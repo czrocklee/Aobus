@@ -1,0 +1,1095 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 Aobus Contributors
+
+#include "runtime/RuntimeOperationProbe.h"
+#include "test/library/TrackTestSupport.h"
+#include "test/runtime/RuntimeLibraryTestSupport.h"
+#include "test/runtime/projection/TrackListProjectionTestSupport.h"
+#include <ao/CoreIds.h>
+#include <ao/i18n/IcuTextOrdering.h>
+#include <ao/library/Credits.h>
+#include <ao/rt/TrackField.h>
+#include <ao/rt/TrackMutation.h>
+#include <ao/rt/TrackPresentation.h>
+#include <ao/rt/TrackRow.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibrarySnapshot.h>
+#include <ao/rt/projection/TrackListProjection.h>
+
+#include <catch2/catch_message.hpp>
+#include <catch2/catch_test_macros.hpp>
+
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <variant>
+#include <vector>
+
+namespace ao::rt::test
+{
+  TEST_CASE("TrackListProjection - group sections for Artist grouping", "[runtime][unit][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+
+    auto id1 = env.libraryFixture.addTrack(
+      library::test::TrackSpec{.title = "T1", .artist = "Zeppelin", .album = "IV", .trackNumber = 1});
+    auto id2 = env.libraryFixture.addTrack(
+      library::test::TrackSpec{.title = "T2", .artist = "Zeppelin", .album = "IV", .trackNumber = 2});
+    auto id3 = env.libraryFixture.addTrack(
+      library::test::TrackSpec{.title = "T3", .artist = "Abba", .album = "Gold", .trackNumber = 1});
+    auto id4 = env.libraryFixture.addTrack(
+      library::test::TrackSpec{.title = "T4", .artist = "Coldplay", .album = "X", .trackNumber = 1});
+    auto id5 = env.libraryFixture.addTrack(
+      library::test::TrackSpec{.title = "T5", .artist = "Coldplay", .album = "Y", .trackNumber = 1});
+    env.setupFiltered({{id1, id2, id3, id4, id5}});
+
+    auto proj = env.createProjection(ViewId{1});
+
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Artist,
+                                               .sortBy = {
+                                                 TrackSortTerm{.field = TrackSortField::Artist, .ascending = true},
+                                                 TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
+                                                 TrackSortTerm{.field = TrackSortField::TrackNumber, .ascending = true},
+                                               }});
+
+    REQUIRE(proj.size() == 5);
+
+    // After sorting: Abba(Gold) < Coldplay(X) < Coldplay(Y) < Zeppelin(IV,T1) < Zeppelin(IV,T2)
+    // Groups: Abba(1), Coldplay(2), Zeppelin(2)
+    REQUIRE(proj.groupCount() == 3);
+
+    auto s0 = proj.groupAt(0);
+    CHECK(trackGroupHeadingText(s0.heading.primary) == "Abba");
+    CHECK(s0.rows.start == 0);
+    CHECK(s0.rows.count == 1);
+
+    auto s1 = proj.groupAt(1);
+    CHECK(trackGroupHeadingText(s1.heading.primary) == "Coldplay");
+    CHECK(s1.rows.start == 1);
+    CHECK(s1.rows.count == 2);
+
+    auto s2 = proj.groupAt(2);
+    CHECK(trackGroupHeadingText(s2.heading.primary) == "Zeppelin");
+    CHECK(s2.rows.start == 3);
+    CHECK(s2.rows.count == 2);
+
+    CHECK(proj.groupIndexAt(0) == 0);
+    CHECK(proj.groupIndexAt(1) == 1);
+    CHECK(proj.groupIndexAt(2) == 1);
+    CHECK(proj.groupIndexAt(3) == 2);
+    CHECK(proj.groupIndexAt(4) == 2);
+
+    auto const optFirstRange = proj.groupRangeAt(0);
+    REQUIRE(optFirstRange);
+    CHECK(optFirstRange->start == 0);
+    CHECK(optFirstRange->count == 1);
+
+    auto const optMiddleRange = proj.groupRangeAt(2);
+    REQUIRE(optMiddleRange);
+    CHECK(optMiddleRange->start == 1);
+    CHECK(optMiddleRange->count == 2);
+
+    auto const optLastRange = proj.groupRangeAt(4);
+    REQUIRE(optLastRange);
+    CHECK(optLastRange->start == 3);
+    CHECK(optLastRange->count == 2);
+    CHECK_FALSE(proj.groupRangeAt(5));
+  }
+
+  TEST_CASE("TrackListProjection - large artist groups keep compound sort order", "[runtime][unit][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+
+    auto ids = std::vector<TrackId>{};
+    auto const add =
+      [&](std::string title, std::string artist, std::string album, std::uint16_t disc, std::uint16_t track) -> TrackId
+    {
+      auto const id = env.libraryFixture.addTrack(library::test::TrackSpec{.title = std::move(title),
+                                                                           .artist = std::move(artist),
+                                                                           .album = std::move(album),
+                                                                           .discNumber = disc,
+                                                                           .trackNumber = track});
+      ids.push_back(id);
+      return id;
+    };
+
+    auto const zeppelinPhysicalDisc2Track2 = add("Kashmir", "Zeppelin", "Physical Graffiti", 2, 2);
+    auto const coldplayXyTrack2 = add("Low", "Coldplay", "X&Y", 1, 2);
+    auto const abbaGoldTrack2 = add("Dancing Queen", "Abba", "Gold", 1, 2);
+    auto const radioheadOkTrack3 = add("Exit Music", "Radiohead", "OK Computer", 1, 3);
+    auto const daftDiscoveryTrack2 = add("Aerodynamic", "Daft Punk", "Discovery", 1, 2);
+    auto const zeppelinIvTrack1 = add("Black Dog", "Zeppelin", "IV", 1, 1);
+    auto const abbaVoyageTrack1 = add("I Still Have Faith In You", "Abba", "Voyage", 1, 1);
+    auto const coldplayParachutesTrack1 = add("Don't Panic", "Coldplay", "Parachutes", 1, 1);
+    auto const radioheadKidTrack2 = add("Kid A", "Radiohead", "Kid A", 1, 2);
+    auto const daftRandomTrack1 = add("Give Life Back To Music", "Daft Punk", "Random Access Memories", 1, 1);
+    auto const abbaGoldTrack1 = add("Waterloo", "Abba", "Gold", 1, 1);
+    auto const coldplayXyDisc2Track1 = add("Til Kingdom Come", "Coldplay", "X&Y", 2, 1);
+    auto const radioheadOkTrack1 = add("Airbag", "Radiohead", "OK Computer", 1, 1);
+    auto const zeppelinPhysicalDisc1Track1 = add("Custard Pie", "Zeppelin", "Physical Graffiti", 1, 1);
+    auto const daftDiscoveryTrack1 = add("One More Time", "Daft Punk", "Discovery", 1, 1);
+    auto const abbaVoyageTrack2 = add("When You Danced With Me", "Abba", "Voyage", 1, 2);
+    auto const coldplayParachutesTrack2 = add("Shiver", "Coldplay", "Parachutes", 1, 2);
+    auto const radioheadKidTrack1 = add("Everything In Its Right Place", "Radiohead", "Kid A", 1, 1);
+    auto const zeppelinIvTrack2 = add("Rock and Roll", "Zeppelin", "IV", 1, 2);
+    auto const daftDiscoveryTrack3 = add("Digital Love", "Daft Punk", "Discovery", 1, 3);
+    auto const abbaGoldTrack5 = add("Mamma Mia", "Abba", "Gold", 1, 5);
+    auto const coldplayXyTrack1 = add("Square One", "Coldplay", "X&Y", 1, 1);
+    auto const radioheadOkTrack2 = add("Paranoid Android", "Radiohead", "OK Computer", 1, 2);
+    auto const zeppelinPhysicalDisc2Track1 = add("In The Light", "Zeppelin", "Physical Graffiti", 2, 1);
+
+    env.setupFiltered(ids);
+
+    auto proj = env.createProjection(ViewId{1});
+
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Artist,
+                                               .sortBy = {
+                                                 TrackSortTerm{.field = TrackSortField::Artist, .ascending = true},
+                                                 TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
+                                                 TrackSortTerm{.field = TrackSortField::DiscNumber, .ascending = true},
+                                                 TrackSortTerm{.field = TrackSortField::TrackNumber, .ascending = true},
+                                                 TrackSortTerm{.field = TrackSortField::Title, .ascending = true},
+                                               }});
+
+    auto const expectedOrder = std::vector{
+      abbaGoldTrack1,
+      abbaGoldTrack2,
+      abbaGoldTrack5,
+      abbaVoyageTrack1,
+      abbaVoyageTrack2,
+      coldplayParachutesTrack1,
+      coldplayParachutesTrack2,
+      coldplayXyTrack1,
+      coldplayXyTrack2,
+      coldplayXyDisc2Track1,
+      daftDiscoveryTrack1,
+      daftDiscoveryTrack2,
+      daftDiscoveryTrack3,
+      daftRandomTrack1,
+      radioheadKidTrack1,
+      radioheadKidTrack2,
+      radioheadOkTrack1,
+      radioheadOkTrack2,
+      radioheadOkTrack3,
+      zeppelinIvTrack1,
+      zeppelinIvTrack2,
+      zeppelinPhysicalDisc1Track1,
+      zeppelinPhysicalDisc2Track1,
+      zeppelinPhysicalDisc2Track2,
+    };
+
+    REQUIRE(proj.size() == expectedOrder.size());
+
+    for (std::size_t index = 0; index < expectedOrder.size(); ++index)
+    {
+      CHECK(proj.trackIdAt(index) == expectedOrder[index]);
+      CHECK(proj.indexOf(expectedOrder[index]) == index);
+    }
+
+    struct ExpectedGroup final
+    {
+      std::string_view primaryText;
+      std::size_t start;
+      std::size_t count;
+    };
+
+    auto const expectedGroups = std::array{
+      ExpectedGroup{.primaryText = "Abba", .start = 0, .count = 5},
+      ExpectedGroup{.primaryText = "Coldplay", .start = 5, .count = 5},
+      ExpectedGroup{.primaryText = "Daft Punk", .start = 10, .count = 4},
+      ExpectedGroup{.primaryText = "Radiohead", .start = 14, .count = 5},
+      ExpectedGroup{.primaryText = "Zeppelin", .start = 19, .count = 5},
+    };
+
+    REQUIRE(proj.groupCount() == expectedGroups.size());
+
+    for (std::size_t groupIndex = 0; groupIndex < expectedGroups.size(); ++groupIndex)
+    {
+      auto const group = proj.groupAt(groupIndex);
+      CHECK(trackGroupHeadingText(group.heading.primary) == expectedGroups.at(groupIndex).primaryText);
+      CHECK(group.rows.start == expectedGroups.at(groupIndex).start);
+      CHECK(group.rows.count == expectedGroups.at(groupIndex).count);
+
+      for (std::size_t row = group.rows.start; row < group.rows.start + group.rows.count; ++row)
+      {
+        CHECK(proj.groupIndexAt(row) == groupIndex);
+
+        auto const optRange = proj.groupRangeAt(row);
+        REQUIRE(optRange);
+        CHECK(optRange->start == group.rows.start);
+        CHECK(optRange->count == group.rows.count);
+      }
+    }
+
+    CHECK_FALSE(proj.groupIndexAt(expectedOrder.size()).has_value());
+    CHECK_FALSE(proj.groupRangeAt(expectedOrder.size()).has_value());
+  }
+
+  TEST_CASE("TrackListProjection - normalized artist order retains raw group labels", "[runtime][unit][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+
+    auto const coldplay = env.libraryFixture.addTrack(
+      library::test::TrackSpec{.title = "Clocks", .artist = "Coldplay", .album = "A Rush of Blood to the Head"});
+    auto const beatles = env.libraryFixture.addTrack(
+      library::test::TrackSpec{.title = "Come Together", .artist = "The Beatles", .album = "Abbey Road"});
+    env.setupFiltered({{coldplay, beatles}});
+
+    auto proj = env.createProjection(ViewId{1});
+
+    proj.setPresentation(TrackPresentationSpec{
+      .groupBy = TrackGroupKey::Artist,
+      .sortBy = {TrackSortTerm{.field = TrackSortField::Artist, .ascending = true}},
+    });
+
+    REQUIRE(proj.size() == 2);
+    CHECK(proj.trackIdAt(0) == beatles);
+    CHECK(proj.trackIdAt(1) == coldplay);
+
+    REQUIRE(proj.groupCount() == 2);
+    CHECK(trackGroupHeadingText(proj.groupAt(0).heading.primary) == "The Beatles");
+    CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "Coldplay");
+  }
+
+  TEST_CASE("TrackListProjection - Unicode caseless artist identities select the first ordered raw headings",
+            "[runtime][unit][projection][unicode]")
+  {
+    auto env = TrackListProjectionFixture{};
+    auto const upper = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Zulu", .artist = "MÉTAL"});
+    auto const lower = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Alpha", .artist = "métal"});
+    auto const sharpLower = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Bravo", .artist = "Straße"});
+    auto const sharpUpper =
+      env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Charlie", .artist = "STRASSE"});
+    env.setupFiltered({{upper, sharpUpper, lower, sharpLower}});
+
+    auto projection = env.createProjection(ViewId{1});
+    projection.setPresentation(TrackPresentationSpec{
+      .groupBy = TrackGroupKey::Artist,
+      .sortBy =
+        {
+          TrackSortTerm{.field = TrackSortField::Artist, .ascending = true},
+          TrackSortTerm{.field = TrackSortField::Title, .ascending = true},
+        },
+    });
+
+    CHECK(projection.trackIdAt(0) == lower);
+    CHECK(projection.trackIdAt(1) == upper);
+    CHECK(projection.trackIdAt(2) == sharpLower);
+    CHECK(projection.trackIdAt(3) == sharpUpper);
+    REQUIRE(projection.groupCount() == 2);
+    CHECK(projection.groupAt(0).rows.start == 0);
+    CHECK(projection.groupAt(0).rows.count == 2);
+    CHECK(trackGroupHeadingText(projection.groupAt(0).heading.primary) == "métal");
+    CHECK(projection.groupAt(1).rows.start == 2);
+    CHECK(projection.groupAt(1).rows.count == 2);
+    CHECK(trackGroupHeadingText(projection.groupAt(1).heading.primary) == "Straße");
+  }
+
+  TEST_CASE("TrackListProjection - equal locale group keys retain distinct contiguous identities",
+            "[runtime][unit][projection][collation]")
+  {
+    auto policyRes = i18n::createIcuTextOrderingPolicy("en-US");
+    REQUIRE(policyRes);
+    auto env = TrackListProjectionFixture{};
+    auto const asciiFirst = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Alpha", .artist = "ABC"});
+    auto const wideFirst = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Bravo", .artist = "ＡＢＣ"});
+    auto const asciiSecond = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Charlie", .artist = "ABC"});
+    auto const wideSecond = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Delta", .artist = "ＡＢＣ"});
+    env.setupFiltered({{wideSecond, asciiSecond, wideFirst, asciiFirst}});
+
+    auto projection = env.createProjection(ViewId{1}, policyRes->get());
+    projection.setPresentation(TrackPresentationSpec{
+      .groupBy = TrackGroupKey::Artist,
+      .sortBy =
+        {
+          TrackSortTerm{.field = TrackSortField::Artist, .ascending = true},
+          TrackSortTerm{.field = TrackSortField::Title, .ascending = true},
+        },
+    });
+
+    CHECK(projection.trackIdAt(0) == asciiFirst);
+    CHECK(projection.trackIdAt(1) == asciiSecond);
+    CHECK(projection.trackIdAt(2) == wideFirst);
+    CHECK(projection.trackIdAt(3) == wideSecond);
+    REQUIRE(projection.groupCount() == 2);
+    CHECK(projection.groupAt(0).rows.start == 0);
+    CHECK(projection.groupAt(0).rows.count == 2);
+    CHECK(projection.groupAt(1).rows.start == 2);
+    CHECK(projection.groupAt(1).rows.count == 2);
+  }
+
+  TEST_CASE("TrackListProjection - article-insensitive artist order keeps distinct contiguous identities",
+            "[runtime][unit][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+    auto const doorsAlpha = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Alpha", .artist = "Doors"});
+    auto const theDoorsBravo =
+      env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Bravo", .artist = "The Doors"});
+    auto const doorsCharlie =
+      env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Charlie", .artist = "Doors"});
+    auto const theDoorsDelta =
+      env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Delta", .artist = "The Doors"});
+    env.setupFiltered({{theDoorsDelta, doorsCharlie, theDoorsBravo, doorsAlpha}});
+
+    auto proj = env.createProjection(ViewId{1});
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Artist,
+                                               .sortBy = {
+                                                 TrackSortTerm{.field = TrackSortField::Artist, .ascending = true},
+                                                 TrackSortTerm{.field = TrackSortField::Title, .ascending = true},
+                                               }});
+
+    CHECK(proj.trackIdAt(0) == doorsAlpha);
+    CHECK(proj.trackIdAt(1) == doorsCharlie);
+    CHECK(proj.trackIdAt(2) == theDoorsBravo);
+    CHECK(proj.trackIdAt(3) == theDoorsDelta);
+    REQUIRE(proj.groupCount() == 2);
+    CHECK(trackGroupHeadingText(proj.groupAt(0).heading.primary) == "Doors");
+    CHECK(proj.groupAt(0).rows.start == 0);
+    CHECK(proj.groupAt(0).rows.count == 2);
+    CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "The Doors");
+    CHECK(proj.groupAt(1).rows.start == 2);
+    CHECK(proj.groupAt(1).rows.count == 2);
+  }
+
+  TEST_CASE("TrackListProjection - grouping remains contiguous when the configured sort omits the group field",
+            "[runtime][unit][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+    auto const bravoA = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "A", .artist = "Bravo"});
+    auto const alphaB = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "B", .artist = "Alpha"});
+    auto const bravoC = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "C", .artist = "Bravo"});
+    auto const alphaD = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "D", .artist = "Alpha"});
+    env.setupFiltered({{bravoA, alphaB, bravoC, alphaD}});
+
+    auto proj = env.createProjection(ViewId{1});
+    proj.setPresentation(TrackPresentationSpec{
+      .groupBy = TrackGroupKey::Artist,
+      .sortBy = {TrackSortTerm{.field = TrackSortField::Title, .ascending = true}},
+    });
+
+    CHECK(proj.trackIdAt(0) == alphaB);
+    CHECK(proj.trackIdAt(1) == alphaD);
+    CHECK(proj.trackIdAt(2) == bravoA);
+    CHECK(proj.trackIdAt(3) == bravoC);
+    REQUIRE(proj.groupCount() == 2);
+    CHECK(trackGroupHeadingText(proj.groupAt(0).heading.primary) == "Alpha");
+    CHECK(proj.groupAt(0).rows.count == 2);
+    CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "Bravo");
+    CHECK(proj.groupAt(1).rows.count == 2);
+  }
+
+  TEST_CASE("TrackListProjection - album group identities preserve articles across sort directions",
+            "[runtime][unit][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+    auto const wallA =
+      env.libraryFixture.addTrack(library::test::TrackSpec{.title = "A", .album = "Wall", .albumArtist = "Artist"});
+    auto const theWallB =
+      env.libraryFixture.addTrack(library::test::TrackSpec{.title = "B", .album = "The Wall", .albumArtist = "Artist"});
+    auto const wallC =
+      env.libraryFixture.addTrack(library::test::TrackSpec{.title = "C", .album = "Wall", .albumArtist = "Artist"});
+    auto const theWallD =
+      env.libraryFixture.addTrack(library::test::TrackSpec{.title = "D", .album = "The Wall", .albumArtist = "Artist"});
+    env.setupFiltered({{theWallD, wallC, theWallB, wallA}});
+
+    auto proj = env.createProjection(ViewId{1});
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Album,
+                                               .sortBy = {
+                                                 TrackSortTerm{.field = TrackSortField::AlbumArtist},
+                                                 TrackSortTerm{.field = TrackSortField::Album},
+                                                 TrackSortTerm{.field = TrackSortField::Title},
+                                               }});
+
+    REQUIRE(proj.groupCount() == 2);
+    CHECK(trackGroupHeadingText(proj.groupAt(0).heading.primary) == "The Wall");
+    CHECK(proj.groupAt(0).rows.count == 2);
+    CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "Wall");
+    CHECK(proj.groupAt(1).rows.count == 2);
+
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Album,
+                                               .sortBy = {
+                                                 TrackSortTerm{.field = TrackSortField::AlbumArtist},
+                                                 TrackSortTerm{.field = TrackSortField::Album, .ascending = false},
+                                                 TrackSortTerm{.field = TrackSortField::Title},
+                                               }});
+
+    REQUIRE(proj.groupCount() == 2);
+    CHECK(trackGroupHeadingText(proj.groupAt(0).heading.primary) == "Wall");
+    CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "The Wall");
+  }
+
+  TEST_CASE("TrackListProjection - work group identities do not discard articles", "[runtime][unit][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+    auto const planetsA =
+      env.libraryFixture.addTrack(library::test::TrackSpec{.title = "A", .composer = "Holst", .work = "Planets"});
+    auto const thePlanetsB =
+      env.libraryFixture.addTrack(library::test::TrackSpec{.title = "B", .composer = "Holst", .work = "The Planets"});
+    auto const planetsC =
+      env.libraryFixture.addTrack(library::test::TrackSpec{.title = "C", .composer = "Holst", .work = "Planets"});
+    auto const thePlanetsD =
+      env.libraryFixture.addTrack(library::test::TrackSpec{.title = "D", .composer = "Holst", .work = "The Planets"});
+    env.setupFiltered({{thePlanetsD, planetsC, thePlanetsB, planetsA}});
+
+    auto proj = env.createProjection(ViewId{1});
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Work,
+                                               .sortBy = {
+                                                 TrackSortTerm{.field = TrackSortField::Composer},
+                                                 TrackSortTerm{.field = TrackSortField::Work},
+                                                 TrackSortTerm{.field = TrackSortField::Title},
+                                               }});
+
+    REQUIRE(proj.groupCount() == 2);
+    CHECK(trackGroupHeadingText(proj.groupAt(0).heading.primary) == "Planets");
+    CHECK(proj.groupAt(0).rows.count == 2);
+    CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "The Planets");
+    CHECK(proj.groupAt(1).rows.count == 2);
+  }
+
+  TEST_CASE("TrackListProjection - group sections empty for None grouping", "[runtime][unit][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+    auto id1 = env.libraryFixture.addTrack(library::test::makeTrackSpec("T1", 2020));
+    env.setupFiltered({{id1}});
+
+    auto proj = env.createProjection(ViewId{1});
+
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::None,
+                                               .sortBy = {
+                                                 TrackSortTerm{.field = TrackSortField::Title, .ascending = true},
+                                               }});
+
+    CHECK(proj.groupCount() == 0);
+    auto s = proj.groupAt(0);
+    CHECK(s.rows.count == 0);
+    CHECK(std::holds_alternative<std::monostate>(s.heading.primary));
+    CHECK_FALSE(proj.groupIndexAt(0).has_value());
+    CHECK_FALSE(proj.groupRangeAt(0).has_value());
+  }
+
+  TEST_CASE("TrackListProjection - empty source has no group sections", "[runtime][unit][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+    env.setupFiltered({});
+
+    auto proj = env.createProjection(ViewId{1});
+
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Artist,
+                                               .sortBy = {
+                                                 TrackSortTerm{.field = TrackSortField::Artist, .ascending = true},
+                                               }});
+
+    CHECK(proj.size() == 0);
+    CHECK(proj.groupCount() == 0);
+    CHECK_FALSE(proj.groupRangeAt(0).has_value());
+  }
+
+  TEST_CASE("TrackListProjection - group label for unknown artist", "[runtime][unit][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+
+    auto id1 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "T1", .artist = "", .album = "A"});
+    env.setupFiltered({{id1}});
+
+    auto proj = env.createProjection(ViewId{1});
+
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Artist,
+                                               .sortBy = {
+                                                 TrackSortTerm{.field = TrackSortField::Artist, .ascending = true},
+                                               }});
+
+    REQUIRE(proj.size() == 1);
+    REQUIRE(proj.groupCount() == 1);
+    CHECK(trackGroupHeadingMissingKind(proj.groupAt(0).heading.primary) == MissingTrackValueKind::Artist);
+  }
+
+  TEST_CASE("TrackListProjection - group label for unknown year", "[runtime][unit][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+
+    auto id1 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "T1", .year = 0});
+    env.setupFiltered({{id1}});
+
+    auto proj = env.createProjection(ViewId{1});
+
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Year,
+                                               .sortBy = {
+                                                 TrackSortTerm{.field = TrackSortField::Year, .ascending = true},
+                                               }});
+
+    REQUIRE(proj.size() == 1);
+    REQUIRE(proj.groupCount() == 1);
+    CHECK(trackGroupHeadingMissingKind(proj.groupAt(0).heading.primary) == MissingTrackValueKind::Year);
+  }
+
+  TEST_CASE("TrackListProjection - grouped presentation without sort terms materializes its group key",
+            "[runtime][unit][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+    auto const track2021 = env.libraryFixture.addTrack(library::test::makeTrackSpec("Later", 2021));
+    auto const track2020 = env.libraryFixture.addTrack(library::test::makeTrackSpec("Earlier", 2020));
+    env.setupFiltered({{track2021, track2020}});
+
+    auto proj = env.createProjection(ViewId{1});
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Year});
+
+    REQUIRE(proj.groupCount() == 2);
+    CHECK(proj.trackIdAt(0) == track2020);
+    CHECK(trackGroupHeadingYear(proj.groupAt(0).heading.primary) == 2020);
+    CHECK(proj.trackIdAt(1) == track2021);
+    CHECK(trackGroupHeadingYear(proj.groupAt(1).heading.primary) == 2021);
+  }
+
+  TEST_CASE("TrackListProjection - album groups split by album artist", "[runtime][unit][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+
+    // Same album title, different album artists
+    auto id1 = env.libraryFixture.addTrack(
+      library::test::TrackSpec{.title = "T1", .artist = "Ari", .album = "Greatest Hits", .albumArtist = "Artist One"});
+    auto id2 = env.libraryFixture.addTrack(
+      library::test::TrackSpec{.title = "T2", .artist = "Ari", .album = "Greatest Hits", .albumArtist = "Artist Two"});
+    env.setupFiltered({{id1, id2}});
+
+    auto proj = env.createProjection(ViewId{1});
+
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Album,
+                                               .sortBy = {
+                                                 TrackSortTerm{.field = TrackSortField::AlbumArtist, .ascending = true},
+                                                 TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
+                                               }});
+
+    REQUIRE(proj.size() == 2);
+    REQUIRE(proj.groupCount() == 2);
+    CHECK(trackGroupHeadingText(proj.groupAt(0).heading.primary) == "Greatest Hits");
+    CHECK(trackGroupHeadingText(proj.groupAt(0).heading.secondary) == "Artist One");
+    CHECK(trackGroupHeadingYear(proj.groupAt(0).heading.tertiary) == 2020);
+    CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "Greatest Hits");
+    CHECK(trackGroupHeadingText(proj.groupAt(1).heading.secondary) == "Artist Two");
+    CHECK(trackGroupHeadingYear(proj.groupAt(1).heading.tertiary) == 2020);
+  }
+
+  TEST_CASE("TrackListProjection - supplied compound group fields inherit the authored direction",
+            "[runtime][unit][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+    auto const alpha =
+      env.libraryFixture.addTrack(library::test::TrackSpec{.title = "A", .album = "Shared", .albumArtist = "Alpha"});
+    auto const bravo =
+      env.libraryFixture.addTrack(library::test::TrackSpec{.title = "B", .album = "Shared", .albumArtist = "Bravo"});
+    env.setupFiltered({{alpha, bravo}});
+
+    auto proj = env.createProjection(ViewId{1});
+    proj.setPresentation(TrackPresentationSpec{
+      .groupBy = TrackGroupKey::Album,
+      .sortBy = {TrackSortTerm{.field = TrackSortField::Album, .ascending = false}},
+    });
+
+    REQUIRE(proj.groupCount() == 2);
+    CHECK(proj.trackIdAt(0) == bravo);
+    CHECK(proj.trackIdAt(1) == alpha);
+    CHECK(trackGroupHeadingText(proj.groupAt(0).heading.secondary) == "Bravo");
+    CHECK(trackGroupHeadingText(proj.groupAt(1).heading.secondary) == "Alpha");
+  }
+
+  TEST_CASE("TrackListProjection - presentation returns active grouping and redundant fields snapshot",
+            "[runtime][unit][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+    env.setupFiltered({});
+
+    auto proj = env.createProjection(ViewId{1});
+
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Genre,
+                                               .sortBy = {
+                                                 TrackSortTerm{.field = TrackSortField::Genre, .ascending = true},
+                                                 TrackSortTerm{.field = TrackSortField::Title, .ascending = true},
+                                               }});
+
+    auto snap = proj.presentation();
+    CHECK(snap.groupBy == TrackGroupKey::Genre);
+    REQUIRE(snap.sortBy.size() == 2);
+    CHECK(snap.sortBy[0].field == TrackSortField::Genre);
+    CHECK(snap.sortBy[1].field == TrackSortField::Title);
+
+    auto expectedRedundant = std::vector{TrackField::Genre};
+    CHECK(snap.redundantFields == expectedRedundant);
+  }
+
+  TEST_CASE("TrackListProjection - an album without an album artist names its track artists",
+            "[runtime][unit][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+    auto const addTrack = [&env](std::string title, std::string album, std::string artist, std::string albumArtist = {})
+    {
+      return env.libraryFixture.addTrack(library::test::TrackSpec{.title = std::move(title),
+                                                                  .artist = std::move(artist),
+                                                                  .album = std::move(album),
+                                                                  .albumArtist = std::move(albumArtist)});
+    };
+    auto const ids = std::vector{
+      addTrack("A1", "Solo Album", ""),
+      addTrack("A2", "Solo Album", "Aimer"),
+      addTrack("A3", "Solo Album", ""),
+      addTrack("B1", "Sampler", "Celine Dion"),
+      addTrack("B2", "Sampler", ""),
+      addTrack("B3", "Sampler", "James Horner"),
+      addTrack("B4", "Sampler", "Enya"),
+      addTrack("H1", "Soundtrack", "Celine Dion"),
+      addTrack("H2", "Soundtrack", "James Horner"),
+      addTrack("H3", "Soundtrack", "James Horner"),
+      addTrack("C1", "Untitled", ""),
+      // Inserted against title order, so the source order cannot supply the text.
+      addTrack("E2", "Spellings", "AIMER"),
+      addTrack("E1", "Spellings", "Aimer"),
+      addTrack("F1", "Articles", "The Doors"),
+      addTrack("F2", "Articles", "Doors"),
+      addTrack("G2", "Folding", "STRASSE"),
+      addTrack("G1", "Folding", "Straße"),
+      addTrack("D1", "Duets", "First", "Album Artist"),
+      addTrack("D2", "Duets", "Second", "Album Artist"),
+    };
+    env.setupFiltered({ids});
+
+    auto proj = env.createProjection(ViewId{1});
+    auto const presentAlbumsByTitle = [&proj](bool const ascending)
+    {
+      proj.setPresentation(
+        TrackPresentationSpec{.groupBy = TrackGroupKey::Album,
+                              .sortBy = {
+                                TrackSortTerm{.field = TrackSortField::AlbumArtist, .ascending = true},
+                                TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
+                                TrackSortTerm{.field = TrackSortField::Title, .ascending = ascending},
+                              }});
+    };
+    presentAlbumsByTitle(true);
+
+    REQUIRE(proj.groupCount() == 8);
+    auto const headingOf = [&proj](std::string_view album) -> TrackGroupHeading
+    {
+      auto optHeading = std::optional<TrackGroupHeading>{};
+
+      for (std::size_t index = 0; index < proj.groupCount() && !optHeading; ++index)
+      {
+        if (trackGroupHeadingText(proj.groupAt(index).heading.primary) == album)
+        {
+          optHeading = proj.groupAt(index).heading;
+        }
+      }
+
+      // REQUIRE rather than FAIL: MSVC treats a return after FAIL as unreachable (C4702).
+      INFO("no group for album " << album);
+      REQUIRE(optHeading);
+      return *std::move(optHeading);
+    };
+
+    // A track without an artist does not count, so one artist names the album even when most tracks name none.
+    CHECK(trackGroupHeadingText(headingOf("Solo Album").secondary) == "Aimer");
+    // No artist on more than half of the tracks with one makes Various Artists.
+    CHECK(std::holds_alternative<VariousArtists>(headingOf("Sampler").secondary));
+    // A guest on one track leaves the majority artist, even when the guest's row comes first.
+    CHECK(trackGroupHeadingText(headingOf("Soundtrack").secondary) == "James Horner");
+    // Artists compare by group identity, and the first row in projection order supplies the text.
+    CHECK(trackGroupHeadingText(headingOf("Spellings").secondary) == "Aimer");
+    // Group identity keeps a leading article, so The Doors and Doors are two artists with one track each.
+    CHECK(std::holds_alternative<VariousArtists>(headingOf("Articles").secondary));
+    // Group identity folds Unicode case fully, so Straße and STRASSE are one artist.
+    CHECK(trackGroupHeadingText(headingOf("Folding").secondary) == "Straße");
+    // No artist on any track stays an unknown artist.
+    CHECK(trackGroupHeadingMissingKind(headingOf("Untitled").secondary) == MissingTrackValueKind::Artist);
+    // An album artist always wins over the track artists.
+    CHECK(trackGroupHeadingText(headingOf("Duets").secondary) == "Album Artist");
+
+    // Reversing the title order puts the other spelling first.
+    presentAlbumsByTitle(false);
+    REQUIRE(proj.groupCount() == 8);
+    CHECK(trackGroupHeadingText(headingOf("Spellings").secondary) == "AIMER");
+    CHECK(trackGroupHeadingText(headingOf("Folding").secondary) == "STRASSE");
+  }
+
+  TEST_CASE("TrackListProjection - live edits keep the track artist heading of an album current",
+            "[runtime][unit][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+    auto const first =
+      env.libraryFixture.addTrack(library::test::TrackSpec{.title = "A", .artist = "Aimer", .album = "Mixtape"});
+    auto const second =
+      env.libraryFixture.addTrack(library::test::TrackSpec{.title = "B", .artist = "Aimer", .album = "Mixtape"});
+    env.setupFiltered({{first, second}});
+
+    auto proj = env.createProjection(ViewId{1});
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Album,
+                                               .sortBy = {
+                                                 TrackSortTerm{.field = TrackSortField::AlbumArtist, .ascending = true},
+                                                 TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
+                                                 TrackSortTerm{.field = TrackSortField::Title, .ascending = true},
+                                               }});
+    auto batches = std::vector<TrackListProjectionDeltaBatch>{};
+    auto const sub =
+      proj.subscribe([&batches](TrackListProjectionDeltaBatch const& batch) noexcept { batches.push_back(batch); });
+    // Subscribing delivers an initial reset.
+    batches.clear();
+
+    // Every edit below keeps the album's rows in title order inside its one group.
+    auto const requireOneGroup = [&proj](std::vector<TrackId> const& rows)
+    {
+      REQUIRE(proj.size() == rows.size());
+
+      for (std::size_t index = 0; index < rows.size(); ++index)
+      {
+        CHECK(proj.trackIdAt(index) == rows[index]);
+      }
+
+      REQUIRE(proj.groupCount() == 1);
+      CHECK(proj.groupAt(0).rows.start == 0);
+      CHECK(proj.groupAt(0).rows.count == rows.size());
+      CHECK(trackGroupHeadingText(proj.groupAt(0).heading.primary) == "Mixtape");
+    };
+    auto const requireSingleReset = [&batches]
+    {
+      REQUIRE(batches.size() == 1);
+      REQUIRE(batches.front().deltas.size() == 1);
+      CHECK(std::holds_alternative<ProjectionReset>(batches.front().deltas.front()));
+      batches.clear();
+    };
+    auto const setArtist = [&env](TrackId const id, std::string artist)
+    {
+      env.libraryFixture.updateTrack(
+        id, [&artist](library::test::TrackSpec& spec) { spec.artist = std::move(artist); });
+      env.source.singleUpdate(id);
+    };
+
+    requireOneGroup({first, second});
+    REQUIRE(trackGroupHeadingText(proj.groupAt(0).heading.secondary) == "Aimer");
+
+    SECTION("an artist-only update")
+    {
+      setArtist(second, "Celine Dion");
+      requireOneGroup({first, second});
+      CHECK(std::holds_alternative<VariousArtists>(proj.groupAt(0).heading.secondary));
+      requireSingleReset();
+
+      setArtist(second, "Aimer");
+      requireOneGroup({first, second});
+      CHECK(trackGroupHeadingText(proj.groupAt(0).heading.secondary) == "Aimer");
+      requireSingleReset();
+
+      // Another spelling of the same artist on a later row keeps the heading, so there is no reset.
+      setArtist(second, "AIMER");
+      requireOneGroup({first, second});
+      CHECK(trackGroupHeadingText(proj.groupAt(0).heading.secondary) == "Aimer");
+      REQUIRE(batches.size() == 1);
+      REQUIRE(batches.front().deltas.size() == 1);
+      auto const* const update = std::get_if<ProjectionUpdateRange>(&batches.front().deltas.front());
+      REQUIRE(update != nullptr);
+      CHECK(update->range.start == 1);
+      CHECK(update->range.count == 1);
+    }
+
+    SECTION("inserting and removing tracks of a second artist")
+    {
+      // One guest track leaves Aimer the majority, so the heading stays and nothing resets.
+      auto const third = env.libraryFixture.addTrack(
+        library::test::TrackSpec{.title = "C", .artist = "Celine Dion", .album = "Mixtape"});
+      env.source.singleInsert(third);
+      requireOneGroup({first, second, third});
+      CHECK(trackGroupHeadingText(proj.groupAt(0).heading.secondary) == "Aimer");
+      REQUIRE(batches.size() == 1);
+      REQUIRE(batches.front().deltas.size() == 1);
+      auto const* const insertion = std::get_if<ProjectionInsertRange>(&batches.front().deltas.front());
+      REQUIRE(insertion != nullptr);
+      CHECK(insertion->range.start == 2);
+      CHECK(insertion->range.count == 1);
+      batches.clear();
+
+      // A second guest track ties the count.
+      auto const fourth = env.libraryFixture.addTrack(
+        library::test::TrackSpec{.title = "D", .artist = "Celine Dion", .album = "Mixtape"});
+      env.source.singleInsert(fourth);
+      requireOneGroup({first, second, third, fourth});
+      CHECK(std::holds_alternative<VariousArtists>(proj.groupAt(0).heading.secondary));
+      requireSingleReset();
+
+      env.source.singleRemove(fourth);
+      requireOneGroup({first, second, third});
+      CHECK(trackGroupHeadingText(proj.groupAt(0).heading.secondary) == "Aimer");
+      requireSingleReset();
+    }
+
+    SECTION("removing the row that supplies the spelling")
+    {
+      setArtist(second, "AIMER");
+      batches.clear();
+
+      env.source.singleRemove(first);
+      requireOneGroup({second});
+      CHECK(trackGroupHeadingText(proj.groupAt(0).heading.secondary) == "AIMER");
+      requireSingleReset();
+    }
+  }
+
+  TEST_CASE("TrackListProjection - unknown album label", "[runtime][unit][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+
+    auto id1 = env.libraryFixture.addTrack(
+      library::test::TrackSpec{.title = "T1", .artist = "", .album = "", .albumArtist = ""});
+    env.setupFiltered({{id1}});
+
+    auto proj = env.createProjection(ViewId{1});
+
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Album,
+                                               .sortBy = {
+                                                 TrackSortTerm{.field = TrackSortField::AlbumArtist, .ascending = true},
+                                                 TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
+                                               }});
+
+    REQUIRE(proj.size() == 1);
+    REQUIRE(proj.groupCount() == 1);
+    CHECK(trackGroupHeadingMissingKind(proj.groupAt(0).heading.primary) == MissingTrackValueKind::Album);
+    CHECK(trackGroupHeadingMissingKind(proj.groupAt(0).heading.secondary) == MissingTrackValueKind::Artist);
+  }
+
+  TEST_CASE("TrackListProjection - grouping labels genre composer conductor ensemble and work fields",
+            "[runtime][unit][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+
+    auto id1 = env.libraryFixture.addTrack(
+      library::test::TrackSpec{.title = "A",
+                               .genre = "Pop",
+                               .composer = "Mozart",
+                               .work = "Opus 1",
+                               .credits = {{.name = "Carlos Kleiber", .kind = library::CreditKind::Conductor},
+                                           {.name = "Vienna Philharmonic", .kind = library::CreditKind::Ensemble}}});
+    auto id2 = env.libraryFixture.addTrack(
+      library::test::TrackSpec{.title = "B",
+                               .genre = "Rock",
+                               .composer = "Bach",
+                               .work = "Opus 2",
+                               .credits = {{.name = "Leonard Bernstein", .kind = library::CreditKind::Conductor},
+                                           {.name = "New York Philharmonic", .kind = library::CreditKind::Ensemble}}});
+    env.setupFiltered({{id1, id2}});
+
+    auto proj = env.createProjection(ViewId{1});
+
+    SECTION("Group by Genre")
+    {
+      proj.setPresentation(TrackPresentationSpec{
+        .groupBy = TrackGroupKey::Genre, .sortBy = {TrackSortTerm{.field = TrackSortField::Genre, .ascending = true}}});
+      REQUIRE(proj.size() == 2);
+      REQUIRE(proj.groupCount() == 2);
+      CHECK(trackGroupHeadingText(proj.groupAt(0).heading.primary) == "Pop");
+      CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "Rock");
+    }
+
+    SECTION("Group by Composer")
+    {
+      proj.setPresentation(
+        TrackPresentationSpec{.groupBy = TrackGroupKey::Composer,
+                              .sortBy = {TrackSortTerm{.field = TrackSortField::Composer, .ascending = true}}});
+      REQUIRE(proj.size() == 2);
+      REQUIRE(proj.groupCount() == 2);
+      CHECK(trackGroupHeadingText(proj.groupAt(0).heading.primary) == "Bach");
+      CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "Mozart");
+    }
+
+    SECTION("Group by Work")
+    {
+      proj.setPresentation(TrackPresentationSpec{
+        .groupBy = TrackGroupKey::Work, .sortBy = {TrackSortTerm{.field = TrackSortField::Work, .ascending = true}}});
+      REQUIRE(proj.size() == 2);
+      REQUIRE(proj.groupCount() == 2);
+      CHECK(trackGroupHeadingText(proj.groupAt(0).heading.primary) == "Opus 1");
+      CHECK(trackGroupHeadingText(proj.groupAt(0).heading.secondary) == "Mozart");
+      CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "Opus 2");
+      CHECK(trackGroupHeadingText(proj.groupAt(1).heading.secondary) == "Bach");
+    }
+
+    SECTION("Group by Conductor")
+    {
+      proj.setPresentation(
+        TrackPresentationSpec{.groupBy = TrackGroupKey::Conductor,
+                              .sortBy = {TrackSortTerm{.field = TrackSortField::Conductor, .ascending = true}}});
+      REQUIRE(proj.size() == 2);
+      REQUIRE(proj.groupCount() == 2);
+      CHECK(trackGroupHeadingText(proj.groupAt(0).heading.primary) == "Carlos Kleiber");
+      CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "Leonard Bernstein");
+    }
+
+    SECTION("Group by Ensemble")
+    {
+      proj.setPresentation(
+        TrackPresentationSpec{.groupBy = TrackGroupKey::Ensemble,
+                              .sortBy = {TrackSortTerm{.field = TrackSortField::Ensemble, .ascending = true}}});
+      REQUIRE(proj.size() == 2);
+      REQUIRE(proj.groupCount() == 2);
+      CHECK(trackGroupHeadingText(proj.groupAt(0).heading.primary) == "New York Philharmonic");
+      CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "Vienna Philharmonic");
+    }
+  }
+
+  TEST_CASE("TrackListProjection - same primary credits keep distinct row counts through incremental refresh",
+            "[runtime][unit][projection][credits]")
+  {
+    auto kind = library::CreditKind::Conductor;
+    auto field = TrackField::Conductor;
+    auto sortField = TrackSortField::Conductor;
+    auto groupKey = TrackGroupKey::Conductor;
+    auto missingKind = MissingTrackValueKind::Conductor;
+    auto nameMember = &TrackRow::conductor;
+    auto countMember = &TrackRow::conductorCount;
+
+    SECTION("Conductors")
+    {
+    }
+
+    SECTION("Ensembles")
+    {
+      kind = library::CreditKind::Ensemble;
+      field = TrackField::Ensemble;
+      sortField = TrackSortField::Ensemble;
+      groupKey = TrackGroupKey::Ensemble;
+      missingKind = MissingTrackValueKind::Ensemble;
+      nameMember = &TrackRow::ensemble;
+      countMember = &TrackRow::ensembleCount;
+    }
+
+    auto env = TrackListProjectionFixture{};
+    auto const single = env.libraryFixture.addTrack(
+      library::test::TrackSpec{.title = "Single", .credits = {{.name = "Zulu", .kind = kind}}});
+    auto const multiple = env.libraryFixture.addTrack(
+      library::test::TrackSpec{.title = "Multiple",
+                               .credits = {{.name = "Zulu", .kind = kind},
+                                           {.name = "Aaron", .kind = kind, .role = "Guest"},
+                                           {.name = "Aaron", .kind = kind, .role = "Guest"},
+                                           {.name = "Solo", .kind = library::CreditKind::Soloist},
+                                           {.name = "Solo", .kind = library::CreditKind::Soloist},
+                                           {.name = "Other", .kind = library::CreditKind::Soloist}}});
+    auto const missing = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Missing"});
+    env.setupFiltered({{single, multiple, missing}});
+    auto changes = makeStateOnlyLibraryChanges(env.libraryFixture.library());
+    auto commands = LibraryCommandsFixture{env.libraryFixture.library(), changes};
+    auto projection = env.createProjection(ViewId{1});
+    auto batches = std::vector<TrackListProjectionDeltaBatch>{};
+    auto const subscription =
+      projection.subscribe([&](TrackListProjectionDeltaBatch const& batch) noexcept { batches.push_back(batch); });
+    projection.setPresentation(TrackPresentationSpec{.groupBy = groupKey,
+                                                     .sortBy = {{sortField, true}},
+                                                     .visibleFields = {TrackField::Title, field},
+                                                     .redundantFields = {field}});
+    CHECK(projection.presentation().redundantFields.empty());
+    REQUIRE(projection.groupCount() == 2);
+    CHECK(trackGroupHeadingMissingKind(projection.groupAt(0).heading.primary) == missingKind);
+    CHECK(trackGroupHeadingText(projection.groupAt(1).heading.primary) == "Zulu");
+    CHECK(projection.groupAt(1).rows.count == 2);
+    CHECK(projection.trackIdAt(0) == missing);
+    CHECK(projection.trackIdAt(1) == single);
+    CHECK(projection.trackIdAt(2) == multiple);
+
+    auto checkRow = [&](TrackId id, std::string const& name, std::uint16_t count)
+    {
+      auto const snapshot = commands.library().snapshot();
+      auto const optRow = snapshot.trackRow(id);
+      REQUIRE(optRow);
+      CHECK((*optRow).*nameMember == name);
+      CHECK((*optRow).*countMember == count);
+      CHECK(std::get<std::string>(snapshot.trackField(id, field)) == name);
+      CHECK(optRow->soloist == (id == multiple ? "Solo" : ""));
+      CHECK(optRow->soloistCount == (id == multiple ? 3 : 0));
+    };
+    checkRow(single, "Zulu", 1);
+    checkRow(multiple, "Zulu", 3);
+    checkRow(missing, "", 0);
+    auto const heading = projection.groupAt(1).heading;
+
+    auto replace = [&](std::vector<library::Credit> const& entries, std::uint16_t count)
+    {
+      auto replacement = CreditReplacement{.entries = entries};
+      replacement.kinds.set(static_cast<std::size_t>(kind));
+      REQUIRE(commands.updateMetadata(std::array{multiple}, MetadataPatch{.optCredits = replacement}));
+      batches.clear();
+      auto const before = rt::detail::RuntimeOperationProbe::counts(projection);
+      env.source.update(multiple);
+      auto const after = rt::detail::RuntimeOperationProbe::counts(projection);
+      CHECK(after.fullProjectionRebuilds == before.fullProjectionRebuilds);
+      CHECK(after.incrementalProjectionUpdates == before.incrementalProjectionUpdates + 1);
+      REQUIRE(batches.size() == 1);
+      REQUIRE(batches.front().deltas.size() == 1);
+      auto const* update = std::get_if<ProjectionUpdateRange>(&batches.front().deltas.front());
+      REQUIRE(update != nullptr);
+      CHECK(update->range.start == 2);
+      CHECK(update->range.count == 1);
+      CHECK(projection.groupAt(1).heading == heading);
+      CHECK(projection.groupAt(1).rows.count == 2);
+      checkRow(multiple, "Zulu", count);
+
+      auto rebuilt = env.createProjection(ViewId{2});
+      rebuilt.setPresentation(projection.presentation());
+      REQUIRE(rebuilt.groupCount() == projection.groupCount());
+
+      for (std::size_t index = 0; index < 3; ++index)
+      {
+        CHECK(rebuilt.trackIdAt(index) == projection.trackIdAt(index));
+      }
+
+      for (std::size_t index = 0; index < rebuilt.groupCount(); ++index)
+      {
+        CHECK(rebuilt.groupAt(index).heading == projection.groupAt(index).heading);
+        CHECK(rebuilt.groupAt(index).rows.start == projection.groupAt(index).rows.start);
+        CHECK(rebuilt.groupAt(index).rows.count == projection.groupAt(index).rows.count);
+      }
+    };
+
+    // Role-only, nonfirst-name, then duplicate-count changes leave the heading intact.
+    replace({{.name = "Zulu", .kind = kind},
+             {.name = "Aaron", .kind = kind, .role = "Host"},
+             {.name = "Aaron", .kind = kind, .role = "Guest"}},
+            3);
+    replace({{.name = "Zulu", .kind = kind},
+             {.name = "Beta", .kind = kind, .role = "Host"},
+             {.name = "Aaron", .kind = kind, .role = "Guest"}},
+            3);
+    replace({{.name = "Zulu", .kind = kind}, {.name = "Zulu", .kind = kind}}, 2);
+  }
+
+  TEST_CASE("TrackListProjection - every grouping supplies a semantic primary heading", "[runtime][unit][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+    auto const trackId = env.libraryFixture.addTrack(library::test::makeEmptyTrackSpec("t1.flac"));
+    env.setupFiltered({{trackId}});
+
+    auto proj = env.createProjection(ViewId{1});
+
+    struct GroupCase final
+    {
+      TrackGroupKey key;
+      MissingTrackValueKind missingKind;
+    };
+
+    constexpr auto kCases = std::array{
+      GroupCase{TrackGroupKey::Artist, MissingTrackValueKind::Artist},
+      GroupCase{TrackGroupKey::Album, MissingTrackValueKind::Album},
+      GroupCase{TrackGroupKey::AlbumArtist, MissingTrackValueKind::Artist},
+      GroupCase{TrackGroupKey::Genre, MissingTrackValueKind::Genre},
+      GroupCase{TrackGroupKey::Composer, MissingTrackValueKind::Composer},
+      GroupCase{TrackGroupKey::Conductor, MissingTrackValueKind::Conductor},
+      GroupCase{TrackGroupKey::Ensemble, MissingTrackValueKind::Ensemble},
+      GroupCase{TrackGroupKey::Work, MissingTrackValueKind::Work},
+      GroupCase{TrackGroupKey::Year, MissingTrackValueKind::Year},
+    };
+
+    for (auto const& testCase : kCases)
+    {
+      INFO("Track group key " << static_cast<std::uint32_t>(testCase.key));
+      proj.setPresentation(TrackPresentationSpec{.groupBy = testCase.key});
+
+      REQUIRE(proj.groupCount() == 1);
+      CHECK(trackGroupHeadingMissingKind(proj.groupAt(0).heading.primary) == testCase.missingKind);
+    }
+  }
+} // namespace ao::rt::test

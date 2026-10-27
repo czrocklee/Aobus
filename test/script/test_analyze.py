@@ -50,7 +50,7 @@ class AnalyzerCompileCoverageTest(unittest.TestCase):
         return analyze.run_command(make_parser().parse_args(["analyze", "-p", str(self.build), "-j", "1"]))
 
     def test_test_sources_receive_leak_exclusion_with_native_path_separators(self):
-        test_source = self.root / "test" / "unit" / "Probe.cpp"
+        test_source = self.root / "test" / "Probe.cpp"
         test_source.parent.mkdir(parents=True)
         test_source.touch()
         self.scope.return_value = ([str(test_source), str(self.other)], True)

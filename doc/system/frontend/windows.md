@@ -300,31 +300,31 @@ UIModel supplies style, monogram, and deterministic monogram foreground-color va
 
 ## Test map
 
-- [`ShellStateTest.cpp`](../../../test/unit/winui/layout/ShellStateTest.cpp) protects Windows breakpoints and shell-mode behavior.
-- [`ShellDocumentTest.cpp`](../../../test/unit/winui/layout/ShellDocumentTest.cpp) protects the shipped presets' roles, including the Classic status message's claim on the status bar's remaining width.
-- [`TrackDisplayIndexTest.cpp`](../../../test/unit/uimodel/library/track/TrackDisplayIndexTest.cpp) and [`IndexedTrackRowCacheTest.cpp`](../../../test/unit/uimodel/library/track/IndexedTrackRowCacheTest.cpp) protect grouping, source/display index mapping, and lazy row caching; runtime resource-byte tests protect shared cover delivery and stale-flight fencing.
-- [`AobusSoulViewModelTest.cpp`](../../../test/unit/uimodel/playback/soul/AobusSoulViewModelTest.cpp) protects shared geometry, colors, aura, periods, and frame gating.
-- [`OutputSelectionTest.cpp`](../../../test/unit/uimodel/playback/output/OutputSelectionTest.cpp)
+- [`ShellStateTest.cpp`](../../../test/winui/layout/ShellStateTest.cpp) protects Windows breakpoints and shell-mode behavior.
+- [`ShellDocumentTest.cpp`](../../../test/winui/layout/ShellDocumentTest.cpp) protects the shipped presets' roles, including the Classic status message's claim on the status bar's remaining width.
+- [`TrackDisplayIndexTest.cpp`](../../../test/uimodel/library/track/TrackDisplayIndexTest.cpp) and [`IndexedTrackRowCacheTest.cpp`](../../../test/uimodel/library/track/IndexedTrackRowCacheTest.cpp) protect grouping, source/display index mapping, and lazy row caching; runtime resource-byte tests protect shared cover delivery and stale-flight fencing.
+- [`AobusSoulViewModelTest.cpp`](../../../test/uimodel/playback/soul/AobusSoulViewModelTest.cpp) protects shared geometry, colors, aura, periods, and frame gating.
+- [`OutputSelectionTest.cpp`](../../../test/uimodel/playback/output/OutputSelectionTest.cpp)
   protects catalog-aware persisted-route admission and fallback resolution.
-- [`DesktopOutputSelectionTest.cpp`](../../../test/unit/winui/app/DesktopOutputSelectionTest.cpp)
+- [`DesktopOutputSelectionTest.cpp`](../../../test/winui/app/DesktopOutputSelectionTest.cpp)
   protects Windows startup resolution and the deferred-checkpoint preference update.
-- [`DesktopSettingsYamlSchemaTest.cpp`](../../../test/unit/winui/DesktopSettingsYamlSchemaTest.cpp) and [`ThemeTest.cpp`](../../../test/unit/winui/ThemeTest.cpp) protect strict persistence and fallback.
-- [`TrackPropertiesAdapterTest.cpp`](../../../test/unit/winui/track/TrackPropertiesAdapterTest.cpp) protects control-kind projection, mixed-state preservation, edit parsing, command eligibility, commit outcomes, and vocabulary suggestions on every host.
-- [`WinUiActivityStatusProbe.cpp`](../../../test/integration/windows/WinUiActivityStatusProbe.cpp) builds the registered `status.activity` component — real chrome, adapter, and runtime — with the actual `MainWindow` compiled style resources and invokes its native automation providers, protecting empty-action rejection, null inactive tooltips, Light/Dark foreground updates, retained-detail access, live enablement, and popup teardown. These are native-property regressions, not shipping screenshot or assistive-technology acceptance.
-- [`WinUiAutomationProbe.cpp`](../../../test/integration/windows/WinUiAutomationProbe.cpp) audits loaded Modern/Classic shells and visited popups through native automation peers. Role-and-scope landmarks require critical controls and two synthetic track rows with an album heading to reach that same audit, with effective-width expectations for responsive panes. Naming, removal, Raw-view, role, and scope canaries guard the auditor itself. The Windows CI naming gate runs this explicit desktop suite; unvisited dialogs and rows beyond this small materialized fixture remain outside its coverage.
-- [`WinUiCreditsProbe.cpp`](../../../test/integration/windows/WinUiCreditsProbe.cpp) exercises native Credits controls, including automation-driven kind dropdown choice and row command names, parent staging, and guarded submission; the shared scoped editor/form tests own replacement and overlay semantics.
+- [`DesktopSettingsYamlSchemaTest.cpp`](../../../test/winui/DesktopSettingsYamlSchemaTest.cpp) and [`ThemeTest.cpp`](../../../test/winui/ThemeTest.cpp) protect strict persistence and fallback.
+- [`TrackPropertiesAdapterTest.cpp`](../../../test/winui/track/TrackPropertiesAdapterTest.cpp) protects control-kind projection, mixed-state preservation, edit parsing, command eligibility, commit outcomes, and vocabulary suggestions on every host.
+- [`WinUiActivityStatusProbe.cpp`](../../../test/winui/probe/WinUiActivityStatusProbe.cpp) builds the registered `status.activity` component — real chrome, adapter, and runtime — with the actual `MainWindow` compiled style resources and invokes its native automation providers, protecting empty-action rejection, null inactive tooltips, Light/Dark foreground updates, retained-detail access, live enablement, and popup teardown. These are native-property regressions, not shipping screenshot or assistive-technology acceptance.
+- [`WinUiAutomationProbe.cpp`](../../../test/winui/probe/WinUiAutomationProbe.cpp) audits loaded Modern/Classic shells and visited popups through native automation peers. Role-and-scope landmarks require critical controls and two synthetic track rows with an album heading to reach that same audit, with effective-width expectations for responsive panes. Naming, removal, Raw-view, role, and scope canaries guard the auditor itself. The Windows CI naming gate runs this explicit desktop suite; unvisited dialogs and rows beyond this small materialized fixture remain outside its coverage.
+- [`WinUiCreditsProbe.cpp`](../../../test/winui/probe/WinUiCreditsProbe.cpp) exercises native Credits controls, including automation-driven kind dropdown choice and row command names, parent staging, and guarded submission; the shared scoped editor/form tests own replacement and overlay semantics.
 - [Library workflow tests](windows-library-workflows.md#test-map) cover scan decisions, transfer reports, committed List refresh, and native saved-order accelerators.
-- Tests under [`test/unit/desktop/`](../../../test/unit/desktop) protect shared
+- Tests under [`test/desktop/`](../../../test/desktop) protect shared
   successor arguments, strict root planning, same-root identity, detached
   launch, native quoting, and handle inheritance on both hosts.
-- [`DestructiveLibraryRestartTest.cpp`](../../../test/unit/winui/app/DestructiveLibraryRestartTest.cpp)
-  and [`SelectedRootCommitTest.cpp`](../../../test/unit/winui/app/SelectedRootCommitTest.cpp)
+- [`DestructiveLibraryRestartTest.cpp`](../../../test/winui/app/DestructiveLibraryRestartTest.cpp)
+  and [`SelectedRootCommitTest.cpp`](../../../test/winui/app/SelectedRootCommitTest.cpp)
   protect preparation failure, release-before-launch ordering, and fail-closed
   root candidate mutation.
-- [`StartupWarningsTest.cpp`](../../../test/unit/winui/app/StartupWarningsTest.cpp) protects the startup warnings' status line: their order, and that only an initial scan that did not fail gives the line back to them, once.
-- [`CallbackAdmissionGateTest.cpp`](../../../test/unit/winui/app/CallbackAdmissionGateTest.cpp) protects idempotent retirement and proves that renewing a workflow cannot make an old generation token admissible again.
-- [`WinUiErrorBoundaryTest.cpp`](../../../test/unit/winui/WinUiErrorBoundaryTest.cpp) proves that the optional boundary contains WinRT HRESULT failures without hiding ordinary C++ exceptions.
-- WinUI-owned tests under [`test/unit/winui/`](../../../test/unit/winui) that
+- [`StartupWarningsTest.cpp`](../../../test/winui/app/StartupWarningsTest.cpp) protects the startup warnings' status line: their order, and that only an initial scan that did not fail gives the line back to them, once.
+- [`CallbackAdmissionGateTest.cpp`](../../../test/winui/app/CallbackAdmissionGateTest.cpp) protects idempotent retirement and proves that renewing a workflow cannot make an old generation token admissible again.
+- [`WinUiErrorBoundaryTest.cpp`](../../../test/winui/WinUiErrorBoundaryTest.cpp) proves that the optional boundary contains WinRT HRESULT failures without hiding ordinary C++ exceptions.
+- WinUI-owned tests under [`test/winui/`](../../../test/winui) that
   need a native host are compiled only by the native Windows profile. Windows
   shell policy carrying no WinRT dependency - settings compatibility,
   output-preference resolution, root-commit sequencing, the startup warnings'

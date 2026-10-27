@@ -1,0 +1,237 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Aobus Contributors
+
+#include <ao/library/WriteTransaction.h>
+
+#include "lib/library/detail/LibraryError.h"
+#include "lib/lmdb/detail/ReadFaultInjection.h"
+#include "test/TestFixtureSupport.h"
+#include "test/library/MusicLibraryTestSupport.h"
+#include "test/library/WritableLibraryTestSupport.h"
+#include <ao/CoreIds.h>
+#include <ao/Error.h>
+#include <ao/library/DictionaryStore.h>
+#include <ao/library/LibraryWrite.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/library/ResourceStore.h>
+#include <ao/library/WritableMusicLibrary.h>
+#include <ao/utility/ByteView.h>
+#include <ao/utility/Sha256.h>
+
+#include <catch2/catch_message.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers.hpp>
+#include <lmdb.h>
+
+#include <cstddef>
+#include <expected>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <tuple>
+
+namespace ao::library::test
+{
+  TEST_CASE("MusicLibrary - aborted write does not advance the snapshot revision",
+            "[library][unit][write-transaction][revision]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
+    {
+      auto transaction = library.readTransaction();
+      CHECK(library.libraryRevision(transaction) == 0);
+    }
+    {
+      auto transaction = writeTransaction(library);
+      CHECK(library.libraryRevision(transaction) == 1);
+    }
+    {
+      auto transaction = library.readTransaction();
+      CHECK(library.libraryRevision(transaction) == 0);
+    }
+    {
+      auto transaction = writeTransaction(library);
+      CHECK(library.libraryRevision(transaction) == 1);
+      REQUIRE(transaction.commit());
+    }
+    auto transaction = library.readTransaction();
+    CHECK(library.libraryRevision(transaction) == 1);
+  }
+
+  TEST_CASE("WriteTransaction - successful root operation remains committable", "[library][unit][write-transaction]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
+    auto writable = ao::test::requireValue(WritableMusicLibrary::acquire(library));
+    auto transaction = writable.writeTransaction();
+    auto const bytes = utility::bytes::view(std::string_view{"committed resource"});
+
+    auto createRes = transaction.apply([&library, bytes](LibraryWrite& write)
+                                       { return physicalWriter(library.resources(), write).create(bytes); });
+
+    REQUIRE(createRes);
+    auto const resourceId = *createRes;
+    REQUIRE(transaction.commit());
+
+    auto readTransaction = library.readTransaction();
+    auto const optStored = library.resources().reader(readTransaction).get(resourceId);
+    REQUIRE(optStored);
+    CHECK(optStored->digest == utility::computeSha256(bytes));
+    CHECK(optStored->byteLength == bytes.size());
+  }
+
+  TEST_CASE("WriteTransaction - operation error aborts staged writes and releases the writer gate",
+            "[library][unit][write-transaction]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
+    auto writable = ao::test::requireValue(WritableMusicLibrary::acquire(library));
+    auto transaction = writable.writeTransaction();
+    auto const bytes = utility::bytes::view(std::string_view{"rolled back resource"});
+    auto stagedId = kInvalidResourceId;
+
+    auto operationRes = transaction.apply(
+      [&library, bytes, &stagedId](LibraryWrite& write) -> Result<ResourceId>
+      {
+        auto createRes = physicalWriter(library.resources(), write).create(bytes);
+
+        if (!createRes)
+        {
+          return std::unexpected{createRes.error()};
+        }
+
+        stagedId = *createRes;
+        return makeError(Error::Code::Conflict, "reject staged write");
+      });
+
+    REQUIRE_FALSE(operationRes);
+    CHECK(operationRes.error().code == Error::Code::Conflict);
+    CHECK(operationRes.error().message == "reject staged write");
+
+    auto retryTransaction = writable.writeTransaction();
+    retryTransaction.abort();
+
+    auto readTransaction = library.readTransaction();
+    CHECK_FALSE(library.resources().reader(readTransaction).get(stagedId));
+  }
+
+  TEST_CASE("WriteTransaction - native mutation failure becomes a terminal Result error",
+            "[library][unit][write-transaction]")
+  {
+    constexpr std::size_t kMapSize = std::size_t{256} * 1024;
+    auto const temp = ao::test::TempDir{};
+    auto library = ao::test::requireValue(
+      MusicLibrary::open(temp.path(), temp.path() / "db", MusicLibrary::Options{.pinnedMapBytes = kMapSize}));
+    auto writable = ao::test::requireValue(WritableMusicLibrary::acquire(library));
+    auto transaction = writable.writeTransaction();
+
+    // A resource row is a fixed 36 bytes, so exhausting a pinned map takes a store
+    // that still holds variable-length content; a dictionary entry is one.
+    auto const oversizedText = std::string(kMapSize * 4, 'x');
+    auto failureRes = transaction.apply(
+      [&transaction, &oversizedText](LibraryWrite& /*write*/) -> Result<>
+      {
+        auto idRes = physicalDictionary(transaction).intern(oversizedText);
+
+        if (!idRes)
+        {
+          return std::unexpected{idRes.error()};
+        }
+
+        return {};
+      });
+
+    REQUIRE_FALSE(failureRes);
+    CHECK(failureRes.error().code == Error::Code::StorageFull);
+    CHECK_FALSE(library.dictionary().findId(oversizedText));
+    CHECK(library.dictionary().size() == 0);
+    auto retryTransaction = writable.writeTransaction();
+    retryTransaction.abort();
+  }
+
+  TEST_CASE("WriteTransaction - native writer read fault aborts the root operation",
+            "[library][unit][write-transaction]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
+    auto setup = writeTransaction(library);
+    auto resourceIdRes = setup.apply(
+      [&library](LibraryWrite& write)
+      { return physicalWriter(library.resources(), write).create(utility::bytes::view(std::string_view{"probe"})); });
+    REQUIRE(resourceIdRes);
+    REQUIRE(setup.commit());
+
+    auto transaction = writeTransaction(library);
+
+    auto failureRes = transaction.apply(
+      [&library, resourceId = *resourceIdRes](LibraryWrite& write) -> Result<>
+      {
+        auto writer = physicalWriter(library.resources(), write);
+        [[maybe_unused]] auto injection = lmdb::detail::ReadFaultInjection{MDB_PANIC};
+        std::ignore = writer.get(resourceId);
+        return {};
+      });
+
+    REQUIRE_FALSE(failureRes);
+    CHECK(failureRes.error().code == Error::Code::IoError);
+    INFO(failureRes.error().message);
+    CHECK(failureRes.error().message.contains("mdb_cursor_get"));
+
+    auto retry = writeTransaction(library);
+    CHECK(library.libraryRevision(retry) == 2);
+    retry.abort();
+    auto read = library.readTransaction();
+    CHECK(library.libraryRevision(read) == 1);
+  }
+
+  TEST_CASE("WriteTransaction - private library failure becomes a terminal Result error",
+            "[library][unit][write-transaction]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
+    auto writable = ao::test::requireValue(WritableMusicLibrary::acquire(library));
+    auto transaction = writable.writeTransaction();
+
+    auto failureRes =
+      transaction.apply([](LibraryWrite&) -> Result<>
+                        { detail::throwLibraryError(Error::Code::CorruptData, "private library failure"); });
+
+    REQUIRE_FALSE(failureRes);
+    CHECK(failureRes.error().code == Error::Code::CorruptData);
+    CHECK(failureRes.error().message == "private library failure");
+    auto retryTransaction = writable.writeTransaction();
+    retryTransaction.abort();
+  }
+
+  TEST_CASE("WriteTransaction - unexpected exception aborts before it is rethrown",
+            "[library][unit][write-transaction]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
+    auto writable = ao::test::requireValue(WritableMusicLibrary::acquire(library));
+    auto transaction = writable.writeTransaction();
+    auto const bytes = utility::bytes::view(std::string_view{"exception rollback"});
+    auto stagedId = kInvalidResourceId;
+
+    CHECK_THROWS_WITH(transaction.apply(
+                        [&library, bytes, &stagedId](LibraryWrite& write) -> Result<>
+                        {
+                          auto createRes = physicalWriter(library.resources(), write).create(bytes);
+
+                          if (!createRes)
+                          {
+                            return std::unexpected{createRes.error()};
+                          }
+
+                          stagedId = *createRes;
+                          throw std::runtime_error{"unexpected operation failure"};
+                        }),
+                      "unexpected operation failure");
+
+    auto retryTransaction = writable.writeTransaction();
+    retryTransaction.abort();
+
+    auto readTransaction = library.readTransaction();
+    CHECK_FALSE(library.resources().reader(readTransaction).get(stagedId));
+  }
+} // namespace ao::library::test

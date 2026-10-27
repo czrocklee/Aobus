@@ -173,13 +173,13 @@ Persisted field order and visibility are merged with the active presentation bef
 
 ## Test map
 
-- [`TrackColumnDefaultsTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackColumnDefaultsTest.cpp) protects field alignment, sizing roles, and default/minimum policy.
-- [`TrackColumnWidthSolverTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackColumnWidthSolverTest.cpp) protects distribution, overflow-safe finite-weight normalization, viewport overflow, convergence, resize, and canonical state.
-- [`TrackColumnLayoutsTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackColumnLayoutsTest.cpp) protects per-list state, cascade deletion, notification behavior, and deletion-callback lifetime.
-- [`TrackColumnLayoutYamlSchemaTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackColumnLayoutYamlSchemaTest.cpp) protects stable ids, canonical dimensions, and whole-object rejection.
-- [`TrackColumnLayoutMergingTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackColumnLayoutMergingTest.cpp) protects stored visibility and presentation-field filtering.
-- [`TrackColumnControllerTest.cpp`](../../../test/unit/linux-gtk/track/TrackColumnControllerTest.cpp) protects the GTK adapter.
-- [`TerminalTrackColumnLayoutTest.cpp`](../../../test/unit/tui/TerminalTrackColumnLayoutTest.cpp), [`TrackTableTest.cpp`](../../../test/unit/tui/TrackTableTest.cpp), [`EventControllerTest.cpp`](../../../test/unit/tui/EventControllerTest.cpp), and [`LayoutStateStoreTest.cpp`](../../../test/unit/tui/LayoutStateStoreTest.cpp) protect terminal projection, rendering, commit/rollback gestures, and persistence.
+- [`TrackColumnDefaultsTest.cpp`](../../../test/uimodel/library/presentation/TrackColumnDefaultsTest.cpp) protects field alignment, sizing roles, and default/minimum policy.
+- [`TrackColumnWidthSolverTest.cpp`](../../../test/uimodel/library/presentation/TrackColumnWidthSolverTest.cpp) protects distribution, overflow-safe finite-weight normalization, viewport overflow, convergence, resize, and canonical state.
+- [`TrackColumnLayoutsTest.cpp`](../../../test/uimodel/library/presentation/TrackColumnLayoutsTest.cpp) protects per-list state, cascade deletion, notification behavior, and deletion-callback lifetime.
+- [`TrackColumnLayoutYamlSchemaTest.cpp`](../../../test/uimodel/library/presentation/TrackColumnLayoutYamlSchemaTest.cpp) protects stable ids, canonical dimensions, and whole-object rejection.
+- [`TrackColumnLayoutMergingTest.cpp`](../../../test/uimodel/library/presentation/TrackColumnLayoutMergingTest.cpp) protects stored visibility and presentation-field filtering.
+- [`TrackColumnControllerTest.cpp`](../../../test/linux-gtk/track/TrackColumnControllerTest.cpp) protects the GTK adapter.
+- [`TerminalTrackColumnLayoutTest.cpp`](../../../test/tui/TerminalTrackColumnLayoutTest.cpp), [`TrackTableTest.cpp`](../../../test/tui/TrackTableTest.cpp), [`EventControllerTest.cpp`](../../../test/tui/EventControllerTest.cpp), and [`LayoutStateStoreTest.cpp`](../../../test/tui/LayoutStateStoreTest.cpp) protect terminal projection, rendering, commit/rollback gestures, and persistence.
 
 ## Related documents
 

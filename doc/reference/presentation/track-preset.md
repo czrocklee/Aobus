@@ -58,8 +58,8 @@ Labels and descriptions may evolve only with matching UIModel catalog tests and 
 
 ## Test authority
 
-- [`TrackPresentationTest.cpp`](../../../test/unit/runtime/TrackPresentationTest.cpp) locks established ids and preset shapes; [`TrackRecordingDateSortTest.cpp`](../../../test/unit/runtime/projection/TrackRecordingDateSortTest.cpp) locks all three classical date-aware presets and absence ordering.
-- [`PresentationTextFeaturesTest.cpp`](../../../test/unit/uimodel/presentation/PresentationTextFeaturesTest.cpp) locks text coverage; UIModel and frontend presentation tests lock selection and rendering adaptation.
+- [`TrackPresentationTest.cpp`](../../../test/runtime/TrackPresentationTest.cpp) locks established ids and preset shapes; [`TrackRecordingDateSortTest.cpp`](../../../test/runtime/projection/TrackRecordingDateSortTest.cpp) locks all three classical date-aware presets and absence ordering.
+- [`PresentationTextFeaturesTest.cpp`](../../../test/uimodel/presentation/PresentationTextFeaturesTest.cpp) locks text coverage; UIModel and frontend presentation tests lock selection and rendering adaptation.
 
 ## Related documents
 

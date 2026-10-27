@@ -149,10 +149,10 @@ Representative invalid forms are:
 
 ## Test authority
 
-- [`FormatExpressionTest.cpp`](../../../test/unit/query/FormatExpressionTest.cpp) locks supported fields, concatenation, literals, missing values, pure compilation, explicit binding, access profiles, and rejected forms.
-- [`CliSmokeTest.cpp`](../../../test/unit/cli/CliSmokeTest.cpp) locks the `track show --format` workflow.
-- [`TerminalTitleTest.cpp`](../../../test/unit/tui/TerminalTitleTest.cpp) locks TUI preference compilation and terminal-title evaluation through the same language.
-- [`RecordingDatePredicateTest.cpp`](../../../test/unit/query/RecordingDatePredicateTest.cpp) locks `$recordingDate` formatting at each stored precision, empty output for absence, and its dictionary-free cold access.
+- [`FormatExpressionTest.cpp`](../../../test/query/FormatExpressionTest.cpp) locks supported fields, concatenation, literals, missing values, pure compilation, explicit binding, access profiles, and rejected forms.
+- [`CliSmokeTest.cpp`](../../../test/cli/CliSmokeTest.cpp) locks the `track show --format` workflow.
+- [`TerminalTitleTest.cpp`](../../../test/tui/TerminalTitleTest.cpp) locks TUI preference compilation and terminal-title evaluation through the same language.
+- [`RecordingDatePredicateTest.cpp`](../../../test/query/RecordingDatePredicateTest.cpp) locks `$recordingDate` formatting at each stored precision, empty output for absence, and its dictionary-free cold access.
 
 ## Related documents
 

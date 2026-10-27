@@ -120,8 +120,8 @@ The runtime schema writes strong ids through their explicit unsigned raw values 
 
 ## Test authority
 
-- [`PlaybackSessionTest.cpp`](../../../test/unit/runtime/PlaybackSessionTest.cpp) protects every field, missing-field rejection, schema gate, semantic validation, round trip, and frozen stop/shutdown checkpoints.
-- [`ConfigStoreTest.cpp`](../../../test/unit/runtime/ConfigStoreTest.cpp) protects the explicit schema invocation and failed-candidate boundary used by this payload.
+- [`PlaybackSessionTest.cpp`](../../../test/runtime/PlaybackSessionTest.cpp) protects every field, missing-field rejection, schema gate, semantic validation, round trip, and frozen stop/shutdown checkpoints.
+- [`ConfigStoreTest.cpp`](../../../test/runtime/ConfigStoreTest.cpp) protects the explicit schema invocation and failed-candidate boundary used by this payload.
 
 ## Related documents
 

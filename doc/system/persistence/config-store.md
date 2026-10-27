@@ -229,10 +229,10 @@ A runtime or frontend workflow decides how to report or recover from a store fai
 
 ## Test map
 
-- [`ConfigStoreTest.cpp`](../../../test/unit/runtime/ConfigStoreTest.cpp) protects explicit schema round trips, presence results, seeded values, byte ceilings, failed-deserialize isolation, multi-group atomicity, propagation and isolation of schema exceptions, replacement failure, temporary-string ownership, removal, read-only behavior, protected-group refusal of load, save, batch save, and removal, and the no-location session's same-instance live groups and lack of filesystem output.
-- [`RymlAdapterTest.cpp`](../../../test/unit/utility/RymlAdapterTest.cpp) protects strict scalar parsing and parser diagnostics; [`YamlSerializationTest.cpp`](../../../test/unit/utility/YamlSerializationTest.cpp) protects node-kind and key validation, duplicate detection, unknown-key policy, bounded context, failure order, and arena-owned writes.
+- [`ConfigStoreTest.cpp`](../../../test/runtime/ConfigStoreTest.cpp) protects explicit schema round trips, presence results, seeded values, byte ceilings, failed-deserialize isolation, multi-group atomicity, propagation and isolation of schema exceptions, replacement failure, temporary-string ownership, removal, read-only behavior, protected-group refusal of load, save, batch save, and removal, and the no-location session's same-instance live groups and lack of filesystem output.
+- [`RymlAdapterTest.cpp`](../../../test/utility/RymlAdapterTest.cpp) protects strict scalar parsing and parser diagnostics; [`YamlSerializationTest.cpp`](../../../test/utility/YamlSerializationTest.cpp) protects node-kind and key validation, duplicate detection, unknown-key policy, bounded context, failure order, and arena-owned writes.
 - Payload schema tests protect field vocabulary, versions, unknown and missing fields, enum membership, semantic rejection, and representative documents at their owning layers.
-- [`AtomicFileTest.cpp`](../../../test/unit/utility/AtomicFileTest.cpp) protects replacement, owner-only permissions, and lower write-failure behavior.
+- [`AtomicFileTest.cpp`](../../../test/utility/AtomicFileTest.cpp) protects replacement, owner-only permissions, and lower write-failure behavior.
 
 ## Related documents
 

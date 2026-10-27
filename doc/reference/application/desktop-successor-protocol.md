@@ -109,15 +109,15 @@ Accepted equals spelling with an unrelated GTK argument preserved:
 
 ## Test authority
 
-- [`LibrarySuccessorProtocolTest.cpp`](../../../test/unit/desktop/LibrarySuccessorProtocolTest.cpp)
+- [`LibrarySuccessorProtocolTest.cpp`](../../../test/desktop/LibrarySuccessorProtocolTest.cpp)
   protects round trip, preservation, pairing, duplicate, relative-root, and
   scan-admission rules on every host.
-- [`GtkStartupPlanTest.cpp`](../../../test/unit/linux-gtk/app/GtkStartupPlanTest.cpp)
+- [`GtkStartupPlanTest.cpp`](../../../test/linux-gtk/app/GtkStartupPlanTest.cpp)
   protects GTK-specific remainder partitioning.
-- [`DetachedProcessLauncherWindowsTest.cpp`](../../../test/unit/desktop/DetachedProcessLauncherWindowsTest.cpp)
+- [`DetachedProcessLauncherWindowsTest.cpp`](../../../test/desktop/DetachedProcessLauncherWindowsTest.cpp)
   protects exact UTF-8-to-Windows argv transport for spaces, quotes, trailing
   backslashes, and Unicode.
-- [`AppKitDesktopScenario.mm`](../../../test/integration/macos/AppKitDesktopScenario.mm) exercises successor reentry through production startup and launcher invocation under the native supervisor; it is not an exhaustive malformed-native-option test.
+- [`AppKitDesktopScenario.mm`](../../../test/macos-appkit/AppKitDesktopScenario.mm) exercises successor reentry through production startup and launcher invocation under the native supervisor; it is not an exhaustive malformed-native-option test.
 
 ## Related documents
 

@@ -1,0 +1,1610 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 Aobus Contributors
+
+#include "tui/LibraryController.h"
+
+#include "test/MessageCatalogTestSupport.h"
+#include "test/TestFixtureSupport.h"
+#include "test/library/TrackTestSupport.h"
+#include "test/runtime/AppRuntimeTestSupport.h"
+#include "test/runtime/RuntimeLibraryTestSupport.h"
+#include "tui/LibraryNavigation.h"
+#include "tui/ListNavigationModel.h"
+#include "tui/TrackPresentationNavigation.h"
+#include <ao/CoreIds.h>
+#include <ao/i18n/IcuTextOrdering.h>
+#include <ao/rt/ListMutation.h>
+#include <ao/rt/TrackField.h>
+#include <ao/rt/TrackPresentation.h>
+#include <ao/rt/ViewIds.h>
+#include <ao/rt/ViewService.h>
+#include <ao/rt/ViewState.h>
+#include <ao/rt/VirtualListIds.h>
+#include <ao/rt/WorkspaceService.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryCommands.h>
+#include <ao/uimodel/library/presentation/ListPresentations.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
+#include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
+
+#include <catch2/catch_message.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
+
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <string_view>
+#include <unordered_set>
+#include <utility>
+#include <vector>
+
+namespace ao::tui::test
+{
+  namespace
+  {
+    struct LibraryControllerFixture final
+    {
+      ao::test::TempDir tempDir{};
+      std::unique_ptr<rt::AppRuntime> runtimePtr{rt::test::makeStateOnlyRuntime(tempDir)};
+      uimodel::TrackPresentationCatalog presentationCatalog{runtimePtr->workspace(), ao::test::englishMessageCatalog()};
+      uimodel::ListPresentations listPresentations{presentationCatalog, runtimePtr->library().changes()};
+
+      LibraryController makeController()
+      {
+        return LibraryController{runtimePtr->library(),
+                                 runtimePtr->views(),
+                                 runtimePtr->workspace(),
+                                 ao::test::englishMessageCatalog(),
+                                 listPresentations};
+      }
+
+      TrackId addTrack(std::string_view title) const
+      {
+        return rt::test::addRuntimeTrack(*runtimePtr, library::test::TrackSpec{.title = std::string{title}});
+      }
+
+      TrackId addTrack(library::test::TrackSpec const& spec) const
+      {
+        return rt::test::addRuntimeTrack(*runtimePtr, spec);
+      }
+
+      ListId addList(std::string name) const
+      {
+        return ao::test::requireValue(rt::test::runRuntimeTask(
+          *runtimePtr, runtimePtr->library().commands().createListAsync(rt::ListDraft{.name = std::move(name)})));
+      }
+    };
+
+    std::string requireAppliedFilter(LibraryController& controller)
+    {
+      auto res = controller.applyFilter();
+      REQUIRE(res);
+      return std::move(*res);
+    }
+  } // namespace
+
+  TEST_CASE("LibraryController - live locale change retains focused and marked track identities",
+            "[tui][unit][library][localization]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const umlaut = fixture.addTrack("ä");
+    auto const zed = fixture.addTrack("z");
+    fixture.runtimePtr->setTextOrderingPolicy(
+      std::shared_ptr<rt::TextOrderingPolicy const>{ao::test::requireValue(i18n::createIcuTextOrderingPolicy("de"))});
+    auto controller = fixture.makeController();
+    controller.setPresentation("songs");
+    controller.setSelectedTrackIndex(0);
+    REQUIRE(controller.selectedTrackView().track->id == umlaut);
+    controller.toggleFocusedMark();
+    auto const viewId = controller.activeViewId();
+    fixture.runtimePtr->setTextOrderingPolicy(
+      std::shared_ptr<rt::TextOrderingPolicy const>{ao::test::requireValue(i18n::createIcuTextOrderingPolicy("sv"))});
+    controller.setTextCatalog(ao::test::messageCatalog("zh-Hans"));
+    CHECK(controller.activeViewId() == viewId);
+    CHECK(controller.selectedTrackView().track->id == umlaut);
+    CHECK(controller.markedIds() == std::unordered_set<TrackId>{umlaut});
+    REQUIRE(controller.tracks().size() == 2);
+    CHECK(controller.tracks().front().id == zed);
+    CHECK(controller.currentListTitle() != "All Tracks");
+  }
+
+  TEST_CASE("LibraryController - startup publishes an active all-tracks view", "[tui][integration][library]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const trackId = fixture.addTrack("Needle");
+
+    auto controller = fixture.makeController();
+
+    REQUIRE(controller.activeViewId() != rt::kInvalidViewId);
+    auto const workspace = fixture.runtimePtr->workspace().snapshot();
+    REQUIRE(workspace.openViews.size() == 1);
+    CHECK(workspace.activeViewId == controller.activeViewId());
+    CHECK(fixture.runtimePtr->views().trackListState(controller.activeViewId()).listId == rt::kAllTracksListId);
+    CHECK_FALSE(fixture.runtimePtr->workspace().canGoBack());
+    REQUIRE(controller.tracks().size() == 1);
+    CHECK(controller.tracks()[0].id == trackId);
+
+    controller.setFilterDraft("Needle");
+    CHECK(requireAppliedFilter(controller) == "Quick filter matched 1 track");
+    REQUIRE(controller.tracks().size() == 1);
+    CHECK(controller.tracks()[0].id == trackId);
+  }
+
+  TEST_CASE("LibraryController - fallback navigation uses the shared presentation recommendation",
+            "[tui][unit][library][presentation]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto catalog =
+      uimodel::TrackPresentationCatalog{fixture.runtimePtr->workspace(), ao::test::englishMessageCatalog()};
+    auto presentations = uimodel::ListPresentations{catalog, fixture.runtimePtr->library().changes()};
+
+    auto controller = LibraryController{fixture.runtimePtr->library(),
+                                        fixture.runtimePtr->views(),
+                                        fixture.runtimePtr->workspace(),
+                                        ao::test::englishMessageCatalog(),
+                                        presentations};
+
+    CHECK(controller.activePresentationId() == "albums");
+    CHECK(presentations.snapshot().empty());
+  }
+
+  TEST_CASE("LibraryController - new list navigation uses the persisted presentation preference",
+            "[tui][unit][library][presentation]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const listId = fixture.addList("Albums");
+    auto catalog =
+      uimodel::TrackPresentationCatalog{fixture.runtimePtr->workspace(), ao::test::englishMessageCatalog()};
+    auto presentations = uimodel::ListPresentations{catalog, fixture.runtimePtr->library().changes()};
+    presentations.setPresentationIdForList(rt::kAllTracksListId, "artists");
+    presentations.setPresentationIdForList(listId, "albums");
+
+    auto controller = LibraryController{fixture.runtimePtr->library(),
+                                        fixture.runtimePtr->views(),
+                                        fixture.runtimePtr->workspace(),
+                                        ao::test::englishMessageCatalog(),
+                                        presentations};
+
+    CHECK(controller.activePresentationId() == "artists");
+    controller.navigation().reveal(listId);
+    REQUIRE(controller.openList(controller.navigation().cursor()));
+    CHECK(controller.currentListId() == listId);
+    CHECK(controller.activePresentationId() == "albums");
+  }
+
+  TEST_CASE("LibraryController - successful presentation selection records the list preference",
+            "[tui][unit][library][presentation]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto catalog =
+      uimodel::TrackPresentationCatalog{fixture.runtimePtr->workspace(), ao::test::englishMessageCatalog()};
+    auto presentations = uimodel::ListPresentations{catalog, fixture.runtimePtr->library().changes()};
+    auto controller = LibraryController{fixture.runtimePtr->library(),
+                                        fixture.runtimePtr->views(),
+                                        fixture.runtimePtr->workspace(),
+                                        ao::test::englishMessageCatalog(),
+                                        presentations};
+
+    CHECK(controller.setPresentation("albums") == "View: albums");
+
+    REQUIRE(presentations.snapshot().contains(rt::kAllTracksListId));
+    CHECK(presentations.snapshot().at(rt::kAllTracksListId) == "albums");
+  }
+
+  TEST_CASE("LibraryController - failed presentation selection does not change the list preference",
+            "[tui][unit][library][presentation]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto catalog =
+      uimodel::TrackPresentationCatalog{fixture.runtimePtr->workspace(), ao::test::englishMessageCatalog()};
+    auto presentations = uimodel::ListPresentations{catalog, fixture.runtimePtr->library().changes()};
+    presentations.setPresentationIdForList(rt::kAllTracksListId, "albums");
+    auto controller = LibraryController{fixture.runtimePtr->library(),
+                                        fixture.runtimePtr->views(),
+                                        fixture.runtimePtr->workspace(),
+                                        ao::test::englishMessageCatalog(),
+                                        presentations};
+    auto const activeBefore = controller.activePresentationId();
+
+    CHECK(controller.setPresentation("missing-presentation") == "Unknown view missing-presentation");
+
+    CHECK(controller.activePresentationId() == activeBefore);
+    CHECK(presentations.snapshot().at(rt::kAllTracksListId) == "albums");
+  }
+
+  TEST_CASE("LibraryController - persisted preference does not replace an exact restored active view",
+            "[tui][integration][library][presentation]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const* albumsPreset = rt::builtinTrackPresentationPreset("albums");
+    REQUIRE(albumsPreset != nullptr);
+    auto const activeViewId = ao::test::requireValue(fixture.runtimePtr->workspace().navigate({
+      .target = rt::GlobalViewKind::AllTracks,
+      .optPresentation =
+        rt::NavigationPresentation{
+          .mode = rt::NavigationPresentationMode::Override,
+          .spec = albumsPreset->spec,
+        },
+    }));
+    auto const workspaceBefore = fixture.runtimePtr->workspace().snapshot();
+    auto catalog =
+      uimodel::TrackPresentationCatalog{fixture.runtimePtr->workspace(), ao::test::englishMessageCatalog()};
+    auto presentations = uimodel::ListPresentations{catalog, fixture.runtimePtr->library().changes()};
+    presentations.setPresentationIdForList(rt::kAllTracksListId, "artists");
+
+    auto controller = LibraryController{fixture.runtimePtr->library(),
+                                        fixture.runtimePtr->views(),
+                                        fixture.runtimePtr->workspace(),
+                                        ao::test::englishMessageCatalog(),
+                                        presentations};
+
+    CHECK(controller.activeViewId() == activeViewId);
+    CHECK(controller.activePresentationId() == "albums");
+    CHECK(fixture.runtimePtr->workspace().snapshot() == workspaceBefore);
+  }
+
+  TEST_CASE("LibraryController - construction attaches the exact active workspace view", "[tui][integration][library]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto firstTrackId = kInvalidTrackId;
+    auto secondTrackId = kInvalidTrackId;
+
+    {
+      auto runtimePtr = rt::test::makeStateOnlyRuntime(tempDir);
+      firstTrackId = rt::test::addRuntimeTrack(*runtimePtr, library::test::TrackSpec{.title = "First"});
+      secondTrackId = rt::test::addRuntimeTrack(*runtimePtr, library::test::TrackSpec{.title = "Second"});
+      auto const* songsPreset = rt::builtinTrackPresentationPreset("songs");
+      auto const* albumsPreset = rt::builtinTrackPresentationPreset("albums");
+      REQUIRE(songsPreset != nullptr);
+      REQUIRE(albumsPreset != nullptr);
+      REQUIRE(runtimePtr->workspace().navigate({
+        .target =
+          rt::FilteredListTarget{
+            .listId = rt::kAllTracksListId,
+            .filterExpression = "$title ~ \"First\"",
+          },
+        .optPresentation =
+          rt::NavigationPresentation{
+            .mode = rt::NavigationPresentationMode::Override,
+            .spec = songsPreset->spec,
+          },
+      }));
+      REQUIRE(runtimePtr->workspace().navigate({
+        .target =
+          rt::FilteredListTarget{
+            .listId = rt::kAllTracksListId,
+            .filterExpression = "$title ~ \"Second\"",
+          },
+        .optPresentation =
+          rt::NavigationPresentation{
+            .mode = rt::NavigationPresentationMode::Override,
+            .spec = albumsPreset->spec,
+          },
+      }));
+      runtimePtr->workspace().saveSession(runtimePtr->workspaceConfigStore());
+    }
+
+    auto runtimePtr = rt::test::makeStateOnlyRuntime(tempDir);
+    REQUIRE(runtimePtr->workspace().restoreSession(runtimePtr->workspaceConfigStore()));
+    rt::test::settleRuntimeCallbacks(*runtimePtr);
+    auto const before = runtimePtr->workspace().snapshot();
+    REQUIRE(before.openViews.size() == 2);
+    auto const expectedActiveViewId = before.activeViewId;
+    auto const expectedState = runtimePtr->views().trackListState(expectedActiveViewId);
+    REQUIRE(expectedState.filterExpression == "$title ~ \"Second\"");
+
+    auto presentationCatalog =
+      uimodel::TrackPresentationCatalog{runtimePtr->workspace(), ao::test::englishMessageCatalog()};
+    auto listPresentations = uimodel::ListPresentations{presentationCatalog, runtimePtr->library().changes()};
+    auto controller = LibraryController{runtimePtr->library(),
+                                        runtimePtr->views(),
+                                        runtimePtr->workspace(),
+                                        ao::test::englishMessageCatalog(),
+                                        listPresentations};
+
+    CHECK(controller.activeViewId() == expectedActiveViewId);
+    CHECK(runtimePtr->workspace().snapshot() == before);
+    CHECK(controller.currentListId() == rt::kAllTracksListId);
+    CHECK(controller.navigation().cursor() == rt::kAllTracksListId);
+    CHECK(controller.filterDraft() == expectedState.filterExpression);
+    CHECK(controller.activePresentationId() == "albums");
+    REQUIRE(controller.tracks().size() == 1);
+    CHECK(controller.tracks()[0].id == secondTrackId);
+    CHECK(controller.tracks()[0].id != firstTrackId);
+    auto const selection = runtimePtr->views().trackListState(expectedActiveViewId).selection;
+    REQUIRE(selection.size() == 1);
+    CHECK(selection[0] == secondTrackId);
+  }
+
+  TEST_CASE("LibraryController - construction keeps a valid empty restored view", "[tui][integration][library]")
+  {
+    auto tempDir = ao::test::TempDir{};
+
+    {
+      auto runtimePtr = rt::test::makeStateOnlyRuntime(tempDir);
+      REQUIRE(rt::test::addRuntimeTrack(*runtimePtr, library::test::TrackSpec{.title = "Present"}) != kInvalidTrackId);
+      REQUIRE(runtimePtr->workspace().navigate({
+        .target =
+          rt::FilteredListTarget{
+            .listId = rt::kAllTracksListId,
+            .filterExpression = "$title ~ \"Absent\"",
+          },
+      }));
+      runtimePtr->workspace().saveSession(runtimePtr->workspaceConfigStore());
+    }
+
+    auto runtimePtr = rt::test::makeStateOnlyRuntime(tempDir);
+    REQUIRE(runtimePtr->workspace().restoreSession(runtimePtr->workspaceConfigStore()));
+    rt::test::settleRuntimeCallbacks(*runtimePtr);
+    auto const before = runtimePtr->workspace().snapshot();
+    REQUIRE(before.openViews.size() == 1);
+    auto const expectedActiveViewId = before.activeViewId;
+
+    auto presentationCatalog =
+      uimodel::TrackPresentationCatalog{runtimePtr->workspace(), ao::test::englishMessageCatalog()};
+    auto listPresentations = uimodel::ListPresentations{presentationCatalog, runtimePtr->library().changes()};
+    auto controller = LibraryController{runtimePtr->library(),
+                                        runtimePtr->views(),
+                                        runtimePtr->workspace(),
+                                        ao::test::englishMessageCatalog(),
+                                        listPresentations};
+
+    CHECK(controller.activeViewId() == expectedActiveViewId);
+    CHECK(runtimePtr->workspace().snapshot() == before);
+    CHECK(controller.filterDraft() == "$title ~ \"Absent\"");
+    CHECK(controller.tracks().empty());
+  }
+
+  TEST_CASE("LibraryController - reload preserves the active view configuration", "[tui][integration][library]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const matchingTrackId = fixture.addTrack("Needle");
+    fixture.addTrack("Other");
+
+    auto controller = fixture.makeController();
+    controller.setFilterDraft("Needle");
+    CHECK(requireAppliedFilter(controller) == "Quick filter matched 1 track");
+    CHECK(controller.setPresentation("albums") == "View: albums");
+    REQUIRE(controller.tracks().size() == 1);
+    auto const activeViewId = controller.activeViewId();
+    auto const workspaceBefore = fixture.runtimePtr->workspace().snapshot();
+    auto const viewBefore = fixture.runtimePtr->views().trackListState(activeViewId);
+
+    CHECK(controller.reloadActiveList() == "Reloaded 1 track");
+
+    CHECK(controller.activeViewId() == activeViewId);
+    CHECK(fixture.runtimePtr->workspace().snapshot() == workspaceBefore);
+    CHECK(fixture.runtimePtr->views().trackListState(activeViewId).filterExpression == viewBefore.filterExpression);
+    CHECK(fixture.runtimePtr->views().trackListState(activeViewId).presentation == viewBefore.presentation);
+    CHECK(controller.filterDraft() == "Needle");
+    CHECK(controller.activePresentationId() == "albums");
+    REQUIRE(controller.tracks().size() == 1);
+    CHECK(controller.tracks()[0].id == matchingTrackId);
+  }
+
+  TEST_CASE("LibraryController - track-only reload preserves chooser highlights", "[tui][unit][library]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    fixture.addTrack("Initial");
+    auto const otherListId = fixture.addList("Other");
+    auto controller = fixture.makeController();
+    controller.navigation().reveal(otherListId);
+    REQUIRE(controller.presentationEntries().size() > 1);
+    auto const activePresentationId = controller.activePresentationId();
+    auto const selectedPresentation = controller.selectedPresentation() == 0 ? 1 : 0;
+    REQUIRE(controller.trySetSelectedPresentation(selectedPresentation));
+
+    fixture.addTrack("Added");
+    rt::test::settleRuntimeCallbacks(*fixture.runtimePtr);
+
+    CHECK(controller.navigation().cursor() == otherListId);
+    CHECK(controller.selectedPresentation() == selectedPresentation);
+    CHECK(controller.currentListId() == rt::kAllTracksListId);
+    CHECK(controller.activePresentationId() == activePresentationId);
+    CHECK(controller.tracks().size() == 2);
+  }
+
+  TEST_CASE("LibraryController - navigation refresh localizes unnamed Lists for both consumers",
+            "[tui][unit][library][localization]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const unnamedId = fixture.addList("");
+
+    auto controller = LibraryController{fixture.runtimePtr->library(),
+                                        fixture.runtimePtr->views(),
+                                        fixture.runtimePtr->workspace(),
+                                        ao::test::messageCatalog("de"),
+                                        fixture.listPresentations};
+
+    auto const chooserEntry = std::ranges::find(controller.libraryEntries(), unnamedId, &LibraryNavEntry::id);
+    REQUIRE(chooserEntry != controller.libraryEntries().end());
+    CHECK(chooserEntry->label == "[L] <Unbenannte Liste>");
+
+    auto const treeRow = std::ranges::find(controller.navigation().rows(), unnamedId, &ListNavigationRow::id);
+    REQUIRE(treeRow != controller.navigation().rows().end());
+    CHECK(treeRow->name == "<Unbenannte Liste>");
+  }
+
+  TEST_CASE("LibraryController - chooser selection clamps and can reveal the active List",
+            "[tui][unit][library][selection]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const firstId = fixture.addList("First");
+    auto const lastId = fixture.addList("Last");
+    auto controller = fixture.makeController();
+
+    controller.selectListRow(-10);
+    CHECK(controller.selectedList() == 0);
+    CHECK(controller.libraryEntries()[controller.selectedList()].id == rt::kAllTracksListId);
+    controller.selectListRow(100);
+    CHECK(controller.selectedList() == static_cast<std::int32_t>(controller.libraryEntries().size()) - 1);
+    CHECK(controller.libraryEntries()[controller.selectedList()].id == lastId);
+
+    REQUIRE(controller.openList(firstId));
+    controller.selectListRow(100);
+    controller.revealActiveList();
+    CHECK(controller.libraryEntries()[controller.selectedList()].id == firstId);
+  }
+
+  TEST_CASE("LibraryController - chooser refresh retains the selected List identity when rows shift",
+            "[tui][unit][library][selection]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const removedId = fixture.addList("Removed before selection");
+    auto const selectedId = fixture.addList("Retained selection");
+    auto controller = fixture.makeController();
+    auto const selected = std::ranges::find(controller.libraryEntries(), selectedId, &LibraryNavEntry::id);
+    REQUIRE(selected != controller.libraryEntries().end());
+    controller.selectListRow(static_cast<std::int32_t>(selected - controller.libraryEntries().begin()));
+    REQUIRE(controller.libraryEntries()[controller.selectedList()].id == selectedId);
+
+    REQUIRE(rt::test::runRuntimeTask(
+      *fixture.runtimePtr, fixture.runtimePtr->library().commands().deleteListAsync(removedId)));
+    rt::test::settleRuntimeCallbacks(*fixture.runtimePtr);
+
+    CHECK(controller.libraryEntries()[controller.selectedList()].id == selectedId);
+    CHECK(controller.selectedList() == 1);
+  }
+
+  TEST_CASE("LibraryController - reload falls back when the active view disappeared", "[tui][integration][library]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    fixture.addTrack("Needle");
+    fixture.addTrack("Other");
+    auto controller = fixture.makeController();
+    controller.setFilterDraft("Needle");
+    REQUIRE(controller.applyFilter());
+    auto const closedViewId = controller.activeViewId();
+    REQUIRE(fixture.runtimePtr->workspace().closeView(closedViewId));
+
+    CHECK(controller.reloadActiveList() == "Reloaded 2 tracks");
+
+    CHECK(controller.activeViewId() != closedViewId);
+    CHECK(controller.currentListId() == rt::kAllTracksListId);
+    CHECK(controller.filterDraft().empty());
+    REQUIRE(controller.tracks().size() == 2);
+    CHECK(fixture.runtimePtr->workspace().snapshot().activeViewId == controller.activeViewId());
+  }
+
+  TEST_CASE("LibraryController - list deletion recovers without observer-order assumptions",
+            "[tui][integration][library]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    fixture.addTrack("Needle");
+    auto const temporaryListId = fixture.addList("Temporary");
+    auto catalog =
+      uimodel::TrackPresentationCatalog{fixture.runtimePtr->workspace(), ao::test::englishMessageCatalog()};
+    auto presentations = uimodel::ListPresentations{catalog, fixture.runtimePtr->library().changes()};
+    presentations.setPresentationIdForList(temporaryListId, "albums");
+    auto columnLayouts = uimodel::TrackColumnLayouts{fixture.runtimePtr->library().changes()};
+    columnLayouts.updateLayout(
+      temporaryListId, {uimodel::TrackColumnState{.field = rt::TrackField::Duration, .width = 17, .weight = -1.0}});
+    auto controller = LibraryController{fixture.runtimePtr->library(),
+                                        fixture.runtimePtr->views(),
+                                        fixture.runtimePtr->workspace(),
+                                        ao::test::englishMessageCatalog(),
+                                        presentations};
+    auto const allTracksViewId = controller.activeViewId();
+    controller.navigation().reveal(temporaryListId);
+    REQUIRE(controller.openList(controller.navigation().cursor()));
+    REQUIRE(controller.currentListId() == temporaryListId);
+
+    REQUIRE(rt::test::runRuntimeTask(
+      *fixture.runtimePtr, fixture.runtimePtr->library().commands().deleteListAsync(temporaryListId)));
+    rt::test::settleRuntimeCallbacks(*fixture.runtimePtr);
+
+    CHECK(controller.activeViewId() == allTracksViewId);
+    CHECK(controller.currentListId() == rt::kAllTracksListId);
+    CHECK(fixture.runtimePtr->workspace().snapshot().activeViewId == allTracksViewId);
+    CHECK_FALSE(presentations.snapshot().contains(temporaryListId));
+    CHECK_FALSE(columnLayouts.snapshot().contains(temporaryListId));
+    REQUIRE(controller.tracks().size() == 1);
+    CHECK(controller.tracks()[0].row.title == "Needle");
+  }
+
+  TEST_CASE("LibraryController - expression filters report expression mode", "[tui][unit][library]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const trackId = fixture.addTrack("Needle");
+    fixture.addTrack("Other");
+
+    auto controller = fixture.makeController();
+    controller.setFilterDraft("$title ~ \"Needle\"");
+
+    CHECK(requireAppliedFilter(controller) == "Expression filter matched 1 track");
+    REQUIRE(controller.tracks().size() == 1);
+    CHECK(controller.tracks()[0].id == trackId);
+  }
+
+  TEST_CASE("LibraryController - exposes and clears transient expression errors", "[tui][unit][library][filter]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    fixture.addTrack("Needle");
+
+    auto controller = fixture.makeController();
+    controller.setFilterDraft("$artist =");
+
+    REQUIRE(controller.applyFilter());
+    CHECK(controller.filterError().contains("Filter error:"));
+
+    controller.setFilterDraft("Needle");
+    REQUIRE(controller.applyFilter());
+    CHECK(controller.filterError().empty());
+  }
+
+  TEST_CASE("LibraryController - opening another list clears the previous view filter error",
+            "[tui][unit][library][filter]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    fixture.addTrack("Needle");
+    auto const cleanListId = fixture.addList("Clean");
+
+    auto controller = fixture.makeController();
+    controller.setFilterDraft("$artist =");
+    REQUIRE(controller.applyFilter());
+    REQUIRE(controller.filterError().contains("Filter error:"));
+
+    controller.navigation().reveal(cleanListId);
+
+    auto const openedRes = controller.openList(controller.navigation().cursor());
+
+    REQUIRE(openedRes);
+    CHECK(controller.currentListId() == cleanListId);
+    CHECK(controller.filterDraft().empty());
+    CHECK(controller.filterError().empty());
+  }
+
+  TEST_CASE("LibraryController - filter error preserves visible controller state", "[tui][unit][library][selection]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const firstTrackId = fixture.addTrack("Needle");
+    fixture.addTrack("Other");
+
+    auto controller = fixture.makeController();
+    auto const activeViewId = controller.activeViewId();
+    auto const sectionCount = controller.sections().size();
+    controller.toggleFocusedMark();
+    controller.moveTrackSelection(1);
+    auto const selectedTrack = controller.selectedTrack();
+    REQUIRE(selectedTrack == 1);
+    REQUIRE(controller.markedIds().contains(firstTrackId));
+    controller.setFilterDraft("Needle");
+    REQUIRE(fixture.runtimePtr->workspace().closeView(activeViewId));
+
+    auto res = controller.applyFilter();
+
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::NotFound);
+    CHECK(controller.filterError().contains("Filter error:"));
+    CHECK(controller.filterDraft() == "Needle");
+    CHECK(controller.activeViewId() == activeViewId);
+    CHECK(controller.selectedTrack() == selectedTrack);
+    CHECK(controller.sections().size() == sectionCount);
+    REQUIRE(controller.tracks().size() == 2);
+    CHECK(controller.tracks().front().id == firstTrackId);
+    CHECK(controller.activePresentation() == rt::defaultTrackPresentationSpec());
+    CHECK(controller.markedIds() == std::unordered_set<TrackId>{firstTrackId});
+  }
+
+  TEST_CASE("LibraryController - empty track views clear the published selection", "[tui][integration][library]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const trackId = fixture.addTrack("Needle");
+
+    auto controller = fixture.makeController();
+    auto const activeViewId = controller.activeViewId();
+    auto const selectionBefore = fixture.runtimePtr->views().trackListState(activeViewId).selection;
+    REQUIRE(selectionBefore.size() == 1);
+    CHECK(selectionBefore.front() == trackId);
+    controller.setFilterDraft("not-present");
+
+    CHECK(requireAppliedFilter(controller) == "Quick filter matched 0 tracks");
+    CHECK(controller.tracks().empty());
+    CHECK(fixture.runtimePtr->views().trackListState(activeViewId).selection.empty());
+    CHECK(fixture.runtimePtr->workspace().snapshot().activeViewId == activeViewId);
+
+    auto selected = controller.selectedTrackView();
+    CHECK(selected.track == nullptr);
+    CHECK(selected.coverArtId == kInvalidResourceId);
+  }
+
+  TEST_CASE("LibraryController - revealTrack selects a visible track", "[tui][unit][library]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    fixture.addTrack("First");
+    auto const secondId = fixture.addTrack("Second");
+
+    auto controller = fixture.makeController();
+
+    CHECK(controller.revealTrack(secondId) == "Revealed Second");
+    CHECK(controller.selectedTrack() == 1);
+    REQUIRE(controller.selectedTrackView().track != nullptr);
+    CHECK(controller.selectedTrackView().track->id == secondId);
+  }
+
+  TEST_CASE("LibraryController - revealTrack opens an unfiltered view and preserves the previous filter",
+            "[tui][integration][library]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    fixture.addTrack("First");
+    auto const hiddenId = fixture.addTrack("Hidden");
+
+    auto controller = fixture.makeController();
+
+    CHECK(controller.revealTrack(kInvalidTrackId) == "No current track");
+
+    controller.setFilterDraft("First");
+    CHECK(requireAppliedFilter(controller) == "Quick filter matched 1 track");
+    auto const filteredView = controller.activeViewId();
+    auto const expression = fixture.runtimePtr->views().trackListState(filteredView).filterExpression;
+    CHECK(controller.revealTrack(hiddenId) == "Revealed Hidden");
+    CHECK(controller.activeViewId() != filteredView);
+    CHECK(controller.tracks()[controller.selectedTrack()].id == hiddenId);
+    CHECK(fixture.runtimePtr->views().trackListState(filteredView).filterExpression == expression);
+    REQUIRE(controller.navigateHistory(false));
+    CHECK(controller.activeViewId() == filteredView);
+    REQUIRE(controller.tracks().size() == 1);
+    CHECK(controller.tracks().front().row.title == "First");
+    REQUIRE(controller.navigateHistory(true));
+    CHECK(controller.tracks().size() == 2);
+  }
+
+  TEST_CASE("LibraryController - revealTrack selects a track after presentation reorder", "[tui][unit][library]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const lastId = fixture.addTrack(library::test::TrackSpec{.title = "B One",
+                                                                  .artist = "Artist",
+                                                                  .album = "Album B",
+                                                                  .albumArtist = "Artist",
+                                                                  .uri = "b1.flac",
+                                                                  .year = 2021});
+    auto const targetId = fixture.addTrack(library::test::TrackSpec{.title = "A One",
+                                                                    .artist = "Artist",
+                                                                    .album = "Album A",
+                                                                    .albumArtist = "Artist",
+                                                                    .uri = "a1.flac",
+                                                                    .year = 2020});
+    auto const secondId = fixture.addTrack(library::test::TrackSpec{.title = "A Two",
+                                                                    .artist = "Artist",
+                                                                    .album = "Album A",
+                                                                    .albumArtist = "Artist",
+                                                                    .uri = "a2.flac",
+                                                                    .year = 2020});
+
+    auto controller = fixture.makeController();
+    REQUIRE(controller.setPresentation("albums") == "View: albums");
+    REQUIRE(controller.tracks().size() == 3);
+    CHECK(controller.tracks()[0].id == targetId);
+    CHECK(controller.tracks()[1].id == secondId);
+    CHECK(controller.tracks()[2].id == lastId);
+
+    CHECK(controller.revealTrack(targetId) == "Revealed A One");
+    CHECK(controller.selectedTrack() == 0);
+    REQUIRE(controller.selectedTrackView().track != nullptr);
+    CHECK(controller.selectedTrackView().track->id == targetId);
+  }
+
+  TEST_CASE("LibraryController - setPresentation applies active workspace presentation", "[tui][integration][library]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    fixture.addTrack("First");
+
+    auto controller = fixture.makeController();
+
+    CHECK(controller.setPresentation("albums") == "View: albums");
+    CHECK(fixture.runtimePtr->views().trackListState(controller.activeViewId()).presentation.id == "albums");
+    CHECK(controller.setPresentation("missing-preset") == "Unknown view missing-preset");
+    CHECK(fixture.runtimePtr->views().trackListState(controller.activeViewId()).presentation.id == "albums");
+  }
+
+  TEST_CASE("LibraryController - construction reads custom presets already restored in workspace",
+            "[tui][unit][library]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto customSpec = rt::defaultTrackPresentationSpec();
+    customSpec.id = "custom-restored";
+
+    {
+      auto runtimePtr = rt::test::makeStateOnlyRuntime(tempDir);
+      REQUIRE(runtimePtr->workspace().addCustomPreset(rt::CustomTrackPresentationPreset{
+        .label = "Restored Custom",
+        .basePresetId = "songs",
+        .spec = customSpec,
+      }));
+      runtimePtr->workspace().saveSession(runtimePtr->workspaceConfigStore());
+    }
+
+    auto runtimePtr = rt::test::makeStateOnlyRuntime(tempDir);
+    REQUIRE(runtimePtr->workspace().restoreSession(runtimePtr->workspaceConfigStore()));
+    rt::test::settleRuntimeCallbacks(*runtimePtr);
+
+    auto presentationCatalog =
+      uimodel::TrackPresentationCatalog{runtimePtr->workspace(), ao::test::englishMessageCatalog()};
+    auto listPresentations = uimodel::ListPresentations{presentationCatalog, runtimePtr->library().changes()};
+    auto controller = LibraryController{runtimePtr->library(),
+                                        runtimePtr->views(),
+                                        runtimePtr->workspace(),
+                                        ao::test::englishMessageCatalog(),
+                                        listPresentations};
+
+    auto const entryIt =
+      std::ranges::find(controller.presentationEntries(), customSpec.id, &TrackPresentationNavEntry::id);
+    REQUIRE(entryIt != controller.presentationEntries().end());
+    CHECK(entryIt->label == "Restored Custom");
+  }
+
+  TEST_CASE("LibraryController - presentation list follows custom preset changes", "[tui][integration][library]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    fixture.addTrack("First");
+
+    auto controller = fixture.makeController();
+    auto customSpec = rt::defaultTrackPresentationSpec();
+    customSpec.id = "custom-songs";
+
+    auto const initialCount = controller.presentationEntries().size();
+    REQUIRE(fixture.runtimePtr->workspace().addCustomPreset(rt::CustomTrackPresentationPreset{
+      .label = "Custom Songs",
+      .basePresetId = "songs",
+      .spec = customSpec,
+    }));
+    rt::test::settleRuntimeCallbacks(*fixture.runtimePtr);
+
+    REQUIRE(controller.presentationEntries().size() == initialCount + 1);
+    CHECK(controller.presentationEntries().back().id == "custom-songs");
+    REQUIRE(controller.selectedPresentation() >= 0);
+    CHECK(controller.presentationEntries()[static_cast<std::size_t>(controller.selectedPresentation())].id ==
+          controller.activePresentationId());
+
+    CHECK_FALSE(controller.trySetSelectedPresentation(-1));
+    CHECK_FALSE(
+      controller.trySetSelectedPresentation(static_cast<std::int32_t>(controller.presentationEntries().size())));
+    REQUIRE(
+      controller.trySetSelectedPresentation(static_cast<std::int32_t>(controller.presentationEntries().size()) - 1));
+
+    CHECK(controller.selectSelectedPresentation() == "View: custom-songs");
+    CHECK(fixture.runtimePtr->views().trackListState(controller.activeViewId()).presentation.id == "custom-songs");
+    CHECK(controller.selectedPresentation() == static_cast<std::int32_t>(controller.presentationEntries().size()) - 1);
+  }
+
+  TEST_CASE("LibraryController - setPresentation preserves selected track identity", "[tui][unit][library]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const olderId = fixture.addTrack(library::test::TrackSpec{
+      .title = "Older", .artist = "Same Artist", .album = "Z Album", .uri = "older.flac", .year = 2000});
+    fixture.addTrack(library::test::TrackSpec{
+      .title = "Newer", .artist = "Same Artist", .album = "A Album", .uri = "newer.flac", .year = 2025});
+
+    auto controller = fixture.makeController();
+    REQUIRE(controller.tracks().size() == 2);
+    REQUIRE(controller.tracks()[1].id == olderId);
+
+    controller.moveTrackSelection(1);
+    REQUIRE(controller.selectedTrackView().track != nullptr);
+    REQUIRE(controller.selectedTrackView().track->id == olderId);
+
+    CHECK(controller.setPresentation("artists") == "View: artists");
+    REQUIRE(controller.selectedTrackView().track != nullptr);
+    CHECK(controller.selectedTrackView().track->id == olderId);
+    CHECK(controller.selectedTrack() == 0);
+  }
+
+  TEST_CASE("LibraryController - album presentation exposes projection sections", "[tui][unit][library]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    fixture.addTrack(library::test::TrackSpec{
+      .title = "A One", .artist = "Artist", .album = "Album A", .albumArtist = "Artist", .year = 2020});
+    fixture.addTrack(library::test::TrackSpec{
+      .title = "A Two", .artist = "Artist", .album = "Album A", .albumArtist = "Artist", .year = 2020});
+    fixture.addTrack(library::test::TrackSpec{
+      .title = "B One", .artist = "Artist", .album = "Album B", .albumArtist = "Artist", .year = 2021});
+
+    auto controller = fixture.makeController();
+
+    CHECK(controller.setPresentation("albums") == "View: albums");
+    REQUIRE(controller.sections().size() == 2);
+    CHECK(controller.sections()[0].primaryText == "Album A");
+    CHECK(controller.sections()[0].secondaryText == "Artist");
+    CHECK(controller.sections()[0].tertiaryText == "2020");
+    CHECK(controller.sections()[0].rowBegin == 0);
+    CHECK(controller.sections()[0].rowCount == 2);
+    CHECK(controller.sections()[1].primaryText == "Album B");
+    CHECK(controller.sections()[1].rowBegin == 2);
+    CHECK(controller.sections()[1].rowCount == 1);
+  }
+
+  TEST_CASE("LibraryController - section jumps keep track selection flat", "[tui][unit][library]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    fixture.addTrack(
+      library::test::TrackSpec{.title = "A One", .artist = "Artist", .album = "Album A", .albumArtist = "Artist"});
+    fixture.addTrack(
+      library::test::TrackSpec{.title = "A Two", .artist = "Artist", .album = "Album A", .albumArtist = "Artist"});
+    fixture.addTrack(
+      library::test::TrackSpec{.title = "B One", .artist = "Artist", .album = "Album B", .albumArtist = "Artist"});
+
+    auto controller = fixture.makeController();
+    REQUIRE(controller.setPresentation("albums") == "View: albums");
+    REQUIRE(controller.sections().size() == 2);
+
+    controller.setSelectedTrackIndex(1);
+    CHECK(controller.jumpToAdjacentSection(1) == "Section: Album B");
+    CHECK(controller.selectedTrack() == 2);
+
+    CHECK(controller.jumpToAdjacentSection(-1) == "Section: Album A");
+    CHECK(controller.selectedTrack() == 0);
+  }
+
+  TEST_CASE("LibraryController - section-boundary jumps preserve focus and effective selection",
+            "[tui][unit][library][selection]")
+  {
+    auto const delta = GENERATE(-1, 1);
+    CAPTURE(delta);
+    auto fixture = LibraryControllerFixture{};
+    fixture.addTrack(library::test::TrackSpec{.title = "A 1", .album = "Album A", .albumArtist = "Artist"});
+    auto const firstBoundaryId =
+      fixture.addTrack(library::test::TrackSpec{.title = "A 2", .album = "Album A", .albumArtist = "Artist"});
+    fixture.addTrack(library::test::TrackSpec{.title = "B 1", .album = "Album B", .albumArtist = "Artist"});
+    fixture.addTrack(library::test::TrackSpec{.title = "B 2", .album = "Album B", .albumArtist = "Artist"});
+    auto const lastBoundaryId =
+      fixture.addTrack(library::test::TrackSpec{.title = "B 3", .album = "Album B", .albumArtist = "Artist"});
+    auto controller = fixture.makeController();
+    REQUIRE(controller.setPresentation("albums") == "View: albums");
+    REQUIRE(controller.sections().size() == 2);
+    REQUIRE(controller.sections()[0].rowBegin == 0);
+    REQUIRE(controller.sections()[0].rowCount == 2);
+    REQUIRE(controller.sections()[1].rowBegin == 2);
+    REQUIRE(controller.sections()[1].rowCount == 3);
+    auto const selectedIndex = delta < 0 ? 1 : 4;
+    auto const expectedId = delta < 0 ? firstBoundaryId : lastBoundaryId;
+    controller.setSelectedTrackIndex(selectedIndex);
+    REQUIRE(controller.selectedTrackView().track != nullptr);
+    REQUIRE(controller.selectedTrackView().track->id == expectedId);
+
+    SECTION("unmarked focus is the effective selection")
+    {
+      REQUIRE(controller.markedIds().empty());
+      REQUIRE_FALSE(controller.isVisualSelectionActive());
+    }
+
+    SECTION("independent marks survive the boundary")
+    {
+      controller.setSelectedTrackIndex(0);
+      controller.toggleFocusedMark();
+      controller.setSelectedTrackIndex(selectedIndex);
+      REQUIRE(controller.markedIds().size() == 1);
+    }
+
+    SECTION("an active visual range survives the boundary")
+    {
+      controller.setSelectedTrackIndex(selectedIndex - 1);
+      controller.toggleVisualSelection();
+      controller.setSelectedTrackIndex(selectedIndex);
+      REQUIRE(controller.isVisualSelectionActive());
+      REQUIRE(controller.selectedTrackIds().size() == 2);
+    }
+
+    auto const marksBefore = controller.markedIds();
+    auto const selectionBefore = controller.selectedTrackIds();
+    auto const visualBefore = controller.isVisualSelectionActive();
+    auto const publishedBefore = fixture.runtimePtr->views().trackListState(controller.activeViewId()).selection;
+    REQUIRE(publishedBefore == selectionBefore);
+
+    for (std::int32_t attempt = 0; attempt < 2; ++attempt)
+    {
+      CAPTURE(attempt);
+      CHECK(controller.jumpToAdjacentSection(delta) == (delta < 0 ? "Section: Album A" : "Section: Album B"));
+      CHECK(controller.selectedTrack() == selectedIndex);
+      REQUIRE(controller.selectedTrackView().track != nullptr);
+      CHECK(controller.selectedTrackView().track->id == expectedId);
+      CHECK(controller.markedIds() == marksBefore);
+      CHECK(controller.selectedTrackIds() == selectionBefore);
+      CHECK(controller.isVisualSelectionActive() == visualBefore);
+      CHECK(fixture.runtimePtr->views().trackListState(controller.activeViewId()).selection == publishedBefore);
+    }
+  }
+
+  TEST_CASE("LibraryController - single-section jumps preserve an interior row", "[tui][unit][library]")
+  {
+    auto const delta = GENERATE(-1, 1);
+    CAPTURE(delta);
+    auto fixture = LibraryControllerFixture{};
+    fixture.addTrack(library::test::TrackSpec{.title = "One", .album = "Only Album", .albumArtist = "Artist"});
+    auto const secondId =
+      fixture.addTrack(library::test::TrackSpec{.title = "Two", .album = "Only Album", .albumArtist = "Artist"});
+    auto controller = fixture.makeController();
+    REQUIRE(controller.setPresentation("albums") == "View: albums");
+    REQUIRE(controller.sections().size() == 1);
+    REQUIRE(controller.sections()[0].rowCount == 2);
+    controller.setSelectedTrackIndex(1);
+    REQUIRE(controller.selectedTrackView().track != nullptr);
+    REQUIRE(controller.selectedTrackView().track->id == secondId);
+    REQUIRE(controller.jumpToAdjacentSection(delta) == "Section: Only Album");
+    CHECK(controller.selectedTrack() == 1);
+    CHECK(controller.selectedTrackIds() == std::vector<TrackId>{secondId});
+    CHECK(fixture.runtimePtr->views().trackListState(controller.activeViewId()).selection ==
+          std::vector<TrackId>{secondId});
+  }
+
+  TEST_CASE("LibraryController - section selection reports empty and invalid states", "[tui][unit][library]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    fixture.addTrack("First");
+
+    auto controller = fixture.makeController();
+    REQUIRE(controller.setPresentation("songs") == "View: songs");
+    REQUIRE(controller.sections().empty());
+
+    CHECK(controller.jumpToAdjacentSection(1) == "No sections in this view");
+    CHECK(controller.selectSection(0) == "No section selected");
+    CHECK(controller.selectSection(-1) == "No section selected");
+    CHECK(controller.selectedTrack() == 0);
+  }
+
+  TEST_CASE("LibraryController - marks are independent of focus and publish effective ids",
+            "[tui][integration][library][selection]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const firstId = fixture.addTrack("First");
+    auto const secondId = fixture.addTrack("Second");
+    auto const thirdId = fixture.addTrack("Third");
+    auto controller = fixture.makeController();
+    REQUIRE(controller.tracks().size() == 3);
+
+    controller.toggleFocusedMark();
+    CHECK(controller.markedIds().contains(firstId));
+    CHECK(controller.selectedTrackIds() == std::vector<TrackId>{firstId});
+
+    controller.moveTrackSelection(1);
+    CHECK(controller.selectedTrack() == 1);
+    CHECK(controller.selectedTrackIds() == std::vector<TrackId>{firstId});
+
+    controller.toggleFocusedMark();
+    CHECK(controller.selectedTrackIds() == std::vector<TrackId>{firstId, secondId});
+
+    controller.moveTrackSelection(1);
+    CHECK(controller.selectedTrackView().track->id == thirdId);
+    CHECK(controller.selectedTrackIds() == std::vector<TrackId>{firstId, secondId});
+
+    auto const& published = fixture.runtimePtr->views().trackListState(controller.activeViewId()).selection;
+    CHECK(published == std::vector<TrackId>{firstId, secondId});
+  }
+
+  TEST_CASE("LibraryController - a visual selection grows with the focus and confirms into the marked set",
+            "[tui][unit][library][selection]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const firstId = fixture.addTrack("First");
+    auto const secondId = fixture.addTrack("Second");
+    auto const thirdId = fixture.addTrack("Third");
+    auto controller = fixture.makeController();
+
+    controller.toggleVisualSelection();
+    CHECK(controller.isVisualSelectionActive());
+    CHECK(controller.selectedTrackIds() == std::vector<TrackId>{firstId});
+
+    controller.moveTrackSelection(2);
+    CHECK(controller.selectedTrackIds() == std::vector<TrackId>{firstId, secondId, thirdId});
+
+    // Retreating re-derives the range instead of accumulating what it passed over.
+    controller.moveTrackSelection(-1);
+    CHECK(controller.selectedTrackIds() == std::vector<TrackId>{firstId, secondId});
+
+    controller.toggleVisualSelection();
+    CHECK_FALSE(controller.isVisualSelectionActive());
+    CHECK(controller.selectedTrackIds() == std::vector<TrackId>{firstId, secondId});
+
+    controller.moveTrackSelection(1);
+    CHECK(controller.selectedTrackIds() == std::vector<TrackId>{firstId, secondId});
+  }
+
+  TEST_CASE("LibraryController - cancelling a visual selection restores the marks it started from",
+            "[tui][integration][library][selection]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const firstId = fixture.addTrack("First");
+    auto const secondId = fixture.addTrack("Second");
+    auto const thirdId = fixture.addTrack("Third");
+    auto controller = fixture.makeController();
+
+    controller.toggleFocusedMark();
+    controller.setSelectedTrackIndex(1);
+    controller.toggleVisualSelection();
+    controller.moveTrackSelection(1);
+    CHECK(controller.selectedTrackIds() == std::vector<TrackId>{firstId, secondId, thirdId});
+
+    controller.cancelVisualSelection();
+    CHECK_FALSE(controller.isVisualSelectionActive());
+    CHECK(controller.selectedTrackIds() == std::vector<TrackId>{firstId});
+
+    auto const& published = fixture.runtimePtr->views().trackListState(controller.activeViewId()).selection;
+    CHECK(published == std::vector<TrackId>{firstId});
+  }
+
+  TEST_CASE("LibraryController - toggling a mark commits the running visual range first",
+            "[tui][unit][library][selection]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const firstId = fixture.addTrack("First");
+    auto const secondId = fixture.addTrack("Second");
+    auto const thirdId = fixture.addTrack("Third");
+    auto controller = fixture.makeController();
+
+    controller.toggleVisualSelection();
+    controller.moveTrackSelection(2);
+    controller.toggleFocusedMark();
+
+    CHECK_FALSE(controller.isVisualSelectionActive());
+    CHECK(controller.selectedTrackIds() == std::vector<TrackId>{firstId, secondId});
+    CHECK_FALSE(controller.markedIds().contains(thirdId));
+
+    // With the range committed, a later move no longer re-derives it.
+    controller.moveTrackSelection(-2);
+    CHECK(controller.selectedTrackIds() == std::vector<TrackId>{firstId, secondId});
+  }
+
+  TEST_CASE("LibraryController - a visual selection crossing its anchor derives the range on the other side",
+            "[tui][unit][library][selection]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const firstId = fixture.addTrack("First");
+    auto const secondId = fixture.addTrack("Second");
+    auto const thirdId = fixture.addTrack("Third");
+    auto controller = fixture.makeController();
+
+    controller.moveTrackSelection(1);
+    controller.toggleVisualSelection();
+    controller.moveTrackSelection(1);
+    REQUIRE(controller.selectedTrackIds() == std::vector<TrackId>{secondId, thirdId});
+
+    // Crossing back over the anchor drops the rows on the far side instead of
+    // keeping everything the focus ever passed.
+    controller.moveTrackSelection(-2);
+    CHECK(controller.selectedTrackIds() == std::vector<TrackId>{firstId, secondId});
+    CHECK_FALSE(controller.markedIds().contains(thirdId));
+  }
+
+  TEST_CASE("LibraryController - marking all or clearing ends a running visual selection",
+            "[tui][unit][library][selection]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const firstId = fixture.addTrack("First");
+    auto const secondId = fixture.addTrack("Second");
+    fixture.addTrack("Third");
+
+    SECTION("marking all takes over the whole view")
+    {
+      auto controller = fixture.makeController();
+      controller.toggleVisualSelection();
+      controller.markAllTracks();
+
+      CHECK_FALSE(controller.isVisualSelectionActive());
+      CHECK(controller.markedIds().size() == controller.tracks().size());
+
+      controller.moveTrackSelection(1);
+      CHECK(controller.markedIds().size() == controller.tracks().size());
+    }
+
+    SECTION("clearing drops the range instead of leaving it running")
+    {
+      auto controller = fixture.makeController();
+      controller.toggleVisualSelection();
+      controller.moveTrackSelection(1);
+      REQUIRE(controller.selectedTrackIds() == std::vector<TrackId>{firstId, secondId});
+
+      controller.clearMarks();
+      CHECK_FALSE(controller.isVisualSelectionActive());
+      CHECK(controller.markedIds().empty());
+
+      controller.moveTrackSelection(1);
+      CHECK(controller.markedIds().empty());
+    }
+  }
+
+  TEST_CASE("LibraryController - a running visual selection derives its range again in a new row order",
+            "[tui][unit][library][selection]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const alphaId = fixture.addTrack(library::test::TrackSpec{
+      .title = "Alpha", .artist = "Same Artist", .album = "Alpha Album", .uri = "alpha.flac", .year = 2000});
+    auto const bravoId = fixture.addTrack(library::test::TrackSpec{
+      .title = "Bravo", .artist = "Same Artist", .album = "Bravo Album", .uri = "bravo.flac", .year = 2020});
+    auto const charlieId = fixture.addTrack(library::test::TrackSpec{
+      .title = "Charlie", .artist = "Same Artist", .album = "Charlie Album", .uri = "charlie.flac", .year = 2010});
+    auto controller = fixture.makeController();
+    REQUIRE(controller.tracks().size() == 3);
+    REQUIRE(controller.tracks()[0].id == alphaId);
+    REQUIRE(controller.tracks()[1].id == bravoId);
+    REQUIRE(controller.tracks()[2].id == charlieId);
+
+    controller.toggleVisualSelection();
+    controller.moveTrackSelection(1);
+    REQUIRE(controller.selectedTrackIds() == std::vector<TrackId>{alphaId, bravoId});
+
+    CHECK(controller.setPresentation("artists") == "View: artists");
+    REQUIRE(controller.tracks()[0].id == alphaId);
+    REQUIRE(controller.tracks()[1].id == charlieId);
+    REQUIRE(controller.tracks()[2].id == bravoId);
+
+    // The range is a span of rows, so the row that moved between the anchor and
+    // the focus joins it instead of leaving a gap until the next motion.
+    CHECK(controller.isVisualSelectionActive());
+    CHECK(controller.selectedTrackIds() == std::vector<TrackId>{alphaId, charlieId, bravoId});
+
+    controller.moveTrackSelection(-1);
+    CHECK(controller.selectedTrackIds() == std::vector<TrackId>{alphaId, charlieId});
+  }
+
+  TEST_CASE("LibraryController - a no-op filter keeps the selection running and follows the focused track",
+            "[tui][unit][library][selection]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const alphaId = fixture.addTrack(library::test::TrackSpec{
+      .title = "Alpha", .artist = "Same Artist", .album = "Alpha Album", .uri = "alpha.flac", .year = 2000});
+    auto const bravoId = fixture.addTrack(library::test::TrackSpec{
+      .title = "Bravo", .artist = "Same Artist", .album = "Bravo Album", .uri = "bravo.flac", .year = 2020});
+    auto const charlieId = fixture.addTrack(library::test::TrackSpec{
+      .title = "Charlie", .artist = "Same Artist", .album = "Charlie Album", .uri = "charlie.flac", .year = 2010});
+    auto controller = fixture.makeController();
+    REQUIRE(controller.tracks()[1].id == bravoId);
+
+    controller.toggleVisualSelection();
+    controller.moveTrackSelection(1);
+    REQUIRE(controller.selectedTrackIds() == std::vector<TrackId>{alphaId, bravoId});
+
+    // Another shell can reorder the rows under the same filter expression, so
+    // the kept focus has to follow its track rather than its row index.
+    REQUIRE(fixture.runtimePtr->workspace().setActivePresentation("artists"));
+    REQUIRE(controller.applyFilter());
+
+    REQUIRE(controller.tracks()[2].id == bravoId);
+    REQUIRE(controller.selectedTrackView().track != nullptr);
+    CHECK(controller.selectedTrackView().track->id == bravoId);
+    CHECK(controller.isVisualSelectionActive());
+    CHECK(controller.selectedTrackIds() == std::vector<TrackId>{alphaId, charlieId, bravoId});
+  }
+
+  TEST_CASE("LibraryController - a visual selection survives view work that keeps the view and ends work that does not",
+            "[tui][unit][library][selection]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const alphaId = fixture.addTrack(library::test::TrackSpec{
+      .title = "Alpha", .artist = "Same Artist", .album = "Alpha Album", .uri = "alpha.flac", .year = 2000});
+    auto const bravoId = fixture.addTrack(library::test::TrackSpec{
+      .title = "Bravo", .artist = "Same Artist", .album = "Bravo Album", .uri = "bravo.flac", .year = 2020});
+    auto const charlieId = fixture.addTrack(library::test::TrackSpec{
+      .title = "Charlie", .artist = "Same Artist", .album = "Charlie Album", .uri = "charlie.flac", .year = 2010});
+
+    SECTION("a rejected filter leaves the running selection exactly as it was")
+    {
+      auto controller = fixture.makeController();
+      auto const activeViewId = controller.activeViewId();
+      controller.toggleVisualSelection();
+      controller.moveTrackSelection(1);
+      REQUIRE(controller.selectedTrackIds() == std::vector<TrackId>{alphaId, bravoId});
+
+      controller.setFilterDraft("Alpha");
+      REQUIRE(fixture.runtimePtr->workspace().closeView(activeViewId));
+      CHECK_FALSE(controller.applyFilter());
+
+      CHECK(controller.isVisualSelectionActive());
+      CHECK(controller.selectedTrackIds() == std::vector<TrackId>{alphaId, bravoId});
+    }
+
+    SECTION("a new filter expression ends the selection with the marks it cleared")
+    {
+      auto controller = fixture.makeController();
+      controller.toggleVisualSelection();
+      controller.moveTrackSelection(1);
+      REQUIRE(controller.selectedTrackIds() == std::vector<TrackId>{alphaId, bravoId});
+
+      controller.setFilterDraft("Alpha");
+      REQUIRE(controller.applyFilter());
+
+      CHECK_FALSE(controller.isVisualSelectionActive());
+      CHECK(controller.markedIds().empty());
+    }
+
+    SECTION("reattaching the open view keeps the selection running")
+    {
+      auto controller = fixture.makeController();
+      controller.toggleVisualSelection();
+      controller.moveTrackSelection(1);
+      REQUIRE(controller.selectedTrackIds() == std::vector<TrackId>{alphaId, bravoId});
+
+      REQUIRE(controller.openList(controller.navigation().cursor()));
+
+      CHECK(controller.isVisualSelectionActive());
+      CHECK(controller.selectedTrackIds() == std::vector<TrackId>{alphaId, bravoId});
+
+      controller.moveTrackSelection(1);
+      CHECK(controller.selectedTrackIds() == std::vector<TrackId>{alphaId, bravoId, charlieId});
+    }
+
+    SECTION("a reorder keeps the marks the selection started from")
+    {
+      auto controller = fixture.makeController();
+      controller.moveTrackSelection(1);
+      controller.toggleFocusedMark();
+      controller.moveTrackSelection(-1);
+      controller.toggleVisualSelection();
+      REQUIRE(controller.selectedTrackIds() == std::vector<TrackId>{alphaId, bravoId});
+
+      CHECK(controller.setPresentation("artists") == "View: artists");
+      REQUIRE(controller.tracks()[1].id == charlieId);
+
+      // The starting set is carried through the new row order untouched, and the
+      // range is only the anchor row until the focus moves again.
+      CHECK(controller.isVisualSelectionActive());
+      CHECK(controller.selectedTrackIds() == std::vector<TrackId>{alphaId, bravoId});
+
+      controller.moveTrackSelection(1);
+      CHECK(controller.selectedTrackIds() == std::vector<TrackId>{alphaId, charlieId, bravoId});
+    }
+  }
+
+  TEST_CASE("LibraryController - a reload derives the visual range from the restored focus",
+            "[tui][unit][library][selection]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const alphaId = fixture.addTrack("Alpha");
+    auto const bravoId = fixture.addTrack("Bravo");
+    auto const charlieId = fixture.addTrack("Charlie");
+    auto const deltaId = fixture.addTrack("Delta");
+    auto controller = fixture.makeController();
+    REQUIRE(controller.tracks().size() == 4);
+
+    controller.toggleVisualSelection();
+    controller.moveTrackSelection(2);
+    REQUIRE(controller.selectedTrackIds() == std::vector<TrackId>{alphaId, bravoId, charlieId});
+
+    REQUIRE(rt::test::runRuntimeTask(
+      *fixture.runtimePtr, fixture.runtimePtr->library().commands().deleteTrackAsync(bravoId)));
+    rt::test::settleRuntimeCallbacks(*fixture.runtimePtr);
+
+    // The library observer already reloaded the view, so this is the state a
+    // single reload leaves behind.
+    REQUIRE(controller.tracks().size() == 3);
+
+    // Dropping a row above the focus moves that row up, so the range has to
+    // follow the restored focus instead of the index it used to hold.
+    REQUIRE(controller.selectedTrackView().track != nullptr);
+    CHECK(controller.selectedTrackView().track->id == charlieId);
+    CHECK(controller.isVisualSelectionActive());
+    CHECK(controller.selectedTrackIds() == std::vector<TrackId>{alphaId, charlieId});
+    CHECK_FALSE(controller.markedIds().contains(deltaId));
+  }
+
+  TEST_CASE("LibraryController - a visual selection whose anchor vanishes ends and keeps the rows it reached",
+            "[tui][unit][library][selection]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const firstId = fixture.addTrack("First");
+    auto const secondId = fixture.addTrack("Second");
+    fixture.addTrack("Third");
+    auto controller = fixture.makeController();
+
+    controller.toggleVisualSelection();
+    controller.moveTrackSelection(1);
+    REQUIRE(controller.selectedTrackIds() == std::vector<TrackId>{firstId, secondId});
+
+    REQUIRE(rt::test::runRuntimeTask(
+      *fixture.runtimePtr, fixture.runtimePtr->library().commands().deleteTrackAsync(firstId)));
+    rt::test::settleRuntimeCallbacks(*fixture.runtimePtr);
+    CHECK(controller.reloadActiveList() == "Reloaded 2 tracks");
+
+    // Without its anchor the range cannot be extended or cancelled coherently,
+    // so it ends where it stood rather than restoring the starting set.
+    CHECK_FALSE(controller.isVisualSelectionActive());
+    CHECK(controller.markedIds() == std::unordered_set<TrackId>{secondId});
+  }
+
+  TEST_CASE("LibraryController - select all marks every materialized row and clear restores focus selection",
+            "[tui][unit][library][selection]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const firstId = fixture.addTrack("First");
+    fixture.addTrack("Second");
+    fixture.addTrack("Third");
+    auto controller = fixture.makeController();
+
+    controller.markAllTracks();
+    CHECK(controller.markedIds().size() == 3);
+    CHECK(controller.selectedTrackIds().size() == 3);
+
+    controller.clearMarks();
+    CHECK(controller.markedIds().empty());
+    CHECK(controller.selectedTrackIds() == std::vector<TrackId>{firstId});
+  }
+
+  TEST_CASE("LibraryController - successful filter change clears marks; a no-op filter keeps them",
+            "[tui][unit][library][selection]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const firstId = fixture.addTrack("Alpha");
+    fixture.addTrack("Beta");
+    auto controller = fixture.makeController();
+
+    controller.toggleFocusedMark();
+    controller.setFilterDraft("Alpha");
+    CHECK(requireAppliedFilter(controller) == "Quick filter matched 1 track");
+    CHECK(controller.markedIds().empty());
+    CHECK(controller.selectedTrackIds() == std::vector<TrackId>{firstId});
+
+    controller.toggleFocusedMark();
+    controller.setFilterDraft("Alpha");
+    CHECK(requireAppliedFilter(controller) == "Quick filter matched 1 track");
+    CHECK(controller.markedIds().contains(firstId));
+  }
+
+  TEST_CASE("LibraryController - presentation change keeps marks in the new row order",
+            "[tui][integration][library][selection]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const olderId = fixture.addTrack(library::test::TrackSpec{
+      .title = "Older", .artist = "Same Artist", .album = "Z Album", .uri = "older.flac", .year = 2000});
+    auto const newerId = fixture.addTrack(library::test::TrackSpec{
+      .title = "Newer", .artist = "Same Artist", .album = "A Album", .uri = "newer.flac", .year = 2025});
+    auto controller = fixture.makeController();
+    REQUIRE(controller.tracks().size() == 2);
+    REQUIRE(controller.tracks()[0].id == newerId);
+    REQUIRE(controller.tracks()[1].id == olderId);
+
+    controller.toggleFocusedMark();
+    controller.moveTrackSelection(1);
+    controller.toggleFocusedMark();
+    REQUIRE(controller.selectedTrack() == 1);
+    REQUIRE(controller.selectedTrackIds() == std::vector<TrackId>{newerId, olderId});
+
+    CHECK(controller.setPresentation("artists") == "View: artists");
+    REQUIRE(controller.selectedTrackView().track != nullptr);
+    CHECK(controller.selectedTrackView().track->id == olderId);
+    CHECK(controller.selectedTrackIds() == std::vector<TrackId>{olderId, newerId});
+    CHECK(fixture.runtimePtr->views().trackListState(controller.activeViewId()).selection ==
+          std::vector<TrackId>{olderId, newerId});
+  }
+
+  TEST_CASE("LibraryController - same-view reload reconciles vanished marks", "[tui][integration][library][selection]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const firstId = fixture.addTrack("First");
+    auto const secondId = fixture.addTrack("Second");
+    auto controller = fixture.makeController();
+
+    controller.toggleFocusedMark();
+    controller.moveTrackSelection(1);
+    controller.toggleFocusedMark();
+    REQUIRE(controller.selectedTrackIds() == std::vector<TrackId>{firstId, secondId});
+
+    SECTION("deleting a marked track drops that mark")
+    {
+      REQUIRE(rt::test::runRuntimeTask(
+        *fixture.runtimePtr, fixture.runtimePtr->library().commands().deleteTrackAsync(secondId)));
+      rt::test::settleRuntimeCallbacks(*fixture.runtimePtr);
+      CHECK(controller.reloadActiveList() == "Reloaded 1 track");
+      CHECK(controller.markedIds() == std::unordered_set<TrackId>{firstId});
+      CHECK(controller.selectedTrackIds() == std::vector<TrackId>{firstId});
+      CHECK(fixture.runtimePtr->views().trackListState(controller.activeViewId()).selection ==
+            std::vector<TrackId>{firstId});
+    }
+
+    SECTION("deleting another marked track keeps the remaining mark")
+    {
+      REQUIRE(rt::test::runRuntimeTask(
+        *fixture.runtimePtr, fixture.runtimePtr->library().commands().deleteTrackAsync(firstId)));
+      rt::test::settleRuntimeCallbacks(*fixture.runtimePtr);
+      CHECK(controller.reloadActiveList() == "Reloaded 1 track");
+      CHECK(controller.markedIds() == std::unordered_set<TrackId>{secondId});
+      CHECK(controller.selectedTrackIds() == std::vector<TrackId>{secondId});
+      CHECK(fixture.runtimePtr->views().trackListState(controller.activeViewId()).selection ==
+            std::vector<TrackId>{secondId});
+    }
+  }
+
+  TEST_CASE("LibraryController - list navigation clears marks; same-view reload keeps live ids",
+            "[tui][unit][library][selection]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const firstId = fixture.addTrack("Keep");
+    fixture.addTrack("Other");
+    auto const listId = fixture.addList("Side");
+    auto controller = fixture.makeController();
+
+    controller.toggleFocusedMark();
+    CHECK(controller.reloadActiveList().contains("2"));
+    CHECK(controller.markedIds().contains(firstId));
+
+    controller.navigation().reveal(listId);
+    REQUIRE(controller.openList(controller.navigation().cursor()));
+    CHECK(controller.markedIds().empty());
+  }
+
+  TEST_CASE("LibraryController - reopening the current list keeps marks, focus, and published selection",
+            "[tui][integration][library][selection]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const firstId = fixture.addTrack("First");
+    auto const secondId = fixture.addTrack("Second");
+    auto controller = fixture.makeController();
+
+    controller.setFilterDraft("$title?");
+    REQUIRE(controller.applyFilter());
+    controller.toggleFocusedMark();
+    controller.moveTrackSelection(1);
+    controller.toggleFocusedMark();
+    auto const viewId = controller.activeViewId();
+    auto const marked = controller.selectedTrackIds();
+    REQUIRE(viewId != rt::kInvalidViewId);
+    REQUIRE(marked == std::vector<TrackId>{firstId, secondId});
+
+    auto const workspaceBefore = fixture.runtimePtr->workspace().snapshot();
+    auto const openedRes = controller.openList(controller.currentListId());
+    REQUIRE(openedRes);
+    CHECK_FALSE(*openedRes);
+    CHECK(fixture.runtimePtr->workspace().snapshot() == workspaceBefore);
+    CHECK(controller.filterDraft() == "$title?");
+
+    CHECK(controller.activeViewId() == viewId);
+    CHECK(controller.markedIds().contains(firstId));
+    CHECK(controller.markedIds().contains(secondId));
+    CHECK(controller.selectedTrackIds() == marked);
+    CHECK(fixture.runtimePtr->views().trackListState(viewId).selection == marked);
+    CHECK(controller.selectedTrack() == 1);
+    REQUIRE(controller.selectedTrackView().track != nullptr);
+    CHECK(controller.selectedTrackView().track->id == secondId);
+  }
+
+  TEST_CASE("LibraryController - empty library guidance uses the available scan command",
+            "[tui][unit][library][usability]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto controller = fixture.makeController();
+    REQUIRE(controller.tracks().empty());
+    CHECK(controller.emptyStateText() == "No indexed tracks. Run :scan to scan this library.");
+    controller.setFilterDraft("not applied yet");
+    CHECK(controller.emptyStateText().contains(":scan"));
+  }
+
+  TEST_CASE("LibraryController - empty-state guidance recovers from unmatched and invalid filters",
+            "[tui][unit][library][usability]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    fixture.addTrack("Alpha");
+    auto controller = fixture.makeController();
+    controller.setFilterDraft("missing");
+    REQUIRE(controller.applyFilter());
+    REQUIRE(controller.tracks().empty());
+    CHECK(controller.emptyStateText() == "No tracks match this filter. Change or clear the filter.");
+    controller.setFilterDraft("$artist =");
+    REQUIRE(controller.applyFilter());
+    REQUIRE_FALSE(controller.filterError().empty());
+    CHECK(controller.emptyStateText() == "The filter could not be applied. Edit or clear it.");
+    controller.clearFilterDraft();
+    REQUIRE(controller.applyFilter());
+    REQUIRE(controller.tracks().size() == 1);
+    CHECK(controller.tracks().front().row.title == "Alpha");
+  }
+
+  TEST_CASE("LibraryController - empty-state guidance identifies an empty saved List",
+            "[tui][unit][library][usability]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    fixture.addTrack("Alpha");
+    auto const emptyList = ao::test::requireValue(
+      rt::test::runRuntimeTask(*fixture.runtimePtr,
+                               fixture.runtimePtr->library().commands().createListAsync(
+                                 rt::ListDraft{.name = "Empty", .expression = "$title ~ \"Missing\""})));
+    auto listController = fixture.makeController();
+
+    REQUIRE(listController.openList(emptyList));
+    REQUIRE(listController.currentListId() == emptyList);
+    REQUIRE(listController.tracks().empty());
+    CHECK(listController.emptyStateText() == "This List has no tracks. Choose another List to browse.");
+  }
+
+  TEST_CASE("LibraryController - reveal finishes a visual range without extending its marks",
+            "[tui][unit][library][selection]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const first = fixture.addTrack("First");
+    auto const second = fixture.addTrack("Second");
+    auto controller = fixture.makeController();
+    controller.toggleVisualSelection();
+    REQUIRE(controller.markedIds() == std::unordered_set<TrackId>{first});
+    CHECK(controller.revealTrack(second) == "Revealed Second");
+    CHECK_FALSE(controller.isVisualSelectionActive());
+    CHECK(controller.markedIds() == std::unordered_set<TrackId>{first});
+    CHECK(controller.tracks()[controller.selectedTrack()].id == second);
+  }
+
+  TEST_CASE("LibraryController - reveal prefers a source view and tolerates a removed source",
+            "[tui][integration][library]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const target = fixture.addTrack("Target");
+    fixture.addTrack("Other");
+    auto const sourceList = fixture.addList("Source");
+    auto const sourceView = ao::test::requireValue(fixture.runtimePtr->workspace().navigate({.target = sourceList}));
+    auto controller = fixture.makeController();
+    controller.setFilterDraft("Other");
+    REQUIRE(controller.applyFilter());
+    auto const filteredView = controller.activeViewId();
+    auto const plainSource = ao::test::requireValue(fixture.runtimePtr->workspace().navigate({.target = sourceList}));
+    REQUIRE(fixture.runtimePtr->workspace().focusView(filteredView));
+
+    SECTION("An existing source view is reused")
+    {
+      CHECK(controller.revealTrack(target, plainSource, sourceList) == "Revealed Target");
+      CHECK(controller.activeViewId() == plainSource);
+      REQUIRE(controller.navigateHistory(false));
+      CHECK(controller.activeViewId() == filteredView);
+    }
+
+    SECTION("A closed source view falls back without changing the filtered view")
+    {
+      REQUIRE(fixture.runtimePtr->workspace().closeView(plainSource));
+      CHECK(controller.revealTrack(target, plainSource, kInvalidListId) == "Revealed Target");
+      CHECK(controller.currentListId() == rt::kAllTracksListId);
+      CHECK_FALSE(fixture.runtimePtr->views().trackListState(sourceView).filterExpression.empty());
+    }
+  }
+
+  TEST_CASE("LibraryController - reveal of a missing subject leaves the workspace intact",
+            "[tui][integration][library]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const firstId = fixture.addTrack("First");
+    auto controller = fixture.makeController();
+    auto const before = fixture.runtimePtr->workspace().snapshot();
+    auto const selected = controller.selectedTrackIds();
+    REQUIRE(selected == std::vector{firstId});
+
+    CHECK(controller.revealTrack(TrackId{999999}) == "Could not locate the current track in the library");
+
+    CHECK(fixture.runtimePtr->workspace().snapshot() == before);
+    CHECK(controller.activeViewId() == before.activeViewId);
+    CHECK(controller.selectedTrackIds() == selected);
+    REQUIRE(controller.tracks().size() == 1);
+    CHECK(controller.tracks().front().id == firstId);
+  }
+
+  TEST_CASE("LibraryController - missing List fails before changing active view or selection",
+            "[tui][integration][library]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    fixture.addTrack("Retained");
+    auto controller = fixture.makeController();
+    controller.toggleVisualSelection();
+    auto const before = fixture.runtimePtr->workspace().snapshot();
+    auto const selected = controller.selectedTrackIds();
+    auto const res = controller.openList(ListId{987654});
+    REQUIRE_FALSE(res);
+    CHECK(fixture.runtimePtr->workspace().snapshot() == before);
+    CHECK(controller.activeViewId() == before.activeViewId);
+    CHECK(controller.selectedTrackIds() == selected);
+    CHECK(controller.isVisualSelectionActive());
+  }
+} // namespace ao::tui::test

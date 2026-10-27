@@ -116,10 +116,10 @@ If one throws, required cleanup completes before that exception propagates and r
 
 ## Test map
 
-- [`LibraryJobsTest.cpp`](../../../test/unit/runtime/library/LibraryJobsTest.cpp) proves worker/callback affinity, bounded progress coalescing and terminal ordering, paired progress identities, transfer phase/file-name publication, background-task exclusion, interactive authoring during scan preparation and after background commit, maintenance admission, errors, status-free progress finalization, pre-admission silence, callback exception propagation, cancellation cleanup, and the mandatory post-commit barrier.
-- [`ActivityStatusFeedProjectionCompactTest.cpp`](../../../test/unit/uimodel/status/activity/ActivityStatusFeedProjectionCompactTest.cpp) proves that finishing one overlapping read-only task immediately restores another task's active progress instead of clearing the status surface.
-- [`LibraryAuthoringTest.cpp`](../../../test/unit/runtime/library/LibraryAuthoringTest.cpp) proves non-terminal contention behind a background command, worker-side execution, Maintenance ordering, active pre-transaction Closing cancellation, and later admission after release.
-- [`AudioIdentityIndexerTest.cpp`](../../../test/unit/runtime/library/AudioIdentityIndexerTest.cpp) proves concurrent fingerprinting and bounded write-back behavior.
+- [`LibraryJobsTest.cpp`](../../../test/runtime/library/LibraryJobsTest.cpp) proves worker/callback affinity, bounded progress coalescing and terminal ordering, paired progress identities, transfer phase/file-name publication, background-task exclusion, interactive authoring during scan preparation and after background commit, maintenance admission, errors, status-free progress finalization, pre-admission silence, callback exception propagation, cancellation cleanup, and the mandatory post-commit barrier.
+- [`ActivityStatusFeedProjectionCompactTest.cpp`](../../../test/uimodel/status/activity/ActivityStatusFeedProjectionCompactTest.cpp) proves that finishing one overlapping read-only task immediately restores another task's active progress instead of clearing the status surface.
+- [`LibraryAuthoringTest.cpp`](../../../test/runtime/library/LibraryAuthoringTest.cpp) proves non-terminal contention behind a background command, worker-side execution, Maintenance ordering, active pre-transaction Closing cancellation, and later admission after release.
+- [`AudioIdentityIndexerTest.cpp`](../../../test/runtime/library/AudioIdentityIndexerTest.cpp) proves concurrent fingerprinting and bounded write-back behavior.
 
 ## Related documents
 

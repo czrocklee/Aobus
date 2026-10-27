@@ -10,7 +10,7 @@ Use `./ao tidy` or `ao.bat tidy`; the portal selects checks, discovers tools, pr
 - [Checker development](../../doc/development/lint/checker-development.md) explains symbol identity, macro safety, diagnostics, and fixture design.
 - [Linting](../../doc/development/linting.md) is the starting point for investigating a finding rather than modifying a checker.
 
-Fixtures live under `test/integration/lint/fixture/`.
+Fixtures live under `test/lint/fixture/`.
 `./ao test --lint` verifies diagnostics on Linux and macOS, including optional message assertions and mandatory compiler-error detection while Clang parses the original fixtures.
 A focused `tidy --check` invocation inspects diagnostics; it does not replace those assertions.
 

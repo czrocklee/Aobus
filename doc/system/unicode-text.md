@@ -167,7 +167,7 @@ layout engine for cell or pixel measurement.
 
 ## Test map
 
-- [`UnicodeTextTest.cpp`](../../test/unit/utility/UnicodeTextTest.cpp)
+- [`UnicodeTextTest.cpp`](../../test/utility/UnicodeTextTest.cpp)
   verifies the governed runtime ICU and Unicode versions and protects
   malformed-sequence rejection, NFC equivalence and idempotence,
   quick checks, multi-code-point case folds, sigma equivalence, and byte-indexed
@@ -175,12 +175,12 @@ layout engine for cell or pixel measurement.
   emoji, including interior offsets, both text edges, and a rejected
   out-of-range offset.
 - Library builder, Store, and open-integrity tests under
-  [`test/unit/library/`](../../test/unit/library) protect NFC admission,
+  [`test/library/`](../../test/library) protect NFC admission,
   canonical dictionary identity, malformed-input rejection, and persisted-row
   corruption detection.
-- [`ShellInteractionModelTest.cpp`](../../test/unit/tui/ShellInteractionModelTest.cpp)
+- [`ShellInteractionModelTest.cpp`](../../test/tui/ShellInteractionModelTest.cpp)
   protects grapheme-aware Backspace through the frontend consumer.
-- [`TextFieldModelTest.cpp`](../../test/unit/tui/TextFieldModelTest.cpp)
+- [`TextFieldModelTest.cpp`](../../test/tui/TextFieldModelTest.cpp)
   protects grapheme-aware cursor movement and deletion, boundary rejection,
   and multibyte range replacement in the terminal text-field consumer.
 - Dependency-policy tests and native dependency reports protect the aligned

@@ -249,9 +249,9 @@ A frontend file adapter may log or fall back only according to the specification
 
 ## Test map
 
-- [`RymlAdapterTest.cpp`](../../../test/unit/utility/RymlAdapterTest.cpp) protects complete scalar consumption, numeric range, unsigned-negative rejection, canonical booleans, null-string rejection, bounded context, parser-result diagnostics, file-byte ceiling boundaries, missing-file `IoError`, and callback filename ownership.
-- [`YamlSerializationTest.cpp`](../../../test/unit/utility/YamlSerializationTest.cpp) protects quoted string type preservation, exact finite float/double round trips at adjacent and representational boundaries, signed zero, unchanged nonfinite spelling and rejection, node kinds, required children, duplicate and unknown keys, map-reader assignment, explicit-null rejection, failure order, map-writer failure order and arena ownership, sequence index context, bounded field context, and dynamic string-map boundary classification.
-- [`ConfigStoreTest.cpp`](../../../test/unit/runtime/ConfigStoreTest.cpp) protects translation of malformed YAML through a containing store and retry after initialization failure.
+- [`RymlAdapterTest.cpp`](../../../test/utility/RymlAdapterTest.cpp) protects complete scalar consumption, numeric range, unsigned-negative rejection, canonical booleans, null-string rejection, bounded context, parser-result diagnostics, file-byte ceiling boundaries, missing-file `IoError`, and callback filename ownership.
+- [`YamlSerializationTest.cpp`](../../../test/utility/YamlSerializationTest.cpp) protects quoted string type preservation, exact finite float/double round trips at adjacent and representational boundaries, signed zero, unchanged nonfinite spelling and rejection, node kinds, required children, duplicate and unknown keys, map-reader assignment, explicit-null rejection, failure order, map-writer failure order and arena ownership, sequence index context, bounded field context, and dynamic string-map boundary classification.
+- [`ConfigStoreTest.cpp`](../../../test/runtime/ConfigStoreTest.cpp) protects translation of malformed YAML through a containing store and retry after initialization failure.
 - Library transfer, layout model, and component-state tests protect their domain-specific use of the adapter without making those schemas part of this contract.
 
 Current focused tests do not directly protect zero-length file reading, in-place buffer lifetime, callback replacement before state destruction, or each individual file-read failure stage.

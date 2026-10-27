@@ -20,15 +20,15 @@ class TidyClassifyTest(unittest.TestCase):
         self.assertEqual(tidy.classify(Path("/repo/tool/lint/Check.cpp"), explicit=False), "STRICT")
 
     def test_test_code_is_relaxed(self):
-        self.assertEqual(tidy.classify(Path("/repo/test/unit/audio/FooTest.cpp"), explicit=False), "RELAXED")
+        self.assertEqual(tidy.classify(Path("/repo/test/audio/FooTest.cpp"), explicit=False), "RELAXED")
 
     def test_lint_fixtures_only_checked_when_explicit(self):
-        fixture = Path("/repo/test/integration/lint/fixture/aobus-check/case.cpp")
+        fixture = Path("/repo/test/lint/fixture/aobus-check/case.cpp")
         self.assertEqual(tidy.classify(fixture, explicit=True), "STRICT")
         self.assertEqual(tidy.classify(fixture, explicit=False), "IGNORE")
 
     def test_other_lint_integration_files_are_ignored(self):
-        helper = Path("/repo/test/integration/lint/fixture_helper.cpp")
+        helper = Path("/repo/test/lint/fixture_helper.cpp")
         self.assertEqual(tidy.classify(helper, explicit=True), "IGNORE")
 
 
@@ -188,10 +188,10 @@ class TidySplitExistingTest(unittest.TestCase):
 class AnalyzeClassifyTest(unittest.TestCase):
     def test_project_sources_are_analyzed(self):
         self.assertTrue(analyze.classify(Path("/repo/lib/audio/Foo.cpp")))
-        self.assertTrue(analyze.classify(Path("/repo/test/unit/audio/FooTest.cpp")))
+        self.assertTrue(analyze.classify(Path("/repo/test/audio/FooTest.cpp")))
 
     def test_lint_integration_is_skipped(self):
-        self.assertFalse(analyze.classify(Path("/repo/test/integration/lint/fixture/x/case.cpp")))
+        self.assertFalse(analyze.classify(Path("/repo/test/lint/fixture/x/case.cpp")))
 
 
 class AnalyzerChecksTest(unittest.TestCase):

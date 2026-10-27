@@ -204,12 +204,12 @@ The runtime provider contains no GTK types.
 
 ## Test map
 
-- [`CompletionServiceTest.cpp`](../../../test/unit/runtime/completion/CompletionServiceTest.cpp) protects shared-snapshot coherence, alias reuse and lifetime, tag/custom/field/aggregate materialization, frequency merging, specification replacement, and insertion/mutation/deletion/reset invalidation.
-- [`CreditCompletionTest.cpp`](../../../test/unit/runtime/completion/CreditCompletionTest.cpp) protects all/category name and role votes, duplicate handling, nonfirst members, scoped editor completion, and invalidation.
-- [`MetadataValueCompleterTest.cpp`](../../../test/unit/runtime/completion/MetadataValueCompleterTest.cpp) protects whole-value/word/alias tiering, source-text insertion, field gating, prefix matching, limits, and whole-entry replacement.
-- [`CompletionVocabularyTest.cpp`](../../../test/unit/runtime/completion/CompletionVocabularyTest.cpp) protects bounded input-order tiering, duplicate-value suppression, shared-alias handling, and the runtime item-adapter path.
-- [`TrackFilterCompleterTest.cpp`](../../../test/unit/uimodel/library/track/TrackFilterCompleterTest.cpp) protects Quick Filter's full-match frequency ranking independently from input-order selection.
-- [`CompletionVocabularyBaselineTest.cpp`](../../../test/perf/CompletionVocabularyBaselineTest.cpp) records shared rebuild, in-memory materialization, and cached Quick-filter lookup latency at representative cardinalities without a machine-dependent pass threshold.
+- [`CompletionServiceTest.cpp`](../../../test/runtime/completion/CompletionServiceTest.cpp) protects shared-snapshot coherence, alias reuse and lifetime, tag/custom/field/aggregate materialization, frequency merging, specification replacement, and insertion/mutation/deletion/reset invalidation.
+- [`CreditCompletionTest.cpp`](../../../test/runtime/completion/CreditCompletionTest.cpp) protects all/category name and role votes, duplicate handling, nonfirst members, scoped editor completion, and invalidation.
+- [`MetadataValueCompleterTest.cpp`](../../../test/runtime/completion/MetadataValueCompleterTest.cpp) protects whole-value/word/alias tiering, source-text insertion, field gating, prefix matching, limits, and whole-entry replacement.
+- [`CompletionVocabularyTest.cpp`](../../../test/runtime/completion/CompletionVocabularyTest.cpp) protects bounded input-order tiering, duplicate-value suppression, shared-alias handling, and the runtime item-adapter path.
+- [`TrackFilterCompleterTest.cpp`](../../../test/uimodel/library/track/TrackFilterCompleterTest.cpp) protects Quick Filter's full-match frequency ranking independently from input-order selection.
+- [`CompletionVocabularyBaselineTest.cpp`](../../../test/perf/baseline/CompletionVocabularyBaselineTest.cpp) records shared rebuild, in-memory materialization, and cached Quick-filter lookup latency at representative cardinalities without a machine-dependent pass threshold.
 - GTK completion-controller tests protect frontend application of the neutral result.
 
 ## Related documents

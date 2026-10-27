@@ -24,7 +24,7 @@ Each format keeps its current version beside the last released one:
 A last released version of `0` means that no release has shipped the format, and the current version is then 1.
 After a release, the current version equals the last released one until the first incompatible change of the next cycle increments it by one.
 Every later change in that cycle amends the unreleased version and keeps its number.
-A [format-fixture test](../../test/unit/runtime/library/LibraryFormatFixtureTest.cpp) enforces both rules at compile time.
+A [format-fixture test](../../test/runtime/library/LibraryFormatFixtureTest.cpp) enforces both rules at compile time.
 
 A predicate-language change that alters the outcome of filter text the current language accepts is incompatible for both formats, as the [predicate language reference](../reference/query/predicate-language.md#compatibility-and-versioning) explains.
 
@@ -35,7 +35,7 @@ Version 1 is unreleased until the first release, and every change amends it.
 
 1. Change the layout or schema together with its validation.
 2. Update the owning reference so that it still describes exactly what the build reads and writes.
-3. Regenerate the unreleased version's fixtures when the change alters what they hold. The [format-fixture test](../../test/unit/runtime/library/LibraryFormatFixtureTest.cpp) describes how each platform's library and `v1.yaml` were made, and each platform's library is made on that platform.
+3. Regenerate the unreleased version's fixtures when the change alters what they hold. The [format-fixture test](../../test/runtime/library/LibraryFormatFixtureTest.cpp) describes how each platform's library and `v1.yaml` were made, and each platform's library is made on that platform.
 
 ## Increment a version
 

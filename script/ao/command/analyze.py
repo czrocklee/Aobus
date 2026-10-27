@@ -87,7 +87,7 @@ def classify(path: Path) -> bool:
         rel = absolute_path(path).as_posix()
 
     rel_slash = "/" + rel
-    if "/test/integration/lint/" in rel_slash:
+    if "/test/lint/" in rel_slash:
         return False
     return True
 

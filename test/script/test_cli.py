@@ -1469,9 +1469,9 @@ class CliParseTest(unittest.TestCase):
         self.assertEqual(args.suite, "default")
 
     def test_test_audit_arguments(self):
-        args = self.parse(["test-audit", "--fail-on-issue", "test/unit/query"])
+        args = self.parse(["test-audit", "--fail-on-issue", "test/query"])
         self.assertTrue(args.fail_on_issue)
-        self.assertEqual(args.paths, ["test/unit/query"])
+        self.assertEqual(args.paths, ["test/query"])
 
     def test_name_audit_arguments(self):
         args = self.parse(["name-audit", "--fail-on-issue", "app/include/ao/uimodel"])

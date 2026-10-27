@@ -179,13 +179,13 @@ Frontend-specific debounce, focus styling, popover rendering, and command syntax
 
 ## Test map
 
-- [`TrackFilterResolutionTest.cpp`](../../../test/unit/uimodel/library/track/TrackFilterResolutionTest.cpp) protects classification, exact mixed-quote preservation, serialized syntax, and explicit caseless expansion.
-- [`TrackFilterCompleterTest.cpp`](../../../test/unit/uimodel/library/track/TrackFilterCompleterTest.cpp) protects the live field set, ranking, limits, replacement, escaping, and Quick/expression boundary.
-- [`TrackFilterViewModelTest.cpp`](../../../test/unit/uimodel/library/track/TrackFilterViewModelTest.cpp) protects state, end-to-end caseless Quick-filter membership, synchronous failure handling, and single-render policy.
-- [`ViewServiceListFilterTest.cpp`](../../../test/unit/runtime/ViewServiceListFilterTest.cpp) protects runtime replacement, transient expression errors, contextual stored-parent errors with empty projections, and List order membership that is refused until the stored parent is repaired and then ignores the quick filter.
-- Source tests under [`test/unit/runtime/source/`](../../../test/unit/runtime/source) protect source membership and dependency propagation.
+- [`TrackFilterResolutionTest.cpp`](../../../test/uimodel/library/track/TrackFilterResolutionTest.cpp) protects classification, exact mixed-quote preservation, serialized syntax, and explicit caseless expansion.
+- [`TrackFilterCompleterTest.cpp`](../../../test/uimodel/library/track/TrackFilterCompleterTest.cpp) protects the live field set, ranking, limits, replacement, escaping, and Quick/expression boundary.
+- [`TrackFilterViewModelTest.cpp`](../../../test/uimodel/library/track/TrackFilterViewModelTest.cpp) protects state, end-to-end caseless Quick-filter membership, synchronous failure handling, and single-render policy.
+- [`ViewServiceListFilterTest.cpp`](../../../test/runtime/ViewServiceListFilterTest.cpp) protects runtime replacement, transient expression errors, contextual stored-parent errors with empty projections, and List order membership that is refused until the stored parent is repaired and then ignores the quick filter.
+- Source tests under [`test/runtime/source/`](../../../test/runtime/source) protect source membership and dependency propagation.
 - GTK Quick Filter tests plus TUI event-controller and library-controller tests protect completion acceptance, debounce/cancellation, error presentation, and frontend adaptation.
-- [`QuickFilterCompletionAdapterTest.cpp`](../../../test/unit/winui/track/QuickFilterCompletionAdapterTest.cpp) runs on every host and protects WinUI caret/range conversion plus semantic completion-row projection without naming WinRT types.
+- [`QuickFilterCompletionAdapterTest.cpp`](../../../test/winui/track/QuickFilterCompletionAdapterTest.cpp) runs on every host and protects WinUI caret/range conversion plus semantic completion-row projection without naming WinRT types.
 
 ## Related documents
 

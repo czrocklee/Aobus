@@ -164,10 +164,10 @@ Now-playing row style is driven by the current playing id in `TrackListModel`; v
 
 ## Test map
 
-- [`TrackPresentationTest.cpp`](../../../test/unit/runtime/TrackPresentationTest.cpp) locks built-ins and normalization.
-- Sorting and grouping tests under [`test/unit/runtime/projection/`](../../../test/unit/runtime/projection) lock compound groups and classical order.
-- Presentation recommendation tests under [`test/unit/uimodel/library/presentation/`](../../../test/unit/uimodel/library/presentation) lock selection behavior.
-- [`TrackRowCacheTest.cpp`](../../../test/unit/linux-gtk/track/TrackRowCacheTest.cpp) and [`TrackListModelTest.cpp`](../../../test/unit/linux-gtk/track/TrackListModelTest.cpp) protect GTK row caching and now-playing model state.
+- [`TrackPresentationTest.cpp`](../../../test/runtime/TrackPresentationTest.cpp) locks built-ins and normalization.
+- Sorting and grouping tests under [`test/runtime/projection/`](../../../test/runtime/projection) lock compound groups and classical order.
+- Presentation recommendation tests under [`test/uimodel/library/presentation/`](../../../test/uimodel/library/presentation) lock selection behavior.
+- [`TrackRowCacheTest.cpp`](../../../test/linux-gtk/track/TrackRowCacheTest.cpp) and [`TrackListModelTest.cpp`](../../../test/linux-gtk/track/TrackListModelTest.cpp) protect GTK row caching and now-playing model state.
 
 ## Related documents
 

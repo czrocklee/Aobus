@@ -105,7 +105,7 @@ ao::Result<> res{};
 
 ## Test authority
 
-- [`ErrorTest.cpp`](../../../test/unit/core/ErrorTest.cpp) protects construction, expected-value behavior, and source-location capture.
+- [`ErrorTest.cpp`](../../../test/core/ErrorTest.cpp) protects construction, expected-value behavior, and source-location capture.
 - Subsystem tests protect the code subsets promised by their own specifications.
 
 ## Related documents

@@ -181,14 +181,14 @@ The probe retains nothing and schedules no work; its CMake boundary rejects prod
 
 ## Test map
 
-- [`TrackFieldGridCollapsibleTest.cpp`](../../../../test/unit/linux-gtk/layout/components/TrackFieldGridCollapsibleTest.cpp) protects sections and empty-field visibility.
-- [`TrackDetailConstrainedLayoutTest.cpp`](../../../../test/unit/linux-gtk/layout/components/TrackDetailConstrainedLayoutTest.cpp) protects stable rows, clipping, anchors, and narrow allocation.
-- [`TrackFieldGridTextTest.cpp`](../../../../test/unit/linux-gtk/layout/components/TrackFieldGridTextTest.cpp) protects mixed/unknown/display text.
-- [`SemanticLayoutComponentsTest.cpp`](../../../../test/unit/linux-gtk/layout/components/SemanticLayoutComponentsTest.cpp) protects scope, mutations, shell binding, the shared undo bar, five-second timeout, stale and rejected terminal replay, destruction during replay, selection clear, common present-empty eligibility, and refusal of a stale session to displace a current opportunity. Its mixed and missing deletion cases observe admitted-to-terminal field-grid submission before checking stored deletion and absence of an undo offer.
-- [`TrackCreditsRefreshTest.cpp`](../../../../test/unit/linux-gtk/layout/components/TrackCreditsRefreshTest.cpp) protects same-selection input, focus, completion, custom-key topology, pending-publication settlement, and stale Save; [`TrackCreditsEditorTest.cpp`](../../../../test/unit/linux-gtk/layout/components/TrackCreditsEditorTest.cpp) protects scoped controls, Properties staging, row retirement, selection replacement, owner teardown before delivery, coherent clear-undo, and opportunity identity for retired replay, timeout, and overlapping scoped changes.
-- [`TrackCreditsTest.cpp`](../../../../test/unit/uimodel/library/detail/TrackCreditsTest.cpp) protects scoped editor and clear-undo policy.
-- [`TagEditorTest.cpp`](../../../../test/unit/linux-gtk/tag/TagEditorTest.cpp) and [`TagEditControllerTest.cpp`](../../../../test/unit/linux-gtk/tag/TagEditControllerTest.cpp) protect chip flow and edit interaction.
-- [`TrackColumnFactoryBuilderTest.cpp`](../../../../test/unit/linux-gtk/track/TrackColumnFactoryBuilderTest.cpp) protects inline-session invalidation, deferred teardown cancellation, and recycled-cell editing.
+- [`TrackFieldGridCollapsibleTest.cpp`](../../../../test/linux-gtk/layout/components/TrackFieldGridCollapsibleTest.cpp) protects sections and empty-field visibility.
+- [`TrackDetailConstrainedLayoutTest.cpp`](../../../../test/linux-gtk/layout/components/TrackDetailConstrainedLayoutTest.cpp) protects stable rows, clipping, anchors, and narrow allocation.
+- [`TrackFieldGridTextTest.cpp`](../../../../test/linux-gtk/layout/components/TrackFieldGridTextTest.cpp) protects mixed/unknown/display text.
+- [`SemanticLayoutComponentsTest.cpp`](../../../../test/linux-gtk/layout/components/SemanticLayoutComponentsTest.cpp) protects scope, mutations, shell binding, the shared undo bar, five-second timeout, stale and rejected terminal replay, destruction during replay, selection clear, common present-empty eligibility, and refusal of a stale session to displace a current opportunity. Its mixed and missing deletion cases observe admitted-to-terminal field-grid submission before checking stored deletion and absence of an undo offer.
+- [`TrackCreditsRefreshTest.cpp`](../../../../test/linux-gtk/layout/components/TrackCreditsRefreshTest.cpp) protects same-selection input, focus, completion, custom-key topology, pending-publication settlement, and stale Save; [`TrackCreditsEditorTest.cpp`](../../../../test/linux-gtk/layout/components/TrackCreditsEditorTest.cpp) protects scoped controls, Properties staging, row retirement, selection replacement, owner teardown before delivery, coherent clear-undo, and opportunity identity for retired replay, timeout, and overlapping scoped changes.
+- [`TrackCreditsTest.cpp`](../../../../test/uimodel/library/detail/TrackCreditsTest.cpp) protects scoped editor and clear-undo policy.
+- [`TagEditorTest.cpp`](../../../../test/linux-gtk/tag/TagEditorTest.cpp) and [`TagEditControllerTest.cpp`](../../../../test/linux-gtk/tag/TagEditControllerTest.cpp) protect chip flow and edit interaction.
+- [`TrackColumnFactoryBuilderTest.cpp`](../../../../test/linux-gtk/track/TrackColumnFactoryBuilderTest.cpp) protects inline-session invalidation, deferred teardown cancellation, and recycled-cell editing.
 
 ## Related documents
 

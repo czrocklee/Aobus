@@ -182,12 +182,12 @@ The [workspace session specification](session.md) owns capture and restore, and 
 
 ## Test map
 
-- [`NavigationHistoryTest.cpp`](../../../test/unit/runtime/NavigationHistoryTest.cpp) proves cursor and capacity mechanics.
-- [`WorkspaceNavigationTest.cpp`](../../../test/unit/runtime/WorkspaceNavigationTest.cpp) proves validation, command results, complete observations, reentrancy, observer delivery, deletion and reset batching, and album reveal.
-- [`WorkspaceHistoryTest.cpp`](../../../test/unit/runtime/WorkspaceHistoryTest.cpp) proves atomic history replay and boundary availability.
-- [`WorkspacePresentationTest.cpp`](../../../test/unit/runtime/WorkspacePresentationTest.cpp) proves presentation and preset commands.
-- [`WorkspaceSessionTest.cpp`](../../../test/unit/runtime/WorkspaceSessionTest.cpp) proves atomic multi-view restore and failure cleanup.
-- [`HeadlessShellTest.cpp`](../../../test/unit/runtime/HeadlessShellTest.cpp) proves frontend-neutral reconstruction.
+- [`NavigationHistoryTest.cpp`](../../../test/runtime/NavigationHistoryTest.cpp) proves cursor and capacity mechanics.
+- [`WorkspaceNavigationTest.cpp`](../../../test/runtime/WorkspaceNavigationTest.cpp) proves validation, command results, complete observations, reentrancy, observer delivery, deletion and reset batching, and album reveal.
+- [`WorkspaceHistoryTest.cpp`](../../../test/runtime/WorkspaceHistoryTest.cpp) proves atomic history replay and boundary availability.
+- [`WorkspacePresentationTest.cpp`](../../../test/runtime/WorkspacePresentationTest.cpp) proves presentation and preset commands.
+- [`WorkspaceSessionTest.cpp`](../../../test/runtime/WorkspaceSessionTest.cpp) proves atomic multi-view restore and failure cleanup.
+- [`HeadlessShellTest.cpp`](../../../test/runtime/HeadlessShellTest.cpp) proves frontend-neutral reconstruction.
 
 ## Related documents
 

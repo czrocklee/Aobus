@@ -27,4 +27,4 @@ This directory binds runtime completion providers to GTK entries.
 
 - `EntryCompletionController.h` owns the borrowed-entry contract, installed controller handles, scoped changed connection, and programmatic update API.
 - `EntryCompletionController.cpp` owns key routing, checked byte-range replacement, signal blocking, and teardown ordering.
-- `test/unit/linux-gtk/completion/EntryCompletionControllerTest.cpp` protects replacement and programmatic-update behavior.
+- `test/linux-gtk/completion/EntryCompletionControllerTest.cpp` protects replacement and programmatic-update behavior.

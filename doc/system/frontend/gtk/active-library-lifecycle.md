@@ -196,7 +196,7 @@ playback schema or migration is implied.
   owns chooser admission; `ao_desktop_launch`, `AppRuntime`, and
   `PlaybackSessionPersistence` own the shared rules linked above.
 
-Tests under `test/unit/desktop/` protect shared planning, identity, protocol, and
+Tests under `test/desktop/` protect shared planning, identity, protocol, and
 launch. `GtkStartupPlanTest.cpp`, `SuccessorProcessLauncherTest.cpp`, and
 `GApplicationReplacementTest.cpp` protect GTK partitioning, executable/token
 adaptation, and registration overlap. `MainWindowTest.cpp` and

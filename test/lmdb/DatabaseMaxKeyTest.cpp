@@ -1,0 +1,118 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 Aobus Contributors
+
+#include "test/TestFixtureSupport.h"
+#include "test/lmdb/LmdbTestSupport.h"
+#include <ao/lmdb/Environment.h>
+
+#include <catch2/catch_test_macros.hpp>
+
+namespace ao::lmdb::test
+{
+  TEST_CASE("IntegerKeyDatabase::Reader - maxKey returns zero for empty databases",
+            "[lmdb][unit][database-reader][max-key]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
+
+    auto wtxn = beginWriteTransaction(env);
+    auto db = openIntegerKeyDatabase(wtxn, "test");
+    REQUIRE(wtxn.commit());
+
+    auto const rtxn = beginReadTransaction(env);
+    auto const reader = db.reader(rtxn);
+    CHECK(reader.maxKey() == 0);
+  }
+
+  TEST_CASE("IntegerKeyDatabase::Reader - maxKey after append", "[lmdb][unit][database-reader][max-key]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
+
+    auto wtxn = beginWriteTransaction(env);
+    auto db = openIntegerKeyDatabase(wtxn, "test");
+    auto writer = db.writer(wtxn);
+
+    REQUIRE(writer.append(createStringData("first")));
+    auto const id2Res = writer.append(createStringData("second"));
+    REQUIRE(id2Res);
+    REQUIRE(wtxn.commit());
+
+    auto const rtxn = beginReadTransaction(env);
+    auto const reader = db.reader(rtxn);
+    CHECK(reader.maxKey() == *id2Res);
+  }
+
+  TEST_CASE("IntegerKeyDatabase::Reader - maxKey tracks explicitly created keys",
+            "[lmdb][unit][database-reader][max-key]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
+
+    auto wtxn = beginWriteTransaction(env);
+    auto db = openIntegerKeyDatabase(wtxn, "test");
+    auto writer = db.writer(wtxn);
+
+    REQUIRE(writer.create(5, createStringData("five")));
+    REQUIRE(writer.create(10, createStringData("ten")));
+    REQUIRE(writer.create(3, createStringData("three")));
+    REQUIRE(wtxn.commit());
+
+    auto const rtxn = beginReadTransaction(env);
+    auto const reader = db.reader(rtxn);
+    CHECK(reader.maxKey() == 10);
+  }
+
+  TEST_CASE("IntegerKeyDatabase::Reader - maxKey after delete", "[lmdb][unit][database-reader][max-key]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
+
+    auto wtxn = beginWriteTransaction(env);
+    auto db = openIntegerKeyDatabase(wtxn, "test");
+    auto writer = db.writer(wtxn);
+
+    REQUIRE(writer.create(1, createStringData("one")));
+    REQUIRE(writer.create(2, createStringData("two")));
+    REQUIRE(writer.create(3, createStringData("three")));
+    REQUIRE(wtxn.commit());
+
+    {
+      auto wtxn2 = beginWriteTransaction(env);
+      auto writer2 = db.writer(wtxn2);
+      REQUIRE(writer2.tryDelete(3));
+      REQUIRE(wtxn2.commit());
+    }
+
+    auto const rtxn = beginReadTransaction(env);
+    auto const reader = db.reader(rtxn);
+    CHECK(reader.maxKey() == 2);
+  }
+
+  TEST_CASE("IntegerKeyDatabase::Reader - maxKey after deleting middle element",
+            "[lmdb][unit][database-reader][max-key]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
+
+    auto wtxn = beginWriteTransaction(env);
+    auto db = openIntegerKeyDatabase(wtxn, "test");
+    auto writer = db.writer(wtxn);
+
+    REQUIRE(writer.create(1, createStringData("one")));
+    REQUIRE(writer.create(2, createStringData("two")));
+    REQUIRE(writer.create(3, createStringData("three")));
+    REQUIRE(wtxn.commit());
+
+    {
+      auto wtxn2 = beginWriteTransaction(env);
+      auto writer2 = db.writer(wtxn2);
+      REQUIRE(writer2.tryDelete(2));
+      REQUIRE(wtxn2.commit());
+    }
+
+    auto const rtxn = beginReadTransaction(env);
+    auto const reader = db.reader(rtxn);
+    CHECK(reader.maxKey() == 3);
+  }
+} // namespace ao::lmdb::test

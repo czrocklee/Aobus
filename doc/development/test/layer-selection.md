@@ -7,7 +7,7 @@ Choose the lowest layer that proves the behavior. Higher layers should not dupli
 
 ## `lib` tests
 
-Use `test/unit/<module>/...Test.cpp` for pure algorithms, data layouts, storage, parsing, serialization, query evaluation, audio primitives, and utility behavior.
+Use `test/<module>/...Test.cpp` for pure algorithms, data layouts, storage, parsing, serialization, query evaluation, audio primitives, and utility behavior.
 
 Good `lib` tests usually:
 
@@ -25,7 +25,7 @@ Appropriate contracts:
 
 ## `runtime` tests
 
-Use `test/unit/runtime/...Test.cpp` for service contracts, runtime state transitions, event publication, subscriptions, projections, workspace/view/playback behavior, and async lifecycle.
+Use `test/runtime/...Test.cpp` for service contracts, runtime state transitions, event publication, subscriptions, projections, workspace/view/playback behavior, and async lifecycle.
 
 Good `runtime` tests usually:
 
@@ -43,7 +43,7 @@ Appropriate contracts:
 
 ## `uimodel` tests
 
-Use `test/unit/uimodel/...Test.cpp` for UI policy, view-state projection, menu models, editor models, layout models, selection summaries, field formatting, and presentation decisions that do not need GTK.
+Use `test/uimodel/...Test.cpp` for UI policy, view-state projection, menu models, editor models, layout models, selection summaries, field formatting, and presentation decisions that do not need GTK.
 
 This is the preferred layer for most UI behavior.
 
@@ -70,7 +70,7 @@ Native availability belongs to the conditional source registration; it does not 
 
 ## `linux-gtk` tests
 
-Use `test/unit/linux-gtk/...Test.cpp` for GTK adapter behavior: widget construction, render binding, event-to-action routing, lifecycle cleanup, CSS class application, popovers/dialogs, and small targeted layout regressions.
+Use `test/linux-gtk/...Test.cpp` for GTK adapter behavior: widget construction, render binding, event-to-action routing, lifecycle cleanup, CSS class application, popovers/dialogs, and small targeted layout regressions.
 
 GTK tests should be thin. Do not re-test all business policy that can be covered in `uimodel` or `runtime`.
 
@@ -93,11 +93,11 @@ Appropriate contracts:
 
 ## CLI and TUI frontend tests
 
-Use `test/unit/cli/...Test.cpp` and `test/unit/tui/...Test.cpp` for frontend-owned parsing, formatting, rendering, input routing, and lifecycle behavior. Keep shared service and presentation policy in `runtime` or `uimodel`. Scope follows the [direction of the asserted value](#scope-and-independent-metadata): a CLI command or TUI action that changes library, playback, workspace, or notification state and asserts that state is `[integration]`; read-only output and TUI rendering of runtime state stay `[unit]`.
+Use `test/cli/...Test.cpp` and `test/tui/...Test.cpp` for frontend-owned parsing, formatting, rendering, input routing, and lifecycle behavior. Keep shared service and presentation policy in `runtime` or `uimodel`. Scope follows the [direction of the asserted value](#scope-and-independent-metadata): a CLI command or TUI action that changes library, playback, workspace, or notification state and asserts that state is `[integration]`; read-only output and TUI rendering of runtime state stay `[unit]`.
 
 ## WinUI frontend tests
 
-Use `test/unit/winui/...Test.cpp` for native WinUI composition and frontend-owned behavior such as XAML resource lookup, Windows layout dialects, shell policy, startup options, and process-boundary adapters.
+Use `test/winui/...Test.cpp` for native WinUI composition and frontend-owned behavior such as XAML resource lookup, Windows layout dialects, shell policy, startup options, and process-boundary adapters.
 
 Keep pure shared policy in `uimodel` tests. A WinUI test may use the `[winui]` layer tag when the behavior belongs to the Windows frontend even if the implementation is a small pure helper. Many WinRT-free WinUI policy tests are intentionally compiled into `ao_core_test` on every host; suite membership does not change their frontend layer.
 
@@ -129,7 +129,7 @@ Scope promises neither speed nor hermeticity, and it is unrelated to the
 
 Useful existing samples:
 
-- Runtime service contract style: `test/unit/runtime/NotificationServiceTest.cpp`.
-- UI policy style: `test/unit/uimodel/status/activity/ActivityStatusFeedProjection*Test.cpp` and `test/unit/uimodel/library/presentation/TrackPresentationCatalogTest.cpp`.
-- Pure helper style: `test/unit/linux-gtk/layout/components/TrackFieldGridTextTest.cpp`.
-- Thin GTK adapter style: `test/unit/linux-gtk/track/TrackPresentationButtonTest.cpp`.
+- Runtime service contract style: `test/runtime/NotificationServiceTest.cpp`.
+- UI policy style: `test/uimodel/status/activity/ActivityStatusFeedProjection*Test.cpp` and `test/uimodel/library/presentation/TrackPresentationCatalogTest.cpp`.
+- Pure helper style: `test/linux-gtk/layout/components/TrackFieldGridTextTest.cpp`.
+- Thin GTK adapter style: `test/linux-gtk/track/TrackPresentationButtonTest.cpp`.

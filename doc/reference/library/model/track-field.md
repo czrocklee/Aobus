@@ -169,11 +169,11 @@ Adding a field requires coordinated decisions about persistence source, projecti
 
 ## Test authority
 
-- [`TrackFieldTest.cpp`](../../../../test/unit/runtime/TrackFieldTest.cpp) locks runtime catalog completeness, ids, capabilities, exhaustive typed mappings, and invalid lookup behavior.
-- [`PresentationTextFeaturesTest.cpp`](../../../../test/unit/uimodel/presentation/PresentationTextFeaturesTest.cpp) locks exhaustive UIModel field labels.
-- [`TrackColumnDefaultsTest.cpp`](../../../../test/unit/uimodel/library/presentation/TrackColumnDefaultsTest.cpp) ensures every presentable field has UIModel column policy.
-- [`CompletionServiceTest.cpp`](../../../../test/unit/runtime/completion/CompletionServiceTest.cpp) locks vocabulary support.
-- [`WorkspaceSessionYamlSchemaTest.cpp`](../../../../test/unit/runtime/WorkspaceSessionYamlSchemaTest.cpp) and [`GtkLayoutStateStoreTest.cpp`](../../../../test/unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp) protect stable presentation tokens at persistence boundaries.
+- [`TrackFieldTest.cpp`](../../../../test/runtime/TrackFieldTest.cpp) locks runtime catalog completeness, ids, capabilities, exhaustive typed mappings, and invalid lookup behavior.
+- [`PresentationTextFeaturesTest.cpp`](../../../../test/uimodel/presentation/PresentationTextFeaturesTest.cpp) locks exhaustive UIModel field labels.
+- [`TrackColumnDefaultsTest.cpp`](../../../../test/uimodel/library/presentation/TrackColumnDefaultsTest.cpp) ensures every presentable field has UIModel column policy.
+- [`CompletionServiceTest.cpp`](../../../../test/runtime/completion/CompletionServiceTest.cpp) locks vocabulary support.
+- [`WorkspaceSessionYamlSchemaTest.cpp`](../../../../test/runtime/WorkspaceSessionYamlSchemaTest.cpp) and [`GtkLayoutStateStoreTest.cpp`](../../../../test/linux-gtk/app/GtkLayoutStateStoreTest.cpp) protect stable presentation tokens at persistence boundaries.
 
 ## Related documents
 

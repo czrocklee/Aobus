@@ -40,10 +40,10 @@ repository. None of them is a design choice.
 | 3 | `ao::compat::AtomicSharedPtr` | `include/ao/compat/AtomicSharedPtr.h` | libc++ defines `__cpp_lib_atomic_shared_ptr` |
 | 4 | libc++ `expected` shim | `script/ao/macos-vcpkg-bootstrap.sh`, `cmake/CompilerOptions.cmake` | libc++ constrains `expected`'s equality operators without self-reference |
 | 5 | `-Wno-c2y-extensions` | `cmake/CompilerOptions.cmake` | fakeit stops expanding `__COUNTER__`, or Clang stops reporting it |
-| 6 | `StringMaker<file_time_type>` | `test/unit/FilesystemTestSupport.h` | Catch2 can stringify `__int128`, or Darwin stops using it for the file clock |
+| 6 | `StringMaker<file_time_type>` | `test/FilesystemTestSupport.h` | Catch2 can stringify `__int128`, or Darwin stops using it for the file clock |
 | 7 | c4core `C4_CPP=17` header mode | `cmake/Dependencies.cmake` | c4core accepts C++26 consumers under Darwin Clang without invalid likelihood attributes |
 | 8 | Objective-C++26 compiler flag mapping | root `CMakeLists.txt` | CMake supplies Clang's Objective-C++26 standard flags |
-| 9 | `__cpp_lib_chrono` clock-conversion branches | `lib/library/FileClockConversion.h`, `test/unit/FilesystemTestSupport.h` | libc++ defines `__cpp_lib_chrono` as at least `201907L` |
+| 9 | `__cpp_lib_chrono` clock-conversion branches | `lib/library/FileClockConversion.h`, `test/FilesystemTestSupport.h` | libc++ defines `__cpp_lib_chrono` as at least `201907L` |
 | 10 | `date` time-zone database | `vcpkg.json`, `cmake/Dependencies.cmake`, `app/uimodel/field/TrackFieldFormatter.cpp` | libc++ defines `__cpp_lib_chrono` as at least `201907L` with its time-zone database enabled |
 
 ### 1-3: standard-library seams
@@ -235,7 +235,7 @@ between Darwin and Linux, and deleting them breaks macOS again.
 | `sigemptyset` and `sigaddset` are function-like macros | `lib/utility/Fatal.cpp`, `app/tui/SignalExitWatcherPosix.cpp` |
 | `environ` is declared only for the main executable | `test/fatal/ProbeProcessPosix.cpp` |
 | No procfs, so `/proc/self/exe` does not resolve | `test/fatal/ProbeProcessPosix.cpp` |
-| LMDB locks through named POSIX semaphores that outlive an aborted owner | `test/unit/lmdb/LmdbProbeScratch.cpp` |
+| LMDB locks through named POSIX semaphores that outlive an aborted owner | `test/lmdb/LmdbProbeScratch.cpp` |
 
 The `Environment.h` mapping is guarded by a `static_assert` against
 `::mdb_mode_t` in `lib/lmdb/Environment.cpp`, so a wrong branch fails the build

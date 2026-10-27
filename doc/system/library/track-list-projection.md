@@ -100,8 +100,8 @@ A lease pins the source identity until the projection releases it, and the proje
 
 ## Test map
 
-Track-list projection tests under [`test/unit/runtime/projection/`](../../../test/unit/runtime/projection) prove lifecycle, sequential deltas, sorting, grouping, incremental equivalence, arena rebase, mutation behavior, and scale behavior.
-The source-order mismatch case in [`RuntimeFatalProbeTest.cpp`](../../../test/unit/runtime/library/RuntimeFatalProbeTest.cpp) proves that an inconsistent source batch terminates rather than publishing a recovery reset.
+Track-list projection tests under [`test/runtime/projection/`](../../../test/runtime/projection) prove lifecycle, sequential deltas, sorting, grouping, incremental equivalence, arena rebase, mutation behavior, and scale behavior.
+The source-order mismatch case in [`RuntimeFatalProbeTest.cpp`](../../../test/runtime/library/RuntimeFatalProbeTest.cpp) proves that an inconsistent source batch terminates rather than publishing a recovery reset.
 
 ## Related documents
 

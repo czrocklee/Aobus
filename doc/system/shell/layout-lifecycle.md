@@ -178,12 +178,12 @@ GTK responsive and component-specific behavior remains owned by the individual c
 
 ## Test map
 
-- UIModel tests under [`test/unit/uimodel/layout/`](../../../test/unit/uimodel/layout) protect document preparation, state, schema validation, action-slot resolution, promotion, session transitions, immutable snapshots, and generation-fenced writes.
-- [`LayoutRuntimeBuildTest.cpp`](../../../test/unit/linux-gtk/layout/components/LayoutRuntimeBuildTest.cpp), [`LayoutHostTest.cpp`](../../../test/unit/linux-gtk/layout/components/LayoutHostTest.cpp), and registry/action tests under [`test/unit/linux-gtk/layout/runtime/`](../../../test/unit/linux-gtk/layout/runtime) protect construction, activation, shared-widget switching, and failed-handoff rollback.
-- Editor tests under [`test/unit/linux-gtk/layout/editor/`](../../../test/unit/linux-gtk/layout/editor) protect preview, validation, save, cancel, and template editing.
-- [`ShellLayoutControllerTest.cpp`](../../../test/unit/linux-gtk/app/ShellLayoutControllerTest.cpp) protects failed-save retention, persistable cancel restoration, repeated action export, and controller teardown across the editor/controller boundary.
-- [`GioActionBridgeTest.cpp`](../../../test/unit/linux-gtk/layout/runtime/GioActionBridgeTest.cpp), [`ActionMapRegistrationTest.cpp`](../../../test/unit/linux-gtk/common/ActionMapRegistrationTest.cpp), and [`MainWindowTest.cpp`](../../../test/unit/linux-gtk/app/MainWindowTest.cpp) protect retained-action revocation, partial-export rollback, exact replacement identity, and window action teardown.
-- Component tests under [`test/unit/linux-gtk/layout/components/`](../../../test/unit/linux-gtk/layout/components) protect stateful and responsive behavior; [`PlaybackImageTest.cpp`](../../../test/unit/linux-gtk/layout/components/PlaybackImageTest.cpp) protects tooltip visibility gating and delayed-reveal eligibility.
+- UIModel tests under [`test/uimodel/layout/`](../../../test/uimodel/layout) protect document preparation, state, schema validation, action-slot resolution, promotion, session transitions, immutable snapshots, and generation-fenced writes.
+- [`LayoutRuntimeBuildTest.cpp`](../../../test/linux-gtk/layout/components/LayoutRuntimeBuildTest.cpp), [`LayoutHostTest.cpp`](../../../test/linux-gtk/layout/components/LayoutHostTest.cpp), and registry/action tests under [`test/linux-gtk/layout/runtime/`](../../../test/linux-gtk/layout/runtime) protect construction, activation, shared-widget switching, and failed-handoff rollback.
+- Editor tests under [`test/linux-gtk/layout/editor/`](../../../test/linux-gtk/layout/editor) protect preview, validation, save, cancel, and template editing.
+- [`ShellLayoutControllerTest.cpp`](../../../test/linux-gtk/app/ShellLayoutControllerTest.cpp) protects failed-save retention, persistable cancel restoration, repeated action export, and controller teardown across the editor/controller boundary.
+- [`GioActionBridgeTest.cpp`](../../../test/linux-gtk/layout/runtime/GioActionBridgeTest.cpp), [`ActionMapRegistrationTest.cpp`](../../../test/linux-gtk/common/ActionMapRegistrationTest.cpp), and [`MainWindowTest.cpp`](../../../test/linux-gtk/app/MainWindowTest.cpp) protect retained-action revocation, partial-export rollback, exact replacement identity, and window action teardown.
+- Component tests under [`test/linux-gtk/layout/components/`](../../../test/linux-gtk/layout/components) protect stateful and responsive behavior; [`PlaybackImageTest.cpp`](../../../test/linux-gtk/layout/components/PlaybackImageTest.cpp) protects tooltip visibility gating and delayed-reveal eligibility.
 
 ## Related documents
 

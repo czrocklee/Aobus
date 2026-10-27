@@ -127,13 +127,13 @@ Messages and confirmations may use `AppDialog::presentMessage` or a native GTK d
 
 ## Test map
 
-- [`PreferencesWindowTest.cpp`](../../../../test/unit/linux-gtk/preference/PreferencesWindowTest.cpp) protects page construction, preference persistence, pending-candidate retention and postponed refresh on reopen, Retry through the currently resolved commit target or without one, the close prompt's Retry, Discard, Cancel, and close-request responses, single-prompt reuse and retirement on dismissal, and shortcut-candidate close versus target-hide dismissal.
-- [`AppDialogTest.cpp`](../../../../test/unit/linux-gtk/app/AppDialogTest.cpp) protects common window composition, parent-bound destruction configuration, and messages.
-- [`MainContextCallbackScopeTest.cpp`](../../../../test/unit/linux-gtk/common/MainContextCallbackScopeTest.cpp) protects callback invalidation before the configured close action.
-- [`ImportExportCoordinatorTest.cpp`](../../../../test/unit/linux-gtk/portal/ImportExportCoordinatorTest.cpp) protects chooser handoff, scan policy, and export-mode response invalidation.
-- Layout-editor tests under [`test/unit/linux-gtk/layout/editor/`](../../../../test/unit/linux-gtk/layout/editor) protect draft, preview, and action behavior.
-- [`TrackPropertiesDialogTest.cpp`](../../../../test/unit/linux-gtk/tag/TrackPropertiesDialogTest.cpp) protects pending-draft freezing, repeated-Save rejection, managed-and-presented Save success, retained failure outcomes, unchanged-Credits close without a discard prompt, and post-publication owner teardown around admitted completion.
-- [`ShellLayoutControllerTest.cpp`](../../../../test/unit/linux-gtk/app/ShellLayoutControllerTest.cpp) protects persistence-failure feedback and editor retention.
+- [`PreferencesWindowTest.cpp`](../../../../test/linux-gtk/preference/PreferencesWindowTest.cpp) protects page construction, preference persistence, pending-candidate retention and postponed refresh on reopen, Retry through the currently resolved commit target or without one, the close prompt's Retry, Discard, Cancel, and close-request responses, single-prompt reuse and retirement on dismissal, and shortcut-candidate close versus target-hide dismissal.
+- [`AppDialogTest.cpp`](../../../../test/linux-gtk/app/AppDialogTest.cpp) protects common window composition, parent-bound destruction configuration, and messages.
+- [`MainContextCallbackScopeTest.cpp`](../../../../test/linux-gtk/common/MainContextCallbackScopeTest.cpp) protects callback invalidation before the configured close action.
+- [`ImportExportCoordinatorTest.cpp`](../../../../test/linux-gtk/portal/ImportExportCoordinatorTest.cpp) protects chooser handoff, scan policy, and export-mode response invalidation.
+- Layout-editor tests under [`test/linux-gtk/layout/editor/`](../../../../test/linux-gtk/layout/editor) protect draft, preview, and action behavior.
+- [`TrackPropertiesDialogTest.cpp`](../../../../test/linux-gtk/tag/TrackPropertiesDialogTest.cpp) protects pending-draft freezing, repeated-Save rejection, managed-and-presented Save success, retained failure outcomes, unchanged-Credits close without a discard prompt, and post-publication owner teardown around admitted completion.
+- [`ShellLayoutControllerTest.cpp`](../../../../test/linux-gtk/app/ShellLayoutControllerTest.cpp) protects persistence-failure feedback and editor retention.
 
 ## Related documents
 

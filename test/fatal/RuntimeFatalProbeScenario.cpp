@@ -8,8 +8,8 @@
 #include "runtime/library/LibraryWriteLane.h"
 #include "runtime/library/LibraryYamlExporter.h"
 #include "runtime/playback/PlaybackTransport.h"
-#include "test/unit/runtime/library/LibraryChangesTestAccess.h"
-#include "test/unit/runtime/source/TrackSourceTestSupport.h"
+#include "test/runtime/library/LibraryChangesTestAccess.h"
+#include "test/runtime/source/TrackSourceTestSupport.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>

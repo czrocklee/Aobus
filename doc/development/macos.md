@@ -211,7 +211,7 @@ Use `--asan`, `--tsan`, or `--path` when the applicable bundle already belongs
 to that tree. `--no-build` is valid only after the selected tree contains the
 bundle. For native lifecycle or authoring work, run the relevant scenarios in
 Debug, Release, and TSan; add ASan for memory-sensitive changes. Include both
-`app/macos-appkit` and `test/integration/macos` in scoped hygiene.
+`app/macos-appkit` and `test/macos-appkit` in scoped hygiene.
 
 Treat each scenario only as evidence for the surface it drives:
 

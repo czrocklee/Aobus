@@ -163,14 +163,14 @@ The TUI and AppKit editors have no presentation picker, so their saves never wri
 
 ## Test map
 
-- [`ListPresentationsTest.cpp`](../../../test/unit/uimodel/library/presentation/ListPresentationsTest.cpp) proves map behavior, resolution, fallbacks, and cascade cleanup.
-- [`ListPresentationPreferenceYamlSchemaTest.cpp`](../../../test/unit/uimodel/library/presentation/ListPresentationPreferenceYamlSchemaTest.cpp) proves version gates, opaque ids, and whole-group rejection.
-- [`ListPresentationRecommendationTest.cpp`](../../../test/unit/uimodel/library/presentation/ListPresentationRecommendationTest.cpp) proves source-aware recommendations.
-- [`GtkLayoutStateStoreTest.cpp`](../../../test/unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp) and [`LayoutStateStoreTest.cpp`](../../../test/unit/tui/LayoutStateStoreTest.cpp) prove independent per-library persistence.
-- [`LibraryControllerTest.cpp`](../../../test/unit/tui/LibraryControllerTest.cpp) proves TUI preference/recommendation navigation and exact restored-view precedence.
-- [`MainWindowSessionPresentationTest.cpp`](../../../test/unit/linux-gtk/app/MainWindowSessionPresentationTest.cpp) proves GTK creation, reuse, workspace restoration, history replay, and playback-restoration precedence.
-- [`AppKitPresentationScenario.mm`](../../../test/integration/macos/AppKitPresentationScenario.mm) checks native-session preference writes, reuse/new-view defaults, Auto, opaque and custom ids, deletion, history, reopen sibling preservation, and no overwrite of a rejected group; [`AppKitDesktopScenario.mm`](../../../test/integration/macos/AppKitDesktopScenario.mm) checks native catalog identity, eligibility, label and checkmark display, open-menu deferral, and transient sort labeling.
-- Workspace history tests under [`test/unit/runtime/`](../../../test/unit/runtime) prove snapshot replay semantics.
+- [`ListPresentationsTest.cpp`](../../../test/uimodel/library/presentation/ListPresentationsTest.cpp) proves map behavior, resolution, fallbacks, and cascade cleanup.
+- [`ListPresentationPreferenceYamlSchemaTest.cpp`](../../../test/uimodel/library/presentation/ListPresentationPreferenceYamlSchemaTest.cpp) proves version gates, opaque ids, and whole-group rejection.
+- [`ListPresentationRecommendationTest.cpp`](../../../test/uimodel/library/presentation/ListPresentationRecommendationTest.cpp) proves source-aware recommendations.
+- [`GtkLayoutStateStoreTest.cpp`](../../../test/linux-gtk/app/GtkLayoutStateStoreTest.cpp) and [`LayoutStateStoreTest.cpp`](../../../test/tui/LayoutStateStoreTest.cpp) prove independent per-library persistence.
+- [`LibraryControllerTest.cpp`](../../../test/tui/LibraryControllerTest.cpp) proves TUI preference/recommendation navigation and exact restored-view precedence.
+- [`MainWindowSessionPresentationTest.cpp`](../../../test/linux-gtk/app/MainWindowSessionPresentationTest.cpp) proves GTK creation, reuse, workspace restoration, history replay, and playback-restoration precedence.
+- [`AppKitPresentationScenario.mm`](../../../test/macos-appkit/AppKitPresentationScenario.mm) checks native-session preference writes, reuse/new-view defaults, Auto, opaque and custom ids, deletion, history, reopen sibling preservation, and no overwrite of a rejected group; [`AppKitDesktopScenario.mm`](../../../test/macos-appkit/AppKitDesktopScenario.mm) checks native catalog identity, eligibility, label and checkmark display, open-menu deferral, and transient sort labeling.
+- Workspace history tests under [`test/runtime/`](../../../test/runtime) prove snapshot replay semantics.
 
 ## Related documents
 

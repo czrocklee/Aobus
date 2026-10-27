@@ -194,18 +194,18 @@ and sorting. Windows desktop paths and schema details remain in the
 
 ## Test map
 
-- [`LibraryScanWorkflowTest.cpp`](../../../test/unit/uimodel/library/task/LibraryScanWorkflowTest.cpp)
+- [`LibraryScanWorkflowTest.cpp`](../../../test/uimodel/library/task/LibraryScanWorkflowTest.cpp)
   protects the scan decision shared by GTK and WinUI.
-- [`LibraryTransferAdapterTest.cpp`](../../../test/unit/winui/library/LibraryTransferAdapterTest.cpp)
+- [`LibraryTransferAdapterTest.cpp`](../../../test/winui/library/LibraryTransferAdapterTest.cpp)
   protects selector mappings, restore-only confirmation, and complete preview
   text; shared task-service and YAML tests protect execution and data semantics.
-- [`ListAuthoringAdapterTest.cpp`](../../../test/unit/winui/list/ListAuthoringAdapterTest.cpp)
+- [`ListAuthoringAdapterTest.cpp`](../../../test/winui/list/ListAuthoringAdapterTest.cpp)
   protects presentation resolution, committed invalidation, expansion,
   ancestor reveal, and fallback; shared List editor, membership, and order tests
   protect semantic authoring.
-- [`KeymapAcceleratorPlanTest.cpp`](../../../test/unit/winui/input/KeymapAcceleratorPlanTest.cpp)
+- [`KeymapAcceleratorPlanTest.cpp`](../../../test/winui/input/KeymapAcceleratorPlanTest.cpp)
   protects native-only order accelerators without extending the layout schema.
-- [`CallbackAdmissionGateTest.cpp`](../../../test/unit/winui/app/CallbackAdmissionGateTest.cpp)
+- [`CallbackAdmissionGateTest.cpp`](../../../test/winui/app/CallbackAdmissionGateTest.cpp)
   proves idempotent retirement and that renewal cannot re-admit an old token.
 - Native Debug and Release WinUI builds are still required for XAML dialogs,
   Windows pickers, generated C++/WinRT, and native cancellation behavior.

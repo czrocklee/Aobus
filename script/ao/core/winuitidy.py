@@ -14,13 +14,13 @@ _WINUI_ROOT = PROJECT_ROOT / "app" / "windows-winui"
 _AUXILIARY_SOURCE_PROJECTS = {
     "test/helper/WinUiLocalizationProbe.cpp": "app/windows-winui/ao_winui_localization_probe.vcxproj",
     "test/helper/WinUiTrackItemProbe.cpp": "app/windows-winui/ao_winui_track_item_probe.vcxproj",
-    "test/integration/windows/WinUiActivityStatusProbe.cpp": "app/windows-winui/ao_winui_activity_status_probe.vcxproj",
-    "test/integration/windows/WinUiAutomationProbe.cpp": "app/windows-winui/ao_winui_automation_probe.vcxproj",
-    "test/integration/windows/WinUiCreditsProbe.cpp": "app/windows-winui/ao_winui_credits_probe.vcxproj",
-    "test/integration/windows/WinUiQualityToolTipProbe.cpp": "app/windows-winui/ao_winui_quality_tooltip_probe.vcxproj",
-    "test/integration/windows/WinUiSilentAudio.cpp": "app/windows-winui/ao_winui_automation_probe.vcxproj",
-    "test/integration/windows/WinUiSoulProbe.cpp": "app/windows-winui/ao_winui_soul_probe.vcxproj",
-    "test/integration/windows/WinUiTrackTableProbe.cpp": "app/windows-winui/ao_winui_track_table_probe.vcxproj",
+    "test/winui/probe/WinUiActivityStatusProbe.cpp": "app/windows-winui/ao_winui_activity_status_probe.vcxproj",
+    "test/winui/probe/WinUiAutomationProbe.cpp": "app/windows-winui/ao_winui_automation_probe.vcxproj",
+    "test/winui/probe/WinUiCreditsProbe.cpp": "app/windows-winui/ao_winui_credits_probe.vcxproj",
+    "test/winui/probe/WinUiQualityToolTipProbe.cpp": "app/windows-winui/ao_winui_quality_tooltip_probe.vcxproj",
+    "test/winui/probe/WinUiSilentAudio.cpp": "app/windows-winui/ao_winui_automation_probe.vcxproj",
+    "test/winui/probe/WinUiSoulProbe.cpp": "app/windows-winui/ao_winui_soul_probe.vcxproj",
+    "test/winui/probe/WinUiTrackTableProbe.cpp": "app/windows-winui/ao_winui_track_table_probe.vcxproj",
 }
 _TRANSLATION_UNIT_SUFFIXES = frozenset((".c", ".cc", ".cpp", ".cxx"))
 _INCLUDE_DIRECTIVE_RE = re.compile(r'^\s*#\s*include\s*([<"])([^">]+)[">]', re.MULTILINE)

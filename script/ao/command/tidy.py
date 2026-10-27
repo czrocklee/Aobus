@@ -366,10 +366,10 @@ def classify(path: Path, explicit: bool) -> str:
 
     rel_slash = "/" + rel
 
-    if "/test/integration/lint/fixture/" in rel_slash:
+    if "/test/lint/fixture/" in rel_slash:
         # Fixture files: check when explicitly requested, skip in batch scans.
         return "STRICT" if explicit else "IGNORE"
-    if "/test/integration/lint/" in rel_slash:
+    if "/test/lint/" in rel_slash:
         return "IGNORE"
     if "/tool/lint/" in rel_slash:
         return "STRICT"

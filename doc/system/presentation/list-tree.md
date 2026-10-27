@@ -86,10 +86,10 @@ None of the frontends independently sorts the snapshot or follows source-parent 
 
 ## Test map
 
-- [`ListTreeProjectionTest.cpp`](../../../test/unit/uimodel/library/list/ListTreeProjectionTest.cpp) protects nested rows, unified row data, invalid-parent recovery, deterministic cycle breaking, and sibling order.
-- [`ListTreeModelBuilderTest.cpp`](../../../test/unit/linux-gtk/list/ListTreeModelBuilderTest.cpp) protects GTK tree adaptation.
-- [`ListAuthoringAdapterTest.cpp`](../../../test/unit/winui/list/ListAuthoringAdapterTest.cpp) protects WinUI invalidation filtering, stable fallback, surviving expansion, and active-ancestor reveal without naming WinRT types.
-- [`ListNavigationModelTest.cpp`](../../../test/unit/tui/ListNavigationModelTest.cpp) protects TUI preorder, expansion, cursor reconciliation, search, and malformed-parent adaptation.
+- [`ListTreeProjectionTest.cpp`](../../../test/uimodel/library/list/ListTreeProjectionTest.cpp) protects nested rows, unified row data, invalid-parent recovery, deterministic cycle breaking, and sibling order.
+- [`ListTreeModelBuilderTest.cpp`](../../../test/linux-gtk/list/ListTreeModelBuilderTest.cpp) protects GTK tree adaptation.
+- [`ListAuthoringAdapterTest.cpp`](../../../test/winui/list/ListAuthoringAdapterTest.cpp) protects WinUI invalidation filtering, stable fallback, surviving expansion, and active-ancestor reveal without naming WinRT types.
+- [`ListNavigationModelTest.cpp`](../../../test/tui/ListNavigationModelTest.cpp) protects TUI preorder, expansion, cursor reconciliation, search, and malformed-parent adaptation.
 
 ## Related documents
 

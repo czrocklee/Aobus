@@ -242,7 +242,7 @@ target_link_libraries(ao_winui_localization_probe PRIVATE
 # A real XAML unload/reload probe: built by native checks, run only in an
 # interactive desktop session. The shipping executable has no test switches.
 add_executable(ao_winui_soul_probe WIN32
-  ${CMAKE_SOURCE_DIR}/test/integration/windows/WinUiSoulProbe.cpp)
+  ${CMAKE_SOURCE_DIR}/test/winui/probe/WinUiSoulProbe.cpp)
 aobus_enable_windows_utf8_manifest(ao_winui_soul_probe)
 target_include_directories(ao_winui_soul_probe PRIVATE
   "${CMAKE_CURRENT_BINARY_DIR}/aobus-winui-lib/${CMAKE_VS_PLATFORM_NAME}/$<CONFIG>/Generated Files")
@@ -286,8 +286,8 @@ target_link_options(ao_winui_track_item_probe PRIVATE /ENTRY:mainCRTStartup)
 # interactive desktop session like the Soul probe. The shipping executable has
 # no test switches.
 add_executable(ao_winui_track_table_probe WIN32
-  ${CMAKE_SOURCE_DIR}/test/integration/windows/WinUiTrackTableProbe.cpp
-  ${CMAKE_SOURCE_DIR}/test/integration/windows/WinUiSilentAudio.cpp)
+  ${CMAKE_SOURCE_DIR}/test/winui/probe/WinUiTrackTableProbe.cpp
+  ${CMAKE_SOURCE_DIR}/test/winui/probe/WinUiSilentAudio.cpp)
 aobus_enable_windows_utf8_manifest(ao_winui_track_table_probe)
 target_include_directories(ao_winui_track_table_probe PRIVATE
   "${CMAKE_SOURCE_DIR}"
@@ -320,7 +320,7 @@ aobus_enable_windows_app_sdk(ao_winui_track_table_probe APPLICATION)
 # The shipping quality tooltip over real decoder/runtime publications. Built
 # by native checks, but property observations require an interactive desktop.
 add_executable(ao_winui_quality_tooltip_probe WIN32
-  ${CMAKE_SOURCE_DIR}/test/integration/windows/WinUiQualityToolTipProbe.cpp)
+  ${CMAKE_SOURCE_DIR}/test/winui/probe/WinUiQualityToolTipProbe.cpp)
 aobus_enable_windows_utf8_manifest(ao_winui_quality_tooltip_probe)
 # Private admission runs in a GUI logon that may not have the compiler's
 # temporary pushd drive or S: view. Resolve the native checkout while those
@@ -361,8 +361,8 @@ aobus_enable_windows_app_sdk(ao_winui_quality_tooltip_probe APPLICATION)
 add_executable(ao_winui_automation_probe WIN32
   ${AOBUS_NO_COVER_ASSETS}
   ${AOBUS_SHELL_LAYOUT_ASSETS}
-  ${CMAKE_SOURCE_DIR}/test/integration/windows/WinUiAutomationProbe.cpp
-  ${CMAKE_SOURCE_DIR}/test/integration/windows/WinUiSilentAudio.cpp)
+  ${CMAKE_SOURCE_DIR}/test/winui/probe/WinUiAutomationProbe.cpp
+  ${CMAKE_SOURCE_DIR}/test/winui/probe/WinUiSilentAudio.cpp)
 aobus_enable_windows_utf8_manifest(ao_winui_automation_probe)
 target_precompile_headers(ao_winui_automation_probe PRIVATE pch.h)
 target_include_directories(ao_winui_automation_probe PRIVATE
@@ -393,7 +393,7 @@ aobus_enable_windows_app_sdk(ao_winui_automation_probe APPLICATION)
 # Real status controls and native automation providers; manually executed on
 # an authenticated desktop, never from the unattended build.
 add_executable(ao_winui_activity_status_probe WIN32
-  ${CMAKE_SOURCE_DIR}/test/integration/windows/WinUiActivityStatusProbe.cpp)
+  ${CMAKE_SOURCE_DIR}/test/winui/probe/WinUiActivityStatusProbe.cpp)
 aobus_enable_windows_utf8_manifest(ao_winui_activity_status_probe)
 target_include_directories(ao_winui_activity_status_probe PRIVATE
   "${CMAKE_CURRENT_BINARY_DIR}/aobus-winui-lib/${CMAKE_VS_PLATFORM_NAME}/$<CONFIG>/Generated Files")
@@ -418,7 +418,7 @@ aobus_enable_windows_app_sdk(ao_winui_activity_status_probe APPLICATION)
 
 # Real scoped Credits controls; manually executed on an authenticated desktop.
 add_executable(ao_winui_credits_probe WIN32
-  ${CMAKE_SOURCE_DIR}/test/integration/windows/WinUiCreditsProbe.cpp)
+  ${CMAKE_SOURCE_DIR}/test/winui/probe/WinUiCreditsProbe.cpp)
 aobus_enable_windows_utf8_manifest(ao_winui_credits_probe)
 target_include_directories(ao_winui_credits_probe PRIVATE
   "${CMAKE_CURRENT_BINARY_DIR}/aobus-winui-lib/${CMAKE_VS_PLATFORM_NAME}/$<CONFIG>/Generated Files")

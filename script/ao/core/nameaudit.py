@@ -10,31 +10,31 @@ from .paths import PROJECT_ROOT
 from .proc import die
 
 AUDIT_FOLDERS = ("app", "include", "lib", "test", "tool")
-LINT_FIXTURE_PARTS = ("test", "integration", "lint", "fixture")
+LINT_FIXTURE_PARTS = ("test", "lint", "fixture")
 
 ROLE_ALLOWED_PREFIXES: dict[str, tuple[str, ...]] = {
-    "ViewModel": ("app/include/ao/uimodel/", "app/uimodel/", "test/unit/uimodel/"),
-    "Service": ("app/include/ao/rt/", "app/runtime/", "test/unit/runtime/"),
+    "ViewModel": ("app/include/ao/uimodel/", "app/uimodel/", "test/uimodel/"),
+    "Service": ("app/include/ao/rt/", "app/runtime/", "test/runtime/"),
     "Component": (
         "app/linux-gtk/layout/",
         "app/windows-winui/layout/",
-        "test/unit/linux-gtk/layout/",
-        "test/unit/winui/layout/",
+        "test/linux-gtk/layout/",
+        "test/winui/layout/",
     ),
-    "Dialog": ("app/linux-gtk/", "test/unit/linux-gtk/"),
-    "Widget": ("app/linux-gtk/", "test/unit/linux-gtk/"),
-    "Panel": ("app/linux-gtk/", "app/tui/", "app/windows-winui/", "test/unit/linux-gtk/", "test/unit/tui/"),
-    "Controller": ("app/linux-gtk/", "app/tui/", "app/windows-winui/", "test/unit/linux-gtk/", "test/unit/tui/"),
-    "Coordinator": ("app/linux-gtk/", "app/tui/", "app/windows-winui/", "test/unit/linux-gtk/", "test/unit/tui/"),
-    "Host": ("app/linux-gtk/", "app/tui/", "app/windows-winui/", "test/unit/linux-gtk/", "test/unit/tui/"),
+    "Dialog": ("app/linux-gtk/", "test/linux-gtk/"),
+    "Widget": ("app/linux-gtk/", "test/linux-gtk/"),
+    "Panel": ("app/linux-gtk/", "app/tui/", "app/windows-winui/", "test/linux-gtk/", "test/tui/"),
+    "Controller": ("app/linux-gtk/", "app/tui/", "app/windows-winui/", "test/linux-gtk/", "test/tui/"),
+    "Coordinator": ("app/linux-gtk/", "app/tui/", "app/windows-winui/", "test/linux-gtk/", "test/tui/"),
+    "Host": ("app/linux-gtk/", "app/tui/", "app/windows-winui/", "test/linux-gtk/", "test/tui/"),
     "Bridge": (
         "app/include/ao/systemmedia/",
         "app/linux-gtk/",
         "app/systemmedia/",
         "app/tui/",
         "app/windows-winui/",
-        "test/unit/linux-gtk/",
-        "test/unit/tui/",
+        "test/linux-gtk/",
+        "test/tui/",
     ),
 }
 

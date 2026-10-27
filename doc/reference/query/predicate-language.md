@@ -373,13 +373,13 @@ Representative invalid forms are:
 
 ## Test authority
 
-- [`ParserTest.cpp`](../../../test/unit/query/ParserTest.cpp) and [`ExpressionTest.cpp`](../../../test/unit/query/ExpressionTest.cpp) lock grammar and AST shape.
-- Execution-plan tests under [`test/unit/query/`](../../../test/unit/query) lock variables, operators, lists, ranges, units, and invalid forms.
-- [`CompletionVariableTest.cpp`](../../../test/unit/query/CompletionVariableTest.cpp) locks the shared descriptor, variable, alias, and lookup catalog.
-- [`RecordingDatePredicateTest.cpp`](../../../test/unit/query/RecordingDatePredicateTest.cpp) specifies literal precision, absence, lists/ranges, typed rejection, and cold/dictionary-free access.
-- [`CreditPredicateTest.cpp`](../../../test/unit/query/CreditPredicateTest.cpp) specifies category and all-credit name membership, whole-selection inequality, untrimmed literals, empty selections, unresolved bindings, substring matching, and unsupported forms.
-- [`PredicateOperandContextTest.cpp`](../../../test/unit/query/PredicateOperandContextTest.cpp) specifies nested and sibling operand isolation.
-- [`FormatExpressionTest.cpp`](../../../test/unit/query/FormatExpressionTest.cpp) specifies joined member display and its storage dependencies.
+- [`ParserTest.cpp`](../../../test/query/ParserTest.cpp) and [`ExpressionTest.cpp`](../../../test/query/ExpressionTest.cpp) lock grammar and AST shape.
+- Execution-plan tests under [`test/query/`](../../../test/query) lock variables, operators, lists, ranges, units, and invalid forms.
+- [`CompletionVariableTest.cpp`](../../../test/query/CompletionVariableTest.cpp) locks the shared descriptor, variable, alias, and lookup catalog.
+- [`RecordingDatePredicateTest.cpp`](../../../test/query/RecordingDatePredicateTest.cpp) specifies literal precision, absence, lists/ranges, typed rejection, and cold/dictionary-free access.
+- [`CreditPredicateTest.cpp`](../../../test/query/CreditPredicateTest.cpp) specifies category and all-credit name membership, whole-selection inequality, untrimmed literals, empty selections, unresolved bindings, substring matching, and unsupported forms.
+- [`PredicateOperandContextTest.cpp`](../../../test/query/PredicateOperandContextTest.cpp) specifies nested and sibling operand isolation.
+- [`FormatExpressionTest.cpp`](../../../test/query/FormatExpressionTest.cpp) specifies joined member display and its storage dependencies.
 
 ## Related documents
 

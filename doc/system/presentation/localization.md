@@ -212,9 +212,9 @@ Changing the message runtime, fallback model, or ICU family is an architectural/
 - [`SystemLocaleWindows.cpp`](../../../app/i18n/SystemLocaleWindows.cpp), [`SystemLocaleMacos.cpp`](../../../app/i18n/SystemLocaleMacos.cpp), and [`SystemLocaleLinux.cpp`](../../../app/i18n/SystemLocaleLinux.cpp) read the operating-system locale.
 - [`StringResources.cpp`](../../../app/windows-winui/platform/StringResources.cpp) owns the explicit MRT context.
 
-[`MessageCatalogTest.cpp`](../../../test/unit/i18n/MessageCatalogTest.cpp) protects locale admission, fallback, arguments, ownership, pseudo behavior, and concurrent formatting.
-[`CatalogPatternTest.cpp`](../../../test/unit/i18n/CatalogPatternTest.cpp) protects signatures and deterministic ICU/RESW generation.
-[`StringResourceTest.cpp`](../../../test/unit/winui/StringResourceTest.cpp) protects canonical WinUI reachability and the bounded projection.
+[`MessageCatalogTest.cpp`](../../../test/i18n/MessageCatalogTest.cpp) protects locale admission, fallback, arguments, ownership, pseudo behavior, and concurrent formatting.
+[`CatalogPatternTest.cpp`](../../../test/i18n/CatalogPatternTest.cpp) protects signatures and deterministic ICU/RESW generation.
+[`StringResourceTest.cpp`](../../../test/winui/StringResourceTest.cpp) protects canonical WinUI reachability and the bounded projection.
 [`WinUiLocalizationProbe.cpp`](../../../test/helper/WinUiLocalizationProbe.cpp) compares native MRT and ICU selection and formatting across the compatibility matrix.
 See the [localization workflow](../../development/localization.md#validation) for the required contributor evidence.
 

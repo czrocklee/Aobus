@@ -177,12 +177,12 @@ Each literal group carries and gates its own payload version.
 
 ## Test authority
 
-- [`TrackFieldTest.cpp`](../../../test/unit/runtime/TrackFieldTest.cpp) proves stable token coverage, uniqueness, and round trip.
-- [`TrackColumnLayoutYamlSchemaTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackColumnLayoutYamlSchemaTest.cpp) protects layout conversion and rejection.
-- [`ListPresentationPreferenceYamlSchemaTest.cpp`](../../../test/unit/uimodel/library/presentation/ListPresentationPreferenceYamlSchemaTest.cpp) protects opaque preference ids and rejection.
-- [`GtkLayoutStateStoreTest.cpp`](../../../test/unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp) and [`LayoutStateStoreTest.cpp`](../../../test/unit/tui/LayoutStateStoreTest.cpp) protect exact group integration, seeded fallback, canonical output, and distinct file boundaries; the GTK test also protects a file saved for another library.
-- [`LibraryRestoreStateIdentityTest.cpp`](../../../test/unit/runtime/LibraryRestoreStateIdentityTest.cpp) protects that neither group resumes another list after a library restore into the same or a new database.
-- [`WorkspaceSessionYamlSchemaTest.cpp`](../../../test/unit/runtime/WorkspaceSessionYamlSchemaTest.cpp) protects the shared workspace vocabulary.
+- [`TrackFieldTest.cpp`](../../../test/runtime/TrackFieldTest.cpp) proves stable token coverage, uniqueness, and round trip.
+- [`TrackColumnLayoutYamlSchemaTest.cpp`](../../../test/uimodel/library/presentation/TrackColumnLayoutYamlSchemaTest.cpp) protects layout conversion and rejection.
+- [`ListPresentationPreferenceYamlSchemaTest.cpp`](../../../test/uimodel/library/presentation/ListPresentationPreferenceYamlSchemaTest.cpp) protects opaque preference ids and rejection.
+- [`GtkLayoutStateStoreTest.cpp`](../../../test/linux-gtk/app/GtkLayoutStateStoreTest.cpp) and [`LayoutStateStoreTest.cpp`](../../../test/tui/LayoutStateStoreTest.cpp) protect exact group integration, seeded fallback, canonical output, and distinct file boundaries; the GTK test also protects a file saved for another library.
+- [`LibraryRestoreStateIdentityTest.cpp`](../../../test/runtime/LibraryRestoreStateIdentityTest.cpp) protects that neither group resumes another list after a library restore into the same or a new database.
+- [`WorkspaceSessionYamlSchemaTest.cpp`](../../../test/runtime/WorkspaceSessionYamlSchemaTest.cpp) protects the shared workspace vocabulary.
 
 ## Related documents
 

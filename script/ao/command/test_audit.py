@@ -17,8 +17,8 @@ The audit is advisory by default: it reports issues and exits zero. Use
 
 examples:
   ./ao test-audit
-  ./ao test-audit test/unit/query
-  ./ao test-audit --fail-on-issue test/unit/query/ParserTest.cpp
+  ./ao test-audit test/query
+  ./ao test-audit --fail-on-issue test/query/ParserTest.cpp
 """
 
 

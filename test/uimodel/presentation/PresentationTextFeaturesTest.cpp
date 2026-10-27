@@ -1,0 +1,732 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 Aobus Contributors
+
+#include "test/MessageCatalogTestSupport.h"
+#include <ao/Error.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/i18n/MessageCatalog.h>
+#include <ao/rt/NotificationState.h>
+#include <ao/rt/TrackField.h>
+#include <ao/rt/TrackPresentation.h>
+#include <ao/rt/completion/CompletionItem.h>
+#include <ao/rt/library/LibraryTaskEvents.h>
+#include <ao/rt/projection/TrackListProjection.h>
+#include <ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h>
+#include <ao/uimodel/library/presentation/TrackPresentationText.h>
+#include <ao/uimodel/playback/command/PlaybackCommand.h>
+#include <ao/uimodel/playback/command/PlaybackCommandText.h>
+#include <ao/uimodel/playback/output/PlaybackOutputText.h>
+#include <ao/uimodel/status/activity/ActivityPresentationText.h>
+
+#include <catch2/catch_message.hpp>
+#include <catch2/catch_test_macros.hpp>
+
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <string>
+#include <string_view>
+
+namespace ao::uimodel::test
+{
+  using i18n::MessageId;
+
+  TEST_CASE("i18n::MessageCatalog - resolves one-to-one frontend messages through typed ids",
+            "[uimodel][unit][catalog][localization]")
+  {
+    auto const& english = ao::test::englishMessageCatalog();
+    CHECK(i18n::requiredText(english, MessageId::GtkPreferencesTitle) == "Preferences");
+    CHECK(i18n::requiredText(english, MessageId::LibraryBusyTryAgain) == "Library is busy. Try again.");
+    CHECK(i18n::requiredFormat(
+            english, MessageId::GtkShortcutConflictMessage, {{"chord", "Ctrl+P"}, {"owner", "Play/Pause"}}) ==
+          "Ctrl+P is already assigned to \"Play/Pause\". Reassign it to this action?");
+    CHECK(playbackActionLabel(english, PlaybackCommand::PlayPause) == "Play/Pause");
+    CHECK(playbackActionLabel(english, PlaybackCommand::Next) == "Next");
+    CHECK(playbackActionLabel(english, PlaybackCommand::Previous) == "Previous");
+    CHECK(playbackActionLabel(english, PlaybackCommand::ToggleShuffle) == "Toggle Shuffle");
+    CHECK(playbackActionLabel(english, PlaybackCommand::CycleRepeat) == "Cycle Repeat");
+
+    auto const german = ao::test::messageCatalog("de-DE");
+    CHECK(i18n::requiredFormat(german, MessageId::GtkPresentationCopyLabel, {{"label", "Alben"}}) == "Kopie von Alben");
+    CHECK(i18n::requiredFormat(german, MessageId::TuiPresentationBadge, {{"id", "Standard"}}) == "Ansicht:Standard");
+    CHECK(playbackActionLabel(german, PlaybackCommand::PlayPause) == "Wiedergabe/Pause");
+
+    auto const chinese = ao::test::messageCatalog("zh-CN");
+    CHECK(i18n::requiredFormat(chinese, MessageId::GtkPresentationCopyLabel, {{"label", "专辑"}}) == "专辑 副本");
+    CHECK(i18n::requiredFormat(chinese, MessageId::TuiPresentationBadge, {{"id", "默认"}}) == "视图:默认");
+    CHECK(playbackActionLabel(chinese, PlaybackCommand::PlayPause) == "播放/暂停");
+    CHECK(trackFieldLabel(chinese, rt::TrackField::SampleRate) == "采样率");
+
+    auto const traditionalChinese = ao::test::messageCatalog("zh-TW");
+    CHECK(i18n::requiredFormat(traditionalChinese, MessageId::GtkPresentationCopyLabel, {{"label", "專輯"}}) ==
+          "專輯 複本");
+    CHECK(i18n::requiredFormat(traditionalChinese, MessageId::TuiPresentationBadge, {{"id", "預設"}}) == "檢視:預設");
+    CHECK(playbackActionLabel(traditionalChinese, PlaybackCommand::PlayPause) == "播放/暫停");
+    CHECK(trackFieldLabel(traditionalChinese, rt::TrackField::SampleRate) == "取樣率");
+
+    auto const japanese = ao::test::messageCatalog("ja-JP");
+    CHECK(i18n::requiredFormat(japanese, MessageId::GtkPresentationCopyLabel, {{"label", "アルバム"}}) ==
+          "アルバム のコピー");
+    CHECK(i18n::requiredFormat(japanese, MessageId::TuiPresentationBadge, {{"id", "デフォルト"}}) == "表示:デフォルト");
+    CHECK(playbackActionLabel(japanese, PlaybackCommand::PlayPause) == "再生/一時停止");
+    CHECK(trackFieldLabel(japanese, rt::TrackField::SampleRate) == "サンプリングレート");
+
+    auto const spanish = ao::test::messageCatalog("es-ES");
+    CHECK(i18n::requiredFormat(spanish, MessageId::GtkPresentationCopyLabel, {{"label", "Álbumes"}}) ==
+          "Copia de Álbumes");
+    CHECK(i18n::requiredFormat(spanish, MessageId::TuiPresentationBadge, {{"id", "predeterminado"}}) ==
+          "vista:predeterminado");
+    CHECK(playbackActionLabel(spanish, PlaybackCommand::PlayPause) == "Reproducir/Pausar");
+    CHECK(trackFieldLabel(spanish, rt::TrackField::SampleRate) == "Frecuencia de muestreo");
+
+    auto const french = ao::test::messageCatalog("fr-FR");
+    CHECK(i18n::requiredFormat(french, MessageId::GtkPresentationCopyLabel, {{"label", "Albums"}}) ==
+          "Copie de « Albums »");
+    CHECK(i18n::requiredFormat(french, MessageId::TuiPresentationBadge, {{"id", "par défaut"}}) == "vue:par défaut");
+    CHECK(playbackActionLabel(french, PlaybackCommand::PlayPause) == "Lecture/Pause");
+    CHECK(trackFieldLabel(french, rt::TrackField::SampleRate) == "Fréquence d'échantillonnage");
+  }
+
+  TEST_CASE("i18n::MessageCatalog - exhaustively labels track presentation semantics", "[uimodel][unit][catalog]")
+  {
+    auto const& catalog = ao::test::englishMessageCatalog();
+
+    for (std::size_t index = 0; index < rt::kTrackFieldCount; ++index)
+    {
+      auto const field = static_cast<rt::TrackField>(index);
+      INFO("Track field index " << index);
+      CHECK_FALSE(trackFieldLabel(catalog, field).empty());
+    }
+
+    for (std::size_t index = 0; index < rt::kTrackGroupKeyCount; ++index)
+    {
+      auto const key = static_cast<rt::TrackGroupKey>(index);
+      INFO("Track group key index " << index);
+      CHECK_FALSE(trackGroupKeyLabel(catalog, key).empty());
+    }
+
+    for (auto const kind : {rt::MissingTrackValueKind::Artist,
+                            rt::MissingTrackValueKind::Album,
+                            rt::MissingTrackValueKind::Year,
+                            rt::MissingTrackValueKind::Genre,
+                            rt::MissingTrackValueKind::Composer,
+                            rt::MissingTrackValueKind::Conductor,
+                            rt::MissingTrackValueKind::Ensemble,
+                            rt::MissingTrackValueKind::Work})
+    {
+      CHECK_FALSE(missingTrackValueLabel(catalog, kind).empty());
+    }
+
+    for (auto const& preset : rt::builtinTrackPresentationPresets())
+    {
+      INFO("Built-in presentation " << preset.spec.id);
+      auto const optText = builtinTrackPresentation(catalog, preset.spec.id);
+      REQUIRE(optText);
+      CHECK_FALSE(optText->label.empty());
+      CHECK_FALSE(optText->description.empty());
+    }
+
+    CHECK_FALSE(builtinTrackPresentation(catalog, "extension-view"));
+    CHECK(trackFieldLabel(catalog, rt::TrackField::SampleRate) == "Sample Rate");
+    CHECK(i18n::requiredText(catalog, MessageId::CreateCustomTrackPresentation) == "Create Custom View...");
+  }
+
+  TEST_CASE("i18n::MessageCatalog - renders structured group headings only at the UIModel boundary",
+            "[uimodel][unit][catalog]")
+  {
+    auto const heading = rt::TrackGroupHeading{
+      .primary = std::string{"Greatest Hits"},
+      .secondary = rt::MissingTrackValueKind::Artist,
+      .tertiary = std::uint16_t{2020},
+    };
+
+    CHECK(formatTrackGroupHeading(ao::test::englishMessageCatalog(), heading) == TrackGroupHeadingPresentation{
+                                                                                   .primaryText = "Greatest Hits",
+                                                                                   .secondaryText = "Unknown Artist",
+                                                                                   .tertiaryText = "2020",
+                                                                                 });
+  }
+
+  TEST_CASE("i18n::MessageCatalog - names Various Artists in every maintained locale", "[uimodel][unit][catalog]")
+  {
+    struct LocaleCase final
+    {
+      std::string_view locale;
+      std::string_view text;
+    };
+
+    auto const cases = std::to_array<LocaleCase>({
+      {"en-US", "Various Artists"},
+      {"zh-Hans", "群星"},
+      {"zh-Hant", "群星"},
+      {"ja", "ヴァリアス・アーティスト"},
+      {"de", "Verschiedene Interpreten"},
+      {"fr", "Multi-interprètes"},
+      {"es", "Varios Artistas"},
+    });
+    auto const heading = rt::TrackGroupHeading{.primary = std::string{"Sampler"}, .secondary = rt::VariousArtists{}};
+
+    for (auto const& localeCase : cases)
+    {
+      CAPTURE(localeCase.locale);
+      CHECK(formatTrackGroupHeading(ao::test::messageCatalog(localeCase.locale), heading).secondaryText ==
+            localeCase.text);
+    }
+  }
+
+  TEST_CASE("i18n::MessageCatalog - owns backend profile and semantic icon presentation", "[uimodel][unit][catalog]")
+  {
+    auto const& catalog = ao::test::englishMessageCatalog();
+
+    auto const pipeWire = audioBackendPresentation(catalog, audio::kBackendPipeWire);
+    CHECK(pipeWire.label == "PipeWire");
+    CHECK(pipeWire.shortLabel == "PW");
+    CHECK(pipeWire.iconKind == AudioIconKind::AudioServer);
+    CHECK_FALSE(pipeWire.description.empty());
+
+    auto const alsa = audioBackendPresentation(catalog, audio::kBackendAlsa);
+    CHECK(alsa.label == "ALSA");
+    CHECK(alsa.iconKind == AudioIconKind::OutputDevice);
+
+    auto const wasapi = audioBackendPresentation(catalog, audio::kBackendWasapi);
+    CHECK(wasapi.outputDeviceDescriptionFallback == "WASAPI render endpoint");
+
+    auto const coreAudio = audioBackendPresentation(catalog, audio::kBackendCoreAudio);
+    CHECK(coreAudio.label == "Core Audio");
+    CHECK(coreAudio.description == "macOS shared audio output through Core Audio");
+    CHECK(coreAudio.shortLabel == "Core Audio");
+    CHECK(coreAudio.outputDeviceDescriptionFallback == "Core Audio output device");
+    CHECK(coreAudio.iconKind == AudioIconKind::OutputDevice);
+
+    auto const unknown = audioBackendPresentation(catalog, audio::BackendId{"extension-backend"});
+    CHECK(unknown.label == "extension-backend");
+    CHECK(unknown.shortLabel == "extension-backend");
+    CHECK(unknown.description.empty());
+
+    CHECK(audioProfilePresentation(catalog, audio::kProfileShared).label == "Shared Mode");
+    CHECK(audioProfilePresentation(catalog, audio::kProfileExclusive).label == "Exclusive Mode");
+    CHECK(audioProfilePresentation(catalog, audio::ProfileId{"extension-profile"}).label == "extension-profile");
+    CHECK(i18n::requiredText(catalog, MessageId::SystemDefaultOutputDevice) == "System Default");
+  }
+
+  TEST_CASE("i18n::MessageCatalog - resolves typed completion details", "[uimodel][unit][catalog]")
+  {
+    auto const& catalog = ao::test::englishMessageCatalog();
+
+    CHECK(completionDetail(catalog, {.kind = rt::CompletionDetailKind::Field}) == "field");
+    CHECK(completionDetail(catalog, {.kind = rt::CompletionDetailKind::Alias}) == "alias");
+    CHECK(completionDetail(catalog, {.kind = rt::CompletionDetailKind::Operator}) == "operator");
+    CHECK(completionDetail(catalog, {.kind = rt::CompletionDetailKind::LogicalOperator}) == "logical operator");
+    CHECK(completionDetail(catalog, rt::CompletionDetail::makeUsageFrequency(42)) == "42");
+    CHECK(completionDetail(catalog, rt::CompletionDetail::makeResolvedText("frontend detail")) == "frontend detail");
+    CHECK(completionDetail(catalog, {}).empty());
+  }
+
+  TEST_CASE("i18n::MessageCatalog - expands structured playback reports", "[uimodel][unit][catalog]")
+  {
+    auto const& catalog = ao::test::englishMessageCatalog();
+
+    CHECK(notificationMessage(catalog,
+                              rt::NotificationReport{
+                                .templateId = rt::NotificationReportTemplate::PlaybackTrackOpenFailed,
+                                .trackId = TrackId{7},
+                                .detail = "file missing",
+                              }) == "Could not play track 7: file missing");
+    CHECK(notificationMessage(catalog,
+                              rt::NotificationReport{
+                                .templateId = rt::NotificationReportTemplate::PlaybackDecodeFailed,
+                                .subject = "Song",
+                                .detail = "bad frame",
+                              }) == "Playback failed for Song: bad frame");
+    CHECK(notificationMessage(catalog,
+                              rt::NotificationReport{
+                                .templateId = rt::NotificationReportTemplate::PlaybackRouteActivationFailed,
+                                .detail = "route unavailable",
+                              }) == "Could not start playback: route unavailable");
+    CHECK(notificationMessage(catalog,
+                              rt::NotificationReport{
+                                .templateId = rt::NotificationReportTemplate::PlaybackDeviceLost,
+                                .detail = "device removed",
+                              }) == "Playback device failed: device removed");
+    CHECK(notificationMessage(catalog,
+                              rt::NotificationReport{
+                                .templateId = rt::NotificationReportTemplate::PlaybackSequenceFinished,
+                              }) == "Playback sequence finished");
+    CHECK(notificationMessage(catalog,
+                              rt::NotificationReport{
+                                .templateId = rt::NotificationReportTemplate::PlaybackTracksSkipped,
+                                .count = 1,
+                              }) == "Skipped 1 unplayable track");
+    CHECK(notificationMessage(catalog,
+                              rt::NotificationReport{
+                                .templateId = rt::NotificationReportTemplate::PlaybackTracksSkipped,
+                                .count = 4,
+                              }) == "Skipped 4 unplayable tracks");
+    CHECK(notificationMessage(catalog,
+                              rt::NotificationReport{
+                                .templateId = rt::NotificationReportTemplate::PlaybackStoppedAfterFailures,
+                                .count = 3,
+                              }) == "Playback stopped after 3 unplayable tracks");
+    CHECK(notificationMessage(catalog,
+                              rt::NotificationReport{
+                                .templateId = rt::NotificationReportTemplate::PlaybackStoppedForTrack,
+                                .subject = "Song",
+                                .detail = "decode failed",
+                              }) == "Playback stopped for Song: decode failed");
+
+    // Fallbacks: an empty detail resolves to a generic failure reason.
+    CHECK(notificationMessage(catalog,
+                              rt::NotificationReport{
+                                .templateId = rt::NotificationReportTemplate::PlaybackTrackOpenFailed,
+                                .trackId = TrackId{7},
+                              }) == "Could not play track 7: unknown error");
+    // Fallbacks: an empty subject with no track id resolves to a generic subject.
+    CHECK(notificationMessage(catalog,
+                              rt::NotificationReport{
+                                .templateId = rt::NotificationReportTemplate::PlaybackDecodeFailed,
+                                .detail = "bad frame",
+                              }) == "Playback failed for playback: bad frame");
+    // Fallbacks: PlaybackStoppedForTrack without a subject, with and without a detail.
+    CHECK(notificationMessage(catalog,
+                              rt::NotificationReport{
+                                .templateId = rt::NotificationReportTemplate::PlaybackStoppedForTrack,
+                                .detail = "decode failed",
+                              }) == "Playback stopped: decode failed");
+    CHECK(notificationMessage(catalog,
+                              rt::NotificationReport{
+                                .templateId = rt::NotificationReportTemplate::PlaybackStoppedForTrack,
+                              }) == "Playback stopped");
+
+    CHECK(notificationMessage(catalog, rt::NotificationMessage{std::string{"Frontend message"}}) == "Frontend message");
+  }
+
+  TEST_CASE("i18n::MessageCatalog - library progress is selected by kind rather than text prefixes",
+            "[uimodel][unit][catalog]")
+  {
+    auto const& catalog = ao::test::englishMessageCatalog();
+    using Kind = rt::LibraryTaskProgressKind;
+
+    CHECK(libraryTaskProgressDetail(catalog, Kind::Scanning, "Scanning: literal.flac") ==
+          "Scanning: Scanning: literal.flac");
+    CHECK(libraryTaskProgressCompact(catalog, Kind::Scanning, "literal.flac") == "Scanning library");
+    CHECK(libraryTaskProgressCompact(catalog, Kind::Updating, "literal.flac") == "Updating library");
+    CHECK(libraryTaskProgressCompact(catalog, Kind::Fingerprinting, "literal.flac") == "Fingerprinting: literal.flac");
+    CHECK(libraryTaskProgressCompact(catalog, Kind::IndexingAudioIdentity, "literal.flac") ==
+          "Indexing audio identity: literal.flac");
+    CHECK(libraryTaskProgressCompact(catalog, Kind::PreparingImport, "backup.yaml") == "Preparing import: backup.yaml");
+    CHECK(libraryTaskProgressCompact(catalog, Kind::Importing, "backup.yaml") == "Importing: backup.yaml");
+    CHECK(libraryTaskProgressCompact(catalog, Kind::Exporting, "backup.yaml") == "Exporting: backup.yaml");
+  }
+
+  TEST_CASE("i18n::MessageCatalog - track filter errors carry the parser diagnostic verbatim",
+            "[uimodel][unit][catalog]")
+  {
+    auto const& catalog = ao::test::englishMessageCatalog();
+
+    CHECK(i18n::requiredFormat(catalog, MessageId::TrackFilterError, {{"diagnostic", "unexpected token ')'"}}) ==
+          "Filter error: unexpected token ')'");
+    CHECK(i18n::requiredFormat(catalog, MessageId::TrackFilterError, {{"diagnostic", ""}}) == "Filter error: ");
+  }
+
+  TEST_CASE("i18n::MessageCatalog - an unsaved library switch is a retained warning with its failure detail",
+            "[uimodel][unit][catalog]")
+  {
+    auto const request = librarySwitchNotSavedNotification(
+      ao::test::englishMessageCatalog(), Error{.code = Error::Code::IoError, .message = "Disk full"});
+
+    // Every desktop frontend posts this request; the history lifetime keeps the
+    // report past a startup scan's progress instead of letting it expire unread.
+    CHECK(request.severity == rt::NotificationSeverity::Warning);
+    CHECK(request.lifetime == rt::NotificationLifetime::history());
+    CHECK(request.message ==
+          rt::NotificationMessage{std::string{
+            "Could not remember the library switch: Disk full. The previous library will open next launch."}});
+  }
+
+  TEST_CASE("i18n::MessageCatalog - formats shared library and smart-list copy", "[uimodel][unit][catalog]")
+  {
+    auto const& catalog = ao::test::englishMessageCatalog();
+
+    CHECK(i18n::requiredText(catalog, MessageId::LibraryAllTracks) == "All Tracks");
+    CHECK(i18n::requiredText(catalog, MessageId::LibraryUnnamedList) == "<Unnamed List>");
+    CHECK(i18n::requiredFormat(catalog, MessageId::TrackCount, {{"count", 1}}) == "1 track");
+    CHECK(i18n::requiredFormat(catalog, MessageId::TrackCount, {{"count", 4}}) == "4 tracks");
+    CHECK(trackSelectionSummary(catalog, 0).empty());
+    CHECK(trackSelectionSummary(catalog, 2, "5:00") == "2 items selected (5:00)");
+    CHECK(smartListMembershipEditingText(catalog, true, R"(#"road-trip")") ==
+          R"(Direct membership editing via #"road-trip")");
+    CHECK(smartListMembershipEditingText(catalog, false) == "Computed membership — edit tags or the expression");
+    CHECK(i18n::requiredText(catalog, MessageId::SmartListExpressionNone) == "(none)");
+    CHECK(smartListPreviewStatus(catalog, true, 4, false, true) == "Showing all tracks from source: 4");
+    CHECK(smartListPreviewStatus(catalog, true, 14, true, false) == "Showing 10 of 14 matches");
+    CHECK(smartListPreviewStatus(catalog, false, 0, false, false) == "Invalid filter");
+    CHECK(i18n::requiredText(catalog, MessageId::SmartListUntitledTrack) == "(untitled)");
+    CHECK(i18n::requiredText(catalog, MessageId::ListOrderSavedListsOnly) ==
+          "Manual ordering is available for saved Lists only.");
+    CHECK(i18n::requiredFormat(catalog, MessageId::ListOrderMoved, {{"count", 1}}) == "Moved 1 track in Manual Order.");
+    CHECK(i18n::requiredFormat(catalog, MessageId::ListOrderMoved, {{"count", 3}}) ==
+          "Moved 3 tracks in Manual Order.");
+    CHECK(i18n::requiredFormat(catalog, MessageId::ListOrderReset, {{"count", 2}}) ==
+          "Reset Manual Order and forgot 2 saved positions.");
+    CHECK(i18n::requiredFormat(catalog, MessageId::ListOrderForgotHidden, {{"count", 1}}) ==
+          "Forgot 1 hidden saved position.");
+    CHECK(i18n::requiredText(catalog, MessageId::LibraryAudioIdentityIndexingComplete) ==
+          "Audio identity indexing complete");
+    CHECK(i18n::requiredText(catalog, MessageId::LibraryReadyIndexingAudioIdentity) ==
+          "Library ready; indexing audio identity in background");
+    CHECK(i18n::requiredFormat(catalog, MessageId::LibraryExportFailed, {{"error", "disk full"}}) ==
+          "Export failed: disk full");
+    CHECK(i18n::requiredText(catalog, MessageId::LibraryExported) == "Library exported successfully");
+    CHECK(i18n::requiredFormat(catalog, MessageId::LibraryImportFailed, {{"error", "bad YAML"}}) ==
+          "Import failed: bad YAML");
+    CHECK(i18n::requiredText(catalog, MessageId::LibraryImportConfirmationUnavailable) ==
+          "Import failed: Confirmation is unavailable");
+    CHECK(i18n::requiredText(catalog, MessageId::LibraryImported) == "Library imported successfully");
+  }
+
+  TEST_CASE("i18n::MessageCatalog - neutral German supplies shared semantic copy and plural policy",
+            "[uimodel][unit][catalog][localization]")
+  {
+    auto const catalog = ao::test::messageCatalog("de-DE");
+
+    CHECK(trackFieldLabel(catalog, rt::TrackField::Title) == "Titel");
+    CHECK(trackGroupKeyLabel(catalog, rt::TrackGroupKey::None) == "Keine");
+    CHECK(missingTrackValueLabel(catalog, rt::MissingTrackValueKind::Artist) == "Unbekannter Interpret");
+    REQUIRE(builtinTrackPresentation(catalog, "library"));
+    CHECK(builtinTrackPresentation(catalog, "library")->label == "Bibliothek");
+    CHECK(i18n::requiredText(catalog, MessageId::CreateCustomTrackPresentation) ==
+          "Benutzerdefinierte Ansicht erstellen...");
+    CHECK(audioProfilePresentation(catalog, audio::kProfileShared).label == "Gemeinsam genutzter Modus");
+    CHECK(i18n::requiredText(catalog, MessageId::SystemDefaultOutputDevice) == "Systemstandard");
+    CHECK(completionDetail(catalog, {.kind = rt::CompletionDetailKind::Field}) == "Feld");
+    CHECK(trackChannelText(catalog, 1) == "Mono");
+    CHECK(trackChannelText(catalog, 3) == "3 Kanäle");
+    CHECK(i18n::requiredText(catalog, MessageId::TrackTechnicalUnknown) == "Unbekannt");
+    CHECK(i18n::requiredText(catalog, MessageId::PlaybackNotPlaying) == "Keine Wiedergabe");
+    CHECK(i18n::requiredText(catalog, MessageId::PlaybackConnectingAudioEngine) ==
+          "Verbindung zur Audio-Engine wird hergestellt...");
+    CHECK(i18n::requiredText(catalog, MessageId::PlaybackUnknownArtist) == "Unbekannter Interpret");
+    CHECK(i18n::requiredText(catalog, MessageId::PlaybackAudioPipeline) == "Audiokette");
+    CHECK(transportControlLabel(catalog, PlaybackCommand::Play) == "Wiedergeben");
+    CHECK(transportControlLabel(catalog, PlaybackCommand::Pause) == "Pausieren");
+    CHECK(transportControlLabel(catalog, PlaybackCommand::Next) == "Nächster Titel");
+    CHECK(volumeTooltip(catalog, 42, false, false) == "Lautstärke: 42%");
+    CHECK(volumeTooltip(catalog, 42, true, true) == "Lautstärke: 42% (Stumm)");
+    CHECK(volumeTooltip(catalog, 42, false, true) == "Lautstärke: 42% (Hardware)");
+
+    CHECK(notificationMessage(catalog,
+                              rt::NotificationReport{
+                                .templateId = rt::NotificationReportTemplate::PlaybackTracksSkipped,
+                                .count = 1,
+                              }) == "1 nicht abspielbarer Titel übersprungen");
+    CHECK(notificationMessage(catalog,
+                              rt::NotificationReport{
+                                .templateId = rt::NotificationReportTemplate::PlaybackTracksSkipped,
+                                .count = 4,
+                              }) == "4 nicht abspielbare Titel übersprungen");
+    CHECK(libraryTaskProgressDetail(catalog, rt::LibraryTaskProgressKind::Scanning, "Straße.flac") ==
+          "Scannen: Straße.flac");
+    CHECK(i18n::requiredFormat(catalog, MessageId::TrackFilterError, {{"diagnostic", "unerwartetes Token"}}) ==
+          "Filterfehler: unerwartetes Token");
+    CHECK(i18n::requiredText(catalog, MessageId::LibraryAllTracks) == "Alle Titel");
+    CHECK(i18n::requiredText(catalog, MessageId::LibraryUnnamedList) == "<Unbenannte Liste>");
+    CHECK(i18n::requiredFormat(catalog, MessageId::TrackCount, {{"count", 3}}) == "3 Titel");
+    CHECK(trackSelectionSummary(catalog, 2, "5:00") == "2 Elemente ausgewählt (5:00)");
+    CHECK(i18n::requiredText(catalog, MessageId::SmartListExpressionNone) == "(keiner)");
+    CHECK(smartListPreviewStatus(catalog, true, 4, false, true) == "Alle Titel aus der Quelle werden angezeigt: 4");
+    CHECK(i18n::requiredFormat(catalog, MessageId::ListOrderMoved, {{"count", 2}}) ==
+          "2 Titel wurden in der manuellen Reihenfolge verschoben.");
+    CHECK(i18n::requiredFormat(catalog, MessageId::LibraryExportFailed, {{"error", "Datenträger voll"}}) ==
+          "Export fehlgeschlagen: Datenträger voll");
+  }
+
+  TEST_CASE("i18n::MessageCatalog - Spanish manual-order verbs agree with singular and plural counts",
+            "[uimodel][unit][catalog][localization]")
+  {
+    auto const catalog = ao::test::messageCatalog("es-ES");
+
+    CHECK(i18n::requiredFormat(catalog, MessageId::ListOrderMoved, {{"count", 1}}) ==
+          "Se movió 1 pista en Orden manual.");
+    CHECK(i18n::requiredFormat(catalog, MessageId::ListOrderMoved, {{"count", 2}}) ==
+          "Se movieron 2 pistas en Orden manual.");
+    CHECK(i18n::requiredFormat(catalog, MessageId::ListOrderReset, {{"count", 1}}) ==
+          "Se restableció Orden manual y se descartó 1 posición guardada.");
+    CHECK(i18n::requiredFormat(catalog, MessageId::ListOrderForgotHidden, {{"count", 1}}) ==
+          "Se descartó 1 posición guardada oculta.");
+    CHECK(i18n::requiredFormat(catalog, MessageId::ListOrderForgotHidden, {{"count", 2}}) ==
+          "Se descartaron 2 posiciones guardadas ocultas.");
+  }
+
+  TEST_CASE("i18n::MessageCatalog - localized previews distinguish complete and partial results",
+            "[uimodel][unit][catalog][localization]")
+  {
+    struct ExpectedStatuses final
+    {
+      std::string_view locale;
+      std::array<std::string_view, 4> filtered;
+      std::array<std::string_view, 4> library;
+      std::array<std::string_view, 4> source;
+    };
+
+    static constexpr auto kCounts = std::array<std::size_t, 4>{1, 2, 10, 11};
+    static constexpr auto kExpected = std::array{
+      ExpectedStatuses{
+        .locale = "de-DE",
+        .filtered = {"Alle Treffer werden angezeigt: 1",
+                     "Alle Treffer werden angezeigt: 2",
+                     "Alle Treffer werden angezeigt: 10",
+                     "10 von 11 Treffern werden angezeigt"},
+        .library = {"Alle Titel werden angezeigt: 1",
+                    "Alle Titel werden angezeigt: 2",
+                    "Alle Titel werden angezeigt: 10",
+                    "Alle Titel werden angezeigt: 11"},
+        .source = {"Alle Titel aus der Quelle werden angezeigt: 1",
+                   "Alle Titel aus der Quelle werden angezeigt: 2",
+                   "Alle Titel aus der Quelle werden angezeigt: 10",
+                   "Alle Titel aus der Quelle werden angezeigt: 11"},
+      },
+      ExpectedStatuses{
+        .locale = "fr-FR",
+        .filtered = {"Affichage de toutes les correspondances : 1",
+                     "Affichage de toutes les correspondances : 2",
+                     "Affichage de toutes les correspondances : 10",
+                     "Affichage de 10 sur 11 correspondances"},
+        .library = {"Affichage de tous les morceaux : 1",
+                    "Affichage de tous les morceaux : 2",
+                    "Affichage de tous les morceaux : 10",
+                    "Affichage de tous les morceaux : 11"},
+        .source = {"Affichage de tous les morceaux de la source : 1",
+                   "Affichage de tous les morceaux de la source : 2",
+                   "Affichage de tous les morceaux de la source : 10",
+                   "Affichage de tous les morceaux de la source : 11"},
+      },
+      ExpectedStatuses{
+        .locale = "es-ES",
+        .filtered = {"Mostrando todas las coincidencias: 1",
+                     "Mostrando todas las coincidencias: 2",
+                     "Mostrando todas las coincidencias: 10",
+                     "Mostrando 10 de 11 coincidencias"},
+        .library = {"Mostrando todas las pistas: 1",
+                    "Mostrando todas las pistas: 2",
+                    "Mostrando todas las pistas: 10",
+                    "Mostrando todas las pistas: 11"},
+        .source = {"Mostrando todas las pistas del origen: 1",
+                   "Mostrando todas las pistas del origen: 2",
+                   "Mostrando todas las pistas del origen: 10",
+                   "Mostrando todas las pistas del origen: 11"},
+      },
+      ExpectedStatuses{
+        .locale = "ja-JP",
+        .filtered = {"全1件の一致を表示中", "全2件の一致を表示中", "全10件の一致を表示中", "11件中10件の一致を表示中"},
+        .library = {"全1曲を表示中", "全2曲を表示中", "全10曲を表示中", "全11曲を表示中"},
+        .source = {"ソースから全1曲を表示中",
+                   "ソースから全2曲を表示中",
+                   "ソースから全10曲を表示中",
+                   "ソースから全11曲を表示中"},
+      },
+      ExpectedStatuses{
+        .locale = "zh-CN",
+        .filtered =
+          {"显示全部 1 个匹配项", "显示全部 2 个匹配项", "显示全部 10 个匹配项", "显示 11 个匹配项中的前 10 个"},
+        .library = {"显示全部 1 首曲目", "显示全部 2 首曲目", "显示全部 10 首曲目", "显示全部 11 首曲目"},
+        .source =
+          {"从源显示全部 1 首曲目", "从源显示全部 2 首曲目", "从源显示全部 10 首曲目", "从源显示全部 11 首曲目"},
+      },
+      ExpectedStatuses{
+        .locale = "zh-TW",
+        .filtered =
+          {"顯示全部 1 個匹配項", "顯示全部 2 個匹配項", "顯示全部 10 個匹配項", "顯示 11 個匹配項中的前 10 個"},
+        .library = {"顯示全部 1 首曲目", "顯示全部 2 首曲目", "顯示全部 10 首曲目", "顯示全部 11 首曲目"},
+        .source =
+          {"從源顯示全部 1 首曲目", "從源顯示全部 2 首曲目", "從源顯示全部 10 首曲目", "從源顯示全部 11 首曲目"},
+      },
+    };
+
+    for (auto const& expected : kExpected)
+    {
+      auto const catalog = ao::test::messageCatalog(expected.locale);
+
+      for (std::size_t index = 0; index < kCounts.size(); ++index)
+      {
+        INFO("locale: " << expected.locale << ", count: " << kCounts[index]);
+        CHECK(smartListPreviewStatus(catalog, true, kCounts[index], true, false) == expected.filtered[index]);
+        CHECK(smartListPreviewStatus(catalog, true, kCounts[index], true, true) == expected.library[index]);
+        CHECK(smartListPreviewStatus(catalog, true, kCounts[index], false, true) == expected.source[index]);
+      }
+    }
+  }
+
+  TEST_CASE("i18n::MessageCatalog - localized restore scopes form grammatical sentences",
+            "[uimodel][unit][catalog][localization]")
+  {
+    struct ExpectedRestoreSentence final
+    {
+      std::string_view locale;
+      std::string_view library;
+      std::string_view lists;
+    };
+
+    static constexpr auto kExpected = std::array{
+      ExpectedRestoreSentence{.locale = "de-DE",
+                              .library = "Diese Wiederherstellung ersetzt Folgendes: "
+                                         "Bibliothekstitel und Listen.",
+                              .lists = "Diese Wiederherstellung ersetzt Folgendes: Listen."},
+      ExpectedRestoreSentence{.locale = "fr-FR",
+                              .library = "Cette restauration remplacera le contenu actuel du périmètre "
+                                         "suivant : morceaux et listes de la bibliothèque.",
+                              .lists = "Cette restauration remplacera le contenu actuel du "
+                                       "périmètre suivant : listes."},
+      ExpectedRestoreSentence{.locale = "es-ES",
+                              .library = "Esta restauración reemplazará el contenido actual de "
+                                         "este ámbito: pistas y listas de la biblioteca.",
+                              .lists = "Esta restauración reemplazará el contenido actual de "
+                                       "este ámbito: listas."},
+    };
+
+    for (auto const& expected : kExpected)
+    {
+      auto const catalog = ao::test::messageCatalog(expected.locale);
+      auto const formatRestore = [&catalog](MessageId const scopeId)
+      {
+        return i18n::requiredFormat(catalog,
+                                    MessageId::LibraryRestoreConfirmation,
+                                    {{"scope", i18n::requiredText(catalog, scopeId)},
+                                     {"version", 2},
+                                     {"mode", "Full"},
+                                     {"tracksCreated", 1},
+                                     {"tracksUpdated", 2},
+                                     {"tracksDeleted", 3},
+                                     {"listsCreated", 4},
+                                     {"listsDeleted", 5},
+                                     {"dangling", 6},
+                                     {"invalidFilters", 7}});
+      };
+
+      INFO("locale: " << expected.locale);
+      CHECK(formatRestore(MessageId::LibraryRestoreScopeLibrary).starts_with(expected.library));
+      CHECK(formatRestore(MessageId::LibraryRestoreScopeLists).starts_with(expected.lists));
+    }
+  }
+
+  TEST_CASE("i18n::MessageCatalog - every locale's restore confirmation shows each report count",
+            "[uimodel][unit][catalog][localization]")
+  {
+    static constexpr auto kLocales =
+      std::to_array<std::string_view>({"en", "de-DE", "fr-FR", "es-ES", "ja-JP", "zh-CN", "zh-TW"});
+    static constexpr auto kCounts = std::to_array<std::string_view>({"11", "12", "13", "14", "15", "16", "17"});
+
+    for (auto const locale : kLocales)
+    {
+      auto const catalog = ao::test::messageCatalog(locale);
+      auto const message =
+        i18n::requiredFormat(catalog,
+                             MessageId::LibraryRestoreConfirmation,
+                             {{"scope", i18n::requiredText(catalog, MessageId::LibraryRestoreScopeLists)},
+                              {"version", 2},
+                              {"mode", "Full"},
+                              {"tracksCreated", 11},
+                              {"tracksUpdated", 12},
+                              {"tracksDeleted", 13},
+                              {"listsCreated", 14},
+                              {"listsDeleted", 15},
+                              {"dangling", 16},
+                              {"invalidFilters", 17}});
+
+      INFO("locale: " << locale);
+
+      for (auto const count : kCounts)
+      {
+        INFO("count: " << count);
+        CHECK(message.contains(count));
+      }
+
+      CHECK_FALSE(message.contains('{'));
+      CHECK_FALSE(message.contains('}'));
+    }
+  }
+
+  TEST_CASE("i18n::MessageCatalog - Japanese tag edits use complete grammar for each mutation",
+            "[uimodel][unit][catalog][localization]")
+  {
+    auto const catalog = ao::test::messageCatalog("ja-JP");
+
+    CHECK(i18n::requiredFormat(
+            catalog,
+            MessageId::TrackTagsChanged,
+            {{"hasAdded", "yes"}, {"hasRemoved", "no"}, {"addedCount", 2}, {"removedCount", 0}, {"trackCount", 1}}) ==
+          "1 曲のタグを 2 件追加しました");
+    CHECK(i18n::requiredFormat(
+            catalog,
+            MessageId::TrackTagsChanged,
+            {{"hasAdded", "no"}, {"hasRemoved", "yes"}, {"addedCount", 0}, {"removedCount", 1}, {"trackCount", 2}}) ==
+          "2 曲のタグを 1 件削除しました");
+    CHECK(i18n::requiredFormat(
+            catalog,
+            MessageId::TrackTagsChanged,
+            {{"hasAdded", "yes"}, {"hasRemoved", "yes"}, {"addedCount", 2}, {"removedCount", 1}, {"trackCount", 2}}) ==
+          "2 曲のタグを 2 件追加し、1 件削除しました");
+  }
+
+  TEST_CASE("i18n::MessageCatalog - unsupported locale falls back to English track and playback presentation",
+            "[uimodel][unit][catalog][localization]")
+  {
+    auto const catalog = ao::test::messageCatalog("sv-SE");
+    auto const& english = ao::test::englishMessageCatalog();
+
+    for (std::size_t index = 0; index < rt::kTrackFieldCount; ++index)
+    {
+      INFO("Track field index " << index);
+      auto const field = static_cast<rt::TrackField>(index);
+      CHECK_FALSE(trackFieldLabel(catalog, field).empty());
+      CHECK(trackFieldLabel(catalog, field) == trackFieldLabel(english, field));
+    }
+
+    for (auto const& preset : rt::builtinTrackPresentationPresets())
+    {
+      INFO("Built-in presentation " << preset.spec.id);
+      auto const optText = builtinTrackPresentation(catalog, preset.spec.id);
+      auto const optEnglishText = builtinTrackPresentation(english, preset.spec.id);
+      REQUIRE(optText);
+      REQUIRE(optEnglishText);
+      CHECK_FALSE(optText->label.empty());
+      CHECK_FALSE(optText->description.empty());
+      CHECK(optText->label == optEnglishText->label);
+      CHECK(optText->description == optEnglishText->description);
+    }
+
+    CHECK(trackFieldLabel(catalog, rt::TrackField::Title) == "Title");
+    CHECK(trackChannelText(catalog, 6) == "6 channels");
+    CHECK(i18n::requiredText(catalog, MessageId::TrackTechnicalUnknown) == "Unknown");
+    CHECK(transportControlLabel(catalog, PlaybackCommand::Previous) == "Previous Track");
+    CHECK(volumeTooltip(catalog, 42, false, false) == "Volume: 42%");
+  }
+
+  TEST_CASE("i18n::MessageCatalog - pseudo copy owns borrowed text and preserves runtime arguments",
+            "[uimodel][unit][catalog][localization]")
+  {
+    auto catalog = ao::test::messageCatalog("qps-ploc");
+    auto const titleView = trackFieldLabel(catalog, rt::TrackField::Title);
+    // NOLINTNEXTLINE(performance-unnecessary-copy-initialization) -- tests that copies share identical buffer pointer
+    auto const catalogCopy = catalog;
+
+    CHECK(titleView.starts_with("[!! "));
+    CHECK(titleView.ends_with(" !!]"));
+    CHECK(trackFieldLabel(catalogCopy, rt::TrackField::Title).data() == titleView.data());
+
+    auto const message = notificationMessage(catalog,
+                                             rt::NotificationReport{
+                                               .templateId = rt::NotificationReportTemplate::PlaybackStoppedForTrack,
+                                               .subject = "Straße",
+                                               .detail = "E42",
+                                             });
+    CHECK(message.contains("Straße"));
+    CHECK(message.contains("E42"));
+    CHECK(message.size() > std::string_view{"Playback stopped for Straße: E42"}.size());
+
+    auto const volume = volumeTooltip(catalog, 42, true, false);
+    CHECK(volume.contains("42"));
+    CHECK(volume.starts_with("[!! "));
+    CHECK(volume.ends_with(" !!]"));
+    CHECK(i18n::requiredText(catalog, MessageId::PlaybackNotPlaying).starts_with("[!! "));
+  }
+} // namespace ao::uimodel::test

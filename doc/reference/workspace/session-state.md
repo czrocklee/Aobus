@@ -183,10 +183,10 @@ Mapping order is not semantically significant; canonical explicit emission follo
 
 ## Test authority
 
-- [`WorkspaceSessionYamlSchemaTest.cpp`](../../../test/unit/runtime/WorkspaceSessionYamlSchemaTest.cpp) protects exact semantic conversion, canonical root emission, active-index bounds and representation, stable tokens, and invalid-object rejection.
-- [`WorkspaceSessionTest.cpp`](../../../test/unit/runtime/WorkspaceSessionTest.cpp) protects missing, malformed, unsupported, strict-schema, exact-focus, bounds, empty-candidate, and transactional restoration outcomes.
-- [`HeadlessShellTest.cpp`](../../../test/unit/runtime/HeadlessShellTest.cpp) protects canonical persisted text and presentation reconstruction across runtime instances.
-- [`TrackFieldTest.cpp`](../../../test/unit/runtime/TrackFieldTest.cpp) protects exhaustive stable token lookup.
+- [`WorkspaceSessionYamlSchemaTest.cpp`](../../../test/runtime/WorkspaceSessionYamlSchemaTest.cpp) protects exact semantic conversion, canonical root emission, active-index bounds and representation, stable tokens, and invalid-object rejection.
+- [`WorkspaceSessionTest.cpp`](../../../test/runtime/WorkspaceSessionTest.cpp) protects missing, malformed, unsupported, strict-schema, exact-focus, bounds, empty-candidate, and transactional restoration outcomes.
+- [`HeadlessShellTest.cpp`](../../../test/runtime/HeadlessShellTest.cpp) protects canonical persisted text and presentation reconstruction across runtime instances.
+- [`TrackFieldTest.cpp`](../../../test/runtime/TrackFieldTest.cpp) protects exhaustive stable token lookup.
 
 ## Related documents
 

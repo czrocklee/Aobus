@@ -28,8 +28,8 @@ Empty subsets are skipped, a formatting failure stops later stages, and reposito
 
 - `STRICT` applies to production C++ under `lib/`, `app/`, `include/`, and `tool/`.
 - `RELAXED` applies to C++ under `test/` with the same baseline but disables test-noisy checks: unchecked optional access, discarded return values, designated initializers for positional expected-data tables, cognitive complexity, identifier length, magic numbers, C arrays, C varargs, and test-only casts.
-- Non-fixture files under `test/integration/lint/` are ignored by normal tidy runs.
-- Fixtures under `test/integration/lint/fixture/` are skipped in batch scans and checked only when explicitly named. `./ao test --lint` owns their diagnostics.
+- Non-fixture files under `test/lint/` are ignored by normal tidy runs.
+- Fixtures under `test/lint/fixture/` are skipped in batch scans and checked only when explicitly named. `./ao test --lint` owns their diagnostics.
 - Python files in scope are checked against `pyproject.toml` by Ruff and mypy through `./ao tidy`.
 
 ## Objective-C diagnostics

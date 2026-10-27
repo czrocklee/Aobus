@@ -182,14 +182,14 @@ It is not converted into generic presentation followed by continued execution.
 
 ## Test map
 
-- [`ErrorTest.cpp`](../../../test/unit/core/ErrorTest.cpp) protects recoverable value and diagnostic-location behavior.
-- Fatal tests under [`test/unit/core/`](../../../test/unit/core) and the dedicated `ao_fatal_probe` under [`test/fatal/`](../../../test/fatal) protect lazy conditions, registration, emergency fallback, reentrancy, source context, and process death.
+- [`ErrorTest.cpp`](../../../test/core/ErrorTest.cpp) protects recoverable value and diagnostic-location behavior.
+- Fatal tests under [`test/core/`](../../../test/core) and the dedicated `ao_fatal_probe` under [`test/fatal/`](../../../test/fatal) protect lazy conditions, registration, emergency fallback, reentrancy, source context, and process death.
 - The check-owned `aobus_guardrails` target in [`CMakeLists.txt`](../../../CMakeLists.txt) rejects production C assertions, raw gsl-lite contract spellings, unconditional false AO contracts, and production `std::unreachable()` at every completion gate.
-- [`AsyncRuntimeTest.cpp`](../../../test/unit/runtime/AsyncRuntimeTest.cpp) protects future single ownership, non-default-constructible value transport, and cancellation exclusion.
-- [`LifetimeScopeTest.cpp`](../../../test/unit/runtime/LifetimeScopeTest.cpp) plus runtime fatal subprocess scenarios protect task retirement before fatal entry.
-- [`LibraryJobsTest.cpp`](../../../test/unit/runtime/library/LibraryJobsTest.cpp) protects callback-affine failure cleanup before exception propagation.
-- [`LogTest.cpp`](../../../test/unit/runtime/LogTest.cpp) protects the registered fatal logging adapter.
-- Subsystem tests under [`test/unit/audio/`](../../../test/unit/audio), [`test/unit/library/`](../../../test/unit/library), [`test/unit/query/`](../../../test/unit/query), and [`test/unit/runtime/`](../../../test/unit/runtime) protect boundary-specific return and translation behavior.
+- [`AsyncRuntimeTest.cpp`](../../../test/runtime/AsyncRuntimeTest.cpp) protects future single ownership, non-default-constructible value transport, and cancellation exclusion.
+- [`LifetimeScopeTest.cpp`](../../../test/runtime/LifetimeScopeTest.cpp) plus runtime fatal subprocess scenarios protect task retirement before fatal entry.
+- [`LibraryJobsTest.cpp`](../../../test/runtime/library/LibraryJobsTest.cpp) protects callback-affine failure cleanup before exception propagation.
+- [`LogTest.cpp`](../../../test/runtime/LogTest.cpp) protects the registered fatal logging adapter.
+- Subsystem tests under [`test/audio/`](../../../test/audio), [`test/library/`](../../../test/library), [`test/query/`](../../../test/query), and [`test/runtime/`](../../../test/runtime) protect boundary-specific return and translation behavior.
 
 ## Related documents
 

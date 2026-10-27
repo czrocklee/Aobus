@@ -55,7 +55,7 @@ function(aobus_finalize_test_sources manifest)
   file(GLOB_RECURSE _expected CONFIGURE_DEPENDS LIST_DIRECTORIES false
     "${CMAKE_SOURCE_DIR}/test/*Test.cpp"
     "${CMAKE_SOURCE_DIR}/test/*Test.mm")
-  list(FILTER _expected EXCLUDE REGEX "/test/integration/lint/fixture/")
+  list(FILTER _expected EXCLUDE REGEX "/test/lint/fixture/")
   set(_expected_relative)
   foreach(_source IN LISTS _expected)
     _aobus_normalize_test_source(_relative "${_source}" "${CMAKE_SOURCE_DIR}")

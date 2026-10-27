@@ -1,0 +1,346 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 Aobus Contributors
+
+#include <ao/async/LifetimeScope.h>
+
+#include "test/runtime/AsyncTestSupport.h"
+#include "test/runtime/ExecutorTestSupport.h"
+#include <ao/async/OperationCancelled.h>
+#include <ao/async/Runtime.h>
+#include <ao/async/Task.h>
+
+#include <boost/asio/error.hpp>
+#include <boost/system/system_error.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <gsl-lite/gsl-lite.hpp>
+
+#include <barrier>
+#include <cstddef>
+#include <exception>
+#include <memory>
+#include <stdexcept>
+#include <stop_token>
+#include <string_view>
+#include <thread>
+#include <utility>
+
+namespace ao::rt::test
+{
+  using namespace ao::async;
+
+  namespace
+  {
+    struct MemberTaskOwner final
+    {
+      MemberTaskOwner(Runtime& runtime, LifetimeScope& scope, AsyncTestState<int> completed)
+        : runtime{runtime}, completed{std::move(completed)}
+      {
+        runtime.spawnWithLifetime(scope, [this](std::stop_token const stopToken) { return runAsync(stopToken); });
+      }
+
+      Task<void> runAsync(std::stop_token const stopToken)
+      {
+        co_await runtime.resumeOnWorkerAsync(stopToken);
+        completed.increment();
+      }
+
+      Runtime& runtime;
+      AsyncTestState<int> completed;
+    };
+
+    struct TaskExitObserver final
+    {
+      AsyncTestState<bool> exited;
+
+      explicit TaskExitObserver(AsyncTestState<bool> exited)
+        : exited{std::move(exited)}
+      {
+      }
+
+      ~TaskExitObserver() { exited.set(true); }
+
+      TaskExitObserver(TaskExitObserver const&) = delete;
+      TaskExitObserver(TaskExitObserver&&) = delete;
+      TaskExitObserver& operator=(TaskExitObserver const&) = delete;
+      TaskExitObserver& operator=(TaskExitObserver&&) = delete;
+    };
+
+    Task<void> longRunningTaskAsync(Runtime* runtime,
+                                    AsyncBarrier* barrier,
+                                    AsyncTestState<bool> reachedBarrierWait,
+                                    AsyncTestState<bool> reachedCallbackHop,
+                                    AsyncTestState<bool> completed,
+                                    AsyncTestState<bool> taskExited,
+                                    std::stop_token const stopToken)
+    {
+      auto exitObserver = TaskExitObserver{taskExited};
+
+      co_await runtime->resumeOnWorkerAsync(stopToken);
+      reachedBarrierWait.set(true);
+      barrier->wait(); // deterministic wait point (blocks worker thread)
+
+      reachedCallbackHop.set(true);
+      co_await runtime->resumeOnCallbackExecutorAsync(stopToken);
+      // If cancelled, this line should never be reached.
+      completed.set(true);
+    }
+
+    Task<void> pendingControlResumeTaskAsync(Runtime* runtime,
+                                             AsyncTestState<bool> completed,
+                                             std::stop_token const stopToken = {})
+    {
+      co_await runtime->resumeOnWorkerAsync(stopToken);
+      co_await runtime->resumeOnCallbackExecutorAsync(stopToken);
+      completed.set(true);
+    }
+
+    Task<void> racingSleepAsync(Runtime* runtime, AsyncTestState<bool> taskExited, std::stop_token const stopToken)
+    {
+      auto exitObserver = TaskExitObserver{taskExited};
+      co_await runtime->sleepForAsync(std::chrono::hours{1}, stopToken);
+    }
+  } // namespace
+
+  TEST_CASE("LifetimeScope - task completes while scope remains alive", "[runtime][unit][async][concurrency]")
+  {
+    auto barrier = AsyncBarrier{};
+    auto executor = ManualExecutor{};
+    auto runtime = Runtime{executor};
+    auto reachedBarrierWait = AsyncTestState<bool>::create(false);
+    auto reachedCallbackHop = AsyncTestState<bool>::create(false);
+    auto completed = AsyncTestState<bool>::create(false);
+    auto taskExited = AsyncTestState<bool>::create(false);
+    auto releaseBarrier = gsl_lite::finally([&barrier] { barrier.release(); });
+
+    {
+      auto scope = LifetimeScope{};
+      runtime.spawnWithLifetime(
+        scope,
+        [&runtime, &barrier, reachedBarrierWait, reachedCallbackHop, completed, taskExited](
+          std::stop_token const stopToken)
+        {
+          return longRunningTaskAsync(
+            &runtime, &barrier, reachedBarrierWait, reachedCallbackHop, completed, taskExited, stopToken);
+        });
+
+      REQUIRE(reachedBarrierWait.tryWaitUntil(true));
+      barrier.release();
+      executor.checkQueued();
+      CHECK(reachedCallbackHop.load());
+      CHECK_FALSE(completed.load());
+      CHECK_FALSE(taskExited.load());
+
+      executor.runUntilIdle();
+      CHECK(completed.load());
+      CHECK(taskExited.load());
+    }
+
+    CHECK(completed.load());
+    runtime.requestStop();
+    runtime.join();
+  }
+
+  TEST_CASE("LifetimeScope - destruction cancels blocked task before callback resume",
+            "[runtime][unit][async][concurrency]")
+  {
+    auto barrier = AsyncBarrier{};
+    auto executor = ManualExecutor{};
+    auto runtime = Runtime{executor};
+    auto reachedBarrierWait = AsyncTestState<bool>::create(false);
+    auto reachedCallbackHop = AsyncTestState<bool>::create(false);
+    auto completed = AsyncTestState<bool>::create(false);
+    auto taskExited = AsyncTestState<bool>::create(false);
+    auto releaseBarrier = gsl_lite::finally([&barrier] { barrier.release(); });
+
+    {
+      auto scope = LifetimeScope{};
+      runtime.spawnWithLifetime(
+        scope,
+        [&runtime, &barrier, reachedBarrierWait, reachedCallbackHop, completed, taskExited](
+          std::stop_token const stopToken)
+        {
+          return longRunningTaskAsync(
+            &runtime, &barrier, reachedBarrierWait, reachedCallbackHop, completed, taskExited, stopToken);
+        });
+
+      REQUIRE(reachedBarrierWait.tryWaitUntil(true));
+      // Destroy scope while task is blocked at the barrier.
+    }
+
+    barrier.release();
+    REQUIRE(reachedCallbackHop.tryWaitUntil(true));
+    REQUIRE(taskExited.tryWaitUntil(true));
+
+    CHECK_FALSE(completed.load());
+    runtime.requestStop();
+    runtime.join();
+  }
+
+  TEST_CASE("LifetimeScope - cancellation before queued callback resume prevents completion",
+            "[runtime][unit][async][concurrency]")
+  {
+    auto executor = ManualExecutor{};
+    auto runtime = Runtime{executor};
+    auto completed = AsyncTestState<bool>::create(false);
+
+    {
+      auto scope = LifetimeScope{};
+      runtime.spawnWithLifetime(scope,
+                                [&runtime, completed](std::stop_token const stopToken)
+                                { return pendingControlResumeTaskAsync(&runtime, completed, stopToken); });
+      executor.checkQueued();
+    }
+
+    executor.runUntilIdle();
+
+    CHECK_FALSE(completed.load());
+    runtime.requestStop();
+    runtime.join();
+  }
+
+  TEST_CASE("OperationCancelled - current exception guard recognizes cancellation",
+            "[runtime][unit][async][cancellation]")
+  {
+    CHECK_THROWS_AS(
+      []
+      {
+        try
+        {
+          std::rethrow_exception(std::make_exception_ptr(OperationCancelled{}));
+        }
+        catch (...)
+        {
+          rethrowIfOperationCancelled();
+        }
+      }(),
+      OperationCancelled);
+
+    CHECK_THROWS_AS(
+      []
+      {
+        try
+        {
+          std::rethrow_exception(
+            std::make_exception_ptr(boost::system::system_error{boost::asio::error::operation_aborted}));
+        }
+        catch (...)
+        {
+          rethrowIfOperationCancelled();
+        }
+      }(),
+      OperationCancelled);
+
+    CHECK_NOTHROW(
+      []
+      {
+        try
+        {
+          std::rethrow_exception(std::make_exception_ptr(std::runtime_error{"not cancellation"}));
+        }
+        catch (...)
+        {
+          rethrowIfOperationCancelled();
+        }
+      }());
+  }
+
+  TEST_CASE("OperationCancelled - exception pointer classification recognizes only cancellation",
+            "[runtime][unit][async][cancellation]")
+  {
+    CHECK_FALSE(isOperationCancelled(std::exception_ptr{}));
+    CHECK(isOperationCancelled(std::make_exception_ptr(OperationCancelled{})));
+    CHECK(isOperationCancelled(
+      std::make_exception_ptr(boost::system::system_error{boost::asio::error::operation_aborted})));
+    CHECK_FALSE(isOperationCancelled(std::make_exception_ptr(std::runtime_error{"not cancellation"})));
+    CHECK_FALSE(isOperationCancelled(std::make_exception_ptr(42)));
+  }
+
+  TEST_CASE("OperationCancelled - exception rethrow normalizes cancellation", "[runtime][unit][async][cancellation]")
+  {
+    bool deferredFailureRethrown = false;
+
+    try
+    {
+      rethrowException(std::make_exception_ptr(std::runtime_error{"deferred failure"}));
+    }
+    catch (std::runtime_error const& error)
+    {
+      deferredFailureRethrown = true;
+      CHECK(std::string_view{error.what()} == "deferred failure");
+    }
+
+    CHECK(deferredFailureRethrown);
+
+    bool cancellationNormalized = false;
+
+    try
+    {
+      rethrowException(std::make_exception_ptr(boost::system::system_error{boost::asio::error::operation_aborted}));
+    }
+    catch (OperationCancelled const&)
+    {
+      cancellationNormalized = true;
+    }
+
+    CHECK(cancellationNormalized);
+  }
+
+  TEST_CASE("LifetimeScope - member task can complete while owner remains alive", "[runtime][unit][async][concurrency]")
+  {
+    auto ownerPtr = std::unique_ptr<MemberTaskOwner>{};
+    auto executor = InlineExecutor{};
+    auto runtime = Runtime{executor};
+    auto completed = AsyncTestState<int>::create(0);
+
+    {
+      auto scope = LifetimeScope{};
+      ownerPtr = std::make_unique<MemberTaskOwner>(runtime, scope, completed);
+
+      // Coroutine finishes while owner and scope are alive
+      REQUIRE(completed.tryWaitUntil(1));
+    }
+
+    CHECK(completed.load() == 1);
+    runtime.requestStop();
+    runtime.join();
+    ownerPtr.reset();
+  }
+
+  TEST_CASE("LifetimeScope - cancellation races safely with concurrent completion",
+            "[runtime][unit][async][concurrency]")
+  {
+    constexpr std::size_t kIterations = 64;
+    auto executor = ManualExecutor{};
+    auto sleeper = ControlledSleeper{};
+    auto runtime = Runtime{executor, 4, &sleeper};
+
+    for (std::size_t iteration = 0; iteration < kIterations; ++iteration)
+    {
+      auto taskExited = AsyncTestState<bool>::create(false);
+      auto scope = LifetimeScope{};
+      runtime.spawnWithLifetime(scope,
+                                [&runtime, taskExited](std::stop_token const stopToken)
+                                { return racingSleepAsync(&runtime, taskExited, stopToken); });
+      REQUIRE(sleeper.tryWaitForCallCount(iteration + 1));
+      auto const sleepId = sleeper.call(iteration).id;
+      auto start = std::barrier{2};
+      bool completionDispatched = false;
+
+      {
+        auto completionThread = std::jthread{[&]
+                                             {
+                                               start.arrive_and_wait();
+                                               completionDispatched = sleeper.tryFireById(sleepId);
+                                             }};
+        start.arrive_and_wait();
+        scope.cancelAll();
+      }
+
+      CHECK((completionDispatched || sleeper.call(iteration).cancelled));
+      REQUIRE(taskExited.tryWaitUntil(true));
+    }
+
+    runtime.requestStop();
+    runtime.join();
+  }
+} // namespace ao::rt::test

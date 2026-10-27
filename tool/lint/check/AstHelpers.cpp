@@ -48,8 +48,7 @@ namespace clang::tidy::aobus
 
     auto const filename = sourceManager.getFilename(spellingLocation);
     auto const isTestSource = filename.contains("/test/") || filename.contains("\\test\\");
-    auto const isLintFixture =
-      filename.contains("/test/integration/lint/fixture/") || filename.contains(R"(\test\integration\lint\fixture\)");
+    auto const isLintFixture = filename.contains("/test/lint/fixture/") || filename.contains(R"(\test\lint\fixture\)");
     return !isTestSource || isLintFixture;
   }
 

@@ -430,8 +430,8 @@ def _is_platform_incompatible(path: Path, root: Path) -> bool:
     # fail the Linux gate as a coverage hole rather than a platform deferral.
     owned_by_windows = (
         parts[:2] in {("app", "windows"), ("app", "windows-winui")}
-        or parts[:3] == ("test", "unit", "windows")
-        or parts[:3] == ("test", "unit", "winui")
+        or parts[:2] == ("test", "windows")
+        or parts[:2] == ("test", "winui")
         or "wasapi" in joined
         or "win32" in joined
         or "winui" in joined
@@ -444,17 +444,16 @@ def _is_platform_incompatible(path: Path, root: Path) -> bool:
         parts[:2] == ("app", "linux-gtk")
         or parts[:5] == ("app", "include", "ao", "systemmedia", "linux")
         or parts[:3] == ("app", "systemmedia", "linux")
-        or parts[:3] == ("test", "unit", "linux-gtk")
-        or parts[:3] == ("test", "integration", "linux-gtk")
-        or parts[:4] == ("test", "integration", "linux", "systemmedia")
+        or parts[:2] == ("test", "linux-gtk")
+        or parts[:3] == ("test", "systemmedia", "linux")
         or "alsa" in joined
         or "pipewire" in joined
         or stem.endswith("linux")
     )
     owned_by_macos = (
         parts[:2] == ("app", "macos-appkit")
-        or parts[:3] == ("test", "unit", "macos")
-        or parts[:3] == ("test", "integration", "macos")
+        or parts[:2] == ("test", "macos")
+        or parts[:2] == ("test", "macos-appkit")
         or "coreaudio" in joined
         or "corefoundation" in joined
         or stem.endswith("macos")
@@ -822,7 +821,7 @@ def compile_command_plan(
                 resolved_path = absolute_path(path)
                 relative_path = resolved_path.relative_to(absolute_path(project_root))
                 is_under_root = True
-                is_lint_fixture = relative_path.parts[:4] == ("test", "integration", "lint", "fixture")
+                is_lint_fixture = relative_path.parts[:3] == ("test", "lint", "fixture")
             except ValueError:
                 is_under_root = False
                 is_lint_fixture = False

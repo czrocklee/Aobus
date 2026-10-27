@@ -157,10 +157,10 @@ Subscriptions release before their source or changes owner; source destruction d
 
 ## Test map
 
-- [`TrackSourcePublicationTest.cpp`](../../../test/unit/runtime/source/TrackSourcePublicationTest.cpp) proves one mixed commit publishes one final all-tracks batch and smart membership transition before phase-two observers and command completion.
-- [`TrackSourceCachePublicationLifetimeTest.cpp`](../../../test/unit/runtime/source/TrackSourceCachePublicationLifetimeTest.cpp) proves that a handler may release its own or a sibling's last lease, retire a whole evaluator bucket, or acquire a new sibling during update-only, structural, reset, and invalidation publication without stale batches or use-after-free.
-- [`TrackSourceCacheTest.cpp`](../../../test/unit/runtime/source/TrackSourceCacheTest.cpp) proves cache identity, expired ad-hoc pruning, dependency composition, contextual propagation of an invalid stored ancestor expression through saved and ad-hoc sources with empty membership, and that orderable track ids refuse a failed or invalidated source while a valid empty one succeeds.
-- Source tests under [`test/unit/runtime/source/`](../../../test/unit/runtime/source) prove in-place indexed edits, update-only smart-list membership transitions, edit validation, leases, expression membership, ranked/unranked order, hidden-rank recovery, reentrancy, and mutation-storm equivalence.
+- [`TrackSourcePublicationTest.cpp`](../../../test/runtime/source/TrackSourcePublicationTest.cpp) proves one mixed commit publishes one final all-tracks batch and smart membership transition before phase-two observers and command completion.
+- [`TrackSourceCachePublicationLifetimeTest.cpp`](../../../test/runtime/source/TrackSourceCachePublicationLifetimeTest.cpp) proves that a handler may release its own or a sibling's last lease, retire a whole evaluator bucket, or acquire a new sibling during update-only, structural, reset, and invalidation publication without stale batches or use-after-free.
+- [`TrackSourceCacheTest.cpp`](../../../test/runtime/source/TrackSourceCacheTest.cpp) proves cache identity, expired ad-hoc pruning, dependency composition, contextual propagation of an invalid stored ancestor expression through saved and ad-hoc sources with empty membership, and that orderable track ids refuse a failed or invalidated source while a valid empty one succeeds.
+- Source tests under [`test/runtime/source/`](../../../test/runtime/source) prove in-place indexed edits, update-only smart-list membership transitions, edit validation, leases, expression membership, ranked/unranked order, hidden-rank recovery, reentrancy, and mutation-storm equivalence.
 
 ## Related documents
 

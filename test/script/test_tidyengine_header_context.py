@@ -81,17 +81,17 @@ class HeaderCompileCommandSelectionTest(unittest.TestCase):
             self.fixture.file("app/include/ao/systemmedia/linux/MprisBridge.h"),
             self.fixture.file("app/systemmedia/linux/MprisBridge.cpp"),
             self.fixture.file("app/systemmedia/linux/MprisBusSession.h"),
-            self.fixture.file("test/integration/linux/systemmedia/MprisBridgeTest.cpp"),
-            self.fixture.file("test/integration/linux/systemmedia/MprisTestSupport.h"),
+            self.fixture.file("test/systemmedia/linux/MprisBridgeTest.cpp"),
+            self.fixture.file("test/systemmedia/linux/MprisTestSupport.h"),
         ]
         nearby_sources = [
             self.fixture.file("app/include/ao/systemmedia/linux-other/MprisBridge.h"),
             self.fixture.file("app/include/ao/systemmedia/shared/MprisBridge.h"),
             self.fixture.file("app/systemmedia/linux-other/MprisBridge.cpp"),
             self.fixture.file("app/systemmedia/shared/MprisBridge.h"),
-            self.fixture.file("test/integration/linux/audio/MprisBridgeTest.cpp"),
-            self.fixture.file("test/integration/linux/systemmedia-other/MprisTestSupport.h"),
-            self.fixture.file("test/integration/other/systemmedia/MprisBridgeTest.cpp"),
+            self.fixture.file("test/audio/MprisBridgeTest.cpp"),
+            self.fixture.file("test/systemmedia/linux-other/MprisTestSupport.h"),
+            self.fixture.file("test/other/systemmedia/MprisBridgeTest.cpp"),
         ]
         self.fixture.write_compile_database(shared)
         selected = [shared, *linux_sources, *nearby_sources]
@@ -123,8 +123,8 @@ class HeaderCompileCommandSelectionTest(unittest.TestCase):
         header = self.fixture.file("app/include/ao/systemmedia/linux/MprisBridge.h")
         session = self.fixture.file("app/systemmedia/linux/MprisBusSession.cpp")
         session_header = self.fixture.file("app/systemmedia/linux/MprisBusSession.h")
-        support = self.fixture.file("test/integration/linux/systemmedia/MprisTestSupport.cpp")
-        support_header = self.fixture.file("test/integration/linux/systemmedia/MprisTestSupport.h")
+        support = self.fixture.file("test/systemmedia/linux/MprisTestSupport.cpp")
+        support_header = self.fixture.file("test/systemmedia/linux/MprisTestSupport.h")
         self.fixture.write_compile_database(bridge, session, support)
 
         with mock.patch.object(tidyengine.builddir, "platform_profile", return_value=tidyengine.builddir.LINUX_PROFILE):
@@ -146,6 +146,41 @@ class HeaderCompileCommandSelectionTest(unittest.TestCase):
             ],
         )
         self.assertEqual(list(plan.deferred), [])
+
+    def test_exact_commands_for_portable_winui_tests_precede_platform_fallback(self):
+        source = self.fixture.file("test/winui/layout/LayoutDialectTest.cpp")
+        self.fixture.write_compile_database(source)
+        for profile in (
+            tidyengine.builddir.LINUX_PROFILE,
+            tidyengine.builddir.MACOS_PROFILE,
+            tidyengine.builddir.WINDOWS_PROFILE,
+        ):
+            with self.subTest(profile=profile.name):
+                with mock.patch.object(tidyengine.builddir, "platform_profile", return_value=profile):
+                    plan = tidyengine.compile_command_plan(
+                        self.fixture.build_dir, [source], project_root=self.fixture.root
+                    )
+                self.assertEqual(list(plan.targets), [tidyengine.CompileCommandTarget(source, source)])
+                self.assertEqual(list(plan.deferred), [])
+
+    def test_moved_explicit_fixture_can_borrow_flags_but_nearby_project_file_cannot(self):
+        source = self.fixture.file("tool/lint/Check.cpp")
+        fixture = self.fixture.file("test/lint/fixture/check/positive.cpp")
+        nearby = self.fixture.file("test/lint/fixture-other/check/positive.cpp")
+        self.fixture.write_compile_database(source)
+        for profile in (
+            tidyengine.builddir.LINUX_PROFILE,
+            tidyengine.builddir.MACOS_PROFILE,
+            tidyengine.builddir.WINDOWS_PROFILE,
+        ):
+            with self.subTest(profile=profile.name):
+                with mock.patch.object(tidyengine.builddir, "platform_profile", return_value=profile):
+                    plan = tidyengine.compile_command_plan(
+                        self.fixture.build_dir, [fixture, nearby], project_root=self.fixture.root
+                    )
+                self.assertEqual(list(plan.targets), [tidyengine.CompileCommandTarget(fixture, source)])
+                self.assertEqual(list(plan.deferred), [nearby])
+                self.assertEqual([detail.kind for detail in plan.deferral_details], ["native-coverage"])
 
     def test_same_stem_companion_precedes_dependency_graph(self):
         header = self.fixture.file("include/ao/utility/Value.h")

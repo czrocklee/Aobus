@@ -183,11 +183,11 @@ There is no automatic migration, quarantine, or normalization policy.
 
 ## Test authority
 
-- [`LayoutModelTest.cpp`](../../../test/unit/uimodel/layout/document/LayoutModelTest.cpp) protects fields, value classification, tooltips, strict node/list validation, version dispatch, unknown-key rejection, and round trip.
-- [`LayoutTemplateExpansionTest.cpp`](../../../test/unit/uimodel/layout/document/LayoutTemplateExpansionTest.cpp) protects template success and error nodes.
-- [`LayoutPreparationTest.cpp`](../../../test/unit/uimodel/layout/document/LayoutPreparationTest.cpp) protects tree-limit boundaries and expansion multiplication.
-- [`LayoutValidationTest.cpp`](../../../test/unit/uimodel/layout/document/LayoutValidationTest.cpp) protects schema, surface, action, and common-field rejection.
-- [`ShellLayoutStoreTest.cpp`](../../../test/unit/linux-gtk/app/ShellLayoutStoreTest.cpp) protects the group, file ceiling, and rejected-file preservation boundary.
+- [`LayoutModelTest.cpp`](../../../test/uimodel/layout/document/LayoutModelTest.cpp) protects fields, value classification, tooltips, strict node/list validation, version dispatch, unknown-key rejection, and round trip.
+- [`LayoutTemplateExpansionTest.cpp`](../../../test/uimodel/layout/document/LayoutTemplateExpansionTest.cpp) protects template success and error nodes.
+- [`LayoutPreparationTest.cpp`](../../../test/uimodel/layout/document/LayoutPreparationTest.cpp) protects tree-limit boundaries and expansion multiplication.
+- [`LayoutValidationTest.cpp`](../../../test/uimodel/layout/document/LayoutValidationTest.cpp) protects schema, surface, action, and common-field rejection.
+- [`ShellLayoutStoreTest.cpp`](../../../test/linux-gtk/app/ShellLayoutStoreTest.cpp) protects the group, file ceiling, and rejected-file preservation boundary.
 
 ## Related documents
 

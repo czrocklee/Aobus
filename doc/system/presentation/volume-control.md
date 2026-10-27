@@ -82,10 +82,10 @@ shell placement does not change the internal vertical scale.
   owns the tooltip selector.
 - [`VolumeControlWidget.cpp`](../../../app/linux-gtk/playback/VolumeControlWidget.cpp)
   owns GTK mapping, gestures, popovers, and teardown.
-- [`VolumeViewModelTest.cpp`](../../../test/unit/uimodel/playback/output/VolumeViewModelTest.cpp)
+- [`VolumeViewModelTest.cpp`](../../../test/uimodel/playback/output/VolumeViewModelTest.cpp)
   protects shared state and commands, including relative clamping and unrelated
   snapshot suppression.
-- [`VolumeControlWidgetTest.cpp`](../../../test/unit/linux-gtk/playback/VolumeControlWidgetTest.cpp)
+- [`VolumeControlWidgetTest.cpp`](../../../test/linux-gtk/playback/VolumeControlWidgetTest.cpp)
   protects GTK state and icon rendering.
 
 ## Related documents

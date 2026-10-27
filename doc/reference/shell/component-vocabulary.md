@@ -177,10 +177,10 @@ The same soul button, with each shell's own extension alongside the shared prope
 
 ## Test authority
 
-- [`LayoutSchemaTest.cpp`](../../../test/unit/uimodel/layout/component/LayoutSchemaTest.cpp) protects type-id uniqueness, schema lookup, the shell-extension rule, and the generated reference block.
-- [`PlaybackCommandTest.cpp`](../../../test/unit/uimodel/playback/command/PlaybackCommandTest.cpp) protects the command ids.
-- [`LayoutComponentsTest.cpp`](../../../test/unit/linux-gtk/layout/components/LayoutComponentsTest.cpp) checks that GTK imports every shared entry it registers.
-- [`LayoutSchemaTest.cpp`](../../../test/unit/winui/layout/LayoutSchemaTest.cpp) protects the Windows schema and runs on every host rather than only on Windows.
+- [`LayoutSchemaTest.cpp`](../../../test/uimodel/layout/component/LayoutSchemaTest.cpp) protects type-id uniqueness, schema lookup, the shell-extension rule, and the generated reference block.
+- [`PlaybackCommandTest.cpp`](../../../test/uimodel/playback/command/PlaybackCommandTest.cpp) protects the command ids.
+- [`LayoutComponentsTest.cpp`](../../../test/linux-gtk/layout/components/LayoutComponentsTest.cpp) checks that GTK imports every shared entry it registers.
+- [`LayoutSchemaTest.cpp`](../../../test/winui/layout/LayoutSchemaTest.cpp) protects the Windows schema and runs on every host rather than only on Windows.
 
 ## Related documents
 

@@ -167,7 +167,7 @@ A duration of 125 seconds maps to `125000000` microseconds.
 
 ## Test authority
 
-Focused sources are [`MprisBridgeTest.cpp`](../../../test/integration/linux/systemmedia/MprisBridgeTest.cpp), [`MprisPlaybackPositionTest.cpp`](../../../test/integration/linux/systemmedia/MprisPlaybackPositionTest.cpp), [`MprisArtUrlSessionTest.cpp`](../../../test/integration/linux/systemmedia/MprisArtUrlSessionTest.cpp), [`MprisBridgeIntegrationTest.cpp`](../../../test/integration/linux/systemmedia/MprisBridgeIntegrationTest.cpp), [`MprisBusSessionTest.cpp`](../../../test/integration/linux/systemmedia/MprisBusSessionTest.cpp), and [`MprisSignalTest.cpp`](../../../test/integration/linux/systemmedia/MprisSignalTest.cpp).
+Focused sources are [`MprisBridgeTest.cpp`](../../../test/systemmedia/linux/MprisBridgeTest.cpp), [`MprisPlaybackPositionTest.cpp`](../../../test/systemmedia/linux/MprisPlaybackPositionTest.cpp), [`MprisArtUrlSessionTest.cpp`](../../../test/systemmedia/linux/MprisArtUrlSessionTest.cpp), [`MprisBridgeIntegrationTest.cpp`](../../../test/systemmedia/linux/MprisBridgeIntegrationTest.cpp), [`MprisBusSessionTest.cpp`](../../../test/systemmedia/linux/MprisBusSessionTest.cpp), and [`MprisSignalTest.cpp`](../../../test/systemmedia/linux/MprisSignalTest.cpp).
 
 ## Related documents
 

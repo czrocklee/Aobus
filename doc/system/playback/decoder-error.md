@@ -143,12 +143,12 @@ if (!session)
 
 ## Test authority
 
-- [`DecoderFactoryTest.cpp`](../../../test/unit/audio/DecoderFactoryTest.cpp) protects ready construction, routing, and initialization failure codes.
-- [`DecoderErrorTest.cpp`](../../../test/unit/audio/DecoderErrorTest.cpp) protects helper location preservation, private exception values, constructor inaccessibility, and the absence of instance `close()`.
+- [`DecoderFactoryTest.cpp`](../../../test/audio/DecoderFactoryTest.cpp) protects ready construction, routing, and initialization failure codes.
+- [`DecoderErrorTest.cpp`](../../../test/audio/DecoderErrorTest.cpp) protects helper location preservation, private exception values, constructor inaccessibility, and the absence of instance `close()`.
 - [`AudioFatalProbeProtocol.cpp`](../../../test/fatal/AudioFatalProbeProtocol.cpp) protects the `TrackSession` invariant that an injected `DecoderFactoryFn` success contains a session.
-- [`FlacMetadataInitializationTest.cpp`](../../../test/unit/audio/FlacMetadataInitializationTest.cpp) covers raw-frame missing-STREAMINFO initialization diagnostics, implicit-header cases, and valid metadata/prefix and truncated-metadata controls.
-- Codec tests under [`test/unit/audio/`](../../../test/unit/audio) protect initialization failures, per-operation failure codes, and end-of-stream values.
-- [`AlacDecoderMalformedMp4Test.cpp`](../../../test/unit/audio/AlacDecoderMalformedMp4Test.cpp) retains required ALAC/container failure coverage; optional-identity coverage is listed in the [decoder test map](decoder-session.md#test-map).
+- [`FlacMetadataInitializationTest.cpp`](../../../test/audio/FlacMetadataInitializationTest.cpp) covers raw-frame missing-STREAMINFO initialization diagnostics, implicit-header cases, and valid metadata/prefix and truncated-metadata controls.
+- Codec tests under [`test/audio/`](../../../test/audio) protect initialization failures, per-operation failure codes, and end-of-stream values.
+- [`AlacDecoderMalformedMp4Test.cpp`](../../../test/audio/AlacDecoderMalformedMp4Test.cpp) retains required ALAC/container failure coverage; optional-identity coverage is listed in the [decoder test map](decoder-session.md#test-map).
 
 ## Related documents
 

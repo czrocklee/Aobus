@@ -184,7 +184,7 @@ A decoder or filesystem call already executing on a worker may extend final work
 - [`Player`](../../../include/ao/audio/Player.h), [`Engine`](../../../include/ao/audio/Engine.h), [`DecoderSession`](../../../include/ao/audio/DecoderSession.h), and [`BackendProvider`](../../../include/ao/audio/BackendProvider.h)
 - [`PlaybackActions`](../../../app/include/ao/uimodel/playback/command/PlaybackActions.h), [`OutputDeviceViewModel`](../../../app/include/ao/uimodel/playback/output/OutputDeviceViewModel.h), and [`AudioQualityFormatter`](../../../app/include/ao/uimodel/playback/quality/AudioQualityFormatter.h)
 
-Focused tests live beside these owners under `test/unit/runtime/`, `test/unit/audio/`, and `test/unit/uimodel/playback/`. The linked topic pages identify the tests for each exact contract.
+Focused tests live beside these owners under `test/runtime/`, `test/audio/`, and `test/uimodel/playback/`. The linked topic pages identify the tests for each exact contract.
 
 ## Related architecture
 
