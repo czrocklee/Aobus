@@ -9,7 +9,6 @@ import argparse
 import os
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 from ..core import builddir, buildlock, compiler_cache, phases, workspace_cache
@@ -199,6 +198,27 @@ def scoped_stats(
     return rows
 
 
+def _split_gcov_stdout(stdout: str) -> list[str]:
+    """Split `gcov -t` stdout into per-source blocks at the lineno-0 Source header.
+
+    Each block is the exact text gcov writes into one .gcov file, so the same
+    parse_gcov_text handles it unchanged.
+    """
+    blocks: list[str] = []
+    current: list[str] = []
+    for line in stdout.splitlines():
+        parts = line.split(":", 2)
+        if len(parts) >= 3 and parts[1].strip() == "0" and parts[2].startswith("Source:"):
+            if current:
+                blocks.append("\n".join(current))
+            current = [line]
+        elif current:
+            current.append(line)
+    if current:
+        blocks.append("\n".join(current))
+    return blocks
+
+
 def collect_coverage(build_dir: Path) -> dict[str, dict[int, tuple[int | None, str]]]:
     """Merge production coverage from all instrumented project and test objects."""
     gcda_files = sorted(
@@ -208,33 +228,47 @@ def collect_coverage(build_dir: Path) -> dict[str, dict[int, tuple[int | None, s
         raise die("no coverage data generated. Did the tests run successfully?")
 
     merged: dict[str, dict[int, tuple[int | None, str]]] = {}
-    with tempfile.TemporaryDirectory(prefix="ao-gcov-") as temporary:
-        report_dir = Path(temporary)
-        for gcda in gcda_files:
-            result = subprocess.run(
-                ["gcov", "--preserve-paths", str(absolute_path(gcda))], cwd=report_dir, capture_output=True, text=True
-            )
-            if result.returncode != 0:
-                detail = (result.stdout + result.stderr).strip()
-                raise die(f"gcov failed for {gcda} (exit {result.returncode}); coverage is incomplete.\n{detail}")
-            reports = list(report_dir.glob("*.gcov"))
-            if not reports:
-                raise die(f"gcov produced no reports for {gcda}; coverage is incomplete.")
-            for gcov_file in reports:
-                source, lines = parse_gcov_text(gcov_file.read_text(encoding="utf-8", errors="replace"))
-                gcov_file.unlink()
-                if source is None:
-                    raise die(f"gcov report {gcov_file.name} has no source; coverage is incomplete.")
-                source_path = Path(source)
-                if not source_path.is_absolute():
-                    source_path = absolute_path(build_dir / source_path)
-                try:
-                    rel = absolute_path(source_path).relative_to(PROJECT_ROOT).as_posix()
-                except ValueError:
-                    continue
-                if not rel.startswith(tuple(f"{top}/" for top in REPORTED_TOP_DIRS)):
-                    continue
-                merge_report(merged.setdefault(rel, {}), lines)
+    for gcda in gcda_files:
+        # ccache (CCACHE_BASEDIR) makes GCC record project source paths relative
+        # to the build directory, so gcov must run from there to read them; -t
+        # sends the .gcov text to stdout so no report files touch the build
+        # tree. --preserve-paths stays required under -t: without it gcov emits
+        # header-only text for the relative-spelled project sources.
+        result = subprocess.run(
+            ["gcov", "--preserve-paths", "-t", str(absolute_path(gcda))],
+            cwd=build_dir,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            detail = (result.stdout + result.stderr).strip()
+            raise die(f"gcov failed for {gcda} (exit {result.returncode}); coverage is incomplete.\n{detail}")
+        blocks = _split_gcov_stdout(result.stdout)
+        if not blocks:
+            raise die(f"gcov produced no reports for {gcda}; coverage is incomplete.")
+        for block in blocks:
+            source, lines = parse_gcov_text(block)
+            if source is None:
+                raise die(f"gcov report for {gcda} has no source; coverage is incomplete.")
+            source_path = Path(source)
+            if not source_path.is_absolute():
+                source_path = absolute_path(build_dir / source_path)
+            try:
+                rel = absolute_path(source_path).relative_to(PROJECT_ROOT).as_posix()
+            except ValueError:
+                continue
+            if not rel.startswith(tuple(f"{top}/" for top in REPORTED_TOP_DIRS)):
+                continue
+            if not lines:
+                # An openable source always contributes its text lines; a block
+                # holding only lineno-0 headers means gcov could not read that
+                # source, so its measurement would silently be empty. Fail
+                # closed instead of reporting zero coverage for the file.
+                raise die(
+                    f"gcov could not read project source {rel} for {gcda}; coverage is incomplete.\n"
+                    f"{result.stderr.strip()}"
+                )
+            merge_report(merged.setdefault(rel, {}), lines)
     return merged
 
 
