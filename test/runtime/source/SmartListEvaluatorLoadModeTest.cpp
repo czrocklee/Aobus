@@ -16,8 +16,7 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("SmartListEvaluator - one reload evaluates pending metadata and property predicates",
-            "[runtime][unit][smart-list][membership]")
+  TEST_CASE("SmartListEvaluator - one reload evaluates pending metadata and property predicates")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto engine = SmartListEvaluator{libraryFixture.library()};
@@ -40,8 +39,7 @@ namespace ao::rt::test
     CHECK(sourceTrackIds(propertyList) == std::vector{t1});
   }
 
-  TEST_CASE("SmartListEvaluator - a compound metadata and property predicate filters membership",
-            "[runtime][unit][smart-list][membership]")
+  TEST_CASE("SmartListEvaluator - a compound metadata and property predicate filters membership")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto engine = SmartListEvaluator{libraryFixture.library()};

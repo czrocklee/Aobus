@@ -155,8 +155,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("LibraryImportExportWorkflow - scan reports up-to-date empty library",
-            "[gtk][integration][portal][import-export][scan]")
+  TEST_CASE("LibraryImportExportWorkflow - scan reports up-to-date empty library")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -180,8 +179,7 @@ namespace ao::gtk::test
     CHECK(std::get<std::string>(feed.entries.back().message) == "Library is up to date");
   }
 
-  TEST_CASE("LibraryImportExportWorkflow - scan mutates only when files change",
-            "[gtk][integration][portal][import-export][scan]")
+  TEST_CASE("LibraryImportExportWorkflow - scan mutates only when files change")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -279,8 +277,7 @@ namespace ao::gtk::test
     CHECK(trackTitles(fixture) == std::vector<std::string>{"Test Title"});
   }
 
-  TEST_CASE("LibraryImportExportWorkflow - fast bootstrap background identity relinks a moved file",
-            "[gtk][integration][portal][import-export][scan]")
+  TEST_CASE("LibraryImportExportWorkflow - fast bootstrap background identity relinks a moved file")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -308,8 +305,7 @@ namespace ao::gtk::test
     CHECK(trackUris(fixture) == std::vector<std::string>{"renamed.flac"});
   }
 
-  TEST_CASE("LibraryImportExportWorkflow - scan reports relinked moved files",
-            "[gtk][integration][portal][import-export][scan]")
+  TEST_CASE("LibraryImportExportWorkflow - scan reports relinked moved files")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -332,8 +328,7 @@ namespace ao::gtk::test
     CHECK(trackUris(fixture) == std::vector<std::string>{"renamed.flac"});
   }
 
-  TEST_CASE("LibraryImportExportWorkflow - scan reports missing files needing review",
-            "[gtk][integration][portal][import-export][scan]")
+  TEST_CASE("LibraryImportExportWorkflow - scan reports missing files needing review")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -354,8 +349,7 @@ namespace ao::gtk::test
       { return hasNotification(fixture, rt::NotificationSeverity::Warning, "1 missing file needs review"); }));
   }
 
-  TEST_CASE("LibraryImportExportWorkflow - scan reports missing files even when errors occur",
-            "[gtk][integration][portal][import-export][scan]")
+  TEST_CASE("LibraryImportExportWorkflow - scan reports missing files even when errors occur")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -383,8 +377,7 @@ namespace ao::gtk::test
       }));
   }
 
-  TEST_CASE("LibraryImportExportWorkflow - scan reports error-only plans without up-to-date success",
-            "[gtk][integration][portal][import-export][scan]")
+  TEST_CASE("LibraryImportExportWorkflow - scan reports error-only plans without up-to-date success")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -414,8 +407,7 @@ namespace ao::gtk::test
     CHECK_FALSE(hasNotification(fixture, rt::NotificationSeverity::Info, "Library is up to date"));
   }
 
-  TEST_CASE("LibraryImportExportWorkflow - export writes scanned track metadata to YAML",
-            "[gtk][integration][portal][import-export][yaml]")
+  TEST_CASE("LibraryImportExportWorkflow - export writes scanned track metadata to YAML")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -442,8 +434,7 @@ namespace ao::gtk::test
     CHECK(std::string_view{exportedYaml}.contains("Test Artist"));
   }
 
-  TEST_CASE("LibraryImportExportWorkflow - import restores track metadata through runtime changes",
-            "[gtk][integration][portal][import-export][yaml]")
+  TEST_CASE("LibraryImportExportWorkflow - import restores track metadata through runtime changes")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto sourceFixture = GtkRuntimeFixture{};
@@ -480,8 +471,7 @@ namespace ao::gtk::test
     CHECK(allTracks->size() == 1);
   }
 
-  TEST_CASE("LibraryImportExportWorkflow - restore waits for explicit preview confirmation",
-            "[gtk][integration][portal][import-export]")
+  TEST_CASE("LibraryImportExportWorkflow - restore waits for explicit preview confirmation")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -523,8 +513,7 @@ library:
     CHECK_FALSE(hasLibraryTrackTitle(fixture, "Restored"));
   }
 
-  TEST_CASE("LibraryImportExportWorkflow - confirmation becomes inert after workflow destruction",
-            "[gtk][integration][portal][import-export][async]")
+  TEST_CASE("LibraryImportExportWorkflow - confirmation becomes inert after workflow destruction")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -599,8 +588,7 @@ library:
     }
   }
 
-  TEST_CASE("LibraryImportExportWorkflow - destruction after commit suppresses frontend completion",
-            "[gtk][integration][portal][import-export][concurrency]")
+  TEST_CASE("LibraryImportExportWorkflow - destruction after commit suppresses frontend completion", "[concurrency]")
   {
     auto tempDir = ao::test::TempDir{};
     auto executorPtr = std::make_unique<rt::test::ManualExecutor>();
@@ -680,8 +668,7 @@ library:
       [](auto const& entry) { return std::get<std::string>(entry.message) == "Library imported successfully"; }));
   }
 
-  TEST_CASE("LibraryImportExportWorkflow - import reports read errors without mutation",
-            "[gtk][integration][portal][import-export][error]")
+  TEST_CASE("LibraryImportExportWorkflow - import reports read errors without mutation")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -699,8 +686,7 @@ library:
     CHECK_FALSE(hasNotification(fixture, rt::NotificationSeverity::Error, "Import failed: Internal error"));
   }
 
-  TEST_CASE("LibraryImportExportWorkflow - destruction cancels pending import without internal error",
-            "[gtk][integration][portal][import-export][concurrency]")
+  TEST_CASE("LibraryImportExportWorkflow - destruction cancels pending import without internal error", "[concurrency]")
   {
     auto tempDir = ao::test::TempDir{};
     auto executorPtr = std::make_unique<rt::test::ManualExecutor>();

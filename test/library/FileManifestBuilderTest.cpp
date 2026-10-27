@@ -20,7 +20,7 @@
 
 namespace ao::library::test
 {
-  TEST_CASE("FileManifestBuilder - constructs valid payload", "[library][unit][manifest]")
+  TEST_CASE("FileManifestBuilder - constructs valid payload")
   {
     auto const signature = utility::xxh3Hash128("audio payload");
     constexpr auto kMtime = FileTimestamp{.seconds = 1719835200, .nanoseconds = 123456789};
@@ -45,7 +45,7 @@ namespace ao::library::test
     CHECK(view.status() == FileStatus::Error);
   }
 
-  TEST_CASE("FileManifestBuilder - constructs from view", "[library][unit][manifest]")
+  TEST_CASE("FileManifestBuilder - constructs from view")
   {
     auto const signature = utility::xxh3Hash128("copied payload");
     constexpr auto kMtime = FileTimestamp{.seconds = 1719835200, .nanoseconds = 987654321};
@@ -74,8 +74,7 @@ namespace ao::library::test
     CHECK(view2.status() == FileStatus::Missing);
   }
 
-  TEST_CASE("FileManifestBuilder - stores epoch zero and absence as distinct canonical facts",
-            "[library][unit][manifest]")
+  TEST_CASE("FileManifestBuilder - stores epoch zero and absence as distinct canonical facts")
   {
     // Epoch zero is a present instant, not the canonical absent encoding.
     {
@@ -111,7 +110,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("FileManifestBuilder - round-trips negative and wide instants exactly", "[library][unit][manifest]")
+  TEST_CASE("FileManifestBuilder - round-trips negative and wide instants exactly")
   {
     auto const roundTrip = [](FileTimestamp const timestamp)
     {
@@ -132,7 +131,7 @@ namespace ao::library::test
     roundTrip(FileTimestamp{.seconds = std::numeric_limits<std::int64_t>::min(), .nanoseconds = 999999999});
   }
 
-  TEST_CASE("FileManifestBuilder - unbound value owns canonical URI and payload snapshots", "[library][unit][manifest]")
+  TEST_CASE("FileManifestBuilder - unbound value owns canonical URI and payload snapshots")
   {
     auto uri = std::string{"snapshot.flac"};
     constexpr auto kMtime = FileTimestamp{.seconds = 1719835200, .nanoseconds = 13};
@@ -155,7 +154,7 @@ namespace ao::library::test
     CHECK(view.status() == FileStatus::Missing);
   }
 
-  TEST_CASE("FileManifestBuilder - validation is independent of the Track binding", "[library][unit][manifest]")
+  TEST_CASE("FileManifestBuilder - validation is independent of the Track binding")
   {
     auto const builder = FileManifestBuilder::makeEmpty();
     auto unbound = ao::test::requireValue(builder.validate("unbound.flac"));
@@ -168,7 +167,7 @@ namespace ao::library::test
     CHECK(FileManifestView{prepared.bytes()}.trackId() == TrackId{5});
   }
 
-  TEST_CASE("FileManifestBuilder - validation rejects broken record facts", "[library][unit][manifest]")
+  TEST_CASE("FileManifestBuilder - validation rejects broken record facts")
   {
     auto const invalidStatusRes =
       FileManifestBuilder::makeEmpty().status(static_cast<FileStatus>(0xff)).validate("status.flac");
@@ -182,7 +181,7 @@ namespace ao::library::test
     CHECK(pendingSignatureRes.error().code == Error::Code::CorruptData);
   }
 
-  TEST_CASE("FileManifestBuilder - validation rejects malformed mtime nanoseconds", "[library][unit][manifest]")
+  TEST_CASE("FileManifestBuilder - validation rejects malformed mtime nanoseconds")
   {
     SECTION("the last valid fraction is accepted")
     {
@@ -211,7 +210,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("FileManifestBuilder - validation rejects a non-canonical URI", "[library][unit][manifest]")
+  TEST_CASE("FileManifestBuilder - validation rejects a non-canonical URI")
   {
     auto const unboundRes = FileManifestBuilder::makeEmpty().validate("../outside.flac");
 
@@ -219,8 +218,7 @@ namespace ao::library::test
     CHECK(unboundRes.error().code == Error::Code::InvalidInput);
   }
 
-  TEST_CASE("FileManifestBuilder - the complete payload validator still rejects Track zero",
-            "[library][unit][manifest]")
+  TEST_CASE("FileManifestBuilder - the complete payload validator still rejects Track zero")
   {
     auto const payload = FileManifestBuilder::makeEmpty().serialize();
     auto const validationRes = validateFileManifestPayload(payload);

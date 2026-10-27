@@ -55,7 +55,7 @@ namespace ao::gtk::test
     };
   } // namespace
 
-  TEST_CASE("ActivityStatusWidget - renders compact notification state", "[gtk][unit][status][activity]")
+  TEST_CASE("ActivityStatusWidget - renders compact notification state")
   {
     auto mounted = MountedActivityStatus{};
     auto& runtime = mounted.runtime();
@@ -83,7 +83,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("ActivityStatusWidget - separates compact dismissal from feed retention", "[gtk][unit][status][activity]")
+  TEST_CASE("ActivityStatusWidget - separates compact dismissal from feed retention")
   {
     auto mounted = MountedActivityStatus{};
     auto& runtime = mounted.runtime();
@@ -106,8 +106,7 @@ namespace ao::gtk::test
     CHECK(retainedMessage->get_text() == "Scan failed");
   }
 
-  TEST_CASE("ActivityStatusWidget - enables minimal detail popover only when detail exists",
-            "[gtk][unit][status][activity]")
+  TEST_CASE("ActivityStatusWidget - enables minimal detail popover only when detail exists")
   {
     auto mounted = MountedActivityStatus{};
     auto& runtime = mounted.runtime();
@@ -166,8 +165,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("ActivityStatusWidget - long notification details wrap without losing diagnostic text",
-            "[gtk][unit][status][activity]")
+  TEST_CASE("ActivityStatusWidget - long notification details wrap without losing diagnostic text")
   {
     auto mounted = MountedActivityStatus{};
     auto message = std::string{};
@@ -210,8 +208,7 @@ namespace ao::gtk::test
     CHECK(height.natural > unwrappedHeight.natural);
   }
 
-  TEST_CASE("ActivityStatusWidget - detail dismiss hides row without deleting notification feed",
-            "[gtk][unit][status][activity]")
+  TEST_CASE("ActivityStatusWidget - detail dismiss hides row without deleting notification feed")
   {
     auto mounted = MountedActivityStatus{};
     auto& runtime = mounted.runtime();
@@ -233,7 +230,7 @@ namespace ao::gtk::test
     CHECK_FALSE(status.detailButton().get_sensitive());
   }
 
-  TEST_CASE("ActivityStatusWidget - classic inline reserves idle space", "[gtk][unit][status][activity]")
+  TEST_CASE("ActivityStatusWidget - classic inline reserves idle space")
   {
     auto options = ActivityStatusWidgetOptions{.variant = ActivityStatusWidgetVariant::ClassicInline,
                                                .idleBehavior = ActivityStatusWidgetIdleBehavior::Reserve,

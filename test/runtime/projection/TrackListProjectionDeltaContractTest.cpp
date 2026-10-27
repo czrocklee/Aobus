@@ -39,8 +39,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("TrackListProjection - delta validation enforces sequential ranges and singleton lifecycle batches",
-            "[runtime][unit][projection][delta]")
+  TEST_CASE("TrackListProjection - delta validation enforces sequential ranges and singleton lifecycle batches")
   {
     auto const move = TrackListProjectionDeltaBatch{
       .deltas =
@@ -76,8 +75,7 @@ namespace ao::rt::test
     CHECK_FALSE(isValidTrackListProjectionDeltaBatch(invalidTerminal, 3));
   }
 
-  TEST_CASE("TrackListProjection - empty sort mirrors a middle source insertion exactly",
-            "[runtime][unit][projection][source-order]")
+  TEST_CASE("TrackListProjection - empty sort mirrors a middle source insertion exactly")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const first = libraryFixture.addTrack(library::test::makeTrackSpec("First", 2020));
@@ -101,8 +99,7 @@ namespace ao::rt::test
     CHECK(projectionTrackIds(projection) == expected);
   }
 
-  TEST_CASE("TrackListProjection - empty sort preserves source positions through update removal and reset",
-            "[runtime][unit][projection][source-order]")
+  TEST_CASE("TrackListProjection - empty sort preserves source positions through update removal and reset")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const first = libraryFixture.addTrack(library::test::makeTrackSpec("First", 2020));
@@ -146,8 +143,7 @@ namespace ao::rt::test
     CHECK(projectionTrackIds(projection) == std::vector{second, third, fourth});
   }
 
-  TEST_CASE("TrackListProjection - subscription observes a source mutation triggered by its initial reset",
-            "[runtime][unit][projection][subscription]")
+  TEST_CASE("TrackListProjection - subscription observes a source mutation triggered by its initial reset")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const first = libraryFixture.addTrack(library::test::makeTrackSpec("First", 2020));
@@ -180,8 +176,7 @@ namespace ao::rt::test
     CHECK(projectionTrackIds(projection) == expected);
   }
 
-  TEST_CASE("TrackListProjection - empty sort publishes a source move as one sequential batch",
-            "[runtime][unit][projection][source-order]")
+  TEST_CASE("TrackListProjection - empty sort publishes a source move as one sequential batch")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const first = libraryFixture.addTrack(library::test::makeTrackSpec("First", 2020));
@@ -214,7 +209,7 @@ namespace ao::rt::test
     CHECK(projectionTrackIds(projection) == expected);
   }
 
-  TEST_CASE("TrackListProjection - sorted source-only reorder does not publish", "[runtime][unit][projection][sorted]")
+  TEST_CASE("TrackListProjection - sorted source-only reorder does not publish")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const first = libraryFixture.addTrack(library::test::makeTrackSpec("A", 2020));
@@ -242,8 +237,7 @@ namespace ao::rt::test
     CHECK(batches.empty());
   }
 
-  TEST_CASE("TrackListProjection - sorted metadata move publishes one atomic projection batch",
-            "[runtime][unit][projection][sorted]")
+  TEST_CASE("TrackListProjection - sorted metadata move publishes one atomic projection batch")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const first = libraryFixture.addTrack(library::test::makeTrackSpec("A", 2020));
@@ -275,7 +269,7 @@ namespace ao::rt::test
     CHECK(projectionTrackIds(projection) == expected);
   }
 
-  TEST_CASE("TrackListProjection - detached construction applies only captured order", "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - detached construction applies only captured order")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const first = libraryFixture.addTrack(library::test::makeTrackSpec("A", 2020));

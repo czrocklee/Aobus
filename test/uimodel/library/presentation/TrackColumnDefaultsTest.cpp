@@ -59,8 +59,7 @@ namespace ao::uimodel::test
     constexpr auto kFixedTextFields = std::to_array<F>({F::Codec, F::TechnicalSummary, F::Quality});
   } // namespace
 
-  TEST_CASE("trackColumnDefaults sizes and aligns every presentable field by its value role",
-            "[uimodel][unit][presentation]")
+  TEST_CASE("trackColumnDefaults sizes and aligns every presentable field by its value role")
   {
     for (auto const& definition : rt::trackFieldDefinitions())
     {
@@ -90,8 +89,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("trackColumnDefaults gives flexible text one shared minimum above fixed columns",
-            "[uimodel][unit][presentation]")
+  TEST_CASE("trackColumnDefaults gives flexible text one shared minimum above fixed columns")
   {
     auto const sharedMinimum = trackColumnDefaults(F::Title).minimumWidth;
     CHECK(sharedMinimum > TrackColumnDefaults::kDefaultMinimumWidth);
@@ -103,7 +101,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("trackColumnDefaults weights primary text above secondary text", "[uimodel][unit][presentation]")
+  TEST_CASE("trackColumnDefaults weights primary text above secondary text")
   {
     auto const weight = [](F const field) { return trackColumnDefaults(field).weight; };
 
@@ -120,7 +118,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("trackFieldColumnTitle uses the localized field label", "[uimodel][unit][presentation]")
+  TEST_CASE("trackFieldColumnTitle uses the localized field label")
   {
     auto const& textCatalog = ao::test::englishMessageCatalog();
     CHECK(trackFieldColumnTitle(textCatalog, F::AlbumArtist) == "Album Artist");

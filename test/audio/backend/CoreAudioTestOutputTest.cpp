@@ -47,8 +47,7 @@ namespace ao::audio::backend::test
     }
   } // namespace
 
-  TEST_CASE("resolveCoreAudioTestOutput returns the owning non-default exact Core Audio device",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("resolveCoreAudioTestOutput returns the owning non-default exact Core Audio device")
   {
     auto devices = std::vector<Device>{{.id = DeviceId{"builtin-uid"},
                                         .displayName = "Built-in Output",
@@ -80,7 +79,7 @@ namespace ao::audio::backend::test
     CHECK(selectedRes->backendId == kBackendCoreAudio);
   }
 
-  TEST_CASE("resolveCoreAudioTestOutput rejects an empty UID without selecting a device", "[audio][unit][coreaudio]")
+  TEST_CASE("resolveCoreAudioTestOutput rejects an empty UID without selecting a device")
   {
     auto const devices = std::vector<Device>{{.id = DeviceId{"builtin-uid"},
                                               .displayName = "Built-in Output",
@@ -94,7 +93,7 @@ namespace ao::audio::backend::test
     CHECK(selectedRes.error().code == Error::Code::InvalidInput);
   }
 
-  TEST_CASE("resolveCoreAudioTestOutput does not fall back from a non-exact UID", "[audio][unit][coreaudio]")
+  TEST_CASE("resolveCoreAudioTestOutput does not fall back from a non-exact UID")
   {
     auto const devices = std::vector<Device>{{.id = DeviceId{"builtin-uid"},
                                               .displayName = "Built-in Output",
@@ -144,8 +143,7 @@ namespace ao::audio::backend::test
     CHECK(selectedRes.error().code == Error::Code::DeviceNotFound);
   }
 
-  TEST_CASE("resolveCoreAudioTestOutput rejects a duplicate Core Audio UID instead of selecting the first",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("resolveCoreAudioTestOutput rejects a duplicate Core Audio UID instead of selecting the first")
   {
     auto const devices = std::vector<Device>{{.id = DeviceId{"BlackHole2ch_UID"},
                                               .displayName = "BlackHole 2ch",
@@ -169,7 +167,7 @@ namespace ao::audio::backend::test
     CHECK(selectedRes.error().code == Error::Code::InvalidState);
   }
 
-  TEST_CASE("resolveCoreAudioTestOutput does not accept another backend's matching UID", "[audio][unit][coreaudio]")
+  TEST_CASE("resolveCoreAudioTestOutput does not accept another backend's matching UID")
   {
     auto const devices = std::vector<Device>{{.id = DeviceId{"builtin-uid"},
                                               .displayName = "Built-in Output",
@@ -188,8 +186,7 @@ namespace ao::audio::backend::test
     CHECK(selectedRes.error().code == Error::Code::DeviceNotFound);
   }
 
-  TEST_CASE("requestedCoreAudioTestOutput returns an empty selection when the UID environment is unset",
-            "[audio][integration][coreaudio]")
+  TEST_CASE("requestedCoreAudioTestOutput returns an empty selection when the UID environment is unset")
   {
     auto const result = runCoreAudioOutputProbe("unset");
 
@@ -197,8 +194,7 @@ namespace ao::audio::backend::test
     CHECK(result.standardOutput == "unset: absent\n");
   }
 
-  TEST_CASE("requestedCoreAudioTestOutput rejects an empty UID environment value as invalid input",
-            "[audio][integration][coreaudio]")
+  TEST_CASE("requestedCoreAudioTestOutput rejects an empty UID environment value as invalid input")
   {
     auto const result = runCoreAudioOutputProbe("empty");
 
@@ -207,8 +203,7 @@ namespace ao::audio::backend::test
           std::format("empty: error code={}\n", std::to_underlying(Error::Code::InvalidInput)));
   }
 
-  TEST_CASE("requestedCoreAudioTestOutput rejects an unmatched UID environment value as device not found",
-            "[audio][integration][coreaudio]")
+  TEST_CASE("requestedCoreAudioTestOutput rejects an unmatched UID environment value as device not found")
   {
     auto const result = runCoreAudioOutputProbe("missing");
 

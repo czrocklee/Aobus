@@ -86,7 +86,7 @@ namespace ao::audio::test
     }
   } // namespace
 
-  TEST_CASE("QualityAnalyzer - source history caps confidence without changing equal modes", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - source history caps confidence without changing equal modes")
   {
     auto graph = mappedChannelGraph();
     auto expectedConfidence = ChannelConfidence::Verified;
@@ -113,7 +113,7 @@ namespace ao::audio::test
     CHECK(result.assessments[0].optFormat == graph.nodes[0].optFormat);
   }
 
-  TEST_CASE("QualityAnalyzer - every native role needs its own mapping observation", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - every native role needs its own mapping observation")
   {
     auto graph = mappedChannelGraph();
 
@@ -152,8 +152,7 @@ namespace ao::audio::test
     REQUIRE(result.assessments.size() == 6U);
   }
 
-  TEST_CASE("QualityAnalyzer - absent source identity or delivery path has unknown confidence",
-            "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - absent source identity or delivery path has unknown confidence")
   {
     auto graph = mappedChannelGraph();
 
@@ -188,7 +187,7 @@ namespace ao::audio::test
     CHECK(result.channelConfidence == ChannelConfidence::Unknown);
   }
 
-  TEST_CASE("QualityAnalyzer - unmapped delivery does not invent numerical loss", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - unmapped delivery does not invent numerical loss")
   {
     auto graph = mappedChannelGraph();
     auto expectedConfidence = ChannelConfidence::Unverified;
@@ -242,8 +241,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("QualityAnalyzer - compatible native subsets of a complete source are uncertainty only",
-            "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - compatible native subsets of a complete source are uncertainty only")
   {
     auto graph = mappedChannelGraph(2, 0x3); // Complete FL FR source and application path
     setIdentity(graph.nodes[3], 2, 0x1);     // Native FL is known; FR is not observed, not contradicted.
@@ -297,8 +295,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("QualityAnalyzer - native positions outside the assigned WAVE bits cannot complete an identity",
-            "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - native positions outside the assigned WAVE bits cannot complete an identity")
   {
     auto graph = mappedChannelGraph(); // Identified FL FR source with a complete application path.
     std::uint32_t nativeMask = 0x80000001;
@@ -325,7 +322,7 @@ namespace ao::audio::test
     CHECK(result.fullyVerified);
   }
 
-  TEST_CASE("QualityAnalyzer - source positions outside the assigned WAVE bits stay unknown", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - source positions outside the assigned WAVE bits stay unknown")
   {
     auto graph = mappedChannelGraph();
 
@@ -344,8 +341,7 @@ namespace ao::audio::test
     CHECK(result.channelConfidence == ChannelConfidence::Unknown);
   }
 
-  TEST_CASE("QualityAnalyzer - application node identities cannot borrow native delivery fields",
-            "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - application node identities cannot borrow native delivery fields")
   {
     auto graph = mappedChannelGraph();
     std::size_t appIndex = 1;
@@ -372,8 +368,7 @@ namespace ao::audio::test
     CHECK(result.fullyVerified);
   }
 
-  TEST_CASE("QualityAnalyzer - a complete assigned-WAVE candidate in either field completes a native identity",
-            "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - a complete assigned-WAVE candidate in either field completes a native identity")
   {
     auto graph = mappedChannelGraph();
     auto expectedQuality = Quality::BitwisePerfect;
@@ -450,8 +445,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("QualityAnalyzer - complementary partial position fields cannot combine into a complete identity",
-            "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - complementary partial position fields cannot combine into a complete identity")
   {
     auto graph = mappedChannelGraph();
 
@@ -476,8 +470,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("QualityAnalyzer - known speaker substitutions and count changes are genuine interventions",
-            "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - known speaker substitutions and count changes are genuine interventions")
   {
     auto graph = mappedChannelGraph(4, 0x33); // FL FR BL BR
     std::uint8_t channels = 4;
@@ -552,7 +545,7 @@ namespace ao::audio::test
     CHECK(stream.findings[0].optToFormat == graph.nodes[3].optFormat);
   }
 
-  TEST_CASE("QualityAnalyzer - uncertainty cannot hide a known channel alteration", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - uncertainty cannot hide a known channel alteration")
   {
     auto graph = mappedChannelGraph(1, 0x4);
     std::size_t findingIndex = 3;
@@ -604,7 +597,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("QualityAnalyzer - a mapped same-set permutation has no numerical penalty", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - a mapped same-set permutation has no numerical penalty")
   {
     auto graph = mappedChannelGraph(4, 0x33); // Canonical FL FR BL BR
 
@@ -648,7 +641,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("QualityAnalyzer - conflicting known positions remain complete while mapped", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - conflicting known positions remain complete while mapped")
   {
     auto graph = mappedChannelGraph(4, 0x33);
     std::size_t nativeIndex = 3;
@@ -692,8 +685,7 @@ namespace ao::audio::test
     CHECK(finding.optToSpeakerMask == 0x107U);
   }
 
-  TEST_CASE("QualityAnalyzer - complete native roles continue a local conflict without repeating its transition",
-            "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - complete native roles continue a local conflict without repeating its transition")
   {
     auto graph = mappedChannelGraph();
     graph.nodes[3].channelDelivery.nativeSpeakerMask = 0x30; // Observed BL BR, not the format's FL FR.
@@ -753,8 +745,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("QualityAnalyzer - later role changes remain distinct after a local native conflict",
-            "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - later role changes remain distinct after a local native conflict")
   {
     auto graph = mappedChannelGraph();
     graph.nodes[3].channelDelivery.nativeSpeakerMask = 0x30; // First FL FR -> BL BR.
@@ -795,8 +786,7 @@ namespace ao::audio::test
     CHECK(third.optToSpeakerMask == 0x30U);
   }
 
-  TEST_CASE("QualityAnalyzer - partial and invalid native reports cannot replace incoming role constraints",
-            "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - partial and invalid native reports cannot replace incoming role constraints")
   {
     auto graph = mappedChannelGraph();
     auto expectedConfidence = ChannelConfidence::Unverified;
@@ -837,8 +827,7 @@ namespace ao::audio::test
     CHECK(finding.optToSpeakerMask == graph.nodes[3].channelDelivery.nativeSpeakerMask);
   }
 
-  TEST_CASE("QualityAnalyzer - application nodes cannot report a native shared channel conversion",
-            "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - application nodes cannot report a native shared channel conversion")
   {
     auto graph = mappedChannelGraph();
     std::size_t applicationIndex = 0;
@@ -871,8 +860,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("QualityAnalyzer - independently converting native boundaries retain separate findings",
-            "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - independently converting native boundaries retain separate findings")
   {
     auto graph = mappedChannelGraph();
     graph.nodes[3].channelDelivery.hasSharedConversion = true;
@@ -910,8 +898,7 @@ namespace ao::audio::test
     CHECK(result.assessments[4].findings.front().optToFormat == graph.nodes[4].optFormat);
   }
 
-  TEST_CASE("QualityAnalyzer - count changes retain actual native sets despite conflicting local format roles",
-            "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - count changes retain actual native sets despite conflicting local format roles")
   {
     std::uint8_t sourceChannels = 0;
     std::uint8_t sinkChannels = 0;
@@ -964,8 +951,7 @@ namespace ao::audio::test
     CHECK_FALSE(hasChannelFinding(result.assessments[5], QualityFindingKind::ChannelMapping));
   }
 
-  TEST_CASE("QualityAnalyzer - a formatless role conflict retains the known comparison channel count",
-            "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - a formatless role conflict retains the known comparison channel count")
   {
     auto graph = mappedChannelGraph(); // Source, Decoder and Engine stay identified FL FR.
 
@@ -1026,8 +1012,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("QualityAnalyzer - observed native sets preserve cross-boundary identity contradictions",
-            "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - observed native sets preserve cross-boundary identity contradictions")
   {
     auto graph = mappedChannelGraph(4, 0x33);
     std::size_t changedIndex = 3;
@@ -1089,7 +1074,7 @@ namespace ao::audio::test
     CHECK(finding.optToSpeakerMask.value_or(signalFormat(*finding.optToFormat).speakerMask) == 0x107U);
   }
 
-  TEST_CASE("QualityAnalyzer - partial observations retain count-bounded role contradictions", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - partial observations retain count-bounded role contradictions")
   {
     auto graph = mappedChannelGraph(2, 0x1); // Only FL is established at the source.
     setIdentity(graph.nodes[1], 2, 0);
@@ -1110,8 +1095,7 @@ namespace ao::audio::test
     CHECK(hasChannelFinding(result.assessments[4], QualityFindingKind::ChannelMapping));
   }
 
-  TEST_CASE("QualityAnalyzer - current native uncertainty cannot borrow application mapping facts",
-            "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - current native uncertainty cannot borrow application mapping facts")
   {
     auto graph = mappedChannelGraph();
     // An initial open may have established mapping. Only current graph-native
@@ -1135,8 +1119,7 @@ namespace ao::audio::test
     CHECK(std::get<PcmFormat>(*result.assessments[3].optFormat).speakerMask == 0U);
   }
 
-  TEST_CASE("QualityAnalyzer - confidence follows only the selected active sink-reaching path",
-            "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - confidence follows only the selected active sink-reaching path")
   {
     auto graph = mappedChannelGraph();
     graph.nodes.push_back({.id = "cycle-a",
@@ -1165,7 +1148,7 @@ namespace ao::audio::test
     CHECK(result.assessments.back().nodeId == "sink");
   }
 
-  TEST_CASE("QualityAnalyzer - channel confidence uses the first active sink-reaching branch", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - channel confidence uses the first active sink-reaching branch")
   {
     auto graph = mappedChannelGraph();
     graph.nodes.push_back({.id = "alternate",
@@ -1200,8 +1183,7 @@ namespace ao::audio::test
     CHECK(result.assessments.back().nodeId == expectedSink);
   }
 
-  TEST_CASE("QualityAnalyzer - format presence verification stays independent of channel confidence",
-            "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - format presence verification stays independent of channel confidence")
   {
     auto graph = mappedChannelGraph();
     graph.nodes[3].optFormat.reset();
@@ -1215,8 +1197,7 @@ namespace ao::audio::test
     CHECK_FALSE(result.assessments[3].optFormat);
   }
 
-  TEST_CASE("QualityAnalyzer - channel interventions invalidate integer precision round-trip proof",
-            "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - channel interventions invalidate integer precision round-trip proof")
   {
     auto graph = mappedChannelGraph(4, 0x33);
 
@@ -1270,8 +1251,7 @@ namespace ao::audio::test
     CHECK_FALSE(hasChannelFinding(result.assessments[5], QualityFindingKind::LosslessRoundTrip));
   }
 
-  TEST_CASE("QualityAnalyzer - channel uncertainty alone preserves numerical round-trip proof",
-            "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - channel uncertainty alone preserves numerical round-trip proof")
   {
     auto graph = mappedChannelGraph();
 

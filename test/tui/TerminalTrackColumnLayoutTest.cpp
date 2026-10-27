@@ -16,8 +16,7 @@
 
 namespace ao::tui::test
 {
-  TEST_CASE("TerminalTrackColumnLayout - applies persisted order visibility and cell widths",
-            "[tui][unit][track-column]")
+  TEST_CASE("TerminalTrackColumnLayout - applies persisted order visibility and cell widths")
   {
     auto const presentation = rt::TrackPresentationSpec{
       .id = "terminal",
@@ -54,7 +53,7 @@ namespace ao::tui::test
     CHECK(trackTableChromeColumns(3) == 12);
   }
 
-  TEST_CASE("TerminalTrackColumnLayout - bounds restored fixed widths in terminal cells", "[tui][unit][track-column]")
+  TEST_CASE("TerminalTrackColumnLayout - bounds restored fixed widths in terminal cells")
   {
     auto const presentation = rt::TrackPresentationSpec{
       .id = "terminal",
@@ -72,7 +71,7 @@ namespace ao::tui::test
     CHECK(layout.columns[1].columns == kMaximumTrackColumnWidthColumns);
   }
 
-  TEST_CASE("TerminalTrackColumnLayout - permits every presentation field to be hidden", "[tui][unit][track-column]")
+  TEST_CASE("TerminalTrackColumnLayout - permits every presentation field to be hidden")
   {
     auto const presentation = rt::TrackPresentationSpec{
       .id = "hidden",
@@ -86,7 +85,7 @@ namespace ao::tui::test
     CHECK(projectTerminalTrackColumnLayout(presentation, stored, 80).columns.empty());
   }
 
-  TEST_CASE("TerminalTrackColumnLayout - canonical resize survives viewport reflow", "[tui][unit][track-column]")
+  TEST_CASE("TerminalTrackColumnLayout - canonical resize survives viewport reflow")
   {
     auto const presentation = rt::TrackPresentationSpec{
       .id = "terminal",
@@ -138,7 +137,7 @@ namespace ao::tui::test
     CHECK(canonicalDuration->weight == -1.0);
   }
 
-  TEST_CASE("TerminalTrackColumnLayout - clamps pointer resize in terminal cells", "[tui][unit][track-column]")
+  TEST_CASE("TerminalTrackColumnLayout - clamps pointer resize in terminal cells")
   {
     auto const presentation = rt::TrackPresentationSpec{
       .id = "terminal",

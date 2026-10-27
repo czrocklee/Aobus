@@ -41,7 +41,7 @@ namespace ao::cli::test
     }
   } // namespace
 
-  TEST_CASE("CLI - tag and custom operands preserve literal brackets and commas", "[cli][integration][track][update]")
+  TEST_CASE("CLI - tag and custom operands preserve literal brackets and commas")
   {
     for (auto const* literal : {"[live]", "[]", "[[aabb]]", "[Smith, John]", "a,b"})
     {
@@ -68,8 +68,7 @@ namespace ao::cli::test
     }
   }
 
-  TEST_CASE("CLI - literal vector repeats attached forms and multiple operands retain order",
-            "[cli][integration][track][update]")
+  TEST_CASE("CLI - literal vector repeats attached forms and multiple operands retain order")
   {
     auto fixture = CliFixture{};
     auto const trackArg = std::to_string(fixture.addTrack(library::test::makeEmptyTrackSpec("vectors.flac")).raw());
@@ -138,7 +137,7 @@ namespace ao::cli::test
     CHECK(yaml::scalarView(tree.rootref()["title"]) == "Still after");
   }
 
-  TEST_CASE("CLI - attached literal values are not boolean flag overrides", "[cli][integration][track][update]")
+  TEST_CASE("CLI - attached literal values are not boolean flag overrides")
   {
     for (auto const* literal : {"false", "true", "{}", "[]", "[[aabb]]", "[a,b]"})
     {
@@ -163,8 +162,7 @@ namespace ao::cli::test
     }
   }
 
-  TEST_CASE("CLI - literal vectors use native short root numeric and delimiter context",
-            "[cli][integration][track][update]")
+  TEST_CASE("CLI - literal vectors use native short root numeric and delimiter context")
   {
     auto fixture = CliFixture{};
     auto const trackArg =
@@ -214,8 +212,7 @@ namespace ao::cli::test
           std::vector<std::string>{"--help", "--unknown", "-.5", "-12", "-leading", "[live]"});
   }
 
-  TEST_CASE("CLI - native dotted options and synthetic long remainders retain raw operand context",
-            "[cli][integration][track][update]")
+  TEST_CASE("CLI - native dotted options and synthetic long remainders retain raw operand context")
   {
     auto fixture = CliFixture{};
     auto const trackArg =
@@ -240,7 +237,7 @@ namespace ao::cli::test
     CHECK_FALSE(tree.rootref()["custom"].has_child("from-short"));
   }
 
-  TEST_CASE("CLI - attached literal operands follow multiple positional targets", "[cli][integration][track][update]")
+  TEST_CASE("CLI - attached literal operands follow multiple positional targets")
   {
     auto fixture = CliFixture{};
     auto const firstArg =
@@ -268,8 +265,7 @@ namespace ao::cli::test
     }
   }
 
-  TEST_CASE("CLI - missing empty and invalid literal operands reject all metadata and tag edits",
-            "[cli][unit][track][update]")
+  TEST_CASE("CLI - missing empty and invalid literal operands reject all metadata and tag edits")
   {
     auto fixture = CliFixture{};
     auto const trackArg = std::to_string(
@@ -331,7 +327,7 @@ namespace ao::cli::test
     CHECK(literalTags(tree.rootref()) == std::vector<std::string>{"kept"});
   }
 
-  TEST_CASE("CLI - set and unset of one custom key apply in argument order", "[cli][integration][track][update]")
+  TEST_CASE("CLI - set and unset of one custom key apply in argument order")
   {
     struct Case final
     {
@@ -370,8 +366,7 @@ namespace ao::cli::test
     }
   }
 
-  TEST_CASE("CLI - empty literal tag operands and custom values retain their existing meaning",
-            "[cli][integration][track][update]")
+  TEST_CASE("CLI - empty literal tag operands and custom values retain their existing meaning")
   {
     auto fixture = CliFixture{};
     auto const trackArg = std::to_string(fixture.addTrack(library::test::makeEmptyTrackSpec("empty.flac")).raw());
@@ -399,8 +394,7 @@ namespace ao::cli::test
     CHECK(yaml::scalarView(tree.rootref()["custom"]["equals"]) == "a=b");
   }
 
-  TEST_CASE("CLI - literal option recognition preserves help unknown and no-target validation",
-            "[cli][unit][track][update]")
+  TEST_CASE("CLI - literal option recognition preserves help unknown and no-target validation")
   {
     auto fixture = CliFixture{};
     auto const trackArg =

@@ -31,8 +31,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("ListOrderSource - parent hide and re-entry preserve stored rank and position",
-            "[runtime][unit][source][list-order]")
+  TEST_CASE("ListOrderSource - parent hide and re-entry preserve stored rank and position")
   {
     auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{2}, TrackId{3}});
     auto view = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}}};
@@ -63,8 +62,7 @@ namespace ao::rt::test
     CHECK(orderTrackIdsOf(source) == expectedStored);
   }
 
-  TEST_CASE("ListOrderSource - quick filter remains a stable subsequence of stored order",
-            "[runtime][unit][source][list-order]")
+  TEST_CASE("ListOrderSource - quick filter remains a stable subsequence of stored order")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const first = libraryFixture.addTrack(library::test::makeTrackSpec("First", 2024));
@@ -100,8 +98,7 @@ namespace ao::rt::test
     CHECK(insertion.trackIds == std::vector{third});
   }
 
-  TEST_CASE("ListOrderSource - ignores parent reorder when membership is unchanged",
-            "[runtime][unit][source][list-order]")
+  TEST_CASE("ListOrderSource - ignores parent reorder when membership is unchanged")
   {
     auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{2}, TrackId{3}});
     auto view = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}}};
@@ -121,8 +118,7 @@ namespace ao::rt::test
     CHECK(batches.empty());
   }
 
-  TEST_CASE("ListOrderSource - empty stored order forwards the exact regular parent script",
-            "[runtime][unit][source][list-order]")
+  TEST_CASE("ListOrderSource - empty stored order forwards the exact regular parent script")
   {
     auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{2}, TrackId{3}});
     auto view = ListViewOwner{std::vector<TrackId>{}};
@@ -144,8 +140,7 @@ namespace ao::rt::test
     CHECK(orderTrackIdsOf(source).empty());
   }
 
-  TEST_CASE("ListOrderSource - translates one mixed parent batch into one child batch",
-            "[runtime][unit][source][list-order]")
+  TEST_CASE("ListOrderSource - translates one mixed parent batch into one child batch")
   {
     auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{2}, TrackId{3}});
     auto view = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}, TrackId{4}}};
@@ -172,8 +167,7 @@ namespace ao::rt::test
     CHECK(sourceTrackIds(source) == expected);
   }
 
-  TEST_CASE("ListOrderSource - coalesces parent updates in effective order coordinates",
-            "[runtime][unit][source][list-order]")
+  TEST_CASE("ListOrderSource - coalesces parent updates in effective order coordinates")
   {
     auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{2}, TrackId{3}, TrackId{4}});
     auto view = ListViewOwner{{TrackId{1}, TrackId{3}}};
@@ -197,8 +191,7 @@ namespace ao::rt::test
     CHECK(update.trackIds == expectedUpdated);
   }
 
-  TEST_CASE("ListOrderSource - unranked parent changes publish in tail coordinates",
-            "[runtime][unit][source][list-order]")
+  TEST_CASE("ListOrderSource - unranked parent changes publish in tail coordinates")
   {
     auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{9}});
     auto view = ListViewOwner{{TrackId{1}, TrackId{2}}};
@@ -227,8 +220,7 @@ namespace ao::rt::test
     CHECK(removal.trackIds == std::vector{TrackId{8}});
   }
 
-  TEST_CASE("ListOrderSource - parent reset rebuilds effective state without discarding stored intent",
-            "[runtime][unit][source][list-order]")
+  TEST_CASE("ListOrderSource - parent reset rebuilds effective state without discarding stored intent")
   {
     auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{2}, TrackId{3}});
     auto view = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}}};
@@ -247,7 +239,7 @@ namespace ao::rt::test
     CHECK(orderTrackIdsOf(source) == expectedStored);
   }
 
-  TEST_CASE("ListOrderSource - parent invalidation is terminal and emitted once", "[runtime][unit][source][list-order]")
+  TEST_CASE("ListOrderSource - parent invalidation is terminal and emitted once")
   {
     auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{2}});
     auto view = ListViewOwner{{TrackId{1}, TrackId{2}}};
@@ -264,8 +256,7 @@ namespace ao::rt::test
     CHECK(source.state() == TrackSourceState::Invalidated);
   }
 
-  TEST_CASE("ListOrderSource - invalidation propagates through a leased order chain",
-            "[runtime][unit][source][list-order]")
+  TEST_CASE("ListOrderSource - invalidation propagates through a leased order chain")
   {
     auto rootPtr = makeMutableTrackSource({TrackId{1}, TrackId{2}, TrackId{3}});
     auto innerView = ListViewOwner{{TrackId{1}, TrackId{2}}};
@@ -289,8 +280,7 @@ namespace ao::rt::test
     CHECK(std::holds_alternative<SourceInvalidated>(outerBatches.front()));
   }
 
-  TEST_CASE("ListOrderSource - lease pins its parent for the subscription lifetime",
-            "[runtime][unit][source][list-order]")
+  TEST_CASE("ListOrderSource - lease pins its parent for the subscription lifetime")
   {
     auto parentPtr = makeMutableTrackSource({TrackId{1}});
     auto weakParentPtr = std::weak_ptr<MutableTrackSource>{parentPtr};

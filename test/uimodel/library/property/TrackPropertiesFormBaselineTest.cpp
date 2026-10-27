@@ -52,7 +52,7 @@ namespace ao::uimodel::test
     }
   } // namespace
 
-  TEST_CASE("loadTrackPropertiesFormBaseline aggregates common and mixed standard fields", "[uimodel][unit][property]")
+  TEST_CASE("loadTrackPropertiesFormBaseline aggregates common and mixed standard fields")
   {
     auto fixture = BaselineFixture{};
     auto const firstId = fixture.addTrack({.title = "Same", .album = "First", .uri = "first.flac"});
@@ -74,8 +74,7 @@ namespace ao::uimodel::test
     CHECK(album.editable);
   }
 
-  TEST_CASE("loadTrackPropertiesFormBaseline captures read-only segment rows and clears them on another selection",
-            "[uimodel][unit][property]")
+  TEST_CASE("loadTrackPropertiesFormBaseline captures read-only segment rows and clears them on another selection")
   {
     auto storage = rt::test::MusicLibraryFixture{};
     auto segment = library::TrackBuilder::makeEmpty();
@@ -121,7 +120,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(form.canSave());
   }
 
-  TEST_CASE("loadTrackPropertiesFormBaseline preserves empty text and numeric zero values", "[uimodel][unit][property]")
+  TEST_CASE("loadTrackPropertiesFormBaseline preserves empty text and numeric zero values")
   {
     auto fixture = BaselineFixture{};
     auto const firstId = fixture.addTrack({.title = "", .uri = "first.flac", .year = 0});
@@ -146,7 +145,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(form.canSave());
   }
 
-  TEST_CASE("loadTrackPropertiesFormBaseline keeps read-only rows out of patches", "[uimodel][unit][property]")
+  TEST_CASE("loadTrackPropertiesFormBaseline keeps read-only rows out of patches")
   {
     auto fixture = BaselineFixture{};
     auto const trackId = fixture.addTrack({.title = "Track", .uri = "readonly.flac"});
@@ -164,8 +163,7 @@ namespace ao::uimodel::test
     CHECK(patch.customUpdates.empty());
   }
 
-  TEST_CASE("loadTrackPropertiesFormBaseline preserves mixed fields until an explicit override",
-            "[uimodel][unit][property]")
+  TEST_CASE("loadTrackPropertiesFormBaseline preserves mixed fields until an explicit override")
   {
     auto fixture = BaselineFixture{};
     auto const firstId = fixture.addTrack({.title = "First", .uri = "first.flac"});
@@ -185,8 +183,7 @@ namespace ao::uimodel::test
     CHECK(*patch.optTitle == "Replacement");
   }
 
-  TEST_CASE("loadTrackPropertiesFormBaseline rejects incomplete targets without changing the form",
-            "[uimodel][unit][property]")
+  TEST_CASE("loadTrackPropertiesFormBaseline rejects incomplete targets without changing the form")
   {
     auto fixture = BaselineFixture{};
     auto const trackId = fixture.addTrack({.title = "Original", .uri = "present.flac"});
@@ -224,8 +221,7 @@ namespace ao::uimodel::test
     CHECK(form.rowView(rt::TrackField::Title).text == "Original");
   }
 
-  TEST_CASE("loadTrackPropertiesFormBaseline replaces prepopulated edits on a repeated successful load",
-            "[uimodel][unit][property]")
+  TEST_CASE("loadTrackPropertiesFormBaseline replaces prepopulated edits on a repeated successful load")
   {
     auto fixture = BaselineFixture{};
     auto const firstId = fixture.addTrack({.title = "First", .uri = "first.flac"});
@@ -244,8 +240,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(form.canSave());
   }
 
-  TEST_CASE("loadTrackPropertiesFormBaseline aggregates duplicate targets without changing common or mixed values",
-            "[uimodel][unit][property]")
+  TEST_CASE("loadTrackPropertiesFormBaseline aggregates duplicate targets without changing common or mixed values")
   {
     auto fixture = BaselineFixture{};
     auto const firstId = fixture.addTrack({.title = "First", .uri = "first.flac"});

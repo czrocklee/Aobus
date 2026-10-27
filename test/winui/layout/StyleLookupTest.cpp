@@ -22,7 +22,7 @@ namespace ao::winui::test
     }
   } // namespace
 
-  TEST_CASE("planStyleLookup - an authored key plans a lookup for the constructed element", "[winui][unit][layout]")
+  TEST_CASE("planStyleLookup - an authored key plans a lookup for the constructed element")
   {
     auto const optPlan =
       planStyleLookup(styledNode(uimodel::LayoutValue{std::string{"ChromeLessButtonStyle"}}), ElementKind::Button);
@@ -32,13 +32,13 @@ namespace ao::winui::test
     CHECK(optPlan->elementKind == ElementKind::Button);
   }
 
-  TEST_CASE("planStyleLookup - a node without a usable key plans nothing", "[winui][unit][layout]")
+  TEST_CASE("planStyleLookup - a node without a usable key plans nothing")
   {
     CHECK_FALSE(planStyleLookup(uimodel::LayoutNode{.type = "actionButton"}, ElementKind::Button).has_value());
     CHECK_FALSE(planStyleLookup(styledNode(uimodel::LayoutValue{std::string{}}), ElementKind::Button).has_value());
   }
 
-  TEST_CASE("resolveStyle - a key resolves only against the window's own resources", "[winui][unit][layout]")
+  TEST_CASE("resolveStyle - a key resolves only against the window's own resources")
   {
     auto const optPlan =
       planStyleLookup(styledNode(uimodel::LayoutValue{std::string{"ChromeLessButtonStyle"}}), ElementKind::Button);
@@ -49,7 +49,7 @@ namespace ao::winui::test
     CHECK(resolveStyle(optPlan, StyleScope::Unresolved, std::nullopt) == StyleResolution::MissingKey);
   }
 
-  TEST_CASE("resolveStyle - a style applies through its base target types", "[winui][unit][layout]")
+  TEST_CASE("resolveStyle - a style applies through its base target types")
   {
     auto const optPlan =
       planStyleLookup(styledNode(uimodel::LayoutValue{std::string{"ChromeLessButtonStyle"}}), ElementKind::Button);
@@ -62,7 +62,7 @@ namespace ao::winui::test
           StyleResolution::IncompatibleTarget);
   }
 
-  TEST_CASE("resolveStyle - an unstyled node reports no style rather than a defect", "[winui][unit][layout]")
+  TEST_CASE("resolveStyle - an unstyled node reports no style rather than a defect")
   {
     CHECK(resolveStyle(std::nullopt, StyleScope::Unresolved, std::nullopt) == StyleResolution::NoStyleAuthored);
   }

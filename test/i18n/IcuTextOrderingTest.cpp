@@ -59,7 +59,7 @@ namespace ao::i18n::test
     }
   } // namespace
 
-  TEST_CASE("IcuTextOrdering - locale changes intentional alphabetic order", "[runtime][unit][collation]")
+  TEST_CASE("IcuTextOrdering - locale changes intentional alphabetic order")
   {
     auto const germanPtr = policyFor("de-DE");
     auto const swedishPtr = policyFor("sv-SE");
@@ -68,7 +68,7 @@ namespace ao::i18n::test
     CHECK(keyFor(*swedishPtr, "z") < keyFor(*swedishPtr, "ä"));
   }
 
-  TEST_CASE("IcuTextOrdering - explicit default folding owns case equivalence", "[runtime][unit][collation]")
+  TEST_CASE("IcuTextOrdering - explicit default folding owns case equivalence")
   {
     auto const policyPtr = policyFor("de");
 
@@ -76,7 +76,7 @@ namespace ao::i18n::test
     CHECK(keyFor(*policyPtr, "Σ") == keyFor(*policyPtr, "ς"));
   }
 
-  TEST_CASE("IcuTextOrdering - punctuation and numeric text remain non-ignorable", "[runtime][unit][collation]")
+  TEST_CASE("IcuTextOrdering - punctuation and numeric text remain non-ignorable")
   {
     auto const policyPtr = policyFor("en-US");
 
@@ -88,7 +88,7 @@ namespace ao::i18n::test
     CHECK(keyFor(*policyPtr, "10") < keyFor(*policyPtr, "2"));
   }
 
-  TEST_CASE("IcuTextOrdering - default folding retains its Turkic tradeoff", "[runtime][unit][collation]")
+  TEST_CASE("IcuTextOrdering - default folding retains its Turkic tradeoff")
   {
     auto const policyPtr = policyFor("tr");
 
@@ -96,7 +96,7 @@ namespace ao::i18n::test
     CHECK(keyFor(*policyPtr, "I") != keyFor(*policyPtr, "\u0131"));
   }
 
-  TEST_CASE("IcuTextOrdering - secondary strength retains intentional tertiary ties", "[runtime][unit][collation]")
+  TEST_CASE("IcuTextOrdering - secondary strength retains intentional tertiary ties")
   {
     auto const englishPtr = policyFor("en-US");
     auto const japanesePtr = policyFor("ja-JP");
@@ -109,7 +109,7 @@ namespace ao::i18n::test
     CHECK(keyFor(*japanesePtr, "めたる") == keyFor(*japanesePtr, "メタル"));
   }
 
-  TEST_CASE("IcuTextOrdering - binary keys exclude ICU's terminal zero", "[runtime][unit][collation]")
+  TEST_CASE("IcuTextOrdering - binary keys exclude ICU's terminal zero")
   {
     auto const policyPtr = policyFor("de-DE");
     auto const key = keyFor(*policyPtr, "Dvořák");
@@ -119,7 +119,7 @@ namespace ao::i18n::test
     CHECK(key == keyFor(*policyPtr, "Dvořák"));
   }
 
-  TEST_CASE("IcuTextOrdering - long text produces complete repeatable binary keys", "[runtime][unit][collation]")
+  TEST_CASE("IcuTextOrdering - long text produces complete repeatable binary keys")
   {
     auto const policyPtr = policyFor("en-US");
     auto const text = std::string(512, 'a');
@@ -131,7 +131,7 @@ namespace ao::i18n::test
     CHECK(key < keyFor(*policyPtr, text + "b"));
   }
 
-  TEST_CASE("IcuTextOrdering - caller storage is replaced across successive keys", "[runtime][unit][collation]")
+  TEST_CASE("IcuTextOrdering - caller storage is replaced across successive keys")
   {
     auto const policyPtr = policyFor("en-US");
     auto output = std::string{};
@@ -149,7 +149,7 @@ namespace ao::i18n::test
     CHECK(output == first);
   }
 
-  TEST_CASE("IcuTextOrdering - governed ICU data fixes candidate key bytes", "[runtime][unit][collation]")
+  TEST_CASE("IcuTextOrdering - governed ICU data fixes candidate key bytes")
   {
     auto const policyPtr = policyFor("de-DE");
     constexpr auto kFixtures = std::to_array<std::pair<std::string_view, std::string_view>>({
@@ -165,14 +165,14 @@ namespace ao::i18n::test
     }
   }
 
-  TEST_CASE("IcuTextOrdering - malformed locale is rejected during construction", "[runtime][unit][collation]")
+  TEST_CASE("IcuTextOrdering - malformed locale is rejected during construction")
   {
     auto invalidLocaleRes = createIcuTextOrderingPolicy("en_US!");
     REQUIRE_FALSE(invalidLocaleRes);
     CHECK(invalidLocaleRes.error().code == Error::Code::InvalidInput);
   }
 
-  TEST_CASE("IcuTextOrdering - a policy remains usable after malformed text", "[runtime][unit][collation]")
+  TEST_CASE("IcuTextOrdering - a policy remains usable after malformed text")
   {
     auto const policyPtr = policyFor("en-US");
     auto key = std::string{"stale"};
@@ -189,12 +189,12 @@ namespace ao::i18n::test
     CHECK(key == before);
   }
 
-  TEST_CASE("IcuTextOrdering - ICU warnings retain the caller error class", "[runtime][unit][collation]")
+  TEST_CASE("IcuTextOrdering - ICU warnings retain the caller error class")
   {
     CHECK(detail::collationErrorCode(U_USING_FALLBACK_WARNING, Error::Code::InvalidInput) == Error::Code::InvalidInput);
   }
 
-  TEST_CASE("IcuTextOrdering - ICU construction failures keep typed error classes", "[runtime][unit][collation]")
+  TEST_CASE("IcuTextOrdering - ICU construction failures keep typed error classes")
   {
     CHECK(detail::collationErrorCode(U_MEMORY_ALLOCATION_ERROR) == Error::Code::ResourceExhausted);
     CHECK(detail::collationErrorCode(U_BUFFER_OVERFLOW_ERROR) == Error::Code::ValueTooLarge);

@@ -32,8 +32,7 @@
 
 namespace ao::library::test
 {
-  TEST_CASE("MusicLibrary - aborted write does not advance the snapshot revision",
-            "[library][unit][write-transaction][revision]")
+  TEST_CASE("MusicLibrary - aborted write does not advance the snapshot revision")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -58,7 +57,7 @@ namespace ao::library::test
     CHECK(library.libraryRevision(transaction) == 1);
   }
 
-  TEST_CASE("WriteTransaction - successful root operation remains committable", "[library][unit][write-transaction]")
+  TEST_CASE("WriteTransaction - successful root operation remains committable")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -80,8 +79,7 @@ namespace ao::library::test
     CHECK(optStored->byteLength == bytes.size());
   }
 
-  TEST_CASE("WriteTransaction - operation error aborts staged writes and releases the writer gate",
-            "[library][unit][write-transaction]")
+  TEST_CASE("WriteTransaction - operation error aborts staged writes and releases the writer gate")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -115,8 +113,7 @@ namespace ao::library::test
     CHECK_FALSE(library.resources().reader(readTransaction).get(stagedId));
   }
 
-  TEST_CASE("WriteTransaction - native mutation failure becomes a terminal Result error",
-            "[library][unit][write-transaction]")
+  TEST_CASE("WriteTransaction - native mutation failure becomes a terminal Result error")
   {
     constexpr std::size_t kMapSize = std::size_t{256} * 1024;
     auto const temp = ao::test::TempDir{};
@@ -149,8 +146,7 @@ namespace ao::library::test
     retryTransaction.abort();
   }
 
-  TEST_CASE("WriteTransaction - native writer read fault aborts the root operation",
-            "[library][unit][write-transaction]")
+  TEST_CASE("WriteTransaction - native writer read fault aborts the root operation")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -184,8 +180,7 @@ namespace ao::library::test
     CHECK(library.libraryRevision(read) == 1);
   }
 
-  TEST_CASE("WriteTransaction - private library failure becomes a terminal Result error",
-            "[library][unit][write-transaction]")
+  TEST_CASE("WriteTransaction - private library failure becomes a terminal Result error")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -203,8 +198,7 @@ namespace ao::library::test
     retryTransaction.abort();
   }
 
-  TEST_CASE("WriteTransaction - unexpected exception aborts before it is rethrown",
-            "[library][unit][write-transaction]")
+  TEST_CASE("WriteTransaction - unexpected exception aborts before it is rethrown")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");

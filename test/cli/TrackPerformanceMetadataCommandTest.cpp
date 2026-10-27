@@ -39,7 +39,7 @@ namespace ao::cli::test
     }
   } // namespace
 
-  TEST_CASE("CLI - track show reports recording date at its stored precision", "[cli][unit][track][show]")
+  TEST_CASE("CLI - track show reports recording date at its stored precision")
   {
     auto fixture = CliFixture{};
     fixture.addTrack(library::test::TrackSpec{.title = "Year only", .recordingDate = date(1981), .uri = "year.flac"});
@@ -70,7 +70,7 @@ namespace ao::cli::test
     CHECK_FALSE(jsonTree.rootref()["recordingDate"].readable());
   }
 
-  TEST_CASE("CLI - track show reports one canonical credits sequence", "[cli][unit][track][show]")
+  TEST_CASE("CLI - track show reports one canonical credits sequence")
   {
     auto fixture = CliFixture{};
     fixture.addTrack(library::test::TrackSpec{
@@ -118,7 +118,7 @@ namespace ao::cli::test
     CHECK(jsonTree.rootref()["credits"].num_children() == 0);
   }
 
-  TEST_CASE("CLI - track update parses recording date forms and clear", "[cli][integration][track][update]")
+  TEST_CASE("CLI - track update parses recording date forms and clear")
   {
     auto fixture = CliFixture{};
     auto const trackId = fixture.addTrack(library::test::makeEmptyTrackSpec("date.flac"));
@@ -165,7 +165,7 @@ namespace ao::cli::test
     CHECK(contains(result.out, "updated 0 of 1 matched track(s)"));
   }
 
-  TEST_CASE("CLI - track update rejects invalid recording dates before mutation", "[cli][unit][track][update]")
+  TEST_CASE("CLI - track update rejects invalid recording dates before mutation")
   {
     auto fixture = CliFixture{};
     auto const trackId = fixture.addTrack(
@@ -193,7 +193,7 @@ namespace ao::cli::test
     CHECK(yaml::scalarView(tree.rootref()["recordingDate"]) == "1981-05-12");
   }
 
-  TEST_CASE("CLI - credit arguments have exact arity and no punctuation codec", "[cli][integration][track][update]")
+  TEST_CASE("CLI - credit arguments have exact arity and no punctuation codec")
   {
     auto fixture = CliFixture{};
     auto const trackArg = idArg(fixture.addTrack(library::test::makeEmptyTrackSpec("credits.flac")));
@@ -261,7 +261,7 @@ namespace ao::cli::test
     }
   }
 
-  TEST_CASE("CLI - credit names and roles retain literal argv text", "[cli][integration][track][update]")
+  TEST_CASE("CLI - credit names and roles retain literal argv text")
   {
     auto fixture = CliFixture{};
     auto const trackArg = idArg(fixture.addTrack(library::test::makeEmptyTrackSpec("literal-credits.flac")));
@@ -318,8 +318,7 @@ namespace ao::cli::test
     }
   }
 
-  TEST_CASE("CLI - native argv credit role consumes dry-run literally while explicit preview remains safe",
-            "[cli][integration][track][update]")
+  TEST_CASE("CLI - native argv credit role consumes dry-run literally while explicit preview remains safe")
   {
     auto fixture = CliFixture{};
     auto const trackArg =
@@ -367,8 +366,7 @@ namespace ao::cli::test
     }
   }
 
-  TEST_CASE("CLI - every attached credit spelling rejects without metadata or tag mutation",
-            "[cli][unit][track][update]")
+  TEST_CASE("CLI - every attached credit spelling rejects without metadata or tag mutation")
   {
     auto fixture = CliFixture{};
     auto const trackArg =
@@ -405,8 +403,7 @@ namespace ao::cli::test
     CHECK(yaml::scalarView(tree.rootref()["tags"][0]) == "kept");
   }
 
-  TEST_CASE("CLI - negated clear-credits spellings reject without clearing credits or applying other edits",
-            "[cli][unit][track][update]")
+  TEST_CASE("CLI - negated clear-credits spellings reject without clearing credits or applying other edits")
   {
     auto fixture = CliFixture{};
     auto const trackArg = idArg(fixture.addTrack(library::test::TrackSpec{
@@ -438,7 +435,7 @@ namespace ao::cli::test
     CHECK(tree.rootref()["credits"].num_children() == 0);
   }
 
-  TEST_CASE("CLI - credit recognition respects ordinary option operands", "[cli][integration][track][update]")
+  TEST_CASE("CLI - credit recognition respects ordinary option operands")
   {
     auto fixture = CliFixture{};
     auto const trackArg = idArg(fixture.addTrack(library::test::makeEmptyTrackSpec("context-credits.flac")));
@@ -505,8 +502,7 @@ namespace ao::cli::test
     CHECK(yaml::scalarView(tree.rootref()["credits"][0]["role"]) == "--help");
   }
 
-  TEST_CASE("CLI - credit parsing preserves help and rejects wrong contexts without mutation",
-            "[cli][integration][track][update]")
+  TEST_CASE("CLI - credit parsing preserves help and rejects wrong contexts without mutation")
   {
     auto fixture = CliFixture{};
     auto const trackArg = idArg(fixture.addTrack(library::test::TrackSpec{
@@ -564,7 +560,7 @@ namespace ao::cli::test
     CHECK(yaml::scalarView(credits[0]["role"]) == "Kept role");
   }
 
-  TEST_CASE("CLI - incomplete credits and unknown metadata flags reject without mutation", "[cli][unit][track][update]")
+  TEST_CASE("CLI - incomplete credits and unknown metadata flags reject without mutation")
   {
     auto fixture = CliFixture{};
     auto const trackArg = idArg(fixture.addTrack(library::test::TrackSpec{.title = "Kept", .uri = "kept.flac"}));
@@ -603,7 +599,7 @@ namespace ao::cli::test
     CHECK(tree.rootref()["credits"].num_children() == 0);
   }
 
-  TEST_CASE("CLI - invalid credit text scopes and conflicting actions reject atomically", "[cli][unit][track][update]")
+  TEST_CASE("CLI - invalid credit text scopes and conflicting actions reject atomically")
   {
     auto fixture = CliFixture{};
     auto const trackArg = idArg(fixture.addTrack(library::test::TrackSpec{
@@ -647,7 +643,7 @@ namespace ao::cli::test
     CHECK(yaml::scalarView(credits[0]["role"]) == "piano");
   }
 
-  TEST_CASE("CLI - invalid credits reject even when the update filter matches no tracks", "[cli][unit][track][update]")
+  TEST_CASE("CLI - invalid credits reject even when the update filter matches no tracks")
   {
     auto fixture = CliFixture{};
     auto const trackArg = idArg(fixture.addTrack(library::test::TrackSpec{.title = "Kept", .uri = "no-match.flac"}));
@@ -661,8 +657,7 @@ namespace ao::cli::test
     CHECK(tree.rootref()["credits"].num_children() == 0);
   }
 
-  TEST_CASE("CLI - scope union replaces selected categories and preserves work and date",
-            "[cli][integration][track][update]")
+  TEST_CASE("CLI - scope union replaces selected categories and preserves work and date")
   {
     auto fixture = CliFixture{};
     auto const trackArg = idArg(fixture.addTrack(
@@ -739,7 +734,7 @@ namespace ao::cli::test
     CHECK(yaml::scalarView(tree.rootref()["recordingDate"]) == "1955");
   }
 
-  TEST_CASE("CLI - every credit kind token round trips through update and show", "[cli][integration][track][update]")
+  TEST_CASE("CLI - every credit kind token round trips through update and show")
   {
     auto fixture = CliFixture{};
     auto const trackArg = idArg(fixture.addTrack(library::test::TrackSpec{.title = "Song", .uri = "song.flac"}));
@@ -805,7 +800,7 @@ namespace ao::cli::test
     }
   }
 
-  TEST_CASE("CLI - structured update reports carry performance metadata changes", "[cli][integration][track][update]")
+  TEST_CASE("CLI - structured update reports carry performance metadata changes")
   {
     auto fixture = CliFixture{};
     auto const trackArg = idArg(fixture.addTrack(library::test::makeEmptyTrackSpec("report.flac")));
@@ -835,7 +830,7 @@ namespace ao::cli::test
     CHECK(yaml::scalarView(clearChange["newValue"]).empty());
   }
 
-  TEST_CASE("CLI - track update reserves built-in metadata keys for --set", "[cli][unit][track][update]")
+  TEST_CASE("CLI - track update reserves built-in metadata keys for --set")
   {
     auto fixture = CliFixture{};
     auto const trackArg = idArg(fixture.addTrack(library::test::makeEmptyTrackSpec("reserved.flac")));
@@ -901,7 +896,7 @@ namespace ao::cli::test
     CHECK_FALSE(custom.has_child("credits"));
   }
 
-  TEST_CASE("CLI - track update help documents performance metadata options", "[cli][unit][track][help]")
+  TEST_CASE("CLI - track update help documents performance metadata options")
   {
     auto fixture = CliFixture{};
     auto const result = fixture.run({"track", "update", "--help"});

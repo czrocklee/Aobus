@@ -164,7 +164,7 @@ unprotected:
     }
   } // namespace
 
-  TEST_CASE("ConfigStore - delegates payload ownership to an explicit schema", "[runtime][unit][config]")
+  TEST_CASE("ConfigStore - delegates payload ownership to an explicit schema")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = std::filesystem::path{tempDir.path()} / "config.yaml";
@@ -185,7 +185,7 @@ unprotected:
     CHECK(restored.enabled == original.enabled);
   }
 
-  TEST_CASE("ConfigStore - reports absence without changing the target", "[runtime][unit][config]")
+  TEST_CASE("ConfigStore - reports absence without changing the target")
   {
     auto const tempDir = ao::test::TempDir{};
 
@@ -214,7 +214,7 @@ unprotected:
     }
   }
 
-  TEST_CASE("ConfigStore - a store with nowhere to write keeps the session running", "[runtime][unit][config]")
+  TEST_CASE("ConfigStore - a store with nowhere to write keeps the session running")
   {
     // Reached when the platform names no home or profile location at all.
     // Refusing to start would cost the whole session to save preferences that
@@ -267,7 +267,7 @@ unprotected:
     }
   }
 
-  TEST_CASE("ConfigStore - enforces an optional backing-file byte limit", "[runtime][unit][config]")
+  TEST_CASE("ConfigStore - enforces an optional backing-file byte limit")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";
@@ -299,7 +299,7 @@ unprotected:
     }
   }
 
-  TEST_CASE("ConfigStore - passes the caller seed only to the selected schema", "[runtime][unit][config]")
+  TEST_CASE("ConfigStore - passes the caller seed only to the selected schema")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";
@@ -319,7 +319,7 @@ unprotected:
     CHECK_FALSE(target.enabled);
   }
 
-  TEST_CASE("ConfigStore - failed deserialization leaves the target unchanged", "[runtime][unit][config]")
+  TEST_CASE("ConfigStore - failed deserialization leaves the target unchanged")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";
@@ -368,7 +368,7 @@ unprotected:
     }
   }
 
-  TEST_CASE("ConfigStore - batch saves are atomic across schemas", "[runtime][unit][config]")
+  TEST_CASE("ConfigStore - batch saves are atomic across schemas")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";
@@ -404,7 +404,7 @@ unprotected:
     CHECK_FALSE(*brokenRes);
   }
 
-  TEST_CASE("ConfigStore - successful batch saves replace independent groups", "[runtime][unit][config]")
+  TEST_CASE("ConfigStore - successful batch saves replace independent groups")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";
@@ -432,7 +432,7 @@ unprotected:
     CHECK_FALSE(second.enabled);
   }
 
-  TEST_CASE("ConfigStore - failed replacement preserves the live document", "[runtime][unit][config]")
+  TEST_CASE("ConfigStore - failed replacement preserves the live document")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";
@@ -467,7 +467,7 @@ unprotected:
     CHECK_FALSE(*reloaded.contains("staged"));
   }
 
-  TEST_CASE("ConfigStore - saves preserve rejected backing documents", "[runtime][unit][config]")
+  TEST_CASE("ConfigStore - saves preserve rejected backing documents")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";
@@ -504,7 +504,7 @@ unprotected:
     CHECK(ao::test::readFile(configPath) == original);
   }
 
-  TEST_CASE("ConfigStore - later saves preserve owned serialized strings", "[runtime][unit][config]")
+  TEST_CASE("ConfigStore - later saves preserve owned serialized strings")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";
@@ -529,7 +529,7 @@ unprotected:
     CHECK(first.name == "temporary value");
   }
 
-  TEST_CASE("ConfigStore - removes groups durably and treats absence as a no-op", "[runtime][unit][config]")
+  TEST_CASE("ConfigStore - removes groups durably and treats absence as a no-op")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";
@@ -559,7 +559,7 @@ unprotected:
     }
   }
 
-  TEST_CASE("ConfigStore - a protected group of a newer version is neither read nor written", "[runtime][unit][config]")
+  TEST_CASE("ConfigStore - a protected group of a newer version is neither read nor written")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";
@@ -614,7 +614,7 @@ unprotected:
     CHECK(ao::test::readFile(configPath) == kNewerProtectedDocument);
   }
 
-  TEST_CASE("ConfigStore - protection covers only protected schemas and newer versions", "[runtime][unit][config]")
+  TEST_CASE("ConfigStore - protection covers only protected schemas and newer versions")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";

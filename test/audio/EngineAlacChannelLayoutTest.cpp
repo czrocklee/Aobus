@@ -200,7 +200,7 @@ namespace ao::audio::test
   } // namespace
 
   TEST_CASE("Engine - matching real WAV and ALAC layouts splice strictly across one through eight channels",
-            "[audio][integration][engine][gapless][concurrency]")
+            "[concurrency]")
   {
     // Literal S16LE canonical frames, authored from declared roles rather than
     // production mapping tables or decoder output. Mono/stereo omit chan.
@@ -246,8 +246,7 @@ namespace ao::audio::test
                            wavFirst ? alacPcm : wavPcm);
   }
 
-  TEST_CASE("Engine - equal-role ALAC declarations with different arrival orders splice canonical PCM",
-            "[audio][integration][engine][gapless][concurrency]")
+  TEST_CASE("Engine - equal-role ALAC declarations with different arrival orders splice canonical PCM", "[concurrency]")
   {
     bool const centerFirst = GENERATE(false, true);
     CAPTURE(centerFirst);
@@ -270,7 +269,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Engine - real ALAC unknown identities and different speaker roles drain before explicit reopen",
-            "[audio][integration][engine][gapless][concurrency]")
+            "[concurrency]")
   {
     auto const row =
       GENERATE(DrainRow{"mono unsupported declaration", 1, 0, 0x4, {0x52, 0x51}, 0xDEAD0001, 0, {0x52, 0x51}},

@@ -20,7 +20,7 @@
 
 namespace ao::audio::test
 {
-  TEST_CASE("FlacDecoderSession - decodes happy path", "[audio][unit][flac]")
+  TEST_CASE("FlacDecoderSession - decodes happy path")
   {
     auto const testFile = requireAudioFixture("hires.flac");
 
@@ -52,7 +52,7 @@ namespace ao::audio::test
     CHECK(flushedBlockRes->firstFrameIndex == frameAfterSoughtBlock);
   }
 
-  TEST_CASE("FlacDecoderSession - 24-bit", "[audio][unit][flac]")
+  TEST_CASE("FlacDecoderSession - 24-bit")
   {
     auto const testFile = requireAudioFixture("hires.flac");
 
@@ -92,7 +92,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("FlacDecoderSession - rejects precision-losing output", "[audio][unit][flac]")
+  TEST_CASE("FlacDecoderSession - rejects precision-losing output")
   {
     auto const testFile = requireAudioFixture("hires.flac");
     auto const res = FlacDecoderSession::open(testFile, SampleEncoding::Signed16Le);
@@ -100,7 +100,7 @@ namespace ao::audio::test
     CHECK(res.error().code == Error::Code::NotSupported);
   }
 
-  TEST_CASE("FlacDecoderSession - seek to reported duration lands on the final frame", "[audio][unit][flac]")
+  TEST_CASE("FlacDecoderSession - seek to reported duration lands on the final frame")
   {
     // Seeking to the exact reported duration resolves to total_samples, one past
     // the last valid sample. The session must clamp to the last decodable sample
@@ -125,7 +125,7 @@ namespace ao::audio::test
     CHECK(finalBlockRes->firstFrameIndex + finalBlockRes->frames > finalFrame);
   }
 
-  TEST_CASE("FlacDecoderSession - stable end of stream", "[audio][unit][flac]")
+  TEST_CASE("FlacDecoderSession - stable end of stream")
   {
     auto const testFile = requireAudioFixture("basic_metadata.flac");
     auto decoderPtr = ao::test::requireValue(FlacDecoderSession::open(testFile, SampleEncoding::Signed16Le));
@@ -133,7 +133,7 @@ namespace ao::audio::test
     CHECK(readUntilStableEndOfStream(decoder, 512) > 0);
   }
 
-  TEST_CASE("FlacDecoderSession - reports error paths", "[audio][unit][flac][error]")
+  TEST_CASE("FlacDecoderSession - reports error paths")
   {
     SECTION("Non-existent file")
     {

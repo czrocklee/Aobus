@@ -16,8 +16,7 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("PlaybackSessionYamlSchema - repeated YAML round trips preserve unity and near-unity volume exactly",
-            "[runtime][unit][playback-session]")
+  TEST_CASE("PlaybackSessionYamlSchema - repeated YAML round trips preserve unity and near-unity volume exactly")
   {
     for (float const volume : std::to_array<float>({1.0F, std::nextafter(1.0F, 0.0F), 0.999F}))
     {

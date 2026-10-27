@@ -16,7 +16,7 @@ samples), see the focused documents under `doc/development/test/`.
 
 | Document | Scope |
 |---|---|
-| [`test/layer-selection.md`](test/layer-selection.md) | Layer boundaries and unit/integration scope |
+| [`test/layer-selection.md`](test/layer-selection.md) | Layer boundaries and contract/assertion-layer choices |
 | [`test/naming-and-assertion.md`](test/naming-and-assertion.md) | Test names, tags, structure, and assertion quality |
 | [`test/fixture-and-helper.md`](test/fixture-and-helper.md) | Fixtures, helpers, FakeIt, test data, and filesystem setup |
 | [`test/runtime-and-async.md`](test/runtime-and-async.md) | Deterministic async, runtime service, callback, and lifetime tests |
@@ -46,10 +46,11 @@ For detailed layer selection guidance with boundary-case tables, see
 ## Naming and tags
 
 Name tests as behavior contracts: `"Component - behavior under condition"`.
-Tags start with `[layer][scope][component]`, where scope is exactly one of
-`[unit]` or `[integration]`.
+An ordinary case takes no tag; the only retained markers are `[concurrency]`
+for cross-thread contracts and `[.manual]` for real-hardware or deliberate
+manual execution.
 
-For tag tables, naming examples, and anti-patterns, see
+For naming examples, the two-marker contract, and anti-patterns, see
 `doc/development/test/naming-and-assertion.md`.
 
 ## Assertion quality

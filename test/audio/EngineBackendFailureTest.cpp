@@ -40,8 +40,7 @@ namespace ao::audio::test
     }
   } // namespace
 
-  TEST_CASE("Engine - identical open errors with opposite causes produce different failure kinds",
-            "[audio][unit][engine][backend-open]")
+  TEST_CASE("Engine - identical open errors with opposite causes produce different failure kinds")
   {
     auto const error = Error{.code = Error::Code::FormatRejected, .message = "backend refused the requested format"};
 
@@ -73,8 +72,7 @@ namespace ao::audio::test
     CHECK(trackFailure.error.message == error.message);
   }
 
-  TEST_CASE("Engine - route-incompatible refusal preserves the original error and track context",
-            "[audio][unit][engine][backend-open]")
+  TEST_CASE("Engine - route-incompatible refusal preserves the original error and track context")
   {
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backend = backendPtr.get();
@@ -108,7 +106,7 @@ namespace ao::audio::test
     CHECK(countEvents(events, "start") == 0U);
   }
 
-  TEST_CASE("Engine - refused open neither falls back nor starts the route", "[audio][unit][engine][backend-open]")
+  TEST_CASE("Engine - refused open neither falls back nor starts the route")
   {
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backend = backendPtr.get();
@@ -136,7 +134,7 @@ namespace ao::audio::test
     CHECK(snap.statusText == "route cannot carry this source");
   }
 
-  TEST_CASE("Engine - malformed successful backend mode stays terminal", "[audio][unit][engine][backend-open]")
+  TEST_CASE("Engine - malformed successful backend mode stays terminal")
   {
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backend = backendPtr.get();

@@ -9,7 +9,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("PlaybackTimeFormatter - formats display text for each label mode", "[uimodel][unit][playback]")
+  TEST_CASE("PlaybackTimeFormatter - formats display text for each label mode")
   {
     SECTION("template text reserves the widest idle label")
     {

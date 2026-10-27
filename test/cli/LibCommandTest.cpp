@@ -51,7 +51,7 @@ namespace ao::cli::test
     }
   } // namespace
 
-  TEST_CASE("CLI - corrupt persisted manifest rejects the command before payload output", "[cli][unit][lib][integrity]")
+  TEST_CASE("CLI - corrupt persisted manifest rejects the command before payload output")
   {
     auto fixture = CliFixture{};
     auto const databasePath = rt::LibraryPaths{fixture.root()}.databasePath();
@@ -85,8 +85,7 @@ namespace ao::cli::test
     CHECK(contains(result.err, "File manifest key has an invalid size"));
   }
 
-  TEST_CASE("CLI - lib dump --manifest prints a scanned modification time as exact seconds and nanoseconds",
-            "[cli][integration][lib][manifest]")
+  TEST_CASE("CLI - lib dump --manifest prints a scanned modification time as exact seconds and nanoseconds")
   {
     auto fixture = CliFixture{};
     auto const trackPath = fixture.root() / "track.flac";
@@ -111,8 +110,7 @@ namespace ao::cli::test
     CHECK(contains(result.out, "MTime: seconds=1719835259 nanoseconds=500000000"));
   }
 
-  TEST_CASE("CLI - lib dump --manifest reports an imported mtime verbatim and unknown for a stored null",
-            "[cli][integration][lib][manifest]")
+  TEST_CASE("CLI - lib dump --manifest reports an imported mtime verbatim and unknown for a stored null")
   {
     auto fixture = CliFixture{};
     // Both files exist, so a filesystem stat cannot explain either row: the
@@ -153,8 +151,7 @@ library:
     CHECK(contains(result.out, "MTime: unknown"));
   }
 
-  TEST_CASE("CLI - lib dump --manifest machine output nests a known mtime and omits an absent one",
-            "[cli][integration][lib][manifest]")
+  TEST_CASE("CLI - lib dump --manifest machine output nests a known mtime and omits an absent one")
   {
     auto fixture = CliFixture{};
     // Both files exist, so a filesystem stat cannot explain either row: the
@@ -221,7 +218,7 @@ library:
     assertManifestRecords(jsonTree.rootref()["manifest"]);
   }
 
-  TEST_CASE("CLI - lib stats reports known fixture counts", "[cli][integration][lib][stats]")
+  TEST_CASE("CLI - lib stats reports known fixture counts")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "basic_metadata.flac");
@@ -283,7 +280,7 @@ library:
     CHECK(contains(result.out, "resourceBytes: 0"));
   }
 
-  TEST_CASE("CLI - database allocation excludes workspace and unrelated descendants", "[cli][unit][lib][stats]")
+  TEST_CASE("CLI - database allocation excludes workspace and unrelated descendants")
   {
     auto fixture = CliFixture{rt::LibraryDurability::Durable};
     REQUIRE(fixture.run({"init"}).status == 0);
@@ -328,7 +325,7 @@ library:
     CHECK(yaml::scalarView(afterTree.rootref()["diskBytes"]) == expected);
   }
 
-  TEST_CASE("CLI - lib verify reports missing files with failing exit", "[cli][unit][lib][verify]")
+  TEST_CASE("CLI - lib verify reports missing files with failing exit")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "track.flac");
@@ -358,7 +355,7 @@ library:
     CHECK(contains(result.err, "library verification failed"));
   }
 
-  TEST_CASE("CLI - lib verify reports moved files without failing", "[cli][unit][lib][verify]")
+  TEST_CASE("CLI - lib verify reports moved files without failing")
   {
     auto fixture = CliFixture{};
     auto const originalPath = fixture.root() / "track.flac";
@@ -376,8 +373,7 @@ library:
     CHECK(contains(result.out, "moved renamed.flac"));
   }
 
-  TEST_CASE("CLI - lib verify lists accompanying CUE warnings without failing or replacing classifications",
-            "[cli][unit][lib][verify]")
+  TEST_CASE("CLI - lib verify lists accompanying CUE warnings without failing or replacing classifications")
   {
     auto fixture = CliFixture{};
     auto const path = fixture.root() / "track.flac";
@@ -414,8 +410,7 @@ library:
     CHECK(contains(moved.out, "moved renamed.flac Imported as a whole file"));
   }
 
-  TEST_CASE("CLI - lib verify retains unchanged carrier diagnostics when its sheet is missing",
-            "[cli][unit][lib][verify]")
+  TEST_CASE("CLI - lib verify retains unchanged carrier diagnostics when its sheet is missing")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "image.flac");
@@ -442,8 +437,7 @@ library:
     CHECK(contains(shown.out, "CUE Track Number: 9"));
   }
 
-  TEST_CASE("CLI - lib relink exposes fingerprinted malformed-sheet destinations and preserves explicit identity",
-            "[cli][integration][lib][relink]")
+  TEST_CASE("CLI - lib relink exposes fingerprinted malformed-sheet destinations and preserves explicit identity")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "first.flac");
@@ -516,8 +510,7 @@ library:
     CHECK(yaml::scalarView(afterTree.rootref()["tracks"][0]["uri"]) == "moved-first.flac");
   }
 
-  TEST_CASE("CLI - lib relink applies an explicit two-member carrier when the sheet matches",
-            "[cli][integration][lib][relink]")
+  TEST_CASE("CLI - lib relink applies an explicit two-member carrier when the sheet matches")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "first.flac");
@@ -574,8 +567,7 @@ library:
     CHECK(preserved[0] != preserved[1]);
   }
 
-  TEST_CASE("CLI - lib relink lists, previews, and applies explicit moved-file bindings",
-            "[cli][integration][lib][relink]")
+  TEST_CASE("CLI - lib relink lists, previews, and applies explicit moved-file bindings")
   {
     auto fixture = CliFixture{};
     auto const firstPath = fixture.root() / "first.flac";
@@ -618,7 +610,7 @@ library:
     CHECK(contains(result.out, R"("uri": "moved-first.flac")"));
   }
 
-  TEST_CASE("CLI - lib relink rejects incomplete and invalid bindings", "[cli][unit][lib][relink]")
+  TEST_CASE("CLI - lib relink rejects incomplete and invalid bindings")
   {
     {
       auto fixture = CliFixture{};
@@ -654,7 +646,7 @@ library:
     }
   }
 
-  TEST_CASE("CLI - lib resource list and export read a cover by digest", "[cli][integration][lib][resource]")
+  TEST_CASE("CLI - lib resource list and export read a cover by digest")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("with_cover.flac", "cover.flac");
@@ -721,7 +713,7 @@ library:
     CHECK_FALSE(fs::exists(missingDirectory));
   }
 
-  TEST_CASE("CLI - lib resource export reports absence when no source holds the content", "[cli][unit][lib][resource]")
+  TEST_CASE("CLI - lib resource export reports absence when no source holds the content")
   {
     auto fixture = CliFixture{};
     auto const orphanBytes = std::array{std::byte{0x10}, std::byte{0x20}, std::byte{0x30}, std::byte{0x40}};
@@ -743,7 +735,7 @@ library:
     CHECK_FALSE(fs::exists(outputPath));
   }
 
-  TEST_CASE("CLI - lib export reserves --output for the global format option", "[cli][integration][lib][import-export]")
+  TEST_CASE("CLI - lib export reserves --output for the global format option")
   {
     auto source = CliFixture{};
     source.copyAudio("basic_metadata.flac", "track.flac");
@@ -772,8 +764,7 @@ library:
     CHECK_FALSE(fs::exists(source.root() / "json"));
   }
 
-  TEST_CASE("CLI - lib resource export reserves --output for the global format option",
-            "[cli][integration][lib][resource]")
+  TEST_CASE("CLI - lib resource export reserves --output for the global format option")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("with_cover.flac", "cover.flac");
@@ -812,7 +803,7 @@ library:
     CHECK_FALSE(fs::exists(fixture.root() / "json"));
   }
 
-  TEST_CASE("CLI - lib export and import round-trip library data", "[cli][integration][lib][import-export]")
+  TEST_CASE("CLI - lib export and import round-trip library data")
   {
     auto source = CliFixture{};
     source.copyAudio("basic_metadata.flac", "track.flac");
@@ -864,8 +855,7 @@ library:
     CHECK(contains(result.out, "Test Title"));
   }
 
-  TEST_CASE("CLI - lib export --mode list-only carries the hyphenated mode token through import",
-            "[cli][integration][lib][import-export]")
+  TEST_CASE("CLI - lib export --mode list-only carries the hyphenated mode token through import")
   {
     auto source = CliFixture{};
     source.copyAudio("basic_metadata.flac", "track.flac");
@@ -899,8 +889,7 @@ library:
     CHECK(contains(result.out, "Payload: YAML v1, mode 'list-only'"));
   }
 
-  TEST_CASE("CLI - lib import counts kept invalid List filters in every output and phase",
-            "[cli][integration][lib][import-export]")
+  TEST_CASE("CLI - lib import counts kept invalid List filters in every output and phase")
   {
     auto fixture = CliFixture{};
     auto const documentPath = fixture.root() / "invalid-filter.yaml";
@@ -946,8 +935,7 @@ library:
       result.out, "Changes: tracks +0/~0/-0, lists +2/-2, dangling references ignored 0, invalid filters kept 1."));
   }
 
-  TEST_CASE("CLI - lib import defaults to merge and preserves absent target tracks",
-            "[cli][integration][lib][import-export]")
+  TEST_CASE("CLI - lib import defaults to merge and preserves absent target tracks")
   {
     auto source = CliFixture{};
     source.copyAudio("basic_metadata.flac", "imported.flac");
@@ -969,7 +957,7 @@ library:
     CHECK(contains(result.out, "tracks: 2"));
   }
 
-  TEST_CASE("CLI - lib domain failures use stderr and exit non-zero", "[cli][unit][lib][contract]")
+  TEST_CASE("CLI - lib domain failures use stderr and exit non-zero")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "track.flac");

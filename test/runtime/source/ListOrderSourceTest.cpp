@@ -28,8 +28,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("ListOrderSource - keeps stored order separate from effective parent membership",
-            "[runtime][unit][source][list-order]")
+  TEST_CASE("ListOrderSource - keeps stored order separate from effective parent membership")
   {
     auto parentPtr = makeMutableTrackSource({TrackId{3}, TrackId{1}});
     auto view = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}}};
@@ -48,8 +47,7 @@ namespace ao::rt::test
     CHECK_FALSE(source.contains(TrackId{2}));
   }
 
-  TEST_CASE("ListOrderSource - materializing existing effective identities emits no batch",
-            "[runtime][unit][source][list-order]")
+  TEST_CASE("ListOrderSource - materializing existing effective identities emits no batch")
   {
     auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{3}});
     auto view = ListViewOwner{{TrackId{1}}};
@@ -87,8 +85,7 @@ namespace ao::rt::test
     CHECK(batches.empty());
   }
 
-  TEST_CASE("ListOrderSource - exact remove applies descending stored ranges and visible delta",
-            "[runtime][unit][source][list-order]")
+  TEST_CASE("ListOrderSource - exact remove applies descending stored ranges and visible delta")
   {
     auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{3}, TrackId{4}});
     auto view = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}, TrackId{4}, TrackId{5}}};
@@ -116,8 +113,7 @@ namespace ao::rt::test
     CHECK(sourceTrackIds(source) == expectedEffective);
   }
 
-  TEST_CASE("ListOrderSource - exact move preserves known identity through hidden selections",
-            "[runtime][unit][source][list-order]")
+  TEST_CASE("ListOrderSource - exact move preserves known identity through hidden selections")
   {
     auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{3}, TrackId{4}});
     auto view = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}, TrackId{4}, TrackId{5}}};
@@ -146,8 +142,7 @@ namespace ao::rt::test
     CHECK(sourceTrackIds(source) == expectedEffective);
   }
 
-  TEST_CASE("ListOrderSource - preserves exact move identity for an ambiguous final permutation",
-            "[runtime][unit][source][list-order]")
+  TEST_CASE("ListOrderSource - preserves exact move identity for an ambiguous final permutation")
   {
     auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{2}, TrackId{3}});
     auto view = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}}};
@@ -198,8 +193,7 @@ namespace ao::rt::test
     CHECK(tailInsertion.trackIds == std::vector{TrackId{2}, TrackId{3}});
   }
 
-  TEST_CASE("ListOrderSource - hidden-only move changes stored order without a source batch",
-            "[runtime][unit][source][list-order]")
+  TEST_CASE("ListOrderSource - hidden-only move changes stored order without a source batch")
   {
     auto parentPtr = makeMutableTrackSource({TrackId{1}});
     auto view = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}}};

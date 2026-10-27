@@ -14,7 +14,7 @@
 
 namespace ao::rt::detail::test
 {
-  TEST_CASE("StringArena - interns and deduplicates projection text", "[runtime][unit][projection][arena]")
+  TEST_CASE("StringArena - interns and deduplicates projection text")
   {
     auto arena = StringArena{};
 
@@ -63,7 +63,7 @@ namespace ao::rt::detail::test
     }
   }
 
-  TEST_CASE("StringArena - views stay valid across arena and index growth", "[runtime][unit][projection][arena]")
+  TEST_CASE("StringArena - views stay valid across arena and index growth")
   {
     auto arena = StringArena{};
 
@@ -85,7 +85,7 @@ namespace ao::rt::detail::test
     }
   }
 
-  TEST_CASE("StringArena - clear resets projection storage", "[runtime][unit][projection][arena]")
+  TEST_CASE("StringArena - clear resets projection storage")
   {
     auto arena = StringArena{};
 

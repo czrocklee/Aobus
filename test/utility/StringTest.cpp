@@ -10,7 +10,7 @@
 
 namespace ao::utility::test
 {
-  TEST_CASE("String - ASCII character operations are locale independent", "[utility][unit][string]")
+  TEST_CASE("String - ASCII character operations are locale independent")
   {
     CHECK(isAsciiAlpha('A'));
     CHECK(isAsciiAlpha('z'));
@@ -53,7 +53,7 @@ namespace ao::utility::test
     CHECK(toAsciiUpper(utf8Byte) == utf8Byte);
   }
 
-  TEST_CASE("String - ASCII transforms preserve UTF-8 bytes", "[utility][unit][string]")
+  TEST_CASE("String - ASCII transforms preserve UTF-8 bytes")
   {
     auto const text = std::string{" \tDVO\xC5\x98\xC3\x81K \n"};
 

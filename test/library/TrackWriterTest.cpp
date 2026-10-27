@@ -95,8 +95,7 @@ namespace ao::library::test
     }
   } // namespace
 
-  TEST_CASE("TrackWriter - create commits one Track, manifest, dictionary, and Resource graph",
-            "[library][unit][track-writer]")
+  TEST_CASE("TrackWriter - create commits one Track, manifest, dictionary, and Resource graph")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -137,7 +136,7 @@ namespace ao::library::test
     CHECK(optManifest->mtime() == kMtime);
   }
 
-  TEST_CASE("TrackWriter - a maximum-length URI survives commit and reopen", "[library][unit][track-writer]")
+  TEST_CASE("TrackWriter - a maximum-length URI survives commit and reopen")
   {
     auto const temp = ao::test::TempDir{};
     auto uri = std::string(200, 'a');
@@ -168,7 +167,7 @@ namespace ao::library::test
     CHECK(optManifest->trackId() == trackId);
   }
 
-  TEST_CASE("TrackWriter - create rejects a missing existing Resource before mutation", "[library][unit][track-writer]")
+  TEST_CASE("TrackWriter - create rejects a missing existing Resource before mutation")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -201,8 +200,7 @@ namespace ao::library::test
     CHECK(library.dictionary().size() == 0);
   }
 
-  TEST_CASE("TrackWriter - create and update reject an oversized cold record before mutation",
-            "[library][unit][track-writer]")
+  TEST_CASE("TrackWriter - create and update reject an oversized cold record before mutation")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -248,8 +246,7 @@ namespace ao::library::test
     CHECK(library.dictionary().size() == dictionarySize);
   }
 
-  TEST_CASE("TrackWriter - create rejects a duplicate manifest URI without aliasing it",
-            "[library][unit][track-writer]")
+  TEST_CASE("TrackWriter - create rejects a duplicate manifest URI without aliasing it")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -274,8 +271,7 @@ namespace ao::library::test
     CHECK(optManifest->trackId() == firstId);
   }
 
-  TEST_CASE("TrackWriter - validate accepts complete builders and rejects hot-only builders as input",
-            "[library][unit][track-writer]")
+  TEST_CASE("TrackWriter - validate accepts complete builders and rejects hot-only builders as input")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -302,8 +298,7 @@ namespace ao::library::test
     REQUIRE(transaction.commit());
   }
 
-  TEST_CASE("TrackWriter - full, cold, and replacement updates persist their owned sides",
-            "[library][unit][track-writer]")
+  TEST_CASE("TrackWriter - full, cold, and replacement updates persist their owned sides")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -378,7 +373,7 @@ namespace ao::library::test
     CHECK(optManifest->status() == expectedStatus);
   }
 
-  TEST_CASE("TrackWriter - ordinary updates preserve the URI and manifest binding", "[library][unit][track-writer]")
+  TEST_CASE("TrackWriter - ordinary updates preserve the URI and manifest binding")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -420,8 +415,7 @@ namespace ao::library::test
     CHECK(optManifest->fileSize() == 777);
   }
 
-  TEST_CASE("TrackWriter - normal update rejects a URI change without committing partial state",
-            "[library][unit][track-writer]")
+  TEST_CASE("TrackWriter - normal update rejects a URI change without committing partial state")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -450,8 +444,7 @@ namespace ao::library::test
     CHECK_FALSE(library.manifest().reader(readTransaction).get("after.flac"));
   }
 
-  TEST_CASE("TrackWriter - relink replaces the manifest key while preserving Track identity",
-            "[library][unit][track-writer]")
+  TEST_CASE("TrackWriter - relink replaces the manifest key while preserving Track identity")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -482,8 +475,7 @@ namespace ao::library::test
     CHECK(optManifest->fileSize() == 999);
   }
 
-  TEST_CASE("TrackWriter - delete removes its Track and manifest while preserving others",
-            "[library][unit][track-writer]")
+  TEST_CASE("TrackWriter - delete removes its Track and manifest while preserving others")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -505,7 +497,7 @@ namespace ao::library::test
     REQUIRE(library.manifest().reader(readTransaction).get("second.flac"));
   }
 
-  TEST_CASE("TrackWriter - clear removes all Tracks and manifests", "[library][unit][track-writer]")
+  TEST_CASE("TrackWriter - clear removes all Tracks and manifests")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -521,7 +513,7 @@ namespace ao::library::test
     CHECK(library.manifest().reader(readTransaction).begin() == FileManifestStore::Reader::EndSentinel{});
   }
 
-  TEST_CASE("TrackWriter - deleting an absent Track succeeds with false", "[library][unit][track-writer]")
+  TEST_CASE("TrackWriter - deleting an absent Track succeeds with false")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");

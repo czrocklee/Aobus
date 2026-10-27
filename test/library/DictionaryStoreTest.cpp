@@ -47,7 +47,7 @@ namespace ao::library::test
     }
   } // namespace
 
-  TEST_CASE("DictionaryStore - publishes a transaction delta only after commit", "[library][unit][dictionary]")
+  TEST_CASE("DictionaryStore - publishes a transaction delta only after commit")
   {
     auto const temp = ao::test::TempDir{};
     auto library = openTestLibrary(temp);
@@ -73,7 +73,7 @@ namespace ao::library::test
     CHECK(dictionary.generation() == initialGeneration + 1);
   }
 
-  TEST_CASE("DictionaryStore - canonicalizes Unicode identity before interning", "[library][unit][dictionary][unicode]")
+  TEST_CASE("DictionaryStore - canonicalizes Unicode identity before interning")
   {
     auto const temp = ao::test::TempDir{};
     auto library = openTestLibrary(temp);
@@ -91,8 +91,7 @@ namespace ao::library::test
     CHECK_FALSE(library.dictionary().findId(decomposed));
   }
 
-  TEST_CASE("DictionaryStore - rejects malformed UTF-8 without staging a symbol",
-            "[library][unit][dictionary][unicode]")
+  TEST_CASE("DictionaryStore - rejects malformed UTF-8 without staging a symbol")
   {
     auto const temp = ao::test::TempDir{};
     auto library = openTestLibrary(temp);
@@ -114,7 +113,7 @@ namespace ao::library::test
     CHECK(library.dictionary().findId("valid") == validId);
   }
 
-  TEST_CASE("DictionaryStore - discards an uncommitted overlay and reuses its ID", "[library][unit][dictionary]")
+  TEST_CASE("DictionaryStore - discards an uncommitted overlay and reuses its ID")
   {
     auto const temp = ao::test::TempDir{};
     auto library = openTestLibrary(temp);
@@ -136,7 +135,7 @@ namespace ao::library::test
     CHECK(dictionary.get(id) == "committed");
   }
 
-  TEST_CASE("DictionaryStore - rolls back prepared publication when commit fails", "[library][unit][dictionary]")
+  TEST_CASE("DictionaryStore - rolls back prepared publication when commit fails")
   {
     auto const temp = ao::test::TempDir{};
     auto library = openTestLibrary(temp);
@@ -166,8 +165,7 @@ namespace ao::library::test
     CHECK(dictionary.get(failedId) == "retry");
   }
 
-  TEST_CASE("DictionaryStore - commits repeated and distinct transaction symbols exactly once",
-            "[library][unit][dictionary]")
+  TEST_CASE("DictionaryStore - commits repeated and distinct transaction symbols exactly once")
   {
     auto const temp = ao::test::TempDir{};
     auto library = openTestLibrary(temp);
@@ -183,7 +181,7 @@ namespace ao::library::test
     CHECK(library.dictionary().size() == 2);
   }
 
-  TEST_CASE("DictionaryStore - committed rows survive reopening", "[library][unit][dictionary]")
+  TEST_CASE("DictionaryStore - committed rows survive reopening")
   {
     auto const temp = ao::test::TempDir{};
     auto const databasePath = temp.path() / "db";
@@ -201,7 +199,7 @@ namespace ao::library::test
     CHECK(reopened.dictionary().findId("persistent") == id);
   }
 
-  TEST_CASE("DictionaryStore - validates invalid lookups and defaults", "[library][unit][dictionary]")
+  TEST_CASE("DictionaryStore - validates invalid lookups and defaults")
   {
     auto const temp = ao::test::TempDir{};
     auto library = openTestLibrary(temp);
@@ -214,8 +212,7 @@ namespace ao::library::test
     CHECK(library.dictionary().getOrDefault(DictionaryId{999}).empty());
   }
 
-  TEST_CASE("DictionaryStore - keeps borrowed values stable across ten thousand committed inserts",
-            "[library][unit][dictionary]")
+  TEST_CASE("DictionaryStore - keeps borrowed values stable across ten thousand committed inserts")
   {
     auto const temp = ao::test::TempDir{};
     auto library = openTestLibrary(temp);
@@ -237,7 +234,7 @@ namespace ao::library::test
     CHECK(library.dictionary().findId("stable") == stableId);
   }
 
-  TEST_CASE("DictionaryReadCache - resolves values after bounded collisions", "[library][unit][dictionary]")
+  TEST_CASE("DictionaryReadCache - resolves values after bounded collisions")
   {
     auto const temp = ao::test::TempDir{};
     auto library = openTestLibrary(temp);
@@ -260,7 +257,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("DictionaryReadContext - binds symbols with one committed generation", "[library][unit][dictionary]")
+  TEST_CASE("DictionaryReadContext - binds symbols with one committed generation")
   {
     auto const temp = ao::test::TempDir{};
     auto library = openTestLibrary(temp);
@@ -277,8 +274,7 @@ namespace ao::library::test
     CHECK(ids == std::vector{firstId, kInvalidDictionaryId});
   }
 
-  TEST_CASE("DictionaryStore - readers observe complete committed publications",
-            "[library][unit][dictionary][concurrency][stress]")
+  TEST_CASE("DictionaryStore - readers observe complete committed publications", "[concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto library = openTestLibrary(temp);

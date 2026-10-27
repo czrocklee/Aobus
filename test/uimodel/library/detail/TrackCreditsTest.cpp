@@ -47,8 +47,7 @@ namespace ao::uimodel::test
     }
   } // namespace
 
-  TEST_CASE("TrackCredits - per-kind display preserves duplicates roles and unrelated mixed sections",
-            "[uimodel][unit][track-credits]")
+  TEST_CASE("TrackCredits - per-kind display preserves duplicates roles and unrelated mixed sections")
   {
     using K = library::CreditKind;
     auto sections =
@@ -76,8 +75,7 @@ namespace ao::uimodel::test
     CHECK(formatTrackCreditDisplayRows(catalog, commonCredits()).empty());
   }
 
-  TEST_CASE("TrackCredits - scope and section labels distinguish empty common and mixed values",
-            "[uimodel][unit][track-credits]")
+  TEST_CASE("TrackCredits - scope and section labels distinguish empty common and mixed values")
   {
     using K = library::CreditKind;
     auto const& catalog = ao::test::englishMessageCatalog();
@@ -93,8 +91,7 @@ namespace ao::uimodel::test
     CHECK(formatTrackCreditSectionSummary(catalog, {}).empty());
   }
 
-  TEST_CASE("TrackCredits - every kind has its own label and kinds after Performer show only when used",
-            "[uimodel][unit][track-credits]")
+  TEST_CASE("TrackCredits - every kind has its own label and kinds after Performer show only when used")
   {
     using K = library::CreditKind;
     auto const& catalog = ao::test::englishMessageCatalog();
@@ -127,8 +124,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("TrackCredits - validation messages localize every reason and the actual one-based row",
-            "[uimodel][unit][track-credits]")
+  TEST_CASE("TrackCredits - validation messages localize every reason and the actual one-based row")
   {
     struct LocaleCase final
     {
@@ -194,8 +190,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("TrackCredits - row action labels name the actual one-based row in every maintained locale",
-            "[uimodel][unit][track-credits]")
+  TEST_CASE("TrackCredits - row action labels name the actual one-based row in every maintained locale")
   {
     struct LocaleCase final
     {
@@ -233,8 +228,7 @@ namespace ao::uimodel::test
           formatTrackCreditRowActionLabel(english, TrackCreditRowAction::Delete, 1));
   }
 
-  TEST_CASE("TrackCredits - Add without an explicit kind uses the single scoped kind or Performer",
-            "[uimodel][unit][track-credits]")
+  TEST_CASE("TrackCredits - Add without an explicit kind uses the single scoped kind or Performer")
   {
     using K = library::CreditKind;
     auto const sections = commonCredits();
@@ -261,8 +255,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("TrackCredits - mixed editing requires explicit replacement or a distinct explicit clear",
-            "[uimodel][unit][track-credits]")
+  TEST_CASE("TrackCredits - mixed editing requires explicit replacement or a distinct explicit clear")
   {
     using K = library::CreditKind;
     auto sections = commonCredits({{"Must not seed", K::Conductor, "Guest"}});
@@ -304,8 +297,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("TrackCredits - mixed clear intent survives add and delete only within its session",
-            "[uimodel][unit][track-credits]")
+  TEST_CASE("TrackCredits - mixed clear intent survives add and delete only within its session")
   {
     using K = library::CreditKind;
     auto sections = commonCredits({{"Common", K::Conductor, "Guest"}});
@@ -337,7 +329,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(model.buildCommitPatch());
   }
 
-  TEST_CASE("TrackCredits - draft changes count only intent a discard would lose", "[uimodel][unit][track-credits]")
+  TEST_CASE("TrackCredits - draft changes count only intent a discard would lose")
   {
     using K = library::CreditKind;
     auto model = TrackCreditsEditorModel{};
@@ -374,8 +366,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("TrackCredits - common clear roundtrip retains empty NoOp and nonempty clear semantics",
-            "[uimodel][unit][track-credits]")
+  TEST_CASE("TrackCredits - common clear roundtrip retains empty NoOp and nonempty clear semantics")
   {
     using K = library::CreditKind;
     auto entries = std::vector<library::Credit>{};
@@ -408,8 +399,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("TrackCredits - Properties full clear roundtrip replaces staged scopes without early writes",
-            "[uimodel][unit][track-credits]")
+  TEST_CASE("TrackCredits - Properties full clear roundtrip replaces staged scopes without early writes")
   {
     using K = library::CreditKind;
     auto storage = rt::test::MusicLibraryFixture{};
@@ -452,8 +442,7 @@ namespace ao::uimodel::test
     CHECK(std::get<std::string>(snapshot.trackField(first, rt::TrackField::Title)) == "Before");
   }
 
-  TEST_CASE("TrackCredits - failed validation retains row text attributes errors and focus",
-            "[uimodel][unit][track-credits]")
+  TEST_CASE("TrackCredits - failed validation retains row text attributes errors and focus")
   {
     using K = library::CreditKind;
     auto model = TrackCreditsEditorModel{};
@@ -476,8 +465,7 @@ namespace ao::uimodel::test
     CHECK(model.entries()[0].name == " Gould ");
   }
 
-  TEST_CASE("TrackCredits - later invalid rows report typed reasons without changing the draft",
-            "[uimodel][unit][track-credits]")
+  TEST_CASE("TrackCredits - later invalid rows report typed reasons without changing the draft")
   {
     using K = library::CreditKind;
     auto model = TrackCreditsEditorModel{};
@@ -518,8 +506,7 @@ namespace ao::uimodel::test
                                                                         {"Fourth", K::Performer, "Violin"}});
   }
 
-  TEST_CASE("TrackCredits - public baselines reject invalid kinds and noncanonical text without opening",
-            "[uimodel][unit][track-credits]")
+  TEST_CASE("TrackCredits - public baselines reject invalid kinds and noncanonical text without opening")
   {
     using K = library::CreditKind;
     auto sections = commonCredits({{"A", K::Conductor, "Guest"}});
@@ -577,8 +564,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(undoValueForClearedTrackCredits(sections, trackCreditScope(K::Conductor)));
   }
 
-  TEST_CASE("TrackCredits - complete normalized equality includes role multiplicity and within-kind order",
-            "[uimodel][unit][track-credits]")
+  TEST_CASE("TrackCredits - complete normalized equality includes role multiplicity and within-kind order")
   {
     using K = library::CreditKind;
     auto model = TrackCreditsEditorModel{};
@@ -606,8 +592,7 @@ namespace ao::uimodel::test
           std::vector<library::Credit>{{"B", K::Conductor, ""}, {"\xc3\xa9", K::Conductor, "New role"}});
   }
 
-  TEST_CASE("TrackCredits - full editor reclassification appends destination and forbids cross-kind reorder",
-            "[uimodel][unit][track-credits]")
+  TEST_CASE("TrackCredits - full editor reclassification appends destination and forbids cross-kind reorder")
   {
     using K = library::CreditKind;
     auto const sections =
@@ -639,8 +624,7 @@ namespace ao::uimodel::test
     CHECK(model.scope() == trackCreditScope(K::Conductor));
   }
 
-  TEST_CASE("TrackCredits - fixed category deletion clears only that scope and invalid scopes never open",
-            "[uimodel][unit][track-credits]")
+  TEST_CASE("TrackCredits - fixed category deletion clears only that scope and invalid scopes never open")
   {
     using K = library::CreditKind;
     auto const sections = commonCredits({{"A", K::Soloist, "Violin"}});
@@ -662,7 +646,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(model.buildCommitPatch());
   }
 
-  TEST_CASE("TrackCredits - scoped clear undo ignores unrelated mixed categories", "[uimodel][unit][track-credits]")
+  TEST_CASE("TrackCredits - scoped clear undo ignores unrelated mixed categories")
   {
     using K = library::CreditKind;
     auto sections = commonCredits({{"A", K::Conductor, "Guest"}, {"A", K::Conductor, "Guest"}});
@@ -692,8 +676,7 @@ namespace ao::uimodel::test
     CHECK(shouldShowTrackCredits(true, true, true, commonCredits(), false));
   }
 
-  TEST_CASE("TrackCredits - owning baseline distinguishes missing empty and complete per-kind disagreement",
-            "[uimodel][unit][track-credits]")
+  TEST_CASE("TrackCredits - owning baseline distinguishes missing empty and complete per-kind disagreement")
   {
     using K = library::CreditKind;
     auto storage = rt::test::MusicLibraryFixture{};
@@ -734,8 +717,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(patchRes->optCredits);
   }
 
-  TEST_CASE("TrackCredits - present target with missing cold record reports corrupt baseline",
-            "[uimodel][unit][track-credits]")
+  TEST_CASE("TrackCredits - present target with missing cold record reports corrupt baseline")
   {
     auto storage = rt::test::MusicLibraryFixture{};
     auto const id = storage.addTrack({.title = "Present", .uri = "present.flac"});

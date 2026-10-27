@@ -13,7 +13,7 @@
 
 namespace ao::tui::test
 {
-  TEST_CASE("HitRegions - hitTestButton resolves clickable buttons", "[tui][unit][hit-region]")
+  TEST_CASE("HitRegions - hitTestButton resolves clickable buttons")
   {
     auto regions = HitRegions{};
     regions.outputDeviceButtonBox = ftxui::Box{.x_min = 1, .x_max = 5, .y_min = 0, .y_max = 0};
@@ -35,7 +35,7 @@ namespace ao::tui::test
     CHECK(regions.hitTestButton(60, 10).hoveredButton == HoveredButton::None);
   }
 
-  TEST_CASE("HitRegions - text-input and overlay context applies modal hover policy", "[tui][unit][hit-region]")
+  TEST_CASE("HitRegions - text-input and overlay context applies modal hover policy")
   {
     auto regions = HitRegions{};
     regions.outputDeviceButtonBox = ftxui::Box{.x_min = 1, .x_max = 5, .y_min = 0, .y_max = 0};
@@ -52,7 +52,7 @@ namespace ao::tui::test
     CHECK(overlaySoulHit.isQualityHoverVisible == false);
   }
 
-  TEST_CASE("HitRegions - clearFrameLocalRows clears conditional footer buttons", "[tui][unit][hit-region]")
+  TEST_CASE("HitRegions - clearFrameLocalRows clears conditional footer buttons")
   {
     auto regions = HitRegions{};
     regions.presentationButtonBox = ftxui::Box{.x_min = 1, .x_max = 4, .y_min = 2, .y_max = 2};

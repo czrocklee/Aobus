@@ -43,8 +43,7 @@
 
 namespace ao::library::test
 {
-  TEST_CASE("TrackBuilder - work and performance blocks are independently optional",
-            "[library][unit][track-performance]")
+  TEST_CASE("TrackBuilder - work and performance blocks are independently optional")
   {
     auto context = TrackSerializationFixture{};
     auto builder = TrackBuilder::makeEmpty();
@@ -105,8 +104,7 @@ namespace ao::library::test
     CHECK((header.blockOffsets[3] != 0) == hasPerformance);
   }
 
-  TEST_CASE("TrackBuilder - direct borrowed credit admission groups kinds and preserves duplicates roles and NFC",
-            "[library][unit][track-performance]")
+  TEST_CASE("TrackBuilder - direct borrowed credit admission groups kinds and preserves duplicates roles and NFC")
   {
     auto context = TrackSerializationFixture{};
     auto builder = TrackBuilder::makeEmpty();
@@ -146,8 +144,7 @@ namespace ao::library::test
           cold.data() + header->blockOffsets[3] + sizeof(TrackPerformanceBlock));
   }
 
-  TEST_CASE("TrackBuilder - recording date retains exact partial precision independently of release year",
-            "[library][unit][track-performance]")
+  TEST_CASE("TrackBuilder - recording date retains exact partial precision independently of release year")
   {
     auto context = TrackSerializationFixture{};
 
@@ -169,8 +166,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("TrackBuilder - complete reconstruction retains all kinds and hot reconstruction avoids cold",
-            "[library][unit][track-performance]")
+  TEST_CASE("TrackBuilder - complete reconstruction retains all kinds and hot reconstruction avoids cold")
   {
     auto context = TrackSerializationFixture{};
     auto original = TrackBuilder::makeEmpty();
@@ -223,8 +219,7 @@ namespace ao::library::test
     CHECK(hotOnly.metadata().work().empty());
   }
 
-  TEST_CASE("TrackBuilder - whole-list replacement and clear preserve the independent date",
-            "[library][unit][track-performance]")
+  TEST_CASE("TrackBuilder - whole-list replacement and clear preserve the independent date")
   {
     auto context = TrackSerializationFixture{};
     auto builder = TrackBuilder::makeEmpty();
@@ -248,8 +243,7 @@ namespace ao::library::test
     CHECK(clearedPerformance.recordingDate() == date);
   }
 
-  TEST_CASE("TrackBuilder - invalid performance input rejects before staging dictionary or resources",
-            "[library][unit][track-performance]")
+  TEST_CASE("TrackBuilder - invalid performance input rejects before staging dictionary or resources")
   {
     auto context = TrackSerializationFixture{};
     auto builder = TrackBuilder::makeEmpty();
@@ -300,8 +294,7 @@ namespace ao::library::test
     CHECK(context.dictionary().size() == 0);
   }
 
-  TEST_CASE("TrackBuilder - aggregate cold bounds reject excessive credits and merged retained blocks before interning",
-            "[library][unit][track-performance]")
+  TEST_CASE("TrackBuilder - aggregate cold bounds reject excessive credits and merged retained blocks before interning")
   {
     auto context = TrackSerializationFixture{};
     auto builder = TrackBuilder::makeEmpty();
@@ -340,8 +333,7 @@ namespace ao::library::test
     CHECK(context.dictionary().size() == 0);
   }
 
-  TEST_CASE("TrackBuilder - largest credit list fitting a short URI is stored without truncation",
-            "[library][unit][track-performance]")
+  TEST_CASE("TrackBuilder - largest credit list fitting a short URI is stored without truncation")
   {
     auto context = TrackSerializationFixture{};
     auto builder = TrackBuilder::makeEmpty();
@@ -360,8 +352,7 @@ namespace ao::library::test
     CHECK(credits.back().roleId == kInvalidDictionaryId);
   }
 
-  TEST_CASE("TrackBuilder - prepared performance survives owning input destruction and builder replacement",
-            "[library][unit][track-performance]")
+  TEST_CASE("TrackBuilder - prepared performance survives owning input destruction and builder replacement")
   {
     auto context = TrackSerializationFixture{};
     auto builder = TrackBuilder::makeEmpty();
@@ -423,8 +414,7 @@ namespace ao::library::test
     CHECK(credits[2].roleId == credits[0].roleId);
   }
 
-  TEST_CASE("TrackWriter - rejected performance admission leaves no rows even when the operation commits",
-            "[library][unit][track-performance]")
+  TEST_CASE("TrackWriter - rejected performance admission leaves no rows even when the operation commits")
   {
     auto fixture = TrackStoreFixture{};
     auto rejected = TrackBuilder::makeEmpty();
@@ -461,8 +451,7 @@ namespace ao::library::test
     CHECK(fixture.library.resources().reader(read).maxKey() == kInvalidResourceId);
   }
 
-  TEST_CASE("TrackWriter - rejected performance updates remain write-neutral when committed",
-            "[library][unit][track-performance]")
+  TEST_CASE("TrackWriter - rejected performance updates remain write-neutral when committed")
   {
     auto fixture = TrackStoreFixture{};
     auto const spec =
@@ -520,8 +509,7 @@ namespace ao::library::test
     CHECK(optManifest->trackId() == id);
   }
 
-  TEST_CASE("TrackWriter - hot updates preserve owning fixture credits and complete updates clear them",
-            "[library][unit][track-performance]")
+  TEST_CASE("TrackWriter - hot updates preserve owning fixture credits and complete updates clear them")
   {
     auto fixture = TrackStoreFixture{};
     auto const spec = TrackSpec{.title = "Before",
@@ -572,8 +560,7 @@ namespace ao::library::test
     CHECK(optView->performance().recordingDate() == RecordingDate{});
   }
 
-  TEST_CASE("TrackWriter - native failure after credit interning aborts all staged text and rows",
-            "[library][unit][track-performance]")
+  TEST_CASE("TrackWriter - native failure after credit interning aborts all staged text and rows")
   {
     constexpr std::size_t kMapBytes = std::size_t{256} * 1024;
     auto const temp = ao::test::TempDir{};

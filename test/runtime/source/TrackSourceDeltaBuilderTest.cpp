@@ -47,8 +47,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("TrackSourceDeltaBuilder - non-contiguous removals are coalesced in descending order",
-            "[runtime][unit][source]")
+  TEST_CASE("TrackSourceDeltaBuilder - non-contiguous removals are coalesced in descending order")
   {
     auto builder = TrackSourceDeltaBuilder{6};
     builder.remove(2, TrackId{30});
@@ -69,7 +68,7 @@ namespace ao::rt::test
           std::vector{TrackId{10}, TrackId{40}, TrackId{60}});
   }
 
-  TEST_CASE("TrackSourceDeltaBuilder - non-contiguous move inserts at the post-removal gap", "[runtime][unit][source]")
+  TEST_CASE("TrackSourceDeltaBuilder - non-contiguous move inserts at the post-removal gap")
   {
     auto builder = TrackSourceDeltaBuilder{6};
     builder.remove(4, TrackId{50});
@@ -90,8 +89,7 @@ namespace ao::rt::test
           std::vector{TrackId{10}, TrackId{30}, TrackId{20}, TrackId{50}, TrackId{40}, TrackId{60}});
   }
 
-  TEST_CASE("TrackSourceDeltaBuilder - ascending insertions use sequential resulting coordinates",
-            "[runtime][unit][source]")
+  TEST_CASE("TrackSourceDeltaBuilder - ascending insertions use sequential resulting coordinates")
   {
     auto builder = TrackSourceDeltaBuilder{3};
     builder.insert(4, TrackId{60});
@@ -112,8 +110,7 @@ namespace ao::rt::test
           std::vector{TrackId{10}, TrackId{40}, TrackId{50}, TrackId{20}, TrackId{60}, TrackId{30}});
   }
 
-  TEST_CASE("TrackSourceDeltaBuilder - updates are sorted and coalesced after structural edits",
-            "[runtime][unit][source]")
+  TEST_CASE("TrackSourceDeltaBuilder - updates are sorted and coalesced after structural edits")
   {
     auto builder = TrackSourceDeltaBuilder{3};
     builder.remove(0, TrackId{10});
@@ -129,8 +126,7 @@ namespace ao::rt::test
                                                        delta::UpdateRange{1, {TrackId{20}, TrackId{30}}}}});
   }
 
-  TEST_CASE("TrackSourceDeltaBuilder - update-only batches preserve membership and coalesce adjacent updates",
-            "[runtime][unit][source]")
+  TEST_CASE("TrackSourceDeltaBuilder - update-only batches preserve membership and coalesce adjacent updates")
   {
     auto builder = TrackSourceDeltaBuilder{4};
     builder.update(3, TrackId{40});
@@ -148,7 +144,7 @@ namespace ao::rt::test
     CHECK(*appliedRes == original);
   }
 
-  TEST_CASE("TrackSourceDeltaBuilder - no registered identities produce no batch", "[runtime][unit][source]")
+  TEST_CASE("TrackSourceDeltaBuilder - no registered identities produce no batch")
   {
     auto const builder = TrackSourceDeltaBuilder{4};
 

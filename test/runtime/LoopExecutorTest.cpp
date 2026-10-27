@@ -38,7 +38,7 @@ namespace ao::async::test
     }
   } // namespace
 
-  TEST_CASE("LoopExecutor - owner dispatch runs inline", "[runtime][unit][async]")
+  TEST_CASE("LoopExecutor - owner dispatch runs inline")
   {
     auto executor = LoopExecutor{};
     auto order = std::vector<int>{};
@@ -50,7 +50,7 @@ namespace ao::async::test
     CHECK_FALSE(executor.tryRunReadyTurn());
   }
 
-  TEST_CASE("LoopExecutor - foreign dispatch runs on the owner thread", "[runtime][unit][async][concurrency]")
+  TEST_CASE("LoopExecutor - foreign dispatch runs on the owner thread", "[concurrency]")
   {
     auto executor = LoopExecutor{};
     auto const ownerThread = std::this_thread::get_id();
@@ -67,7 +67,7 @@ namespace ao::async::test
     CHECK_FALSE(executor.tryRunReadyTurn());
   }
 
-  TEST_CASE("LoopExecutor - a timed-out wait preserves subsequent turns", "[runtime][unit][async][concurrency]")
+  TEST_CASE("LoopExecutor - a timed-out wait preserves subsequent turns", "[concurrency]")
   {
     auto executor = LoopExecutor{};
 
@@ -96,7 +96,7 @@ namespace ao::async::test
     CHECK_FALSE(executor.tryRunReadyTurn());
   }
 
-  TEST_CASE("LoopExecutor - a bounded wait accepts a foreign producer", "[runtime][unit][async][concurrency]")
+  TEST_CASE("LoopExecutor - a bounded wait accepts a foreign producer", "[concurrency]")
   {
     auto executor = LoopExecutor{};
     auto const ownerThread = std::this_thread::get_id();
@@ -113,7 +113,7 @@ namespace ao::async::test
     CHECK_FALSE(executor.tryRunReadyTurn());
   }
 
-  TEST_CASE("LoopExecutor - concurrent producers share one ready turn", "[runtime][unit][async][concurrency]")
+  TEST_CASE("LoopExecutor - concurrent producers share one ready turn", "[concurrency]")
   {
     constexpr std::size_t kProducerCount = 8;
     auto executor = LoopExecutor{};
@@ -154,7 +154,7 @@ namespace ao::async::test
     CHECK_FALSE(executor.tryRunReadyTurn());
   }
 
-  TEST_CASE("LoopExecutor - a pending burst preserves FIFO order in one ready turn", "[runtime][unit][async]")
+  TEST_CASE("LoopExecutor - a pending burst preserves FIFO order in one ready turn")
   {
     auto executor = LoopExecutor{};
     auto order = std::vector<std::int32_t>{};
@@ -170,7 +170,7 @@ namespace ao::async::test
     CHECK_FALSE(executor.tryRunReadyTurn());
   }
 
-  TEST_CASE("LoopExecutor - work queued during a turn runs in a later turn", "[runtime][unit][async][concurrency]")
+  TEST_CASE("LoopExecutor - work queued during a turn runs in a later turn", "[concurrency]")
   {
     auto executor = LoopExecutor{};
     auto drainStarted = std::binary_semaphore{0};
@@ -229,7 +229,7 @@ namespace ao::async::test
     CHECK_FALSE(executor.tryRunReadyTurn());
   }
 
-  TEST_CASE("LoopExecutor - deferred work admitted during a turn runs later", "[runtime][unit][async]")
+  TEST_CASE("LoopExecutor - deferred work admitted during a turn runs later")
   {
     auto executor = LoopExecutor{};
     auto order = std::vector<int>{};
@@ -250,7 +250,7 @@ namespace ao::async::test
     CHECK_FALSE(executor.tryRunReadyTurn());
   }
 
-  TEST_CASE("LoopExecutor - nested pumping does not reenter a draining turn", "[runtime][unit][async]")
+  TEST_CASE("LoopExecutor - nested pumping does not reenter a draining turn")
   {
     auto executor = LoopExecutor{};
     auto order = std::vector<int>{};
@@ -273,7 +273,7 @@ namespace ao::async::test
     CHECK(order == std::vector<int>{1, 2, 3});
   }
 
-  TEST_CASE("QueuedExecutorBase - final drain includes deferred continuations", "[runtime][unit][async]")
+  TEST_CASE("QueuedExecutorBase - final drain includes deferred continuations")
   {
     auto executor = FinalDrainExecutor{};
     auto order = std::vector<int>{};

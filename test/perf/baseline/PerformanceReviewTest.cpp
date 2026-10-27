@@ -857,7 +857,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("PerformanceReview - ordering and completion-alias workloads", "[perf][unit][review]")
+  TEST_CASE("PerformanceReview - ordering and completion-alias workloads")
   {
     Log::initialize(LogLevel::Info);
     auto const samples = configuredCount("AOBUS_PERF_SAMPLES", kDefaultSamples, 1);
@@ -1148,8 +1148,7 @@ namespace ao::rt::test
 
   // Run this case alone in a fresh process with --samples 1 --warmups 0.
   // Select kana/han in separate invocations; ICU has no reset between samples.
-  TEST_CASE("PerformanceReview - first completion alias transform in an isolated process",
-            "[perf][unit][completion-alias][audit-cold-alias]")
+  TEST_CASE("PerformanceReview - first completion alias transform in an isolated process")
   {
     auto const samples = configuredCount("AOBUS_PERF_SAMPLES", 1, 1);
     auto const warmups = configuredCount("AOBUS_PERF_WARMUPS", 0, 0);
@@ -1174,7 +1173,7 @@ namespace ao::rt::test
     writeReport(measurements, warmups, samples);
   }
 
-  TEST_CASE("PerformanceReview - query expression admission and recursive phases", "[perf][unit][audit-query]")
+  TEST_CASE("PerformanceReview - query expression admission and recursive phases")
   {
     auto const count = configuredCount("AOBUS_AUDIT_QUERY_ATOMS", 128, 1);
     auto const samples = configuredCount("AOBUS_PERF_SAMPLES", kDefaultSamples, 1);
@@ -1329,8 +1328,7 @@ namespace ao::rt::test
     writeReport(measurements, warmups, samples);
   }
 
-  TEST_CASE("PerformanceReview - graph bursts retain one latest payload until owner delivery",
-            "[perf][unit][audit-observation][concurrency]")
+  TEST_CASE("PerformanceReview - graph bursts retain one latest payload until owner delivery")
   {
     auto const count = configuredCount("AOBUS_AUDIT_OBSERVATIONS", 1000, 1);
     auto const samples = configuredCount("AOBUS_PERF_SAMPLES", kDefaultSamples, 1);

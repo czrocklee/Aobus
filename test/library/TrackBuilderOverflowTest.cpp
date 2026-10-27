@@ -27,8 +27,7 @@
 
 namespace ao::library::test
 {
-  TEST_CASE("TrackBuilder - hot serialization rejects values that exceed header fields",
-            "[library][unit][track-builder][overflow]")
+  TEST_CASE("TrackBuilder - hot serialization rejects values that exceed header fields")
   {
     constexpr std::size_t kUint16Max = std::numeric_limits<std::uint16_t>::max();
 
@@ -71,8 +70,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("TrackBuilder - cold serialization names the component that crosses the record limit",
-            "[library][unit][track-builder][overflow]")
+  TEST_CASE("TrackBuilder - cold serialization names the component that crosses the record limit")
   {
     auto context = TrackSerializationFixture{};
     auto builder = TrackBuilder::makeEmpty();
@@ -151,8 +149,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("TrackBuilder - the cold record limit covers the whole record including padding",
-            "[library][unit][track-builder][overflow]")
+  TEST_CASE("TrackBuilder - the cold record limit covers the whole record including padding")
   {
     // The limit is format: pin its value independently of the production constant.
     STATIC_REQUIRE(kTrackColdRecordSizeLimit == 65'535);
@@ -210,8 +207,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("TrackBuilder - cold preflight reports invalid input before an oversized record",
-            "[library][unit][track-builder][overflow]")
+  TEST_CASE("TrackBuilder - cold preflight reports invalid input before an oversized record")
   {
     auto context = TrackSerializationFixture{};
     auto builder = TrackBuilder::makeEmpty();
@@ -246,8 +242,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("TrackBuilder - cold serialization rejects durations outside the stored range",
-            "[library][unit][track-builder][overflow]")
+  TEST_CASE("TrackBuilder - cold serialization rejects durations outside the stored range")
   {
     auto context = TrackSerializationFixture{};
 
@@ -265,8 +260,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("TrackBuilder - complete preflight keeps rejected cold data from staging shared dictionary rows",
-            "[library][unit][track-builder][atomicity]")
+  TEST_CASE("TrackBuilder - complete preflight keeps rejected cold data from staging shared dictionary rows")
   {
     constexpr auto kUint16Overflow = static_cast<std::size_t>(std::numeric_limits<std::uint16_t>::max()) + 1U;
     auto context = TrackSerializationFixture{};

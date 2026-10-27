@@ -30,8 +30,7 @@
 
 namespace ao::audio::backend::test
 {
-  TEST_CASE("WasapiSharedBackend - selected native endpoint observes declared roles and direct-out opens",
-            "[audio][integration][wasapi][.manual]")
+  TEST_CASE("WasapiSharedBackend - selected native endpoint observes declared roles and direct-out opens", "[.manual]")
   {
     // Explicitly selected idle endpoint only. No start/render/PCM submission,
     // test setProperty call, endpoint-volume write or system-default change.

@@ -105,8 +105,7 @@ namespace ao::systemmedia::test
     }
   } // namespace
 
-  TEST_CASE("MprisBridge private bus - changed properties precede a later live query on the wire",
-            "[platform][integration][mpris][concurrency]")
+  TEST_CASE("MprisBridge private bus - changed properties precede a later live query on the wire", "[concurrency]")
   {
     constexpr auto kPlayerInterface = "org.mpris.MediaPlayer2.Player";
     auto bus = PrivateBus{};

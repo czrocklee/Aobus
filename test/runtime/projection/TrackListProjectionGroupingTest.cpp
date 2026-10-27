@@ -31,7 +31,7 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("TrackListProjection - group sections for Artist grouping", "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - group sections for Artist grouping")
   {
     auto env = TrackListProjectionFixture{};
 
@@ -100,7 +100,7 @@ namespace ao::rt::test
     CHECK_FALSE(proj.groupRangeAt(5));
   }
 
-  TEST_CASE("TrackListProjection - large artist groups keep compound sort order", "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - large artist groups keep compound sort order")
   {
     auto env = TrackListProjectionFixture{};
 
@@ -229,7 +229,7 @@ namespace ao::rt::test
     CHECK_FALSE(proj.groupRangeAt(expectedOrder.size()).has_value());
   }
 
-  TEST_CASE("TrackListProjection - normalized artist order retains raw group labels", "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - normalized artist order retains raw group labels")
   {
     auto env = TrackListProjectionFixture{};
 
@@ -255,8 +255,7 @@ namespace ao::rt::test
     CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "Coldplay");
   }
 
-  TEST_CASE("TrackListProjection - Unicode caseless artist identities select the first ordered raw headings",
-            "[runtime][unit][projection][unicode]")
+  TEST_CASE("TrackListProjection - Unicode caseless artist identities select the first ordered raw headings")
   {
     auto env = TrackListProjectionFixture{};
     auto const upper = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Zulu", .artist = "MÉTAL"});
@@ -289,8 +288,7 @@ namespace ao::rt::test
     CHECK(trackGroupHeadingText(projection.groupAt(1).heading.primary) == "Straße");
   }
 
-  TEST_CASE("TrackListProjection - equal locale group keys retain distinct contiguous identities",
-            "[runtime][unit][projection][collation]")
+  TEST_CASE("TrackListProjection - equal locale group keys retain distinct contiguous identities")
   {
     auto policyRes = i18n::createIcuTextOrderingPolicy("en-US");
     REQUIRE(policyRes);
@@ -322,8 +320,7 @@ namespace ao::rt::test
     CHECK(projection.groupAt(1).rows.count == 2);
   }
 
-  TEST_CASE("TrackListProjection - article-insensitive artist order keeps distinct contiguous identities",
-            "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - article-insensitive artist order keeps distinct contiguous identities")
   {
     auto env = TrackListProjectionFixture{};
     auto const doorsAlpha = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Alpha", .artist = "Doors"});
@@ -355,8 +352,7 @@ namespace ao::rt::test
     CHECK(proj.groupAt(1).rows.count == 2);
   }
 
-  TEST_CASE("TrackListProjection - grouping remains contiguous when the configured sort omits the group field",
-            "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - grouping remains contiguous when the configured sort omits the group field")
   {
     auto env = TrackListProjectionFixture{};
     auto const bravoA = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "A", .artist = "Bravo"});
@@ -382,8 +378,7 @@ namespace ao::rt::test
     CHECK(proj.groupAt(1).rows.count == 2);
   }
 
-  TEST_CASE("TrackListProjection - album group identities preserve articles across sort directions",
-            "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - album group identities preserve articles across sort directions")
   {
     auto env = TrackListProjectionFixture{};
     auto const wallA =
@@ -422,7 +417,7 @@ namespace ao::rt::test
     CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "The Wall");
   }
 
-  TEST_CASE("TrackListProjection - work group identities do not discard articles", "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - work group identities do not discard articles")
   {
     auto env = TrackListProjectionFixture{};
     auto const planetsA =
@@ -450,7 +445,7 @@ namespace ao::rt::test
     CHECK(proj.groupAt(1).rows.count == 2);
   }
 
-  TEST_CASE("TrackListProjection - group sections empty for None grouping", "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - group sections empty for None grouping")
   {
     auto env = TrackListProjectionFixture{};
     auto id1 = env.libraryFixture.addTrack(library::test::makeTrackSpec("T1", 2020));
@@ -471,7 +466,7 @@ namespace ao::rt::test
     CHECK_FALSE(proj.groupRangeAt(0).has_value());
   }
 
-  TEST_CASE("TrackListProjection - empty source has no group sections", "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - empty source has no group sections")
   {
     auto env = TrackListProjectionFixture{};
     env.setupFiltered({});
@@ -488,7 +483,7 @@ namespace ao::rt::test
     CHECK_FALSE(proj.groupRangeAt(0).has_value());
   }
 
-  TEST_CASE("TrackListProjection - group label for unknown artist", "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - group label for unknown artist")
   {
     auto env = TrackListProjectionFixture{};
 
@@ -507,7 +502,7 @@ namespace ao::rt::test
     CHECK(trackGroupHeadingMissingKind(proj.groupAt(0).heading.primary) == MissingTrackValueKind::Artist);
   }
 
-  TEST_CASE("TrackListProjection - group label for unknown year", "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - group label for unknown year")
   {
     auto env = TrackListProjectionFixture{};
 
@@ -526,8 +521,7 @@ namespace ao::rt::test
     CHECK(trackGroupHeadingMissingKind(proj.groupAt(0).heading.primary) == MissingTrackValueKind::Year);
   }
 
-  TEST_CASE("TrackListProjection - grouped presentation without sort terms materializes its group key",
-            "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - grouped presentation without sort terms materializes its group key")
   {
     auto env = TrackListProjectionFixture{};
     auto const track2021 = env.libraryFixture.addTrack(library::test::makeTrackSpec("Later", 2021));
@@ -544,7 +538,7 @@ namespace ao::rt::test
     CHECK(trackGroupHeadingYear(proj.groupAt(1).heading.primary) == 2021);
   }
 
-  TEST_CASE("TrackListProjection - album groups split by album artist", "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - album groups split by album artist")
   {
     auto env = TrackListProjectionFixture{};
 
@@ -573,8 +567,7 @@ namespace ao::rt::test
     CHECK(trackGroupHeadingYear(proj.groupAt(1).heading.tertiary) == 2020);
   }
 
-  TEST_CASE("TrackListProjection - supplied compound group fields inherit the authored direction",
-            "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - supplied compound group fields inherit the authored direction")
   {
     auto env = TrackListProjectionFixture{};
     auto const alpha =
@@ -596,8 +589,7 @@ namespace ao::rt::test
     CHECK(trackGroupHeadingText(proj.groupAt(1).heading.secondary) == "Alpha");
   }
 
-  TEST_CASE("TrackListProjection - presentation returns active grouping and redundant fields snapshot",
-            "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - presentation returns active grouping and redundant fields snapshot")
   {
     auto env = TrackListProjectionFixture{};
     env.setupFiltered({});
@@ -620,8 +612,7 @@ namespace ao::rt::test
     CHECK(snap.redundantFields == expectedRedundant);
   }
 
-  TEST_CASE("TrackListProjection - an album without an album artist names its track artists",
-            "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - an album without an album artist names its track artists")
   {
     auto env = TrackListProjectionFixture{};
     auto const addTrack = [&env](std::string title, std::string album, std::string artist, std::string albumArtist = {})
@@ -711,8 +702,7 @@ namespace ao::rt::test
     CHECK(trackGroupHeadingText(headingOf("Folding").secondary) == "STRASSE");
   }
 
-  TEST_CASE("TrackListProjection - live edits keep the track artist heading of an album current",
-            "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - live edits keep the track artist heading of an album current")
   {
     auto env = TrackListProjectionFixture{};
     auto const first =
@@ -832,7 +822,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackListProjection - unknown album label", "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - unknown album label")
   {
     auto env = TrackListProjectionFixture{};
 
@@ -854,8 +844,7 @@ namespace ao::rt::test
     CHECK(trackGroupHeadingMissingKind(proj.groupAt(0).heading.secondary) == MissingTrackValueKind::Artist);
   }
 
-  TEST_CASE("TrackListProjection - grouping labels genre composer conductor ensemble and work fields",
-            "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - grouping labels genre composer conductor ensemble and work fields")
   {
     auto env = TrackListProjectionFixture{};
 
@@ -933,8 +922,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackListProjection - same primary credits keep distinct row counts through incremental refresh",
-            "[runtime][unit][projection][credits]")
+  TEST_CASE("TrackListProjection - same primary credits keep distinct row counts through incremental refresh")
   {
     auto kind = library::CreditKind::Conductor;
     auto field = TrackField::Conductor;
@@ -1057,7 +1045,7 @@ namespace ao::rt::test
     replace({{.name = "Zulu", .kind = kind}, {.name = "Zulu", .kind = kind}}, 2);
   }
 
-  TEST_CASE("TrackListProjection - every grouping supplies a semantic primary heading", "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - every grouping supplies a semantic primary heading")
   {
     auto env = TrackListProjectionFixture{};
     auto const trackId = env.libraryFixture.addTrack(library::test::makeEmptyTrackSpec("t1.flac"));

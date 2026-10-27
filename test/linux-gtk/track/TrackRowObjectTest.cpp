@@ -17,7 +17,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("TrackRowObject - mutations refresh computed and text-backed display values", "[gtk][unit][track]")
+  TEST_CASE("TrackRowObject - mutations refresh computed and text-backed display values")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto const rowPtr = TrackRowObject::create(TrackId{1}, ao::test::englishMessageCatalog());

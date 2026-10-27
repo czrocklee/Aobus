@@ -7,8 +7,7 @@
 
 namespace ao::audio::backend::detail::test
 {
-  TEST_CASE("AudioBackendRenderProgress - committedPositionFrames handles partial cross-boundary commits",
-            "[audio][unit][backend][render]")
+  TEST_CASE("AudioBackendRenderProgress - committedPositionFrames handles partial cross-boundary commits")
   {
     CHECK(committedPositionFrames(0, 2, 2) == 0);
     CHECK(committedPositionFrames(1, 2, 2) == 0);

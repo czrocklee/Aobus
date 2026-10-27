@@ -30,7 +30,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("ActivityStatusViewModel - projects runtime feed updates", "[uimodel][unit][activity-status]")
+  TEST_CASE("ActivityStatusViewModel - projects runtime feed updates")
   {
     auto executor = rt::test::InlineExecutor{};
     auto sleeper = rt::test::ControlledSleeper{};
@@ -175,8 +175,7 @@ namespace ao::uimodel::test
     CHECK(renderCount > 0);
   }
 
-  TEST_CASE("ActivityStatusViewModel - accepted history eviction projects one bounded snapshot",
-            "[uimodel][unit][activity-status]")
+  TEST_CASE("ActivityStatusViewModel - accepted history eviction projects one bounded snapshot")
   {
     auto executor = rt::test::InlineExecutor{};
     auto runtime = async::Runtime{executor, 1};
@@ -214,7 +213,7 @@ namespace ao::uimodel::test
     CHECK(notifications.feed().entries.front().id == secondId);
   }
 
-  TEST_CASE("ActivityStatusViewModel - projects events from LibraryJobs", "[uimodel][unit][activity-status]")
+  TEST_CASE("ActivityStatusViewModel - projects events from LibraryJobs")
   {
     auto libraryFixture = rt::test::MusicLibraryFixture{};
     auto executor = rt::test::QueuedExecutor{};

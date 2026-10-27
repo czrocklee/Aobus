@@ -51,7 +51,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("OutputDevicePopover - constructs the configured scrolled list", "[gtk][unit][playback][output]")
+  TEST_CASE("OutputDevicePopover - constructs the configured scrolled list")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -70,8 +70,7 @@ namespace ao::gtk::test
     CHECK(hasCssClass(*listBox, "ao-rich-list"));
   }
 
-  TEST_CASE("OutputDevicePopover - retirement stops observation and rejects retained widget events",
-            "[gtk][unit][playback][output]")
+  TEST_CASE("OutputDevicePopover - retirement stops observation and rejects retained widget events")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixturePtr = std::make_unique<GtkRuntimeFixture>();
@@ -120,8 +119,7 @@ namespace ao::gtk::test
     CHECK(selections.empty());
   }
 
-  TEST_CASE("OutputDevicePopover - activates the rendered exclusive profile and records its selection",
-            "[gtk][integration][playback][output]")
+  TEST_CASE("OutputDevicePopover - activates the rendered exclusive profile and records its selection")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

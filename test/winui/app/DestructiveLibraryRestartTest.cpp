@@ -23,8 +23,7 @@ namespace ao::winui::test
     };
   } // namespace
 
-  TEST_CASE("DestructiveLibraryRestart - releases the active graph before a successful launch and exits",
-            "[winui][unit][app]")
+  TEST_CASE("DestructiveLibraryRestart - releases the active graph before a successful launch and exits")
   {
     auto events = EventLog{};
     auto const outcome = executeDestructiveLibraryRestart({
@@ -48,8 +47,7 @@ namespace ao::winui::test
     CHECK(events.values == std::vector<std::string_view>{"prepare", "release", "launch", "exit"});
   }
 
-  TEST_CASE("DestructiveLibraryRestart - reports launch failure, does not roll back, and still exits",
-            "[winui][unit][app]")
+  TEST_CASE("DestructiveLibraryRestart - reports launch failure, does not roll back, and still exits")
   {
     auto events = EventLog{};
     auto reportedCode = Error::Code::Generic;
@@ -80,8 +78,7 @@ namespace ao::winui::test
     CHECK(events.values == std::vector<std::string_view>{"prepare", "release", "launch", "report", "exit"});
   }
 
-  TEST_CASE("DestructiveLibraryRestart - preparation failure retains the active graph without launch or exit",
-            "[winui][unit][app]")
+  TEST_CASE("DestructiveLibraryRestart - preparation failure retains the active graph without launch or exit")
   {
     auto events = EventLog{};
     auto reportedCode = Error::Code::Generic;
@@ -112,8 +109,7 @@ namespace ao::winui::test
     CHECK(events.values == std::vector<std::string_view>{"prepare", "report"});
   }
 
-  TEST_CASE("DestructiveLibraryRestart - a missing required operation exits without releasing anything",
-            "[winui][unit][app]")
+  TEST_CASE("DestructiveLibraryRestart - a missing required operation exits without releasing anything")
   {
     auto events = EventLog{};
     auto reportedCode = Error::Code::Generic;
@@ -140,7 +136,7 @@ namespace ao::winui::test
     CHECK(events.values == std::vector<std::string_view>{"report", "exit"});
   }
 
-  TEST_CASE("DestructiveLibraryRestart - tolerates absent optional operations", "[winui][unit][app]")
+  TEST_CASE("DestructiveLibraryRestart - tolerates absent optional operations")
   {
     bool released = false;
     auto const outcome = executeDestructiveLibraryRestart({

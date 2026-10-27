@@ -127,10 +127,10 @@ Run commands from the repository root through `./ao`, or through `ao.bat` on nat
 For catalog-only wording in a maintained locale:
 
 1. build each affected frontend so generated ICU and native resources are current;
-2. run the catalog suite:
+2. run the ordinary core suite, which owns the catalog cases:
 
    ```bash
-   ./ao test --core "[catalog]"
+   ./ao test --core
    ```
 
 3. run message-specific UIModel or adapter tests for the changed semantic owner;

@@ -23,7 +23,7 @@ namespace ao::query::test
     }
   } // namespace
 
-  TEST_CASE("ExecutionPlan - scales duration unit constants", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - scales duration unit constants")
   {
     auto expr = parseOk("@duration >= 3m");
     auto plan = compileOk(expr);
@@ -31,7 +31,7 @@ namespace ao::query::test
     CHECK(requireLoadConstant(plan) == 180000);
   }
 
-  TEST_CASE("ExecutionPlan - scales bitrate unit constants", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - scales bitrate unit constants")
   {
     auto expr = parseOk("@bitrate >= 2m");
     auto plan = compileOk(expr);
@@ -39,7 +39,7 @@ namespace ao::query::test
     CHECK(requireLoadConstant(plan) == 2000000);
   }
 
-  TEST_CASE("ExecutionPlan - scales sample-rate unit constants", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - scales sample-rate unit constants")
   {
     auto expr = parseOk("@sampleRate = 44.1k");
     auto plan = compileOk(expr);
@@ -47,14 +47,14 @@ namespace ao::query::test
     CHECK(requireLoadConstant(plan) == 44100);
   }
 
-  TEST_CASE("ExecutionPlan - rejects unit constants on unsupported fields", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - rejects unit constants on unsupported fields")
   {
     auto expr = parseOk("$year >= 3m");
 
     std::ignore = compileError(expr);
   }
 
-  TEST_CASE("ExecutionPlan - scales unit literals", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - scales unit literals")
   {
     SECTION("Duration Supports MsSMMHUnits")
     {
@@ -115,7 +115,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("ExecutionPlan - rejects invalid unit literals", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - rejects invalid unit literals")
   {
     SECTION("Rejects UnsupportedSuffixForField")
     {

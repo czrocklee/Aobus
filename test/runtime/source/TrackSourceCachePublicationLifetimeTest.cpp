@@ -50,8 +50,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("TrackSourceCache - a delta observer may release a sibling ad-hoc lease during an update-only batch",
-            "[runtime][unit][source][track-source-cache]")
+  TEST_CASE("TrackSourceCache - a delta observer may release a sibling ad-hoc lease during an update-only batch")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack(library::test::TrackSpec{.title = "Alpha", .year = 2001});
@@ -98,8 +97,7 @@ namespace ao::rt::test
     CHECK(sourceTrackIds(optFirstLease->source()) == std::vector{trackId});
   }
 
-  TEST_CASE("TrackSourceCache - a delta observer may release a sibling ad-hoc lease during a structural batch",
-            "[runtime][unit][source][track-source-cache]")
+  TEST_CASE("TrackSourceCache - a delta observer may release a sibling ad-hoc lease during a structural batch")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const keptId = libraryFixture.addTrack(library::test::TrackSpec{.title = "Alpha", .year = 2001});
@@ -142,8 +140,7 @@ namespace ao::rt::test
     CHECK(sourceTrackIds(optFirstLease->source()) == std::vector{keptId});
   }
 
-  TEST_CASE("TrackSourceCache - a delta observer may release a sibling ad-hoc lease during an upstream reset",
-            "[runtime][unit][source][track-source-cache]")
+  TEST_CASE("TrackSourceCache - a delta observer may release a sibling ad-hoc lease during an upstream reset")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack(library::test::TrackSpec{.title = "Alpha", .year = 2001});
@@ -186,8 +183,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE(
-    "TrackSourceCache - a delta observer may release the publishing source's own lease during a structural batch",
-    "[runtime][unit][source][track-source-cache]")
+    "TrackSourceCache - a delta observer may release the publishing source's own lease during a structural batch")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const keptId = libraryFixture.addTrack(library::test::TrackSpec{.title = "Alpha", .year = 2001});
@@ -234,8 +230,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE(
-    "TrackSourceCache - a delta observer may release the publishing source's own lease during an upstream reset",
-    "[runtime][unit][source][track-source-cache]")
+    "TrackSourceCache - a delta observer may release the publishing source's own lease during an upstream reset")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack(library::test::TrackSpec{.title = "Alpha", .year = 2001});
@@ -277,8 +272,7 @@ namespace ao::rt::test
     CHECK(secondBatches.empty());
   }
 
-  TEST_CASE("TrackSourceCache - a delta observer may replace a retired bucket with a new source during a reset",
-            "[runtime][unit][source][track-source-cache]")
+  TEST_CASE("TrackSourceCache - a delta observer may replace a retired bucket with a new source during a reset")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack(library::test::TrackSpec{.title = "Alpha", .year = 2001});
@@ -326,8 +320,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE(
-    "TrackSourceCache - an invalidation observer may release a sibling ad-hoc lease during upstream invalidation",
-    "[runtime][unit][source][track-source-cache]")
+    "TrackSourceCache - an invalidation observer may release a sibling ad-hoc lease during upstream invalidation")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack(library::test::TrackSpec{.title = "Alpha", .year = 2001});
@@ -383,8 +376,7 @@ namespace ao::rt::test
     CHECK(reacquireRes.error().code == Error::Code::NotFound);
   }
 
-  TEST_CASE("TrackSourceCache - a delta observer acquiring a new ad-hoc source during publication leaves it coherent",
-            "[runtime][unit][source][track-source-cache]")
+  TEST_CASE("TrackSourceCache - a delta observer acquiring a new ad-hoc source during publication leaves it coherent")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const firstId = libraryFixture.addTrack(library::test::TrackSpec{.title = "Alpha", .year = 2001});

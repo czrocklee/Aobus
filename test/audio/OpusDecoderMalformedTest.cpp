@@ -19,7 +19,7 @@
 
 namespace ao::audio::test
 {
-  TEST_CASE("OpusDecoderSession - rejects streams it cannot open", "[audio][unit][opus][malformed]")
+  TEST_CASE("OpusDecoderSession - rejects streams it cannot open")
   {
     auto const openError = [](std::vector<std::uint8_t> const& bytes)
     {
@@ -54,7 +54,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("OpusDecoderSession - a truncated stream reaches a stable end of stream", "[audio][unit][opus][malformed]")
+  TEST_CASE("OpusDecoderSession - a truncated stream reaches a stable end of stream")
   {
     auto const source = readFileBytes(requireAudioFixture("basic_metadata.opus"));
     REQUIRE(source.size() > 1024);
@@ -89,8 +89,7 @@ namespace ao::audio::test
     CHECK(restartedBlockRes->frames > 0);
   }
 
-  TEST_CASE("OpusDecoderSession - a stream truncated before any complete audio page is rejected",
-            "[audio][unit][opus][malformed]")
+  TEST_CASE("OpusDecoderSession - a stream truncated before any complete audio page is rejected")
   {
     auto const source = readFileBytes(requireAudioFixture("basic_metadata.opus"));
     auto data = source;

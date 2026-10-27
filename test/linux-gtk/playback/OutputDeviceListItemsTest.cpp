@@ -10,7 +10,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("OutputBackendItem - retains backend identity and display name", "[gtk][unit][playback][output]")
+  TEST_CASE("OutputBackendItem - retains backend identity and display name")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto itemPtr = OutputBackendItem::create(audio::BackendId{"alsa"}, "ALSA");
@@ -19,7 +19,7 @@ namespace ao::gtk::test
     CHECK(itemPtr->name() == "ALSA");
   }
 
-  TEST_CASE("OutputDeviceItem - retains device identity and mutable active state", "[gtk][unit][playback][output]")
+  TEST_CASE("OutputDeviceItem - retains device identity and mutable active state")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto device = audio::Device{.id = audio::DeviceId{"hw:0,0"}, .displayName = "Default", .description = "Hardware"};

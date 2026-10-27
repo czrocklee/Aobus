@@ -79,8 +79,7 @@ namespace ao::uimodel::test
     }
   } // namespace
 
-  TEST_CASE("LayoutPreparation - enforces authored entry limits at the exact boundary",
-            "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutPreparation - enforces authored entry limits at the exact boundary")
   {
     auto limits = generousLimits();
     limits.authored.maxEntries = 3;
@@ -99,7 +98,7 @@ namespace ao::uimodel::test
     CHECK(rejectedRes.error().code == Error::Code::ValueTooLarge);
   }
 
-  TEST_CASE("LayoutPreparation - enforces concrete depth at the exact boundary", "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutPreparation - enforces concrete depth at the exact boundary")
   {
     auto limits = generousLimits();
     limits.authored.maxDepth = 3;
@@ -112,8 +111,7 @@ namespace ao::uimodel::test
     CHECK(rejectedRes.error().code == Error::Code::ValueTooLarge);
   }
 
-  TEST_CASE("LayoutPreparation - enforces owned string bytes at the exact boundary",
-            "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutPreparation - enforces owned string bytes at the exact boundary")
   {
     auto document = LayoutDocument{};
     document.root = LayoutNode{.id = "x", .type = "spacer"};
@@ -137,8 +135,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("LayoutPreparation - meters use-site edges below one resolved template root",
-            "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutPreparation - meters use-site edges below one resolved template root")
   {
     auto document = LayoutDocument{};
     document.root = templateReference("concrete");
@@ -157,8 +154,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("LayoutPreparation - propagates resolved root depth through template aliases",
-            "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutPreparation - propagates resolved root depth through template aliases")
   {
     auto document = LayoutDocument{};
     document.root = templateReference("alias");
@@ -178,8 +174,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("LayoutPreparation - meters every owned string category at exact boundaries",
-            "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutPreparation - meters every owned string category at exact boundaries")
   {
     SECTION("template key")
     {
@@ -206,7 +201,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("LayoutPreparation - charges copied and replacing template values", "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutPreparation - charges copied and replacing template values")
   {
     auto document = LayoutDocument{};
     document.root = templateReference("base");
@@ -224,7 +219,7 @@ namespace ao::uimodel::test
     CHECK(rejectedRes.error().code == Error::Code::ValueTooLarge);
   }
 
-  TEST_CASE("LayoutPreparation - charges unused authored templates", "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutPreparation - charges unused authored templates")
   {
     auto limits = generousLimits();
     limits.authored.maxEntries = 2;
@@ -239,7 +234,7 @@ namespace ao::uimodel::test
     CHECK(rejectedRes.error().code == Error::Code::ValueTooLarge);
   }
 
-  TEST_CASE("LayoutPreparation - bounds long acyclic template chains", "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutPreparation - bounds long acyclic template chains")
   {
     auto limits = generousLimits();
     limits.effective.maxDepth = 4;
@@ -257,7 +252,7 @@ namespace ao::uimodel::test
     CHECK(rejectedRes.error().code == Error::Code::ValueTooLarge);
   }
 
-  TEST_CASE("LayoutPreparation - charges every repeated template expansion", "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutPreparation - charges every repeated template expansion")
   {
     auto document = LayoutDocument{};
     document.root.type = "box";

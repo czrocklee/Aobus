@@ -37,7 +37,7 @@ namespace ao::media::wav::test
     }
   } // namespace
 
-  TEST_CASE("WAV RIFF parser - reads real PCM fixture layout", "[media][unit][wav]")
+  TEST_CASE("WAV RIFF parser - reads real PCM fixture layout")
   {
     auto const bytes = audio::test::readFileBytes(audio::test::requireAudioFixture("basic_metadata.wav"));
     auto parsedRes = parseWave(utility::bytes::view(bytes.data(), bytes.size()));
@@ -64,7 +64,7 @@ namespace ao::media::wav::test
     CHECK(hasInfoList);
   }
 
-  TEST_CASE("WAV RIFF parser - resolves real extensible PCM fixture layout", "[media][unit][wav]")
+  TEST_CASE("WAV RIFF parser - resolves real extensible PCM fixture layout")
   {
     auto const bytes = audio::test::readFileBytes(audio::test::requireAudioFixture("hires.wav"));
     auto parsedRes = parseWave(utility::bytes::view(bytes.data(), bytes.size()));
@@ -83,7 +83,7 @@ namespace ao::media::wav::test
     CHECK((parsed.data.size() % parsed.format.blockAlign) == 0);
   }
 
-  TEST_CASE("WAV RIFF parser - reads real IEEE float fixture layout", "[media][unit][wav]")
+  TEST_CASE("WAV RIFF parser - reads real IEEE float fixture layout")
   {
     auto const bytes = audio::test::readFileBytes(audio::test::requireAudioFixture("float32.wav"));
     auto parsedRes = parseWave(utility::bytes::view(bytes.data(), bytes.size()));
@@ -100,7 +100,7 @@ namespace ao::media::wav::test
     CHECK_FALSE(parsed.data.empty());
   }
 
-  TEST_CASE("WAV RIFF parser - required audio extent ignores malformed trailing chunks", "[media][unit][wav]")
+  TEST_CASE("WAV RIFF parser - required audio extent ignores malformed trailing chunks")
   {
     auto data = ao::test::wav::makeWav({});
     ao::test::wav::appendTruncatedChunk(data, "JUNK", 100);
@@ -114,7 +114,7 @@ namespace ao::media::wav::test
     CHECK(completeRes.error().code == Error::Code::CorruptData);
   }
 
-  TEST_CASE("WAV RIFF parser - skips empty data chunks before required audio", "[media][unit][wav]")
+  TEST_CASE("WAV RIFF parser - skips empty data chunks before required audio")
   {
     auto const emptyData = ao::test::wav::Chunk{.id = {'d', 'a', 't', 'a'}, .payload = {}};
     auto const data = ao::test::wav::makeWav({.extraChunks = {emptyData}});
@@ -128,7 +128,7 @@ namespace ao::media::wav::test
     CHECK(completeRes->data.size() == 2);
   }
 
-  TEST_CASE("WAV RIFF parser - rejects malformed or unsupported RIFF data", "[media][unit][wav]")
+  TEST_CASE("WAV RIFF parser - rejects malformed or unsupported RIFF data")
   {
     SECTION("empty audio data")
     {
@@ -201,7 +201,7 @@ namespace ao::media::wav::test
     }
   }
 
-  TEST_CASE("WAV fixture builder - rejects computed byte rates beyond DWORD storage", "[media][unit][wav]")
+  TEST_CASE("WAV fixture builder - rejects computed byte rates beyond DWORD storage")
   {
     auto spec = ao::test::wav::Spec{.sampleRate = 0x800003E8U};
 
@@ -220,8 +220,7 @@ namespace ao::media::wav::test
     REQUIRE_THROWS_AS(ao::test::wav::makeWav(spec), std::overflow_error);
   }
 
-  TEST_CASE("WAV RIFF parser - validates declared fmt byte rate against full-precision sample rate product",
-            "[media][unit][wav]")
+  TEST_CASE("WAV RIFF parser - validates declared fmt byte rate against full-precision sample rate product")
   {
     // Every variant authors the declared byte rate as literal fmt payload
     // bytes; the expectation is never a product recomputed with the 32-bit

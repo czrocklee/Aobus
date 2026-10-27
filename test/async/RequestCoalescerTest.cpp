@@ -18,7 +18,7 @@
 
 namespace ao::async::test
 {
-  TEST_CASE("RequestCoalescer - equal keys share one ordered flight", "[core][unit][request-coalescer]")
+  TEST_CASE("RequestCoalescer - equal keys share one ordered flight")
   {
     using Coalescer = RequestCoalescer<std::int32_t, std::string>;
 
@@ -58,7 +58,7 @@ namespace ao::async::test
     CHECK(observed == std::vector<std::string>{"first:ready", "second:ready", "other:done"});
   }
 
-  TEST_CASE("RequestCoalescer - prefetch and empty callbacks reserve work once", "[core][unit][request-coalescer]")
+  TEST_CASE("RequestCoalescer - prefetch and empty callbacks reserve work once")
   {
     using Coalescer = RequestCoalescer<std::int32_t, std::int32_t>;
 
@@ -72,8 +72,7 @@ namespace ao::async::test
     CHECK_FALSE(emptyRequest);
   }
 
-  TEST_CASE("RequestCoalescer - cancellation affects only its own interest",
-            "[core][unit][request-coalescer][concurrency]")
+  TEST_CASE("RequestCoalescer - cancellation affects only its own interest", "[concurrency]")
   {
     using Coalescer = RequestCoalescer<std::int32_t, std::int32_t>;
 
@@ -94,8 +93,7 @@ namespace ao::async::test
     CHECK(secondCalled);
   }
 
-  TEST_CASE("RequestCoalescer - completion retires a flight after every waiter cancels",
-            "[core][unit][request-coalescer][concurrency]")
+  TEST_CASE("RequestCoalescer - completion retires a flight after every waiter cancels", "[concurrency]")
   {
     using Coalescer = RequestCoalescer<std::int32_t, std::int32_t>;
 
@@ -137,7 +135,7 @@ namespace ao::async::test
     CHECK(calls == 1);
   }
 
-  TEST_CASE("RequestCoalescer - request handles may outlive the owner", "[core][unit][request-coalescer][concurrency]")
+  TEST_CASE("RequestCoalescer - request handles may outlive the owner", "[concurrency]")
   {
     using Coalescer = RequestCoalescer<std::int32_t, std::int32_t>;
 
@@ -151,7 +149,7 @@ namespace ao::async::test
     CHECK_NOTHROW(request.reset());
   }
 
-  TEST_CASE("RequestCoalescer - completion permits a reentrant same-key flight", "[core][unit][request-coalescer]")
+  TEST_CASE("RequestCoalescer - completion permits a reentrant same-key flight")
   {
     using Coalescer = RequestCoalescer<std::int32_t, std::int32_t>;
 
@@ -190,7 +188,7 @@ namespace ao::async::test
     CHECK(observed == std::vector<std::int32_t>{4, 5});
   }
 
-  TEST_CASE("RequestCoalescer - an earlier callback may cancel a later callback", "[core][unit][request-coalescer]")
+  TEST_CASE("RequestCoalescer - an earlier callback may cancel a later callback")
   {
     using Coalescer = RequestCoalescer<std::int32_t, std::int32_t>;
 
@@ -208,7 +206,7 @@ namespace ao::async::test
     CHECK_FALSE(laterCalled);
   }
 
-  TEST_CASE("RequestCoalescer - callback exceptions do not stop fanout", "[core][unit][request-coalescer]")
+  TEST_CASE("RequestCoalescer - callback exceptions do not stop fanout")
   {
     using Coalescer = RequestCoalescer<std::int32_t, std::int32_t>;
 
@@ -226,7 +224,7 @@ namespace ao::async::test
     CHECK(laterCalled);
   }
 
-  TEST_CASE("RequestCoalescer - starter failure rolls back only the matching flight", "[core][unit][request-coalescer]")
+  TEST_CASE("RequestCoalescer - starter failure rolls back only the matching flight")
   {
     using Coalescer = RequestCoalescer<std::int32_t, std::int32_t>;
 
@@ -282,8 +280,7 @@ namespace ao::async::test
     }
   }
 
-  TEST_CASE("RequestCoalescer - duplicate and foreign completions are ignored",
-            "[core][unit][request-coalescer][concurrency]")
+  TEST_CASE("RequestCoalescer - duplicate and foreign completions are ignored", "[concurrency]")
   {
     using Coalescer = RequestCoalescer<std::int32_t, std::int32_t>;
 
@@ -317,8 +314,7 @@ namespace ao::async::test
     CHECK(foreignObserved == std::vector<std::int32_t>{3});
   }
 
-  TEST_CASE("RequestCoalescer - clear fences late completion from a replacement flight",
-            "[core][unit][request-coalescer][concurrency]")
+  TEST_CASE("RequestCoalescer - clear fences late completion from a replacement flight", "[concurrency]")
   {
     using Coalescer = RequestCoalescer<std::int32_t, std::int32_t>;
 
@@ -347,8 +343,7 @@ namespace ao::async::test
     CHECK(observed == std::vector<std::int32_t>{2});
   }
 
-  TEST_CASE("RequestCoalescer - exact-flight dependencies are retained until retirement",
-            "[core][unit][request-coalescer][concurrency]")
+  TEST_CASE("RequestCoalescer - exact-flight dependencies are retained until retirement", "[concurrency]")
   {
     using Coalescer = RequestCoalescer<std::int32_t, std::int32_t>;
 
@@ -371,8 +366,7 @@ namespace ao::async::test
     CHECK(releasedBeforeCallback);
   }
 
-  TEST_CASE("RequestCoalescer - clear and stale tokens release dependencies immediately",
-            "[core][unit][request-coalescer][concurrency]")
+  TEST_CASE("RequestCoalescer - clear and stale tokens release dependencies immediately", "[concurrency]")
   {
     using Coalescer = RequestCoalescer<std::int32_t, std::int32_t>;
 
@@ -390,8 +384,7 @@ namespace ao::async::test
     CHECK(releases == 2);
   }
 
-  TEST_CASE("RequestCoalescer - retired tokens cannot attach to a reentrant replacement",
-            "[core][unit][request-coalescer][concurrency]")
+  TEST_CASE("RequestCoalescer - retired tokens cannot attach to a reentrant replacement", "[concurrency]")
   {
     using Coalescer = RequestCoalescer<std::int32_t, std::int32_t>;
 

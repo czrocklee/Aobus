@@ -22,7 +22,7 @@ namespace ao::audio::test
 {
   static_assert(std::is_nothrow_default_constructible_v<NullBackend>);
 
-  TEST_CASE("NullBackend - lifecycle is inert and identifies the shared null route", "[audio][unit][null-backend]")
+  TEST_CASE("NullBackend - lifecycle is inert and identifies the shared null route")
   {
     auto target = NoopRenderTarget{};
     auto backend = NullBackend{};
@@ -49,8 +49,7 @@ namespace ao::audio::test
     CHECK(backend.profileId() == kProfileShared);
   }
 
-  TEST_CASE("NullBackend - retains identified application slots without claiming a physical endpoint",
-            "[audio][unit][null-backend]")
+  TEST_CASE("NullBackend - retains identified application slots without claiming a physical endpoint")
   {
     auto target = NoopRenderTarget{};
     auto backend = NullBackend{};
@@ -70,7 +69,7 @@ namespace ao::audio::test
     CHECK_FALSE(openedRes->optEndpoint);
   }
 
-  TEST_CASE("NullBackend - reuse preserves exact equality without requiring an open", "[audio][unit][null-backend]")
+  TEST_CASE("NullBackend - reuse preserves exact equality without requiring an open")
   {
     auto backend = NullBackend{};
     Backend const& dispatch = backend;
@@ -83,8 +82,7 @@ namespace ao::audio::test
     CHECK(backend.canReuseFormat(PcmFormat{}, PcmFormat{}));
   }
 
-  TEST_CASE("NullBackend - reuse accepts bidirectional stereo identity aliases in every encoding",
-            "[audio][unit][null-backend]")
+  TEST_CASE("NullBackend - reuse accepts bidirectional stereo identity aliases in every encoding")
   {
     auto backend = NullBackend{};
     Backend const& dispatch = backend;
@@ -103,7 +101,7 @@ namespace ao::audio::test
     CHECK(dispatch.canReuseFormat(identified, unidentified));
   }
 
-  TEST_CASE("NullBackend - reuse refuses changed PCM geometry rate or encoding", "[audio][unit][null-backend]")
+  TEST_CASE("NullBackend - reuse refuses changed PCM geometry rate or encoding")
   {
     auto backend = NullBackend{};
     auto const first = PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le};
@@ -129,8 +127,7 @@ namespace ao::audio::test
     CHECK_FALSE(backend.canReuseFormat(second, first));
   }
 
-  TEST_CASE("NullBackend - unidentified masks are not a reuse wildcard for other roles or channel counts",
-            "[audio][unit][null-backend]")
+  TEST_CASE("NullBackend - unidentified masks are not a reuse wildcard for other roles or channel counts")
   {
     auto backend = NullBackend{};
     auto unidentified = PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le};
@@ -171,8 +168,7 @@ namespace ao::audio::test
     CHECK_FALSE(backend.canReuseFormat(identified, unidentified));
   }
 
-  TEST_CASE("NullBackend - stereo aliases with invalid rate or encoding cannot be reused",
-            "[audio][unit][null-backend]")
+  TEST_CASE("NullBackend - stereo aliases with invalid rate or encoding cannot be reused")
   {
     auto backend = NullBackend{};
     auto unidentified = PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le};
@@ -199,7 +195,7 @@ namespace ao::audio::test
     CHECK_FALSE(backend.canReuseFormat(identified, unidentified));
   }
 
-  TEST_CASE("NullBackend - source without a lossless PCM encoding is rejected", "[audio][unit][null-backend]")
+  TEST_CASE("NullBackend - source without a lossless PCM encoding is rejected")
   {
     auto target = NoopRenderTarget{};
     auto backend = NullBackend{};
@@ -215,7 +211,7 @@ namespace ao::audio::test
     CHECK(openedRes.error().cause == BackendOpenFailure::Cause::TrackRouteIncompatible);
   }
 
-  TEST_CASE("NullBackend - zero-precision source stays refused without a prewarm hint", "[audio][unit][null-backend]")
+  TEST_CASE("NullBackend - zero-precision source stays refused without a prewarm hint")
   {
     auto target = NoopRenderTarget{};
     auto backend = NullBackend{};
@@ -234,7 +230,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("NullBackend - zero-geometry source is rejected as invalid input", "[audio][unit][null-backend]")
+  TEST_CASE("NullBackend - zero-geometry source is rejected as invalid input")
   {
     auto target = NoopRenderTarget{};
     auto backend = NullBackend{};
@@ -260,7 +256,7 @@ namespace ao::audio::test
     CHECK(openedRes.error().cause == BackendOpenFailure::Cause::OutputFailure);
   }
 
-  TEST_CASE("NullBackend - volume and mute properties remain readable and writable", "[audio][unit][null-backend]")
+  TEST_CASE("NullBackend - volume and mute properties remain readable and writable")
   {
     auto backend = NullBackend{};
 
@@ -289,7 +285,7 @@ namespace ao::audio::test
     CHECK(backend.queryProperty(PropertyId::Muted) == expectedInfo);
   }
 
-  TEST_CASE("NullBackend - unknown properties are unsupported", "[audio][unit][null-backend]")
+  TEST_CASE("NullBackend - unknown properties are unsupported")
   {
     auto backend = NullBackend{};
     auto const unknown = static_cast<PropertyId>(UINT8_C(0xff));

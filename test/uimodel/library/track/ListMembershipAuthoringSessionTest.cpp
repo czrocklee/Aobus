@@ -31,7 +31,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("ListMembershipAuthoringSession - discovers only direct tag targets", "[uimodel][unit][list-membership]")
+  TEST_CASE("ListMembershipAuthoringSession - discovers only direct tag targets")
   {
     auto const lists = std::array{
       rt::ListNode{.id = ListId{1}, .name = "Zulu", .expression = "#zulu"},
@@ -47,8 +47,7 @@ namespace ao::uimodel::test
     CHECK(result[1] == WritableTagListTarget{.listId = ListId{1}, .name = "Zulu", .tag = "zulu"});
   }
 
-  TEST_CASE("ListMembershipAuthoringSession - writable targets use locale order and List identity fallback",
-            "[uimodel][unit][list-membership][collation]")
+  TEST_CASE("ListMembershipAuthoringSession - writable targets use locale order and List identity fallback")
   {
     auto policyRes = i18n::createIcuTextOrderingPolicy("de-DE");
     REQUIRE(policyRes);
@@ -80,8 +79,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("ListMembershipAuthoringSession - formats edit notifications",
-            "[uimodel][unit][list-membership][localization]")
+  TEST_CASE("ListMembershipAuthoringSession - formats edit notifications")
   {
     auto const& catalog = ao::test::messageCatalog("en-US");
 
@@ -131,8 +129,7 @@ namespace ao::uimodel::test
           R"(#"road-trip" wurde für 1 Titel in Road Trip hinzugefügt.)");
   }
 
-  TEST_CASE("ListMembershipAuthoringSession - maps edit results to feed notifications",
-            "[uimodel][unit][list-membership]")
+  TEST_CASE("ListMembershipAuthoringSession - maps edit results to feed notifications")
   {
     auto const& catalog = ao::test::messageCatalog("en-US");
     auto const notificationFor = [&catalog](rt::AuthoringStatus const status)
@@ -173,8 +170,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("ListMembershipAuthoringSession - Remove maps the reply and removes tags and saved positions",
-            "[uimodel][integration][list-membership]")
+  TEST_CASE("ListMembershipAuthoringSession - Remove maps the reply and removes tags and saved positions")
   {
     auto storage = rt::test::MusicLibraryFixture{};
     auto const trackId = storage.addTrack("Road Song");
@@ -213,8 +209,7 @@ namespace ao::uimodel::test
     CHECK(optList->orderTrackIds().empty());
   }
 
-  TEST_CASE("ListMembershipAuthoringSession - Add maps the reply and updates membership",
-            "[uimodel][integration][list-membership]")
+  TEST_CASE("ListMembershipAuthoringSession - Add maps the reply and updates membership")
   {
     auto storage = rt::test::MusicLibraryFixture{};
     auto const trackId = storage.addTrack("Road Song");
@@ -248,8 +243,7 @@ namespace ao::uimodel::test
     CHECK(scope.selectionTags(std::array{trackId}) == std::vector<std::string>{"road-trip"});
   }
 
-  TEST_CASE("ListMembershipAuthoringSession - pending edit outlives moved and destroyed facades",
-            "[uimodel][integration][list-membership][concurrency]")
+  TEST_CASE("ListMembershipAuthoringSession - pending edit outlives moved and destroyed facades", "[concurrency]")
   {
     STATIC_REQUIRE(std::is_nothrow_move_constructible_v<ListMembershipAuthoringSession>);
     STATIC_REQUIRE_FALSE(std::is_copy_constructible_v<ListMembershipAuthoringSession>);

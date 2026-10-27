@@ -16,7 +16,7 @@
 
 namespace ao::winui::test
 {
-  TEST_CASE("SelectedRootCommit - prepares a new settings candidate without dirtying live state", "[winui][unit][app]")
+  TEST_CASE("SelectedRootCommit - prepares a new settings candidate without dirtying live state")
   {
     auto const fixture = ao::test::TempDir{};
     auto settings = DesktopSettings{};

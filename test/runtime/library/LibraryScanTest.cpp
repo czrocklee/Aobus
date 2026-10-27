@@ -61,7 +61,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("LibraryScan - buildPlan reports new audio files", "[runtime][unit][library-scan]")
+  TEST_CASE("LibraryScan - buildPlan reports new audio files")
   {
     auto libraryFixture = MusicLibraryFixture{};
     copyBasicAudioFixture(libraryFixture);
@@ -79,8 +79,7 @@ namespace ao::rt::test
       progressPaths, [](std::filesystem::path const& path) { return path.filename() == "song.flac"; }));
   }
 
-  TEST_CASE("LibraryScan - buildPlan cancellation before start reports no progress",
-            "[runtime][unit][library-scan][concurrency]")
+  TEST_CASE("LibraryScan - buildPlan cancellation before start reports no progress", "[concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     copyBasicAudioFixture(libraryFixture);
@@ -95,8 +94,7 @@ namespace ao::rt::test
     CHECK_FALSE(reportedProgress);
   }
 
-  TEST_CASE("LibraryScan - buildPlan cancellation from progress stops before the next entry",
-            "[runtime][unit][library-scan][concurrency]")
+  TEST_CASE("LibraryScan - buildPlan cancellation from progress stops before the next entry", "[concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     copyBasicAudioFixture(libraryFixture, "first.flac");
@@ -115,8 +113,7 @@ namespace ao::rt::test
     CHECK(progressCount == 1);
   }
 
-  TEST_CASE("LibraryScan - a present file restores a missing manifest with unchanged file facts",
-            "[runtime][integration][library-scan]")
+  TEST_CASE("LibraryScan - a present file restores a missing manifest with unchanged file facts")
   {
     auto libraryFixture = MusicLibraryFixture{};
     copyBasicAudioFixture(libraryFixture);
@@ -145,8 +142,7 @@ namespace ao::rt::test
     CHECK(optManifest->status() == library::FileStatus::Available);
   }
 
-  TEST_CASE("LibraryScan - an already missing file is reported without advancing the revision",
-            "[runtime][integration][library-scan]")
+  TEST_CASE("LibraryScan - an already missing file is reported without advancing the revision")
   {
     auto libraryFixture = MusicLibraryFixture{};
     copyBasicAudioFixture(libraryFixture);

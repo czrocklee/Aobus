@@ -93,7 +93,7 @@ namespace ao::tui::test
     }
   } // namespace
 
-  TEST_CASE("QualityPanel - renders empty pipeline state", "[tui][unit][playback][quality]")
+  TEST_CASE("QualityPanel - renders empty pipeline state")
   {
     auto state = rt::PlaybackTransportSnapshot{.quality = rt::QualityState{.overall = audio::Quality::Unknown}};
 
@@ -110,7 +110,7 @@ namespace ao::tui::test
     CHECK(text.contains("Esc close"));
   }
 
-  TEST_CASE("QualityPanel - renders selected device pipeline and findings", "[tui][unit][playback][quality]")
+  TEST_CASE("QualityPanel - renders selected device pipeline and findings")
   {
     auto state =
       rt::PlaybackTransportSnapshot{
@@ -179,8 +179,7 @@ namespace ao::tui::test
     CHECK(text.contains("Pipeline intervention"));
   }
 
-  TEST_CASE("QualityPanel - localizes semantic copy and preserves external names",
-            "[tui][unit][playback][quality][localization]")
+  TEST_CASE("QualityPanel - localizes semantic copy and preserves external names")
   {
     auto const textCatalog = ao::test::messageCatalog("de-DE");
     auto state = rt::PlaybackTransportSnapshot{
@@ -222,7 +221,7 @@ namespace ao::tui::test
     CHECK(emptyText.contains("Noch keine Audiokette"));
   }
 
-  TEST_CASE("QualityPanel - width follows content and terminal bounds", "[tui][unit][playback][quality]")
+  TEST_CASE("QualityPanel - width follows content and terminal bounds")
   {
     auto state = rt::PlaybackTransportSnapshot{.quality = rt::QualityState{.overall = audio::Quality::Unknown}};
     auto const narrowColumns = englishQualityPanelColumns(state, 120);
@@ -239,8 +238,7 @@ namespace ao::tui::test
     CHECK(englishQualityPanelColumns(state, 32) == 32);
   }
 
-  TEST_CASE("QualityPanel - renders layout uncertainty separately from the numerical headline",
-            "[tui][unit][playback][quality]")
+  TEST_CASE("QualityPanel - renders layout uncertainty separately from the numerical headline")
   {
     auto state = rt::PlaybackTransportSnapshot{
       .quality =
@@ -274,8 +272,7 @@ namespace ao::tui::test
     CHECK_FALSE(verified.contains("Channel delivery not proved"));
   }
 
-  TEST_CASE("QualityPanel - narrow terminal cells retain wrapped headlines and independent notes",
-            "[tui][unit][playback][quality][localization]")
+  TEST_CASE("QualityPanel - narrow terminal cells retain wrapped headlines and independent notes")
   {
     struct Case final
     {
@@ -380,7 +377,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("QualityPanel - indicators use the Soul quality colors", "[tui][unit][playback][quality]")
+  TEST_CASE("QualityPanel - indicators use the Soul quality colors")
   {
     CHECK(qualityIndicatorColor(uimodel::AudioQualityCategory::Medal) == uimodel::kAobusSoulRadiant);
     CHECK(qualityIndicatorColor(uimodel::AudioQualityCategory::Positive) == uimodel::kAobusSoulFlowing);

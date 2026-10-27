@@ -61,7 +61,7 @@ namespace ao::rt::test
     };
   } // namespace
 
-  TEST_CASE("TrackListProjection - batch insertion keeps sorted rows and index map", "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - batch insertion keeps sorted rows and index map")
   {
     auto env = TrackListProjectionFixture{};
     auto id1 = env.libraryFixture.addTrack(library::test::makeTrackSpec("B", 2020));
@@ -104,7 +104,7 @@ namespace ao::rt::test
     CHECK(proj.indexOf(id5) == 4);
   }
 
-  TEST_CASE("TrackListProjection - batch removal drops rows and stale index entries", "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - batch removal drops rows and stale index entries")
   {
     auto env = TrackListProjectionFixture{};
     auto id1 = env.libraryFixture.addTrack(library::test::makeTrackSpec("A", 2020));
@@ -136,7 +136,7 @@ namespace ao::rt::test
     CHECK_FALSE(proj.indexOf(id4).has_value());
   }
 
-  TEST_CASE("TrackListProjection - sorted ungrouped insertion publishes exact ranges", "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - sorted ungrouped insertion publishes exact ranges")
   {
     auto fixture = MutationProjectionFixture{};
     fixture.useSortedPresentation();
@@ -182,7 +182,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackListProjection - sorted ungrouped removal publishes exact ranges", "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - sorted ungrouped removal publishes exact ranges")
   {
     auto fixture = MutationProjectionFixture{};
     fixture.useSortedPresentation();
@@ -224,8 +224,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackListProjection - sorted ungrouped updates publish stable ranges and exact moves",
-            "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - sorted ungrouped updates publish stable ranges and exact moves")
   {
     auto fixture = MutationProjectionFixture{};
     fixture.useSortedPresentation();
@@ -352,7 +351,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackListProjection - grouped topology changes publish singleton resets", "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - grouped topology changes publish singleton resets")
   {
     auto fixture = MutationProjectionFixture{};
     auto& env = fixture.environment;
@@ -478,7 +477,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackListProjection - mutations inside one group publish regular ranges", "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - mutations inside one group publish regular ranges")
   {
     auto fixture = MutationProjectionFixture{};
     auto& env = fixture.environment;
@@ -630,7 +629,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackListProjection - source-order mutations preserve unsorted coordinates", "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - source-order mutations preserve unsorted coordinates")
   {
     auto fixture = MutationProjectionFixture{};
     fixture.useSourceOrderPresentation();

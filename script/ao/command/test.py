@@ -68,7 +68,10 @@ def requires_build_environment(args: argparse.Namespace) -> bool:
 
 EPILOG = """\
 Pass any valid Catch2 filter string as the last argument. Quote it to avoid shell
-globbing, e.g. "[layout],[model]" (OR logic) or "[audio][backend]" (AND logic).
+globbing, e.g. "DecoderFactory - *,PlaybackSession - *" (name alternatives).
+Commas separate alternatives even inside shell quotes. Escape literal commas as
+\\, in the quoted filter, e.g. "FieldCatalog - finds descriptors by canonical name\\, alias\\, and field".
+Project tags are [concurrency] and [.manual]; --concurrency excludes hidden probes.
 An explicit filter applies only to Catch2 suites; selected tooling and lint suites
 are skipped. Across a suite group, individual suites may have no match, but at
 least one test must match globally. Tests that match and then skip still count as
@@ -76,12 +79,12 @@ matches. Without a filter, --list reports non-Catch2 suite names.
 
 examples:
   ./ao test                          # build and run the native default suites
-  ./ao test --all                    # build and run every native suite
+  ./ao test --all                    # build and run every automatic native suite
   ./ao test -n                       # run the default suites without building
-  ./ao test --core "[audio][backend]"
-  ./ao test --tui "[layout]"
+  ./ao test --core "DecoderFactory - *"
+  ./ao test --tui "Render - *"
   ./ao test --tooling                # test the ao development tooling
-  ./ao test --core --list "[audio]"  # list matching core tests
+  ./ao test --core --list "DecoderFactory - *"
   ./ao test --concurrency             # run concurrency contracts across Catch2 suites
   ./ao test --tsan --repeat 20        # repeat the TSan-safe suite group
 """
@@ -1038,7 +1041,7 @@ def run_suites(
     for iteration in range(iterations):
         matched_tests = 0
         if iterations > 1:
-            print(f"Concurrency/stress repetition {iteration + 1}/{iterations}")
+            print(f"Test repetition {iteration + 1}/{iterations}")
 
         for index, name in enumerate(suites):
             if index:

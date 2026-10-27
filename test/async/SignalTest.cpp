@@ -17,7 +17,7 @@
 
 namespace ao::async::test
 {
-  TEST_CASE("Signal - invokes move-only handlers in connection order", "[core][unit][signal]")
+  TEST_CASE("Signal - invokes move-only handlers in connection order")
   {
     auto signal = Signal<std::int32_t>{};
     auto observed = std::vector<std::int32_t>{};
@@ -39,7 +39,7 @@ namespace ao::async::test
     CHECK_FALSE(signal.hasConnectedHandlers());
   }
 
-  TEST_CASE("Signal - connection and disconnection during emission affect later eligibility", "[core][unit][signal]")
+  TEST_CASE("Signal - connection and disconnection during emission affect later eligibility")
   {
     auto signal = Signal<std::int32_t>{};
     auto observed = std::vector<std::int32_t>{};
@@ -67,8 +67,7 @@ namespace ao::async::test
     CHECK(observed == std::vector<std::int32_t>{1, 11, 2, 12, 102});
   }
 
-  TEST_CASE("Signal - nested emission defers disconnected handler cleanup until the outer emission returns",
-            "[core][unit][signal]")
+  TEST_CASE("Signal - nested emission defers disconnected handler cleanup until the outer emission returns")
   {
     auto signal = Signal<std::int32_t>{};
     auto observed = std::vector<std::int32_t>{};
@@ -103,7 +102,7 @@ namespace ao::async::test
     CHECK(observed == std::vector<std::int32_t>{1, 2, -2, 20, 7, 10, 30});
   }
 
-  TEST_CASE("Signal - disconnectAll prevents remaining and future delivery", "[core][unit][signal]")
+  TEST_CASE("Signal - disconnectAll prevents remaining and future delivery")
   {
     auto signal = Signal<>{};
     std::int32_t callCount = 0;
@@ -123,7 +122,7 @@ namespace ao::async::test
     CHECK_FALSE(signal.hasConnectedHandlers());
   }
 
-  TEST_CASE("Signal - subscription move assignment disconnects the replaced handler", "[core][unit][signal]")
+  TEST_CASE("Signal - subscription move assignment disconnects the replaced handler")
   {
     auto signal = Signal<>{};
     auto observed = std::vector<std::int32_t>{};
@@ -140,7 +139,7 @@ namespace ao::async::test
     CHECK(observed == std::vector<std::int32_t>{2});
   }
 
-  TEST_CASE("Signal - owns the non-throwing terminal emission boundary", "[core][unit][signal]")
+  TEST_CASE("Signal - owns the non-throwing terminal emission boundary")
   {
     // Observation reports something that already happened, so a handler failure
     // carries no decision the publisher could act on. Handlers may use ordinary
@@ -160,7 +159,7 @@ namespace ao::async::test
     STATIC_REQUIRE_FALSE(noexcept(signal.post(executor, 0)));
   }
 
-  TEST_CASE("Signal - a disconnecting handler does not starve later observers", "[core][unit][signal]")
+  TEST_CASE("Signal - a disconnecting handler does not starve later observers")
   {
     auto signal = Signal<>{};
     auto observed = std::vector<std::int32_t>{};
@@ -184,7 +183,7 @@ namespace ao::async::test
     CHECK(weakTokenPtr.expired());
   }
 
-  TEST_CASE("Signal - destroying the owner during emission invalidates remaining subscriptions", "[core][unit][signal]")
+  TEST_CASE("Signal - destroying the owner during emission invalidates remaining subscriptions")
   {
     auto signalPtr = std::make_unique<Signal<std::int32_t>>();
     auto observed = std::vector<std::int32_t>{};
@@ -209,8 +208,7 @@ namespace ao::async::test
     secondSub.reset();
   }
 
-  TEST_CASE("Signal - post owns decayed payload and defers reentrant posts to a later turn",
-            "[core][unit][signal][concurrency]")
+  TEST_CASE("Signal - post owns decayed payload and defers reentrant posts to a later turn", "[concurrency]")
   {
     auto executor = LoopExecutor{};
     auto signal = Signal<std::string const&>{};
@@ -239,7 +237,7 @@ namespace ao::async::test
     CHECK_FALSE(executor.tryRunReadyTurn());
   }
 
-  TEST_CASE("Signal - posted emission becomes a no-op after owner destruction", "[core][unit][signal][concurrency]")
+  TEST_CASE("Signal - posted emission becomes a no-op after owner destruction", "[concurrency]")
   {
     auto executor = LoopExecutor{};
     auto signalPtr = std::make_unique<Signal<std::int32_t>>();

@@ -14,7 +14,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("PlaybackCommand - every id resolves back to its command", "[uimodel][unit][playback][command]")
+  TEST_CASE("PlaybackCommand - every id resolves back to its command")
   {
     struct ExpectedMapping final
     {
@@ -45,7 +45,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("PlaybackCommand - the whole transport is offered", "[uimodel][unit][playback][command]")
+  TEST_CASE("PlaybackCommand - the whole transport is offered")
   {
     constexpr auto kExpectedCommands = std::array{
       PlaybackCommand::Play,
@@ -70,7 +70,7 @@ namespace ao::uimodel::test
     CHECK(uniqueIds.size() == kExpectedIds.size());
   }
 
-  TEST_CASE("PlaybackCommand - an unknown id names nothing", "[uimodel][unit][playback][command]")
+  TEST_CASE("PlaybackCommand - an unknown id names nothing")
   {
     // The caller decides what to fall back to; resolution itself does not guess.
     CHECK_FALSE(playbackCommandFor(""));

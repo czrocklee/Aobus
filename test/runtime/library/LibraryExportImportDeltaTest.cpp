@@ -95,8 +95,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("LibraryYaml - failed import wait retires the suspended task during runtime unwinding",
-            "[runtime][unit][import-export][concurrency]")
+  TEST_CASE("LibraryYaml - failed import wait retires the suspended task during runtime unwinding", "[concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto completedPtr = std::make_shared<std::atomic_bool>(false);
@@ -124,8 +123,7 @@ namespace ao::rt::test
     CHECK(Library::prepare(reopened));
   }
 
-  TEST_CASE("LibraryYaml - delta export writes changed and unreadable tracks",
-            "[runtime][integration][import-export][delta]")
+  TEST_CASE("LibraryYaml - delta export writes changed and unreadable tracks")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -230,7 +228,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("LibraryYaml - delta export reports filesystem inspection errors", "[runtime][unit][import-export][delta]")
+  TEST_CASE("LibraryYaml - delta export reports filesystem inspection errors")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -269,7 +267,7 @@ namespace ao::rt::test
     CHECK(res.error().code == Error::Code::IoError);
   }
 
-  TEST_CASE("LibraryYaml - delta import reports filesystem inspection errors", "[runtime][unit][import-export][delta]")
+  TEST_CASE("LibraryYaml - delta import reports filesystem inspection errors")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -304,8 +302,7 @@ namespace ao::rt::test
     CHECK(res.error().code == Error::Code::IoError);
   }
 
-  TEST_CASE("LibraryYaml - merge publishes truthful inserted and mutated track ids",
-            "[runtime][integration][import-export][changeset]")
+  TEST_CASE("LibraryYaml - merge publishes truthful inserted and mutated track ids")
   {
     auto const temp = ao::test::TempDir{};
     auto existingId = kInvalidTrackId;
@@ -362,7 +359,7 @@ library:
     CHECK(optExistingTrack->metadata().title() == "After");
   }
 
-  TEST_CASE("LibraryYaml - restore publishes a library reset", "[runtime][integration][import-export][changeset]")
+  TEST_CASE("LibraryYaml - restore publishes a library reset")
   {
     auto const temp = ao::test::TempDir{};
     auto const yamlPath = std::filesystem::path{temp.path()} / "restore.yaml";
@@ -388,8 +385,7 @@ library:
     CHECK(observed.front().libraryRevision == ml.libraryRevision(transaction));
   }
 
-  TEST_CASE("LibraryYaml - restore commits content under one revision and keeps the library id",
-            "[runtime][integration][import-export][changeset]")
+  TEST_CASE("LibraryYaml - restore commits content under one revision and keeps the library id")
   {
     auto const temp = ao::test::TempDir{};
     auto const yamlPath = std::filesystem::path{temp.path()} / "restore.yaml";
@@ -448,7 +444,7 @@ library:
     CHECK(listIterator == listReader.end());
   }
 
-  TEST_CASE("LibraryYaml - restore gives restored Tracks and Lists fresh ids", "[runtime][integration][import-export]")
+  TEST_CASE("LibraryYaml - restore gives restored Tracks and Lists fresh ids")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -493,8 +489,7 @@ library:
     CHECK(iterator == listReader.end());
   }
 
-  TEST_CASE("LibraryYaml - restore preview leaves revision, content, and id marks unchanged",
-            "[runtime][integration][import-export][dry-run]")
+  TEST_CASE("LibraryYaml - restore preview leaves revision, content, and id marks unchanged")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());

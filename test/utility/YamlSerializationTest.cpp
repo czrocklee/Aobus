@@ -41,7 +41,7 @@ namespace ao::test
     }
   } // namespace
 
-  TEST_CASE("YamlSerialization - node-shape and map-key validation is explicit", "[core][unit][yaml]")
+  TEST_CASE("YamlSerialization - node-shape and map-key validation is explicit")
   {
     constexpr auto kAllowed = std::to_array<std::string_view>({"known"});
 
@@ -78,7 +78,7 @@ namespace ao::test
     }
   }
 
-  TEST_CASE("YamlSerialization - MapReader preserves explicit field policy", "[core][unit][yaml]")
+  TEST_CASE("YamlSerialization - MapReader preserves explicit field policy")
   {
     constexpr auto kKeys = std::to_array<std::string_view>({"count", "name"});
 
@@ -170,7 +170,7 @@ namespace ao::test
     }
   }
 
-  TEST_CASE("YamlSerialization - sequence helpers preserve index context", "[core][unit][yaml]")
+  TEST_CASE("YamlSerialization - sequence helpers preserve index context")
   {
     auto tree = parseYaml("[1, invalid, 3]");
     auto readRes = yaml::readScalarSequence<std::int32_t>(tree.rootref(), "values");
@@ -180,7 +180,7 @@ namespace ao::test
     CHECK(readRes.error().message.contains("values.1"));
   }
 
-  TEST_CASE("YamlSerialization - UUID scalars accept only the canonical text form", "[core][unit][yaml]")
+  TEST_CASE("YamlSerialization - UUID scalars accept only the canonical text form")
   {
     auto tree = parseYaml("{id: 123e4567-e89b-12d3-a456-426614174000, short: 123e4567, nested: [1]}");
     auto const root = tree.rootref();
@@ -199,7 +199,7 @@ namespace ao::test
     CHECK(nestedRes.error().code == Error::Code::FormatRejected);
   }
 
-  TEST_CASE("YamlSerialization - field context is bounded", "[core][unit][yaml]")
+  TEST_CASE("YamlSerialization - field context is bounded")
   {
     auto const field = yaml::fieldContext(std::string(500, 'x'), std::string(500, 'y'));
     CHECK(field.size() == yaml::kMaximumErrorContextBytes);
@@ -214,7 +214,7 @@ namespace ao::test
     CHECK(yaml::fieldContext(exact, "y") == exact + ".y");
   }
 
-  TEST_CASE("YamlSerialization - scalar writers own and quote text", "[core][unit][yaml]")
+  TEST_CASE("YamlSerialization - scalar writers own and quote text")
   {
     SECTION("writeScalar copies transient text into the tree arena")
     {
@@ -246,7 +246,7 @@ namespace ao::test
     }
   }
 
-  TEST_CASE("YamlSerialization - map writers compose owned values and preserve failures", "[core][unit][yaml]")
+  TEST_CASE("YamlSerialization - map writers compose owned values and preserve failures")
   {
     SECTION("MapWriter creates arena-owned scalar fields")
     {
@@ -311,7 +311,7 @@ namespace ao::test
     }
   }
 
-  TEST_CASE("YamlSerialization - string-map helpers preserve dynamic keys and reject empty keys", "[core][unit][yaml]")
+  TEST_CASE("YamlSerialization - string-map helpers preserve dynamic keys and reject empty keys")
   {
     SECTION("string-map helpers preserve dynamic keys")
     {
@@ -365,7 +365,7 @@ namespace ao::test
   }
 
   TEMPLATE_TEST_CASE("YamlSerialization - floating scalars round trip exactly without string quoting",
-                     "[core][unit][yaml]",
+                     "",
                      float,
                      double)
   {
@@ -400,7 +400,7 @@ namespace ao::test
   }
 
   TEMPLATE_TEST_CASE("YamlSerialization - nonfinite scalars retain native spelling and strict rejection",
-                     "[core][unit][yaml]",
+                     "",
                      float,
                      double)
   {

@@ -7,8 +7,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("TrackFieldGrid - renders sections from available rows and selection state",
-            "[uimodel][unit][library][detail]")
+  TEST_CASE("TrackFieldGrid - renders sections from available rows and selection state")
   {
     CHECK(shouldRenderMetadataSection(TrackFieldGridSectionAvailability{
       .hasMetadataFields = false, .hasSelectedTracks = true, .hasTechnicalFields = true}));
@@ -36,7 +35,7 @@ namespace ao::uimodel::test
       .hasMetadataFields = false, .hasSelectedTracks = false, .hasTechnicalFields = true}));
   }
 
-  TEST_CASE("TrackFieldGrid - shows metadata rows from expansion and content state", "[uimodel][unit][library][detail]")
+  TEST_CASE("TrackFieldGrid - shows metadata rows from expansion and content state")
   {
     CHECK_FALSE(shouldShowTrackFieldGridMetadataFieldRow(TrackFieldGridMetadataFieldVisibility{
       .metadataExpanded = false, .showEmptyMetadata = true, .editorEditing = true, .hasDisplayText = true}));
@@ -54,7 +53,7 @@ namespace ao::uimodel::test
       .metadataExpanded = true, .showEmptyMetadata = false, .editorEditing = true, .hasDisplayText = false}));
   }
 
-  TEST_CASE("TrackFieldGrid - shows composite metadata rows from either side", "[uimodel][unit][library][detail]")
+  TEST_CASE("TrackFieldGrid - shows composite metadata rows from either side")
   {
     CHECK_FALSE(shouldShowCompositeMetadataRow(CompositeMetadataVisibility{.metadataExpanded = false,
                                                                            .showEmptyMetadata = true,

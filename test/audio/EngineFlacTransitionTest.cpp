@@ -131,8 +131,7 @@ namespace ao::audio::test
     }
   } // namespace
 
-  TEST_CASE("Engine - unequal real six-channel FLAC identities drain before explicit successor reopen",
-            "[audio][integration][engine][flac][concurrency]")
+  TEST_CASE("Engine - unequal real six-channel FLAC identities drain before explicit successor reopen", "[concurrency]")
   {
     auto const alternate = GENERATE(AlternateIdentity{"untagged", FlacIdentity::Untagged, 0},
                                     AlternateIdentity{"damaged-comment", FlacIdentity::DamagedComment, 0},
@@ -262,8 +261,7 @@ namespace ao::audio::test
       &FakeCapturingBackend::Event::name));
   }
 
-  TEST_CASE("Engine - equal real six-channel FLAC identities splice literal PCM without reopening",
-            "[audio][integration][engine][flac][concurrency]")
+  TEST_CASE("Engine - equal real six-channel FLAC identities splice literal PCM without reopening", "[concurrency]")
   {
     auto const identities =
       GENERATE(EqualIdentities{"back-back", FlacIdentity::Back, FlacIdentity::Back, 0x3F},

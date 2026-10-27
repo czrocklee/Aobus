@@ -36,7 +36,7 @@ namespace ao::uimodel::test
     }
   } // namespace
 
-  TEST_CASE("KeyChord - parse returns modifiers and key", "[uimodel][unit][input][key-chord]")
+  TEST_CASE("KeyChord - parse returns modifiers and key")
   {
     SECTION("plain key")
     {
@@ -97,7 +97,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("KeyChord - parse rejects malformed input", "[uimodel][unit][input][key-chord]")
+  TEST_CASE("KeyChord - parse rejects malformed input")
   {
     CHECK(KeyChord::parse("").has_value() == false);
     CHECK(KeyChord::parse("   ").has_value() == false);
@@ -105,7 +105,7 @@ namespace ao::uimodel::test
     CHECK(KeyChord::parse("Bogus+P").has_value() == false);
   }
 
-  TEST_CASE("KeyChord - toString returns canonical text", "[uimodel][unit][input][key-chord]")
+  TEST_CASE("KeyChord - toString returns canonical text")
   {
     SECTION("modifier order is Ctrl, Shift, Alt, Super")
     {
@@ -123,7 +123,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("KeyChord - round-trips through parse and toString", "[uimodel][unit][input][key-chord]")
+  TEST_CASE("KeyChord - round-trips through parse and toString")
   {
     for (auto const* text :
          {"Ctrl+P", "Ctrl+Shift+Right", "Media:Next", "F5", "Super+Q", "+", "Ctrl++", "Ctrl+Shift++"})
@@ -134,7 +134,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("KeyChord - parses the '+' key despite the separator collision", "[uimodel][unit][input][key-chord]")
+  TEST_CASE("KeyChord - parses the '+' key despite the separator collision")
   {
     SECTION("bare plus")
     {
@@ -160,15 +160,14 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("KeyChord - equality compares modifiers and key", "[uimodel][unit][input][key-chord]")
+  TEST_CASE("KeyChord - equality compares modifiers and key")
   {
     CHECK(requireChord("Ctrl+P") == requireChord("primary+p"));
     CHECK_FALSE(requireChord("Ctrl+P") == requireChord("Ctrl+Shift+P"));
     CHECK_FALSE(requireChord("Ctrl+P") == requireChord("Ctrl+Q"));
   }
 
-  TEST_CASE("KeyChord - canonicalizes named keys, function keys, and media aliases",
-            "[uimodel][unit][input][key-chord]")
+  TEST_CASE("KeyChord - canonicalizes named keys, function keys, and media aliases")
   {
     SECTION("named editing and navigation keys")
     {

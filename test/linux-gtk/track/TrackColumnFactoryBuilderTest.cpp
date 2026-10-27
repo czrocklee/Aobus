@@ -75,8 +75,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("TrackColumnFactoryBuilder - binds column factories to track row widgets",
-            "[gtk][unit][track-column][async]")
+  TEST_CASE("TrackColumnFactoryBuilder - binds column factories to track row widgets")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto trackId = kInvalidTrackId;

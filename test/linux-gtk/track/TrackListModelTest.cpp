@@ -133,7 +133,7 @@ namespace ao::gtk::test
     };
   } // namespace
 
-  TEST_CASE("TrackListModel - exposes projection identity and cached row fields", "[gtk][unit][track-model]")
+  TEST_CASE("TrackListModel - exposes projection identity and cached row fields")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = TrackListModelFixture{};
@@ -152,7 +152,7 @@ namespace ao::gtk::test
     CHECK(castRowPtr->fieldText(rt::TrackField::Artist) == "Artist A");
   }
 
-  TEST_CASE("TrackListModel - reports playing state without structural notifications", "[gtk][unit][track-model]")
+  TEST_CASE("TrackListModel - reports playing state without structural notifications")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = TrackListModelFixture{};
@@ -245,7 +245,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("TrackListModel - translates projection changes into list-model notifications", "[gtk][unit][track-model]")
+  TEST_CASE("TrackListModel - translates projection changes into list-model notifications")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = TrackListModelFixture{};
@@ -319,7 +319,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("TrackListModel - section ranges propagate without materializing rows", "[gtk][unit][track-model]")
+  TEST_CASE("TrackListModel - section ranges propagate without materializing rows")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -373,7 +373,7 @@ namespace ao::gtk::test
     CHECK(rowCache.cachedRowCount() == 0);
   }
 
-  TEST_CASE("TrackListModel - source invalidation clears rows and detaches the projection", "[gtk][unit][track-model]")
+  TEST_CASE("TrackListModel - source invalidation clears rows and detaches the projection")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -417,8 +417,7 @@ namespace ao::gtk::test
     CHECK(weakProjectionPtr.expired());
   }
 
-  TEST_CASE("TrackListModel - multi-delta batches reset atomically and preserve section invariants",
-            "[gtk][unit][track-model]")
+  TEST_CASE("TrackListModel - multi-delta batches reset atomically and preserve section invariants")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -495,8 +494,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("TrackListModel - multi-delta updates refresh cached rows across notification strategies",
-            "[gtk][unit][track-model]")
+  TEST_CASE("TrackListModel - multi-delta updates refresh cached rows across notification strategies")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

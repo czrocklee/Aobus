@@ -298,8 +298,7 @@ namespace ao::lmdb::test
     }
   } // namespace
 
-  TEST_CASE("Database Writers - every operation of both key families rejects a stale binding before native access",
-            "[lmdb][unit][database][writer]")
+  TEST_CASE("Database Writers - every operation of both key families rejects a stale binding before native access")
   {
     auto const family = GENERATE(std::string_view{"integer"}, std::string_view{"byte"});
     auto const operation = family == "integer" ? GENERATE(std::string_view{"clear"},
@@ -319,8 +318,7 @@ namespace ao::lmdb::test
     checkStaleWriterProbe(family, "round-trip", operation);
   }
 
-  TEST_CASE("Database Writers - every complete owner transfer invalidates writer bindings",
-            "[lmdb][unit][database][writer]")
+  TEST_CASE("Database Writers - every complete owner transfer invalidates writer bindings")
   {
     auto const transfer = GENERATE(std::string_view{"committed-rebind"},
                                    std::string_view{"replacement"},
@@ -334,8 +332,7 @@ namespace ao::lmdb::test
     checkStaleWriterProbe("integer", transfer, "update");
   }
 
-  TEST_CASE("Database Writers - wrapper moves and self-moves preserve complete write capability",
-            "[lmdb][unit][database][writer]")
+  TEST_CASE("Database Writers - wrapper moves and self-moves preserve complete write capability")
   {
     SECTION("integer keys")
     {
@@ -348,8 +345,7 @@ namespace ao::lmdb::test
     }
   }
 
-  TEST_CASE("Database Writers - fresh bindings work after complete owner moves and rebinds",
-            "[lmdb][unit][database][writer]")
+  TEST_CASE("Database Writers - fresh bindings work after complete owner moves and rebinds")
   {
     auto const transfer = GENERATE(std::string_view{"construction"},
                                    std::string_view{"round-trip"},
@@ -371,8 +367,7 @@ namespace ao::lmdb::test
     }
   }
 
-  TEST_CASE("Database Writers - destruction is safe after transaction and owner teardown",
-            "[lmdb][unit][database][writer]")
+  TEST_CASE("Database Writers - destruction is safe after transaction and owner teardown")
   {
     auto const termination =
       GENERATE(std::string_view{"commit"}, std::string_view{"abort"}, std::string_view{"destruction"});

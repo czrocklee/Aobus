@@ -40,7 +40,7 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("PlaybackTransport playback - playTrack fails when track does not exist", "[runtime][unit][playback][play]")
+  TEST_CASE("PlaybackTransport playback - playTrack fails when track does not exist")
   {
     auto fixture = PlaybackTransportFixture<InlineExecutor>{};
 
@@ -50,7 +50,7 @@ namespace ao::rt::test
     CHECK(res.error().code == Error::Code::NotFound);
   }
 
-  TEST_CASE("PlaybackTransport playback - playTrack resolves track metadata", "[runtime][integration][playback][play]")
+  TEST_CASE("PlaybackTransport playback - playTrack resolves track metadata")
   {
     auto fixture = PlaybackTransportFixture<InlineExecutor>{};
 
@@ -76,8 +76,7 @@ namespace ao::rt::test
     CHECK(fixture.playbackTransport.state().nowPlaying == NowPlayingInfo{});
   }
 
-  TEST_CASE("PlaybackTransport playback - playTrack rejects a URI escaping through a symlink",
-            "[runtime][unit][playback][uri]")
+  TEST_CASE("PlaybackTransport playback - playTrack rejects a URI escaping through a symlink")
   {
     auto fixture = PlaybackTransportFixture<InlineExecutor>{};
     auto const outside = ao::test::TempDir{};
@@ -95,7 +94,7 @@ namespace ao::rt::test
     CHECK(fixture.playbackTransport.state().nowPlaying == NowPlayingInfo{});
   }
 
-  TEST_CASE("PlaybackTransport playback - prepareNext does not replace current state", "[runtime][unit][playback]")
+  TEST_CASE("PlaybackTransport playback - prepareNext does not replace current state")
   {
     auto fixture = PlaybackTransportFixture<InlineExecutor>{};
     fixture.onDevicesChangedCb(fixture.status.devices);
@@ -118,8 +117,7 @@ namespace ao::rt::test
     CHECK(fixture.playbackTransport.clearPreparedNext() == preparedToken);
   }
 
-  TEST_CASE("PlaybackTransport playback - natural terminal completion clears guarded seek ownership",
-            "[runtime][unit][playback][concurrency]")
+  TEST_CASE("PlaybackTransport playback - natural terminal completion clears guarded seek ownership", "[concurrency]")
   {
     auto const format =
       audio::PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = audio::SampleEncoding::Signed16Le};
@@ -170,8 +168,7 @@ namespace ao::rt::test
     CHECK_FALSE(fixture.playbackTransport.trySeek(occurrenceId, std::chrono::milliseconds{1}));
   }
 
-  TEST_CASE("PlaybackTransport playback - natural advance commits prepared track without idle",
-            "[runtime][unit][playback][concurrency]")
+  TEST_CASE("PlaybackTransport playback - natural advance commits prepared track without idle", "[concurrency]")
   {
     auto fixture = PlaybackTransportFixture<QueuedExecutor>{};
     fixture.onDevicesChangedCb(fixture.status.devices);
@@ -226,8 +223,7 @@ namespace ao::rt::test
     CHECK(idleCount == 0);
   }
 
-  TEST_CASE("PlaybackTransport playback - final seek before advanced callback keeps prepared metadata",
-            "[runtime][unit][playback][gapless][concurrency]")
+  TEST_CASE("PlaybackTransport playback - final seek before advanced callback keeps prepared metadata", "[concurrency]")
   {
     auto fixture = PlaybackTransportFixture<QueuedExecutor>{};
     fixture.onDevicesChangedCb(fixture.status.devices);
@@ -265,7 +261,7 @@ namespace ao::rt::test
     CHECK(fixture.playbackTransport.state().nowPlaying.title == "Prepared Track");
   }
 
-  TEST_CASE("PlaybackTransport playback - rejected preflight reports synchronously", "[runtime][unit][playback][error]")
+  TEST_CASE("PlaybackTransport playback - rejected preflight reports synchronously")
   {
     auto fixture = PlaybackTransportFixture<QueuedExecutor>{};
     fixture.onDevicesChangedCb(fixture.status.devices);
@@ -286,8 +282,7 @@ namespace ao::rt::test
       std::get<NotificationReport>(feed.entries.front().message).detail.contains("Unsupported audio file extension"));
   }
 
-  TEST_CASE("PlaybackTransport playback - rejected preflight report suppresses identical updates",
-            "[runtime][unit][playback][error]")
+  TEST_CASE("PlaybackTransport playback - rejected preflight report suppresses identical updates")
   {
     auto fixture = PlaybackTransportFixture<QueuedExecutor>{};
     fixture.onDevicesChangedCb(fixture.status.devices);
@@ -318,8 +313,7 @@ namespace ao::rt::test
     CHECK(feed.entries.front().id == originalId);
   }
 
-  TEST_CASE("PlaybackTransport playback - rejected preflight preserves accepted playback",
-            "[runtime][unit][playback][error]")
+  TEST_CASE("PlaybackTransport playback - rejected preflight preserves accepted playback")
   {
     auto fixture = PlaybackTransportFixture<QueuedExecutor>{};
     fixture.onDevicesChangedCb(fixture.status.devices);
@@ -342,8 +336,7 @@ namespace ao::rt::test
   // succession skip, but it can be released at any moment with no event to
   // retract the report. Pinning it would leave a stale error on screen long
   // after the device became available again.
-  TEST_CASE("PlaybackTransport playback - a busy device reports a clearable failure",
-            "[runtime][unit][playback][error]")
+  TEST_CASE("PlaybackTransport playback - a busy device reports a clearable failure")
   {
     auto fixture = PlaybackTransportFixture<QueuedExecutor>{};
     fixture.onDevicesChangedCb(fixture.status.devices);
@@ -377,7 +370,7 @@ namespace ao::rt::test
     CHECK(fixture.playbackTransport.state().transport == audio::Transport::Error);
   }
 
-  TEST_CASE("PlaybackTransport playback - route activation failures dedupe by kind", "[runtime][unit][playback][error]")
+  TEST_CASE("PlaybackTransport playback - route activation failures dedupe by kind")
   {
     auto fixture = PlaybackTransportFixture<InlineExecutor>{};
 
@@ -396,8 +389,7 @@ namespace ao::rt::test
           NotificationReportTemplate::PlaybackRouteActivationFailed);
   }
 
-  TEST_CASE("PlaybackTransport playback - backend error publishes pinned device failure",
-            "[runtime][unit][playback][error]")
+  TEST_CASE("PlaybackTransport playback - backend error publishes pinned device failure")
   {
     auto fixture = PlaybackTransportFixture<QueuedExecutor>{};
     fixture.onDevicesChangedCb(fixture.status.devices);

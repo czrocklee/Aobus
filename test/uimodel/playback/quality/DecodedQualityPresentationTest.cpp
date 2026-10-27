@@ -64,8 +64,7 @@ namespace ao::uimodel::test
     }
   } // namespace
 
-  TEST_CASE("AudioQualityFormatter - decoded compressed streams retain numerical delivery headlines",
-            "[uimodel][integration][playback][quality]")
+  TEST_CASE("AudioQualityFormatter - decoded compressed streams retain numerical delivery headlines")
   {
     struct Case final
     {
@@ -136,8 +135,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("AudioQualityFormatter - unidentified source keeps numerical delivery and count-only text",
-            "[uimodel][unit][playback][quality]")
+  TEST_CASE("AudioQualityFormatter - unidentified source keeps numerical delivery and count-only text")
   {
     // This controlled source owns Unknown coverage; real decoder producers may
     // independently gain channel identification without changing these rules.
@@ -164,8 +162,7 @@ namespace ao::uimodel::test
     CHECK(resolveSoulAura(audio::Transport::Playing, true, state) == SoulAura::Radiant);
   }
 
-  TEST_CASE("AudioQualityFormatter - decoded lossless delivery keeps real interventions ahead of positives",
-            "[uimodel][integration][playback][quality]")
+  TEST_CASE("AudioQualityFormatter - decoded lossless delivery keeps real interventions ahead of positives")
   {
     auto decoderRes = audio::openDecoderSession(
       audio::test::requireAudioFixture("basic_metadata.flac"), audio::SampleEncoding::Signed16Le);

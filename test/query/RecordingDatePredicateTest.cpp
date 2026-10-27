@@ -38,7 +38,7 @@ namespace ao::query::test
     }
   } // namespace
 
-  TEST_CASE("RecordingDatePredicate - compares every operator at literal precision", "[query][unit][recording-date]")
+  TEST_CASE("RecordingDatePredicate - compares every operator at literal precision")
   {
     auto fixture = TrackFixture{TrackSpec{.recordingDate = {.year = 1981, .month = 5, .day = 12}}};
 
@@ -60,7 +60,7 @@ namespace ao::query::test
     CHECK(matchesDate("($recordingDate = 1955) = false", fixture));
   }
 
-  TEST_CASE("RecordingDatePredicate - keeps unknown stored components zero", "[query][unit][recording-date]")
+  TEST_CASE("RecordingDatePredicate - keeps unknown stored components zero")
   {
     auto fixture = TrackFixture{TrackSpec{.recordingDate = {.year = 1981}}};
 
@@ -76,8 +76,7 @@ namespace ao::query::test
     CHECK(matchesDate("$recordingDate < '1981-05-01'", month));
   }
 
-  TEST_CASE("RecordingDatePredicate - lists and each range bound retain their precision",
-            "[query][unit][recording-date]")
+  TEST_CASE("RecordingDatePredicate - lists and each range bound retain their precision")
   {
     auto fixture = TrackFixture{TrackSpec{.recordingDate = {.year = 1959, .month = 11, .day = 2}}};
 
@@ -93,7 +92,7 @@ namespace ao::query::test
     CHECK(matchesDate("$recordingDate in ['1950-01', 1950]", coarse));
   }
 
-  TEST_CASE("RecordingDatePredicate - absent dates only match missing and inequality", "[query][unit][recording-date]")
+  TEST_CASE("RecordingDatePredicate - absent dates only match missing and inequality")
   {
     // The ordinary hot year is present; it must never supply a recording date.
     auto fixture = TrackFixture{TrackSpec{.year = 1981}};
@@ -116,8 +115,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("RecordingDatePredicate - rejects noncanonical literals and scalar conversions",
-            "[query][unit][recording-date]")
+  TEST_CASE("RecordingDatePredicate - rejects noncanonical literals and scalar conversions")
   {
     for (auto const* const expression : {"$recordingDate = 0",
                                          "$recordingDate = -1",
@@ -171,8 +169,7 @@ namespace ao::query::test
     CHECK(compileOk(parseOk("$recordingDate = 9999")).recordingDateConstants[0].year == 9999);
   }
 
-  TEST_CASE("RecordingDatePredicate - an invalid stored date withholds cold data from predicates and formats",
-            "[query][unit][recording-date]")
+  TEST_CASE("RecordingDatePredicate - an invalid stored date withholds cold data from predicates and formats")
   {
     auto const fixture = TrackFixture{TrackSpec{.recordingDate = {.year = 1981, .month = 5, .day = 12}}};
     auto const rawCold = library::detail::TrackViewRawAccess::coldData(fixture.coldOnlyView());
@@ -199,8 +196,7 @@ namespace ao::query::test
     CHECK_FALSE(hasRequiredTrackData(formatRes->accessProfile, corrupt));
   }
 
-  TEST_CASE("RecordingDatePredicate - catalog completion and mixed access remain typed",
-            "[query][unit][recording-date]")
+  TEST_CASE("RecordingDatePredicate - catalog completion and mixed access remain typed")
   {
     CHECK(completeQueryOperator(Field::RecordingDate, "") ==
           std::vector<std::string_view>{"=", "!=", "<", "<=", ">", ">=", "in", "?"});
@@ -209,7 +205,7 @@ namespace ao::query::test
     CHECK_FALSE(isStringField(Field::RecordingDate));
   }
 
-  TEST_CASE("FormatExpression - recording dates preserve precision and absence", "[query][unit][recording-date]")
+  TEST_CASE("FormatExpression - recording dates preserve precision and absence")
   {
     auto const formatRes = compileFormat(parseOk("'[' + $recordingDate + ']'"));
     REQUIRE(formatRes);

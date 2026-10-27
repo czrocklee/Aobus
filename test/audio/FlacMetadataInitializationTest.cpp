@@ -119,8 +119,7 @@ namespace ao::audio::test
     }
   } // namespace
 
-  TEST_CASE("FlacDecoderSession - raw implicit header fields require STREAMINFO just like explicit fields",
-            "[audio][integration][flac]")
+  TEST_CASE("FlacDecoderSession - raw implicit header fields require STREAMINFO just like explicit fields")
   {
     auto const prefixes = buildNativePrefixes();
 
@@ -150,8 +149,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("FlacDecoderSession - long raw implicit frame input retains the required STREAMINFO cause",
-            "[audio][integration][flac]")
+  TEST_CASE("FlacDecoderSession - long raw implicit frame input retains the required STREAMINFO cause")
   {
     auto const prefixes = buildNativePrefixes();
 
@@ -181,8 +179,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("FlacDecoderSession - raw subframe loss of sync retains the missing STREAMINFO cause",
-            "[audio][integration][flac]")
+  TEST_CASE("FlacDecoderSession - raw subframe loss of sync retains the missing STREAMINFO cause")
   {
     auto frame = buildFlacVerbatimFrameBytes(0, 48000, 2, 16, kMarkers16);
     REQUIRE(frame.size() > 9U);
@@ -200,8 +197,7 @@ namespace ao::audio::test
     checkOpenFailure(bytes, "FLAC stream is missing valid STREAMINFO");
   }
 
-  TEST_CASE("FlacDecoderSession - STREAMINFO resolves implicit frame fields after native prefixes",
-            "[audio][integration][flac]")
+  TEST_CASE("FlacDecoderSession - STREAMINFO resolves implicit frame fields after native prefixes")
   {
     auto prefixes = buildNativePrefixes();
     prefixes.emplace_back(32768, std::uint8_t{'j'});
@@ -273,8 +269,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("FlacDecoderSession - actual metadata truncation is not reclassified as a raw frame failure",
-            "[audio][integration][flac]")
+  TEST_CASE("FlacDecoderSession - actual metadata truncation is not reclassified as a raw frame failure")
   {
     auto bytes = buildFlacStreaminfoBytes(16);
 

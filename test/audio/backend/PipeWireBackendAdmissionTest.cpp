@@ -645,8 +645,7 @@ namespace ao::audio::backend::test
     }
   }
 
-  TEST_CASE("PipeWireBackend - terminal native callbacks revoke rendering and block restart",
-            "[audio][integration][pipewire]")
+  TEST_CASE("PipeWireBackend - terminal native callbacks revoke rendering and block restart")
   {
     auto terminalObservation = TerminalObservation::Format;
     auto expectedError = std::string_view{};
@@ -767,8 +766,7 @@ namespace ao::audio::backend::test
     script.retire();
   }
 
-  TEST_CASE("PipeWireBackend - open reports the latest accepted roles without changing zero-source transport",
-            "[audio][integration][pipewire]")
+  TEST_CASE("PipeWireBackend - open reports the latest accepted roles without changing zero-source transport")
   {
     auto secondPositions = std::array<std::uint32_t, 4>{};
     std::uint32_t expectedNativeMask = 0;

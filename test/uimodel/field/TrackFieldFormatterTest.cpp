@@ -84,7 +84,7 @@ namespace ao::uimodel::test
     }
   } // namespace
 
-  TEST_CASE("TrackFieldFormatter - duration formatting", "[uimodel][unit][field][formatter]")
+  TEST_CASE("TrackFieldFormatter - duration formatting")
   {
     using std::chrono::milliseconds;
     CHECK(formatDuration(milliseconds{0}).empty());
@@ -95,14 +95,14 @@ namespace ao::uimodel::test
     CHECK(formatDuration(std::chrono::seconds{3723}) == "1:02:03");
   }
 
-  TEST_CASE("TrackFieldFormatter - uint16 formatting", "[uimodel][unit][field][formatter]")
+  TEST_CASE("TrackFieldFormatter - uint16 formatting")
   {
     CHECK(formatUint16(0).empty());
     CHECK(formatUint16(1) == "1");
     CHECK(formatUint16(65535) == "65535");
   }
 
-  TEST_CASE("TrackFieldFormatter - filesize formatting", "[uimodel][unit][field][formatter]")
+  TEST_CASE("TrackFieldFormatter - filesize formatting")
   {
     CHECK(formatFileSize(0).empty());
     CHECK(formatFileSize(512) == "0.5 KB");
@@ -111,8 +111,7 @@ namespace ao::uimodel::test
     CHECK(formatFileSize(5242880) == "5.0 MB");
   }
 
-  TEST_CASE("TrackFieldFormatter - absent modification time renders empty while epoch zero renders its date",
-            "[uimodel][unit][field][formatter]")
+  TEST_CASE("TrackFieldFormatter - absent modification time renders empty while epoch zero renders its date")
   {
     CHECK(formatTime(std::nullopt).empty());
 
@@ -121,15 +120,13 @@ namespace ao::uimodel::test
     CHECK(formatTime(epochInstant) == expectedLocalTime(std::chrono::sys_seconds{}));
   }
 
-  TEST_CASE("TrackFieldFormatter - seconds outside the display calendar do not overflow or wrap years",
-            "[uimodel][unit][field][formatter]")
+  TEST_CASE("TrackFieldFormatter - seconds outside the display calendar do not overflow or wrap years")
   {
     CHECK(formatTime(FileTimestamp{.seconds = std::numeric_limits<std::int64_t>::min()}).empty());
     CHECK(formatTime(FileTimestamp{.seconds = std::numeric_limits<std::int64_t>::max()}).empty());
   }
 
-  TEST_CASE("TrackFieldFormatter - Unix modification seconds render the local date",
-            "[uimodel][unit][field][formatter]")
+  TEST_CASE("TrackFieldFormatter - Unix modification seconds render the local date")
   {
     // 2024-07-01 12:00:00 UTC stored as plain Unix seconds; noon UTC in mid-2024
     // keeps the rendered year the same across local zone offsets.
@@ -162,7 +159,7 @@ namespace ao::uimodel::test
     CHECK(text == expectedLocalTime(modificationTime));
   }
 
-  TEST_CASE("TrackFieldFormatter - negative Unix seconds render pre-epoch dates", "[uimodel][unit][field][formatter]")
+  TEST_CASE("TrackFieldFormatter - negative Unix seconds render pre-epoch dates")
   {
     // 1938-07-01 12:00:00 UTC predates the Unix epoch.
     auto const mtime = FileTimestamp{.seconds = -994161600};
@@ -171,8 +168,7 @@ namespace ao::uimodel::test
     CHECK(formatTime(mtime) == expectedLocalTime(modificationTime));
   }
 
-  TEST_CASE("TrackFieldFormatter - Unix seconds beyond the nanosecond range render far-future dates",
-            "[uimodel][unit][field][formatter]")
+  TEST_CASE("TrackFieldFormatter - Unix seconds beyond the nanosecond range render far-future dates")
   {
     // 2459-07-01 12:00:00 UTC lies beyond 2262, the signed 64-bit nanosecond
     // horizon; explicit Unix seconds keep the instant representable.
@@ -182,8 +178,7 @@ namespace ao::uimodel::test
     CHECK(formatTime(mtime) == expectedLocalTime(modificationTime));
   }
 
-  TEST_CASE("TrackFieldFormatter - nanosecond fraction stays in the payload without shifting the minute",
-            "[uimodel][unit][field][formatter]")
+  TEST_CASE("TrackFieldFormatter - nanosecond fraction stays in the payload without shifting the minute")
   {
     // 2024-07-01 12:00:59.5 UTC: the fraction must not round the minute up.
     auto const mtime = FileTimestamp{.seconds = 1719835259, .nanoseconds = 500000000};
@@ -204,8 +199,7 @@ namespace ao::uimodel::test
     CHECK(withFraction == TrackFieldRawValue{std::in_place_type<FileTimestamp>, mtime});
   }
 
-  TEST_CASE("TrackFieldFormatter - scanned manifest modification time renders the file's local date",
-            "[uimodel][integration][field][formatter]")
+  TEST_CASE("TrackFieldFormatter - scanned manifest modification time renders the file's local date")
   {
     auto libraryFixture = rt::test::MusicLibraryFixture{};
     auto const audioPath = libraryFixture.root() / "song.flac";
@@ -240,7 +234,7 @@ namespace ao::uimodel::test
     CHECK(formatTime(optMtime) == expectedLocalTime(std::chrono::floor<std::chrono::seconds>(modificationTime)));
   }
 
-  TEST_CASE("TrackFieldFormatter - sample rate formatting", "[uimodel][unit][field][formatter]")
+  TEST_CASE("TrackFieldFormatter - sample rate formatting")
   {
     CHECK(formatSampleRate(0).empty());
     CHECK(formatSampleRate(44100) == "44100 Hz");
@@ -248,7 +242,7 @@ namespace ao::uimodel::test
     CHECK(formatSampleRate(192000) == "192000 Hz");
   }
 
-  TEST_CASE("TrackFieldFormatter - bitrate formatting", "[uimodel][unit][field][formatter]")
+  TEST_CASE("TrackFieldFormatter - bitrate formatting")
   {
     CHECK(formatBitrate(0).empty());
     CHECK(formatBitrate(1000) == "1 kbps");
@@ -257,7 +251,7 @@ namespace ao::uimodel::test
     CHECK(formatBitrate(1411000) == "1411 kbps");
   }
 
-  TEST_CASE("TrackFieldFormatter - channels formatting", "[uimodel][unit][field][formatter]")
+  TEST_CASE("TrackFieldFormatter - channels formatting")
   {
     auto const& catalog = ao::test::englishMessageCatalog();
     CHECK(formatChannels(catalog, 0).empty());
@@ -268,7 +262,7 @@ namespace ao::uimodel::test
     CHECK(formatChannels(catalog, 8) == "8 channels");
   }
 
-  TEST_CASE("TrackFieldFormatter - lexical output follows the injected locale", "[uimodel][unit][field][localization]")
+  TEST_CASE("TrackFieldFormatter - lexical output follows the injected locale")
   {
     auto const catalog = ao::test::messageCatalog("de-AT");
     auto snap = makeTrackDetailSnapshot();
@@ -279,14 +273,14 @@ namespace ao::uimodel::test
     CHECK(formatTrackFieldDisplayText(catalog, TrackField::Codec, snap, "unused", true) == "Unbekannt");
   }
 
-  TEST_CASE("TrackFieldFormatter - bit depth formatting", "[uimodel][unit][field][formatter]")
+  TEST_CASE("TrackFieldFormatter - bit depth formatting")
   {
     CHECK(formatBitDepth(0).empty());
     CHECK(formatBitDepth(16) == "16-bit");
     CHECK(formatBitDepth(24) == "24-bit");
   }
 
-  TEST_CASE("TrackFieldFormatter - codec formatting", "[uimodel][unit][field][formatter]")
+  TEST_CASE("TrackFieldFormatter - codec formatting")
   {
     CHECK(formatCodec(AudioCodec::Unknown).empty());
     CHECK(formatCodec(AudioCodec::Flac) == "FLAC");
@@ -295,7 +289,7 @@ namespace ao::uimodel::test
     CHECK(formatCodec(AudioCodec::Aac) == "AAC");
   }
 
-  TEST_CASE("TrackFieldFormatter - display track number formatting", "[uimodel][unit][field][formatter]")
+  TEST_CASE("TrackFieldFormatter - display track number formatting")
   {
     CHECK(formatDisplayTrackNumber(0, 0, 0).empty());
     CHECK(formatDisplayTrackNumber(0, 1, 7) == "7");
@@ -303,7 +297,7 @@ namespace ao::uimodel::test
     CHECK(formatDisplayTrackNumber(0, 3, 7) == "7");
   }
 
-  TEST_CASE("TrackFieldFormatter - technical summary formatting", "[uimodel][unit][field][formatter]")
+  TEST_CASE("TrackFieldFormatter - technical summary formatting")
   {
     CHECK(formatTechnicalSummary(AudioCodec::Flac, 44100, 16, 0) == "FLAC \u00b7 44.1 kHz \u00b7 16-bit");
     CHECK(formatTechnicalSummary(AudioCodec::Wav, 96000, 24, 4608000) ==
@@ -319,7 +313,7 @@ namespace ao::uimodel::test
     CHECK(formatTechnicalSummary(AudioCodec::Unknown, 0, 0, 0).empty());
   }
 
-  TEST_CASE("formatTrackFieldRawValue formats raw values by field policy", "[uimodel][unit][field][formatter]")
+  TEST_CASE("formatTrackFieldRawValue formats raw values by field policy")
   {
     using Raw = TrackFieldRawValue;
     auto const& catalog = ao::test::englishMessageCatalog();
@@ -367,7 +361,7 @@ namespace ao::uimodel::test
       formatTrackFieldRawValue(catalog, TrackField::Quality, Raw{std::in_place_type<std::string>, "anything"}).empty());
   }
 
-  TEST_CASE("formatTrackFieldDisplayText resolves aggregate display text", "[uimodel][unit][field][formatter]")
+  TEST_CASE("formatTrackFieldDisplayText resolves aggregate display text")
   {
     auto const& catalog = ao::test::englishMessageCatalog();
 

@@ -114,8 +114,7 @@ namespace ao::rt::test
     };
   } // namespace
 
-  TEST_CASE("CUE scan - new carrier imports sparse ordinals with exact ranges and metadata fallbacks",
-            "[runtime][integration][cue-scan]")
+  TEST_CASE("CUE scan - new carrier imports sparse ordinals with exact ranges and metadata fallbacks")
   {
     auto fixture = CueScanFixture{};
     auto const res = fixture.scan();
@@ -154,8 +153,7 @@ namespace ao::rt::test
     CHECK(spec.trackTotal == 2);
   }
 
-  TEST_CASE("CUE scan - byte edits with unchanged sheet size and timestamp stale prepared imports",
-            "[runtime][integration][cue-scan][concurrency]")
+  TEST_CASE("CUE scan - byte edits with unchanged sheet size and timestamp stale prepared imports", "[concurrency]")
   {
     auto fixture = CueScanFixture{};
     auto operation = ScanApplyOperation{fixture.library, fixture.plan(), {}, {}};
@@ -176,8 +174,7 @@ namespace ao::rt::test
     CHECK_FALSE(fixture.library.manifest().reader(transaction).get("image.flac"));
   }
 
-  TEST_CASE("CUE scan - case variant sheet insertion changes candidate sets before apply",
-            "[runtime][integration][cue-scan][concurrency]")
+  TEST_CASE("CUE scan - case variant sheet insertion changes candidate sets before apply", "[concurrency]")
   {
     auto fixture = CueScanFixture{};
     auto operation = ScanApplyOperation{fixture.library, fixture.plan(), {}, {}};
@@ -193,8 +190,7 @@ namespace ao::rt::test
     CHECK_FALSE(fixture.library.manifest().reader(transaction).get("image.flac"));
   }
 
-  TEST_CASE("CUE scan - missing ordinal is actionable and appended without rewriting surviving members",
-            "[runtime][integration][cue-scan]")
+  TEST_CASE("CUE scan - missing ordinal is actionable and appended without rewriting surviving members")
   {
     auto fixture = CueScanFixture{};
     auto const imported = fixture.scan();
@@ -223,7 +219,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("CUE scan - deleting a carrier member after preparation makes its structural evidence stale",
-            "[runtime][integration][cue-scan][concurrency]")
+            "[concurrency]")
   {
     auto fixture = CueScanFixture{};
     auto const imported = fixture.scan();
@@ -242,8 +238,7 @@ namespace ao::rt::test
     CHECK_FALSE(fixture.library.manifest().reader(transaction).get("image.flac"));
   }
 
-  TEST_CASE("CUE scan - moving a carrier counts one physical file for all member Tracks",
-            "[runtime][integration][cue-scan]")
+  TEST_CASE("CUE scan - moving a carrier counts one physical file for all member Tracks")
   {
     auto fixture = CueScanFixture{};
     auto const imported = fixture.scan();
@@ -261,8 +256,7 @@ namespace ao::rt::test
     CHECK(res->failureCount == 0);
   }
 
-  TEST_CASE("CUE scan - moving a carrier without its sheet preserves every member identity and range",
-            "[runtime][integration][cue-scan]")
+  TEST_CASE("CUE scan - moving a carrier without its sheet preserves every member identity and range")
   {
     auto fixture = CueScanFixture{};
     auto const imported = fixture.scan();
@@ -301,8 +295,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("CUE scan - changed carrier with another exact extent is rejected without modifying members",
-            "[runtime][integration][cue-scan]")
+  TEST_CASE("CUE scan - changed carrier with another exact extent is rejected without modifying members")
   {
     auto fixture = CueScanFixture{};
     auto const imported = fixture.scan();
@@ -329,7 +322,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("CUE scan - changed carrier refreshes all members while preserving concurrently curated metadata",
-            "[runtime][integration][cue-scan][concurrency]")
+            "[concurrency]")
   {
     auto fixture = CueScanFixture{};
     auto const imported = fixture.scan();
@@ -365,7 +358,7 @@ namespace ao::rt::test
     CHECK(optManifest->fileSize() == std::filesystem::file_size(path));
   }
 
-  TEST_CASE("CUE scan - empty sheet values fall back like absent ones", "[runtime][integration][cue-scan]")
+  TEST_CASE("CUE scan - empty sheet values fall back like absent ones")
   {
     auto fixture = CueScanFixture{};
     writeSheet(fixture.musicRoot / "image.cue",
@@ -385,8 +378,7 @@ namespace ao::rt::test
     CHECK(third.artist == "Carrier artist");
   }
 
-  TEST_CASE("CUE scan - an unmatched image sheet reports its name without importing unrelated files",
-            "[runtime][integration][cue-scan]")
+  TEST_CASE("CUE scan - an unmatched image sheet reports its name without importing unrelated files")
   {
     auto fixture = CueScanFixture{};
     std::filesystem::remove(fixture.musicRoot / "image.flac");
@@ -402,8 +394,7 @@ namespace ao::rt::test
     CHECK(res->failureCount == 0);
   }
 
-  TEST_CASE("CUE scan - embedded fallback imports segments and malformed external sheets block it",
-            "[runtime][integration][cue-scan]")
+  TEST_CASE("CUE scan - embedded fallback imports segments and malformed external sheets block it")
   {
     auto fixture = CueScanFixture{};
     writeScanFlacMetadataFixture(fixture.musicRoot / "image.flac", {"CUESHEET=" + std::string{kSheet}}, 88200);
@@ -427,7 +418,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("CUE scan - only different nonempty embedded CUESHEET comments compete", "[runtime][integration][cue-scan]")
+  TEST_CASE("CUE scan - only different nonempty embedded CUESHEET comments compete")
   {
     auto fixture = CueScanFixture{};
     std::filesystem::remove(fixture.musicRoot / "image.cue");
@@ -476,8 +467,7 @@ namespace ao::rt::test
     CHECK(res->failureCount == (competes ? 1 : 0));
   }
 
-  TEST_CASE("CUE add file - creates and publishes every segment ID through the ordinary command",
-            "[runtime][integration][cue-scan]")
+  TEST_CASE("CUE add file - creates and publishes every segment ID through the ordinary command")
   {
     auto fixture = CueScanFixture{};
     auto executor = QueuedExecutor{};
@@ -502,8 +492,7 @@ namespace ao::rt::test
     CHECK(optThird->property().segment()->ordinal == 3);
   }
 
-  TEST_CASE("CUE add file - malformed external binding rejects creation without publication",
-            "[runtime][integration][cue-scan]")
+  TEST_CASE("CUE add file - malformed external binding rejects creation without publication")
   {
     auto fixture = CueScanFixture{};
     writeSheet(fixture.musicRoot / "image.cue", "invalid sheet");
@@ -521,8 +510,7 @@ namespace ao::rt::test
     CHECK(fixture.library.tracks().reader(transaction).entryCount() == 0);
   }
 
-  TEST_CASE("CUE scan - restoring a missing carrier without its sheet restores every member's physical row",
-            "[runtime][integration][cue-scan]")
+  TEST_CASE("CUE scan - restoring a missing carrier without its sheet restores every member's physical row")
   {
     auto fixture = CueScanFixture{};
     auto const imported = fixture.scan();
@@ -549,8 +537,7 @@ namespace ao::rt::test
     CHECK(ids == imported.insertedIds);
   }
 
-  TEST_CASE("CUE scan - text-only sheet edits preserve existing metadata and commit no changes",
-            "[runtime][integration][cue-scan]")
+  TEST_CASE("CUE scan - text-only sheet edits preserve existing metadata and commit no changes")
   {
     auto fixture = CueScanFixture{};
     auto const imported = fixture.scan();
@@ -566,8 +553,7 @@ namespace ao::rt::test
     CHECK(storedTrackSpec(fixture.library, imported.insertedIds[1]).title == "Third");
   }
 
-  TEST_CASE("CUE scan - a whole-file Track stays whole when a dividing sheet is added",
-            "[runtime][integration][cue-scan]")
+  TEST_CASE("CUE scan - a whole-file Track stays whole when a dividing sheet is added")
   {
     auto fixture = CueScanFixture{};
     std::filesystem::remove(fixture.musicRoot / "image.cue");
@@ -594,8 +580,7 @@ namespace ao::rt::test
     CHECK(optManifest->segmentCount() == 0);
   }
 
-  TEST_CASE("CUE scan - a layout mismatch names the first imported range the sheet no longer reproduces",
-            "[runtime][integration][cue-scan]")
+  TEST_CASE("CUE scan - a layout mismatch names the first imported range the sheet no longer reproduces")
   {
     auto fixture = CueScanFixture{};
     REQUIRE(fixture.scan().insertedIds.size() == 2);
@@ -623,8 +608,7 @@ namespace ao::rt::test
     CHECK(plan.items()[0].errorMessage.contains("segments kept"));
   }
 
-  TEST_CASE("CUE scan - explicit relink can resolve an identity ambiguity despite destination binding errors",
-            "[runtime][integration][cue-scan]")
+  TEST_CASE("CUE scan - explicit relink can resolve an identity ambiguity despite destination binding errors")
   {
     auto fixture = CueScanFixture{};
     auto const imported = fixture.scan();
@@ -653,8 +637,7 @@ namespace ao::rt::test
     CHECK(ids == imported.insertedIds);
   }
 
-  TEST_CASE("CUE scan - invalid external encoding has a typed diagnostic and imports after repair",
-            "[runtime][integration][cue-scan]")
+  TEST_CASE("CUE scan - invalid external encoding has a typed diagnostic and imports after repair")
   {
     auto fixture = CueScanFixture{};
     writeSheet(fixture.musicRoot / "image.cue", "TITLE \"\xff\"\n");
@@ -814,8 +797,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("CUE scan - unchanged whole file keeps empty evidence until an external sheet appears",
-            "[runtime][integration][cue-scan]")
+  TEST_CASE("CUE scan - unchanged whole file keeps empty evidence until an external sheet appears")
   {
     auto fixture = CueScanFixture{};
     std::filesystem::remove(fixture.musicRoot / "image.cue");
@@ -842,8 +824,7 @@ namespace ao::rt::test
     CHECK(divided.items().front().cueEvidence.extensionSpecific.empty());
   }
 
-  TEST_CASE("CUE scan - Opus embedded comments import whole and an external sheet stays unsupported",
-            "[runtime][integration][cue-scan]")
+  TEST_CASE("CUE scan - Opus embedded comments import whole and an external sheet stays unsupported")
   {
     auto temp = ao::test::TempDir{};
     auto const musicRoot = makeMusicRoot(temp.path());
@@ -886,8 +867,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("CUE scan - both candidate precedences are evidenced and only the deciding set binds",
-            "[runtime][integration][cue-scan]")
+  TEST_CASE("CUE scan - both candidate precedences are evidenced and only the deciding set binds")
   {
     auto fixture = CueScanFixture{};
     writeSheet(fixture.musicRoot / "image.cue", "malformed lower precedence sheet");

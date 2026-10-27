@@ -89,8 +89,7 @@ namespace ao::gtk::test
 #endif
   } // namespace
 
-  TEST_CASE("ResourceImageLoader - resolves image sources into pixbuf results",
-            "[gtk][unit][resource-image][concurrency]")
+  TEST_CASE("ResourceImageLoader - resolves image sources into pixbuf results", "[concurrency]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto const validBytes = encodePng(makePixbuf(256));
@@ -468,8 +467,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("ResourceImageLoader - failed resource reads terminate their request flight",
-            "[gtk][unit][resource-image][concurrency]")
+  TEST_CASE("ResourceImageLoader - failed resource reads terminate their request flight", "[concurrency]")
   {
     auto executor = rt::test::QueuedExecutor{};
     auto runtime = async::Runtime{executor, 1};
@@ -538,8 +536,7 @@ namespace ao::gtk::test
 
 #ifdef AOBUS_HAS_SYSTEM_MEDIA
 
-  TEST_CASE("ResourceByteMemoryCache - GTK derivatives share one owner-affine raw resource flight",
-            "[gtk][integration][resource-byte][concurrency]")
+  TEST_CASE("ResourceByteMemoryCache - GTK derivatives share one owner-affine raw resource flight", "[concurrency]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto tempDir = ao::test::TempDir{};

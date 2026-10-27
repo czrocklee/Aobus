@@ -45,7 +45,7 @@ namespace ao::media::file::vorbis::test
     }
   } // namespace
 
-  TEST_CASE("VorbisComment - PERFORMER parses one final isolated role suffix", "[media][unit][vorbis-comment]")
+  TEST_CASE("VorbisComment - PERFORMER parses one final isolated role suffix")
   {
     struct Example final
     {
@@ -74,7 +74,7 @@ namespace ao::media::file::vorbis::test
     }
   }
 
-  TEST_CASE("VorbisComment - Picard credit comments name their kinds without a role", "[media][unit][vorbis-comment]")
+  TEST_CASE("VorbisComment - Picard credit comments name their kinds without a role")
   {
     // Only PERFORMER parses a role suffix; a blank value contributes nothing.
     CHECK(creditsAfterComments({{"LYRICIST", "Lee"},
@@ -97,7 +97,7 @@ namespace ao::media::file::vorbis::test
                                                          });
   }
 
-  TEST_CASE("VorbisComment - PERFORMER falls back to one whole unstructured name", "[media][unit][vorbis-comment]")
+  TEST_CASE("VorbisComment - PERFORMER falls back to one whole unstructured name")
   {
     auto const examples = std::to_array<std::string_view>({
       "John Smith",
@@ -127,13 +127,13 @@ namespace ao::media::file::vorbis::test
           std::vector<Credit>{{.name = "John Smith", .kind = CreditKind::Performer}});
   }
 
-  TEST_CASE("VorbisComment - blank PERFORMER contributes no credit", "[media][unit][vorbis-comment]")
+  TEST_CASE("VorbisComment - blank PERFORMER contributes no credit")
   {
     CHECK(creditsAfterComments({{"PERFORMER", ""}}).empty());
     CHECK(creditsAfterComments({{"PERFORMER", " \t\n\r\f\v"}}).empty());
   }
 
-  TEST_CASE("VorbisComment - PERFORMER never implies Soloist", "[media][unit][vorbis-comment]")
+  TEST_CASE("VorbisComment - PERFORMER never implies Soloist")
   {
     CHECK(creditsAfterComments({{"PERFORMER", "  Anne (Piano)  "}}) ==
           std::vector<Credit>{{.name = "Anne", .kind = CreditKind::Performer, .role = "Piano"}});
@@ -149,7 +149,7 @@ namespace ao::media::file::vorbis::test
           });
   }
 
-  TEST_CASE("VorbisComment - repeated category comments accumulate in traversal order", "[media][unit][vorbis-comment]")
+  TEST_CASE("VorbisComment - repeated category comments accumulate in traversal order")
   {
     CHECK(creditsAfterComments({{"ARTIST", "Not a credit"},
                                 {"PERFORMER", "Bob (Piano)"},
@@ -179,8 +179,7 @@ namespace ao::media::file::vorbis::test
           });
   }
 
-  TEST_CASE("VorbisComment - nonblank Ensemble discards all Orchestra fallbacks across the whole content",
-            "[media][unit][vorbis-comment]")
+  TEST_CASE("VorbisComment - nonblank Ensemble discards all Orchestra fallbacks across the whole content")
   {
     auto const explicitCredits = std::vector<Credit>{{.name = "Group A", .kind = CreditKind::Ensemble},
                                                      {.name = "Ada", .kind = CreditKind::Performer},
@@ -212,13 +211,13 @@ namespace ao::media::file::vorbis::test
                                 {"ENSEMBLE", ""}}) == fallbackCredits);
   }
 
-  TEST_CASE("VorbisComment - preserves malformed UTF-8 for later admission failure", "[media][unit][vorbis-comment]")
+  TEST_CASE("VorbisComment - preserves malformed UTF-8 for later admission failure")
   {
     CHECK(creditsAfterComments({{"PERFORMER", "John\xED\xA0\x80 (Piano)"}}) ==
           std::vector<Credit>{{.name = "John\xED\xA0\x80", .kind = CreditKind::Performer, .role = "Piano"}});
   }
 
-  TEST_CASE("VorbisComment - Artist and Composer do not become performance credits", "[media][unit][vorbis-comment]")
+  TEST_CASE("VorbisComment - Artist and Composer do not become performance credits")
   {
     CHECK(creditsAfterComments({{"ARTIST", "John Smith (Piano)"}, {"COMPOSER", "Composer"}}).empty());
   }

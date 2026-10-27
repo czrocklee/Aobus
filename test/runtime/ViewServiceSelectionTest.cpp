@@ -12,7 +12,7 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("ViewService - selectionDuration sums selected track durations", "[runtime][unit][view][selection]")
+  TEST_CASE("ViewService - selectionDuration sums selected track durations")
   {
     auto env = ViewServiceFixture{};
     // Seed exact stored durations; authoring fixtures derive them from their audio file.
@@ -49,7 +49,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ViewService - selection mutation reports missing views", "[runtime][unit][view][selection]")
+  TEST_CASE("ViewService - selection mutation reports missing views")
   {
     auto env = ViewServiceFixture{};
     auto& service = env.service;

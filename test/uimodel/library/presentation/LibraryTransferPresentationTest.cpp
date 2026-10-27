@@ -16,7 +16,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("Library export options - fixed order covers every native choice", "[uimodel][unit][library-transfer]")
+  TEST_CASE("Library export options - fixed order covers every native choice")
   {
     REQUIRE(kLibraryExportOptions.size() == 4);
     CHECK(kLibraryExportOptions[0] ==
@@ -33,13 +33,13 @@ namespace ao::uimodel::test
             .mode = rt::ExportMode::ListOnly, .messageId = i18n::MessageId::LibraryExportModeListOnly});
   }
 
-  TEST_CASE("Library export options - default selects Full", "[uimodel][unit][library-transfer]")
+  TEST_CASE("Library export options - default selects Full")
   {
     REQUIRE(kLibraryExportDefaultIndex < kLibraryExportOptions.size());
     CHECK(kLibraryExportOptions[kLibraryExportDefaultIndex].mode == rt::ExportMode::Full);
   }
 
-  TEST_CASE("Library restore presentation - owns every library-scope report field", "[uimodel][unit][library-transfer]")
+  TEST_CASE("Library restore presentation - owns every library-scope report field")
   {
     auto const presentation = libraryRestorePresentation(ao::test::englishMessageCatalog(),
                                                          rt::ImportReport{
@@ -64,8 +64,7 @@ namespace ao::uimodel::test
       "invalid List filters kept as written: 8.\n\nContinue only if this matches the selected backup.");
   }
 
-  TEST_CASE("Library restore presentation - list-only payload names the narrower destructive scope",
-            "[uimodel][unit][library-transfer]")
+  TEST_CASE("Library restore presentation - list-only payload names the narrower destructive scope")
   {
     // Deliberately distinct report fields exercise projection, not the importer's valid list-only counts.
     auto const presentation = libraryRestorePresentation(ao::test::englishMessageCatalog(),
@@ -90,8 +89,7 @@ namespace ao::uimodel::test
           "invalid List filters kept as written: 8.\n\nContinue only if this matches the selected backup.");
   }
 
-  TEST_CASE("Library restore presentation - every mode preserves its token and explicit zero counts",
-            "[uimodel][unit][library-transfer]")
+  TEST_CASE("Library restore presentation - every mode preserves its token and explicit zero counts")
   {
     auto const modes = std::array{
       std::pair{rt::ExportMode::Delta, std::string_view{"delta"}},
@@ -120,8 +118,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("Library restore presentation - a count of one reads as grammatically as any other",
-            "[uimodel][unit][library-transfer]")
+  TEST_CASE("Library restore presentation - a count of one reads as grammatically as any other")
   {
     auto const presentation = libraryRestorePresentation(ao::test::englishMessageCatalog(),
                                                          rt::ImportReport{

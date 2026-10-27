@@ -39,7 +39,7 @@ namespace ao::rt::test
 {
   using namespace ao::test;
 
-  TEST_CASE("WorkspaceService - first navigate opens the target list", "[runtime][unit][workspace][navigation]")
+  TEST_CASE("WorkspaceService - first navigate opens the target list")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -52,7 +52,7 @@ namespace ao::rt::test
     CHECK(state.listId == fixture.firstListId);
   }
 
-  TEST_CASE("WorkspaceService - navigate AllTracks opens the global list", "[runtime][unit][workspace][navigation]")
+  TEST_CASE("WorkspaceService - navigate AllTracks opens the global list")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -64,8 +64,7 @@ namespace ao::rt::test
     CHECK(state.listId == kAllTracksListId);
   }
 
-  TEST_CASE("WorkspaceService - filtered AllTracks navigation uses the global list",
-            "[runtime][unit][workspace][navigation]")
+  TEST_CASE("WorkspaceService - filtered AllTracks navigation uses the global list")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -83,7 +82,7 @@ namespace ao::rt::test
     CHECK(state.filterExpression == "$genre = \"Rock\"");
   }
 
-  TEST_CASE("AppRuntime - jumpToAlbum rejects invalid tracks", "[runtime][unit][workspace][navigation]")
+  TEST_CASE("AppRuntime - jumpToAlbum rejects invalid tracks")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -107,7 +106,7 @@ namespace ao::rt::test
     CHECK(state.listId == fixture.firstListId);
   }
 
-  TEST_CASE("WorkspaceService - onChanged includes the committed focus", "[runtime][unit][workspace]")
+  TEST_CASE("WorkspaceService - onChanged includes the committed focus")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -122,7 +121,7 @@ namespace ao::rt::test
     CHECK(focusedViewId == activeViewId);
   }
 
-  TEST_CASE("WorkspaceService - deleting a list closes its open views", "[runtime][unit][workspace]")
+  TEST_CASE("WorkspaceService - deleting a list closes its open views")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -139,7 +138,7 @@ namespace ao::rt::test
     CHECK(!std::ranges::contains(layout.openViews, activeViewId));
   }
 
-  TEST_CASE("WorkspaceService - deleting a list closes all matching views in one commit", "[runtime][unit][workspace]")
+  TEST_CASE("WorkspaceService - deleting a list closes all matching views in one commit")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -159,8 +158,7 @@ namespace ao::rt::test
     CHECK(changes.front().snapshot.revision == before.revision + 1);
   }
 
-  TEST_CASE("WorkspaceService - a library restore closes the views of lists it replaced",
-            "[runtime][integration][workspace]")
+  TEST_CASE("WorkspaceService - a library restore closes the views of lists it replaced")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -225,8 +223,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("AppRuntime - jumpToAlbum reveals valid tracks in album presentation",
-            "[runtime][unit][workspace][navigation]")
+  TEST_CASE("AppRuntime - jumpToAlbum reveals valid tracks in album presentation")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -262,7 +259,7 @@ namespace ao::rt::test
     CHECK(state.presentation.id == "albums");
   }
 
-  TEST_CASE("WorkspaceService - invalid navigation targets return an error", "[runtime][unit][workspace][navigation]")
+  TEST_CASE("WorkspaceService - invalid navigation targets return an error")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -274,8 +271,7 @@ namespace ao::rt::test
     CHECK(runtime.workspace().snapshot().activeViewId == kInvalidViewId);
   }
 
-  TEST_CASE("WorkspaceService - empty navigation request rejects its invalid default target",
-            "[runtime][unit][workspace][navigation]")
+  TEST_CASE("WorkspaceService - empty navigation request rejects its invalid default target")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -288,8 +284,7 @@ namespace ao::rt::test
     CHECK(runtime.workspace().snapshot().openViews.empty());
   }
 
-  TEST_CASE("WorkspaceService - missing-list navigation leaves views focus and history unchanged",
-            "[runtime][unit][workspace][navigation]")
+  TEST_CASE("WorkspaceService - missing-list navigation leaves views focus and history unchanged")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -315,8 +310,7 @@ namespace ao::rt::test
     CHECK(runtime.workspace().snapshot().activeViewId == beforeLayout.activeViewId);
   }
 
-  TEST_CASE("WorkspaceService - focus rejects ids outside the open live aggregate",
-            "[runtime][unit][workspace][validation]")
+  TEST_CASE("WorkspaceService - focus rejects ids outside the open live aggregate")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -334,8 +328,7 @@ namespace ao::rt::test
     CHECK(runtime.workspace().snapshot().activeViewId == activeViewId);
   }
 
-  TEST_CASE("WorkspaceService - no-op focus and close preserve revision and observation",
-            "[runtime][unit][workspace][observation]")
+  TEST_CASE("WorkspaceService - no-op focus and close preserve revision and observation")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& workspace = fixture.runtime().workspace();
@@ -352,8 +345,7 @@ namespace ao::rt::test
     CHECK(changeCount == 0);
   }
 
-  TEST_CASE("WorkspaceService - focus commits a different open live view once",
-            "[runtime][unit][workspace][observation]")
+  TEST_CASE("WorkspaceService - focus commits a different open live view once")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& workspace = fixture.runtime().workspace();
@@ -372,8 +364,7 @@ namespace ao::rt::test
     CHECK(changed.snapshot == workspace.snapshot());
   }
 
-  TEST_CASE("WorkspaceService - changed observations are deferred to contract-fulfilling observers",
-            "[runtime][unit][workspace][observation][async]")
+  TEST_CASE("WorkspaceService - changed observations are deferred to contract-fulfilling observers")
   {
     // The owning Signal emission boundary accepts ordinary handlers so it can
     // diagnose an escaping exception before aborting. Contract-fulfilling
@@ -409,8 +400,7 @@ namespace ao::rt::test
     CHECK(received.front().snapshot == runtimePtr->workspace().snapshot());
   }
 
-  TEST_CASE("WorkspaceService - reentrant changes cannot mutate the observation being delivered",
-            "[runtime][unit][workspace][observation][async]")
+  TEST_CASE("WorkspaceService - reentrant changes cannot mutate the observation being delivered")
   {
     auto tempDir = ao::test::TempDir{};
     auto executorPtr = std::make_unique<QueuedExecutor>();

@@ -110,7 +110,7 @@ namespace ao::uimodel::test
     }
   } // namespace
 
-  TEST_CASE("LayoutStatePromoter - promotes runtime panel sizes", "[uimodel][unit][layout][component]")
+  TEST_CASE("LayoutStatePromoter - promotes runtime panel sizes")
   {
     auto doc = LayoutDocument{};
     doc.root.type = "box";
@@ -151,7 +151,7 @@ namespace ao::uimodel::test
     CHECK(stateDoc.components.at("detail-split").baselineHash == componentBaselineHash(doc.root.children[1]));
   }
 
-  TEST_CASE("LayoutStatePromoter - clamps promoted panel sizes", "[uimodel][unit][layout][component]")
+  TEST_CASE("LayoutStatePromoter - clamps promoted panel sizes")
   {
     SECTION("split percentages clamp to zero")
     {
@@ -214,7 +214,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("LayoutStatePromoter - ignores documents with no matching state", "[uimodel][unit][layout][component]")
+  TEST_CASE("LayoutStatePromoter - ignores documents with no matching state")
   {
     auto doc = LayoutDocument{};
     doc.root.type = "box";
@@ -233,7 +233,7 @@ namespace ao::uimodel::test
     CHECK(stateDoc.components.empty());
   }
 
-  TEST_CASE("LayoutStatePromoter - promotes deep layout trees", "[uimodel][unit][layout][component]")
+  TEST_CASE("LayoutStatePromoter - promotes deep layout trees")
   {
     auto doc = LayoutDocument{};
     auto deepNode = collapsibleSplitNode("deep-split");
@@ -268,7 +268,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(stateDoc.components.contains("deep-split"));
   }
 
-  TEST_CASE("LayoutStatePromoter - rejects mismatched baseline hash", "[uimodel][unit][layout][component]")
+  TEST_CASE("LayoutStatePromoter - rejects mismatched baseline hash")
   {
     auto doc = LayoutDocument{};
     doc.root.type = "box";
@@ -289,7 +289,7 @@ namespace ao::uimodel::test
     checkStateEqual(stateDoc, beforeState);
   }
 
-  TEST_CASE("LayoutStatePromoter - ignores malformed state types", "[uimodel][unit][layout][component]")
+  TEST_CASE("LayoutStatePromoter - ignores malformed state types")
   {
     auto malformedSize = LayoutValue{true};
 

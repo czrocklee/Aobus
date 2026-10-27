@@ -48,8 +48,7 @@ namespace ao::i18n::test
   static_assert(!std::constructible_from<MessageArgument, std::string_view, bool>);
   static_assert(!std::constructible_from<MessageArgument, std::string_view, MessageId>);
 
-  TEST_CASE("MessageCatalog - CUE property labels and scan reasons are authored in every maintained locale",
-            "[core][unit][catalog]")
+  TEST_CASE("MessageCatalog - CUE property labels and scan reasons are authored in every maintained locale")
   {
     auto const reasons = std::array{
       MessageId::LibraryScanCueInvalidEncoding,
@@ -100,7 +99,7 @@ namespace ao::i18n::test
     }
   }
 
-  TEST_CASE("MessageCatalog - Settings steps use singular and plural forms", "[core][unit][catalog]")
+  TEST_CASE("MessageCatalog - Settings steps use singular and plural forms")
   {
     struct Forms final
     {
@@ -126,8 +125,7 @@ namespace ao::i18n::test
     }
   }
 
-  TEST_CASE("MessageCatalog - selectable locales resolve packaged translations without fallback",
-            "[core][unit][catalog]")
+  TEST_CASE("MessageCatalog - selectable locales resolve packaged translations without fallback")
   {
     auto const locales = availableCatalogLocales();
     REQUIRE_FALSE(locales.empty());
@@ -148,8 +146,7 @@ namespace ao::i18n::test
     }
   }
 
-  TEST_CASE("MessageCatalog - Credits copy resolves in every maintained locale without English fallback",
-            "[core][unit][catalog]")
+  TEST_CASE("MessageCatalog - Credits copy resolves in every maintained locale without English fallback")
   {
     // Maintained locales are sparse by policy, but the Credits feature is
     // translated as one unit. A missing override would fall back silently.
@@ -230,7 +227,7 @@ namespace ao::i18n::test
     }
   }
 
-  TEST_CASE("MessageCatalog - admits canonical locale tags and applies explicit fallback", "[core][unit][catalog]")
+  TEST_CASE("MessageCatalog - admits canonical locale tags and applies explicit fallback")
   {
     auto englishRes = MessageCatalog::create("en-GB");
     REQUIRE(englishRes);
@@ -342,7 +339,7 @@ namespace ao::i18n::test
     CHECK(invalidRes.error().code == Error::Code::InvalidInput);
   }
 
-  TEST_CASE("MessageCatalog - exposes the internal root resource as English", "[core][unit][catalog]")
+  TEST_CASE("MessageCatalog - exposes the internal root resource as English")
   {
     auto rootRes = MessageCatalog::create("root");
     REQUIRE(rootRes);
@@ -361,7 +358,7 @@ namespace ao::i18n::test
     CHECK(*fallbackCountRes == ResolvedMessage{.text = "1 track", .locale = "en"});
   }
 
-  TEST_CASE("MessageCatalog - an inadmissible or unavailable system locale selects English", "[core][unit][catalog]")
+  TEST_CASE("MessageCatalog - an inadmissible or unavailable system locale selects English")
   {
     auto const systemLocaleRes = GENERATE(Result<std::string>{"12345"},
                                           Result<std::string>{"en_US"},
@@ -377,7 +374,7 @@ namespace ao::i18n::test
     CHECK(*titleRes == ResolvedMessage{.text = "Music library", .locale = "en"});
   }
 
-  TEST_CASE("MessageCatalog - an admissible system locale is requested as reported", "[core][unit][catalog]")
+  TEST_CASE("MessageCatalog - an admissible system locale is requested as reported")
   {
     auto catalogRes = detail::createCatalogForSystemLocale(std::string{"de-AT"});
     REQUIRE(catalogRes);
@@ -386,7 +383,7 @@ namespace ao::i18n::test
 
 #if !defined(_WIN32) && !defined(__APPLE__)
 
-  TEST_CASE("MessageCatalog - malformed operating-system locale falls back to English", "[core][unit][catalog]")
+  TEST_CASE("MessageCatalog - malformed operating-system locale falls back to English")
   {
     auto const originalLocale = std::string{::uloc_getDefault()};
     auto const restoreLocale = gsl_lite::finally(
@@ -412,8 +409,7 @@ namespace ao::i18n::test
 
 #ifdef __APPLE__
 
-  TEST_CASE("MessageCatalog - macOS requests the first preferred language rather than the ICU default",
-            "[core][unit][catalog]")
+  TEST_CASE("MessageCatalog - macOS requests the first preferred language rather than the ICU default")
   {
     auto const originalLocale = std::string{::uloc_getDefault()};
     auto const restoreLocale = gsl_lite::finally(
@@ -450,7 +446,7 @@ namespace ao::i18n::test
   }
 #endif
 
-  TEST_CASE("MessageCatalog - formats reordered, plural, and select arguments", "[core][unit][catalog]")
+  TEST_CASE("MessageCatalog - formats reordered, plural, and select arguments")
   {
     auto catalogRes = MessageCatalog::create("de-DE");
     REQUIRE(catalogRes);
@@ -529,7 +525,7 @@ namespace ao::i18n::test
     CHECK(frStateRes->text == "En pause");
   }
 
-  TEST_CASE("MessageCatalog - pseudo output expands literals but preserves argument values", "[core][unit][catalog]")
+  TEST_CASE("MessageCatalog - pseudo output expands literals but preserves argument values")
   {
     auto catalogRes = MessageCatalog::create("qps-ploc");
     REQUIRE(catalogRes);
@@ -545,8 +541,7 @@ namespace ao::i18n::test
     CHECK(messageRes->text.size() > std::string_view{"Open Aobus music library"}.size());
   }
 
-  TEST_CASE("MessageCatalog - final frontend slice resolves localized wrappers and accessibility copy",
-            "[core][unit][catalog]")
+  TEST_CASE("MessageCatalog - final frontend slice resolves localized wrappers and accessibility copy")
   {
     auto englishRes = MessageCatalog::create("en");
     REQUIRE(englishRes);
@@ -575,7 +570,7 @@ namespace ao::i18n::test
     CHECK(*moveColumnRes == "Nach links verschieben");
   }
 
-  TEST_CASE("MessageCatalog - rejects missing, duplicate, unexpected, and mistyped arguments", "[core][unit][catalog]")
+  TEST_CASE("MessageCatalog - rejects missing, duplicate, unexpected, and mistyped arguments")
   {
     auto catalogRes = MessageCatalog::create("en");
     REQUIRE(catalogRes);
@@ -613,7 +608,7 @@ namespace ao::i18n::test
     CHECK(oversizedRes.error().code == Error::Code::InvalidInput);
   }
 
-  TEST_CASE("MessageCatalog - one published catalog formats concurrently", "[core][unit][catalog][concurrency][stress]")
+  TEST_CASE("MessageCatalog - one published catalog formats concurrently", "[concurrency]")
   {
     auto catalogRes = MessageCatalog::create("de-DE");
     REQUIRE(catalogRes);
@@ -657,7 +652,7 @@ namespace ao::i18n::test
     CHECK(succeeded.load(std::memory_order_relaxed));
   }
 
-  TEST_CASE("MessageCatalog - resolves German and pseudo shell copy", "[core][unit][catalog]")
+  TEST_CASE("MessageCatalog - resolves German and pseudo shell copy")
   {
     auto germanRes = MessageCatalog::create("de-DE");
     REQUIRE(germanRes);

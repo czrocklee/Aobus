@@ -98,7 +98,7 @@ namespace ao::uimodel::test
     }
   } // namespace
 
-  TEST_CASE("PlaybackActions - executes transport policy", "[uimodel][integration][playback][command]")
+  TEST_CASE("PlaybackActions - executes transport policy")
   {
     auto fixture = PlaybackUiFixture{};
     fixture.makePlaybackReady();
@@ -197,8 +197,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("PlaybackActions - owns availability and live-sequence command policy",
-            "[uimodel][integration][playback][command][sequence]")
+  TEST_CASE("PlaybackActions - owns availability and live-sequence command policy")
   {
     auto fixture = PlaybackUiFixture{};
     fixture.makePlaybackReady();
@@ -254,7 +253,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("PlaybackActions - separates UI enablement from protocol capability", "[uimodel][unit][playback][command]")
+  TEST_CASE("PlaybackActions - separates UI enablement from protocol capability")
   {
     auto fixture = PlaybackUiFixture{};
     auto& playback = fixture.runtime().playback();
@@ -314,7 +313,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("PlaybackActions - emits availability when playback becomes ready", "[uimodel][unit][playback][command]")
+  TEST_CASE("PlaybackActions - emits availability when playback becomes ready")
   {
     auto fixture = PlaybackUiFixture{};
     std::int32_t playSelectionCount = 0;
@@ -341,8 +340,7 @@ namespace ao::uimodel::test
     CHECK(availability.aggregateCount > 0);
   }
 
-  TEST_CASE("PlaybackActions - emits one availability event for playback command inputs",
-            "[uimodel][unit][playback][command]")
+  TEST_CASE("PlaybackActions - emits one availability event for playback command inputs")
   {
     auto fixture = PlaybackUiFixture{};
     fixture.makePlaybackReady();

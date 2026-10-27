@@ -21,7 +21,7 @@
 
 namespace ao::audio::test
 {
-  TEST_CASE("DecoderFactory - opens ready sessions for supported audio files", "[audio][unit][decoder]")
+  TEST_CASE("DecoderFactory - opens ready sessions for supported audio files")
   {
     struct Case final
     {
@@ -63,7 +63,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("DecoderFactory - reports selection and initialization failures", "[audio][unit][decoder][error]")
+  TEST_CASE("DecoderFactory - reports selection and initialization failures")
   {
     SECTION("Unsupported extension")
     {
@@ -122,7 +122,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("DecoderFactory - normalizes supported extensions before opening", "[audio][unit][decoder]")
+  TEST_CASE("DecoderFactory - normalizes supported extensions before opening")
   {
     struct Case final
     {

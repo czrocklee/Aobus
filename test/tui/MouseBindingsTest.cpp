@@ -20,7 +20,7 @@
 
 namespace ao::tui::test
 {
-  TEST_CASE("MouseBindings - only painted cells activate shortcuts", "[tui][unit][mouse]")
+  TEST_CASE("MouseBindings - only painted cells activate shortcuts")
   {
     auto bindings = MouseBindings{};
     auto elementPtr = bindings.bind(ftxui::text("Run"), ftxui::Event::Return);
@@ -41,7 +41,7 @@ namespace ao::tui::test
     CHECK_FALSE(bindings.eventAt(mouse));
   }
 
-  TEST_CASE("MouseBindings - scroll frames retire off-screen row targets", "[tui][unit][mouse][render]")
+  TEST_CASE("MouseBindings - scroll frames retire off-screen row targets")
   {
     using namespace ftxui;
     auto boxes = std::array<Box, 20>{};
@@ -67,7 +67,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("MouseBindings - fitting scroll panel keeps all four border corners", "[tui][unit][mouse][render]")
+  TEST_CASE("MouseBindings - fitting scroll panel keeps all four border corners")
   {
     using namespace ftxui;
     auto regions = PanelMouseRegions{};
@@ -80,8 +80,7 @@ namespace ao::tui::test
     CHECK(regions.contentBox.y_max == regions.box.y_max);
   }
 
-  TEST_CASE("MouseBindings - scrolling panel keeps its hit region in the visible viewport",
-            "[tui][unit][mouse][render]")
+  TEST_CASE("MouseBindings - scrolling panel keeps its hit region in the visible viewport")
   {
     using namespace ftxui;
     auto regions = PanelMouseRegions{};

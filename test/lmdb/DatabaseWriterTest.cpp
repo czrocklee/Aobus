@@ -168,7 +168,7 @@ namespace ao::lmdb::test
     static_assert(!ReservationAccessAcceptsUpdateEncoder<PotentiallyThrowingEncoder>);
   } // namespace
 
-  TEST_CASE("IntegerKeyDatabase::Writer - create with id and data", "[lmdb][unit][database][writer]")
+  TEST_CASE("IntegerKeyDatabase::Writer - create with id and data")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -187,8 +187,7 @@ namespace ao::lmdb::test
     REQUIRE(utility::bytes::stringView(*optData) == "hello");
   }
 
-  TEST_CASE("ReservationWriterAccess - create encoder receives exact storage once and persists bytes",
-            "[lmdb][unit][database][writer]")
+  TEST_CASE("ReservationWriterAccess - create encoder receives exact storage once and persists bytes")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -222,7 +221,7 @@ namespace ao::lmdb::test
     REQUIRE(utility::bytes::stringView(*optData) == std::string(10, 'x'));
   }
 
-  TEST_CASE("IntegerKeyDatabase::Writer - append with data", "[lmdb][unit][database][writer]")
+  TEST_CASE("IntegerKeyDatabase::Writer - append with data")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -252,8 +251,7 @@ namespace ao::lmdb::test
     CHECK(utility::bytes::stringView(*optData2) == "second");
   }
 
-  TEST_CASE("ReservationWriterAccess - append encoders receive exact storage once and persist bytes",
-            "[lmdb][unit][database][writer]")
+  TEST_CASE("ReservationWriterAccess - append encoders receive exact storage once and persist bytes")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -305,8 +303,7 @@ namespace ao::lmdb::test
     CHECK(utility::bytes::stringView(*optData2) == std::string(12, 'b'));
   }
 
-  TEST_CASE("ReservationWriterAccess - append conflict restores cached maximum and skips encoder",
-            "[lmdb][unit][database][writer]")
+  TEST_CASE("ReservationWriterAccess - append conflict restores cached maximum and skips encoder")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -334,8 +331,7 @@ namespace ao::lmdb::test
     CHECK(utility::bytes::stringView(*optData) == "still active");
   }
 
-  TEST_CASE("IntegerKeyDatabase::Writer - clear resets integer append allocation on the same writer",
-            "[lmdb][unit][database][writer]")
+  TEST_CASE("IntegerKeyDatabase::Writer - clear resets integer append allocation on the same writer")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -363,8 +359,7 @@ namespace ao::lmdb::test
     CHECK_FALSE(reader.get(2));
   }
 
-  TEST_CASE("IntegerKeyDatabase::Writer - raising the cached maximum moves appends above it and never lowers it",
-            "[lmdb][unit][database][writer]")
+  TEST_CASE("IntegerKeyDatabase::Writer - raising the cached maximum moves appends above it and never lowers it")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -389,7 +384,7 @@ namespace ao::lmdb::test
     CHECK(reader.maxKey() == 8);
   }
 
-  TEST_CASE("IntegerKeyDatabase::Writer - append reports exhausted integer key space", "[lmdb][unit][database][writer]")
+  TEST_CASE("IntegerKeyDatabase::Writer - append reports exhausted integer key space")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -424,7 +419,7 @@ namespace ao::lmdb::test
     CHECK(utility::bytes::stringView(*optData) == "still active");
   }
 
-  TEST_CASE("IntegerKeyDatabase::Writer - update existing record", "[lmdb][unit][database][writer]")
+  TEST_CASE("IntegerKeyDatabase::Writer - update existing record")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -452,8 +447,7 @@ namespace ao::lmdb::test
     CHECK(utility::bytes::stringView(*optData) == "updated");
   }
 
-  TEST_CASE("ReservationWriterAccess - update encoder receives exact storage once and persists bytes",
-            "[lmdb][unit][database][writer]")
+  TEST_CASE("ReservationWriterAccess - update encoder receives exact storage once and persists bytes")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -487,7 +481,7 @@ namespace ao::lmdb::test
     CHECK(utility::bytes::stringView(*optData) == "changed");
   }
 
-  TEST_CASE("ByteKeyDatabase::Writer - copied create and update persist bytes", "[lmdb][unit][database][writer]")
+  TEST_CASE("ByteKeyDatabase::Writer - copied create and update persist bytes")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -519,7 +513,7 @@ namespace ao::lmdb::test
     CHECK(utility::bytes::stringView(*optData) == "updated-blob");
   }
 
-  TEST_CASE("IntegerKeyDatabase::Writer - delete record", "[lmdb][unit][database][writer]")
+  TEST_CASE("IntegerKeyDatabase::Writer - delete record")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -555,7 +549,7 @@ namespace ao::lmdb::test
     }
   }
 
-  TEST_CASE("IntegerKeyDatabase::Writer - delete missing record returns false", "[lmdb][unit][database][writer]")
+  TEST_CASE("IntegerKeyDatabase::Writer - delete missing record returns false")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -574,7 +568,7 @@ namespace ao::lmdb::test
     CHECK(utility::bytes::stringView(*optData) == "after miss");
   }
 
-  TEST_CASE("IntegerKeyDatabase::Writer - get within write transaction", "[lmdb][unit][database][writer]")
+  TEST_CASE("IntegerKeyDatabase::Writer - get within write transaction")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -590,7 +584,7 @@ namespace ao::lmdb::test
     CHECK(utility::bytes::stringView(*optDataRes) == "answer");
   }
 
-  TEST_CASE("IntegerKeyDatabase::Writer - move constructor", "[lmdb][unit][database][writer]")
+  TEST_CASE("IntegerKeyDatabase::Writer - move constructor")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -615,8 +609,7 @@ namespace ao::lmdb::test
     CHECK(utility::bytes::stringView(*optMoved) == "after move");
   }
 
-  TEST_CASE("IntegerKeyDatabase::Writer - create returns Conflict on duplicate id with data",
-            "[lmdb][unit][database][writer]")
+  TEST_CASE("IntegerKeyDatabase::Writer - create returns Conflict on duplicate id with data")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -643,7 +636,7 @@ namespace ao::lmdb::test
     CHECK(utility::bytes::stringView(*optSecond) == "after conflict");
   }
 
-  TEST_CASE("ReservationWriterAccess - duplicate create does not invoke encoder", "[lmdb][unit][database][writer]")
+  TEST_CASE("ReservationWriterAccess - duplicate create does not invoke encoder")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -680,8 +673,7 @@ namespace ao::lmdb::test
     CHECK(utility::bytes::stringView(*optData) == "aaaaaa");
   }
 
-  TEST_CASE("IntegerKeyDatabase::Writer - non-conflict mutation failure unwinds and rolls back its transaction",
-            "[lmdb][unit][database][writer]")
+  TEST_CASE("IntegerKeyDatabase::Writer - non-conflict mutation failure unwinds and rolls back its transaction")
   {
     // Apple Silicon uses 16 KiB pages. Leave enough LMDB pages for the named
     // database and baseline record before forcing the capacity failure.
@@ -781,8 +773,7 @@ namespace ao::lmdb::test
     CHECK_FALSE(reader.get(3));
   }
 
-  TEST_CASE("IntegerKeyDatabase::Writer - move assignment releases a finished cursor without closing it",
-            "[lmdb][unit][database][writer]")
+  TEST_CASE("IntegerKeyDatabase::Writer - move assignment releases a finished cursor without closing it")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});

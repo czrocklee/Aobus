@@ -129,7 +129,7 @@ namespace ao::audio::test
     }
   } // namespace
 
-  TEST_CASE("AlacDecoderSession - rejects malformed MP4 sample data", "[audio][unit][alac][mp4]")
+  TEST_CASE("AlacDecoderSession - rejects malformed MP4 sample data")
   {
     auto const fixture = loadAlacFixture();
 
@@ -162,7 +162,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("AlacDecoderSession - rejects malformed ALAC config", "[audio][unit][alac][mp4]")
+  TEST_CASE("AlacDecoderSession - rejects malformed ALAC config")
   {
     auto const fixture = loadAlacFixture();
 
@@ -220,7 +220,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("AlacDecoderSession - MP4 timing fallbacks", "[audio][unit][alac][mp4]")
+  TEST_CASE("AlacDecoderSession - MP4 timing fallbacks")
   {
     auto const fixture = loadAlacFixture();
 

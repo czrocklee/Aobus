@@ -97,7 +97,7 @@ namespace ao::audio::test
     };
   } // namespace
 
-  TEST_CASE("Engine - drain completion requires a pending render drain", "[audio][unit][engine][drain][concurrency]")
+  TEST_CASE("Engine - drain completion requires a pending render drain", "[concurrency]")
   {
     auto const device = Device{.id = DeviceId{"test-device"},
                                .displayName = "Test",
@@ -152,8 +152,7 @@ namespace ao::audio::test
     CHECK(engine.status().transport == Transport::Idle);
   }
 
-  TEST_CASE("Engine - an already drained prepared source completes without starting the backend",
-            "[audio][unit][engine][drain]")
+  TEST_CASE("Engine - an already drained prepared source completes without starting the backend")
   {
     auto const format = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
     auto const factory = [format](auto const&, std::optional<SampleEncoding> optOutputEncoding)
@@ -193,8 +192,7 @@ namespace ao::audio::test
     CHECK(events[2].name == "close");
   }
 
-  TEST_CASE("Engine - play ignores stale pending drain from retired session",
-            "[audio][unit][engine][drain][concurrency]")
+  TEST_CASE("Engine - play ignores stale pending drain from retired session", "[concurrency]")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
@@ -269,8 +267,7 @@ namespace ao::audio::test
     CHECK(engine.status().transport == Transport::Playing);
   }
 
-  TEST_CASE("Engine - seek ignores stale pending drain and keeps session playing",
-            "[audio][unit][engine][seek][drain][concurrency]")
+  TEST_CASE("Engine - seek ignores stale pending drain and keeps session playing", "[concurrency]")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
@@ -347,7 +344,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Engine - seek landing at end of stream completes the track and retires the render session",
-            "[audio][unit][engine][seek][drain][concurrency]")
+            "[concurrency]")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<DrainOnStopBackend>();

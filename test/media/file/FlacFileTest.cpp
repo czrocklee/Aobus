@@ -120,7 +120,7 @@ namespace ao::media::file::flac::test
     }
   } // namespace
 
-  TEST_CASE("FLAC File - parses metadata and audio properties", "[media][unit][flac][file]")
+  TEST_CASE("FLAC File - parses metadata and audio properties")
   {
     auto data = createMinimalFlac();
     data.push_back(0xA0);
@@ -158,8 +158,7 @@ namespace ao::media::file::flac::test
     CHECK(prop.duration() == std::chrono::seconds{1});
   }
 
-  TEST_CASE("FLAC File - count comments require complete numbers while dates yield their year",
-            "[media][unit][flac][file]")
+  TEST_CASE("FLAC File - count comments require complete numbers while dates yield their year")
   {
     auto const comments = std::vector<std::string>{
       "TRACKTOTAL=12x",
@@ -179,7 +178,7 @@ namespace ao::media::file::flac::test
     CHECK(content.number(NumberField::Year) == 2024);
   }
 
-  TEST_CASE("FLAC File - explicit WORK outranks GROUPING regardless of comment order", "[media][unit][flac][file]")
+  TEST_CASE("FLAC File - explicit WORK outranks GROUPING regardless of comment order")
   {
     // Copy the view out; the file and content die with the lambda.
     auto const readWork = [](std::vector<std::string> comments) -> std::string
@@ -248,7 +247,7 @@ namespace ao::media::file::flac::test
     }
   }
 
-  TEST_CASE("FLAC File - emits real fixture tag fields", "[media][unit][flac][file]")
+  TEST_CASE("FLAC File - emits real fixture tag fields")
   {
     auto const file = File{audio::test::requireAudioFixture("basic_metadata.flac")};
     auto content = readContent(file);
@@ -268,7 +267,7 @@ namespace ao::media::file::flac::test
                                         .kind = ao::media::file::test::RecordedContent::CallbackKind::Credits}));
   }
 
-  TEST_CASE("FLAC File - maps classical fallback comments when primary fields are absent", "[media][unit][flac][file]")
+  TEST_CASE("FLAC File - maps classical fallback comments when primary fields are absent")
   {
     using Event = ao::media::file::test::RecordedContent::CallbackEvent;
     using Kind = ao::media::file::test::RecordedContent::CallbackKind;
@@ -299,8 +298,7 @@ namespace ao::media::file::flac::test
                    });
   }
 
-  TEST_CASE("FLAC File - public visitor owns ordered performer credits after the file dies",
-            "[media][unit][flac][file]")
+  TEST_CASE("FLAC File - public visitor owns ordered performer credits after the file dies")
   {
     using Event = ao::media::file::test::RecordedContent::CallbackEvent;
     using Kind = ao::media::file::test::RecordedContent::CallbackKind;
@@ -345,7 +343,7 @@ namespace ao::media::file::flac::test
                    });
   }
 
-  TEST_CASE("FLAC File - audio payload range starts after metadata blocks", "[media][unit][flac][file]")
+  TEST_CASE("FLAC File - audio payload range starts after metadata blocks")
   {
     auto data = createMinimalFlac();
     std::size_t const expectedOffset = data.size();
@@ -364,7 +362,7 @@ namespace ao::media::file::flac::test
     CHECK(std::to_integer<std::uint8_t>(range.bytes[2]) == 0xA2);
   }
 
-  TEST_CASE("FLAC File - rejects empty audio payload", "[media][unit][flac][file]")
+  TEST_CASE("FLAC File - rejects empty audio payload")
   {
     auto const data = createMinimalFlac();
     auto const temp = TempFile{data, ".flac"};
@@ -375,7 +373,7 @@ namespace ao::media::file::flac::test
     CHECK(rangeRes.error().code == Error::Code::CorruptData);
   }
 
-  TEST_CASE("FLAC File - audio payload signature ignores metadata changes", "[media][unit][flac][file]")
+  TEST_CASE("FLAC File - audio payload signature ignores metadata changes")
   {
     auto firstData = createMinimalFlac("Short");
     auto secondData = createMinimalFlac("A Longer Retagged Title");
@@ -401,7 +399,7 @@ namespace ao::media::file::flac::test
     CHECK(utility::xxh3Hash128(firstPayloadRes->bytes) == utility::xxh3Hash128(secondPayloadRes->bytes));
   }
 
-  TEST_CASE("FLAC File - rejects malformed input", "[media][unit][flac][file]")
+  TEST_CASE("FLAC File - rejects malformed input")
   {
     SECTION("Missing StreamInfo block")
     {

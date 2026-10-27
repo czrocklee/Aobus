@@ -11,7 +11,7 @@ event binding, widget lifecycle, and layout boundaries.
 
 Read only the applicable references under `doc/development/test/`:
 
-- `layer-selection.md`: owning layer and unit/integration scope.
+- `layer-selection.md`: owning layer, contract choices, and assertion direction.
 - `naming-and-assertion.md`: names, tags, assertions, and SECTION policy.
 - `fixture-and-helper.md`: where a new case belongs, helpers, fakes, and seams.
 - `runtime-and-async.md`: deterministic executors and runtime subscriptions.

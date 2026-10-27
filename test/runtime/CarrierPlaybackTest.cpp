@@ -70,8 +70,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("Carrier playback - stored second segment reaches final PCM with exact source boundaries",
-            "[runtime][integration][playback][segment]")
+  TEST_CASE("Carrier playback - stored second segment reaches final PCM with exact source boundaries")
   {
     auto spec = ao::test::wav::Spec{
       .sampleRate = 44100,
@@ -114,8 +113,7 @@ namespace ao::rt::test
     CHECK(fixture.renderTarget->renderPcm(output).bytesWritten == 0);
   }
 
-  TEST_CASE("Carrier playback - nonempty zero millisecond segment plays at offset zero",
-            "[runtime][integration][playback][segment]")
+  TEST_CASE("Carrier playback - nonempty zero millisecond segment plays at offset zero")
   {
     auto const bytes = ao::test::wav::makeWav(ao::test::wav::Spec{
       .sampleRate = 44100,

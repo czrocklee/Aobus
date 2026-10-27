@@ -10,7 +10,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("SeekInteraction - pointer seek decisions", "[uimodel][unit][playback][seek]")
+  TEST_CASE("SeekInteraction - pointer seek decisions")
   {
     constexpr auto kFirstOccurrenceId = rt::PlaybackOccurrenceId{1};
     constexpr auto kSecondOccurrenceId = rt::PlaybackOccurrenceId{2};

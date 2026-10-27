@@ -94,7 +94,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("EntryCompletionController - uses UTF-8 byte spans with GTK character cursors", "[gtk][unit][completion]")
+  TEST_CASE("EntryCompletionController - uses UTF-8 byte spans with GTK character cursors")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -136,7 +136,7 @@ namespace ao::gtk::test
     CHECK(entry.get_position() == charCount("你 $album"));
   }
 
-  TEST_CASE("EntryCompletionController - programmatic text changes do not call provider", "[gtk][unit][completion]")
+  TEST_CASE("EntryCompletionController - programmatic text changes do not call provider")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -175,7 +175,7 @@ namespace ao::gtk::test
     CHECK(entry.get_text() == "$artist");
   }
 
-  TEST_CASE("EntryCompletionController - shows completion popup without modal keyboard grab", "[gtk][unit][completion]")
+  TEST_CASE("EntryCompletionController - shows completion popup without modal keyboard grab")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -219,7 +219,7 @@ namespace ao::gtk::test
     CHECK(popover->get_visible());
   }
 
-  TEST_CASE("EntryCompletionController - renders completion item detail", "[gtk][unit][completion]")
+  TEST_CASE("EntryCompletionController - renders completion item detail")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -260,7 +260,7 @@ namespace ao::gtk::test
     CHECK(detail->get_text() == "field");
   }
 
-  TEST_CASE("EntryCompletionController - applies refreshed completion rows", "[gtk][unit][completion]")
+  TEST_CASE("EntryCompletionController - applies refreshed completion rows")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -306,8 +306,7 @@ namespace ao::gtk::test
     CHECK(entry.get_text() == "$composer");
   }
 
-  TEST_CASE("EntryCompletionController - keyboard navigation cycles and only Tab accepts a selection",
-            "[gtk][unit][completion]")
+  TEST_CASE("EntryCompletionController - keyboard navigation cycles and only Tab accepts a selection")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -403,7 +402,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("EntryCompletionController - page navigation uses the visible viewport", "[gtk][unit][completion]")
+  TEST_CASE("EntryCompletionController - page navigation uses the visible viewport")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -439,7 +438,7 @@ namespace ao::gtk::test
     CHECK(entry.get_text() == "$item3");
   }
 
-  TEST_CASE("EntryCompletionController - clears completion state when entry focus leaves", "[gtk][unit][completion]")
+  TEST_CASE("EntryCompletionController - clears completion state when entry focus leaves")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -472,8 +471,7 @@ namespace ao::gtk::test
     CHECK(entry.get_text() == "$al");
   }
 
-  TEST_CASE("EntryCompletionController - dismisses popup on outside press without modal autohide",
-            "[gtk][unit][completion]")
+  TEST_CASE("EntryCompletionController - dismisses popup on outside press without modal autohide")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -513,7 +511,7 @@ namespace ao::gtk::test
     CHECK(entry.get_text() == "$al");
   }
 
-  TEST_CASE("EntryCompletionController - clears completion state when popover closes", "[gtk][unit][completion]")
+  TEST_CASE("EntryCompletionController - clears completion state when popover closes")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 

@@ -15,7 +15,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("CustomPresentationEditorModel - edits custom presentation draft", "[uimodel][unit][presentation]")
+  TEST_CASE("CustomPresentationEditorModel - edits custom presentation draft")
   {
     auto spec = rt::TrackPresentationSpec{};
     spec.groupBy = rt::TrackGroupKey::Album;

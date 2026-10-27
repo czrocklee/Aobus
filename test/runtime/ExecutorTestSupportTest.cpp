@@ -39,7 +39,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("InlineExecutor - owner work executes inline", "[runtime][unit][async]")
+  TEST_CASE("InlineExecutor - owner work executes inline")
   {
     auto executor = InlineExecutor{};
     auto order = std::vector<int>{};
@@ -54,7 +54,7 @@ namespace ao::rt::test
     CHECK(order == std::vector<int>{1, 2});
   }
 
-  TEST_CASE("InlineExecutor - foreign work is rejected", "[runtime][unit][async][concurrency]")
+  TEST_CASE("InlineExecutor - foreign work is rejected", "[concurrency]")
   {
     auto executor = InlineExecutor{};
     bool taskRan = false;
@@ -95,7 +95,7 @@ namespace ao::rt::test
     checkRejection(deferFailure, "InlineExecutor can only execute work on its owner thread");
   }
 
-  TEST_CASE("ManualExecutor - foreign producers queue work for the owner", "[runtime][unit][async][concurrency]")
+  TEST_CASE("ManualExecutor - foreign producers queue work for the owner", "[concurrency]")
   {
     auto executor = ManualExecutor{};
     auto const ownerThread = std::this_thread::get_id();
@@ -129,8 +129,7 @@ namespace ao::rt::test
     CHECK_FALSE(executor.tryRunOne());
   }
 
-  TEST_CASE("ManualExecutor - draining observes worker-only completion before its deadline",
-            "[runtime][unit][async][concurrency]")
+  TEST_CASE("ManualExecutor - draining observes worker-only completion before its deadline", "[concurrency]")
   {
     auto executor = ManualExecutor{};
     auto completed = std::atomic_bool{false};

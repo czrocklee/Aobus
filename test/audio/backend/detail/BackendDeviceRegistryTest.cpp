@@ -13,7 +13,7 @@
 
 namespace ao::audio::backend::detail::test
 {
-  TEST_CASE("BackendDeviceRegistry - publishes snapshots and honors cancellation", "[audio][unit][device-registry]")
+  TEST_CASE("BackendDeviceRegistry - publishes snapshots and honors cancellation")
   {
     auto registry = BackendDeviceRegistry{};
     std::size_t calls = 0;
@@ -42,7 +42,7 @@ namespace ao::audio::backend::detail::test
     CHECK(registry.snapshot() == nextDevices);
   }
 
-  TEST_CASE("BackendDeviceRegistry - shutdown closes admission and clears status", "[audio][unit][device-registry]")
+  TEST_CASE("BackendDeviceRegistry - shutdown closes admission and clears status")
   {
     auto registry = BackendDeviceRegistry{};
     auto const devices = std::vector<Device>{{.id = DeviceId{"uid-a"}}};
@@ -70,8 +70,7 @@ namespace ao::audio::backend::detail::test
     sub.reset();
   }
 
-  TEST_CASE("BackendDeviceRegistry - one callback may cancel another copied subscriber",
-            "[audio][unit][device-registry][concurrency]")
+  TEST_CASE("BackendDeviceRegistry - one callback may cancel another copied subscriber", "[concurrency]")
   {
     auto registry = BackendDeviceRegistry{};
     std::size_t firstCalls = 0;

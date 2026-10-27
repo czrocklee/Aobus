@@ -4,8 +4,10 @@ import contextlib
 import io
 import json
 import os
+import subprocess
 import tempfile
 import unittest
+from functools import partial
 from pathlib import Path
 from unittest import mock
 
@@ -15,6 +17,52 @@ from ao.core import builddir
 
 
 class PerformanceIdentityTest(unittest.TestCase):
+    def test_provenance_uses_checkout_scoped_git_commands_on_native_share_profiles(self):
+        command = perf.gitfiles._git_command
+        for profile, options in (
+            ("windows", {"os_name": "nt", "platform_name": "win32", "checkout_uses_smb": True}),
+            ("macos-smb", {"os_name": "posix", "platform_name": "darwin", "checkout_uses_smb": True}),
+            ("linux", {"os_name": "posix", "platform_name": "linux", "checkout_uses_smb": False}),
+        ):
+            with self.subTest(profile=profile):
+                with (
+                    mock.patch.object(perf.gitfiles, "_git_command", side_effect=partial(command, **options)) as git,
+                    mock.patch.object(perf, "capture", side_effect=["revision-id\n", ""]) as capture,
+                ):
+                    self.assertEqual(perf._revision(), "revision-id")
+                self.assertEqual(
+                    git.call_args_list, [mock.call("rev-parse", "--verify", "HEAD"), mock.call("status", "--porcelain")]
+                )
+                self.assertEqual(
+                    capture.call_args_list,
+                    [
+                        mock.call(command("rev-parse", "--verify", "HEAD", **options), cwd=perf.PROJECT_ROOT),
+                        mock.call(command("status", "--porcelain", **options), cwd=perf.PROJECT_ROOT),
+                    ],
+                )
+
+    def test_meaningful_worktree_changes_still_mark_the_revision_dirty(self):
+        with mock.patch.object(perf, "capture", side_effect=["revision-id\n", " M script/ao/command/perf.py\n"]):
+            self.assertEqual(perf._revision(), "revision-id+dirty")
+
+    def test_revision_read_failure_is_not_silently_reported_as_verified(self):
+        with mock.patch.object(perf, "capture", side_effect=subprocess.CalledProcessError(128, "git")) as capture:
+            with self.assertRaises(subprocess.CalledProcessError):
+                perf._revision()
+            capture.assert_called_once()
+
+    def test_worktree_status_failure_cannot_report_a_clean_revision(self):
+        def capture(argv, *, cwd, check=True):
+            if "rev-parse" in argv:
+                return "revision-id\n"
+            if check:
+                raise subprocess.CalledProcessError(128, argv)
+            return ""
+
+        with mock.patch.object(perf, "capture", side_effect=capture):
+            with self.assertRaises(subprocess.CalledProcessError):
+                perf._revision()
+
     @mock.patch.dict(os.environ, {"AOBUS_PERF_BASELINE_JSON": ""})
     def test_reused_executable_cannot_claim_the_current_checkout_revision(self):
         with tempfile.TemporaryDirectory() as temporary:

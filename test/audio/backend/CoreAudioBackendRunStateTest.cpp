@@ -292,7 +292,7 @@ namespace ao::audio::backend::test
   } // namespace
 
   TEST_CASE("CoreAudioBackend - failed pause withholds activation and reset until an explicit stop succeeds",
-            "[audio][integration][coreaudio][backend][coreaudio-run-state][concurrency]")
+            "[concurrency]")
   {
     auto const device = requireRunStateTestOutput();
     CAPTURE(device.id.raw());
@@ -368,7 +368,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("CoreAudioBackend - a successful pause retry permits a new start without reviving the errored run",
-            "[audio][integration][coreaudio][backend][coreaudio-run-state][concurrency]")
+            "[concurrency]")
   {
     auto const device = requireRunStateTestOutput();
     CAPTURE(device.id.raw());
@@ -416,7 +416,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("CoreAudioBackend - flush after a confirmed explicit stop resets without a second native stop",
-            "[audio][integration][coreaudio][backend][coreaudio-run-state][concurrency]")
+            "[concurrency]")
   {
     auto const device = requireRunStateTestOutput();
     CAPTURE(device.id.raw());
@@ -452,7 +452,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("CoreAudioBackend - a failed presentation-tail stop reports its drain context without completing drain",
-            "[audio][integration][coreaudio][backend][coreaudio-run-state][concurrency]")
+            "[concurrency]")
   {
     auto const device = requireRunStateTestOutput();
     CAPTURE(device.id.raw());
@@ -505,7 +505,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("CoreAudioBackend - an actual oversized render reports frame-limit and failed fault-stop context once",
-            "[audio][integration][coreaudio][backend][coreaudio-run-state][concurrency]")
+            "[concurrency]")
   {
     auto const device = requireRunStateTestOutput();
     CAPTURE(device.id.raw());
@@ -631,7 +631,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("CoreAudioBackend - failed resume start becomes inactive while a confirmed stopped unit remains resettable",
-            "[audio][integration][coreaudio][backend][coreaudio-run-state][concurrency]")
+            "[concurrency]")
   {
     auto const device = requireRunStateTestOutput();
     CAPTURE(device.id.raw());

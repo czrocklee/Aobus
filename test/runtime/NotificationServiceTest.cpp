@@ -34,7 +34,7 @@ namespace ao::rt::test
     };
   } // namespace
 
-  TEST_CASE("NotificationService - post publishes one immutable snapshot", "[runtime][unit][notification]")
+  TEST_CASE("NotificationService - post publishes one immutable snapshot")
   {
     auto fixture = NotificationServiceFixture{};
     auto& service = fixture.service;
@@ -53,7 +53,7 @@ namespace ao::rt::test
     CHECK(std::get<std::string>(update.feedPtr->entries.front().message) == "test message");
   }
 
-  TEST_CASE("NotificationService - request post stores product notification state", "[runtime][unit][notification]")
+  TEST_CASE("NotificationService - request post stores product notification state")
   {
     auto fixture = NotificationServiceFixture{};
     auto const report = NotificationReport{
@@ -79,8 +79,7 @@ namespace ao::rt::test
     CHECK(std::get<NotificationReport>(entry.message) == report);
   }
 
-  TEST_CASE("NotificationService - invalid bounded input publishes nothing and preserves identity",
-            "[runtime][unit][notification]")
+  TEST_CASE("NotificationService - invalid bounded input publishes nothing and preserves identity")
   {
     auto limits = NotificationFeedLimits{};
     limits.maxTextBytes = 32;
@@ -108,7 +107,7 @@ namespace ao::rt::test
     CHECK(service.feed().entries.front().id == NotificationId{1});
   }
 
-  TEST_CASE("NotificationService - structured report bounds cover subject and detail", "[runtime][unit][notification]")
+  TEST_CASE("NotificationService - structured report bounds cover subject and detail")
   {
     auto limits = NotificationFeedLimits{};
     limits.maxTextBytes = 32;
@@ -156,8 +155,7 @@ namespace ao::rt::test
     CHECK(std::get<NotificationReport>(service.feed().entries.front().message) == report);
   }
 
-  TEST_CASE("NotificationService - history eviction is atomic and pinned exhaustion rejects",
-            "[runtime][unit][notification]")
+  TEST_CASE("NotificationService - history eviction is atomic and pinned exhaustion rejects")
   {
     auto limits = NotificationFeedLimits{};
     limits.maxEntries = 3;
@@ -206,8 +204,7 @@ namespace ao::rt::test
     CHECK(service.feed().entries[2].id == thirdPinnedId);
   }
 
-  TEST_CASE("NotificationService - keyed report coalesces and suppresses identical updates",
-            "[runtime][unit][notification]")
+  TEST_CASE("NotificationService - keyed report coalesces and suppresses identical updates")
   {
     auto fixture = NotificationServiceFixture{};
     auto& service = fixture.service;
@@ -245,8 +242,7 @@ namespace ao::rt::test
     CHECK(std::get<NotificationReport>(entry.message).count == 2);
   }
 
-  TEST_CASE("NotificationService - contract-fulfilling feed observers see committed updates",
-            "[runtime][unit][notification]")
+  TEST_CASE("NotificationService - contract-fulfilling feed observers see committed updates")
   {
     // The feed cannot act on an observer failure: publication is already
     // committed. The owning Signal emission boundary accepts ordinary handlers
@@ -265,8 +261,7 @@ namespace ao::rt::test
     CHECK(laterObserverCount == 2);
   }
 
-  TEST_CASE("NotificationService - reentrant report update preserves immutable publication order",
-            "[runtime][unit][notification]")
+  TEST_CASE("NotificationService - reentrant report update preserves immutable publication order")
   {
     auto fixture = NotificationServiceFixture{};
     auto& service = fixture.service;
@@ -318,8 +313,7 @@ namespace ao::rt::test
     CHECK(std::get<std::string>(service.feed().entries.front().message) == "updated");
   }
 
-  TEST_CASE("NotificationService - reentrant post advances the id watermark before publication",
-            "[runtime][unit][notification]")
+  TEST_CASE("NotificationService - reentrant post advances the id watermark before publication")
   {
     auto fixture = NotificationServiceFixture{};
     auto& service = fixture.service;

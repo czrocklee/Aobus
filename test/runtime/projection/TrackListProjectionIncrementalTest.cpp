@@ -70,8 +70,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("TrackListProjection - equal keys follow source order across every update path",
-            "[runtime][unit][projection][incremental]")
+  TEST_CASE("TrackListProjection - equal keys follow source order across every update path")
   {
     auto fixture = MusicLibraryFixture{};
     auto const first = fixture.addTrack(library::test::makeTrackSpec("First", 2020));
@@ -117,8 +116,7 @@ namespace ao::rt::test
     checkSourceOrder();
   }
 
-  TEST_CASE("TrackListProjection - incremental batches match a fresh full rebuild",
-            "[runtime][unit][projection][incremental]")
+  TEST_CASE("TrackListProjection - incremental batches match a fresh full rebuild")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto trackIds = std::vector<TrackId>{};
@@ -220,8 +218,7 @@ namespace ao::rt::test
     CHECK(after.rowIndexRebuilds - before.rowIndexRebuilds == kIterations);
   }
 
-  TEST_CASE("TrackListProjection - incremental article rename matches a full rebuild",
-            "[runtime][unit][projection][incremental]")
+  TEST_CASE("TrackListProjection - incremental article rename matches a full rebuild")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const doorsA = libraryFixture.addTrack(library::test::TrackSpec{.title = "A", .artist = "Doors"});
@@ -251,8 +248,7 @@ namespace ao::rt::test
     CHECK(projection.groupAt(1).rows.count == 3);
   }
 
-  TEST_CASE("TrackListProjection - sustained metadata churn periodically rebases arena storage",
-            "[runtime][unit][projection][incremental]")
+  TEST_CASE("TrackListProjection - sustained metadata churn periodically rebases arena storage")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto trackIds = std::vector<TrackId>{};

@@ -17,7 +17,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("ListPresentationRecommendation - heuristics", "[uimodel][unit][presentation]")
+  TEST_CASE("ListPresentationRecommendation - heuristics")
   {
     auto const syntheticAlbums = rt::TrackPresentationSpec{
       .id = "albums",

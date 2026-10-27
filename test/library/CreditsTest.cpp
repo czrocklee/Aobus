@@ -26,7 +26,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("Credits - builder copies descriptors but borrows unadmitted owning text", "[library][unit][credits]")
+  TEST_CASE("Credits - builder copies descriptors but borrows unadmitted owning text")
   {
     auto const malformed = std::string{"\xC0\xAF", 2};
     auto const entries = std::vector<Credit>{{.name = " Cafe\u0301 ", .role = "\t "},
@@ -52,7 +52,7 @@ namespace ao::library::test
     CHECK(res.error().message.contains("Credit entry 1"));
   }
 
-  TEST_CASE("Credits - normalized owning text outlives input and preserves duplicates", "[library][unit][credits]")
+  TEST_CASE("Credits - normalized owning text outlives input and preserves duplicates")
   {
     auto const res = []
     {
@@ -66,7 +66,7 @@ namespace ao::library::test
                     {.name = "Café", .role = "Pianoforté"}, {.name = "Other"}, {.name = "Café", .role = "Pianoforté"}});
   }
 
-  TEST_CASE("Credits - trims six ASCII whitespace characters but not NBSP", "[library][unit][credits]")
+  TEST_CASE("Credits - trims six ASCII whitespace characters but not NBSP")
   {
     auto const res =
       normalizeList({{.name = " \t\n\r\f\v Glenn Gould \v\f\r\n\t ", .role = " \t\n\r\f\v Piano \v\f\r\n\t "},
@@ -78,7 +78,7 @@ namespace ao::library::test
                                       {.name = "\u00A0", .role = "\u00A0"}});
   }
 
-  TEST_CASE("Credits - NFC equivalent names and roles compare equal", "[library][unit][credits]")
+  TEST_CASE("Credits - NFC equivalent names and roles compare equal")
   {
     auto const decomposedRes = normalizeList({{.name = "Cafe\u0301", .role = "Pianoforte\u0301"}});
     auto const composedRes = normalizeList({{.name = "Café", .role = "Pianoforté"}});
@@ -88,7 +88,7 @@ namespace ao::library::test
     CHECK(*decomposedRes == std::vector<Credit>{{.name = "Café", .role = "Pianoforté"}});
   }
 
-  TEST_CASE("Credits - malformed scalar UTF-8 rejects the whole list", "[library][unit][credits]")
+  TEST_CASE("Credits - malformed scalar UTF-8 rejects the whole list")
   {
     auto const malformed = std::vector<std::string>{
       "\xC0\xAF", "\xED\xA0\x80", "\xE2\x82", "\x80", "\xF4\x90\x80\x80", "\xF8\x88\x80\x80\x80"};
@@ -106,7 +106,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("Credits - empty lists are valid and authored blank names reject", "[library][unit][credits]")
+  TEST_CASE("Credits - empty lists are valid and authored blank names reject")
   {
     auto const emptyRes = normalizeList({});
     REQUIRE(emptyRes);
@@ -121,7 +121,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("Credits - blank roles mean absence and delimiters remain literal", "[library][unit][credits]")
+  TEST_CASE("Credits - blank roles mean absence and delimiters remain literal")
   {
     auto const res = normalizeList({{.name = "Glenn Gould", .role = ""},
                                     {.name = "Jane Smith", .role = " "},
@@ -136,8 +136,7 @@ namespace ao::library::test
                                       {.name = "Duo A, Duo B", .role = "(Ensemble)"}});
   }
 
-  TEST_CASE("Credits - stable fixed-kind grouping preserves multiplicity and within-kind order",
-            "[library][unit][credits]")
+  TEST_CASE("Credits - stable fixed-kind grouping preserves multiplicity and within-kind order")
   {
     auto const res = normalizeList({{.name = "P", .role = "soloist"},
                                     {.name = "S", .kind = CreditKind::Soloist},
@@ -171,7 +170,7 @@ namespace ao::library::test
     CHECK(*owningRes == *res);
   }
 
-  TEST_CASE("Credits - fixed kind tokens reject unknown enum values and spellings", "[library][unit][credits]")
+  TEST_CASE("Credits - fixed kind tokens reject unknown enum values and spellings")
   {
     auto const tokens = std::array{"conductor",
                                    "ensemble",

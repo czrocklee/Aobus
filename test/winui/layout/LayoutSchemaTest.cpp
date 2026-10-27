@@ -26,7 +26,7 @@ namespace ao::winui::test
   using uimodel::LayoutValue;
   using uimodel::PropertySchema;
 
-  TEST_CASE("layoutSchema - every shared id preserves the canonical vocabulary floor", "[winui][unit][layout]")
+  TEST_CASE("layoutSchema - every shared id preserves the canonical vocabulary floor")
   {
     auto const schema = layoutSchema();
 
@@ -54,7 +54,7 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("layoutSchema - stays narrower than the GTK schema", "[winui][unit][layout]")
+  TEST_CASE("layoutSchema - stays narrower than the GTK schema")
   {
     auto const schema = layoutSchema();
 
@@ -139,7 +139,7 @@ namespace ao::winui::test
     CHECK(actionIds == expectedActions);
   }
 
-  TEST_CASE("layoutSchema - action slots are injected only where the policy allows them", "[winui][unit][layout]")
+  TEST_CASE("layoutSchema - action slots are injected only where the policy allows them")
   {
     auto const schema = layoutSchema();
 
@@ -167,7 +167,7 @@ namespace ao::winui::test
     CHECK_FALSE(optLabel->accepts(uimodel::ActionSlot::PrimaryClick));
   }
 
-  TEST_CASE("layoutSchema - no component offers a slot this shell cannot bind", "[winui][unit][layout]")
+  TEST_CASE("layoutSchema - no component offers a slot this shell cannot bind")
   {
     // The schema decides what a document may author and `ActionBinder` decides
     // what the shell can honor. Where they disagree, a document passes
@@ -182,8 +182,7 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("layoutSchema - localization is a shell property, not a second meaning for shared text",
-            "[winui][unit][layout]")
+  TEST_CASE("layoutSchema - localization is a shell property, not a second meaning for shared text")
   {
     // `text` is the words a reader sees, and a document that sets it must read
     // the same in every shell. Resolving it against this shell's resource
@@ -209,7 +208,7 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("layoutSchema - the soul button names its own inner mark", "[winui][unit][layout]")
+  TEST_CASE("layoutSchema - the soul button names its own inner mark")
   {
     // GTK's `glyph` picks between two static ornaments; this shell draws the
     // live transport icon and only decides whether to draw it. Sharing the name
@@ -228,7 +227,7 @@ namespace ao::winui::test
     CHECK(named(uimodel::kGlyphScaleProp));
   }
 
-  TEST_CASE("layoutSchema - text-bearing components carry the shared text property", "[winui][unit][layout]")
+  TEST_CASE("layoutSchema - text-bearing components carry the shared text property")
   {
     auto const schema = layoutSchema();
 
@@ -249,8 +248,7 @@ namespace ao::winui::test
     CHECK_FALSE(hasProperty("windows.libraryPath", uimodel::kTextProp));
   }
 
-  TEST_CASE("layoutSchema - the Soul button defaults resolve against the Windows action schema",
-            "[winui][unit][layout]")
+  TEST_CASE("layoutSchema - the Soul button defaults resolve against the Windows action schema")
   {
     auto const schema = layoutSchema();
     auto const optSoul = schema.component("playback.soulButton");
@@ -269,7 +267,7 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("layoutSchema - the cover art placeholder is authored from the shared style set", "[winui][unit][layout]")
+  TEST_CASE("layoutSchema - the cover art placeholder is authored from the shared style set")
   {
     auto const optCover = layoutSchema().component("track.coverArt");
     REQUIRE(optCover);
@@ -289,7 +287,7 @@ namespace ao::winui::test
     CHECK_FALSE(std::ranges::contains(optCover->properties, std::string_view{"targetSize"}, &PropertySchema::name));
   }
 
-  TEST_CASE("componentElementKind - a presentation property selects the constructed element", "[winui][unit][layout]")
+  TEST_CASE("componentElementKind - a presentation property selects the constructed element")
   {
     auto const paneWith = [](std::string presentation)
     {
@@ -315,7 +313,7 @@ namespace ao::winui::test
           ElementKind::Slider);
   }
 
-  TEST_CASE("componentElementKind - every registered component declares a known element kind", "[winui][unit][layout]")
+  TEST_CASE("componentElementKind - every registered component declares a known element kind")
   {
     for (auto const& component : layoutSchema().components())
     {
@@ -326,13 +324,13 @@ namespace ao::winui::test
     CHECK_FALSE(componentElementKind(LayoutNode{.type = "tabs"}).has_value());
   }
 
-  TEST_CASE("componentElementKind - structural containers allocate slots as grids", "[winui][unit][layout]")
+  TEST_CASE("componentElementKind - structural containers allocate slots as grids")
   {
     CHECK(componentElementKind(LayoutNode{.type = "box"}) == ElementKind::Grid);
     CHECK(componentElementKind(LayoutNode{.type = "split"}) == ElementKind::Grid);
   }
 
-  TEST_CASE("presentationChildCount - only the navigation pane fixes its child count", "[winui][unit][layout]")
+  TEST_CASE("presentationChildCount - only the navigation pane fixes its child count")
   {
     CHECK(presentationChildCount(LayoutNode{.type = "windows.navigationPane"}) == 1);
     CHECK(presentationChildCount(LayoutNode{
@@ -340,7 +338,7 @@ namespace ao::winui::test
     CHECK_FALSE(presentationChildCount(LayoutNode{.type = "box"}).has_value());
   }
 
-  TEST_CASE("componentRequiresId - components whose state is reconciled must be locatable", "[winui][unit][layout]")
+  TEST_CASE("componentRequiresId - components whose state is reconciled must be locatable")
   {
     CHECK(needsComponentId("track.table"));
     CHECK(needsComponentId("track.detail"));

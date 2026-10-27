@@ -43,7 +43,7 @@ namespace ao::tui::test
     }
   } // namespace
 
-  TEST_CASE("TrackPropertiesEditor - opens a single target without mixed markers", "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - opens a single target without mixed markers")
   {
     auto editor = makeEditor({TrackFixture{.title = "So What", .album = "Kind of Blue", .year = 1959}});
 
@@ -78,7 +78,7 @@ namespace ao::tui::test
     CHECK(editor.tab() == TrackEditorTab::Properties);
   }
 
-  TEST_CASE("TrackPropertiesEditor - shows a batch as counts, not the first target's values", "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - shows a batch as counts, not the first target's values")
   {
     auto editor = makeEditor({
       TrackFixture{.title = "So What", .album = "Kind of Blue", .year = 1959},
@@ -98,7 +98,7 @@ namespace ao::tui::test
     CHECK(text.contains("<Multiple Values>"));
   }
 
-  TEST_CASE("TrackPropertiesEditor - grants Apply intent only for an accepted edit", "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - grants Apply intent only for an accepted edit")
   {
     auto editor = makeEditor({
       TrackFixture{.title = "So What", .album = "Kind of Blue", .year = 1959},
@@ -153,7 +153,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackPropertiesEditor - Ctrl-D on a mixed field arms an explicit clear", "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - Ctrl-D on a mixed field arms an explicit clear")
   {
     auto editor = makeEditor({
       TrackFixture{.title = "So What", .album = "Kind of Blue", .year = 1959},
@@ -193,7 +193,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackPropertiesEditor - Ctrl-D on a common field clears it, and Ctrl-G restores it", "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - Ctrl-D on a common field clears it, and Ctrl-G restores it")
   {
     auto editor = makeEditor({
       TrackFixture{.title = "So What", .album = "Kind of Blue", .year = 1959},
@@ -216,7 +216,7 @@ namespace ao::tui::test
     CHECK(restored.contains("Kind of Blue"));
   }
 
-  TEST_CASE("TrackPropertiesEditor - reports an included number it cannot parse", "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - reports an included number it cannot parse")
   {
     auto editor = makeEditor({TrackFixture{.title = "So What", .album = "Kind of Blue", .year = 1959}});
 
@@ -237,7 +237,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackPropertiesEditor - activates a page as the tab strip moves", "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - activates a page as the tab strip moves")
   {
     auto editor = makeEditor({
       TrackFixture{.title = "So What", .album = "Kind of Blue", .year = 1959},
@@ -273,7 +273,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackPropertiesEditor - aggregates read-only properties without offering intent", "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - aggregates read-only properties without offering intent")
   {
     auto editor = makeEditor({
       TrackFixture{.title = "So What", .album = "Kind of Blue", .year = 1959, .codec = "FLAC"},
@@ -295,7 +295,7 @@ namespace ao::tui::test
     CHECK_FALSE(editor.isDirty());
   }
 
-  TEST_CASE("TrackPropertiesEditor - asks before dropping a draft", "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - asks before dropping a draft")
   {
     auto editor = makeEditor({TrackFixture{.title = "So What", .album = "Kind of Blue", .year = 1959}});
 
@@ -329,8 +329,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackPropertiesEditor - a refused Credits baseline reports why instead of ignoring the key",
-            "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - a refused Credits baseline reports why instead of ignoring the key")
   {
     // This preparation captures no Credits sections, so the shared model refuses
     // every scope, as it does for any baseline it cannot validate.
@@ -343,7 +342,7 @@ namespace ao::tui::test
     CHECK(frame(editor).contains("Credits baseline"));
   }
 
-  TEST_CASE("TrackPropertiesEditor - consumes every key it does not use", "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - consumes every key it does not use")
   {
     auto editor = makeEditor({TrackFixture{.title = "So What", .album = "Kind of Blue", .year = 1959}});
     selectTab(editor, TrackEditorTab::Properties);
@@ -356,7 +355,7 @@ namespace ao::tui::test
     CHECK(editor.takeRequest() == TrackEditorRequest::None);
   }
 
-  TEST_CASE("TrackPropertiesEditor - fits an 80x24 terminal", "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - fits an 80x24 terminal")
   {
     auto editor = makeEditor({
       TrackFixture{.title = "So What", .album = "Kind of Blue", .year = 1959},
@@ -376,7 +375,7 @@ namespace ao::tui::test
     CHECK(rendered.text.contains("Esc"));
   }
 
-  TEST_CASE("TrackPropertiesEditor - offers Apply only for a valid included draft", "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - offers Apply only for a valid included draft")
   {
     auto editor = makeEditor({
       TrackFixture{.title = "So What", .album = "Kind of Blue", .year = 1959},
@@ -428,7 +427,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackPropertiesEditor - builds a patch from edited fields only", "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - builds a patch from edited fields only")
   {
     auto editor = makeEditor({
       TrackFixture{.title = "So What", .album = "Kind of Blue", .year = 1959},
@@ -483,8 +482,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackPropertiesEditor - a recording date row edits and clears with its own precision",
-            "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - a recording date row edits and clears with its own precision")
   {
     auto editor = makeEditor({TrackFixture{.title = "So What", .album = "Kind of Blue", .year = 1959}});
 
@@ -574,8 +572,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackPropertiesEditor - a mixed recording date clears and restores without touching year",
-            "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - a mixed recording date clears and restores without touching year")
   {
     auto editor = makeEditor({
       TrackFixture{.title = "So What",
@@ -637,7 +634,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackPropertiesEditor - a stale recording-date draft survives reload confirmation", "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - a stale recording-date draft survives reload confirmation")
   {
     auto editor = makeEditor({
       TrackFixture{.title = "So What",
@@ -725,7 +722,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackPropertiesEditor - keeps the draft when a write cannot proceed", "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - keeps the draft when a write cannot proceed")
   {
     auto editor = makeEditor({TrackFixture{.title = "So What", .album = "Kind of Blue", .year = 1959}});
 
@@ -785,8 +782,7 @@ namespace ao::tui::test
     CHECK(editor.buildPatch().metadata.optAlbum == "Kind of Blue!");
   }
 
-  TEST_CASE("TrackPropertiesEditor - localized recovery shortcuts remain readable in short terminals",
-            "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - localized recovery shortcuts remain readable in short terminals")
   {
     for (auto const* const locale : {"de", "fr", "ja", "zh-Hans", "zh-Hant", "qps-ploc"})
     {
@@ -799,8 +795,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackPropertiesEditor - long confirmation prompts wrap without losing the final action",
-            "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - long confirmation prompts wrap without losing the final action")
   {
     auto editor = makeEditor({TrackFixture{.title = "Track", .album = "Blue"}}, {}, {}, {}, "de");
     typeText(editor, "!");
@@ -813,7 +808,7 @@ namespace ao::tui::test
     CHECK(rendered.text.contains("Weiterbearbeiten"));
   }
 
-  TEST_CASE("TrackPropertiesEditor - treats reload as a destructive draft action", "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - treats reload as a destructive draft action")
   {
     auto editor = makeEditor({TrackFixture{.title = "So What", .album = "Kind of Blue", .year = 1959}});
 
@@ -856,7 +851,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackPropertiesEditor - a value wider than its cell scrolls under the caret", "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - a value wider than its cell scrolls under the caret")
   {
     auto editor = makeEditor({TrackFixture{.title = "So What", .album = "Kind of Blue", .year = 1959}});
 
@@ -873,7 +868,7 @@ namespace ao::tui::test
     CHECK(hasCaretOnLine(rendered.screen, titleLine));
   }
 
-  TEST_CASE("TrackPropertiesEditor - an empty input still shows where typing would land", "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - an empty input still shows where typing would land")
   {
     auto editor = makeEditor({
       TrackFixture{.title = "So What", .album = "Kind of Blue", .year = 1959},
@@ -906,7 +901,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackPropertiesEditor - the Tracks page scrolls to its last target", "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - the Tracks page scrolls to its last target")
   {
     auto tracks = std::vector<TrackFixture>{};
 
@@ -930,7 +925,7 @@ namespace ao::tui::test
     CHECK(frame(editor).contains("Target 29"));
   }
 
-  TEST_CASE("TrackPropertiesEditor - centers the modal and fills a small terminal", "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - centers the modal and fills a small terminal")
   {
     auto editor = makeEditor({TrackFixture{.title = "So What", .album = "Kind of Blue"}});
 
@@ -975,7 +970,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackPropertiesEditor - preserves both page drafts while retiring transient input", "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - preserves both page drafts while retiring transient input")
   {
     auto editor = makeEditor(
       {TrackFixture{.title = "So What", .album = "Kind of Blue", .year = 1959}}, {}, {{"Jazz", 1}}, {"Acoustic"});
@@ -1005,8 +1000,7 @@ namespace ao::tui::test
     CHECK(movedEditor.takeRequest() == TrackEditorRequest::Apply);
   }
 
-  TEST_CASE("TrackPropertiesEditor - invalid metadata blocks tag submission until the field is restored",
-            "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - invalid metadata blocks tag submission until the field is restored")
   {
     auto editor =
       makeEditor({TrackFixture{.title = "So What", .album = "Kind of Blue", .year = 1959}}, {}, {{"Jazz", 1}});
@@ -1030,7 +1024,7 @@ namespace ao::tui::test
     CHECK(editor.takeRequest() == TrackEditorRequest::Apply);
   }
 
-  TEST_CASE("TrackPropertiesEditor - line deletion preserves untouched mixed values", "[tui][unit][editor][keyboard]")
+  TEST_CASE("TrackPropertiesEditor - line deletion preserves untouched mixed values")
   {
     auto editor = makeEditor(
       {TrackFixture{.title = "First", .album = "Common"}, TrackFixture{.title = "Second", .album = "Common"}});

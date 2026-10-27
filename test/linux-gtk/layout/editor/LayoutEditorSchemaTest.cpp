@@ -28,8 +28,7 @@ namespace ao::gtk::layout::editor::test
 {
   using namespace uimodel;
 
-  TEST_CASE("LayoutEditorSchema - schema entry validation covers all standard layout components",
-            "[gtk][unit][layout-editor]")
+  TEST_CASE("LayoutEditorSchema - schema entry validation covers all standard layout components")
   {
     auto const tempDir = ao::test::TempDir{};
     std::unique_ptr<rt::AppRuntime> runtimePtr = ao::gtk::test::makeRuntime(tempDir);
@@ -303,8 +302,7 @@ namespace ao::gtk::layout::editor::test
     }
   }
 
-  TEST_CASE("LayoutEditorSchema - registered property labels resolve through editor vocabulary",
-            "[gtk][unit][layout-editor][localization]")
+  TEST_CASE("LayoutEditorSchema - registered property labels resolve through editor vocabulary")
   {
     auto const tempDir = ao::test::TempDir{};
     std::unique_ptr<rt::AppRuntime> runtimePtr = ao::gtk::test::makeRuntime(tempDir);

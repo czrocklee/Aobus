@@ -42,8 +42,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("ShuffleHistory - unrelated membership changes preserve an eligible sticky candidate",
-            "[runtime][unit][playback-cursor]")
+  TEST_CASE("ShuffleHistory - unrelated membership changes preserve an eligible sticky candidate")
   {
     auto chooser = ScriptedCandidateChooser{
       .selections = {kSecondTrack, kThirdTrack},
@@ -62,8 +61,7 @@ namespace ao::rt::test
     CHECK(history.pendingForwardCandidate() == kSecondTrack);
   }
 
-  TEST_CASE("ShuffleHistory - departed and explicitly invalidated candidates are re-rolled",
-            "[runtime][unit][playback-cursor]")
+  TEST_CASE("ShuffleHistory - departed and explicitly invalidated candidates are re-rolled")
   {
     auto chooser = ScriptedCandidateChooser{
       .selections = {kSecondTrack, kThirdTrack, kFourthTrack},
@@ -85,8 +83,7 @@ namespace ao::rt::test
     CHECK(chooser.candidateSets[2] == std::vector{kThirdTrack, kFourthTrack});
   }
 
-  TEST_CASE("ShuffleHistory - Bound and Gap eligibility follow repeat-all fallback rules",
-            "[runtime][unit][playback-cursor]")
+  TEST_CASE("ShuffleHistory - Bound and Gap eligibility follow repeat-all fallback rules")
   {
     auto chooser = ScriptedCandidateChooser{
       .selections = {kFirstTrack, kFirstTrack},
@@ -105,8 +102,7 @@ namespace ao::rt::test
     CHECK(chooser.candidateSets[1] == std::vector{kFirstTrack});
   }
 
-  TEST_CASE("ShuffleHistory - failed candidate discard is exact and permits a fresh choice",
-            "[runtime][unit][playback-cursor]")
+  TEST_CASE("ShuffleHistory - failed candidate discard is exact and permits a fresh choice")
   {
     auto chooser = ScriptedCandidateChooser{
       .selections = {kSecondTrack, kThirdTrack},
@@ -122,8 +118,7 @@ namespace ao::rt::test
     CHECK(history.pendingForwardCandidate() == kThirdTrack);
   }
 
-  TEST_CASE("ShuffleHistory - failure walk excludes every attempted forward candidate",
-            "[runtime][unit][playback-cursor]")
+  TEST_CASE("ShuffleHistory - failure walk excludes every attempted forward candidate")
   {
     auto chooser = ScriptedCandidateChooser{
       .selections = {kSecondTrack, kFourthTrack},
@@ -140,8 +135,7 @@ namespace ao::rt::test
     CHECK(chooser.candidateSets[1] == std::vector{kFourthTrack});
   }
 
-  TEST_CASE("ShuffleHistory - forward and sequential previous transitions record the actual path",
-            "[runtime][unit][playback-cursor]")
+  TEST_CASE("ShuffleHistory - forward and sequential previous transitions record the actual path")
   {
     auto history = ShuffleHistory{chooseFirst};
     constexpr auto kProjection = std::array{kFirstTrack, kSecondTrack, kThirdTrack};
@@ -155,8 +149,7 @@ namespace ao::rt::test
     CHECK_FALSE(history.popPrevious(kProjection, kSecondTrack));
   }
 
-  TEST_CASE("ShuffleHistory - successful history previous walks backward without bouncing",
-            "[runtime][unit][playback-cursor]")
+  TEST_CASE("ShuffleHistory - successful history previous walks backward without bouncing")
   {
     auto history = ShuffleHistory{chooseFirst};
     constexpr auto kProjection = std::array{kFirstTrack, kSecondTrack, kThirdTrack};
@@ -172,8 +165,7 @@ namespace ao::rt::test
     CHECK_FALSE(history.popPrevious(kProjection, kFirstTrack));
   }
 
-  TEST_CASE("ShuffleHistory - hasPrevious scans membership without mutating stale or current entries",
-            "[runtime][unit][playback-cursor]")
+  TEST_CASE("ShuffleHistory - hasPrevious scans membership without mutating stale or current entries")
   {
     auto history = ShuffleHistory{chooseFirst};
     history.recordTransition(kFirstTrack, kSecondTrack, ShuffleHistory::TransitionOrigin::Forward);
@@ -192,8 +184,7 @@ namespace ao::rt::test
     CHECK(history.historySize() == 0);
   }
 
-  TEST_CASE("ShuffleHistory - failed history candidate remains popped so the walk can continue",
-            "[runtime][unit][playback-cursor]")
+  TEST_CASE("ShuffleHistory - failed history candidate remains popped so the walk can continue")
   {
     auto history = ShuffleHistory{chooseFirst};
     constexpr auto kProjection = std::array{kFirstTrack, kSecondTrack, kThirdTrack};
@@ -207,7 +198,7 @@ namespace ao::rt::test
     CHECK(history.historySize() == 0);
   }
 
-  TEST_CASE("ShuffleHistory - same-track replay and restart do not push history", "[runtime][unit][playback-cursor]")
+  TEST_CASE("ShuffleHistory - same-track replay and restart do not push history")
   {
     auto history = ShuffleHistory{chooseFirst};
 
@@ -220,8 +211,7 @@ namespace ao::rt::test
     CHECK(history.historySize() == 1);
   }
 
-  TEST_CASE("ShuffleHistory - source invalidation clears candidate and navigation history",
-            "[runtime][unit][playback-cursor]")
+  TEST_CASE("ShuffleHistory - source invalidation clears candidate and navigation history")
   {
     auto history = ShuffleHistory{chooseFirst};
     constexpr auto kProjection = std::array{kFirstTrack, kSecondTrack};
@@ -237,8 +227,7 @@ namespace ao::rt::test
     CHECK_FALSE(history.hasPrevious(kProjection, kSecondTrack));
   }
 
-  TEST_CASE("ShuffleHistory - navigation history retains only the newest 64 entries",
-            "[runtime][unit][playback-cursor]")
+  TEST_CASE("ShuffleHistory - navigation history retains only the newest 64 entries")
   {
     auto history = ShuffleHistory{chooseFirst};
     auto projection = std::vector<TrackId>{};

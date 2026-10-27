@@ -57,7 +57,7 @@ namespace ao::media::test
   static_assert(
     !noexcept(tryVisitVorbisComments({}, VorbisCommentTrailing::Rejected, [](std::string_view) { return true; })));
 
-  TEST_CASE("VorbisComment - raw traversal preserves every entry and its order", "[media][unit][vorbis-comment]")
+  TEST_CASE("VorbisComment - raw traversal preserves every entry and its order")
   {
     auto const payload = makePayload(
       {"TITLE=First", std::string_view{""}, "separatorless", std::string_view{"KEY=a\0b", 7}, "title=Last"});
@@ -89,7 +89,7 @@ namespace ao::media::test
     CHECK(*optImported == visited);
   }
 
-  TEST_CASE("VorbisComment - zero vendor length and zero entries form a complete list", "[media][unit][vorbis-comment]")
+  TEST_CASE("VorbisComment - zero vendor length and zero entries form a complete list")
   {
     auto payload = std::vector<std::byte>{};
     appendU32(payload, 0);
@@ -110,7 +110,7 @@ namespace ao::media::test
     CHECK(optImported->empty());
   }
 
-  TEST_CASE("VorbisComment - every truncated vendor count or entry field is rejected", "[media][unit][vorbis-comment]")
+  TEST_CASE("VorbisComment - every truncated vendor count or entry field is rejected")
   {
     auto const payload = makePayload({"TITLE=First"});
 
@@ -132,7 +132,7 @@ namespace ao::media::test
     }
   }
 
-  TEST_CASE("VorbisComment - oversized lengths and counts cannot escape the payload", "[media][unit][vorbis-comment]")
+  TEST_CASE("VorbisComment - oversized lengths and counts cannot escape the payload")
   {
     auto payload = std::vector<std::byte>{};
 
@@ -168,8 +168,7 @@ namespace ao::media::test
     CHECK_FALSE(file::detail::parseVorbisComments(payload, VorbisCommentTrailing::Allowed));
   }
 
-  TEST_CASE("VorbisComment - malformed suffix exposes a raw prefix but no import result",
-            "[media][unit][vorbis-comment]")
+  TEST_CASE("VorbisComment - malformed suffix exposes a raw prefix but no import result")
   {
     auto payload = makePayload({"TITLE=Visible", "ARTIST=Truncated"});
     payload.pop_back();
@@ -187,7 +186,7 @@ namespace ao::media::test
     CHECK_FALSE(file::detail::parseVorbisComments(payload, VorbisCommentTrailing::Rejected));
   }
 
-  TEST_CASE("VorbisComment - trailing bytes follow the explicit FLAC or Opus policy", "[media][unit][vorbis-comment]")
+  TEST_CASE("VorbisComment - trailing bytes follow the explicit FLAC or Opus policy")
   {
     auto payload = makePayload({"TITLE=Visible"});
     payload.push_back(std::byte{0});
@@ -226,8 +225,7 @@ namespace ao::media::test
     }
   }
 
-  TEST_CASE("VorbisComment - a mutable visitor copy is invoked as an lvalue for every entry",
-            "[media][unit][vorbis-comment]")
+  TEST_CASE("VorbisComment - a mutable visitor copy is invoked as an lvalue for every entry")
   {
     struct Visitor final
     {
@@ -251,8 +249,7 @@ namespace ao::media::test
     CHECK(entries[1] == std::pair<std::uint32_t, std::string_view>{2, "TITLE=Second"});
   }
 
-  TEST_CASE("VorbisComment - visitor abort returns false without visiting later entries",
-            "[media][unit][vorbis-comment]")
+  TEST_CASE("VorbisComment - visitor abort returns false without visiting later entries")
   {
     auto const payload = makePayload({"TITLE=First", "TITLE=Second"});
     auto visited = std::vector<std::string_view>{};
@@ -268,8 +265,7 @@ namespace ao::media::test
     CHECK(visited[0] == std::string_view{"TITLE=First"});
   }
 
-  TEST_CASE("VorbisComment - visitor exceptions propagate without visiting later entries",
-            "[media][unit][vorbis-comment]")
+  TEST_CASE("VorbisComment - visitor exceptions propagate without visiting later entries")
   {
     auto const payload = makePayload({"TITLE=First", "TITLE=Second"});
     auto visited = std::vector<std::string_view>{};
@@ -286,8 +282,7 @@ namespace ao::media::test
     CHECK(visited[0] == std::string_view{"TITLE=First"});
   }
 
-  TEST_CASE("VorbisComment - complete lists above one hundred thousand entries have no artificial cap",
-            "[media][unit][vorbis-comment]")
+  TEST_CASE("VorbisComment - complete lists above one hundred thousand entries have no artificial cap")
   {
     constexpr std::uint32_t kCount = 100001;
     auto payload = std::vector<std::byte>{};

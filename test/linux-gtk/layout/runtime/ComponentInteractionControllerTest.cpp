@@ -30,8 +30,7 @@ namespace ao::gtk::layout::test
   using namespace uimodel;
   using namespace ao::gtk::test;
 
-  TEST_CASE("ComponentInteractionController - routes configured gestures to layout actions",
-            "[gtk][unit][layout][runtime][async]")
+  TEST_CASE("ComponentInteractionController - routes configured gestures to layout actions")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

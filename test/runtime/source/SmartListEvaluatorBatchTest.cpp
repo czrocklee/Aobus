@@ -20,7 +20,7 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("SmartListEvaluator - batch operations emit batch notifications", "[runtime][unit][smart-list][batch]")
+  TEST_CASE("SmartListEvaluator - batch operations emit batch notifications")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto engine = SmartListEvaluator{libraryFixture.library()};
@@ -61,7 +61,7 @@ namespace ao::rt::test
     CHECK(list.size() == 1);
   }
 
-  TEST_CASE("SmartListEvaluator - batch updates combine membership transitions", "[runtime][unit][smart-list][batch]")
+  TEST_CASE("SmartListEvaluator - batch updates combine membership transitions")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto engine = SmartListEvaluator{libraryFixture.library()};
@@ -110,8 +110,7 @@ namespace ao::rt::test
     CHECK(operationCountsAfter.membershipIndexRebuilds == operationCountsBefore.membershipIndexRebuilds);
   }
 
-  TEST_CASE("SmartListEvaluator - filtered membership is an atomic stable subsequence of upstream order",
-            "[runtime][unit][smart-list][batch]")
+  TEST_CASE("SmartListEvaluator - filtered membership is an atomic stable subsequence of upstream order")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const first = libraryFixture.addTrack(makeSmartListSpec("first", 2024));
@@ -147,8 +146,7 @@ namespace ao::rt::test
     CHECK(insert.trackIds == std::vector{second});
   }
 
-  TEST_CASE("SmartListEvaluator - update-only batches preserve upstream order across several membership changes",
-            "[runtime][unit][smart-list][batch]")
+  TEST_CASE("SmartListEvaluator - update-only batches preserve upstream order across several membership changes")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const t0 = libraryFixture.addTrack(makeSmartListSpec("t0", 2024));

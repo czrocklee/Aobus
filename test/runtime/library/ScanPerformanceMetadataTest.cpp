@@ -37,8 +37,7 @@ namespace ao::rt::test
   using library::test::TrackSpec;
   using library::test::updateTrackSpec;
 
-  TEST_CASE("ScanApplyOperation - new scans import PERFORMER credits without inferring recording date or Soloist",
-            "[runtime][integration][library-scan]")
+  TEST_CASE("ScanApplyOperation - new scans import PERFORMER credits without inferring recording date or Soloist")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -59,8 +58,7 @@ namespace ao::rt::test
                             {.name = "Ada", .role = "Piano"}, {.name = "Bob"}, {.name = "Ada", .role = "Violin"}});
   }
 
-  TEST_CASE("ScanApplyOperation - new scans store Picard non-performing credits in their own kinds",
-            "[runtime][integration][library-scan]")
+  TEST_CASE("ScanApplyOperation - new scans store Picard non-performing credits in their own kinds")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -96,8 +94,7 @@ namespace ao::rt::test
                           });
   }
 
-  TEST_CASE("ScanApplyOperation - explicit SOLOIST stays independent of PERFORMER in either order",
-            "[runtime][integration][library-scan]")
+  TEST_CASE("ScanApplyOperation - explicit SOLOIST stays independent of PERFORMER in either order")
   {
     auto comments = std::vector<std::string>{};
 
@@ -123,8 +120,7 @@ namespace ao::rt::test
                             {.name = "Anne", .kind = library::CreditKind::Soloist}, {.name = "Ada", .role = "Piano"}});
   }
 
-  TEST_CASE("ScanApplyOperation - new scans retain repeated kinds and whole-file nonblank Ensemble precedence",
-            "[runtime][integration][library-scan]")
+  TEST_CASE("ScanApplyOperation - new scans retain repeated kinds and whole-file nonblank Ensemble precedence")
   {
     auto comments = std::vector<std::string>{};
     auto expectedEnsembles = std::vector<library::Credit>{};
@@ -177,8 +173,7 @@ namespace ao::rt::test
     CHECK_FALSE(spec.recordingDate.isPresent());
   }
 
-  TEST_CASE("ScanApplyOperation - malformed new credit or artist text fails only that item at serialization",
-            "[runtime][integration][library-scan]")
+  TEST_CASE("ScanApplyOperation - malformed new credit or artist text fails only that item at serialization")
   {
     auto invalidComment = std::string{};
 
@@ -280,8 +275,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE(
-    "ScanApplyOperation - malformed rescan metadata preserves curation and commits refreshed facts with new siblings",
-    "[runtime][integration][library-scan]")
+    "ScanApplyOperation - malformed rescan metadata preserves curation and commits refreshed facts with new siblings")
   {
     auto const invalidComments = std::to_array<std::string>(
       {"CONDUCTOR=bad\xFFname", "PERFORMER=Rejected performer (bad\xFFrole)", "ARTIST=bad\xFFname"});
@@ -420,8 +414,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ScanApplyOperation - changed-file scans keep stored credits and recording date",
-            "[runtime][integration][library-scan]")
+  TEST_CASE("ScanApplyOperation - changed-file scans keep stored credits and recording date")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -457,8 +450,7 @@ namespace ao::rt::test
     CHECK(changedSpec.recordingDate == library::RecordingDate{.year = 1981, .month = 5, .day = 12});
   }
 
-  TEST_CASE("ScanApplyOperation - changed-file scans do not populate absent credits",
-            "[runtime][integration][library-scan]")
+  TEST_CASE("ScanApplyOperation - changed-file scans do not populate absent credits")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -488,8 +480,7 @@ namespace ao::rt::test
     CHECK_FALSE(changedSpec.recordingDate.isPresent());
   }
 
-  TEST_CASE("ScanApplyOperation - changed and moved rescans keep curated year apart from the file year",
-            "[runtime][integration][library-scan]")
+  TEST_CASE("ScanApplyOperation - changed and moved rescans keep curated year apart from the file year")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";

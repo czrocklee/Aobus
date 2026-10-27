@@ -26,7 +26,7 @@
 namespace ao::audio::test
 {
   TEST_CASE("Engine - successor precision remains bounded by the confirmed endpoint behind a wider client",
-            "[audio][integration][engine][gapless][concurrency]")
+            "[concurrency]")
   {
     auto const first =
       ao::test::TempFile{ao::test::wav::makeWav({.channels = 2, .audioData = {0x11, 0x12, 0x23, 0x24}}), ".wav"};

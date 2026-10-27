@@ -12,7 +12,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("ActivityStatusFeedProjection - projects detail feed items and helpers", "[uimodel][unit][activity-status]")
+  TEST_CASE("ActivityStatusFeedProjection - projects detail feed items and helpers")
   {
     auto const retainedError = entry(
       rt::NotificationId{12}, rt::NotificationSeverity::Error, "Write failed", rt::NotificationLifetime::pinned());
@@ -81,7 +81,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("ActivityStatusFeedProjection - task-only detail counts as content", "[uimodel][unit][activity-status]")
+  TEST_CASE("ActivityStatusFeedProjection - task-only detail counts as content")
   {
     auto feedProjection = ActivityStatusFeedProjection{ao::test::englishMessageCatalog(), feed({})};
     REQUIRE_FALSE(hasDetailContent(feedProjection.viewState().detail));

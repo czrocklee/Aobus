@@ -41,8 +41,7 @@ namespace ao::uimodel::test
     }
   } // namespace
 
-  TEST_CASE("LibraryScanOutcome - a library already matching disk is reported quietly",
-            "[uimodel][unit][library][scan]")
+  TEST_CASE("LibraryScanOutcome - a library already matching disk is reported quietly")
   {
     auto const result = ScanResult{LibraryScanWorkflowResult{}};
     auto const outcome = decideLibraryScanOutcome(result);
@@ -53,7 +52,7 @@ namespace ao::uimodel::test
     CHECK(messageFor(result) == "Library is up to date");
   }
 
-  TEST_CASE("LibraryScanOutcome - a clean apply is reported quietly", "[uimodel][unit][library][scan]")
+  TEST_CASE("LibraryScanOutcome - a clean apply is reported quietly")
   {
     auto result = rt::ScanApplyResult{};
     result.insertedIds.emplace_back(1);
@@ -65,7 +64,7 @@ namespace ao::uimodel::test
     CHECK(messageFor(applied(result)) == "Library scan complete");
   }
 
-  TEST_CASE("LibraryScanOutcome - stale items left for a later scan are not errors", "[uimodel][unit][library][scan]")
+  TEST_CASE("LibraryScanOutcome - stale items left for a later scan are not errors")
   {
     auto result = rt::ScanApplyResult{};
     result.staleCount = 2;
@@ -79,7 +78,7 @@ namespace ao::uimodel::test
     CHECK(libraryScanLifetime(outcome.verdict).kind() == rt::NotificationLifetimeKind::Transient);
   }
 
-  TEST_CASE("LibraryScanOutcome - relinking a moved file is news, not a warning", "[uimodel][unit][library][scan]")
+  TEST_CASE("LibraryScanOutcome - relinking a moved file is news, not a warning")
   {
     // Nothing was lost, so nobody has to do anything; saying so is a courtesy.
     auto result = rt::ScanApplyResult{};
@@ -96,7 +95,7 @@ namespace ao::uimodel::test
     CHECK(messageFor(applied(result)) == "Relinked 2 moved files");
   }
 
-  TEST_CASE("LibraryScanOutcome - two relinked member ids report one physical file", "[uimodel][unit][library][scan]")
+  TEST_CASE("LibraryScanOutcome - two relinked member ids report one physical file")
   {
     // Member ids stay complete for library refresh. The reported count is the
     // physical file, so a two-member CUE carrier must not pluralize as two files.
@@ -113,7 +112,7 @@ namespace ao::uimodel::test
     CHECK(messageFor(applied(result)) == "Relinked 1 moved file");
   }
 
-  TEST_CASE("LibraryScanOutcome - files the library lost need a person", "[uimodel][unit][library][scan]")
+  TEST_CASE("LibraryScanOutcome - files the library lost need a person")
   {
     auto result = rt::ScanApplyResult{};
     result.missingCount = 1;
@@ -136,8 +135,7 @@ namespace ao::uimodel::test
     CHECK(messageFor(applied(result)) == "Relinked 1 moved file; 3 missing files need review");
   }
 
-  TEST_CASE("LibraryScanOutcome - notices on an applied plan need review but are not failures",
-            "[uimodel][unit][library][scan]")
+  TEST_CASE("LibraryScanOutcome - notices on an applied plan need review but are not failures")
   {
     auto workflow = applied(rt::ScanApplyResult{});
     workflow->summary.newCount = 1;
@@ -160,7 +158,7 @@ namespace ao::uimodel::test
     CHECK(decideLibraryScanOutcome(workflow).verdict == LibraryScanVerdict::CompletedWithErrors);
   }
 
-  TEST_CASE("LibraryScanOutcome - files that could not be applied outrank the rest", "[uimodel][unit][library][scan]")
+  TEST_CASE("LibraryScanOutcome - files that could not be applied outrank the rest")
   {
     auto result = rt::ScanApplyResult{};
     result.failureCount = 2;
@@ -173,8 +171,7 @@ namespace ao::uimodel::test
     CHECK(messageFor(applied(result)) == "Scan completed with errors; 4 missing files need review");
   }
 
-  TEST_CASE("LibraryScanOutcome - a plan of nothing but unreadable files says how many",
-            "[uimodel][unit][library][scan]")
+  TEST_CASE("LibraryScanOutcome - a plan of nothing but unreadable files says how many")
   {
     auto workflow = LibraryScanWorkflowResult{};
     workflow.disposition = LibraryScanPlanDisposition::ErrorsOnly;
@@ -192,7 +189,7 @@ namespace ao::uimodel::test
     CHECK(messageFor(ScanResult{workflow}) == "Library scan found 7 unreadable files and no usable changes");
   }
 
-  TEST_CASE("LibraryScanOutcome - a scan that did not finish carries its reason", "[uimodel][unit][library][scan]")
+  TEST_CASE("LibraryScanOutcome - a scan that did not finish carries its reason")
   {
     auto const result = ScanResult{std::unexpected{LibraryScanWorkflowFailure{
       .stage = LibraryScanWorkflowStage::Applying,
@@ -207,8 +204,7 @@ namespace ao::uimodel::test
     CHECK(messageFor(result) == "Scan failed: The library database is locked");
   }
 
-  TEST_CASE("LibraryScanOutcome - an actionable plan with no result is a failure, not a success",
-            "[uimodel][unit][library][scan]")
+  TEST_CASE("LibraryScanOutcome - an actionable plan with no result is a failure, not a success")
   {
     // The workflow promises an applied plan or a failure. Neither means the two
     // halves disagree, and reporting that as a completed scan would hide it.
@@ -223,7 +219,7 @@ namespace ao::uimodel::test
     CHECK(outcome.optError->code == Error::Code::InvalidState);
   }
 
-  TEST_CASE("LibraryScanOutcome - deferred audio identity work survives the decision", "[uimodel][unit][library][scan]")
+  TEST_CASE("LibraryScanOutcome - deferred audio identity work survives the decision")
   {
     // A fast bootstrap scan leaves identity indexing for afterwards. A shell
     // that drops this leaves the library permanently half-indexed, so the
@@ -237,8 +233,7 @@ namespace ao::uimodel::test
     CHECK(decideLibraryScanOutcome(ScanResult{workflow}).shouldBackfillAudioIdentity);
   }
 
-  TEST_CASE("LibraryScanOutcome - CUE notices survive reduction and display localized actionable reasons",
-            "[uimodel][unit][library][scan]")
+  TEST_CASE("LibraryScanOutcome - CUE notices survive reduction and display localized actionable reasons")
   {
     auto workflow = LibraryScanWorkflowResult{};
     workflow.disposition = LibraryScanPlanDisposition::UpToDate;
@@ -264,8 +259,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(message.contains("English runtime wording"));
   }
 
-  TEST_CASE("LibraryScanOutcome - CUE reasons retain external diagnostics but not unrelated raw errors",
-            "[uimodel][unit][library][scan]")
+  TEST_CASE("LibraryScanOutcome - CUE reasons retain external diagnostics but not unrelated raw errors")
   {
     auto outcome = LibraryScanOutcome{.verdict = LibraryScanVerdict::Unreadable};
     outcome.issues = {
@@ -286,8 +280,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(message.contains("not a CUE diagnostic"));
   }
 
-  TEST_CASE("LibraryScanOutcome - invalid CUE layouts retain details without claiming segments were imported",
-            "[uimodel][unit][library][scan]")
+  TEST_CASE("LibraryScanOutcome - invalid CUE layouts retain details without claiming segments were imported")
   {
     bool isNotice = false;
 
@@ -324,8 +317,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("LibraryScanOutcome - every typed CUE reason is visible in every maintained locale",
-            "[uimodel][unit][library][scan]")
+  TEST_CASE("LibraryScanOutcome - every typed CUE reason is visible in every maintained locale")
   {
     auto const kinds = std::array{
       rt::ScanCueDiagnostic::InvalidEncoding,
@@ -354,8 +346,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("LibraryScanOutcome - CUE summaries show five issues and retain the omitted count",
-            "[uimodel][unit][library][scan]")
+  TEST_CASE("LibraryScanOutcome - CUE summaries show five issues and retain the omitted count")
   {
     auto outcome = LibraryScanOutcome{.verdict = LibraryScanVerdict::Unreadable, .failureCount = 7};
     outcome.issues.push_back({.uri = "ordinary.flac", .message = "not a CUE diagnostic"});
@@ -377,8 +368,7 @@ namespace ao::uimodel::test
     CHECK(outcome.issues == issues);
   }
 
-  TEST_CASE("LibraryScanOutcome - oversized CUE values are omitted whole within every locale budget",
-            "[uimodel][unit][library][scan]")
+  TEST_CASE("LibraryScanOutcome - oversized CUE values are omitted whole within every locale budget")
   {
     auto issue = LibraryScanIssue{.uri = "broken.cue",
                                   .message = "parser detail",
@@ -418,8 +408,7 @@ namespace ao::uimodel::test
     CHECK(outcome.issues.size() == 2);
   }
 
-  TEST_CASE("LibraryScanOutcome - long failed verdicts remain UTF-8 within the notification budget",
-            "[uimodel][unit][library][scan]")
+  TEST_CASE("LibraryScanOutcome - long failed verdicts remain UTF-8 within the notification budget")
   {
     auto error = std::string{};
 
@@ -456,7 +445,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("LibraryScanOutcome - every verdict is said out loud", "[uimodel][unit][library][scan]")
+  TEST_CASE("LibraryScanOutcome - every verdict is said out loud")
   {
     // A verdict with no sentence would reach a notification as empty text.
     for (auto const verdict : {LibraryScanVerdict::UpToDate,

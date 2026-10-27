@@ -23,8 +23,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("TrackProperties Credits - sequential scopes overlay drafts and save ordinary metadata atomically",
-            "[uimodel][integration][track-credits]")
+  TEST_CASE("TrackProperties Credits - sequential scopes overlay drafts and save ordinary metadata atomically")
   {
     using K = library::CreditKind;
     auto storage = rt::test::MusicLibraryFixture{};
@@ -92,8 +91,7 @@ namespace ao::uimodel::test
     CHECK(std::get<std::string>(snapshot.trackField(second, rt::TrackField::Title)) == "After");
   }
 
-  TEST_CASE("TrackProperties Credits - invalid child rows retain staged scopes and ordinary drafts",
-            "[uimodel][unit][track-credits]")
+  TEST_CASE("TrackProperties Credits - invalid child rows retain staged scopes and ordinary drafts")
   {
     using K = library::CreditKind;
     auto storage = rt::test::MusicLibraryFixture{};
@@ -142,8 +140,7 @@ namespace ao::uimodel::test
     CHECK(commands.library().snapshot().trackCredits(id) == std::vector<library::Credit>{});
   }
 
-  TEST_CASE("TrackProperties Credits - full mixed reopen never seeds staged common subsets",
-            "[uimodel][unit][track-credits]")
+  TEST_CASE("TrackProperties Credits - full mixed reopen never seeds staged common subsets")
   {
     using K = library::CreditKind;
     auto storage = rt::test::MusicLibraryFixture{};
@@ -183,8 +180,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE(
-    "TrackProperties Credits - reverting normalized scope removes pending patch and scalar writes stay disabled",
-    "[uimodel][unit][track-credits]")
+    "TrackProperties Credits - reverting normalized scope removes pending patch and scalar writes stay disabled")
   {
     using K = library::CreditKind;
     auto storage = rt::test::MusicLibraryFixture{};
@@ -215,8 +211,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(form.canSave());
   }
 
-  TEST_CASE("TrackProperties Credits - unchanged primary does not hide mixed complete category values",
-            "[uimodel][unit][track-credits]")
+  TEST_CASE("TrackProperties Credits - unchanged primary does not hide mixed complete category values")
   {
     using K = library::CreditKind;
     auto storage = rt::test::MusicLibraryFixture{};
@@ -241,8 +236,7 @@ namespace ao::uimodel::test
     CHECK(form.pendingCredits()->entries.empty());
   }
 
-  TEST_CASE("TrackProperties Credits - stale submission retains draft and reopening retains captured other scopes",
-            "[uimodel][integration][track-credits]")
+  TEST_CASE("TrackProperties Credits - stale submission retains draft and reopening retains captured other scopes")
   {
     using K = library::CreditKind;
     auto fixture = TrackAuthoringFixture{1};

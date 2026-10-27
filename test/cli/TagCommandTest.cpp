@@ -10,7 +10,7 @@
 
 namespace ao::cli::test
 {
-  TEST_CASE("CLI - tag commands mutate track tags", "[cli][integration][tag]")
+  TEST_CASE("CLI - tag commands mutate track tags")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "track.flac");
@@ -47,7 +47,7 @@ namespace ao::cli::test
     CHECK(contains(result.out, "removed tag: missing from 0 track(s)"));
   }
 
-  TEST_CASE("CLI - tag list and batch targets use reader and writer contracts", "[cli][integration][tag]")
+  TEST_CASE("CLI - tag list and batch targets use reader and writer contracts")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "basic_metadata.flac");
@@ -102,7 +102,7 @@ namespace ao::cli::test
     CHECK(foundLive);
   }
 
-  TEST_CASE("CLI - tag mutations support dry-run reports", "[cli][integration][tag][dry-run]")
+  TEST_CASE("CLI - tag mutations support dry-run reports")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "track.flac");
@@ -149,7 +149,7 @@ namespace ao::cli::test
     CHECK_FALSE(contains(result.out, "Favorite"));
   }
 
-  TEST_CASE("CLI - tag show resolves filter targets with add and remove semantics", "[cli][integration][tag]")
+  TEST_CASE("CLI - tag show resolves filter targets with add and remove semantics")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "basic_metadata.flac");
@@ -197,7 +197,7 @@ namespace ao::cli::test
     checkDomainFailure(fixture.run({"tag", "show"}), "tag command requires track ids or --filter");
   }
 
-  TEST_CASE("CLI - tag mutations on a zero-match filter are no-ops", "[cli][integration][tag]")
+  TEST_CASE("CLI - tag mutations on a zero-match filter are no-ops")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "track.flac");
@@ -221,7 +221,7 @@ namespace ao::cli::test
     CHECK(contains(result.out, "no tags"));
   }
 
-  TEST_CASE("CLI - tag domain failures use stderr and exit non-zero", "[cli][unit][tag][contract]")
+  TEST_CASE("CLI - tag domain failures use stderr and exit non-zero")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "track.flac");

@@ -20,7 +20,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("AudioQualityFormatter - empty pipeline omits channel uncertainty", "[uimodel][unit][playback][quality]")
+  TEST_CASE("AudioQualityFormatter - empty pipeline omits channel uncertainty")
   {
     auto const formatter = AudioQualityFormatter{ao::test::englishMessageCatalog()};
 
@@ -39,8 +39,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("AudioQualityFormatter - missing output path does not blame identified source layout",
-            "[uimodel][integration][playback][quality]")
+  TEST_CASE("AudioQualityFormatter - missing output path does not blame identified source layout")
   {
     auto const format =
       audio::SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 16, .speakerMask = 0x3};
@@ -79,8 +78,7 @@ namespace ao::uimodel::test
     CHECK(formatter.formatLabel(*state.assessments.front().optFormat) == "48.0 kHz · 16-bit · Stereo");
   }
 
-  TEST_CASE("AudioQualityFormatter - channel conversion with equal endpoint descriptions stays generic",
-            "[uimodel][unit][playback][quality]")
+  TEST_CASE("AudioQualityFormatter - channel conversion with equal endpoint descriptions stays generic")
   {
     auto const formatter = AudioQualityFormatter{ao::test::englishMessageCatalog()};
 
@@ -97,8 +95,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("AudioQualityFormatter - shared conversion without role change keeps its generic finding",
-            "[uimodel][integration][playback][quality]")
+  TEST_CASE("AudioQualityFormatter - shared conversion without role change keeps its generic finding")
   {
     auto const format =
       audio::SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 16, .speakerMask = 0x3};
@@ -140,8 +137,7 @@ namespace ao::uimodel::test
     CHECK(presentation.channelNote.empty());
   }
 
-  TEST_CASE("AudioQualityFormatter - channel count stays authoritative with partial or overfull role evidence",
-            "[uimodel][unit][playback][quality]")
+  TEST_CASE("AudioQualityFormatter - channel count stays authoritative with partial or overfull role evidence")
   {
     struct Case final
     {
@@ -166,8 +162,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("AudioQualityFormatter - assigned height roles retain their names and order",
-            "[uimodel][unit][playback][quality]")
+  TEST_CASE("AudioQualityFormatter - assigned height roles retain their names and order")
   {
     struct Case final
     {

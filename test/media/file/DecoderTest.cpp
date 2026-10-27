@@ -18,7 +18,7 @@ namespace ao::media::file::test
   using namespace std::chrono_literals;
 
   // NOLINTBEGIN(misc-include-cleaner) — <chrono> provides std::operator""ms
-  TEST_CASE("Decoder - bitrateFromBytes computes average bitrate", "[media][unit][decoder]")
+  TEST_CASE("Decoder - bitrateFromBytes computes average bitrate")
   {
     // 4,320,000 bytes over 180 s == 192 kbps.
     CHECK(bitrateFromBytes(4'320'000, 180'000ms) == 192'000U);
@@ -26,13 +26,13 @@ namespace ao::media::file::test
     CHECK(bitrateFromBytes(1'411'200, 1'000ms) == 1'411'200U * 8U);
   }
 
-  TEST_CASE("Decoder - bitrateFromBytes guards non-positive duration", "[media][unit][decoder]")
+  TEST_CASE("Decoder - bitrateFromBytes guards non-positive duration")
   {
     CHECK(bitrateFromBytes(1'000'000, 0ms) == 0U);
     CHECK(bitrateFromBytes(1'000'000, -5ms) == 0U);
   }
   // NOLINTEND(misc-include-cleaner)
-  TEST_CASE("Decoder - parseSlashPair splits primary/secondary", "[media][unit][decoder]")
+  TEST_CASE("Decoder - parseSlashPair splits primary/secondary")
   {
     auto const both = parseSlashPair("3/12");
     REQUIRE(both.optPrimary);
@@ -41,7 +41,7 @@ namespace ao::media::file::test
     CHECK(*both.optSecondary == 12U);
   }
 
-  TEST_CASE("Decoder - parseSlashPair handles a bare primary", "[media][unit][decoder]")
+  TEST_CASE("Decoder - parseSlashPair handles a bare primary")
   {
     auto const single = parseSlashPair("5");
     REQUIRE(single.optPrimary);
@@ -49,7 +49,7 @@ namespace ao::media::file::test
     CHECK_FALSE(single.optSecondary);
   }
 
-  TEST_CASE("Decoder - parseSlashPair tolerates missing or invalid components", "[media][unit][decoder]")
+  TEST_CASE("Decoder - parseSlashPair tolerates missing or invalid components")
   {
     // Empty primary before the slash.
     auto const leadingSlash = parseSlashPair("/7");
@@ -87,7 +87,7 @@ namespace ao::media::file::test
     CHECK_FALSE(parseSlashPair("70000").optPrimary);
   }
 
-  TEST_CASE("Decoder - standalone numbers require the complete field", "[media][unit][decoder]")
+  TEST_CASE("Decoder - standalone numbers require the complete field")
   {
     auto const optNumber = decodeUint16("12");
     REQUIRE(optNumber);
@@ -100,7 +100,7 @@ namespace ao::media::file::test
     CHECK_FALSE(decodeUint16("65536"));
   }
 
-  TEST_CASE("Decoder - a year is four digits that end the value or begin a date", "[media][unit][decoder]")
+  TEST_CASE("Decoder - a year is four digits that end the value or begin a date")
   {
     CHECK(decodeYear("2024") == 2024U);
     CHECK(decodeYear("2024-05-17") == 2024U);

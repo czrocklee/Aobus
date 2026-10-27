@@ -22,7 +22,7 @@ namespace ao::rt::test
 {
   using namespace ao::test;
 
-  TEST_CASE("WorkspaceService - navigate deduplicates the current list", "[runtime][unit][workspace][history]")
+  TEST_CASE("WorkspaceService - navigate deduplicates the current list")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -36,7 +36,7 @@ namespace ao::rt::test
     CHECK(state.listId == fixture.firstListId);
   }
 
-  TEST_CASE("WorkspaceService - navigate request can skip recording history", "[runtime][unit][workspace][history]")
+  TEST_CASE("WorkspaceService - navigate request can skip recording history")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -49,7 +49,7 @@ namespace ao::rt::test
     CHECK_FALSE(runtime.workspace().goBack());
   }
 
-  TEST_CASE("WorkspaceService - navigate filtered target records filter history", "[runtime][unit][workspace][history]")
+  TEST_CASE("WorkspaceService - navigate filtered target records filter history")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -66,7 +66,7 @@ namespace ao::rt::test
     CHECK(backState.filterExpression.empty());
   }
 
-  TEST_CASE("WorkspaceService - goBack restores the previous list", "[runtime][unit][workspace][history]")
+  TEST_CASE("WorkspaceService - goBack restores the previous list")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -86,7 +86,7 @@ namespace ao::rt::test
     CHECK(state.listId == fixture.secondListId);
   }
 
-  TEST_CASE("WorkspaceService - repeated goBack restores the first list", "[runtime][unit][workspace][history]")
+  TEST_CASE("WorkspaceService - repeated goBack restores the first list")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -103,7 +103,7 @@ namespace ao::rt::test
     CHECK_FALSE(runtime.workspace().goBack());
   }
 
-  TEST_CASE("WorkspaceService - goForward after back restores the newer list", "[runtime][unit][workspace][history]")
+  TEST_CASE("WorkspaceService - goForward after back restores the newer list")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -119,8 +119,7 @@ namespace ao::rt::test
     CHECK_FALSE(runtime.workspace().goForward());
   }
 
-  TEST_CASE("WorkspaceService - goBack at the first entry reports NotFound without changing the workspace",
-            "[runtime][unit][workspace][history]")
+  TEST_CASE("WorkspaceService - goBack at the first entry reports NotFound without changing the workspace")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -141,8 +140,7 @@ namespace ao::rt::test
     CHECK(changeCount == 0);
   }
 
-  TEST_CASE("WorkspaceService - goForward at the newest entry reports NotFound without changing the workspace",
-            "[runtime][unit][workspace][history]")
+  TEST_CASE("WorkspaceService - goForward at the newest entry reports NotFound without changing the workspace")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -163,8 +161,7 @@ namespace ao::rt::test
     CHECK(changeCount == 0);
   }
 
-  TEST_CASE("WorkspaceService - new navigation after back truncates forward history",
-            "[runtime][unit][workspace][history]")
+  TEST_CASE("WorkspaceService - new navigation after back truncates forward history")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -184,7 +181,7 @@ namespace ao::rt::test
     CHECK(firstState.listId == fixture.firstListId);
   }
 
-  TEST_CASE("WorkspaceService - goBack restores presentation state", "[runtime][unit][workspace][history]")
+  TEST_CASE("WorkspaceService - goBack restores presentation state")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -199,7 +196,7 @@ namespace ao::rt::test
     CHECK(state.presentation == normalizeTrackPresentationSpec(defaultTrackPresentationSpec()));
   }
 
-  TEST_CASE("WorkspaceService - goBack works after closing the active view", "[runtime][unit][workspace][history]")
+  TEST_CASE("WorkspaceService - goBack works after closing the active view")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -214,8 +211,7 @@ namespace ao::rt::test
     CHECK(state.listId == fixture.firstListId);
   }
 
-  TEST_CASE("WorkspaceService - navigation history signal skips deduplicated navigation",
-            "[runtime][unit][workspace][history]")
+  TEST_CASE("WorkspaceService - navigation history signal skips deduplicated navigation")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -231,7 +227,7 @@ namespace ao::rt::test
     CHECK(callCount == 0);
   }
 
-  TEST_CASE("WorkspaceService - goBack and goForward do not grow history", "[runtime][unit][workspace][history]")
+  TEST_CASE("WorkspaceService - goBack and goForward do not grow history")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -256,8 +252,7 @@ namespace ao::rt::test
     CHECK(boundaryRes.error().code == Error::Code::NotFound);
   }
 
-  TEST_CASE("WorkspaceService - repeated back navigation returns to the source list",
-            "[runtime][unit][workspace][history]")
+  TEST_CASE("WorkspaceService - repeated back navigation returns to the source list")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -272,7 +267,7 @@ namespace ao::rt::test
     CHECK(state.listId == fixture.firstListId);
   }
 
-  TEST_CASE("WorkspaceService - goBack recreates destroyed views", "[runtime][unit][workspace][history]")
+  TEST_CASE("WorkspaceService - goBack recreates destroyed views")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -325,7 +320,7 @@ namespace ao::rt::test
     CHECK(changes[0].snapshot == replayed);
   }
 
-  TEST_CASE("WorkspaceService - failed goBack leaves workspace state unchanged", "[runtime][unit][workspace][history]")
+  TEST_CASE("WorkspaceService - failed goBack leaves workspace state unchanged")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -352,8 +347,7 @@ namespace ao::rt::test
     CHECK(runtime.workspace().snapshot().activeViewId == viewB);
   }
 
-  TEST_CASE("WorkspaceService - failed goForward leaves workspace state unchanged",
-            "[runtime][unit][workspace][history]")
+  TEST_CASE("WorkspaceService - failed goForward leaves workspace state unchanged")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();

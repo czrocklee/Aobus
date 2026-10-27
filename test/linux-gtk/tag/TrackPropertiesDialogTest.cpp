@@ -80,8 +80,7 @@ namespace ao::gtk::test
     };
   } // namespace
 
-  TEST_CASE("TrackPropertiesDialog - pending Save freezes the draft and commits before closing",
-            "[gtk][integration][tag][dialog][concurrency]")
+  TEST_CASE("TrackPropertiesDialog - pending Save freezes the draft and commits before closing", "[concurrency]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto trackId = kInvalidTrackId;
@@ -132,8 +131,7 @@ namespace ao::gtk::test
     drainGtkEvents();
   }
 
-  TEST_CASE("TrackPropertiesDialog - stale managed Save keeps the editor open",
-            "[gtk][integration][tag][dialog][async]")
+  TEST_CASE("TrackPropertiesDialog - stale managed Save keeps the editor open")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto trackId = kInvalidTrackId;
@@ -191,8 +189,7 @@ namespace ao::gtk::test
     drainGtkEvents();
   }
 
-  TEST_CASE("TrackPropertiesDialog - post-publication owner teardown does not cancel an admitted Save",
-            "[gtk][integration][tag][dialog][concurrency]")
+  TEST_CASE("TrackPropertiesDialog - post-publication owner teardown does not cancel an admitted Save", "[concurrency]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto trackId = kInvalidTrackId;
@@ -282,7 +279,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("TrackPropertiesDialog - renders metadata fields for the selected tracks", "[gtk][unit][tag][dialog]")
+  TEST_CASE("TrackPropertiesDialog - renders metadata fields for the selected tracks")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto trackId1 = kInvalidTrackId;
@@ -421,8 +418,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("TrackPropertiesDialog - keeps a presented draft until save settlement",
-            "[gtk][integration][tag][dialog][concurrency]")
+  TEST_CASE("TrackPropertiesDialog - keeps a presented draft until save settlement", "[concurrency]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto trackId = kInvalidTrackId;
@@ -591,8 +587,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("TrackPropertiesDialog - active Credits child blocks parent Save and stages one composed patch",
-            "[gtk][integration][track-credits][dialog]")
+  TEST_CASE("TrackPropertiesDialog - active Credits child blocks parent Save and stages one composed patch")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto trackId = kInvalidTrackId;
@@ -648,8 +643,7 @@ namespace ao::gtk::test
     drainGtkEvents();
   }
 
-  TEST_CASE("TrackPropertiesDialog - closing with a Credits draft asks before discarding it",
-            "[gtk][integration][track-credits][dialog]")
+  TEST_CASE("TrackPropertiesDialog - closing with a Credits draft asks before discarding it")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto trackId = kInvalidTrackId;
@@ -740,8 +734,7 @@ namespace ao::gtk::test
     drainGtkEvents();
   }
 
-  TEST_CASE("TrackPropertiesDialog - closing an unchanged Credits session does not ask",
-            "[gtk][integration][track-credits][dialog]")
+  TEST_CASE("TrackPropertiesDialog - closing an unchanged Credits session does not ask")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto trackId = kInvalidTrackId;

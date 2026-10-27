@@ -14,7 +14,7 @@
 
 namespace ao::lmdb::test
 {
-  TEST_CASE("ResultError - maps LMDB codes and captures the caller location", "[lmdb][unit][error]")
+  TEST_CASE("ResultError - maps LMDB codes and captures the caller location")
   {
     SECTION("Success code yields a value")
     {

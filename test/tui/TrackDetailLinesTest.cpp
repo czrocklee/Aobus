@@ -65,7 +65,7 @@ namespace ao::tui::test
     }
   } // namespace
 
-  TEST_CASE("TrackDetailLines - identity and facts have separate labeled rows", "[tui][unit][detail]")
+  TEST_CASE("TrackDetailLines - identity and facts have separate labeled rows")
   {
     using Kind = TrackDetailLine::Kind;
     auto const lines = trackDetailLines(ao::test::englishMessageCatalog(), fullyPopulatedRow());
@@ -116,7 +116,7 @@ namespace ao::tui::test
     CHECK(hasLabel(trackDetailLines(german, fullyPopulatedRow()), "Dirigent"));
   }
 
-  TEST_CASE("TrackDetailLines - labeled fields keep a stable sizing schema", "[tui][unit][detail]")
+  TEST_CASE("TrackDetailLines - labeled fields keep a stable sizing schema")
   {
     auto const& catalog = ao::test::englishMessageCatalog();
     auto row = fullyPopulatedRow();
@@ -149,7 +149,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackDetailLines - sparse identity has no placeholders or duplicate album artist", "[tui][unit][detail]")
+  TEST_CASE("TrackDetailLines - sparse identity has no placeholders or duplicate album artist")
   {
     auto row = rt::TrackRow{.id = TrackId{3}, .title = "Untagged"};
     auto const& catalog = ao::test::englishMessageCatalog();
@@ -169,7 +169,7 @@ namespace ao::tui::test
     CHECK_FALSE(hasLabel(lines, "Track"));
   }
 
-  TEST_CASE("TrackDetailLines - missing metadata title uses a separately labeled filename", "[tui][unit][detail]")
+  TEST_CASE("TrackDetailLines - missing metadata title uses a separately labeled filename")
   {
     auto const row = rt::TrackRow{.id = TrackId{3}, .optUriPath = "/music/untitled.flac"};
     auto const& catalog = ao::test::englishMessageCatalog();
@@ -180,7 +180,7 @@ namespace ao::tui::test
     CHECK_FALSE(hasLabel(lines, "Title"));
   }
 
-  TEST_CASE("TrackDetailLines - metadata title takes precedence over the filename", "[tui][unit][detail]")
+  TEST_CASE("TrackDetailLines - metadata title takes precedence over the filename")
   {
     auto const row = rt::TrackRow{.optUriPath = "/music/untitled.flac", .title = "Real title"};
     auto const lines = trackDetailLines(ao::test::englishMessageCatalog(), row);
@@ -190,7 +190,7 @@ namespace ao::tui::test
     CHECK_FALSE(hasLabel(lines, "File Name"));
   }
 
-  TEST_CASE("TrackDetailLines - missing title without a usable filename has no identity row", "[tui][unit][detail]")
+  TEST_CASE("TrackDetailLines - missing title without a usable filename has no identity row")
   {
     auto row = rt::TrackRow{.id = TrackId{3}, .optUriPath = "/music/untitled.flac"};
     auto const& catalog = ao::test::englishMessageCatalog();
@@ -213,7 +213,7 @@ namespace ao::tui::test
     CHECK(trackDetailLines(catalog, row).empty());
   }
 
-  TEST_CASE("TrackDetailLines - track numbering retains disc and total context", "[tui][unit][track-detail]")
+  TEST_CASE("TrackDetailLines - track numbering retains disc and total context")
   {
     auto row = fullyPopulatedRow();
     row.discNumber = 2;
@@ -224,8 +224,7 @@ namespace ao::tui::test
     CHECK(valueFor(trackDetailLines(catalog, row), "Track") == "2-7");
   }
 
-  TEST_CASE("TrackDetailLines - recording date keeps its precision and does not infer the release year",
-            "[tui][unit][detail]")
+  TEST_CASE("TrackDetailLines - recording date keeps its precision and does not infer the release year")
   {
     auto const& catalog = ao::test::englishMessageCatalog();
     auto row = rt::TrackRow{.id = TrackId{4}, .title = "Goldberg", .year = 2014};
@@ -276,8 +275,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackDetailLines - credit lines keep kinds ordered duplicates roles and independently mixed sections",
-            "[tui][unit][detail]")
+  TEST_CASE("TrackDetailLines - credit lines keep kinds ordered duplicates roles and independently mixed sections")
   {
     auto const& catalog = ao::test::englishMessageCatalog();
     auto sections = uimodel::TrackCreditSections{};
@@ -303,7 +301,7 @@ namespace ao::tui::test
     CHECK(trackCreditDetailLines(catalog, {}).empty());
   }
 
-  TEST_CASE("TrackDetailLines - category summaries count duplicate entries", "[tui][unit][detail]")
+  TEST_CASE("TrackDetailLines - category summaries count duplicate entries")
   {
     auto row = rt::TrackRow{.conductor = "A", .conductorCount = 3};
     auto const lines = trackDetailLines(ao::test::englishMessageCatalog(), row);

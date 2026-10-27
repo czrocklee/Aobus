@@ -152,8 +152,7 @@ namespace ao::systemmedia::test
     }
   } // namespace
 
-  TEST_CASE("MprisBridge private bus - properties and native methods cross the owner executor",
-            "[platform][integration][mpris][concurrency]")
+  TEST_CASE("MprisBridge private bus - properties and native methods cross the owner executor", "[concurrency]")
   {
     auto bus = PrivateBus{};
     auto fixture = rt::test::PlaybackUiFixture{};
@@ -265,8 +264,7 @@ namespace ao::systemmedia::test
     CHECK(playSelectionOnOwner);
   }
 
-  TEST_CASE("MprisBridge private bus - DesktopEntry is available only when configured",
-            "[platform][integration][mpris]")
+  TEST_CASE("MprisBridge private bus - DesktopEntry is available only when configured")
   {
     auto const desktopEntry = std::string{GENERATE("", "aobus")};
     auto bus = PrivateBus{};
@@ -326,7 +324,7 @@ namespace ao::systemmedia::test
     }
   }
 
-  TEST_CASE("MprisBridge private bus - canonical and unique instances coexist", "[platform][integration][mpris]")
+  TEST_CASE("MprisBridge private bus - canonical and unique instances coexist")
   {
     constexpr auto kBaseName = "org.mpris.MediaPlayer2.aobus.multi";
     auto bus = PrivateBus{};
@@ -370,8 +368,7 @@ namespace ao::systemmedia::test
     CHECK(requireStringGet(secondReply) == "Second unique");
   }
 
-  TEST_CASE("MprisBridge private bus - same-name contender cannot revoke or inherit the current owner",
-            "[platform][integration][mpris][concurrency]")
+  TEST_CASE("MprisBridge private bus - same-name contender cannot revoke or inherit the current owner", "[concurrency]")
   {
     constexpr auto kName = "org.mpris.MediaPlayer2.aobus.lifetime";
     auto bus = PrivateBus{};
@@ -433,7 +430,7 @@ namespace ao::systemmedia::test
   }
 
   TEST_CASE("MprisBridge private bus - external ownership rejects a contender without queueing a promotion",
-            "[platform][integration][mpris][concurrency]")
+            "[concurrency]")
   {
     constexpr auto kName = "org.mpris.MediaPlayer2.aobus.external";
     auto bus = PrivateBus{};
@@ -465,7 +462,7 @@ namespace ao::systemmedia::test
   }
 
   TEST_CASE("MprisBridge private bus - failed startup joins and permits replacement without resurrection",
-            "[platform][integration][mpris][concurrency]")
+            "[concurrency]")
   {
     enum class FailureStage : std::uint8_t
     {
@@ -604,8 +601,7 @@ namespace ao::systemmedia::test
     CHECK_FALSE(bridge.isActive());
   }
 
-  TEST_CASE("MprisBridge private bus - replacement survives retiring an unsettled or acquired owner",
-            "[platform][integration][mpris][concurrency]")
+  TEST_CASE("MprisBridge private bus - replacement survives retiring an unsettled or acquired owner", "[concurrency]")
   {
     constexpr auto kName = "org.mpris.MediaPlayer2.aobus.retirement";
     auto bus = PrivateBus{};
@@ -647,8 +643,7 @@ namespace ao::systemmedia::test
     CHECK(hasBusOwner(observer.nativeConnection(), kName));
   }
 
-  TEST_CASE("MprisBridge private bus - Quit replies before deferred host destruction",
-            "[platform][integration][mpris][concurrency]")
+  TEST_CASE("MprisBridge private bus - Quit replies before deferred host destruction", "[concurrency]")
   {
     auto bus = PrivateBus{};
     auto fixture = rt::test::PlaybackUiFixture{};
@@ -680,8 +675,7 @@ namespace ao::systemmedia::test
     CHECK_FALSE(bridgePtr);
   }
 
-  TEST_CASE("MprisBridge private bus - queued invocation outlives native join without host access",
-            "[platform][integration][mpris][concurrency]")
+  TEST_CASE("MprisBridge private bus - queued invocation outlives native join without host access", "[concurrency]")
   {
     auto bus = PrivateBus{};
     auto fixture = rt::test::PlaybackUiFixture{};
@@ -725,7 +719,7 @@ namespace ao::systemmedia::test
     CHECK(raiseCount == 0);
   }
 
-  TEST_CASE("MprisBridge private bus - an empty address disables admission", "[platform][unit][mpris]")
+  TEST_CASE("MprisBridge private bus - an empty address disables admission")
   {
     auto fixture = rt::test::PlaybackUiFixture{};
     auto& playback = fixture.runtime().playback();
@@ -749,8 +743,7 @@ namespace ao::systemmedia::test
     CHECK(subscriptionCount == 0);
   }
 
-  TEST_CASE("MprisBridge private bus - a Unix candidate survives an autolaunch fallback",
-            "[platform][integration][mpris][concurrency]")
+  TEST_CASE("MprisBridge private bus - a Unix candidate survives an autolaunch fallback", "[concurrency]")
   {
     auto bus = PrivateBus{};
     auto fixture = rt::test::PlaybackUiFixture{};
@@ -768,8 +761,7 @@ namespace ao::systemmedia::test
     CHECK(control.isActive());
   }
 
-  TEST_CASE("MprisBridge private bus - invalid addresses degrade without interests",
-            "[platform][integration][mpris][concurrency]")
+  TEST_CASE("MprisBridge private bus - invalid addresses degrade without interests", "[concurrency]")
   {
     auto fixture = rt::test::PlaybackUiFixture{};
     auto& playback = fixture.runtime().playback();
@@ -796,8 +788,7 @@ namespace ao::systemmedia::test
     CHECK(subscriptionCount == 0);
   }
 
-  TEST_CASE("MprisBridge private bus - disappearance retires an active adapter",
-            "[platform][integration][mpris][concurrency]")
+  TEST_CASE("MprisBridge private bus - disappearance retires an active adapter", "[concurrency]")
   {
     auto bus = PrivateBus{};
     auto fixture = rt::test::PlaybackUiFixture{};
@@ -811,8 +802,7 @@ namespace ao::systemmedia::test
     CHECK(bridge.busName().empty());
   }
 
-  TEST_CASE("MprisBridge private bus - retirement suppresses queued acquisition",
-            "[platform][integration][mpris][concurrency]")
+  TEST_CASE("MprisBridge private bus - retirement suppresses queued acquisition", "[concurrency]")
   {
     auto bus = PrivateBus{};
     auto fixture = rt::test::PlaybackUiFixture{};

@@ -49,7 +49,7 @@ namespace ao::library::test
     }
   } // namespace
 
-  TEST_CASE("ListWriter - create and update validate the live parent graph", "[library][unit][list-writer]")
+  TEST_CASE("ListWriter - create and update validate the live parent graph")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -102,7 +102,7 @@ namespace ao::library::test
     CHECK(optChild->parentId() == rootId);
   }
 
-  TEST_CASE("ListWriter - update does not upsert a missing id", "[library][unit][list-writer]")
+  TEST_CASE("ListWriter - update does not upsert a missing id")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -119,7 +119,7 @@ namespace ao::library::test
     CHECK_FALSE(library.lists().reader(readTransaction).get(missingId));
   }
 
-  TEST_CASE("ListWriter - self-parent rejection preserves the stored list", "[library][unit][list-writer]")
+  TEST_CASE("ListWriter - self-parent rejection preserves the stored list")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -139,7 +139,7 @@ namespace ao::library::test
     CHECK(optStored->parentId() == kInvalidListId);
   }
 
-  TEST_CASE("ListWriter - missing leaf deletion preserves existing lists", "[library][unit][list-writer]")
+  TEST_CASE("ListWriter - missing leaf deletion preserves existing lists")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -157,7 +157,7 @@ namespace ao::library::test
     CHECK(optSurvivor->parentId() == kInvalidListId);
   }
 
-  TEST_CASE("ListWriter - missing subtree deletion preserves existing lists", "[library][unit][list-writer]")
+  TEST_CASE("ListWriter - missing subtree deletion preserves existing lists")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -176,7 +176,7 @@ namespace ao::library::test
     CHECK(optSurvivor->parentId() == kInvalidListId);
   }
 
-  TEST_CASE("ListWriter - leaf deletion rejects a parent until child-first cleanup", "[library][unit][list-writer]")
+  TEST_CASE("ListWriter - leaf deletion rejects a parent until child-first cleanup")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -219,8 +219,7 @@ namespace ao::library::test
     CHECK_FALSE(library.lists().reader(readTransaction).get(childId));
   }
 
-  TEST_CASE("ListWriter - subtree deletion returns root-first ids and preserves unrelated Lists",
-            "[library][unit][list-writer]")
+  TEST_CASE("ListWriter - subtree deletion returns root-first ids and preserves unrelated Lists")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -254,7 +253,7 @@ namespace ao::library::test
     CHECK_FALSE(library.lists().reader(readTransaction).get(siblingId));
   }
 
-  TEST_CASE("ListWriter - clear removes the complete saved List graph", "[library][unit][list-writer]")
+  TEST_CASE("ListWriter - clear removes the complete saved List graph")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");

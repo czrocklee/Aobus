@@ -10,7 +10,7 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("WritableTagList - recognizes only a positive tag AST root", "[runtime][unit][writable-tag]")
+  TEST_CASE("WritableTagList - recognizes only a positive tag AST root")
   {
     CHECK(writableTagForListExpression(R"(#"road-trip")") == std::optional<std::string>{"road-trip"});
     CHECK(writableTagForListExpression(R"(#"Road Trip")") == std::optional<std::string>{"Road Trip"});
@@ -26,7 +26,7 @@ namespace ao::rt::test
     CHECK_FALSE(writableTagForListExpression("(").has_value());
   }
 
-  TEST_CASE("WritableTagList - finds tag references anywhere in a valid expression", "[runtime][unit][writable-tag]")
+  TEST_CASE("WritableTagList - finds tag references anywhere in a valid expression")
   {
     CHECK(hasListExpressionTagReference(R"(#"road-trip")", "road-trip"));
     CHECK(hasListExpressionTagReference(R"((#rock or #jazz) and not #blocked)", "rock"));

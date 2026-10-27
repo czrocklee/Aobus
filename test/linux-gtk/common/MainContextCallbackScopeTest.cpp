@@ -10,8 +10,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("MainContextCallbackScope - guarded callbacks run only while the scope is open",
-            "[gtk][unit][callback-lifetime][async]")
+  TEST_CASE("MainContextCallbackScope - guarded callbacks run only while the scope is open")
   {
     auto callback = std::function<void(std::int32_t)>{};
     std::int32_t observedValue = 0;
@@ -30,8 +29,7 @@ namespace ao::gtk::test
     CHECK(observedValue == 2);
   }
 
-  TEST_CASE("MainContextCallbackScope - close invalidates callbacks before teardown and is idempotent",
-            "[gtk][unit][callback-lifetime][async]")
+  TEST_CASE("MainContextCallbackScope - close invalidates callbacks before teardown and is idempotent")
   {
     auto callback = std::function<void()>{};
     std::int32_t callbackCount = 0;

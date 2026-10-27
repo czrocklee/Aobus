@@ -13,7 +13,7 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from ..core import buildenv, gitfiles, testregistry, tidyengine
+from ..core import buildenv, gitfiles, testaudit, tidyengine
 from . import format as format_command
 from . import name_audit, test_audit, tidy
 
@@ -107,7 +107,10 @@ def run_command(args: argparse.Namespace) -> int:
         return 1
 
     cpp_files = [name for name in files if name.endswith(gitfiles.CPP_SUFFIXES) and format_command._file_exists(name)]
-    test_files = [name for name in cpp_files if name.endswith(testregistry.TEST_SOURCE_SUFFIXES)]
+    # Content discovery, not the registration filename convention: every
+    # candidate test-tree file reaches the audit, including headers, include
+    # fragments, and benchmark sources such as TrackTableBenchmark.cpp.
+    test_files = [name for name in cpp_files if testaudit.is_audit_candidate(name)]
 
     print()
     print("=== test-audit ===")

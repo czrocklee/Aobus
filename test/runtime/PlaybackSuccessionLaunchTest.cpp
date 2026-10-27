@@ -35,8 +35,7 @@ namespace ao::rt::test
   using playback_succession::playFromViewAndWait;
   using playback_succession::PreparationReleaseGuard;
 
-  TEST_CASE("PlaybackSuccession - strict launch commits only a validated captured spec",
-            "[runtime][unit][playback-succession][launch]")
+  TEST_CASE("PlaybackSuccession - strict launch commits only a validated captured spec")
   {
     auto fixture = PlaybackSuccessionFixture{};
     auto const outsideTrackId = fixture.addPlayableTrack("Outside");
@@ -77,7 +76,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackSuccession - replaying the current track waits for a distinct explicit settlement",
-            "[runtime][unit][playback-succession][concurrency]")
+            "[concurrency]")
   {
     auto fixture = PlaybackSuccessionTransportFixture{};
     fixture.buildThreeTrackManualView();
@@ -96,7 +95,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackSuccession - asynchronous preparation failure preserves the accepted session and transport",
-            "[runtime][unit][playback-succession][launch][concurrency]")
+            "[concurrency]")
   {
     auto fixture = PlaybackSuccessionFixture{};
     auto const current = fixture.addPlayableTrack("Current");
@@ -149,8 +148,7 @@ namespace ao::rt::test
     CHECK(fixture.playbackTransport.state().transport == audio::Transport::Playing);
   }
 
-  TEST_CASE("PlaybackSuccession - pending start adopts the latest repeat and shuffle modes",
-            "[runtime][unit][playback-succession][concurrency]")
+  TEST_CASE("PlaybackSuccession - pending start adopts the latest repeat and shuffle modes", "[concurrency]")
   {
     auto gatePtr = std::make_shared<audio::test::BlockingPreparationGate>();
     auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
@@ -189,8 +187,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("PlaybackSuccession - pending shuffled start adopts paired sequential repeat modes",
-            "[runtime][unit][playback-succession][concurrency]")
+  TEST_CASE("PlaybackSuccession - pending shuffled start adopts paired sequential repeat modes", "[concurrency]")
   {
     auto gatePtr = std::make_shared<audio::test::BlockingPreparationGate>();
     auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
@@ -222,8 +219,7 @@ namespace ao::rt::test
     CHECK(fixture.transport.playbackTransport.state().transport == audio::Transport::Playing);
   }
 
-  TEST_CASE("PlaybackSuccession - newer pending start silently replaces blocked preparation",
-            "[runtime][unit][playback-succession][concurrency]")
+  TEST_CASE("PlaybackSuccession - newer pending start silently replaces blocked preparation", "[concurrency]")
   {
     auto gatePtr = std::make_shared<audio::test::BlockingPreparationGate>();
     auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
@@ -248,8 +244,7 @@ namespace ao::rt::test
           gatePtr->createdPtr->load(std::memory_order_relaxed));
   }
 
-  TEST_CASE("PlaybackSuccession - final seek silently cancels blocked pending start",
-            "[runtime][unit][playback-succession][concurrency]")
+  TEST_CASE("PlaybackSuccession - final seek silently cancels blocked pending start", "[concurrency]")
   {
     auto gatePtr = std::make_shared<audio::test::BlockingPreparationGate>();
     auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
@@ -276,8 +271,7 @@ namespace ao::rt::test
     CHECK(fixture.transport.notificationService.feed().entries.empty());
   }
 
-  TEST_CASE("PlaybackSuccession - output route change silently cancels blocked pending start",
-            "[runtime][unit][playback-succession][concurrency]")
+  TEST_CASE("PlaybackSuccession - output route change silently cancels blocked pending start", "[concurrency]")
   {
     auto gatePtr = std::make_shared<audio::test::BlockingPreparationGate>();
     auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
@@ -312,8 +306,7 @@ namespace ao::rt::test
     CHECK(fixture.transport.notificationService.feed().entries.empty());
   }
 
-  TEST_CASE("PlaybackSuccession - lookahead open failure rerolls the sticky shuffle successor",
-            "[runtime][unit][playback-succession][concurrency]")
+  TEST_CASE("PlaybackSuccession - lookahead open failure rerolls the sticky shuffle successor", "[concurrency]")
   {
     auto gatePtr = std::make_shared<audio::test::BlockingPreparationGate>();
     auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
@@ -359,8 +352,7 @@ namespace ao::rt::test
     CHECK(fixture.transport.notificationService.feed().entries.empty());
   }
 
-  TEST_CASE("PlaybackSuccession - device evidence refresh silently rejects a stale pending start",
-            "[runtime][unit][playback-succession][concurrency]")
+  TEST_CASE("PlaybackSuccession - device evidence refresh silently rejects a stale pending start", "[concurrency]")
   {
     auto gatePtr = std::make_shared<audio::test::BlockingPreparationGate>();
     auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
@@ -388,8 +380,7 @@ namespace ao::rt::test
     CHECK(fixture.transport.notificationService.feed().entries.empty());
   }
 
-  TEST_CASE("PlaybackSuccession - changed playback input supersedes a blocked failing start",
-            "[runtime][unit][playback-succession][concurrency]")
+  TEST_CASE("PlaybackSuccession - changed playback input supersedes a blocked failing start", "[concurrency]")
   {
     auto gatePtr = std::make_shared<audio::test::BlockingPreparationGate>();
     auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
@@ -424,8 +415,7 @@ namespace ao::rt::test
     CHECK(fixture.transport.notificationService.feed().entries.empty());
   }
 
-  TEST_CASE("PlaybackSuccession - an accepted launch publishes consistent state to connected observers",
-            "[runtime][unit][playback-succession][launch]")
+  TEST_CASE("PlaybackSuccession - an accepted launch publishes consistent state to connected observers")
   {
     auto fixture = PlaybackSuccessionFixture{};
     fixture.buildThreeTrackManualView();
@@ -465,8 +455,7 @@ namespace ao::rt::test
     CHECK(playbackTransport.state().transport == audio::Transport::Playing);
   }
 
-  TEST_CASE("PlaybackSuccession - launch spec remains detached from later view edits and destruction",
-            "[runtime][unit][playback-succession][launch]")
+  TEST_CASE("PlaybackSuccession - launch spec remains detached from later view edits and destruction")
   {
     auto fixture = PlaybackSuccessionFixture{};
     fixture.buildThreeTrackManualView(TrackListViewConfig{.filterExpression = "$year >= 2000"});
@@ -489,8 +478,7 @@ namespace ao::rt::test
     CHECK(fixture.playbackTransport.state().transport == audio::Transport::Playing);
   }
 
-  TEST_CASE("PlaybackSuccession - invalid captured quick filter rejects launch atomically",
-            "[runtime][unit][playback-succession][launch]")
+  TEST_CASE("PlaybackSuccession - invalid captured quick filter rejects launch atomically")
   {
     auto fixture = PlaybackSuccessionFixture{};
     fixture.buildThreeTrackManualView(TrackListViewConfig{.filterExpression = "("});
@@ -503,8 +491,7 @@ namespace ao::rt::test
     CHECK(fixture.playbackTransport.state().transport == audio::Transport::Idle);
   }
 
-  TEST_CASE("PlaybackSuccession - source deleted after view capture rejects launch atomically",
-            "[runtime][unit][playback-succession][launch]")
+  TEST_CASE("PlaybackSuccession - source deleted after view capture rejects launch atomically")
   {
     auto fixture = PlaybackSuccessionFixture{};
     fixture.buildThreeTrackManualView();

@@ -173,8 +173,7 @@ namespace ao::audio::test
     }
   } // namespace
 
-  TEST_CASE("FlacDecoderSession - readable empty and unrelated comments identify the default layout",
-            "[audio][integration][flac]")
+  TEST_CASE("FlacDecoderSession - readable empty and unrelated comments identify the default layout")
   {
     auto const commentSets = std::vector<std::vector<std::string>>{
       {},
@@ -195,8 +194,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("FlacDecoderSession - native ID3 prefix preserves comment admission despite embedded FLAC markers",
-            "[audio][integration][flac]")
+  TEST_CASE("FlacDecoderSession - native ID3 prefix preserves comment admission despite embedded FLAC markers")
   {
     // Native ID3 skipping masks off the high bit of each size byte and can
     // begin after a partial fLaC match. Each payload still contains a marker.
@@ -245,8 +243,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("FlacDecoderSession - native prefix selection ignores invisible overlapping metadata chains",
-            "[audio][integration][flac]")
+  TEST_CASE("FlacDecoderSession - native prefix selection ignores invisible overlapping metadata chains")
   {
     auto fakeMetadata = buildFlacStreaminfoBytes(48);
     appendFlacCommentBlock(fakeMetadata, std::to_array<std::string>({"WAVEFORMATEXTENSIBLE_CHANNEL_MASK=bad"}));
@@ -288,8 +285,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("FlacDecoderSession - repeated STREAMINFO cannot hide readable mask declarations",
-            "[audio][integration][flac]")
+  TEST_CASE("FlacDecoderSession - repeated STREAMINFO cannot hide readable mask declarations")
   {
     auto const commentSets = std::vector<std::vector<std::string>>{
       {"WAVEFORMATEXTENSIBLE_CHANNEL_MASK=0xC"},
@@ -329,8 +325,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("FlacDecoderSession - non-first STREAMINFO cannot hide early masks behind padding markers",
-            "[audio][integration][flac]")
+  TEST_CASE("FlacDecoderSession - non-first STREAMINFO cannot hide early masks behind padding markers")
   {
     auto const earlyCommentSets = std::vector<std::vector<std::string>>{
       {"WAVEFORMATEXTENSIBLE_CHANNEL_MASK=bad"},
@@ -376,8 +371,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("FlacDecoderSession - an early-only valid mask before STREAMINFO remains unknown",
-            "[audio][integration][flac]")
+  TEST_CASE("FlacDecoderSession - an early-only valid mask before STREAMINFO remains unknown")
   {
     auto const streamInfo = buildFlacStreaminfoBytes(48);
     auto earlyMetadata = streamInfo;
@@ -417,8 +411,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("FlacDecoderSession - 100000 and 100001 complete unrelated comments preserve all audio",
-            "[audio][integration][flac]")
+  TEST_CASE("FlacDecoderSession - 100000 and 100001 complete unrelated comments preserve all audio")
   {
     // libFLAC 1.5.0 rejects the second payload when VC response is enabled;
     // this format-valid count must not become an application admission cap.
@@ -436,8 +429,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("FlacDecoderSession - explicit mask after 100001 comments is still recognized",
-            "[audio][integration][flac]")
+  TEST_CASE("FlacDecoderSession - explicit mask after 100001 comments is still recognized")
   {
     auto comments = std::vector<std::string>(100001, "X=Y");
     comments.emplace_back("WAVEFORMATEXTENSIBLE_CHANNEL_MASK=0xC");
@@ -450,8 +442,7 @@ namespace ao::audio::test
     checkAllPcm(*decoderPtr, 24);
   }
 
-  TEST_CASE("FlacDecoderSession - internally damaged comment blocks play with unknown identity",
-            "[audio][integration][flac]")
+  TEST_CASE("FlacDecoderSession - internally damaged comment blocks play with unknown identity")
   {
     auto trailing = buildCommentPayload(std::to_array<std::string>({"TITLE=Readable"}));
     trailing.push_back(0);
@@ -484,8 +475,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("FlacDecoderSession - readable valid mask cannot identify a damaged comment remainder",
-            "[audio][integration][flac]")
+  TEST_CASE("FlacDecoderSession - readable valid mask cannot identify a damaged comment remainder")
   {
     auto const comments = std::to_array<std::string>({"WAVEFORMATEXTENSIBLE_CHANNEL_MASK=0xC"});
 
@@ -509,8 +499,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("FlacDecoderSession - later good comment blocks cannot erase structural uncertainty",
-            "[audio][integration][flac]")
+  TEST_CASE("FlacDecoderSession - later good comment blocks cannot erase structural uncertainty")
   {
     auto const good = std::to_array<std::string>({"WAVEFORMATEXTENSIBLE_CHANNEL_MASK=0xC"});
     auto const damaged = std::to_array<std::uint8_t>({0, 0, 0, 0, 0, 0, 0});
@@ -539,8 +528,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("FlacDecoderSession - invalid declarations keep identity unknown across complete or damaged tails",
-            "[audio][integration][flac]")
+  TEST_CASE("FlacDecoderSession - invalid declarations keep identity unknown across complete or damaged tails")
   {
     auto const badCommentSets = std::vector<std::vector<std::string>>{
       {"WAVEFORMATEXTENSIBLE_CHANNEL_MASK"},
@@ -583,8 +571,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("FlacDecoderSession - later declarations cannot restore identity after structural uncertainty",
-            "[audio][integration][flac]")
+  TEST_CASE("FlacDecoderSession - later declarations cannot restore identity after structural uncertainty")
   {
     auto const good = std::to_array<std::string>({"WAVEFORMATEXTENSIBLE_CHANNEL_MASK=0xC"});
     auto const badCommentSets = std::vector<std::vector<std::string>>{
@@ -632,8 +619,7 @@ namespace ao::audio::test
     checkUnknownAdmission(bytes);
   }
 
-  TEST_CASE("FlacDecoderSession - unknown identity survives seek flush EOF and factory admission",
-            "[audio][integration][flac]")
+  TEST_CASE("FlacDecoderSession - unknown identity survives seek flush EOF and factory admission")
   {
     for (std::uint8_t const precisionBits : std::to_array<std::uint8_t>({16, 24}))
     {
@@ -697,8 +683,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("FlacDecoderSession - raw frames without STREAMINFO fail with the required metadata diagnostic",
-            "[audio][integration][flac]")
+  TEST_CASE("FlacDecoderSession - raw frames without STREAMINFO fail with the required metadata diagnostic")
   {
     for (bool const hasJunkPrefix : {false, true})
     {
@@ -725,7 +710,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("FlacDecoderSession - truncated native metadata remains a hard open failure", "[audio][integration][flac]")
+  TEST_CASE("FlacDecoderSession - truncated native metadata remains a hard open failure")
   {
     auto bytes = buildFlacStreaminfoBytes(48);
 
@@ -783,8 +768,7 @@ namespace ao::audio::test
     CHECK(factoryRes.error().message.contains("Failed to read FLAC metadata"));
   }
 
-  TEST_CASE("FlacDecoderSession - comment tolerance does not hide outer metadata or STREAMINFO damage",
-            "[audio][integration][flac]")
+  TEST_CASE("FlacDecoderSession - comment tolerance does not hide outer metadata or STREAMINFO damage")
   {
     auto bytes = buildFlacStreaminfoBytes(48);
     auto const commentHeader = bytes.size();
@@ -821,8 +805,7 @@ namespace ao::audio::test
     CHECK(factoryRes.error().code == Error::Code::DecodeFailed);
   }
 
-  TEST_CASE("FlacDecoderSession - damaged comments cannot conceal contradictory audio frames",
-            "[audio][integration][flac]")
+  TEST_CASE("FlacDecoderSession - damaged comments cannot conceal contradictory audio frames")
   {
     auto bytes = buildFlacStreaminfoBytes(48);
     appendFlacRawCommentBlock(bytes, std::to_array<std::uint8_t>({0, 0, 0, 0, 0, 0, 0}));

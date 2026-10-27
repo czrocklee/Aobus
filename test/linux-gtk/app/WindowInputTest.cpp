@@ -19,7 +19,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("WindowInput - thumb buttons map to history navigation", "[gtk][unit][app][navigation]")
+  TEST_CASE("WindowInput - thumb buttons map to history navigation")
   {
     CHECK(mouseButtonNavigation(8) == WorkspaceNavigation::Back);
     CHECK(mouseButtonNavigation(9) == WorkspaceNavigation::Forward);
@@ -30,7 +30,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("WindowInput - playback Space preserves text editing", "[gtk][unit][app][shortcut]")
+  TEST_CASE("WindowInput - playback Space preserves text editing")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 

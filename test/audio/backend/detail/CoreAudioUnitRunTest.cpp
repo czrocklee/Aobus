@@ -89,7 +89,7 @@ namespace ao::audio::backend::detail::test
     };
   } // namespace
 
-  TEST_CASE("CoreAudioUnitRun - confirmed stop settles a start and idle stop is a no-op", "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioUnitRun - confirmed stop settles a start and idle stop is a no-op")
   {
     auto fake = UnitRunFake{};
     auto run = CoreAudioUnitRun{fake.operations()};
@@ -144,8 +144,7 @@ namespace ao::audio::backend::detail::test
     CHECK(fake.stopCount == 1U);
   }
 
-  TEST_CASE("CoreAudioUnitRun - a failed stop stays started and preserves the raw unconfirmed status",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioUnitRun - a failed stop stays started and preserves the raw unconfirmed status")
   {
     auto fake = UnitRunFake{};
     fake.stopStatuses[0] = kUnknownStopFailure;
@@ -170,7 +169,7 @@ namespace ao::audio::backend::detail::test
     CHECK(fake.calls[1].status == kUnknownStopFailure);
   }
 
-  TEST_CASE("CoreAudioUnitRun - later explicit stops retain failure until native success", "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioUnitRun - later explicit stops retain failure until native success")
   {
     auto fake = UnitRunFake{};
     fake.stopStatuses[0] = kUnknownStopFailure;
@@ -231,8 +230,7 @@ namespace ao::audio::backend::detail::test
     CHECK(fake.calls[4].status == ::noErr);
   }
 
-  TEST_CASE("CoreAudioUnitRun - a failed start is not started and stop does not call native stop",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioUnitRun - a failed start is not started and stop does not call native stop")
   {
     auto fake = UnitRunFake{};
     fake.startStatuses[0] = kUnknownStartFailure;
@@ -261,8 +259,7 @@ namespace ao::audio::backend::detail::test
     CHECK(fake.stopCount == 0U);
   }
 
-  TEST_CASE("CoreAudioUnitRun - detach clears status without native calls and permits the next start",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioUnitRun - detach clears status without native calls and permits the next start")
   {
     auto fake = UnitRunFake{};
     fake.stopStatuses[0] = kUnknownStopFailure;

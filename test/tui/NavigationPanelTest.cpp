@@ -36,7 +36,7 @@
 
 namespace ao::tui::test
 {
-  TEST_CASE("NavigationPanel - docking budgets Detail and the minimum Tracks width", "[tui][unit][navigation]")
+  TEST_CASE("NavigationPanel - docking budgets Detail and the minimum Tracks width")
   {
     auto layout = navigationGeometry(102, 0, true);
     CHECK(layout.docked);
@@ -57,8 +57,7 @@ namespace ao::tui::test
     CHECK_FALSE(navigationGeometry(140, 0, false).docked);
   }
 
-  TEST_CASE("NavigationPanel - docked panes share one border without shifting content hit targets",
-            "[tui][unit][navigation]")
+  TEST_CASE("NavigationPanel - docked panes share one border without shifting content hit targets")
   {
     using namespace ftxui;
     auto const& catalog = ao::test::englishMessageCatalog();
@@ -115,7 +114,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("NavigationPanel - translated active search retains input targets", "[tui][unit][navigation]")
+  TEST_CASE("NavigationPanel - translated active search retains input targets")
   {
     for (auto const* locale : {"en", "de", "zh-Hans"})
     {
@@ -150,8 +149,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("NavigationPanel - cover overlap includes Kitty clearing halo and excludes hidden targets",
-            "[tui][unit][navigation][cover-art]")
+  TEST_CASE("NavigationPanel - cover overlap includes Kitty clearing halo and excludes hidden targets")
   {
     auto const cover = ftxui::Box{.x_min = 60, .x_max = 79, .y_min = 3, .y_max = 15};
     CHECK_FALSE(hasCoverIntersection(cover, kEmptyMouseBox));
@@ -161,8 +159,7 @@ namespace ao::tui::test
     CHECK_FALSE(hasCoverIntersection(cover, {.x_min = 20, .x_max = 65, .y_min = 17, .y_max = 20}));
   }
 
-  TEST_CASE("NavigationPanel - search status describes local ownership rather than tree keys",
-            "[tui][unit][navigation]")
+  TEST_CASE("NavigationPanel - search status describes local ownership rather than tree keys")
   {
     auto shell = ShellInteractionModel{};
     shell.focusNavigation();
@@ -175,8 +172,7 @@ namespace ao::tui::test
     CHECK_FALSE(rendered.contains("tree"));
   }
 
-  TEST_CASE("NavigationPanel - search only takes a row while active and Escape restores the full tree",
-            "[tui][unit][navigation][search]")
+  TEST_CASE("NavigationPanel - search only takes a row while active and Escape restores the full tree")
   {
     auto const& catalog = ao::test::englishMessageCatalog();
     auto model = ListNavigationModel{};
@@ -205,7 +201,7 @@ namespace ao::tui::test
     CHECK(regions.rows.front().row.y_min == initialRow);
   }
 
-  TEST_CASE("NavigationPanel - docked expression follows selection without footer chrome", "[tui][unit][navigation]")
+  TEST_CASE("NavigationPanel - docked expression follows selection without footer chrome")
   {
     auto const& catalog = ao::test::englishMessageCatalog();
     auto model = ListNavigationModel{};
@@ -241,7 +237,7 @@ namespace ao::tui::test
     CHECK(regions.rows.front().row.y_min == 1);
   }
 
-  TEST_CASE("NavigationPanel - the focused active List row keeps the interactive pair", "[tui][unit][navigation]")
+  TEST_CASE("NavigationPanel - the focused active List row keeps the interactive pair")
   {
     auto const& catalog = ao::test::englishMessageCatalog();
     auto model = ListNavigationModel{};
@@ -267,8 +263,7 @@ namespace ao::tui::test
           ftxui::Color::Cyan);
   }
 
-  TEST_CASE("NavigationPanel - long expressions wrap into two dim rows with explicit truncation",
-            "[tui][unit][navigation]")
+  TEST_CASE("NavigationPanel - long expressions wrap into two dim rows with explicit truncation")
   {
     auto const& catalog = ao::test::englishMessageCatalog();
     auto model = ListNavigationModel{};
@@ -294,7 +289,7 @@ namespace ao::tui::test
     CHECK(rendered.screen.PixelAt(optSecond->x_min, optSecond->y_min).dim);
   }
 
-  TEST_CASE("NavigationPanel - expression controls flatten without corrupting Unicode", "[tui][unit][navigation]")
+  TEST_CASE("NavigationPanel - expression controls flatten without corrupting Unicode")
   {
     using namespace std::string_view_literals;
     // NOLINTNEXTLINE(misc-include-cleaner) -- MSVC include-cleaner cannot map sv to the included <string_view>.
@@ -327,8 +322,7 @@ namespace ao::tui::test
     CHECK(model.rows().back().detail == expression);
   }
 
-  TEST_CASE("NavigationPanel - Tracks advertises focus only for a docked list using the current binding",
-            "[tui][unit][navigation]")
+  TEST_CASE("NavigationPanel - Tracks advertises focus only for a docked list using the current binding")
   {
     auto const& catalog = ao::test::englishMessageCatalog();
     auto shell = ShellInteractionModel{};
@@ -346,7 +340,7 @@ namespace ao::tui::test
     CHECK_FALSE(renderText(statusBar(catalog, state, plan), 80).contains("F4 lists"));
   }
 
-  TEST_CASE("NavigationPanel - global return hint follows executable focus bindings", "[tui][unit][navigation]")
+  TEST_CASE("NavigationPanel - global return hint follows executable focus bindings")
   {
     auto shell = ShellInteractionModel{};
     shell.focusNavigation();
@@ -367,7 +361,7 @@ namespace ao::tui::test
     CHECK_FALSE(search.contains("F4 tracks"));
   }
 
-  TEST_CASE("NavigationPanel - the pane's edit hint follows the Edit binding", "[tui][unit][navigation]")
+  TEST_CASE("NavigationPanel - the pane's edit hint follows the Edit binding")
   {
     auto shell = ShellInteractionModel{};
     shell.focusNavigation();

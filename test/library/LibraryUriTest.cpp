@@ -20,7 +20,7 @@
 
 namespace ao::library::test
 {
-  TEST_CASE("LibraryUri - parsing produces canonical root-relative values", "[library][unit][uri]")
+  TEST_CASE("LibraryUri - parsing produces canonical root-relative values")
   {
     auto const uriRes = LibraryUri::parse(R"(albums\live\..\song.flac)");
 
@@ -43,7 +43,7 @@ namespace ao::library::test
     CHECK(literalPercentEncodingRes->value() == "literal/%2e%2e/song.flac");
   }
 
-  TEST_CASE("LibraryUri - persisted canonical check agrees with parse normalization", "[library][unit][uri]")
+  TEST_CASE("LibraryUri - persisted canonical check agrees with parse normalization")
   {
     STATIC_REQUIRE(noexcept(detail::isCanonicalLibraryUri(std::string_view{})));
 
@@ -86,7 +86,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("LibraryUri - parsing owns the storage length limit", "[library][unit][uri]")
+  TEST_CASE("LibraryUri - parsing owns the storage length limit")
   {
     // The limit is format: pin its value independently of the production constant.
     STATIC_REQUIRE(LibraryUri::kMaxLength == 1'976);
@@ -122,7 +122,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("LibraryUri - diagnostics quote at most a URI's length of input", "[library][unit][uri]")
+  TEST_CASE("LibraryUri - diagnostics quote at most a URI's length of input")
   {
     // "../" and then 1,000 three-byte U+8AB0: byte 1,976 falls inside a code
     // point, so the quote backs off to the lead byte at 1,974.
@@ -142,7 +142,7 @@ namespace ao::library::test
     CHECK_FALSE(message.contains(escaping.substr(0, 1'975)));
   }
 
-  TEST_CASE("LibraryUri - UTF-8 names resolve through native filesystem paths", "[library][unit][uri]")
+  TEST_CASE("LibraryUri - UTF-8 names resolve through native filesystem paths")
   {
     auto const expected = std::string{"\xE8\xAA\xB0\xE3\x81\x8B\xE3\x80\x81\xE6\xB5\xB7\xE3\x82\x92\xE3\x80\x82/"
                                       "Dvo\xC5\x99\xC3\xA1k.flac"};
@@ -160,7 +160,7 @@ namespace ao::library::test
     CHECK(utility::pathToGenericUtf8(resolvedRes->lexically_relative(root)) == expected);
   }
 
-  TEST_CASE("LibraryUri - parsing rejects paths outside the library namespace", "[library][unit][uri]")
+  TEST_CASE("LibraryUri - parsing rejects paths outside the library namespace")
   {
     for (auto const input : {std::string_view{},
                              std::string_view{"."},
@@ -178,7 +178,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("LibraryUri - parsing rejects control characters", "[library][unit][uri]")
+  TEST_CASE("LibraryUri - parsing rejects control characters")
   {
     for (auto const input : {std::string_view{"line\nbreak.flac"},
                              std::string_view{"tab\tname.flac"},
@@ -192,7 +192,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("LibraryUri - resolution accepts missing roots and ordinary missing suffixes", "[library][unit][uri]")
+  TEST_CASE("LibraryUri - resolution accepts missing roots and ordinary missing suffixes")
   {
     auto const temp = ao::test::TempDir{};
     auto const missingRoot = temp.path() / "future-music";
@@ -211,7 +211,7 @@ namespace ao::library::test
     CHECK(*directRes == root / "upcoming" / "song.flac");
   }
 
-  TEST_CASE("LibraryUri - resolution accepts in-root symlinks", "[library][unit][uri]")
+  TEST_CASE("LibraryUri - resolution accepts in-root symlinks")
   {
     auto const temp = ao::test::TempDir{};
     auto const root = temp.path() / "music";
@@ -226,7 +226,7 @@ namespace ao::library::test
     CHECK(*aliasRes == album / "song.flac");
   }
 
-  TEST_CASE("LibraryUri - resolution rejects a symlink escaping the root", "[library][unit][uri]")
+  TEST_CASE("LibraryUri - resolution rejects a symlink escaping the root")
   {
     auto const temp = ao::test::TempDir{};
     auto const root = temp.path() / "music";
@@ -242,7 +242,7 @@ namespace ao::library::test
     CHECK(resolvedRes.error().code == Error::Code::InvalidInput);
   }
 
-  TEST_CASE("LibraryUri - resolution rejects a dangling symlink", "[library][unit][uri]")
+  TEST_CASE("LibraryUri - resolution rejects a dangling symlink")
   {
     auto const temp = ao::test::TempDir{};
     auto const root = temp.path() / "music";
@@ -260,7 +260,7 @@ namespace ao::library::test
     CHECK(resolvedRes.error().message.contains("unresolved symlink"));
   }
 
-  TEST_CASE("LibraryUri - resolution requires an item below the root", "[library][unit][uri]")
+  TEST_CASE("LibraryUri - resolution requires an item below the root")
   {
     auto const temp = ao::test::TempDir{};
     auto const root = temp.path() / "music";

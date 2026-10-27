@@ -22,8 +22,7 @@ namespace ao::library::test
   // bytes, so a non-canonical Track can no longer be offered to the writer. What
   // still has to hold is that such a record never survives being read back: the
   // canonical validators run again over persisted bytes at MusicLibrary::open().
-  TEST_CASE("MusicLibrary - open rejects a non-canonical persisted hot Track record",
-            "[library][unit][track-store][track-integrity]")
+  TEST_CASE("MusicLibrary - open rejects a non-canonical persisted hot Track record")
   {
     auto const temp = ao::test::TempDir{};
     auto const hot = makeHotData(TrackHotHeader{.tagBloom = 1}, "Invalid bloom");
@@ -34,8 +33,7 @@ namespace ao::library::test
       temp.path(), "Track 1 failed persisted validation: Hot Track record tag bloom does not match its tag IDs");
   }
 
-  TEST_CASE("MusicLibrary - open rejects a non-canonical persisted cold Track record",
-            "[library][unit][track-store][track-integrity]")
+  TEST_CASE("MusicLibrary - open rejects a non-canonical persisted cold Track record")
   {
     auto const temp = ao::test::TempDir{};
     auto const cold = makeColdData(TrackColdHeader{.reserved8 = 1});
@@ -46,7 +44,7 @@ namespace ao::library::test
       temp.path(), "Track 1 failed persisted validation: Cold Track record has a non-canonical structural layout");
   }
 
-  TEST_CASE("MusicLibrary - open rejects a non-NFC persisted Track title", "[library][unit][track-store][unicode]")
+  TEST_CASE("MusicLibrary - open rejects a non-NFC persisted Track title")
   {
     auto const temp = ao::test::TempDir{};
     auto const hot = makeHotData({}, "Cafe\u0301");
@@ -56,8 +54,7 @@ namespace ao::library::test
     requireCorruptOpen(temp.path(), "Track 1 failed persisted validation: Track title is not NFC");
   }
 
-  TEST_CASE("TrackStore - prepared updates of an absent Track are non-mutating NotFound",
-            "[library][unit][track-store][track-integrity]")
+  TEST_CASE("TrackStore - prepared updates of an absent Track are non-mutating NotFound")
   {
     auto fixture = TrackStoreFixture{};
     auto const original = makeTrackSpec("Original");
@@ -124,8 +121,7 @@ namespace ao::library::test
     CHECK_FALSE(reader.get(missingId, TrackStore::Reader::LoadMode::Cold));
   }
 
-  TEST_CASE("TrackStore - writer rejects the reserved Track id before probing storage",
-            "[library][unit][track-store][track-integrity]")
+  TEST_CASE("TrackStore - writer rejects the reserved Track id before probing storage")
   {
     auto fixture = TrackStoreFixture{};
     auto transaction = writeTransaction(fixture.library);

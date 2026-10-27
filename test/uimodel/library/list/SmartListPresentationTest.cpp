@@ -33,7 +33,7 @@ namespace ao::uimodel::test
                                                                  "technical"};
   } // namespace
 
-  TEST_CASE("SmartListPresentation - maps known ids after auto option", "[uimodel][unit][list]")
+  TEST_CASE("SmartListPresentation - maps known ids after auto option")
   {
     auto const presets = rt::builtinTrackPresentationPresets();
     REQUIRE(presets.size() == kPresetIds.size());
@@ -54,7 +54,7 @@ namespace ao::uimodel::test
           kSmartListAutoTrackPresentationIndex);
   }
 
-  TEST_CASE("SmartListPresentation - resolves builtin manual selection", "[uimodel][unit][list]")
+  TEST_CASE("SmartListPresentation - resolves builtin manual selection")
   {
     auto const presets = rt::builtinTrackPresentationPresets();
     REQUIRE(presets.size() == kPresetIds.size());
@@ -69,7 +69,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("SmartListPresentation - Auto and invalid selections stay an absent preference", "[uimodel][unit][list]")
+  TEST_CASE("SmartListPresentation - Auto and invalid selections stay an absent preference")
   {
     auto const presets = rt::builtinTrackPresentationPresets();
 
@@ -82,7 +82,7 @@ namespace ao::uimodel::test
     CHECK(resolveSmartListTrackPresentationId(2, true, presets, {}) == presets[1].spec.id);
   }
 
-  TEST_CASE("SmartListPresentation - falls back for out-of-range manual selection", "[uimodel][unit][list]")
+  TEST_CASE("SmartListPresentation - falls back for out-of-range manual selection")
   {
     auto const presets = rt::builtinTrackPresentationPresets();
 
@@ -90,7 +90,7 @@ namespace ao::uimodel::test
           rt::kDefaultTrackPresentationId);
   }
 
-  TEST_CASE("SmartListPresentation - round-trips custom presentations after the builtins", "[uimodel][unit][list]")
+  TEST_CASE("SmartListPresentation - round-trips custom presentations after the builtins")
   {
     auto const presets = rt::builtinTrackPresentationPresets();
     REQUIRE(presets.size() == kPresetIds.size());

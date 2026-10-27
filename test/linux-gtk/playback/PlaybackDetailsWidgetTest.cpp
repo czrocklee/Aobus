@@ -26,7 +26,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("PlaybackDetailsWidget - renders idle stream status", "[gtk][unit][playback]")
+  TEST_CASE("PlaybackDetailsWidget - renders idle stream status")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -48,8 +48,7 @@ namespace ao::gtk::test
     CHECK_FALSE(icons[0]->get_visible());
   }
 
-  TEST_CASE("PlaybackDetailsWidget - preserves active quality when constructed during playback",
-            "[gtk][unit][playback]")
+  TEST_CASE("PlaybackDetailsWidget - preserves active quality when constructed during playback")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

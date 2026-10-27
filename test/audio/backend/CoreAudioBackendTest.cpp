@@ -205,8 +205,7 @@ namespace ao::audio::backend::test
     }
   } // namespace
 
-  TEST_CASE("CoreAudioBackend - caches software volume and mute before native open",
-            "[audio][unit][coreaudio][backend]")
+  TEST_CASE("CoreAudioBackend - caches software volume and mute before native open")
   {
     auto backend = CoreAudioBackend{
       Device{.id = DeviceId{"synthetic-uid"}, .displayName = "Synthetic Output", .backendId = kBackendCoreAudio},
@@ -233,8 +232,7 @@ namespace ao::audio::backend::test
     CHECK(*mutedRes);
   }
 
-  TEST_CASE("CoreAudioBackend - an unrepresentable source is refused as a track incompatibility before native access",
-            "[audio][unit][coreaudio][backend]")
+  TEST_CASE("CoreAudioBackend - an unrepresentable source is refused as a track incompatibility before native access")
   {
     // The UID names no native device, so a regressed guard could only surface
     // a device lookup failure here, never an audio unit.
@@ -266,8 +264,7 @@ namespace ao::audio::backend::test
     }
   }
 
-  TEST_CASE("CoreAudioBackend - zero geometry is refused as invalid input before native access",
-            "[audio][unit][coreaudio][backend]")
+  TEST_CASE("CoreAudioBackend - zero geometry is refused as invalid input before native access")
   {
     // The UID names no native device, so a regressed guard could only surface
     // a device lookup failure here, never an audio unit.
@@ -303,7 +300,7 @@ namespace ao::audio::backend::test
     }
   }
 
-  TEST_CASE("CoreAudioBackend - geometry refusal outranks precision refusal", "[audio][unit][coreaudio][backend]")
+  TEST_CASE("CoreAudioBackend - geometry refusal outranks precision refusal")
   {
     auto backend = CoreAudioBackend{
       Device{.id = DeviceId{"synthetic-uid"}, .displayName = "Synthetic Output", .backendId = kBackendCoreAudio},
@@ -322,8 +319,7 @@ namespace ao::audio::backend::test
     }
   }
 
-  TEST_CASE("CoreAudioBackend - locally unsupported identity is refused before native access and prewarm",
-            "[audio][unit][coreaudio][backend]")
+  TEST_CASE("CoreAudioBackend - locally unsupported identity is refused before native access and prewarm")
   {
     auto backend = CoreAudioBackend{
       Device{.id = DeviceId{"synthetic-uid"}, .displayName = "Synthetic Output", .backendId = kBackendCoreAudio},
@@ -343,8 +339,7 @@ namespace ao::audio::backend::test
     CHECK(openedRes.error().cause == BackendOpenFailure::Cause::TrackRouteIncompatible);
   }
 
-  TEST_CASE("CoreAudioBackend - an identified source reaches ordinary device lookup instead of a blanket layout ban",
-            "[audio][integration][coreaudio][backend]")
+  TEST_CASE("CoreAudioBackend - an identified source reaches ordinary device lookup instead of a blanket layout ban")
   {
     auto backend = CoreAudioBackend{
       Device{.id = DeviceId{"synthetic-uid"}, .displayName = "Synthetic Output", .backendId = kBackendCoreAudio},
@@ -365,8 +360,7 @@ namespace ao::audio::backend::test
     backend.close();
   }
 
-  TEST_CASE("CoreAudioBackend - local refusals retain geometry then precision then identity precedence",
-            "[audio][unit][coreaudio][backend]")
+  TEST_CASE("CoreAudioBackend - local refusals retain geometry then precision then identity precedence")
   {
     auto backend = CoreAudioBackend{
       Device{.id = DeviceId{"synthetic-uid"}, .displayName = "Synthetic Output", .backendId = kBackendCoreAudio},
@@ -417,8 +411,7 @@ namespace ao::audio::backend::test
                                                         : BackendOpenFailure::Cause::TrackRouteIncompatible));
   }
 
-  TEST_CASE("CoreAudioBackend - prewarm predicts the lossless mode without native negotiation",
-            "[audio][unit][coreaudio][backend]")
+  TEST_CASE("CoreAudioBackend - prewarm predicts the lossless mode without native negotiation")
   {
     // prewarmFormatHint is non-blocking and performs no native open or
     // negotiation, so a synthetic device observes only local admission policy.
@@ -438,8 +431,7 @@ namespace ao::audio::backend::test
     }
   }
 
-  TEST_CASE("CoreAudioBackend - prewarm retains identified source eligibility without native negotiation",
-            "[audio][unit][coreaudio][backend]")
+  TEST_CASE("CoreAudioBackend - prewarm retains identified source eligibility without native negotiation")
   {
     auto backend = CoreAudioBackend{
       Device{.id = DeviceId{"synthetic-uid"}, .displayName = "Synthetic Output", .backendId = kBackendCoreAudio},
@@ -468,8 +460,7 @@ namespace ao::audio::backend::test
     }
   }
 
-  TEST_CASE("CoreAudioBackend - native AUHAL open retains canonical identities in the exact lossless client stream",
-            "[audio][integration][coreaudio][backend]")
+  TEST_CASE("CoreAudioBackend - native AUHAL open retains canonical identities in the exact lossless client stream")
   {
     auto const device = requireNativeTestOutput();
     CAPTURE(device.id.raw());
@@ -519,8 +510,7 @@ namespace ao::audio::backend::test
     CHECK_FALSE(backend.queryProperty(PropertyId::Volume).isAvailable);
   }
 
-  TEST_CASE("CoreAudioBackend - native AUHAL open confirms the exact lossless client stream",
-            "[audio][integration][coreaudio][backend]")
+  TEST_CASE("CoreAudioBackend - native AUHAL open confirms the exact lossless client stream")
   {
     auto const device = requireNativeTestOutput();
     CAPTURE(device.id.raw());
@@ -547,8 +537,7 @@ namespace ao::audio::backend::test
     CHECK_FALSE(backend.queryProperty(PropertyId::Volume).isAvailable);
   }
 
-  TEST_CASE("CoreAudioBackend - native AUHAL keeps common high-resolution clients lossless",
-            "[audio][integration][coreaudio][backend]")
+  TEST_CASE("CoreAudioBackend - native AUHAL keeps common high-resolution clients lossless")
   {
     auto const device = requireNativeTestOutput();
     CAPTURE(device.id.raw());
@@ -570,8 +559,7 @@ namespace ao::audio::backend::test
     }
   }
 
-  TEST_CASE("CoreAudioBackend - native drain renders once and completes after the presentation tail",
-            "[audio][integration][coreaudio][backend][concurrency]")
+  TEST_CASE("CoreAudioBackend - native drain renders once and completes after the presentation tail", "[concurrency]")
   {
     auto const device = requireNativeTestOutput();
     CAPTURE(device.id.raw());
@@ -594,7 +582,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("CoreAudioBackend - start after a completed close delivers no callbacks and resurrects no graph",
-            "[audio][integration][coreaudio][backend][concurrency]")
+            "[concurrency]")
   {
     auto const device = requireNativeTestOutput();
     CAPTURE(device.id.raw());
@@ -635,8 +623,7 @@ namespace ao::audio::backend::test
     CHECK(latest == flow::Graph{});
   }
 
-  TEST_CASE("CoreAudioBackend - graph observer may close backend without recursive clear",
-            "[audio][integration][coreaudio][backend]")
+  TEST_CASE("CoreAudioBackend - graph observer may close backend without recursive clear")
   {
     auto const device = requireNativeTestOutput();
     CAPTURE(device.id.raw());
@@ -674,8 +661,7 @@ namespace ao::audio::backend::test
     CHECK(graphCalls == 2U);
   }
 
-  TEST_CASE("CoreAudioBackend - open publication may close the native owner without resurrecting its graph",
-            "[audio][integration][coreaudio][backend]")
+  TEST_CASE("CoreAudioBackend - open publication may close the native owner without resurrecting its graph")
   {
     auto const device = requireNativeTestOutput();
     CAPTURE(device.id.raw());
@@ -713,8 +699,7 @@ namespace ao::audio::backend::test
     CHECK(graphs.size() == 3U);
   }
 
-  TEST_CASE("CoreAudioBackend - a route-ready notification may operate another backend's synthetic route",
-            "[audio][integration][coreaudio][backend]")
+  TEST_CASE("CoreAudioBackend - a route-ready notification may operate another backend's synthetic route")
   {
     auto const device = requireNativeTestOutput();
     CAPTURE(device.id.raw());
@@ -785,8 +770,7 @@ namespace ao::audio::backend::test
     CHECK(latest == flow::Graph{});
   }
 
-  TEST_CASE("CoreAudioBackend - a target defers graph subscription while an observer requests stop",
-            "[audio][integration][coreaudio][backend][concurrency]")
+  TEST_CASE("CoreAudioBackend - a target defers graph subscription while an observer requests stop", "[concurrency]")
   {
     auto const device = requireNativeTestOutput();
     CAPTURE(device.id.raw());
@@ -940,8 +924,7 @@ namespace ao::audio::backend::test
     cleanup.reset();
   }
 
-  TEST_CASE("CoreAudioBackend - property graph publication is handed off before observer-driven close",
-            "[audio][integration][coreaudio][backend][concurrency]")
+  TEST_CASE("CoreAudioBackend - property graph publication is handed off before observer-driven close", "[concurrency]")
   {
     auto const device = requireNativeTestOutput();
     CAPTURE(device.id.raw());
@@ -1010,7 +993,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("CoreAudioBackend - property observer close settles an active open notification before returning",
-            "[audio][integration][coreaudio][backend][concurrency]")
+            "[concurrency]")
   {
     auto const device = requireNativeTestOutput();
     CAPTURE(device.id.raw());
@@ -1122,7 +1105,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("CoreAudioBackend - observer close quiesces rendering restarted by an admitted open notification",
-            "[audio][integration][coreaudio][backend][concurrency]")
+            "[concurrency]")
   {
     auto const device = requireNativeTestOutput();
     CAPTURE(device.id.raw());
@@ -1259,8 +1242,7 @@ namespace ao::audio::backend::test
     CHECK(latest == flow::Graph{});
   }
 
-  TEST_CASE("CoreAudioBackend - observer close quiesces rendering started by a raw graph observer",
-            "[audio][integration][coreaudio][backend][concurrency]")
+  TEST_CASE("CoreAudioBackend - observer close quiesces rendering started by a raw graph observer", "[concurrency]")
   {
     auto const device = requireNativeTestOutput();
     CAPTURE(device.id.raw());
@@ -1383,7 +1365,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("CoreAudioBackend - run-only start and stop inside an open notification keep the same open target",
-            "[audio][integration][coreaudio][backend][concurrency]")
+            "[concurrency]")
   {
     auto const device = requireNativeTestOutput();
     CAPTURE(device.id.raw());
@@ -1497,7 +1479,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("CoreAudioBackend - registry retirement on native publication is synchronous and leaves close inert",
-            "[audio][integration][coreaudio][backend][concurrency]")
+            "[concurrency]")
   {
     auto const device = requireNativeTestOutput();
     CAPTURE(device.id.raw());
@@ -1539,8 +1521,7 @@ namespace ao::audio::backend::test
     sub.reset();
   }
 
-  TEST_CASE("CoreAudioBackend - stop fences a blocked render and cancels its drain",
-            "[audio][integration][coreaudio][backend][concurrency]")
+  TEST_CASE("CoreAudioBackend - stop fences a blocked render and cancels its drain", "[concurrency]")
   {
     auto const device = requireNativeTestOutput();
     CAPTURE(device.id.raw());

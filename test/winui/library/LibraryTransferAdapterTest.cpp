@@ -9,7 +9,7 @@
 
 namespace ao::winui::test
 {
-  TEST_CASE("Library transfer selector - rows map to every runtime policy", "[winui][unit][library-transfer]")
+  TEST_CASE("Library transfer selector - rows map to every runtime policy")
   {
     CHECK(libraryExportModeForSelection(0) == rt::ExportMode::Delta);
     CHECK(libraryExportModeForSelection(1) == rt::ExportMode::Metadata);
@@ -24,8 +24,7 @@ namespace ao::winui::test
     CHECK_FALSE(libraryImportModeForSelection(2));
   }
 
-  TEST_CASE("Library import confirmation - only restore requires destructive confirmation",
-            "[winui][unit][library-transfer]")
+  TEST_CASE("Library import confirmation - only restore requires destructive confirmation")
   {
     CHECK_FALSE(needsLibraryImportDestructiveConfirmation(rt::ImportMode::Merge));
     CHECK(needsLibraryImportDestructiveConfirmation(rt::ImportMode::Restore));

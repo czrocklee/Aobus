@@ -481,9 +481,11 @@ audio, or sanitizer results. Run the opt-in WASAPI endpoint and playback probe
 on a host with an active render endpoint:
 
 ```bat
-ao.bat test --integration "[wasapi][.manual]"
+ao.bat test --integration "WasapiProvider - enumerates and renders through real endpoints"
 ```
 
+The exact case name selects the provider probe only; the hidden WASAPI
+channel-map readback probe has different prerequisites and stays separate.
 The probe skips when there are no active endpoints; inspect the test summary
 rather than treating a skipped run as playback evidence. It checks enumeration,
 frame advancement, and drain completion, not whether a listener heard sound.

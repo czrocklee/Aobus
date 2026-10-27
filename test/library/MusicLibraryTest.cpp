@@ -287,7 +287,7 @@ namespace ao::library::test
     }
   } // namespace
 
-  TEST_CASE("MusicLibrary - initializes metadata header", "[library][unit][music-library]")
+  TEST_CASE("MusicLibrary - initializes metadata header")
   {
     auto const temp = ao::test::TempDir{};
 
@@ -310,8 +310,7 @@ namespace ao::library::test
     CHECK(reopened.metadataHeader().createdTime == firstHeader.createdTime);
   }
 
-  TEST_CASE("MusicLibrary - storageCapacity reports the map it was opened with",
-            "[library][unit][music-library][capacity]")
+  TEST_CASE("MusicLibrary - storageCapacity reports the map it was opened with")
   {
     auto const temp = ao::test::TempDir{};
     auto libraryRes = openTestMusicLibrary(temp.path(), temp.path());
@@ -326,8 +325,7 @@ namespace ao::library::test
     CHECK(capacity.diskBytes > 0);
   }
 
-  TEST_CASE("MusicLibrary - managed capacity opens a fresh library at the 2 GiB floor",
-            "[library][unit][music-library][capacity]")
+  TEST_CASE("MusicLibrary - managed capacity opens a fresh library at the 2 GiB floor")
   {
     auto const temp = ao::test::TempDir{};
 
@@ -338,8 +336,7 @@ namespace ao::library::test
     CHECK(libraryRes->storageCapacity().mapBytes == kManagedMapFloorBytes);
   }
 
-  TEST_CASE("MusicLibrary - managed capacity raises a smaller recorded map to the floor",
-            "[library][unit][music-library][capacity]")
+  TEST_CASE("MusicLibrary - managed capacity raises a smaller recorded map to the floor")
   {
     auto const temp = ao::test::TempDir{};
     auto const databasePath = temp.path() / "smaller-db";
@@ -358,8 +355,7 @@ namespace ao::library::test
     CHECK(libraryRes->storageCapacity().mapBytes == kManagedMapFloorBytes);
   }
 
-  TEST_CASE("MusicLibrary - a pinned map size stays pinned across reopening",
-            "[library][unit][music-library][capacity]")
+  TEST_CASE("MusicLibrary - a pinned map size stays pinned across reopening")
   {
     auto const temp = ao::test::TempDir{};
     auto const databasePath = temp.path() / "pinned-db";
@@ -377,7 +373,7 @@ namespace ao::library::test
     CHECK(libraryRes->storageCapacity().mapBytes == kTestMusicLibraryMapBytes);
   }
 
-  TEST_CASE("MusicLibrary - opens each named database once per library admission", "[library][unit][music-library]")
+  TEST_CASE("MusicLibrary - opens each named database once per library admission")
   {
     auto const temp = ao::test::TempDir{};
 
@@ -390,7 +386,7 @@ namespace ao::library::test
     CHECK(detail::openValidationMetrics().namedDatabaseOpens == 7);
   }
 
-  TEST_CASE("MusicLibrary - admits only the exact current main catalog", "[library][unit][music-library][integrity]")
+  TEST_CASE("MusicLibrary - admits only the exact current main catalog")
   {
     auto const temp = ao::test::TempDir{};
     initializeLibrary(temp.path());
@@ -445,15 +441,14 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("MusicLibrary - does not mistake an ordinary meta row for the metadata database",
-            "[library][unit][music-library][integrity]")
+  TEST_CASE("MusicLibrary - does not mistake an ordinary meta row for the metadata database")
   {
     auto const temp = ao::test::TempDir{};
     addOrdinaryMainCatalogRow(temp.path(), "meta");
     requireCorruptLibrary(temp.path());
   }
 
-  TEST_CASE("MusicLibrary - rejects persisted data without metadata", "[library][unit][music-library][integrity]")
+  TEST_CASE("MusicLibrary - rejects persisted data without metadata")
   {
     auto const temp = ao::test::TempDir{};
     createRawIntegerRow(temp.path(), "dictionary", 1, createStringData("orphaned"));
@@ -461,7 +456,7 @@ namespace ao::library::test
     requireCorruptLibrary(temp.path());
   }
 
-  TEST_CASE("MusicLibrary - rejects non-NFC dictionary rows", "[library][unit][music-library][unicode]")
+  TEST_CASE("MusicLibrary - rejects non-NFC dictionary rows")
   {
     auto const temp = ao::test::TempDir{};
     initializeLibrary(temp.path());
@@ -470,8 +465,7 @@ namespace ao::library::test
     requireCorruptLibrary(temp.path());
   }
 
-  TEST_CASE("MusicLibrary - rejects a database whose pages cannot hold the longest manifest key",
-            "[library][unit][music-library]")
+  TEST_CASE("MusicLibrary - rejects a database whose pages cannot hold the longest manifest key")
   {
     auto const temp = ao::test::TempDir{};
 
@@ -491,7 +485,7 @@ namespace ao::library::test
     CHECK(res.error().message.contains("may take 1976 bytes"));
   }
 
-  TEST_CASE("MusicLibrary - refuses a library version other than the current one", "[library][unit][music-library]")
+  TEST_CASE("MusicLibrary - refuses a library version other than the current one")
   {
     auto const temp = ao::test::TempDir{};
 
@@ -542,8 +536,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("MusicLibrary - future schema is rejected before current exact-shape checks",
-            "[library][unit][music-library][integrity]")
+  TEST_CASE("MusicLibrary - future schema is rejected before current exact-shape checks")
   {
     auto const temp = ao::test::TempDir{};
     auto header = [&]
@@ -568,8 +561,7 @@ namespace ao::library::test
     CHECK(res.error().code == Error::Code::NotSupported);
   }
 
-  TEST_CASE("MusicLibrary - validates the staged metadata header admission rules",
-            "[library][unit][music-library][integrity]")
+  TEST_CASE("MusicLibrary - validates the staged metadata header admission rules")
   {
     auto const temp = ao::test::TempDir{};
     auto header = [&]
@@ -622,8 +614,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("MusicLibrary - a fresh header carries zero reserved bytes and a non-nil id",
-            "[library][unit][music-library][integrity]")
+  TEST_CASE("MusicLibrary - a fresh header carries zero reserved bytes and a non-nil id")
   {
     auto const temp = ao::test::TempDir{};
     initializeLibrary(temp.path());
@@ -637,8 +628,7 @@ namespace ao::library::test
     CHECK_FALSE(isNilLibraryId(header.libraryId));
   }
 
-  TEST_CASE("MusicLibrary - admits only the current metadata record set and revision range",
-            "[library][unit][music-library][revision]")
+  TEST_CASE("MusicLibrary - admits only the current metadata record set and revision range")
   {
     auto const temp = ao::test::TempDir{};
     initializeLibrary(temp.path());
@@ -700,8 +690,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("MusicLibrary - the id space covers every stored Track, List, and saved-order id",
-            "[library][unit][music-library][integrity]")
+  TEST_CASE("MusicLibrary - the id space covers every stored Track, List, and saved-order id")
   {
     auto const temp = ao::test::TempDir{};
     initializeLibrary(temp.path());
@@ -753,7 +742,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("MusicLibrary - maximum valid committed revision opens", "[library][unit][music-library][revision]")
+  TEST_CASE("MusicLibrary - maximum valid committed revision opens")
   {
     auto const temp = ao::test::TempDir{};
     initializeLibrary(temp.path());
@@ -765,7 +754,7 @@ namespace ao::library::test
     CHECK(library.libraryRevision(read) == kMaximumValidRevision);
   }
 
-  TEST_CASE("MusicLibrary - Track and manifest admission work grows linearly", "[library][unit][music-library]")
+  TEST_CASE("MusicLibrary - Track and manifest admission work grows linearly")
   {
     auto const measure = [](std::size_t const trackCount)
     {
@@ -811,7 +800,7 @@ namespace ao::library::test
     CHECK(atTwoN.manifestPointReads == 2U * atN.manifestPointReads);
   }
 
-  TEST_CASE("MusicLibrary - open reports a storage fault as a Result", "[library][unit][music-library]")
+  TEST_CASE("MusicLibrary - open reports a storage fault as a Result")
   {
     // open() is the sole public recoverable constructor. Storage mutations
     // inside it raise TransactionFailure to leave the initialization
@@ -826,8 +815,7 @@ namespace ao::library::test
     CHECK(res.error().code == Error::Code::StorageFull);
   }
 
-  TEST_CASE("MusicLibrary - injected validation read fault remains a recoverable open result",
-            "[library][unit][music-library][integrity]")
+  TEST_CASE("MusicLibrary - injected validation read fault remains a recoverable open result")
   {
     auto const temp = ao::test::TempDir{};
     auto injection = lmdb::detail::ReadFaultInjection{MDB_PANIC};
@@ -840,7 +828,7 @@ namespace ao::library::test
     CHECK(res.error().message.contains("mdb_stat"));
   }
 
-  TEST_CASE("MusicLibrary - rejects invalid persisted dictionary state", "[library][unit][music-library][integrity]")
+  TEST_CASE("MusicLibrary - rejects invalid persisted dictionary state")
   {
     auto const temp = ao::test::TempDir{};
     initializeLibrary(temp.path());
@@ -866,7 +854,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("MusicLibrary - rejects invalid persisted Track state", "[library][unit][music-library][integrity]")
+  TEST_CASE("MusicLibrary - rejects invalid persisted Track state")
   {
     auto const temp = ao::test::TempDir{};
     initializeLibrary(temp.path());
@@ -894,8 +882,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("MusicLibrary - requires a strict Track and manifest bijection",
-            "[library][unit][music-library][integrity]")
+  TEST_CASE("MusicLibrary - requires a strict Track and manifest bijection")
   {
     auto const temp = ao::test::TempDir{};
     initializeLibrary(temp.path());
@@ -945,7 +932,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("MusicLibrary - rejects missing referenced Resources", "[library][unit][music-library][integrity]")
+  TEST_CASE("MusicLibrary - rejects missing referenced Resources")
   {
     auto const temp = ao::test::TempDir{};
     initializeLibrary(temp.path());
@@ -955,7 +942,7 @@ namespace ao::library::test
     requireCorruptLibrary(temp.path());
   }
 
-  TEST_CASE("MusicLibrary - rejects invalid persisted List state", "[library][unit][music-library][integrity]")
+  TEST_CASE("MusicLibrary - rejects invalid persisted List state")
   {
     auto const temp = ao::test::TempDir{};
     initializeLibrary(temp.path());
@@ -1021,7 +1008,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("MusicLibrary - accepts opaque invalid List filter text", "[library][unit][music-library][integrity]")
+  TEST_CASE("MusicLibrary - accepts opaque invalid List filter text")
   {
     auto const temp = ao::test::TempDir{};
     initializeLibrary(temp.path());
@@ -1038,7 +1025,7 @@ namespace ao::library::test
     CHECK(optList->filter() == kInvalidFilter);
   }
 
-  TEST_CASE("MusicLibrary - retains stale saved-order Track ids", "[library][unit][music-library][integrity]")
+  TEST_CASE("MusicLibrary - retains stale saved-order Track ids")
   {
     auto const temp = ao::test::TempDir{};
     initializeLibrary(temp.path());
@@ -1057,8 +1044,7 @@ namespace ao::library::test
     CHECK(optList->orderTrackIds()[0] == TrackId{999});
   }
 
-  TEST_CASE("MusicLibrary - rejects malformed or unreachable Resource descriptors",
-            "[library][unit][music-library][integrity]")
+  TEST_CASE("MusicLibrary - rejects malformed or unreachable Resource descriptors")
   {
     auto const temp = ao::test::TempDir{};
     initializeLibrary(temp.path());
@@ -1117,7 +1103,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("MusicLibrary - accepts reachable Resource collision clusters", "[library][unit][music-library][integrity]")
+  TEST_CASE("MusicLibrary - accepts reachable Resource collision clusters")
   {
     auto const temp = ao::test::TempDir{};
     initializeLibrary(temp.path());
@@ -1153,8 +1139,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("MusicLibrary - accepts orphan Dictionary and unreferenced Resource rows",
-            "[library][unit][music-library][integrity]")
+  TEST_CASE("MusicLibrary - accepts orphan Dictionary and unreferenced Resource rows")
   {
     auto const temp = ao::test::TempDir{};
     initializeLibrary(temp.path());
@@ -1173,7 +1158,7 @@ namespace ao::library::test
     CHECK(deriveResourceId(optResource->digest) == ResourceId{1});
   }
 
-  TEST_CASE("MusicLibrary - rejects invalid persisted manifest state", "[library][unit][music-library][integrity]")
+  TEST_CASE("MusicLibrary - rejects invalid persisted manifest state")
   {
     auto const temp = ao::test::TempDir{};
     initializeLibrary(temp.path());
@@ -1219,7 +1204,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("MusicLibrary - accessors return valid references", "[library][unit][music-library]")
+  TEST_CASE("MusicLibrary - accessors return valid references")
   {
     auto const temp = ao::test::TempDir{};
     auto const ml = makeTestMusicLibrary(temp.path(), temp.path());
@@ -1240,8 +1225,7 @@ namespace ao::library::test
     STATIC_REQUIRE(std::is_same_v<decltype(std::declval<MusicLibrary&>().metadataHeader()), MetadataHeader>);
   }
 
-  TEST_CASE("WritableMusicLibrary - excludes another writer session until release",
-            "[library][unit][music-library][concurrency]")
+  TEST_CASE("WritableMusicLibrary - excludes another writer session until release", "[concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -1262,8 +1246,7 @@ namespace ao::library::test
     REQUIRE(releasedWriterRes);
   }
 
-  TEST_CASE("WritableMusicLibrary - excludes a writer session in another process",
-            "[library][integration][music-library][concurrency]")
+  TEST_CASE("WritableMusicLibrary - excludes a writer session in another process", "[concurrency]")
   {
     constexpr auto kTimeout = std::chrono::seconds{15};
     auto const temp = ao::test::TempDir{};
@@ -1280,8 +1263,7 @@ namespace ao::library::test
     CHECK(result.standardError.empty());
   }
 
-  TEST_CASE("MusicLibrary - an exclusive open lock refuses opening until it is released",
-            "[library][unit][music-library][concurrency]")
+  TEST_CASE("MusicLibrary - an exclusive open lock refuses opening until it is released", "[concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const databasePath = temp.path() / "db";
@@ -1305,8 +1287,7 @@ namespace ao::library::test
     CHECK(openTestMusicLibrary(temp.path(), databasePath));
   }
 
-  TEST_CASE("MusicLibrary - an open library shares its open lock and refuses an exclusive holder",
-            "[library][unit][music-library][concurrency]")
+  TEST_CASE("MusicLibrary - an open library shares its open lock and refuses an exclusive holder", "[concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const openLockPath = temp.path() / "db" / ".aobus-open.lock";
@@ -1345,8 +1326,7 @@ namespace ao::library::test
   }
 
 #ifdef _WIN32
-  TEST_CASE("MusicLibrary - Windows refuses to remove the lock files of an open library",
-            "[library][unit][music-library][concurrency]")
+  TEST_CASE("MusicLibrary - Windows refuses to remove the lock files of an open library", "[concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const databasePath = temp.path() / "db";
@@ -1364,7 +1344,7 @@ namespace ao::library::test
   }
 #endif
 
-  TEST_CASE("MusicLibrary - a refused open releases its open lock", "[library][unit][music-library][concurrency]")
+  TEST_CASE("MusicLibrary - a refused open releases its open lock", "[concurrency]")
   {
     auto const temp = ao::test::TempDir{};
 
@@ -1393,8 +1373,7 @@ namespace ao::library::test
     CHECK(detail::LockFile::acquire(temp.path() / ".aobus-open.lock", detail::LockFile::Mode::Exclusive));
   }
 
-  TEST_CASE("MusicLibrary - an exclusive open lock refuses opening in another process",
-            "[library][integration][music-library][concurrency]")
+  TEST_CASE("MusicLibrary - an exclusive open lock refuses opening in another process", "[concurrency]")
   {
     constexpr auto kTimeout = std::chrono::seconds{15};
     auto const temp = ao::test::TempDir{};
@@ -1412,7 +1391,7 @@ namespace ao::library::test
     CHECK(result.standardError.empty());
   }
 
-  TEST_CASE("WritableMusicLibrary - active transaction retains the writer session", "[library][unit][music-library]")
+  TEST_CASE("WritableMusicLibrary - active transaction retains the writer session")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -1433,8 +1412,7 @@ namespace ao::library::test
     REQUIRE(committedTransactionWriterRes);
   }
 
-  TEST_CASE("WritableMusicLibrary - terminal transaction paths release the retained writer session",
-            "[library][unit][music-library]")
+  TEST_CASE("WritableMusicLibrary - terminal transaction paths release the retained writer session")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -1483,8 +1461,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("WritableMusicLibrary - storage mutation failure releases the writer session",
-            "[library][unit][music-library]")
+  TEST_CASE("WritableMusicLibrary - storage mutation failure releases the writer session")
   {
     auto const temp = ao::test::TempDir{};
     constexpr std::size_t kMapSize = std::size_t{256} * 1024;

@@ -21,8 +21,7 @@ namespace ao::uimodel::test
     }
   } // namespace
 
-  TEST_CASE("planLayoutPlacement - an absent expansion field is not an authored false",
-            "[uimodel][unit][layout][placement]")
+  TEST_CASE("planLayoutPlacement - an absent expansion field is not an authored false")
   {
     // GTK derives a widget's expansion from its children until something states
     // it, so the two cases are different instructions and cannot collapse.
@@ -40,8 +39,7 @@ namespace ao::uimodel::test
     CHECK(*authored.optVerticalExpand);
   }
 
-  TEST_CASE("planLayoutPlacement - the authored alignment vocabulary is the document's",
-            "[uimodel][unit][layout][placement]")
+  TEST_CASE("planLayoutPlacement - the authored alignment vocabulary is the document's")
   {
     CHECK(layoutAlignmentFromString("fill") == LayoutAlignment::Fill);
     CHECK(layoutAlignmentFromString("start") == LayoutAlignment::Start);
@@ -60,7 +58,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(placement.optVerticalAlignment);
   }
 
-  TEST_CASE("planLayoutPlacement - a negative size request asks for no minimum", "[uimodel][unit][layout][placement]")
+  TEST_CASE("planLayoutPlacement - a negative size request asks for no minimum")
   {
     auto const placement = planLayoutPlacement(nodeWithLayout(
       {{"widthRequest", LayoutValue{std::int64_t{240}}}, {"heightRequest", LayoutValue{std::int64_t{-1}}}}));
@@ -75,7 +73,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(absent.heightRequestAuthored);
   }
 
-  TEST_CASE("planLayoutPlacement - authored visibility remains distinct", "[uimodel][unit][layout][placement]")
+  TEST_CASE("planLayoutPlacement - authored visibility remains distinct")
   {
     auto const shown = planLayoutPlacement(nodeWithLayout({{"visible", LayoutValue{true}}}));
     CHECK(shown.optAuthoredVisible == true);
@@ -84,8 +82,7 @@ namespace ao::uimodel::test
     CHECK(hidden.optAuthoredVisible == false);
   }
 
-  TEST_CASE("planLayoutPlacement - saying nothing about visibility is not saying visible",
-            "[uimodel][unit][layout][placement]")
+  TEST_CASE("planLayoutPlacement - saying nothing about visibility is not saying visible")
   {
     // A component that hides itself because it has nothing to show must survive
     // having its common props applied. Collapsing the two states into `true`
@@ -94,8 +91,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(unauthored.optAuthoredVisible);
   }
 
-  TEST_CASE("isCommonLayoutProp - names exactly the version 1 fields every frontend interprets",
-            "[uimodel][unit][layout][placement]")
+  TEST_CASE("isCommonLayoutProp - names exactly the version 1 fields every frontend interprets")
   {
     for (auto const* const name :
          {"hexpand", "vexpand", "halign", "valign", "widthRequest", "heightRequest", "visible"})

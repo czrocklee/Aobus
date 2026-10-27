@@ -11,13 +11,13 @@
 
 namespace ao::library::test
 {
-  TEST_CASE("TrackHotHeader - has stable size and alignment", "[library][unit][track]")
+  TEST_CASE("TrackHotHeader - has stable size and alignment")
   {
     CHECK(sizeof(TrackHotHeader) == 36);
     CHECK(alignof(TrackHotHeader) == 4);
   }
 
-  TEST_CASE("TrackHotHeader - stores fields at stable offsets", "[library][unit][track]")
+  TEST_CASE("TrackHotHeader - stores fields at stable offsets")
   {
     // Check 4-byte section
     CHECK(offsetof(TrackHotHeader, tagBloom) == 0);
@@ -38,13 +38,13 @@ namespace ao::library::test
     CHECK(offsetof(TrackHotHeader, codec) == 35);
   }
 
-  TEST_CASE("TrackColdHeader - has stable size and alignment", "[library][unit][track]")
+  TEST_CASE("TrackColdHeader - has stable size and alignment")
   {
     CHECK(sizeof(TrackColdHeader) == 32);
     CHECK(alignof(TrackColdHeader) == 4);
   }
 
-  TEST_CASE("TrackColdHeader - stores fields at stable offsets", "[library][unit][track]")
+  TEST_CASE("TrackColdHeader - stores fields at stable offsets")
   {
     // 4-byte section
     CHECK(offsetof(TrackColdHeader, duration) == 0);
@@ -64,7 +64,7 @@ namespace ao::library::test
     CHECK(offsetof(TrackColdHeader, reserved8) == 31);
   }
 
-  TEST_CASE("TrackCold extension blocks - have stable size and alignment", "[library][unit][track]")
+  TEST_CASE("TrackCold extension blocks - have stable size and alignment")
   {
     CHECK(kTrackColdKnownBlockSlotCount == 5);
     CHECK(kTrackColdBlockSlotCount == 5);

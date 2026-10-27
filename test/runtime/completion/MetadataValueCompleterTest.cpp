@@ -34,7 +34,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("MetadataValueCompleter - completes supported field values", "[runtime][unit][completion-value]")
+  TEST_CASE("MetadataValueCompleter - completes supported field values")
   {
     auto libraryFixture = MusicLibraryFixture{};
     addMetadataValueTrack(libraryFixture, "Massive Attack", "Mezzanine");
@@ -55,8 +55,7 @@ namespace ao::rt::test
     CHECK(insertTexts(albumCompleter.complete("pro")) == std::vector<std::string>{"Protection"});
   }
 
-  TEST_CASE("MetadataValueCompleter - rejects unsupported fields and limits results",
-            "[runtime][unit][completion-value]")
+  TEST_CASE("MetadataValueCompleter - rejects unsupported fields and limits results")
   {
     auto libraryFixture = MusicLibraryFixture{};
     addMetadataValueTrack(libraryFixture, "Artist A", "Album A");
@@ -73,8 +72,7 @@ namespace ao::rt::test
     CHECK(artistCompleter.complete("artist", 0).empty());
   }
 
-  TEST_CASE("MetadataValueCompleter - whole-value prefixes outrank interior word prefixes",
-            "[runtime][unit][completion-value][ranking]")
+  TEST_CASE("MetadataValueCompleter - whole-value prefixes outrank interior word prefixes")
   {
     auto libraryFixture = MusicLibraryFixture{};
     addMetadataValueTrack(libraryFixture, "Trevor Pinnock", "One");
@@ -91,8 +89,7 @@ namespace ao::rt::test
     CHECK(completer.complete("pinnok").empty());
   }
 
-  TEST_CASE("MetadataValueCompleter - adapts entry text to whole-value replacement",
-            "[runtime][unit][completion-value][provider]")
+  TEST_CASE("MetadataValueCompleter - adapts entry text to whole-value replacement")
   {
     auto libraryFixture = MusicLibraryFixture{};
     addMetadataValueTrack(libraryFixture, "Massive Attack", "Mezzanine");
@@ -122,8 +119,7 @@ namespace ao::rt::test
     CHECK_FALSE(unsupportedProvider("Metadata", 3));
   }
 
-  TEST_CASE("MetadataValueCompleter - alias matches preserve source text and rank below direct matches",
-            "[runtime][unit][completion-value][completion-alias]")
+  TEST_CASE("MetadataValueCompleter - alias matches preserve source text and rank below direct matches")
   {
     auto libraryFixture = MusicLibraryFixture{};
     addMetadataValueTrack(libraryFixture, "周杰倫", "One");

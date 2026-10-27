@@ -183,14 +183,14 @@ namespace ao::library::test
     }
   } // namespace
 
-  TEST_CASE("TrackView - validates hot buffers", "[library][unit][track][validation]")
+  TEST_CASE("TrackView - validates hot buffers")
   {
     auto const data = makeMinimalHotTrackViewData();
     auto const view = TrackView{data, std::span<std::byte const>{}};
     CHECK(view.isHotValid() == true);
   }
 
-  TEST_CASE("TrackView - validation rejects duplicate persisted tag IDs", "[library][unit][track][validation]")
+  TEST_CASE("TrackView - validation rejects duplicate persisted tag IDs")
   {
     auto const tagIds = std::array{DictionaryId{7}, DictionaryId{7}};
     auto const data = makeHotRecord(tagIds);
@@ -203,22 +203,21 @@ namespace ao::library::test
     CHECK(res.error().message.contains("duplicate tag ID"));
   }
 
-  TEST_CASE("TrackView - rejects null hot data", "[library][unit][track][validation]")
+  TEST_CASE("TrackView - rejects null hot data")
   {
     auto const nullSpan = std::span<std::byte const>{static_cast<std::byte const*>(nullptr), 100};
     auto const nullView = TrackView{nullSpan, std::span<std::byte const>{}};
     CHECK(nullView.isHotValid() == false);
   }
 
-  TEST_CASE("TrackView - rejects undersized hot data", "[library][unit][track][validation]")
+  TEST_CASE("TrackView - rejects undersized hot data")
   {
     auto const smallData = std::array<char, 10>{};
     auto const smallView = TrackView{utility::bytes::view(smallData), std::span<std::byte const>{}};
     CHECK(smallView.isHotValid() == false);
   }
 
-  TEST_CASE("TrackView hot gate - poisons records whose extents overrun the record",
-            "[library][unit][track][validation]")
+  TEST_CASE("TrackView hot gate - poisons records whose extents overrun the record")
   {
     SECTION("title length overruns the record")
     {
@@ -255,14 +254,14 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("TrackView - validates cold buffers", "[library][unit][track][validation]")
+  TEST_CASE("TrackView - validates cold buffers")
   {
     auto const data = makeColdTrackViewData();
     auto const view = TrackView{std::span<std::byte const>{}, data};
     CHECK(view.isColdValid() == true);
   }
 
-  TEST_CASE("TrackView - loaded tiers are independent accessor contracts", "[library][unit][track][validation]")
+  TEST_CASE("TrackView - loaded tiers are independent accessor contracts")
   {
     auto const hotData = makeHotTrackViewData("Hot only");
     auto const hotView = TrackView{hotData, std::span<std::byte const>{}};
@@ -282,21 +281,21 @@ namespace ao::library::test
     CHECK(coldView.customMetadata().count() == 0);
   }
 
-  TEST_CASE("TrackView - rejects null cold data", "[library][unit][track][validation]")
+  TEST_CASE("TrackView - rejects null cold data")
   {
     auto const nullSpan = std::span<std::byte const>{static_cast<std::byte const*>(nullptr), 100};
     auto const nullView = TrackView{std::span<std::byte const>{}, nullSpan};
     CHECK(nullView.isColdValid() == false);
   }
 
-  TEST_CASE("TrackView - rejects undersized cold data", "[library][unit][track][validation]")
+  TEST_CASE("TrackView - rejects undersized cold data")
   {
     auto const smallData = std::array<char, 10>{};
     auto const smallView = TrackView{std::span<std::byte const>{}, utility::bytes::view(smallData)};
     CHECK(smallView.isColdValid() == false);
   }
 
-  TEST_CASE("TrackColdReader - validates extension block records", "[library][unit][track][validation]")
+  TEST_CASE("TrackColdReader - validates extension block records")
   {
     auto const data = makeColdRecord({RawColdBlock{.payload = makeClassicalPayload()}});
     auto const reader = detail::TrackColdReader{data};
@@ -305,8 +304,7 @@ namespace ao::library::test
     CHECK(reader.work().movementNumber() == 3);
   }
 
-  TEST_CASE("TrackView - block-backed proxies are stable across repeated access and copies",
-            "[library][unit][track][validation]")
+  TEST_CASE("TrackView - block-backed proxies are stable across repeated access and copies")
   {
     auto const data = makeColdRecord({RawColdBlock{.slot = TrackColdBlockSlot::CoverArt, .payload = makeCoverPayload()},
                                       RawColdBlock{.payload = makeClassicalPayload()}});
@@ -323,7 +321,7 @@ namespace ao::library::test
     CHECK(copy.coverArt().primary()->type == PictureType::FrontCover);
   }
 
-  TEST_CASE("TrackView cold gate - poisons structurally unsafe records", "[library][unit][track][validation]")
+  TEST_CASE("TrackView cold gate - poisons structurally unsafe records")
   {
     SECTION("too short for header")
     {
@@ -450,7 +448,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("TrackView cold gate - tolerates semantic corruption within bounds", "[library][unit][track][validation]")
+  TEST_CASE("TrackView cold gate - tolerates semantic corruption within bounds")
   {
     SECTION("exact twelve-byte all-zero work block is present but noncanonical")
     {
@@ -632,7 +630,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("TrackColdReader - rejects malformed extension block records", "[library][unit][track][validation]")
+  TEST_CASE("TrackColdReader - rejects malformed extension block records")
   {
     SECTION("first present slot leaves a post-header gap")
     {

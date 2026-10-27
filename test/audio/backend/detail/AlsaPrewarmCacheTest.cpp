@@ -40,8 +40,7 @@ namespace ao::audio::backend::detail::test
     }
   } // namespace
 
-  TEST_CASE("AlsaPrewarmCache - speaker-mask-distinct signals keep their client formats separately",
-            "[audio][unit][alsa-prewarm]")
+  TEST_CASE("AlsaPrewarmCache - speaker-mask-distinct signals keep their client formats separately")
   {
     auto cache = AlsaPrewarmCache{};
 
@@ -80,8 +79,7 @@ namespace ao::audio::backend::detail::test
           }) == std::size_t{16});
   }
 
-  TEST_CASE("AlsaPrewarmCache - an unrecorded zero mask does not match identified layouts",
-            "[audio][unit][alsa-prewarm]")
+  TEST_CASE("AlsaPrewarmCache - an unrecorded zero mask does not match identified layouts")
   {
     auto cache = AlsaPrewarmCache{};
     CHECK_FALSE(cache.find(quadSource(0)).has_value());
@@ -119,7 +117,7 @@ namespace ao::audio::backend::detail::test
     CHECK(optBackPair->speakerMask == kQuadBackPairMask);
   }
 
-  TEST_CASE("AlsaPrewarmCache - overwriting one signal leaves the other entry intact", "[audio][unit][alsa-prewarm]")
+  TEST_CASE("AlsaPrewarmCache - overwriting one signal leaves the other entry intact")
   {
     auto cache = AlsaPrewarmCache{};
 
@@ -155,7 +153,7 @@ namespace ao::audio::backend::detail::test
     CHECK(*optCenterBack == centerBackClient);
   }
 
-  TEST_CASE("AlsaPrewarmCache - clear empties every stored entry", "[audio][unit][alsa-prewarm]")
+  TEST_CASE("AlsaPrewarmCache - clear empties every stored entry")
   {
     auto cache = AlsaPrewarmCache{};
     cache.store(quadSource(kQuadBackPairMask),

@@ -27,8 +27,7 @@ namespace ao::rt::test
   using library::test::TrackSpec;
   using library::test::updateTrackSpec;
 
-  TEST_CASE("ScanApplyOperation - new scans import explicit work ahead of conflicting grouping",
-            "[runtime][integration][library-scan]")
+  TEST_CASE("ScanApplyOperation - new scans import explicit work ahead of conflicting grouping")
   {
     auto comments = std::vector<std::string>{};
     auto expectedWork = std::string{};
@@ -64,8 +63,7 @@ namespace ao::rt::test
     CHECK(spec.work == expectedWork);
   }
 
-  TEST_CASE("ScanApplyOperation - malformed explicit work is rejected instead of falling back to grouping",
-            "[runtime][integration][library-scan][unicode]")
+  TEST_CASE("ScanApplyOperation - malformed explicit work is rejected instead of falling back to grouping")
   {
     auto comments = std::vector<std::string>{"TITLE=Scan Title"};
     auto const malformedWork = std::string{"WORK="} + std::string{"\xC3\x28", 2};
@@ -102,8 +100,7 @@ namespace ao::rt::test
     CHECK(ml.dictionary().size() == 0);
   }
 
-  TEST_CASE("ScanApplyOperation - changed-file scans keep the grouping-derived work of an existing track",
-            "[runtime][integration][library-scan]")
+  TEST_CASE("ScanApplyOperation - changed-file scans keep the grouping-derived work of an existing track")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -154,8 +151,7 @@ namespace ao::rt::test
     CHECK(newSpec.title == "Retagged Title");
   }
 
-  TEST_CASE("ScanApplyOperation - changed-file scans keep curated work and credits over file tags",
-            "[runtime][integration][library-scan]")
+  TEST_CASE("ScanApplyOperation - changed-file scans keep curated work and credits over file tags")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";

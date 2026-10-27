@@ -130,7 +130,7 @@ namespace ao::media::file::test
     }
   } // namespace
 
-  TEST_CASE("Media File - basic fixture exposes metadata", "[media][integration][metadata]")
+  TEST_CASE("Media File - basic fixture exposes metadata")
   {
     auto const* const format = GENERATE("flac", "m4a", "mp3", "wav", "opus");
     auto const path = kTestDataDir / ("basic_metadata." + std::string{format});
@@ -157,7 +157,7 @@ namespace ao::media::file::test
   // ============================================================================
   // Media file tests - high-resolution metadata
   // ============================================================================
-  TEST_CASE("Media File - hires fixture exposes metadata", "[media][integration][metadata]")
+  TEST_CASE("Media File - hires fixture exposes metadata")
   {
     auto const* const format = GENERATE("flac", "m4a", "mp3", "wav");
     auto const path = kTestDataDir / ("hires." + std::string{format});
@@ -181,7 +181,7 @@ namespace ao::media::file::test
     }
   }
 
-  TEST_CASE("Media File - classical fixture exposes metadata", "[media][integration][metadata][classical]")
+  TEST_CASE("Media File - classical fixture exposes metadata")
   {
     auto const* const format = GENERATE("flac", "m4a", "mp3", "opus");
     CAPTURE(format);
@@ -210,8 +210,7 @@ namespace ao::media::file::test
     CHECK(metadata.year() == 2026);
   }
 
-  TEST_CASE("Media File - classical fallback fixture maps orchestra fields",
-            "[media][integration][metadata][classical]")
+  TEST_CASE("Media File - classical fallback fixture maps orchestra fields")
   {
     auto const* const format = GENERATE("flac", "m4a", "mp3", "opus");
     CAPTURE(format);
@@ -247,7 +246,7 @@ namespace ao::media::file::test
   // ============================================================================
   // Media file tests - audio properties
   // ============================================================================
-  TEST_CASE("Media File - basic fixture exposes audio properties", "[media][integration][property]")
+  TEST_CASE("Media File - basic fixture exposes audio properties")
   {
     auto const* const format = GENERATE("flac", "m4a", "mp3", "wav");
     auto const path = kTestDataDir / ("basic_metadata." + std::string{format});
@@ -273,7 +272,7 @@ namespace ao::media::file::test
     CHECK(prop.bitrate() >= 56000);
   }
 
-  TEST_CASE("Media File - hires fixture exposes audio properties", "[media][integration][property]")
+  TEST_CASE("Media File - hires fixture exposes audio properties")
   {
     auto const* const format = GENERATE("flac", "m4a", "mp3", "wav");
     auto const path = kTestDataDir / ("hires." + std::string{format});
@@ -327,7 +326,7 @@ namespace ao::media::file::test
   // ============================================================================
   // Cover Art Extraction Tests
   // ============================================================================
-  TEST_CASE("Media File - cover art fixture exposes primary artwork", "[media][integration][cover-art]")
+  TEST_CASE("Media File - cover art fixture exposes primary artwork")
   {
     auto const* const format = GENERATE("flac", "m4a", "mp3", "opus");
     auto const path = kTestDataDir / ("with_cover." + std::string{format});
@@ -381,7 +380,7 @@ namespace ao::media::file::test
     CHECK(library::deriveResourceId(optDescriptor->digest) == cover.resourceId);
   }
 
-  TEST_CASE("Media File - opus fixture exposes decoded audio properties", "[media][integration][property]")
+  TEST_CASE("Media File - opus fixture exposes decoded audio properties")
   {
     auto const* const fixture = GENERATE("basic_metadata.opus", "mono.opus");
     CAPTURE(fixture);
@@ -402,7 +401,7 @@ namespace ao::media::file::test
   // ============================================================================
   // Empty/Missing Metadata Tests
   // ============================================================================
-  TEST_CASE("Media File - empty fixture exposes empty metadata", "[media][integration][metadata]")
+  TEST_CASE("Media File - empty fixture exposes empty metadata")
   {
     auto const* const format = GENERATE("flac", "m4a", "mp3", "wav", "opus");
     auto const path = kTestDataDir / ("empty." + std::string{format});
@@ -428,8 +427,7 @@ namespace ao::media::file::test
     CHECK_FALSE(metadata.recordingDate().isPresent());
   }
 
-  TEST_CASE("Media File - all credit kinds map explicitly and owning copies prepare in canonical library order",
-            "[media][integration][metadata]")
+  TEST_CASE("Media File - all credit kinds map explicitly and owning copies prepare in canonical library order")
   {
     auto const source = []
     {

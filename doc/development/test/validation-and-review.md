@@ -15,25 +15,31 @@ When creating a new test file:
 6. Keep file-scope helpers local unless multiple files need them.
 7. Do not create duplicate helper types and hide the conflict in a nested namespace; reuse or extend the existing helper instead.
 
-That helper takes only `*Test.cpp` and `*Test.mm` files; a disabled declaration
-needs a one-line reason. Support files such as `*TestSupport.cpp` use ordinary
+That helper takes `*Test.cpp` and `*Test.mm` files, plus `*Benchmark.cpp` for
+benchmark declarations; a disabled declaration needs a one-line reason. Support files such as `*TestSupport.cpp` use ordinary
 `target_sources`. CMake configuration fails on any unregistered or doubly owned
 test source, even for an app-only target, unless `AOBUS_BUILD_TESTS=OFF`; keep
 throwaway tests outside the checkout. The resulting `aobus-test-sources.tsv`
-in the build tree records configuration, not execution. When moving tests
-between binaries, compare runtime test lists on each affected platform.
+in the build tree records configuration, not execution. Registrations live only
+in `*Test.cpp`/`*Test.mm` files (`*Benchmark.cpp` for benchmark cases);
+[naming and assertions](naming-and-assertion.md#tags) owns the discovery and
+placement contract. Standalone `test-audit` and hygiene's source audit do not
+require a build tree or check configured ownership. After a successful build,
+`./ao check` reconciles whole-project discovery with that build's fresh manifest
+to check ownership completeness. When moving tests between binaries, compare
+runtime test lists on each affected platform.
 
 ## Regression tests
 
 Protect a real bug with a test named for the behavior, placed with related cases
 (see [fixtures and helpers](fixture-and-helper.md#before-adding-or-restructuring-tests)).
-Keep its unit/integration scope and add no marker tag. Add a short comment
+Keep it beside related cases and add no marker tag. Add a short comment
 when the assertion guards a non-obvious lifecycle or layout invariant.
 
 ## Reviewing existing tests
 
 A review of test quality or tags reads each complete case, every `SECTION`, and
-the helpers needed to explain its assertions. Names, tags, and keyword searches
+the helpers needed to explain its assertions. Names and keyword searches
 are triage only. Judge scope and `[concurrency]` from the asserted contract, not
 from the fixture's threads or binary. For an exhaustive review, keep a per-case
 record of reviewed and pending cases outside the repository and report gaps; a
@@ -73,7 +79,7 @@ combine routes when a change spans several rows.
 | Python portal or automation scripts | `./ao test --tooling` on Linux, `ao.bat test --tooling` on Windows for affected Windows behavior, and scoped `hygiene`. Exercise changed shell/bootstrap/process boundaries on their native hosts. macOS has no tooling suite; use native portal probes and scoped hygiene there. |
 | C++ implementation, headers, or tests | One full native `check`, then scoped `hygiene`. Add affected native hosts when their implementation, toolchain, or frontend is involved. |
 | Build configuration, dependencies, native test orchestration, or CI | Tooling checks plus the affected native build/test matrix. Include Release or sanitizers when the changed configuration or behavior requires them. |
-| Catalog-only wording in an existing maintained locale | Build affected frontends to regenerate catalogs, run `./ao test --core "[catalog]"` and any affected message-specific tests identified by the [text-catalog reference](../../system/presentation/text-catalog.md#compatibility-and-test-authority), and inspect the changed UI at normal and constrained widths. Native Windows UI evidence is needed when WinUI consumes the changed text; unchanged projection rules do not independently require the full Windows parity gate. |
+| Catalog-only wording in an existing maintained locale | Build affected frontends to regenerate catalogs, run the core suite (`./ao test --core`) and any affected message-specific tests identified by the [text-catalog reference](../../system/presentation/text-catalog.md#compatibility-and-test-authority), and inspect the changed UI at normal and constrained widths. Native Windows UI evidence is needed when WinUI consumes the changed text; unchanged projection rules do not independently require the full Windows parity gate. |
 | UI, localization, or audio behavior | The applicable implementation route plus focused visual, catalog, or audible evidence for the changed user-facing behavior. New locales or changes to locale selection, signatures, or WinUI projection rules include native Windows parity validation. |
 
 Alongside the selected completion route, use [design review](../design-review.md) for structural acceptance and refactor evidence when work changes ownership or a public boundary, introduces an abstraction, or structurally refactors a subsystem.
@@ -206,7 +212,7 @@ Before finishing, confirm:
 
 - The test lives at the lowest layer that proves the behavior.
 - The name explains behavior and condition.
-- Tags start with layer, one unit/integration scope, and component.
+- Cases carry no tag except a retained `[concurrency]` or `[.manual]` marker.
 - The test asserts observable outcomes, not implementation details.
 - Mutations have postconditions.
 - Async/GTK behavior is deterministic.

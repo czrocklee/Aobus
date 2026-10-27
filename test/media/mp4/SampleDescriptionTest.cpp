@@ -44,7 +44,7 @@ namespace ao::media::mp4::test
     }
   } // namespace
 
-  TEST_CASE("MP4 SampleDescription - reads audio sample entry type", "[media][unit][mp4]")
+  TEST_CASE("MP4 SampleDescription - reads audio sample entry type")
   {
     SECTION("Returns ALAC sample entry type")
     {

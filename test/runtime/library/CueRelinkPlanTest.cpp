@@ -68,8 +68,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("CUE relink plan - rejects known carrier facts for rejected and ambiguous destinations",
-            "[runtime][integration][cue-relink-plan]")
+  TEST_CASE("CUE relink plan - rejects known carrier facts for rejected and ambiguous destinations")
   {
     auto fixture = MusicLibraryFixture{};
     auto& library = fixture.library();
@@ -132,8 +131,7 @@ namespace ao::rt::test
           imported.insertedIds);
   }
 
-  TEST_CASE("CUE relink plan - compatible explicit moves classify the selected stored form",
-            "[runtime][integration][cue-relink-plan]")
+  TEST_CASE("CUE relink plan - compatible explicit moves classify the selected stored form")
   {
     auto fixture = MusicLibraryFixture{};
     auto& library = fixture.library();
@@ -267,8 +265,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("CUE relink plan - Error admission requires a typed binding failure and observed carrier facts",
-            "[runtime][unit][cue-relink-plan]")
+  TEST_CASE("CUE relink plan - Error admission requires a typed binding failure and observed carrier facts")
   {
     auto source = ScanItem{.uri = "old.wav",
                            .classification = ScanClassification::Missing,
@@ -317,8 +314,7 @@ namespace ao::rt::test
     CHECK(canRelinkItems(source, destination));
   }
 
-  TEST_CASE("CUE relink plan - unsupported external binding does not prevent a valid whole-file move",
-            "[runtime][integration][cue-relink-plan]")
+  TEST_CASE("CUE relink plan - unsupported external binding does not prevent a valid whole-file move")
   {
     auto fixture = MusicLibraryFixture{};
     auto& library = fixture.library();

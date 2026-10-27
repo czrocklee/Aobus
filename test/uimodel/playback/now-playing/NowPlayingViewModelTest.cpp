@@ -182,7 +182,7 @@ namespace ao::uimodel::test
     }
   } // namespace
 
-  TEST_CASE("NowPlayingViewModel - projects idle and track metadata", "[uimodel][unit][playback]")
+  TEST_CASE("NowPlayingViewModel - projects idle and track metadata")
   {
     auto fixture = ApplicationPlaybackFixture{};
     auto& playback = fixture.playback;
@@ -236,7 +236,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("NowPlayingViewModel - fieldText exposes supported metadata fields", "[uimodel][unit][playback]")
+  TEST_CASE("NowPlayingViewModel - fieldText exposes supported metadata fields")
   {
     auto fixture = ApplicationPlaybackFixture{};
     auto& playbackTransport = fixture.playbackTransport;
@@ -268,7 +268,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("NowPlayingViewModel - resolves field actions", "[uimodel][unit][playback]")
+  TEST_CASE("NowPlayingViewModel - resolves field actions")
   {
     auto fixture = ApplicationPlaybackFixture{};
     auto& playback = fixture.playback;
@@ -360,8 +360,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("NowPlayingViewModel - reports connecting stream info when audio engine is not ready",
-            "[uimodel][unit][playback]")
+  TEST_CASE("NowPlayingViewModel - reports connecting stream info when audio engine is not ready")
   {
     auto fixture = ApplicationPlaybackFixture{};
 
@@ -408,8 +407,7 @@ namespace ao::uimodel::test
     CHECK(log.last().streamInfo.empty());
   }
 
-  TEST_CASE("NowPlayingViewModel - localizes shared copy without changing track metadata",
-            "[uimodel][unit][playback][localization]")
+  TEST_CASE("NowPlayingViewModel - localizes shared copy without changing track metadata")
   {
     auto fixture = ApplicationPlaybackFixture{};
     auto& playback = fixture.playback;
@@ -429,8 +427,7 @@ namespace ao::uimodel::test
     CHECK(log.last().audioPipeline.plainTextFallback.starts_with("Audiokette:\n"));
   }
 
-  TEST_CASE("NowPlayingViewModel - presents an unnamed system-default output through the catalog",
-            "[uimodel][unit][playback]")
+  TEST_CASE("NowPlayingViewModel - presents an unnamed system-default output through the catalog")
   {
     auto fixture = ApplicationPlaybackFixture{};
     auto& playback = fixture.playback;
@@ -453,7 +450,7 @@ namespace ao::uimodel::test
     CHECK(log.last().audioPipeline.plainTextFallback.starts_with("Audio Pipeline:\n"));
   }
 
-  TEST_CASE("NowPlayingViewModel - refreshes for output and quality dependencies", "[uimodel][unit][playback]")
+  TEST_CASE("NowPlayingViewModel - refreshes for output and quality dependencies")
   {
     auto fixture = ApplicationPlaybackFixtureT<QueuedExecutor>{};
     auto& playback = fixture.playback;
@@ -547,7 +544,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("NowPlayingViewModel - refreshes from playback events until destroyed", "[uimodel][unit][playback]")
+  TEST_CASE("NowPlayingViewModel - refreshes from playback events until destroyed")
   {
     auto fixture = ApplicationPlaybackFixture{};
     auto& playback = fixture.playback;

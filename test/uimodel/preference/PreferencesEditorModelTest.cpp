@@ -31,7 +31,7 @@ namespace ao::uimodel::test
     }
   } // namespace
 
-  TEST_CASE("PreferencesEditorModel - theme changes persist and apply selected theme", "[uimodel][unit][preference]")
+  TEST_CASE("PreferencesEditorModel - theme changes persist and apply selected theme")
   {
     auto persisted = std::vector<PreferenceWrite>{};
     auto appliedThemes = std::vector<ThemePreset>{};
@@ -71,7 +71,7 @@ namespace ao::uimodel::test
     CHECK(appliedOutputs.empty());
   }
 
-  TEST_CASE("PreferencesEditorModel - output changes persist the requested preference", "[uimodel][unit][preference]")
+  TEST_CASE("PreferencesEditorModel - output changes persist the requested preference")
   {
     auto persisted = std::vector<PreferenceWrite>{};
     auto appliedThemes = std::vector<ThemePreset>{};
@@ -116,8 +116,7 @@ namespace ao::uimodel::test
     CHECK(appliedThemes.empty());
   }
 
-  TEST_CASE("PreferencesEditorModel - layout preset changes persist for the next layout load",
-            "[uimodel][unit][preference]")
+  TEST_CASE("PreferencesEditorModel - layout preset changes persist for the next layout load")
   {
     auto persisted = std::vector<PreferenceWrite>{};
     auto appliedThemes = std::vector<ThemePreset>{};
@@ -158,7 +157,7 @@ namespace ao::uimodel::test
     CHECK(appliedOutputs.empty());
   }
 
-  TEST_CASE("mergePreferenceChange preserves unrelated current preferences", "[uimodel][unit][preference]")
+  TEST_CASE("mergePreferenceChange preserves unrelated current preferences")
   {
     auto current = rt::AppPrefsState{};
     current.lastThemePreset = "classic";

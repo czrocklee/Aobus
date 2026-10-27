@@ -22,7 +22,7 @@ namespace ao::uimodel::test
     auto const kLibraryId = utility::parseUuid("123e4567-e89b-12d3-a456-426614174000").value();
   } // namespace
 
-  TEST_CASE("TrackColumnLayoutYamlSchema - round-trip uses stable field ids", "[uimodel][unit][track-column-layout]")
+  TEST_CASE("TrackColumnLayoutYamlSchema - round-trip uses stable field ids")
   {
     auto state = TrackColumnLayouts::Snapshot{};
     state[ListId{10}] = {
@@ -51,8 +51,7 @@ namespace ao::uimodel::test
     CHECK((*decodedRes).at(ListId{10})[1] == state.at(ListId{10})[1]);
   }
 
-  TEST_CASE("TrackColumnLayoutYamlSchema - rejects an invalid document as one object",
-            "[uimodel][unit][track-column-layout]")
+  TEST_CASE("TrackColumnLayoutYamlSchema - rejects an invalid document as one object")
   {
     auto document = TrackColumnLayoutDocument{
       .layouts =
@@ -191,7 +190,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("TrackColumnLayoutYamlSchema - owns the exact YAML mapping", "[uimodel][unit][track-column-layout][yaml]")
+  TEST_CASE("TrackColumnLayoutYamlSchema - owns the exact YAML mapping")
   {
     auto state = TrackColumnLayouts::Snapshot{};
     state[ListId{10}] = {
@@ -231,8 +230,7 @@ namespace ao::uimodel::test
     CHECK((*decodedRes) == state);
   }
 
-  TEST_CASE("TrackColumnLayoutYamlSchema - a document saved for another library keeps only virtual-list layouts",
-            "[uimodel][unit][track-column-layout][yaml]")
+  TEST_CASE("TrackColumnLayoutYamlSchema - a document saved for another library keeps only virtual-list layouts")
   {
     auto state = TrackColumnLayouts::Snapshot{};
     state[ListId{10}] = {TrackColumnState{.field = rt::TrackField::Duration, .width = 200}};
@@ -248,8 +246,7 @@ namespace ao::uimodel::test
     CHECK((*decodedRes) == TrackColumnLayouts::Snapshot{{rt::kAllTracksListId, state.at(rt::kAllTracksListId)}});
   }
 
-  TEST_CASE("TrackColumnLayoutYamlSchema - rejects invalid YAML candidates",
-            "[uimodel][unit][track-column-layout][yaml]")
+  TEST_CASE("TrackColumnLayoutYamlSchema - rejects invalid YAML candidates")
   {
     SECTION("Future version is reported before interpreting its payload")
     {

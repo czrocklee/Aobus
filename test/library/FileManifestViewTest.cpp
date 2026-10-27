@@ -16,7 +16,7 @@
 
 namespace ao::library::test
 {
-  TEST_CASE("FileManifestView - properties", "[library][unit][manifest]")
+  TEST_CASE("FileManifestView - properties")
   {
     auto const signature = utility::xxh3Hash128("view payload");
     auto header = FileManifestHeader{};
@@ -35,7 +35,7 @@ namespace ao::library::test
     CHECK(view.audioSignature() == signature);
   }
 
-  TEST_CASE("FileManifestView - returns file size and modification time", "[library][unit][manifest]")
+  TEST_CASE("FileManifestView - returns file size and modification time")
   {
     auto header = FileManifestHeader{};
     header.fileSize(123456789012345ULL);
@@ -61,7 +61,7 @@ namespace ao::library::test
     CHECK_FALSE(zeroView.mtime());
   }
 
-  TEST_CASE("FileManifestView - reads epoch zero and negative instants with a fraction", "[library][unit][manifest]")
+  TEST_CASE("FileManifestView - reads epoch zero and negative instants with a fraction")
   {
     auto epochZeroHeader = FileManifestHeader{};
     epochZeroHeader.mtime(FileTimestamp{});
@@ -85,7 +85,7 @@ namespace ao::library::test
     CHECK(optNegative->nanoseconds == 123456789);
   }
 
-  TEST_CASE("FileManifestView - poisons a small buffer", "[library][unit][manifest]")
+  TEST_CASE("FileManifestView - poisons a small buffer")
   {
     auto buffer = std::array<std::byte, kFileManifestHeaderSize - 1>{};
 

@@ -86,7 +86,7 @@ namespace ao::media::mp4::test
     }
   } // namespace
 
-  TEST_CASE("MP4 Demuxer - borrows bounded selected ALAC entry with chan siblings", "[media][unit][mp4]")
+  TEST_CASE("MP4 Demuxer - borrows bounded selected ALAC entry with chan siblings")
   {
     auto const chanBeforeCookie = GENERATE(false, true);
     auto const extendedChan = GENERATE(false, true);
@@ -132,7 +132,7 @@ namespace ao::media::mp4::test
     checkPacketAndTiming(*res);
   }
 
-  TEST_CASE("MP4 Demuxer - distinguishes cookie-contained chan from sample-entry sibling", "[media][unit][mp4]")
+  TEST_CASE("MP4 Demuxer - distinguishes cookie-contained chan from sample-entry sibling")
   {
     auto const contained = GENERATE(false, true);
     auto const extendedCookie = GENERATE(false, true);
@@ -186,7 +186,7 @@ namespace ao::media::mp4::test
     checkPacketAndTiming(*res);
   }
 
-  TEST_CASE("MP4 Demuxer - leaves malformed ALAC tails opaque after required cookie", "[media][unit][mp4]")
+  TEST_CASE("MP4 Demuxer - leaves malformed ALAC tails opaque after required cookie")
   {
     auto const variant = GENERATE(0U, 1U, 2U);
     CAPTURE(variant);
@@ -214,7 +214,7 @@ namespace ao::media::mp4::test
     checkPacketAndTiming(*res);
   }
 
-  TEST_CASE("MP4 Demuxer - rejects malformed ALAC prefix before required cookie", "[media][unit][mp4]")
+  TEST_CASE("MP4 Demuxer - rejects malformed ALAC prefix before required cookie")
   {
     auto const variant = GENERATE(0U, 1U, 2U);
     CAPTURE(variant);
@@ -228,7 +228,7 @@ namespace ao::media::mp4::test
     CHECK(res.error().code == Error::Code::FormatRejected);
   }
 
-  TEST_CASE("MP4 Demuxer - ALAC evidence stays with selected track", "[media][unit][mp4]")
+  TEST_CASE("MP4 Demuxer - ALAC evidence stays with selected track")
   {
     auto const cookie = makeCookie();
     auto const chan = ao::test::mp4::makeAtom("chan", {0x41, 0x62, 0x83});
@@ -261,7 +261,7 @@ namespace ao::media::mp4::test
     checkPacketAndTiming(*res);
   }
 
-  TEST_CASE("MP4 Demuxer - AAC retains exact ASC without borrowing ALAC evidence", "[media][unit][mp4]")
+  TEST_CASE("MP4 Demuxer - AAC retains exact ASC without borrowing ALAC evidence")
   {
     auto const chan = ao::test::mp4::makeAtom("chan", {0x81, 0x62, 0x43});
     auto alacExtensions = makeCookie();
@@ -281,8 +281,7 @@ namespace ao::media::mp4::test
     checkPacketAndTiming(*res);
   }
 
-  TEST_CASE("MP4 Demuxer - withholds entry view when required cookie comes from later description",
-            "[media][unit][mp4]")
+  TEST_CASE("MP4 Demuxer - withholds entry view when required cookie comes from later description")
   {
     auto const cookie = makeCookie();
     auto const firstEntry = ao::test::mp4::makeAudioSampleEntryAtom("alac", ao::test::mp4::makeAtom("chan", {0x71}));

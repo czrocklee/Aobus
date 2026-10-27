@@ -161,7 +161,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("ShellLayoutController - attaches its host and exports transport-gated actions", "[gtk][unit][app][shell]")
+  TEST_CASE("ShellLayoutController - attaches its host and exports transport-gated actions")
   {
     auto fixture = ShellLayoutControllerFixture{};
     auto& window = fixture.window;
@@ -190,8 +190,7 @@ namespace ao::gtk::test
     CHECK(gioActionPtr->property_enabled() == false);
   }
 
-  TEST_CASE("ShellLayoutController - registers stable action ids with catalog-selected presentation",
-            "[gtk][unit][app][shell]")
+  TEST_CASE("ShellLayoutController - registers stable action ids with catalog-selected presentation")
   {
     auto fixture = ShellLayoutControllerFixture{};
     auto& controller = fixture.controller;
@@ -203,8 +202,7 @@ namespace ao::gtk::test
     CHECK(optDescriptor->category == "Playback");
   }
 
-  TEST_CASE("ShellLayoutController - output-device action reports the selected popover route",
-            "[gtk][unit][app][shell]")
+  TEST_CASE("ShellLayoutController - output-device action reports the selected popover route")
   {
     auto fixture = ShellLayoutControllerFixture{};
     auto& runtime = fixture.runtimeFixture.runtime();
@@ -236,8 +234,7 @@ namespace ao::gtk::test
     CHECK(optOutputSelectionRequested->profileId == audio::kProfileExclusive);
   }
 
-  TEST_CASE("ShellLayoutController - layout edit action defers generation replacement until after dispatch",
-            "[gtk][unit][app][shell][async]")
+  TEST_CASE("ShellLayoutController - layout edit action defers generation replacement until after dispatch")
   {
     auto fixture = ShellLayoutControllerFixture{};
     auto& controller = fixture.controller;
@@ -251,8 +248,7 @@ namespace ao::gtk::test
     CHECK(controller.editorDialog() != nullptr);
   }
 
-  TEST_CASE("ShellLayoutController - editor retirement preserves a replacement beyond the old hide callback",
-            "[gtk][unit][app][shell][async]")
+  TEST_CASE("ShellLayoutController - editor retirement preserves a replacement beyond the old hide callback")
   {
     auto fixture = ShellLayoutControllerFixture{};
     auto& configStorePtr = fixture.configStorePtr;
@@ -291,8 +287,7 @@ namespace ao::gtk::test
     CHECK(Gtk::Window::list_toplevels().size() == topLevelCount);
   }
 
-  TEST_CASE("ShellLayoutController - Soul window retirement is deferred beyond the hide callback",
-            "[gtk][unit][app][shell][async]")
+  TEST_CASE("ShellLayoutController - Soul window retirement is deferred beyond the hide callback")
   {
     auto fixture = ShellLayoutControllerFixture{};
     auto& controller = fixture.controller;
@@ -310,7 +305,7 @@ namespace ao::gtk::test
     CHECK(controller.soulWindow() == nullptr);
   }
 
-  TEST_CASE("ShellLayoutController - loads the default and saved built-in presets", "[gtk][unit][app][shell]")
+  TEST_CASE("ShellLayoutController - loads the default and saved built-in presets")
   {
     auto fixture = ShellLayoutControllerFixture{};
     auto& configStorePtr = fixture.configStorePtr;
@@ -337,8 +332,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("ShellLayoutController - a layout load keeps the preset preferred when it started",
-            "[gtk][unit][app][shell][concurrency]")
+  TEST_CASE("ShellLayoutController - a layout load keeps the preset preferred when it started", "[concurrency]")
   {
     auto fixture = ShellLayoutControllerFixture{};
     auto& configStorePtr = fixture.configStorePtr;
@@ -359,8 +353,7 @@ namespace ao::gtk::test
     CHECK(findNodeById(controller.activeLayout().root, "modern-bar") != nullptr);
   }
 
-  TEST_CASE("ShellLayoutController - custom layout rejection falls back without changing the file",
-            "[gtk][unit][app][shell]")
+  TEST_CASE("ShellLayoutController - custom layout rejection falls back without changing the file")
   {
     auto fixture = ShellLayoutControllerFixture{};
     auto& tempDir = fixture.tempDir;
@@ -409,8 +402,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("ShellLayoutController - loadLayout falls back from a custom layout a newer version saved and reports it",
-            "[gtk][integration][app][shell]")
+  TEST_CASE("ShellLayoutController - loadLayout falls back from a custom layout a newer version saved and reports it")
   {
     auto fixture = ShellLayoutControllerFixture{};
     auto& controller = fixture.controller;
@@ -437,8 +429,7 @@ namespace ao::gtk::test
     CHECK(ao::test::readFile(layoutPath) == original);
   }
 
-  TEST_CASE("ShellLayoutController - the layout editor reports a preset a newer version saved",
-            "[gtk][integration][app][shell]")
+  TEST_CASE("ShellLayoutController - the layout editor reports a preset a newer version saved")
   {
     auto fixture = ShellLayoutControllerFixture{};
     auto& configStorePtr = fixture.configStorePtr;
@@ -477,8 +468,7 @@ namespace ao::gtk::test
     CHECK(ao::test::readFile(layoutPath) == original);
   }
 
-  TEST_CASE("ShellLayoutController - over-budget editor preview preserves the active GTK tree",
-            "[gtk][unit][app][shell]")
+  TEST_CASE("ShellLayoutController - over-budget editor preview preserves the active GTK tree")
   {
     auto fixture = ShellLayoutControllerFixture{};
     auto& configStorePtr = fixture.configStorePtr;
@@ -512,8 +502,7 @@ namespace ao::gtk::test
     drainGtkEvents();
   }
 
-  TEST_CASE("ShellLayoutController - editor save failure keeps the draft open and reports the error",
-            "[gtk][unit][app][shell]")
+  TEST_CASE("ShellLayoutController - editor save failure keeps the draft open and reports the error")
   {
     auto fixture = ShellLayoutControllerFixture{};
     auto& tempDir = fixture.tempDir;
@@ -567,7 +556,7 @@ namespace ao::gtk::test
     drainGtkEvents();
   }
 
-  TEST_CASE("ShellLayoutController - editor cancel restores a persistable shell generation", "[gtk][unit][app][shell]")
+  TEST_CASE("ShellLayoutController - editor cancel restores a persistable shell generation")
   {
     auto fixture = ShellLayoutControllerFixture{};
     auto& configStorePtr = fixture.configStorePtr;
@@ -606,8 +595,7 @@ namespace ao::gtk::test
     CHECK(optPersisted->components.at("main-paned").state.contains("positionPercent"));
   }
 
-  TEST_CASE("ShellLayoutController - ordinary editor close restores layout and theme previews",
-            "[gtk][unit][app][shell]")
+  TEST_CASE("ShellLayoutController - ordinary editor close restores layout and theme previews")
   {
     auto fixture = ShellLayoutControllerFixture{};
     auto& configStorePtr = fixture.configStorePtr;
@@ -651,8 +639,7 @@ namespace ao::gtk::test
     CHECK(themeCoordinator.activeTheme() == uimodel::ThemePreset::Classic);
   }
 
-  TEST_CASE("ShellLayoutController - ending a theme preview leaves persisted preferences unchanged",
-            "[gtk][unit][app][shell]")
+  TEST_CASE("ShellLayoutController - ending a theme preview leaves persisted preferences unchanged")
   {
     auto fixture = ShellLayoutControllerFixture{};
     auto& configStorePtr = fixture.configStorePtr;
@@ -693,8 +680,7 @@ namespace ao::gtk::test
     CHECK(themeCoordinator.activeTheme() == uimodel::ThemePreset::Classic);
   }
 
-  TEST_CASE("ShellLayoutController - repeated attachment revokes the previous action generation",
-            "[gtk][unit][app][shell][async]")
+  TEST_CASE("ShellLayoutController - repeated attachment revokes the previous action generation")
   {
     auto fixture = ShellLayoutControllerFixture{};
     auto& window = fixture.window;
@@ -723,8 +709,7 @@ namespace ao::gtk::test
     CHECK(controller.soulWindow() != nullptr);
   }
 
-  TEST_CASE("ShellLayoutController - playPause resumes restored idle playback and stop is transport-gated",
-            "[gtk][integration][app][shell]")
+  TEST_CASE("ShellLayoutController - playPause resumes restored idle playback and stop is transport-gated")
   {
     auto fixture = ShellLayoutControllerFixture{};
     auto& runtime = fixture.runtimeFixture.runtime();
@@ -766,8 +751,7 @@ namespace ao::gtk::test
     CHECK(playback.snapshot().transport.transport == audio::Transport::Idle);
   }
 
-  TEST_CASE("ShellLayoutController - resetting runtime panel state preserves the customized layout file",
-            "[gtk][unit][app][shell]")
+  TEST_CASE("ShellLayoutController - resetting runtime panel state preserves the customized layout file")
   {
     auto fixture = ShellLayoutControllerFixture{};
     auto& tempDir = fixture.tempDir;
@@ -806,8 +790,7 @@ namespace ao::gtk::test
     CHECK(ao::test::readFile(layoutPath) == original);
   }
 
-  TEST_CASE("ShellLayoutController - declining panel promotion preserves layout defaults and runtime state",
-            "[gtk][unit][app][shell]")
+  TEST_CASE("ShellLayoutController - declining panel promotion preserves layout defaults and runtime state")
   {
     auto fixture = ShellLayoutControllerFixture{};
     auto& storePtr = fixture.storePtr;
@@ -851,8 +834,7 @@ namespace ao::gtk::test
     CHECK(optUntouchedState->components.contains("main-paned"));
   }
 
-  TEST_CASE("ShellLayoutController - panel promotion saves geometry defaults and retains nongeometry state",
-            "[gtk][unit][app][shell]")
+  TEST_CASE("ShellLayoutController - panel promotion saves geometry defaults and retains nongeometry state")
   {
     auto fixture = ShellLayoutControllerFixture{};
     auto& storePtr = fixture.storePtr;
@@ -916,8 +898,7 @@ namespace ao::gtk::test
     CHECK(remainingEntry.state.at("revealed").asBool(true) == false);
   }
 
-  TEST_CASE("ShellLayoutController - teardown revokes exported actions while the window remains alive",
-            "[gtk][unit][app][shell][async]")
+  TEST_CASE("ShellLayoutController - teardown revokes exported actions while the window remains alive")
   {
     [[maybe_unused]] auto const appPtr = ensureRegisteredGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -967,8 +948,7 @@ namespace ao::gtk::test
     CHECK(Gtk::Window::list_toplevels().size() == topLevelCount);
   }
 
-  TEST_CASE("ShellLayoutController - teardown releases the stores captured by a pending layout load",
-            "[gtk][unit][app][shell][concurrency]")
+  TEST_CASE("ShellLayoutController - teardown releases the stores captured by a pending layout load", "[concurrency]")
   {
     [[maybe_unused]] auto const appPtr = ensureRegisteredGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -1008,7 +988,7 @@ namespace ao::gtk::test
       }));
   }
 
-  TEST_CASE("ShellLayoutController - teardown cancels pending Soul window retirement", "[gtk][unit][app][shell][async]")
+  TEST_CASE("ShellLayoutController - teardown cancels pending Soul window retirement")
   {
     [[maybe_unused]] auto const appPtr = ensureRegisteredGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -1045,8 +1025,7 @@ namespace ao::gtk::test
     CHECK(Gtk::Window::list_toplevels().size() == topLevelCount);
   }
 
-  TEST_CASE("ShellLayoutController - teardown flushes pending component state while its sole store owner is alive",
-            "[gtk][unit][app][shell][async]")
+  TEST_CASE("ShellLayoutController - teardown flushes pending component state while its sole store owner is alive")
   {
     [[maybe_unused]] auto const appPtr = ensureRegisteredGtkApplication();
     auto fixture = GtkRuntimeFixture{};

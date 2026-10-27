@@ -18,7 +18,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("AppDialog - configures a modal window with app header", "[gtk][unit][app][dialog]")
+  TEST_CASE("AppDialog - configures a modal window with app header")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -34,7 +34,7 @@ namespace ao::gtk::test
     CHECK(dialog.get_modal());
   }
 
-  TEST_CASE("AppDialog - parent and default response use shared dialog behavior", "[gtk][unit][app][dialog]")
+  TEST_CASE("AppDialog - parent and default response use shared dialog behavior")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -57,7 +57,7 @@ namespace ao::gtk::test
     CHECK(dialog.get_default_widget() == primaryButton);
   }
 
-  TEST_CASE("AppDialog - action buttons emit configured response ids", "[gtk][unit][app][dialog]")
+  TEST_CASE("AppDialog - action buttons emit configured response ids")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -85,8 +85,7 @@ namespace ao::gtk::test
     CHECK(responses[1] == -6);
   }
 
-  TEST_CASE("AppDialog - response tolerates managed dialog finalization from its handler",
-            "[gtk][unit][app][dialog][async]")
+  TEST_CASE("AppDialog - response tolerates managed dialog finalization from its handler")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -112,8 +111,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("AppDialog - response tolerates C++ retirement with a retained native object",
-            "[gtk][unit][app][dialog][async]")
+  TEST_CASE("AppDialog - response tolerates C++ retirement with a retained native object")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     bool destroyed = false;
@@ -141,7 +139,7 @@ namespace ao::gtk::test
     CHECK(G_IS_OBJECT(nativePtr.get()));
   }
 
-  TEST_CASE("AppDialog - content replacement detaches previous widget", "[gtk][unit][app][dialog]")
+  TEST_CASE("AppDialog - content replacement detaches previous widget")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -165,7 +163,7 @@ namespace ao::gtk::test
     CHECK(findLabelByText(dialog, "Second content") == &second);
   }
 
-  TEST_CASE("AppDialog - message factory builds standard modal response dialogs", "[gtk][unit][app][dialog]")
+  TEST_CASE("AppDialog - message factory builds standard modal response dialogs")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 

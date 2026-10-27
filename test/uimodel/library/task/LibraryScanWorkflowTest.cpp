@@ -47,8 +47,7 @@ namespace ao::uimodel::test
     };
   } // namespace
 
-  TEST_CASE("LibraryScanWorkflow - plan decision distinguishes success, rejection, and work",
-            "[uimodel][unit][library][scan]")
+  TEST_CASE("LibraryScanWorkflow - plan decision distinguishes success, rejection, and work")
   {
     CHECK(decideLibraryScanPlan({}) == LibraryScanPlanDisposition::UpToDate);
     auto summary = LibraryScanPlanSummary{};
@@ -67,7 +66,7 @@ namespace ao::uimodel::test
     CHECK(decideLibraryScanPlan(summary) == LibraryScanPlanDisposition::Actionable);
   }
 
-  TEST_CASE("LibraryScanWorkflow - mutation detection excludes issue-only results", "[uimodel][unit][library][scan]")
+  TEST_CASE("LibraryScanWorkflow - mutation detection excludes issue-only results")
   {
     auto result = LibraryScanWorkflowResult{};
     CHECK_FALSE(result.hasMutatedLibrary());
@@ -80,8 +79,7 @@ namespace ao::uimodel::test
     CHECK(result.hasMutatedLibrary());
   }
 
-  TEST_CASE("LibraryScanWorkflow - mutation detection observes each changed identity vector independently",
-            "[uimodel][unit][library][scan]")
+  TEST_CASE("LibraryScanWorkflow - mutation detection observes each changed identity vector independently")
   {
     auto noApply = LibraryScanWorkflowResult{};
     CHECK_FALSE(noApply.hasMutatedLibrary());
@@ -109,8 +107,7 @@ namespace ao::uimodel::test
     CHECK(relinkedOnly.hasMutatedLibrary());
   }
 
-  TEST_CASE("LibraryScanWorkflow - an empty library completes as up to date without applying",
-            "[uimodel][integration][library][scan]")
+  TEST_CASE("LibraryScanWorkflow - an empty library completes as up to date without applying")
   {
     auto fixture = LibraryScanWorkflowFixture{};
 
@@ -126,8 +123,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(res->optApplyResult);
   }
 
-  TEST_CASE("LibraryScanWorkflow - an errors-only plan returns exact issues without applying",
-            "[uimodel][integration][library][scan]")
+  TEST_CASE("LibraryScanWorkflow - an errors-only plan returns exact issues without applying")
   {
     auto fixture = LibraryScanWorkflowFixture{};
     auto outside = ao::test::TempDir{};
@@ -153,8 +149,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(res->optApplyResult);
   }
 
-  TEST_CASE("LibraryScanWorkflow - eager mode applies a new file with a known audio identity",
-            "[uimodel][integration][library][scan]")
+  TEST_CASE("LibraryScanWorkflow - eager mode applies a new file with a known audio identity")
   {
     auto fixture = LibraryScanWorkflowFixture{};
     std::filesystem::copy_file(
@@ -190,8 +185,7 @@ namespace ao::uimodel::test
     CHECK(fixture.storage.library().libraryRevision(transaction) == apply.libraryRevision);
   }
 
-  TEST_CASE("LibraryScanWorkflow - fast bootstrap applies a new file with pending audio identity",
-            "[uimodel][integration][library][scan]")
+  TEST_CASE("LibraryScanWorkflow - fast bootstrap applies a new file with pending audio identity")
   {
     auto fixture = LibraryScanWorkflowFixture{};
     std::filesystem::copy_file(
@@ -227,8 +221,7 @@ namespace ao::uimodel::test
     CHECK(fixture.storage.library().libraryRevision(transaction) == apply.libraryRevision);
   }
 
-  TEST_CASE("LibraryScanWorkflow - a missing root returns an exact planning failure",
-            "[uimodel][integration][library][scan]")
+  TEST_CASE("LibraryScanWorkflow - a missing root returns an exact planning failure")
   {
     auto temp = ao::test::TempDir{};
     auto const missingRoot = temp.path() / "missing-music";
@@ -249,8 +242,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(res.error().optPlanSummary);
   }
 
-  TEST_CASE("LibraryScanWorkflow - cancellation before start reaches plan building without mutation",
-            "[uimodel][integration][library][scan][concurrency]")
+  TEST_CASE("LibraryScanWorkflow - cancellation before start reaches plan building without mutation", "[concurrency]")
   {
     auto fixture = LibraryScanWorkflowFixture{};
     auto const withNewFile = GENERATE(false, true);
@@ -278,8 +270,7 @@ namespace ao::uimodel::test
     CHECK(fixture.storage.library().libraryRevision(transaction) == 0);
   }
 
-  TEST_CASE("LibraryScanWorkflow - an occupied background lease returns an exact applying failure",
-            "[uimodel][integration][library][scan][concurrency]")
+  TEST_CASE("LibraryScanWorkflow - an occupied background lease returns an exact applying failure", "[concurrency]")
   {
     auto applyRelease = rt::test::AsyncBarrier{};
     auto fixture = LibraryScanWorkflowFixture{};

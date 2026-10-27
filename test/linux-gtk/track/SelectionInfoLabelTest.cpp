@@ -24,7 +24,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("SelectionInfoLabel - binds selection changes to summary text", "[gtk][unit][track][selection]")
+  TEST_CASE("SelectionInfoLabel - binds selection changes to summary text")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -46,7 +46,7 @@ namespace ao::gtk::test
     CHECK(text.get_text() == emptyText);
   }
 
-  TEST_CASE("SelectionInfoLabel - follows only the active runtime view", "[gtk][unit][track][selection]")
+  TEST_CASE("SelectionInfoLabel - follows only the active runtime view")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto firstTrackId = kInvalidTrackId;

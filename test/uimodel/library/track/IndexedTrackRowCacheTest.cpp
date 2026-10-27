@@ -15,8 +15,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("IndexedTrackRowCache - lazily loads rows and retains the bounded working set",
-            "[uimodel][unit][track-cache]")
+  TEST_CASE("IndexedTrackRowCache - lazily loads rows and retains the bounded working set")
   {
     std::size_t loadCount = 0;
     auto cache = IndexedTrackRowCache{2};
@@ -41,8 +40,7 @@ namespace ao::uimodel::test
     CHECK(loadCount == 3);
   }
 
-  TEST_CASE("IndexedTrackRowCache - source replacement invalidates rows and bounds checks before loading",
-            "[uimodel][unit][track-cache]")
+  TEST_CASE("IndexedTrackRowCache - source replacement invalidates rows and bounds checks before loading")
   {
     std::size_t loadCount = 0;
     auto cache = IndexedTrackRowCache{};
@@ -69,8 +67,7 @@ namespace ao::uimodel::test
     CHECK(loadCount == 2);
   }
 
-  TEST_CASE("IndexedTrackRowCache - retries missing rows without consuming cache capacity",
-            "[uimodel][unit][track-cache]")
+  TEST_CASE("IndexedTrackRowCache - retries missing rows without consuming cache capacity")
   {
     auto loads = std::array<std::size_t, 3>{};
     auto cache = IndexedTrackRowCache{1};

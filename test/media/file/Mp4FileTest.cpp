@@ -468,7 +468,7 @@ namespace ao::media::file::mp4::test
     }
   } // namespace
 
-  TEST_CASE("MP4 File - parses a complete tagged file", "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - parses a complete tagged file")
   {
     auto const data = createMinimalM4a();
     auto const temp = TempFile{data, ".m4a"};
@@ -516,7 +516,7 @@ namespace ao::media::file::mp4::test
     CHECK(content.codec() == AudioCodec::Aac);
   }
 
-  TEST_CASE("MP4 File - reads metadata from an extended-size semantic atom", "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - reads metadata from an extended-size semantic atom")
   {
     auto const title = ao::test::mp4::makeExtendedFromCompactAtom(makeTextMetadataAtom("\xA9"
                                                                                        "nam",
@@ -541,7 +541,7 @@ namespace ao::media::file::mp4::test
     CHECK(content.text(TextField::Title) == "Extended Title");
   }
 
-  TEST_CASE("MP4 File - emits real fixture tag fields", "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - emits real fixture tag fields")
   {
     auto const file = File{audio::test::requireAudioFixture("basic_metadata.m4a")};
     auto content = readContent(file);
@@ -557,7 +557,7 @@ namespace ao::media::file::mp4::test
     CHECK(metadata.number(NumberField::Year) == 2024);
   }
 
-  TEST_CASE("MP4 File - maps freeform classical names case-insensitively", "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - maps freeform classical names case-insensitively")
   {
     auto ilstChildren = std::vector<std::uint8_t>{};
 
@@ -581,7 +581,7 @@ namespace ao::media::file::mp4::test
                                });
   }
 
-  TEST_CASE("MP4 File - maps Picard freeform and mdta credit names to their kinds", "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - maps Picard freeform and mdta credit names to their kinds")
   {
     auto const names = std::to_array<std::string_view>(
       {"LYRICIST", "arranger", "Writer", "PRODUCER", "ENGINEER", "MIXER", "DJMIXER", "REMIXER", "LYRICS"});
@@ -627,7 +627,7 @@ namespace ao::media::file::mp4::test
     }
   }
 
-  TEST_CASE("MP4 File - maps orchestra freeform fallback when ensemble is absent", "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - maps orchestra freeform fallback when ensemble is absent")
   {
     auto const data = createMinimalM4aWithRawIlstAtom(makeFreeformTextAtom("orchestra", "Fallback Ensemble"));
     auto const temp = TempFile{data, ".m4a"};
@@ -638,8 +638,7 @@ namespace ao::media::file::mp4::test
     CHECK(content.credits() == std::vector<Credit>{{.name = "Fallback Ensemble", .kind = CreditKind::Ensemble}});
   }
 
-  TEST_CASE("MP4 File - supported freeform and mdta credits accumulate repeated values with one final callback",
-            "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - supported freeform and mdta credits accumulate repeated values with one final callback")
   {
     using Event = ao::media::file::test::RecordedContent::CallbackEvent;
     using Kind = ao::media::file::test::RecordedContent::CallbackKind;
@@ -696,8 +695,7 @@ namespace ao::media::file::mp4::test
                    });
   }
 
-  TEST_CASE("MP4 File - credit text requires declared UTF-8 without reinterpreting unsupported data types",
-            "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - credit text requires declared UTF-8 without reinterpreting unsupported data types")
   {
     auto const keys = makeMdtaKeysAtom(std::to_array<std::string_view>({"ensemble", "conductor"}));
     // UTF-16BE U+4142 is the valid UTF-8 byte sequence "AB" if misread;
@@ -735,7 +733,7 @@ namespace ao::media::file::mp4::test
     }
   }
 
-  TEST_CASE("MP4 File - scalar text atoms require declared UTF-8 like credit text", "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - scalar text atoms require declared UTF-8 like credit text")
   {
     // The type rule belongs to every text atom, not only credits: a UTF-16 or
     // binary payload is never reinterpreted as UTF-8 text or a year.
@@ -806,8 +804,7 @@ namespace ao::media::file::mp4::test
     }
   }
 
-  TEST_CASE("MP4 File - declared UTF-8 credits retain malformed bytes for library admission",
-            "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - declared UTF-8 credits retain malformed bytes for library admission")
   {
     auto const malformed = std::string_view{"bad\xFFname"};
     auto const keys = makeMdtaKeysAtom(std::to_array<std::string_view>({"conductor"}));
@@ -824,8 +821,7 @@ namespace ao::media::file::mp4::test
                                });
   }
 
-  TEST_CASE("MP4 File - mixed freeform and mdta Ensemble precedence is whole-file and nonblank in both orders",
-            "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - mixed freeform and mdta Ensemble precedence is whole-file and nonblank in both orders")
   {
     auto const keys = makeMdtaKeysAtom(std::to_array<std::string_view>({"ensemble", "orchestra"}));
 
@@ -867,8 +863,7 @@ namespace ao::media::file::mp4::test
     }
   }
 
-  TEST_CASE("MP4 File - blank Ensemble keeps all Orchestra values in traversal order across mapping forms",
-            "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - blank Ensemble keeps all Orchestra values in traversal order across mapping forms")
   {
     auto const keys = makeMdtaKeysAtom(std::to_array<std::string_view>({"orchestra", "soloist", "ensemble"}));
     auto children = std::vector<std::uint8_t>{};
@@ -894,7 +889,7 @@ namespace ao::media::file::mp4::test
                                });
   }
 
-  TEST_CASE("MP4 File - blank category data children produce no credit callback", "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - blank category data children produce no credit callback")
   {
     auto const keys =
       makeMdtaKeysAtom(std::to_array<std::string_view>({"conductor", "ensemble", "soloist", "orchestra"}));
@@ -923,7 +918,7 @@ namespace ao::media::file::mp4::test
     CHECK(content.sampleRate() == 44100);
   }
 
-  TEST_CASE("MP4 File - work atoms and aliases keep their precedence regardless of order", "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - work atoms and aliases keep their precedence regardless of order")
   {
     auto const keysAtom = makeMdtaKeysAtom(std::to_array<std::string_view>({"work", "grouping"}));
 
@@ -1036,7 +1031,7 @@ namespace ao::media::file::mp4::test
     }
   }
 
-  TEST_CASE("MP4 File - freeform work and grouping names do not populate the work field", "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - freeform work and grouping names do not populate the work field")
   {
     auto ilstChildren = makeFreeformTextAtom("work", "Freeform Work");
     auto const grouping = makeFreeformTextAtom("grouping", "Freeform Grouping");
@@ -1052,7 +1047,7 @@ namespace ao::media::file::mp4::test
     CHECK(content.text(TextField::Work).empty());
   }
 
-  TEST_CASE("MP4 File - a day atom date yields the leading year", "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - a day atom date yields the leading year")
   {
     auto const data = createMinimalM4aWithRawIlstAtom(makeTextMetadataAtom("\xA9"
                                                                            "day",
@@ -1064,7 +1059,7 @@ namespace ao::media::file::mp4::test
     CHECK(content.number(NumberField::Year) == 2024);
   }
 
-  TEST_CASE("MP4 File - maps orchestra mdta fixture fallback when ensemble is absent", "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - maps orchestra mdta fixture fallback when ensemble is absent")
   {
     auto const file = File{audio::test::requireAudioFixture("classical_fallback.m4a")};
     auto const content = readContent(file);
@@ -1074,7 +1069,7 @@ namespace ao::media::file::mp4::test
           std::vector<Credit>{{.name = "Fixture Fallback Ensemble", .kind = CreditKind::Ensemble}});
   }
 
-  TEST_CASE("MP4 File - audio payload range exposes mdat payload", "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - audio payload range exposes mdat payload")
   {
     auto const payload = std::vector<std::uint8_t>{0x11, 0x22, 0x33, 0x44};
     auto const data = createMinimalM4aWithMdat(payload);
@@ -1094,7 +1089,7 @@ namespace ao::media::file::mp4::test
     }
   }
 
-  TEST_CASE("MP4 File - audio payload range accepts standard variable-size mdat forms", "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - audio payload range accepts standard variable-size mdat forms")
   {
     auto const payload = std::vector<std::uint8_t>{0x11, 0x22, 0x33, 0x44};
 
@@ -1130,7 +1125,7 @@ namespace ao::media::file::mp4::test
     }
   }
 
-  TEST_CASE("MP4 File - audio payload signature ignores non-mdat atoms", "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - audio payload signature ignores non-mdat atoms")
   {
     auto const payload = std::vector<std::uint8_t>{0x21, 0x22, 0x23, 0x24};
     auto const baselineData = createMinimalM4aWithMdat(payload);
@@ -1152,7 +1147,7 @@ namespace ao::media::file::mp4::test
     CHECK(utility::xxh3Hash128(baselinePayloadRes->bytes) == utility::xxh3Hash128(retaggedPayloadRes->bytes));
   }
 
-  TEST_CASE("MP4 File - single covr with two data boxes", "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - single covr with two data boxes")
   {
     // Standard iTunes encoding: one covr atom containing two data children.
     // Each data child has: [length(4)]["data"(4)][type_indicator(4)][locale(4)][payload]
@@ -1219,7 +1214,7 @@ namespace ao::media::file::mp4::test
     CHECK(static_cast<std::uint8_t>(secondData[2]) == 0xFF);
   }
 
-  TEST_CASE("MP4 File - parses movement integer metadata", "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - parses movement integer metadata")
   {
     SECTION("Accepts every supported payload width")
     {
@@ -1295,7 +1290,7 @@ namespace ao::media::file::mp4::test
     }
   }
 
-  TEST_CASE("MP4 File - parses track and disc number pairs", "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - parses track and disc number pairs")
   {
     SECTION("Accepts a 32-byte disk atom")
     {
@@ -1322,7 +1317,7 @@ namespace ao::media::file::mp4::test
     }
   }
 
-  TEST_CASE("MP4 File - recognizes ALAC sample entries", "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - recognizes ALAC sample entries")
   {
     auto const data = createMinimalM4a("alac");
     auto const temp = TempFile{data, ".m4a"};
@@ -1333,7 +1328,7 @@ namespace ao::media::file::mp4::test
     CHECK(content.codec() == AudioCodec::Alac);
   }
 
-  TEST_CASE("MP4 File - reads AAC entries containing child atoms", "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - reads AAC entries containing child atoms")
   {
     auto const esdsAtom = ao::test::mp4::makeAtom("esds", {0, 0, 0, 0});
     auto const data = createMinimalM4a("mp4a", esdsAtom);
@@ -1348,7 +1343,7 @@ namespace ao::media::file::mp4::test
     CHECK(content.bitDepth() == 16);
   }
 
-  TEST_CASE("MP4 File - skips a leading video track for audio properties", "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - skips a leading video track for audio properties")
   {
     auto const data = createMinimalM4aWithLeadingVideoTrack();
     auto const temp = TempFile{data, ".m4a"};
@@ -1363,8 +1358,7 @@ namespace ao::media::file::mp4::test
     CHECK(content.bitDepth() == 16);
   }
 
-  TEST_CASE("MP4 File - preserves audio properties when the optional media header is malformed",
-            "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - preserves audio properties when the optional media header is malformed")
   {
     auto const stbl = ao::test::mp4::makeSampleTableAtom(ao::test::mp4::makeStsdAtom("mp4a"));
     auto const shortMdhd = ao::test::mp4::makeAtom("mdhd", {0, 0, 0, 0});
@@ -1385,7 +1379,7 @@ namespace ao::media::file::mp4::test
     CHECK(content.bitDepth() == 16);
   }
 
-  TEST_CASE("MP4 File - rejects truncated top-level atoms through the content API", "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - rejects truncated top-level atoms through the content API")
   {
     auto data = std::vector<std::uint8_t>{};
     // moov atom claiming to be 500 bytes long, but we only give it 8
@@ -1408,7 +1402,7 @@ namespace ao::media::file::mp4::test
     CHECK(res.error().message == "mp4 atom size exceeds its container boundary");
   }
 
-  TEST_CASE("MP4 File - requires audio payload after an EOF-sized moov", "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - requires audio payload after an EOF-sized moov")
   {
     auto data = std::vector<std::uint8_t>{};
     // atom claiming to be 0 bytes long (meaning extends to EOF)
@@ -1431,7 +1425,7 @@ namespace ao::media::file::mp4::test
     CHECK(res.error().message == "mp4 file has no mdat audio payload");
   }
 
-  TEST_CASE("MP4 File - rejects atom lengths smaller than the header", "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - rejects atom lengths smaller than the header")
   {
     auto data = std::vector<std::uint8_t>{};
     std::uint32_t const length = 4; // Too small for header
@@ -1453,7 +1447,7 @@ namespace ao::media::file::mp4::test
     CHECK(res.error().message == "mp4 atom length is smaller than its header");
   }
 
-  TEST_CASE("MP4 File - ignores optional metadata shorter than the data header", "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - ignores optional metadata shorter than the data header")
   {
     // A ©nam atom whose declared length (16) is smaller than the fixed data-atom
     // header (24). atomData() must refuse to interpret it instead of underflowing
@@ -1473,7 +1467,7 @@ namespace ao::media::file::mp4::test
     CHECK(content.text(TextField::Title).empty());
   }
 
-  TEST_CASE("MP4 File - rejects an empty mdat payload", "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - rejects an empty mdat payload")
   {
     auto data = std::vector<std::uint8_t>{};
     ao::test::mp4::addAtom(data, "mdat", {});
@@ -1487,7 +1481,7 @@ namespace ao::media::file::mp4::test
     CHECK(res.error().message == "mp4 file has no mdat audio payload");
   }
 
-  TEST_CASE("MP4 File - validates top-level atoms even after finding mdat", "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - validates top-level atoms even after finding mdat")
   {
     auto data = std::vector<std::uint8_t>{};
     ao::test::mp4::addAtom(data, "mdat", {0x11});
@@ -1503,7 +1497,7 @@ namespace ao::media::file::mp4::test
     CHECK(res.error().message == "mp4 atom size exceeds its container boundary");
   }
 
-  TEST_CASE("MP4 File - malformed text metadata cannot overwrite valid metadata", "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - malformed text metadata cannot overwrite valid metadata")
   {
     auto ilstChildren = makeTextMetadataAtom("\xA9nam", "Before");
     auto malformed = makeTextMetadataAtom("\xA9nam", "After");
@@ -1521,7 +1515,7 @@ namespace ao::media::file::mp4::test
     CHECK(content.text(TextField::Title) == "Before");
   }
 
-  TEST_CASE("MP4 File - every data child of a text item contributes a value", "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - every data child of a text item contributes a value")
   {
     auto ilstChildren = std::vector<std::uint8_t>{};
     auto const append = [&ilstChildren](std::vector<std::uint8_t> const& atom)
@@ -1547,7 +1541,7 @@ namespace ao::media::file::mp4::test
     CHECK(content.text(TextField::Genre) == "Rock");
   }
 
-  TEST_CASE("MP4 File - a malformed data child discards every value of its item", "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - a malformed data child discards every value of its item")
   {
     auto itemBody = std::vector<std::uint8_t>{};
     auto valid = std::vector<std::uint8_t>{};
@@ -1570,8 +1564,7 @@ namespace ao::media::file::mp4::test
     CHECK(content.text(TextField::Artist).empty());
   }
 
-  TEST_CASE("MP4 File - a data child of an unsupported type is skipped without discarding its item",
-            "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - a data child of an unsupported type is skipped without discarding its item")
   {
     auto itemBody = std::vector<std::uint8_t>{};
 
@@ -1592,7 +1585,7 @@ namespace ao::media::file::mp4::test
     CHECK(content.text(TextField::Artist) == "Kept; Also Kept");
   }
 
-  TEST_CASE("MP4 File - an end-of-file size inside an item discards that item", "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - an end-of-file size inside an item discards that item")
   {
     // That size is valid only for a top-level atom of the file. Inside an item
     // it would make the child run to the end of its item, so the item is
@@ -1623,7 +1616,7 @@ namespace ao::media::file::mp4::test
     }
   }
 
-  TEST_CASE("MP4 File - every data child of an mdta item contributes a value", "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - every data child of an mdta item contributes a value")
   {
     auto const keys = makeMdtaKeysAtom(std::to_array<std::string_view>({"artist", "work", "date", "conductor"}));
     auto ilstChildren = std::vector<std::uint8_t>{};
@@ -1652,7 +1645,7 @@ namespace ao::media::file::mp4::test
                                });
   }
 
-  TEST_CASE("MP4 File - Work and Year items apply every data child", "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - Work and Year items apply every data child")
   {
     auto ilstChildren = std::vector<std::uint8_t>{};
 
@@ -1674,7 +1667,7 @@ namespace ao::media::file::mp4::test
     CHECK(content.number(NumberField::Year) == 2024);
   }
 
-  TEST_CASE("MP4 File - an artist repeated under the mdta alias joins as a whole value", "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - an artist repeated under the mdta alias joins as a whole value")
   {
     auto const readArtist = [](std::string_view atomArtist, std::string_view mdtaArtist)
     {
@@ -1695,7 +1688,7 @@ namespace ao::media::file::mp4::test
     CHECK(readArtist("Artist A", "Artist A; Artist B") == "Artist A; Artist A; Artist B");
   }
 
-  TEST_CASE("MP4 File - malformed metadata child boundaries preserve completed siblings", "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - malformed metadata child boundaries preserve completed siblings")
   {
     auto ilstChildren = makeTextMetadataAtom("\xA9nam", "Before");
     ao::test::mp4::appendBe32(ilstChildren, 100);
@@ -1709,7 +1702,7 @@ namespace ao::media::file::mp4::test
     CHECK(content.text(TextField::Title) == "Before");
   }
 
-  TEST_CASE("MP4 File - malformed covr discards all artwork from that atom", "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - malformed covr discards all artwork from that atom")
   {
     auto covrBody = std::vector<std::uint8_t>{};
     ao::test::mp4::appendBe32(covrBody, 18);

@@ -40,7 +40,7 @@ namespace ao::tui::test
     }
   } // namespace
 
-  TEST_CASE("OutputDevicePanel - renders grouped selectable rows", "[tui][unit][output]")
+  TEST_CASE("OutputDevicePanel - renders grouped selectable rows")
   {
     auto rowHitRegions = std::vector<OutputDeviceRowHitRegion>{};
     auto const view = uimodel::OutputDeviceViewState{
@@ -91,7 +91,7 @@ namespace ao::tui::test
     CHECK(rowHitRegions[1].profileId == audio::kProfileExclusive);
   }
 
-  TEST_CASE("OutputDevicePanel - empty state uses the selected locale", "[tui][unit][output][localization]")
+  TEST_CASE("OutputDevicePanel - empty state uses the selected locale")
   {
     auto const german = ao::test::messageCatalog("de-AT");
     auto const view = uimodel::OutputDeviceViewState{};
@@ -102,7 +102,7 @@ namespace ao::tui::test
     CHECK(text.contains("Kein Ausgabegerät ausgewählt"));
   }
 
-  TEST_CASE("OutputDevicePanel - width follows content and terminal bounds", "[tui][unit][output]")
+  TEST_CASE("OutputDevicePanel - width follows content and terminal bounds")
   {
     auto view = uimodel::OutputDeviceViewState{
       .rows =
@@ -126,7 +126,7 @@ namespace ao::tui::test
     CHECK(englishOutputDevicePanelColumns(view, 40) == 40);
   }
 
-  TEST_CASE("OutputDevicePanel - frames long device lists", "[tui][unit][output]")
+  TEST_CASE("OutputDevicePanel - frames long device lists")
   {
     auto rows = std::vector{
       uimodel::OutputDeviceRow{

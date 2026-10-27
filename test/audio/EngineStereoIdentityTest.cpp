@@ -14,7 +14,7 @@
 
 namespace ao::audio::test
 {
-  TEST_CASE("Engine - different PCM identities require a drained transition", "[audio][integration][engine][gapless]")
+  TEST_CASE("Engine - different PCM identities require a drained transition")
   {
     auto const first = ao::test::TempFile{
       ao::test::wav::makeWav({.channels = 2, .sampleRate = 48000, .audioData = {0x11, 0x12, 0x23, 0x24}}), ".wav"};

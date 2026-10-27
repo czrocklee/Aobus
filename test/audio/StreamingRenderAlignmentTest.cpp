@@ -89,8 +89,7 @@ namespace ao::audio::test
     }
   } // namespace
 
-  TEST_CASE("StreamingSource - parked partial write keeps every read whole-frame aligned and lossless",
-            "[audio][unit][streaming-source]")
+  TEST_CASE("StreamingSource - parked partial write keeps every read whole-frame aligned and lossless")
   {
     REQUIRE(frameBytes(alignedStreamInfo().outputFormat) == kFrameByteCount);
     auto errors = std::atomic<std::int32_t>{0};
@@ -129,8 +128,7 @@ namespace ao::audio::test
     CHECK(errors.load() == 0);
   }
 
-  TEST_CASE("Engine render path - starved render across a parked partial write stays frame aligned",
-            "[audio][unit][engine]")
+  TEST_CASE("Engine render path - starved render across a parked partial write stays frame aligned")
   {
     REQUIRE(frameBytes(alignedStreamInfo().outputFormat) == kFrameByteCount);
     auto errors = std::atomic<std::int32_t>{0};

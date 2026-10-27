@@ -365,8 +365,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("PlaybackCursor - construction owns fixed launch spec and exact initial semantic tuple",
-            "[runtime][unit][playback-cursor]")
+  TEST_CASE("PlaybackCursor - construction owns fixed launch spec and exact initial semantic tuple")
   {
     auto policy = CursorPolicyDouble{{kFirstTrack, kSecondTrack, kThirdTrack}};
     auto spec = launchSpec();
@@ -393,8 +392,7 @@ namespace ao::rt::test
     CHECK(cursor.semanticTuple() == expectedTuple);
   }
 
-  TEST_CASE("PlaybackCursor - source invalidation is terminal without stale sequence queries",
-            "[runtime][unit][playback-cursor]")
+  TEST_CASE("PlaybackCursor - source invalidation is terminal without stale sequence queries")
   {
     auto policy = CursorPolicyDouble{{kFirstTrack, kSecondTrack, kThirdTrack}};
     policy.recordHistory(kFirstTrack, kSecondTrack);
@@ -435,8 +433,7 @@ namespace ao::rt::test
     CHECK(cursor.resolvePrevious(policy) == restartCurrent(kFourthTrack));
   }
 
-  TEST_CASE("PlaybackCursor - paired modes resolve once without an intermediate shuffle candidate",
-            "[runtime][unit][playback-cursor]")
+  TEST_CASE("PlaybackCursor - paired modes resolve once without an intermediate shuffle candidate")
   {
     auto policy = CursorPolicyDouble{{kFirstTrack, kSecondTrack, kThirdTrack, kFourthTrack}};
     auto cursor = boundCursor(policy, kSecondTrack, 1, RepeatMode::Off, ShuffleMode::On);
@@ -459,8 +456,7 @@ namespace ao::rt::test
     CHECK(policy.shuffleCandidateInvalidationCount() == beforeInvalidations + 1);
   }
 
-  TEST_CASE("PlaybackCursor - repeat one overrides shuffle forward but not previous policy",
-            "[runtime][unit][playback-cursor]")
+  TEST_CASE("PlaybackCursor - repeat one overrides shuffle forward but not previous policy")
   {
     auto policy = CursorPolicyDouble{{kFirstTrack, kSecondTrack, kThirdTrack, kFourthTrack}};
     policy.selectShuffleCandidate(kFourthTrack);
@@ -473,8 +469,7 @@ namespace ao::rt::test
     CHECK(cursor.resolvePrevious(policy) == startTrack(kThirdTrack));
   }
 
-  TEST_CASE("PlaybackCursor - elapsed restart then shuffle then sequential order command precedence",
-            "[runtime][unit][playback-cursor]")
+  TEST_CASE("PlaybackCursor - elapsed restart then shuffle then sequential order command precedence")
   {
     auto shufflePolicy = CursorPolicyDouble{{kFirstTrack, kSecondTrack, kThirdTrack, kFourthTrack}};
     shufflePolicy.selectShuffleCandidate(kFourthTrack);
@@ -500,8 +495,7 @@ namespace ao::rt::test
     CHECK(sequentialCursor.resolvePrevious(sequentialPolicy) == startTrack(kFirstTrack));
   }
 
-  TEST_CASE("PlaybackCursor - Gap and empty projections follow sequential repeat rules",
-            "[runtime][unit][playback-cursor]")
+  TEST_CASE("PlaybackCursor - Gap and empty projections follow sequential repeat rules")
   {
     auto policy = CursorPolicyDouble{{kFirstTrack, kSecondTrack, kThirdTrack}};
     auto cursor = boundCursor(policy, kSecondTrack, 1);
@@ -531,7 +525,7 @@ namespace ao::rt::test
     CHECK(cursor.resolvePrevious(policy) == noCommand());
   }
 
-  TEST_CASE("PlaybackCursor - changes distinguish semantic and restorable state", "[runtime][unit][playback-cursor]")
+  TEST_CASE("PlaybackCursor - changes distinguish semantic and restorable state")
   {
     auto policy = CursorPolicyDouble{{kFirstTrack, kSecondTrack, kThirdTrack, kFourthTrack}};
     auto cursor = boundCursor(policy, kSecondTrack, 1);
@@ -581,8 +575,7 @@ namespace ao::rt::test
     CHECK_FALSE(cursor.semanticTuple().optResolvedSuccessor);
   }
 
-  TEST_CASE("PlaybackCursor - projection move reconciliation is observable only after the complete batch",
-            "[runtime][unit][playback-cursor]")
+  TEST_CASE("PlaybackCursor - projection move reconciliation is observable only after the complete batch")
   {
     auto policy = CursorPolicyDouble{{kFirstTrack, kSecondTrack, kThirdTrack, kFourthTrack}};
     auto cursor = boundCursor(policy, kSecondTrack, 1);
@@ -618,8 +611,7 @@ namespace ao::rt::test
     CHECK_FALSE(cursor.semanticTuple().optResolvedSuccessor);
   }
 
-  TEST_CASE("PlaybackCursor - deterministic reference sequence preserves anchor and semantic invariants",
-            "[runtime][unit][playback-cursor][model]")
+  TEST_CASE("PlaybackCursor - deterministic reference sequence preserves anchor and semantic invariants")
   {
     constexpr std::uint32_t kSeed = 0x00C0FFEEU;
     constexpr std::size_t kStepCount = 80;

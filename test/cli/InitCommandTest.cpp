@@ -7,7 +7,7 @@
 
 namespace ao::cli::test
 {
-  TEST_CASE("CLI - init dry-run reports scan plan without importing tracks", "[cli][integration][init][dry-run]")
+  TEST_CASE("CLI - init dry-run reports scan plan without importing tracks")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "track.flac");

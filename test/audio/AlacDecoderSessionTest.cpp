@@ -19,7 +19,7 @@
 
 namespace ao::audio::test
 {
-  TEST_CASE("AlacDecoderSession - seek", "[audio][unit][alac][seek]")
+  TEST_CASE("AlacDecoderSession - seek")
   {
     auto const testFile = requireAudioFixture("hires.m4a");
 
@@ -56,7 +56,7 @@ namespace ao::audio::test
     CHECK(decoder.readNextBlock());
   }
 
-  TEST_CASE("AlacDecoderSession - output formats", "[audio][unit][alac]")
+  TEST_CASE("AlacDecoderSession - output formats")
   {
     SECTION("Decodes 24-bit ALAC into 32-bit output")
     {
@@ -142,7 +142,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("AlacDecoderSession - reading through the final packet reaches stable end of stream", "[audio][unit][alac]")
+  TEST_CASE("AlacDecoderSession - reading through the final packet reaches stable end of stream")
   {
     auto const testFile = requireAudioFixture("hires.m4a");
     auto decoderPtr = ao::test::requireValue(AlacDecoderSession::open(testFile, SampleEncoding::Signed24PackedLe));
@@ -151,7 +151,7 @@ namespace ao::audio::test
     CHECK(readUntilStableEndOfStream(decoder, 512) > 0);
   }
 
-  TEST_CASE("AlacDecoderSession - rejects invalid input", "[audio][unit][alac][error]")
+  TEST_CASE("AlacDecoderSession - rejects invalid input")
   {
     SECTION("Non-existent file")
     {

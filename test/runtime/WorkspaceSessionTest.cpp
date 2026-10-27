@@ -93,8 +93,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("WorkspaceService - missing workspace config is a successful empty restore",
-            "[runtime][unit][workspace][session]")
+  TEST_CASE("WorkspaceService - missing workspace config is a successful empty restore")
   {
     auto tempDir = TempDir{};
     auto runtimePtr = makeStateOnlyRuntime(tempDir);
@@ -106,8 +105,7 @@ namespace ao::rt::test
     CHECK(runtimePtr->workspace().snapshot().activeViewId == kInvalidViewId);
   }
 
-  TEST_CASE("WorkspaceService - missing workspace group preserves an existing workspace",
-            "[runtime][unit][workspace][session]")
+  TEST_CASE("WorkspaceService - missing workspace group preserves an existing workspace")
   {
     auto tempDir = TempDir{};
     auto runtimePtr = makeStateOnlyRuntime(tempDir);
@@ -124,8 +122,7 @@ namespace ao::rt::test
     CHECK(runtimePtr->workspace().snapshot().openViews.size() == 1);
   }
 
-  TEST_CASE("WorkspaceService - session restore recreates the initial navigation point",
-            "[runtime][unit][workspace][session]")
+  TEST_CASE("WorkspaceService - session restore recreates the initial navigation point")
   {
     auto tempDir = TempDir{};
     auto listId = kInvalidListId;
@@ -146,8 +143,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("WorkspaceService - restored sessions can navigate back to restored state",
-            "[runtime][unit][workspace][session]")
+  TEST_CASE("WorkspaceService - restored sessions can navigate back to restored state")
   {
     auto tempDir = TempDir{};
     auto firstListId = kInvalidListId;
@@ -170,8 +166,7 @@ namespace ao::rt::test
     CHECK(state.listId == firstListId);
   }
 
-  TEST_CASE("WorkspaceService - session round-trip restores the exact active view over one list",
-            "[runtime][unit][workspace][session]")
+  TEST_CASE("WorkspaceService - session round-trip restores the exact active view over one list")
   {
     std::size_t expectedActiveIndex = 0;
 
@@ -246,8 +241,7 @@ namespace ao::rt::test
     CHECK(replayed.presentation == (expectedActiveIndex == 0 ? firstPresentation : secondPresentation));
   }
 
-  TEST_CASE("WorkspaceService - a session saved for another library restores only its custom presets",
-            "[runtime][unit][workspace][session]")
+  TEST_CASE("WorkspaceService - a session saved for another library restores only its custom presets")
   {
     auto savedDir = TempDir{};
     auto restoringDir = TempDir{};
@@ -283,8 +277,7 @@ namespace ao::rt::test
     CHECK(runtimePtr->workspace().customPresets().front().spec.id == "custom.portable");
   }
 
-  TEST_CASE("WorkspaceService - multi-view restore publishes one complete snapshot",
-            "[runtime][unit][workspace][session]")
+  TEST_CASE("WorkspaceService - multi-view restore publishes one complete snapshot")
   {
     auto tempDir = TempDir{};
     auto const* songsPreset = builtinTrackPresentationPreset("songs");
@@ -334,7 +327,7 @@ namespace ao::rt::test
     CHECK(restoredPresets[0] == expectedPreset);
   }
 
-  TEST_CASE("WorkspaceService - saveSession tolerates flush failures", "[runtime][unit][workspace][session]")
+  TEST_CASE("WorkspaceService - saveSession tolerates flush failures")
   {
     auto tempDir = TempDir{};
     auto runtimePtr = makeStateOnlyRuntime(tempDir);
@@ -343,7 +336,7 @@ namespace ao::rt::test
     CHECK_NOTHROW(runtimePtr->workspace().saveSession(*badConfigStorePtr));
   }
 
-  TEST_CASE("WorkspaceService - restoreSession tolerates malformed config", "[runtime][unit][workspace][session]")
+  TEST_CASE("WorkspaceService - restoreSession tolerates malformed config")
   {
     auto tempDir = TempDir{};
     auto runtimePtr = makeStateOnlyRuntime(tempDir);
@@ -357,8 +350,7 @@ namespace ao::rt::test
     CHECK(res.error().code == Error::Code::FormatRejected);
   }
 
-  TEST_CASE("WorkspaceService - out-of-bounds active index rejects before mutation",
-            "[runtime][unit][workspace][session]")
+  TEST_CASE("WorkspaceService - out-of-bounds active index rejects before mutation")
   {
     auto tempDir = TempDir{};
     auto runtimePtr = makeStateOnlyRuntime(tempDir);
@@ -401,8 +393,7 @@ namespace ao::rt::test
     CHECK(runtimePtr->workspace().snapshot().activeViewId == existingViewId);
   }
 
-  TEST_CASE("WorkspaceService - empty session preserves empty focus and selects an existing front view",
-            "[runtime][unit][workspace][session]")
+  TEST_CASE("WorkspaceService - empty session preserves empty focus and selects an existing front view")
   {
     auto tempDir = TempDir{};
     auto runtimePtr = makeStateOnlyRuntime(tempDir);
@@ -447,8 +438,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("WorkspaceService - failed session restore leaves workspace views focus and history unchanged",
-            "[runtime][unit][workspace][session]")
+  TEST_CASE("WorkspaceService - failed session restore leaves workspace views focus and history unchanged")
   {
     auto tempDir = TempDir{};
     auto runtimePtr = makeStateOnlyRuntime(tempDir);
@@ -493,8 +483,7 @@ namespace ao::rt::test
     CHECK(backRes.error().code == Error::Code::NotFound);
   }
 
-  TEST_CASE("WorkspaceService - restore rejects unsupported or unknown presentation vocabulary",
-            "[runtime][unit][workspace][session]")
+  TEST_CASE("WorkspaceService - restore rejects unsupported or unknown presentation vocabulary")
   {
     auto tempDir = TempDir{};
     auto runtimePtr = makeStateOnlyRuntime(tempDir);
@@ -532,8 +521,7 @@ namespace ao::rt::test
     CHECK(changeCount == 0);
   }
 
-  TEST_CASE("WorkspaceService - restore rejects the unversioned numeric presentation format",
-            "[runtime][unit][workspace][session]")
+  TEST_CASE("WorkspaceService - restore rejects the unversioned numeric presentation format")
   {
     auto tempDir = TempDir{};
     auto runtimePtr = makeStateOnlyRuntime(tempDir);

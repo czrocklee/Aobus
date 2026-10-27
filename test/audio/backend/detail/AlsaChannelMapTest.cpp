@@ -42,8 +42,7 @@ namespace ao::audio::backend::detail::test
     }
   } // namespace
 
-  TEST_CASE("AlsaChannelMap - independent NULL query and current observations preserve compatible delivery",
-            "[audio][unit][alsa-channel-map]")
+  TEST_CASE("AlsaChannelMap - independent NULL query and current observations preserve compatible delivery")
   {
     auto const channels = GENERATE(std::uint8_t{4}, std::uint8_t{6});
     auto const client = PcmFormat{.sampleRate = 48000,
@@ -104,8 +103,7 @@ namespace ao::audio::backend::detail::test
     CHECK(client.speakerMask == (channels == 4 ? 0x33U : 0x3fU));
   }
 
-  TEST_CASE("AlsaChannelMap - current same-set identity and permutation are both mapped",
-            "[audio][unit][alsa-channel-map]")
+  TEST_CASE("AlsaChannelMap - current same-set identity and permutation are both mapped")
   {
     bool const swapped = GENERATE(false, true);
     auto observations = currentMap(swapped ? std::vector<unsigned int>{SND_CHMAP_FR, SND_CHMAP_FL}
@@ -122,8 +120,7 @@ namespace ao::audio::backend::detail::test
     CHECK(mapRes->sourceSlots[1] == (swapped ? 0U : 1U));
   }
 
-  TEST_CASE("AlsaChannelMap - stereo identity reuse requires observed canonical unflagged slots",
-            "[audio][unit][alsa-channel-map]")
+  TEST_CASE("AlsaChannelMap - stereo identity reuse requires observed canonical unflagged slots")
   {
     auto const sourceMask = GENERATE(0x0U, 0x3U);
     auto const mapRes = prepareAlsaChannelMap(
@@ -142,8 +139,7 @@ namespace ao::audio::backend::detail::test
     CHECK(mapRes->sourceSlots[1] == 1U);
   }
 
-  TEST_CASE("AlsaChannelMap - legacy uncertainty permutation and flags do not authorize stereo identity reuse",
-            "[audio][unit][alsa-channel-map]")
+  TEST_CASE("AlsaChannelMap - legacy uncertainty permutation and flags do not authorize stereo identity reuse")
   {
     auto observations = AlsaChannelMapObservations{};
 
@@ -186,7 +182,7 @@ namespace ao::audio::backend::detail::test
     CHECK_FALSE(mapRes->delivery.isMapped);
   }
 
-  TEST_CASE("AlsaChannelMap - source zero never acquires guessed slot identity", "[audio][unit][alsa-channel-map]")
+  TEST_CASE("AlsaChannelMap - source zero never acquires guessed slot identity")
   {
     bool const silent = GENERATE(false, true);
     auto const positions = silent ? std::vector<unsigned int>{SND_CHMAP_NA, SND_CHMAP_NA}
@@ -205,7 +201,7 @@ namespace ao::audio::backend::detail::test
     CHECK(mapRes->sourceSlots[1] == 1U);
   }
 
-  TEST_CASE("AlsaChannelMap - MONO is not an observed front-center identity", "[audio][unit][alsa-channel-map]")
+  TEST_CASE("AlsaChannelMap - MONO is not an observed front-center identity")
   {
     auto const client =
       PcmFormat{.sampleRate = 48000, .channels = 1, .encoding = SampleEncoding::Signed16Le, .speakerMask = 0x4};
@@ -219,8 +215,7 @@ namespace ao::audio::backend::detail::test
     CHECK_FALSE(mapRes->needsPermutation);
   }
 
-  TEST_CASE("AlsaChannelMap - known complete and partial contradictions remain contextual refusals",
-            "[audio][unit][alsa-channel-map]")
+  TEST_CASE("AlsaChannelMap - known complete and partial contradictions remain contextual refusals")
   {
     auto observations = AlsaChannelMapObservations{};
 
@@ -258,8 +253,7 @@ namespace ao::audio::backend::detail::test
     CHECK(mapRes.error().error.message.contains("ALSA current channel positions conflict"));
   }
 
-  TEST_CASE("AlsaChannelMap - incomplete or reserved source roles cannot establish a lossless mapping",
-            "[audio][unit][alsa-channel-map]")
+  TEST_CASE("AlsaChannelMap - incomplete or reserved source roles cannot establish a lossless mapping")
   {
     auto const sourceMask = GENERATE(0x1U, 0x7U, 0x80000001U);
     auto const mapRes = prepareAlsaChannelMap(stereoFormat(sourceMask),
@@ -276,8 +270,7 @@ namespace ao::audio::backend::detail::test
       "ALSA source channel mask is incomplete or contains unassigned speaker positions"));
   }
 
-  TEST_CASE("AlsaChannelMap - an invalid nonzero source declaration is refused across all current evidence",
-            "[audio][unit][alsa-channel-map]")
+  TEST_CASE("AlsaChannelMap - an invalid nonzero source declaration is refused across all current evidence")
   {
     auto const invalidMask = GENERATE(0x1U, 0x7U, 0x80000001U);
     auto observations = AlsaChannelMapObservations{};
@@ -311,8 +304,7 @@ namespace ao::audio::backend::detail::test
       "ALSA source channel mask is incomplete or contains unassigned speaker positions"));
   }
 
-  TEST_CASE("AlsaChannelMap - a NULL current map keeps complete and unidentified sources unmapped",
-            "[audio][unit][alsa-channel-map]")
+  TEST_CASE("AlsaChannelMap - a NULL current map keeps complete and unidentified sources unmapped")
   {
     auto const sourceMask = GENERATE(0x3U, 0x0U);
     CAPTURE(sourceMask);
@@ -334,8 +326,7 @@ namespace ao::audio::backend::detail::test
     CHECK(mapRes->sourceSlots[1] == 1U);
   }
 
-  TEST_CASE("AlsaChannelMap - independent observation faults win over an invalid source declaration",
-            "[audio][unit][alsa-channel-map]")
+  TEST_CASE("AlsaChannelMap - independent observation faults win over an invalid source declaration")
   {
     auto const client = stereoFormat(0x1U);
 
@@ -386,8 +377,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("AlsaChannelMap - phase-flagged current refuses identified sources but keeps legacy playback",
-            "[audio][unit][alsa-channel-map]")
+  TEST_CASE("AlsaChannelMap - phase-flagged current refuses identified sources but keeps legacy playback")
   {
     auto const positions = std::vector<unsigned int>{SND_CHMAP_FL | SND_CHMAP_PHASE_INVERSE, SND_CHMAP_FR};
 
@@ -422,8 +412,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("AlsaChannelMap - silent current slots cannot carry identified source speakers",
-            "[audio][unit][alsa-channel-map]")
+  TEST_CASE("AlsaChannelMap - silent current slots cannot carry identified source speakers")
   {
     bool const allSilent = GENERATE(false, true);
     auto const positions = allSilent ? std::vector<unsigned int>{SND_CHMAP_NA, SND_CHMAP_NA}
@@ -439,8 +428,7 @@ namespace ao::audio::backend::detail::test
     CHECK(mapRes.error().error.message.contains("ALSA current channel positions conflict"));
   }
 
-  TEST_CASE("AlsaChannelMap - silent capabilities never replace actual current evidence",
-            "[audio][unit][alsa-channel-map]")
+  TEST_CASE("AlsaChannelMap - silent capabilities never replace actual current evidence")
   {
     auto observations = AlsaChannelMapObservations{.query = AlsaChannelMapObservations::Query::ApplicableMap,
                                                    .supportedMaps = {{SND_CHMAP_NA, SND_CHMAP_NA}},
@@ -470,8 +458,7 @@ namespace ao::audio::backend::detail::test
     CHECK_FALSE(mapRes->needsPermutation);
   }
 
-  TEST_CASE("AlsaChannelMap - non-applicable capability role defects cannot fault the applied current mode",
-            "[audio][unit][alsa-channel-map]")
+  TEST_CASE("AlsaChannelMap - non-applicable capability role defects cannot fault the applied current mode")
   {
     auto observations = AlsaChannelMapObservations{};
     observations.query = AlsaChannelMapObservations::Query::NoApplicableMap;
@@ -502,8 +489,7 @@ namespace ao::audio::backend::detail::test
     CHECK(mapRes->sourceSlots[1] == 1U);
   }
 
-  TEST_CASE("AlsaChannelMap - non-applicable capability storage bounds still fault the open",
-            "[audio][unit][alsa-channel-map]")
+  TEST_CASE("AlsaChannelMap - non-applicable capability storage bounds still fault the open")
   {
     auto observations = AlsaChannelMapObservations{};
     observations.query = AlsaChannelMapObservations::Query::NoApplicableMap;
@@ -528,8 +514,7 @@ namespace ao::audio::backend::detail::test
     CHECK(mapRes.error().error.message.contains("malformed channel map"));
   }
 
-  TEST_CASE("AlsaChannelMap - exactly 256 parsed offered maps stay admitted beside current or absent evidence",
-            "[audio][unit][alsa-channel-map]")
+  TEST_CASE("AlsaChannelMap - exactly 256 parsed offered maps stay admitted beside current or absent evidence")
   {
     // Literal 256 pins the parsed-value count itself; this boundary is the
     // classifier's own list bound, and the raw snd_pcm_query_chmaps array
@@ -566,8 +551,7 @@ namespace ao::audio::backend::detail::test
     CHECK(mapRes->sourceSlots[1] == 1U);
   }
 
-  TEST_CASE("AlsaChannelMap - 257 parsed offered maps stay a capability fault beside current or absent evidence",
-            "[audio][unit][alsa-channel-map]")
+  TEST_CASE("AlsaChannelMap - 257 parsed offered maps stay a capability fault beside current or absent evidence")
   {
     // Literal 257 isolates the parsed-value count as the only defect: every
     // offered map itself stays valid, and a valid current map cannot reorder
@@ -594,8 +578,7 @@ namespace ao::audio::backend::detail::test
     CHECK(mapRes.error().error.message.contains("ALSA capability query returned a malformed channel map list"));
   }
 
-  TEST_CASE("AlsaChannelMap - partial compatible observations retain legacy uncertainty",
-            "[audio][unit][alsa-channel-map]")
+  TEST_CASE("AlsaChannelMap - partial compatible observations retain legacy uncertainty")
   {
     bool const allUnknown = GENERATE(false, true);
     auto const positions = allUnknown ? std::vector<unsigned int>{SND_CHMAP_UNKNOWN, SND_CHMAP_UNKNOWN}
@@ -612,8 +595,7 @@ namespace ao::audio::backend::detail::test
     CHECK(*mapRes->observations.optCurrentPositions == positions);
   }
 
-  TEST_CASE("AlsaChannelMap - multichannel MONO slots keep partial stereo uncertainty without fabricated identity",
-            "[audio][unit][alsa-channel-map]")
+  TEST_CASE("AlsaChannelMap - multichannel MONO slots keep partial stereo uncertainty without fabricated identity")
   {
     auto positions = std::vector<unsigned int>{};
 
@@ -645,8 +627,7 @@ namespace ao::audio::backend::detail::test
     CHECK(mapRes->sourceSlots[1] == 1U);
   }
 
-  TEST_CASE("AlsaChannelMap - a conflicting known role beside MONO refuses the track route",
-            "[audio][unit][alsa-channel-map]")
+  TEST_CASE("AlsaChannelMap - a conflicting known role beside MONO refuses the track route")
   {
     auto const mapRes = prepareAlsaChannelMap(stereoFormat(),
                                               []
@@ -664,7 +645,7 @@ namespace ao::audio::backend::detail::test
     CHECK(mapRes.error().error.message.contains("ALSA current channel positions conflict"));
   }
 
-  TEST_CASE("AlsaChannelMap - malformed successful maps are output failures", "[audio][unit][alsa-channel-map]")
+  TEST_CASE("AlsaChannelMap - malformed successful maps are output failures")
   {
     auto observations = AlsaChannelMapObservations{};
 
@@ -708,8 +689,7 @@ namespace ao::audio::backend::detail::test
     CHECK(mapRes.error().error.message.contains("malformed channel map"));
   }
 
-  TEST_CASE("AlsaChannelMap - same-namespace duplicate identities fault the observed shape",
-            "[audio][unit][alsa-channel-map]")
+  TEST_CASE("AlsaChannelMap - same-namespace duplicate identities fault the observed shape")
   {
     auto positions = std::vector<unsigned int>{};
 
@@ -749,8 +729,7 @@ namespace ao::audio::backend::detail::test
     CHECK(mapRes.error().error.message.contains("malformed channel map"));
   }
 
-  TEST_CASE("AlsaChannelMap - driver and standard role identities stay distinct namespaces",
-            "[audio][unit][alsa-channel-map]")
+  TEST_CASE("AlsaChannelMap - driver and standard role identities stay distinct namespaces")
   {
     auto positions = std::vector<unsigned int>{};
 
@@ -805,7 +784,7 @@ namespace ao::audio::backend::detail::test
     CHECK(mapRes->sourceSlots[1] == 1U);
   }
 
-  TEST_CASE("AlsaChannelMap - identified sources never accept opaque driver roles", "[audio][unit][alsa-channel-map]")
+  TEST_CASE("AlsaChannelMap - identified sources never accept opaque driver roles")
   {
     auto positions = std::vector<unsigned int>{};
 
@@ -832,8 +811,7 @@ namespace ao::audio::backend::detail::test
     CHECK(mapRes.error().error.message.contains("ALSA current channel positions conflict"));
   }
 
-  TEST_CASE("AlsaChannelMap - independent operation failure preserves its original error and cause",
-            "[audio][unit][alsa-channel-map]")
+  TEST_CASE("AlsaChannelMap - independent operation failure preserves its original error and cause")
   {
     auto const cause =
       GENERATE(BackendOpenFailure::Cause::OutputFailure, BackendOpenFailure::Cause::TrackRouteIncompatible);
@@ -849,7 +827,7 @@ namespace ao::audio::backend::detail::test
     CHECK(mapRes.error().cause == cause);
   }
 
-  TEST_CASE("AlsaChannelMap - front-center mono cannot be relabelled as front-left", "[audio][unit][alsa-channel-map]")
+  TEST_CASE("AlsaChannelMap - front-center mono cannot be relabelled as front-left")
   {
     auto const client =
       PcmFormat{.sampleRate = 48000, .channels = 1, .encoding = SampleEncoding::Signed16Le, .speakerMask = 0x4};
@@ -861,8 +839,7 @@ namespace ao::audio::backend::detail::test
     CHECK(mapRes.error().error.code == Error::Code::FormatRejected);
   }
 
-  TEST_CASE("AlsaChannelMap - six-channel current order drives the real render permutation",
-            "[audio][unit][alsa-channel-map]")
+  TEST_CASE("AlsaChannelMap - six-channel current order drives the real render permutation")
   {
     auto const client =
       PcmFormat{.sampleRate = 48000, .channels = 6, .encoding = SampleEncoding::Signed16Le, .speakerMask = 0x3f};
@@ -887,8 +864,7 @@ namespace ao::audio::backend::detail::test
     CHECK(bytes == expected);
   }
 
-  TEST_CASE("AlsaChannelMap - production in-place permutation preserves literal sample bytes in every storage type",
-            "[audio][unit][alsa-channel-map]")
+  TEST_CASE("AlsaChannelMap - production in-place permutation preserves literal sample bytes in every storage type")
   {
     struct SampleBytes final
     {

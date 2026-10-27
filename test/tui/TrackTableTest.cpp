@@ -217,7 +217,7 @@ namespace ao::tui::test
     }
   } // namespace
 
-  TEST_CASE("TrackTable - framed rows share the right padding with the scrollbar", "[tui][unit][track-table]")
+  TEST_CASE("TrackTable - framed rows share the right padding with the scrollbar")
   {
     using namespace ftxui;
     auto const presentation = rt::TrackPresentationSpec{.id = "padding", .visibleFields = {rt::TrackField::Title}};
@@ -274,7 +274,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackTable - track rows keep metadata columns aligned", "[tui][unit][track-table]")
+  TEST_CASE("TrackTable - track rows keep metadata columns aligned")
   {
     auto const tracks = std::vector{
       trackEntry(TrackId{1}, "Alpha", "Artist One", "Album One", 7, std::chrono::seconds{65}),
@@ -302,7 +302,7 @@ namespace ao::tui::test
     CHECK(cellPosition(second, "│") == cellPosition(header, "│"));
   }
 
-  TEST_CASE("TrackTable - wide glyph titles do not shift metadata columns", "[tui][unit][track-table]")
+  TEST_CASE("TrackTable - wide glyph titles do not shift metadata columns")
   {
     auto const tracks = std::vector{
       trackEntry(
@@ -325,7 +325,7 @@ namespace ao::tui::test
     CHECK(cellPosition(second, "Album Two") == cellPosition(header, "Album"));
   }
 
-  TEST_CASE("TrackTable - playing marker uses its own leading column", "[tui][unit][track-table]")
+  TEST_CASE("TrackTable - playing marker uses its own leading column")
   {
     auto const tracks = std::vector{
       trackEntry(TrackId{1}, "Alpha", "Artist One", "Album One", 7, std::chrono::seconds{65}),
@@ -344,7 +344,7 @@ namespace ao::tui::test
     CHECK(cellPosition(first, "7") == cellPosition(second, "8"));
   }
 
-  TEST_CASE("TrackTable - empty state remains visible", "[tui][unit][track-table]")
+  TEST_CASE("TrackTable - empty state remains visible")
   {
     auto const tracks = std::vector<TrackListEntry>{};
     auto const text = renderText(trackTableView(tracks, 0, kInvalidTrackId, rt::defaultTrackPresentationSpec()));
@@ -353,7 +353,7 @@ namespace ao::tui::test
     CHECK(text.contains("This List has no tracks. Choose another List to browse."));
   }
 
-  TEST_CASE("TrackTable - presentation controls visible columns", "[tui][unit][track-table]")
+  TEST_CASE("TrackTable - presentation controls visible columns")
   {
     auto const presentation = rt::TrackPresentationSpec{
       .id = "tui-test", .visibleFields = {rt::TrackField::Title, rt::TrackField::Year, rt::TrackField::Duration}};
@@ -371,7 +371,7 @@ namespace ao::tui::test
     CHECK(text.contains("1:05"));
   }
 
-  TEST_CASE("TrackTable - maps track rows through section headers", "[tui][unit][track-table]")
+  TEST_CASE("TrackTable - maps track rows through section headers")
   {
     auto const sections = std::vector{
       TrackSection{.rowBegin = 0, .rowCount = 2, .primaryText = "Album A"},
@@ -389,7 +389,7 @@ namespace ao::tui::test
     CHECK(trackIndexForVisualRow(4, 3, sections) == 2);
   }
 
-  TEST_CASE("TrackTable - grouped sections render as non-selectable headers", "[tui][unit][track-table]")
+  TEST_CASE("TrackTable - grouped sections render as non-selectable headers")
   {
     auto const presentation =
       rt::TrackPresentationSpec{.id = "grouped", .visibleFields = {rt::TrackField::Title, rt::TrackField::Duration}};
@@ -431,7 +431,7 @@ namespace ao::tui::test
     CHECK(sectionHitRegions[1].box.y_min == albumBLine);
   }
 
-  TEST_CASE("TrackTable - negative selection does not highlight section headers", "[tui][unit][track-table]")
+  TEST_CASE("TrackTable - negative selection does not highlight section headers")
   {
     auto const presentation =
       rt::TrackPresentationSpec{.id = "grouped", .visibleFields = {rt::TrackField::Title, rt::TrackField::Duration}};
@@ -449,7 +449,7 @@ namespace ao::tui::test
     CHECK_FALSE(rendered.screen.PixelAt(2, trackLine).inverted);
   }
 
-  TEST_CASE("TrackTable credits - compact categories count every entry including duplicates", "[tui][unit][credits]")
+  TEST_CASE("TrackTable credits - compact categories count every entry including duplicates")
   {
     auto const presentation = rt::TrackPresentationSpec{
       .id = "credits", .visibleFields = {rt::TrackField::Conductor, rt::TrackField::Ensemble, rt::TrackField::Soloist}};
@@ -471,7 +471,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackTable - projected column widths reposition following columns", "[tui][unit][track-table]")
+  TEST_CASE("TrackTable - projected column widths reposition following columns")
   {
     auto const presentation =
       rt::TrackPresentationSpec{.id = "widths", .visibleFields = {rt::TrackField::Title, rt::TrackField::Duration}};
@@ -498,7 +498,7 @@ namespace ao::tui::test
     CHECK(cellPosition(resizedHeader, "Duration") < cellPosition(defaultHeader, "Duration"));
   }
 
-  TEST_CASE("TrackTable - available terminal width expands flexible columns", "[tui][unit][track-table]")
+  TEST_CASE("TrackTable - available terminal width expands flexible columns")
   {
     auto const presentation = rt::TrackPresentationSpec{
       .id = "elastic-widths", .visibleFields = {rt::TrackField::Title, rt::TrackField::Artist, rt::TrackField::Album}};
@@ -533,7 +533,7 @@ namespace ao::tui::test
     CHECK(wideHandles[0].availableColumns == 120);
   }
 
-  TEST_CASE("TrackTable - renderer consumes projected widths without re-solving", "[tui][unit][track-table]")
+  TEST_CASE("TrackTable - renderer consumes projected widths without re-solving")
   {
     auto const presentation = rt::TrackPresentationSpec{
       .id = "override-elastic-widths",
@@ -594,7 +594,7 @@ namespace ao::tui::test
     CHECK(wideHandles[2].box.x_min == narrowHandles[2].box.x_min + 10);
   }
 
-  TEST_CASE("TrackTable - narrow available width clamps columns to terminal minimum", "[tui][unit][track-table]")
+  TEST_CASE("TrackTable - narrow available width clamps columns to terminal minimum")
   {
     auto const presentation = rt::TrackPresentationSpec{
       .id = "narrow-elastic-widths",
@@ -618,7 +618,7 @@ namespace ao::tui::test
     CHECK(handles[2].columns == kMinimumTrackColumnWidthColumns);
   }
 
-  TEST_CASE("TrackTable - header exposes resize handles", "[tui][unit][track-table]")
+  TEST_CASE("TrackTable - header exposes resize handles")
   {
     auto const presentation =
       rt::TrackPresentationSpec{.id = "handles", .visibleFields = {rt::TrackField::Title, rt::TrackField::Duration}};
@@ -640,7 +640,7 @@ namespace ao::tui::test
     CHECK(rendered.screen.PixelAt(handles[0].box.x_max + 2, handles[0].box.y_min).character == "│");
   }
 
-  TEST_CASE("TrackTable - selected row style fills the table width", "[tui][unit][track-table]")
+  TEST_CASE("TrackTable - selected row style fills the table width")
   {
     auto const tracks = std::vector{
       trackEntry(TrackId{1}, "Alpha", "Artist One", "Album One", 7, std::chrono::seconds{65}),
@@ -657,7 +657,7 @@ namespace ao::tui::test
     checkInteractiveSurface(rendered.screen.PixelAt(90, row));
   }
 
-  TEST_CASE("TrackTable - an unfocused marked row reverses the terminal's own pair", "[tui][unit][track-table]")
+  TEST_CASE("TrackTable - an unfocused marked row reverses the terminal's own pair")
   {
     auto const tracks = std::vector{
       trackEntry(TrackId{1}, "Alpha", "Artist One", "Album One", 7, std::chrono::seconds{65}),
@@ -682,7 +682,7 @@ namespace ao::tui::test
     CHECK_FALSE(rendered.screen.PixelAt(2, plainRow).inverted);
   }
 
-  TEST_CASE("TrackTable - a marked focused row reverses the interactive pair", "[tui][unit][track-table]")
+  TEST_CASE("TrackTable - a marked focused row reverses the interactive pair")
   {
     auto const tracks = std::vector{
       trackEntry(TrackId{1}, "Alpha", "Artist One", "Album One", 7, std::chrono::seconds{65}),
@@ -711,7 +711,7 @@ namespace ao::tui::test
     CHECK_FALSE(rendered.screen.PixelAt(2, plainRow).inverted);
   }
 
-  TEST_CASE("TrackTable - the focused surface overrides the playing caret accent", "[tui][unit][track-table]")
+  TEST_CASE("TrackTable - the focused surface overrides the playing caret accent")
   {
     auto const tracks = std::vector{
       trackEntry(TrackId{1}, "Alpha", "Artist One", "Album One", 7, std::chrono::seconds{65}),
@@ -733,7 +733,7 @@ namespace ao::tui::test
     CHECK(unfocused.screen.PixelAt(0, unfocusedRow).foreground_color == ftxui::Color::Green);
   }
 
-  TEST_CASE("TrackTable - a playing marked focused row keeps one readable pair", "[tui][unit][track-table]")
+  TEST_CASE("TrackTable - a playing marked focused row keeps one readable pair")
   {
     auto const tracks = std::vector{
       trackEntry(TrackId{1}, "Alpha", "Artist One", "Album One", 7, std::chrono::seconds{65}),
@@ -759,7 +759,7 @@ namespace ao::tui::test
     CHECK(rendered.screen.PixelAt(2, row).inverted);
   }
 
-  TEST_CASE("TrackTable - selected row is scrolled into a short viewport", "[tui][unit][track-table]")
+  TEST_CASE("TrackTable - selected row is scrolled into a short viewport")
   {
     auto tracks = std::vector<TrackListEntry>{};
 
@@ -781,7 +781,7 @@ namespace ao::tui::test
     CHECK_FALSE(rendered.text.contains("Track 00"));
   }
 
-  TEST_CASE("TrackTable - missing field values render one dim dash per column", "[tui][unit][track-table]")
+  TEST_CASE("TrackTable - missing field values render one dim dash per column")
   {
     auto const presentation = rt::TrackPresentationSpec{
       .id = "fallbacks",
@@ -859,7 +859,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackTable - a literal dash value keeps full emphasis and column alignment", "[tui][unit][track-table]")
+  TEST_CASE("TrackTable - a literal dash value keeps full emphasis and column alignment")
   {
     auto const presentation = rt::TrackPresentationSpec{
       .id = "literal-dash",
@@ -931,7 +931,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackTable - title column expands on wide terminals", "[tui][unit][track-table]")
+  TEST_CASE("TrackTable - title column expands on wide terminals")
   {
     auto const presentation =
       rt::TrackPresentationSpec{.id = "wide", .visibleFields = {rt::TrackField::Title, rt::TrackField::Duration}};
@@ -948,7 +948,7 @@ namespace ao::tui::test
     CHECK(text.contains("wide-terminal-tail"));
   }
 
-  TEST_CASE("TrackTable - computeTrackTableWindow disables windowing without a viewport", "[tui][unit][track-table]")
+  TEST_CASE("TrackTable - computeTrackTableWindow disables windowing without a viewport")
   {
     auto const window = computeTrackTableWindow(50, 100, 0, kTrackTableOverscanRows);
 
@@ -958,7 +958,7 @@ namespace ao::tui::test
     CHECK(window.bottomSpacerRows == 0);
   }
 
-  TEST_CASE("TrackTable - computeTrackTableWindow keeps spacer sums equal to the total", "[tui][unit][track-table]")
+  TEST_CASE("TrackTable - computeTrackTableWindow keeps spacer sums equal to the total")
   {
     std::int32_t const overscan = 8;
     std::int32_t const total = 1000;
@@ -996,7 +996,7 @@ namespace ao::tui::test
     CHECK(negative.startVisualRow == 0);
   }
 
-  TEST_CASE("TrackTable - computeTrackTableWindow drops both spacers for short lists", "[tui][unit][track-table]")
+  TEST_CASE("TrackTable - computeTrackTableWindow drops both spacers for short lists")
   {
     auto const window = computeTrackTableWindow(25, 50, 40, 8);
 
@@ -1006,7 +1006,7 @@ namespace ao::tui::test
     CHECK(window.bottomSpacerRows == 0);
   }
 
-  TEST_CASE("TrackTable - computeTrackTableWindow returns empty for an empty list", "[tui][unit][track-table]")
+  TEST_CASE("TrackTable - computeTrackTableWindow returns empty for an empty list")
   {
     auto const window = computeTrackTableWindow(0, 0, 40, 8);
 
@@ -1016,7 +1016,7 @@ namespace ao::tui::test
     CHECK(window.bottomSpacerRows == 0);
   }
 
-  TEST_CASE("TrackTable - enumerateTrackTableRows reproduces the full build across windows", "[tui][unit][track-table]")
+  TEST_CASE("TrackTable - enumerateTrackTableRows reproduces the full build across windows")
   {
     auto const noSections = std::vector<TrackSection>{};
     auto const grouped = equalSections(6, 5); // 30 tracks, headers at 0/5/10/15/20/25
@@ -1048,7 +1048,7 @@ namespace ao::tui::test
     check(grouped, 30);
   }
 
-  TEST_CASE("TrackTable - enumerateTrackTableRows honors window boundaries", "[tui][unit][track-table]")
+  TEST_CASE("TrackTable - enumerateTrackTableRows honors window boundaries")
   {
     auto const sections = std::vector{
       TrackSection{.rowBegin = 0, .rowCount = 2, .primaryText = "Album A"},
@@ -1076,7 +1076,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackTable - virtualized render is pixel-identical to the full build", "[tui][unit][track-table]")
+  TEST_CASE("TrackTable - virtualized render is pixel-identical to the full build")
   {
     auto const tracks = manyTracks(5000);
     auto const presentation = rt::TrackPresentationSpec{
@@ -1107,7 +1107,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackTable - virtualized grouped render matches the full build", "[tui][unit][track-table]")
+  TEST_CASE("TrackTable - virtualized grouped render matches the full build")
   {
     auto const tracks = manyTracks(300);
     auto const sections = equalSections(10, 30);
@@ -1156,7 +1156,7 @@ namespace ao::tui::test
     CHECK(sectionRegion->box.y_max == sectionLine);
   }
 
-  TEST_CASE("TrackTable - virtualized render without selection matches the full build", "[tui][unit][track-table]")
+  TEST_CASE("TrackTable - virtualized render without selection matches the full build")
   {
     auto const tracks = manyTracks(4000);
     auto const presentation = rt::TrackPresentationSpec{
@@ -1190,7 +1190,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackTable - virtualization builds O(viewport) rows, not the whole library", "[tui][unit][track-table]")
+  TEST_CASE("TrackTable - virtualization builds O(viewport) rows, not the whole library")
   {
     std::size_t const trackCount = 5000;
     std::int32_t const viewportRows = 40;

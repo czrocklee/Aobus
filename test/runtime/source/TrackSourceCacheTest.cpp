@@ -40,8 +40,7 @@ namespace ao::rt::test
 {
   using namespace ao::library;
 
-  TEST_CASE("TrackSourceCache - acquire resolves only the explicit All Tracks virtual id",
-            "[runtime][unit][source][track-source-cache]")
+  TEST_CASE("TrackSourceCache - acquire resolves only the explicit All Tracks virtual id")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
@@ -57,8 +56,7 @@ namespace ao::rt::test
     CHECK(invalidRes.error().code == Error::Code::InvalidInput);
   }
 
-  TEST_CASE("TrackSourceCache - acquire creates and reuses one saved List identity",
-            "[runtime][unit][source][track-source-cache]")
+  TEST_CASE("TrackSourceCache - acquire creates and reuses one saved List identity")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto listId = ListId{0};
@@ -81,8 +79,7 @@ namespace ao::rt::test
     CHECK(&source == &secondLease.source());
   }
 
-  TEST_CASE("TrackSourceCache - acquire creates a live filtered smart list",
-            "[runtime][unit][source][track-source-cache]")
+  TEST_CASE("TrackSourceCache - acquire creates a live filtered smart list")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const matchingId = libraryFixture.addTrack("foo");
@@ -107,8 +104,7 @@ namespace ao::rt::test
     CHECK(sourceTrackIds(lease.source()) == std::vector{matchingId});
   }
 
-  TEST_CASE("TrackSourceCache - acquire rejects a missing list without an All Tracks fallback",
-            "[runtime][unit][source][track-source-cache]")
+  TEST_CASE("TrackSourceCache - acquire rejects a missing list without an All Tracks fallback")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
@@ -118,8 +114,7 @@ namespace ao::rt::test
     CHECK(res.error().code == Error::Code::NotFound);
   }
 
-  TEST_CASE("TrackSourceCache - reloadAllTracks updates allTracks source",
-            "[runtime][unit][source][track-source-cache]")
+  TEST_CASE("TrackSourceCache - reloadAllTracks updates allTracks source")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const firstId = libraryFixture.addTrack("Track 1");
@@ -133,8 +128,7 @@ namespace ao::rt::test
     CHECK(sourceTrackIds(allTracks.source()) == std::vector{firstId, secondId});
   }
 
-  TEST_CASE("TrackSourceCache - track delete notifications remove allTracks membership",
-            "[runtime][unit][source][track-source-cache]")
+  TEST_CASE("TrackSourceCache - track delete notifications remove allTracks membership")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Track 1");
@@ -156,8 +150,7 @@ namespace ao::rt::test
     CHECK(removal.trackIds == std::vector{trackId});
   }
 
-  TEST_CASE("TrackSourceCache - deleting a saved list invalidates its lease and rejects reacquisition",
-            "[runtime][unit][source][track-source-cache]")
+  TEST_CASE("TrackSourceCache - deleting a saved list invalidates its lease and rejects reacquisition")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto listId = ListId{0};
@@ -184,8 +177,7 @@ namespace ao::rt::test
     CHECK(res.error().code == Error::Code::NotFound);
   }
 
-  TEST_CASE("TrackSourceCache - headless metadata mutation updates all-tracks and smart membership once",
-            "[runtime][unit][source][track-source-cache]")
+  TEST_CASE("TrackSourceCache - headless metadata mutation updates all-tracks and smart membership once")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Before");
@@ -235,8 +227,7 @@ namespace ao::rt::test
     CHECK(insert.trackIds == std::vector{trackId});
   }
 
-  TEST_CASE("TrackSourceCache - invalid stored filter is empty and propagates through child sources",
-            "[runtime][unit][source][track-source-cache]")
+  TEST_CASE("TrackSourceCache - invalid stored filter is empty and propagates through child sources")
   {
     auto libraryFixture = MusicLibraryFixture{};
     libraryFixture.addTrack("Present only in All Tracks");
@@ -282,8 +273,7 @@ namespace ao::rt::test
     CHECK(optFilteredChildError->message == optParentError->message);
   }
 
-  TEST_CASE("TrackSourceCache - orderable track ids require a live source whose stored filter evaluates",
-            "[runtime][unit][source][track-source-cache]")
+  TEST_CASE("TrackSourceCache - orderable track ids require a live source whose stored filter evaluates")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const firstId = libraryFixture.addTrack("First");
@@ -340,8 +330,7 @@ namespace ao::rt::test
     CHECK(deletedRes.error().code == Error::Code::InvalidState);
   }
 
-  TEST_CASE("TrackSourceCache - shutdown does not semantically invalidate a leased All Tracks source",
-            "[runtime][unit][source][track-source-cache]")
+  TEST_CASE("TrackSourceCache - shutdown does not semantically invalidate a leased All Tracks source")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Pinned across cache shutdown");
@@ -370,8 +359,7 @@ namespace ao::rt::test
     subscription.reset();
   }
 
-  TEST_CASE("TrackSourceCache - a filtered saved-list lease survives cache shutdown",
-            "[runtime][unit][source][track-source-cache]")
+  TEST_CASE("TrackSourceCache - a filtered saved-list lease survives cache shutdown")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const matchingId = libraryFixture.addTrack("Pinned");
@@ -406,8 +394,7 @@ namespace ao::rt::test
     subscription.reset();
   }
 
-  TEST_CASE("TrackSourceCache - cached sources preserve mutation delivery, identity, and deletion invalidation",
-            "[runtime][unit][source][track-source-cache]")
+  TEST_CASE("TrackSourceCache - cached sources preserve mutation delivery, identity, and deletion invalidation")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Inserted after acquisition");
@@ -451,8 +438,7 @@ namespace ao::rt::test
     CHECK(missingRes.error().code == Error::Code::NotFound);
   }
 
-  TEST_CASE("TrackSourceCache - a List created after a deletion leaves the invalidated lease dead",
-            "[runtime][unit][source][track-source-cache]")
+  TEST_CASE("TrackSourceCache - a List created after a deletion leaves the invalidated lease dead")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
@@ -485,8 +471,7 @@ namespace ao::rt::test
     CHECK_FALSE(cache.acquire(listId));
   }
 
-  TEST_CASE("TrackSourceCache - rejected parent deletion leaves its cached dependency graph live",
-            "[runtime][unit][source][track-source-cache]")
+  TEST_CASE("TrackSourceCache - rejected parent deletion leaves its cached dependency graph live")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
@@ -534,8 +519,7 @@ namespace ao::rt::test
     CHECK(std::holds_alternative<SourceInvalidated>(parentBatches[0]));
   }
 
-  TEST_CASE("TrackSourceCache - reparent rewires deletion propagation to the new parent",
-            "[runtime][unit][source][track-source-cache]")
+  TEST_CASE("TrackSourceCache - reparent rewires deletion propagation to the new parent")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
@@ -586,8 +570,7 @@ namespace ao::rt::test
     REQUIRE(commandsFixture.runTask(commands.deleteListAsync(newParentId)));
   }
 
-  TEST_CASE("TrackSourceCache - definition rebind keeps identity and metadata-only updates emit nothing",
-            "[runtime][unit][source][track-source-cache]")
+  TEST_CASE("TrackSourceCache - definition rebind keeps identity and metadata-only updates emit nothing")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
@@ -617,8 +600,7 @@ namespace ao::rt::test
     CHECK(std::holds_alternative<SourceReset>(batches[0]));
   }
 
-  TEST_CASE("TrackSourceCache - detailed List order moves publish exact batches and reset explicitly",
-            "[runtime][unit][source][track-source-cache]")
+  TEST_CASE("TrackSourceCache - detailed List order moves publish exact batches and reset explicitly")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const first = libraryFixture.addTrack("First");
@@ -658,8 +640,7 @@ namespace ao::rt::test
     CHECK(sourceTrackIds(lease.source()) == std::vector{first, second, third});
   }
 
-  TEST_CASE("TrackSourceCache - reentrant metadata mutation is rejected during detailed publication",
-            "[runtime][unit][source][list-order]")
+  TEST_CASE("TrackSourceCache - reentrant metadata mutation is rejected during detailed publication")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const first = libraryFixture.addTrack("First");
@@ -724,8 +705,7 @@ namespace ao::rt::test
     CHECK(optView->name() == "Before");
   }
 
-  TEST_CASE("TrackSourceCache - reentrant reparent is rejected during detailed publication",
-            "[runtime][unit][source][list-order]")
+  TEST_CASE("TrackSourceCache - reentrant reparent is rejected during detailed publication")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const first = libraryFixture.addTrack("First");
@@ -824,8 +804,7 @@ namespace ao::rt::test
     REQUIRE(commandsFixture.runTask(commands.deleteListAsync(oldParentId)));
   }
 
-  TEST_CASE("TrackSourceCache - mutations reentered from a delta observer are rejected",
-            "[runtime][unit][source][list-order]")
+  TEST_CASE("TrackSourceCache - mutations reentered from a delta observer are rejected")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const first = libraryFixture.addTrack("First");
@@ -933,8 +912,7 @@ namespace ao::rt::test
     CHECK(commandsFixture.runTask(commands.deleteListAsync(finalParentId)));
   }
 
-  TEST_CASE("TrackSourceCache - hidden rank re-enters at its stored position",
-            "[runtime][unit][source][track-source-cache]")
+  TEST_CASE("TrackSourceCache - hidden rank re-enters at its stored position")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const visible = libraryFixture.addTrack("Visible");
@@ -987,8 +965,7 @@ namespace ao::rt::test
     CHECK(sourceTrackIds(childLease.source()) == expected);
   }
 
-  TEST_CASE("TrackSourceCache - track deletion does not duplicate order removal via parent",
-            "[runtime][unit][source][track-source-cache]")
+  TEST_CASE("TrackSourceCache - track deletion does not duplicate order removal via parent")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const first = libraryFixture.addTrack("First");
@@ -1026,8 +1003,7 @@ namespace ao::rt::test
     CHECK(sourceTrackIds(lease.source()) == expected);
   }
 
-  TEST_CASE("TrackSourceCache - explicit List removal publishes one final visible removal",
-            "[runtime][unit][source][list-order]")
+  TEST_CASE("TrackSourceCache - explicit List removal publishes one final visible removal")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const first = libraryFixture.addTrack("First");
@@ -1071,7 +1047,7 @@ namespace ao::rt::test
     CHECK(sourceTrackIds(lease.source()) == std::vector{first});
   }
 
-  TEST_CASE("TrackSourceCache - identical source specs share one ad-hoc source", "[runtime][unit][source][source-spec]")
+  TEST_CASE("TrackSourceCache - identical source specs share one ad-hoc source")
   {
     auto libraryFixture = MusicLibraryFixture{};
     libraryFixture.addTrack("First");
@@ -1089,8 +1065,7 @@ namespace ao::rt::test
     CHECK(&first.source() != &different.source());
   }
 
-  TEST_CASE("TrackSourceCache - an invalid ad-hoc source reports its error without affecting a valid spec",
-            "[runtime][unit][source][source-spec]")
+  TEST_CASE("TrackSourceCache - an invalid ad-hoc source reports its error without affecting a valid spec")
   {
     auto libraryFixture = MusicLibraryFixture{};
     libraryFixture.addTrack("First");
@@ -1113,8 +1088,7 @@ namespace ao::rt::test
     CHECK(valid->size() == 1);
   }
 
-  TEST_CASE("TrackSourceCache - acquiring a new ad-hoc source prunes expired unrelated specs",
-            "[runtime][unit][source][source-spec]")
+  TEST_CASE("TrackSourceCache - acquiring a new ad-hoc source prunes expired unrelated specs")
   {
     auto libraryFixture = MusicLibraryFixture{};
     libraryFixture.addTrack("First");
@@ -1138,8 +1112,7 @@ namespace ao::rt::test
     CHECK(&live.source() == &sameLive.source());
   }
 
-  TEST_CASE("TrackSourceCache - a list stored at the root derives from All Tracks",
-            "[runtime][unit][source][track-source-cache]")
+  TEST_CASE("TrackSourceCache - a list stored at the root derives from All Tracks")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const kept = libraryFixture.addTrack("Keep");

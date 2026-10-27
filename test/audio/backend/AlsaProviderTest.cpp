@@ -43,8 +43,7 @@ namespace ao::audio::backend::test
     }
   } // namespace
 
-  TEST_CASE("AlsaProvider - exposes exclusive devices and rejects subscriptions after shutdown",
-            "[audio][unit][alsa][provider][concurrency]")
+  TEST_CASE("AlsaProvider - exposes exclusive devices and rejects subscriptions after shutdown", "[concurrency]")
   {
     auto hooksPtr = makeMonitorHooks();
     auto provider = AlsaProvider{hooksPtr};
@@ -68,7 +67,7 @@ namespace ao::audio::backend::test
     CHECK(graphCalls == 0U);
   }
 
-  TEST_CASE("AlsaProvider - initial device callback may destroy provider", "[audio][unit][alsa][provider][concurrency]")
+  TEST_CASE("AlsaProvider - initial device callback may destroy provider", "[concurrency]")
   {
     auto monitorExited = std::binary_semaphore{0};
     auto monitorStateDestroyed = std::binary_semaphore{0};
@@ -97,8 +96,7 @@ namespace ao::audio::backend::test
     sub.reset();
   }
 
-  TEST_CASE("AlsaProvider - nested provider callback may destroy the outer provider",
-            "[audio][unit][alsa][provider][concurrency]")
+  TEST_CASE("AlsaProvider - nested provider callback may destroy the outer provider", "[concurrency]")
   {
     auto outerMonitorExited = std::binary_semaphore{0};
     auto outerStateDestroyed = std::binary_semaphore{0};
@@ -133,8 +131,7 @@ namespace ao::audio::backend::test
     innerSub.reset();
   }
 
-  TEST_CASE("AlsaProvider - monitor callback may destroy provider on its worker",
-            "[audio][unit][alsa][provider][concurrency]")
+  TEST_CASE("AlsaProvider - monitor callback may destroy provider on its worker", "[concurrency]")
   {
     auto monitorExited = std::binary_semaphore{0};
     auto monitorStateDestroyed = std::binary_semaphore{0};
@@ -164,8 +161,7 @@ namespace ao::audio::backend::test
     CHECK_FALSE(sub);
   }
 
-  TEST_CASE("AlsaProvider - graph callback may destroy provider and retained backend stays inert",
-            "[audio][unit][alsa][provider][concurrency]")
+  TEST_CASE("AlsaProvider - graph callback may destroy provider and retained backend stays inert", "[concurrency]")
   {
     auto monitorExited = std::binary_semaphore{0};
     auto hooksPtr = makeMonitorHooks();
@@ -200,8 +196,7 @@ namespace ao::audio::backend::test
     CHECK_FALSE(graphSub);
   }
 
-  TEST_CASE("AlsaProvider - device and graph subscriptions may outlive provider",
-            "[audio][unit][alsa][provider][concurrency]")
+  TEST_CASE("AlsaProvider - device and graph subscriptions may outlive provider", "[concurrency]")
   {
     auto deviceSub = utility::ScopedRegistration{};
     auto graphSub = utility::ScopedRegistration{};
@@ -222,8 +217,7 @@ namespace ao::audio::backend::test
     CHECK_FALSE(graphSub);
   }
 
-  TEST_CASE("AlsaProvider - concurrent subscriptions retain distinct registrations",
-            "[audio][unit][alsa][provider][concurrency]")
+  TEST_CASE("AlsaProvider - concurrent subscriptions retain distinct registrations", "[concurrency]")
   {
     auto refreshComplete = std::binary_semaphore{0};
     auto hooksPtr = makeMonitorHooks();
@@ -262,8 +256,7 @@ namespace ao::audio::backend::test
     provider.shutdown();
   }
 
-  TEST_CASE("AlsaProvider - reset removes a callback copied by monitor publication",
-            "[audio][unit][alsa][provider][concurrency]")
+  TEST_CASE("AlsaProvider - reset removes a callback copied by monitor publication", "[concurrency]")
   {
     auto refreshComplete = std::binary_semaphore{0};
     auto hooksPtr = makeMonitorHooks();
@@ -298,8 +291,7 @@ namespace ao::audio::backend::test
     provider.shutdown();
   }
 
-  TEST_CASE("AlsaProvider - concurrent external shutdown callers share callback quiescence",
-            "[audio][unit][alsa][provider][concurrency]")
+  TEST_CASE("AlsaProvider - concurrent external shutdown callers share callback quiescence", "[concurrency]")
   {
     auto callbackEntered = std::binary_semaphore{0};
     auto releaseCallback = std::binary_semaphore{0};
@@ -350,8 +342,7 @@ namespace ao::audio::backend::test
     CHECK(provider.status().devices.empty());
   }
 
-  TEST_CASE("AlsaProvider - callback shutdown returns while later external shutdown waits",
-            "[audio][unit][alsa][provider][concurrency]")
+  TEST_CASE("AlsaProvider - callback shutdown returns while later external shutdown waits", "[concurrency]")
   {
     auto callbackShutdownReturned = std::binary_semaphore{0};
     auto releaseCallback = std::binary_semaphore{0};

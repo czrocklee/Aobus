@@ -478,6 +478,11 @@ class WindowsBatchPortalTest(unittest.TestCase):
 
 
 class CliParseTest(unittest.TestCase):
+    def setUp(self):
+        # Dispatch fixtures substitute build results; manifest semantics use
+        # real configured-source fixtures in test_check_registration.py.
+        self.enterContext(mock.patch.object(check_command, "_verify_test_source_manifest"))
+
     def parse(self, argv):
         return parse_arguments(make_parser(), argv)
 
@@ -519,7 +524,7 @@ class CliParseTest(unittest.TestCase):
         self.assertEqual(args.flavor, "release")
         self.assertEqual(args.samples, 20)
         self.assertEqual(args.warmups, 1)
-        self.assertEqual(args.filter, "[perf][review]")
+        self.assertEqual(args.filter, "PerformanceReview - ordering and completion-alias workloads")
         self.assertIsNone(args.library_root)
         self.assertEqual(args.library_locale, "en-US")
 
@@ -609,7 +614,7 @@ class CliParseTest(unittest.TestCase):
         do_build.assert_called_once_with(args, ["ao_perf_baseline"])
         command = run.call_args.args[0]
         environment = run.call_args.kwargs["env"]
-        self.assertEqual(command, [str(executable), "[perf][review]"])
+        self.assertEqual(command, [str(executable), "PerformanceReview - ordering and completion-alias workloads"])
         self.assertEqual(environment["AOBUS_PERF_SAMPLES"], "24")
         self.assertEqual(environment["AOBUS_PERF_WARMUPS"], "2")
         self.assertEqual(environment["AOBUS_PERF_REVISION"], "abc123")
@@ -2259,6 +2264,16 @@ class CliParseTest(unittest.TestCase):
             asan=False,
             tsan=False,
         )
+
+    def test_performance_targets_are_never_in_native_concurrency_groups(self):
+        for profile in (builddir.LINUX_PROFILE, builddir.MACOS_PROFILE, builddir.WINDOWS_PROFILE):
+            with self.subTest(platform=profile.name):
+                with mock.patch.object(builddir, "platform_profile", return_value=profile):
+                    suites = test_command.suites_for("concurrency")
+                targets = {test_command.SUITES[suite].target for suite in suites}
+                self.assertNotIn(perf_command.TARGET, targets)
+                self.assertNotIn("ao_tui_bench", targets)
+                self.assertTrue(suites)
 
     @mock.patch.object(build_command, "validate_build_tree", return_value="gcc")
     @mock.patch.object(Path, "is_dir", return_value=True)
@@ -4312,6 +4327,13 @@ class CliParseTest(unittest.TestCase):
         self.assertIn("explicit filter applies only to Catch2 suites", help_text)
         self.assertIn("at least one test must match globally", help_text)
         self.assertIn("match and then skip still count", help_text)
+        self.assertIn("Escape literal commas", help_text)
+        self.assertIn(r"name\, alias\, and field", help_text)
+
+    def test_test_parser_preserves_escaped_literal_commas(self):
+        test_filter = r"FieldCatalog - finds descriptors by canonical name\, alias\, and field"
+        args = self.parse(["test", "--core", "--list", test_filter])
+        self.assertEqual(args.filter, test_filter)
 
     def test_help_exits_zero(self):
         for argv in (["--help"], ["build", "--help"], ["tidy", "--help"], ["run", "--help"]):

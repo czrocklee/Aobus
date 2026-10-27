@@ -838,7 +838,14 @@ class HygieneCommandTest(unittest.TestCase):
     def setUp(self):
         self.stack = contextlib.ExitStack()
         self.addCleanup(self.stack.close)
-        self.files = ["test/audio/FooTest.cpp", "lib/audio/Foo.h", "script/foo.py"]
+        self.files = [
+            "test/audio/FooTest.cpp",
+            "test/audio/FooTestSupport.h",
+            "test/tui/TrackTableBenchmark.cpp",
+            "lib/audio/Foo.h",
+            "script/foo.py",
+        ]
+        self.test_tree_files = self.files[:3]
         self.resolve = self.stack.enter_context(
             mock.patch.object(hygiene.format_command, "resolve_files", return_value=self.files)
         )
@@ -861,8 +868,11 @@ class HygieneCommandTest(unittest.TestCase):
         self.resolve.assert_called_once()
         self.assertTrue(self.format.call_args.args[0].check)
         self.assertEqual(self.format.call_args.kwargs["files"], self.files)
-        self.assertEqual(self.test_audit.call_args.args[0].paths, self.files[:1])
-        self.assertEqual(self.name_audit.call_args.args[0].paths, self.files[:2])
+        # Content discovery, not the registration filename convention: the
+        # header and the benchmark source reach the test audit alongside the
+        # registration file, while lib/ and Python files do not.
+        self.assertEqual(self.test_audit.call_args.args[0].paths, self.test_tree_files)
+        self.assertEqual(self.name_audit.call_args.args[0].paths, self.files[:4])
         self.assertTrue(self.test_audit.call_args.args[0].fail_on_issue)
         self.assertEqual(self.tidy.call_args.kwargs["resolved_scope"], (self.files, False))
 
@@ -874,10 +884,35 @@ class HygieneCommandTest(unittest.TestCase):
         self.assertEqual(self.tidy.call_args.kwargs["resolved_scope"], (["script/foo.py"], True))
 
     def test_objective_cpp_tests_reach_the_test_audit(self):
-        self.resolve.return_value = ["test/utility/FooTest.mm"]
+        self.resolve.return_value = ["test/media/FooTest.mm"]
         self.assertEqual(hygiene.run_command(_hygiene_args()), 0)
-        self.assertEqual(self.test_audit.call_args.args[0].paths, ["test/utility/FooTest.mm"])
+        self.assertEqual(self.test_audit.call_args.args[0].paths, ["test/media/FooTest.mm"])
         self.assertTrue(self.test_audit.call_args.args[0].fail_on_issue)
+
+    def test_registration_in_a_support_file_fails_hygiene(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            path = root / "test" / "query" / "FooSupport.cpp"
+            path.parent.mkdir(parents=True)
+            path.write_text('TEST_CASE("Foo - preserves the contract") {}\n', encoding="utf-8")
+            self.resolve.return_value = [str(path)]
+            self.test_audit.side_effect = lambda args: int(
+                bool(hygiene.test_audit.testaudit.audit_paths(args.paths, root))
+            )
+            is_candidate = hygiene.testaudit.is_audit_candidate
+            with mock.patch.object(
+                hygiene.testaudit, "is_audit_candidate", side_effect=lambda name: is_candidate(name, root)
+            ):
+                self.assertEqual(hygiene.run_command(_hygiene_args()), 1)
+        self.assertTrue(self.test_audit.call_args.args[0].fail_on_issue)
+        self.name_audit.assert_called_once()
+        self.tidy.assert_called_once()
+
+    def test_lint_fixtures_never_reach_the_test_audit(self):
+        self.resolve.return_value = ["test/lint/fixture/aobus-check/BasicTest.cpp"]
+        self.assertEqual(hygiene.run_command(_hygiene_args()), 0)
+        self.test_audit.assert_not_called()
+        self.assertEqual(self.name_audit.call_args.args[0].paths, self.resolve.return_value)
 
     def test_empty_scope_does_not_expand_to_a_repository_scan(self):
         self.resolve.return_value = []

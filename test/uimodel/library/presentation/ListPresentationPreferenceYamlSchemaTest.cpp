@@ -19,8 +19,7 @@ namespace ao::uimodel::test
     auto const kLibraryId = utility::parseUuid("123e4567-e89b-12d3-a456-426614174000").value();
   } // namespace
 
-  TEST_CASE("ListPresentationPreferenceYamlSchema - round-trip preserves opaque presentation ids",
-            "[uimodel][unit][presentation-preference]")
+  TEST_CASE("ListPresentationPreferenceYamlSchema - round-trip preserves opaque presentation ids")
   {
     auto state = ListPresentations::Snapshot{};
     state[ListId{10}] = "plugin-preset";
@@ -41,8 +40,7 @@ namespace ao::uimodel::test
     CHECK((*decodedRes).at(ListId{10}) == "plugin-preset");
   }
 
-  TEST_CASE("ListPresentationPreferenceYamlSchema - rejects an invalid document as one object",
-            "[uimodel][unit][presentation-preference]")
+  TEST_CASE("ListPresentationPreferenceYamlSchema - rejects an invalid document as one object")
   {
     auto document = ListPresentationPreferenceDocument{
       .preferences =
@@ -88,8 +86,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("ListPresentationPreferenceYamlSchema - owns the exact YAML mapping",
-            "[uimodel][unit][presentation-preference][yaml]")
+  TEST_CASE("ListPresentationPreferenceYamlSchema - owns the exact YAML mapping")
   {
     auto state = ListPresentations::Snapshot{};
     state[ListId{10}] = "plugin-preset";
@@ -110,8 +107,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE(
-    "ListPresentationPreferenceYamlSchema - a document saved for another library keeps only virtual-list preferences",
-    "[uimodel][unit][presentation-preference][yaml]")
+    "ListPresentationPreferenceYamlSchema - a document saved for another library keeps only virtual-list preferences")
   {
     auto state = ListPresentations::Snapshot{{ListId{10}, "albums"}, {rt::kAllTracksListId, "songs"}};
     auto const otherLibraryId = utility::parseUuid("00000000-0000-4000-8000-000000000001").value();
@@ -125,8 +121,7 @@ namespace ao::uimodel::test
     CHECK((*decodedRes) == ListPresentations::Snapshot{{rt::kAllTracksListId, "songs"}});
   }
 
-  TEST_CASE("ListPresentationPreferenceYamlSchema - rejects invalid YAML candidates",
-            "[uimodel][unit][presentation-preference][yaml]")
+  TEST_CASE("ListPresentationPreferenceYamlSchema - rejects invalid YAML candidates")
   {
     SECTION("Future version is reported before interpreting its payload")
     {

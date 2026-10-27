@@ -34,8 +34,7 @@
 
 namespace ao::tui::test
 {
-  TEST_CASE("DetailSections - empty credits expose focused all-kind and locked category editors",
-            "[tui][unit][credits]")
+  TEST_CASE("DetailSections - empty credits expose focused all-kind and locked category editors")
   {
     using namespace ftxui;
     auto fixture = EventControllerFixture{};
@@ -83,7 +82,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("DetailSections - focused credits carry their shortcut on a single heading", "[tui][unit][credits]")
+  TEST_CASE("DetailSections - focused credits carry their shortcut on a single heading")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -136,7 +135,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("DetailSections - explicit focus stays outside the normal panel cycle", "[tui][unit][detail]")
+  TEST_CASE("DetailSections - explicit focus stays outside the normal panel cycle")
   {
     using namespace ftxui;
     auto fixture = EventControllerFixture{};
@@ -183,8 +182,7 @@ namespace ao::tui::test
     CHECK(fixture.shell.isDetailFocused());
   }
 
-  TEST_CASE("DetailSections - playback remains available while section keys leave track selection alone",
-            "[tui][integration][detail]")
+  TEST_CASE("DetailSections - playback remains available while section keys leave track selection alone")
   {
     using namespace ftxui;
     auto fixture = EventControllerFixture{};
@@ -200,7 +198,7 @@ namespace ao::tui::test
     CHECK(fixture.shell.detailSections().selected == 1);
   }
 
-  TEST_CASE("DetailSections - input and modals own keys before detail and focus can be rebound", "[tui][unit][detail]")
+  TEST_CASE("DetailSections - input and modals own keys before detail and focus can be rebound")
   {
     using namespace ftxui;
     auto fixture = EventControllerFixture{};
@@ -223,8 +221,7 @@ namespace ao::tui::test
     CHECK_FALSE(fixture.shell.isDetailFocused());
   }
 
-  TEST_CASE("DetailSections - visible header clicks fold without taking focus and reject stale tracks",
-            "[tui][unit][detail][mouse]")
+  TEST_CASE("DetailSections - visible header clicks fold without taking focus and reject stale tracks")
   {
     using namespace ftxui;
     auto fixture = EventControllerFixture{};
@@ -258,8 +255,7 @@ namespace ao::tui::test
     CHECK(fixture.shell.isNavigationFocused());
   }
 
-  TEST_CASE("DetailSections - focused status preserves live activity and replaces stale hit regions",
-            "[tui][unit][detail][mouse]")
+  TEST_CASE("DetailSections - focused status preserves live activity and replaces stale hit regions")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -308,8 +304,7 @@ namespace ao::tui::test
     CHECK(fixture.hitRegions.activityStatusBox.IsEmpty());
   }
 
-  TEST_CASE("DetailSections - full hints reserve the standard activity width at the boundary",
-            "[tui][unit][detail][render]")
+  TEST_CASE("DetailSections - full hints reserve the standard activity width at the boundary")
   {
     auto fixture = EventControllerFixture{};
     fixture.runtimePtr->notifications().post(
@@ -348,7 +343,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("DetailSections - tags belong to Metadata independently of Audio Properties", "[tui][unit][detail][render]")
+  TEST_CASE("DetailSections - tags belong to Metadata independently of Audio Properties")
   {
     auto const& catalog = ao::test::englishMessageCatalog();
     auto const track =
@@ -382,8 +377,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("DetailSections - selecting an offscreen header reveals it and folding preserves identity",
-            "[tui][unit][detail][render]")
+  TEST_CASE("DetailSections - selecting an offscreen header reveals it and folding preserves identity")
   {
     auto row = rt::TrackRow{.title = "Title",
                             .artist = "Artist",

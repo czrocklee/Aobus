@@ -25,8 +25,7 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("LibraryCommands - deleteTrack removes an existing track and publishes a mutation",
-            "[runtime][unit][library][track-delete]")
+  TEST_CASE("LibraryCommands - deleteTrack removes an existing track and publishes a mutation")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack(library::test::TrackSpec{.title = "Test Track", .uri = "test.flac"});
@@ -116,7 +115,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("LibraryCommands - deleteTrack rejects missing tracks", "[runtime][unit][library][track-delete]")
+  TEST_CASE("LibraryCommands - deleteTrack rejects missing tracks")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Test Track");

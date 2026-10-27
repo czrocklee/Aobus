@@ -4,7 +4,8 @@ import argparse
 import copy
 from pathlib import Path
 
-from ..core import builddir, compiler_cache, dependency_policy, phases
+from ..core import builddir, compiler_cache, dependency_policy, phases, testaudit
+from ..core.paths import absolute_path
 from ..core.proc import die
 from . import build, perf, test
 
@@ -59,6 +60,64 @@ def _tsan_build_suites(args: argparse.Namespace) -> tuple[str, ...]:
     return suites
 
 
+def _verify_test_source_manifest(build_dir: Path) -> None:
+    """Reconcile content discovery with this build's configured CMake evidence."""
+    cache = compiler_cache.read_cmake_cache(build_dir / "CMakeCache.txt")
+    source_home = cache.get("CMAKE_HOME_DIRECTORY")
+    if (
+        not source_home
+        or not (source_root := absolute_path(source_home)).is_dir()
+        or not (source_root / "test").is_dir()
+    ):
+        raise die(f"Configured test source view is unavailable in {build_dir}.")
+    manifest = build_dir / "aobus-test-sources.tsv"
+    try:
+        rows = manifest.read_text(encoding="utf-8").splitlines()
+    except OSError as error:
+        raise die(f"Cannot read configured test source manifest {manifest}: {error}") from error
+    if not rows or rows[0] != "source\tstate\towner-or-disabled-reason":
+        raise die(f"Invalid configured test source manifest header: {manifest}")
+
+    registered: set[str] = set()
+    for line in rows[1:]:
+        fields = line.split("\t")
+        if len(fields) != 3:
+            raise die(f"Invalid configured test source record in {manifest}: {line!r}")
+        source, state, owner_or_reason = fields
+        relative = Path(source)
+        if (
+            not source.startswith("test/")
+            or ".." in relative.parts
+            or state not in ("configured", "disabled")
+            or not owner_or_reason
+            or source in registered
+            or not (source_root / relative).is_file()
+        ):
+            raise die(f"Invalid or duplicate configured test source record in {manifest}: {line!r}")
+        registered.add(source)
+
+    problems: list[str] = []
+    declaration_files = 0
+    declarations = 0
+    for path in testaudit.discover_test_files(source_root):
+        cases, lexical_issues = testaudit.scan_test_file(path)
+        problems.extend(issue.format(source_root) for issue in lexical_issues)
+        placement_issues = testaudit.registration_placement_issues(path, cases)
+        problems.extend(issue.format(source_root) for issue in placement_issues)
+        if placement_issues or not cases:
+            continue
+        declaration_files += 1
+        declarations += len(cases)
+        relative_source = path.relative_to(source_root).as_posix()
+        if relative_source not in registered:
+            problems.append(f"{relative_source}: registration file has no configured owner or explicit disabled record")
+    if declaration_files == 0:
+        problems.append("no registration files were discovered in the configured source view")
+    if problems:
+        raise die("Configured test registration coverage failed:\n  " + "\n  ".join(problems))
+    print(f"Test registration ownership: {declaration_files} files, {declarations} declarations accounted for.")
+
+
 def run_command(args: argparse.Namespace) -> int:
     if args.flavor not in ("debug", "release"):
         print(f"Note: tests only run for debug/release; use ./ao build for {args.flavor}.")
@@ -73,6 +132,7 @@ def run_command(args: argparse.Namespace) -> int:
     else:
         targets = ["all", GUARDRAIL_TARGET, perf.TARGET]
     result = build.do_build(args, targets=targets)
+    _verify_test_source_manifest(result.build_dir)
 
     print("Verifying dependency resolution...")
     try:

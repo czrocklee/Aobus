@@ -27,8 +27,7 @@
 
 namespace ao::audio::backend::detail::test
 {
-  TEST_CASE("CoreAudioGraph - distinguishes the client stream, endpoint signal, and software gain",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioGraph - distinguishes the client stream, endpoint signal, and software gain")
   {
     auto const graph = coreAudioGraph(
       {.routeAnchor = "device-uid",
@@ -69,8 +68,7 @@ namespace ao::audio::backend::detail::test
     CHECK(graph.connections.front().destinationId == "device-uid");
   }
 
-  TEST_CASE("CoreAudioGraph - unrepresentable downstream numerics never borrow the client signal",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioGraph - unrepresentable downstream numerics never borrow the client signal")
   {
     auto const client =
       PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed24PackedLe, .speakerMask = 0x3};
@@ -106,8 +104,7 @@ namespace ao::audio::backend::detail::test
     CHECK_FALSE(opened.optEndpoint);
   }
 
-  TEST_CASE("CoreAudioGraph - legacy positioning and independently known mono to stereo conversion coexist",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioGraph - legacy positioning and independently known mono to stereo conversion coexist")
   {
     auto const graph = coreAudioGraph(
       {.routeAnchor = "device-uid",
@@ -126,8 +123,7 @@ namespace ao::audio::backend::detail::test
     CHECK(graph.nodes[1].channelDelivery.hasSharedConversion);
   }
 
-  TEST_CASE("CoreAudioGraph - planned mono to stereo conversion produces one sink-owned analyzer finding",
-            "[audio][integration][coreaudio]")
+  TEST_CASE("CoreAudioGraph - planned mono to stereo conversion produces one sink-owned analyzer finding")
   {
     auto const client =
       PcmFormat{.sampleRate = 48000, .channels = 1, .encoding = SampleEncoding::Signed24PackedLe, .speakerMask = 0x4};
@@ -238,7 +234,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("CoreAudioGraph - stays empty until a client stream is configured", "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioGraph - stays empty until a client stream is configured")
   {
     CHECK(coreAudioGraph({.routeAnchor = "device-uid"}) == flow::Graph{});
   }

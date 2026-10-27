@@ -14,7 +14,7 @@
 
 namespace ao::i18n::detail::test
 {
-  TEST_CASE("CatalogPattern - validates named argument signatures and required branches", "[core][unit][catalog]")
+  TEST_CASE("CatalogPattern - validates named argument signatures and required branches")
   {
     auto signatureRes = messageArgumentSignature(
       "{state, select, playing {{count, plural, one {# track} other {# tracks}}} other {Stopped}}");
@@ -33,7 +33,7 @@ namespace ao::i18n::detail::test
     CHECK(missingOtherRes.error().code == Error::Code::FormatRejected);
   }
 
-  TEST_CASE("CatalogPattern - translation ids and argument kinds match English", "[core][unit][catalog]")
+  TEST_CASE("CatalogPattern - translation ids and argument kinds match English")
   {
     auto const root = std::array{
       CatalogMessage{.id = "plain", .pattern = "Plain"},
@@ -57,7 +57,7 @@ namespace ao::i18n::detail::test
     CHECK(unknownRes.error().message.contains("unknown message id"));
   }
 
-  TEST_CASE("CatalogPattern - pseudo-localization preserves MessageFormat structure", "[core][unit][catalog]")
+  TEST_CASE("CatalogPattern - pseudo-localization preserves MessageFormat structure")
   {
     auto pseudoRes = pseudoLocalizePattern("Open {application}: {count, plural, one {# track} other {# tracks}}");
     REQUIRE(pseudoRes);
@@ -76,7 +76,7 @@ namespace ao::i18n::detail::test
     CHECK(validateTranslationCatalog(root, pseudo));
   }
 
-  TEST_CASE("CatalogPattern - projects only the supported WinUI positional syntax", "[core][unit][catalog][winui]")
+  TEST_CASE("CatalogPattern - projects only the supported WinUI positional syntax")
   {
     CHECK(unescapeIcuApostrophePairs("Owner''s {value}") == "Owner's {value}");
 
@@ -93,8 +93,7 @@ namespace ao::i18n::detail::test
     CHECK(pluralRes.error().message.contains("exactly one plain named argument"));
   }
 
-  TEST_CASE("CatalogPattern - partial WinUI projections omit untranslated governed messages",
-            "[core][unit][catalog][winui]")
+  TEST_CASE("CatalogPattern - partial WinUI projections omit untranslated governed messages")
   {
     auto const translated = std::array{
       CatalogMessage{.id = "winui_error", .pattern = "Fehler: {detail}"},
@@ -117,7 +116,7 @@ namespace ao::i18n::detail::test
     CHECK(completeProjectionRes.error().message.contains("references unknown message id"));
   }
 
-  TEST_CASE("CatalogPattern - RESW output is stable, sorted, and escaped", "[core][unit][catalog]")
+  TEST_CASE("CatalogPattern - RESW output is stable, sorted, and escaped")
   {
     auto const messages = std::array{
       CatalogMessage{.id = "z_last", .pattern = "A & B"},
@@ -142,7 +141,7 @@ namespace ao::i18n::detail::test
       "</root>\n");
   }
 
-  TEST_CASE("CatalogPattern - ICU resource output is sorted and escaped", "[core][unit][catalog]")
+  TEST_CASE("CatalogPattern - ICU resource output is sorted and escaped")
   {
     auto const messages = std::array{
       CatalogMessage{.id = "z_last", .pattern = "A & B"},

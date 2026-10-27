@@ -66,7 +66,7 @@ namespace ao::rt::test
   } // namespace
 
   TEST_CASE("ScanApplyOperation - changed file merges technical facts into concurrently curated metadata",
-            "[runtime][unit][library-scan][admission][concurrency]")
+            "[concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = temp.path() / "music";
@@ -109,7 +109,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("ScanApplyOperation - deleting a changed Track during preparation skips it without aborting",
-            "[runtime][unit][library-scan][admission][concurrency]")
+            "[concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = temp.path() / "music";
@@ -139,8 +139,7 @@ namespace ao::rt::test
     CHECK_FALSE(library.manifest().reader(transaction).get("song.flac"));
   }
 
-  TEST_CASE("ScanApplyOperation - a replacement at a planned missing URI is not marked missing",
-            "[runtime][unit][library-scan][admission][concurrency]")
+  TEST_CASE("ScanApplyOperation - a replacement at a planned missing URI is not marked missing", "[concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = temp.path() / "music";
@@ -176,8 +175,7 @@ namespace ao::rt::test
     CHECK(optManifest->status() == library::FileStatus::Available);
   }
 
-  TEST_CASE("ScanApplyOperation - independently updated identity does not stale a missing item",
-            "[runtime][unit][library-scan][admission][concurrency]")
+  TEST_CASE("ScanApplyOperation - independently updated identity does not stale a missing item", "[concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = temp.path() / "music";
@@ -226,8 +224,7 @@ namespace ao::rt::test
     CHECK(optManifest->audioSignature() == replacementSignature);
   }
 
-  TEST_CASE("ScanApplyOperation - an occupied moved destination aborts all co-planned writes",
-            "[runtime][unit][library-scan][admission][concurrency]")
+  TEST_CASE("ScanApplyOperation - an occupied moved destination aborts all co-planned writes", "[concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = temp.path() / "music";
@@ -270,8 +267,7 @@ namespace ao::rt::test
     CHECK_FALSE(library.manifest().reader(transaction).get("peer.flac"));
   }
 
-  TEST_CASE("ScanApplyOperation - a deleted moved source aborts all co-planned writes",
-            "[runtime][unit][library-scan][admission][concurrency]")
+  TEST_CASE("ScanApplyOperation - a deleted moved source aborts all co-planned writes", "[concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = temp.path() / "music";

@@ -98,7 +98,7 @@ namespace ao::rt::delta::test
     }
   } // namespace
 
-  TEST_CASE("TrackEditScript - random unique sequences round-trip through diff", "[runtime][unit][delta][property]")
+  TEST_CASE("TrackEditScript - random unique sequences round-trip through diff")
   {
     auto const seed = GENERATE(Catch::Generators::range(0U, 128U));
     auto const [from, to] = sequencesFor(seed);
@@ -132,7 +132,7 @@ namespace ao::rt::delta::test
     }
   }
 
-  TEST_CASE("TrackEditScript - retained updates are coalesced at final coordinates", "[runtime][unit][delta]")
+  TEST_CASE("TrackEditScript - retained updates are coalesced at final coordinates")
   {
     auto const from = std::vector{TrackId{1}, TrackId{2}, TrackId{3}, TrackId{4}};
     auto const to = std::vector{TrackId{1}, TrackId{3}, TrackId{4}, TrackId{2}};
@@ -159,7 +159,7 @@ namespace ao::rt::delta::test
     CHECK(updates.front().trackIds == std::vector{TrackId{1}, TrackId{3}, TrackId{4}});
   }
 
-  TEST_CASE("TrackEditScript - apply rejects removal and update identity mismatches", "[runtime][unit][delta]")
+  TEST_CASE("TrackEditScript - apply rejects removal and update identity mismatches")
   {
     auto const initial = std::vector{TrackId{1}, TrackId{2}, TrackId{3}};
     auto const badRemoval = RegularTrackEditScript{.edits = {RemoveRange{.start = 1, .trackIds = {TrackId{9}}}}};
@@ -169,7 +169,7 @@ namespace ao::rt::delta::test
     CHECK_FALSE(apply(initial, badUpdate));
   }
 
-  TEST_CASE("TrackEditScript - apply rejects edits that return to an earlier canonical stage", "[runtime][unit][delta]")
+  TEST_CASE("TrackEditScript - apply rejects edits that return to an earlier canonical stage")
   {
     auto const initial = std::vector{TrackId{1}, TrackId{2}, TrackId{3}};
     auto const updateThenRemove = RegularTrackEditScript{
@@ -189,7 +189,7 @@ namespace ao::rt::delta::test
     CHECK_FALSE(apply(initial, removeUpdateInsert));
   }
 
-  TEST_CASE("TrackEditScript - coalescer output validates and preserves range identities", "[runtime][unit][delta]")
+  TEST_CASE("TrackEditScript - coalescer output validates and preserves range identities")
   {
     auto coalescer = Coalescer{};
     coalescer.appendRemove(4, std::array{TrackId{5}, TrackId{6}});
@@ -205,7 +205,7 @@ namespace ao::rt::delta::test
     CHECK(*res == std::vector{TrackId{1}, TrackId{7}, TrackId{8}, TrackId{2}});
   }
 
-  TEST_CASE("RangeEditValidator - enforces stage order and running bounds without payloads", "[runtime][unit][delta]")
+  TEST_CASE("RangeEditValidator - enforces stage order and running bounds without payloads")
   {
     using Kind = RangeEditKind;
 

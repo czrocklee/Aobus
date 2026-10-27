@@ -20,7 +20,7 @@ namespace ao::compat::test
     constexpr auto kPortableEnumerate = detail::EnumerateAdaptor{};
   } // namespace
 
-  TEST_CASE("Enumerate - pairs each element with its index", "[core][unit][enumerate]")
+  TEST_CASE("Enumerate - pairs each element with its index")
   {
     auto const values = std::vector<std::string>{"a", "b", "c"};
 
@@ -37,7 +37,7 @@ namespace ao::compat::test
     CHECK(seenValues == values);
   }
 
-  TEST_CASE("Enumerate - supports pipe syntax", "[core][unit][enumerate]")
+  TEST_CASE("Enumerate - supports pipe syntax")
   {
     auto const values = std::vector<std::int32_t>{10, 20};
 
@@ -51,7 +51,7 @@ namespace ao::compat::test
     CHECK(total == 20);
   }
 
-  TEST_CASE("Enumerate - yields references into the source range", "[core][unit][enumerate]")
+  TEST_CASE("Enumerate - yields references into the source range")
   {
     auto values = std::vector<std::int32_t>{1, 2, 3};
 
@@ -63,7 +63,7 @@ namespace ao::compat::test
     CHECK(values == std::vector<std::int32_t>{1, 3, 5});
   }
 
-  TEST_CASE("Enumerate - an empty range yields nothing", "[core][unit][enumerate]")
+  TEST_CASE("Enumerate - an empty range yields nothing")
   {
     auto const values = std::vector<std::int32_t>{};
 
@@ -77,7 +77,7 @@ namespace ao::compat::test
     CHECK(count == 0);
   }
 
-  TEST_CASE("Enumerate - indexes the filtered sequence, not the source", "[core][unit][enumerate]")
+  TEST_CASE("Enumerate - indexes the filtered sequence, not the source")
   {
     auto const values = std::vector<std::int32_t>{1, 2, 3, 4, 5, 6};
     auto even = values | std::views::filter([](std::int32_t value) { return value % 2 == 0; });
@@ -93,7 +93,7 @@ namespace ao::compat::test
     CHECK(seen == std::vector<std::int64_t>{2, 104, 206});
   }
 
-  TEST_CASE("Enumerate - a const view is still a range", "[core][unit][enumerate]")
+  TEST_CASE("Enumerate - a const view is still a range")
   {
     auto const values = std::vector<std::int32_t>{4, 5, 6};
 
@@ -112,7 +112,7 @@ namespace ao::compat::test
     CHECK(seen == std::vector<std::int64_t>{4, 15, 26});
   }
 
-  TEST_CASE("Enumerate - reports the size of a sized base range", "[core][unit][enumerate]")
+  TEST_CASE("Enumerate - reports the size of a sized base range")
   {
     auto values = std::vector<std::int32_t>{1, 2, 3, 4};
 
@@ -125,7 +125,7 @@ namespace ao::compat::test
     CHECK(std::ranges::size(constView) == 4U);
   }
 
-  TEST_CASE("Enumerate - an unsized base range leaves the view unsized", "[core][unit][enumerate]")
+  TEST_CASE("Enumerate - an unsized base range leaves the view unsized")
   {
     auto const values = std::vector<std::int32_t>{1, 2, 3, 4};
     // Not const: filter_view has no begin() const, so a const one is not a
@@ -137,7 +137,7 @@ namespace ao::compat::test
     STATIC_REQUIRE_FALSE(std::ranges::sized_range<decltype(kPortableEnumerate(odd))>);
   }
 
-  TEST_CASE("Enumerate - the project alias behaves the same", "[core][unit][enumerate]")
+  TEST_CASE("Enumerate - the project alias behaves the same")
   {
     auto const values = std::vector<std::int32_t>{7, 8};
 

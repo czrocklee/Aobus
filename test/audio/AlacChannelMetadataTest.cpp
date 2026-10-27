@@ -155,8 +155,7 @@ namespace ao::audio::test
     }
   } // namespace
 
-  TEST_CASE("AlacDecoderSession - reads agreeing channel declarations around and inside the selected cookie",
-            "[audio][integration][alac][metadata]")
+  TEST_CASE("AlacDecoderSession - reads agreeing channel declarations around and inside the selected cookie")
   {
     auto options = AlacFrameTestOptions{.channels = 4, .packetCount = 2};
     auto const layout = makeAlacChannelLayoutAtom(0x00740004);
@@ -212,8 +211,7 @@ namespace ao::audio::test
     checkMetadata(options, 0x107, canonical);
   }
 
-  TEST_CASE("AlacDecoderSession - compact configuration supplies decoded geometry independently of sample entry fields",
-            "[audio][integration][alac][metadata]")
+  TEST_CASE("AlacDecoderSession - compact configuration supplies decoded geometry independently of sample entry fields")
   {
     auto const options = AlacFrameTestOptions{
       .channels = 4, .precisionBits = 16, .packetCount = 2, .sampleEntrySuffix = makeAlacChannelLayoutAtom(0x00740004)};
@@ -241,8 +239,7 @@ namespace ao::audio::test
     checkMetadataBytes(bytes, options, 0x107, canonical);
   }
 
-  TEST_CASE("AlacDecoderSession - a later required cookie cannot borrow the selected entry channel declaration",
-            "[audio][integration][alac][metadata]")
+  TEST_CASE("AlacDecoderSession - a later required cookie cannot borrow the selected entry channel declaration")
   {
     auto const donor = buildAlacUncompressedFileBytes(4);
     auto const donorRes =
@@ -294,8 +291,7 @@ namespace ao::audio::test
     checkMetadataBytes(file, AlacFrameTestOptions{.channels = 4});
   }
 
-  TEST_CASE("AlacDecoderSession - repeated inner cookies withhold optional identity without replacing required data",
-            "[audio][integration][alac][metadata]")
+  TEST_CASE("AlacDecoderSession - repeated inner cookies withhold optional identity without replacing required data")
   {
     auto const donor = buildAlacUncompressedFileBytes(4);
     auto const donorRes =
@@ -313,8 +309,7 @@ namespace ao::audio::test
     checkMetadata({.channels = 4, .sampleEntryPrefix = declaration, .sampleEntrySuffix = duplicate});
   }
 
-  TEST_CASE("AlacDecoderSession - generic named sibling variants retain their own explicit slot order",
-            "[audio][integration][alac][metadata]")
+  TEST_CASE("AlacDecoderSession - generic named sibling variants retain their own explicit slot order")
   {
     struct NamedCase final
     {
@@ -355,8 +350,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("AlacDecoderSession - named descriptions map all eighteen WAVE positions without rear-side aliases",
-            "[audio][integration][alac][metadata]")
+  TEST_CASE("AlacDecoderSession - named descriptions map all eighteen WAVE positions without rear-side aliases")
   {
     struct LabelCase final
     {
@@ -398,8 +392,7 @@ namespace ao::audio::test
     checkMetadata({.channels = 2, .sampleEntrySuffix = makeAlacChannelLayoutAtom(0, 0, sideLabels)}, 0x600, reversed);
   }
 
-  TEST_CASE("AlacDecoderSession - declarations with the same speaker set must also agree on slot order",
-            "[audio][integration][alac][metadata]")
+  TEST_CASE("AlacDecoderSession - declarations with the same speaker set must also agree on slot order")
   {
     auto options = AlacFrameTestOptions{.channels = 4, .packetCount = 2};
     auto const centerFirst = makeAlacChannelLayoutAtom(0x00740004);
@@ -454,8 +447,7 @@ namespace ao::audio::test
     checkMetadata(options);
   }
 
-  TEST_CASE("AlacDecoderSession - ambiguous full three-channel tags never acquire a namespace from placement",
-            "[audio][integration][alac][metadata]")
+  TEST_CASE("AlacDecoderSession - ambiguous full three-channel tags never acquire a namespace from placement")
   {
     auto options = AlacFrameTestOptions{.channels = 3, .packetCount = 2};
     auto const ambiguous = makeAlacChannelLayoutAtom(0x00710003);
@@ -497,8 +489,7 @@ namespace ao::audio::test
     checkMetadata(options);
   }
 
-  TEST_CASE("AlacDecoderSession - accepts only full big-endian named tag values",
-            "[audio][integration][alac][metadata]")
+  TEST_CASE("AlacDecoderSession - accepts only full big-endian named tag values")
   {
     for (auto const tag : std::to_array<std::uint32_t>({0x04007400, 0x00000004, 0xFFFF0004, 0x00740003}))
     {
@@ -507,8 +498,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("AlacDecoderSession - bad optional declarations permanently withhold even mono and stereo identity",
-            "[audio][integration][alac][metadata]")
+  TEST_CASE("AlacDecoderSession - bad optional declarations permanently withhold even mono and stereo identity")
   {
     for (auto const channels : std::to_array<std::uint8_t>({1, 2}))
     {
@@ -527,8 +517,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("AlacDecoderSession - malformed channel payloads are optional failures without later repair",
-            "[audio][integration][alac][metadata]")
+  TEST_CASE("AlacDecoderSession - malformed channel payloads are optional failures without later repair")
   {
     auto const labels = std::to_array<std::uint32_t>({3, 1, 2});
     auto const good = makeAlacChannelLayoutAtom(0x00720003);
@@ -571,8 +560,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("AlacDecoderSession - incomplete reserved wildcard and mixed bitmaps do not assign roles",
-            "[audio][integration][alac][metadata]")
+  TEST_CASE("AlacDecoderSession - incomplete reserved wildcard and mixed bitmaps do not assign roles")
   {
     for (auto const bitmap : std::to_array<std::uint32_t>({0, 0x3, 0xF, 0x40003, 0x80000003, 0xFFFFFFFF}))
     {
@@ -585,8 +573,7 @@ namespace ao::audio::test
     checkMetadata({.channels = 3, .sampleEntrySuffix = makeAlacChannelLayoutAtom(0, 0x7, labels)});
   }
 
-  TEST_CASE("AlacDecoderSession - repeated unsupported discrete and coordinate descriptions remain ordinal",
-            "[audio][integration][alac][metadata]")
+  TEST_CASE("AlacDecoderSession - repeated unsupported discrete and coordinate descriptions remain ordinal")
   {
     auto const cases = std::vector<std::vector<std::uint32_t>>{
       {1, 1, 2},
@@ -615,8 +602,7 @@ namespace ao::audio::test
     checkMetadata({.channels = 3, .sampleEntrySuffix = coordinates});
   }
 
-  TEST_CASE("AlacDecoderSession - cookie-contained channel grammar excludes generic-only declarations",
-            "[audio][integration][alac][metadata]")
+  TEST_CASE("AlacDecoderSession - cookie-contained channel grammar excludes generic-only declarations")
   {
     auto const labels = std::to_array<std::uint32_t>({3, 1, 2});
     auto const cases = std::vector<ChannelAtomCase>{
@@ -637,8 +623,7 @@ namespace ao::audio::test
                    .cookieSuffix = ao::test::mp4::makeExtendedFromCompactAtom(makeAlacChannelLayoutAtom(0x00740004))});
   }
 
-  TEST_CASE("AlacDecoderSession - nonzero reserved cookie layout words cannot be reinterpreted as generic fields",
-            "[audio][integration][alac][metadata]")
+  TEST_CASE("AlacDecoderSession - nonzero reserved cookie layout words cannot be reinterpreted as generic fields")
   {
     for (auto const offset : std::to_array<std::size_t>({16, 20}))
     {
@@ -650,8 +635,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("AlacDecoderSession - nonzero cookie FullBox words withhold optional identity without blocking PCM",
-            "[audio][integration][alac][metadata]")
+  TEST_CASE("AlacDecoderSession - nonzero cookie FullBox words withhold optional identity without blocking PCM")
   {
     for (auto const reserved : std::to_array<std::uint32_t>({1, 0x01000000}))
     {
@@ -665,8 +649,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("AlacDecoderSession - malformed optional tails after a valid cookie withhold identity but decode PCM",
-            "[audio][integration][alac][metadata]")
+  TEST_CASE("AlacDecoderSession - malformed optional tails after a valid cookie withhold identity but decode PCM")
   {
     auto oversized = ao::test::mp4::makeAtom("junk", {});
     overwriteBe32(oversized, 0, 64);
@@ -703,8 +686,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("AlacDecoderSession - malformed required prefixes still fail before a later valid cookie",
-            "[audio][integration][alac][metadata]")
+  TEST_CASE("AlacDecoderSession - malformed required prefixes still fail before a later valid cookie")
   {
     auto malformed = ao::test::mp4::makeAtom("junk", {});
     overwriteBe32(malformed, 0, 0xFFFFFFFF);
@@ -725,8 +707,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("AlacDecoderSession - layout declarations cannot repair invalid mandatory cookie geometry or precision",
-            "[audio][integration][alac][metadata]")
+  TEST_CASE("AlacDecoderSession - layout declarations cannot repair invalid mandatory cookie geometry or precision")
   {
     struct ConfigMutation final
     {
@@ -766,8 +747,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("AlacDecoderSession - requested precision loss remains an error even when optional channel metadata is bad",
-            "[audio][integration][alac][metadata]")
+  TEST_CASE("AlacDecoderSession - requested precision loss remains an error even when optional channel metadata is bad")
   {
     auto good = makeAlacChannelLayoutAtom(0x00740004);
     auto bad = good;

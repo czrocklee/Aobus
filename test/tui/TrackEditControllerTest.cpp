@@ -161,7 +161,7 @@ namespace ao::tui::test
     }
   } // namespace
 
-  TEST_CASE("TrackEditController - opens over the whole captured selection", "[tui][unit][editor]")
+  TEST_CASE("TrackEditController - opens over the whole captured selection")
   {
     auto fixture = EditFixture{};
     auto const firstId = fixture.addTrack({.title = "First", .album = "Blue", .uri = "first.flac"});
@@ -183,7 +183,7 @@ namespace ao::tui::test
     CHECK(fixture.refreshCount > 0);
   }
 
-  TEST_CASE("TrackEditController - refuses to open without targets", "[tui][integration][editor]")
+  TEST_CASE("TrackEditController - refuses to open without targets")
   {
     auto fixture = EditFixture{};
     auto controller = fixture.makeController();
@@ -196,7 +196,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackEditController - refuses a selection it cannot open completely", "[tui][integration][editor]")
+  TEST_CASE("TrackEditController - refuses a selection it cannot open completely")
   {
     auto fixture = EditFixture{};
     auto const trackId = fixture.addTrack({.title = "Present", .uri = "present.flac"});
@@ -207,7 +207,7 @@ namespace ao::tui::test
     CHECK(fixture.lastMessage().starts_with("The complete selection could not be opened"));
   }
 
-  TEST_CASE("TrackEditController - a second open is refused while an editor is active", "[tui][unit][editor]")
+  TEST_CASE("TrackEditController - a second open is refused while an editor is active")
   {
     auto fixture = EditFixture{};
     auto const trackId = fixture.addTrack({.title = "Only", .uri = "only.flac"});
@@ -220,7 +220,7 @@ namespace ao::tui::test
     CHECK(controller.activeEditor() == editor);
   }
 
-  TEST_CASE("TrackEditController - open is refused after retirement", "[tui][integration][editor]")
+  TEST_CASE("TrackEditController - open is refused after retirement")
   {
     auto fixture = EditFixture{};
     auto const trackId = fixture.addTrack({.title = "Only", .uri = "only.flac"});
@@ -233,8 +233,7 @@ namespace ao::tui::test
     CHECK_FALSE(fixture.hasNotifications());
   }
 
-  TEST_CASE("TrackEditController credits - invalid scopes do not install an editor or emit notifications",
-            "[tui][unit][credits]")
+  TEST_CASE("TrackEditController credits - invalid scopes do not install an editor or emit notifications")
   {
     using K = library::CreditKind;
     auto fixture = EditFixture{};
@@ -256,8 +255,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackEditController credits - no targets preserves the unopened state and existing warning",
-            "[tui][integration][credits]")
+  TEST_CASE("TrackEditController credits - no targets preserves the unopened state and existing warning")
   {
     auto fixture = EditFixture{};
     auto controller = fixture.makeController();
@@ -270,8 +268,7 @@ namespace ao::tui::test
     CHECK(fixture.lastMessage() == "No track is selected");
   }
 
-  TEST_CASE("TrackEditController credits - missing target never installs a partial selection",
-            "[tui][integration][credits]")
+  TEST_CASE("TrackEditController credits - missing target never installs a partial selection")
   {
     auto fixture = EditFixture{};
     auto const id = fixture.addTrack({.title = "Present", .uri = "present.flac"});
@@ -286,8 +283,7 @@ namespace ao::tui::test
     CHECK(fixture.trackSpec(id).title == "Present");
   }
 
-  TEST_CASE("TrackEditController credits - refused second open retains captured targets and dirty draft",
-            "[tui][unit][credits]")
+  TEST_CASE("TrackEditController credits - refused second open retains captured targets and dirty draft")
   {
     using K = library::CreditKind;
     auto fixture = EditFixture{};
@@ -323,7 +319,7 @@ namespace ao::tui::test
     CHECK(fixture.trackSpec(second).title == "Second");
   }
 
-  TEST_CASE("TrackEditController credits - refused second open retains the active child draft", "[tui][unit][credits]")
+  TEST_CASE("TrackEditController credits - refused second open retains the active child draft")
   {
     using K = library::CreditKind;
     auto fixture = EditFixture{};
@@ -354,8 +350,7 @@ namespace ao::tui::test
     CHECK(fixture.trackSpec(first).credits == std::vector<library::Credit>{{"A", K::Soloist, "Violin"}});
   }
 
-  TEST_CASE("TrackEditController credits - retired controller rejects opening without presentation effects",
-            "[tui][unit][credits]")
+  TEST_CASE("TrackEditController credits - retired controller rejects opening without presentation effects")
   {
     auto fixture = EditFixture{};
     auto const id = fixture.addTrack({.title = "Present", .uri = "present.flac"});
@@ -370,8 +365,7 @@ namespace ao::tui::test
     CHECK_FALSE(fixture.hasNotifications());
   }
 
-  TEST_CASE("TrackEditController credits - full and single-kind scopes open over exactly the supplied targets",
-            "[tui][unit][credits]")
+  TEST_CASE("TrackEditController credits - full and single-kind scopes open over exactly the supplied targets")
   {
     using K = library::CreditKind;
     auto fixture = EditFixture{};
@@ -418,7 +412,7 @@ namespace ao::tui::test
     CHECK(controller.activeEditor()->targets()[0].id == first);
   }
 
-  TEST_CASE("TrackEditController - Escape closes a clean editor", "[tui][unit][editor]")
+  TEST_CASE("TrackEditController - Escape closes a clean editor")
   {
     auto fixture = EditFixture{};
     auto const trackId = fixture.addTrack({.title = "Only", .uri = "only.flac"});
@@ -432,7 +426,7 @@ namespace ao::tui::test
     CHECK_FALSE(controller.tryHandleEvent(ftxui::Event::Escape));
   }
 
-  TEST_CASE("TrackEditController - Apply writes one patch to every captured target", "[tui][integration][editor]")
+  TEST_CASE("TrackEditController - Apply writes one patch to every captured target")
   {
     auto fixture = EditFixture{};
     auto const firstId = fixture.addTrack({.title = "First", .album = "Old", .uri = "first.flac"});
@@ -459,8 +453,7 @@ namespace ao::tui::test
     CHECK(fixture.trackSpec(secondId).title == "Second");
   }
 
-  TEST_CASE("TrackEditController - submission starts on the callback executor before writing",
-            "[tui][integration][editor][concurrency]")
+  TEST_CASE("TrackEditController - submission starts on the callback executor before writing", "[concurrency]")
   {
     auto fixture = EditFixture{};
     auto const trackId = fixture.addTrack({.title = "Only", .album = "Old", .uri = "only.flac"});
@@ -484,8 +477,7 @@ namespace ao::tui::test
     CHECK_FALSE(controller.isActive());
   }
 
-  TEST_CASE("TrackEditController - an included value every target already has reports no change",
-            "[tui][integration][editor]")
+  TEST_CASE("TrackEditController - an included value every target already has reports no change")
   {
     auto fixture = EditFixture{};
     auto const trackId = fixture.addTrack({.title = "Only", .album = "", .uri = "only.flac"});
@@ -503,8 +495,7 @@ namespace ao::tui::test
     CHECK(fixture.trackSpec(trackId).album.empty());
   }
 
-  TEST_CASE("TrackEditController - an invalidated session goes stale and refuses to submit",
-            "[tui][integration][editor]")
+  TEST_CASE("TrackEditController - an invalidated session goes stale and refuses to submit")
   {
     auto fixture = EditFixture{};
     auto const trackId = fixture.addTrack({.title = "Only", .album = "Old", .uri = "only.flac"});
@@ -525,7 +516,7 @@ namespace ao::tui::test
     CHECK(fixture.trackSpec(trackId).album == "Old");
   }
 
-  TEST_CASE("TrackEditController - reload rebinds a stale editor and resets its draft", "[tui][integration][editor]")
+  TEST_CASE("TrackEditController - reload rebinds a stale editor and resets its draft")
   {
     auto fixture = EditFixture{};
     auto const trackId = fixture.addTrack({.title = "Only", .album = "Old", .uri = "only.flac"});
@@ -556,8 +547,7 @@ namespace ao::tui::test
     CHECK(fixture.trackSpec(trackId).album == "Green");
   }
 
-  TEST_CASE("TrackEditController - a submitted write outlives the editor it came from",
-            "[tui][integration][editor][concurrency]")
+  TEST_CASE("TrackEditController - a submitted write outlives the editor it came from", "[concurrency]")
   {
     auto fixture = EditFixture{};
     auto const trackId = fixture.addTrack({.title = "Only", .album = "Old", .uri = "only.flac"});
@@ -582,8 +572,7 @@ namespace ao::tui::test
     CHECK_FALSE(fixture.hasNotifications());
   }
 
-  TEST_CASE("TrackEditController - unified submission writes metadata and tags, deduplicating changed tracks",
-            "[tui][integration][editor]")
+  TEST_CASE("TrackEditController - unified submission writes metadata and tags, deduplicating changed tracks")
   {
     auto fixture = EditFixture{};
     auto const firstId = fixture.addTrack({.title = "First", .album = "Old", .uri = "first.flac", .tags = {"rock"}});
@@ -622,8 +611,7 @@ namespace ao::tui::test
     CHECK(secondSpec.tags == std::vector<std::string>{"jazz"});
   }
 
-  TEST_CASE("TrackEditController - quick tags reload preserves mode and writes only captured targets",
-            "[tui][integration][editor][concurrency]")
+  TEST_CASE("TrackEditController - quick tags reload preserves mode and writes only captured targets", "[concurrency]")
   {
     auto fixture = EditFixture{};
     auto const firstId = fixture.addTrack({.title = "First", .album = "Old", .uri = "first.flac", .tags = {"rock"}});
@@ -649,8 +637,7 @@ namespace ao::tui::test
     CHECK(fixture.trackSpec(secondId).album == "Other");
   }
 
-  TEST_CASE("TrackEditController credits - category preview stages one scope alongside tags and metadata",
-            "[tui][integration][credits]")
+  TEST_CASE("TrackEditController credits - category preview stages one scope alongside tags and metadata")
   {
     using library::CreditKind;
     auto fixture = EditFixture{};
@@ -696,8 +683,7 @@ namespace ao::tui::test
     CHECK(fixture.trackSpec(secondId).tags == std::vector<std::string>{"tag"});
   }
 
-  TEST_CASE("TrackEditController credits - focused entry retains stale child until confirmed reload",
-            "[tui][integration][credits]")
+  TEST_CASE("TrackEditController credits - focused entry retains stale child until confirmed reload")
   {
     using library::CreditKind;
     auto fixture = EditFixture{};

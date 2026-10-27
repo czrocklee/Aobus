@@ -32,7 +32,7 @@ namespace ao::gtk::layout::test
   using ao::gtk::test::AllocationHost;
   using ao::gtk::test::measureWidget;
 
-  TEST_CASE("LayoutRuntime - builds documents into GTK widget trees", "[gtk][unit][layout][container]")
+  TEST_CASE("LayoutRuntime - builds documents into GTK widget trees")
   {
     auto fixture = LayoutRuntimeFixture{};
     auto& ctx = fixture.context();
@@ -210,7 +210,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("LayoutRuntimeFixture - detaches its window child before fixture teardown", "[gtk][unit][layout]")
+  TEST_CASE("LayoutRuntimeFixture - detaches its window child before fixture teardown")
   {
     auto childPtr = std::unique_ptr<Gtk::Box>{};
 

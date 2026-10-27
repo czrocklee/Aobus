@@ -104,7 +104,7 @@ namespace ao::audio::test
   } // namespace
 
   TEST_CASE("Engine - matching real WAV and FLAC identities reuse a strict backend for one through eight channels",
-            "[audio][integration][engine][flac][concurrency]")
+            "[concurrency]")
   {
     auto const channels = GENERATE(std::uint8_t{1},
                                    std::uint8_t{2},
@@ -255,8 +255,7 @@ namespace ao::audio::test
     CHECK(advancedEvents.front().generation == preparedRes->generation);
   }
 
-  TEST_CASE("Engine - unequal real WAV and FLAC identities drain before explicit successor reopen",
-            "[audio][integration][engine][flac][concurrency]")
+  TEST_CASE("Engine - unequal real WAV and FLAC identities drain before explicit successor reopen", "[concurrency]")
   {
     auto const channels = GENERATE(std::uint8_t{4}, std::uint8_t{5}, std::uint8_t{6});
     bool const wavFirst = GENERATE(false, true);
@@ -378,8 +377,7 @@ namespace ao::audio::test
     CHECK(endedEvents.front().generation == firstGeneration);
   }
 
-  TEST_CASE("Engine - truncated FLAC metadata is a recoverable source refusal before backend open",
-            "[audio][integration][engine][flac]")
+  TEST_CASE("Engine - truncated FLAC metadata is a recoverable source refusal before backend open")
   {
     auto const file = ao::test::TempFile{makeTruncatedMetadataFlacBytes(), ".flac"};
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
@@ -404,7 +402,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Engine - truncated FLAC replacement clears armed lookahead without interrupting current playback",
-            "[audio][integration][engine][flac][concurrency]")
+            "[concurrency]")
   {
     auto const currentPcm = repeatLiteralFrame(std::to_array<std::uint8_t>({0x11, 0x12, 0x23, 0x24}));
     auto const currentFile =

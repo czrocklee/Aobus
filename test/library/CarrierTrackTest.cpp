@@ -113,8 +113,7 @@ namespace ao::library::test
     }
   } // namespace
 
-  TEST_CASE("Carrier Track - sparse members derive duration and preserve identity through append relink and deletion",
-            "[library][unit][carrier-track]")
+  TEST_CASE("Carrier Track - sparse members derive duration and preserve identity through append relink and deletion")
   {
     auto const temp = ao::test::TempDir{};
     auto ids = std::vector<TrackId>{};
@@ -197,8 +196,7 @@ namespace ao::library::test
     CHECK(library.tracks().reader(read).entryCount() == 0);
   }
 
-  TEST_CASE("Carrier Track - aggregate preflight rejects invalid final layouts without writing",
-            "[library][unit][carrier-track]")
+  TEST_CASE("Carrier Track - aggregate preflight rejects invalid final layouts without writing")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -287,8 +285,7 @@ namespace ao::library::test
     CHECK(library.manifest().reader(read).get("disc.flac")->segmentCount() == 1);
   }
 
-  TEST_CASE("Carrier Track - every ordinary mutation rejects segment structure bypasses",
-            "[library][unit][carrier-track]")
+  TEST_CASE("Carrier Track - every ordinary mutation rejects segment structure bypasses")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -369,8 +366,7 @@ namespace ao::library::test
     CHECK(library.manifest().reader(read).get("disc.flac")->segmentCount() == 2);
   }
 
-  TEST_CASE("Carrier Track - nonstructural updates preserve the aggregate across every entry point",
-            "[library][unit][carrier-track]")
+  TEST_CASE("Carrier Track - nonstructural updates preserve the aggregate across every entry point")
   {
     auto const temp = ao::test::TempDir{};
     auto ids = std::vector<TrackId>{};
@@ -410,8 +406,7 @@ namespace ao::library::test
     CHECK(std::ranges::equal(manifest.segmentTrackIds(), std::array{ids[1], ids[0]}));
   }
 
-  TEST_CASE("Carrier Track - whole file conflicts and conversions cannot bypass aggregate creation",
-            "[library][unit][carrier-track]")
+  TEST_CASE("Carrier Track - whole file conflicts and conversions cannot bypass aggregate creation")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -444,8 +439,7 @@ namespace ao::library::test
     CHECK(library.manifest().reader(read).get("disc.flac")->segmentCount() == 0);
   }
 
-  TEST_CASE("Carrier Track - relink onto a taken URI conflicts and noncanonical URIs are input errors",
-            "[library][unit][carrier-track]")
+  TEST_CASE("Carrier Track - relink onto a taken URI conflicts and noncanonical URIs are input errors")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -486,8 +480,7 @@ namespace ao::library::test
       }));
   }
 
-  TEST_CASE("Carrier Track - a later root failure rolls back aggregate membership relink and removal",
-            "[library][unit][carrier-track]")
+  TEST_CASE("Carrier Track - a later root failure rolls back aggregate membership relink and removal")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -528,8 +521,7 @@ namespace ao::library::test
     CHECK(std::ranges::equal(library.lists().reader(read).get(listId)->orderTrackIds(), std::array{ids[0], ids[1]}));
   }
 
-  TEST_CASE("Carrier Track - handled append rejection stages nothing before a successful append commits",
-            "[library][unit][carrier-track]")
+  TEST_CASE("Carrier Track - handled append rejection stages nothing before a successful append commits")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -603,7 +595,7 @@ namespace ao::library::test
     CHECK(resources.begin() == resources.end());
   }
 
-  TEST_CASE("Carrier Track - open rejects malformed persisted carrier structures", "[library][unit][carrier-track]")
+  TEST_CASE("Carrier Track - open rejects malformed persisted carrier structures")
   {
     auto const temp = ao::test::TempDir{};
     auto ids = std::vector<TrackId>{};
@@ -790,8 +782,7 @@ namespace ao::library::test
     CHECK(openRes.error().code == Error::Code::CorruptData);
   }
 
-  TEST_CASE("Carrier Track - high frame words and zero millisecond members survive reopen",
-            "[library][unit][carrier-track]")
+  TEST_CASE("Carrier Track - high frame words and zero millisecond members survive reopen")
   {
     auto const temp = ao::test::TempDir{};
     auto ids = std::vector<TrackId>{};
@@ -819,8 +810,7 @@ namespace ao::library::test
     CHECK(library.manifest().reader(read).get("disc.flac")->totalFrames() == 0x20000024cULL);
   }
 
-  TEST_CASE("Carrier Track - frame duration and manifest references use exact arithmetic and four byte alignment",
-            "[library][unit][carrier-track]")
+  TEST_CASE("Carrier Track - frame duration and manifest references use exact arithmetic and four byte alignment")
   {
     CHECK(sizeof(TrackSegmentBlock) == 20);
     CHECK(alignof(TrackSegmentBlock) == 4);

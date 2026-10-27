@@ -36,7 +36,7 @@ namespace ao::lmdb::test
     static_assert(!HasMaxKey<ByteKeyDatabase::Reader>);
   } // namespace
 
-  TEST_CASE("IntegerKeyDatabase::Reader::Iterator - reaches end as normal state", "[lmdb][unit][database][reader]")
+  TEST_CASE("IntegerKeyDatabase::Reader::Iterator - reaches end as normal state")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -63,7 +63,7 @@ namespace ao::lmdb::test
     CHECK(it == reader.end());
   }
 
-  TEST_CASE("IntegerKeyDatabase::Reader - iterates no records for empty databases", "[lmdb][unit][database][reader]")
+  TEST_CASE("IntegerKeyDatabase::Reader - iterates no records for empty databases")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -77,7 +77,7 @@ namespace ao::lmdb::test
     CHECK(reader.begin() == reader.end());
   }
 
-  TEST_CASE("IntegerKeyDatabase::Reader - get returns records by integer key", "[lmdb][unit][database][reader]")
+  TEST_CASE("IntegerKeyDatabase::Reader - get returns records by integer key")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -105,7 +105,7 @@ namespace ao::lmdb::test
     }
   }
 
-  TEST_CASE("IntegerKeyDatabase::Reader - entryCount reports visible row cardinality", "[lmdb][unit][database][reader]")
+  TEST_CASE("IntegerKeyDatabase::Reader - entryCount reports visible row cardinality")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -150,13 +150,13 @@ namespace ao::lmdb::test
     }
   }
 
-  TEST_CASE("IntegerKeyDatabase::Reader::Iterator - default constructor", "[lmdb][unit][database][reader]")
+  TEST_CASE("IntegerKeyDatabase::Reader::Iterator - default constructor")
   {
     auto const it = IntegerKeyDatabase::Reader::Iterator{};
     CHECK(it == IntegerKeyDatabase::Reader::Iterator{});
   }
 
-  TEST_CASE("IntegerKeyDatabase::Reader::Iterator - compares equal to itself", "[lmdb][unit][database][reader]")
+  TEST_CASE("IntegerKeyDatabase::Reader::Iterator - compares equal to itself")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -175,7 +175,7 @@ namespace ao::lmdb::test
     REQUIRE(it1 == it2);
   }
 
-  TEST_CASE("IntegerKeyDatabase::Reader::Iterator - move constructor", "[lmdb][unit][database][reader]")
+  TEST_CASE("IntegerKeyDatabase::Reader::Iterator - move constructor")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -195,7 +195,7 @@ namespace ao::lmdb::test
     CHECK(utility::bytes::stringView(it2->second) == "data");
   }
 
-  TEST_CASE("IntegerKeyDatabase::Reader::Iterator - dereference", "[lmdb][unit][database][reader]")
+  TEST_CASE("IntegerKeyDatabase::Reader::Iterator - dereference")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -212,8 +212,7 @@ namespace ao::lmdb::test
     CHECK(utility::bytes::stringView(it->second) == "value");
   }
 
-  TEST_CASE("IntegerKeyDatabase::Reader::Iterator - an open cursor stays counted by its move-assigned read transaction",
-            "[lmdb][unit][database][cursor-lifetime]")
+  TEST_CASE("IntegerKeyDatabase::Reader::Iterator - an open cursor stays counted by its move-assigned read transaction")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -236,8 +235,7 @@ namespace ao::lmdb::test
     CHECK(replacement.isActive());
   }
 
-  TEST_CASE("IntegerKeyDatabase::Writer - destruction remains safe after its transaction object is gone",
-            "[lmdb][unit][database][cursor-lifetime]")
+  TEST_CASE("IntegerKeyDatabase::Writer - destruction remains safe after its transaction object is gone")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});

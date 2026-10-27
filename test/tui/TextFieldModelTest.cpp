@@ -20,7 +20,7 @@ namespace ao::tui::test
     constexpr auto kCombiningAcute = std::string_view{"́"};
   } // namespace
 
-  TEST_CASE("TextFieldModel - loads a value with the cursor at its end", "[tui][unit][editor]")
+  TEST_CASE("TextFieldModel - loads a value with the cursor at its end")
   {
     auto field = TextFieldModel{std::string{"Blue"}};
 
@@ -46,7 +46,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TextFieldModel - moves and edits on whole grapheme clusters", "[tui][unit][editor]")
+  TEST_CASE("TextFieldModel - moves and edits on whole grapheme clusters")
   {
     auto field = TextFieldModel{std::string{"a"} + std::string{kFamily} + "b"};
 
@@ -92,7 +92,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TextFieldModel - inserts at the cursor and reports acceptance", "[tui][unit][editor]")
+  TEST_CASE("TextFieldModel - inserts at the cursor and reports acceptance")
   {
     auto field = TextFieldModel{std::string{"Blue"}};
 
@@ -126,7 +126,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TextFieldModel - refuses input a single-line field cannot hold", "[tui][unit][editor]")
+  TEST_CASE("TextFieldModel - refuses input a single-line field cannot hold")
   {
     auto field = TextFieldModel{std::string{"Blue"}};
 
@@ -149,7 +149,7 @@ namespace ao::tui::test
     checkRejected(std::string{"Bl"} + static_cast<char>(0x80) + "ue");
   }
 
-  TEST_CASE("TextFieldModel - refuses Unicode line and paragraph separators", "[tui][unit][editor]")
+  TEST_CASE("TextFieldModel - refuses Unicode line and paragraph separators")
   {
     auto model = TextFieldModel{"Kind of Blue"};
 
@@ -170,7 +170,7 @@ namespace ao::tui::test
     CHECK(model.value() == "Kind of Blue\u2027" + directionalEmbedding);
   }
 
-  TEST_CASE("TextFieldModel - reports no change at the value's edges", "[tui][unit][editor]")
+  TEST_CASE("TextFieldModel - reports no change at the value's edges")
   {
     auto field = TextFieldModel{};
 
@@ -197,7 +197,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TextFieldModel - replaces ranges with checked invariants", "[tui][unit][editor]")
+  TEST_CASE("TextFieldModel - replaces ranges with checked invariants")
   {
     auto field = TextFieldModel{std::string{"Blue"}};
 
@@ -263,7 +263,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TextFieldModel - text events report edits separately from cursor navigation", "[tui][unit][editor]")
+  TEST_CASE("TextFieldModel - text events report edits separately from cursor navigation")
   {
     auto field = TextFieldModel{std::string{"a"} + std::string{kFamily}};
 
@@ -285,7 +285,7 @@ namespace ao::tui::test
     CHECK(field.empty());
   }
 
-  TEST_CASE("TextFieldModel - text events leave commands and rejected input to the editor", "[tui][unit][editor]")
+  TEST_CASE("TextFieldModel - text events leave commands and rejected input to the editor")
   {
     auto field = TextFieldModel{"Blue"};
     REQUIRE(field.tryMoveToBegin());
@@ -307,8 +307,7 @@ namespace ao::tui::test
     CHECK(field.cursor() == 0);
   }
 
-  TEST_CASE("TextFieldModel - word navigation skips spaces and keeps grapheme boundaries",
-            "[tui][unit][editor][keyboard]")
+  TEST_CASE("TextFieldModel - word navigation skips spaces and keeps grapheme boundaries")
   {
     auto const value = std::string{"A  界"} + std::string{kFamily} + " B";
     auto field = TextFieldModel{value};
@@ -330,8 +329,7 @@ namespace ao::tui::test
     CHECK(field.value() == value);
   }
 
-  TEST_CASE("TextFieldModel - word deletion removes trailing spaces and a complete Unicode word",
-            "[tui][unit][editor][keyboard]")
+  TEST_CASE("TextFieldModel - word deletion removes trailing spaces and a complete Unicode word")
   {
     auto field = TextFieldModel{std::string{"A  界"} + std::string{kFamily} + "  "};
     REQUIRE(field.tryApplyEvent(ftxui::Event::CtrlW));
@@ -343,8 +341,7 @@ namespace ao::tui::test
     CHECK_FALSE(field.tryApplyEvent(ftxui::Event::CtrlW));
   }
 
-  TEST_CASE("TextFieldModel - line deletion respects the caret and grapheme boundaries",
-            "[tui][unit][editor][keyboard]")
+  TEST_CASE("TextFieldModel - line deletion respects the caret and grapheme boundaries")
   {
     auto field = TextFieldModel{std::string{"a"} + std::string{kFamily} + "尾"};
     REQUIRE(field.tryMoveLeft());
@@ -357,7 +354,7 @@ namespace ao::tui::test
     CHECK_FALSE(field.tryApplyEvent(ftxui::Event::CtrlK));
   }
 
-  TEST_CASE("TextFieldModel - pointer placement respects wide and joined graphemes", "[tui][unit][editor][mouse]")
+  TEST_CASE("TextFieldModel - pointer placement respects wide and joined graphemes")
   {
     auto field = TextFieldModel{"a界👨‍👩‍👧‍👦b"};
     REQUIRE(field.tryMoveToCell(0));
@@ -383,8 +380,7 @@ namespace ao::tui::test
     CHECK(field.value() == "a界👨‍👩‍👧‍👦b");
   }
 
-  TEST_CASE("TextFieldModel - edits at grapheme boundaries and distinguishes movement from typing",
-            "[tui][unit][editor][input]")
+  TEST_CASE("TextFieldModel - edits at grapheme boundaries and distinguishes movement from typing")
   {
     auto field = TextFieldModel{"a👨‍👩‍👧‍👦b"};
     CHECK_FALSE(field.tryApplyEvent(ftxui::Event::ArrowLeft));
@@ -400,7 +396,7 @@ namespace ao::tui::test
     CHECK(field.value() == "a");
   }
 
-  TEST_CASE("TextFieldModel - word editing preserves Unicode text around the cursor", "[tui][unit][editor][input]")
+  TEST_CASE("TextFieldModel - word editing preserves Unicode text around the cursor")
   {
     auto field = TextFieldModel{"filter 中文 音乐"};
     CHECK_FALSE(field.tryApplyEvent(ftxui::Event::Special("\x1b"

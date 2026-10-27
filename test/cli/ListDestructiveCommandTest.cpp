@@ -144,8 +144,7 @@ namespace ao::cli::test
     }
   } // namespace
 
-  TEST_CASE("CLI - list delete --descendants previews and commits the subtree in root-first order",
-            "[cli][integration][list][list-delete]")
+  TEST_CASE("CLI - list delete --descendants previews and commits the subtree in root-first order")
   {
     auto fixture = CliFixture{};
     auto const first = fixture.addTrack(library::test::TrackSpec{.title = "Alpha", .uri = "alpha.flac"});
@@ -247,8 +246,7 @@ namespace ao::cli::test
     checkDomainFailure(fixture.run({"list", "delete", "--descendants", "--dry-run", "999"}), "list not found: 999");
   }
 
-  TEST_CASE("CLI - ordinary list delete refuses a parent until its children are removed",
-            "[cli][integration][list][list-delete]")
+  TEST_CASE("CLI - ordinary list delete refuses a parent until its children are removed")
   {
     auto fixture = CliFixture{};
 
@@ -286,7 +284,7 @@ namespace ao::cli::test
     CHECK_FALSE(contains(result.out, "Child"));
   }
 
-  TEST_CASE("CLI - negated presence flags reject instead of enabling the flag", "[cli][unit][list][list-delete]")
+  TEST_CASE("CLI - negated presence flags reject instead of enabling the flag")
   {
     auto fixture = CliFixture{};
 
@@ -317,8 +315,7 @@ namespace ao::cli::test
     CHECK(contains(result.out, "would delete list subtree: " + parentId + " (2 Lists)"));
   }
 
-  TEST_CASE("CLI - list order reset forgets every saved position of that list only",
-            "[cli][integration][list][list-order]")
+  TEST_CASE("CLI - list order reset forgets every saved position of that list only")
   {
     auto fixture = CliFixture{};
     auto const first =
@@ -414,8 +411,7 @@ namespace ao::cli::test
     CHECK(storedOrderIds(result.out, otherId).empty());
   }
 
-  TEST_CASE("CLI - list order forget-hidden removes only hidden positions and preserves visible ranks",
-            "[cli][integration][list][list-order]")
+  TEST_CASE("CLI - list order forget-hidden removes only hidden positions and preserves visible ranks")
   {
     auto fixture = CliFixture{};
     auto const alpha =
@@ -491,8 +487,7 @@ namespace ao::cli::test
     checkDomainFailure(fixture.run({"list", "order", "forget-hidden", "999"}), "List 999 does not exist");
   }
 
-  TEST_CASE("CLI - list order edits refuse a List whose stored filter does not compile and keep its saved order",
-            "[cli][integration][list][list-order]")
+  TEST_CASE("CLI - list order edits refuse a List whose stored filter does not compile and keep its saved order")
   {
     auto fixture = CliFixture{};
     auto const alpha =

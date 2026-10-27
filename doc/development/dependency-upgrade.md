@@ -198,8 +198,9 @@ as `version-semver` for FTXUI.
 
 Treat the fast_float version and decimal-conversion behavior as one contract.
 Update its exact version in `dependency-contract.json`, its source tag and hash
-in `shell.nix`, and the shared vcpkg resolution together. Run the `[from-chars]`
-regressions on Linux, macOS, and Windows, including representable subnormals,
+in `shell.nix`, and the shared vcpkg resolution together. Run
+`./ao test --core "FromChars - *"` on Linux and macOS, and the equivalent
+`ao.bat test --core "FromChars - *"` on Windows, including representable subnormals,
 true underflow and overflow, unchanged output on errors, and ties-to-even
 rounding. Do not replace those cases with performance-only evidence.
 
@@ -214,8 +215,9 @@ vcpkg resolution together. Nixpkgs still packages 0.9, so the Linux derivation
 builds the same GitHub archive the vcpkg port verifies; compare the archive's
 SHA-512 with the port's before accepting a new hash. The vcpkg port exports
 `unofficial::lmdb::lmdb` while Linux resolves `PkgConfig::LMDB`, so the
-contract checks the `PkgLMDB` interface both feed. Run the `[lmdb]` and
-`[library]` suites on Linux, macOS, and Windows.
+contract checks the `PkgLMDB` interface both feed. Run the complete native gate
+(`./ao check` on Linux and macOS, `ao.bat check` on Windows) so LMDB primitives,
+library/storage consumers, and frontend library consumers are covered together.
 
 ### spdlog
 

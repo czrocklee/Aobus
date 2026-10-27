@@ -36,8 +36,7 @@ namespace ao::audio::backend::detail::test
     }
   } // namespace
 
-  TEST_CASE("BackendGraphRegistry - preparation commits current facts without delivering observers",
-            "[audio][unit][backend-graph]")
+  TEST_CASE("BackendGraphRegistry - preparation commits current facts without delivering observers")
   {
     auto registry = BackendGraphRegistry{};
     auto received = std::vector<flow::Graph>{};
@@ -67,7 +66,7 @@ namespace ao::audio::backend::detail::test
     CHECK(stored == current);
   }
 
-  TEST_CASE("BackendGraphRegistry - a newer clear retires delayed prepared publication", "[audio][unit][backend-graph]")
+  TEST_CASE("BackendGraphRegistry - a newer clear retires delayed prepared publication")
   {
     auto registry = BackendGraphRegistry{};
     auto received = std::vector<flow::Graph>{};
@@ -81,8 +80,7 @@ namespace ao::audio::backend::detail::test
     CHECK(stored == flow::Graph{});
   }
 
-  TEST_CASE("BackendGraphRegistry - delayed prepared clear cannot replace a newer publication",
-            "[audio][unit][backend-graph]")
+  TEST_CASE("BackendGraphRegistry - delayed prepared clear cannot replace a newer publication")
   {
     auto registry = BackendGraphRegistry{};
     auto received = std::vector<flow::Graph>{};
@@ -94,8 +92,7 @@ namespace ao::audio::backend::detail::test
     CHECK((received == std::vector<flow::Graph>{{}, current}));
   }
 
-  TEST_CASE("BackendGraphRegistry - pending delivery is move-only and one-shot across observer reentry",
-            "[audio][unit][backend-graph]")
+  TEST_CASE("BackendGraphRegistry - pending delivery is move-only and one-shot across observer reentry")
   {
     STATIC_REQUIRE_FALSE(std::is_copy_constructible_v<BackendGraphRegistry::PendingDelivery>);
     STATIC_REQUIRE(std::is_nothrow_move_constructible_v<BackendGraphRegistry::PendingDelivery>);
@@ -117,8 +114,7 @@ namespace ao::audio::backend::detail::test
     CHECK((received == std::vector<flow::Graph>{{}, current}));
   }
 
-  TEST_CASE("BackendGraphRegistry - moving a pending delivery releases all source ownership",
-            "[audio][unit][backend-graph]")
+  TEST_CASE("BackendGraphRegistry - moving a pending delivery releases all source ownership")
   {
     auto registry = BackendGraphRegistry{};
     auto ownerPtr = std::make_shared<std::uint32_t>(17U);
@@ -160,8 +156,7 @@ namespace ao::audio::backend::detail::test
     CHECK(received == std::vector<std::uint32_t>{17U});
   }
 
-  TEST_CASE("BackendGraphRegistry - move assignment over an armed delivery drops only the old ticket",
-            "[audio][unit][backend-graph]")
+  TEST_CASE("BackendGraphRegistry - move assignment over an armed delivery drops only the old ticket")
   {
     auto registry = BackendGraphRegistry{};
     auto receivedA = std::vector<flow::Graph>{};
@@ -203,8 +198,7 @@ namespace ao::audio::backend::detail::test
     CHECK(lateA == currentA);
   }
 
-  TEST_CASE("BackendGraphRegistry - prepared deliveries retain cancellation and retirement checks",
-            "[audio][unit][backend-graph]")
+  TEST_CASE("BackendGraphRegistry - prepared deliveries retain cancellation and retirement checks")
   {
     auto received = std::vector<flow::Graph>{};
     auto pending = BackendGraphRegistry::PendingDelivery{};
@@ -226,7 +220,7 @@ namespace ao::audio::backend::detail::test
   }
 
   TEST_CASE("BackendGraphRegistry - initial observer can retire a competing owner-committed publication",
-            "[audio][unit][backend-graph][concurrency]")
+            "[concurrency]")
   {
     auto registry = BackendGraphRegistry{};
     auto ownerMutex = std::mutex{};
@@ -288,8 +282,7 @@ namespace ao::audio::backend::detail::test
     CHECK((received == std::vector<flow::Graph>{{}, {}}));
   }
 
-  TEST_CASE("BackendGraphRegistry - subscriber receives empty then current route snapshot",
-            "[audio][unit][backend-graph]")
+  TEST_CASE("BackendGraphRegistry - subscriber receives empty then current route snapshot")
   {
     auto registry = BackendGraphRegistry{};
     auto received = std::vector<flow::Graph>{};
@@ -310,7 +303,7 @@ namespace ao::audio::backend::detail::test
     CHECK(lateGraph.nodes.front().id == "stream-a");
   }
 
-  TEST_CASE("BackendGraphRegistry - route fallback applies only before publication", "[audio][unit][backend-graph]")
+  TEST_CASE("BackendGraphRegistry - route fallback applies only before publication")
   {
     auto registry = BackendGraphRegistry{};
     auto received = flow::Graph{};
@@ -328,8 +321,7 @@ namespace ao::audio::backend::detail::test
     CHECK(received.nodes.front().id == "published");
   }
 
-  TEST_CASE("BackendGraphRegistry - equal snapshots do not redeliver and remain available to late subscribers",
-            "[audio][unit][backend-graph]")
+  TEST_CASE("BackendGraphRegistry - equal snapshots do not redeliver and remain available to late subscribers")
   {
     auto registry = BackendGraphRegistry{};
     auto received = std::vector<flow::Graph>{};
@@ -348,8 +340,7 @@ namespace ao::audio::backend::detail::test
     CHECK(received.size() == 2U);
   }
 
-  TEST_CASE("BackendGraphRegistry - initial callback publication drains without nesting or losing the current graph",
-            "[audio][unit][backend-graph]")
+  TEST_CASE("BackendGraphRegistry - initial callback publication drains without nesting or losing the current graph")
   {
     auto registry = BackendGraphRegistry{};
     auto const current = graphWithNode("current");
@@ -381,7 +372,7 @@ namespace ao::audio::backend::detail::test
   }
 
   TEST_CASE("BackendGraphRegistry - reentrant subscription defers its initial callback and remains cancellable",
-            "[audio][unit][backend-graph][concurrency]")
+            "[concurrency]")
   {
     bool cancelInitial = false;
 
@@ -452,8 +443,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("BackendGraphRegistry - reentrant real changes coalesce and supersede unfinished delivery",
-            "[audio][unit][backend-graph][concurrency]")
+  TEST_CASE("BackendGraphRegistry - reentrant real changes coalesce and supersede unfinished delivery", "[concurrency]")
   {
     auto registry = BackendGraphRegistry{};
     auto firstGraphs = std::vector<flow::Graph>{};
@@ -487,7 +477,7 @@ namespace ao::audio::backend::detail::test
   }
 
   TEST_CASE("BackendGraphRegistry - cancellation discards a reentrant publication for the cancelled subscriber",
-            "[audio][unit][backend-graph][concurrency]")
+            "[concurrency]")
   {
     auto registry = BackendGraphRegistry{};
     auto received = std::vector<flow::Graph>{};
@@ -515,7 +505,7 @@ namespace ao::audio::backend::detail::test
   }
 
   TEST_CASE("BackendGraphRegistry - cancellation removes callback already copied for route publication",
-            "[audio][unit][backend-graph][concurrency]")
+            "[concurrency]")
   {
     auto registry = BackendGraphRegistry{};
     bool cancelSecond = false;
@@ -541,7 +531,7 @@ namespace ao::audio::backend::detail::test
     CHECK(secondCalls == 1);
   }
 
-  TEST_CASE("BackendGraphRegistry - clear affects only the selected route", "[audio][unit][backend-graph]")
+  TEST_CASE("BackendGraphRegistry - clear affects only the selected route")
   {
     auto registry = BackendGraphRegistry{};
     auto routeAGraph = flow::Graph{};
@@ -558,8 +548,7 @@ namespace ao::audio::backend::detail::test
     CHECK(routeBCalls == 2);
   }
 
-  TEST_CASE("BackendGraphRegistry - reentrant clear supersedes an older publication",
-            "[audio][unit][backend-graph][concurrency]")
+  TEST_CASE("BackendGraphRegistry - reentrant clear supersedes an older publication", "[concurrency]")
   {
     auto registry = BackendGraphRegistry{};
     auto secondSubscriberGraphs = std::vector<flow::Graph>{};
@@ -590,7 +579,7 @@ namespace ao::audio::backend::detail::test
   }
 
   TEST_CASE("BackendGraphRegistry - a blocked publisher keeps delivery ownership after superseding a route",
-            "[audio][unit][backend-graph][concurrency]")
+            "[concurrency]")
   {
     constexpr auto kWaitTimeout = std::chrono::seconds{5};
     auto registry = BackendGraphRegistry{};
@@ -673,8 +662,7 @@ namespace ao::audio::backend::detail::test
     CHECK((latestCallbackThreads == std::vector{publisherThread, publisherThread}));
   }
 
-  TEST_CASE("BackendGraphRegistry - shutdown waits for an active callback and closes admission",
-            "[audio][unit][backend-graph][concurrency]")
+  TEST_CASE("BackendGraphRegistry - shutdown waits for an active callback and closes admission", "[concurrency]")
   {
     auto registry = BackendGraphRegistry{};
     auto callbackEntered = std::binary_semaphore{0};
@@ -724,7 +712,7 @@ namespace ao::audio::backend::detail::test
 
   TEST_CASE(
     "BackendGraphRegistry - callback shutdown delivers final empties before returning and respects cancellation",
-    "[audio][unit][backend-graph][concurrency]")
+    "[concurrency]")
   {
     auto registry = BackendGraphRegistry{};
     auto received = std::vector<flow::Graph>{};
@@ -765,7 +753,7 @@ namespace ao::audio::backend::detail::test
     CHECK_FALSE(registry.subscribe("route-a", [](flow::Graph const&) {}));
   }
 
-  TEST_CASE("BackendGraphRegistry - subscription may outlive registry", "[audio][unit][backend-graph]")
+  TEST_CASE("BackendGraphRegistry - subscription may outlive registry")
   {
     auto sub = utility::ScopedRegistration{};
 

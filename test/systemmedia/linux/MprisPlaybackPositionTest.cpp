@@ -60,8 +60,7 @@ namespace ao::systemmedia::test
     };
   } // namespace
 
-  TEST_CASE("MprisPlaybackEndpoint - valid SetPosition survives an orthogonal backlog",
-            "[platform][integration][mpris][async]")
+  TEST_CASE("MprisPlaybackEndpoint - valid SetPosition survives an orthogonal backlog")
   {
     auto fixture = MprisPositionFixture{};
     auto& playback = fixture.playback;
@@ -98,7 +97,7 @@ namespace ao::systemmedia::test
     CHECK(snapshots[2].finalSeekRevision.value == before.finalSeekRevision.value + 1);
   }
 
-  TEST_CASE("MprisPlaybackEndpoint - relative Seek uses live playback progress", "[platform][integration][mpris]")
+  TEST_CASE("MprisPlaybackEndpoint - relative Seek uses live playback progress")
   {
     auto fixture = MprisPositionFixture{};
     auto const before = fixture.playback.snapshot().transport;
@@ -115,8 +114,7 @@ namespace ao::systemmedia::test
     CHECK(after.finalSeekRevision.value == before.finalSeekRevision.value + 1);
   }
 
-  TEST_CASE("MprisPlaybackEndpoint - relative past-end Seek decides from live playback progress",
-            "[platform][integration][mpris]")
+  TEST_CASE("MprisPlaybackEndpoint - relative past-end Seek decides from live playback progress")
   {
     auto fixture = MprisPositionFixture{};
     auto const before = fixture.playback.snapshot().transport;
@@ -132,8 +130,7 @@ namespace ao::systemmedia::test
     CHECK(after.finalSeekRevision == before.finalSeekRevision);
   }
 
-  TEST_CASE("MprisPlaybackEndpoint - queued relative Seek samples at execution rather than admission",
-            "[platform][integration][mpris][async]")
+  TEST_CASE("MprisPlaybackEndpoint - queued relative Seek samples at execution rather than admission")
   {
     auto fixture = MprisPositionFixture{};
     auto& playback = fixture.playback;
@@ -163,8 +160,7 @@ namespace ao::systemmedia::test
     CHECK(after.finalSeekRevision.value == before.finalSeekRevision.value + 1);
   }
 
-  TEST_CASE("MprisPlaybackEndpoint - queued positioning cannot act on a replayed occurrence",
-            "[platform][integration][mpris][async]")
+  TEST_CASE("MprisPlaybackEndpoint - queued positioning cannot act on a replayed occurrence")
   {
     auto fixture = MprisPositionFixture{};
     auto& playback = fixture.playback;
@@ -196,8 +192,7 @@ namespace ao::systemmedia::test
     CHECK_FALSE(MprisBridge::shouldEmitSeeked(before, after));
   }
 
-  TEST_CASE("MprisPlaybackEndpoint - past-end Seek does not skip a pending realtime successor",
-            "[platform][integration][mpris][concurrency]")
+  TEST_CASE("MprisPlaybackEndpoint - past-end Seek does not skip a pending realtime successor", "[concurrency]")
   {
     auto fixture = MprisPositionFixture{};
     auto const before = fixture.playback.snapshot().transport;
@@ -211,8 +206,7 @@ namespace ao::systemmedia::test
     CHECK(fixture.application.successionPtr->state().optResolvedSuccessor == fixture.application.thirdTrackId);
   }
 
-  TEST_CASE("MprisPlaybackEndpoint - relative Seek preserves endpoint and overflow behavior",
-            "[platform][integration][mpris]")
+  TEST_CASE("MprisPlaybackEndpoint - relative Seek preserves endpoint and overflow behavior")
   {
     auto fixture = MprisPositionFixture{};
     auto& playback = fixture.playback;
@@ -255,8 +249,7 @@ namespace ao::systemmedia::test
     CHECK(after.finalSeekRevision.value == expectedFinalRevision);
   }
 
-  TEST_CASE("MprisPlaybackEndpoint - positive past-end Seek without a successor is a no-op",
-            "[platform][integration][mpris]")
+  TEST_CASE("MprisPlaybackEndpoint - positive past-end Seek without a successor is a no-op")
   {
     auto fixture = MprisPositionFixture{};
     REQUIRE(fixture.application.playAndWait(fixture.application.thirdTrackId));
@@ -272,7 +265,7 @@ namespace ao::systemmedia::test
     CHECK(after.finalSeekRevision == before.finalSeekRevision);
   }
 
-  TEST_CASE("MprisBridge - Position reads the live source instead of the snapshot anchor", "[platform][unit][mpris]")
+  TEST_CASE("MprisBridge - Position reads the live source instead of the snapshot anchor")
   {
     auto fixture = MprisPositionFixture{};
     auto snapshot = fixture.playback.snapshot();

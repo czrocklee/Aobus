@@ -34,7 +34,7 @@ namespace ao::utility::test
     }
   } // namespace
 
-  TEST_CASE("UnicodeText - uses the governed ICU and Unicode data", "[utility][unit][unicode]")
+  TEST_CASE("UnicodeText - uses the governed ICU and Unicode data")
   {
     CHECK(std::string_view{U_ICU_VERSION} == "78.3");
 
@@ -48,7 +48,7 @@ namespace ao::utility::test
     CHECK(unicodeVersion[1] == 0);
   }
 
-  TEST_CASE("UnicodeText - validates Unicode scalar UTF-8", "[utility][unit][unicode]")
+  TEST_CASE("UnicodeText - validates Unicode scalar UTF-8")
   {
     CHECK(validateUtf8(""));
     CHECK(validateUtf8("Dvořák"));
@@ -69,7 +69,7 @@ namespace ao::utility::test
     }
   }
 
-  TEST_CASE("UnicodeText - normalizes valid text to NFC", "[utility][unit][unicode]")
+  TEST_CASE("UnicodeText - normalizes valid text to NFC")
   {
     auto const nullBackedEmpty = std::string_view{};
     auto const decomposed = std::string{"Dvor\u030Ca\u0301k"};
@@ -103,7 +103,7 @@ namespace ao::utility::test
     CHECK(invalidCheckRes.error().code == Error::Code::InvalidInput);
   }
 
-  TEST_CASE("UnicodeText - builds locale-independent NFC caseless keys", "[utility][unit][unicode]")
+  TEST_CASE("UnicodeText - builds locale-independent NFC caseless keys")
   {
     auto const emptyRes = makeUtf8CaselessKey(std::string_view{});
     auto const upperRes = makeUtf8CaselessKey("DVOŘÁK");
@@ -125,8 +125,7 @@ namespace ao::utility::test
     CHECK(*medialSigmaRes == *finalSigmaRes);
   }
 
-  TEST_CASE("UnicodeText - checks grapheme boundaries without accepting interior scalar or cluster offsets",
-            "[utility][unit][unicode]")
+  TEST_CASE("UnicodeText - checks grapheme boundaries without accepting interior scalar or cluster offsets")
   {
     for (auto const cluster :
          {std::string_view{"a\u0301"}, std::string_view{"🇯🇵"}, std::string_view{"👩🏽‍💻"}})
@@ -159,7 +158,7 @@ namespace ao::utility::test
     }
   }
 
-  TEST_CASE("UnicodeText - finds the previous extended grapheme boundary in UTF-8 bytes", "[utility][unit][unicode]")
+  TEST_CASE("UnicodeText - finds the previous extended grapheme boundary in UTF-8 bytes")
   {
     auto const checkBoundary = [](std::string_view const text, std::size_t const expected)
     {
@@ -183,7 +182,7 @@ namespace ao::utility::test
     CHECK(invalidRes.error().code == Error::Code::InvalidInput);
   }
 
-  TEST_CASE("UnicodeText - walks extended grapheme boundaries from an interior offset", "[utility][unit][unicode]")
+  TEST_CASE("UnicodeText - walks extended grapheme boundaries from an interior offset")
   {
     auto const family = std::string_view{"👨‍👩‍👧‍👦"};
     auto const text = std::string{"a"} + std::string{family} + "b";

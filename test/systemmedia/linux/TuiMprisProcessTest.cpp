@@ -471,8 +471,7 @@ namespace ao::systemmedia::test
     }
   } // namespace
 
-  TEST_CASE("TUI system media - default and explicit auto acknowledge Quit before clean process exit",
-            "[tui][integration][mpris][concurrency]")
+  TEST_CASE("TUI system media - default and explicit auto acknowledge Quit before clean process exit", "[concurrency]")
   {
     auto const* const mode = GENERATE("", "auto");
     auto directory = ao::test::TempDir{};
@@ -501,8 +500,7 @@ namespace ao::systemmedia::test
     requireQuit(process, client, name);
   }
 
-  TEST_CASE("TUI system media - keyboard and signal exits release the real process bus name",
-            "[tui][integration][mpris]")
+  TEST_CASE("TUI system media - keyboard and signal exits release the real process bus name")
   {
     auto const keyboard = GENERATE(true, false);
     auto directory = ao::test::TempDir{};
@@ -525,7 +523,7 @@ namespace ao::systemmedia::test
     awaitNoNames(client);
   }
 
-  TEST_CASE("TUI system media - explicit off runs normally without owning a media name", "[tui][integration][mpris]")
+  TEST_CASE("TUI system media - explicit off runs normally without owning a media name")
   {
     auto directory = ao::test::TempDir{};
     auto bus = PrivateBus{};
@@ -541,8 +539,7 @@ namespace ao::systemmedia::test
     CHECK(tuiNames(client).empty());
   }
 
-  TEST_CASE("TUI system media - invalid option is rejected by the product parser before screen startup",
-            "[tui][integration][mpris]")
+  TEST_CASE("TUI system media - invalid option is rejected by the product parser before screen startup")
   {
     auto directory = ao::test::TempDir{};
     auto bus = PrivateBus{};
@@ -558,8 +555,7 @@ namespace ao::systemmedia::test
     CHECK(tuiNames(client).empty());
   }
 
-  TEST_CASE("TUI system media - only absent bus environment falls back to the escaped runtime socket",
-            "[tui][integration][mpris]")
+  TEST_CASE("TUI system media - only absent bus environment falls back to the escaped runtime socket")
   {
     auto const* const environmentMode = GENERATE("unset", "empty", "invalid", "explicit", "relative");
     CAPTURE(environmentMode);
@@ -631,7 +627,7 @@ namespace ao::systemmedia::test
     CHECK(tuiNames(explicitClient).empty());
   }
 
-  TEST_CASE("TUI system media - absent or nonsocket runtime bus leaves the process usable", "[tui][integration][mpris]")
+  TEST_CASE("TUI system media - absent or nonsocket runtime bus leaves the process usable")
   {
     auto const regularFile = GENERATE(false, true);
     auto directory = ao::test::TempDir{};

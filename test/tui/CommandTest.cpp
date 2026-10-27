@@ -23,7 +23,7 @@ namespace ao::tui::test
     }
   } // namespace
 
-  TEST_CASE("Command - command parser recognizes terminal app commands", "[tui][unit][shell]")
+  TEST_CASE("Command - command parser recognizes terminal app commands")
   {
     CHECK(requiredCommand(":lists").action == CommandAction::OpenLists);
     CHECK(requiredCommand(":sidebar").action == CommandAction::TogglePinnedLists);
@@ -105,7 +105,7 @@ namespace ao::tui::test
     CHECK(requiredCommand("  :DeViCe  ").action == CommandAction::OpenOutputDevices);
   }
 
-  TEST_CASE("Command - command and root key actions share one relation", "[tui][unit][shell][keymap]")
+  TEST_CASE("Command - command and root key actions share one relation")
   {
     constexpr auto kRelations = std::to_array<std::pair<CommandAction, KeyAction>>({
       {CommandAction::OpenLists, KeyAction::ToggleLists},
@@ -165,7 +165,7 @@ namespace ao::tui::test
     CHECK_FALSE(commandActionForKeyAction(KeyAction::PreviousSection));
   }
 
-  TEST_CASE("Command - only explicit filter commands become quick filters", "[tui][unit][shell]")
+  TEST_CASE("Command - only explicit filter commands become quick filters")
   {
     CHECK_FALSE(parseCommand("/aimer midnight"));
     CHECK_FALSE(parseCommand("/lists"));

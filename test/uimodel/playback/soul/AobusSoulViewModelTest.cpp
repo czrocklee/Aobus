@@ -32,7 +32,7 @@ namespace ao::uimodel::test
     }
   } // namespace
 
-  TEST_CASE("AobusSoulViewModel - view state generation", "[uimodel][unit][playback][soul]")
+  TEST_CASE("AobusSoulViewModel - view state generation")
   {
     auto fixture = ApplicationPlaybackFixture{};
 
@@ -47,7 +47,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("AobusSoulViewModel - playback signal resolves to branded aura", "[uimodel][unit][playback][soul]")
+  TEST_CASE("AobusSoulViewModel - playback signal resolves to branded aura")
   {
     CHECK(resolveSoulAura(audio::Transport::Idle, true, rt::QualityState{.overall = audio::Quality::BitwisePerfect}) ==
           SoulAura::Dormant);
@@ -92,8 +92,7 @@ namespace ao::uimodel::test
           SoulAura::Burning);
   }
 
-  TEST_CASE("resolveSoulAura keeps numerical positives independent of layout uncertainty",
-            "[uimodel][unit][playback][soul]")
+  TEST_CASE("resolveSoulAura keeps numerical positives independent of layout uncertainty")
   {
     for (auto const confidence : {audio::ChannelConfidence::Unknown,
                                   audio::ChannelConfidence::Unverified,
@@ -121,8 +120,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("AobusSoulViewModel - paused playback freezes motion and keeps the live quality aura",
-            "[uimodel][unit][playback][soul]")
+  TEST_CASE("AobusSoulViewModel - paused playback freezes motion and keeps the live quality aura")
   {
     auto fixture = PlaybackUiFixture{};
     fixture.makePlaybackReady();
@@ -141,7 +139,7 @@ namespace ao::uimodel::test
     CHECK(log.last().aura == playingAura);
   }
 
-  TEST_CASE("resolveSoulAura uses live quality while paused", "[uimodel][unit][playback][soul]")
+  TEST_CASE("resolveSoulAura uses live quality while paused")
   {
     CHECK(resolveSoulAura(audio::Transport::Paused,
                           true,
@@ -161,7 +159,7 @@ namespace ao::uimodel::test
                                            .overall = audio::Quality::BitwisePerfect}) == SoulAura::Veiled);
   }
 
-  TEST_CASE("AobusSoulViewModel - unchanged aura snapshots do not rerender", "[uimodel][unit][playback][soul]")
+  TEST_CASE("AobusSoulViewModel - unchanged aura snapshots do not rerender")
   {
     auto fixture = ApplicationPlaybackFixture{};
     auto log = ao::test::RenderLog<AobusSoulViewState>{};
@@ -173,7 +171,7 @@ namespace ao::uimodel::test
     CHECK(log.states.size() == 1);
   }
 
-  TEST_CASE("AobusSoul - rendering palette matches specified colors", "[uimodel][unit][playback][soul]")
+  TEST_CASE("AobusSoul - rendering palette matches specified colors")
   {
     CHECK(kAobusSoulUiCyan == AobusSoulRgb{.red = 0x00, .green = 0xE5, .blue = 0xFF});
     CHECK(kAobusSoulAnchorAmber == AobusSoulRgb{.red = 0xF9, .green = 0x73, .blue = 0x16});
@@ -185,8 +183,7 @@ namespace ao::uimodel::test
     CHECK(aobusSoulAuraRgb(SoulAura::Burning) == AobusSoulRgb{.red = 0xEF, .green = 0x44, .blue = 0x44});
   }
 
-  TEST_CASE("AobusSoul - gradient keeps a cyan core and counter-shifted quality body",
-            "[uimodel][unit][playback][soul]")
+  TEST_CASE("AobusSoul - gradient keeps a cyan core and counter-shifted quality body")
   {
     auto const stationary = aobusSoulVisualFrame(kAobusSoulTurbulent, AobusSoulMotionFrame{}).gradientColors;
     CHECK(stationary.core == AobusSoulRgb{.red = 0x00, .green = 0xE5, .blue = 0xFF});
@@ -198,7 +195,7 @@ namespace ao::uimodel::test
     CHECK(flowing.body == AobusSoulRgb{.red = 0xF5, .green = 0x77, .blue = 0x0B});
   }
 
-  TEST_CASE("AobusSoul - geometry is one immutable cross-frontend recipe", "[uimodel][unit][playback][soul]")
+  TEST_CASE("AobusSoul - geometry is one immutable cross-frontend recipe")
   {
     CHECK(kAobusSoulGeometry.referenceHeight == 65.0);
     CHECK(kAobusSoulGeometry.radius == 30.0);
@@ -211,7 +208,7 @@ namespace ao::uimodel::test
     CHECK(kAobusSoulCoreGradientStop == 0.382);
   }
 
-  TEST_CASE("AobusSoul - motion mode follows transport state", "[uimodel][unit][playback][soul]")
+  TEST_CASE("AobusSoul - motion mode follows transport state")
   {
     CHECK(aobusSoulMotionMode(audio::Transport::Playing) == AobusSoulMotionMode::Animating);
     CHECK(aobusSoulMotionMode(audio::Transport::Paused) == AobusSoulMotionMode::Frozen);
@@ -219,7 +216,7 @@ namespace ao::uimodel::test
     CHECK(aobusSoulMotionMode(audio::Transport::Seeking) == AobusSoulMotionMode::Dormant);
   }
 
-  TEST_CASE("AobusSoul - resume eases motion in and pause coasts it to a held frame", "[uimodel][unit][playback][soul]")
+  TEST_CASE("AobusSoul - resume eases motion in and pause coasts it to a held frame")
   {
     // Speed follows smoothstep across the transition, so each ramp covers half
     // of the span's full-speed travel.
@@ -255,7 +252,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(animation.needsFrames());
   }
 
-  TEST_CASE("AobusSoul - motion transitions travel the same phase at any frame rate", "[uimodel][unit][playback][soul]")
+  TEST_CASE("AobusSoul - motion transitions travel the same phase at any frame rate")
   {
     auto coarse = AobusSoulAnimationState{};
     auto fine = AobusSoulAnimationState{};
@@ -292,7 +289,7 @@ namespace ao::uimodel::test
     CHECK(fine.elapsed().count() == Catch::Approx{coarse.elapsed().count()});
   }
 
-  TEST_CASE("AobusSoul - aura changes cross-fade from the shown color", "[uimodel][unit][playback][soul]")
+  TEST_CASE("AobusSoul - aura changes cross-fade from the shown color")
   {
     auto animation = AobusSoulAnimationState{};
     animation.setAura(kAobusSoulTurbulent);
@@ -318,7 +315,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(animation.needsFrames());
   }
 
-  TEST_CASE("AobusSoul - settling completes transitions without moving the sample", "[uimodel][unit][playback][soul]")
+  TEST_CASE("AobusSoul - settling completes transitions without moving the sample")
   {
     auto animation = AobusSoulAnimationState{};
     animation.setAura(kAobusSoulTurbulent);
@@ -335,7 +332,7 @@ namespace ao::uimodel::test
     CHECK(animation.visualFrame() == aobusSoulVisualFrame(kAobusSoulRadiant, sampled));
   }
 
-  TEST_CASE("AobusSoul - motion recipe exposes the shared GTK and TUI timing phases", "[uimodel][unit][playback][soul]")
+  TEST_CASE("AobusSoul - motion recipe exposes the shared GTK and TUI timing phases")
   {
     auto const initial = aobusSoulMotionAt(std::chrono::duration<double>{0.0});
     CHECK(initial.breath == Catch::Approx{0.5});

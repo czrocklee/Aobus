@@ -218,8 +218,7 @@ namespace ao::utility::test
     }
   } // namespace
 
-  TEST_CASE("AtomicFile transaction - preserves the target on every pre-replacement failure",
-            "[utility][unit][atomic-file]")
+  TEST_CASE("AtomicFile transaction - preserves the target on every pre-replacement failure")
   {
     constexpr auto kFailureStages = std::array{
       FailureStage::Normalize,
@@ -251,8 +250,7 @@ namespace ao::utility::test
     }
   }
 
-  TEST_CASE("AtomicFile transaction - retains the primary error when temporary cleanup fails",
-            "[utility][unit][atomic-file]")
+  TEST_CASE("AtomicFile transaction - retains the primary error when temporary cleanup fails")
   {
     auto state = ScriptedAtomicFileState{.failureStage = FailureStage::Write, .cleanupFails = true};
     auto operations = ScriptedAtomicFileOperations{state};
@@ -267,8 +265,7 @@ namespace ao::utility::test
     CHECK(state.temporaryExists);
   }
 
-  TEST_CASE("AtomicFile transaction - publishes complete contents before best-effort parent synchronization",
-            "[utility][unit][atomic-file]")
+  TEST_CASE("AtomicFile transaction - publishes complete contents before best-effort parent synchronization")
   {
     auto state = ScriptedAtomicFileState{};
     auto operations = ScriptedAtomicFileOperations{state};
@@ -286,8 +283,7 @@ namespace ao::utility::test
     CHECK(state.temporaryCommittedAtParentSync);
   }
 
-  TEST_CASE("AtomicFile transaction - visibility-only publication skips durability barriers",
-            "[utility][unit][atomic-file]")
+  TEST_CASE("AtomicFile transaction - visibility-only publication skips durability barriers")
   {
     auto state = ScriptedAtomicFileState{.failureStage = FailureStage::Synchronize};
     auto operations = ScriptedAtomicFileOperations{state};
@@ -303,7 +299,7 @@ namespace ao::utility::test
     CHECK(state.parentSyncAttempts == 0);
   }
 
-  TEST_CASE("AtomicFile - writes data atomically with owner-only permissions", "[utility][unit][atomic-file]")
+  TEST_CASE("AtomicFile - writes data atomically with owner-only permissions")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const targetPath = std::filesystem::path{tempDir.path()} / "config.yaml";
@@ -320,7 +316,7 @@ namespace ao::utility::test
     CHECK(ao::test::hasPrivateManagedFileAccess(targetPath));
   }
 
-  TEST_CASE("AtomicFile - preserves empty and embedded-null payloads", "[utility][unit][atomic-file]")
+  TEST_CASE("AtomicFile - preserves empty and embedded-null payloads")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const targetPath = tempDir.path() / "opaque.bin";
@@ -333,7 +329,7 @@ namespace ao::utility::test
     CHECK(ao::test::readFile(targetPath) == payload);
   }
 
-  TEST_CASE("AtomicFile - overwrites existing file", "[utility][unit][atomic-file]")
+  TEST_CASE("AtomicFile - overwrites existing file")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const targetPath = std::filesystem::path{tempDir.path()} / "state.yaml";
@@ -346,8 +342,7 @@ namespace ao::utility::test
     CHECK(content == "new");
   }
 
-  TEST_CASE("AtomicFile - visibility-only publication replaces complete private contents",
-            "[utility][unit][atomic-file]")
+  TEST_CASE("AtomicFile - visibility-only publication replaces complete private contents")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const targetPath = std::filesystem::path{tempDir.path()} / "derived.bin";
@@ -358,7 +353,7 @@ namespace ao::utility::test
     CHECK(ao::test::hasPrivateManagedFileAccess(targetPath));
   }
 
-  TEST_CASE("AtomicFile - fails when parent directory is not writable", "[utility][unit][atomic-file]")
+  TEST_CASE("AtomicFile - fails when parent directory is not writable")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const readonlyDir = std::filesystem::path{tempDir.path()} / "readonly";
@@ -375,7 +370,7 @@ namespace ao::utility::test
     CHECK_FALSE(res.has_value());
   }
 
-  TEST_CASE("AtomicFile - fails to overwrite a directory", "[utility][unit][atomic-file]")
+  TEST_CASE("AtomicFile - fails to overwrite a directory")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const targetPath = std::filesystem::path{tempDir.path()} / "dir";
@@ -402,7 +397,7 @@ namespace ao::utility::test
 
 #ifdef _WIN32
 
-  TEST_CASE("AtomicFile - supports Windows paths beyond MAX_PATH", "[utility][unit][atomic-file][windows]")
+  TEST_CASE("AtomicFile - supports Windows paths beyond MAX_PATH")
   {
     auto const tempDir = ao::test::TempDir{};
     auto targetPath = tempDir.path();
@@ -430,8 +425,7 @@ namespace ao::utility::test
     CHECK_FALSE(ec);
   }
 
-  TEST_CASE("AtomicFile - concurrent Windows writers use distinct temp files",
-            "[utility][unit][atomic-file][windows][concurrency]")
+  TEST_CASE("AtomicFile - concurrent Windows writers use distinct temp files", "[concurrency]")
   {
     constexpr std::size_t kWriterCount = 8;
     auto const tempDir = ao::test::TempDir{};

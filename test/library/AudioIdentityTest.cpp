@@ -30,7 +30,7 @@ namespace ao::library::test
     }
   } // namespace
 
-  TEST_CASE("readAudioIdentity - returns payload identity and progress", "[library][unit][audio-identity]")
+  TEST_CASE("readAudioIdentity - returns payload identity and progress")
   {
     auto const payload = makePayload(32);
     auto progressEvents = std::vector<double>{};
@@ -45,8 +45,7 @@ namespace ao::library::test
     CHECK(progressEvents.back() == 1.0);
   }
 
-  TEST_CASE("readAudioIdentity - streaming matches one-shot XXH3 across chunk boundaries",
-            "[library][unit][audio-identity]")
+  TEST_CASE("readAudioIdentity - streaming matches one-shot XXH3 across chunk boundaries")
   {
     auto const payload = makePayload(kHashChunkSize + 17U);
 
@@ -57,8 +56,7 @@ namespace ao::library::test
     CHECK(optResult->payloadLength == payload.size());
   }
 
-  TEST_CASE("readAudioIdentity - cancellation after one chunk returns no identity",
-            "[library][unit][audio-identity][concurrency]")
+  TEST_CASE("readAudioIdentity - cancellation after one chunk returns no identity", "[concurrency]")
   {
     auto const payload = makePayload(kHashChunkSize + 17U);
     auto stopSource = std::stop_source{};

@@ -99,8 +99,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("LibraryYaml - recording-date admits only canonical partial dates",
-            "[runtime][unit][import-export][schema]")
+  TEST_CASE("LibraryYaml - recording-date admits only canonical partial dates")
   {
     SECTION("canonical literals are accepted")
     {
@@ -180,8 +179,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("LibraryYaml - credits require closed name kind and optional role maps",
-            "[runtime][unit][import-export][schema]")
+  TEST_CASE("LibraryYaml - credits require closed name kind and optional role maps")
   {
     for (auto const* kind : {"conductor", "ensemble", "soloist", "performer"})
     {
@@ -237,8 +235,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("LibraryYaml - an invalid performance field rejects the payload before any mutation",
-            "[runtime][unit][import-export][schema]")
+  TEST_CASE("LibraryYaml - an invalid performance field rejects the payload before any mutation")
   {
     auto const temp = ao::test::TempDir{};
     auto library = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -276,8 +273,7 @@ namespace ao::rt::test
     CHECK(optView->performance().credits().empty());
   }
 
-  TEST_CASE("LibraryYaml - invalid credits preflight leaves all library state untouched",
-            "[runtime][unit][import-export][schema]")
+  TEST_CASE("LibraryYaml - invalid credits preflight leaves all library state untouched")
   {
     auto const temp = ao::test::TempDir{};
     auto library = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -327,8 +323,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("LibraryYaml - a future version rejects before the performance fields are interpreted",
-            "[runtime][unit][import-export][schema]")
+  TEST_CASE("LibraryYaml - a future version rejects before the performance fields are interpreted")
   {
     auto const yaml = std::format("version: {}\n"
                                   "export-mode: full\n"

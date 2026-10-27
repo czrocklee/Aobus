@@ -22,7 +22,7 @@
 using namespace ao::audio::backend::detail;
 using namespace ao::audio::flow;
 
-TEST_CASE("AlsaGraphRegistry - delivery-only changes publish without relabelling native slots", "[audio][unit][alsa]")
+TEST_CASE("AlsaGraphRegistry - delivery-only changes publish without relabelling native slots")
 {
   auto registry = AlsaGraphRegistry{};
   auto graph = Graph{};
@@ -74,8 +74,7 @@ TEST_CASE("AlsaGraphRegistry - delivery-only changes publish without relabelling
   CHECK(mode.clientFormat.speakerMask == 0x33U);
 }
 
-TEST_CASE("AlsaGraphRegistry - observed endpoint set does not become a canonical native slot description",
-          "[audio][unit][alsa]")
+TEST_CASE("AlsaGraphRegistry - observed endpoint set does not become a canonical native slot description")
 {
   auto registry = AlsaGraphRegistry{};
   auto graph = Graph{};
@@ -103,7 +102,7 @@ TEST_CASE("AlsaGraphRegistry - observed endpoint set does not become a canonical
   CHECK_FALSE(graph.nodes[0].channelDelivery.hasSharedConversion);
 }
 
-TEST_CASE("AlsaGraphRegistry - initial subscription receives neutral graph", "[audio][unit][alsa]")
+TEST_CASE("AlsaGraphRegistry - initial subscription receives neutral graph")
 {
   auto registry = AlsaGraphRegistry{};
   auto receivedGraph = Graph{};
@@ -127,7 +126,7 @@ TEST_CASE("AlsaGraphRegistry - initial subscription receives neutral graph", "[a
   CHECK_FALSE(receivedGraph.connections.front().isActive);
 }
 
-TEST_CASE("AlsaGraphRegistry - hardware volume publish updates subscribers", "[audio][unit][alsa]")
+TEST_CASE("AlsaGraphRegistry - hardware volume publish updates subscribers")
 {
   auto registry = AlsaGraphRegistry{};
   auto receivedGraph = Graph{};
@@ -143,7 +142,7 @@ TEST_CASE("AlsaGraphRegistry - hardware volume publish updates subscribers", "[a
   CHECK_FALSE(receivedGraph.nodes[1].isMuted);
 }
 
-TEST_CASE("AlsaGraphRegistry - stream shows the client bytes and sink shows the endpoint signal", "[audio][unit][alsa]")
+TEST_CASE("AlsaGraphRegistry - stream shows the client bytes and sink shows the endpoint signal")
 {
   auto registry = AlsaGraphRegistry{};
   auto receivedGraph = Graph{};
@@ -171,7 +170,7 @@ TEST_CASE("AlsaGraphRegistry - stream shows the client bytes and sink shows the 
   CHECK(receivedGraph.connections.front().isActive);
 }
 
-TEST_CASE("AlsaGraphRegistry - an unconfirmed endpoint leaves the sink format empty", "[audio][unit][alsa]")
+TEST_CASE("AlsaGraphRegistry - an unconfirmed endpoint leaves the sink format empty")
 {
   auto registry = AlsaGraphRegistry{};
   auto receivedGraph = Graph{};
@@ -188,7 +187,7 @@ TEST_CASE("AlsaGraphRegistry - an unconfirmed endpoint leaves the sink format em
   CHECK_FALSE(receivedGraph.nodes[1].optFormat);
 }
 
-TEST_CASE("AlsaGraphRegistry - software volume publish updates subscribers", "[audio][unit][alsa]")
+TEST_CASE("AlsaGraphRegistry - software volume publish updates subscribers")
 {
   auto registry = AlsaGraphRegistry{};
   auto receivedGraph = Graph{};
@@ -205,7 +204,7 @@ TEST_CASE("AlsaGraphRegistry - software volume publish updates subscribers", "[a
   CHECK_FALSE(receivedGraph.nodes[1].isMuted);
 }
 
-TEST_CASE("AlsaGraphRegistry - software amplification publishes gain magnitude", "[audio][unit][alsa]")
+TEST_CASE("AlsaGraphRegistry - software amplification publishes gain magnitude")
 {
   auto registry = AlsaGraphRegistry{};
   auto receivedGraph = Graph{};
@@ -222,7 +221,7 @@ TEST_CASE("AlsaGraphRegistry - software amplification publishes gain magnitude",
   CHECK_FALSE(receivedGraph.nodes[1].isMuted);
 }
 
-TEST_CASE("AlsaGraphRegistry - mute publish updates subscribers", "[audio][unit][alsa]")
+TEST_CASE("AlsaGraphRegistry - mute publish updates subscribers")
 {
   auto registry = AlsaGraphRegistry{};
   auto receivedGraph = Graph{};
@@ -237,7 +236,7 @@ TEST_CASE("AlsaGraphRegistry - mute publish updates subscribers", "[audio][unit]
   CHECK(receivedGraph.nodes[1].isMuted);
 }
 
-TEST_CASE("AlsaGraphRegistry - unavailable mode with non-unity volume emits unclassified volume", "[audio][unit][alsa]")
+TEST_CASE("AlsaGraphRegistry - unavailable mode with non-unity volume emits unclassified volume")
 {
   auto registry = AlsaGraphRegistry{};
   auto receivedGraph = Graph{};
@@ -262,7 +261,7 @@ TEST_CASE("AlsaGraphRegistry - unavailable mode with non-unity volume emits uncl
   CHECK(receivedGraph.nodes[1].minUnclassifiedGain == 0.0F);
 }
 
-TEST_CASE("AlsaGraphRegistry - clear emits empty graph", "[audio][unit][alsa]")
+TEST_CASE("AlsaGraphRegistry - clear emits empty graph")
 {
   auto registry = AlsaGraphRegistry{};
   auto receivedGraph = Graph{};
@@ -279,7 +278,7 @@ TEST_CASE("AlsaGraphRegistry - clear emits empty graph", "[audio][unit][alsa]")
   CHECK(receivedGraph.connections.empty());
 }
 
-TEST_CASE("AlsaGraphRegistry - subscriber only receives updates for its anchor", "[audio][unit][alsa]")
+TEST_CASE("AlsaGraphRegistry - subscriber only receives updates for its anchor")
 {
   auto registry = AlsaGraphRegistry{};
   std::int32_t callCountA = 0;
@@ -301,7 +300,7 @@ TEST_CASE("AlsaGraphRegistry - subscriber only receives updates for its anchor",
   CHECK(callCountB == 2);
 }
 
-TEST_CASE("AlsaGraphRegistry - subscription reset stops updates", "[audio][unit][alsa]")
+TEST_CASE("AlsaGraphRegistry - subscription reset stops updates")
 {
   auto registry = AlsaGraphRegistry{};
   std::int32_t callCount = 0;
@@ -315,7 +314,7 @@ TEST_CASE("AlsaGraphRegistry - subscription reset stops updates", "[audio][unit]
   CHECK(callCount == 1);
 }
 
-TEST_CASE("AlsaGraphRegistry - volume callback may publish reentrantly", "[audio][unit][alsa]")
+TEST_CASE("AlsaGraphRegistry - volume callback may publish reentrantly")
 {
   auto registry = AlsaGraphRegistry{};
   std::int32_t callbackCount = 0;
@@ -352,8 +351,7 @@ TEST_CASE("AlsaGraphRegistry - volume callback may publish reentrantly", "[audio
   CHECK(observedVolume == 0.25F);
 }
 
-TEST_CASE("AlsaGraphRegistry - cancellation removes a callback already copied for publication",
-          "[audio][unit][alsa][subscription][concurrency]")
+TEST_CASE("AlsaGraphRegistry - cancellation removes a callback already copied for publication", "[concurrency]")
 {
   auto registry = AlsaGraphRegistry{};
   bool cancelSecond = false;
@@ -379,8 +377,7 @@ TEST_CASE("AlsaGraphRegistry - cancellation removes a callback already copied fo
   CHECK(secondCalls == 1);
 }
 
-TEST_CASE("AlsaGraphRegistry - shutdown retires subscriptions and retained publishers",
-          "[audio][unit][alsa][concurrency]")
+TEST_CASE("AlsaGraphRegistry - shutdown retires subscriptions and retained publishers", "[concurrency]")
 {
   auto registry = AlsaGraphRegistry{};
   auto publisher = registry.publisher();
@@ -403,7 +400,7 @@ TEST_CASE("AlsaGraphRegistry - shutdown retires subscriptions and retained publi
   sub.reset();
 }
 
-TEST_CASE("AlsaGraphRegistry - publisher and subscription may outlive registry", "[audio][unit][alsa][concurrency]")
+TEST_CASE("AlsaGraphRegistry - publisher and subscription may outlive registry", "[concurrency]")
 {
   auto publisher = AlsaGraphPublisher{};
   auto sub = ao::utility::ScopedRegistration{};

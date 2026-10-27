@@ -78,14 +78,14 @@ namespace ao::library::test
     }
   } // namespace
 
-  TEST_CASE("IdSpace - a fresh library starts with no allocated ids", "[library][unit][id-space]")
+  TEST_CASE("IdSpace - a fresh library starts with no allocated ids")
   {
     auto const temp = ao::test::TempDir{};
     std::ignore = makeTestMusicLibrary(temp.path(), temp.path() / "db");
     CHECK(readRawIdSpace(temp.path() / "db") == IdSpace{});
   }
 
-  TEST_CASE("IdSpace - deleting the highest Track or List never frees its id", "[library][unit][id-space]")
+  TEST_CASE("IdSpace - deleting the highest Track or List never frees its id")
   {
     auto const temp = ao::test::TempDir{};
     {
@@ -109,8 +109,7 @@ namespace ao::library::test
     CHECK(addTrack(library, TrackSpec{.uri = "fourth.flac"}) == TrackId{4});
   }
 
-  TEST_CASE("IdSpace - clearing keeps later ids above the old marks and the library id unchanged",
-            "[library][unit][id-space]")
+  TEST_CASE("IdSpace - clearing keeps later ids above the old marks and the library id unchanged")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -161,8 +160,7 @@ namespace ao::library::test
     CHECK(library.metadataHeader().libraryId == libraryId);
   }
 
-  TEST_CASE("IdSpace - commit marks cover ids allocated and deleted in the same transaction",
-            "[library][unit][id-space]")
+  TEST_CASE("IdSpace - commit marks cover ids allocated and deleted in the same transaction")
   {
     auto const temp = ao::test::TempDir{};
     auto const databasePath = temp.path() / "db";
@@ -192,7 +190,7 @@ namespace ao::library::test
     CHECK(ao::test::requireValue(createList(library, ListBuilder::makeEmpty().name("Next"))) == ListId{3});
   }
 
-  TEST_CASE("IdSpace - commit marks cover rows a physical seam stored", "[library][unit][id-space]")
+  TEST_CASE("IdSpace - commit marks cover rows a physical seam stored")
   {
     auto const temp = ao::test::TempDir{};
     auto const databasePath = temp.path() / "db";
@@ -215,7 +213,7 @@ namespace ao::library::test
     CHECK(readRawIdSpace(databasePath) == IdSpace{.lastTrackId = 1, .lastListId = 1});
   }
 
-  TEST_CASE("IdSpace - a failed commit leaves the marks and revision unchanged", "[library][unit][id-space]")
+  TEST_CASE("IdSpace - a failed commit leaves the marks and revision unchanged")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -242,7 +240,7 @@ namespace ao::library::test
     CHECK(addTrack(library, TrackSpec{.uri = "second.flac"}) == TrackId{2});
   }
 
-  TEST_CASE("ListWriter - saved order refuses a Track id that was never allocated", "[library][unit][id-space]")
+  TEST_CASE("ListWriter - saved order refuses a Track id that was never allocated")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -291,7 +289,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("ListWriter - List allocation never reaches the reserved maximum id", "[library][unit][id-space]")
+  TEST_CASE("ListWriter - List allocation never reaches the reserved maximum id")
   {
     auto const temp = ao::test::TempDir{};
     auto const databasePath = temp.path() / "db";

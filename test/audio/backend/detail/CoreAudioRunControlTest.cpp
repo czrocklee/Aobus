@@ -18,8 +18,7 @@
 
 namespace ao::audio::backend::detail::test
 {
-  TEST_CASE("CoreAudioRunControl - scopes capture the current generation and advancement retires old tokens",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioRunControl - scopes capture the current generation and advancement retires old tokens")
   {
     STATIC_REQUIRE_FALSE(std::is_copy_constructible_v<CoreAudioRunControl::Scope>);
     STATIC_REQUIRE(std::is_nothrow_move_constructible_v<CoreAudioRunControl::Scope>);
@@ -57,8 +56,7 @@ namespace ao::audio::backend::detail::test
     CHECK(control.current() == 3U);
   }
 
-  TEST_CASE("CoreAudioRunControl - a delayed recognized old handler cannot stop a newer run",
-            "[audio][unit][coreaudio][concurrency]")
+  TEST_CASE("CoreAudioRunControl - a delayed recognized old handler cannot stop a newer run", "[concurrency]")
   {
     auto control = CoreAudioRunControl{};
     auto const oldGeneration = control.current();
@@ -161,8 +159,7 @@ namespace ao::audio::backend::detail::test
     CHECK(nativeStopCount == 0U);
   }
 
-  TEST_CASE("CoreAudioRunControl - an admitted handler finishes native stop before a newer run starts",
-            "[audio][unit][coreaudio][concurrency]")
+  TEST_CASE("CoreAudioRunControl - an admitted handler finishes native stop before a newer run starts", "[concurrency]")
   {
     auto control = CoreAudioRunControl{};
     auto const oldGeneration = control.current();

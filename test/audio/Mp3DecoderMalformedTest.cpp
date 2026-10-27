@@ -17,7 +17,7 @@
 
 namespace ao::audio::test
 {
-  TEST_CASE("Mp3DecoderSession - malformed stream handling", "[audio][unit][mp3][malformed]")
+  TEST_CASE("Mp3DecoderSession - malformed stream handling")
   {
     auto const fixture = requireAudioFixture("basic_metadata.mp3");
     auto const source = readFileBytes(fixture);

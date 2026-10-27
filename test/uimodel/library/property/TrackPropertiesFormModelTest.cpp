@@ -42,14 +42,13 @@ namespace ao::uimodel::test
     }
   } // namespace
 
-  TEST_CASE("Track segment properties - an unloaded form has no CUE rows", "[uimodel][unit][property]")
+  TEST_CASE("Track segment properties - an unloaded form has no CUE rows")
   {
     auto const form = TrackPropertiesFormModel{ao::test::englishMessageCatalog()};
     CHECK(form.segmentRows().empty());
   }
 
-  TEST_CASE("Track segment properties - sparse ordinals retain frame-derived exclusive boundaries",
-            "[uimodel][unit][property]")
+  TEST_CASE("Track segment properties - sparse ordinals retain frame-derived exclusive boundaries")
   {
     auto const rows = formatTrackSegmentRows(ao::test::englishMessageCatalog(), 7, 588, 588, 44100);
     REQUIRE(rows.size() == 3);
@@ -60,7 +59,7 @@ namespace ao::uimodel::test
     CHECK(rows[2].text == "0:00.026");
   }
 
-  TEST_CASE("Track segment properties - positions floor to whole milliseconds", "[uimodel][unit][property]")
+  TEST_CASE("Track segment properties - positions floor to whole milliseconds")
   {
     auto const rows = formatTrackSegmentRows(ao::test::englishMessageCatalog(), 99, 191, 1, 192000);
     REQUIRE(rows.size() == 3);
@@ -75,8 +74,7 @@ namespace ao::uimodel::test
     CHECK(cueFrames[2].text == "0:01.000");
   }
 
-  TEST_CASE("Track segment properties - integer formatting retains large coordinates and high rates",
-            "[uimodel][unit][property]")
+  TEST_CASE("Track segment properties - integer formatting retains large coordinates and high rates")
   {
     auto const large =
       formatTrackSegmentRows(ao::test::englishMessageCatalog(), 2, std::numeric_limits<std::uint64_t>::max() - 1, 1, 1);
@@ -90,8 +88,7 @@ namespace ao::uimodel::test
     CHECK(fast[2].text == "0:00.000");
   }
 
-  TEST_CASE("Track segment properties - invalid rate and overflowing range render no invented times",
-            "[uimodel][unit][property]")
+  TEST_CASE("Track segment properties - invalid rate and overflowing range render no invented times")
   {
     CHECK(formatTrackSegmentRows(ao::test::englishMessageCatalog(), 2, 1, 1, 0).empty());
     CHECK(
@@ -99,7 +96,7 @@ namespace ao::uimodel::test
         .empty());
   }
 
-  TEST_CASE("TrackPropertiesFormModel - merges multi-track field state", "[uimodel][unit][property]")
+  TEST_CASE("TrackPropertiesFormModel - merges multi-track field state")
   {
     auto model = TrackPropertiesFormModel{ao::test::englishMessageCatalog()};
     model.addField(rt::TrackField::Title, true);
@@ -116,7 +113,7 @@ namespace ao::uimodel::test
     CHECK(model.rowView(rt::TrackField::Title).mixed);
   }
 
-  TEST_CASE("TrackPropertiesFormModel - writes changed metadata edits", "[uimodel][unit][property]")
+  TEST_CASE("TrackPropertiesFormModel - writes changed metadata edits")
   {
     auto model = TrackPropertiesFormModel{ao::test::englishMessageCatalog()};
     model.addField(rt::TrackField::Title, true);
@@ -137,7 +134,7 @@ namespace ao::uimodel::test
     CHECK(*patch.optYear == 2024);
   }
 
-  TEST_CASE("TrackPropertiesFormModel - exposes row view and save state", "[uimodel][unit][property]")
+  TEST_CASE("TrackPropertiesFormModel - exposes row view and save state")
   {
     auto model = TrackPropertiesFormModel{ao::test::englishMessageCatalog()};
     model.addField(rt::TrackField::Title, true);
@@ -161,7 +158,7 @@ namespace ao::uimodel::test
     CHECK(*patch.optTitle == "New Title");
   }
 
-  TEST_CASE("TrackPropertiesFormModel - keeps mixed multi-track edits out of patches", "[uimodel][unit][property]")
+  TEST_CASE("TrackPropertiesFormModel - keeps mixed multi-track edits out of patches")
   {
     auto const& textCatalog = ao::test::englishMessageCatalog();
     auto model = TrackPropertiesFormModel{textCatalog};
@@ -181,8 +178,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(patch.optTitle);
   }
 
-  TEST_CASE("TrackPropertiesFormModel - skips unchanged, read-only, and incompatible edits",
-            "[uimodel][unit][property]")
+  TEST_CASE("TrackPropertiesFormModel - skips unchanged, read-only, and incompatible edits")
   {
     auto model = TrackPropertiesFormModel{ao::test::englishMessageCatalog()};
     model.addField(rt::TrackField::Title, true);
@@ -207,8 +203,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(patch.optYear);
   }
 
-  TEST_CASE("TrackPropertiesFormModel - explicit replacement writes mixed fields including first-target equality",
-            "[uimodel][unit][property]")
+  TEST_CASE("TrackPropertiesFormModel - explicit replacement writes mixed fields including first-target equality")
   {
     auto model = TrackPropertiesFormModel{ao::test::englishMessageCatalog()};
     model.addField(rt::TrackField::Title, true);
@@ -237,8 +232,7 @@ namespace ao::uimodel::test
     CHECK(*patch.optYear == 0);
   }
 
-  TEST_CASE("TrackPropertiesFormModel - explicit replacement omits a common no-op and rejects read-only fields",
-            "[uimodel][unit][property]")
+  TEST_CASE("TrackPropertiesFormModel - explicit replacement omits a common no-op and rejects read-only fields")
   {
     auto model = TrackPropertiesFormModel{ao::test::englishMessageCatalog()};
     model.addField(rt::TrackField::Title, true);
@@ -258,8 +252,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(patch.optArtist);
   }
 
-  TEST_CASE("TrackPropertiesFormModel - later edits replace explicit intent without changing the baseline",
-            "[uimodel][unit][property]")
+  TEST_CASE("TrackPropertiesFormModel - later edits replace explicit intent without changing the baseline")
   {
     auto model = TrackPropertiesFormModel{ao::test::englishMessageCatalog()};
     model.addField(rt::TrackField::Title, true);

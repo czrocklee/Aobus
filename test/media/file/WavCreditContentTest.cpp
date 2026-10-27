@@ -84,8 +84,7 @@ namespace ao::media::file::wav::test
     }
   } // namespace
 
-  TEST_CASE("WAV credit content - owns decoded embedded credits after the chunk builder and source bytes die",
-            "[media][unit][wav]")
+  TEST_CASE("WAV credit content - owns decoded embedded credits after the chunk builder and source bytes die")
   {
     constexpr auto kCreditText = std::to_array("piano\0Andr\xE9, Ada\0violin\0Bob");
     auto const content = contentAfterChunks(
@@ -105,7 +104,7 @@ namespace ao::media::file::wav::test
     }
   }
 
-  TEST_CASE("WAV credit content - retains repeats from successive ID3 chunks in order", "[media][unit][wav]")
+  TEST_CASE("WAV credit content - retains repeats from successive ID3 chunks in order")
   {
     constexpr auto kFirstCreditText = std::to_array("piano\0Ada\0piano\0Ada");
     constexpr auto kSecondCreditText = std::to_array("\0Bob");
@@ -122,7 +121,7 @@ namespace ao::media::file::wav::test
                                     });
   }
 
-  TEST_CASE("WAV credit content - owns text decoded from a frame-unsynchronised TMCL", "[media][unit][wav]")
+  TEST_CASE("WAV credit content - owns text decoded from a frame-unsynchronised TMCL")
   {
     constexpr auto kCreditText = std::to_array("piano\0A\xFF\0\xE0");
     auto const content =
@@ -135,8 +134,7 @@ namespace ao::media::file::wav::test
     CHECK(hasOwnedText(content, content.credits[0].role));
   }
 
-  TEST_CASE("WAV credit content - resolves nonblank Ensemble over all Orchestra chunks in both orders",
-            "[media][unit][wav]")
+  TEST_CASE("WAV credit content - resolves nonblank Ensemble over all Orchestra chunks in both orders")
   {
     auto const fallback = makeTextTag({{"TXXX", std::string_view{"orchestra\0Fallback A", 20}},
                                        {"TXXX", std::string_view{"orchestra\0Fallback B", 20}}});
@@ -160,8 +158,7 @@ namespace ao::media::file::wav::test
     }
   }
 
-  TEST_CASE("WAV credit content - blank explicit Ensemble retains copied fallbacks in cross-chunk traversal order",
-            "[media][unit][wav]")
+  TEST_CASE("WAV credit content - blank explicit Ensemble retains copied fallbacks in cross-chunk traversal order")
   {
     auto const blank = makeTextTag({{"TXXX", std::string_view{"ensemble\0 \t\n\r\f\v", 15}}});
     auto const first = makeTextTag({{"TXXX", std::string_view{"orchestra\0Andr\xE9", 15}}, {"TPE3", "Conductor"}});

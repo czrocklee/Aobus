@@ -327,8 +327,11 @@ where a short tone is acceptable. It ignores `AOBUS_TEST_COREAUDIO_DEVICE_UID`
 and uses the host's normal output:
 
 ```bash
-./ao test --integration "[coreaudio][.manual]"
+./ao test --integration "CoreAudioProvider - enumerates and renders through a real output"
 ```
+
+The exact case name selects the provider probe only; the hidden Core Audio
+channel-map readback probe has different prerequisites and stays separate.
 
 Then exercise output selection, pause/resume, seek/flush, drain, and device
 removal through `./ao run tui`. The silent automated probe does not prove audible

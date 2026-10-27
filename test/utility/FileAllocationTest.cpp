@@ -27,13 +27,13 @@ namespace ao::utility::test
     }
   } // namespace
 
-  TEST_CASE("allocatedFileBytes - reports zero for a file that cannot be inspected", "[utility][unit][allocation]")
+  TEST_CASE("allocatedFileBytes - reports zero for a file that cannot be inspected")
   {
     auto const temp = ao::test::TempDir{};
     CHECK(allocatedFileBytes(temp.path() / "missing.bin") == 0);
   }
 
-  TEST_CASE("allocatedFileBytes - covers the bytes a dense file stores", "[utility][unit][allocation]")
+  TEST_CASE("allocatedFileBytes - covers the bytes a dense file stores")
   {
     auto const temp = ao::test::TempDir{};
     auto const path = temp.path() / "dense.bin";
@@ -45,7 +45,7 @@ namespace ao::utility::test
     CHECK(allocated < kWrittenBytes * 2);
   }
 
-  TEST_CASE("allocatedFileBytes - an empty file costs no data blocks", "[utility][unit][allocation]")
+  TEST_CASE("allocatedFileBytes - an empty file costs no data blocks")
   {
     auto const temp = ao::test::TempDir{};
     auto const path = temp.path() / "empty.bin";

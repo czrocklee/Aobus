@@ -48,7 +48,7 @@ namespace ao::gtk::layout::test
   using library::CreditKind;
 
   TEST_CASE("TrackCreditsEditor refresh - queued same-selection refresh preserves live input and completion",
-            "[gtk][integration][track-credits][concurrency]")
+            "[concurrency]")
   {
     auto id = kInvalidTrackId;
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.credits_refresh_test",
@@ -144,7 +144,7 @@ namespace ao::gtk::layout::test
   }
 
   TEST_CASE("TrackCreditsEditor refresh - committed credits and custom topology preserve a stale live draft",
-            "[gtk][integration][track-credits][concurrency]")
+            "[concurrency]")
   {
     auto id = kInvalidTrackId;
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.credits_projection_refresh_test",

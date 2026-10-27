@@ -8,7 +8,7 @@
 
 namespace ao::audio::test
 {
-  TEST_CASE("createPlatformBackendProviders - preserves native backend preference order", "[audio][unit][backend]")
+  TEST_CASE("createPlatformBackendProviders - preserves native backend preference order")
   {
     auto providers = createPlatformBackendProviders();
 

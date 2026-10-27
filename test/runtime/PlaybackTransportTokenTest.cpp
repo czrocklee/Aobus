@@ -52,8 +52,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("PlaybackTransport token - same track receives transport-lifetime unique tokens and exact disarm",
-            "[runtime][unit][playback][token]")
+  TEST_CASE("PlaybackTransport token - same track receives transport-lifetime unique tokens and exact disarm")
   {
     auto fixture = PlaybackTransportFixture<InlineExecutor>{};
     makeReady(fixture);
@@ -78,8 +77,7 @@ namespace ao::rt::test
     CHECK(fixture.playbackTransport.clearPreparedNext() == secondToken);
   }
 
-  TEST_CASE("PlaybackTransport token - missing replacement preserves the active token identity",
-            "[runtime][unit][playback][token]")
+  TEST_CASE("PlaybackTransport token - missing replacement preserves the active token identity")
   {
     auto fixture = PlaybackTransportFixture<InlineExecutor>{};
     makeReady(fixture);
@@ -101,8 +99,7 @@ namespace ao::rt::test
     CHECK(fixture.playbackTransport.clearPreparedNext() == token);
   }
 
-  TEST_CASE("PlaybackTransport token - rejected stage and stale commit preserve current and lookahead",
-            "[runtime][unit][playback][token][concurrency]")
+  TEST_CASE("PlaybackTransport token - rejected stage and stale commit preserve current and lookahead", "[concurrency]")
   {
     auto fixture = PlaybackTransportFixture<InlineExecutor>{};
     makeReady(fixture);
@@ -139,7 +136,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackTransport token - final decoder setup failure settles the committed cancellation barrier",
-            "[runtime][unit][playback][token][concurrency]")
+            "[concurrency]")
   {
     auto const format = audio::test::makeEngineTestFormat();
     auto decoderFactory =
@@ -220,8 +217,7 @@ namespace ao::rt::test
     CHECK(report.detail.contains("final decoder setup failed"));
   }
 
-  TEST_CASE("PlaybackTransport token - accepted empty playback ends naturally without a start or failure",
-            "[runtime][unit][playback][token]")
+  TEST_CASE("PlaybackTransport token - accepted empty playback ends naturally without a start or failure")
   {
     auto const factory = [](auto const&, std::optional<audio::SampleEncoding> optOutputEncoding)
     {
@@ -256,8 +252,7 @@ namespace ao::rt::test
     CHECK(fixture.notificationService.feed().entries.empty());
   }
 
-  TEST_CASE("PlaybackTransport token - drain fallback returns exact disarm acknowledgement",
-            "[runtime][unit][playback][token]")
+  TEST_CASE("PlaybackTransport token - drain fallback returns exact disarm acknowledgement")
   {
     auto fixture = PlaybackTransportFixture<InlineExecutor>{};
     makeReady(fixture);
@@ -276,8 +271,7 @@ namespace ao::rt::test
     CHECK_FALSE(fixture.playbackTransport.clearPreparedNext());
   }
 
-  TEST_CASE("PlaybackTransport token - repeated drain fallback reprepare does not retain request metadata",
-            "[runtime][unit][playback][token]")
+  TEST_CASE("PlaybackTransport token - repeated drain fallback reprepare does not retain request metadata")
   {
     auto fixture = PlaybackTransportFixture<InlineExecutor>{};
     makeReady(fixture);
@@ -303,8 +297,7 @@ namespace ao::rt::test
     CHECK_FALSE(fixture.playbackTransport.clearPreparedNext());
   }
 
-  TEST_CASE("PlaybackTransport token - stop barrier covers and removes an armed commitment",
-            "[runtime][unit][playback][token][concurrency]")
+  TEST_CASE("PlaybackTransport token - stop barrier covers and removes an armed commitment", "[concurrency]")
   {
     auto fixture = PlaybackTransportFixture<InlineExecutor>{};
     makeReady(fixture);
@@ -324,7 +317,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackTransport token - prepared decode failure clears the active same-track commitment",
-            "[runtime][unit][playback][token][concurrency]")
+            "[concurrency]")
   {
     auto failureGate = audio::test::StagedFailureGate{};
     auto executor = QueuedExecutor{};
@@ -367,8 +360,7 @@ namespace ao::rt::test
     CHECK_FALSE(transportPtr->clearPreparedNext());
   }
 
-  TEST_CASE("PlaybackTransport token - accepted start publishes in connection order with committed state",
-            "[runtime][unit][playback][token]")
+  TEST_CASE("PlaybackTransport token - accepted start publishes in connection order with committed state")
   {
     auto fixture = PlaybackTransportFixture<InlineExecutor>{};
     makeReady(fixture);

@@ -120,7 +120,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("TagEditController - routes submitted tag mutations", "[gtk][integration][tag][concurrency]")
+  TEST_CASE("TagEditController - routes submitted tag mutations", "[concurrency]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto firstTrackId = kInvalidTrackId;
@@ -184,7 +184,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("TagEditController - tag popover attachment follows the anchor lifetime", "[gtk][unit][tag]")
+  TEST_CASE("TagEditController - tag popover attachment follows the anchor lifetime")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto trackId = kInvalidTrackId;
@@ -226,8 +226,7 @@ namespace ao::gtk::test
     CHECK(collectAll<Gtk::Popover>(anchor).size() == 1);
   }
 
-  TEST_CASE("TagEditController - Edit Tags survives context popover close-before-action ordering",
-            "[gtk][unit][tag][collation][async]")
+  TEST_CASE("TagEditController - Edit Tags survives context popover close-before-action ordering")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto policyRes = i18n::createIcuTextOrderingPolicy("de-DE");
@@ -289,7 +288,7 @@ namespace ao::gtk::test
     CHECK(directChildLabelTextsByClass(*editor, "ao-tag-chip-suggested") == std::vector<std::string>{"ä", "z"});
   }
 
-  TEST_CASE("TagEditController - empty Add to Playlist menu links to Playlist creation", "[gtk][unit][tag][playlist]")
+  TEST_CASE("TagEditController - empty Add to Playlist menu links to Playlist creation")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto trackId = kInvalidTrackId;
@@ -335,8 +334,7 @@ namespace ao::gtk::test
     drainGtkEvents();
   }
 
-  TEST_CASE("TagEditController - Playlist membership menu distinguishes writable and computed Lists",
-            "[gtk][unit][tag][playlist]")
+  TEST_CASE("TagEditController - Playlist membership menu distinguishes writable and computed Lists")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto trackId = kInvalidTrackId;
@@ -419,7 +417,7 @@ namespace ao::gtk::test
     CHECK_FALSE(menuLabelForAction(*contextPopovers.front(), "ctx.remove-from-current-list"));
   }
 
-  TEST_CASE("TagEditController - quick filter menu keeps absolute Manual Order actions", "[gtk][unit][tag][list-order]")
+  TEST_CASE("TagEditController - quick filter menu keeps absolute Manual Order actions")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto trackId = kInvalidTrackId;

@@ -31,8 +31,7 @@ namespace ao::uimodel::test
 {
   using i18n::MessageId;
 
-  TEST_CASE("i18n::MessageCatalog - resolves one-to-one frontend messages through typed ids",
-            "[uimodel][unit][catalog][localization]")
+  TEST_CASE("i18n::MessageCatalog - resolves one-to-one frontend messages through typed ids")
   {
     auto const& english = ao::test::englishMessageCatalog();
     CHECK(i18n::requiredText(english, MessageId::GtkPreferencesTitle) == "Preferences");
@@ -87,7 +86,7 @@ namespace ao::uimodel::test
     CHECK(trackFieldLabel(french, rt::TrackField::SampleRate) == "Fréquence d'échantillonnage");
   }
 
-  TEST_CASE("i18n::MessageCatalog - exhaustively labels track presentation semantics", "[uimodel][unit][catalog]")
+  TEST_CASE("i18n::MessageCatalog - exhaustively labels track presentation semantics")
   {
     auto const& catalog = ao::test::englishMessageCatalog();
 
@@ -131,8 +130,7 @@ namespace ao::uimodel::test
     CHECK(i18n::requiredText(catalog, MessageId::CreateCustomTrackPresentation) == "Create Custom View...");
   }
 
-  TEST_CASE("i18n::MessageCatalog - renders structured group headings only at the UIModel boundary",
-            "[uimodel][unit][catalog]")
+  TEST_CASE("i18n::MessageCatalog - renders structured group headings only at the UIModel boundary")
   {
     auto const heading = rt::TrackGroupHeading{
       .primary = std::string{"Greatest Hits"},
@@ -147,7 +145,7 @@ namespace ao::uimodel::test
                                                                                  });
   }
 
-  TEST_CASE("i18n::MessageCatalog - names Various Artists in every maintained locale", "[uimodel][unit][catalog]")
+  TEST_CASE("i18n::MessageCatalog - names Various Artists in every maintained locale")
   {
     struct LocaleCase final
     {
@@ -174,7 +172,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("i18n::MessageCatalog - owns backend profile and semantic icon presentation", "[uimodel][unit][catalog]")
+  TEST_CASE("i18n::MessageCatalog - owns backend profile and semantic icon presentation")
   {
     auto const& catalog = ao::test::englishMessageCatalog();
 
@@ -209,7 +207,7 @@ namespace ao::uimodel::test
     CHECK(i18n::requiredText(catalog, MessageId::SystemDefaultOutputDevice) == "System Default");
   }
 
-  TEST_CASE("i18n::MessageCatalog - resolves typed completion details", "[uimodel][unit][catalog]")
+  TEST_CASE("i18n::MessageCatalog - resolves typed completion details")
   {
     auto const& catalog = ao::test::englishMessageCatalog();
 
@@ -222,7 +220,7 @@ namespace ao::uimodel::test
     CHECK(completionDetail(catalog, {}).empty());
   }
 
-  TEST_CASE("i18n::MessageCatalog - expands structured playback reports", "[uimodel][unit][catalog]")
+  TEST_CASE("i18n::MessageCatalog - expands structured playback reports")
   {
     auto const& catalog = ao::test::englishMessageCatalog();
 
@@ -300,8 +298,7 @@ namespace ao::uimodel::test
     CHECK(notificationMessage(catalog, rt::NotificationMessage{std::string{"Frontend message"}}) == "Frontend message");
   }
 
-  TEST_CASE("i18n::MessageCatalog - library progress is selected by kind rather than text prefixes",
-            "[uimodel][unit][catalog]")
+  TEST_CASE("i18n::MessageCatalog - library progress is selected by kind rather than text prefixes")
   {
     auto const& catalog = ao::test::englishMessageCatalog();
     using Kind = rt::LibraryTaskProgressKind;
@@ -318,8 +315,7 @@ namespace ao::uimodel::test
     CHECK(libraryTaskProgressCompact(catalog, Kind::Exporting, "backup.yaml") == "Exporting: backup.yaml");
   }
 
-  TEST_CASE("i18n::MessageCatalog - track filter errors carry the parser diagnostic verbatim",
-            "[uimodel][unit][catalog]")
+  TEST_CASE("i18n::MessageCatalog - track filter errors carry the parser diagnostic verbatim")
   {
     auto const& catalog = ao::test::englishMessageCatalog();
 
@@ -328,8 +324,7 @@ namespace ao::uimodel::test
     CHECK(i18n::requiredFormat(catalog, MessageId::TrackFilterError, {{"diagnostic", ""}}) == "Filter error: ");
   }
 
-  TEST_CASE("i18n::MessageCatalog - an unsaved library switch is a retained warning with its failure detail",
-            "[uimodel][unit][catalog]")
+  TEST_CASE("i18n::MessageCatalog - an unsaved library switch is a retained warning with its failure detail")
   {
     auto const request = librarySwitchNotSavedNotification(
       ao::test::englishMessageCatalog(), Error{.code = Error::Code::IoError, .message = "Disk full"});
@@ -343,7 +338,7 @@ namespace ao::uimodel::test
             "Could not remember the library switch: Disk full. The previous library will open next launch."}});
   }
 
-  TEST_CASE("i18n::MessageCatalog - formats shared library and smart-list copy", "[uimodel][unit][catalog]")
+  TEST_CASE("i18n::MessageCatalog - formats shared library and smart-list copy")
   {
     auto const& catalog = ao::test::englishMessageCatalog();
 
@@ -384,8 +379,7 @@ namespace ao::uimodel::test
     CHECK(i18n::requiredText(catalog, MessageId::LibraryImported) == "Library imported successfully");
   }
 
-  TEST_CASE("i18n::MessageCatalog - neutral German supplies shared semantic copy and plural policy",
-            "[uimodel][unit][catalog][localization]")
+  TEST_CASE("i18n::MessageCatalog - neutral German supplies shared semantic copy and plural policy")
   {
     auto const catalog = ao::test::messageCatalog("de-DE");
 
@@ -440,8 +434,7 @@ namespace ao::uimodel::test
           "Export fehlgeschlagen: Datenträger voll");
   }
 
-  TEST_CASE("i18n::MessageCatalog - Spanish manual-order verbs agree with singular and plural counts",
-            "[uimodel][unit][catalog][localization]")
+  TEST_CASE("i18n::MessageCatalog - Spanish manual-order verbs agree with singular and plural counts")
   {
     auto const catalog = ao::test::messageCatalog("es-ES");
 
@@ -457,8 +450,7 @@ namespace ao::uimodel::test
           "Se descartaron 2 posiciones guardadas ocultas.");
   }
 
-  TEST_CASE("i18n::MessageCatalog - localized previews distinguish complete and partial results",
-            "[uimodel][unit][catalog][localization]")
+  TEST_CASE("i18n::MessageCatalog - localized previews distinguish complete and partial results")
   {
     struct ExpectedStatuses final
     {
@@ -556,8 +548,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("i18n::MessageCatalog - localized restore scopes form grammatical sentences",
-            "[uimodel][unit][catalog][localization]")
+  TEST_CASE("i18n::MessageCatalog - localized restore scopes form grammatical sentences")
   {
     struct ExpectedRestoreSentence final
     {
@@ -608,8 +599,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("i18n::MessageCatalog - every locale's restore confirmation shows each report count",
-            "[uimodel][unit][catalog][localization]")
+  TEST_CASE("i18n::MessageCatalog - every locale's restore confirmation shows each report count")
   {
     static constexpr auto kLocales =
       std::to_array<std::string_view>({"en", "de-DE", "fr-FR", "es-ES", "ja-JP", "zh-CN", "zh-TW"});
@@ -645,8 +635,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("i18n::MessageCatalog - Japanese tag edits use complete grammar for each mutation",
-            "[uimodel][unit][catalog][localization]")
+  TEST_CASE("i18n::MessageCatalog - Japanese tag edits use complete grammar for each mutation")
   {
     auto const catalog = ao::test::messageCatalog("ja-JP");
 
@@ -667,8 +656,7 @@ namespace ao::uimodel::test
           "2 曲のタグを 2 件追加し、1 件削除しました");
   }
 
-  TEST_CASE("i18n::MessageCatalog - unsupported locale falls back to English track and playback presentation",
-            "[uimodel][unit][catalog][localization]")
+  TEST_CASE("i18n::MessageCatalog - unsupported locale falls back to English track and playback presentation")
   {
     auto const catalog = ao::test::messageCatalog("sv-SE");
     auto const& english = ao::test::englishMessageCatalog();
@@ -701,8 +689,7 @@ namespace ao::uimodel::test
     CHECK(volumeTooltip(catalog, 42, false, false) == "Volume: 42%");
   }
 
-  TEST_CASE("i18n::MessageCatalog - pseudo copy owns borrowed text and preserves runtime arguments",
-            "[uimodel][unit][catalog][localization]")
+  TEST_CASE("i18n::MessageCatalog - pseudo copy owns borrowed text and preserves runtime arguments")
   {
     auto catalog = ao::test::messageCatalog("qps-ploc");
     auto const titleView = trackFieldLabel(catalog, rt::TrackField::Title);

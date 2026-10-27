@@ -155,8 +155,7 @@ namespace ao::gtk::layout::test
     }
   } // namespace
 
-  TEST_CASE("TrackCreditsEditor - clear undo reads its bound snapshot rather than stale display",
-            "[gtk][integration][track-credits]")
+  TEST_CASE("TrackCreditsEditor - clear undo reads its bound snapshot rather than stale display")
   {
     auto id = kInvalidTrackId;
     auto const before =
@@ -194,8 +193,7 @@ namespace ao::gtk::layout::test
     windowFixture.unmount();
   }
 
-  TEST_CASE("TrackCreditsEditor - mixed scope requires explicit intent and rejects role-only rows",
-            "[gtk][integration][track-credits]")
+  TEST_CASE("TrackCreditsEditor - mixed scope requires explicit intent and rejects role-only rows")
   {
     auto first = kInvalidTrackId;
     auto second = kInvalidTrackId;
@@ -247,8 +245,7 @@ namespace ao::gtk::layout::test
     windowFixture.unmount();
   }
 
-  TEST_CASE("TrackCreditsEditor - selection replacement cannot retarget an admitted edit",
-            "[gtk][integration][track-credits][concurrency]")
+  TEST_CASE("TrackCreditsEditor - selection replacement cannot retarget an admitted edit", "[concurrency]")
   {
     auto first = kInvalidTrackId;
     auto second = kInvalidTrackId;
@@ -285,8 +282,7 @@ namespace ao::gtk::layout::test
     windowFixture.unmount();
   }
 
-  TEST_CASE("TrackDetailUndoController - retired credits replay and timer cannot clear a replacement",
-            "[gtk][integration][track-credits][concurrency]")
+  TEST_CASE("TrackDetailUndoController - retired credits replay and timer cannot clear a replacement", "[concurrency]")
   {
     auto id = kInvalidTrackId;
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.credits_undo_generation_test",
@@ -334,8 +330,7 @@ namespace ao::gtk::layout::test
     CHECK_FALSE(undo.pendingCustomMetadataUndo());
   }
 
-  TEST_CASE("TrackDetailUndoController - only overlapping scopes and newer mutations retire credits undo",
-            "[gtk][unit][track-credits]")
+  TEST_CASE("TrackDetailUndoController - only overlapping scopes and newer mutations retire credits undo")
   {
     auto id = kInvalidTrackId;
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.credits_undo_overlap_test",
@@ -358,8 +353,7 @@ namespace ao::gtk::layout::test
     CHECK_FALSE(undo.pendingCreditsUndo());
   }
 
-  TEST_CASE("TrackCreditsEditor - retired rows ignore late input before their queued replacement",
-            "[gtk][integration][track-credits][async]")
+  TEST_CASE("TrackCreditsEditor - retired rows ignore late input before their queued replacement")
   {
     auto id = kInvalidTrackId;
     auto fixture = LayoutRuntimeFixture{
@@ -403,7 +397,7 @@ namespace ao::gtk::layout::test
     windowFixture.unmount();
   }
 
-  TEST_CASE("TrackCreditsEditor - queued rows retire safely with their owner", "[gtk][unit][track-credits][async]")
+  TEST_CASE("TrackCreditsEditor - queued rows retire safely with their owner")
   {
     auto id = kInvalidTrackId;
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.credits_row_teardown_test",
@@ -434,8 +428,7 @@ namespace ao::gtk::layout::test
     CHECK(credits(runtime, id).empty());
   }
 
-  TEST_CASE("TrackCreditsEditor - Properties category and full editors stage attribute-preserving controls",
-            "[gtk][unit][track-credits]")
+  TEST_CASE("TrackCreditsEditor - Properties category and full editors stage attribute-preserving controls")
   {
     auto id = kInvalidTrackId;
     auto const before = std::vector<Credit>{{"A", CreditKind::Conductor, "Lead"},
@@ -489,8 +482,7 @@ namespace ao::gtk::layout::test
     windowFixture.unmount();
   }
 
-  TEST_CASE("TrackCreditsEditor - empty scopes focus Add and restore the originating action",
-            "[gtk][unit][track-credits]")
+  TEST_CASE("TrackCreditsEditor - empty scopes focus Add and restore the originating action")
   {
     auto id = kInvalidTrackId;
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.credits_empty_focus_test",
@@ -536,8 +528,7 @@ namespace ao::gtk::layout::test
     windowFixture.unmount();
   }
 
-  TEST_CASE("TrackCreditsEditor - emptying an optional kind returns focus to Full Credits",
-            "[gtk][unit][track-credits]")
+  TEST_CASE("TrackCreditsEditor - emptying an optional kind returns focus to Full Credits")
   {
     auto id = kInvalidTrackId;
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.credits_emptied_kind_focus_test",
@@ -578,7 +569,7 @@ namespace ao::gtk::layout::test
     windowFixture.unmount();
   }
 
-  TEST_CASE("TrackCreditsEditor - category summaries start at the leading edge", "[gtk][unit][track-credits]")
+  TEST_CASE("TrackCreditsEditor - category summaries start at the leading edge")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto id = kInvalidTrackId;
@@ -610,8 +601,7 @@ namespace ao::gtk::layout::test
     CHECK(categories == library::kCreditKindCount);
   }
 
-  TEST_CASE("TrackCreditsEditor - kinds after Performer preview only with credits or show-empty",
-            "[gtk][unit][track-credits]")
+  TEST_CASE("TrackCreditsEditor - kinds after Performer preview only with credits or show-empty")
   {
     auto id = kInvalidTrackId;
     auto fixture = LayoutRuntimeFixture{
@@ -665,7 +655,7 @@ namespace ao::gtk::layout::test
     CHECK(visiblePreviews() == withCredits);
   }
 
-  TEST_CASE("TrackCreditsEditor - validation identifies a later row in the active locale", "[gtk][unit][track-credits]")
+  TEST_CASE("TrackCreditsEditor - validation identifies a later row in the active locale")
   {
     auto id = kInvalidTrackId;
     auto fixture = LayoutRuntimeFixture{
@@ -713,8 +703,7 @@ namespace ao::gtk::layout::test
     windowFixture.unmount();
   }
 
-  TEST_CASE("TrackCreditsEditor - Busy retains the complete draft while publication settles",
-            "[gtk][integration][track-credits][concurrency]")
+  TEST_CASE("TrackCreditsEditor - Busy retains the complete draft while publication settles", "[concurrency]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto temp = ao::test::TempDir{};
@@ -784,8 +773,7 @@ namespace ao::gtk::layout::test
     windowFixture.unmount();
   }
 
-  TEST_CASE("TrackCreditsEditor - Unavailable reply retains the draft and reports unavailable editing",
-            "[gtk][integration][track-credits]")
+  TEST_CASE("TrackCreditsEditor - Unavailable reply retains the draft and reports unavailable editing")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto temp = ao::test::TempDir{};
@@ -841,7 +829,7 @@ namespace ao::gtk::layout::test
   }
 
   TEST_CASE("TrackCreditsEditor - destroying the editor before its write completes leaves delivery harmless",
-            "[gtk][integration][track-credits][concurrency]")
+            "[concurrency]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto temp = ao::test::TempDir{};
@@ -890,8 +878,7 @@ namespace ao::gtk::layout::test
                                { return notification.severity == rt::NotificationSeverity::Error; }));
   }
 
-  TEST_CASE("TrackCreditsEditor - common category editing preserves each target's mixed other kinds",
-            "[gtk][integration][track-credits]")
+  TEST_CASE("TrackCreditsEditor - common category editing preserves each target's mixed other kinds")
   {
     auto first = kInvalidTrackId;
     auto second = kInvalidTrackId;
@@ -942,8 +929,7 @@ namespace ao::gtk::layout::test
     windowFixture.unmount();
   }
 
-  TEST_CASE("TrackCreditsEditor - wrapped labels keep minimum-height requests consistent across locales",
-            "[gtk][unit][track-credits][geometry]")
+  TEST_CASE("TrackCreditsEditor - wrapped labels keep minimum-height requests consistent across locales")
   {
     auto const* const locale = GENERATE("en-US", "de-DE", "es-ES", "fr-FR", "ja-JP", "zh-CN", "zh-TW");
     CAPTURE(locale);
@@ -1001,8 +987,7 @@ namespace ao::gtk::layout::test
     windowFixture.unmount();
   }
 
-  TEST_CASE("TrackCreditsEditor - localized controls do not impose a wide horizontal minimum",
-            "[gtk][unit][track-credits][geometry]")
+  TEST_CASE("TrackCreditsEditor - localized controls do not impose a wide horizontal minimum")
   {
     auto id = kInvalidTrackId;
     auto fixture = LayoutRuntimeFixture{
@@ -1038,8 +1023,7 @@ namespace ao::gtk::layout::test
     windowFixture.unmount();
   }
 
-  TEST_CASE("TrackCreditsEditor - repeated row commands carry row-specific accessible names",
-            "[gtk][unit][track-credits]")
+  TEST_CASE("TrackCreditsEditor - repeated row commands carry row-specific accessible names")
   {
     auto id = kInvalidTrackId;
     auto fixture = LayoutRuntimeFixture{

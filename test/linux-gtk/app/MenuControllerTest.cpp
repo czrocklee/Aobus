@@ -75,7 +75,7 @@ namespace ao::gtk::test
     };
   } // namespace
 
-  TEST_CASE("MenuController - window menu actions dispatch through WindowActionRegistry", "[gtk][unit][menu]")
+  TEST_CASE("MenuController - window menu actions dispatch through WindowActionRegistry")
   {
     auto const appPtr = ensureRegisteredGtkApplication();
     auto controller = MenuController{ao::test::englishMessageCatalog()};
@@ -139,8 +139,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("WindowActionRegistry - ending registration revokes old actions without removing replacements",
-            "[gtk][unit][menu][async]")
+  TEST_CASE("WindowActionRegistry - ending registration revokes old actions without removing replacements")
   {
     auto const appPtr = ensureRegisteredGtkApplication();
     auto window = Gtk::ApplicationWindow{};
@@ -180,7 +179,7 @@ namespace ao::gtk::test
     CHECK(replacementActivationCount == 1);
   }
 
-  TEST_CASE("MenuController - builds menu model around window and app actions", "[gtk][unit][menu]")
+  TEST_CASE("MenuController - builds menu model around window and app actions")
   {
     auto const appPtr = ensureGtkApplication();
     auto const controller = MenuController{ao::test::englishMessageCatalog()};

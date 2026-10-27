@@ -19,7 +19,7 @@
 
 namespace ao::audio::test
 {
-  TEST_CASE("PcmConversion - pads linear PCM samples", "[audio][unit][pcm]")
+  TEST_CASE("PcmConversion - pads linear PCM samples")
   {
     SECTION("16-bit to 32-bit padding")
     {
@@ -64,7 +64,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("PcmConversion - interleaves channels and pads frames", "[audio][unit][pcm]")
+  TEST_CASE("PcmConversion - interleaves channels and pads frames")
   {
     SECTION("Stereo 16-bit to 32-bit interleaved")
     {
@@ -107,7 +107,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("PcmConversion - unpacks signed 24-bit samples", "[audio][unit][pcm]")
+  TEST_CASE("PcmConversion - unpacks signed 24-bit samples")
   {
     SECTION("Unpack S24_LE to S32_LE (with 8-bit shift)")
     {
@@ -148,7 +148,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("convertPcmEncoding - S24-in-32 uses the low 24 bits", "[audio][unit][pcm]")
+  TEST_CASE("convertPcmEncoding - S24-in-32 uses the low 24 bits")
   {
     auto const source = std::to_array<std::byte>(
       {std::byte{0x56}, std::byte{0x34}, std::byte{0x12}, std::byte{0xFF}, std::byte{0xFF}, std::byte{0xFF}});
@@ -170,7 +170,7 @@ namespace ao::audio::test
                                                 std::byte{0xFF}});
   }
 
-  TEST_CASE("convertPcmEncoding - S16 to S32 uses the full 32-bit scale", "[audio][unit][pcm]")
+  TEST_CASE("convertPcmEncoding - S16 to S32 uses the full 32-bit scale")
   {
     auto const source = std::to_array<std::byte>({std::byte{0x34}, std::byte{0x12}, std::byte{0xFF}, std::byte{0xFF}});
     auto destination = std::vector<std::byte>{};
@@ -190,7 +190,7 @@ namespace ao::audio::test
                                                 std::byte{0xFF}});
   }
 
-  TEST_CASE("convertPcmEncoding - S24 to S32 scales to the full 32-bit range", "[audio][unit][pcm]")
+  TEST_CASE("convertPcmEncoding - S24 to S32 scales to the full 32-bit range")
   {
     auto const source = std::to_array<std::byte>({std::byte{0x56}, std::byte{0x34}, std::byte{0x12}});
     auto destination = std::vector<std::byte>{};
@@ -204,7 +204,7 @@ namespace ao::audio::test
     CHECK(destination == std::vector<std::byte>{std::byte{0x00}, std::byte{0x56}, std::byte{0x34}, std::byte{0x12}});
   }
 
-  TEST_CASE("convertPcmEncoding - integer narrowing is rejected", "[audio][unit][pcm]")
+  TEST_CASE("convertPcmEncoding - integer narrowing is rejected")
   {
     // 0x123456 and 0xFFFFFF (-1) packed little-endian.
     auto const source = std::to_array<std::byte>(
@@ -221,7 +221,7 @@ namespace ao::audio::test
     CHECK(destination.empty());
   }
 
-  TEST_CASE("convertPcmEncoding - float source is never quantized to integer PCM", "[audio][unit][pcm]")
+  TEST_CASE("convertPcmEncoding - float source is never quantized to integer PCM")
   {
     auto const source = std::to_array<std::byte>({std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x3F}});
     auto destination = std::vector<std::byte>{};
@@ -247,7 +247,7 @@ namespace ao::audio::test
     CHECK(destination.empty());
   }
 
-  TEST_CASE("convertPcmEncoding - integer PCM converts to exact Float32 samples", "[audio][unit][pcm]")
+  TEST_CASE("convertPcmEncoding - integer PCM converts to exact Float32 samples")
   {
     auto const source = std::to_array<std::byte>(
       {std::byte{0xFF}, std::byte{0xFF}, std::byte{0x7F}, std::byte{0x00}, std::byte{0x00}, std::byte{0x80}});
@@ -269,8 +269,7 @@ namespace ao::audio::test
                                                 std::byte{0xBF}});
   }
 
-  TEST_CASE("convertPcmEncoding - Float32 carrying an integer signal still rejects integer output",
-            "[audio][unit][pcm]")
+  TEST_CASE("convertPcmEncoding - Float32 carrying an integer signal still rejects integer output")
   {
     auto const source = std::to_array<std::byte>({std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x3F}});
     auto destination = std::vector<std::byte>{};
@@ -285,7 +284,7 @@ namespace ao::audio::test
     CHECK(destination.empty());
   }
 
-  TEST_CASE("convertPcmEncoding - input must contain complete interleaved frames", "[audio][unit][pcm]")
+  TEST_CASE("convertPcmEncoding - input must contain complete interleaved frames")
   {
     auto const source = std::to_array<std::byte>(
       {std::byte{0x01}, std::byte{0x00}, std::byte{0x02}, std::byte{0x00}, std::byte{0x03}, std::byte{0x00}});
@@ -300,7 +299,7 @@ namespace ao::audio::test
     CHECK(destination.empty());
   }
 
-  TEST_CASE("convertPcmEncoding - byte layout and logical signal must describe the same stream", "[audio][unit][pcm]")
+  TEST_CASE("convertPcmEncoding - byte layout and logical signal must describe the same stream")
   {
     auto const source = std::to_array<std::byte>({std::byte{0x01}, std::byte{0x00}});
     auto destination = std::vector<std::byte>{};
@@ -315,7 +314,7 @@ namespace ao::audio::test
     CHECK(destination.empty());
   }
 
-  TEST_CASE("convertPcmEncoding - same-count streams with different speaker masks are rejected", "[audio][unit][pcm]")
+  TEST_CASE("convertPcmEncoding - same-count streams with different speaker masks are rejected")
   {
     // One stereo S16 frame: L = 0x1234, R = 0x5678, little-endian.
     auto const source = std::to_array<std::byte>({std::byte{0x34}, std::byte{0x12}, std::byte{0x78}, std::byte{0x56}});
@@ -345,7 +344,7 @@ namespace ao::audio::test
     CHECK(destination.empty());
   }
 
-  TEST_CASE("convertPcmEncoding - matching speaker masks convert exact stereo bytes", "[audio][unit][pcm]")
+  TEST_CASE("convertPcmEncoding - matching speaker masks convert exact stereo bytes")
   {
     // One stereo S16 frame: L = 0x1234, R = 0x5678, little-endian.
     auto const source = std::to_array<std::byte>({std::byte{0x34}, std::byte{0x12}, std::byte{0x78}, std::byte{0x56}});

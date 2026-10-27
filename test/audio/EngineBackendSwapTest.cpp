@@ -19,7 +19,7 @@
 
 namespace ao::audio::test
 {
-  TEST_CASE("Engine - setBackend with active track resumes playback", "[audio][unit][engine][hot-swap]")
+  TEST_CASE("Engine - setBackend with active track resumes playback")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();

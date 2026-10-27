@@ -24,8 +24,7 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("ScanApplyOperation - a new file changed after preparation is left for the next scan",
-            "[runtime][unit][library-scan][revalidation][concurrency]")
+  TEST_CASE("ScanApplyOperation - a new file changed after preparation is left for the next scan", "[concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = temp.path() / "music";
@@ -53,7 +52,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("ScanApplyOperation - a changed file changed again after preparation keeps live track data",
-            "[runtime][unit][library-scan][revalidation][concurrency]")
+            "[concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = temp.path() / "music";
@@ -90,8 +89,7 @@ namespace ao::rt::test
     CHECK(optTrack->property().sampleRate() == initialSampleRate);
   }
 
-  TEST_CASE("ScanApplyOperation - a moved file restamped after preparation is not relinked",
-            "[runtime][unit][library-scan][revalidation][concurrency]")
+  TEST_CASE("ScanApplyOperation - a moved file restamped after preparation is not relinked", "[concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = temp.path() / "music";
@@ -132,8 +130,7 @@ namespace ao::rt::test
     CHECK_FALSE(library.manifest().reader(transaction).get("renamed.flac"));
   }
 
-  TEST_CASE("ScanApplyOperation - a missing path that reappears before mutation stays available",
-            "[runtime][unit][library-scan][revalidation][concurrency]")
+  TEST_CASE("ScanApplyOperation - a missing path that reappears before mutation stays available", "[concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = temp.path() / "music";

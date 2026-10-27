@@ -20,7 +20,7 @@ namespace ao::query::test
 {
   // This representative loop is a diagnostic workload, not portable performance evidence.
   // Its inputs are checked independently before timing so semantic regressions cannot hide in the aggregate.
-  TEST_CASE("Completion - exercises representative analyzer workload", "[query][unit][completion][baseline]")
+  TEST_CASE("Completion - exercises representative analyzer workload")
   {
     auto const inputs = std::array<std::string_view, 4>{
       R"($artist = "Miles Davis" )",

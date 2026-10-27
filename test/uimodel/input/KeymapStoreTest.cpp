@@ -37,7 +37,7 @@ namespace ao::uimodel::test
     }
   } // namespace
 
-  TEST_CASE("loadKeymap returns defaults when the config group is absent", "[uimodel][unit][input][keymap-store]")
+  TEST_CASE("loadKeymap returns defaults when the config group is absent")
   {
     auto const tempDir = ao::test::TempDir{};
     auto store = rt::ConfigStore{tempDir.path() / "config.yaml"};
@@ -46,7 +46,7 @@ namespace ao::uimodel::test
     CHECK(keymap.bindings() == sampleDefaults());
   }
 
-  TEST_CASE("saveKeymap then loadKeymap round-trips a customization", "[uimodel][unit][input][keymap-store]")
+  TEST_CASE("saveKeymap then loadKeymap round-trips a customization")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";
@@ -81,7 +81,7 @@ namespace ao::uimodel::test
     CHECK(reloaded.chordsFor("playback.playPause") == std::vector<KeyChord>{chord("Ctrl+P")});
   }
 
-  TEST_CASE("saveKeymap only persists deltas from defaults", "[uimodel][unit][input][keymap-store]")
+  TEST_CASE("saveKeymap only persists deltas from defaults")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";
@@ -98,7 +98,7 @@ namespace ao::uimodel::test
     CHECK(reloaded.chordsFor("playback.playPause") == std::vector<KeyChord>{chord("Ctrl+Shift+P")});
   }
 
-  TEST_CASE("saveKeymap rejects an empty action id", "[uimodel][unit][input][keymap-store]")
+  TEST_CASE("saveKeymap rejects an empty action id")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";
@@ -113,7 +113,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(std::filesystem::exists(configPath));
   }
 
-  TEST_CASE("loadKeymap rejects malformed YAML as one candidate", "[uimodel][unit][input][keymap-store]")
+  TEST_CASE("loadKeymap rejects malformed YAML as one candidate")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";
@@ -136,8 +136,7 @@ namespace ao::uimodel::test
     CHECK(keymap.chordsFor("playback.next") == std::vector<KeyChord>{chord("Ctrl+Right")});
   }
 
-  TEST_CASE("loadKeymap preserves dynamic action ids and skips invalid chord strings semantically",
-            "[uimodel][unit][input][keymap-store]")
+  TEST_CASE("loadKeymap preserves dynamic action ids and skips invalid chord strings semantically")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";
@@ -159,7 +158,7 @@ namespace ao::uimodel::test
     CHECK(keymap.chordsFor("playback.playPause") == std::vector<KeyChord>{chord("Ctrl+P")});
   }
 
-  TEST_CASE("saveKeymap writes the bindings under a version", "[uimodel][unit][input][keymap-store]")
+  TEST_CASE("saveKeymap writes the bindings under a version")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";
@@ -175,8 +174,7 @@ namespace ao::uimodel::test
                                             "      - \"Ctrl+N\"\n");
   }
 
-  TEST_CASE("a shortcuts group of a newer version is kept and never overwritten",
-            "[uimodel][unit][input][keymap-store]")
+  TEST_CASE("a shortcuts group of a newer version is kept and never overwritten")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";
@@ -203,7 +201,7 @@ namespace ao::uimodel::test
     CHECK(ao::test::readFile(configPath) == document);
   }
 
-  TEST_CASE("an unversioned shortcuts map is malformed rather than newer", "[uimodel][unit][input][keymap-store]")
+  TEST_CASE("an unversioned shortcuts map is malformed rather than newer")
   {
     // The flat shape that development builds wrote before version 1.
     auto const tempDir = ao::test::TempDir{};

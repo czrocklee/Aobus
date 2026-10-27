@@ -16,6 +16,10 @@ from ao.core.paths import PROJECT_ROOT
 
 
 class BuildFeatureTest(unittest.TestCase):
+    def setUp(self):
+        # These fixtures model feature configuration, not source ownership.
+        self.enterContext(mock.patch.object(check, "_verify_test_source_manifest"))
+
     def parse(self, *arguments):
         return make_parser().parse_args(list(arguments))
 

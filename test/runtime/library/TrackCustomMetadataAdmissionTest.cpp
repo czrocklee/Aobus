@@ -41,8 +41,7 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("TrackCustomMetadataAdmission - reserved writes reject the entire command before interning",
-            "[runtime][unit][library-authoring]")
+  TEST_CASE("TrackCustomMetadataAdmission - reserved writes reject the entire command before interning")
   {
     auto storage = MusicLibraryFixture{};
     auto const originalCredits =
@@ -145,8 +144,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackCustomMetadataAdmission - reserved key deletion remains available for cleanup",
-            "[runtime][unit][library-authoring]")
+  TEST_CASE("TrackCustomMetadataAdmission - reserved key deletion remains available for cleanup")
   {
     auto storage = MusicLibraryFixture{};
     auto const originalCredits = std::vector<library::Credit>{{.name = "Original performer", .role = "Cello"}};
@@ -225,8 +223,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackCustomMetadataAdmission - a stored reserved key blocks export until its cleanup, then round trips",
-            "[runtime][integration][library-authoring][import-export]")
+  TEST_CASE("TrackCustomMetadataAdmission - a stored reserved key blocks export until its cleanup, then round trips")
   {
     auto storage = MusicLibraryFixture{};
     // Core custom storage has no runtime field vocabulary, so its builder can
@@ -295,8 +292,7 @@ namespace ao::rt::test
     CHECK(restored == std::vector<std::map<std::string, std::string>>{{{"mood", "Calm"}}});
   }
 
-  TEST_CASE("TrackCustomMetadataAdmission - case variants and query aliases remain ordinary NFC custom keys",
-            "[runtime][unit][library-authoring]")
+  TEST_CASE("TrackCustomMetadataAdmission - case variants and query aliases remain ordinary NFC custom keys")
   {
     auto storage = MusicLibraryFixture{};
     auto const id = storage.addTrack("Before");

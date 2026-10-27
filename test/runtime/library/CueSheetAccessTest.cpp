@@ -85,8 +85,7 @@ namespace ao::rt::test
     };
   } // namespace
 
-  TEST_CASE("readCueDirectory - rejected symlinks remain blocking and valid in-root symlinks bind",
-            "[runtime][unit][cue-binding]")
+  TEST_CASE("readCueDirectory - rejected symlinks remain blocking and valid in-root symlinks bind")
   {
     auto const temp = ao::test::TempDir{};
     auto const root = temp.path() / "music";
@@ -143,8 +142,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("readCueDirectory - an entry named like a sheet blocks binding whatever its type",
-            "[runtime][unit][cue-binding]")
+  TEST_CASE("readCueDirectory - an entry named like a sheet blocks binding whatever its type")
   {
     auto const temp = ao::test::TempDir{};
     auto const root = temp.path() / "music";
@@ -182,8 +180,7 @@ namespace ao::rt::test
     CHECK(binding.layout.empty());
   }
 
-  TEST_CASE("CUE access - a file symlink into an unlistable folder fails only that item",
-            "[runtime][integration][cue-binding]")
+  TEST_CASE("CUE access - a file symlink into an unlistable folder fails only that item")
   {
     auto fixture = CueAccessFixture{};
     auto const hidden = fixture.root / "hidden";
@@ -218,8 +215,7 @@ namespace ao::rt::test
     CHECK(fixture.library.manifest().reader(transaction).get("disc.flac"));
   }
 
-  TEST_CASE("CUE access - an unchanged file whose folder becomes unlistable is only reported",
-            "[runtime][integration][cue-binding]")
+  TEST_CASE("CUE access - an unchanged file whose folder becomes unlistable is only reported")
   {
     auto fixture = CueAccessFixture{};
     auto const hidden = fixture.root / "hidden";
@@ -260,8 +256,7 @@ namespace ao::rt::test
     CHECK(fixture.library.manifest().reader(transaction).get("hidden/inner.flac"));
   }
 
-  TEST_CASE("CUE access - a move into an unlistable folder leaves its source missing",
-            "[runtime][integration][cue-binding]")
+  TEST_CASE("CUE access - a move into an unlistable folder leaves its source missing")
   {
     auto fixture = CueAccessFixture{};
     auto const hidden = fixture.root / "hidden";
@@ -315,8 +310,7 @@ namespace ao::rt::test
     CHECK_FALSE(fixture.library.manifest().reader(transaction).get("hidden/song.flac"));
   }
 
-  TEST_CASE("CUE access - scan and add-file never import an out-of-root sheet or embedded fallback",
-            "[runtime][integration][cue-binding]")
+  TEST_CASE("CUE access - scan and add-file never import an out-of-root sheet or embedded fallback")
   {
     auto fixture = CueAccessFixture{};
     auto const outside = fixture.temp.path() / "outside.txt";
@@ -357,8 +351,7 @@ namespace ao::rt::test
     fixture.requireEmpty();
   }
 
-  TEST_CASE("CUE access - sheet retargeting outside root invalidates preparation and final proof",
-            "[runtime][unit][cue-binding][concurrency]")
+  TEST_CASE("CUE access - sheet retargeting outside root invalidates preparation and final proof", "[concurrency]")
   {
     auto fixture = CueAccessFixture{};
     auto const inside = fixture.root / "sheets" / "inside.txt";
@@ -405,8 +398,7 @@ namespace ao::rt::test
     fixture.requireEmpty();
   }
 
-  TEST_CASE("CUE access - escaped moved-carrier sheet aborts the complete plan without sibling writes",
-            "[runtime][unit][cue-binding][concurrency]")
+  TEST_CASE("CUE access - escaped moved-carrier sheet aborts the complete plan without sibling writes", "[concurrency]")
   {
     auto fixture = CueAccessFixture{};
     auto const inside = fixture.root / "sheets" / "inside.txt";
@@ -474,8 +466,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("readCueDirectory - external source byte limit accepts its boundary and blocks larger sheets",
-            "[runtime][unit][cue-binding]")
+  TEST_CASE("readCueDirectory - external source byte limit accepts its boundary and blocks larger sheets")
   {
     auto const temp = ao::test::TempDir{};
     auto const root = temp.path() / "music";
@@ -509,8 +500,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("readCueDirectory - directory symlink is nonregular and gets no encoding advice",
-            "[runtime][unit][cue-binding]")
+  TEST_CASE("readCueDirectory - directory symlink is nonregular and gets no encoding advice")
   {
     auto const temp = ao::test::TempDir{};
     auto const root = temp.path() / "music";

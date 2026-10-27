@@ -409,8 +409,7 @@ namespace ao::audio::backend::detail::test
     }
   } // namespace
 
-  TEST_CASE("CoreAudioChannelLayout - coordinate positions are unsupported identity rather than unpositioned slots",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - coordinate positions are unsupported identity rather than unpositioned slots")
   {
     auto fake = ChannelObservationFake{};
     auto coordinates = descriptions({::kAudioChannelLabel_UseCoordinates, ::kAudioChannelLabel_UseCoordinates});
@@ -449,8 +448,7 @@ namespace ao::audio::backend::detail::test
     CHECK_FALSE(legacyRes->delivery.hasSharedConversion);
   }
 
-  TEST_CASE("CoreAudioChannelLayout - unavailable properties keep canonical compatibility and known conversion",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - unavailable properties keep canonical compatibility and known conversion")
   {
     auto fake = ChannelObservationFake{};
     auto const observedRes = observeCoreAudioChannels(fake.operations(), 2U, 6U);
@@ -477,8 +475,7 @@ namespace ao::audio::backend::detail::test
     CHECK(planRes->delivery.hasSharedConversion);
   }
 
-  TEST_CASE("CoreAudioChannelLayout - AU client layout admits only documented absence statuses",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - AU client layout admits only documented absence statuses")
   {
     auto fake = ChannelObservationFake{};
     fake.reply(Property::ClientLayout).optBytes = descriptions({1U, 2U});
@@ -520,8 +517,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("CoreAudioChannelLayout - channel property device loss keeps its classification at size and read",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - channel property device loss keeps its classification at size and read")
   {
     for (auto const property :
          {Property::ClientLayout, Property::OutputLayout, Property::DeviceLayout, Property::OutputMap})
@@ -559,8 +555,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("CoreAudioChannelLayout - malformed successful observations are output failures",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - malformed successful observations are output failures")
   {
     auto fake = ChannelObservationFake{};
 
@@ -620,8 +615,7 @@ namespace ao::audio::backend::detail::test
     CHECK(planRes.error().cause == BackendOpenFailure::Cause::OutputFailure);
   }
 
-  TEST_CASE("CoreAudioChannelLayout - native downstream geometry need not fit diagnostic signal fields",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - native downstream geometry need not fit diagnostic signal fields")
   {
     auto output = outputFormat();
 
@@ -662,8 +656,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("CoreAudioChannelLayout - unusable native output geometry still rejects initial admission",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - unusable native output geometry still rejects initial admission")
   {
     auto output = outputFormat();
 
@@ -705,8 +698,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("CoreAudioChannelLayout - numerical format changes do not invent channel conversion",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - numerical format changes do not invent channel conversion")
   {
     auto fake = ChannelObservationFake{};
     auto output = outputFormat();
@@ -745,8 +737,7 @@ namespace ao::audio::backend::detail::test
     CHECK(planRes->delivery.nativeSpeakerMask == 0U);
   }
 
-  TEST_CASE("CoreAudioChannelLayout - centered mono retains opaque native Mono and known stereo conversion",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - centered mono retains opaque native Mono and known stereo conversion")
   {
     auto fake = ChannelObservationFake{};
     fake.reply(Property::OutputLayout).optBytes = descriptions({1U, 2U});
@@ -784,8 +775,7 @@ namespace ao::audio::backend::detail::test
     CHECK(fake.sets == 0U);
   }
 
-  TEST_CASE("CoreAudioChannelLayout - native tags and bitmaps expand through AudioFormat rather than WAVE casts",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - native tags and bitmaps expand through AudioFormat rather than WAVE casts")
   {
     auto fake = ChannelObservationFake{};
 
@@ -828,8 +818,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("CoreAudioChannelLayout - required actual layout expansion failures remain output failures",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - required actual layout expansion failures remain output failures")
   {
     for (auto const& representation : expansionRepresentations())
     {
@@ -892,8 +881,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("CoreAudioChannelLayout - unusable preferred layout expansions withhold evidence without vetoing transport",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - unusable preferred layout expansions withhold evidence without vetoing transport")
   {
     for (auto const& representation : expansionRepresentations())
     {
@@ -960,8 +948,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("CoreAudioChannelLayout - known client conflicts cannot disappear into legacy uncertainty",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - known client conflicts cannot disappear into legacy uncertainty")
   {
     auto fake = ChannelObservationFake{};
     fake.reply(Property::ClientLayout).optBytes = descriptions({3U, 2U});
@@ -972,7 +959,7 @@ namespace ao::audio::backend::detail::test
     CHECK(planRes.error().cause == BackendOpenFailure::Cause::TrackRouteIncompatible);
   }
 
-  TEST_CASE("CoreAudioChannelLayout - Center and Mono are not unconditional aliases", "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - Center and Mono are not unconditional aliases")
   {
     auto fake = ChannelObservationFake{};
     auto client = kStereoClient;
@@ -1020,8 +1007,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("CoreAudioChannelLayout - device preferences require applicable count and observed ordinal correspondence",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - device preferences require applicable count and observed ordinal correspondence")
   {
     auto fake = ChannelObservationFake{};
     fake.reply(Property::DeviceLayout).optBytes = descriptions({3U, 4U, 1U, 2U, 5U, 6U});
@@ -1070,8 +1056,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("CoreAudioChannelLayout - current output layout overrides conflicting same-count device preferences",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - current output layout overrides conflicting same-count device preferences")
   {
     auto fake = ChannelObservationFake{};
     fake.reply(Property::OutputLayout).optBytes = descriptions({1U, 2U});
@@ -1142,8 +1127,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("CoreAudioChannelLayout - unusable optional preferences do not veto legacy transport",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - unusable optional preferences do not veto legacy transport")
   {
     auto fake = ChannelObservationFake{};
     fake.reply(Property::DeviceLayout).optBytes = descriptions({1U, 2U});
@@ -1212,8 +1196,7 @@ namespace ao::audio::backend::detail::test
     CHECK(fake.sets == 0U);
   }
 
-  TEST_CASE("CoreAudioChannelLayout - optional preference handling never hides actual output readback faults",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - optional preference handling never hides actual output readback faults")
   {
     auto fake = ChannelObservationFake{};
     fake.reply(Property::OutputLayout).optBytes = descriptions({1U, 2U});
@@ -1276,8 +1259,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("CoreAudioChannelLayout - applicable preference device loss remains an output failure",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - applicable preference device loss remains an output failure")
   {
     auto fake = ChannelObservationFake{};
     fake.reply(Property::DeviceLayout).optBytes = descriptions({1U, 2U});
@@ -1304,8 +1286,7 @@ namespace ao::audio::backend::detail::test
     CHECK(fake.sets == 0U);
   }
 
-  TEST_CASE("CoreAudioChannelLayout - conflicting current output roles remain a refusal without a device preference",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - conflicting current output roles remain a refusal without a device preference")
   {
     auto fake = ChannelObservationFake{};
     fake.reply(Property::OutputLayout).optBytes = descriptions({3U, 2U});
@@ -1327,8 +1308,7 @@ namespace ao::audio::backend::detail::test
   }
 
   TEST_CASE(
-    "CoreAudioChannelLayout - identity and same-set swaps preserve every sample storage byte before the native map",
-    "[audio][unit][coreaudio]")
+    "CoreAudioChannelLayout - identity and same-set swaps preserve every sample storage byte before the native map")
   {
     struct MarkerCase final
     {
@@ -1411,8 +1391,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("CoreAudioChannelLayout - identity null binding aliases render storage while permutations stay separate",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - identity null binding aliases render storage while permutations stay separate")
   {
     auto fake = ChannelObservationFake{};
     bool isIdentity = true;
@@ -1456,8 +1435,7 @@ namespace ao::audio::backend::detail::test
     CHECK(providedBound.output.size() == 12U);
   }
 
-  TEST_CASE("CoreAudioChannelLayout - swapped native graph storage retains its observed set and canonical opened mode",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - swapped native graph storage retains its observed set and canonical opened mode")
   {
     auto fake = ChannelObservationFake{};
     fake.reply(Property::ClientLayout).optBytes = descriptions({2U, 1U});
@@ -1484,8 +1462,7 @@ namespace ao::audio::backend::detail::test
     CHECK(native == markers({4, 5, 6, 1, 2, 3}));
   }
 
-  TEST_CASE("CoreAudioChannelLayout - native client positions require observation rather than source identity",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - native client positions require observation rather than source identity")
   {
     auto fake = ChannelObservationFake{};
     std::uint32_t expectedNativeSet = 0U;
@@ -1530,8 +1507,7 @@ namespace ao::audio::backend::detail::test
   }
 
   TEST_CASE(
-    "CoreAudioChannelLayout - an observed nonbijective ordinal map preserves known conversion without inventing roles",
-    "[audio][unit][coreaudio]")
+    "CoreAudioChannelLayout - an observed nonbijective ordinal map preserves known conversion without inventing roles")
   {
     auto fake = ChannelObservationFake{};
 
@@ -1554,8 +1530,7 @@ namespace ao::audio::backend::detail::test
     CHECK(fake.sets == 0U);
   }
 
-  TEST_CASE("CoreAudioChannelLayout - same-set client and output differences configure a lossless ordinal relationship",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - same-set client and output differences configure a lossless ordinal relationship")
   {
     auto fake = ChannelObservationFake{};
     fake.reply(Property::ClientLayout).optBytes = descriptions({2U, 1U});
@@ -1580,8 +1555,7 @@ namespace ao::audio::backend::detail::test
     CHECK(std::vector<std::byte>(native.begin(), native.begin() + 3) == markers({4, 5, 6}));
   }
 
-  TEST_CASE("CoreAudioChannelLayout - accepted map repair requires fresh actual AU roles for every mapped pair",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - accepted map repair requires fresh actual AU roles for every mapped pair")
   {
     auto fake = ChannelObservationFake{};
     fake.reply(Property::ClientLayout).optBytes = descriptions({2U, 1U});
@@ -1679,8 +1653,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("CoreAudioChannelLayout - failed or divergent map configuration never erases known contradiction",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - failed or divergent map configuration never erases known contradiction")
   {
     auto fake = ChannelObservationFake{};
     fake.reply(Property::ClientLayout).optBytes = descriptions({2U, 1U});
@@ -1773,8 +1746,7 @@ namespace ao::audio::backend::detail::test
   }
 
   TEST_CASE(
-    "CoreAudioChannelLayout - contradictory role readback after accepted map configuration is an output failure",
-    "[audio][unit][coreaudio]")
+    "CoreAudioChannelLayout - contradictory role readback after accepted map configuration is an output failure")
   {
     auto fake = ChannelObservationFake{};
     fake.reply(Property::ClientLayout).optBytes = descriptions({2U, 1U});
@@ -1800,8 +1772,7 @@ namespace ao::audio::backend::detail::test
           "Core Audio observed channel roles cannot carry the canonical source losslessly");
   }
 
-  TEST_CASE("CoreAudioChannelLayout - execution and worker refresh reject changed required channel relationships",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - execution and worker refresh reject changed required channel relationships")
   {
     auto fake = ChannelObservationFake{};
     fake.reply(Property::ClientLayout).optBytes = descriptions({2U, 1U});
@@ -1855,8 +1826,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("CoreAudioChannelLayout - execution and worker refresh require fresh exact input storage",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - execution and worker refresh require fresh exact input storage")
   {
     auto fake = ChannelObservationFake{};
     fake.reply(Property::OutputLayout).optBytes = descriptions({1U, 2U});
@@ -1946,8 +1916,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("CoreAudioChannelLayout - fresh output geometry separates optional diagnostics from execution",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - fresh output geometry separates optional diagnostics from execution")
   {
     auto fake = ChannelObservationFake{};
     std::uint32_t expectedOutputMask = 0U;
@@ -1998,8 +1967,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("CoreAudioChannelLayout - optional downstream failure retains only independently proved transport",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - optional downstream failure retains only independently proved transport")
   {
     auto fake = ChannelObservationFake{};
     auto client = kStereoClient;
@@ -2098,8 +2066,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("CoreAudioChannelLayout - current native geometry survives an unavailable diagnostic projection",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - current native geometry survives an unavailable diagnostic projection")
   {
     auto output = outputFormat();
 
@@ -2151,8 +2118,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("CoreAudioChannelLayout - independent geometry does not hide downstream device loss or malformed success",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - independent geometry does not hide downstream device loss or malformed success")
   {
     auto fake = ChannelObservationFake{};
     fake.reply(Property::OutputLayout).optBytes = descriptions({1U, 2U});
@@ -2206,8 +2172,7 @@ namespace ao::audio::backend::detail::test
     CHECK(fake.outputFormatReads == 1U);
   }
 
-  TEST_CASE("CoreAudioChannelLayout - queried downstream success requires exact ASBD storage independently of geometry",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - queried downstream success requires exact ASBD storage independently of geometry")
   {
     auto fake = ChannelObservationFake{};
     fake.reply(Property::OutputLayout).optBytes = descriptions({1U, 2U});
@@ -2290,8 +2255,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("CoreAudioChannelLayout - raw downstream errors are not malformed successful ASBD extents",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - raw downstream errors are not malformed successful ASBD extents")
   {
     auto fake = ChannelObservationFake{};
     fake.reply(Property::OutputLayout).optBytes = descriptions({1U, 2U});
@@ -2348,8 +2312,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("CoreAudioChannelLayout - optional downstream failure cannot hide required AU readback faults",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - optional downstream failure cannot hide required AU readback faults")
   {
     auto fake = ChannelObservationFake{};
     fake.reply(Property::OutputLayout).optBytes = descriptions({1U, 2U});
@@ -2389,8 +2352,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("CoreAudioChannelLayout - client count and preferences cannot replace missing current output geometry",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - client count and preferences cannot replace missing current output geometry")
   {
     auto fake = ChannelObservationFake{};
     fake.reply(Property::DeviceLayout).optBytes = descriptions({1U, 2U});
@@ -2422,8 +2384,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("CoreAudioChannelLayout - fresh output changes cannot mutate provisioned source slots",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - fresh output changes cannot mutate provisioned source slots")
   {
     auto fake = ChannelObservationFake{};
     fake.reply(Property::OutputLayout).optBytes = descriptions({1U, 2U});
@@ -2459,8 +2420,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("CoreAudioChannelLayout - preference-derived permutations require a fresh applicable fallback",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - preference-derived permutations require a fresh applicable fallback")
   {
     auto fake = ChannelObservationFake{};
     fake.reply(Property::DeviceLayout).optBytes = descriptions({2U, 1U});
@@ -2516,8 +2476,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("CoreAudioChannelLayout - execution defers dispensable preference and numerical observations",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - execution defers dispensable preference and numerical observations")
   {
     auto fake = ChannelObservationFake{};
     fake.reply(Property::ClientLayout).optBytes = descriptions({2U, 1U});
@@ -2560,8 +2519,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("CoreAudioChannelLayout - unreadable identity refresh clears native sets without borrowing source roles",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - unreadable identity refresh clears native sets without borrowing source roles")
   {
     auto fake = ChannelObservationFake{};
     fake.reply(Property::ClientLayout).optBytes = descriptions({1U, 2U});
@@ -2592,8 +2550,7 @@ namespace ao::audio::backend::detail::test
     CHECK(coreAudioOpenedPcmMode(kStereoClient, refreshedPlan).clientFormat == kStereoClient);
   }
 
-  TEST_CASE("CoreAudioChannelLayout - generation retirement and close discard native refreshes",
-            "[audio][unit][coreaudio][concurrency]")
+  TEST_CASE("CoreAudioChannelLayout - generation retirement and close discard native refreshes", "[concurrency]")
   {
     auto fake = ChannelObservationFake{};
     fake.reply(Property::ClientLayout).optBytes = descriptions({1U, 2U});
@@ -2656,8 +2613,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("CoreAudioChannelLayout - retirement discards malformed successful ASBD storage failures",
-            "[audio][unit][coreaudio][concurrency]")
+  TEST_CASE("CoreAudioChannelLayout - retirement discards malformed successful ASBD storage failures", "[concurrency]")
   {
     auto fake = ChannelObservationFake{};
     auto const configuredRes = configureCoreAudioChannels(fake.operations(), kStereoClient, outputFormat());
@@ -2698,8 +2654,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("CoreAudioChannelLayout - required observations reject bounded storage violations before role admission",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioChannelLayout - required observations reject bounded storage violations before role admission")
   {
     auto fake = ChannelObservationFake{};
 
@@ -2779,8 +2734,7 @@ namespace ao::audio::backend::detail::test
   }
 
   TEST_CASE(
-    "CoreAudioChannelLayout - both documented AU absence statuses apply to size and read without inventing evidence",
-    "[audio][unit][coreaudio]")
+    "CoreAudioChannelLayout - both documented AU absence statuses apply to size and read without inventing evidence")
   {
     for (auto const property : {Property::ClientLayout, Property::OutputLayout, Property::OutputMap})
     {

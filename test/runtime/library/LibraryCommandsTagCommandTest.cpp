@@ -21,7 +21,7 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("LibraryCommands - editTags adds a new tag and publishes a mutation", "[runtime][unit][library][tag]")
+  TEST_CASE("LibraryCommands - editTags adds a new tag and publishes a mutation")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Test Track");
@@ -51,7 +51,7 @@ namespace ao::rt::test
     CHECK(std::ranges::contains(builder.tags().names(), std::string_view{"Favorite"}));
   }
 
-  TEST_CASE("LibraryCommands - editTags ignores an existing tag", "[runtime][unit][library][tag]")
+  TEST_CASE("LibraryCommands - editTags ignores an existing tag")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Test Track");
@@ -75,7 +75,7 @@ namespace ao::rt::test
     CHECK(mutated.empty());
   }
 
-  TEST_CASE("LibraryCommands - editTags uses canonical Unicode identity", "[runtime][unit][library][unicode]")
+  TEST_CASE("LibraryCommands - editTags uses canonical Unicode identity")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Test Track");
@@ -96,7 +96,7 @@ namespace ao::rt::test
     CHECK(removeRes->changes[0].removedTags[0] == "résumé");
   }
 
-  TEST_CASE("LibraryCommands - conflicting tag edits preserve membership and revision", "[runtime][unit][library][tag]")
+  TEST_CASE("LibraryCommands - conflicting tag edits preserve membership and revision")
   {
     auto storage = MusicLibraryFixture{};
     auto const trackId = storage.addTrack("Track");
@@ -134,7 +134,7 @@ namespace ao::rt::test
     CHECK(std::ranges::contains(track.tags().names(), std::string_view{"Favorite"}) == initiallyPresent);
   }
 
-  TEST_CASE("LibraryCommands - editTags rejects missing tag-add targets", "[runtime][unit][library][tag]")
+  TEST_CASE("LibraryCommands - editTags rejects missing tag-add targets")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Test Track");
@@ -157,8 +157,7 @@ namespace ao::rt::test
     CHECK(libraryFixture.library().libraryRevision(transaction) == revisionBefore);
   }
 
-  TEST_CASE("LibraryCommands - editTags removes an existing tag and publishes a mutation",
-            "[runtime][unit][library][tag]")
+  TEST_CASE("LibraryCommands - editTags removes an existing tag and publishes a mutation")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Test Track");
@@ -189,7 +188,7 @@ namespace ao::rt::test
     CHECK(optTrack->tags().empty());
   }
 
-  TEST_CASE("LibraryCommands - editTags ignores missing tags", "[runtime][unit][library][tag]")
+  TEST_CASE("LibraryCommands - editTags ignores missing tags")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Test Track");
@@ -209,7 +208,7 @@ namespace ao::rt::test
     CHECK(mutated.empty());
   }
 
-  TEST_CASE("LibraryCommands - editTags rejects missing tag-remove targets", "[runtime][unit][library][tag]")
+  TEST_CASE("LibraryCommands - editTags rejects missing tag-remove targets")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Test Track");

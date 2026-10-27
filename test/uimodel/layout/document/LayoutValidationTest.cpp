@@ -136,8 +136,7 @@ namespace ao::uimodel::test
     }
   } // namespace
 
-  TEST_CASE("validateLayout - the shared rules hold for a vocabulary no frontend ships",
-            "[uimodel][unit][layout][validation]")
+  TEST_CASE("validateLayout - the shared rules hold for a vocabulary no frontend ships")
   {
     auto const optAccepted = validate(LayoutNode{.type = "frame", .children = {readout("a")}}, fakeDialect());
     CHECK_FALSE(optAccepted);
@@ -148,8 +147,7 @@ namespace ao::uimodel::test
     CHECK(describeLayoutRejection(fakeDialect(), unknown).contains("Fake schema"));
   }
 
-  TEST_CASE("validateLayout - component child bounds hold without a dialect override",
-            "[uimodel][unit][layout][validation]")
+  TEST_CASE("validateLayout - component child bounds hold without a dialect override")
   {
     auto const bare = LayoutDialect{.name = "Bare"};
 
@@ -164,8 +162,7 @@ namespace ao::uimodel::test
     CHECK(aboveMaximum.reason == LayoutRejectionReason::ChildCountAboveMaximum);
   }
 
-  TEST_CASE("validateLayout - enum properties reject values outside their schema",
-            "[uimodel][unit][layout][validation]")
+  TEST_CASE("validateLayout - enum properties reject values outside their schema")
   {
     auto const invalid = rejectionOf(
       LayoutNode{
@@ -176,8 +173,7 @@ namespace ao::uimodel::test
     CHECK(invalid.detail == "mode");
   }
 
-  TEST_CASE("validateLayout - action bindings use the document validator's single error channel",
-            "[uimodel][unit][layout][validation]")
+  TEST_CASE("validateLayout - action bindings use the document validator's single error channel")
   {
     auto node = LayoutNode{.type = "trigger"};
     node.props[std::string{kPrimaryActionProp}] = LayoutValue{std::string{"valid.action"}};
@@ -194,8 +190,7 @@ namespace ao::uimodel::test
     CHECK(rejectionOf(node, LayoutDialect{.name = "Bare"}).reason == LayoutRejectionReason::UnsupportedActionSlot);
   }
 
-  TEST_CASE("validateLayout - component defaults must resolve to a registered action",
-            "[uimodel][unit][layout][validation]")
+  TEST_CASE("validateLayout - component defaults must resolve to a registered action")
   {
     auto schema = fakeSchema();
     REQUIRE(schema.tryAddComponent(ComponentSchema{
@@ -213,8 +208,7 @@ namespace ao::uimodel::test
     CHECK(optRejection->reason == LayoutRejectionReason::UnknownAction);
   }
 
-  TEST_CASE("validateLayout - a parent layout field is accepted on its direct child",
-            "[uimodel][unit][layout][validation]")
+  TEST_CASE("validateLayout - a parent layout field is accepted on its direct child")
   {
     auto child = readout("child");
     child.layout["weight"] = LayoutValue{1.5};
@@ -232,8 +226,7 @@ namespace ao::uimodel::test
     CHECK(rejection.detail == "weight");
   }
 
-  TEST_CASE("validateLayout - a dialect rules on a layout field before the schema entry does",
-            "[uimodel][unit][layout][validation]")
+  TEST_CASE("validateLayout - a dialect rules on a layout field before the schema entry does")
   {
     auto const optClaimed = validate(LayoutNode{.type = "frame",
                                                 .layout = {{std::string{kPaintProp}, LayoutValue{std::string{"teal"}}}},
@@ -256,8 +249,7 @@ namespace ao::uimodel::test
     CHECK(rival.message.contains("its own vocabulary"));
   }
 
-  TEST_CASE("validateLayout - the common layout fields are shared and need no dialect",
-            "[uimodel][unit][layout][validation]")
+  TEST_CASE("validateLayout - the common layout fields are shared and need no dialect")
   {
     auto const bare = LayoutDialect{.name = "Bare"};
 
@@ -320,8 +312,7 @@ namespace ao::uimodel::test
     CHECK(oversized.reason == LayoutRejectionReason::InvalidLayoutFieldValue);
   }
 
-  TEST_CASE("validateLayout - an absent hook is no opinion rather than a refusal",
-            "[uimodel][unit][layout][validation]")
+  TEST_CASE("validateLayout - an absent hook is no opinion rather than a refusal")
   {
     auto const bare = LayoutDialect{.name = "Bare"};
 
@@ -337,8 +328,7 @@ namespace ao::uimodel::test
     CHECK(rejectionOf(leaf, fakeDialect()).reason == LayoutRejectionReason::ChildCountAboveMaximum);
   }
 
-  TEST_CASE("validateLayout - a dialect that authors tooltips accepts the subtree the others reject",
-            "[uimodel][unit][layout][validation]")
+  TEST_CASE("validateLayout - a dialect that authors tooltips accepts the subtree the others reject")
   {
     auto tooltipped = LayoutNode{.type = "frame", .children = {readout("a")}};
     tooltipped.optTooltip = BoxedLayoutNode{readout("tip")};
@@ -354,7 +344,7 @@ namespace ao::uimodel::test
     CHECK(rejectionOf(unsupported, withTooltips).reason == LayoutRejectionReason::UnsupportedSurface);
   }
 
-  TEST_CASE("validateLayout - node ids stay unique across the whole document", "[uimodel][unit][layout][validation]")
+  TEST_CASE("validateLayout - node ids stay unique across the whole document")
   {
     SECTION("siblings")
     {
@@ -378,7 +368,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("validateLayout - reports the first defect in document order", "[uimodel][unit][layout][validation]")
+  TEST_CASE("validateLayout - reports the first defect in document order")
   {
     auto first = readout("first");
     first.props["undeclared"] = LayoutValue{std::string{"value"}};

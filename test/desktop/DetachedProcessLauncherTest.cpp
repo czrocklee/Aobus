@@ -27,8 +27,7 @@
 
 namespace ao::desktop::test
 {
-  TEST_CASE("DetachedProcessLauncher - invalid executable reports process creation failure",
-            "[runtime][integration][desktop-process]")
+  TEST_CASE("DetachedProcessLauncher - invalid executable reports process creation failure")
   {
     auto res = launchDetachedProcess({.executable = "/aobus-test/nonexistent-successor", .arguments = {}});
 
@@ -39,8 +38,7 @@ namespace ao::desktop::test
 
 #ifndef _WIN32
 
-  TEST_CASE("DetachedProcessLauncher - detached child completes after launcher ownership ends",
-            "[runtime][integration][desktop-process]")
+  TEST_CASE("DetachedProcessLauncher - detached child completes after launcher ownership ends")
   {
     auto const fixture = ao::test::TempDir{};
     auto const gatePath = fixture.path() / "gate.fifo";

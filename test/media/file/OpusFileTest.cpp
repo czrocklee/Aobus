@@ -176,7 +176,7 @@ namespace ao::media::file::opus::test
     }
   } // namespace
 
-  TEST_CASE("Opus File - emits real fixture tag fields", "[media][unit][opus][file]")
+  TEST_CASE("Opus File - emits real fixture tag fields")
   {
     auto const file = File{audio::test::requireAudioFixture("basic_metadata.opus")};
     auto const content = readContent(file);
@@ -195,7 +195,7 @@ namespace ao::media::file::opus::test
                                         .kind = ao::media::file::test::RecordedContent::CallbackKind::Credits}));
   }
 
-  TEST_CASE("Opus File - reports the decoded signal rather than the encoder input", "[media][unit][opus][file]")
+  TEST_CASE("Opus File - reports the decoded signal rather than the encoder input")
   {
     auto const file = File{audio::test::requireAudioFixture("basic_metadata.opus")};
     auto const content = readContent(file);
@@ -213,7 +213,7 @@ namespace ao::media::file::opus::test
     CHECK(content.bitDepth() == BitDepth{});
   }
 
-  TEST_CASE("Opus File - reports a mono stream as one channel", "[media][unit][opus][file]")
+  TEST_CASE("Opus File - reports a mono stream as one channel")
   {
     auto const file = File{audio::test::requireAudioFixture("mono.opus")};
     auto const content = readContent(file);
@@ -222,7 +222,7 @@ namespace ao::media::file::opus::test
     CHECK(content.text(TextField::Title) == "Mono Title");
   }
 
-  TEST_CASE("Opus File - maps classical comments and their fallbacks", "[media][unit][opus][file]")
+  TEST_CASE("Opus File - maps classical comments and their fallbacks")
   {
     SECTION("Primary classical fields")
     {
@@ -277,8 +277,7 @@ namespace ao::media::file::opus::test
     }
   }
 
-  TEST_CASE("Opus File - public visitor owns ordered performer credits after the file dies",
-            "[media][unit][opus][file]")
+  TEST_CASE("Opus File - public visitor owns ordered performer credits after the file dies")
   {
     using Event = ao::media::file::test::RecordedContent::CallbackEvent;
     using Kind = ao::media::file::test::RecordedContent::CallbackKind;
@@ -323,7 +322,7 @@ namespace ao::media::file::opus::test
                    });
   }
 
-  TEST_CASE("Opus File - imports a Base64 picture comment", "[media][unit][opus][file]")
+  TEST_CASE("Opus File - imports a Base64 picture comment")
   {
     auto const file = File{audio::test::requireAudioFixture("with_cover.opus")};
     auto const content = readContent(file);
@@ -345,7 +344,7 @@ namespace ao::media::file::opus::test
     CHECK(std::ranges::equal(picture.bytes.first(kPngSignature.size()), kPngSignature));
   }
 
-  TEST_CASE("Opus File - ignores a Base64 picture comment with invalid structure", "[media][unit][opus][file]")
+  TEST_CASE("Opus File - ignores a Base64 picture comment with invalid structure")
   {
     auto const comments = std::vector<std::string_view>{"METADATA_BLOCK_PICTURE=AAAA"};
     auto spec = StreamSpec{};
@@ -358,7 +357,7 @@ namespace ao::media::file::opus::test
     CHECK(content.pictures().empty());
   }
 
-  TEST_CASE("Opus File - a tagless stream still reports its audio properties", "[media][unit][opus][file]")
+  TEST_CASE("Opus File - a tagless stream still reports its audio properties")
   {
     auto const file = File{audio::test::requireAudioFixture("empty.opus")};
     auto const content = readContent(file);
@@ -371,7 +370,7 @@ namespace ao::media::file::opus::test
     CHECK(content.duration() == std::chrono::seconds{1});
   }
 
-  TEST_CASE("Opus File - audio payload excludes the header pages", "[media][unit][opus][file]")
+  TEST_CASE("Opus File - audio payload excludes the header pages")
   {
     auto const file = File{audio::test::requireAudioFixture("basic_metadata.opus")};
     auto const payload = requireValue(file.audioPayload());
@@ -386,7 +385,7 @@ namespace ao::media::file::opus::test
     CHECK_FALSE(containsBytes(payload.bytes, std::string_view{"Test Title"}));
   }
 
-  TEST_CASE("Opus File - rejects streams it cannot interpret", "[media][unit][opus][file]")
+  TEST_CASE("Opus File - rejects streams it cannot interpret")
   {
     auto const readError = [](std::vector<std::uint8_t> const& bytes)
     {
@@ -459,7 +458,7 @@ namespace ao::media::file::opus::test
     }
   }
 
-  TEST_CASE("Opus File - reads comments from a synthetic tags packet", "[media][unit][opus][file]")
+  TEST_CASE("Opus File - reads comments from a synthetic tags packet")
   {
     auto const comments = std::vector<std::string_view>{
       "TITLE=Synthetic", "ARTIST=Synthetic Artist", "TRACKNUMBER=4/12", "UNMAPPED=ignored"};
@@ -477,7 +476,7 @@ namespace ao::media::file::opus::test
     CHECK(content.duration() == std::chrono::seconds{1});
   }
 
-  TEST_CASE("Opus File - repeated Vorbis descriptor comments fold into one value", "[media][unit][opus][file]")
+  TEST_CASE("Opus File - repeated Vorbis descriptor comments fold into one value")
   {
     auto const comments = std::vector<std::string_view>{"ARTIST=First Artist",
                                                         "ARTIST=Second Artist",
@@ -506,7 +505,7 @@ namespace ao::media::file::opus::test
     CHECK(content.number(NumberField::Year) == 0);
   }
 
-  TEST_CASE("Opus File - maps common Vorbis comment aliases", "[media][unit][opus][file]")
+  TEST_CASE("Opus File - maps common Vorbis comment aliases")
   {
     auto comments = std::vector<std::string_view>{};
     auto expectedAlbumArtist = std::string_view{};

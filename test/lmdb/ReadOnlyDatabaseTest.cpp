@@ -91,8 +91,7 @@ namespace ao::lmdb::test
     };
   } // namespace
 
-  TEST_CASE("IntegerKeyDatabase - retained DBI readonly reads preserve integer order and empty versus missing values",
-            "[lmdb][unit][database]")
+  TEST_CASE("IntegerKeyDatabase - retained DBI readonly reads preserve integer order and empty versus missing values")
   {
     auto fixture = RecordsFixture{};
     auto transaction = beginReadTransaction(fixture.environment);
@@ -122,8 +121,7 @@ namespace ao::lmdb::test
     CHECK(iterator == reader.end());
   }
 
-  TEST_CASE("IntegerKeyDatabase - write-backed retained readers see staged rows and survive commit for destruction",
-            "[lmdb][unit][database]")
+  TEST_CASE("IntegerKeyDatabase - write-backed retained readers see staged rows and survive commit for destruction")
   {
     auto fixture = RecordsFixture{};
 
@@ -173,8 +171,7 @@ namespace ao::lmdb::test
     CHECK(reader.entryCount() == 4);
   }
 
-  TEST_CASE("IntegerKeyDatabase - existing write open DBI capacity faults unwind the owner and roll back staged reads",
-            "[lmdb][unit][database]")
+  TEST_CASE("IntegerKeyDatabase - existing write open DBI capacity faults unwind the owner and roll back staged reads")
   {
     auto const temp = ao::test::TempDir{};
 
@@ -239,8 +236,7 @@ namespace ao::lmdb::test
     CHECK(otherRes->reader(transaction).begin() == otherRes->reader(transaction).end());
   }
 
-  TEST_CASE("IntegerKeyDatabase - retained writer-base read faults preserve root rollback and cursor ownership",
-            "[lmdb][unit][database]")
+  TEST_CASE("IntegerKeyDatabase - retained writer-base read faults preserve root rollback and cursor ownership")
   {
     auto fixture = RecordsFixture{};
     auto optFailure = std::optional<Error>{};
@@ -299,8 +295,7 @@ namespace ao::lmdb::test
     CHECK(fixture.database.reader(transaction).entryCount() == 3);
   }
 
-  TEST_CASE("IntegerKeyDatabase - moved retained readers and iterators stay usable within their live transaction",
-            "[lmdb][unit][database]")
+  TEST_CASE("IntegerKeyDatabase - moved retained readers and iterators stay usable within their live transaction")
   {
     auto fixture = RecordsFixture{};
     auto transaction = beginReadTransaction(fixture.environment);
@@ -327,8 +322,7 @@ namespace ao::lmdb::test
     CHECK(assignedIterator->second.empty());
   }
 
-  TEST_CASE("ReadTransaction - retained bindings recreate after owner moves and survive self-move",
-            "[lmdb][unit][transaction]")
+  TEST_CASE("ReadTransaction - retained bindings recreate after owner moves and survive self-move")
   {
     auto fixture = RecordsFixture{};
     auto transaction = beginReadTransaction(fixture.environment);
@@ -378,7 +372,7 @@ namespace ao::lmdb::test
   }
 
   TEMPLATE_TEST_CASE("Transaction bindings - complete moves require fresh readers and self-move preserves borrowers",
-                     "[lmdb][unit][transaction]",
+                     "",
                      (std::pair<IntegerKeyDatabase, ReadTransaction>),
                      (std::pair<ByteKeyDatabase, ReadTransaction>),
                      (std::pair<IntegerKeyDatabase, WriteTransaction>),
@@ -552,8 +546,7 @@ namespace ao::lmdb::test
     CHECK(utility::bytes::stringView(*optReplacement) == "replacement");
   }
 
-  TEST_CASE("ByteKeyDatabase - retained writer-base faults preserve rollback after reader and seek iterator moves",
-            "[lmdb][unit][database]")
+  TEST_CASE("ByteKeyDatabase - retained writer-base faults preserve rollback after reader and seek iterator moves")
   {
     using Fixture = BindingRecordsFixture<ByteKeyDatabase>;
     auto fixture = Fixture{};
@@ -617,8 +610,7 @@ namespace ao::lmdb::test
     CHECK(fixture.database.reader(transaction).entryCount() == 2);
   }
 
-  TEST_CASE("IntegerKeyDatabase - retained reader destruction is safe after readonly owner ends",
-            "[lmdb][unit][database]")
+  TEST_CASE("IntegerKeyDatabase - retained reader destruction is safe after readonly owner ends")
   {
     auto fixture = RecordsFixture{};
     auto optReader = std::optional<IntegerKeyDatabase::Reader>{};

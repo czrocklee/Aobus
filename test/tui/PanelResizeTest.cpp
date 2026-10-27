@@ -62,7 +62,7 @@ namespace ao::tui::test
     }
   } // namespace
 
-  TEST_CASE("PanelResize - keyboard moves the focused boundary in screen direction", "[tui][unit][panel-resize]")
+  TEST_CASE("PanelResize - keyboard moves the focused boundary in screen direction")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -98,7 +98,7 @@ namespace ao::tui::test
     CHECK(fixture.layoutCheckpointCount == 7);
   }
 
-  TEST_CASE("PanelResize - dragging survives reflow and commits only on release", "[tui][unit][panel-resize][mouse]")
+  TEST_CASE("PanelResize - dragging survives reflow and commits only on release")
   {
     for (bool const separate : {false, true})
     {
@@ -129,7 +129,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("PanelResize - escape and terminal changes cancel an unfinished drag", "[tui][unit][panel-resize]")
+  TEST_CASE("PanelResize - escape and terminal changes cancel an unfinished drag")
   {
     for (bool const resizeTerminal : {false, true})
     {
@@ -160,7 +160,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("PanelResize - cancelling moved pointer input retires drag hover", "[tui][unit][panel-resize]")
+  TEST_CASE("PanelResize - cancelling moved pointer input retires drag hover")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -221,8 +221,7 @@ namespace ao::tui::test
     CHECK(events.hoveredButton() == HoveredButton::None);
   }
 
-  TEST_CASE("PanelResize - normal release recomputes hover from the painted pointer target",
-            "[tui][unit][panel-resize]")
+  TEST_CASE("PanelResize - normal release recomputes hover from the painted pointer target")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -239,7 +238,7 @@ namespace ao::tui::test
     CHECK(fixture.layoutCheckpointCount == 1);
   }
 
-  TEST_CASE("PanelResize - limits preserve readable panes and preferred sizes recover", "[tui][unit][panel-resize]")
+  TEST_CASE("PanelResize - limits preserve readable panes and preferred sizes recover")
   {
     for (bool const separate : {false, true})
     {
@@ -258,8 +257,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("PanelResize - dragging clamps and clicking the indicator keeps its toggle behavior",
-            "[tui][unit][panel-resize][mouse]")
+  TEST_CASE("PanelResize - dragging clamps and clicking the indicator keeps its toggle behavior")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -281,7 +279,7 @@ namespace ao::tui::test
     CHECK_FALSE(events.isPanelResizing(HoveredButton::NavigationToggle));
   }
 
-  TEST_CASE("PanelResize - active list search owns modified arrows", "[tui][unit][panel-resize]")
+  TEST_CASE("PanelResize - active list search owns modified arrows")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -294,8 +292,7 @@ namespace ao::tui::test
     CHECK(fixture.layoutCheckpointCount == 0);
   }
 
-  TEST_CASE("PanelResize - shrinking detail can restore pinned lists without cancelling the drag",
-            "[tui][unit][panel-resize]")
+  TEST_CASE("PanelResize - shrinking detail can restore pinned lists without cancelling the drag")
   {
     for (bool const separate : {false, true})
     {
@@ -318,7 +315,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("PanelResize - newly opened detail waits for its first painted width", "[tui][unit][panel-resize]")
+  TEST_CASE("PanelResize - newly opened detail waits for its first painted width")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -337,8 +334,7 @@ namespace ao::tui::test
     CHECK(events.keyboardResizeDivider() == PanelDivider::Detail);
   }
 
-  TEST_CASE("PanelResize - mode starts at the focused divider without taking workspace focus",
-            "[tui][unit][panel-resize]")
+  TEST_CASE("PanelResize - mode starts at the focused divider without taking workspace focus")
   {
     for (auto const focus : {WorkspaceFocus::Tracks, WorkspaceFocus::Lists, WorkspaceFocus::Detail})
     {
@@ -369,8 +365,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("PanelResize - mode previews both boundaries and applies or cancels them together",
-            "[tui][unit][panel-resize]")
+  TEST_CASE("PanelResize - mode previews both boundaries and applies or cancels them together")
   {
     for (bool const apply : {false, true})
     {
@@ -403,7 +398,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("PanelResize - mode skips hidden dividers and leaves a missing layout alone", "[tui][unit][panel-resize]")
+  TEST_CASE("PanelResize - mode skips hidden dividers and leaves a missing layout alone")
   {
     for (bool const navigation : {false, true})
     {
@@ -437,7 +432,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("PanelResize - text editing retains Ctrl W word deletion", "[tui][unit][panel-resize]")
+  TEST_CASE("PanelResize - text editing retains Ctrl W word deletion")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -457,7 +452,7 @@ namespace ao::tui::test
     CHECK_FALSE(events.keyboardResizeDivider());
   }
 
-  TEST_CASE("PanelResize - mode entry can be rebound", "[tui][unit][panel-resize][keymap]")
+  TEST_CASE("PanelResize - mode entry can be rebound")
   {
     auto keymap = uimodel::KeymapModel{defaultKeymap()};
     REQUIRE(keymap.tryUnbind("tui.workspace.beginPanelResize", *uimodel::KeyChord::parse("Ctrl+W")));
@@ -475,8 +470,7 @@ namespace ao::tui::test
     CHECK(plan.shortcutFor(KeyAction::BeginPanelResize) == "F4");
   }
 
-  TEST_CASE("PanelResize - mode cancels on terminal changes and consumes a cancelling mouse press",
-            "[tui][unit][panel-resize]")
+  TEST_CASE("PanelResize - mode cancels on terminal changes and consumes a cancelling mouse press")
   {
     for (bool const terminalChange : {false, true})
     {
@@ -505,8 +499,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("PanelResize - shared screen deltas clamp safely and preserve untouched preferences",
-            "[tui][unit][panel-resize]")
+  TEST_CASE("PanelResize - shared screen deltas clamp safely and preserve untouched preferences")
   {
     auto const widths = PanelWidths{.detail = 48};
     auto const geometry = navigationGeometry(180, 40, true, false, widths);
@@ -519,8 +512,7 @@ namespace ao::tui::test
     CHECK(largest.detail == 48);
   }
 
-  TEST_CASE("PanelResize - mode status identifies its divider and keeps activity and exit keys visible",
-            "[tui][unit][panel-resize]")
+  TEST_CASE("PanelResize - mode status identifies its divider and keeps activity and exit keys visible")
   {
     auto fixture = EventControllerFixture{};
     fixture.runtimePtr->notifications().post(

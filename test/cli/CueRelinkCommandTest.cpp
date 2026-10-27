@@ -176,8 +176,7 @@ namespace ao::cli::test
     }
   } // namespace
 
-  TEST_CASE("CLI CUE relink - incompatible carriers are neither candidates nor successful previews",
-            "[cli][integration][cue-relink-command]")
+  TEST_CASE("CLI CUE relink - incompatible carriers are neither candidates nor successful previews")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.wav", "old.wav");
@@ -237,8 +236,7 @@ namespace ao::cli::test
     CHECK(fixture.run({"-O", "json", "lib", "dump", "--manifest"}).out == manifestBefore.out);
   }
 
-  TEST_CASE("CLI CUE relink - source-form warning accompanies a committed identity-preserving carrier move",
-            "[cli][integration][cue-relink-command]")
+  TEST_CASE("CLI CUE relink - source-form warning accompanies a committed identity-preserving carrier move")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.wav", "old.wav");
@@ -286,8 +284,7 @@ namespace ao::cli::test
     }
   }
 
-  TEST_CASE("CLI CUE relink - explicit carrier move preserves ranges and reports every member id",
-            "[cli][integration][cue-relink-command]")
+  TEST_CASE("CLI CUE relink - explicit carrier move preserves ranges and reports every member id")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.wav", "disc.wav");

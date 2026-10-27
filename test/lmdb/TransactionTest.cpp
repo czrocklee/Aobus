@@ -37,7 +37,7 @@ namespace ao::lmdb::test
     static_assert(std::is_nothrow_move_assignable_v<WriteTransaction>);
   } // namespace
 
-  TEST_CASE("ReadTransaction - helper starts transaction", "[lmdb][unit][transaction]")
+  TEST_CASE("ReadTransaction - helper starts transaction")
   {
     auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -53,7 +53,7 @@ namespace ao::lmdb::test
     CHECK(reader.begin() == reader.end()); // Empty DB
   }
 
-  TEST_CASE("ReadTransaction - begin returns transaction", "[lmdb][unit][transaction]")
+  TEST_CASE("ReadTransaction - begin returns transaction")
   {
     auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -63,7 +63,7 @@ namespace ao::lmdb::test
     CHECK(txnRes);
   }
 
-  TEST_CASE("ReadTransaction - destructor aborts", "[lmdb][unit][transaction]")
+  TEST_CASE("ReadTransaction - destructor aborts")
   {
     auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -85,7 +85,7 @@ namespace ao::lmdb::test
     CHECK(reader.begin() == reader.end());
   }
 
-  TEST_CASE("ReadTransaction - move constructor transfers usable transactions", "[lmdb][unit][transaction]")
+  TEST_CASE("ReadTransaction - move constructor transfers usable transactions")
   {
     auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -105,7 +105,7 @@ namespace ao::lmdb::test
   // ============================================================================
   // WriteTransaction Tests
   // ============================================================================
-  TEST_CASE("WriteTransaction - helper starts transaction", "[lmdb][unit][transaction]")
+  TEST_CASE("WriteTransaction - helper starts transaction")
   {
     auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -116,7 +116,7 @@ namespace ao::lmdb::test
     [[maybe_unused]] auto writer = db.writer(txn);
   }
 
-  TEST_CASE("WriteTransaction - begin returns transaction", "[lmdb][unit][transaction]")
+  TEST_CASE("WriteTransaction - begin returns transaction")
   {
     auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -126,7 +126,7 @@ namespace ao::lmdb::test
     CHECK(txnRes);
   }
 
-  TEST_CASE("WriteTransaction - commit persists written data", "[lmdb][unit][transaction]")
+  TEST_CASE("WriteTransaction - commit persists written data")
   {
     auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -151,7 +151,7 @@ namespace ao::lmdb::test
     CHECK(utility::bytes::stringView(it->second) == "test data");
   }
 
-  TEST_CASE("WriteTransaction - destructor without commit aborts", "[lmdb][unit][transaction]")
+  TEST_CASE("WriteTransaction - destructor without commit aborts")
   {
     auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -175,7 +175,7 @@ namespace ao::lmdb::test
     REQUIRE_FALSE(reader.get(1).has_value());
   }
 
-  TEST_CASE("WriteTransaction - explicit abort is terminal and idempotent", "[lmdb][unit][transaction]")
+  TEST_CASE("WriteTransaction - explicit abort is terminal and idempotent")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -196,7 +196,7 @@ namespace ao::lmdb::test
     CHECK_FALSE(reopened.reader(readTransaction).get(1));
   }
 
-  TEST_CASE("WriteTransaction - move constructor transfers usable transactions", "[lmdb][unit][transaction]")
+  TEST_CASE("WriteTransaction - move constructor transfers usable transactions")
   {
     auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -219,8 +219,7 @@ namespace ao::lmdb::test
     CHECK(utility::bytes::stringView(*optData) == "moved transaction");
   }
 
-  TEST_CASE("WriteTransaction - database-open admission releases after every terminal path",
-            "[lmdb][unit][transaction][concurrency]")
+  TEST_CASE("WriteTransaction - database-open admission releases after every terminal path", "[concurrency]")
   {
     static constexpr auto kScenarios = std::array<std::string_view, 6>{
       "lmdb-database-open-admission-release-commit",

@@ -24,7 +24,7 @@ namespace ao::library::test
 #endif
   } // namespace
 
-  TEST_CASE("TrackView - round-trips empty custom metadata", "[library][unit][track][custom-metadata]")
+  TEST_CASE("TrackView - round-trips empty custom metadata")
   {
     auto const data = makeColdTrackViewData();
     auto const view = makeColdTrackView(data);
@@ -39,7 +39,7 @@ namespace ao::library::test
     CHECK(count == 0);
   }
 
-  TEST_CASE("TrackView - round-trips one custom metadata pair", "[library][unit][track][custom-metadata]")
+  TEST_CASE("TrackView - round-trips one custom metadata pair")
   {
     auto const pairs = std::vector{std::pair<std::string, std::string>{"key1", "value1"}};
     auto const data = makeColdTrackViewData({}, pairs, "/path/to/file.flac");
@@ -58,7 +58,7 @@ namespace ao::library::test
     CHECK(view.property().uri() == "/path/to/file.flac");
   }
 
-  TEST_CASE("TrackView - round-trips multiple custom metadata pairs", "[library][unit][track][custom-metadata]")
+  TEST_CASE("TrackView - round-trips multiple custom metadata pairs")
   {
     auto const key1 = std::string{"replaygain_track_gain_db"};
     auto const key2 = std::string{"isrc"};
@@ -91,7 +91,7 @@ namespace ao::library::test
     CHECK(result[2].second == "remaster");
   }
 
-  TEST_CASE("TrackView - iterates no custom metadata when empty", "[library][unit][track][custom-metadata]")
+  TEST_CASE("TrackView - iterates no custom metadata when empty")
   {
     auto const data = makeColdTrackViewData({}, {}, "");
     auto const view = makeColdTrackView(data);
@@ -106,7 +106,7 @@ namespace ao::library::test
     CHECK(count == 0);
   }
 
-  TEST_CASE("TrackView - iterates one custom metadata pair", "[library][unit][track][custom-metadata]")
+  TEST_CASE("TrackView - iterates one custom metadata pair")
   {
     auto const pairs = std::vector{std::pair<std::string, std::string>{"key1", "value1"}};
 
@@ -125,7 +125,7 @@ namespace ao::library::test
     CHECK(count == 1);
   }
 
-  TEST_CASE("TrackView - iterates custom metadata with special characters", "[library][unit][track][custom-metadata]")
+  TEST_CASE("TrackView - iterates custom metadata with special characters")
   {
     auto const pairs = std::vector{std::pair<std::string, std::string>{"comment", "Hello, World! 你好"}};
 
@@ -144,7 +144,7 @@ namespace ao::library::test
     CHECK(count == 1);
   }
 
-  TEST_CASE("TrackView - iterates multiple custom metadata pairs", "[library][unit][track][custom-metadata]")
+  TEST_CASE("TrackView - iterates multiple custom metadata pairs")
   {
     auto const key1 = std::string{"replaygain_track_gain_db"};
     auto const key2 = std::string{"isrc"};
@@ -172,7 +172,7 @@ namespace ao::library::test
     CHECK(result[2].second == "remaster");
   }
 
-  TEST_CASE("TrackView - finds custom metadata by key", "[library][unit][track][custom-metadata]")
+  TEST_CASE("TrackView - finds custom metadata by key")
   {
     auto const pairs = std::vector{std::pair<std::string, std::string>{"replaygain_track_gain_db", "-6.5"},
                                    std::pair<std::string, std::string>{"isrc", "USSM19999999"}};
@@ -186,8 +186,7 @@ namespace ao::library::test
     CHECK(*optValue == "USSM19999999");
   }
 
-  TEST_CASE("TrackView - copied custom metadata survives backing record retirement",
-            "[library][unit][track][custom-metadata]")
+  TEST_CASE("TrackView - copied custom metadata survives backing record retirement")
   {
     auto copiedValue = std::string{};
 
@@ -203,7 +202,7 @@ namespace ao::library::test
     CHECK(copiedValue == "USSM19999999");
   }
 
-  TEST_CASE("TrackView - returns empty custom metadata for missing keys", "[library][unit][track][custom-metadata]")
+  TEST_CASE("TrackView - returns empty custom metadata for missing keys")
   {
     auto const pairs = std::vector{std::pair<std::string, std::string>{"replaygain_track_gain_db", "-6.5"}};
 
@@ -215,7 +214,7 @@ namespace ao::library::test
     CHECK_FALSE(optValue);
   }
 
-  TEST_CASE("TrackView - finds custom metadata keys case sensitively", "[library][unit][track][custom-metadata]")
+  TEST_CASE("TrackView - finds custom metadata keys case sensitively")
   {
     auto const pairs = std::vector{std::pair<std::string, std::string>{"ISRC", "USSM19999999"},
                                    std::pair<std::string, std::string>{"isrc", "GBAYE6800011"}};
@@ -232,7 +231,7 @@ namespace ao::library::test
     CHECK(*optLowercaseValue == "GBAYE6800011");
   }
 
-  TEST_CASE("TrackView - finds custom metadata through binary search", "[library][unit][track][custom-metadata]")
+  TEST_CASE("TrackView - finds custom metadata through binary search")
   {
     // Create 100 entries to force binary search path
     auto pairs = std::vector<std::pair<std::string, std::string>>{};
@@ -262,7 +261,7 @@ namespace ao::library::test
     CHECK(view.customMetadata().get(kInvalidDictionaryId).has_value() == false);
   }
 
-  TEST_CASE("TrackView - preserves empty custom metadata keys and values", "[library][unit][track][custom-metadata]")
+  TEST_CASE("TrackView - preserves empty custom metadata keys and values")
   {
     auto const pairs = std::vector{std::pair<std::string, std::string>{"", ""}};
 
@@ -281,8 +280,7 @@ namespace ao::library::test
     CHECK(count == 1);
   }
 
-  TEST_CASE("TrackView - preserves special characters in custom metadata values",
-            "[library][unit][track][custom-metadata]")
+  TEST_CASE("TrackView - preserves special characters in custom metadata values")
   {
     auto const pairs = std::vector{std::pair<std::string, std::string>{"comment", "Hello, World! 你好"}};
 

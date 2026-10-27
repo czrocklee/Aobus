@@ -76,8 +76,7 @@ namespace ao::library::test
     }
   } // namespace
 
-  TEST_CASE("TrackView - performance gate rejects invalid recording dates before any date accessor",
-            "[library][unit][track-performance]")
+  TEST_CASE("TrackView - performance gate rejects invalid recording dates before any date accessor")
   {
     // Date formatting and comparison require a valid date, so the constant-time
     // read gate owns date validity rather than leaving it to deep validation.
@@ -94,8 +93,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("TrackView - performance gate leaves empty-block semantics to deep validation",
-            "[library][unit][track-performance]")
+  TEST_CASE("TrackView - performance gate leaves empty-block semantics to deep validation")
   {
     auto const bytes = performanceRecord(TrackPerformanceBlock{});
     auto const view = TrackView{{}, bytes};
@@ -114,7 +112,7 @@ namespace ao::library::test
     CHECK(res.error().code == Error::Code::CorruptData);
   }
 
-  TEST_CASE("TrackView - performance gate borrows complete ordered credit tails", "[library][unit][track-performance]")
+  TEST_CASE("TrackView - performance gate borrows complete ordered credit tails")
   {
     auto const entries = std::array{TrackCreditEntry{.nameId = DictionaryId{7}, .roleId = DictionaryId{3}},
                                     TrackCreditEntry{.nameId = DictionaryId{9}},
@@ -141,8 +139,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("TrackView - performance gate requires an exact prefix plus whole twelve-byte entries",
-            "[library][unit][track-performance]")
+  TEST_CASE("TrackView - performance gate requires an exact prefix plus whole twelve-byte entries")
   {
     auto bytes = performanceRecord(TrackPerformanceBlock{.recordingDate = RecordingDate{.year = 1981}});
     auto* header = utility::layout::viewMutable<TrackColdHeader>(bytes);
@@ -153,7 +150,7 @@ namespace ao::library::test
     checkPerformanceGateRejects(bytes);
   }
 
-  TEST_CASE("TrackView - each kind's credits are one bounded run of the entries", "[library][unit][track-performance]")
+  TEST_CASE("TrackView - each kind's credits are one bounded run of the entries")
   {
     auto entries = std::vector<TrackCreditEntry>{};
 
@@ -229,8 +226,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("TrackColdReader - performance tail rejects zero name IDs without linear work in TrackView",
-            "[library][unit][track-performance]")
+  TEST_CASE("TrackColdReader - performance tail rejects zero name IDs without linear work in TrackView")
   {
     auto const entries = std::array{TrackCreditEntry{.nameId = DictionaryId{1}}, TrackCreditEntry{}};
     auto const bytes = performanceRecord({}, entries);
@@ -241,8 +237,7 @@ namespace ao::library::test
     CHECK(res.error().code == Error::Code::CorruptData);
   }
 
-  TEST_CASE("TrackView - unused cold slot and obsolete mixed block are not accepted",
-            "[library][unit][track-performance]")
+  TEST_CASE("TrackView - unused cold slot and obsolete mixed block are not accepted")
   {
     auto bytes = performanceRecord(TrackPerformanceBlock{.recordingDate = RecordingDate{.year = 1981}});
     auto* header = utility::layout::viewMutable<TrackColdHeader>(bytes);
@@ -263,8 +258,7 @@ namespace ao::library::test
     checkPerformanceGateRejects(bytes);
   }
 
-  TEST_CASE("MusicLibrary - open rejects an exact all-zero work block without rewriting either track record",
-            "[library][unit][track-performance]")
+  TEST_CASE("MusicLibrary - open rejects an exact all-zero work block without rewriting either track record")
   {
     auto const temp = ao::test::TempDir{};
     constexpr auto kUri = std::string_view{"track.flac"};
@@ -298,8 +292,7 @@ namespace ao::library::test
     CHECK(*optHotBytes == hotBytes);
   }
 
-  TEST_CASE("MusicLibrary - open rejects malformed performance storage without rewriting it",
-            "[library][unit][track-performance]")
+  TEST_CASE("MusicLibrary - open rejects malformed performance storage without rewriting it")
   {
     auto const temp = ao::test::TempDir{};
     auto prefix = TrackPerformanceBlock{.recordingDate = RecordingDate{.year = 1981}};
@@ -381,8 +374,7 @@ namespace ao::library::test
     checkPersistedColdBytes(temp.path(), bytes);
   }
 
-  TEST_CASE("MusicLibrary - open enforces trimmed nonempty credit text on admitted dictionary references",
-            "[library][unit][track-performance]")
+  TEST_CASE("MusicLibrary - open enforces trimmed nonempty credit text on admitted dictionary references")
   {
     auto const temp = ao::test::TempDir{};
     auto name = std::string_view{"Name"};

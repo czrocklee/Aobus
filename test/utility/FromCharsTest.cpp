@@ -30,7 +30,7 @@ namespace ao::utility::test
     }
   } // namespace
 
-  TEST_CASE("FromChars - parses plain decimal values", "[utility][unit][from-chars]")
+  TEST_CASE("FromChars - parses plain decimal values")
   {
     double value = 0.0;
     REQUIRE(isFullyParseable("3.5", value));
@@ -43,14 +43,14 @@ namespace ao::utility::test
     CHECK(value == 42.0);
   }
 
-  TEST_CASE("FromChars - parses exponent notation", "[utility][unit][from-chars]")
+  TEST_CASE("FromChars - parses exponent notation")
   {
     double value = 0.0;
     REQUIRE(isFullyParseable("1.5e3", value));
     CHECK(value == 1500.0);
   }
 
-  TEST_CASE("FromChars - rejects what std::from_chars rejects", "[utility][unit][from-chars]")
+  TEST_CASE("FromChars - rejects what std::from_chars rejects")
   {
     double value = 0.0;
 
@@ -60,7 +60,7 @@ namespace ao::utility::test
     CHECK(parse("abc", value).ec == std::errc::invalid_argument);
   }
 
-  TEST_CASE("FromChars - stops before a hexadecimal marker like the general format", "[utility][unit][from-chars]")
+  TEST_CASE("FromChars - stops before a hexadecimal marker like the general format")
   {
     double value = 1.0;
     auto const text = std::string_view{"0x10"};
@@ -72,7 +72,7 @@ namespace ao::utility::test
     CHECK(ptr == text.data() + 1);
   }
 
-  TEST_CASE("FromChars - reports the unconsumed tail", "[utility][unit][from-chars]")
+  TEST_CASE("FromChars - reports the unconsumed tail")
   {
     double value = 0.0;
     auto const text = std::string_view{"1.5abc"};
@@ -84,7 +84,7 @@ namespace ao::utility::test
     CHECK(ptr == text.data() + 3);
   }
 
-  TEST_CASE("FromChars - accepts infinities and NaNs", "[utility][unit][from-chars]")
+  TEST_CASE("FromChars - accepts infinities and NaNs")
   {
     double value = 0.0;
 
@@ -107,7 +107,7 @@ namespace ao::utility::test
     CHECK(notANumberResult.ptr == notANumber.data() + notANumber.size());
   }
 
-  TEST_CASE("FromChars - keeps an exponent only when digits follow it", "[utility][unit][from-chars]")
+  TEST_CASE("FromChars - keeps an exponent only when digits follow it")
   {
     double value = 0.0;
     auto const text = std::string_view{"1e"};
@@ -119,7 +119,7 @@ namespace ao::utility::test
     CHECK(ptr == text.data() + 1);
   }
 
-  TEST_CASE("FromChars - accepts a missing integer or fraction but not a lone point", "[utility][unit][from-chars]")
+  TEST_CASE("FromChars - accepts a missing integer or fraction but not a lone point")
   {
     double value = 0.0;
 
@@ -132,7 +132,7 @@ namespace ao::utility::test
     CHECK(parse(".", value).ec == std::errc::invalid_argument);
   }
 
-  TEST_CASE("FromChars - is independent of the ambient locale", "[utility][unit][from-chars]")
+  TEST_CASE("FromChars - is independent of the ambient locale")
   {
     double value = 0.0;
     auto const text = std::string_view{"3,14"};
@@ -144,7 +144,7 @@ namespace ao::utility::test
     CHECK(ptr == text.data() + 1);
   }
 
-  TEST_CASE("FromChars - accepts representable subnormal values", "[utility][unit][from-chars]")
+  TEST_CASE("FromChars - accepts representable subnormal values")
   {
     double value = 1.0;
     REQUIRE(isFullyParseable("5e-324", value));
@@ -155,7 +155,7 @@ namespace ao::utility::test
     CHECK(floatValue == std::numeric_limits<float>::denorm_min());
   }
 
-  TEST_CASE("FromChars - reports true range errors without changing the output", "[utility][unit][from-chars]")
+  TEST_CASE("FromChars - reports true range errors without changing the output")
   {
     double value = 42.0;
     auto const underflow = std::string_view{"1e-9999"};
@@ -171,7 +171,7 @@ namespace ao::utility::test
     CHECK(value == 42.0);
   }
 
-  TEST_CASE("FromChars - rounds finite values according to from_chars", "[utility][unit][from-chars]")
+  TEST_CASE("FromChars - rounds finite values according to from_chars")
   {
     double value = 0.0;
     REQUIRE(isFullyParseable("1.7976931348623157e308", value));
@@ -181,7 +181,7 @@ namespace ao::utility::test
     CHECK(value == 9007199254740992.0);
   }
 
-  TEST_CASE("FromChars - the entry point handles integers and floats", "[utility][unit][from-chars]")
+  TEST_CASE("FromChars - the entry point handles integers and floats")
   {
     std::uint32_t whole = 0;
     auto const digits = std::string_view{"1234"};

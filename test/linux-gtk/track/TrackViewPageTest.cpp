@@ -119,7 +119,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("TrackViewPage - exposes list identity and status message state", "[gtk][unit][track-view]")
+  TEST_CASE("TrackViewPage - exposes list identity and status message state")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{[](library::MusicLibrary& musicLibrary)
@@ -152,8 +152,7 @@ namespace ao::gtk::test
     CHECK_FALSE(label->get_visible());
   }
 
-  TEST_CASE("TrackViewPage - grouped headers render localized cover placeholders",
-            "[gtk][unit][track-view][geometry][localization]")
+  TEST_CASE("TrackViewPage - grouped headers render localized cover placeholders")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto albumTrackId = kInvalidTrackId;
@@ -248,7 +247,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("TrackViewPage - large projections materialize only the GTK prefetch window", "[gtk][unit][track-view]")
+  TEST_CASE("TrackViewPage - large projections materialize only the GTK prefetch window")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     constexpr std::size_t kTrackCount = 10000;
@@ -306,8 +305,7 @@ namespace ao::gtk::test
     CHECK(groupedRows < kMaximumPrefetchedRows);
   }
 
-  TEST_CASE("TrackViewPage - drag handle follows the shared List order capability",
-            "[gtk][unit][track-view][list-order]")
+  TEST_CASE("TrackViewPage - drag handle follows the shared List order capability")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{[](library::MusicLibrary& musicLibrary)
@@ -409,8 +407,7 @@ namespace ao::gtk::test
           "Fix the List or quick-filter expression before changing its order.");
   }
 
-  TEST_CASE("TrackViewPage - dropping a drag handle preserves the order submission",
-            "[gtk][integration][track-view][list-order]")
+  TEST_CASE("TrackViewPage - dropping a drag handle preserves the order submission")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{[](library::MusicLibrary& musicLibrary)
@@ -523,8 +520,7 @@ namespace ao::gtk::test
     CHECK(observedTrackIds == expectedTrackIds);
   }
 
-  TEST_CASE("TrackViewPage - an intervening revision cancels inline metadata without changing the row",
-            "[gtk][integration][track-view][async]")
+  TEST_CASE("TrackViewPage - an intervening revision cancels inline metadata without changing the row")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto trackId = kInvalidTrackId;

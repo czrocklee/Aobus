@@ -31,7 +31,7 @@ namespace ao::query::test
     }
   } // namespace
 
-  TEST_CASE("Completion - analyzes logical operator context after complete expressions", "[query][unit][completion]")
+  TEST_CASE("Completion - analyzes logical operator context after complete expressions")
   {
     SECTION("Offers an empty logical operator prefix after a comparison")
     {
@@ -150,7 +150,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("Completion - backward scanner tracks complete predicate boundaries", "[query][unit][completion]")
+  TEST_CASE("Completion - backward scanner tracks complete predicate boundaries")
   {
     auto const checkCompletePredicateBoundary = [](std::string_view expression)
     {
@@ -194,7 +194,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("Completion - backward scanner does not promote incomplete expressions", "[query][unit][completion]")
+  TEST_CASE("Completion - backward scanner does not promote incomplete expressions")
   {
     auto const incompleteExpressions = std::array{
       std::string_view{"$artist ="},
@@ -226,7 +226,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("Completion - backward scanner does not promote non-predicate expressions", "[query][unit][completion]")
+  TEST_CASE("Completion - backward scanner does not promote non-predicate expressions")
   {
     auto const nonPredicateExpressions = std::array{
       std::string_view{"$title"},
@@ -250,7 +250,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("Completion - backward scanner rejects invalid group boundaries", "[query][unit][completion]")
+  TEST_CASE("Completion - backward scanner rejects invalid group boundaries")
   {
     auto const invalidGroupedExpressions = std::array{
       std::string_view{"($artist =)"},

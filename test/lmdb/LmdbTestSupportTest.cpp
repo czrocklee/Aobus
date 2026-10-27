@@ -20,8 +20,7 @@
 
 namespace ao::lmdb::test
 {
-  TEST_CASE("LmdbTestSupport - existing record probes own bytes and leave the data file unchanged",
-            "[lmdb][unit][test-support]")
+  TEST_CASE("LmdbTestSupport - existing record probes own bytes and leave the data file unchanged")
   {
     auto const temp = ao::test::TempDir{};
     auto const expected = createTestData(256);
@@ -89,8 +88,7 @@ namespace ao::lmdb::test
     CHECK(readExistingIntegerKeyRecord(path, "records", 1) == expected);
   }
 
-  TEST_CASE("LmdbTestSupport - readonly inspection rejects comparator and duplicate flags without repair",
-            "[lmdb][unit][test-support]")
+  TEST_CASE("LmdbTestSupport - readonly inspection rejects comparator and duplicate flags without repair")
   {
     constexpr auto kFlags = std::to_array<unsigned int>({
       0,

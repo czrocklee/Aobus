@@ -51,8 +51,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("PlaybackTransport - final end seek completes every codec without a decoder EOF",
-            "[runtime][unit][playback][seek]")
+  TEST_CASE("PlaybackTransport - final end seek completes every codec without a decoder EOF")
   {
     for (auto const fileName : std::to_array<std::string_view>({"basic_metadata.flac",
                                                                 "basic_metadata.wav",
@@ -109,8 +108,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("PlaybackTransport - unguarded final seek clamps past the end and negative positions",
-            "[runtime][unit][playback][seek]")
+  TEST_CASE("PlaybackTransport - unguarded final seek clamps past the end and negative positions")
   {
     auto fixture = PlaybackTransportFixture<QueuedExecutor>{};
     std::ignore = startEndSeekTrack(fixture, "basic_metadata.wav");
@@ -125,8 +123,7 @@ namespace ao::rt::test
     CHECK(fixture.playbackTransport.state().transport == audio::Transport::Idle);
   }
 
-  TEST_CASE("PlaybackTransport - unguarded final seek keeps a position beyond an unknown duration",
-            "[runtime][unit][playback][seek]")
+  TEST_CASE("PlaybackTransport - unguarded final seek keeps a position beyond an unknown duration")
   {
     auto const format =
       audio::PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = audio::SampleEncoding::Signed16Le};
@@ -163,8 +160,7 @@ namespace ao::rt::test
     CHECK(fixture.playbackTransport.state().transport == audio::Transport::Paused);
   }
 
-  TEST_CASE("PlaybackTransport - seeking inside a held paused end resumes from the new position",
-            "[runtime][unit][playback][seek]")
+  TEST_CASE("PlaybackTransport - seeking inside a held paused end resumes from the new position")
   {
     auto fixture = PlaybackTransportFixture<QueuedExecutor>{};
     std::ignore = startEndSeekTrack(fixture, "basic_metadata.wav");
@@ -185,8 +181,7 @@ namespace ao::rt::test
     CHECK(fixture.playbackTransport.elapsed() == insideElapsed);
   }
 
-  TEST_CASE("PlaybackTransport - resuming inside a held end opens the file of a Track relinked meanwhile",
-            "[runtime][unit][playback][seek]")
+  TEST_CASE("PlaybackTransport - resuming inside a held end opens the file of a Track relinked meanwhile")
   {
     auto fixture = PlaybackTransportFixture<QueuedExecutor>{};
     fixture.onDevicesChangedCb(fixture.status.devices);
@@ -218,8 +213,7 @@ namespace ao::rt::test
     CHECK(fixture.playbackTransport.elapsed() == insideElapsed);
   }
 
-  TEST_CASE("PlaybackTransport - end seek rejects an occurrence whose successor already spliced",
-            "[runtime][unit][playback][concurrency]")
+  TEST_CASE("PlaybackTransport - end seek rejects an occurrence whose successor already spliced", "[concurrency]")
   {
     auto fixture = playback_succession::PlaybackSuccessionTransportFixture{};
     fixture.buildThreeTrackManualView();
@@ -238,8 +232,7 @@ namespace ao::rt::test
     CHECK(playback.snapshot().transport.finalSeekRevision == before.finalSeekRevision);
   }
 
-  TEST_CASE("PlaybackTransport - queued natural completion and end seek publish only one end",
-            "[runtime][unit][playback][concurrency]")
+  TEST_CASE("PlaybackTransport - queued natural completion and end seek publish only one end", "[concurrency]")
   {
     auto const bytes = ao::test::wav::makeWav(ao::test::wav::Spec{
       .sampleRate = 44100,

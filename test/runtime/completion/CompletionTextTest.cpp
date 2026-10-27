@@ -12,8 +12,7 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("findCompletionWordPrefixInsensitive finds value and ASCII-delimited word prefixes",
-            "[runtime][unit][completion]")
+  TEST_CASE("findCompletionWordPrefixInsensitive finds value and ASCII-delimited word prefixes")
   {
     CHECK(findCompletionWordPrefixInsensitive("Trevor Pinnock", "tre") == std::optional<std::size_t>{0});
 
@@ -31,7 +30,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("findCompletionWordPrefixInsensitive does not split ASCII or UTF-8 words", "[runtime][unit][completion]")
+  TEST_CASE("findCompletionWordPrefixInsensitive does not split ASCII or UTF-8 words")
   {
     CHECK_FALSE(findCompletionWordPrefixInsensitive("Trevor Pinnock", "innock"));
     CHECK_FALSE(findCompletionWordPrefixInsensitive("TrevorPinnock", "pinnock"));
@@ -40,7 +39,7 @@ namespace ao::rt::test
     CHECK(findCompletionWordPrefixInsensitive("é-Pinnock", "pinnock") == std::optional<std::size_t>{3});
   }
 
-  TEST_CASE("makeCompletionAliasPrefixKey compacts only ASCII letters and digits", "[runtime][unit][completion]")
+  TEST_CASE("makeCompletionAliasPrefixKey compacts only ASCII letters and digits")
   {
     CHECK(makeCompletionAliasPrefixKey(" Zhou-Jie_Lun 99! ") == std::optional<std::string>{"zhoujielun99"});
     CHECK(makeCompletionAliasPrefixKey("A-12") == std::optional<std::string>{"a12"});

@@ -93,12 +93,12 @@ namespace ao::tui::test
     }
   } // namespace
 
-  TEST_CASE("CoverArt - empty input produces no preview", "[tui][unit][cover-art]")
+  TEST_CASE("CoverArt - empty input produces no preview")
   {
     CHECK_FALSE(decodeCoverArtPreview({}, 4, 2).has_value());
   }
 
-  TEST_CASE("CoverArt - decoded image is sampled into terminal cells", "[tui][unit][cover-art]")
+  TEST_CASE("CoverArt - decoded image is sampled into terminal cells")
   {
     auto const optPreview = decodeCoverArtPreview(support::onePixelRedPng(), 3, 2);
 
@@ -115,7 +115,7 @@ namespace ao::tui::test
     CHECK(first.bottomBlue < 50);
   }
 
-  TEST_CASE("CoverArt - block artwork fills the shared cell geometry", "[tui][unit][cover-art]")
+  TEST_CASE("CoverArt - block artwork fills the shared cell geometry")
   {
     auto const optPreview = decodeCoverArtPreview(support::onePixelRedPng(),
                                                   static_cast<std::size_t>(kCoverArtDefaultColumns),
@@ -144,12 +144,12 @@ namespace ao::tui::test
     CHECK(renderCoverArtPreview(std::nullopt) == nullptr);
   }
 
-  TEST_CASE("CoverArt - trailing bytes leave a decodable image", "[tui][unit][cover-art]")
+  TEST_CASE("CoverArt - trailing bytes leave a decodable image")
   {
     CHECK(decodeCoverArtPreview(support::distinctPng(7), 3, 2).has_value());
   }
 
-  TEST_CASE("CoverArt - embedded BMP and GIF images remain supported", "[tui][unit][cover-art]")
+  TEST_CASE("CoverArt - embedded BMP and GIF images remain supported")
   {
     auto checkRedPreview = [](std::vector<std::byte> const& bytes)
     {
@@ -174,7 +174,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("CoverArt - preview centers non-square images and composites transparency", "[tui][unit][cover-art]")
+  TEST_CASE("CoverArt - preview centers non-square images and composites transparency")
   {
     SECTION("center crop")
     {
@@ -215,7 +215,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("CoverArt - preview downsampling interpolates neighboring colors", "[tui][unit][cover-art]")
+  TEST_CASE("CoverArt - preview downsampling interpolates neighboring colors")
   {
     auto const optPreview = decodeCoverArtPreview(twoByTwoRedBlueBmp(), 1, 1);
 
@@ -231,7 +231,7 @@ namespace ao::tui::test
     CHECK(cell.bottomBlue > 100);
   }
 
-  TEST_CASE("CoverArt - decoded image can be converted to PNG payload", "[tui][unit][cover-art]")
+  TEST_CASE("CoverArt - decoded image can be converted to PNG payload")
   {
     auto const optPng = decodeCoverArtPng(support::onePixelRedPng(), 8, 4);
 
@@ -266,7 +266,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("CoverArt - malformed input and invalid dimensions are rejected", "[tui][unit][cover-art]")
+  TEST_CASE("CoverArt - malformed input and invalid dimensions are rejected")
   {
     auto const malformed = std::vector{std::byte{0x42}, std::byte{0x4D}};
 
@@ -277,7 +277,7 @@ namespace ao::tui::test
     CHECK_FALSE(decodeCoverArtPng(support::onePixelRedPng(), 1, -1));
   }
 
-  TEST_CASE("CoverArt - encoded dimensions and generated output are bounded", "[tui][unit][cover-art]")
+  TEST_CASE("CoverArt - encoded dimensions and generated output are bounded")
   {
     auto const source = twoByTwoRedBlueBmp();
 
@@ -306,7 +306,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("CoverArt - Kitty escape advertises image dimensions", "[tui][unit][cover-art]")
+  TEST_CASE("CoverArt - Kitty escape advertises image dimensions")
   {
     auto const data = std::vector{std::byte{1}, std::byte{2}, std::byte{3}};
     auto const escape = kittyImageEscape(data, 24, 12);
@@ -315,7 +315,7 @@ namespace ao::tui::test
     CHECK(escape == "\033_Ga=T,i=1,f=100,t=d,c=24,r=12,q=2,m=0;AQID\033\\");
   }
 
-  TEST_CASE("CoverArt - Kitty escape splits large payloads into continuation chunks", "[tui][unit][cover-art]")
+  TEST_CASE("CoverArt - Kitty escape splits large payloads into continuation chunks")
   {
     auto const data = std::vector<std::byte>(4096, std::byte{0x42});
 
@@ -351,7 +351,7 @@ namespace ao::tui::test
           expectedPayload);
   }
 
-  TEST_CASE("CoverArt - cover columns adapt to cell aspect ratio", "[tui][unit][cover-art]")
+  TEST_CASE("CoverArt - cover columns adapt to cell aspect ratio")
   {
     CHECK(coverArtColumns(12, 0.50) == 24);
     CHECK(coverArtColumns(12, 0.60) == 20);
@@ -369,7 +369,7 @@ namespace ao::tui::test
     CHECK(coverArtColumns(-1, 0.60) == kCoverArtDefaultColumns);
   }
 
-  TEST_CASE("CoverArt - implausible cell geometry does not size artwork", "[tui][unit][cover-art]")
+  TEST_CASE("CoverArt - implausible cell geometry does not size artwork")
   {
     // Every platform query funnels through here, so this is where a terminal
     // reporting nonsense stops mattering.

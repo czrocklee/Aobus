@@ -36,7 +36,7 @@ namespace ao::winui::test
     }
   } // namespace
 
-  TEST_CASE("themeSurfaceFromString - every slot round-trips through its authored spelling", "[winui][unit][layout]")
+  TEST_CASE("themeSurfaceFromString - every slot round-trips through its authored spelling")
   {
     constexpr auto kAuthoredSpellings = std::to_array<std::pair<ThemeSurface, std::string_view>>({
       {ThemeSurface::Window, "window"},
@@ -64,14 +64,14 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("themeSurfaceFromString - a slot the shell does not paint is not a surface", "[winui][unit][layout]")
+  TEST_CASE("themeSurfaceFromString - a slot the shell does not paint is not a surface")
   {
     CHECK_FALSE(themeSurfaceFromString("modern.nowhere").has_value());
     CHECK_FALSE(themeSurfaceFromString("").has_value());
     CHECK_FALSE(themeSurfaceFromString("Window").has_value());
   }
 
-  TEST_CASE("themeSurfaceToken - each slot reads the token its own theme section carries", "[winui][unit][layout]")
+  TEST_CASE("themeSurfaceToken - each slot reads the token its own theme section carries")
   {
     auto theme = Theme{};
     theme.shared.windowBackground = "#010101";
@@ -93,7 +93,7 @@ namespace ao::winui::test
     CHECK(themeSurfaceToken(theme, ThemeSurface::ClassicStatusBar) == "#080808");
   }
 
-  TEST_CASE("themeSurfaceToken - every slot names a token the theme actually carries", "[winui][unit][layout]")
+  TEST_CASE("themeSurfaceToken - every slot names a token the theme actually carries")
   {
     auto const theme = Theme{};
 
@@ -103,7 +103,7 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("elementKindAcceptsSurface - only the kinds that own a background accept one", "[winui][unit][layout]")
+  TEST_CASE("elementKindAcceptsSurface - only the kinds that own a background accept one")
   {
     CHECK(acceptsSurfaceForElementKind(ElementKind::Grid));
     CHECK(acceptsSurfaceForElementKind(ElementKind::Border));
@@ -143,7 +143,7 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("planThemeSurface - an authored slot plans the surface it names", "[winui][unit][layout]")
+  TEST_CASE("planThemeSurface - an authored slot plans the surface it names")
   {
     auto const optSurface = planThemeSurface(surfacedNode(uimodel::LayoutValue{std::string{"classic.toolbar"}}));
 
@@ -151,7 +151,7 @@ namespace ao::winui::test
     CHECK(*optSurface == ThemeSurface::ClassicToolbar);
   }
 
-  TEST_CASE("planThemeSurface - a node without a usable slot plans nothing", "[winui][unit][layout]")
+  TEST_CASE("planThemeSurface - a node without a usable slot plans nothing")
   {
     CHECK_FALSE(planThemeSurface(uimodel::LayoutNode{.type = "box"}).has_value());
     CHECK_FALSE(planThemeSurface(surfacedNode(uimodel::LayoutValue{std::string{}})).has_value());

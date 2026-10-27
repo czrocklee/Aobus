@@ -35,7 +35,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("HeadlessShell - initial layout is empty", "[runtime][unit][headless]")
+  TEST_CASE("HeadlessShell - initial layout is empty")
   {
     auto tempDir = ao::test::TempDir{};
     auto runtimePtr = makeStateOnlyRuntime(tempDir);
@@ -46,7 +46,7 @@ namespace ao::rt::test
     CHECK(layout.activeViewId == kInvalidViewId);
   }
 
-  TEST_CASE("HeadlessShell - navigating to a list creates an active view", "[runtime][unit][headless]")
+  TEST_CASE("HeadlessShell - navigating to a list creates an active view")
   {
     auto tempDir = ao::test::TempDir{};
     auto runtimePtr = makeStateOnlyRuntime(tempDir);
@@ -63,7 +63,7 @@ namespace ao::rt::test
     CHECK(viewState.listId == listId);
   }
 
-  TEST_CASE("HeadlessShell - global navigation does not reuse a filtered All Tracks view", "[runtime][unit][headless]")
+  TEST_CASE("HeadlessShell - global navigation does not reuse a filtered All Tracks view")
   {
     auto tempDir = ao::test::TempDir{};
     auto runtimePtr = makeStateOnlyRuntime(tempDir);
@@ -91,7 +91,7 @@ namespace ao::rt::test
     CHECK(activeState.filterExpression.empty());
   }
 
-  TEST_CASE("HeadlessShell - closing a view updates the active layout", "[runtime][unit][headless]")
+  TEST_CASE("HeadlessShell - closing a view updates the active layout")
   {
     auto tempDir = ao::test::TempDir{};
     auto runtimePtr = makeStateOnlyRuntime(tempDir);
@@ -113,8 +113,7 @@ namespace ao::rt::test
     CHECK(layout2.activeViewId == remainingView);
   }
 
-  TEST_CASE("HeadlessShell - session persistence restores multiple views and their presentations",
-            "[runtime][unit][headless]")
+  TEST_CASE("HeadlessShell - session persistence restores multiple views and their presentations")
   {
     auto tempDir = ao::test::TempDir{};
     auto const workspaceConfigPath = std::filesystem::path{tempDir.path()} / "workspace.yaml";
@@ -169,7 +168,7 @@ namespace ao::rt::test
     CHECK(secondState.presentation == secondPresentation);
   }
 
-  TEST_CASE("HeadlessShell - session persistence restores a grouped presentation", "[runtime][unit][headless]")
+  TEST_CASE("HeadlessShell - session persistence restores a grouped presentation")
   {
     auto tempDir = ao::test::TempDir{};
     auto const workspaceConfigPath = std::filesystem::path{tempDir.path()} / "workspace.yaml";
@@ -205,7 +204,7 @@ namespace ao::rt::test
     CHECK(restoredState.presentation == artistPreset->spec);
   }
 
-  TEST_CASE("HeadlessShell - session persistence restores a flat default presentation", "[runtime][unit][headless]")
+  TEST_CASE("HeadlessShell - session persistence restores a flat default presentation")
   {
     auto tempDir = ao::test::TempDir{};
     auto listId = kInvalidListId;

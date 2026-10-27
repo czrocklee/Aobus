@@ -46,7 +46,7 @@ namespace ao::tui::test
     }
   } // namespace
 
-  TEST_CASE("Keymap - editing validates terminal aliases and reserved or unsupported events", "[tui][unit][keymap]")
+  TEST_CASE("Keymap - editing validates terminal aliases and reserved or unsupported events")
   {
     auto keymap = uimodel::KeymapModel{};
     REQUIRE(keymap.tryBind("tui.shell.openSettings", *uimodel::KeyChord::parse("F12")));
@@ -69,7 +69,7 @@ namespace ao::tui::test
     CHECK(conflictRes.error().message == "tui.shell.quit");
   }
 
-  TEST_CASE("Keymap - descriptors have stable unique identities and valid defaults", "[tui][unit][keymap]")
+  TEST_CASE("Keymap - descriptors have stable unique identities and valid defaults")
   {
     constexpr auto kExpected = std::to_array<std::pair<KeyAction, std::string_view>>({
       {KeyAction::OpenSettings, "tui.shell.openSettings"},
@@ -146,7 +146,7 @@ namespace ao::tui::test
     CHECK(kExpected.size() == static_cast<std::size_t>(KeyAction::Count));
   }
 
-  TEST_CASE("Keymap - terminal defaults are independent of desktop defaults", "[tui][unit][keymap]")
+  TEST_CASE("Keymap - terminal defaults are independent of desktop defaults")
   {
     auto const sharedBefore = uimodel::defaultKeymap();
     auto const tuiDefaults = defaultKeymap();
@@ -168,7 +168,7 @@ namespace ao::tui::test
     CHECK(tuiDefaults.at("track.orderMoveToBottom") == sharedBefore.at("track.orderMoveToBottom"));
   }
 
-  TEST_CASE("Keymap - an explicit quit override preserves the lowercase chord", "[tui][unit][keymap]")
+  TEST_CASE("Keymap - an explicit quit override preserves the lowercase chord")
   {
     auto keymap = uimodel::KeymapModel{defaultKeymap()};
     keymap.applyOverrides({{"tui.shell.quit", {"Q"}}});
@@ -179,7 +179,7 @@ namespace ao::tui::test
     CHECK(plan.shortcutFor(KeyAction::Quit) == "q");
   }
 
-  TEST_CASE("Keymap - no-location global store retains defaults without persistence", "[tui][unit][keymap]")
+  TEST_CASE("Keymap - no-location global store retains defaults without persistence")
   {
     auto store = rt::ConfigStore{rt::ConfigStore::NoLocation{}};
     auto const model = uimodel::loadKeymap(store, defaultKeymap());
@@ -189,7 +189,7 @@ namespace ao::tui::test
     CHECK(plan.shortcutFor(KeyAction::OpenQuickFilter) == "/");
   }
 
-  TEST_CASE("Keymap - default plan dispatches and advertises only executable chords", "[tui][unit][keymap]")
+  TEST_CASE("Keymap - default plan dispatches and advertises only executable chords")
   {
     auto const model = uimodel::KeymapModel{defaultKeymap()};
     auto const plan = KeymapPlan{model};
@@ -256,7 +256,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("Keymap - terminal projection is explicit and accounts for protocol aliases", "[tui][unit][keymap]")
+  TEST_CASE("Keymap - terminal projection is explicit and accounts for protocol aliases")
   {
     CHECK(eventForChord(chord("Q")) == ftxui::Event::Character("q"));
     CHECK(eventForChord(chord("M")) == ftxui::Event::Character("m"));
@@ -301,7 +301,7 @@ namespace ao::tui::test
     CHECK_FALSE(eventForChord(chord("翼")));
   }
 
-  TEST_CASE("Keymap - Alt navigation chords project onto their terminal escape sequences", "[tui][unit][keymap]")
+  TEST_CASE("Keymap - Alt navigation chords project onto their terminal escape sequences")
   {
     CHECK(eventForChord(chord("Alt+Up")) == ftxui::Event::Special("\x1b[1;3A"));
     CHECK(eventForChord(chord("Alt+Down")) == ftxui::Event::Special("\x1b[1;3B"));
@@ -319,7 +319,7 @@ namespace ao::tui::test
     CHECK_FALSE(eventForChord(chord("Alt+Shift+Up")));
   }
 
-  TEST_CASE("Keymap - shipped order movement chords dispatch manual order actions", "[tui][unit][keymap]")
+  TEST_CASE("Keymap - shipped order movement chords dispatch manual order actions")
   {
     auto model = uimodel::KeymapModel{defaultKeymap()};
     auto const plan = KeymapPlan{model};
@@ -340,7 +340,7 @@ namespace ao::tui::test
     CHECK(plan.shortcutFor(KeyAction::OrderMoveToBottom) == "Alt+End");
   }
 
-  TEST_CASE("Keymap - order chord editing accepts Alt navigation and rejects ambiguous chords", "[tui][unit][keymap]")
+  TEST_CASE("Keymap - order chord editing accepts Alt navigation and rejects ambiguous chords")
   {
     auto candidate = uimodel::KeymapModel{defaultKeymap()};
     candidate.applyOverrides({{"track.orderMoveDown", {}}});
@@ -363,7 +363,7 @@ namespace ao::tui::test
     CHECK(conflictRes.error().message == "track.orderMoveUp");
   }
 
-  TEST_CASE("Keymap - override changes dispatch and the selected hint together", "[tui][unit][keymap]")
+  TEST_CASE("Keymap - override changes dispatch and the selected hint together")
   {
     auto model = uimodel::KeymapModel{defaultKeymap()};
     model.applyOverrides({{actionId(KeyAction::ToggleDetails), {"F2"}}});
@@ -374,7 +374,7 @@ namespace ao::tui::test
     CHECK(plan.shortcutFor(KeyAction::ToggleDetails) == "F2");
   }
 
-  TEST_CASE("Keymap - persisted override drives dispatch and rendered hint", "[tui][unit][keymap]")
+  TEST_CASE("Keymap - persisted override drives dispatch and rendered hint")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "tui.yaml";
@@ -395,7 +395,7 @@ namespace ao::tui::test
     CHECK(plan.shortcutFor(KeyAction::ToggleLists) == "F2");
   }
 
-  TEST_CASE("Keymap - scoped hints select only executable projected chords", "[tui][unit][keymap]")
+  TEST_CASE("Keymap - scoped hints select only executable projected chords")
   {
     auto const plan = KeymapPlan{uimodel::KeymapModel{defaultKeymap()}};
     auto const question = ftxui::Event::Character("?");
@@ -409,7 +409,7 @@ namespace ao::tui::test
     CHECK(plan.shortcutFor(KeyAction::ShowHelp, std::array{question, f1}).empty());
   }
 
-  TEST_CASE("Keymap - ordinary global preference writes preserve untouched shortcuts", "[tui][unit][keymap]")
+  TEST_CASE("Keymap - ordinary global preference writes preserve untouched shortcuts")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "tui.yaml";
@@ -438,7 +438,7 @@ namespace ao::tui::test
     CHECK(contents.contains("F2"));
   }
 
-  TEST_CASE("Keymap - explicit unbinding removes dispatch and hint", "[tui][unit][keymap]")
+  TEST_CASE("Keymap - explicit unbinding removes dispatch and hint")
   {
     auto model = uimodel::KeymapModel{defaultKeymap()};
     model.applyOverrides({{actionId(KeyAction::ToggleLists), {}}});
@@ -448,7 +448,7 @@ namespace ao::tui::test
     CHECK(plan.shortcutFor(KeyAction::ToggleLists).empty());
   }
 
-  TEST_CASE("Keymap - root protocol events are representable but never installed or advertised", "[tui][unit][keymap]")
+  TEST_CASE("Keymap - root protocol events are representable but never installed or advertised")
   {
     auto model = uimodel::KeymapModel{defaultKeymap()};
     model.applyOverrides({
@@ -469,7 +469,7 @@ namespace ao::tui::test
     CHECK(plan.shortcutFor(KeyAction::ToggleLists).empty());
   }
 
-  TEST_CASE("Keymap - unsupported and unknown bindings are local omissions", "[tui][unit][keymap]")
+  TEST_CASE("Keymap - unsupported and unknown bindings are local omissions")
   {
     auto model = uimodel::KeymapModel{defaultKeymap()};
     model.applyOverrides({
@@ -483,7 +483,7 @@ namespace ao::tui::test
     CHECK(plan.actionFor(ftxui::Event::Character("l")) == KeyAction::ToggleLists);
   }
 
-  TEST_CASE("Keymap - projected collision keeps the earlier descriptor deterministically", "[tui][unit][keymap]")
+  TEST_CASE("Keymap - projected collision keeps the earlier descriptor deterministically")
   {
     auto model = uimodel::KeymapModel{defaultKeymap()};
     model.applyOverrides({

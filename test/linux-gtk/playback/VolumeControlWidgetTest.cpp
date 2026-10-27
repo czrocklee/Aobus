@@ -17,7 +17,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("VolumeControlWidget - renders model state into the button", "[gtk][unit][playback]")
+  TEST_CASE("VolumeControlWidget - renders model state into the button")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -68,7 +68,7 @@ namespace ao::gtk::test
     CHECK(hasAccessibleLabel(*btn, "Volume: 100%"));
   }
 
-  TEST_CASE("VolumeControlWidget - exposes localized volume state", "[gtk][unit][playback][localization]")
+  TEST_CASE("VolumeControlWidget - exposes localized volume state")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

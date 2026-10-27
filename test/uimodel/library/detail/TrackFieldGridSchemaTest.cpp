@@ -10,7 +10,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("buildTrackFieldGridSchema builds rows from presentable track fields", "[uimodel][unit][library][detail]")
+  TEST_CASE("buildTrackFieldGridSchema builds rows from presentable track fields")
   {
     auto const projection = buildTrackFieldGridSchema();
 
@@ -47,7 +47,7 @@ namespace ao::uimodel::test
                                                     rt::TrackField::ModifiedTime});
   }
 
-  TEST_CASE("buildTrackFieldGridSchema filters sections from request flags", "[uimodel][unit][library][detail]")
+  TEST_CASE("buildTrackFieldGridSchema filters sections from request flags")
   {
     auto const complete = buildTrackFieldGridSchema();
     auto const metadataOnly =
@@ -63,7 +63,7 @@ namespace ao::uimodel::test
     CHECK(technicalOnly.technicalFields == complete.technicalFields);
   }
 
-  TEST_CASE("formatMetadataHeader summarizes collapsed metadata", "[uimodel][unit][library][detail]")
+  TEST_CASE("formatMetadataHeader summarizes collapsed metadata")
   {
     CHECK(formatMetadataHeader("Song", "Artist") == "Song — Artist");
     CHECK(formatMetadataHeader("Song", "") == "Song");
@@ -71,7 +71,7 @@ namespace ao::uimodel::test
     CHECK(formatMetadataHeader("", "").empty());
   }
 
-  TEST_CASE("formatTechnicalHeader summarizes collapsed audio properties", "[uimodel][unit][library][detail]")
+  TEST_CASE("formatTechnicalHeader summarizes collapsed audio properties")
   {
     CHECK(formatTechnicalHeader("FLAC", "44.1 kHz", "16-bit") == "FLAC · 44.1 kHz · 16-bit");
     CHECK(formatTechnicalHeader("", "44.1 kHz", "") == "44.1 kHz");

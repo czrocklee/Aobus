@@ -12,7 +12,7 @@
 namespace ao::audio::backend::test
 {
   TEST_CASE("CoreAudioBackend - reentry from its own RenderTarget callback stacks aborts in the fatal probes",
-            "[audio][integration][coreaudio][backend][concurrency]")
+            "[concurrency]")
   {
     // Each native scenario opens a real Core Audio output device, the exact
     // configured UID when AOBUS_TEST_COREAUDIO_DEVICE_UID names one or the
@@ -52,8 +52,7 @@ namespace ao::audio::backend::test
     }
   }
 
-  TEST_CASE("CoreAudioRenderAdmission - open preconditions abort the fatal probe child",
-            "[audio][integration][coreaudio]")
+  TEST_CASE("CoreAudioRenderAdmission - open preconditions abort the fatal probe child")
   {
     // These two children call production CoreAudioRenderAdmission::open() in
     // the fatal probe process. They do not open a Core Audio device, resolve
@@ -81,8 +80,7 @@ namespace ao::audio::backend::test
     }
   }
 
-  TEST_CASE("CoreAudioUnitRun - start while a native stop is unconfirmed aborts the fatal probe child",
-            "[audio][integration][coreaudio]")
+  TEST_CASE("CoreAudioUnitRun - start while a native stop is unconfirmed aborts the fatal probe child")
   {
     // This device-free child constructs the production CoreAudioUnitRun with
     // both constructor-injected operations overridden: start reports noErr,
@@ -116,8 +114,7 @@ namespace ao::audio::backend::test
     }
   }
 
-  TEST_CASE("CoreAudioUnitRun - empty constructor bindings abort the fatal probe child",
-            "[audio][integration][coreaudio]")
+  TEST_CASE("CoreAudioUnitRun - empty constructor bindings abort the fatal probe child")
   {
     // Two device-free children construct the production CoreAudioUnitRun
     // directly, each with exactly one of the two constructor-injected
@@ -150,8 +147,7 @@ namespace ao::audio::backend::test
     }
   }
 
-  TEST_CASE("CoreAudioBackend - empty native unit bindings abort the fatal probe child",
-            "[audio][integration][coreaudio]")
+  TEST_CASE("CoreAudioBackend - empty native unit bindings abort the fatal probe child")
   {
     // Two device-free children construct the backend through its existing
     // four-argument constructor with a value-only device identity and one

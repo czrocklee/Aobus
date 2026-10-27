@@ -54,7 +54,7 @@ namespace ao::audio::test
     }
   } // namespace
 
-  TEST_CASE("AacDecoderSession - rejects malformed MP4 sample data", "[audio][unit][aac][mp4]")
+  TEST_CASE("AacDecoderSession - rejects malformed MP4 sample data")
   {
     SECTION("Sample offset points outside the file")
     {
@@ -87,7 +87,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("AacDecoderSession - rejects malformed AudioSpecificConfig", "[audio][unit][aac][mp4]")
+  TEST_CASE("AacDecoderSession - rejects malformed AudioSpecificConfig")
   {
     SECTION("Missing decoder-specific descriptor")
     {

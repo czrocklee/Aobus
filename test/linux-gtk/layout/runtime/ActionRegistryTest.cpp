@@ -31,7 +31,7 @@ namespace ao::gtk::layout::test
     };
   } // namespace
 
-  TEST_CASE("ActionRegistry - registers and queries authoritative action schemas", "[gtk][unit][layout][action]")
+  TEST_CASE("ActionRegistry - registers and queries authoritative action schemas")
   {
     auto fixture = ActionRegistryFixture{};
     auto& registry = fixture.registry;
@@ -83,7 +83,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("ActionRegistry - dispatches with live context and availability", "[gtk][unit][layout][action]")
+  TEST_CASE("ActionRegistry - dispatches with live context and availability")
   {
     auto fixture = ActionRegistryFixture{};
     auto& registry = fixture.registry;

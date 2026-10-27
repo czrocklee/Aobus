@@ -29,7 +29,7 @@
 
 namespace ao::tui::test
 {
-  TEST_CASE("PlaybackMode - padded codes remain stable across states and languages", "[tui][unit][playback-mode]")
+  TEST_CASE("PlaybackMode - padded codes remain stable across states and languages")
   {
     for (std::string_view const locale : {"en", "zh-Hans", "zh-Hant", "ja", "de", "es", "fr"})
     {
@@ -105,7 +105,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("PlaybackMode - time and volume changes preserve adjacent button positions", "[tui][unit][playback-mode]")
+  TEST_CASE("PlaybackMode - time and volume changes preserve adjacent button positions")
   {
     auto state = rt::PlaybackTransportSnapshot{.duration = std::chrono::minutes{20}};
     state.volume.level = 0.99F;
@@ -180,8 +180,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("PlaybackPanel - narrow volume slots shorten mute wording without losing the title or numeric value",
-            "[tui][unit][playback]")
+  TEST_CASE("PlaybackPanel - narrow volume slots shorten mute wording without losing the title or numeric value")
   {
     auto const catalog = ao::test::messageCatalog("de");
 
@@ -207,8 +206,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("PlaybackMode - hover identifies the current and next preset for every mode combination",
-            "[tui][unit][playback-mode]")
+  TEST_CASE("PlaybackMode - hover identifies the current and next preset for every mode combination")
   {
     for (auto const& [choice, hint] : std::array{
            std::pair{PlaybackModeChoice{}, "In order · Click for Repeat all"},
@@ -231,8 +229,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("PlaybackMode - repeat-one hover preserves the shuffle preference in every language",
-            "[tui][unit][playback-mode]")
+  TEST_CASE("PlaybackMode - repeat-one hover preserves the shuffle preference in every language")
   {
     auto mode = rt::PlaybackSuccessionSnapshot{.shuffle = rt::ShuffleMode::On, .repeat = rt::RepeatMode::One};
 
@@ -257,8 +254,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("PlaybackMode - localized hover hints prioritize the current mode at narrow widths",
-            "[tui][unit][playback-mode]")
+  TEST_CASE("PlaybackMode - localized hover hints prioritize the current mode at narrow widths")
   {
     auto mode = rt::PlaybackSuccessionSnapshot{.shuffle = rt::ShuffleMode::On, .repeat = rt::RepeatMode::All};
     auto activity =
@@ -325,7 +321,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("PlaybackMode - narrow activity slots retain content or disappear", "[tui][unit][playback-mode]")
+  TEST_CASE("PlaybackMode - narrow activity slots retain content or disappear")
   {
     auto const catalog = ao::test::messageCatalog("ja");
     auto mode = rt::PlaybackSuccessionSnapshot{.shuffle = rt::ShuffleMode::On, .repeat = rt::RepeatMode::All};
@@ -360,8 +356,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("PlaybackMode - hover retires hidden shortcuts and yields to foreground hints",
-            "[tui][unit][playback-mode]")
+  TEST_CASE("PlaybackMode - hover retires hidden shortcuts and yields to foreground hints")
   {
     auto const& catalog = ao::test::englishMessageCatalog();
     auto shell = ShellInteractionModel{};
@@ -405,8 +400,7 @@ namespace ao::tui::test
     CHECK_FALSE(actions.empty());
   }
 
-  TEST_CASE("PlaybackMode - hover yields to navigation search and resumes when search ends",
-            "[tui][unit][playback-mode]")
+  TEST_CASE("PlaybackMode - hover yields to navigation search and resumes when search ends")
   {
     auto const& catalog = ao::test::englishMessageCatalog();
     auto shell = ShellInteractionModel{};
@@ -426,7 +420,7 @@ namespace ao::tui::test
     CHECK_FALSE(browsing.contains("/ search · Esc clear"));
   }
 
-  TEST_CASE("PlaybackMode - hover preserves visual selection controls", "[tui][unit][playback-mode]")
+  TEST_CASE("PlaybackMode - hover preserves visual selection controls")
   {
     auto mode = rt::PlaybackSuccessionSnapshot{};
     auto cancelBox = kEmptyMouseBox;
@@ -446,8 +440,7 @@ namespace ao::tui::test
     CHECK_FALSE(cancelBox.IsEmpty());
   }
 
-  TEST_CASE("PlaybackMode - invalid closed enum values retire the button and retain ordinary status hints",
-            "[tui][unit][playback-mode]")
+  TEST_CASE("PlaybackMode - invalid closed enum values retire the button and retain ordinary status hints")
   {
     auto const& catalog = ao::test::englishMessageCatalog();
     auto const invalidShuffle = rt::PlaybackSuccessionSnapshot{.shuffle = static_cast<rt::ShuffleMode>(2)};

@@ -10,8 +10,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("TrackColumnLayouts - orders visible fields using stored order first",
-            "[uimodel][unit][library][presentation]")
+  TEST_CASE("TrackColumnLayouts - orders visible fields using stored order first")
   {
     auto const visible = std::vector{rt::TrackField::Title, rt::TrackField::Artist, rt::TrackField::Album};
     auto const stored = std::vector{rt::TrackField::Album, rt::TrackField::DiscNumber, rt::TrackField::Title};
@@ -24,8 +23,7 @@ namespace ao::uimodel::test
     CHECK(ordered[2] == rt::TrackField::Artist);
   }
 
-  TEST_CASE("TrackColumnLayouts - stored visibility filters presentation fields without hiding new fields",
-            "[uimodel][unit][library][presentation]")
+  TEST_CASE("TrackColumnLayouts - stored visibility filters presentation fields without hiding new fields")
   {
     auto const presentation = std::vector{rt::TrackField::Title, rt::TrackField::Artist, rt::TrackField::Album};
     auto const stored = std::vector{
@@ -40,8 +38,7 @@ namespace ao::uimodel::test
     CHECK(visible[1] == rt::TrackField::Title);
   }
 
-  TEST_CASE("TrackColumnLayouts - visible updates preserve hidden column slots",
-            "[uimodel][unit][library][presentation]")
+  TEST_CASE("TrackColumnLayouts - visible updates preserve hidden column slots")
   {
     auto const stored = std::vector{
       TrackColumnState{.field = rt::TrackField::Title, .weight = 1.0},

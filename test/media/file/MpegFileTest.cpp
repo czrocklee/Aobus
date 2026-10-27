@@ -295,7 +295,7 @@ namespace ao::media::file::mpeg::test
     }
   } // namespace
 
-  TEST_CASE("MPEG File - parses metadata and cover art", "[media][unit][mpeg][file]")
+  TEST_CASE("MPEG File - parses metadata and cover art")
   {
     auto const data = createMp3WithTags();
     auto const temp = TempFile{data, ".mp3"};
@@ -338,7 +338,7 @@ namespace ao::media::file::mpeg::test
     CHECK(prop.bitDepth() == 16);
   }
 
-  TEST_CASE("MPEG File - maps orchestra fallback when ensemble is absent", "[media][unit][mpeg][file]")
+  TEST_CASE("MPEG File - maps orchestra fallback when ensemble is absent")
   {
     auto const file = TestFile{audio::test::requireAudioFixture("classical_fallback.mp3")};
     auto const content = readContent(file);
@@ -348,7 +348,7 @@ namespace ao::media::file::mpeg::test
           std::vector<Credit>{{.name = "Fixture Fallback Ensemble", .kind = CreditKind::Ensemble}});
   }
 
-  TEST_CASE("MPEG File - emits real fixture tag fields", "[media][unit][mpeg][file]")
+  TEST_CASE("MPEG File - emits real fixture tag fields")
   {
     auto const file = TestFile{audio::test::requireAudioFixture("basic_metadata.mp3")};
     auto content = readContent(file);
@@ -364,7 +364,7 @@ namespace ao::media::file::mpeg::test
     CHECK(metadata.number(NumberField::Year) == 2024);
   }
 
-  TEST_CASE("MPEG File - audio payload range trims leading and trailing tags", "[media][unit][mpeg][file]")
+  TEST_CASE("MPEG File - audio payload range trims leading and trailing tags")
   {
     auto data = wrapId3v2(3, {});
     std::size_t const expectedOffset = data.size();
@@ -387,7 +387,7 @@ namespace ao::media::file::mpeg::test
     CHECK(std::to_integer<std::uint8_t>(range.bytes[3]) == frame[3]);
   }
 
-  TEST_CASE("MPEG File - audio payload range skips junk between ID3v2 and first frame", "[media][unit][mpeg][file]")
+  TEST_CASE("MPEG File - audio payload range skips junk between ID3v2 and first frame")
   {
     auto data = wrapId3v2(3, {});
     data.insert(data.end(), {0x00, 0x11, 0x22, 0x33, 0x7F});
@@ -411,7 +411,7 @@ namespace ao::media::file::mpeg::test
     CHECK(std::to_integer<std::uint8_t>(range.bytes[3]) == frame[3]);
   }
 
-  TEST_CASE("MPEG File - audio payload range trims APEv2 header advertised by footer", "[media][unit][mpeg][file]")
+  TEST_CASE("MPEG File - audio payload range trims APEv2 header advertised by footer")
   {
     auto data = std::vector<std::uint8_t>{};
     auto const frame = createValidMpegFrame();
@@ -432,7 +432,7 @@ namespace ao::media::file::mpeg::test
     CHECK(std::to_integer<std::uint8_t>(range.bytes[3]) == frame[3]);
   }
 
-  TEST_CASE("MPEG File - audio payload signature ignores tag changes", "[media][unit][mpeg][file]")
+  TEST_CASE("MPEG File - audio payload signature ignores tag changes")
   {
     auto firstBody = std::vector<std::uint8_t>{};
     addTextFrame(firstBody, "TIT2", "Before");
@@ -462,7 +462,7 @@ namespace ao::media::file::mpeg::test
     CHECK(utility::xxh3Hash128(firstPayloadRes->bytes) == utility::xxh3Hash128(secondPayloadRes->bytes));
   }
 
-  TEST_CASE("MPEG File - derives CBR audio properties", "[media][unit][mpeg][file]")
+  TEST_CASE("MPEG File - derives CBR audio properties")
   {
     auto const data = createValidMpegFrames(40);
 
@@ -475,7 +475,7 @@ namespace ao::media::file::mpeg::test
     CHECK(content.bitDepth() == 16);
   }
 
-  TEST_CASE("MPEG File - CBR duration excludes trailing APEv2 bytes", "[media][unit][mpeg][file]")
+  TEST_CASE("MPEG File - CBR duration excludes trailing APEv2 bytes")
   {
     auto data = createValidMpegFrames(40);
     appendApeV2HeaderAndFooter(data);
@@ -487,7 +487,7 @@ namespace ao::media::file::mpeg::test
     CHECK(content.duration() == std::chrono::milliseconds{1042});
   }
 
-  TEST_CASE("MPEG File - reads free-format frame properties and payload", "[media][unit][mpeg][file]")
+  TEST_CASE("MPEG File - reads free-format frame properties and payload")
   {
     auto const data = createFreeFormatMpegFrames(3);
 
@@ -502,7 +502,7 @@ namespace ao::media::file::mpeg::test
     CHECK(payloadRes->bytes.size() == 2160);
   }
 
-  TEST_CASE("MPEG File - decodes ID3v2.4 syncsafe frame sizes", "[media][unit][mpeg][file][id3v2]")
+  TEST_CASE("MPEG File - decodes ID3v2.4 syncsafe frame sizes")
   {
     // A content size >= 128 makes the v2.4 syncsafe encoding differ from a plain
     // big-endian 32-bit decode, so the parser must use the syncsafe path to step
@@ -525,7 +525,7 @@ namespace ao::media::file::mpeg::test
     CHECK(metadata.text(TextField::Artist) == "Artist");
   }
 
-  TEST_CASE("MPEG File - ID3v2.4 recording dates yield the leading year", "[media][unit][mpeg][file][id3v2]")
+  TEST_CASE("MPEG File - ID3v2.4 recording dates yield the leading year")
   {
     auto body = std::vector<std::uint8_t>{};
     addV24TextFrame(body, "TDRC", id3v2::Encoding::Latin1, asBytes("2024-05-17"));
@@ -540,7 +540,7 @@ namespace ao::media::file::mpeg::test
     CHECK(content.number(NumberField::Year) == 2024);
   }
 
-  TEST_CASE("MPEG File - decodes ID3v2.4 UTF-8 and UTF-16BE text", "[media][unit][mpeg][file][id3v2]")
+  TEST_CASE("MPEG File - decodes ID3v2.4 UTF-8 and UTF-16BE text")
   {
     SECTION("UTF-8")
     {
@@ -588,7 +588,7 @@ namespace ao::media::file::mpeg::test
     }
   }
 
-  TEST_CASE("MPEG File - reads metadata from an ID3v2.4 unsynchronised tag", "[media][unit][mpeg][file][id3v2]")
+  TEST_CASE("MPEG File - reads metadata from an ID3v2.4 unsynchronised tag")
   {
     auto body = std::vector<std::uint8_t>{};
 
@@ -644,8 +644,7 @@ namespace ao::media::file::mpeg::test
     CHECK(std::ranges::equal(covers.front().bytes, expectedPicture));
   }
 
-  TEST_CASE("MPEG File - mixed borrowed and converted ID3 text remains stable across File move",
-            "[media][unit][mpeg][file]")
+  TEST_CASE("MPEG File - mixed borrowed and converted ID3 text remains stable across File move")
   {
     auto body = std::vector<std::uint8_t>{};
     auto const utf8Title = std::to_array<std::uint8_t>(
@@ -698,7 +697,7 @@ namespace ao::media::file::mpeg::test
     CHECK(second.text(TextField::Work).data() == firstWork.data());
   }
 
-  TEST_CASE("MPEG File - skips the declared unsupported ID3v2.2 region", "[media][unit][mpeg][file]")
+  TEST_CASE("MPEG File - skips the declared unsupported ID3v2.2 region")
   {
     auto const frame = createValidMpegFrame();
     auto body = std::vector<std::uint8_t>{};
@@ -731,7 +730,7 @@ namespace ao::media::file::mpeg::test
     CHECK(payloadRes->bytes.size() == frame.size());
   }
 
-  TEST_CASE("MPEG File - rejects ID3 layouts without a complete frame outside the tag", "[media][unit][mpeg][file]")
+  TEST_CASE("MPEG File - rejects ID3 layouts without a complete frame outside the tag")
   {
     auto data = std::vector<std::uint8_t>{};
     auto header = id3v2::HeaderLayout{};
@@ -771,8 +770,7 @@ namespace ao::media::file::mpeg::test
     CHECK(res.error().message == "mpeg file has no complete audio frame");
   }
 
-  TEST_CASE("MPEG File - ignores an oversized ID3 envelope when a complete MPEG frame follows",
-            "[media][unit][mpeg][file]")
+  TEST_CASE("MPEG File - ignores an oversized ID3 envelope when a complete MPEG frame follows")
   {
     auto header = id3v2::HeaderLayout{};
     std::memcpy(header.id.data(), "ID3", 3);
@@ -798,7 +796,7 @@ namespace ao::media::file::mpeg::test
     CHECK(payloadRes->bytes.size() == frame.size());
   }
 
-  TEST_CASE("MPEG File - discards optional ID3 frames exceeding the tag body", "[media][unit][mpeg][file]")
+  TEST_CASE("MPEG File - discards optional ID3 frames exceeding the tag body")
   {
     auto data = std::vector<std::uint8_t>{};
     auto header = id3v2::HeaderLayout{};
@@ -827,7 +825,7 @@ namespace ao::media::file::mpeg::test
     CHECK(res->codec() == AudioCodec::Mp3);
   }
 
-  TEST_CASE("MPEG File - rejects input without frame sync", "[media][unit][mpeg][file]")
+  TEST_CASE("MPEG File - rejects input without frame sync")
   {
     auto data = std::vector<std::uint8_t>(1000, 0x42); // Just 1000 bytes of garbage, no 0xFF 0xFB sync
     auto const temp = TempFile{data, ".mp3"};
@@ -839,7 +837,7 @@ namespace ao::media::file::mpeg::test
     CHECK(res.error().message == "mpeg file has no complete audio frame");
   }
 
-  TEST_CASE("MPEG File - bounds truncated APIC MIME parsing to its frame", "[media][unit][mpeg][file]")
+  TEST_CASE("MPEG File - bounds truncated APIC MIME parsing to its frame")
   {
     // APIC body with an unterminated MIME string and no picture-type/description/
     // image data. The handler must stop at the frame boundary rather than walking
@@ -863,7 +861,7 @@ namespace ao::media::file::mpeg::test
     CHECK(content.pictures().empty());
   }
 
-  TEST_CASE("MPEG File - rejects incomplete frames through content and payload APIs", "[media][unit][mpeg][file]")
+  TEST_CASE("MPEG File - rejects incomplete frames through content and payload APIs")
   {
     auto data = createValidMpegFrame();
     data.resize(12);

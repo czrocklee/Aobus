@@ -28,13 +28,13 @@ namespace ao::query::test
     }
   } // namespace
 
-  TEST_CASE("Serializer - serializes system variable prefixes", "[query][unit][serializer]")
+  TEST_CASE("Serializer - serializes system variable prefixes")
   {
     CHECK(serialize(VariableExpression{.type = VariableType::Metadata, .name = "artist"}) == "$artist");
     CHECK(serialize(VariableExpression{.type = VariableType::Property, .name = "duration"}) == "@duration");
   }
 
-  TEST_CASE("Serializer - serializes user variable names", "[query][unit][serializer]")
+  TEST_CASE("Serializer - serializes user variable names")
   {
     SECTION("Simple names stay bare")
     {
@@ -67,24 +67,24 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("Serializer - serializes boolean constants", "[query][unit][serializer]")
+  TEST_CASE("Serializer - serializes boolean constants")
   {
     CHECK(serialize(ConstantExpression{true}) == "true");
     CHECK(serialize(ConstantExpression{false}) == "false");
   }
 
-  TEST_CASE("Serializer - serializes integer constants", "[query][unit][serializer]")
+  TEST_CASE("Serializer - serializes integer constants")
   {
     CHECK(serialize(ConstantExpression{std::int64_t{123}}) == "123");
     CHECK(serialize(ConstantExpression{std::int64_t{-7}}) == "-7");
   }
 
-  TEST_CASE("Serializer - serializes unit constants", "[query][unit][serializer]")
+  TEST_CASE("Serializer - serializes unit constants")
   {
     CHECK(serialize(ConstantExpression{UnitConstantExpression{"44.1k"}}) == "44.1k");
   }
 
-  TEST_CASE("Serializer - serializes string constants with quotes", "[query][unit][serializer]")
+  TEST_CASE("Serializer - serializes string constants with quotes")
   {
     CHECK(serialize(ConstantExpression{std::string{"Bach"}}) == "\"Bach\"");
     CHECK(serialize(ConstantExpression{std::string{"quote\"and\\slash"}}) == R"("quote\"and\\slash")");
@@ -94,7 +94,7 @@ namespace ao::query::test
     CHECK(serialize(ConstantExpression{std::string{"has'apostrophe"}}) == R"("has'apostrophe")");
   }
 
-  TEST_CASE("Serializer - round-trips string constants with control characters", "[query][unit][serializer]")
+  TEST_CASE("Serializer - round-trips string constants with control characters")
   {
     auto const original = std::string{"quote\"\n\t\r\\slash"};
     auto const expr = ConstantExpression{original};
@@ -109,7 +109,7 @@ namespace ao::query::test
     CHECK(*value == original);
   }
 
-  TEST_CASE("Serializer - serializes unary not", "[query][unit][serializer]")
+  TEST_CASE("Serializer - serializes unary not")
   {
     SECTION("Variable operand")
     {
@@ -152,7 +152,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("Serializer - serializes existence tests", "[query][unit][serializer]")
+  TEST_CASE("Serializer - serializes existence tests")
   {
     CHECK(serialize(parseOk("$year?")) == "$year?");
     CHECK(serialize(parseOk("!$year?")) == "not $year?");
@@ -172,7 +172,7 @@ namespace ao::query::test
     CHECK(serialize(Expression{std::move(unaryPtr)}) == "($year = 1990)?");
   }
 
-  TEST_CASE("Serializer - serializes each binary operator token", "[query][unit][serializer]")
+  TEST_CASE("Serializer - serializes each binary operator token")
   {
     struct Case final
     {
@@ -203,7 +203,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("Serializer - parenthesizes nested binary expressions", "[query][unit][serializer]")
+  TEST_CASE("Serializer - parenthesizes nested binary expressions")
   {
     // ($artist = "Bach") and ($year >= 2020)
     auto lhsPtr = std::make_unique<BinaryExpression>();
@@ -222,7 +222,7 @@ namespace ao::query::test
     CHECK(result == "($artist = \"Bach\") and ($year >= 2020)");
   }
 
-  TEST_CASE("Serializer - omits parentheses around root binary expressions", "[query][unit][serializer]")
+  TEST_CASE("Serializer - omits parentheses around root binary expressions")
   {
     auto binaryPtr = std::make_unique<BinaryExpression>();
     binaryPtr->operand = VariableExpression{.type = VariableType::Metadata, .name = "a"};
@@ -230,7 +230,7 @@ namespace ao::query::test
     CHECK(serialize(Expression{std::move(binaryPtr)}) == "$a = 1");
   }
 
-  TEST_CASE("Serializer - serializes in lists", "[query][unit][serializer]")
+  TEST_CASE("Serializer - serializes in lists")
   {
     auto binaryPtr = std::make_unique<BinaryExpression>();
     binaryPtr->operand = VariableExpression{.type = VariableType::Metadata, .name = "artist"};
@@ -240,7 +240,7 @@ namespace ao::query::test
     CHECK(serialize(Expression{std::move(binaryPtr)}) == R"($artist in ["Bach", "Mozart"])");
   }
 
-  TEST_CASE("Serializer - serializes in ranges", "[query][unit][serializer]")
+  TEST_CASE("Serializer - serializes in ranges")
   {
     auto binaryPtr = std::make_unique<BinaryExpression>();
     binaryPtr->operand = VariableExpression{.type = VariableType::Property, .name = "duration"};
@@ -251,7 +251,7 @@ namespace ao::query::test
     CHECK(serialize(Expression{std::move(binaryPtr)}) == "@duration in 2m30s..5m");
   }
 
-  TEST_CASE("Serializer - preserves canonical shape across parse serialize parse", "[query][unit][serializer]")
+  TEST_CASE("Serializer - preserves canonical shape across parse serialize parse")
   {
     struct Case final
     {
@@ -283,7 +283,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("Serializer - handles empty or incomplete expressions defensively", "[query][unit][serializer]")
+  TEST_CASE("Serializer - handles empty or incomplete expressions defensively")
   {
     SECTION("Empty Expression")
     {

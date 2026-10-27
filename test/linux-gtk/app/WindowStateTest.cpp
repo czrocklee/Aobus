@@ -7,8 +7,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("recordWindowGeometry - maximized checkpoint retains current-session normal geometry",
-            "[gtk][unit][app][geometry]")
+  TEST_CASE("recordWindowGeometry - maximized checkpoint retains current-session normal geometry")
   {
     auto state = WindowState{.width = 720, .height = 540, .maximized = false};
 
@@ -22,7 +21,7 @@ namespace ao::gtk::test
     CHECK(state.maximized);
   }
 
-  TEST_CASE("recordWindowGeometry - unrealized extents do not replace a chosen size", "[gtk][unit][app][geometry]")
+  TEST_CASE("recordWindowGeometry - unrealized extents do not replace a chosen size")
   {
     auto state = WindowState{.width = 900, .height = 700, .maximized = true};
 

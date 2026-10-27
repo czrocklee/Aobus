@@ -81,8 +81,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("CueYaml baseline - carrier restore does not inherit target identity status or omitted facts",
-            "[runtime][integration][import-export][cue-yaml-baseline]")
+  TEST_CASE("CueYaml baseline - carrier restore does not inherit target identity status or omitted facts")
   {
     for (bool const hasMedia : {false, true})
     {
@@ -158,8 +157,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("CueYaml baseline - whole-file restore seeds omitted facts independently of the target row",
-            "[runtime][integration][import-export][cue-yaml-baseline]")
+  TEST_CASE("CueYaml baseline - whole-file restore seeds omitted facts independently of the target row")
   {
     for (bool const hasMedia : {false, true})
     {
@@ -192,8 +190,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("CueYaml baseline - whole-file merge preserves omitted target manifest facts",
-            "[runtime][integration][import-export][cue-yaml-baseline]")
+  TEST_CASE("CueYaml baseline - whole-file merge preserves omitted target manifest facts")
   {
     for (auto const mode : {ExportMode::Full, ExportMode::Delta, ExportMode::Metadata})
     {

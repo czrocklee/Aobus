@@ -15,7 +15,7 @@
 
 namespace ao::tui::test
 {
-  TEST_CASE("ListSearch - the visible search hint can receive a mouse click", "[tui][unit][search][mouse]")
+  TEST_CASE("ListSearch - the visible search hint can receive a mouse click")
   {
     auto search = ListSearch{};
     auto const rendered = renderElement(search.render(ao::test::englishMessageCatalog()), 30, 1);
@@ -31,7 +31,7 @@ namespace ao::tui::test
     CHECK_FALSE(search.matches("Rock"));
   }
 
-  TEST_CASE("ListSearch - filtering preserves owner indices and rejects an empty selection", "[tui][unit][search]")
+  TEST_CASE("ListSearch - filtering preserves owner indices and rejects an empty selection")
   {
     auto search = ListSearch{};
     auto const labels = std::vector<std::string>{"Rock", "Jazz", "Pop", "Jazz 2026"};
@@ -49,7 +49,7 @@ namespace ao::tui::test
     CHECK(search.selection(labels, 3, -1) == 2);
   }
 
-  TEST_CASE("ListSearch - text navigation and list navigation have distinct owners", "[tui][unit][search]")
+  TEST_CASE("ListSearch - text navigation and list navigation have distinct owners")
   {
     auto search = ListSearch{};
     REQUIRE(search.tryHandleEvent(ftxui::Event::Character("/")));

@@ -118,8 +118,7 @@ namespace ao::uimodel::test
     };
   } // namespace
 
-  TEST_CASE("ListOrderAuthoringSession - relative move commits the complete source order",
-            "[uimodel][integration][list][list-order]")
+  TEST_CASE("ListOrderAuthoringSession - relative move commits the complete source order")
   {
     auto fixture = SessionFixture{};
     auto const viewId = fixture.open();
@@ -138,8 +137,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(session.isCurrent());
   }
 
-  TEST_CASE("ListOrderAuthoringSession - quick filter permits absolute but not relative moves",
-            "[uimodel][integration][list][list-order]")
+  TEST_CASE("ListOrderAuthoringSession - quick filter permits absolute but not relative moves")
   {
     auto fixture = SessionFixture{};
     auto const viewId = fixture.open("true");
@@ -162,8 +160,7 @@ namespace ao::uimodel::test
     CHECK(fixture.storedOrder() == std::vector{fixture.third, fixture.first, fixture.second});
   }
 
-  TEST_CASE("ListOrderAuthoringSession - presentation, filter, and view lifecycle invalidate the binding",
-            "[uimodel][unit][list][list-order]")
+  TEST_CASE("ListOrderAuthoringSession - presentation, filter, and view lifecycle invalidate the binding")
   {
     auto fixture = SessionFixture{};
 
@@ -199,7 +196,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("ListOrderAuthoringSession - a write not yet announced refuses binding with the localized reason",
-            "[uimodel][integration][list][list-order][concurrency]")
+            "[concurrency]")
   {
     auto fixture = PendingSessionFixture{};
     auto const viewId = fixture.open();
@@ -232,7 +229,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("ListOrderAuthoringSession - NoOp replays invalidation observed while submission is pending",
-            "[uimodel][integration][list][list-order][concurrency]")
+            "[concurrency]")
   {
     auto fixture = PendingSessionFixture{};
     auto const viewId = fixture.open();
@@ -262,8 +259,7 @@ namespace ao::uimodel::test
     CHECK(fixture.commandsFixture.library().authoringAvailability().libraryRevision == revision);
   }
 
-  TEST_CASE("ListOrderAuthoringSession - pending submission outlives moved and destroyed facades",
-            "[uimodel][integration][list][list-order][concurrency]")
+  TEST_CASE("ListOrderAuthoringSession - pending submission outlives moved and destroyed facades", "[concurrency]")
   {
     STATIC_REQUIRE(std::is_nothrow_move_constructible_v<ListOrderAuthoringSession>);
     STATIC_REQUIRE_FALSE(std::is_copy_constructible_v<ListOrderAuthoringSession>);

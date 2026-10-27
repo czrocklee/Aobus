@@ -217,7 +217,7 @@ namespace ao::audio::test
     };
   } // namespace
 
-  TEST_CASE("Engine - concurrent control commands are serialized", "[audio][unit][engine][concurrency]")
+  TEST_CASE("Engine - concurrent control commands are serialized", "[concurrency]")
   {
     auto const device = Device{.id = DeviceId{"test-device"},
                                .displayName = "Test",
@@ -274,7 +274,7 @@ namespace ao::audio::test
   // while a contract-conforming backend joins its render thread before each
   // source reset and a poller reads the same queue through status(). PipeWire
   // closes its own render admission and drains both data- and main-loop work.
-  TEST_CASE("Engine - concurrent source swap is race-free", "[audio][unit][engine][concurrency][stress]")
+  TEST_CASE("Engine - concurrent source swap is race-free", "[concurrency]")
   {
     auto const device = Device{.id = DeviceId{"test-device"},
                                .displayName = "Test",

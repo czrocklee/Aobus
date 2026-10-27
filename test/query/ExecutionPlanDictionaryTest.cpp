@@ -16,7 +16,7 @@
 
 namespace ao::query::test
 {
-  TEST_CASE("ExecutionPlan - compiles custom field existence as an owned symbol", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - compiles custom field existence as an owned symbol")
   {
     auto const plan = compileOk(parseOk("%rating?"));
 
@@ -29,8 +29,7 @@ namespace ao::query::test
     CHECK(plan.accessProfile == AccessProfile::ColdOnly);
   }
 
-  TEST_CASE("ExecutionPlan - dictionary-backed LIKE keeps a folded plan-owned key",
-            "[query][unit][execution-plan][unicode]")
+  TEST_CASE("ExecutionPlan - dictionary-backed LIKE keeps a folded plan-owned key")
   {
     auto const plan = compileOk(parseOk(R"($artist ~ "Bach")"));
 
@@ -40,8 +39,7 @@ namespace ao::query::test
     CHECK(plan.requiresDictionary);
   }
 
-  TEST_CASE("ExecutionPlan - dictionary-backed caseless LIKE keeps a folded plan-owned key",
-            "[query][unit][execution-plan][unicode]")
+  TEST_CASE("ExecutionPlan - dictionary-backed caseless LIKE keeps a folded plan-owned key")
   {
     auto const plan = compileOk(parseOk(R"($artist ~ "DVOŘÁK")"));
 
@@ -51,7 +49,7 @@ namespace ao::query::test
     CHECK(plan.requiresDictionary);
   }
 
-  TEST_CASE("ExecutionPlan - unknown tags compile without dictionary mutation", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - unknown tags compile without dictionary mutation")
   {
     auto expression = parseOk("#FutureTag");
     auto const plan = compileOk(expression);
@@ -62,7 +60,7 @@ namespace ao::query::test
     CHECK(plan.requiresDictionary);
   }
 
-  TEST_CASE("ExecutionPlan - unknown custom keys compile without dictionary mutation", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - unknown custom keys compile without dictionary mutation")
   {
     auto const plan = compileOk(parseOk("%FutureKey = 'Value'"));
 
@@ -73,7 +71,7 @@ namespace ao::query::test
     CHECK(findInstruction(plan, OpCode::Eq)->dictionarySymbol == 0);
   }
 
-  TEST_CASE("ExecutionPlan - dictionary-backed equality compiles to a bindable symbol", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - dictionary-backed equality compiles to a bindable symbol")
   {
     auto const plan = compileOk(parseOk("$artist = 'Bach'"));
 
@@ -83,7 +81,7 @@ namespace ao::query::test
     CHECK(plan.requiresDictionary);
   }
 
-  TEST_CASE("ExecutionPlan - canonicalizes Unicode lookup literals", "[query][unit][execution-plan][unicode]")
+  TEST_CASE("ExecutionPlan - canonicalizes Unicode lookup literals")
   {
     auto const dictionaryPlan = compileOk(parseOk("$artist = 'Dvor\u030Ca\u0301k'"));
     auto const stringPlan = compileOk(parseOk("$title ~ 'Cafe\u0301'"));
@@ -92,7 +90,7 @@ namespace ao::query::test
     REQUIRE(stringPlan.stringConstants == std::vector<std::string>{"café"});
   }
 
-  TEST_CASE("ExecutionPlan - rejects malformed UTF-8 text literals", "[query][unit][execution-plan][unicode]")
+  TEST_CASE("ExecutionPlan - rejects malformed UTF-8 text literals")
   {
     auto compileMalformed = [](Operator op)
     {

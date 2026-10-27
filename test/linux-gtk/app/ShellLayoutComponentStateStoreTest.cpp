@@ -84,7 +84,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("ShellLayoutComponentStateStore - persists and rejects state documents", "[gtk][unit][app][layout-state]")
+  TEST_CASE("ShellLayoutComponentStateStore - persists and rejects state documents")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const stateDir = std::filesystem::path{tempDir.path()} / "layout-state";
@@ -127,8 +127,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("ShellLayoutComponentStateStore - prune removes only entries outside the prepared baseline",
-            "[gtk][unit][app][layout-state]")
+  TEST_CASE("ShellLayoutComponentStateStore - prune removes only entries outside the prepared baseline")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const stateDir = std::filesystem::path{tempDir.path()} / "layout-state";
@@ -204,8 +203,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("ShellLayoutComponentStateStore - removePreset deletes state idempotently",
-            "[gtk][unit][app][layout-state]")
+  TEST_CASE("ShellLayoutComponentStateStore - removePreset deletes state idempotently")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const stateDir = std::filesystem::path{tempDir.path()} / "layout-state";
@@ -219,8 +217,7 @@ namespace ao::gtk::test
     CHECK(store.tryRemovePreset("classic"));
   }
 
-  TEST_CASE("ShellLayoutComponentStateStore - saved state file is readable only by owner",
-            "[gtk][unit][app][layout-state]")
+  TEST_CASE("ShellLayoutComponentStateStore - saved state file is readable only by owner")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const stateDir = std::filesystem::path{tempDir.path()} / "layout-state";

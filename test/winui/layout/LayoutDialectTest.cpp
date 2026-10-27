@@ -55,8 +55,7 @@ namespace ao::winui::test
     }
   } // namespace
 
-  TEST_CASE("validateLayout under the Windows dialect - a document using only registered components is accepted",
-            "[winui][unit][layout]")
+  TEST_CASE("validateLayout under the Windows dialect - a document using only registered components is accepted")
   {
     auto root = shellRoot(
       {trackTable(),
@@ -67,8 +66,7 @@ namespace ao::winui::test
     CHECK_FALSE(optRejection);
   }
 
-  TEST_CASE("validateLayout under the Windows dialect - an unregistered component type rejects the candidate",
-            "[winui][unit][layout]")
+  TEST_CASE("validateLayout under the Windows dialect - an unregistered component type rejects the candidate")
   {
     auto const rejection = rejectionOf(shellRoot({LayoutNode{.id = "tabs", .type = "tabs"}}));
 
@@ -78,8 +76,7 @@ namespace ao::winui::test
   }
 
   TEST_CASE(
-    "validateLayout under the Windows dialect - a failed template expansion is rejected as an unknown component",
-    "[winui][unit][layout]")
+    "validateLayout under the Windows dialect - a failed template expansion is rejected as an unknown component")
   {
     auto root = shellRoot({LayoutNode{
       .id = "missing-template", .type = "template", .props = {{"templateId", LayoutValue{std::string{"absent"}}}}}});
@@ -89,8 +86,7 @@ namespace ao::winui::test
     CHECK(optRejection->reason == uimodel::LayoutRejectionReason::UnknownComponentType);
   }
 
-  TEST_CASE("validateLayout under the Windows dialect - the GTK styling field is rejected rather than ignored",
-            "[winui][unit][layout]")
+  TEST_CASE("validateLayout under the Windows dialect - the GTK styling field is rejected rather than ignored")
   {
     auto const rejection = rejectionOf(shellRoot(
       {LayoutNode{.id = "styled", .type = "label", .layout = {{"cssClasses", LayoutValue{std::string{"ao-pane"}}}}}}));
@@ -99,8 +95,7 @@ namespace ao::winui::test
     CHECK(rejection.detail == "cssClasses");
   }
 
-  TEST_CASE("validateLayout under the Windows dialect - a themed surface must name a slot the element can paint",
-            "[winui][unit][layout]")
+  TEST_CASE("validateLayout under the Windows dialect - a themed surface must name a slot the element can paint")
   {
     SECTION("a slot the shell does not paint")
     {
@@ -131,8 +126,7 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("validateLayout under the Windows dialect - unsupported and malformed layout fields reject the candidate",
-            "[winui][unit][layout]")
+  TEST_CASE("validateLayout under the Windows dialect - unsupported and malformed layout fields reject the candidate")
   {
     SECTION("a field the component does not declare")
     {
@@ -171,8 +165,7 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("validateLayout under the Windows dialect - properties must exist and carry the declared kind",
-            "[winui][unit][layout]")
+  TEST_CASE("validateLayout under the Windows dialect - properties must exist and carry the declared kind")
   {
     SECTION("an undeclared property")
     {
@@ -202,8 +195,7 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("validateLayout under the Windows dialect - component cardinality is enforced in both directions",
-            "[winui][unit][layout]")
+  TEST_CASE("validateLayout under the Windows dialect - component cardinality is enforced in both directions")
   {
     SECTION("a split needs both of its children")
     {
@@ -224,8 +216,7 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("validateLayout under the Windows dialect - the navigation presentation fixes the pane child count",
-            "[winui][unit][layout]")
+  TEST_CASE("validateLayout under the Windows dialect - the navigation presentation fixes the pane child count")
   {
     SECTION("the navigation view presentation requires a content child")
     {
@@ -262,8 +253,7 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("validateLayout under the Windows dialect - reconciled components need stable unique ids",
-            "[winui][unit][layout]")
+  TEST_CASE("validateLayout under the Windows dialect - reconciled components need stable unique ids")
   {
     SECTION("an anonymous track table cannot be located after a rebuild")
     {
@@ -287,8 +277,7 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("validateLayout under the Windows dialect - action bindings honor the policy and the schema",
-            "[winui][unit][layout]")
+  TEST_CASE("validateLayout under the Windows dialect - action bindings honor the policy and the schema")
   {
     SECTION("a component without an action policy rejects a bound slot")
     {
@@ -320,8 +309,7 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("validateLayout under the Windows dialect - an authored tooltip subtree has no Windows surface",
-            "[winui][unit][layout]")
+  TEST_CASE("validateLayout under the Windows dialect - an authored tooltip subtree has no Windows surface")
   {
     auto tooltipped = LayoutNode{.id = "soul", .type = "playback.soulButton"};
     tooltipped.optTooltip = uimodel::BoxedLayoutNode{LayoutNode{.type = "label"}};
@@ -332,8 +320,7 @@ namespace ao::winui::test
     CHECK(rejection.detail == "tooltip");
   }
 
-  TEST_CASE("requireValidLayout under the Windows dialect - a rejection becomes the candidate's reported error",
-            "[winui][unit][layout]")
+  TEST_CASE("requireValidLayout under the Windows dialect - a rejection becomes the candidate's reported error")
   {
     auto const document = uimodel::LayoutDocument{.root = shellRoot({LayoutNode{.id = "tabs", .type = "tabs"}})};
     auto const preparedRes = uimodel::prepareLayout(document);

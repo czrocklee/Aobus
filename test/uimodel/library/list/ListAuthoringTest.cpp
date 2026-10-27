@@ -22,7 +22,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("ListAuthoring - owns List CRUD across native frontends", "[uimodel][integration][list-authoring]")
+  TEST_CASE("ListAuthoring - owns List CRUD across native frontends")
   {
     auto storage = rt::test::MusicLibraryFixture{};
     auto changes = rt::test::makeStateOnlyLibraryChanges(storage.library());
@@ -52,7 +52,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(commands.library().snapshot().listNode(*listIdRes));
   }
 
-  TEST_CASE("ListAuthoring - previews and deletes a List subtree", "[uimodel][integration][list-authoring]")
+  TEST_CASE("ListAuthoring - previews and deletes a List subtree")
   {
     auto storage = rt::test::MusicLibraryFixture{};
     auto changes = rt::test::makeStateOnlyLibraryChanges(storage.library());
@@ -78,8 +78,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(commands.library().snapshot().listNode(*childIdRes));
   }
 
-  TEST_CASE("ListAuthoring - forwards missing List errors without changing retained state",
-            "[uimodel][integration][list-authoring]")
+  TEST_CASE("ListAuthoring - forwards missing List errors without changing retained state")
   {
     auto storage = rt::test::MusicLibraryFixture{};
     auto changes = rt::test::makeStateOnlyLibraryChanges(storage.library());
@@ -138,8 +137,7 @@ namespace ao::uimodel::test
     CHECK(lists[0].expression == "$year = 2000");
   }
 
-  TEST_CASE("ListAuthoring - ordinary deletion preserves a parent and its dependent child",
-            "[uimodel][integration][list-authoring]")
+  TEST_CASE("ListAuthoring - ordinary deletion preserves a parent and its dependent child")
   {
     auto storage = rt::test::MusicLibraryFixture{};
     auto changes = rt::test::makeStateOnlyLibraryChanges(storage.library());
@@ -178,8 +176,7 @@ namespace ao::uimodel::test
     CHECK(optChild->parentId == *parentIdRes);
   }
 
-  TEST_CASE("ListAuthoring - forwards writable tag removal for single and subtree deletion",
-            "[uimodel][integration][list-authoring]")
+  TEST_CASE("ListAuthoring - forwards writable tag removal for single and subtree deletion")
   {
     auto const includeDescendants = GENERATE(false, true);
     auto const removeTag = GENERATE(false, true);

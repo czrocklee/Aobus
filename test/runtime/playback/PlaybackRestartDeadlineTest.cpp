@@ -50,8 +50,7 @@ namespace ao::rt::test
     };
   } // namespace
 
-  TEST_CASE("PlaybackRestartDeadline - equality remains unavailable and an early callback retries",
-            "[runtime][unit][playback-cursor][concurrency]")
+  TEST_CASE("PlaybackRestartDeadline - equality remains unavailable and an early callback retries", "[concurrency]")
   {
     auto fixture = RestartDeadlineFixture{};
 
@@ -90,7 +89,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackRestartDeadline - cancellation suppresses a queued callback from an older deadline",
-            "[runtime][unit][playback-cursor][concurrency]")
+            "[concurrency]")
   {
     auto fixture = RestartDeadlineFixture{};
     fixture.deadline.start(Elapsed{0});
@@ -117,8 +116,7 @@ namespace ao::rt::test
     CHECK(fixture.availabilityEvents == std::vector<bool>{true});
   }
 
-  TEST_CASE("PlaybackRestartDeadline - destruction cancels a callback already queued for delivery",
-            "[runtime][unit][playback-cursor][concurrency]")
+  TEST_CASE("PlaybackRestartDeadline - destruction cancels a callback already queued for delivery", "[concurrency]")
   {
     auto executor = ManualExecutor{};
     auto scheduler = ControlledSleeper{};
@@ -146,7 +144,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackRestartDeadline - reentrant availability changes install only the replacement deadline",
-            "[runtime][unit][playback-cursor][concurrency]")
+            "[concurrency]")
   {
     auto executor = ManualExecutor{};
     auto scheduler = ControlledSleeper{};
@@ -175,8 +173,7 @@ namespace ao::rt::test
     CHECK(scheduler.call(0).delay == Elapsed{3001});
   }
 
-  TEST_CASE("PlaybackRestartDeadline - start pause resume and seek explicitly control the deadline",
-            "[runtime][unit][playback-cursor][concurrency]")
+  TEST_CASE("PlaybackRestartDeadline - start pause resume and seek explicitly control the deadline", "[concurrency]")
   {
     auto fixture = RestartDeadlineFixture{};
     fixture.deadline.start(Elapsed{500});
@@ -210,8 +207,7 @@ namespace ao::rt::test
     CHECK(fixture.availabilityEvents == std::vector<bool>{true, false});
   }
 
-  TEST_CASE("PlaybackRestartDeadline - current and session replacement cancel obsolete schedules",
-            "[runtime][unit][playback-cursor][concurrency]")
+  TEST_CASE("PlaybackRestartDeadline - current and session replacement cancel obsolete schedules", "[concurrency]")
   {
     auto fixture = RestartDeadlineFixture{};
     fixture.deadline.start(Elapsed{0});
@@ -242,8 +238,7 @@ namespace ao::rt::test
     CHECK(fixture.scheduler.callCount() == 3);
   }
 
-  TEST_CASE("PlaybackRestartDeadline - shutdown suppresses queued work and future controls",
-            "[runtime][unit][playback-cursor][concurrency]")
+  TEST_CASE("PlaybackRestartDeadline - shutdown suppresses queued work and future controls", "[concurrency]")
   {
     auto fixture = RestartDeadlineFixture{};
     fixture.deadline.start(Elapsed{0});

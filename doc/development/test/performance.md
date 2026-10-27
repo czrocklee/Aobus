@@ -36,7 +36,7 @@ ao.bat perf
 ```
 
 The default run performs one unmeasured warm-up and twenty measured samples per workload, then reports the median and 95th percentile.
-It builds only the `EXCLUDE_FROM_ALL` `ao_perf_baseline` target and selects the `[perf][review]` Catch2 contract.
+It builds only the `EXCLUDE_FROM_ALL` `ao_perf_baseline` target and selects the `PerformanceReview - ordering and completion-alias workloads` contract.
 
 Useful controls are:
 
@@ -44,7 +44,7 @@ Useful controls are:
 ./ao perf --samples 40 --warmups 2
 ./ao perf --output /tmp/aobus-performance.json
 ./ao perf --no-build
-./ao perf --filter "[perf][review]"
+./ao perf --filter "PerformanceReview - ordering and completion-alias workloads"
 ```
 
 An ordering review may append a workload from an existing Aobus library:
@@ -115,9 +115,9 @@ Direct executable runs need an existing parent directory and a fresh path.
 For example, on Linux:
 
 ```bash
-AOBUS_AUDIT_OBSERVATIONS=1000 ./ao perf --filter '[audit-observation]' --samples 40 --warmups 2 --output /tmp/observations.json
-AOBUS_AUDIT_COMPLETION_HISTORY=200000 ./ao perf --filter '[completion-vocabulary]' --samples 40 --warmups 2 --output /tmp/completion-history.json
-AOBUS_AUDIT_QUERY_ATOMS=512 ./ao perf --filter '[audit-query]' --samples 40 --warmups 2 --output /tmp/query-boundary.json
+AOBUS_AUDIT_OBSERVATIONS=1000 ./ao perf --filter 'PerformanceReview - graph bursts*' --samples 40 --warmups 2 --output /tmp/observations.json
+AOBUS_AUDIT_COMPLETION_HISTORY=200000 ./ao perf --filter 'CompletionVocabularyBaseline - *' --samples 40 --warmups 2 --output /tmp/completion-history.json
+AOBUS_AUDIT_QUERY_ATOMS=512 ./ao perf --filter 'PerformanceReview - query expression*' --samples 40 --warmups 2 --output /tmp/query-boundary.json
 ```
 
 On Windows, set the corresponding environment variable before `ao.bat perf`
@@ -160,7 +160,7 @@ and write reports to the guest's local temporary directory.
 Before changing the cold metadata layout, run the opt-in production-path workload:
 
 ```bash
-./ao perf --filter '[classical-metadata]' --samples 20 --warmups 1 --output /tmp/classical-before.json
+./ao perf --filter 'ClassicalMetadataBaseline - *' --samples 20 --warmups 1 --output /tmp/classical-before.json
 ```
 
 [`ClassicalMetadataBaselineTest.cpp`](../../../test/perf/baseline/ClassicalMetadataBaselineTest.cpp) seeds deterministic 10,000- and 100,000-track libraries in one transaction with a pinned 2 GiB map.
@@ -193,7 +193,7 @@ The single-entry category fixture remains separate from the cardinality workload
 Run the new feature case separately, with its own report:
 
 ```bash
-./ao perf release --filter '[performance-metadata]' --samples 20 --warmups 1 --output /tmp/performance-metadata.json
+./ao perf release --filter 'PerformanceMetadataBaseline - *' --samples 20 --warmups 1 --output /tmp/performance-metadata.json
 ```
 
 [`PerformanceMetadataBaselineTest.cpp`](../../../test/perf/baseline/PerformanceMetadataBaselineTest.cpp) records 56 rows over 10k/100k libraries.
@@ -213,7 +213,7 @@ Verify that an allocation profiler records the C++ workload PID, not merely a po
 Run incremental member-filter delivery separately:
 
 ```bash
-./ao perf release --filter '[performance-incremental]' --samples 20 --warmups 1 --output /tmp/performance-incremental.json
+./ao perf release --filter 'PerformanceMetadataIncrementalBaseline - *' --samples 20 --warmups 1 --output /tmp/performance-incremental.json
 ```
 
 [`PerformanceMetadataIncrementalBaselineTest.cpp`](../../../test/perf/baseline/PerformanceMetadataIncrementalBaselineTest.cpp) records 16 rows from independent homogeneous 10k/100k libraries with baseline list lengths 0, 1, 8, and 32.
@@ -230,7 +230,7 @@ Keep such instrumented diagnostic runs separate from acceptance timing and disti
 ### Credits cardinality and allocation workloads
 
 ```bash
-./ao perf release --filter '[credits-metadata],[allocation-counter]' --samples 20 --warmups 1 --output /tmp/credits.json
+./ao perf release --filter 'CreditsBaseline - *,PerformanceAllocation - *' --samples 20 --warmups 1 --output /tmp/credits.json
 ```
 
 [`CreditsBaselineTest.cpp`](../../../test/perf/baseline/CreditsBaselineTest.cpp) records 104 rows:
@@ -248,7 +248,7 @@ and counts successful calls and requested bytes process-wide during that window,
 threads. Setup, validation, retirement, and post-reply cleanup are outside the window. Concurrent
 unrelated work can contribute; this is not call-path attribution. Native allocators, `malloc`,
 `realloc`, mapped pages, and DSOs bypassing these replacements are excluded. Requested bytes do
-not measure allocator overhead, retained/peak heap, or RSS. The non-reporting `[allocation-counter]`
+not measure allocator overhead, retained/peak heap, or RSS. The non-reporting `PerformanceAllocation`
 case verifies direct and worker allocation paths and may accompany this one report writer.
 
 Counters are disabled during timing, but allocation dispatch still passes through the replacement
@@ -262,8 +262,8 @@ For a first transform in a fresh process, run the cold-alias case alone,
 once per input kind, because ICU state persists for the whole process:
 
 ```bash
-AOBUS_PERF_COLD_ALIAS_INPUT=kana ./ao perf --filter '[audit-cold-alias]' --samples 1 --warmups 0 --output /tmp/cold-kana.json
-AOBUS_PERF_COLD_ALIAS_INPUT=han ./ao perf --filter '[audit-cold-alias]' --samples 1 --warmups 0 --output /tmp/cold-han.json
+AOBUS_PERF_COLD_ALIAS_INPUT=kana ./ao perf --filter 'PerformanceReview - first completion alias*' --samples 1 --warmups 0 --output /tmp/cold-kana.json
+AOBUS_PERF_COLD_ALIAS_INPUT=han ./ao perf --filter 'PerformanceReview - first completion alias*' --samples 1 --warmups 0 --output /tmp/cold-han.json
 ```
 
 The result is a one-shot observation, not a percentile or a machine-wide cold-cache measurement.
@@ -276,11 +276,13 @@ payload to `AOBUS_PERF_BASELINE_JSON`. Its fixed workloads ignore `--samples` an
 with exactly one v2 case and run the workload serially:
 
 ```bash
-AOBUS_PERF_BASELINE_JSON=/tmp/baseline-v1.json ./ao perf --filter '[perf][baseline]~[completion-vocabulary],[perf][review]' --output /tmp/baseline-v2.json
+AOBUS_PERF_BASELINE_JSON=/tmp/baseline-v1.json ./ao perf --filter 'PerformanceBaseline - *,PerformanceReview - ordering and completion-alias workloads' --output /tmp/baseline-v2.json
 ```
 
-The bare `[perf][baseline]` filter would also select the completion-vocabulary
-v2 writer. The v1 report is written only when every selected case passes, and the
+The separately named `CompletionVocabularyBaseline - *` case is not part of
+`PerformanceBaseline - *`; run it with its own filter and output path rather
+than adding a second v2 writer to this run. The v1 report is written only when
+every selected case passes, and the
 portal validates its shape, but not that every expected benchmark ran: check the
 benchmark names and the 10k/100k/1M scales before comparing.
 
@@ -387,6 +389,7 @@ Do not remove outliers manually; the report's median and p95 are calculated from
 - [`script/ao/command/perf.py`](../../../script/ao/command/perf.py) owns portal arguments, build/run selection, metadata injection, and summary output.
 - [`test/perf/baseline/`](../../../test/perf/baseline) contains the standalone Catch2 workloads.
 - [`test/perf/report/`](../../../test/perf/report) contains shared report support and `PerformanceReportTest.cpp`, whose cases run in `ao_core_test`.
+- [`test/tui/TrackTableBenchmark.cpp`](../../../test/tui/TrackTableBenchmark.cpp) is the standalone `ao_tui_bench` target: allocation-bound TUI render micro-benchmarks that link mimalloc to mirror the shipping terminal allocator. It remains `EXCLUDE_FROM_ALL` and is built explicitly and run directly, never by the ordinary runtime or sanitizer gates. Its registrations are part of the same content audit as every other test source.
 - [`test/script/test_cli.py`](../../../test/script/test_cli.py) and [`test/script/test_buildenv.py`](../../../test/script/test_buildenv.py) protect command registration and native-environment classification.
 
 ## Related documents

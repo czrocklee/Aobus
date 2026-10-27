@@ -13,7 +13,7 @@
 
 namespace ao::winui::test
 {
-  TEST_CASE("Track reveal adapter - retains intent until source rows become available", "[winui][unit][track-reveal]")
+  TEST_CASE("Track reveal adapter - retains intent until source rows become available")
   {
     auto intent = TrackRevealIntent{};
     auto displayIndex = uimodel::TrackDisplayIndex{};
@@ -30,7 +30,7 @@ namespace ao::winui::test
                                                                        });
   }
 
-  TEST_CASE("Track reveal adapter - rejects stale views and advances request identity", "[winui][unit][track-reveal]")
+  TEST_CASE("Track reveal adapter - rejects stale views and advances request identity")
   {
     auto intent = TrackRevealIntent{};
     auto displayIndex = uimodel::TrackDisplayIndex{};

@@ -42,7 +42,7 @@ namespace ao::tui::test
     }
   } // namespace
 
-  TEST_CASE("TerminalTitle - compiles existing format language and empty disables", "[tui][unit][terminal-title]")
+  TEST_CASE("TerminalTitle - compiles existing format language and empty disables")
   {
     auto emptyRes = compileTerminalTitleFormat("");
     REQUIRE(emptyRes);
@@ -54,8 +54,7 @@ namespace ao::tui::test
     CHECK_FALSE(compileTerminalTitleFormat("$year > 2000"));
   }
 
-  TEST_CASE("TerminalTitle - writes only changed playing titles and balances title ownership",
-            "[tui][unit][terminal-title]")
+  TEST_CASE("TerminalTitle - writes only changed playing titles and balances title ownership")
   {
     auto const now = std::chrono::steady_clock::time_point{};
     auto temp = ao::test::TempDir{};
@@ -103,8 +102,7 @@ namespace ao::tui::test
     CHECK(writes.back() == "\033[23;2t");
   }
 
-  TEST_CASE("TerminalTitle - Soul replaces fallback branding and changes independently of track text",
-            "[tui][unit][terminal-title]")
+  TEST_CASE("TerminalTitle - Soul replaces fallback branding and changes independently of track text")
   {
     auto temp = ao::test::TempDir{};
     auto runtimePtr = rt::test::makeRuntime(temp, std::make_unique<rt::test::QueuedExecutor>());
@@ -135,8 +133,7 @@ namespace ao::tui::test
     CHECK(writes.back() == "\033[23;2t");
   }
 
-  TEST_CASE("TerminalTitle - identical output consumes semantic changes without delaying animation",
-            "[tui][unit][terminal-title]")
+  TEST_CASE("TerminalTitle - identical output consumes semantic changes without delaying animation")
   {
     auto temp = ao::test::TempDir{};
     auto runtimePtr = rt::test::makeRuntime(temp, std::make_unique<rt::test::QueuedExecutor>());
@@ -180,8 +177,7 @@ namespace ao::tui::test
     CHECK(writes.back() == "\033]2;D Song\033\\");
   }
 
-  TEST_CASE("TerminalTitle - animation coalesces to the latest frame without postponing its deadline",
-            "[tui][unit][terminal-title]")
+  TEST_CASE("TerminalTitle - animation coalesces to the latest frame without postponing its deadline")
   {
     auto temp = ao::test::TempDir{};
     auto runtimePtr = rt::test::makeRuntime(temp, std::make_unique<rt::test::QueuedExecutor>());
@@ -212,8 +208,7 @@ namespace ao::tui::test
     CHECK(writes.back() == "\033[22;2t\033]2;G Song\033\\");
   }
 
-  TEST_CASE("TerminalTitle - enabling Soul writes immediately after a title without Soul",
-            "[tui][unit][terminal-title]")
+  TEST_CASE("TerminalTitle - enabling Soul writes immediately after a title without Soul")
   {
     auto temp = ao::test::TempDir{};
     auto runtimePtr = rt::test::makeRuntime(temp, std::make_unique<rt::test::QueuedExecutor>());
@@ -230,7 +225,7 @@ namespace ao::tui::test
     CHECK(writes.back() == "\033]2;A Song\033\\");
   }
 
-  TEST_CASE("TerminalTitle - animation coalesces without a current track", "[tui][unit][terminal-title]")
+  TEST_CASE("TerminalTitle - animation coalesces without a current track")
   {
     auto temp = ao::test::TempDir{};
     auto runtimePtr = rt::test::makeRuntime(temp, std::make_unique<rt::test::QueuedExecutor>());
@@ -249,8 +244,7 @@ namespace ao::tui::test
     CHECK(writes.back() == "\033]2;C\033\\");
   }
 
-  TEST_CASE("TerminalTitle - content transport and settings changes bypass animation throttling",
-            "[tui][unit][terminal-title]")
+  TEST_CASE("TerminalTitle - content transport and settings changes bypass animation throttling")
   {
     auto temp = ao::test::TempDir{};
     auto runtimePtr = rt::test::makeRuntime(temp, std::make_unique<rt::test::QueuedExecutor>());
@@ -314,7 +308,7 @@ namespace ao::tui::test
     CHECK(writes.size() == 2);
   }
 
-  TEST_CASE("TerminalTitle - metadata controls cannot escape the title payload", "[tui][unit][terminal-title]")
+  TEST_CASE("TerminalTitle - metadata controls cannot escape the title payload")
   {
     auto const now = std::chrono::steady_clock::time_point{};
     auto temp = ao::test::TempDir{};
@@ -328,7 +322,7 @@ namespace ao::tui::test
     CHECK(writes.front() == "\033[22;2t\033]2;曲名  ]2;injected  \033\\");
   }
 
-  TEST_CASE("TerminalTitle - failed writes restore once and disable further output", "[tui][unit][terminal-title]")
+  TEST_CASE("TerminalTitle - failed writes restore once and disable further output")
   {
     auto const now = std::chrono::steady_clock::time_point{};
     auto temp = ao::test::TempDir{};
@@ -399,8 +393,7 @@ namespace ao::tui::test
     CHECK(writes.size() == expectedWrites);
   }
 
-  TEST_CASE("TerminalTitle - failed write after throttling restores once and retires output",
-            "[tui][unit][terminal-title]")
+  TEST_CASE("TerminalTitle - failed write after throttling restores once and retires output")
   {
     auto const now = std::chrono::steady_clock::time_point{};
     auto temp = ao::test::TempDir{};
@@ -455,7 +448,7 @@ namespace ao::tui::test
     CHECK(writes == std::vector<std::string>{"\033[22;2t\033]2;A\033\\", "\033]2;D\033\\", "\033[23;2t"});
   }
 
-  TEST_CASE("TerminalTitle - unexpected sink exceptions remain programming failures", "[tui][unit][terminal-title]")
+  TEST_CASE("TerminalTitle - unexpected sink exceptions remain programming failures")
   {
     auto const now = std::chrono::steady_clock::time_point{};
     auto temp = ao::test::TempDir{};
@@ -474,8 +467,7 @@ namespace ao::tui::test
     CHECK_THROWS_AS(title.update(kInvalidTrackId, {}, now), std::logic_error);
   }
 
-  TEST_CASE("TerminalTitle - failed restoration retires ownership without escaping teardown",
-            "[tui][unit][terminal-title]")
+  TEST_CASE("TerminalTitle - failed restoration retires ownership without escaping teardown")
   {
     auto const now = std::chrono::steady_clock::time_point{};
     auto temp = ao::test::TempDir{};
@@ -513,8 +505,7 @@ namespace ao::tui::test
     CHECK(restoreAttempts == 1);
   }
 
-  TEST_CASE("TerminalTitle - sanitizes separator and C1 boundaries while preserving Unicode text",
-            "[tui][unit][terminal-title]")
+  TEST_CASE("TerminalTitle - sanitizes separator and C1 boundaries while preserving Unicode text")
   {
     auto temp = ao::test::TempDir{};
     auto runtimePtr = rt::test::makeRuntime(temp, std::make_unique<rt::test::QueuedExecutor>());
@@ -530,8 +521,7 @@ namespace ao::tui::test
     CHECK(formatter.format(kInvalidTrackId, "\xe2\x80") == "Aobus");
   }
 
-  TEST_CASE("TerminalTitle - bounds wide titles without splitting Unicode or escape delimiters",
-            "[tui][unit][terminal-title]")
+  TEST_CASE("TerminalTitle - bounds wide titles without splitting Unicode or escape delimiters")
   {
     auto const now = std::chrono::steady_clock::time_point{};
     auto temp = ao::test::TempDir{};
@@ -569,8 +559,7 @@ namespace ao::tui::test
     CHECK(writes.size() == 2);
   }
 
-  TEST_CASE("TerminalTitleFormatter - releases library observation before later publications",
-            "[tui][unit][terminal-title]")
+  TEST_CASE("TerminalTitleFormatter - releases library observation before later publications")
   {
     auto temp = ao::test::TempDir{};
     auto runtimePtr = rt::test::makeRuntime(temp, std::make_unique<rt::test::QueuedExecutor>());
@@ -590,8 +579,7 @@ namespace ao::tui::test
     CHECK(survivingPreview.format(track, "⠞⠀⠀") == "⠞⠀⠀ Edited");
   }
 
-  TEST_CASE("TerminalTitleFormatter - draft changes remain independent of the published title",
-            "[tui][unit][terminal-title]")
+  TEST_CASE("TerminalTitleFormatter - draft changes remain independent of the published title")
   {
     auto const now = std::chrono::steady_clock::time_point{};
     auto temp = ao::test::TempDir{};

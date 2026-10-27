@@ -12,8 +12,7 @@
 
 namespace ao::desktop::test
 {
-  TEST_CASE("LibrarySwitch - active directory is reused after lexical normalization",
-            "[runtime][unit][desktop-lifecycle]")
+  TEST_CASE("LibrarySwitch - active directory is reused after lexical normalization")
   {
     auto const fixture = ao::test::TempDir{};
     auto const active = fixture.path() / "music";
@@ -29,8 +28,7 @@ namespace ao::desktop::test
 
 #ifndef _WIN32
 
-  TEST_CASE("LibrarySwitch - symlink alias reuses the active filesystem directory",
-            "[runtime][unit][desktop-lifecycle]")
+  TEST_CASE("LibrarySwitch - symlink alias reuses the active filesystem directory")
   {
     auto const fixture = ao::test::TempDir{};
     auto const active = fixture.path() / "music";
@@ -45,8 +43,7 @@ namespace ao::desktop::test
   }
 #endif
 
-  TEST_CASE("LibrarySwitch - different directory produces one normalized restart request",
-            "[runtime][unit][desktop-lifecycle]")
+  TEST_CASE("LibrarySwitch - different directory produces one normalized restart request")
   {
     auto const fixture = ao::test::TempDir{};
     auto const active = fixture.path() / "active";
@@ -62,7 +59,7 @@ namespace ao::desktop::test
     CHECK_FALSE(planRes->request.scanAfterOpen);
   }
 
-  TEST_CASE("LibrarySwitch - rejects a missing requested directory", "[runtime][unit][desktop-lifecycle]")
+  TEST_CASE("LibrarySwitch - rejects a missing requested directory")
   {
     auto const fixture = ao::test::TempDir{};
     auto const active = fixture.path() / "active";
@@ -74,8 +71,7 @@ namespace ao::desktop::test
     CHECK(planRes.error().code == Error::Code::NotFound);
   }
 
-  TEST_CASE("LibrarySwitch - unavailable active root does not block a different valid request",
-            "[runtime][unit][desktop-lifecycle]")
+  TEST_CASE("LibrarySwitch - unavailable active root does not block a different valid request")
   {
     auto const fixture = ao::test::TempDir{};
     auto const active = fixture.path() / "removed-active";

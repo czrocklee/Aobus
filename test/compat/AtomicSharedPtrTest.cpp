@@ -26,14 +26,14 @@ namespace ao::compat::test
     using Portable = detail::PortableAtomicSharedPtr<T>;
   } // namespace
 
-  TEST_CASE("AtomicSharedPtr - a default constructed slot is empty", "[core][unit][atomic-shared-ptr]")
+  TEST_CASE("AtomicSharedPtr - a default constructed slot is empty")
   {
     auto slot = Portable<std::int32_t>{};
     CHECK(slot.load() == nullptr);
     CHECK_FALSE(slot.is_lock_free());
   }
 
-  TEST_CASE("AtomicSharedPtr - stores and loads a value", "[core][unit][atomic-shared-ptr]")
+  TEST_CASE("AtomicSharedPtr - stores and loads a value")
   {
     auto slot = Portable<std::int32_t>{std::make_shared<std::int32_t>(3)};
     REQUIRE(slot.load() != nullptr);
@@ -43,7 +43,7 @@ namespace ao::compat::test
     CHECK(*slot.load() == 9);
   }
 
-  TEST_CASE("AtomicSharedPtr - exchange returns the previous value", "[core][unit][atomic-shared-ptr]")
+  TEST_CASE("AtomicSharedPtr - exchange returns the previous value")
   {
     auto slot = Portable<std::int32_t>{std::make_shared<std::int32_t>(1)};
 
@@ -54,7 +54,7 @@ namespace ao::compat::test
     CHECK(*slot.load() == 2);
   }
 
-  TEST_CASE("AtomicSharedPtr - a stored value stays alive while the slot holds it", "[core][unit][atomic-shared-ptr]")
+  TEST_CASE("AtomicSharedPtr - a stored value stays alive while the slot holds it")
   {
     auto ownedPtr = std::make_shared<std::int32_t>(5);
     auto weakPtr = std::weak_ptr<std::int32_t>{ownedPtr};
@@ -66,8 +66,7 @@ namespace ao::compat::test
     CHECK(weakPtr.expired());
   }
 
-  TEST_CASE("AtomicSharedPtr - store retires its last owner outside the slot lock",
-            "[core][unit][atomic-shared-ptr][concurrency]")
+  TEST_CASE("AtomicSharedPtr - store retires its last owner outside the slot lock", "[concurrency]")
   {
     auto canLoad = std::binary_semaphore{0};
     auto loadFinished = std::binary_semaphore{0};
@@ -130,8 +129,7 @@ namespace ao::compat::test
     CHECK(slot.load() == replacementPtr);
   }
 
-  TEST_CASE("AtomicSharedPtr - stale compare-exchange retires its expectation outside the slot lock",
-            "[core][unit][atomic-shared-ptr][concurrency]")
+  TEST_CASE("AtomicSharedPtr - stale compare-exchange retires its expectation outside the slot lock", "[concurrency]")
   {
     auto canLoad = std::binary_semaphore{0};
     auto loadFinished = std::binary_semaphore{0};
@@ -194,7 +192,7 @@ namespace ao::compat::test
     CHECK(slot.load() == currentPtr);
   }
 
-  TEST_CASE("AtomicSharedPtr - compare-exchange replaces a matching expectation", "[core][unit][atomic-shared-ptr]")
+  TEST_CASE("AtomicSharedPtr - compare-exchange replaces a matching expectation")
   {
     auto const initialPtr = std::make_shared<std::int32_t>(1);
     auto const replacementPtr = std::make_shared<std::int32_t>(2);
@@ -207,8 +205,7 @@ namespace ao::compat::test
     CHECK(slot.load() == replacementPtr);
   }
 
-  TEST_CASE("AtomicSharedPtr - compare-exchange reports the current value when the expectation is stale",
-            "[core][unit][atomic-shared-ptr]")
+  TEST_CASE("AtomicSharedPtr - compare-exchange reports the current value when the expectation is stale")
   {
     auto const initialPtr = std::make_shared<std::int32_t>(1);
     auto slot = Portable<std::int32_t>{initialPtr};
@@ -221,8 +218,7 @@ namespace ao::compat::test
     CHECK(slot.load() == initialPtr);
   }
 
-  TEST_CASE("AtomicSharedPtr - compare-exchange rejects an unrelated owner of the same object",
-            "[core][unit][atomic-shared-ptr]")
+  TEST_CASE("AtomicSharedPtr - compare-exchange rejects an unrelated owner of the same object")
   {
     std::int32_t object = 7;
     auto const keepAlive = [](std::int32_t*) noexcept {};
@@ -241,8 +237,7 @@ namespace ao::compat::test
     CHECK_FALSE(heldPtr.owner_before(unrelatedPtr));
   }
 
-  TEST_CASE("AtomicSharedPtr - compare-exchange matches an empty slot against an empty expectation",
-            "[core][unit][atomic-shared-ptr]")
+  TEST_CASE("AtomicSharedPtr - compare-exchange matches an empty slot against an empty expectation")
   {
     auto slot = Portable<std::int32_t>{};
     auto const replacementPtr = std::make_shared<std::int32_t>(5);
@@ -252,7 +247,7 @@ namespace ao::compat::test
     CHECK(slot.load() == replacementPtr);
   }
 
-  TEST_CASE("AtomicSharedPtr - the weak form does not fail spuriously here", "[core][unit][atomic-shared-ptr]")
+  TEST_CASE("AtomicSharedPtr - the weak form does not fail spuriously here")
   {
     auto const initialPtr = std::make_shared<std::int32_t>(3);
     auto slot = Portable<std::int32_t>{initialPtr};
@@ -264,7 +259,7 @@ namespace ao::compat::test
     CHECK(*slot.load() == 4);
   }
 
-  TEST_CASE("AtomicSharedPtr - the project alias behaves the same", "[core][unit][atomic-shared-ptr]")
+  TEST_CASE("AtomicSharedPtr - the project alias behaves the same")
   {
     auto slot = AtomicSharedPtr<std::int32_t>{std::make_shared<std::int32_t>(4)};
     REQUIRE(slot.load() != nullptr);
@@ -287,8 +282,7 @@ namespace ao::compat::test
     CHECK(slot.load() == replacementPtr);
   }
 
-  TEST_CASE("AtomicSharedPtr - exposes the same explicit API on every standard library",
-            "[core][unit][atomic-shared-ptr]")
+  TEST_CASE("AtomicSharedPtr - exposes the same explicit API on every standard library")
   {
     using Slot = AtomicSharedPtr<std::int32_t>;
     using Pointer = std::shared_ptr<std::int32_t>;

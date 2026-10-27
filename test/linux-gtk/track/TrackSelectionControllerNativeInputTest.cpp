@@ -108,8 +108,7 @@ namespace ao::gtk::test
   // synthetic case in TrackSelectionControllerTest.cpp proves the handler
   // binding only; only a genuine GDK double-click sequence can witness the
   // CLAIMED gesture arbitration against the column view's row activation.
-  TEST_CASE("TrackSelectionController - native tags-cell double click claims only its own activation",
-            "[gtk][unit][track][selection]")
+  TEST_CASE("TrackSelectionController - native tags-cell double click claims only its own activation")
   {
     requireOwnedGtkDisplay();
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();

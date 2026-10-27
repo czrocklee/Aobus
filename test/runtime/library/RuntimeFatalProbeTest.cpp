@@ -75,7 +75,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("Runtime fatal roots - every registered probe scenario has its own case", "[runtime][unit][fatal]")
+  TEST_CASE("Runtime fatal roots - every registered probe scenario has its own case")
   {
     // Each registered scenario runs from its own case below, so a new registry
     // entry needs a matching case and an updated count here.
@@ -88,241 +88,218 @@ namespace ao::rt::test
     CHECK(runtimeCleanProbeScenarios().size() == 2);
   }
 
-  TEST_CASE("Runtime fatal roots - YAML export rejects a missing cover resource", "[runtime][integration][fatal]")
+  TEST_CASE("Runtime fatal roots - YAML export rejects a missing cover resource")
   {
     requireFatalScenario("yaml-export-missing-cover-resource");
   }
 
-  TEST_CASE("Runtime fatal roots - projection source-order mismatch aborts instead of publishing a reset",
-            "[runtime][integration][fatal]")
+  TEST_CASE("Runtime fatal roots - projection source-order mismatch aborts instead of publishing a reset")
   {
     requireFatalScenario("projection-source-order-mismatch");
   }
 
-  TEST_CASE("Runtime fatal roots - library publication admission exceptions abort", "[runtime][integration][fatal]")
+  TEST_CASE("Runtime fatal roots - library publication admission exceptions abort")
   {
     requireFatalScenario("library-publication-admission-exception");
   }
 
-  TEST_CASE("Runtime fatal roots - library replica exceptions abort", "[runtime][integration][fatal]")
+  TEST_CASE("Runtime fatal roots - library replica exceptions abort")
   {
     requireFatalScenario("library-publication-replica-exception");
   }
 
-  TEST_CASE("Runtime fatal roots - library observer exceptions abort", "[runtime][integration][fatal]")
+  TEST_CASE("Runtime fatal roots - library observer exceptions abort")
   {
     requireFatalScenario("library-publication-observer-exception");
   }
 
-  TEST_CASE("Runtime fatal roots - library completion exceptions abort", "[runtime][integration][fatal]")
+  TEST_CASE("Runtime fatal roots - library completion exceptions abort")
   {
     requireFatalScenario("library-publication-completion-exception");
   }
 
-  TEST_CASE("Runtime fatal roots - library completion acknowledgment must match publication",
-            "[runtime][integration][fatal]")
+  TEST_CASE("Runtime fatal roots - library completion acknowledgment must match publication")
   {
     requireFatalScenario("library-publication-completion-ack-invariant");
   }
 
-  TEST_CASE("Runtime fatal roots - nested library delivery cannot destroy its owner", "[runtime][integration][fatal]")
+  TEST_CASE("Runtime fatal roots - nested library delivery cannot destroy its owner")
   {
     requireFatalScenario("library-nested-delivery-destruction");
   }
 
-  TEST_CASE("Runtime fatal roots - library mutation cannot execute after preview apply",
-            "[runtime][integration][fatal]")
+  TEST_CASE("Runtime fatal roots - library mutation cannot execute after preview apply")
   {
     requireFatalScenario("library-mutation-execute-after-apply");
   }
 
-  TEST_CASE("Runtime fatal roots - library mutation rejects a prestamped changeset", "[runtime][integration][fatal]")
+  TEST_CASE("Runtime fatal roots - library mutation rejects a prestamped changeset")
   {
     requireFatalScenario("library-mutation-prestamped-changeset");
   }
 
-  TEST_CASE("Runtime fatal roots - cancellation cannot rethrow an empty exception", "[runtime][integration][fatal]")
+  TEST_CASE("Runtime fatal roots - cancellation cannot rethrow an empty exception")
   {
     requireFatalScenario("operation-cancelled-empty-rethrow");
   }
 
-  TEST_CASE("Runtime fatal roots - logged task exceptions abort", "[runtime][integration][fatal]")
+  TEST_CASE("Runtime fatal roots - logged task exceptions abort")
   {
     requireFatalScenario("runtime-spawn-logged-exception");
   }
 
-  TEST_CASE("Runtime fatal roots - cancellable task exceptions abort", "[runtime][integration][fatal]")
+  TEST_CASE("Runtime fatal roots - cancellable task exceptions abort")
   {
     requireFatalScenario("runtime-cancellable-exception");
   }
 
-  TEST_CASE("Runtime fatal roots - lifetime task exceptions retire the scope before abort",
-            "[runtime][integration][fatal][concurrency]")
+  TEST_CASE("Runtime fatal roots - lifetime task exceptions retire the scope before abort", "[concurrency]")
   {
     requireFatalScenario("runtime-lifetime-exception");
   }
 
-  TEST_CASE("Runtime fatal roots - shutdown does not hide task exceptions",
-            "[runtime][integration][fatal][concurrency]")
+  TEST_CASE("Runtime fatal roots - shutdown does not hide task exceptions", "[concurrency]")
   {
     requireFatalScenario("runtime-shutdown-exception");
   }
 
-  TEST_CASE("Runtime fatal roots - queued callback exceptions preserve queue bookkeeping",
-            "[runtime][integration][fatal][async]")
+  TEST_CASE("Runtime fatal roots - queued callback exceptions preserve queue bookkeeping")
   {
     requireFatalScenario("queued-executor-callback-exception");
   }
 
-  TEST_CASE("Runtime fatal roots - final executor drain must reach quiescence",
-            "[runtime][integration][fatal][concurrency]")
+  TEST_CASE("Runtime fatal roots - final executor drain must reach quiescence", "[concurrency]")
   {
     requireFatalScenario("queued-executor-final-drain-limit");
   }
 
-  TEST_CASE("Runtime fatal roots - playback publication admission exceptions abort", "[runtime][integration][fatal]")
+  TEST_CASE("Runtime fatal roots - playback publication admission exceptions abort")
   {
     requireFatalScenario("playback-publication-admission-exception");
   }
 
-  TEST_CASE("Runtime fatal roots - playback command drain admission exceptions abort", "[runtime][integration][fatal]")
+  TEST_CASE("Runtime fatal roots - playback command drain admission exceptions abort")
   {
     requireFatalScenario("playback-command-drain-admission-exception");
   }
 
-  TEST_CASE("Runtime fatal roots - playback command exceptions close playback before abort",
-            "[runtime][integration][fatal]")
+  TEST_CASE("Runtime fatal roots - playback command exceptions close playback before abort")
   {
     requireFatalScenario("playback-command-exception");
   }
 
-  TEST_CASE("Runtime fatal roots - playing track reveal requires executor affinity",
-            "[runtime][integration][fatal][concurrency]")
+  TEST_CASE("Runtime fatal roots - playing track reveal requires executor affinity", "[concurrency]")
   {
     requireFatalScenario("playback-reveal-off-executor");
   }
 
-  TEST_CASE("Runtime fatal roots - playback snapshot delivery cannot destroy its owner",
-            "[runtime][integration][fatal]")
+  TEST_CASE("Runtime fatal roots - playback snapshot delivery cannot destroy its owner")
   {
     requireFatalScenario("playback-service-destroy-from-snapshot");
   }
 
-  TEST_CASE("Runtime fatal roots - playback snapshot delivery cannot synchronously shut down",
-            "[runtime][integration][fatal]")
+  TEST_CASE("Runtime fatal roots - playback snapshot delivery cannot synchronously shut down")
   {
     requireFatalScenario("playback-service-shutdown-from-snapshot");
   }
 
-  TEST_CASE("Runtime fatal roots - playback snapshot reads require executor affinity",
-            "[runtime][integration][fatal][concurrency]")
+  TEST_CASE("Runtime fatal roots - playback snapshot reads require executor affinity", "[concurrency]")
   {
     requireFatalScenario("playback-service-snapshot-off-executor");
   }
 
-  TEST_CASE("Runtime fatal roots - playback commands require executor affinity",
-            "[runtime][integration][fatal][concurrency]")
+  TEST_CASE("Runtime fatal roots - playback commands require executor affinity", "[concurrency]")
   {
     requireFatalScenario("playback-service-command-off-executor");
   }
 
-  TEST_CASE("Runtime fatal roots - playback subscriptions require executor affinity",
-            "[runtime][integration][fatal][concurrency]")
+  TEST_CASE("Runtime fatal roots - playback subscriptions require executor affinity", "[concurrency]")
   {
     requireFatalScenario("playback-service-event-off-executor");
   }
 
-  TEST_CASE("Runtime fatal roots - runtime ordering changes require executor affinity",
-            "[runtime][integration][fatal][concurrency]")
+  TEST_CASE("Runtime fatal roots - runtime ordering changes require executor affinity", "[concurrency]")
   {
     requireFatalScenario("runtime-ordering-off-executor");
   }
 
-  TEST_CASE("Runtime fatal roots - view reads require executor affinity", "[runtime][integration][fatal][concurrency]")
+  TEST_CASE("Runtime fatal roots - view reads require executor affinity", "[concurrency]")
   {
     requireFatalScenario("view-service-read-off-executor");
   }
 
-  TEST_CASE("Runtime fatal roots - a protected config save that writes no version aborts",
-            "[runtime][integration][fatal]")
+  TEST_CASE("Runtime fatal roots - a protected config save that writes no version aborts")
   {
     requireFatalScenario("config-protected-schema-without-version");
   }
 
-  TEST_CASE("Runtime fatal roots - a protected config save that writes another version aborts",
-            "[runtime][integration][fatal]")
+  TEST_CASE("Runtime fatal roots - a protected config save that writes another version aborts")
   {
     requireFatalScenario("config-protected-schema-other-version");
   }
 
-  TEST_CASE("Runtime fatal roots - workspace observation admission exceptions abort", "[runtime][integration][fatal]")
+  TEST_CASE("Runtime fatal roots - workspace observation admission exceptions abort")
   {
     requireFatalScenario("workspace-observation-admission-exception");
   }
 
-  TEST_CASE("Runtime fatal roots - view projection observation admission exceptions abort",
-            "[runtime][integration][fatal]")
+  TEST_CASE("Runtime fatal roots - view projection observation admission exceptions abort")
   {
     requireFatalScenario("view-projection-observation-admission-exception");
   }
 
-  TEST_CASE("Runtime fatal roots - view presentation observation admission exceptions abort",
-            "[runtime][integration][fatal]")
+  TEST_CASE("Runtime fatal roots - view presentation observation admission exceptions abort")
   {
     requireFatalScenario("view-presentation-observation-admission-exception");
   }
 
-  TEST_CASE("Runtime fatal roots - signal connection requires owner affinity",
-            "[runtime][integration][fatal][concurrency]")
+  TEST_CASE("Runtime fatal roots - signal connection requires owner affinity", "[concurrency]")
   {
     requireFatalScenario("signal-connect-off-owner");
   }
 
-  TEST_CASE("Runtime fatal roots - signal disconnection requires owner affinity",
-            "[runtime][integration][fatal][concurrency]")
+  TEST_CASE("Runtime fatal roots - signal disconnection requires owner affinity", "[concurrency]")
   {
     requireFatalScenario("signal-disconnect-off-owner");
   }
 
-  TEST_CASE("Runtime fatal roots - signal emission requires owner affinity",
-            "[runtime][integration][fatal][concurrency]")
+  TEST_CASE("Runtime fatal roots - signal emission requires owner affinity", "[concurrency]")
   {
     requireFatalScenario("signal-emit-off-owner");
   }
 
-  TEST_CASE("Runtime fatal roots - signal observer exceptions abort", "[runtime][integration][fatal]")
+  TEST_CASE("Runtime fatal roots - signal observer exceptions abort")
   {
     requireFatalScenario("signal-observer-exception");
   }
 
-  TEST_CASE("Runtime fatal roots - task future completion requires a result", "[runtime][integration][fatal]")
+  TEST_CASE("Runtime fatal roots - task future completion requires a result")
   {
     requireFatalScenario("task-future-missing-result");
   }
 
 #ifdef _WIN32
 
-  TEST_CASE("Runtime fatal roots - destructive restart release exceptions abort after successor launch",
-            "[runtime][integration][fatal]")
+  TEST_CASE("Runtime fatal roots - destructive restart release exceptions abort after successor launch")
   {
     requireFatalScenario("destructive-restart-release-exception");
   }
 
-  TEST_CASE("Runtime fatal roots - destructive restart launch exceptions abort", "[runtime][integration][fatal]")
+  TEST_CASE("Runtime fatal roots - destructive restart launch exceptions abort")
   {
     requireFatalScenario("destructive-restart-launch-exception");
   }
 #endif
 
   TEST_CASE("Runtime shutdown cancellation - joined tasks retire their lifetime scope without fatal diagnostics",
-            "[runtime][integration][fatal][async][concurrency]")
+            "[concurrency]")
   {
     requireCleanScenario("runtime-shutdown-cancellation");
   }
 
   TEST_CASE(
     "Runtime shutdown cancellation - closing retires rejected library control delivery without fatal diagnostics",
-    "[runtime][integration][fatal][async][concurrency]")
+    "[concurrency]")
   {
     requireCleanScenario("library-control-delivery-closing-race");
   }

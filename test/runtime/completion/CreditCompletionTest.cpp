@@ -45,8 +45,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("CompletionService - credits count every name once per track globally and per kind",
-            "[runtime][unit][completion][credits]")
+  TEST_CASE("CompletionService - credits count every name once per track globally and per kind")
   {
     auto fixture = MusicLibraryFixture{};
     std::ignore = fixture.addTrack(library::test::TrackSpec{
@@ -92,8 +91,7 @@ namespace ao::rt::test
     CHECK(aggregate == std::vector<std::pair<std::string, std::uint32_t>>{{"Ada", 1}, {"Bob", 1}});
   }
 
-  TEST_CASE("CompletionService - nonfirst and role-only replacements invalidate credit vocabularies",
-            "[runtime][unit][completion][credits]")
+  TEST_CASE("CompletionService - nonfirst and role-only replacements invalidate credit vocabularies")
   {
     auto fixture = MusicLibraryFixture{};
     auto const trackId = fixture.addTrack(library::test::TrackSpec{
@@ -128,8 +126,7 @@ namespace ao::rt::test
     CHECK(service.creditNames(Kind::Conductor).empty());
   }
 
-  TEST_CASE("Credit completion - editor and member-query providers select names by kind and roles globally",
-            "[runtime][unit][completion][credits]")
+  TEST_CASE("Credit completion - editor and member-query providers select names by kind and roles globally")
   {
     auto fixture = MusicLibraryFixture{};
     std::ignore = fixture.addTrack(library::test::TrackSpec{
@@ -186,8 +183,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("Credit completion - aliases survive category and role materialization and invalidation",
-            "[runtime][unit][completion][credits][completion-alias]")
+  TEST_CASE("Credit completion - aliases survive category and role materialization and invalidation")
   {
     auto fixture = MusicLibraryFixture{};
     auto const trackId = fixture.addTrack(library::test::TrackSpec{
@@ -221,8 +217,7 @@ namespace ao::rt::test
     CHECK_FALSE(roleProvider("zhoujielun", 10));
   }
 
-  TEST_CASE("CompletionService - live locale changes reorder global and category credit vocabulary ties",
-            "[runtime][unit][completion][credits][collation]")
+  TEST_CASE("CompletionService - live locale changes reorder global and category credit vocabulary ties")
   {
     auto fixture = MusicLibraryFixture{};
     auto entries = std::vector<library::Credit>{};

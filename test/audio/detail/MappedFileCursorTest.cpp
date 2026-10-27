@@ -18,7 +18,7 @@
 
 namespace ao::audio::detail::test
 {
-  TEST_CASE("MappedFileCursor - reads and seeks mapped bytes", "[audio][unit][detail]")
+  TEST_CASE("MappedFileCursor - reads and seeks mapped bytes")
   {
     auto const data = std::vector<std::uint8_t>{10, 20, 30, 40, 50};
     auto const temp = ao::test::TempFile{data};
@@ -52,7 +52,7 @@ namespace ao::audio::detail::test
     CHECK(output == std::array{std::byte{10}, std::byte{20}, std::byte{30}});
   }
 
-  TEST_CASE("MappedFileCursor - mapped inspection preserves the native read cursor", "[audio][unit][detail]")
+  TEST_CASE("MappedFileCursor - mapped inspection preserves the native read cursor")
   {
     auto const temp = ao::test::TempFile{std::vector<std::uint8_t>{0x11, 0x22, 0x33, 0x44}};
     auto const next = ao::test::TempFile{std::vector<std::uint8_t>{0xA1, 0xB2}};
@@ -83,7 +83,7 @@ namespace ao::audio::detail::test
     CHECK(cursor.position() == 0);
   }
 
-  TEST_CASE("MappedFileCursor - rejects invalid seeks and resets on close", "[audio][unit][detail]")
+  TEST_CASE("MappedFileCursor - rejects invalid seeks and resets on close")
   {
     auto const data = std::vector<std::uint8_t>{1, 2, 3};
     auto const temp = ao::test::TempFile{data};

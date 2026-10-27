@@ -27,7 +27,7 @@
 
 namespace ao::query::test
 {
-  TEST_CASE("PlanEvaluator - keeps OR candidates when only one branch requires a tag", "[query][unit][plan-evaluator]")
+  TEST_CASE("PlanEvaluator - keeps OR candidates when only one branch requires a tag")
   {
     auto dictionaryFixture = DictionaryFixture{};
     auto const aimerId = dictionaryFixture.intern("Aimer");
@@ -56,8 +56,7 @@ namespace ao::query::test
     CHECK_FALSE(evaluator.matches(binding, noMatch));
   }
 
-  TEST_CASE("PlanEvaluator - unresolved tag symbols are false and do not mutate the dictionary",
-            "[query][unit][plan-evaluator]")
+  TEST_CASE("PlanEvaluator - unresolved tag symbols are false and do not mutate the dictionary")
   {
     auto dictionaryFixture = DictionaryFixture{};
     auto const& dictionary = dictionaryFixture.dictionary();
@@ -70,7 +69,7 @@ namespace ao::query::test
     CHECK_FALSE(dictionary.findId("future"));
   }
 
-  TEST_CASE("PlanEvaluator - matches present tags and rejects absent tags", "[query][unit][plan-evaluator]")
+  TEST_CASE("PlanEvaluator - matches present tags and rejects absent tags")
   {
     auto present = TrackFixture{TrackSpec{.tags = {"rock"}}};
     auto absent = TrackFixture{TrackSpec{.tags = {"jazz"}}};
@@ -81,7 +80,7 @@ namespace ao::query::test
     CHECK_FALSE(matchesWithDictionary(evaluator, plan, absent.view(), absent.dictionary()));
   }
 
-  TEST_CASE("PlanEvaluator - matches numeric tag names and quoted custom keys", "[query][unit][plan-evaluator]")
+  TEST_CASE("PlanEvaluator - matches numeric tag names and quoted custom keys")
   {
     auto spec = TrackSpec{};
     spec.tags.emplace_back("123");
@@ -92,7 +91,7 @@ namespace ao::query::test
     CHECK(matchesFullPlanWithDictionary(PlanEvaluator{}, plan, track.view(), track.dictionary()));
   }
 
-  TEST_CASE("PlanEvaluator - compiles tag fields into bindable field loads", "[query][unit][plan-evaluator]")
+  TEST_CASE("PlanEvaluator - compiles tag fields into bindable field loads")
   {
     auto const plan = compileOk(parseOk("#tagname"));
 
@@ -103,7 +102,7 @@ namespace ao::query::test
     CHECK(plan.dictionarySymbols == std::vector<std::string>{"tagname"});
   }
 
-  TEST_CASE("PlanEvaluator - reads track tag bloom bits from hot data", "[query][unit][plan-evaluator]")
+  TEST_CASE("PlanEvaluator - reads track tag bloom bits from hot data")
   {
     {
       auto header = library::TrackHotHeader{};
@@ -134,7 +133,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("PlanEvaluator - verifies exact membership after a tag bloom collision", "[query][unit][plan-evaluator]")
+  TEST_CASE("PlanEvaluator - verifies exact membership after a tag bloom collision")
   {
     auto dictionaryFixture = DictionaryFixture{};
     auto transaction = dictionaryFixture.writeTransaction();
@@ -160,7 +159,7 @@ namespace ao::query::test
     CHECK_FALSE(matchesWithDictionary(PlanEvaluator{}, plan, collisionTrack, dictionaryFixture.dictionary()));
   }
 
-  TEST_CASE("PlanEvaluator - tag bloom rejects before full bytecode evaluation", "[query][unit][plan-evaluator]")
+  TEST_CASE("PlanEvaluator - tag bloom rejects before full bytecode evaluation")
   {
     auto dictionaryFixture = DictionaryFixture{};
     auto const requiredId = dictionaryFixture.intern("required");
@@ -186,7 +185,7 @@ namespace ao::query::test
     CHECK_FALSE(evaluator.matches(binding, track));
   }
 
-  TEST_CASE("PlanEvaluator - requires every tag in an AND expression", "[query][unit][plan-evaluator]")
+  TEST_CASE("PlanEvaluator - requires every tag in an AND expression")
   {
     auto allTags = TrackFixture{TrackSpec{.tags = {"rock", "jazz", "blues"}}};
     auto rockOnly = TrackFixture{TrackSpec{.tags = {"rock"}}};
@@ -197,7 +196,7 @@ namespace ao::query::test
     CHECK_FALSE(matchesWithDictionary(evaluator, plan, rockOnly.view(), rockOnly.dictionary()));
   }
 
-  TEST_CASE("PlanEvaluator - a new dictionary generation requires a new binding", "[query][unit][plan-evaluator]")
+  TEST_CASE("PlanEvaluator - a new dictionary generation requires a new binding")
   {
     auto dictionaryFixture = DictionaryFixture{};
     auto const& dictionary = dictionaryFixture.dictionary();

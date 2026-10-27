@@ -102,7 +102,7 @@ namespace ao::tui::bench
     }
   } // namespace
 
-  TEST_CASE("bench: flat track-table build - full scales with N, windowed is bounded", "[benchmark][tui][track-table]")
+  TEST_CASE("bench: flat track-table build - full scales with N, windowed is bounded")
   {
     auto const presentation = rt::defaultTrackPresentationSpec();
 
@@ -129,8 +129,7 @@ namespace ao::tui::bench
     }
   }
 
-  TEST_CASE("bench: flat track-table render - full lays out all N, windowed lays out the window",
-            "[benchmark][tui][track-table]")
+  TEST_CASE("bench: flat track-table render - full lays out all N, windowed lays out the window")
   {
     auto const presentation = rt::defaultTrackPresentationSpec();
     auto const tracks = manyTracks(5000);
@@ -161,8 +160,7 @@ namespace ao::tui::bench
     };
   }
 
-  TEST_CASE("bench: grouped track-table build - sections do not change the scaling story",
-            "[benchmark][tui][track-table]")
+  TEST_CASE("bench: grouped track-table build - sections do not change the scaling story")
   {
     auto const presentation = rt::defaultTrackPresentationSpec();
     auto const tracks = manyTracks(5000);

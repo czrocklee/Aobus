@@ -163,7 +163,7 @@ namespace ao::tui::test
     }
   } // namespace
 
-  TEST_CASE("ListAuthoringController - opens a new editor parented from the target", "[tui][unit][editor]")
+  TEST_CASE("ListAuthoringController - opens a new editor parented from the target")
   {
     auto fixture = AuthoringFixture{};
     [[maybe_unused]] auto const trackId = fixture.addTrack({.title = "Roadsongs", .uri = "road.flac"});
@@ -187,8 +187,7 @@ namespace ao::tui::test
     CHECK(editor->previewTracks().front() == "Roadsongs - Artist (Album)");
   }
 
-  TEST_CASE("ListAuthoringController - a real target parents the new List and previews its source",
-            "[tui][integration][editor][concurrency]")
+  TEST_CASE("ListAuthoringController - a real target parents the new List and previews its source", "[concurrency]")
   {
     auto fixture = AuthoringFixture{};
     fixture.addTrack({.title = "First", .uri = "first.flac", .tags = {"rock"}});
@@ -215,7 +214,7 @@ namespace ao::tui::test
     CHECK(editor->previewTracks().front() == "First - Artist (Album)");
   }
 
-  TEST_CASE("ListAuthoringController - a superseded preview generation never lands", "[tui][unit][editor][concurrency]")
+  TEST_CASE("ListAuthoringController - a superseded preview generation never lands", "[concurrency]")
   {
     auto fixture = AuthoringFixture{};
     fixture.addTrack({.title = "First", .uri = "first.flac", .tags = {"rock"}});
@@ -238,7 +237,7 @@ namespace ao::tui::test
     CHECK(editor->draft().expression == "#rock and #jazz");
   }
 
-  TEST_CASE("ListAuthoringController - edit opens the saved definition exactly once", "[tui][integration][editor]")
+  TEST_CASE("ListAuthoringController - edit opens the saved definition exactly once")
   {
     auto fixture = AuthoringFixture{};
     auto const listId = fixture.addList("Roadsongs", "#live");
@@ -256,8 +255,7 @@ namespace ao::tui::test
     CHECK(controller.activeEditor() == editor);
   }
 
-  TEST_CASE("ListAuthoringController - a nested edit shows the parent's inherited expression",
-            "[tui][integration][editor]")
+  TEST_CASE("ListAuthoringController - a nested edit shows the parent's inherited expression")
   {
     auto fixture = AuthoringFixture{};
     auto const parentId = fixture.addList("Tours", "#tour");
@@ -276,8 +274,7 @@ namespace ao::tui::test
     CHECK(findTextCells(rendered.screen, "(#tour) and (#live)"));
   }
 
-  TEST_CASE("ListAuthoringController - virtual targets refuse edit and new keeps the root parent",
-            "[tui][integration][editor]")
+  TEST_CASE("ListAuthoringController - virtual targets refuse edit and new keeps the root parent")
   {
     auto fixture = AuthoringFixture{};
     auto controller = fixture.makeController();
@@ -292,7 +289,7 @@ namespace ao::tui::test
     CHECK(controller.activeEditor()->parentListId() == kInvalidListId);
   }
 
-  TEST_CASE("ListAuthoringController - create keeps the presentation preference absent", "[tui][integration][editor]")
+  TEST_CASE("ListAuthoringController - create keeps the presentation preference absent")
   {
     auto fixture = AuthoringFixture{};
     fixture.addTrack({.title = "Roadsongs", .uri = "road.flac", .tags = {"live"}});
@@ -337,8 +334,7 @@ namespace ao::tui::test
     CHECK(recommended.id == "artists");
   }
 
-  TEST_CASE("ListAuthoringController - update rewrites the definition and keeps the List identity",
-            "[tui][integration][editor]")
+  TEST_CASE("ListAuthoringController - update rewrites the definition and keeps the List identity")
   {
     auto fixture = AuthoringFixture{};
     auto const listId = fixture.addList("Roadsongs", "#live");
@@ -371,8 +367,7 @@ namespace ao::tui::test
     CHECK(fixture.runtimePtr->library().snapshot().lists().size() == 1);
   }
 
-  TEST_CASE("ListAuthoringController - an edit never rewrites the stored presentation preference",
-            "[tui][integration][editor]")
+  TEST_CASE("ListAuthoringController - an edit never rewrites the stored presentation preference")
   {
     auto fixture = AuthoringFixture{};
     auto const listId = fixture.addList("Roadsongs", "#live");
@@ -398,8 +393,7 @@ namespace ao::tui::test
     CHECK(changeCount == 0);
   }
 
-  TEST_CASE("ListAuthoringController - an edit keeps a dangling stored presentation id untouched",
-            "[tui][integration][editor]")
+  TEST_CASE("ListAuthoringController - an edit keeps a dangling stored presentation id untouched")
   {
     auto fixture = AuthoringFixture{};
     auto const listId = fixture.addList("Roadsongs", "#live");
@@ -422,7 +416,7 @@ namespace ao::tui::test
     CHECK(*optPresentationId == "custom-deleted");
   }
 
-  TEST_CASE("ListAuthoringController - a save failure keeps the draft for retry", "[tui][integration][editor]")
+  TEST_CASE("ListAuthoringController - a save failure keeps the draft for retry")
   {
     auto fixture = AuthoringFixture{};
     auto const listId = fixture.addList("Roadsongs");
@@ -446,8 +440,7 @@ namespace ao::tui::test
     CHECK(fixture.settledCount == 1);
   }
 
-  TEST_CASE("ListAuthoringController - a fast save revalidates the draft the debounce has not seen",
-            "[tui][integration][editor]")
+  TEST_CASE("ListAuthoringController - a fast save revalidates the draft the debounce has not seen")
   {
     auto fixture = AuthoringFixture{};
     fixture.addTrack({.title = "First", .uri = "first.flac", .tags = {"rock"}});
@@ -480,8 +473,7 @@ namespace ao::tui::test
     CHECK(controller.activeEditor()->status() == ListEditorStatus::Ready);
   }
 
-  TEST_CASE("ListAuthoringController - a submitted save outlives the editor it came from",
-            "[tui][integration][editor][concurrency]")
+  TEST_CASE("ListAuthoringController - a submitted save outlives the editor it came from", "[concurrency]")
   {
     auto fixture = AuthoringFixture{};
     auto controller = fixture.makeController();
@@ -507,7 +499,7 @@ namespace ao::tui::test
     CHECK(lists.front().name == "Outliving");
   }
 
-  TEST_CASE("ListAuthoringController - open is refused after retirement", "[tui][integration][editor]")
+  TEST_CASE("ListAuthoringController - open is refused after retirement")
   {
     auto fixture = AuthoringFixture{};
     auto controller = fixture.makeController();
@@ -519,7 +511,7 @@ namespace ao::tui::test
     CHECK_FALSE(fixture.hasNotifications());
   }
 
-  TEST_CASE("ListAuthoringController - an open editor answers for every event", "[tui][unit][editor]")
+  TEST_CASE("ListAuthoringController - an open editor answers for every event")
   {
     auto fixture = AuthoringFixture{};
     auto controller = fixture.makeController();
@@ -538,7 +530,7 @@ namespace ao::tui::test
     CHECK_FALSE(controller.tryHandleEvent(ftxui::Event::Escape));
   }
 
-  TEST_CASE("ListAuthoringController - delete previews the target before asking once", "[tui][integration][editor]")
+  TEST_CASE("ListAuthoringController - delete previews the target before asking once")
   {
     auto fixture = AuthoringFixture{};
     auto const listId = fixture.addList("Roadsongs", "#live");
@@ -567,7 +559,7 @@ namespace ao::tui::test
     CHECK(fixture.listNode(listId).has_value());
   }
 
-  TEST_CASE("ListAuthoringController - delete commits after one confirmation", "[tui][integration][editor]")
+  TEST_CASE("ListAuthoringController - delete commits after one confirmation")
   {
     auto fixture = AuthoringFixture{};
     auto const listId = fixture.addList("Roadsongs");
@@ -590,8 +582,7 @@ namespace ao::tui::test
     CHECK(fixture.settledCount == 1);
   }
 
-  TEST_CASE("ListAuthoringController - a subtree deletion previews every descendant it will remove",
-            "[tui][integration][editor]")
+  TEST_CASE("ListAuthoringController - a subtree deletion previews every descendant it will remove")
   {
     auto fixture = AuthoringFixture{};
     auto const parentId = fixture.addList("Tours");
@@ -624,8 +615,7 @@ namespace ao::tui::test
     CHECK_FALSE(fixture.listNode(childId).has_value());
   }
 
-  TEST_CASE("ListAuthoringController - a writable membership tag offers track cleanup on delete",
-            "[tui][integration][editor]")
+  TEST_CASE("ListAuthoringController - a writable membership tag offers track cleanup on delete")
   {
     auto fixture = AuthoringFixture{};
     auto const trackId = fixture.addTrack({.title = "Roadsongs", .uri = "road.flac", .tags = {"live"}});
@@ -652,8 +642,7 @@ namespace ao::tui::test
     CHECK(spec.tags.empty());
   }
 
-  TEST_CASE("ListAuthoringController - a widely referenced tag keeps its warning and footer on screen",
-            "[tui][integration][editor]")
+  TEST_CASE("ListAuthoringController - a widely referenced tag keeps its warning and footer on screen")
   {
     auto fixture = AuthoringFixture{};
     fixture.addTrack({.title = "Roadsongs", .uri = "road.flac", .tags = {"live"}});
@@ -684,8 +673,7 @@ namespace ao::tui::test
     CHECK(findTextCells(rendered.screen, "Esc cancel"));
   }
 
-  TEST_CASE("ListAuthoringController - a large subtree confirmation keeps its footer on screen",
-            "[tui][integration][editor]")
+  TEST_CASE("ListAuthoringController - a large subtree confirmation keeps its footer on screen")
   {
     auto fixture = AuthoringFixture{};
     auto const parentId = fixture.addList("Tours");
@@ -723,7 +711,7 @@ namespace ao::tui::test
     CHECK(findTextCells(small.screen, "Esc cancel"));
   }
 
-  TEST_CASE("ListAuthoringController - the confirmation footer chips accept mouse clicks", "[tui][unit][mouse][editor]")
+  TEST_CASE("ListAuthoringController - the confirmation footer chips accept mouse clicks")
   {
     auto fixture = AuthoringFixture{};
     auto const listId = fixture.addList("Roadsongs");
@@ -762,8 +750,7 @@ namespace ao::tui::test
     CHECK_FALSE(fixture.listNode(listId).has_value());
   }
 
-  TEST_CASE("ListAuthoringController - a click drawn for an earlier question cannot answer a new one",
-            "[tui][integration][mouse][editor]")
+  TEST_CASE("ListAuthoringController - a click drawn for an earlier question cannot answer a new one")
   {
     auto fixture = AuthoringFixture{};
     auto const vanishingId = fixture.addList("Vanishing");
@@ -801,7 +788,7 @@ namespace ao::tui::test
     fixture.executor->drain();
   }
 
-  TEST_CASE("ListAuthoringController - a failed delete preview reports the runtime error", "[tui][integration][editor]")
+  TEST_CASE("ListAuthoringController - a failed delete preview reports the runtime error")
   {
     auto fixture = AuthoringFixture{};
     auto const listId = fixture.addList("Vanishing");
@@ -817,8 +804,7 @@ namespace ao::tui::test
     CHECK(fixture.lastMessage().starts_with("list not found: "));
   }
 
-  TEST_CASE("ListAuthoringController - a key typed before the question was drawn cannot confirm it",
-            "[tui][integration][editor]")
+  TEST_CASE("ListAuthoringController - a key typed before the question was drawn cannot confirm it")
   {
     auto fixture = AuthoringFixture{};
     auto const listId = fixture.addList("Roadsongs");
@@ -844,8 +830,7 @@ namespace ao::tui::test
     CHECK_FALSE(fixture.listNode(listId).has_value());
   }
 
-  TEST_CASE("ListAuthoringController - a question cancelled while it waits ignores its late preview",
-            "[tui][integration][editor][concurrency]")
+  TEST_CASE("ListAuthoringController - a question cancelled while it waits ignores its late preview", "[concurrency]")
   {
     auto fixture = AuthoringFixture{};
     auto const firstId = fixture.addList("First");
@@ -874,8 +859,7 @@ namespace ao::tui::test
     CHECK(controller.activeDeleteConfirmation()->question.contains("\"Second\""));
   }
 
-  TEST_CASE("ListAuthoringController - an admitted deletion outlives retirement",
-            "[tui][integration][editor][concurrency]")
+  TEST_CASE("ListAuthoringController - an admitted deletion outlives retirement", "[concurrency]")
   {
     auto fixture = AuthoringFixture{};
     auto const listId = fixture.addList("Outliving");
@@ -897,8 +881,7 @@ namespace ao::tui::test
     CHECK_FALSE(fixture.listNode(listId).has_value());
   }
 
-  TEST_CASE("ListAuthoringController - retirement while a preview runs leaves nothing behind",
-            "[tui][integration][editor][concurrency]")
+  TEST_CASE("ListAuthoringController - retirement while a preview runs leaves nothing behind", "[concurrency]")
   {
     auto fixture = AuthoringFixture{};
     auto const listId = fixture.addList("Kept");
@@ -916,8 +899,7 @@ namespace ao::tui::test
     CHECK(fixture.listNode(listId).has_value());
   }
 
-  TEST_CASE("ListAuthoringController - a fast save of a corrected draft is not held back by a stale rejection",
-            "[tui][integration][editor]")
+  TEST_CASE("ListAuthoringController - a fast save of a corrected draft is not held back by a stale rejection")
   {
     auto fixture = AuthoringFixture{};
     auto controller = fixture.makeController();
@@ -948,7 +930,7 @@ namespace ao::tui::test
     CHECK(lists.front().expression == "#rock");
   }
 
-  TEST_CASE("ListAuthoringController - a created List is opened and an edited one is not", "[tui][integration][editor]")
+  TEST_CASE("ListAuthoringController - a created List is opened and an edited one is not")
   {
     auto fixture = AuthoringFixture{};
     auto const existingId = fixture.addList("Existing");

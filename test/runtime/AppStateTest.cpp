@@ -37,7 +37,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("AppState - application state round-trips without a frontend", "[runtime][unit][config]")
+  TEST_CASE("AppState - application state round-trips without a frontend")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";
@@ -79,7 +79,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("AppState - an absent group leaves the caller's state untouched", "[runtime][unit][config]")
+  TEST_CASE("AppState - an absent group leaves the caller's state untouched")
   {
     auto const tempDir = ao::test::TempDir{};
     auto store = ConfigStore{tempDir.path() / "config.yaml"};
@@ -105,7 +105,7 @@ namespace ao::rt::test
     CHECK(session.lastOutputSelection == sessionBefore.lastOutputSelection);
   }
 
-  TEST_CASE("AppState - a document written by another build stays readable", "[runtime][unit][config]")
+  TEST_CASE("AppState - a document written by another build stays readable")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";
@@ -142,7 +142,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("AppState - a malformed known field rejects only its own group", "[runtime][unit][config]")
+  TEST_CASE("AppState - a malformed known field rejects only its own group")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";
@@ -175,8 +175,7 @@ session:
     CHECK(session.lastOutputSelection == sessionOutputBefore);
   }
 
-  TEST_CASE("AppState - a preferences group of a newer version is kept and never overwritten",
-            "[runtime][unit][config]")
+  TEST_CASE("AppState - a preferences group of a newer version is kept and never overwritten")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";
@@ -203,7 +202,7 @@ session:
     CHECK(ao::test::readFile(configPath).contains(document));
   }
 
-  TEST_CASE("AppState - a preferences group without a version keeps the seeded state", "[runtime][unit][config]")
+  TEST_CASE("AppState - a preferences group without a version keeps the seeded state")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";

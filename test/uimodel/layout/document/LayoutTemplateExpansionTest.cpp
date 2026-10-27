@@ -23,7 +23,7 @@ namespace ao::uimodel::test
     }
   } // namespace
 
-  TEST_CASE("LayoutTemplateExpansion - expands registered templates", "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutTemplateExpansion - expands registered templates")
   {
     auto doc = LayoutDocument{};
     doc.templates["playback.transportGroup"] = LayoutNode{
@@ -44,7 +44,7 @@ namespace ao::uimodel::test
     CHECK(expanded.children[1].type == "playback.soulButton");
   }
 
-  TEST_CASE("LayoutTemplateExpansion - lets use sites override node id", "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutTemplateExpansion - lets use sites override node id")
   {
     auto doc = LayoutDocument{};
     doc.templates["my.template"] = LayoutNode{.type = "spacer"};
@@ -77,7 +77,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("LayoutTemplateExpansion - merges layout property overrides", "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutTemplateExpansion - merges layout property overrides")
   {
     auto doc = LayoutDocument{};
     doc.templates["my.template"] = LayoutNode{.type = "box", .layout = {{"hexpand", LayoutValue{true}}}};
@@ -104,7 +104,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("LayoutTemplateExpansion - merges prop overrides except templateId", "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutTemplateExpansion - merges prop overrides except templateId")
   {
     auto doc = LayoutDocument{};
     doc.templates["my.template"] =
@@ -124,8 +124,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(expanded.props.contains("templateId"));
   }
 
-  TEST_CASE("LayoutTemplateExpansion - appends use-site children after expanded children",
-            "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutTemplateExpansion - appends use-site children after expanded children")
   {
     auto doc = LayoutDocument{};
     doc.templates["my.template"] = LayoutNode{.type = "box", .children = {LayoutNode{.type = "spacer"}}};
@@ -141,7 +140,7 @@ namespace ao::uimodel::test
     CHECK(expanded.children[1].type == "playback.transportButton");
   }
 
-  TEST_CASE("LayoutTemplateExpansion - recurses into non-template children", "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutTemplateExpansion - recurses into non-template children")
   {
     auto doc = LayoutDocument{};
     doc.templates["inner.template"] = LayoutNode{.type = "spacer"};
@@ -156,7 +155,7 @@ namespace ao::uimodel::test
     CHECK(expanded.children[0].type == "spacer");
   }
 
-  TEST_CASE("LayoutTemplateExpansion - integrates tooltip overrides", "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutTemplateExpansion - integrates tooltip overrides")
   {
     auto doc = LayoutDocument{};
     auto templateTooltip = LayoutNode{.type = "my.templateTooltip"};
@@ -192,7 +191,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("LayoutTemplateExpansion - recurses into non-template tooltip", "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutTemplateExpansion - recurses into non-template tooltip")
   {
     auto doc = LayoutDocument{};
     doc.templates["inner.template"] = LayoutNode{.type = "spacer"};
@@ -210,8 +209,7 @@ namespace ao::uimodel::test
     CHECK(expanded.optTooltip->nodePtr->type == "spacer");
   }
 
-  TEST_CASE("LayoutTemplateExpansion - returns an error node for missing templateId",
-            "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutTemplateExpansion - returns an error node for missing templateId")
   {
     auto doc = LayoutDocument{};
     doc.root.type = "template";
@@ -237,8 +235,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("LayoutTemplateExpansion - returns an error node for unknown template id",
-            "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutTemplateExpansion - returns an error node for unknown template id")
   {
     auto doc = LayoutDocument{};
     doc.root.type = "template";
@@ -260,8 +257,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("LayoutTemplateExpansion - returns an error node for recursive template loops",
-            "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutTemplateExpansion - returns an error node for recursive template loops")
   {
     SECTION("anonymous direct self-reference preserves the historical diagnostic")
     {

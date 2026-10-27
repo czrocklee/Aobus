@@ -33,7 +33,7 @@ namespace ao::media::mp4::test
     }
   } // namespace
 
-  TEST_CASE("MP4 AtomCursor - visits immediate children in file order", "[media][unit][mp4]")
+  TEST_CASE("MP4 AtomCursor - visits immediate children in file order")
   {
     auto data = std::vector<std::uint8_t>{};
     ao::test::mp4::addAtom(data, "ftyp", {1, 2});
@@ -58,7 +58,7 @@ namespace ao::media::mp4::test
     CHECK_FALSE(*endRes);
   }
 
-  TEST_CASE("MP4 AtomCursor - accepts extended and end-of-file atom sizes", "[media][unit][mp4]")
+  TEST_CASE("MP4 AtomCursor - accepts extended and end-of-file atom sizes")
   {
     auto data = ao::test::mp4::makeExtendedAtom("free", {1, 2});
     auto const endOfFileAtom = ao::test::mp4::makeEndOfFileAtom("mdat", {3, 4, 5});
@@ -85,7 +85,7 @@ namespace ao::media::mp4::test
     CHECK_FALSE(*endRes);
   }
 
-  TEST_CASE("MP4 AtomCursor - rejects malformed extended atom sizes", "[media][unit][mp4][error]")
+  TEST_CASE("MP4 AtomCursor - rejects malformed extended atom sizes")
   {
     SECTION("Truncated extended header")
     {
@@ -132,7 +132,7 @@ namespace ao::media::mp4::test
     }
   }
 
-  TEST_CASE("MP4 AtomCursor - rejects end-of-file size inside a container", "[media][unit][mp4][error]")
+  TEST_CASE("MP4 AtomCursor - rejects end-of-file size inside a container")
   {
     auto const child = ao::test::mp4::makeEndOfFileAtom("free", {1});
     auto const bytes = toBytes(ao::test::mp4::makeAtom("moov", child));
@@ -148,7 +148,7 @@ namespace ao::media::mp4::test
     CHECK(childRes.error().code == Error::Code::FormatRejected);
   }
 
-  TEST_CASE("MP4 AtomView - an atom read as a container visits its payload as children", "[media][unit][mp4]")
+  TEST_CASE("MP4 AtomView - an atom read as a container visits its payload as children")
   {
     // The container table does not list this type, so only asContainer() exposes its children.
     auto const child = ao::test::mp4::makeAtom("data", {1, 2});
@@ -177,7 +177,7 @@ namespace ao::media::mp4::test
     CHECK_FALSE(*endRes);
   }
 
-  TEST_CASE("MP4 AtomView - an atom read as a container rejects an end-of-file child size", "[media][unit][mp4][error]")
+  TEST_CASE("MP4 AtomView - an atom read as a container rejects an end-of-file child size")
   {
     auto const child = ao::test::mp4::makeEndOfFileAtom("data", {1});
     auto const bytes = toBytes(ao::test::mp4::makeAtom("item", child));
@@ -193,7 +193,7 @@ namespace ao::media::mp4::test
     CHECK(childRes.error().code == Error::Code::FormatRejected);
   }
 
-  TEST_CASE("MP4 AtomView - short typed layout returns no view", "[media][unit][mp4]")
+  TEST_CASE("MP4 AtomView - short typed layout returns no view")
   {
     auto const bytes = toBytes(ao::test::mp4::makeAtom("stsd", {}));
     auto cursor = AtomView::root(bytes).children();
@@ -204,7 +204,7 @@ namespace ao::media::mp4::test
     CHECK((*atomRes)->tryLayout<StsdAtomLayout>() == nullptr);
   }
 
-  TEST_CASE("MP4 findAtom - returns a non-owning nested path view", "[media][unit][mp4]")
+  TEST_CASE("MP4 findAtom - returns a non-owning nested path view")
   {
     auto const stsd = ao::test::mp4::makeStsdAtom("alac");
     auto const stbl = ao::test::mp4::makeAtom("stbl", stsd);
@@ -221,7 +221,7 @@ namespace ao::media::mp4::test
     CHECK((*res)->bytes().data() + (*res)->bytes().size() <= bytes.data() + bytes.size());
   }
 
-  TEST_CASE("MP4 AtomCursor - reports malformed trailing child boundaries", "[media][unit][mp4]")
+  TEST_CASE("MP4 AtomCursor - reports malformed trailing child boundaries")
   {
     auto data = ao::test::mp4::makeAtom("free", {1});
     ao::test::mp4::appendBe32(data, 100);
@@ -240,7 +240,7 @@ namespace ao::media::mp4::test
     CHECK(malformedRes.error().message == "mp4 atom size exceeds its container boundary");
   }
 
-  TEST_CASE("MP4 findAtom - stops before unrelated siblings after the matched path", "[media][unit][mp4]")
+  TEST_CASE("MP4 findAtom - stops before unrelated siblings after the matched path")
   {
     auto data = ao::test::mp4::makeAtom("moov", {});
     ao::test::mp4::appendBe32(data, 100);

@@ -40,8 +40,7 @@ namespace ao::audio::test
     }
   } // namespace
 
-  TEST_CASE("Engine - prewarm hint with a wrong speaker mask is ignored before the optimistic decoder open",
-            "[audio][unit][engine][channel-layout]")
+  TEST_CASE("Engine - prewarm hint with a wrong speaker mask is ignored before the optimistic decoder open")
   {
     auto const sourceFormat =
       PcmFormat{.sampleRate = 1000, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = 0x3};
@@ -178,8 +177,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("Engine - same-count successor with a different speaker mask drains instead of splicing",
-            "[audio][unit][engine][channel-layout][concurrency]")
+  TEST_CASE("Engine - same-count successor with a different speaker mask drains instead of splicing", "[concurrency]")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
@@ -295,7 +293,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Engine - same-count successor between a known stereo mask and mask zero drains instead of splicing",
-            "[audio][unit][engine][channel-layout][concurrency]")
+            "[concurrency]")
   {
     auto const knownStereoFormat =
       PcmFormat{.sampleRate = 1000, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = 0x3};
@@ -434,8 +432,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("Engine - equal-mask successor splices and refreshes route source layout evidence",
-            "[audio][unit][engine][channel-layout][concurrency]")
+  TEST_CASE("Engine - equal-mask successor splices and refreshes route source layout evidence", "[concurrency]")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();

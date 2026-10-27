@@ -13,7 +13,7 @@
 
 namespace ao::tui::test
 {
-  TEST_CASE("SignalExitWatcher - exit requests reach the registered callback", "[tui][unit][signal-exit][concurrency]")
+  TEST_CASE("SignalExitWatcher - exit requests reach the registered callback", "[concurrency]")
   {
     auto mutex = std::mutex{};
     auto cv = std::condition_variable{};
@@ -35,7 +35,7 @@ namespace ao::tui::test
     REQUIRE(cv.wait_for(lock, std::chrono::seconds{2}, [&] { return exitCount == 2; }));
   }
 
-  TEST_CASE("SignalExitWatcher - callback can destroy its watcher", "[tui][unit][signal-exit][concurrency]")
+  TEST_CASE("SignalExitWatcher - callback can destroy its watcher", "[concurrency]")
   {
     auto mutex = std::mutex{};
     auto cv = std::condition_variable{};

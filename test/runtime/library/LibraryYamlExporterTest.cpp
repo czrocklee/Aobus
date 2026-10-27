@@ -69,8 +69,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("LibraryYamlExporter - a present recording date is recorded, an absent one is omitted",
-            "[runtime][unit][import-export][yaml]")
+  TEST_CASE("LibraryYamlExporter - a present recording date is recorded, an absent one is omitted")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -93,8 +92,7 @@ namespace ao::rt::test
     CHECK_THAT(withDate, Catch::Matchers::ContainsSubstring("1981"));
   }
 
-  TEST_CASE("LibraryYamlExporter - credits record stored names kinds roles and order",
-            "[runtime][unit][import-export][yaml]")
+  TEST_CASE("LibraryYamlExporter - credits record stored names kinds roles and order")
   {
     SECTION("entries without a role omit the role key")
     {
@@ -148,8 +146,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("LibraryYamlExporter - delta records a stored date against the file baseline",
-            "[runtime][unit][import-export][yaml]")
+  TEST_CASE("LibraryYamlExporter - delta records a stored date against the file baseline")
   {
     // No media reader populates a recording date, so a delta baseline always
     // carries an absent date. The reachable delta paths are a stored date
@@ -179,8 +176,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("LibraryYamlExporter - every mode carries the intended credits scope",
-            "[runtime][unit][import-export][yaml]")
+  TEST_CASE("LibraryYamlExporter - every mode carries the intended credits scope")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -215,8 +211,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("LibraryYamlExporter - delta compares complete canonical credits with the media baseline",
-            "[runtime][unit][import-export][yaml]")
+  TEST_CASE("LibraryYamlExporter - delta compares complete canonical credits with the media baseline")
   {
     auto const temp = ao::test::TempDir{};
     writeScanFlacMetadataFixture(

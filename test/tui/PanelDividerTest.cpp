@@ -21,7 +21,7 @@
 
 namespace ao::tui::test
 {
-  TEST_CASE("PanelDivider - separate borders preserve padding and one-cell toggle targets", "[tui][unit][render]")
+  TEST_CASE("PanelDivider - separate borders preserve padding and one-cell toggle targets")
   {
     using namespace ftxui;
 
@@ -106,7 +106,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("PanelDivider - docking budgets include each separate border", "[tui][unit][render][navigation]")
+  TEST_CASE("PanelDivider - docking budgets include each separate border")
   {
     CHECK(navigationGeometry(100, 0, true).docked);
     CHECK_FALSE(navigationGeometry(100, 0, true, true).docked);
@@ -121,7 +121,7 @@ namespace ao::tui::test
     CHECK(navigationGeometry(146, 45, false, true).trackColumns == 98);
   }
 
-  TEST_CASE("PanelDivider - hover-only arrows restore border strokes without changing targets", "[tui][unit][render]")
+  TEST_CASE("PanelDivider - hover-only arrows restore border strokes without changing targets")
   {
     using namespace ftxui;
 
@@ -167,8 +167,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("PanelDivider - concealed collapsed arrows remain discoverable from their side borders",
-            "[tui][unit][render][mouse]")
+  TEST_CASE("PanelDivider - concealed collapsed arrows remain discoverable from their side borders")
   {
     using namespace ftxui;
     auto fixture = EventControllerFixture{};
@@ -223,8 +222,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("PanelDivider - hovering a divider does not make its whole line a collapse target",
-            "[tui][unit][render][mouse]")
+  TEST_CASE("PanelDivider - hovering a divider does not make its whole line a collapse target")
   {
     using namespace ftxui;
     auto fixture = EventControllerFixture{};

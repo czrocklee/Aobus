@@ -33,7 +33,7 @@ namespace ao::query::test
     }
   } // namespace
 
-  TEST_CASE("Completion - analyzes operator context after query variables", "[query][unit][completion]")
+  TEST_CASE("Completion - analyzes operator context after query variables")
   {
     SECTION("Offers an empty operator prefix after trailing whitespace")
     {
@@ -120,7 +120,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("Completion - filters operator catalog by field kind", "[query][unit][completion]")
+  TEST_CASE("Completion - filters operator catalog by field kind")
   {
     CHECK(completeQueryOperator(Field::ArtistId, "") == std::vector<std::string_view>{"=", "!=", "~", "in", "?"});
     CHECK(completeQueryOperator(Field::ArtistId, "~") == std::vector<std::string_view>{"~"});

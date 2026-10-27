@@ -87,7 +87,7 @@ namespace ao::query::test
     }
   } // namespace
 
-  TEST_CASE("FormatExpression - concatenates fields and literals", "[query][unit][format-expression]")
+  TEST_CASE("FormatExpression - concatenates fields and literals")
   {
     auto fixture = TrackFixture{formatTrackSpec()};
 
@@ -96,14 +96,14 @@ namespace ao::query::test
     CHECK(evaluate(R"($artist " - " $title)", fixture) == "Johann Sebastian Bach - Cello Suite");
   }
 
-  TEST_CASE("FormatExpression - preserves valid Unicode output literals", "[query][unit][format-expression][unicode]")
+  TEST_CASE("FormatExpression - preserves valid Unicode output literals")
   {
     auto const plan = compileFormatOk(parseOk("'Cafe\u0301'"));
 
     REQUIRE(plan.literals == std::vector<std::string>{"Cafe\u0301"});
   }
 
-  TEST_CASE("FormatExpression - formats cold fields custom metadata and properties", "[query][unit][format-expression]")
+  TEST_CASE("FormatExpression - formats cold fields custom metadata and properties")
   {
     auto fixture = TrackFixture{formatTrackSpec()};
 
@@ -115,8 +115,7 @@ namespace ao::query::test
     CHECK(evaluate(R"(%catalog + " " + @duration)", fixture) == "Archiv 123 143000");
   }
 
-  TEST_CASE("FormatExpression - joins selected credit names preserving duplicates and kind order",
-            "[query][unit][format-expression][credit]")
+  TEST_CASE("FormatExpression - joins selected credit names preserving duplicates and kind order")
   {
     auto fixture = TrackFixture{TrackSpec{.credits = {
                                             {.name = "Player; literal", .kind = CreditKind::Performer, .role = "Piano"},
@@ -135,8 +134,7 @@ namespace ao::query::test
     CHECK(evaluate("'[' + $conductor + ']'", fixture) == "[Second; First; First]");
   }
 
-  TEST_CASE("FormatExpression - credit formatting declares cold and dictionary dependencies even for empty lists",
-            "[query][unit][format-expression][credit]")
+  TEST_CASE("FormatExpression - credit formatting declares cold and dictionary dependencies even for empty lists")
   {
     auto fixture = TrackFixture{};
     auto cache = library::DictionaryReadCache{fixture.dictionary()};
@@ -158,7 +156,7 @@ namespace ao::query::test
     CHECK(compileFormatOk(parseOk("$title + $credit")).accessProfile == AccessProfile::HotAndCold);
   }
 
-  TEST_CASE("FormatExpression - rejects track ids as format fields", "[query][unit][format-expression]")
+  TEST_CASE("FormatExpression - rejects track ids as format fields")
   {
     auto fixture = TrackFixture{formatTrackSpec()};
     auto ast = parseOk(R"($id + ": " + $title)");
@@ -166,7 +164,7 @@ namespace ao::query::test
     CHECK(error.message.contains("unknown metadata field '$id'"));
   }
 
-  TEST_CASE("FormatExpression - formats unknown codecs as empty", "[query][unit][format-expression]")
+  TEST_CASE("FormatExpression - formats unknown codecs as empty")
   {
     auto spec = formatTrackSpec();
     spec.codec = AudioCodec::Unknown;
@@ -175,14 +173,14 @@ namespace ao::query::test
     CHECK(evaluate(R"("[" + @codec + "]")", fixture) == "[]");
   }
 
-  TEST_CASE("FormatExpression - keeps unit constants as literal text", "[query][unit][format-expression]")
+  TEST_CASE("FormatExpression - keeps unit constants as literal text")
   {
     auto fixture = TrackFixture{formatTrackSpec()};
 
     CHECK(evaluate(R"($title + " " + 3m)", fixture) == "Cello Suite 3m");
   }
 
-  TEST_CASE("FormatExpression - shares query literal keyword tokenization", "[query][unit][format-expression]")
+  TEST_CASE("FormatExpression - shares query literal keyword tokenization")
   {
     auto fixture = TrackFixture{formatTrackSpec()};
 
@@ -191,7 +189,7 @@ namespace ao::query::test
     CHECK_FALSE(::ao::query::parse("AND").has_value());
   }
 
-  TEST_CASE("FormatExpression - formats missing values as empty strings", "[query][unit][format-expression]")
+  TEST_CASE("FormatExpression - formats missing values as empty strings")
   {
     auto spec = formatTrackSpec();
     spec.albumArtist = {};
@@ -207,7 +205,7 @@ namespace ao::query::test
                    fixture) == "-----");
   }
 
-  TEST_CASE("FormatExpression - reports access profile", "[query][unit][format-expression]")
+  TEST_CASE("FormatExpression - reports access profile")
   {
     auto fixture = TrackFixture{formatTrackSpec()};
 
@@ -240,7 +238,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("FormatExpression - evaluates literal-only plans without track data", "[query][unit][format-expression]")
+  TEST_CASE("FormatExpression - evaluates literal-only plans without track data")
   {
     auto ast = parseOk(R"("literal")");
     auto plan = compileFormatOk(ast);
@@ -253,7 +251,7 @@ namespace ao::query::test
     CHECK(output == "literal");
   }
 
-  TEST_CASE("FormatEvaluator - clears and reuses caller-owned output", "[query][unit][format-expression]")
+  TEST_CASE("FormatEvaluator - clears and reuses caller-owned output")
   {
     auto fixture = TrackFixture{formatTrackSpec()};
     auto ast = parseOk(R"($artist + "|" + $title + "|" + %catalog + "|" + $year + "|" + @codec)");
@@ -273,7 +271,7 @@ namespace ao::query::test
     CHECK(output == "Johann Sebastian Bach|Cello Suite|Archiv 123|1720|FLAC");
   }
 
-  TEST_CASE("FormatExpression - rejects query-only expressions", "[query][unit][format-expression]")
+  TEST_CASE("FormatExpression - rejects query-only expressions")
   {
     auto fixture = TrackFixture{formatTrackSpec()};
     std::ignore = compileFormatError(parseOk("$artist = Bach"));
@@ -282,14 +280,14 @@ namespace ao::query::test
     std::ignore = compileFormatError(parseOk("$year in 1720..1730"));
   }
 
-  TEST_CASE("FormatExpression - rejects non-scalar fields", "[query][unit][format-expression]")
+  TEST_CASE("FormatExpression - rejects non-scalar fields")
   {
     auto fixture = TrackFixture{formatTrackSpec()};
     std::ignore = compileFormatError(parseOk("#favorite"));
     std::ignore = compileFormatError(parseOk("$coverArt"));
   }
 
-  TEST_CASE("FormatExpression - marks dictionary-backed plans for binding", "[query][unit][format-expression]")
+  TEST_CASE("FormatExpression - marks dictionary-backed plans for binding")
   {
     auto artist = compileFormatOk(parseOk("$artist"));
     CHECK(artist.requiresDictionary);
@@ -302,7 +300,7 @@ namespace ao::query::test
     CHECK_FALSE(plain.requiresDictionary);
   }
 
-  TEST_CASE("compileFormat returns Result without throwing", "[query][unit][format-expression]")
+  TEST_CASE("compileFormat returns Result without throwing")
   {
     SECTION("Valid format expression yields a plan")
     {

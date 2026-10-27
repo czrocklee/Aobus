@@ -16,7 +16,7 @@
 
 namespace ao::query::test
 {
-  TEST_CASE("PlanEvaluator - rejects invalid string constant operands", "[query][unit][plan-evaluator]")
+  TEST_CASE("PlanEvaluator - rejects invalid string constant operands")
   {
     auto evaluator = PlanEvaluator{};
     auto track = TestTrack{"Title"};
@@ -58,7 +58,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("PlanEvaluator - evaluates no-track-data plans without storage tiers", "[query][unit][plan-evaluator]")
+  TEST_CASE("PlanEvaluator - evaluates no-track-data plans without storage tiers")
   {
     auto expr = parseOk("true");
     auto plan = compileOk(expr);
@@ -74,7 +74,7 @@ namespace ao::query::test
     CHECK_FALSE(evaluator.matchesFullPlan(falsePlan, emptyView));
   }
 
-  TEST_CASE("PlanEvaluator - executes cold-only plans with cold-only track views", "[query][unit][plan-evaluator]")
+  TEST_CASE("PlanEvaluator - executes cold-only plans with cold-only track views")
   {
     auto expr = parseOk("@duration >= 180000");
     auto plan = compileOk(expr);
@@ -86,7 +86,7 @@ namespace ao::query::test
     CHECK(evaluator.matchesFullPlan(plan, track.coldOnlyView()) == true);
   }
 
-  TEST_CASE("PlanEvaluator - executes mixed-access plans with both storage tiers", "[query][unit][plan-evaluator]")
+  TEST_CASE("PlanEvaluator - executes mixed-access plans with both storage tiers")
   {
     auto expr = parseOk("$year = 2020 && @duration >= 180000");
     auto plan = compileOk(expr);

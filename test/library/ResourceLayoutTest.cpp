@@ -34,20 +34,20 @@ namespace ao::library::test
     }
   } // namespace
 
-  TEST_CASE("ResourceDescriptor - is a 36-byte row with no padding", "[library][unit][resource]")
+  TEST_CASE("ResourceDescriptor - is a 36-byte row with no padding")
   {
     STATIC_REQUIRE(sizeof(ResourceDescriptor) == kResourceDescriptorSize);
     STATIC_REQUIRE(alignof(ResourceDescriptor) == kResourceDescriptorAlignment);
     STATIC_REQUIRE(kResourceDescriptorSize == utility::Sha256Digest::kByteCount + sizeof(std::uint32_t));
   }
 
-  TEST_CASE("CoverArtEntry - the track record is untouched by externalization", "[library][unit][resource]")
+  TEST_CASE("CoverArtEntry - the track record is untouched by externalization")
   {
     STATIC_REQUIRE(sizeof(CoverArtEntry) == 8);
     STATIC_REQUIRE(alignof(CoverArtEntry) == 4);
   }
 
-  TEST_CASE("deriveResourceId - reads the digest's first four bytes big-endian", "[library][unit][resource]")
+  TEST_CASE("deriveResourceId - reads the digest's first four bytes big-endian")
   {
     auto const digest = digestWithLeadingBytes({std::byte{0x12}, std::byte{0x34}, std::byte{0x56}, std::byte{0x78}});
 
@@ -56,7 +56,7 @@ namespace ao::library::test
     CHECK(deriveResourceId(digest).raw() == 0x12345678U);
   }
 
-  TEST_CASE("deriveResourceId - normalizes a zero result to one", "[library][unit][resource]")
+  TEST_CASE("deriveResourceId - normalizes a zero result to one")
   {
     auto const zeroLeading =
       digestWithLeadingBytes({std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}});
@@ -71,7 +71,7 @@ namespace ao::library::test
     CHECK(deriveResourceId(oneLeading) == ResourceId{1});
   }
 
-  TEST_CASE("ResourceDescriptor - the persisted row is the record itself, digest first", "[library][unit][resource]")
+  TEST_CASE("ResourceDescriptor - the persisted row is the record itself, digest first")
   {
     auto const descriptor = ResourceDescriptor{
       .digest = digestWithLeadingBytes({std::byte{0xAB}, std::byte{0xCD}, std::byte{0xEF}, std::byte{0x01}}),
@@ -101,7 +101,7 @@ namespace ao::library::test
     CHECK(optParsed->byteLength == descriptor.byteLength);
   }
 
-  TEST_CASE("ResourceDescriptor - the row carries the whole 32-bit length range", "[library][unit][resource]")
+  TEST_CASE("ResourceDescriptor - the row carries the whole 32-bit length range")
   {
     auto const descriptor = ResourceDescriptor{.digest = {}, .byteLength = std::numeric_limits<std::uint32_t>::max()};
     auto const optParsed = parseResourceDescriptor(utility::bytes::view(descriptor));
@@ -110,7 +110,7 @@ namespace ao::library::test
     CHECK(optParsed->byteLength == std::numeric_limits<std::uint32_t>::max());
   }
 
-  TEST_CASE("resourceByteLengthFits - refuses content the length field cannot describe", "[library][unit][resource]")
+  TEST_CASE("resourceByteLengthFits - refuses content the length field cannot describe")
   {
     constexpr std::size_t kMaximum = std::numeric_limits<std::uint32_t>::max();
 
@@ -123,7 +123,7 @@ namespace ao::library::test
     STATIC_REQUIRE_FALSE(canDescribeResourceByteLength(kMaximum + 1U));
   }
 
-  TEST_CASE("parseResourceDescriptor - refuses anything that is not a descriptor's width", "[library][unit][resource]")
+  TEST_CASE("parseResourceDescriptor - refuses anything that is not a descriptor's width")
   {
     auto const descriptor = ResourceDescriptor{};
     auto const row = utility::bytes::view(descriptor);

@@ -28,8 +28,7 @@
 
 namespace ao::tui::test
 {
-  TEST_CASE("Preferences - rejects malformed and unsupported saved values without rewriting them",
-            "[tui][unit][config]")
+  TEST_CASE("Preferences - rejects malformed and unsupported saved values without rewriting them")
   {
     auto temp = ao::test::TempDir{};
     auto const path = std::filesystem::path{temp.path()} / "tui.yaml";
@@ -54,7 +53,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("Preferences - missing groups use defaults and valid numeric boundaries round trip", "[tui][unit][config]")
+  TEST_CASE("Preferences - missing groups use defaults and valid numeric boundaries round trip")
   {
     auto temp = ao::test::TempDir{};
     auto const path = std::filesystem::path{temp.path()} / "tui.yaml";
@@ -74,7 +73,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("Preferences - existing version one documents default to a single panel separator", "[tui][unit][config]")
+  TEST_CASE("Preferences - existing version one documents default to a single panel separator")
   {
     auto temp = ao::test::TempDir{};
     auto const path = std::filesystem::path{temp.path()} / "tui.yaml";
@@ -87,8 +86,7 @@ namespace ao::tui::test
     CHECK_FALSE(loadedRes->revealIndicatorsOnHover);
   }
 
-  TEST_CASE("Preferences - title formats preserve defaults and round trip disabled and custom values",
-            "[tui][unit][config]")
+  TEST_CASE("Preferences - title formats preserve defaults and round trip disabled and custom values")
   {
     auto temp = ao::test::TempDir{};
     auto const path = std::filesystem::path{temp.path()} / "tui.yaml";
@@ -112,7 +110,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("Preferences - round trips language and preserves sibling keymap writes", "[tui][unit][config]")
+  TEST_CASE("Preferences - round trips language and preserves sibling keymap writes")
   {
     auto temp = ao::test::TempDir{};
     auto const path = std::filesystem::path{temp.path()} / "tui.yaml";
@@ -148,7 +146,7 @@ namespace ao::tui::test
     CHECK(systemRes->language.empty());
   }
 
-  TEST_CASE("Preferences - accepts every selectable catalog locale and excludes pseudo", "[tui][unit][config]")
+  TEST_CASE("Preferences - accepts every selectable catalog locale and excludes pseudo")
   {
     auto temp = ao::test::TempDir{};
     auto const path = std::filesystem::path{temp.path()} / "tui.yaml";
@@ -170,7 +168,7 @@ namespace ao::tui::test
     CHECK(ao::test::readFile(path) == original);
   }
 
-  TEST_CASE("Preferences - rejects invalid values without replacing the saved document", "[tui][unit][config]")
+  TEST_CASE("Preferences - rejects invalid values without replacing the saved document")
   {
     auto temp = ao::test::TempDir{};
     auto const path = std::filesystem::path{temp.path()} / "tui.yaml";
@@ -191,7 +189,7 @@ namespace ao::tui::test
     CHECK_FALSE(savePreferences(noLocation, Preferences{}));
   }
 
-  TEST_CASE("Preferences - a newer version is reported before its fields and never overwritten", "[tui][unit][config]")
+  TEST_CASE("Preferences - a newer version is reported before its fields and never overwritten")
   {
     auto temp = ao::test::TempDir{};
     auto const path = std::filesystem::path{temp.path()} / "tui.yaml";
@@ -243,7 +241,7 @@ namespace ao::tui::test
     }
   } // namespace
 
-  TEST_CASE("Preferences - startup reports each newer group with its own warning", "[tui][integration][config]")
+  TEST_CASE("Preferences - startup reports each newer group with its own warning")
   {
     auto const& catalog = ao::test::englishMessageCatalog();
     auto const messages = reportedConfigLoadFailures("shortcuts: {version: 99, future: true}\n"
@@ -255,7 +253,7 @@ namespace ao::tui::test
                                   std::string{i18n::requiredText(catalog, i18n::MessageId::TuiConfigNewerSettings)}});
   }
 
-  TEST_CASE("Preferences - startup reports unreadable preferences with the reason", "[tui][integration][config]")
+  TEST_CASE("Preferences - startup reports unreadable preferences with the reason")
   {
     SECTION("preferences this build rejects post the load-failure warning")
     {

@@ -19,7 +19,7 @@ namespace ao::tui::test
     constexpr std::string_view kJapanFlag = "\U0001F1EF\U0001F1F5";
   } // namespace
 
-  TEST_CASE("TextCell - single-line controls share rejection and substitution byte boundaries", "[tui][unit][text]")
+  TEST_CASE("TextCell - single-line controls share rejection and substitution byte boundaries")
   {
     CHECK(singleLineControlLength("\nrest") == 1);
     CHECK(singleLineControlLength("\x7f") == 1);
@@ -34,20 +34,20 @@ namespace ao::tui::test
     CHECK(singleLineControlLength("") == 0);
   }
 
-  TEST_CASE("TextCell - cellWidth measures terminal cells", "[tui][unit][text]")
+  TEST_CASE("TextCell - cellWidth measures terminal cells")
   {
     CHECK(cellWidth("abc") == 3);
     CHECK(cellWidth("雨") == 2);
   }
 
-  TEST_CASE("TextCell - panelColumnsForContent adds border and clamps to terminal", "[tui][unit][text]")
+  TEST_CASE("TextCell - panelColumnsForContent adds border and clamps to terminal")
   {
     CHECK(panelColumnsForContent(10, 0) == 12);
     CHECK(panelColumnsForContent(10, 80) == 12);
     CHECK(panelColumnsForContent(10, 8) == 8);
   }
 
-  TEST_CASE("TextCell - truncateToCellWidth respects terminal cell width", "[tui][unit][text]")
+  TEST_CASE("TextCell - truncateToCellWidth respects terminal cell width")
   {
     CHECK(truncateToCellWidth("abcdef", 3) == "abc");
     CHECK(truncateToCellWidth("雨abc", 1).empty());
@@ -55,7 +55,7 @@ namespace ao::tui::test
     CHECK(truncateToCellWidth("雨abc", 3) == "雨a");
   }
 
-  TEST_CASE("TextCell - shortening handles empty and negative budgets", "[tui][unit][text]")
+  TEST_CASE("TextCell - shortening handles empty and negative budgets")
   {
     CHECK(truncateToCellWidth("abc", 0).empty());
     CHECK(truncateToCellWidth("abc", -1).empty());
@@ -65,7 +65,7 @@ namespace ao::tui::test
     CHECK(fitCellText("abc", -1).empty());
   }
 
-  TEST_CASE("TextCell - a one-cell budget cannot hold a wide glyph", "[tui][unit][text]")
+  TEST_CASE("TextCell - a one-cell budget cannot hold a wide glyph")
   {
     CHECK(truncateToCellWidth("雨", 1).empty());
     CHECK(fitCellText("雨", 1) == " ");
@@ -74,7 +74,7 @@ namespace ao::tui::test
     CHECK(cellWidth(ellipsizeToCellWidth("雨", 1)) == 1);
   }
 
-  TEST_CASE("TextCell - ellipsizeToCellWidth reports dropped text", "[tui][unit][text]")
+  TEST_CASE("TextCell - ellipsizeToCellWidth reports dropped text")
   {
     CHECK(ellipsizeToCellWidth("abc", 3) == "abc");
     CHECK(ellipsizeToCellWidth("abc", 8) == "abc");
@@ -82,7 +82,7 @@ namespace ao::tui::test
     CHECK(ellipsizeToCellWidth("abcdef", 0).empty());
   }
 
-  TEST_CASE("TextCell - ellipsized text never splits a glyph", "[tui][unit][text]")
+  TEST_CASE("TextCell - ellipsized text never splits a glyph")
   {
     CHECK(ellipsizeToCellWidth("雨雨雨", 6) == "雨雨雨");
     CHECK(ellipsizeToCellWidth("雨雨雨", 5) == "雨雨…");
@@ -93,7 +93,7 @@ namespace ao::tui::test
     CHECK(ellipsizeToCellWidth("e\u0301abc", 2) == "e\u0301\u2026");
   }
 
-  TEST_CASE("TextCell - shortening keeps emoji clusters whole", "[tui][unit][text]")
+  TEST_CASE("TextCell - shortening keeps emoji clusters whole")
   {
     // Cutting between FTXUI glyphs would emit a lone person or a dangling
     // joiner, so the cluster is kept or dropped whole.
@@ -111,7 +111,7 @@ namespace ao::tui::test
     CHECK(truncateToCellWidth("\U0001F44D\U0001F3FD", 2) == "\U0001F44D\U0001F3FD");
   }
 
-  TEST_CASE("TextCell - ellipsized emoji text stays well formed", "[tui][unit][text]")
+  TEST_CASE("TextCell - ellipsized emoji text stays well formed")
   {
     auto const shortened = ellipsizeToCellWidth(std::string{kWomanTechnologist} + "abc", 4);
 
@@ -121,7 +121,7 @@ namespace ao::tui::test
     CHECK(ellipsizeToCellWidth(std::string{kWomanTechnologist} + "abc", 5) == "…");
   }
 
-  TEST_CASE("TextCell - wrapping uses stable display clusters without changing its source", "[tui][unit][text]")
+  TEST_CASE("TextCell - wrapping uses stable display clusters without changing its source")
   {
     using namespace std::string_view_literals;
     // NOLINTNEXTLINE(misc-include-cleaner) -- MSVC include-cleaner cannot map sv to the included <string_view>.
@@ -136,7 +136,7 @@ namespace ao::tui::test
     CHECK(source == kOriginal);
   }
 
-  TEST_CASE("TextCell - wrapping preserves LF and treats CRLF as one deliberate break", "[tui][unit][text]")
+  TEST_CASE("TextCell - wrapping preserves LF and treats CRLF as one deliberate break")
   {
     CHECK(wrapCellText("Alpha\nOmega", 10) == std::vector<std::string>{"Alpha", "Omega"});
     CHECK(wrapCellText("Alpha\r\nOmega", 10) == std::vector<std::string>{"Alpha", "Omega"});
@@ -146,14 +146,14 @@ namespace ao::tui::test
     CHECK(wrapCellText("A\r\n\u0301B", 4) == std::vector<std::string>{"A", "B"});
   }
 
-  TEST_CASE("TextCell - capped wrapping keeps explicit breaks out of the final row", "[tui][unit][text]")
+  TEST_CASE("TextCell - capped wrapping keeps explicit breaks out of the final row")
   {
     CHECK(wrapCellText("A\nB", 10, {.maxLines = 1}) == std::vector<std::string>{"A…"});
     CHECK(wrapCellText("A\nB\nC", 10, {.maxLines = 2}) == std::vector<std::string>{"A", "B…"});
     CHECK(wrapCellText("A\n", 10, {.maxLines = 1}) == std::vector<std::string>{"A"});
   }
 
-  TEST_CASE("TextCell - an oversized wrapped emoji is omitted as a whole cluster", "[tui][unit][text]")
+  TEST_CASE("TextCell - an oversized wrapped emoji is omitted as a whole cluster")
   {
     for (auto const emoji : {kWomanTechnologist, kJapanFlag})
     {
@@ -165,7 +165,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TextCell - fitCellText pads to fixed cell width", "[tui][unit][text]")
+  TEST_CASE("TextCell - fitCellText pads to fixed cell width")
   {
     CHECK(fitCellText("a", 3) == "a  ");
     CHECK(fitCellText("a", 3, CellAlignment::Right) == "  a");

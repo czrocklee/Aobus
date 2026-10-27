@@ -80,7 +80,7 @@ namespace ao::audio::detail::test
     }
   } // namespace
 
-  TEST_CASE("AacConfigParser - parses AudioSpecificConfig", "[audio][unit][aac][config]")
+  TEST_CASE("AacConfigParser - parses AudioSpecificConfig")
   {
     SECTION("AAC LC with table sample rate")
     {
@@ -128,7 +128,7 @@ namespace ao::audio::detail::test
     }
   }
 
-  TEST_CASE("AacConfigParser - rejects incomplete AudioSpecificConfig", "[audio][unit][aac][config]")
+  TEST_CASE("AacConfigParser - rejects incomplete AudioSpecificConfig")
   {
     SECTION("Empty input")
     {

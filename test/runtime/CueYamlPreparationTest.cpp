@@ -134,7 +134,7 @@ namespace ao::rt::test
   } // namespace
 
   TEST_CASE("CueYaml preparation - deleting an untouched carrier ordinal invalidates the whole offline merge",
-            "[runtime][unit][import-export][concurrency][cue-yaml-preparation]")
+            "[concurrency]")
   {
     for (bool const appendOnly : {false, true})
     {
@@ -160,7 +160,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("CueYaml preparation - appending an untouched carrier ordinal invalidates the whole offline merge",
-            "[runtime][unit][import-export][concurrency][cue-yaml-preparation]")
+            "[concurrency]")
   {
     for (bool const appendOnly : {false, true})
     {
@@ -197,7 +197,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("CueYaml preparation - carrier appearance or complete removal invalidates an append-only merge",
-            "[runtime][unit][import-export][concurrency][cue-yaml-preparation]")
+            "[concurrency]")
   {
     auto fixture = CueYamlPreparationFixture{};
     bool hadCarrierAtPreparation = true;
@@ -246,7 +246,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("CueYaml preparation - unrelated offline edits do not invalidate unchanged carrier membership",
-            "[runtime][unit][import-export][concurrency][cue-yaml-preparation]")
+            "[concurrency]")
   {
     auto fixture = CueYamlPreparationFixture{};
 

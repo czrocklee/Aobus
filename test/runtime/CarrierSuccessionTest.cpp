@@ -213,8 +213,7 @@ namespace ao::rt::test
     };
   } // namespace
 
-  TEST_CASE("Carrier succession - three short segments preserve PCM with delayed owner callbacks",
-            "[runtime][integration][playback-succession][segment][concurrency]")
+  TEST_CASE("Carrier succession - three short segments preserve PCM with delayed owner callbacks", "[concurrency]")
   {
     auto const spec = markedCarrierSpec();
     auto expected = std::vector<std::byte>(spec.audioData.size());
@@ -352,8 +351,7 @@ namespace ao::rt::test
           NotificationReportTemplate::PlaybackSequenceFinished);
   }
 
-  TEST_CASE("Carrier succession - an end seek with the same-file successor armed advances once to it",
-            "[runtime][integration][playback-succession][segment][seek]")
+  TEST_CASE("Carrier succession - an end seek with the same-file successor armed advances once to it")
   {
     auto const spec = markedCarrierSpec();
     auto carrier = CarrierSuccessionFixture{spec};

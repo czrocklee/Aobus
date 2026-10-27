@@ -9,7 +9,7 @@
 
 namespace ao::tui::test
 {
-  TEST_CASE("TrackSection - display names fall back consistently", "[tui][unit][track-section]")
+  TEST_CASE("TrackSection - display names fall back consistently")
   {
     auto const& english = ao::test::englishMessageCatalog();
     CHECK(trackSectionDisplayName(english, TrackSection{.primaryText = "Album A"}) == "Album A");

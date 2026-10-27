@@ -71,7 +71,7 @@ namespace ao::uimodel::test
     }
   } // namespace
 
-  TEST_CASE("LayoutComponentState - file round-trips entries", "[uimodel][unit][layout][component]")
+  TEST_CASE("LayoutComponentState - file round-trips entries")
   {
     auto const node = splitNode();
     auto original = stateDocFor(node);
@@ -92,8 +92,7 @@ namespace ao::uimodel::test
     CHECK(decodedEntry.state.at("positionPercent").asDouble() == 0.42);
   }
 
-  TEST_CASE("LayoutComponentState - resolver validates versions type and baseline",
-            "[uimodel][unit][layout][component]")
+  TEST_CASE("LayoutComponentState - resolver validates versions type and baseline")
   {
     auto node = splitNode();
     auto stateDoc = stateDocFor(node);
@@ -136,8 +135,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("LayoutComponentState - layout component baseline hash tracks the owned field inventory",
-            "[uimodel][unit][layout][component]")
+  TEST_CASE("LayoutComponentState - layout component baseline hash tracks the owned field inventory")
   {
     SECTION("equivalent numeric spellings hash the same")
     {
@@ -244,7 +242,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("LayoutComponentState - YAML deserialization handles corrupt files", "[uimodel][unit][layout][component]")
+  TEST_CASE("LayoutComponentState - YAML deserialization handles corrupt files")
   {
     SECTION("malformed state root is rejected")
     {
@@ -474,7 +472,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("LayoutComponentState - pruning removes invalid entries", "[uimodel][unit][layout][component]")
+  TEST_CASE("LayoutComponentState - pruning removes invalid entries")
   {
     auto const withExpandedControls = GENERATE(false, true);
     INFO("Expanded pruning controls: " << withExpandedControls);

@@ -62,7 +62,7 @@ namespace ao::library::test
     }
   } // namespace
 
-  TEST_CASE("TrackStore - stores hot and cold record sides", "[library][unit][track-store][raw-layout]")
+  TEST_CASE("TrackStore - stores hot and cold record sides")
   {
     auto fixture = TrackStoreFixture{};
     auto const id = addCommittedTrack(
@@ -78,7 +78,7 @@ namespace ao::library::test
     CHECK(optView->metadata().trackTotal() == 10);
   }
 
-  TEST_CASE("TrackStore - prepared update replaces the cold side alone", "[library][unit][track-store][raw-layout]")
+  TEST_CASE("TrackStore - prepared update replaces the cold side alone")
   {
     auto fixture = TrackStoreFixture{};
     auto const id = addCommittedTrack(
@@ -103,7 +103,7 @@ namespace ao::library::test
     CHECK(optView->metadata().trackNumber() == 2);
   }
 
-  TEST_CASE("TrackStore - prepared paired update replaces both sides", "[library][unit][track-store][raw-layout]")
+  TEST_CASE("TrackStore - prepared paired update replaces both sides")
   {
     auto fixture = TrackStoreFixture{};
     auto const targetId = addCommittedTrack(fixture.library, TrackSpec{.title = "Target"});
@@ -128,7 +128,7 @@ namespace ao::library::test
     CHECK(optView->property().duration() == std::chrono::minutes{7});
   }
 
-  TEST_CASE("TrackStore - remove deletes hot and cold records", "[library][unit][track-store][raw-layout]")
+  TEST_CASE("TrackStore - remove deletes hot and cold records")
   {
     auto fixture = TrackStoreFixture{};
     auto const id = addCommittedTrack(fixture.library, TrackSpec{});
@@ -143,7 +143,7 @@ namespace ao::library::test
     CHECK_FALSE(reader.get(id, TrackStore::Reader::LoadMode::Cold).has_value());
   }
 
-  TEST_CASE("TrackStore - writer get supports load modes", "[library][unit][track-store][raw-layout]")
+  TEST_CASE("TrackStore - writer get supports load modes")
   {
     auto fixture = TrackStoreFixture{};
     auto const id = addCommittedTrack(fixture.library, TrackSpec{.duration = std::chrono::minutes{4}});
@@ -163,7 +163,7 @@ namespace ao::library::test
     CHECK(optCold->coverArt().count() == 0);
   }
 
-  TEST_CASE("TrackStore - hot load mode iteration omits cold data", "[library][unit][track-store][raw-layout]")
+  TEST_CASE("TrackStore - hot load mode iteration omits cold data")
   {
     auto fixture = TrackStoreFixture{};
     auto const id = addCommittedTrack(
@@ -180,7 +180,7 @@ namespace ao::library::test
     CHECK_FALSE(trackView.isColdValid());
   }
 
-  TEST_CASE("TrackStore - cold load mode iteration omits hot data", "[library][unit][track-store][raw-layout]")
+  TEST_CASE("TrackStore - cold load mode iteration omits hot data")
   {
     auto fixture = TrackStoreFixture{};
     auto const id =
@@ -197,8 +197,7 @@ namespace ao::library::test
     CHECK(trackView.isColdValid());
   }
 
-  TEST_CASE("TrackStore - both load mode iteration returns hot and cold data",
-            "[library][unit][track-store][raw-layout]")
+  TEST_CASE("TrackStore - both load mode iteration returns hot and cold data")
   {
     auto fixture = TrackStoreFixture{};
     auto const id = addCommittedTrack(
@@ -216,8 +215,7 @@ namespace ao::library::test
     CHECK(trackView.metadata().trackNumber() == 0);
   }
 
-  TEST_CASE("TrackStore - both load mode advances paired records in lockstep",
-            "[library][unit][track-store][raw-layout]")
+  TEST_CASE("TrackStore - both load mode advances paired records in lockstep")
   {
     auto fixture = TrackStoreFixture{};
     auto const ids = std::vector{
@@ -240,7 +238,7 @@ namespace ao::library::test
     CHECK(actualIds == ids);
   }
 
-  TEST_CASE("TrackStore - hot load mode get by id omits cold data", "[library][unit][track-store][raw-layout]")
+  TEST_CASE("TrackStore - hot load mode get by id omits cold data")
   {
     auto fixture = TrackStoreFixture{};
     auto const id = addCommittedTrack(fixture.library, TrackSpec{.artist = "Hot Only Artist"});
@@ -253,7 +251,7 @@ namespace ao::library::test
     CHECK(dictionaryText(fixture.library, optView->metadata().artistId()) == "Hot Only Artist");
   }
 
-  TEST_CASE("TrackStore - cold load mode get by id omits hot data", "[library][unit][track-store][raw-layout]")
+  TEST_CASE("TrackStore - cold load mode get by id omits hot data")
   {
     auto fixture = TrackStoreFixture{};
     auto const id =
@@ -267,7 +265,7 @@ namespace ao::library::test
     CHECK(optView->property().duration() == std::chrono::minutes{6});
   }
 
-  TEST_CASE("TrackStore - cold load mode iterates multiple records", "[library][unit][track-store][raw-layout]")
+  TEST_CASE("TrackStore - cold load mode iterates multiple records")
   {
     auto fixture = TrackStoreFixture{};
     auto ids = std::vector<TrackId>{};
@@ -300,7 +298,7 @@ namespace ao::library::test
     CHECK(collectedIds == ids);
   }
 
-  TEST_CASE("TrackStore - cold load mode empty iteration returns end", "[library][unit][track-store][raw-layout]")
+  TEST_CASE("TrackStore - cold load mode empty iteration returns end")
   {
     auto fixture = TrackStoreFixture{};
     auto rtxn = fixture.library.readTransaction();
@@ -310,8 +308,7 @@ namespace ao::library::test
     CHECK(rows.begin() == rows.end());
   }
 
-  TEST_CASE("MusicLibrary - open rejects either kind of orphan Track record",
-            "[library][unit][track-store][raw-layout]")
+  TEST_CASE("MusicLibrary - open rejects either kind of orphan Track record")
   {
     auto const temp = ao::test::TempDir{};
     initializeLibraryStorage(temp.path());
@@ -329,8 +326,7 @@ namespace ao::library::test
     requireCorruptOpen(temp.path(), "Hot and cold Track databases contain different key sets");
   }
 
-  TEST_CASE("MusicLibrary - open rejects an orphan before exposing later valid Track pairs",
-            "[library][unit][track-store][raw-layout]")
+  TEST_CASE("MusicLibrary - open rejects an orphan before exposing later valid Track pairs")
   {
     auto const temp = ao::test::TempDir{};
     initializeLibraryStorage(temp.path());

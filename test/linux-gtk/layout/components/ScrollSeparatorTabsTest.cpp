@@ -22,8 +22,7 @@ namespace ao::gtk::layout::test
 {
   using namespace uimodel;
 
-  TEST_CASE("ScrollSeparatorTabs - scroll maps explicit and default policies",
-            "[gtk][unit][layout-component][geometry]")
+  TEST_CASE("ScrollSeparatorTabs - scroll maps explicit and default policies")
   {
     auto fixture = LayoutRuntimeFixture{};
     auto& ctx = fixture.context();
@@ -82,7 +81,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("ScrollSeparatorTabs - separator applies authored orientation", "[gtk][unit][layout-component]")
+  TEST_CASE("ScrollSeparatorTabs - separator applies authored orientation")
   {
     auto fixture = LayoutRuntimeFixture{};
     auto& ctx = fixture.context();
@@ -99,7 +98,7 @@ namespace ao::gtk::layout::test
     CHECK(sep->get_orientation() == Gtk::Orientation::VERTICAL);
   }
 
-  TEST_CASE("ScrollSeparatorTabs - tabs preserve authored identity title and order", "[gtk][unit][layout-component]")
+  TEST_CASE("ScrollSeparatorTabs - tabs preserve authored identity title and order")
   {
     auto fixture = LayoutRuntimeFixture{};
     auto& ctx = fixture.context();

@@ -38,7 +38,7 @@ namespace ao::library::test
     static_assert(!HasRawManifestPut<FileManifestStore::Writer>);
   } // namespace
 
-  TEST_CASE("FileManifestStore - writes and reads back manifests", "[library][unit][manifest]")
+  TEST_CASE("FileManifestStore - writes and reads back manifests")
   {
     auto fixture = LibraryStoreFixture{};
     auto& library = fixture.library;
@@ -72,8 +72,7 @@ namespace ao::library::test
     CHECK(std::ranges::equal(optView->rawData(), payload));
   }
 
-  TEST_CASE("FileManifestStore - preserves mtime presence and range across a durable roundtrip",
-            "[library][unit][manifest]")
+  TEST_CASE("FileManifestStore - preserves mtime presence and range across a durable roundtrip")
   {
     struct RoundtripManifest final
     {
@@ -131,8 +130,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("FileManifestStore - URI padding boundaries preserve read, write, and remove behavior",
-            "[library][unit][manifest]")
+  TEST_CASE("FileManifestStore - URI padding boundaries preserve read, write, and remove behavior")
   {
     // The longest key is within two bytes of LMDB's computed maximum key size
     // for 4 KiB pages, so a host whose limit is smaller fails its write.
@@ -206,7 +204,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("FileManifestStore - get returns nullopt for missing URI", "[library][unit][manifest]")
+  TEST_CASE("FileManifestStore - get returns nullopt for missing URI")
   {
     auto fixture = LibraryStoreFixture{};
     auto& library = fixture.library;
@@ -220,7 +218,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("FileManifestStore::Reader - lowerBound seeks by canonical URI order", "[library][unit][manifest]")
+  TEST_CASE("FileManifestStore::Reader - lowerBound seeks by canonical URI order")
   {
     auto fixture = LibraryStoreFixture{};
     auto& library = fixture.library;
@@ -260,7 +258,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("FileManifestStore - remove is idempotent", "[library][unit][manifest]")
+  TEST_CASE("FileManifestStore - remove is idempotent")
   {
     auto fixture = LibraryStoreFixture{};
     auto& library = fixture.library;
@@ -282,7 +280,7 @@ namespace ao::library::test
     CHECK_FALSE(optView);
   }
 
-  TEST_CASE("FileManifestStore - failed preparation cannot mutate the Store", "[library][unit][manifest][integrity]")
+  TEST_CASE("FileManifestStore - failed preparation cannot mutate the Store")
   {
     auto const serialize = [](FileManifestHeader const& header)
     {

@@ -69,7 +69,7 @@ namespace ao::audio::test
     };
   } // namespace
 
-  TEST_CASE("Engine - graph integrity", "[audio][integration][playback-graph]")
+  TEST_CASE("Engine - graph integrity")
   {
     auto const testFile = std::filesystem::path{AUDIO_TEST_DATA_DIR} / "basic_metadata.flac";
 

@@ -19,7 +19,7 @@
 namespace ao::audio::backend::test
 {
   TEST_CASE("AlsaExclusiveBackend - native stereo observations admit matching roles and refuse conflicting roles",
-            "[audio][integration][alsa][.manual]")
+            "[.manual]")
   {
     // Explicitly selected, idle stereo endpoint with an independently known
     // current canonical, unflagged FL/FR order. This configures storage only:

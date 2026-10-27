@@ -230,7 +230,7 @@ namespace ao::uimodel::test
     }
   } // namespace
 
-  TEST_CASE("LayoutSchema - component and action entries retain registration order", "[uimodel][unit][layout][schema]")
+  TEST_CASE("LayoutSchema - component and action entries retain registration order")
   {
     auto schema = LayoutSchema{};
 
@@ -254,7 +254,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(schema.action("missing"));
   }
 
-  TEST_CASE("LayoutSchema - duplicate ids preserve the first entry", "[uimodel][unit][layout][schema]")
+  TEST_CASE("LayoutSchema - duplicate ids preserve the first entry")
   {
     auto schema = LayoutSchema{};
     REQUIRE(schema.tryAddComponent(buttonSchema()));
@@ -269,8 +269,7 @@ namespace ao::uimodel::test
     CHECK(schema.action("valid.action")->label == "First");
   }
 
-  TEST_CASE("ComponentSchema - action slots resolve authored values, defaults, and explicit unbinding",
-            "[uimodel][unit][layout][schema]")
+  TEST_CASE("ComponentSchema - action slots resolve authored values, defaults, and explicit unbinding")
   {
     auto schema = LayoutSchema{};
     REQUIRE(schema.tryAddComponent(buttonSchema()));
@@ -305,7 +304,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("ComponentSchema - copied action ids survive backing value replacement", "[uimodel][unit][layout][schema]")
+  TEST_CASE("ComponentSchema - copied action ids survive backing value replacement")
   {
     auto component = buttonSchema();
     auto authoredNode = LayoutNode{.type = "test.button"};
@@ -337,8 +336,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(component.actionId(defaultNode, ActionSlot::PrimaryClick));
   }
 
-  TEST_CASE("LayoutSchema - generated action properties cannot overwrite authored schema",
-            "[uimodel][unit][layout][schema]")
+  TEST_CASE("LayoutSchema - generated action properties cannot overwrite authored schema")
   {
     auto schema = LayoutSchema{};
     auto candidate = buttonSchema();
@@ -349,8 +347,7 @@ namespace ao::uimodel::test
     CHECK(schema.components().empty());
   }
 
-  TEST_CASE("LayoutSchema - defaults cannot target a disallowed component action slot",
-            "[uimodel][unit][layout][schema]")
+  TEST_CASE("LayoutSchema - defaults cannot target a disallowed component action slot")
   {
     auto schema = LayoutSchema{};
     auto candidate = buttonSchema();
@@ -360,8 +357,7 @@ namespace ao::uimodel::test
     CHECK(schema.components().empty());
   }
 
-  TEST_CASE("LayoutSchema - shared component inventory is canonical and uniquely keyed",
-            "[uimodel][unit][layout][schema]")
+  TEST_CASE("LayoutSchema - shared component inventory is canonical and uniquely keyed")
   {
     auto const shared = sharedComponentSchemas();
     REQUIRE(shared.size() == 20);
@@ -384,7 +380,7 @@ namespace ao::uimodel::test
     CHECK(split->optMaxChildren == 2);
   }
 
-  TEST_CASE("LayoutSchema - frontend extensions preserve the shared contract", "[uimodel][unit][layout][schema]")
+  TEST_CASE("LayoutSchema - frontend extensions preserve the shared contract")
   {
     auto schema = LayoutSchema{};
     REQUIRE(
@@ -407,8 +403,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(canonical->accepts(ActionSlot::SecondaryClick));
   }
 
-  TEST_CASE("LayoutSchema - a shared id cannot bypass the canonical vocabulary through addComponent",
-            "[uimodel][unit][layout][schema]")
+  TEST_CASE("LayoutSchema - a shared id cannot bypass the canonical vocabulary through addComponent")
   {
     auto const canonical =
       std::ranges::find(sharedComponentSchemas(), std::string_view{"actionButton"}, &ComponentSchema::id);
@@ -456,8 +451,7 @@ namespace ao::uimodel::test
     CHECK(schema.components().empty());
   }
 
-  TEST_CASE("LayoutSchema - shared component reference is generated from the canonical table",
-            "[uimodel][unit][layout][schema]")
+  TEST_CASE("LayoutSchema - shared component reference is generated from the canonical table")
   {
     auto input = std::ifstream{std::filesystem::path{AOBUS_SOURCE_DIR} / "doc/reference/shell/component-vocabulary.md"};
     REQUIRE(input);
@@ -472,7 +466,7 @@ namespace ao::uimodel::test
     CHECK(document.substr(begin, end + endMarker.size() - begin) == generated);
   }
 
-  TEST_CASE("LayoutSchema - invalid shared extensions fail closed", "[uimodel][unit][layout][schema]")
+  TEST_CASE("LayoutSchema - invalid shared extensions fail closed")
   {
     SECTION("unknown shared id")
     {
@@ -498,7 +492,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("ActionSchema - capabilities are explicit bits", "[uimodel][unit][layout][schema]")
+  TEST_CASE("ActionSchema - capabilities are explicit bits")
   {
     auto const action = ActionSchema{
       .id = "shell.menu",

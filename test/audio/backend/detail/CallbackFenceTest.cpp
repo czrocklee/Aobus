@@ -21,8 +21,7 @@
 
 namespace ao::audio::backend::detail::test
 {
-  TEST_CASE("CallbackFence - close waits for an admitted callback and prevents a late entrant",
-            "[audio][unit][callback-fence][concurrency]")
+  TEST_CASE("CallbackFence - close waits for an admitted callback and prevents a late entrant", "[concurrency]")
   {
     auto fence = CallbackFence{};
     auto entered = std::binary_semaphore{0};
@@ -89,7 +88,7 @@ namespace ao::audio::backend::detail::test
     CHECK(closeReturned.load(std::memory_order_acquire));
   }
 
-  TEST_CASE("CallbackFence - a new run can reopen admission", "[audio][unit][callback-fence]")
+  TEST_CASE("CallbackFence - a new run can reopen admission")
   {
     auto fence = CallbackFence{};
     CHECK_FALSE(fence.tryEnter());
@@ -106,8 +105,7 @@ namespace ao::audio::backend::detail::test
     CHECK_FALSE(fence.tryEnter());
   }
 
-  TEST_CASE("CallbackFence - listener removal can separate close from quiescence",
-            "[audio][unit][callback-fence][concurrency]")
+  TEST_CASE("CallbackFence - listener removal can separate close from quiescence", "[concurrency]")
   {
     auto fence = CallbackFence{};
     fence.open();
@@ -119,8 +117,7 @@ namespace ao::audio::backend::detail::test
     CHECK_FALSE(fence.tryEnter());
   }
 
-  TEST_CASE("CallbackFence - closed rejection leaves the interval reusable for publication",
-            "[audio][unit][callback-fence]")
+  TEST_CASE("CallbackFence - closed rejection leaves the interval reusable for publication")
   {
     auto fence = CallbackFence{};
     std::uint32_t payload = 0U;
@@ -152,8 +149,7 @@ namespace ao::audio::backend::detail::test
     CHECK_FALSE(fence.tryEnter());
   }
 
-  TEST_CASE("CallbackFence - concurrent reopen races continuous closed native attempts",
-            "[audio][unit][callback-fence][concurrency][stress]")
+  TEST_CASE("CallbackFence - concurrent reopen races continuous closed native attempts", "[concurrency]")
   {
     constexpr std::uint32_t kNativeAttemptThreads = 4U;
     constexpr std::uint32_t kReopenCount = 10000U;
@@ -275,8 +271,7 @@ namespace ao::audio::backend::detail::test
     CHECK_FALSE(fence.isOpen());
   }
 
-  TEST_CASE("CallbackFence - reopening before callbacks quiesce aborts the fatal probe child",
-            "[audio][integration][callback-fence]")
+  TEST_CASE("CallbackFence - reopening before callbacks quiesce aborts the fatal probe child")
   {
     // Two children drive only the public single-threaded fence API in the
     // fatal probe process: one reopens a fence that is already open, and one

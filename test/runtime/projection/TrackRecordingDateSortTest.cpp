@@ -112,8 +112,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("TrackListProjection - recording date orders partial tuples and keeps absence last in both directions",
-            "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - recording date orders partial tuples and keeps absence last in both directions")
   {
     auto fixture = TrackListProjectionFixture{};
     auto const absent = addPerformanceTrack(fixture, "Compilation", {}, 1);
@@ -146,8 +145,7 @@ namespace ao::rt::test
     checkOrder(projection, {full, year, month, nextDay, older, absent});
   }
 
-  TEST_CASE("TrackListProjection - classical presets separate Gould recording years within one compilation",
-            "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - classical presets separate Gould recording years within one compilation")
   {
     auto fixture = TrackListProjectionFixture{};
     auto const newerSecond = addPerformanceTrack(fixture, "Compilation", {1981, 5, 12}, 2);
@@ -180,8 +178,7 @@ namespace ao::rt::test
     checkOrder(projection, {newerSecond, newerFirst, olderSecond, olderFirst});
   }
 
-  TEST_CASE("TrackListProjection - same-year sessions and precisions stay album-intact in classical presets",
-            "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - same-year sessions and precisions stay album-intact in classical presets")
   {
     auto fixture = TrackListProjectionFixture{};
     auto const betaSecond = addPerformanceTrack(fixture, "Beta", {1981, 4, 15}, 2);
@@ -201,8 +198,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackListProjection - unknown recording years preserve the former release-year album movement order",
-            "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - unknown recording years preserve the former release-year album movement order")
   {
     auto fixture = TrackListProjectionFixture{};
     auto const later = addPerformanceTrack(fixture, "Alpha", {}, 1, 2001);
@@ -229,7 +225,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackListProjection - release-year zero retains ordinary numeric ordering", "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - release-year zero retains ordinary numeric ordering")
   {
     auto fixture = TrackListProjectionFixture{};
     auto const unknown = addPerformanceTrack(fixture, "Compilation", {}, 1, 0);
@@ -243,8 +239,7 @@ namespace ao::rt::test
     checkOrder(projection, {known, unknown});
   }
 
-  TEST_CASE("TrackListProjection - recording date and year mutations keep incremental order and absence last",
-            "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - recording date and year mutations keep incremental order and absence last")
   {
     auto fixture = TrackListProjectionFixture{};
     auto const absent = addPerformanceTrack(fixture, "Compilation", {}, 1);
@@ -342,8 +337,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackListProjection - title sort keeps title order when a recording date is visible",
-            "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - title sort keeps title order when a recording date is visible")
   {
     auto fixture = TrackListProjectionFixture{};
     auto const zed =

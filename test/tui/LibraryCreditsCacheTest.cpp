@@ -25,8 +25,7 @@
 
 namespace ao::tui::test
 {
-  TEST_CASE("LibraryController credits - redraw borrows the same owning ordered list until focus changes",
-            "[tui][unit][library]")
+  TEST_CASE("LibraryController credits - redraw borrows the same owning ordered list until focus changes")
   {
     auto tempDir = ao::test::TempDir{};
     auto runtimePtr = rt::test::makeRuntime(tempDir, std::make_unique<async::LoopExecutor>());
@@ -74,8 +73,7 @@ namespace ao::tui::test
     CHECK(controller.focusedCredits()[3].optValue == expected);
   }
 
-  TEST_CASE("LibraryController credits - publication replaces clears and deletes the cached focused facts",
-            "[tui][unit][library]")
+  TEST_CASE("LibraryController credits - publication replaces clears and deletes the cached focused facts")
   {
     using library::CreditKind;
     auto tempDir = ao::test::TempDir{};
@@ -119,8 +117,7 @@ namespace ao::tui::test
           std::vector<library::Credit>{{"New", CreditKind::Performer, "Violin"}});
   }
 
-  TEST_CASE("LibraryController credits - library reset replaces cached credits from a disposable restore",
-            "[tui][unit][library]")
+  TEST_CASE("LibraryController credits - library reset replaces cached credits from a disposable restore")
   {
     using library::CreditKind;
     auto tempDir = ao::test::TempDir{};

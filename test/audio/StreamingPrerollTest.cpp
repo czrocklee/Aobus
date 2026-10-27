@@ -126,8 +126,7 @@ namespace ao::audio::test
     }
   } // namespace
 
-  TEST_CASE("StreamingSource - growing preroll returns without a consumer and preserves all PCM",
-            "[audio][unit][streaming-preroll]")
+  TEST_CASE("StreamingSource - growing preroll returns without a consumer and preserves all PCM")
   {
     bool const growingBlockEndsStream = GENERATE(false, true);
     auto errors = std::atomic<int>{0};
@@ -153,7 +152,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("StreamingSource - seek retires pending PCM and completes growing preroll without a consumer",
-            "[audio][unit][streaming-preroll][concurrency]")
+            "[concurrency]")
   {
     bool const growingBlockEndsStream = GENERATE(false, true);
     auto errors = std::atomic<int>{0};
@@ -172,7 +171,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("StreamingSource - consecutive seeks retire every pending block before the final PCM is consumed",
-            "[audio][unit][streaming-preroll][concurrency]")
+            "[concurrency]")
   {
     bool const growingBlockEndsStream = GENERATE(false, true);
     auto errors = std::atomic<int>{0};
@@ -200,8 +199,7 @@ namespace ao::audio::test
     CHECK(errors.load() == 0);
   }
 
-  TEST_CASE("StreamingSource - destruction stops a pending preroll write without a consumer",
-            "[audio][unit][streaming-preroll][concurrency]")
+  TEST_CASE("StreamingSource - destruction stops a pending preroll write without a consumer", "[concurrency]")
   {
     bool const activate = GENERATE(false, true);
     auto destroyedPtr = std::make_shared<std::atomic<std::size_t>>(0);
@@ -224,8 +222,7 @@ namespace ao::audio::test
     CHECK(errors.load() == 0);
   }
 
-  TEST_CASE("StreamingSource - active growing block write remains stoppable without a consumer",
-            "[audio][unit][streaming-preroll][concurrency]")
+  TEST_CASE("StreamingSource - active growing block write remains stoppable without a consumer", "[concurrency]")
   {
     auto destroyedPtr = std::make_shared<std::atomic<std::size_t>>(0);
     auto errors = std::atomic<int>{0};

@@ -128,7 +128,7 @@ namespace ao::uimodel::test
     }
   } // namespace
 
-  TEST_CASE("LayoutSession - preset selection is deterministic", "[uimodel][unit][layout][session]")
+  TEST_CASE("LayoutSession - preset selection is deterministic")
   {
     static constexpr auto kSupported = std::array<std::string_view, 2>{"classic", "modern"};
 
@@ -147,8 +147,7 @@ namespace ao::uimodel::test
     CHECK(LayoutSession::activeOrDefaultPresetId("modern") == "modern");
   }
 
-  TEST_CASE("LayoutSession - build snapshots own candidate state and capture edit behavior",
-            "[uimodel][unit][layout][session]")
+  TEST_CASE("LayoutSession - build snapshots own candidate state and capture edit behavior")
   {
     auto session = LayoutSession{};
     auto candidate = LayoutComponentStateDocument{.preset = "modern"};
@@ -182,8 +181,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(replacementCalled);
   }
 
-  TEST_CASE("LayoutSession - applying a candidate advances the generation and replaces the session atomically",
-            "[uimodel][unit][layout][session]")
+  TEST_CASE("LayoutSession - applying a candidate advances the generation and replaces the session atomically")
   {
     auto session = LayoutSession{};
     auto document = panelLayout();
@@ -203,8 +201,7 @@ namespace ao::uimodel::test
     CHECK(optNext->generation() == generation + 1);
   }
 
-  TEST_CASE("LayoutSession - a candidate owns its preset when it replaces a different active preset",
-            "[uimodel][unit][layout][session]")
+  TEST_CASE("LayoutSession - a candidate owns its preset when it replaces a different active preset")
   {
     auto store = RecordingStateStore{};
     auto session = LayoutSession{&store};
@@ -227,8 +224,7 @@ namespace ao::uimodel::test
     CHECK(store.saved().front().second.preset == "modern");
   }
 
-  TEST_CASE("ComponentStateBinding - matching state restores and writes through the session store",
-            "[uimodel][unit][layout][session]")
+  TEST_CASE("ComponentStateBinding - matching state restores and writes through the session store")
   {
     auto store = RecordingStateStore{};
     auto session = LayoutSession{&store};
@@ -263,8 +259,7 @@ namespace ao::uimodel::test
     CHECK(saved.state.at("positionPercent").asDouble() == 0.5);
   }
 
-  TEST_CASE("ComponentStateBinding - a successor generation fences stale writes",
-            "[uimodel][unit][layout][session][async]")
+  TEST_CASE("ComponentStateBinding - a successor generation fences stale writes")
   {
     auto store = RecordingStateStore{};
     auto session = LayoutSession{&store};
@@ -288,8 +283,7 @@ namespace ao::uimodel::test
     CHECK(store.saved().empty());
   }
 
-  TEST_CASE("ComponentStateBinding - static eligibility prerequisites independently suppress writes",
-            "[uimodel][unit][layout][session]")
+  TEST_CASE("ComponentStateBinding - static eligibility prerequisites independently suppress writes")
   {
     auto const node = splitNode();
 
@@ -344,8 +338,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("LayoutSession - panel-size promotion moves runtime state into authored defaults",
-            "[uimodel][unit][layout][session]")
+  TEST_CASE("LayoutSession - panel-size promotion moves runtime state into authored defaults")
   {
     auto session = LayoutSession{};
     auto document = panelLayout();
@@ -362,8 +355,7 @@ namespace ao::uimodel::test
     CHECK(split.props.at("initialPositionPercent").asDouble() == 0.68);
   }
 
-  TEST_CASE("LayoutSession - panel-size promotion reports no work without promotable state",
-            "[uimodel][unit][layout][session]")
+  TEST_CASE("LayoutSession - panel-size promotion reports no work without promotable state")
   {
     auto session = LayoutSession{};
     auto document = panelLayout();
@@ -372,8 +364,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(session.preparePanelSizePromotion());
   }
 
-  TEST_CASE("LayoutSession - panel-size promotion stamps the classic fallback when no preset is active",
-            "[uimodel][unit][layout][session]")
+  TEST_CASE("LayoutSession - panel-size promotion stamps the classic fallback when no preset is active")
   {
     auto session = LayoutSession{};
     auto document = panelLayout();

@@ -27,7 +27,7 @@ namespace ao::uimodel::test
   using namespace ao::rt::test;
   using namespace ao::rt;
 
-  TEST_CASE("OutputDeviceViewModel - state generation", "[uimodel][unit][playback][output]")
+  TEST_CASE("OutputDeviceViewModel - state generation")
   {
     auto fixture = ApplicationPlaybackFixture{};
 
@@ -54,7 +54,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("OutputDeviceViewModel - refresh with fake provider", "[uimodel][unit][playback][output]")
+  TEST_CASE("OutputDeviceViewModel - refresh with fake provider")
   {
     auto fixture = ApplicationPlaybackFixture{};
     auto& playback = fixture.playback;
@@ -212,8 +212,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("OutputDeviceViewModel - unrelated playback snapshots do not rebuild output rows",
-            "[uimodel][unit][playback][output]")
+  TEST_CASE("OutputDeviceViewModel - unrelated playback snapshots do not rebuild output rows")
   {
     auto fixture = ApplicationPlaybackFixture{};
     auto log = ao::test::RenderLog<OutputDeviceViewState>{};
@@ -231,8 +230,7 @@ namespace ao::uimodel::test
     CHECK(log.states.size() == 1);
   }
 
-  TEST_CASE("OutputDeviceViewModel - stopping observation keeps explicit refresh without resubscribing",
-            "[uimodel][unit][playback][output]")
+  TEST_CASE("OutputDeviceViewModel - stopping observation keeps explicit refresh without resubscribing")
   {
     auto fixture = ApplicationPlaybackFixture{};
     addReadyAudioProvider(fixture.playbackTransport, makePipeWireOutputStatus());
@@ -272,8 +270,7 @@ namespace ao::uimodel::test
     CHECK(log.last().rows[1].isActive);
   }
 
-  TEST_CASE("OutputDeviceViewModel - reports exact requested intent when the engine cannot confirm it",
-            "[uimodel][unit][playback][output]")
+  TEST_CASE("OutputDeviceViewModel - reports exact requested intent when the engine cannot confirm it")
   {
     auto fixture = ApplicationPlaybackFixture{};
     addReadyAudioProvider(fixture.playbackTransport, makePipeWireOutputStatus());
@@ -296,8 +293,7 @@ namespace ao::uimodel::test
     CHECK(fixture.playback.snapshot().transport.output.selectedDevice != *optRequested);
   }
 
-  TEST_CASE("OutputDeviceViewModel - copies row identity before a synchronous render replaces the rows",
-            "[uimodel][unit][playback][output]")
+  TEST_CASE("OutputDeviceViewModel - copies row identity before a synchronous render replaces the rows")
   {
     auto fixture = ApplicationPlaybackFixture{};
     addReadyAudioProvider(fixture.playbackTransport, makePipeWireOutputStatus());

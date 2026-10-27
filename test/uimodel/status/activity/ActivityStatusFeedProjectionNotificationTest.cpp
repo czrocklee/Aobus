@@ -13,8 +13,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("ActivityStatusFeedProjection - compact groups choose the highest severity",
-            "[uimodel][unit][activity-status]")
+  TEST_CASE("ActivityStatusFeedProjection - compact groups choose the highest severity")
   {
     auto currentFeed = feed({entry(rt::NotificationId{2}, rt::NotificationSeverity::Warning, "Warn A"),
                              entry(rt::NotificationId{3}, rt::NotificationSeverity::Error, "Error A"),
@@ -27,7 +26,7 @@ namespace ao::uimodel::test
     CHECK(compact.hasDetails);
   }
 
-  TEST_CASE("ActivityStatusFeedProjection - compact groups use the selected locale", "[uimodel][unit][activity-status]")
+  TEST_CASE("ActivityStatusFeedProjection - compact groups use the selected locale")
   {
     auto currentFeed = feed({entry(rt::NotificationId{30}, rt::NotificationSeverity::Warning, "Warn A"),
                              entry(rt::NotificationId{31}, rt::NotificationSeverity::Warning, "Warn B")});
@@ -38,8 +37,7 @@ namespace ao::uimodel::test
     CHECK(pseudoProjection.viewState().compact.text == "[!! 2 wààrñïïñgs !!]");
   }
 
-  TEST_CASE("ActivityStatusFeedProjection - runtime notification lifetime remains authoritative",
-            "[uimodel][unit][activity-status]")
+  TEST_CASE("ActivityStatusFeedProjection - runtime notification lifetime remains authoritative")
   {
     auto feedProjection = ActivityStatusFeedProjection{ao::test::englishMessageCatalog(), feed({})};
 
@@ -70,8 +68,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("ActivityStatusFeedProjection - local compact dismissal preserves notification histories",
-            "[uimodel][unit][activity-status]")
+  TEST_CASE("ActivityStatusFeedProjection - local compact dismissal preserves notification histories")
   {
     auto feedProjection = ActivityStatusFeedProjection{ao::test::englishMessageCatalog(), feed({})};
 
@@ -170,8 +167,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("ActivityStatusFeedProjection - detail hiding updates the local compact projection",
-            "[uimodel][unit][activity-status]")
+  TEST_CASE("ActivityStatusFeedProjection - detail hiding updates the local compact projection")
   {
     auto currentFeed = feed({entry(rt::NotificationId{23}, rt::NotificationSeverity::Warning, "Older warning"),
                              entry(rt::NotificationId{24}, rt::NotificationSeverity::Warning, "Latest warning")});

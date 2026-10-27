@@ -178,8 +178,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("LibrarySnapshot - evaluates a scalar format against one track including custom fields",
-            "[runtime][unit][library][readmodel]")
+  TEST_CASE("LibrarySnapshot - evaluates a scalar format against one track including custom fields")
   {
     auto temp = ao::test::TempDir{};
     auto const seeded = seedLibrary(temp);
@@ -199,7 +198,7 @@ namespace ao::rt::test
     CHECK(snapshot.formatTrack(seeded.otherTrackId, *customPlanRes) == "");
   }
 
-  TEST_CASE("LibrarySnapshot - reads track rows and dictionary values", "[runtime][unit][library][readmodel]")
+  TEST_CASE("LibrarySnapshot - reads track rows and dictionary values")
   {
     auto tempDir = ao::test::TempDir{};
     auto const seeded = seedLibrary(tempDir);
@@ -282,8 +281,7 @@ namespace ao::rt::test
     CHECK(scope.resolve(seeded.albumId) == "The Album");
   }
 
-  TEST_CASE("LibrarySnapshot - looks up a track's URI and whether any track holds a URI",
-            "[runtime][unit][library][readmodel]")
+  TEST_CASE("LibrarySnapshot - looks up a track's URI and whether any track holds a URI")
   {
     auto tempDir = ao::test::TempDir{};
     auto const seeded = seedLibrary(tempDir);
@@ -310,14 +308,13 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("Library - published facade identity is nonmovable", "[runtime][unit][library]")
+  TEST_CASE("Library - published facade identity is nonmovable")
   {
     STATIC_CHECK_FALSE(std::is_move_constructible_v<Library>);
     STATIC_CHECK_FALSE(std::is_move_assignable_v<Library>);
   }
 
-  TEST_CASE("LibrarySnapshot - URI paths reject symlinks escaping the library root",
-            "[runtime][unit][library][readmodel]")
+  TEST_CASE("LibrarySnapshot - URI paths reject symlinks escaping the library root")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = temp.path() / "music";
@@ -339,7 +336,7 @@ namespace ao::rt::test
     CHECK_FALSE(optRow->optUriPath);
   }
 
-  TEST_CASE("LibrarySnapshot - snapshots list tree DTOs", "[runtime][unit][library][readmodel]")
+  TEST_CASE("LibrarySnapshot - snapshots list tree DTOs")
   {
     auto tempDir = ao::test::TempDir{};
     auto const seeded = seedLibrary(tempDir);
@@ -373,7 +370,7 @@ namespace ao::rt::test
     CHECK_FALSE(optMissingNode);
   }
 
-  TEST_CASE("LibrarySnapshot - reads stored List order", "[runtime][unit][library][readmodel]")
+  TEST_CASE("LibrarySnapshot - reads stored List order")
   {
     auto tempDir = ao::test::TempDir{};
     auto const seeded = seedLibrary(tempDir);
@@ -386,8 +383,7 @@ namespace ao::rt::test
     CHECK(scope.listOrderTrackIds(ListId{999999}).empty());
   }
 
-  TEST_CASE("LibrarySnapshot - caches the committed revision observed at construction",
-            "[runtime][unit][library][readmodel]")
+  TEST_CASE("LibrarySnapshot - caches the committed revision observed at construction")
   {
     auto tempDir = ao::test::TempDir{};
     auto const seeded = seedLibrary(tempDir);
@@ -424,7 +420,7 @@ namespace ao::rt::test
     CHECK(freshBoundRes->revision() == fresh.revision());
   }
 
-  TEST_CASE("LibrarySnapshot - snapshots tag DTOs", "[runtime][unit][library][readmodel]")
+  TEST_CASE("LibrarySnapshot - snapshots tag DTOs")
   {
     auto tempDir = ao::test::TempDir{};
     auto const seeded = seedLibrary(tempDir);

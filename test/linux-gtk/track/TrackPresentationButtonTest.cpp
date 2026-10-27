@@ -34,8 +34,7 @@
 namespace ao::gtk::test
 {
   // Catalog tests own menu contents; the widget owns binding and apply-before-persist.
-  TEST_CASE("TrackPresentationButton - binds the active title and applies a menu selection",
-            "[gtk][integration][track-presentation]")
+  TEST_CASE("TrackPresentationButton - binds the active title and applies a menu selection")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -93,8 +92,7 @@ namespace ao::gtk::test
     drainGtkEvents();
   }
 
-  TEST_CASE("TrackPresentationButton - rebinding services drops the pending apply",
-            "[gtk][integration][track-presentation][async]")
+  TEST_CASE("TrackPresentationButton - rebinding services drops the pending apply")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -131,8 +129,7 @@ namespace ao::gtk::test
     CHECK_FALSE(replacementPreferences.presentationIdForList(rt::kAllTracksListId).has_value());
   }
 
-  TEST_CASE("TrackPresentationButton - cancels pending presentation apply when destroyed",
-            "[gtk][integration][track-presentation][async]")
+  TEST_CASE("TrackPresentationButton - cancels pending presentation apply when destroyed")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -169,8 +166,7 @@ namespace ao::gtk::test
     CHECK(runtime.views().trackListState(activeViewId).presentation.id == rt::kDefaultTrackPresentationId);
   }
 
-  TEST_CASE("TrackPresentationButton - refused deferred applies do not persist a preference",
-            "[gtk][integration][track-presentation][async]")
+  TEST_CASE("TrackPresentationButton - refused deferred applies do not persist a preference")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

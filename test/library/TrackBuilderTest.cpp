@@ -14,7 +14,7 @@
 
 namespace ao::library::test
 {
-  TEST_CASE("TrackBuilder - makeEmpty returns an empty builder", "[library][unit][track][builder]")
+  TEST_CASE("TrackBuilder - makeEmpty returns an empty builder")
   {
     auto builder = TrackBuilder::makeEmpty();
 
@@ -33,7 +33,7 @@ namespace ao::library::test
     CHECK(builder.customMetadata().pairs().empty());
   }
 
-  TEST_CASE("TrackBuilder - metadata builder fluent setters update fields", "[library][unit][track][builder]")
+  TEST_CASE("TrackBuilder - metadata builder fluent setters update fields")
   {
     auto builder = TrackBuilder::makeEmpty();
     auto const entries = std::array{CreditView{.name = "Carlos Kleiber", .kind = CreditKind::Conductor},
@@ -81,7 +81,7 @@ namespace ao::library::test
     CHECK(builder.metadata().movementTotal() == 4);
   }
 
-  TEST_CASE("TrackBuilder - property builder fluent setters update fields", "[library][unit][track][builder]")
+  TEST_CASE("TrackBuilder - property builder fluent setters update fields")
   {
     auto builder = TrackBuilder::makeEmpty();
     builder.property()
@@ -102,7 +102,7 @@ namespace ao::library::test
     CHECK(builder.property().bitDepth() == 16);
   }
 
-  TEST_CASE("TrackBuilder - custom metadata builder adds removes and clears pairs", "[library][unit][track][builder]")
+  TEST_CASE("TrackBuilder - custom metadata builder adds removes and clears pairs")
   {
     auto builder = TrackBuilder::makeEmpty();
 
@@ -120,7 +120,7 @@ namespace ao::library::test
     CHECK(builder.customMetadata().pairs().empty());
   }
 
-  TEST_CASE("TrackBuilder - chained API updates builder state", "[library][unit][track][builder]")
+  TEST_CASE("TrackBuilder - chained API updates builder state")
   {
     auto builder = TrackBuilder::makeEmpty();
 

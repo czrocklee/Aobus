@@ -15,7 +15,7 @@
 
 namespace ao::audio::backend::detail::test
 {
-  TEST_CASE("AlsaPcmError - classifies terminal stream errors", "[audio][unit][alsa]")
+  TEST_CASE("AlsaPcmError - classifies terminal stream errors")
   {
     CHECK(isUnrecoverableAlsaPcmError(-ENODEV));
     CHECK(isUnrecoverableAlsaPcmError(-EBADF));
@@ -25,7 +25,7 @@ namespace ao::audio::backend::detail::test
     CHECK_FALSE(isUnrecoverableAlsaPcmError(-EAGAIN));
   }
 
-  TEST_CASE("AlsaPcmError - reports device contention distinctly", "[audio][unit][alsa]")
+  TEST_CASE("AlsaPcmError - reports device contention distinctly")
   {
     CHECK(alsaPcmOpenErrorCode(-EBUSY) == Error::Code::ResourceBusy);
     CHECK(alsaPcmOpenErrorCode(-ENODEV) == Error::Code::DeviceNotFound);
@@ -36,7 +36,7 @@ namespace ao::audio::backend::detail::test
     CHECK(alsaPcmOpenErrorCode(-EINVAL) == Error::Code::InitFailed);
   }
 
-  TEST_CASE("alsaHwConstraintFailureCause - only exact-constraint rejection routes to the track", "[audio][unit][alsa]")
+  TEST_CASE("alsaHwConstraintFailureCause - only exact-constraint rejection routes to the track")
   {
     struct CauseCase final
     {

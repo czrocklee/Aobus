@@ -25,7 +25,7 @@ namespace ao::gtk::test
     auto const kLibraryId = utility::parseUuid("123e4567-e89b-12d3-a456-426614174000").value();
   } // namespace
 
-  TEST_CASE("GtkLayoutStateStore - missing and rejected groups preserve caller state", "[gtk][unit][app][config]")
+  TEST_CASE("GtkLayoutStateStore - missing and rejected groups preserve caller state")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const libraryPath = std::filesystem::path{tempDir.path()};
@@ -86,7 +86,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("GtkLayoutStateStore - save round-trips both groups through a fresh reader", "[gtk][unit][app][config]")
+  TEST_CASE("GtkLayoutStateStore - save round-trips both groups through a fresh reader")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const libraryPath = std::filesystem::path{tempDir.path()};
@@ -138,8 +138,7 @@ namespace ao::gtk::test
     CHECK(prefState == expectedPrefState);
   }
 
-  TEST_CASE("GtkLayoutStateStore - unsupported column group does not block a valid presentation group",
-            "[gtk][unit][app][config]")
+  TEST_CASE("GtkLayoutStateStore - unsupported column group does not block a valid presentation group")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const libraryPath = std::filesystem::path{tempDir.path()};
@@ -172,8 +171,7 @@ namespace ao::gtk::test
     CHECK(ao::test::readFile(libraryPath / "gtk_layout.yaml") == stored);
   }
 
-  TEST_CASE("GtkLayoutStateStore - a file saved for another library restores only virtual-list entries",
-            "[gtk][unit][app][config]")
+  TEST_CASE("GtkLayoutStateStore - a file saved for another library restores only virtual-list entries")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const libraryPath = std::filesystem::path{tempDir.path()};
@@ -200,8 +198,7 @@ namespace ao::gtk::test
     CHECK(prefState == uimodel::ListPresentations::Snapshot{{rt::kAllTracksListId, "songs"}});
   }
 
-  TEST_CASE("GtkLayoutStateStore - failed serialization leaves both durable groups unchanged",
-            "[gtk][unit][app][config]")
+  TEST_CASE("GtkLayoutStateStore - failed serialization leaves both durable groups unchanged")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const libraryPath = std::filesystem::path{tempDir.path()};

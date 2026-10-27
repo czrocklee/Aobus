@@ -31,7 +31,7 @@ namespace ao::winui::test
     }
   } // namespace
 
-  TEST_CASE("KeyChordAccelerator - letters and digits take their own virtual key", "[winui][unit][input]")
+  TEST_CASE("KeyChordAccelerator - letters and digits take their own virtual key")
   {
     CHECK(translated("P").virtualKey == 0x50);
     CHECK(translated("A").virtualKey == 0x41);
@@ -40,7 +40,7 @@ namespace ao::winui::test
     CHECK(translated("9").virtualKey == 0x39);
   }
 
-  TEST_CASE("KeyChordAccelerator - modifiers become the Windows flags", "[winui][unit][input]")
+  TEST_CASE("KeyChordAccelerator - modifiers become the Windows flags")
   {
     CHECK(translated("Ctrl+P").modifiers == kAcceleratorModifierControl);
     CHECK(translated("Alt+Up").modifiers == kAcceleratorModifierMenu);
@@ -50,7 +50,7 @@ namespace ao::winui::test
     CHECK(translated("Right").modifiers == kAcceleratorModifierNone);
   }
 
-  TEST_CASE("KeyChordAccelerator - named navigation and editing keys translate", "[winui][unit][input]")
+  TEST_CASE("KeyChordAccelerator - named navigation and editing keys translate")
   {
     CHECK(translated("Left").virtualKey == 0x25);
     CHECK(translated("Up").virtualKey == 0x26);
@@ -66,7 +66,7 @@ namespace ao::winui::test
     CHECK(translated("Delete").virtualKey == 0x2E);
   }
 
-  TEST_CASE("KeyChordAccelerator - function keys are numbered from F1", "[winui][unit][input]")
+  TEST_CASE("KeyChordAccelerator - function keys are numbered from F1")
   {
     CHECK(translated("F1").virtualKey == 0x70);
     CHECK(translated("F5").virtualKey == 0x74);
@@ -78,7 +78,7 @@ namespace ao::winui::test
     CHECK_FALSE(toWindowsAccelerator(KeyChord{.key = "F5x"}));
   }
 
-  TEST_CASE("KeyChordAccelerator - Windows names one key for play and pause", "[winui][unit][input]")
+  TEST_CASE("KeyChordAccelerator - Windows names one key for play and pause")
   {
     // GDK separates them; Windows does not, so both tokens have to land
     // somewhere real rather than one of them being dropped.
@@ -89,7 +89,7 @@ namespace ao::winui::test
     CHECK(translated("Media:Stop").virtualKey == 0xB2);
   }
 
-  TEST_CASE("KeyChordAccelerator - a token Windows has no key for is unmappable", "[winui][unit][input]")
+  TEST_CASE("KeyChordAccelerator - a token Windows has no key for is unmappable")
   {
     // Reported rather than guessed at: an accelerator built from a guess is one
     // that silently never fires.
@@ -99,7 +99,7 @@ namespace ao::winui::test
     CHECK_FALSE(toWindowsAccelerator(KeyChord{.key = "AudioPlay"}));
   }
 
-  TEST_CASE("KeyChordAccelerator - every default binding reaches a Windows key", "[winui][unit][input]")
+  TEST_CASE("KeyChordAccelerator - every default binding reaches a Windows key")
   {
     // The shipped defaults are the shortcuts a Windows user gets without ever
     // opening a settings page, so none of them may be silently unmappable.
@@ -113,7 +113,7 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("KeyChordAccelerator - a shifted character carries the Shift it needs", "[winui][unit][input]")
+  TEST_CASE("KeyChordAccelerator - a shifted character carries the Shift it needs")
   {
     // Windows numbers the OEM keys by position, so `+` and `=` are one key.
     // Translating `+` without its implicit Shift installs `=`: the same
@@ -131,7 +131,7 @@ namespace ao::winui::test
     CHECK_FALSE(plus == equals);
   }
 
-  TEST_CASE("KeyChordAccelerator - punctuation reaches its US key position", "[winui][unit][input]")
+  TEST_CASE("KeyChordAccelerator - punctuation reaches its US key position")
   {
     struct Expectation final
     {
@@ -161,15 +161,14 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("KeyChordAccelerator - spelling a Shift that the character already implies changes nothing",
-            "[winui][unit][input]")
+  TEST_CASE("KeyChordAccelerator - spelling a Shift that the character already implies changes nothing")
   {
     // `Shift+=` and `+` are one keystroke described two ways, so they have to
     // translate identically or the conflict check cannot see them collide.
     CHECK(translated("Ctrl+Shift+=") == translated("Ctrl++"));
   }
 
-  TEST_CASE("KeyChordAccelerator - a layout resolver decides where a character sits", "[winui][unit][input]")
+  TEST_CASE("KeyChordAccelerator - a layout resolver decides where a character sits")
   {
     // The built-in table is a US keyboard. A shell installing real accelerators
     // asks the system instead, because Windows names punctuation keys by
@@ -200,7 +199,7 @@ namespace ao::winui::test
     CHECK(translated("Ctrl++").virtualKey == 0xBB);
   }
 
-  TEST_CASE("KeyChordAccelerator - a character the layout cannot reach installs nothing", "[winui][unit][input]")
+  TEST_CASE("KeyChordAccelerator - a character the layout cannot reach installs nothing")
   {
     // A resolver that answers is authoritative, including when it says the
     // character needs AltGr. Falling back to the US table there would bind a
