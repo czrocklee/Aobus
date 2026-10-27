@@ -42,11 +42,12 @@ Visual Studio's bundled vcpkg is the default. `VCPKG_ROOT` may select another
 complete checkout for diagnosis, but the repository registry and manifest locks
 still apply.
 
-Do not install a separate Python for the normal path. `ao.bat` obtains NuGet
-through the Visual Studio vcpkg installation, installs the exact CPython release
-from `script/ao/toolchain.json`, and creates a checkout-specific environment
-from the hashed Windows requirements lock. It does not use the Windows Store
-alias or ambient `PATH` Python.
+Do not install a separate Python for the normal path. `ao.bat` obtains the
+NuGet tool through the Visual Studio vcpkg installation, uses NuGet's `python`
+package for the exact CPython release from `script/ao/toolchain.json`, and
+creates a checkout-specific environment from the hashed Windows requirements lock. It does not use the Windows Store
+alias or ambient `PATH` Python. The manifest's `python3` host port serves
+dependency builds; it is not the portal interpreter or the Ruff/mypy provider.
 
 `AOBUS_PYTHON` is an advanced override for an explicit interpreter. It must
 match the exact policy version and provide `venv` and `ensurepip`; the portal
@@ -127,7 +128,16 @@ Overrides apply in this order:
 A composite `ao.bat check` derives `<primary>-winui` when the primary path is
 explicit. Keep build, tool, and cache overrides on a local Windows disk; mapped
 drives are not reliably distinguishable from local disks and drive mappings are
-login-session scoped.
+login-session scoped. This is a storage requirement, not automatic local-volume
+enforcement; verify the actual backing storage for overrides.
+
+Ruff check/format and mypy use `.ruff_cache` and `.mypy_cache` under the
+managed environment's `sys.prefix`, including for local source checkouts.
+These explicit cache paths take precedence over inherited tool cache settings.
+Check-only commands may write caches without rewriting source. This is not a
+write-free checkout guarantee: ordinary Python `__pycache__` and explicit
+checkout-ID creation remain separate writes. Moving build trees alone does not
+move Git metadata or Python bytecode.
 
 Portal build-tree writers use a persistent lock beside the tree. This prevents
 concurrent mutation but does not make a stable snapshot for a simultaneously

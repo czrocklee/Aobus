@@ -7,10 +7,12 @@ import json
 import os
 import re
 import shlex
+import sys
 import tempfile
 import unittest
 from argparse import Namespace
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 from ao.command import format as format_command
@@ -51,15 +53,49 @@ class FormatCommandTest(unittest.TestCase):
         clang.assert_called_once_with(["lib/Foo.cpp"], check=True, build_dir=None)
         ruff.assert_called_once_with(["script/foo.py"], check=True)
 
-    def test_ruff_format_uses_the_current_python_environment(self):
-        completed = mock.Mock(returncode=0)
-        with mock.patch.object(format_command.subprocess, "run", return_value=completed) as run:
-            self.assertEqual(format_command.run_ruff_format(["script/foo.py"], check=True), 0)
-
-        run.assert_called_once_with(
-            format_command.pythoncheck.module_command("ruff", "format", "--check", "script/foo.py"),
-            cwd=format_command.PROJECT_ROOT,
+    def test_ruff_format_uses_shared_cache_commands_and_preserves_tool_failures(self):
+        # Mocked platform argv is not proof of a native filesystem or cache write.
+        process_python_state = (sys.platform, sys.executable, sys.prefix)
+        prefix = str(Path("managed tool env").absolute())
+        files = ["script/a file.py", "script/other.py"]
+        native_command = (
+            "managed-python",
+            "-I",
+            "-m",
+            "ruff",
+            "format",
+            "--cache-dir",
+            prefix + os.sep + ".ruff_cache",
         )
+        for platform, command in (
+            ("linux", ("managed-python", "-m", "ruff", "format")),
+            ("win32", native_command),
+            ("darwin", native_command),
+        ):
+            for check in (False, True):
+                for code in (0, 1, 2):
+                    with (
+                        self.subTest(platform=platform, check=check, code=code),
+                        mock.patch.object(format_command.pythoncheck, "os", SimpleNamespace(name="posix")),
+                        mock.patch.object(
+                            format_command.pythoncheck,
+                            "sys",
+                            SimpleNamespace(platform=platform, prefix=prefix, executable="managed-python"),
+                        ),
+                        mock.patch.object(
+                            format_command.subprocess, "run", return_value=mock.Mock(returncode=code)
+                        ) as run,
+                        contextlib.redirect_stdout(io.StringIO()),
+                    ):
+                        self.assertEqual(format_command.run_ruff_format(files, check=check), int(code != 0))
+                        self.assertEqual((sys.platform, sys.executable, sys.prefix), process_python_state)
+                        mode = ("--check",) if check else ()
+                        run.assert_called_once_with((*command, *mode, *files), cwd=format_command.PROJECT_ROOT)
+
+    def test_empty_python_format_scope_does_not_start_ruff(self):
+        with mock.patch.object(format_command.subprocess, "run") as run:
+            self.assertEqual(format_command.run_ruff_format([], check=True), 0)
+        run.assert_not_called()
 
     def test_windows_clang_format_uses_the_pinned_llvm_sdk_tool(self):
         pinned = r"C:\llvm-22.1.8\bin\clang-format.exe"

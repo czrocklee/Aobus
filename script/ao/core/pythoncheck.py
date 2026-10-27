@@ -4,7 +4,7 @@ import os
 import subprocess
 import sys
 from dataclasses import dataclass
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import IO
 
 from .paths import PROJECT_ROOT, absolute_path
@@ -28,21 +28,33 @@ def module_command(
     """Run a Python module, isolating managed native tools from ambient packages."""
     resolved_os_name = os.name if os_name is None else os_name
     resolved_platform = sys.platform if platform_name is None else platform_name
-    isolated = ("-I",) if resolved_os_name == "nt" or resolved_platform == "darwin" else ()
+    isolated = ("-I",) if resolved_os_name == "nt" or resolved_platform in ("win32", "darwin") else ()
     return (sys.executable, *isolated, "-m", module, *arguments)
 
 
 def mypy_command(*arguments: str, platform_name: str | None = None) -> tuple[str, ...]:
-    """Keep Darwin's SQLite cache on the local managed-tool volume."""
-    resolved_platform = sys.platform if platform_name is None else platform_name
-    cache = ("--cache-dir", str(PurePosixPath(sys.prefix) / ".mypy_cache")) if resolved_platform == "darwin" else ()
+    """Keep native mypy caches in the managed environment, not the source checkout."""
+    cache = _local_cache_option(".mypy_cache", platform_name=platform_name)
     return module_command("mypy", *cache, *arguments, platform_name=platform_name)
+
+
+def ruff_command(subcommand: str, *arguments: str, platform_name: str | None = None) -> tuple[str, ...]:
+    """Keep native Ruff check and format caches in the managed environment."""
+    cache = _local_cache_option(".ruff_cache", platform_name=platform_name)
+    return module_command("ruff", subcommand, *cache, *arguments, platform_name=platform_name)
+
+
+def _local_cache_option(name: str, *, platform_name: str | None = None) -> tuple[str, ...]:
+    resolved_platform = sys.platform if platform_name is None else platform_name
+    if resolved_platform not in ("win32", "darwin"):
+        return ()
+    return ("--cache-dir", str(Path(sys.prefix) / name))
 
 
 def checks(paths: list[str]) -> tuple[Check, ...]:
     targets = tuple(paths or DEFAULT_TARGETS)
     mypy_targets = tuple(target for target in targets if not _is_test_script_path(target))
-    result = [Check("Ruff", module_command("ruff", "check", *targets))]
+    result = [Check("Ruff", ruff_command("check", *targets))]
     if mypy_targets:
         result.append(Check("mypy", mypy_command(*mypy_targets)))
     return tuple(result)

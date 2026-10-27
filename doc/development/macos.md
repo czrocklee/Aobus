@@ -99,9 +99,11 @@ build either AppKit GUI bundle and is not evidence for native GUI behavior. Use
 an explicit `./ao test --appkit --tsan ...` invocation when the selected AppKit
 scenario is required under TSan.
 
-The managed macOS environment matches Ruff and mypy pins for format/tidy work,
-but macOS does not claim exact Python patch parity and does not expose
-`./ao test --tooling`.
+The portal starts with Homebrew Python and selects the managed Ruff/mypy venv
+on demand for format/tidy/hygiene work. Other commands can use the base
+interpreter; `/usr/bin/python3` only reads initial bootstrap JSON fields.
+The managed environment matches Ruff and mypy pins, but macOS does not claim
+exact Python patch parity and does not expose `./ao test --tooling`.
 
 Release IPO is checked for C++ only. C++ translation units and final links use
 ThinLTO; Objective-C++ translation units use normal Release optimization.
@@ -154,11 +156,16 @@ administration, not portal behavior. Keep source files stable while building
 or collecting validation evidence; do not edit the same shared files
 concurrently from multiple hosts.
 
-This storage requirement does not imply a write-free source checkout.
-Checkout IDs live in private Git metadata, and Ruff/Python may create
-`.ruff_cache` and `__pycache__` beside sources. Darwin's mypy cache is kept in
-the managed Python environment. `AOBUS_BUILD_ROOT` moves only build trees,
-not those metadata or source-side caches.
+This is a storage requirement, not automatic local-volume enforcement; verify
+the actual backing storage for overrides. Ruff check/format and mypy use
+`.ruff_cache` and `.mypy_cache` under the managed environment's `sys.prefix`,
+including for local source checkouts. These explicit cache paths take precedence
+over inherited tool cache settings. Check-only commands may write caches without
+rewriting source.
+
+This does not imply a write-free source checkout. Checkout-ID creation writes
+private Git metadata, and ordinary Python `__pycache__` may appear beside sources.
+`AOBUS_BUILD_ROOT` moves only build trees, not Git metadata or Python bytecode.
 
 ### Native checkout identity
 
@@ -355,8 +362,8 @@ hardware behavior.
 - If a build tree is selected on a source share, choose an absolute local path
   with `-p` or `BUILD_DIR`, or omit `-p` and unset `BUILD_DIR` before selecting
   an absolute local `AOBUS_BUILD_ROOT`. Also check `AOBUS_STATE_ROOT` for managed
-  tool and package state; these settings do not relocate Git metadata or
-  source-side caches.
+  tool and package state, including managed Ruff/mypy caches. These settings do
+  not relocate Git metadata or ordinary Python bytecode.
 - "cannot locate the private Git directory", "cannot create the checkout ID",
   or "checkout ID remained empty" can prevent managed-tool initialization.
   Follow the scoped override guidance under

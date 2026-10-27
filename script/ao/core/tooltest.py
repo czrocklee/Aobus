@@ -46,7 +46,7 @@ def _count(pattern: re.Pattern[str], output: str) -> int:
 
 
 def run(*, log: Path | None = None) -> int:
-    # Ruff and mypy are read-only, so they can gate the tooling suite without touching files.
+    # Static checks do not rewrite sources, but the tools may update their caches.
     static_status = pythoncheck.run_paths([], log=log)
     env = dict(os.environ)
     # Unit modules invoke mocked portal operations. Keep their synthetic phases
