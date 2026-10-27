@@ -101,6 +101,17 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
     APPEND PROPERTY COMPILE_OPTIONS -Wno-mismatched-new-delete)
 endif()
 
+# GCC 16.2 gcov misdiagnoses move_only_function's no-op empty-manager branch
+# as a read of its uninitialized swap temporary. Keep this exception source-local.
+# The portal `ao coverage` supplies --coverage through CMAKE_CXX_FLAGS.
+if(LINUX
+    AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
+    AND CMAKE_CXX_COMPILER_VERSION VERSION_EQUAL 16.2.0
+    AND CMAKE_CXX_FLAGS MATCHES "(^|[ ;])--coverage($|[ ;])")
+  set_property(SOURCE library/ScanApplyOperation.cpp
+    APPEND PROPERTY COMPILE_OPTIONS -Wno-maybe-uninitialized)
+endif()
+
 target_include_directories(ao_app_runtime PUBLIC "${CMAKE_SOURCE_DIR}/app/include")
 target_include_directories(ao_app_runtime PRIVATE "${CMAKE_SOURCE_DIR}/app")
 target_link_libraries(ao_app_runtime PUBLIC ao ao_async PkgRapidYaml spdlog::spdlog)
