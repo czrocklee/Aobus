@@ -204,15 +204,20 @@ class PlatformProfile:
     compiler: str
 
 
+# Backend owns the registrations that need a real device, daemon, or native
+# SDK, so it belongs to the unattended Linux and macOS groups. The Linux-only
+# system-media suite is conditional on AOBUS_BUILD_SYSTEM_MEDIA, which the
+# test command checks against the configured tree before admitting it to an
+# automatic group.
 LINUX_PROFILE = PlatformProfile(
     name="linux",
     build_root=BUILD_ROOT,
     presets=PRESETS,
     executable_suffix="",
     apps=("cli", "tui", "gtk"),
-    default_suites=("core", "gtk"),
-    all_suites=("core", "tui", "cli", "gtk", "integration", "tooling", "lint"),
-    tsan_suites=("core", "gtk"),
+    default_suites=("core", "backend", "gtk"),
+    all_suites=("core", "backend", "tui", "cli", "gtk", "systemmedia", "tooling", "lint"),
+    tsan_suites=("core", "backend", "gtk"),
     compiler="gcc",
 )
 
@@ -226,12 +231,15 @@ MACOS_PROFILE = PlatformProfile(
     presets=MACOS_PRESETS,
     executable_suffix="",
     apps=("cli", "tui", "appkit"),
-    default_suites=("core", "tui"),
-    all_suites=("core", "tui", "cli", "integration", "lint"),
-    tsan_suites=("core",),
+    default_suites=("core", "backend", "tui"),
+    all_suites=("core", "backend", "tui", "cli", "lint"),
+    tsan_suites=("core", "backend"),
     compiler="clang",
 )
 
+# The Windows backend suite is compiled by the ordinary graph but joins no
+# unattended group: both of its registrations are hidden there, so it stays
+# individually selectable for an explicit run, like the WinUI audit.
 WINDOWS_PROFILE = PlatformProfile(
     name="windows",
     build_root=WINDOWS_BUILD_ROOT,
@@ -239,7 +247,7 @@ WINDOWS_PROFILE = PlatformProfile(
     executable_suffix=".exe",
     apps=("cli", "tui", "winui"),
     default_suites=("core", "tui"),
-    all_suites=("core", "tui", "cli", "integration", "tooling", "lint"),
+    all_suites=("core", "tui", "cli", "tooling", "lint"),
     tsan_suites=(),
     compiler="msvc",
 )

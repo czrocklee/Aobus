@@ -44,7 +44,7 @@ target_include_directories(ao_audio
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
 )
 target_link_libraries(ao_audio
-    PUBLIC ao_media ao_utility
+    PUBLIC ao_async ao_media ao_utility
     PRIVATE PkgFLAC PkgALAC PkgFDKAAC PkgMPG123 PkgOpus
 )
 

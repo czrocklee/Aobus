@@ -121,7 +121,7 @@ Use focused filters while implementing or diagnosing a concrete behavior:
 ```bash
 ./ao test --core "Component - behavior"
 ./ao test --gtk "Component - behavior"
-./ao test --integration "Component - behavior"
+./ao test --backend "Component - behavior"
 ```
 
 Focused results do not replace a full gate required by the table.

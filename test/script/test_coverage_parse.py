@@ -2,6 +2,7 @@
 
 import contextlib
 import io
+import os
 import subprocess
 import tempfile
 import unittest
@@ -9,6 +10,7 @@ from pathlib import Path
 from unittest import mock
 
 from ao.command import coverage
+from ao.command import test as test_command
 
 GCOV_A = """\
         -:    0:Source:lib/audio/Foo.cpp
@@ -132,17 +134,115 @@ class ScopedStatsTest(unittest.TestCase):
 
 
 class CoverageSuiteStatusTest(unittest.TestCase):
+    """The shared-suite runner contract: run all, keep the first failure, and
+    require a global match only for an explicitly filtered run."""
+
+    @staticmethod
+    def _suite_kwargs(test_filter):
+        # The coverage invocation is deliberately unsharded and reports match
+        # counts only when the caller supplied an explicit filter.
+        return {
+            "test_filter": test_filter,
+            "shards": 1,
+            "report_matches": bool(test_filter),
+            "allow_no_tests": bool(test_filter),
+        }
+
     def test_failed_suite_status_survives_partial_coverage_collection(self):
-        with mock.patch.object(coverage, "run_suite", side_effect=[0, 7, 5]) as run_suite:
+        outcomes = [
+            test_command.SuiteOutcome(0, 1),
+            test_command.SuiteOutcome(7, 0),
+            test_command.SuiteOutcome(5, 1),
+        ]
+        with mock.patch.object(coverage, "run_catch2_suite", side_effect=outcomes) as run_suite:
             status = coverage.run_coverage_tests(
-                ("core", "tui", "gtk"),
+                ("core", "backend", "gtk"),
                 Path("/tmp/coverage-test"),
                 "[concurrency]",
             )
 
         self.assertEqual(status, 7)
         self.assertEqual(run_suite.call_count, 3)
-        run_suite.assert_any_call("gtk", Path("/tmp/coverage-test"), test_filter="[concurrency]")
+        for suite in ("core", "backend", "gtk"):
+            run_suite.assert_any_call(suite, Path("/tmp/coverage-test"), **self._suite_kwargs("[concurrency]"))
+
+    def test_filtered_run_accepts_an_empty_member_suite_when_another_matches(self):
+        outcomes = [test_command.SuiteOutcome(0, 0), test_command.SuiteOutcome(0, 1)]
+        with mock.patch.object(coverage, "run_catch2_suite", side_effect=outcomes) as run_suite:
+            status = coverage.run_coverage_tests(
+                ("backend", "core"),
+                Path("/tmp/coverage-test"),
+                "[pipewire]",
+            )
+
+        self.assertEqual(status, 0)
+        self.assertEqual(run_suite.call_count, 2)
+
+    def test_filtered_run_fails_when_no_selected_suite_matches_globally(self):
+        outcomes = [test_command.SuiteOutcome(0, 0), test_command.SuiteOutcome(0, 0)]
+        stderr = io.StringIO()
+        with (
+            mock.patch.object(coverage, "run_catch2_suite", side_effect=outcomes) as run_suite,
+            contextlib.redirect_stderr(stderr),
+            self.assertRaises(SystemExit),
+        ):
+            coverage.run_coverage_tests(("core", "backend"), Path("/tmp/coverage-test"), "[missing]")
+
+        self.assertEqual(run_suite.call_count, 2)
+        self.assertIn("no tests in the selected coverage suites matched filter '[missing]'", stderr.getvalue())
+
+    def test_earlier_native_failure_is_preserved_while_every_suite_still_runs(self):
+        outcomes = [test_command.SuiteOutcome(7, 0), test_command.SuiteOutcome(0, 2), test_command.SuiteOutcome(0, 1)]
+        with mock.patch.object(coverage, "run_catch2_suite", side_effect=outcomes) as run_suite:
+            status = coverage.run_coverage_tests(
+                ("core", "backend", "tui"),
+                Path("/tmp/coverage-test"),
+                "[focused]",
+            )
+
+        self.assertEqual(status, 7)
+        self.assertEqual(run_suite.call_count, 3)
+
+    def test_unreadable_match_metadata_keeps_its_promoted_failure_status(self):
+        # The shared runner already promotes an unreadable filtered report to
+        # a failed suite status; coverage keeps that failure and still runs
+        # the remaining suites.
+        outcomes = [test_command.SuiteOutcome(1, None), test_command.SuiteOutcome(0, 2)]
+        with mock.patch.object(coverage, "run_catch2_suite", side_effect=outcomes) as run_suite:
+            status = coverage.run_coverage_tests(
+                ("core", "backend"),
+                Path("/tmp/coverage-test"),
+                "[focused]",
+            )
+
+        self.assertEqual(status, 1)
+        self.assertEqual(run_suite.call_count, 2)
+
+    def test_unfiltered_run_never_relaxes_the_native_empty_failure(self):
+        outcome = test_command.SuiteOutcome(0, None)
+        with mock.patch.object(coverage, "run_catch2_suite", return_value=outcome) as run_suite:
+            status = coverage.run_coverage_tests(("core", "backend"), Path("/tmp/coverage-test"), "")
+
+        self.assertEqual(status, 0)
+        for call in run_suite.call_args_list:
+            self.assertEqual(call.kwargs["shards"], 1)
+            self.assertFalse(call.kwargs["report_matches"])
+            self.assertFalse(call.kwargs["allow_no_tests"])
+
+    def test_hostile_shard_environment_cannot_shard_a_coverage_run(self):
+        outcome = test_command.SuiteOutcome(0, 1)
+        with mock.patch.dict(os.environ, {test_command.SHARD_ENV: "16"}):
+            with mock.patch.object(coverage, "run_catch2_suite", return_value=outcome) as run_suite:
+                status = coverage.run_coverage_tests(
+                    ("core", "backend"),
+                    Path("/tmp/coverage-test"),
+                    "[focused]",
+                )
+
+        self.assertEqual(status, 0)
+        for call in run_suite.call_args_list:
+            self.assertEqual(call.kwargs["shards"], 1)
+            self.assertNotIn("--shard-count", str(call))
 
 
 class CoverageMeasurementTest(unittest.TestCase):
@@ -221,7 +321,7 @@ class CoverageMeasurementTest(unittest.TestCase):
             (build / "test" / "header.gcda").touch()
 
             def extract(argv, *, cwd, **kwargs):
-                for source in ("include/ao/Example.h", "test/ExampleTest.cpp"):
+                for source in ("include/ao/Example.h", "test/unit/ExampleTest.cpp"):
                     text = GCOV_B.replace("lib/audio/Foo.cpp", str(coverage.PROJECT_ROOT / source))
                     (cwd / (Path(source).name + ".gcov")).write_text(text, encoding="utf-8")
                 return subprocess.CompletedProcess(argv, 0, "", "")

@@ -8,22 +8,25 @@ helper boundaries, see `doc/development/test.md`.
 
 The `./ao test` command exposes individual suites and four suite groups:
 
-- `core`: shared core, runtime, UIModel, portable frontend policy, and host-native Catch2 tests (`ao_core_test`).
+- `core`: shared core, runtime, UIModel, portable frontend policy, and host-native Catch2 tests (`ao_core_test`). It also owns the portable decoder, graph, and media-file cases and the device-free backend cases from `test/audio/backend` on their host platforms: the pure PipeWire SDK cases plus the portable ALSA, Core Audio, and WASAPI SDK, null, fake, and refusal cases that need no live endpoint or service.
+- `backend`: native audio backend contracts (`ao_backend_test`) that verify against a true live endpoint or service, plus the PipeWire admission cases that own the five link-interposed stream calls; its hidden hardware and channel-map cases stay opt-in through `[.manual]`.
 - `tui`: terminal frontend Catch2 tests (`ao_tui_test`).
 - `cli`: command-line frontend Catch2 tests (`ao_cli_test`).
 - `gtk`: GTK Catch2 tests (`ao_gtk_test`).
-- `integration`: the standalone media-file, decoder, graph, native-provider, and enabled Linux system-media suite (`ao_integration_test`); its membership comes from CMake registration, not from any case classification.
+- `systemmedia`: the Linux system-media suite (`ao_systemmedia_test`), built when `AOBUS_BUILD_SYSTEM_MEDIA` is enabled; it owns the shared MPRIS adapter cases and the registered real-TUI MPRIS process cases.
 - `tooling`: Python tests for the `./ao` tooling.
 - `lint`: integration tests for the Aobus clang-tidy plugin.
 - `appkit`: an opt-in native macOS GUI smoke harness with scenario selection and required disposable library and isolated state-root inputs; it is not part of a suite group.
-- `default`: the native fast-loop group. Linux runs core and GTK; macOS and Windows run core and TUI.
-- `all`: every suite enabled by the native build profile.
+- `default`: the native fast-loop group. Linux runs core, backend, and GTK; macOS runs core, backend, and TUI; Windows runs core and TUI.
+- `all`: the automatic native selection: Linux runs core, backend, TUI, CLI, GTK, system media, tooling, and lint; macOS runs core, backend, TUI, CLI, and lint; Windows runs core, TUI, CLI, tooling, and lint. It is not the complete built-asset inventory: explicit-only suites such as the Windows backend and opt-in harnesses stay outside it.
 - `tsan`: suites with a clean ThreadSanitizer baseline.
-- `concurrency`: every native Catch2 suite, filtered to non-hidden concurrency cases with `[concurrency]~[.]`.
+- `concurrency`: the automatic native Catch2 suites, filtered to non-hidden concurrency cases with `[concurrency]~[.]`.
 
-Suites choose binaries; Catch2 filters choose cases within them. So
+Suites choose binaries; Catch2 filters choose cases within them. Executables
+own cases by runtime and link needs, not by directory; see
+[Decision 0021](../../decision/0021-own-test-executables-by-runtime-needs.md). So
 `./ao test --core "TrackStore*"` runs matching cases in core,
-while `--integration` never collects cases from other binaries. A filter skips
+while `--backend` never collects cases from other binaries. A filter skips
 tooling and lint, and it fails only when no selected suite matches; a matched
 case that skips still counts as matched.
 
@@ -38,15 +41,17 @@ Use name globs to select a family of cases. For example, on macOS,
 `./ao test --all --list "~[.]CoreAudio*"` lists the non-hidden CoreAudio cases
 across the native Catch2 programs. Remove `--list` to run that selection;
 `~[.]` keeps manual probes excluded. A suite flag still restricts the selection
-to that program, so `--core` does not include matching integration cases.
+to that program, so `--core` does not include the backend suite's matching
+native cases.
 
 `./ao check` is the complete native gate. CTest is not equivalent: it omits the
-standalone integration suite and the portal's tooling, lint, and environment setup.
+standalone backend and system-media suites and the portal's tooling, lint, and environment setup.
 
 `default` is intentionally the normal development loop. On Linux, the TUI, CLI,
-integration, tooling, and lint suites take longer, so they are included
+system-media, tooling, and lint suites take longer, so they are included
 only when selected directly or through `all`. The Windows `all` group contains
-core, TUI, CLI, integration, tooling, and lint. GTK is not built.
+core, TUI, CLI, tooling, and lint; the Windows backend suite is compiled, but
+its hidden cases run only through an explicit filter, and GTK is not built.
 `ao.bat test --lint`, `ao.bat test --all`, and `ao.bat check` prepare the static
 `AobusClangTidy.exe` through the existing `windows-tidy` preset before running
 fixtures. The checker host stays separate from Debug, Release, and ASan product
@@ -72,7 +77,7 @@ Objective-C++ `.mm` fixtures are explicitly listed as platform-incompatible and
 not tested on Windows; C++ and header fixtures retain diagnostic assertions and
 compiler-error detection in the diagnostic invocation.
 
-The macOS `all` group contains core, TUI, CLI, integration, and lint. GTK is not
+The macOS `all` group contains core, backend, TUI, CLI, and lint. GTK is not
 built. Its Homebrew host Python is outside the exact repository-tooling
 contract; native clang-tidy and its integration fixtures do have a Darwin
 baseline. `./ao test --all` and `./ao check` resolve the same supported
@@ -111,9 +116,9 @@ interactive test command and the full gate cannot drift apart.
 ThreadSanitizer is intentionally different. `ao test --tsan` and
 `ao check --tsan` resolve `default`/`all` to the native `tsan` group. Explicit
 suite selection, such as `ao test --gtk --tsan`, remains available for focused diagnosis.
-The Linux TSan group contains core and GTK; reviewed uninstrumented UI dependencies use module-scoped interceptor suppressions.
-Registered real-TUI MPRIS process cases in the integration binary require Linux system media and TUI support and are disabled under TSan, because they launch the actual FTXUI product. Normal and ASan runs cover that composition; focused adapter tests remain available under TSan.
-The macOS TSan group contains core.
+The Linux TSan group contains core, backend, and GTK; reviewed uninstrumented UI dependencies use module-scoped interceptor suppressions.
+The registered real-TUI MPRIS process cases in the system-media suite require Linux system media and TUI support and are disabled under TSan, because they launch the actual FTXUI product. Normal and ASan runs cover that composition; focused adapter tests remain available under TSan.
+The macOS TSan group contains core and backend.
 Windows has no TSan suite group because the MSVC toolchain does not provide
 ThreadSanitizer; requesting `--tsan` is an error. `ao.bat check --asan` runs the
 entire native Windows `all` group with MSVC AddressSanitizer in its own build
@@ -153,7 +158,7 @@ This keeps checker execution policy in `ao tidy` and avoids a second shell-based
 
 For fixture placement, marker semantics, context-header constraints, and Objective-C++ handling, use [checker development](../lint/checker-development.md#fixture-contract). Those are fixture-authoring rules rather than suite-selection rules.
 
-Coverage has a separate `--all` selection of core, TUI, CLI, and GTK. It excludes standalone integration, tooling, and lint suites from the application-source coverage run.
+Coverage has a separate `--all` selection of core, backend, TUI, CLI, and GTK. It excludes the system-media, perf, tooling, and lint suites from the application-source coverage run.
 
 ## Environment availability
 
@@ -161,10 +166,11 @@ Missing or malformed repository fixtures fail. Only a genuinely optional host
 capability may `SKIP()` with a reason; `WARN()` or `SUCCEED()` followed by
 `return` is not a skip.
 
-The PipeWire provider test skips when no daemon is reachable, unless
-`AOBUS_REQUIRE_PIPEWIRE=1` makes that a failure. Linux CI sets it and runs a
-private PipeWire daemon with a policy-only WirePlumber, so the test exercises its
-own null sinks, not host audio hardware.
+The PipeWire provider daemon case in the backend suite skips when no daemon is
+reachable, unless `AOBUS_REQUIRE_PIPEWIRE=1` makes that a failure. Linux CI sets
+it and runs a private PipeWire daemon with a policy-only WirePlumber, so the
+test exercises its own null sinks, not host audio hardware. The device-free PipeWire
+cases stay in the core suite.
 
 ## Sharded Catch2 execution
 

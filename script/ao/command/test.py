@@ -118,7 +118,9 @@ def selectable_suites() -> tuple[str, ...]:
     if profile.name == "macos":
         return (*profile.all_suites, "appkit")
     if profile.name == "windows":
-        return (*profile.all_suites, "winui")
+        # The compiled-but-hidden backend suite stays explicit-only on Windows,
+        # exactly like the WinUI audit: neither joins an unattended group.
+        return (*profile.all_suites, "backend", "winui")
     return profile.all_suites
 
 
@@ -166,6 +168,7 @@ def configured_suites_for(selection: str, build_dir: Path, *, tsan: bool = False
         "gtk": "AOBUS_BUILD_GTK",
         "tui": "AOBUS_BUILD_TUI",
         "cli": "AOBUS_BUILD_CLI",
+        "systemmedia": "AOBUS_BUILD_SYSTEM_MEDIA",
         **({} if windows_lint else {"lint": "AOBUS_BUILD_LINT_PLUGIN"}),
     }
     disabled = tuple(
@@ -428,7 +431,7 @@ _OVERALL_KEYS = ("successes", "failures", "expectedFailures", "skips")
 
 
 @dataclass(frozen=True)
-class _SuiteOutcome:
+class SuiteOutcome:
     """One Catch2 suite's process status and reported matching case count."""
 
     status: int
@@ -540,10 +543,11 @@ def _run_sharded(
     command: Sequence[str],
     *,
     label: str,
+    test_filter: str,
     environments: Sequence[dict[str, str]],
     log: Path | None,
     allow_no_tests: bool,
-) -> _SuiteOutcome:
+) -> SuiteOutcome:
     """Run one Catch2 binary as parallel shards and report a single combined tally.
 
     Each shard also writes an XML report, so the totals are summed exactly rather
@@ -615,8 +619,10 @@ def _run_sharded(
 
     matched = None if unreported else sum(cases.values())
     if not allow_no_tests and matched == 0:
+        if not test_filter:
+            raise die(f"no {label} tests were selected by default. Hidden tests require an explicit filter.")
         raise die(f"no {label} tests matched the supplied filter.")
-    return _SuiteOutcome(status, matched)
+    return SuiteOutcome(status, matched)
 
 
 def _repro_command(shard: _Shard) -> str:
@@ -864,7 +870,7 @@ def run_appkit_smoke(
     return 0
 
 
-def _run_catch2_suite(
+def run_catch2_suite(
     name: str,
     build_dir: Path,
     *,
@@ -876,7 +882,7 @@ def _run_catch2_suite(
     log: Path | None = None,
     shards: int = 1,
     report_matches: bool = False,
-) -> _SuiteOutcome:
+) -> SuiteOutcome:
     spec = SUITES[name]
     if spec.kind != "catch2" or spec.target is None:
         raise ValueError(f"{name} is not a Catch2 suite")
@@ -901,13 +907,18 @@ def _run_catch2_suite(
 
     sanitizer_env = _sanitizer_env(name, build_dir, asan=asan, tsan=tsan)
 
-    def execute(environments: list[dict[str, str]]) -> _SuiteOutcome:
+    def execute(environments: list[dict[str, str]]) -> SuiteOutcome:
         if sharded:
             return _run_sharded(
-                command, label=spec.label, environments=environments, log=log, allow_no_tests=allow_no_tests
+                command,
+                label=spec.label,
+                test_filter=test_filter,
+                environments=environments,
+                log=log,
+                allow_no_tests=allow_no_tests,
             )
         if not report_matches:
-            return _SuiteOutcome(run(command, env=environments[0] or None, log=log, append=log is not None))
+            return SuiteOutcome(run(command, env=environments[0] or None, log=log, append=log is not None))
 
         with tempfile.TemporaryDirectory(prefix="aobus-catch2-report-") as directory:
             report = Path(directory) / "suite.xml"
@@ -929,39 +940,13 @@ def _run_catch2_suite(
         if matched is None:
             print(f"{spec.label}: no readable Catch2 XML report; matching tests could not be counted")
             status = status or 1
-        return _SuiteOutcome(status, matched)
+        return SuiteOutcome(status, matched)
 
     if name == "gtk" and not list_only:
         with virtual_gtk_displays(shards if sharded else 1) as displays:
             return execute([{**sanitizer_env, **display} for display in displays])
 
     return execute([sanitizer_env] * (shards if sharded else 1))
-
-
-def run_suite(
-    name: str,
-    build_dir: Path,
-    *,
-    test_filter: str = "",
-    list_only: bool = False,
-    allow_no_tests: bool = False,
-    asan: bool = False,
-    tsan: bool = False,
-    log: Path | None = None,
-    shards: int = 1,
-) -> int:
-    """Run one Catch2 suite while preserving the integer status API used by coverage."""
-    return _run_catch2_suite(
-        name,
-        build_dir,
-        test_filter=test_filter,
-        list_only=list_only,
-        allow_no_tests=allow_no_tests,
-        asan=asan,
-        tsan=tsan,
-        log=log,
-        shards=shards,
-    ).status
 
 
 def run_non_catch2_suite(
@@ -1053,7 +1038,7 @@ def run_suites(
                 # width and count stays 1 because matched case counts are
                 # unstable across filters and repeats.
                 with phases.measure("suite", tree="native", jobs=shards, count=1, suite=name) as phase:
-                    outcome = _run_catch2_suite(
+                    outcome = run_catch2_suite(
                         name,
                         build_dir,
                         test_filter=test_filter,

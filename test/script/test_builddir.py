@@ -77,13 +77,14 @@ class BuildDirTest(unittest.TestCase):
             self.assertEqual(profile.presets["profile"], "macos-profile")
             self.assertEqual(profile.compiler, "clang")
             self.assertEqual(profile.apps, ("cli", "tui", "appkit"))
-            self.assertEqual(profile.default_suites, ("core", "tui"))
-            self.assertEqual(profile.all_suites, ("core", "tui", "cli", "integration", "lint"))
-            self.assertEqual(profile.tsan_suites, ("core",))
-            # GTK and Python repository tooling are not supported by this
-            # native profile; native clang-tidy integration is.
+            self.assertEqual(profile.default_suites, ("core", "backend", "tui"))
+            self.assertEqual(profile.all_suites, ("core", "backend", "tui", "cli", "lint"))
+            self.assertEqual(profile.tsan_suites, ("core", "backend"))
+            # GTK, system media, and Python repository tooling are not
+            # supported by this native profile; native clang-tidy integration is.
             self.assertNotIn("gtk", profile.apps)
             self.assertNotIn("gtk", profile.all_suites)
+            self.assertNotIn("systemmedia", profile.all_suites)
             self.assertNotIn("tooling", profile.all_suites)
             self.assertIn("lint", profile.all_suites)
             self.assertEqual(builddir.tidy_preset(), "macos-debug")
@@ -134,8 +135,12 @@ class BuildDirTest(unittest.TestCase):
         profile = builddir.platform_profile("nt")
         self.assertEqual(profile.apps, ("cli", "tui", "winui"))
         self.assertEqual(profile.default_suites, ("core", "tui"))
-        self.assertEqual(profile.all_suites, ("core", "tui", "cli", "integration", "tooling", "lint"))
+        self.assertEqual(profile.all_suites, ("core", "tui", "cli", "tooling", "lint"))
         self.assertEqual(profile.tsan_suites, ())
+        # The backend suite is compiled on Windows but never joins an
+        # unattended group; only an explicit selection runs it.
+        self.assertNotIn("backend", profile.default_suites)
+        self.assertNotIn("backend", profile.all_suites)
         self.assertEqual(builddir.flavors("nt"), ("debug", "release"))
 
     def test_winui_uses_a_dedicated_visual_studio_tree(self):
@@ -188,7 +193,12 @@ class BuildDirTest(unittest.TestCase):
     def test_linux_profile_exposes_only_baselined_tsan_suites(self):
         profile = builddir.platform_profile("posix")
 
-        self.assertEqual(profile.tsan_suites, ("core", "gtk"))
+        self.assertEqual(profile.default_suites, ("core", "backend", "gtk"))
+        self.assertEqual(
+            profile.all_suites,
+            ("core", "backend", "tui", "cli", "gtk", "systemmedia", "tooling", "lint"),
+        )
+        self.assertEqual(profile.tsan_suites, ("core", "backend", "gtk"))
 
     def test_tidy_uses_a_dedicated_native_preset_and_tree(self):
         with mock.patch.dict("os.environ", {}, clear=False):

@@ -16,7 +16,7 @@ from ..core import builddir, buildlock, compiler_cache, phases, workspace_cache
 from ..core.paths import PROJECT_ROOT, absolute_path
 from ..core.proc import capture, die, run
 from . import build
-from .test import SUITE_TARGETS, run_suite
+from .test import SUITE_TARGETS, run_catch2_suite
 
 HELP = "Build with --coverage, run tests, and report uncovered lines per source file"
 NAME = "coverage"
@@ -30,8 +30,10 @@ def requires_build_environment(_args: argparse.Namespace) -> bool:
 
 EPILOG = """\
 examples:
-  ./ao coverage                          # core suite, full report
-  ./ao coverage "SmartListEvaluator*"   # coverage for a test subset
+  ./ao coverage                          # core and backend suites, full report
+  ./ao coverage "SmartListEvaluator*"    # coverage for a test subset
+  ./ao coverage --core                   # core suite only
+  ./ao coverage --backend --scope lib/audio
   ./ao coverage --cli --scope app/cli
   ./ao coverage --tui --scope app/tui
   ./ao coverage --gtk "validUtf8Text*"   # GTK suite with a case-name filter
@@ -49,9 +51,15 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
     parser.add_argument("filter", nargs="?", default="", help="Catch2 test filter")
     suite = parser.add_mutually_exclusive_group()
     suite.add_argument(
-        "--suite", choices=("core", "tui", "cli", "gtk", "all"), default="core", help="test suite (default: core)"
+        "--suite",
+        choices=("core", "backend", "tui", "cli", "gtk", "all"),
+        default=None,
+        help="test suite (default: core and backend)",
     )
     suite.add_argument("--core", dest="suite", action="store_const", const="core", help="shortcut for --suite core")
+    suite.add_argument(
+        "--backend", dest="suite", action="store_const", const="backend", help="shortcut for --suite backend"
+    )
     suite.add_argument("--tui", dest="suite", action="store_const", const="tui", help="shortcut for --suite tui")
     suite.add_argument("--cli", dest="suite", action="store_const", const="cli", help="shortcut for --suite cli")
     suite.add_argument("--gtk", dest="suite", action="store_const", const="gtk", help="shortcut for --suite gtk")
@@ -276,21 +284,51 @@ def report(
             print(f"{GREEN}{rel}: {percent:.2f}% ({total} lines) -> OK{RESET}")
 
 
+def coverage_suites(selection: str | None) -> tuple[str, ...]:
+    """Map the CLI suite selection to the suites a coverage run executes.
+
+    The no-option default measures core plus backend; an explicit --core stays
+    core-only. ``--all`` adds the portable application frontends but excludes
+    the conditional system-media suite, performance, tooling, and lint, which
+    do not belong to an unattended coverage run.
+    """
+    if selection == "all":
+        return ("core", "backend", "tui", "cli", "gtk")
+    if selection is None:
+        return ("core", "backend")
+    return (selection,)
+
+
 def run_coverage_tests(suites: tuple[str, ...], build_dir: Path, test_filter: str) -> int:
     """Run every selected suite so the report is useful, while preserving failure."""
     first_failure = 0
+    matched_tests = 0
     for suite in suites:
-        # Deliberately unsharded (run_suite defaults to one shard): parallel
-        # processes would interleave writes to the same gcov counter files.
-        # One suite record per invocation keeps every suite's own status, so
-        # the run-all/first-failure policy below stays attribution-friendly.
+        # Deliberately unsharded (shards=1): parallel processes would interleave
+        # writes to the same gcov counter files, so a hostile AOBUS_TEST_SHARDS
+        # cannot shard a coverage run. One suite record per invocation keeps every
+        # suite's own status, so the run-all/first-failure policy below stays
+        # attribution-friendly. With a filter, a member suite may legitimately
+        # match nothing, but the filter must match at least one test globally;
+        # without a filter the suite still fails natively on an empty run.
         with phases.measure("suite", tree="native", jobs=1, count=1, suite=suite) as phase:
-            status = run_suite(suite, build_dir, test_filter=test_filter)
-            phase.status = status
-        if status != 0:
+            outcome = run_catch2_suite(
+                suite,
+                build_dir,
+                test_filter=test_filter,
+                shards=1,
+                report_matches=bool(test_filter),
+                allow_no_tests=bool(test_filter),
+            )
+            phase.status = outcome.status
+        if outcome.status != 0:
             if first_failure == 0:
-                first_failure = status
-            print(f"Error: {suite} tests exited with status {status}; coverage is partial.", file=sys.stderr)
+                first_failure = outcome.status
+            print(f"Error: {suite} tests exited with status {outcome.status}; coverage is partial.", file=sys.stderr)
+        elif test_filter and outcome.matched is not None:
+            matched_tests += outcome.matched
+    if test_filter and first_failure == 0 and matched_tests == 0:
+        raise die(f"no tests in the selected coverage suites matched filter {test_filter!r}.")
     return first_failure
 
 
@@ -336,7 +374,7 @@ def _run_coverage(args: argparse.Namespace, build_dir: Path) -> int:
         build.sync_compiler_cache(build_dir, unsupported_reason="coverage builds")
 
     print("Building tests...")
-    suites = ("core", "tui", "cli", "gtk") if args.suite == "all" else (args.suite,)
+    suites = coverage_suites(args.suite)
     targets = [target for suite in suites for target in SUITE_TARGETS[suite]]
     # Keep zero/unbounded and invalid CLI values under the native build's
     # existing policy; they do not identify a known positive worker limit.
@@ -350,7 +388,7 @@ def _run_coverage(args: argparse.Namespace, build_dir: Path) -> int:
     for gcda in build_dir.rglob("*.gcda"):
         gcda.unlink()
 
-    print(f"Running tests (suite: {args.suite})...")
+    print(f"Running tests (suites: {', '.join(suites)})...")
     test_status = run_coverage_tests(suites, build_dir, args.filter)
 
     print()

@@ -79,13 +79,13 @@ Use `./ao <command> --help` for current options. Common tasks are:
 ./ao run cli
 ./ao run tui
 ./ao run appkit
-./ao test                     # core and TUI fast loop
+./ao test                     # core, backend, and TUI fast loop
 ./ao test --lint              # custom clang-tidy integration fixtures
-./ao test --all               # core, TUI, CLI, integration, and lint
+./ao test --all               # core, backend, TUI, CLI, and lint
 ./ao check                    # complete native Debug gate
 ./ao check release            # complete native Release gate
 ./ao check --asan             # supported suites with ASan/UBSan
-./ao check --tsan             # TSan-safe core suite
+./ao check --tsan             # TSan-safe core and backend suites
 ./ao hygiene                  # scoped format/audit/tidy gate
 ./ao deps report
 ./ao deps verify
@@ -94,7 +94,7 @@ Use `./ao <command> --help` for current options. Common tasks are:
 `./ao check` does not run fixture-dependent AppKit GUI scenarios. The macOS
 `all` group intentionally excludes AppKit smoke and the Python `tooling` suite.
 `./ao check --tsan` is narrower still: it builds and runs only the macOS
-TSan-safe suite group (currently Core) plus architecture guardrails. It does not
+TSan-safe suite group (currently core and backend) plus architecture guardrails. It does not
 build either AppKit GUI bundle and is not evidence for native GUI behavior. Use
 an explicit `./ao test --appkit --tsan ...` invocation when the selected AppKit
 scenario is required under TSan.
@@ -313,11 +313,15 @@ export AOBUS_TEST_COREAUDIO_DEVICE_UID="${AOBUS_TEST_COREAUDIO_DEVICE_UID-BlackH
 An explicit value, including an empty one, still wins. GUI or service launches
 that do not inherit the shell environment need the setting passed explicitly.
 To exercise the host's normal output from such a shell, remove it for one
-command:
+command and select the backend suite:
 
 ```bash
-env -u AOBUS_TEST_COREAUDIO_DEVICE_UID ./ao test --core "CoreAudioBackend*"
+env -u AOBUS_TEST_COREAUDIO_DEVICE_UID ./ao test --backend "CoreAudioBackend*"
 ```
+
+The backend suite owns the native Core Audio cases that open a live output;
+the core suite's matching `CoreAudioBackend*` cases are device-free refusal,
+prewarm, and software-cache contracts that never reach an output device.
 
 A pass on a software endpoint covers only that native software path. It does
 not prove physical routing, audibility, hardware removal, or latency.
@@ -327,7 +331,7 @@ where a short tone is acceptable. It ignores `AOBUS_TEST_COREAUDIO_DEVICE_UID`
 and uses the host's normal output:
 
 ```bash
-./ao test --integration "CoreAudioProvider - enumerates and renders through a real output"
+./ao test --backend "CoreAudioProvider - enumerates and renders through a real output"
 ```
 
 The exact case name selects the provider probe only; the hidden Core Audio
