@@ -166,6 +166,13 @@ in the governed Microsoft package family and architecture. See
 `script/ao/toolchain.json` is policy. Linux and Windows match its exact Python,
 Ruff, and mypy versions. macOS matches Ruff and mypy exactly but accepts the
 contracted Homebrew Python major/minor rather than an exact patch.
+Linux uses the pinned Nix environment. Windows uses Visual Studio's vcpkg to
+fetch the NuGet tool, then NuGet's `python` package for portal CPython; the
+manifest's `python3` host port is separate dependency-build tooling. macOS uses
+Homebrew base Python and selects a managed tool venv on demand. Native Ruff/mypy
+come from the hashed requirements locks, not ambient tools. See the
+[Windows](windows.md#prerequisites) and [macOS](macos.md#host-setup) guides for
+setup and local-state requirements.
 
 The native requirements files are artifact locks with hashes, not alternative
 policy files. Ruff's target version and mypy's `python_version` in

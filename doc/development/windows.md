@@ -42,11 +42,12 @@ Visual Studio's bundled vcpkg is the default. `VCPKG_ROOT` may select another
 complete checkout for diagnosis, but the repository registry and manifest locks
 still apply.
 
-Do not install a separate Python for the normal path. `ao.bat` obtains NuGet
-through the Visual Studio vcpkg installation, installs the exact CPython release
-from `script/ao/toolchain.json`, and creates a checkout-specific environment
-from the hashed Windows requirements lock. It does not use the Windows Store
-alias or ambient `PATH` Python.
+Do not install a separate Python for the normal path. `ao.bat` obtains the
+NuGet tool through the Visual Studio vcpkg installation, uses NuGet's `python`
+package for the exact CPython release from `script/ao/toolchain.json`, and
+creates a checkout-specific environment from the hashed Windows requirements lock. It does not use the Windows Store
+alias or ambient `PATH` Python. The manifest's `python3` host port serves
+dependency builds; it is not the portal interpreter or the Ruff/mypy provider.
 
 `AOBUS_PYTHON` is an advanced override for an explicit interpreter. It must
 match the exact policy version and provide `venv` and `ensurepip`; the portal
@@ -127,11 +128,74 @@ Overrides apply in this order:
 A composite `ao.bat check` derives `<primary>-winui` when the primary path is
 explicit. Keep build, tool, and cache overrides on a local Windows disk; mapped
 drives are not reliably distinguishable from local disks and drive mappings are
-login-session scoped.
+login-session scoped. This is a storage requirement, not automatic local-volume
+enforcement; verify the actual backing storage for overrides.
+
+Ruff check/format and mypy use `.ruff_cache` and `.mypy_cache` under the
+managed environment's `sys.prefix`, including for local source checkouts.
+These explicit cache paths take precedence over inherited tool cache settings.
+Check-only commands may write caches without rewriting source. This is not a
+write-free checkout guarantee: ordinary Python `__pycache__` and explicit
+checkout-ID creation remain separate writes. Moving build trees alone does not
+move Git metadata or Python bytecode.
 
 Portal build-tree writers use a persistent lock beside the tree. This prevents
 concurrent mutation but does not make a stable snapshot for a simultaneously
 running application, test, or analyzer.
+
+### Shared-source Git discovery
+
+A linked worktree created on another host may have a `.git` pointer that native
+Git cannot use. For Git-backed source discovery, pass `AOBUS_GIT_DIR` (the
+intended private Git directory) and `AOBUS_GIT_WORK_TREE` (the source root) to
+the portal process. Both must be present, nonempty native absolute paths;
+malformed pairs fail when discovery runs. Explicit files, `--folder`, and
+`--all` bypass this discovery and its binding validation. A complete pair for
+another normalized root is ignored; a discovery failure reports the mismatch.
+
+Use Python's `PROJECT_ROOT`, derived from the imported tooling module's path,
+not the current directory after `ao.bat`'s `pushd`. The batch file sets
+`PYTHONPATH` from its own directory before `pushd`: a UNC module path remains
+UNC even when the working directory becomes a temporary drive letter. UNC,
+mapped-drive, and junction spellings are not guaranteed to match each other.
+
+For example, set `$verifiedPrivateGitDir` and `$verifiedPortalRoot` to the
+verified native absolute paths, using the portal's actual root spelling.
+Preserve any existing process-scoped values in the PowerShell session:
+
+```powershell
+$previousGitDir = $env:AOBUS_GIT_DIR
+$previousWorkTree = $env:AOBUS_GIT_WORK_TREE
+try {
+    $env:AOBUS_GIT_DIR = $verifiedPrivateGitDir
+    $env:AOBUS_GIT_WORK_TREE = $verifiedPortalRoot
+    .\ao.bat format --check
+} finally {
+    $env:AOBUS_GIT_DIR = $previousGitDir
+    $env:AOBUS_GIT_WORK_TREE = $previousWorkTree
+}
+```
+
+Do not create or copy metadata for this example. Before accepting a
+mapping, compare its actual private/common/index paths, exact HEAD, and semantic
+staged index with the intended checkout. A plausible `--show-toplevel` is not
+association proof: this trusted binding does not verify that metadata belongs
+to the source root.
+
+Only Git-backed source discovery calls use the pair. Discovery also uses
+process-local `--no-optional-locks` and `-c diff.autoRefreshIndex=false`:
+optional-lock suppression alone does not
+prevent `git diff` from writing stat-only index refreshes.
+Working-tree discovery also compares content, so stat-only differences do not
+expand the selected source scope.
+The binding does not redirect `setup git-hooks`,
+performance revision commands, or arbitrary Git operations. It neither rewrites
+`.git` nor redirects checkout-ID creation. If the original private Git directory
+is inaccessible, supply a separate stable, unique `AOBUS_CHECKOUT_ID` as
+described above. Do not export standard `GIT_DIR` or `GIT_WORK_TREE` across
+the portal: dependencies and disposable test repositories must remain independent.
+The binding and these discovery options do not prove that Git or the entire
+checkout is write-free.
 
 ## Build and run WinUI
 

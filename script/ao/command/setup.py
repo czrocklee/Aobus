@@ -61,7 +61,7 @@ def run_command(args: argparse.Namespace) -> int:
     if args.component != "compiler-cache" and args.shared_workspaces is not None:
         raise die("--shared-workspaces options apply only to setup compiler-cache")
     if args.component == "git-hooks":
-        status = run(gitfiles._git_command("config", "--local", "core.hooksPath", "script/git-hook"), cwd=PROJECT_ROOT)
+        status = run(gitfiles.git_command("config", "--local", "core.hooksPath", "script/git-hook"), cwd=PROJECT_ROOT)
         if status == 0:
             print("Git hooks configured for this repository: script/git-hook")
         return status

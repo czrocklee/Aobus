@@ -99,9 +99,11 @@ build either AppKit GUI bundle and is not evidence for native GUI behavior. Use
 an explicit `./ao test --appkit --tsan ...` invocation when the selected AppKit
 scenario is required under TSan.
 
-The managed macOS environment matches Ruff and mypy pins for format/tidy work,
-but macOS does not claim exact Python patch parity and does not expose
-`./ao test --tooling`.
+The portal starts with Homebrew Python and selects the managed Ruff/mypy venv
+on demand for format/tidy/hygiene work. Other commands can use the base
+interpreter; `/usr/bin/python3` only reads initial bootstrap JSON fields.
+The managed environment matches Ruff and mypy pins, but macOS does not claim
+exact Python patch parity and does not expose `./ao test --tooling`.
 
 Release IPO is checked for C++ only. C++ translation units and final links use
 ThinLTO; Objective-C++ translation units use normal Release optimization.
@@ -154,11 +156,16 @@ administration, not portal behavior. Keep source files stable while building
 or collecting validation evidence; do not edit the same shared files
 concurrently from multiple hosts.
 
-This storage requirement does not imply a write-free source checkout.
-Checkout IDs live in private Git metadata, and Ruff/Python may create
-`.ruff_cache` and `__pycache__` beside sources. Darwin's mypy cache is kept in
-the managed Python environment. `AOBUS_BUILD_ROOT` moves only build trees,
-not those metadata or source-side caches.
+This is a storage requirement, not automatic local-volume enforcement; verify
+the actual backing storage for overrides. Ruff check/format and mypy use
+`.ruff_cache` and `.mypy_cache` under the managed environment's `sys.prefix`,
+including for local source checkouts. These explicit cache paths take precedence
+over inherited tool cache settings. Check-only commands may write caches without
+rewriting source.
+
+This does not imply a write-free source checkout. Checkout-ID creation writes
+private Git metadata, and ordinary Python `__pycache__` may appear beside sources.
+`AOBUS_BUILD_ROOT` moves only build trees, not Git metadata or Python bytecode.
 
 ### Native checkout identity
 
@@ -177,7 +184,42 @@ The override does not repair Git linkage. Default Git-based scope discovery
 can fail during preflight, before managed-tool setup. Select explicit files,
 `--folder <dir>`, or `--all` for format/tidy/hygiene to avoid that discovery;
 these scopes still need a usable managed-tool identity. `--commit` remains
-Git-dependent.
+Git-dependent. For alternate metadata, use the separate binding below.
+
+### Shared-source Git discovery
+
+If a foreign linked-worktree `.git` pointer is unusable on macOS, pass the
+intended private Git directory and the portal's actual source root per invocation:
+
+```bash
+AOBUS_GIT_DIR="$HOME/local-metadata/worktrees/aobus" \
+AOBUS_GIT_WORK_TREE="/Volumes/source/aobus" ./ao format --check
+```
+
+These are example paths, not metadata to create or copy. Both variables must be
+present, nonempty native absolute paths; malformed pairs fail when Git-backed
+source discovery runs. Explicit files, `--folder`, and `--all` bypass this
+discovery and its binding validation. A complete pair for another normalized
+root is ignored; a discovery failure reports the mismatch. Use the root
+spelling seen by the portal, rather than assuming aliases will match.
+Before accepting the mapping, compare actual private/common/index paths, exact
+HEAD, and semantic staged index with the intended checkout. The binding is
+trusted configuration, not repository-association verification;
+`--show-toplevel` alone is insufficient.
+
+Only Git-backed source discovery calls use the pair. Discovery also uses
+process-local `--no-optional-locks` and
+`-c diff.autoRefreshIndex=false`: optional-lock suppression alone does not
+prevent `git diff` from writing stat-only index refreshes.
+Working-tree discovery also compares content, so stat-only differences do not
+expand the selected source scope.
+`setup git-hooks`, performance revision commands, and arbitrary Git operations
+remain outside this support. The binding
+does not rewrite `.git` or redirect checkout-ID creation. If the original
+private Git directory is inaccessible, also supply a separate stable, unique
+`AOBUS_CHECKOUT_ID`. Never export standard `GIT_DIR` or `GIT_WORK_TREE` across
+the portal: dependencies and disposable test repositories must remain independent.
+Neither the binding nor these discovery options prove a write-free checkout.
 
 ## Native desktop development slice
 
@@ -355,16 +397,17 @@ hardware behavior.
 - If a build tree is selected on a source share, choose an absolute local path
   with `-p` or `BUILD_DIR`, or omit `-p` and unset `BUILD_DIR` before selecting
   an absolute local `AOBUS_BUILD_ROOT`. Also check `AOBUS_STATE_ROOT` for managed
-  tool and package state; these settings do not relocate Git metadata or
-  source-side caches.
+  tool and package state, including managed Ruff/mypy caches. These settings do
+  not relocate Git metadata or ordinary Python bytecode.
 - "cannot locate the private Git directory", "cannot create the checkout ID",
   or "checkout ID remained empty" can prevent managed-tool initialization.
   Follow the scoped override guidance under
   [native checkout identity](#native-checkout-identity).
 - "git branch --show-current failed" during default source discovery can occur
-  before checkout-ID initialization. Use the Git-independent scopes described
-  under [native checkout identity](#native-checkout-identity); an ID override
-  alone does not repair Git linkage.
+  before checkout-ID initialization. Use a verified
+  [source-discovery binding](#shared-source-git-discovery) or the Git-independent
+  scopes described under [native checkout identity](#native-checkout-identity);
+  an ID override alone does not repair Git linkage.
 - If no Core Audio outputs appear, confirm a live output in Audio MIDI Setup.
   Aobus does not invent a route when macOS publishes none.
 - If AUHAL or `afplay` fails over SSH, `stat -f "%Su" /dev/console` must name

@@ -18,7 +18,7 @@ from ao.core import builddir
 
 class PerformanceIdentityTest(unittest.TestCase):
     def test_provenance_uses_checkout_scoped_git_commands_on_native_share_profiles(self):
-        command = perf.gitfiles._git_command
+        command = perf.gitfiles.git_command
         for profile, options in (
             ("windows", {"os_name": "nt", "platform_name": "win32", "checkout_uses_smb": True}),
             ("macos-smb", {"os_name": "posix", "platform_name": "darwin", "checkout_uses_smb": True}),
@@ -26,7 +26,7 @@ class PerformanceIdentityTest(unittest.TestCase):
         ):
             with self.subTest(profile=profile):
                 with (
-                    mock.patch.object(perf.gitfiles, "_git_command", side_effect=partial(command, **options)) as git,
+                    mock.patch.object(perf.gitfiles, "git_command", side_effect=partial(command, **options)) as git,
                     mock.patch.object(perf, "capture", side_effect=["revision-id\n", ""]) as capture,
                 ):
                     self.assertEqual(perf._revision(), "revision-id")
@@ -40,6 +40,53 @@ class PerformanceIdentityTest(unittest.TestCase):
                         mock.call(command("status", "--porcelain", **options), cwd=perf.PROJECT_ROOT),
                     ],
                 )
+
+    def test_provenance_ignores_discovery_bindings_in_real_repositories(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+
+            def git(root, *arguments):
+                return subprocess.check_output(
+                    [
+                        "git",
+                        "-C",
+                        str(root),
+                        "-c",
+                        "user.name=Aobus fixture",
+                        "-c",
+                        "user.email=fixture@example.invalid",
+                        "-c",
+                        "commit.gpgsign=false",
+                        "-c",
+                        "core.hooksPath=unused-fixture-hooks",
+                        *arguments,
+                    ],
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                ).strip()
+
+            revisions = {}
+            for name in ("source", "alternate"):
+                root = directory / name
+                root.mkdir()
+                git(root, "init", "-b", "main")
+                (root / "value.txt").write_text(name + "\n", encoding="utf-8")
+                git(root, "add", ".")
+                git(root, "commit", "-m", "fixture")
+                revisions[name] = git(root, "rev-parse", "HEAD")
+            self.assertNotEqual(revisions["source"], revisions["alternate"])
+            source = directory / "source"
+            for dirty in (False, True):
+                (source / "value.txt").write_text("changed\n" if dirty else "source\n", encoding="utf-8")
+                for private in (str(directory / "alternate" / ".git"), ""):
+                    with (
+                        self.subTest(dirty=dirty, private=private),
+                        mock.patch.dict(os.environ, {"AOBUS_GIT_DIR": private, "AOBUS_GIT_WORK_TREE": str(source)}),
+                        mock.patch.object(perf, "PROJECT_ROOT", source),
+                        mock.patch.object(perf.gitfiles, "PROJECT_ROOT", source),
+                    ):
+                        expected = revisions["source"] + ("+dirty" if dirty else "")
+                        self.assertEqual(perf._revision(), expected)
 
     def test_meaningful_worktree_changes_still_mark_the_revision_dirty(self):
         with mock.patch.object(perf, "capture", side_effect=["revision-id\n", " M script/ao/command/perf.py\n"]):

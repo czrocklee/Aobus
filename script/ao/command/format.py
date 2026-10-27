@@ -113,7 +113,7 @@ def run_ruff_format(files: list[str], *, check: bool) -> int:
     action = "Checking" if check else "Formatting"
     print(f"{action} {len(files)} file(s) with ruff format...")
     try:
-        result = subprocess.run(pythoncheck.module_command("ruff", "format", *mode, *files), cwd=PROJECT_ROOT)
+        result = subprocess.run(pythoncheck.ruff_command("format", *mode, *files), cwd=PROJECT_ROOT)
     except FileNotFoundError as exc:
         raise die(f"Python environment is unavailable: {sys.executable}") from exc
     return 1 if result.returncode != 0 else 0

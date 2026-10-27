@@ -27,6 +27,9 @@ PINNED_CCACHE = {
     "Darwin": _POLICY.local_minimum_version,
 }
 
+# Synthetic portal fixtures must not read or create the real checkout's Git-owned ID.
+UNIT_TEST_CHECKOUT_ID = "unit-test-checkout"
+
 
 class CompilerCacheContractTest(unittest.TestCase):
     def test_standalone_contract_entry_point_matches_ci_output(self):
@@ -772,7 +775,7 @@ class CompilerCacheActivationTest(unittest.TestCase):
                 elif condition == "encoding":
                     path.write_bytes(b"\xff")
                 output = io.StringIO()
-                environment = {"AOBUS_STATE_ROOT": str(root)}
+                environment = {"AOBUS_STATE_ROOT": str(root), "AOBUS_CHECKOUT_ID": UNIT_TEST_CHECKOUT_ID}
                 with contextlib.ExitStack() as stack:
                     stack.enter_context(mock.patch.dict(os.environ, environment, clear=True))
                     stack.enter_context(mock.patch.object(compiler_cache.platform, "system", return_value="Linux"))
@@ -1173,7 +1176,11 @@ class CompilerCacheCliTest(unittest.TestCase):
                 executable.write_bytes(b"cache")
                 output = io.StringIO()
                 with (
-                    mock.patch.dict(os.environ, {"AOBUS_STATE_ROOT": str(root), **overrides}, clear=True),
+                    mock.patch.dict(
+                        os.environ,
+                        {"AOBUS_STATE_ROOT": str(root), "AOBUS_CHECKOUT_ID": UNIT_TEST_CHECKOUT_ID, **overrides},
+                        clear=True,
+                    ),
                     mock.patch.object(compiler_cache.platform, "system", return_value=system),
                     mock.patch.object(compiler_cache, "_resolve_posix_ccache", return_value=executable),
                     mock.patch.object(compiler_cache, "_install_windows_ccache", return_value=executable),
@@ -1193,6 +1200,7 @@ class CompilerCacheCliTest(unittest.TestCase):
                 output = io.StringIO()
                 environment = {"CCACHE_DIR": "chosen-store", "CCACHE_MAXSIZE": "10G"} if explicit else {}
                 environment["AOBUS_STATE_ROOT"] = temporary
+                environment["AOBUS_CHECKOUT_ID"] = UNIT_TEST_CHECKOUT_ID
                 updates = {"CMAKE_CXX_COMPILER_LAUNCHER": "managed-ccache"}
                 if not explicit:
                     updates.update(CCACHE_DIR="managed-store", CCACHE_MAXSIZE="20G")
