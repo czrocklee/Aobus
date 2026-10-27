@@ -1,7 +1,7 @@
 """Real phase-JSON regressions for the ``ao test``/``ao coverage`` attribution.
 
 Every test here drives the real control flow (``run_command``, ``run_suites``,
-``_run_catch2_suite``, ``_run_coverage``) with the real ``ao.core.phases``
+``run_catch2_suite``, ``_run_coverage``) with the real ``ao.core.phases``
 writer, pointed at a temporary ``AOBUS_PHASE_LOG_DIR``, while every native
 process is mocked. Two contracts are pinned:
 
@@ -315,7 +315,7 @@ class StandaloneBuildAttributionTest(_PhaseJsonTestCase):
                     mock.patch.object(build_command, "sync_compiler_cache"),
                     mock.patch.object(build_command, "parallel_build_jobs", return_value=31),
                     mock.patch.object(test_command, "run", return_value=0) as run,
-                    mock.patch.object(test_command, "_run_catch2_suite", return_value=test_command._SuiteOutcome(0)),
+                    mock.patch.object(test_command, "run_catch2_suite", return_value=test_command.SuiteOutcome(0)),
                     mock.patch.object(test_command, "shard_count", return_value=1),
                     contextlib.redirect_stdout(io.StringIO()),
                 ):
@@ -412,7 +412,9 @@ class CoverageAttributionTest(_PhaseJsonTestCase):
                 mock.patch.object(build_command, "sync_compiler_cache", side_effect=sync),
                 mock.patch.object(coverage_command, "coverage_cxx_flags", return_value="--coverage"),
                 mock.patch.object(coverage_command, "run", side_effect=run_side_effect) as run,
-                mock.patch.object(coverage_command, "run_suite", return_value=suite_status) as run_suite,
+                mock.patch.object(
+                    coverage_command, "run_catch2_suite", return_value=test_command.SuiteOutcome(suite_status)
+                ) as run_suite,
                 mock.patch.object(coverage_command, "collect_coverage", return_value={}),
                 mock.patch.object(coverage_command, "report"),
                 contextlib.redirect_stdout(io.StringIO()),
@@ -447,7 +449,9 @@ class CoverageAttributionTest(_PhaseJsonTestCase):
         self.assertIn("-DCMAKE_CXX_FLAGS=--coverage", configure_call)
         self.assertIn("-DCMAKE_EXE_LINKER_FLAGS=--coverage", configure_call)
         self.assertEqual(build_call, ["cmake", "--build", str(build_dir), "-j4", "--target", "ao_tui_test"])
-        run_suite.assert_called_once_with("tui", build_dir, test_filter="")
+        run_suite.assert_called_once_with(
+            "tui", build_dir, test_filter="", shards=1, report_matches=False, allow_no_tests=False
+        )
 
     def test_nonpositive_coverage_limits_still_reach_the_native_build(self):
         for jobs in (0, -2):
@@ -516,7 +520,17 @@ class CoverageAttributionTest(_PhaseJsonTestCase):
                     mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE),
                     mock.patch.object(build_command, "sync_compiler_cache"),
                     mock.patch.object(coverage_command, "run", return_value=0),
-                    mock.patch.object(coverage_command, "run_suite", side_effect=[0, 7, 0, -11]) as run_suite,
+                    mock.patch.object(
+                        coverage_command,
+                        "run_catch2_suite",
+                        side_effect=[
+                            test_command.SuiteOutcome(0),
+                            test_command.SuiteOutcome(7),
+                            test_command.SuiteOutcome(0),
+                            test_command.SuiteOutcome(0),
+                            test_command.SuiteOutcome(-11),
+                        ],
+                    ) as run_suite,
                     mock.patch.object(coverage_command, "collect_coverage", return_value={}),
                     mock.patch.object(coverage_command, "report"),
                     contextlib.redirect_stdout(io.StringIO()),
@@ -528,9 +542,66 @@ class CoverageAttributionTest(_PhaseJsonTestCase):
         # Run-all and first-failure semantics are unchanged: every suite ran,
         # each kept its own status, and the first failure wins the command.
         self.assertEqual(status, 7)
-        self.assertEqual([call.args[0] for call in run_suite.call_args_list], ["core", "tui", "cli", "gtk"])
+        self.assertEqual([call.args[0] for call in run_suite.call_args_list], ["core", "backend", "tui", "cli", "gtk"])
         suites = {record["suite"]: record["status"] for record in self.records_for(records, "suite")}
-        self.assertEqual(suites, {"core": 0, "tui": 7, "cli": 0, "gtk": -11})
+        self.assertEqual(suites, {"core": 0, "backend": 7, "tui": 0, "cli": 0, "gtk": -11})
+
+    def test_default_coverage_builds_and_runs_core_and_backend(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_dir = Path(temp_dir)
+            (build_dir / "CMakeCache.txt").write_text("CMAKE_CXX_FLAGS:STRING=--coverage\n", encoding="utf-8")
+            args = self.parse(["coverage", "-p", str(build_dir), "-j", "2"])
+            with self.phase_log() as log_dir:
+                with (
+                    mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE),
+                    mock.patch.object(build_command, "sync_compiler_cache"),
+                    mock.patch.object(coverage_command, "run", return_value=0) as run,
+                    mock.patch.object(
+                        coverage_command, "run_catch2_suite", return_value=test_command.SuiteOutcome(0)
+                    ) as run_suite,
+                    mock.patch.object(coverage_command, "collect_coverage", return_value={}),
+                    mock.patch.object(coverage_command, "report"),
+                    contextlib.redirect_stdout(io.StringIO()),
+                    contextlib.redirect_stderr(io.StringIO()),
+                ):
+                    status = coverage_command.run_command(args)
+                records = self.read_records(log_dir)
+
+        self.assertEqual(status, 0)
+        build_call = run.call_args.args[0]
+        self.assertEqual(build_call[-3:], ["--target", "ao_core_test", "ao_backend_test"])
+        self.assertEqual([call.args[0] for call in run_suite.call_args_list], ["core", "backend"])
+        suites = {record["suite"]: record["status"] for record in self.records_for(records, "suite")}
+        self.assertEqual(suites, {"core": 0, "backend": 0})
+
+    def test_filtered_coverage_without_a_global_match_fails_closed_after_every_suite(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_dir = Path(temp_dir)
+            (build_dir / "CMakeCache.txt").write_text("CMAKE_CXX_FLAGS:STRING=--coverage\n", encoding="utf-8")
+            args = self.parse(["coverage", "-p", str(build_dir), "[missing]", "-j", "2"])
+            with self.phase_log() as log_dir:
+                with (
+                    mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE),
+                    mock.patch.object(build_command, "sync_compiler_cache"),
+                    mock.patch.object(coverage_command, "run", return_value=0),
+                    mock.patch.object(
+                        coverage_command,
+                        "run_catch2_suite",
+                        side_effect=[test_command.SuiteOutcome(0, 0), test_command.SuiteOutcome(0, 0)],
+                    ) as run_suite,
+                    contextlib.redirect_stdout(io.StringIO()),
+                    contextlib.redirect_stderr(io.StringIO()) as stderr,
+                    self.assertRaises(SystemExit),
+                ):
+                    coverage_command.run_command(args)
+                records = self.read_records(log_dir)
+
+        # Every suite still ran; the gate failure is the union contract, not a
+        # member-suite stop.
+        self.assertEqual([call.args[0] for call in run_suite.call_args_list], ["core", "backend"])
+        self.assertIn("no tests in the selected coverage suites matched filter", stderr.getvalue())
+        suites = {record["suite"]: record["status"] for record in self.records_for(records, "suite")}
+        self.assertEqual(suites, {"core": 0, "backend": 0})
 
     def test_cold_configure_failure_keeps_its_native_status_before_die_normalization(self):
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -19,7 +19,12 @@ This script will automatically:
 4. Process all `.gcda` files and print out any files that have missing coverage (`#####:`).
 5. Output the exact missing lines with 6 lines of surrounding context.
 
-Select `--cli`, `--tui`, or `--gtk` for a frontend suite; the default is core, and `--all` runs core, TUI, CLI, and GTK. Use repeatable `--scope <repository-relative-prefix>` options to limit the reported source set without changing which tests run. An explicitly requested scope with no measurable lines fails rather than reporting a vacuous percentage.
+Select `--core`, `--backend`, `--cli`, `--tui`, or `--gtk` for a single suite; the default runs core and backend, and `--all` runs core, backend, TUI, CLI, and GTK. The system-media, perf, tooling, and lint suites are excluded from coverage runs. Use repeatable `--scope <repository-relative-prefix>` options to limit the reported source set without changing which tests run. An explicitly requested scope with no measurable lines fails rather than reporting a vacuous percentage.
+
+A nonempty Catch2 filter that matches no case in one selected suite is
+allowed, but every selected suite still executes and the run requires a match
+across all selected suites: a globally empty selection fails rather than passing
+vacuously, and the command keeps the first failing suite's non-zero status.
 
 Coverage extraction includes test objects so production headers instantiated only in tests contribute; reports retain only `app/`, `lib/`, and `include/` sources. Coverage runs are deliberately unsharded because multiple test processes would write the same gcov counters.
 

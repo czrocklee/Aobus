@@ -161,9 +161,16 @@ class BuildFeatureTest(unittest.TestCase):
                     ):
                         self.assertEqual(check.run_command(args), 0)
 
-                expected_targets = ["ao_core_test"] + (["ao_gtk_test"] if expected_gtk else []) + ["aobus_guardrails"]
+                expected_targets = (
+                    ["ao_core_test", "ao_backend_test"]
+                    + (["ao_gtk_test"] if expected_gtk else [])
+                    + ["aobus_guardrails"]
+                )
                 do_build.assert_called_once_with(args, targets=expected_targets)
-                self.assertEqual(run_suites.call_args.args[0], ("core", "gtk") if expected_gtk else ("core",))
+                self.assertEqual(
+                    run_suites.call_args.args[0],
+                    ("core", "backend", "gtk") if expected_gtk else ("core", "backend"),
+                )
 
     def test_check_rejects_tests_disabled_even_with_old_binaries(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -187,10 +194,10 @@ class BuildFeatureTest(unittest.TestCase):
             self.assertIn("AOBUS_BUILD_TESTS=ON is required", stderr.getvalue())
             run_suites.assert_not_called()
 
-    def test_test_groups_skip_disabled_targets_and_explicit_gtk_fails(self):
+    def test_test_groups_skip_disabled_targets_and_explicit_selections_fail(self):
         with tempfile.TemporaryDirectory() as temporary:
             tree = Path(temporary)
-            self.write_suite_configuration(tree, gtk="OFF", tui="OFF", cli="OFF", lint="OFF")
+            self.write_suite_configuration(tree, gtk="OFF", tui="OFF", cli="OFF", lint="OFF", system_media="OFF")
             stale = tree / "test" / "ao_gtk_test"
             stale.parent.mkdir()
             stale.touch()
@@ -202,17 +209,22 @@ class BuildFeatureTest(unittest.TestCase):
             ):
                 self.assertEqual(test.run_command(self.parse("test", "--all", "-n", "-p", temporary)), 0)
                 run_suites.assert_called_once()
-                self.assertEqual(run_suites.call_args.args[0], ("core", "integration", "tooling"))
+                self.assertEqual(run_suites.call_args.args[0], ("core", "backend", "tooling"))
                 for no_build in ((), ("-n",)):
-                    with self.subTest(no_build=no_build):
-                        with (
-                            mock.patch.object(test, "run") as run,
-                            contextlib.redirect_stderr(io.StringIO()) as stderr,
-                            self.assertRaises(SystemExit),
-                        ):
-                            test.run_command(self.parse("test", "--gtk", "-p", temporary, *no_build))
-                        self.assertIn("suite 'gtk' is disabled", stderr.getvalue())
-                        run.assert_not_called()
+                    for selection, option in (
+                        ("--gtk", "AOBUS_BUILD_GTK"),
+                        ("--systemmedia", "AOBUS_BUILD_SYSTEM_MEDIA"),
+                    ):
+                        with self.subTest(no_build=no_build, selection=selection):
+                            with (
+                                mock.patch.object(test, "run") as run,
+                                contextlib.redirect_stderr(io.StringIO()) as stderr,
+                                self.assertRaises(SystemExit),
+                            ):
+                                test.run_command(self.parse("test", selection, "-p", temporary, *no_build))
+                            self.assertIn("is disabled in", stderr.getvalue())
+                            self.assertIn(option, stderr.getvalue())
+                            run.assert_not_called()
                 self.assertEqual(run_suites.call_count, 1)
 
     def test_cmake_false_spellings_disable_gtk_and_missing_feature_is_an_error(self):
@@ -254,13 +266,14 @@ class BuildFeatureTest(unittest.TestCase):
             self.assertIn("gtk test binary not found", stderr.getvalue())
 
     @staticmethod
-    def write_suite_configuration(tree, *, gtk="ON", tui="ON", cli="ON", lint="ON", tests="ON"):
+    def write_suite_configuration(tree, *, gtk="ON", tui="ON", cli="ON", lint="ON", system_media="ON", tests="ON"):
         (tree / "CMakeCache.txt").write_text(
             f"AOBUS_BUILD_TESTS:BOOL={tests}\n"
             f"AOBUS_BUILD_GTK:BOOL={gtk}\n"
             f"AOBUS_BUILD_TUI:BOOL={tui}\n"
             f"AOBUS_BUILD_CLI:BOOL={cli}\n"
-            f"AOBUS_BUILD_LINT_PLUGIN:BOOL={lint}\n",
+            f"AOBUS_BUILD_LINT_PLUGIN:BOOL={lint}\n"
+            f"AOBUS_BUILD_SYSTEM_MEDIA:BOOL={system_media}\n",
             encoding="utf-8",
         )
 

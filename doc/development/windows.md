@@ -462,7 +462,12 @@ isolated Windows SSH logons.
 ## Native tests and sanitizers
 
 The default test group is core and TUI. Windows `all` and `ao.bat check` add
-CLI, integration, tooling, and lint. `ao.bat test --lint` prepares the separate
+CLI, tooling, and lint. The backend suite is compiled but explicit-only. Both
+cases are hidden `[.manual]`, so `ao.bat test --backend` without a filter selects
+no case and fails (non-zero). Use the exact case name to select the probe whose
+hardware prerequisites you prepared, as the provider example below shows;
+`[.manual]` selects both cases.
+Automatic `all` and concurrency selections exclude them. `ao.bat test --lint` prepares the separate
 `windows-tidy` host and runs the custom-check fixture diagnostics with the governed LLVM SDK and Visual Studio includes.
 Compiler errors in those diagnostic invocations fail the fixtures; there is no second syntax-only pass.
 Objective-C++ fixtures are explicitly deferred, not counted as Windows coverage.
@@ -481,7 +486,7 @@ audio, or sanitizer results. Run the opt-in WASAPI endpoint and playback probe
 on a host with an active render endpoint:
 
 ```bat
-ao.bat test --integration "WasapiProvider - enumerates and renders through real endpoints"
+ao.bat test --backend "WasapiProvider - enumerates and renders through real endpoints"
 ```
 
 The exact case name selects the provider probe only; the hidden WASAPI

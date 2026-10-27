@@ -87,6 +87,7 @@ _ENABLED_SUITE_CACHE = {
         "AOBUS_BUILD_GTK",
         "AOBUS_BUILD_TUI",
         "AOBUS_BUILD_CLI",
+        "AOBUS_BUILD_SYSTEM_MEDIA",
         "AOBUS_BUILD_LINT_PLUGIN",
     )
 }
@@ -1488,10 +1489,11 @@ class CliParseTest(unittest.TestCase):
             test_command.SUITE_TARGETS,
             {
                 "core": ["ao_core_test"],
+                "backend": ["ao_backend_test"],
                 "tui": ["ao_tui_test"],
                 "cli": ["ao_cli_test"],
                 "gtk": ["ao_gtk_test"],
-                "integration": ["ao_integration_test"],
+                "systemmedia": ["ao_systemmedia_test"],
             },
         )
 
@@ -1506,7 +1508,7 @@ class CliParseTest(unittest.TestCase):
                 self.assertEqual(test_command.run_command(args), 0)
 
         run_suites.assert_called_once_with(
-            ("core", "tui", "cli", "gtk", "integration", "tooling", "lint"),
+            ("core", "backend", "tui", "cli", "gtk", "systemmedia", "tooling", "lint"),
             Path("/tmp/aobus-test-build"),
             test_filter="",
             list_only=False,
@@ -1527,7 +1529,7 @@ class CliParseTest(unittest.TestCase):
                     self.assertEqual(test_command.run_command(args), 0)
 
         run_suites.assert_called_once_with(
-            ("core", "tui", "cli", "gtk", "integration"),
+            ("core", "backend", "tui", "cli", "gtk", "systemmedia"),
             Path("/tmp/aobus-test-build"),
             test_filter="[focused]",
             list_only=False,
@@ -1540,14 +1542,14 @@ class CliParseTest(unittest.TestCase):
         build_dir = Path("/tmp/aobus-test-build")
 
         with mock.patch.object(
-            test_command, "_run_catch2_suite", return_value=test_command._SuiteOutcome(0)
+            test_command, "run_catch2_suite", return_value=test_command.SuiteOutcome(0)
         ) as run_suite:
             with mock.patch.object(test_command, "run_non_catch2_suite", return_value=0) as run_non_catch2:
                 self.assertEqual(test_command.run_suites(builddir.LINUX_PROFILE.all_suites, build_dir), 0)
 
         self.assertEqual(
             [call.args[0] for call in run_suite.call_args_list],
-            ["core", "tui", "cli", "gtk", "integration"],
+            ["core", "backend", "tui", "cli", "gtk", "systemmedia"],
         )
         self.assertEqual([call.args[0] for call in run_non_catch2.call_args_list], ["tooling", "lint"])
 
@@ -1557,7 +1559,7 @@ class CliParseTest(unittest.TestCase):
 
         with (
             mock.patch.dict(os.environ, {test_command.SHARD_ENV: "1"}),
-            mock.patch.object(test_command, "_run_catch2_suite", return_value=test_command._SuiteOutcome(0)),
+            mock.patch.object(test_command, "run_catch2_suite", return_value=test_command.SuiteOutcome(0)),
             mock.patch.object(test_command, "run_non_catch2_suite", return_value=0),
             mock.patch.object(test_command, "phases", recorder),
         ):
@@ -1570,10 +1572,11 @@ class CliParseTest(unittest.TestCase):
             recorder.records,
             [
                 {"name": "suite", "tree": "native", "jobs": 1, "count": 1, "suite": "core", "status": 0},
+                {"name": "suite", "tree": "native", "jobs": 1, "count": 1, "suite": "backend", "status": 0},
                 {"name": "suite", "tree": "native", "jobs": 1, "count": 1, "suite": "tui", "status": 0},
                 {"name": "suite", "tree": "native", "jobs": 1, "count": 1, "suite": "cli", "status": 0},
                 {"name": "suite", "tree": "native", "jobs": 1, "count": 1, "suite": "gtk", "status": 0},
-                {"name": "suite", "tree": "native", "jobs": 1, "count": 1, "suite": "integration", "status": 0},
+                {"name": "suite", "tree": "native", "jobs": 1, "count": 1, "suite": "systemmedia", "status": 0},
                 {"name": "suite", "tree": None, "count": 1, "suite": "tooling", "status": 0},
                 {"name": "suite", "tree": "tidy", "count": 1, "suite": "lint", "status": 0},
             ],
@@ -1585,7 +1588,7 @@ class CliParseTest(unittest.TestCase):
 
         with (
             mock.patch.dict(os.environ, {test_command.SHARD_ENV: "1"}),
-            mock.patch.object(test_command, "_run_catch2_suite", return_value=test_command._SuiteOutcome(3)),
+            mock.patch.object(test_command, "run_catch2_suite", return_value=test_command.SuiteOutcome(3)),
             mock.patch.object(test_command, "run_non_catch2_suite") as run_non_catch2,
             mock.patch.object(test_command, "phases", recorder),
         ):
@@ -1616,7 +1619,9 @@ class CliParseTest(unittest.TestCase):
             ):
                 with mock.patch.object(test_command.subprocess, "Popen", return_value=server) as popen:
                     with mock.patch.object(test_command, "run", return_value=0) as run:
-                        self.assertEqual(test_command.run_suite("gtk", build_dir, test_filter="[layout]"), 0)
+                        self.assertEqual(
+                            test_command.run_catch2_suite("gtk", build_dir, test_filter="[layout]").status, 0
+                        )
 
         popen.assert_called_once_with(
             ["Xvfb", "-displayfd", "1", "-screen", "0", "1280x1024x24", "-nolisten", "tcp"],
@@ -1656,8 +1661,10 @@ class CliParseTest(unittest.TestCase):
 
             with mock.patch.object(builddir, "platform_profile", return_value=builddir.MACOS_PROFILE):
                 with mock.patch.object(test_command, "run", return_value=0) as run:
-                    self.assertEqual(test_command.run_suite("core", build_dir, test_filter="[coreaudio]"), 0)
-                    self.assertEqual(test_command.run_suite("core", build_dir, list_only=True), 0)
+                    self.assertEqual(
+                        test_command.run_catch2_suite("core", build_dir, test_filter="[coreaudio]").status, 0
+                    )
+                    self.assertEqual(test_command.run_catch2_suite("core", build_dir, list_only=True).status, 0)
 
         self.assertEqual(
             run.call_args_list,
@@ -1770,9 +1777,11 @@ class CliParseTest(unittest.TestCase):
                         with mock.patch.object(check_command.build, "print_summary"):
                             self.assertEqual(check_command.run_command(args), 0)
 
-        do_build.assert_called_once_with(args, targets=["ao_core_test", "ao_gtk_test", "aobus_guardrails"])
+        do_build.assert_called_once_with(
+            args, targets=["ao_core_test", "ao_backend_test", "ao_gtk_test", "aobus_guardrails"]
+        )
         run_suites.assert_called_once_with(
-            ("core", "gtk"),
+            ("core", "backend", "gtk"),
             result.build_dir,
             asan=False,
             tsan=True,
@@ -1799,7 +1808,7 @@ class CliParseTest(unittest.TestCase):
         do_build.assert_called_once_with(args, targets=["all", "aobus_guardrails", "ao_perf_baseline"])
         verify.assert_called_once_with(result.build_dir)
         run_suites.assert_called_once_with(
-            ("core", "tui", "cli", "integration", "lint"),
+            ("core", "backend", "tui", "cli", "lint"),
             result.build_dir,
             asan=False,
             tsan=False,
@@ -1874,7 +1883,7 @@ class CliParseTest(unittest.TestCase):
             [mock.call(result.build_dir), mock.call(winui_result.build_dir)],
         )
         run_suites.assert_called_once_with(
-            ("core", "tui", "cli", "integration", "tooling", "lint"),
+            ("core", "tui", "cli", "tooling", "lint"),
             result.build_dir,
             asan=False,
             tsan=False,
@@ -1946,7 +1955,7 @@ class CliParseTest(unittest.TestCase):
                 self.assertEqual(test_command.run_command(args), 0)
 
         run_suites.assert_called_once_with(
-            ("core", "gtk"),
+            ("core", "backend", "gtk"),
             Path("/tmp/aobus-test-build"),
             test_filter="",
             list_only=False,
@@ -1961,6 +1970,62 @@ class CliParseTest(unittest.TestCase):
             self.assertEqual(test_command.suites_for("all")[-1], "lint")
             self.assertEqual(test_command.suites_for("default"), ("core", "tui"))
             self.assertNotIn("lint", test_command.suites_for("concurrency"))
+
+    def test_windows_backend_is_explicit_only_and_never_joins_an_unattended_group(self):
+        with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
+            self.assertEqual(self.parse(["test", "--backend"]).suite, "backend")
+            self.assertIn("backend", test_command.selectable_suites())
+            groups = test_command.suite_groups()
+            for group in ("default", "all", "concurrency"):
+                self.assertNotIn("backend", groups[group])
+
+    def test_systemmedia_is_selectable_only_on_linux(self):
+        for profile in (builddir.MACOS_PROFILE, builddir.WINDOWS_PROFILE):
+            with (
+                self.subTest(platform=profile.name),
+                mock.patch.object(builddir, "platform_profile", return_value=profile),
+            ):
+                self.assertNotIn("systemmedia", test_command.selectable_suites())
+                with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+                    test_command.suites_for("systemmedia")
+
+    def test_macos_groups_admit_backend_without_systemmedia(self):
+        with mock.patch.object(builddir, "platform_profile", return_value=builddir.MACOS_PROFILE):
+            groups = test_command.suite_groups()
+            self.assertEqual(groups["default"], ("core", "backend", "tui"))
+            self.assertEqual(groups["tsan"], ("core", "backend"))
+            self.assertIn("backend", groups["concurrency"])
+            self.assertNotIn("systemmedia", groups["all"])
+            self.assertNotIn("systemmedia", groups["concurrency"])
+
+    def test_linux_systemmedia_joins_groups_only_when_configured(self):
+        cache = {**_ENABLED_SUITE_CACHE, "AOBUS_BUILD_SYSTEM_MEDIA": "OFF"}
+        with (
+            mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE),
+            mock.patch.object(test_command.compiler_cache, "read_cmake_cache", return_value=cache),
+        ):
+            # Automatic groups drop the disabled suite instead of running it.
+            for selection in ("default", "all", "concurrency"):
+                self.assertNotIn("systemmedia", test_command.configured_suites_for(selection, Path("product")))
+            # An explicit selection fails closed rather than reusing a stale binary.
+            with contextlib.redirect_stderr(io.StringIO()) as stderr:
+                with self.assertRaises(SystemExit):
+                    test_command.configured_suites_for("systemmedia", Path("product"))
+            self.assertIn("suite 'systemmedia' is disabled", stderr.getvalue())
+            self.assertIn("AOBUS_BUILD_SYSTEM_MEDIA=OFF", stderr.getvalue())
+
+    def test_linux_systemmedia_requires_a_configured_cache_entry(self):
+        cache = {
+            option: value for option, value in _ENABLED_SUITE_CACHE.items() if option != "AOBUS_BUILD_SYSTEM_MEDIA"
+        }
+        with (
+            mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE),
+            mock.patch.object(test_command.compiler_cache, "read_cmake_cache", return_value=cache),
+            contextlib.redirect_stderr(io.StringIO()) as stderr,
+            self.assertRaises(SystemExit),
+        ):
+            test_command.configured_suites_for("all", Path("product"))
+        self.assertIn("Cannot determine AOBUS_BUILD_SYSTEM_MEDIA", stderr.getvalue())
 
     def test_windows_lint_does_not_depend_on_the_product_graph_lint_option(self):
         cache = {**_ENABLED_SUITE_CACHE, "AOBUS_BUILD_LINT_PLUGIN": "OFF"}
@@ -2135,7 +2200,7 @@ class CliParseTest(unittest.TestCase):
         ):
             os.environ.pop("BUILD_DIR", None)
             with (
-                mock.patch.object(test_command, "_run_catch2_suite", return_value=test_command._SuiteOutcome(0)),
+                mock.patch.object(test_command, "run_catch2_suite", return_value=test_command.SuiteOutcome(0)),
                 mock.patch.object(test_command.tooltest, "run", return_value=0),
                 mock.patch.object(test_command.tidy, "prepare_toolchain") as prepare,
                 mock.patch.object(test_command.linttest, "run", return_value=0) as fixtures,
@@ -2254,7 +2319,7 @@ class CliParseTest(unittest.TestCase):
                 self.assertEqual(test_command.run_command(args), 0)
 
         run_suites.assert_called_once_with(
-            ("core", "tui", "cli", "gtk", "integration"),
+            ("core", "backend", "tui", "cli", "gtk", "systemmedia"),
             Path("/tmp/aobus-test-build"),
             test_filter="[concurrency]~[.]",
             list_only=False,
@@ -2286,7 +2351,7 @@ class CliParseTest(unittest.TestCase):
                 self.assertEqual(test_command.run_command(args), 0)
 
         run_suites.assert_called_once_with(
-            ("core", "gtk"),
+            ("core", "backend", "gtk"),
             Path("/tmp/aobus-test-build"),
             test_filter="[concurrency]~[.]",
             list_only=False,
@@ -2303,7 +2368,7 @@ class CliParseTest(unittest.TestCase):
     def test_concurrency_listing_excludes_hidden_but_explicit_filters_can_opt_in(self, _is_dir, _validate_build_tree):
         for selection, expected in (
             (["--concurrency"], "[concurrency]~[.]"),
-            (["--integration", "[concurrency][.manual]"], "[concurrency][.manual]"),
+            (["--backend", "[concurrency][.manual]"], "[concurrency][.manual]"),
         ):
             with self.subTest(selection=selection):
                 args = self.parse(["test", "--list", "-n", "-p", "/tmp/aobus-test-build", *selection])
@@ -2341,12 +2406,12 @@ class CliParseTest(unittest.TestCase):
 
             with mock.patch.object(test_command, "run", return_value=0) as run:
                 self.assertEqual(
-                    test_command.run_suite(
+                    test_command.run_catch2_suite(
                         "cli",
                         build_dir,
                         test_filter="[concurrency]",
                         allow_no_tests=True,
-                    ),
+                    ).status,
                     0,
                 )
 
@@ -2358,9 +2423,9 @@ class CliParseTest(unittest.TestCase):
         )
 
     def test_filtered_suite_group_requires_a_match_globally_not_per_suite(self):
-        outcomes = [test_command._SuiteOutcome(0, 0), test_command._SuiteOutcome(0, 2)]
+        outcomes = [test_command.SuiteOutcome(0, 0), test_command.SuiteOutcome(0, 2)]
         with mock.patch.object(test_command, "suite_shards", return_value=1):
-            with mock.patch.object(test_command, "_run_catch2_suite", side_effect=outcomes) as run_suite:
+            with mock.patch.object(test_command, "run_catch2_suite", side_effect=outcomes) as run_suite:
                 self.assertEqual(
                     test_command.run_suites(("core", "tui"), Path("/tmp/aobus-test-build"), test_filter="[focused]"),
                     0,
@@ -2375,21 +2440,21 @@ class CliParseTest(unittest.TestCase):
         with mock.patch.object(test_command, "suite_shards", return_value=1):
             with mock.patch.object(
                 test_command,
-                "_run_catch2_suite",
-                side_effect=(test_command._SuiteOutcome(0, 0), test_command._SuiteOutcome(0, 0)),
+                "run_catch2_suite",
+                side_effect=(test_command.SuiteOutcome(0, 0), test_command.SuiteOutcome(0, 0)),
             ):
                 with self.assertRaisesRegex(SystemExit, "1"):
                     test_command.run_suites(("core", "tui"), Path("/tmp/aobus-test-build"), test_filter="[missing]")
 
     def test_filtered_single_suite_with_no_match_fails(self):
         with mock.patch.object(test_command, "suite_shards", return_value=1):
-            with mock.patch.object(test_command, "_run_catch2_suite", return_value=test_command._SuiteOutcome(0, 0)):
+            with mock.patch.object(test_command, "run_catch2_suite", return_value=test_command.SuiteOutcome(0, 0)):
                 with self.assertRaisesRegex(SystemExit, "1"):
                     test_command.run_suites(("core",), Path("/tmp/aobus-test-build"), test_filter="[missing]")
 
     def test_filtered_suite_group_never_turns_a_real_failure_into_an_empty_suite(self):
         with mock.patch.object(test_command, "suite_shards", return_value=1):
-            with mock.patch.object(test_command, "_run_catch2_suite", return_value=test_command._SuiteOutcome(7, 0)):
+            with mock.patch.object(test_command, "run_catch2_suite", return_value=test_command.SuiteOutcome(7, 0)):
                 self.assertEqual(
                     test_command.run_suites(("core", "tui"), Path("/tmp/aobus-test-build"), test_filter="[focused]"),
                     7,
@@ -2397,13 +2462,13 @@ class CliParseTest(unittest.TestCase):
 
     def test_filtered_repeat_requires_matches_on_every_iteration(self):
         outcomes = (
-            test_command._SuiteOutcome(0, 0),
-            test_command._SuiteOutcome(0, 1),
-            test_command._SuiteOutcome(0, 1),
-            test_command._SuiteOutcome(0, 0),
+            test_command.SuiteOutcome(0, 0),
+            test_command.SuiteOutcome(0, 1),
+            test_command.SuiteOutcome(0, 1),
+            test_command.SuiteOutcome(0, 0),
         )
         with mock.patch.object(test_command, "suite_shards", return_value=1):
-            with mock.patch.object(test_command, "_run_catch2_suite", side_effect=outcomes) as run_suite:
+            with mock.patch.object(test_command, "run_catch2_suite", side_effect=outcomes) as run_suite:
                 self.assertEqual(
                     test_command.run_suites(
                         ("core", "tui"),
@@ -2419,7 +2484,7 @@ class CliParseTest(unittest.TestCase):
     def test_filtered_list_uses_reported_matches_for_the_global_contract(self):
         with mock.patch.object(test_command, "suite_shards", return_value=1):
             with mock.patch.object(
-                test_command, "_run_catch2_suite", return_value=test_command._SuiteOutcome(0, 1)
+                test_command, "run_catch2_suite", return_value=test_command.SuiteOutcome(0, 1)
             ) as run_suite:
                 self.assertEqual(
                     test_command.run_suites(
@@ -2438,7 +2503,7 @@ class CliParseTest(unittest.TestCase):
         output = io.StringIO()
         with mock.patch.object(test_command, "suite_shards", return_value=1):
             with mock.patch.object(
-                test_command, "_run_catch2_suite", return_value=test_command._SuiteOutcome(0, 1)
+                test_command, "run_catch2_suite", return_value=test_command.SuiteOutcome(0, 1)
             ) as run_suite:
                 with mock.patch.object(test_command, "run_non_catch2_suite") as run_non_catch2:
                     with contextlib.redirect_stdout(output):
@@ -2478,7 +2543,7 @@ class CliParseTest(unittest.TestCase):
 
             with mock.patch.dict("os.environ", {"TSAN_OPTIONS": "history_size=7"}, clear=False):
                 with mock.patch.object(test_command, "run", return_value=0) as run:
-                    self.assertEqual(test_command.run_suite("core", build_dir, tsan=True), 0)
+                    self.assertEqual(test_command.run_catch2_suite("core", build_dir, tsan=True).status, 0)
 
         run.assert_called_once_with(
             [str(binary)],
@@ -2509,7 +2574,7 @@ class CliParseTest(unittest.TestCase):
                     clear=True,
                 ):
                     with mock.patch.object(test_command, "run", return_value=0) as run:
-                        self.assertEqual(test_command.run_suite("core", build_dir, asan=True), 0)
+                        self.assertEqual(test_command.run_catch2_suite("core", build_dir, asan=True).status, 0)
 
         run.assert_called_once_with(
             [str(binary)],
@@ -2530,7 +2595,7 @@ class CliParseTest(unittest.TestCase):
             with mock.patch.object(builddir, "platform_profile", return_value=builddir.MACOS_PROFILE):
                 with mock.patch.dict("os.environ", {"ASAN_OPTIONS": "detect_container_overflow=1"}, clear=True):
                     with mock.patch.object(test_command, "run", return_value=0) as run:
-                        self.assertEqual(test_command.run_suite("tui", build_dir, asan=True), 0)
+                        self.assertEqual(test_command.run_catch2_suite("tui", build_dir, asan=True).status, 0)
 
         run.assert_called_once_with(
             [str(binary)],
@@ -2565,7 +2630,7 @@ class CliParseTest(unittest.TestCase):
             ):
                 with mock.patch.object(test_command, "_TSAN_MERGED_SUPP_PATH", merged_suppressions):
                     with mock.patch.object(test_command, "run", return_value=0) as run:
-                        self.assertEqual(test_command.run_suite("core", build_dir, tsan=True), 0)
+                        self.assertEqual(test_command.run_catch2_suite("core", build_dir, tsan=True).status, 0)
 
             expected_suppressions = (
                 "race:external_runtime_symbol\n\n"
@@ -2621,7 +2686,7 @@ class CliParseTest(unittest.TestCase):
 
             with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
                 with mock.patch.object(test_command, "run", return_value=0) as run:
-                    self.assertEqual(test_command.run_suite("core", build_dir), 0)
+                    self.assertEqual(test_command.run_catch2_suite("core", build_dir).status, 0)
 
         run.assert_called_once_with([str(binary)], env=None, log=None, append=False)
 
@@ -2634,10 +2699,19 @@ class CliParseTest(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 self.parse(["test", "--core", "--gtk"])
 
-    def test_coverage_defaults_to_core_suite(self):
+    def test_coverage_defaults_to_the_core_and_backend_suites(self):
         args = self.parse(["coverage", "SmartListEvaluator*"])
-        self.assertEqual(args.suite, "core")
+        self.assertIsNone(args.suite)
+        self.assertEqual(coverage_command.coverage_suites(args.suite), ("core", "backend"))
         self.assertEqual(args.filter, "SmartListEvaluator*")
+
+    def test_coverage_accepts_backend_and_core_shortcuts(self):
+        self.assertEqual(coverage_command.coverage_suites(self.parse(["coverage", "--core"]).suite), ("core",))
+        self.assertEqual(coverage_command.coverage_suites(self.parse(["coverage", "--backend"]).suite), ("backend",))
+        self.assertEqual(
+            coverage_command.coverage_suites(self.parse(["coverage", "--all"]).suite),
+            ("core", "backend", "tui", "cli", "gtk"),
+        )
 
     def test_coverage_accepts_scopes_and_summary_limit(self):
         args = self.parse(
@@ -3867,7 +3941,7 @@ class CliParseTest(unittest.TestCase):
 
             with mock.patch.object(test_command.subprocess, "Popen", side_effect=spawn):
                 with self._captured_stdout() as raw:
-                    status = test_command.run_suite("core", build_dir, shards=shards)
+                    status = test_command.run_catch2_suite("core", build_dir, shards=shards).status
         return status, raw.getvalue().decode("utf-8")
 
     def test_sharded_run_reports_one_tally_summed_over_every_shard(self):
@@ -3888,7 +3962,7 @@ class CliParseTest(unittest.TestCase):
             spawn = self._catch2_shard_stub([(0, 0, 0), (0, 0, 0, 1)])
             with mock.patch.object(test_command.subprocess, "Popen", side_effect=spawn):
                 with self._captured_stdout():
-                    outcome = test_command._run_catch2_suite(
+                    outcome = test_command.run_catch2_suite(
                         "core",
                         build_dir,
                         test_filter="[focused]",
@@ -3897,7 +3971,7 @@ class CliParseTest(unittest.TestCase):
                         report_matches=True,
                     )
 
-        self.assertEqual(outcome, test_command._SuiteOutcome(0, 1))
+        self.assertEqual(outcome, test_command.SuiteOutcome(0, 1))
 
     def test_sharded_filtered_run_fails_when_the_aggregate_has_no_matches(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -3912,6 +3986,46 @@ class CliParseTest(unittest.TestCase):
                     with self._captured_stdout(), contextlib.redirect_stderr(io.StringIO()):
                         with self.assertRaisesRegex(SystemExit, "1"):
                             test_command.run_suites(("core",), build_dir, test_filter="[missing]")
+
+    def test_empty_sharded_backend_reports_whether_a_filter_was_supplied(self):
+        expectations = (
+            ("", "no Backend tests were selected by default. Hidden tests require an explicit filter."),
+            ("[missing]", "no Backend tests matched the supplied filter."),
+        )
+        for test_filter, expected in expectations:
+            with self.subTest(test_filter=test_filter), tempfile.TemporaryDirectory() as temp_dir:
+                build_dir = Path(temp_dir)
+                binary = builddir.executable(build_dir / "test" / "ao_backend_test")
+                binary.parent.mkdir()
+                binary.touch()
+                spawn = self._catch2_shard_stub([(0, 0, 0), (0, 0, 0)])
+                with (
+                    mock.patch.object(test_command.subprocess, "Popen", side_effect=spawn),
+                    self._captured_stdout(),
+                    contextlib.redirect_stderr(io.StringIO()) as errors,
+                    self.assertRaises(SystemExit) as failure,
+                ):
+                    test_command.run_catch2_suite("backend", build_dir, test_filter=test_filter, shards=2)
+
+                self.assertEqual(failure.exception.code, 1)
+                self.assertIn(expected, errors.getvalue())
+                if not test_filter:
+                    self.assertNotIn("supplied filter", errors.getvalue())
+
+    def test_empty_sharded_backend_preserves_explicit_zero_match_permission(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_dir = Path(temp_dir)
+            binary = builddir.executable(build_dir / "test" / "ao_backend_test")
+            binary.parent.mkdir()
+            binary.touch()
+            spawn = self._catch2_shard_stub([(0, 0, 0), (0, 0, 0)])
+            with (
+                mock.patch.object(test_command.subprocess, "Popen", side_effect=spawn),
+                self._captured_stdout(),
+            ):
+                outcome = test_command.run_catch2_suite("backend", build_dir, allow_no_tests=True, shards=2)
+
+        self.assertEqual(outcome, test_command.SuiteOutcome(0, 0))
 
     def test_sharded_run_surfaces_the_failing_shard_and_its_exit_code(self):
         status, output = self._run_sharded_core(self._catch2_shard_stub([(10, 2, 0), (7, 1, 1)]), shards=2)
@@ -3939,7 +4053,7 @@ class CliParseTest(unittest.TestCase):
             binary.touch()
 
             with mock.patch.object(test_command, "run", return_value=0) as run:
-                self.assertEqual(test_command.run_suite("core", build_dir, list_only=True, shards=8), 0)
+                self.assertEqual(test_command.run_catch2_suite("core", build_dir, list_only=True, shards=8).status, 0)
 
         run.assert_called_once_with(
             [str(binary), "--list-tests", "--verbosity", "high"], env=None, log=None, append=False
@@ -4301,7 +4415,7 @@ class CliParseTest(unittest.TestCase):
             with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
                 with mock.patch.object(test_command.subprocess, "Popen", side_effect=spawn) as popen:
                     with self._captured_stdout():
-                        self.assertEqual(test_command.run_suite("gtk", build_dir, shards=4), 0)
+                        self.assertEqual(test_command.run_catch2_suite("gtk", build_dir, shards=4).status, 0)
 
         shard_environments = [call.kwargs["env"] for call in popen.call_args_list if call.args[0][0] == str(binary)]
         self.assertEqual([env["DISPLAY"] for env in shard_environments], [":40", ":41", ":42", ":43"])

@@ -19,10 +19,11 @@ SUITES = {
     "appkit": SuiteSpec("AppKit Smoke", "appkit", "ao_appkit_smoke"),
     "winui": SuiteSpec("WinUI Naming Audit", "winui", "aobus-winui"),
     "core": SuiteSpec("Core", "catch2", "ao_core_test"),
+    "backend": SuiteSpec("Backend", "catch2", "ao_backend_test"),
     "tui": SuiteSpec("TUI", "catch2", "ao_tui_test"),
     "cli": SuiteSpec("CLI", "catch2", "ao_cli_test"),
     "gtk": SuiteSpec("GTK", "catch2", "ao_gtk_test"),
-    "integration": SuiteSpec("Integration", "catch2", "ao_integration_test"),
+    "systemmedia": SuiteSpec("System Media", "catch2", "ao_systemmedia_test"),
     "tooling": SuiteSpec("Tooling Tests", "tooling"),
     "lint": SuiteSpec("Lint Integration", "lint", "AobusLintPlugin"),
 }

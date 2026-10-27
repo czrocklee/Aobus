@@ -381,6 +381,7 @@ add_executable(ao_core_test
     query/QueryErrorTest.cpp
 
     # media file tests
+    media/file/MediaFileFixtureTest.cpp
     media/file/TestFile.cpp
     media/file/MpegFrameTest.cpp
     media/file/MpegFileTest.cpp
@@ -477,6 +478,8 @@ add_executable(ao_core_test
     lmdb/ResultErrorTest.cpp
 
     # audio unit tests
+    audio/DecoderIntegrationTest.cpp
+    audio/GraphIntegrityTest.cpp
     audio/DecoderFactoryTest.cpp
     audio/PlatformBackendProvidersTest.cpp
     audio/DecoderOutputTest.cpp
@@ -882,14 +885,6 @@ target_link_libraries(ao_core_test PRIVATE
 )
 if(LINUX)
   target_link_libraries(ao_core_test PRIVATE PkgALSA PkgPipeWire)
-  # Only the scoped callback-source fake in PipeWireBackendAdmissionTest owns
-  # these external calls; every other stream delegates to the native SDK.
-  target_link_options(ao_core_test PRIVATE
-    "LINKER:--wrap=pw_stream_add_listener"
-    "LINKER:--wrap=pw_stream_connect"
-    "LINKER:--wrap=pw_stream_set_active"
-    "LINKER:--wrap=pw_stream_dequeue_buffer"
-    "LINKER:--wrap=pw_stream_queue_buffer")
 endif()
 if(LINUX)
   target_sources(ao_core_test PRIVATE audio/backend/AlsaMixerTestSupport.cpp)
@@ -897,12 +892,9 @@ endif()
 aobus_target_test_sources(ao_core_test "${LINUX}" "non-Linux host"
   audio/backend/PipeWireMonitorTest.cpp
   audio/backend/PipeWireBackendTest.cpp
-  audio/backend/PipeWireBackendAdmissionTest.cpp
-  audio/backend/PipeWireChannelObservationTest.cpp
   audio/backend/AlsaEnginePropertyTest.cpp
   audio/backend/AlsaExclusiveBackendTest.cpp
   audio/backend/AlsaBackendReuseTest.cpp
-  audio/backend/AlsaChannelObservationTest.cpp
   audio/backend/AlsaProviderTest.cpp
   audio/backend/FlacAlsaPipeWireRouteTest.cpp
   audio/backend/detail/PipeWireMonitorParsingTest.cpp
@@ -921,8 +913,6 @@ aobus_target_test_sources(ao_core_test "${LINUX}" "non-Linux host"
 aobus_target_test_sources(ao_core_test "${APPLE}" "non-macOS host"
   audio/backend/CoreAudioBackendFatalProbeTest.cpp
   audio/backend/CoreAudioBackendTest.cpp
-  audio/backend/CoreAudioBackendRunStateTest.cpp
-  audio/backend/CoreAudioChannelObservationTest.cpp
   audio/backend/CoreAudioProviderTest.cpp
   audio/backend/CoreAudioTestOutputTest.cpp
   audio/backend/detail/CoreAudioChannelLayoutTest.cpp
@@ -966,7 +956,6 @@ aobus_target_test_sources(ao_core_test "${WIN32}" "non-Windows host"
   audio/backend/WasapiProviderTest.cpp
   audio/backend/WasapiSharedBackendTest.cpp
   audio/backend/WasapiBackendReuseTest.cpp
-  audio/backend/WasapiChannelObservationTest.cpp
   audio/backend/detail/WasapiGraphRegistryTest.cpp
   audio/backend/detail/WasapiMixFormatTest.cpp
   audio/backend/detail/WasapiStringsTest.cpp
@@ -1128,36 +1117,82 @@ aobus_target_test_sources(ao_cli_test "${AOBUS_BUILD_CLI}" "AOBUS_BUILD_CLI=OFF"
     cli/OutputTest.cpp
 )
 
-# ao_integration_test: standalone integration tests (full gate only, not the default ./ao test loop)
-add_executable(ao_integration_test
-    audio/DecoderIntegrationTest.cpp
-    audio/GraphIntegrityTest.cpp
-    media/file/MediaFileFixtureTest.cpp
-)
-aobus_enable_windows_utf8_manifest(ao_integration_test)
+# Native endpoint/service and link-interposition cases. Portable SDK contracts
+# stay in core; Windows backend cases are hidden and explicitly selected.
+add_executable(ao_backend_test)
+aobus_enable_windows_utf8_manifest(ao_backend_test)
 
-target_link_libraries(ao_integration_test PRIVATE
-    ao_app_uimodel
-    ao_test_support_library
+target_link_libraries(ao_backend_test PRIVATE
+    ao_test_support_audio
     ao_test_options
     Catch2::Catch2WithMain
-    FakeIt::FakeIt-catch
 )
 if(LINUX)
-  target_link_libraries(ao_integration_test PRIVATE PkgPipeWire)
+  target_link_libraries(ao_backend_test PRIVATE PkgALSA PkgPipeWire)
+  # Only the scoped callback-source fake in PipeWireBackendAdmissionTest owns
+  # these external calls; every other stream delegates to the native SDK.
+  target_link_options(ao_backend_test PRIVATE
+    "LINKER:--wrap=pw_stream_add_listener"
+    "LINKER:--wrap=pw_stream_connect"
+    "LINKER:--wrap=pw_stream_set_active"
+    "LINKER:--wrap=pw_stream_dequeue_buffer"
+    "LINKER:--wrap=pw_stream_queue_buffer")
+endif()
+if(APPLE)
+  # The native fatal-probe case reenters a live callback in the probe child;
+  # siblingProbeExecutablePath() needs this probe beside the test binary.
+  target_link_libraries(ao_backend_test PRIVATE ao_fatal_probe_support ao_test_support_coreaudio)
+  add_dependencies(ao_backend_test ao_audio_fatal_probe)
+endif()
+aobus_target_test_sources(ao_backend_test "${LINUX}" "non-Linux host"
+  audio/backend/PipeWireBackendAdmissionTest.cpp
+  audio/backend/PipeWireChannelObservationTest.cpp
+  audio/backend/AlsaChannelObservationTest.cpp
+  audio/backend/PipeWireProviderDaemonTest.cpp
+)
+aobus_target_test_sources(ao_backend_test "${APPLE}" "non-macOS host"
+  audio/backend/CoreAudioBackendNativeTest.cpp
+  audio/backend/CoreAudioBackendRunStateTest.cpp
+  audio/backend/CoreAudioBackendNativeFatalProbeTest.cpp
+  audio/backend/detail/CoreAudioDeviceDiscoveryNativeTest.cpp
+  audio/backend/CoreAudioChannelObservationTest.cpp
+  audio/backend/CoreAudioProviderHardwareTest.cpp
+)
+aobus_target_test_sources(ao_backend_test "${WIN32}" "non-Windows host"
+  audio/backend/WasapiChannelObservationTest.cpp
+  audio/backend/WasapiProviderHardwareTest.cpp
+)
+# Not using add_test() for backend or systemmedia: the portal owns suite
+# execution and CTest must not become a second completion gate.
+
+# ao_systemmedia_test: Linux MPRIS surface and real-TUI process contracts.
+# Requires Linux system media; the target exists only in that configuration.
+# Disabled declarations record ownership reasons in the source manifest. The
+# portal checks configured feature flags before selecting an existing binary.
+if(LINUX AND AOBUS_BUILD_SYSTEM_MEDIA)
+  add_executable(ao_systemmedia_test)
+  aobus_enable_windows_utf8_manifest(ao_systemmedia_test)
+
+  target_link_libraries(ao_systemmedia_test PRIVATE
+      ao_app_uimodel
+      ao_test_support_library
+      ao_test_options
+      Catch2::Catch2WithMain
+      FakeIt::FakeIt-catch
+  )
+  target_sources(ao_systemmedia_test PRIVATE systemmedia/linux/MprisTestSupport.cpp)
+  target_link_libraries(ao_systemmedia_test PRIVATE
+      ao_system_media_linux
+      ao_test_support_runtime
+      PkgGIOMM
+      PkgGLIBMM
+  )
 endif()
 set(AOBUS_TEST_SYSTEM_MEDIA_ENABLED OFF)
 if(LINUX AND AOBUS_BUILD_SYSTEM_MEDIA)
   set(AOBUS_TEST_SYSTEM_MEDIA_ENABLED ON)
-  target_sources(ao_integration_test PRIVATE systemmedia/linux/MprisTestSupport.cpp)
-  target_link_libraries(ao_integration_test PRIVATE
-    ao_system_media_linux
-    ao_test_support_runtime
-    PkgGIOMM
-    PkgGLIBMM
-  )
 endif()
-aobus_target_test_sources(ao_integration_test "${AOBUS_TEST_SYSTEM_MEDIA_ENABLED}" "Linux system media is disabled or unavailable"
+aobus_target_test_sources(ao_systemmedia_test "${AOBUS_TEST_SYSTEM_MEDIA_ENABLED}" "Linux system media is disabled or unavailable"
   systemmedia/linux/MprisArtUrlSessionTest.cpp
   systemmedia/linux/MprisBridgeTest.cpp
   systemmedia/linux/MprisBridgeIntegrationTest.cpp
@@ -1169,25 +1204,12 @@ aobus_target_test_sources(ao_integration_test "${AOBUS_TEST_SYSTEM_MEDIA_ENABLED
 set(AOBUS_TEST_TUI_SYSTEM_MEDIA_ENABLED OFF)
 if(AOBUS_TEST_SYSTEM_MEDIA_ENABLED AND AOBUS_BUILD_TUI AND NOT AOBUS_ENABLE_TSAN)
   set(AOBUS_TEST_TUI_SYSTEM_MEDIA_ENABLED ON)
-  target_compile_definitions(ao_integration_test PRIVATE AOBUS_TUI_EXECUTABLE="$<TARGET_FILE:aobus-tui>")
-  add_dependencies(ao_integration_test aobus-tui)
+  target_compile_definitions(ao_systemmedia_test PRIVATE AOBUS_TUI_EXECUTABLE="$<TARGET_FILE:aobus-tui>")
+  add_dependencies(ao_systemmedia_test aobus-tui)
 endif()
-aobus_target_test_sources(ao_integration_test "${AOBUS_TEST_TUI_SYSTEM_MEDIA_ENABLED}" "Linux system media or TUI unavailable, or unsupported TUI TSan coverage"
+aobus_target_test_sources(ao_systemmedia_test "${AOBUS_TEST_TUI_SYSTEM_MEDIA_ENABLED}" "Linux system media or TUI unavailable, or unsupported TUI TSan coverage"
   systemmedia/linux/TuiMprisProcessTest.cpp
 )
-aobus_target_test_sources(ao_integration_test "${LINUX}" "non-Linux host"
-  audio/backend/PipeWireProviderDaemonTest.cpp
-)
-
-aobus_target_test_sources(ao_integration_test "${WIN32}" "non-Windows host"
-  audio/backend/WasapiProviderHardwareTest.cpp
-)
-aobus_target_test_sources(ao_integration_test "${APPLE}" "non-macOS host"
-  audio/backend/CoreAudioProviderHardwareTest.cpp
-)
-
-# Not using add_test() here to keep it out of default 'ctest' runs, 
-# or use labels/properties if preferred. For now, it's just a manual driver.
 
 
 if(AOBUS_BUILD_GTK)
@@ -1361,5 +1383,5 @@ target_include_directories(ao_lint_fixture PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAK
 
 aobus_finalize_test_sources(
   "${CMAKE_BINARY_DIR}/aobus-test-sources.tsv"
-  ao_core_test ao_tui_test ao_cli_test ao_gtk_test ao_integration_test ao_perf_baseline ao_tui_bench
+  ao_core_test ao_backend_test ao_systemmedia_test ao_tui_test ao_cli_test ao_gtk_test ao_perf_baseline ao_tui_bench
 )

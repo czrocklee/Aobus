@@ -9,14 +9,13 @@ import argparse
 import os
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 from ..core import builddir, buildlock, compiler_cache, phases, workspace_cache
 from ..core.paths import PROJECT_ROOT, absolute_path
 from ..core.proc import capture, die, run
 from . import build
-from .test import SUITE_TARGETS, run_suite
+from .test import SUITE_TARGETS, run_catch2_suite
 
 HELP = "Build with --coverage, run tests, and report uncovered lines per source file"
 NAME = "coverage"
@@ -30,8 +29,10 @@ def requires_build_environment(_args: argparse.Namespace) -> bool:
 
 EPILOG = """\
 examples:
-  ./ao coverage                          # core suite, full report
-  ./ao coverage "SmartListEvaluator*"   # coverage for a test subset
+  ./ao coverage                          # core and backend suites, full report
+  ./ao coverage "SmartListEvaluator*"    # coverage for a test subset
+  ./ao coverage --core                   # core suite only
+  ./ao coverage --backend --scope lib/audio
   ./ao coverage --cli --scope app/cli
   ./ao coverage --tui --scope app/tui
   ./ao coverage --gtk "validUtf8Text*"   # GTK suite with a case-name filter
@@ -49,9 +50,15 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
     parser.add_argument("filter", nargs="?", default="", help="Catch2 test filter")
     suite = parser.add_mutually_exclusive_group()
     suite.add_argument(
-        "--suite", choices=("core", "tui", "cli", "gtk", "all"), default="core", help="test suite (default: core)"
+        "--suite",
+        choices=("core", "backend", "tui", "cli", "gtk", "all"),
+        default=None,
+        help="test suite (default: core and backend)",
     )
     suite.add_argument("--core", dest="suite", action="store_const", const="core", help="shortcut for --suite core")
+    suite.add_argument(
+        "--backend", dest="suite", action="store_const", const="backend", help="shortcut for --suite backend"
+    )
     suite.add_argument("--tui", dest="suite", action="store_const", const="tui", help="shortcut for --suite tui")
     suite.add_argument("--cli", dest="suite", action="store_const", const="cli", help="shortcut for --suite cli")
     suite.add_argument("--gtk", dest="suite", action="store_const", const="gtk", help="shortcut for --suite gtk")
@@ -191,6 +198,27 @@ def scoped_stats(
     return rows
 
 
+def _split_gcov_stdout(stdout: str) -> list[str]:
+    """Split `gcov -t` stdout into per-source blocks at the lineno-0 Source header.
+
+    Each block is the exact text gcov writes into one .gcov file, so the same
+    parse_gcov_text handles it unchanged.
+    """
+    blocks: list[str] = []
+    current: list[str] = []
+    for line in stdout.splitlines():
+        parts = line.split(":", 2)
+        if len(parts) >= 3 and parts[1].strip() == "0" and parts[2].startswith("Source:"):
+            if current:
+                blocks.append("\n".join(current))
+            current = [line]
+        elif current:
+            current.append(line)
+    if current:
+        blocks.append("\n".join(current))
+    return blocks
+
+
 def collect_coverage(build_dir: Path) -> dict[str, dict[int, tuple[int | None, str]]]:
     """Merge production coverage from all instrumented project and test objects."""
     gcda_files = sorted(
@@ -200,33 +228,47 @@ def collect_coverage(build_dir: Path) -> dict[str, dict[int, tuple[int | None, s
         raise die("no coverage data generated. Did the tests run successfully?")
 
     merged: dict[str, dict[int, tuple[int | None, str]]] = {}
-    with tempfile.TemporaryDirectory(prefix="ao-gcov-") as temporary:
-        report_dir = Path(temporary)
-        for gcda in gcda_files:
-            result = subprocess.run(
-                ["gcov", "--preserve-paths", str(absolute_path(gcda))], cwd=report_dir, capture_output=True, text=True
-            )
-            if result.returncode != 0:
-                detail = (result.stdout + result.stderr).strip()
-                raise die(f"gcov failed for {gcda} (exit {result.returncode}); coverage is incomplete.\n{detail}")
-            reports = list(report_dir.glob("*.gcov"))
-            if not reports:
-                raise die(f"gcov produced no reports for {gcda}; coverage is incomplete.")
-            for gcov_file in reports:
-                source, lines = parse_gcov_text(gcov_file.read_text(encoding="utf-8", errors="replace"))
-                gcov_file.unlink()
-                if source is None:
-                    raise die(f"gcov report {gcov_file.name} has no source; coverage is incomplete.")
-                source_path = Path(source)
-                if not source_path.is_absolute():
-                    source_path = absolute_path(build_dir / source_path)
-                try:
-                    rel = absolute_path(source_path).relative_to(PROJECT_ROOT).as_posix()
-                except ValueError:
-                    continue
-                if not rel.startswith(tuple(f"{top}/" for top in REPORTED_TOP_DIRS)):
-                    continue
-                merge_report(merged.setdefault(rel, {}), lines)
+    for gcda in gcda_files:
+        # ccache (CCACHE_BASEDIR) makes GCC record project source paths relative
+        # to the build directory, so gcov must run from there to read them; -t
+        # sends the .gcov text to stdout so no report files touch the build
+        # tree. --preserve-paths stays required under -t: without it gcov emits
+        # header-only text for the relative-spelled project sources.
+        result = subprocess.run(
+            ["gcov", "--preserve-paths", "-t", str(absolute_path(gcda))],
+            cwd=build_dir,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            detail = (result.stdout + result.stderr).strip()
+            raise die(f"gcov failed for {gcda} (exit {result.returncode}); coverage is incomplete.\n{detail}")
+        blocks = _split_gcov_stdout(result.stdout)
+        if not blocks:
+            raise die(f"gcov produced no reports for {gcda}; coverage is incomplete.")
+        for block in blocks:
+            source, lines = parse_gcov_text(block)
+            if source is None:
+                raise die(f"gcov report for {gcda} has no source; coverage is incomplete.")
+            source_path = Path(source)
+            if not source_path.is_absolute():
+                source_path = absolute_path(build_dir / source_path)
+            try:
+                rel = absolute_path(source_path).relative_to(PROJECT_ROOT).as_posix()
+            except ValueError:
+                continue
+            if not rel.startswith(tuple(f"{top}/" for top in REPORTED_TOP_DIRS)):
+                continue
+            if not lines:
+                # An openable source always contributes its text lines; a block
+                # holding only lineno-0 headers means gcov could not read that
+                # source, so its measurement would silently be empty. Fail
+                # closed instead of reporting zero coverage for the file.
+                raise die(
+                    f"gcov could not read project source {rel} for {gcda}; coverage is incomplete.\n"
+                    f"{result.stderr.strip()}"
+                )
+            merge_report(merged.setdefault(rel, {}), lines)
     return merged
 
 
@@ -276,21 +318,51 @@ def report(
             print(f"{GREEN}{rel}: {percent:.2f}% ({total} lines) -> OK{RESET}")
 
 
+def coverage_suites(selection: str | None) -> tuple[str, ...]:
+    """Map the CLI suite selection to the suites a coverage run executes.
+
+    The no-option default measures core plus backend; an explicit --core stays
+    core-only. ``--all`` adds the portable application frontends but excludes
+    the conditional system-media suite, performance, tooling, and lint, which
+    do not belong to an unattended coverage run.
+    """
+    if selection == "all":
+        return ("core", "backend", "tui", "cli", "gtk")
+    if selection is None:
+        return ("core", "backend")
+    return (selection,)
+
+
 def run_coverage_tests(suites: tuple[str, ...], build_dir: Path, test_filter: str) -> int:
     """Run every selected suite so the report is useful, while preserving failure."""
     first_failure = 0
+    matched_tests = 0
     for suite in suites:
-        # Deliberately unsharded (run_suite defaults to one shard): parallel
-        # processes would interleave writes to the same gcov counter files.
-        # One suite record per invocation keeps every suite's own status, so
-        # the run-all/first-failure policy below stays attribution-friendly.
+        # Deliberately unsharded (shards=1): parallel processes would interleave
+        # writes to the same gcov counter files, so a hostile AOBUS_TEST_SHARDS
+        # cannot shard a coverage run. One suite record per invocation keeps every
+        # suite's own status, so the run-all/first-failure policy below stays
+        # attribution-friendly. With a filter, a member suite may legitimately
+        # match nothing, but the filter must match at least one test globally;
+        # without a filter the suite still fails natively on an empty run.
         with phases.measure("suite", tree="native", jobs=1, count=1, suite=suite) as phase:
-            status = run_suite(suite, build_dir, test_filter=test_filter)
-            phase.status = status
-        if status != 0:
+            outcome = run_catch2_suite(
+                suite,
+                build_dir,
+                test_filter=test_filter,
+                shards=1,
+                report_matches=bool(test_filter),
+                allow_no_tests=bool(test_filter),
+            )
+            phase.status = outcome.status
+        if outcome.status != 0:
             if first_failure == 0:
-                first_failure = status
-            print(f"Error: {suite} tests exited with status {status}; coverage is partial.", file=sys.stderr)
+                first_failure = outcome.status
+            print(f"Error: {suite} tests exited with status {outcome.status}; coverage is partial.", file=sys.stderr)
+        elif test_filter and outcome.matched is not None:
+            matched_tests += outcome.matched
+    if test_filter and first_failure == 0 and matched_tests == 0:
+        raise die(f"no tests in the selected coverage suites matched filter {test_filter!r}.")
     return first_failure
 
 
@@ -336,7 +408,7 @@ def _run_coverage(args: argparse.Namespace, build_dir: Path) -> int:
         build.sync_compiler_cache(build_dir, unsupported_reason="coverage builds")
 
     print("Building tests...")
-    suites = ("core", "tui", "cli", "gtk") if args.suite == "all" else (args.suite,)
+    suites = coverage_suites(args.suite)
     targets = [target for suite in suites for target in SUITE_TARGETS[suite]]
     # Keep zero/unbounded and invalid CLI values under the native build's
     # existing policy; they do not identify a known positive worker limit.
@@ -350,7 +422,7 @@ def _run_coverage(args: argparse.Namespace, build_dir: Path) -> int:
     for gcda in build_dir.rglob("*.gcda"):
         gcda.unlink()
 
-    print(f"Running tests (suite: {args.suite})...")
+    print(f"Running tests (suites: {', '.join(suites)})...")
     test_status = run_coverage_tests(suites, build_dir, args.filter)
 
     print()

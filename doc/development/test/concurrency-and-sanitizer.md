@@ -110,7 +110,8 @@ ThreadSanitizer, and resumable coroutine bodies are not fully instrumented.
 Windows `--tsan` therefore fails before configuration rather than silently
 running an unsanitized gate.
 
-The green Linux TSan gate covers core and GTK; the macOS gate covers core:
+The Linux TSan group covers core, backend, and GTK; the macOS group covers core
+and backend:
 
 ```bash
 ./ao check --tsan

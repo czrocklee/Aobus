@@ -33,31 +33,6 @@ namespace ao::audio::backend::detail::test
     CHECK_FALSE(ordered[2].isDefault);
   }
 
-  TEST_CASE("CoreAudioDeviceDiscovery - native snapshot contains only stable concrete identities")
-  {
-    auto const devices = enumerateCoreAudioOutputDevices();
-
-    if (devices.empty())
-    {
-      SKIP("macOS host has no live Core Audio output device");
-    }
-
-    std::size_t defaultCount = 0;
-
-    for (auto const& device : devices)
-    {
-      CHECK_FALSE(device.id.empty());
-      CHECK_FALSE(device.displayName.empty());
-      CHECK(device.backendId == kBackendCoreAudio);
-      defaultCount += device.isDefault ? 1U : 0U;
-
-      auto const resolvedRes = coreAudioOutputDeviceId(device.id.raw());
-      CHECK(resolvedRes);
-    }
-
-    CHECK(defaultCount <= 1U);
-  }
-
   TEST_CASE("CoreAudioDeviceDiscovery - UID resolution rejects invalid and absent identities")
   {
     auto const invalidRes = coreAudioOutputDeviceId(std::string{"\xC3\x28", 2U});
