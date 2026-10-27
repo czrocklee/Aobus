@@ -112,7 +112,10 @@ class BuildEnvTest(unittest.TestCase):
                 self.assertEqual(actual.stderr, expected.stderr)
 
     def test_tidy_probe_includes_sources_outside_format_folders(self):
-        with mock.patch.object(gitfiles, "changed_files", return_value=["extras/probe.cpp"]):
+        with (
+            mock.patch.object(gitfiles, "changed_files", return_value=["extras/probe.cpp"]),
+            mock.patch.object(gitfiles, "diff_base", return_value="HEAD"),
+        ):
             with mock.patch.object(Path, "is_file", return_value=True):
                 self.assertTrue(buildenv.requires_build_env("tidy"))
 
@@ -125,7 +128,10 @@ class BuildEnvTest(unittest.TestCase):
                 destination = str(Path(temporary) / "scope.json")
                 arguments = []
                 selected = ["script/ao/core/proc.py"]
-                with mock.patch.object(gitfiles, "changed_files", return_value=selected):
+                with (
+                    mock.patch.object(gitfiles, "changed_files", return_value=selected),
+                    mock.patch.object(gitfiles, "diff_base", return_value="HEAD"),
+                ):
                     with mock.patch.dict(os.environ, {"AOBUS_PREFLIGHT_SCOPE": destination}):
                         self.assertFalse(buildenv.requires_build_env(command, arguments))
                 args = buildenv.parse_command_arguments(command, arguments)

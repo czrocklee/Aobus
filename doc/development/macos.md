@@ -184,7 +184,42 @@ The override does not repair Git linkage. Default Git-based scope discovery
 can fail during preflight, before managed-tool setup. Select explicit files,
 `--folder <dir>`, or `--all` for format/tidy/hygiene to avoid that discovery;
 these scopes still need a usable managed-tool identity. `--commit` remains
-Git-dependent.
+Git-dependent. For alternate metadata, use the separate binding below.
+
+### Shared-source Git discovery
+
+If a foreign linked-worktree `.git` pointer is unusable on macOS, pass the
+intended private Git directory and the portal's actual source root per invocation:
+
+```bash
+AOBUS_GIT_DIR="$HOME/local-metadata/worktrees/aobus" \
+AOBUS_GIT_WORK_TREE="/Volumes/source/aobus" ./ao format --check
+```
+
+These are example paths, not metadata to create or copy. Both variables must be
+present, nonempty native absolute paths; malformed pairs fail when Git-backed
+source discovery runs. Explicit files, `--folder`, and `--all` bypass this
+discovery and its binding validation. A complete pair for another normalized
+root is ignored; a discovery failure reports the mismatch. Use the root
+spelling seen by the portal, rather than assuming aliases will match.
+Before accepting the mapping, compare actual private/common/index paths, exact
+HEAD, and semantic staged index with the intended checkout. The binding is
+trusted configuration, not repository-association verification;
+`--show-toplevel` alone is insufficient.
+
+Only Git-backed source discovery calls use the pair. Discovery also uses
+process-local `--no-optional-locks` and
+`-c diff.autoRefreshIndex=false`: optional-lock suppression alone does not
+prevent `git diff` from writing stat-only index refreshes.
+Working-tree discovery also compares content, so stat-only differences do not
+expand the selected source scope.
+`setup git-hooks`, performance revision commands, and arbitrary Git operations
+remain outside this support. The binding
+does not rewrite `.git` or redirect checkout-ID creation. If the original
+private Git directory is inaccessible, also supply a separate stable, unique
+`AOBUS_CHECKOUT_ID`. Never export standard `GIT_DIR` or `GIT_WORK_TREE` across
+the portal: dependencies and disposable test repositories must remain independent.
+Neither the binding nor these discovery options prove a write-free checkout.
 
 ## Native desktop development slice
 
@@ -369,9 +404,10 @@ hardware behavior.
   Follow the scoped override guidance under
   [native checkout identity](#native-checkout-identity).
 - "git branch --show-current failed" during default source discovery can occur
-  before checkout-ID initialization. Use the Git-independent scopes described
-  under [native checkout identity](#native-checkout-identity); an ID override
-  alone does not repair Git linkage.
+  before checkout-ID initialization. Use a verified
+  [source-discovery binding](#shared-source-git-discovery) or the Git-independent
+  scopes described under [native checkout identity](#native-checkout-identity);
+  an ID override alone does not repair Git linkage.
 - If no Core Audio outputs appear, confirm a live output in Audio MIDI Setup.
   Aobus does not invent a route when macOS publishes none.
 - If AUHAL or `afplay` fails over SSH, `stat -f "%Su" /dev/console` must name
