@@ -78,8 +78,8 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
 
 
 def _revision() -> str:
-    revision = capture(gitfiles._git_command("rev-parse", "--verify", "HEAD"), cwd=PROJECT_ROOT).strip()
-    if capture(gitfiles._git_command("status", "--porcelain"), cwd=PROJECT_ROOT).strip():
+    revision = capture(gitfiles.git_command("rev-parse", "--verify", "HEAD"), cwd=PROJECT_ROOT).strip()
+    if capture(gitfiles.git_command("status", "--porcelain"), cwd=PROJECT_ROOT).strip():
         revision += "+dirty"
     return revision
 

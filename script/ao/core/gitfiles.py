@@ -51,13 +51,18 @@ def _darwin_checkout_uses_smb() -> bool:
     return result.returncode == 0 and _path_is_on_smb_mount(PROJECT_ROOT, result.stdout)
 
 
-def _git_command(
+def git_command(
     *args: str,
     os_name: str | None = None,
     platform_name: str | None = None,
     checkout_uses_smb: bool | None = None,
     source_discovery: bool = False,
 ) -> list[str]:
+    """Build checkout-scoped argv; discovery alone opts into read-only bindings.
+
+    Generic callers such as hook setup and perf provenance ignore discovery
+    selectors, including malformed ones, and retain their own write semantics.
+    """
     command = ["git"]
     if source_discovery:
         # git diff can refresh stat-only changes even when optional locks are
@@ -97,7 +102,7 @@ def _git_command(
 
 def _git_lines(*args: str, null_terminated: bool = False) -> list[str]:
     result = subprocess.run(
-        _git_command(*args, source_discovery=True),
+        git_command(*args, source_discovery=True),
         cwd=PROJECT_ROOT,
         capture_output=True,
         text=not null_terminated,
@@ -119,7 +124,7 @@ def _git_lines(*args: str, null_terminated: bool = False) -> list[str]:
 def _git_ok(*args: str) -> bool:
     return (
         subprocess.run(
-            _git_command(*args, source_discovery=True),
+            git_command(*args, source_discovery=True),
             cwd=PROJECT_ROOT,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,

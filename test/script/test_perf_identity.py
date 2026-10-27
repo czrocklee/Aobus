@@ -18,7 +18,7 @@ from ao.core import builddir
 
 class PerformanceIdentityTest(unittest.TestCase):
     def test_provenance_uses_checkout_scoped_git_commands_on_native_share_profiles(self):
-        command = perf.gitfiles._git_command
+        command = perf.gitfiles.git_command
         for profile, options in (
             ("windows", {"os_name": "nt", "platform_name": "win32", "checkout_uses_smb": True}),
             ("macos-smb", {"os_name": "posix", "platform_name": "darwin", "checkout_uses_smb": True}),
@@ -26,7 +26,7 @@ class PerformanceIdentityTest(unittest.TestCase):
         ):
             with self.subTest(profile=profile):
                 with (
-                    mock.patch.object(perf.gitfiles, "_git_command", side_effect=partial(command, **options)) as git,
+                    mock.patch.object(perf.gitfiles, "git_command", side_effect=partial(command, **options)) as git,
                     mock.patch.object(perf, "capture", side_effect=["revision-id\n", ""]) as capture,
                 ):
                     self.assertEqual(perf._revision(), "revision-id")

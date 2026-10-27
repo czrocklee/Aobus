@@ -33,7 +33,7 @@ class GitFilesTest(unittest.TestCase):
 
     def test_windows_git_config_is_process_local_and_checkout_scoped(self):
         self.assertEqual(
-            gitfiles._git_command("status", os_name="nt"),
+            gitfiles.git_command("status", os_name="nt"),
             [
                 "git",
                 "-c",
@@ -44,13 +44,13 @@ class GitFilesTest(unittest.TestCase):
             ],
         )
         self.assertEqual(
-            gitfiles._git_command("status", os_name="posix", platform_name="linux"),
+            gitfiles.git_command("status", os_name="posix", platform_name="linux"),
             ["git", "status"],
         )
 
     def test_macos_git_ignores_smb_executable_bit_artifacts_process_locally(self):
         self.assertEqual(
-            gitfiles._git_command(
+            gitfiles.git_command(
                 "status",
                 os_name="posix",
                 platform_name="darwin",
@@ -61,7 +61,7 @@ class GitFilesTest(unittest.TestCase):
 
     def test_macos_git_preserves_file_modes_on_local_filesystems(self):
         self.assertEqual(
-            gitfiles._git_command(
+            gitfiles.git_command(
                 "status",
                 os_name="posix",
                 platform_name="darwin",
@@ -215,7 +215,7 @@ class GitFilesTest(unittest.TestCase):
                 os.environ, {"AOBUS_GIT_DIR": str(private), "AOBUS_GIT_WORK_TREE": str(gitfiles.PROJECT_ROOT)}
             ):
                 self.assertEqual(
-                    gitfiles._git_command("ls-files", source_discovery=True, os_name="posix", platform_name="linux"),
+                    gitfiles.git_command("ls-files", source_discovery=True, os_name="posix", platform_name="linux"),
                     [
                         "git",
                         "--no-optional-locks",
@@ -230,9 +230,7 @@ class GitFilesTest(unittest.TestCase):
                 )
                 with mock.patch.object(gitfiles, "PROJECT_ROOT", root):
                     self.assertEqual(
-                        gitfiles._git_command(
-                            "ls-files", source_discovery=True, os_name="posix", platform_name="linux"
-                        ),
+                        gitfiles.git_command("ls-files", source_discovery=True, os_name="posix", platform_name="linux"),
                         ["git", "--no-optional-locks", "-c", "diff.autoRefreshIndex=false", "ls-files"],
                     )
 
@@ -250,7 +248,7 @@ class GitFilesTest(unittest.TestCase):
             with self.subTest(values=values), mock.patch.dict(os.environ, values):
                 errors = io.StringIO()
                 with contextlib.redirect_stderr(errors), self.assertRaises(SystemExit):
-                    gitfiles._git_command("ls-files", source_discovery=True)
+                    gitfiles.git_command("ls-files", source_discovery=True)
                 self.assertIn(expected, errors.getvalue())
 
     def test_binding_keeps_platform_git_options_and_does_not_export_standard_selectors(self):
@@ -272,7 +270,7 @@ class GitFilesTest(unittest.TestCase):
                 str(gitfiles.PROJECT_ROOT),
             ]
             self.assertEqual(
-                gitfiles._git_command("ls-files", source_discovery=True, os_name="nt"),
+                gitfiles.git_command("ls-files", source_discovery=True, os_name="nt"),
                 [
                     *prefix,
                     "-c",
@@ -284,7 +282,7 @@ class GitFilesTest(unittest.TestCase):
             )
             for shared, options in ((False, []), (True, ["-c", "core.filemode=false"])):
                 self.assertEqual(
-                    gitfiles._git_command(
+                    gitfiles.git_command(
                         "ls-files",
                         source_discovery=True,
                         os_name="posix",
@@ -299,7 +297,7 @@ class GitFilesTest(unittest.TestCase):
     def test_generic_git_commands_ignore_even_a_malformed_discovery_binding(self):
         with mock.patch.dict(os.environ, {"AOBUS_GIT_DIR": ""}):
             self.assertEqual(
-                gitfiles._git_command(
+                gitfiles.git_command(
                     "config", "--local", "core.hooksPath", "script/git-hook", os_name="posix", platform_name="linux"
                 ),
                 ["git", "config", "--local", "core.hooksPath", "script/git-hook"],
