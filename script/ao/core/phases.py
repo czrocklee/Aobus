@@ -48,6 +48,7 @@ PHASES = frozenset(
         "checker-verify",
         "compile-commands",
         "lint-diagnostics",
+        "lint-source-policy",
         "lint-compiler-errors",
         "analysis",
         "analysis-item",

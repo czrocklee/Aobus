@@ -5,6 +5,7 @@
 
 #include "check/AstHelpers.h"
 
+#include <clang-tidy/ClangTidyOptions.h>
 #include <clang/AST/Decl.h>
 #include <clang/AST/Expr.h>
 #include <clang/ASTMatchers/ASTMatchFinder.h>
@@ -74,6 +75,11 @@ namespace clang::tidy::readability
     }
   } // namespace
 
+  void ForbidRawFatalCheck::storeOptions(ClangTidyOptions::OptionMap& options)
+  {
+    _sourceScope.storeOptions(Options, options);
+  }
+
   void ForbidRawFatalCheck::registerMatchers(MatchFinder* finder)
   {
     using namespace clang::ast_matchers;
@@ -99,7 +105,7 @@ namespace clang::tidy::readability
     if (reference == nullptr ||
         (isAoFatalBackend(*reference) &&
          isContractBackendMacroExpansion(*reference, *result.SourceManager, result.Context->getLangOpts())) ||
-        !aobus::isPolicySource(*result.SourceManager, reference->getBeginLoc()) ||
+        !_sourceScope.isPolicySource(*result.SourceManager, reference->getBeginLoc()) ||
         aobus::hasEnclosingFunctionPolicyMarker(*reference,
                                                 *result.Context,
                                                 *result.SourceManager,

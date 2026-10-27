@@ -5,6 +5,7 @@
 
 #include "check/AstHelpers.h"
 
+#include <clang-tidy/ClangTidyOptions.h>
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/DeclCXX.h>
 #include <clang/AST/DeclTemplate.h>
@@ -95,6 +96,11 @@ namespace clang::tidy::readability
     }
   } // namespace
 
+  void ExplicitPathConversionCheck::storeOptions(ClangTidyOptions::OptionMap& options)
+  {
+    _sourceScope.storeOptions(Options, options);
+  }
+
   void ExplicitPathConversionCheck::registerMatchers(MatchFinder* finder)
   {
     finder->addMatcher(cxxMemberCallExpr(callee(cxxMethodDecl(hasAnyName("string", "generic_string"),
@@ -118,7 +124,7 @@ namespace clang::tidy::readability
       if (record != nullptr && result.Context != nullptr && construction->getNumArgs() >= 1 &&
           isFilesystemPath(*record) && isNarrowTextType(construction->getArg(0)->getType(), *result.Context) &&
           !isAsciiLiteral(*construction->getArg(0)) &&
-          aobus::isPolicySource(*result.SourceManager, construction->getBeginLoc()))
+          _sourceScope.isPolicySource(*result.SourceManager, construction->getBeginLoc()))
       {
         diag(construction->getBeginLoc(),
              "std::filesystem::path construction from narrow text has an ambient encoding; use pathFromUtf8() "
@@ -134,7 +140,7 @@ namespace clang::tidy::readability
 
     if (call == nullptr || method == nullptr || record == nullptr || result.Context == nullptr ||
         !isFilesystemPath(*record) || !hasNarrowStringReturn(*method, *result.Context) ||
-        !aobus::isPolicySource(*result.SourceManager, call->getBeginLoc()))
+        !_sourceScope.isPolicySource(*result.SourceManager, call->getBeginLoc()))
     {
       return;
     }

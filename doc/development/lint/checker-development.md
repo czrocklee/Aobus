@@ -161,6 +161,37 @@ Move it to the owning implementation and validate optimized behavior with the `r
 Suppress this checker only after a stable benchmark demonstrates a material regression that IPO does not recover.
 The adjacent English comment must name the benchmark and summarize the measured result; file-level suppression and project allowlists are not acceptable.
 
+## Production-policy source scope
+
+The raw-fatal, raw-throw and explicit-path-conversion checks classify source locations relative to the portal's validated source-root spellings.
+The `AobusSourceRoots` check option carries a JSON array of those paths, including owned compiler views; it is not a root guessed from the working directory or baked into the plugin.
+The tidy portal supplies the same validated roots used by its diagnostic filters.
+Active owned compiler-view inputs are mapped through the workspace authority to checkout paths before classification and deduplication; unowned outside paths remain strict.
+The direct native fixture host supplies its checkout root through the shared configuration serializer.
+Each checker parses and normalizes this immutable scope at construction, not for each AST match.
+`--dump-config` retains its effective check-local option, including the empty default.
+A dump is an effective-value snapshot: check-local values take precedence over a subsequently added global option, as in ordinary Clang-Tidy option lookup.
+The normal serializer and tidy/analyzer diagnostic filters reject an explicitly empty root set.
+Direct-checker malformed JSON, non-array values and unusable entries report a configuration warning while retaining conservative handling; absent metadata and the empty default are valid.
+Valid entries in a mixed array still participate in matching.
+
+Only a root-relative `test/` path receives the ordinary-test exemption; `test/lint/fixture/` remains covered.
+The portal's relaxed-test and lint-fixture selection uses the same root-relative boundary, so nested production components such as `app/x/test/` neither relax nor suppress checks.
+A checkout ancestor named `test` or `test/lint/fixture` does not affect that decision.
+Unmatched paths or unavailable root metadata remain subject to production policy, rather than acquiring a test exemption.
+System headers remain excluded.
+A direct checker invocation without this option therefore does not infer ordinary-test exemptions.
+Windows drive and UNC spellings compare case-insensitively.
+POSIX spellings remain exact, including on case-insensitive macOS volumes: differently cased root or `test/` spellings conservatively retain policy and can report ordinary test code.
+Filesystem acceptance alone does not establish a validated alias; blanket case folding would be unsafe on case-sensitive volumes.
+Generated files outside the validated source roots likewise receive no implicit test exemption from a build-directory component named `test`.
+
+The lint suite's source-policy smoke cases run real diagnostics against temporary checkout layouts, including ordinary tests and production sources under misleading ancestors, malformed or missing root metadata, and configuration dump round trips.
+The multi-check smoke explicitly requires every selected alias, with partial-loss controls for each one; ordinary single-check fixtures retain their selected-check contract.
+The stage prepares distinct immutable source files for each case and spelling profile before using the requested bounded worker pool.
+Each dump and semantic replay remains ordered within its case; aggregate logs remain in inventory order, and phase metadata records worker width separately from host-invocation count.
+These controls supplement the rule fixtures, whose maintained paths all lie inside the intentional lint-fixture exception.
+
 ## Fatal-contract source guardrails
 
 The `aobus_guardrails` target lexically scans production C++ under `app/`, `include/`, `lib/`, and `tool/`.

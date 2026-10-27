@@ -1,6 +1,7 @@
 """Integration runner for Aobus clang-tidy checker fixtures."""
 
 import concurrent.futures
+import json
 import os
 import re
 import shutil
@@ -244,7 +245,10 @@ def parse_expectations(source: str, check: str, *, path: Path | None = None) -> 
     return Expectations(dict(expected), dict(negated), messages)
 
 
-def verify_diagnostics(sources: dict[Path, str], output: str, check: str) -> list[str]:
+def verify_diagnostics(
+    sources: dict[Path, str], output: str, check: str, *, required_checks: tuple[str, ...] = ()
+) -> list[str]:
+    checked = frozenset((check, *required_checks))
     actual, actual_messages = _recorded_diagnostics(output)
     expectations: dict[Path, Expectations] = {}
     for path, source in sources.items():
@@ -268,7 +272,7 @@ def verify_diagnostics(sources: dict[Path, str], output: str, check: str) -> lis
             else:
                 errors.append(f"unexpected diagnostic on line {location}: [{actual_check}]")
         for expected_check in sorted(expected_checks - actual_checks):
-            if expected_check == check:
+            if expected_check in checked:
                 errors.append(f"missing expected diagnostic on line {location}: [{expected_check}]")
         message_aliases = sorted(alias for message_line, alias in expected.messages if message_line == line)
         for alias in message_aliases:
@@ -333,6 +337,28 @@ def _windows_fixture_tools(build_dir: Path, toolchain: tidyengine.TidyToolchain)
     )
 
 
+def _direct_tidy_command(
+    host: str,
+    source: str,
+    config: str,
+    *,
+    flags: tuple[str, ...],
+    tidy_args: tuple[str, ...] = (),
+    plugin: Path | None = None,
+) -> list[str]:
+    """Compose a direct native host invocation without borrowing a product TU."""
+    return [
+        host,
+        "--quiet",
+        f"-config={config}",
+        *([f"-load={plugin}"] if plugin is not None else []),
+        *tidy_args,
+        source,
+        "--",
+        *flags,
+    ]
+
+
 def _tidy_command(
     fixture: Fixture, build_dir: Path, *extra: str, tools: WindowsFixtureTools | None = None
 ) -> list[str]:
@@ -341,15 +367,13 @@ def _tidy_command(
         # PCH, defines, or GCC flags. The portal runs explicit fixtures as
         # STRICT, so the direct host must apply the same effective check policy.
         config = tidyconfig.config_for(tidyconfig.checks_for("STRICT", fixture.check))
-        return [
+        return _direct_tidy_command(
             tools.tidy,
-            "--quiet",
-            f"-config={config}",
-            *(argument.removeprefix("--tidy-arg=") for argument in extra),
             str(fixture.path),
-            "--",
-            *tools.flags,
-        ]
+            config,
+            flags=tools.flags,
+            tidy_args=tuple(argument.removeprefix("--tidy-arg=") for argument in extra),
+        )
     return [
         sys.executable,
         "-m",
@@ -441,8 +465,9 @@ def _diagnostic_errors(
     result: subprocess.CompletedProcess[str],
     *,
     direct_host: bool,
+    required_checks: tuple[str, ...] = (),
 ) -> list[str]:
-    errors = verify_diagnostics(sources, result.stdout, fixture.check)
+    errors = verify_diagnostics(sources, result.stdout, fixture.check, required_checks=required_checks)
     has_expected_diagnostics = any(
         fixture.check in checks
         for source in sources.values()
@@ -490,6 +515,195 @@ def _run_diagnostic(
         for error in errors:
             sink.write(f"ERROR: {error}\n")
     return not errors, log
+
+
+_SOURCE_POLICY_CHECKS = (
+    "aobus-readability-forbid-raw-throw",
+    "aobus-readability-forbid-raw-fatal",
+    "aobus-portability-explicit-path-conversion",
+)
+
+
+def _source_policy_cases(root: Path, *, windows: bool = False) -> list[tuple[str, Path, tuple[Path, ...], bool]]:
+    plain = root / "plain" / "checkout"
+    ancestor = root / "test" / "checkout"
+    fixture_ancestor = root / "test" / "lint" / "fixture" / "checkout"
+    spaced = root / "test" / "space;and checkout"
+    alias = plain / "source"
+    return [
+        ("production", plain / "lib" / "Policy.cpp", (plain,), True),
+        ("ordinary-test", plain / "test" / "Policy.cpp", (plain,), False),
+        ("fixture", plain / "test/lint/fixture/probe/Policy.cpp", (plain,), True),
+        ("nested-test-component", plain / "app/nested/test/Policy.cpp", (plain,), True),
+        ("test-ancestor-production", ancestor / "lib/Policy.cpp", (ancestor,), True),
+        ("test-ancestor-test", ancestor / "test/Policy.cpp", (ancestor,), False),
+        ("test-ancestor-fixture", ancestor / "test/lint/fixture/probe/Policy.cpp", (ancestor,), True),
+        ("fixture-ancestor-test", fixture_ancestor / "test/Policy.cpp", (fixture_ancestor,), False),
+        ("fixture-near-miss", plain / "test/lint/fixtures/Policy.cpp", (plain,), False),
+        ("root-near-miss", plain.parent / "checkout-other/test/Policy.cpp", (plain,), True),
+        ("longest-root", alias / "test/Policy.cpp", (plain, alias), False),
+        ("root-encoding", spaced / "lib/Policy.cpp", (spaced,), True),
+        ("encoded-root-test", spaced / "test/Policy.cpp", (spaced,), False),
+        ("unknown-root", plain / "test/Policy.cpp", (root / "unknown",), True),
+        ("case-varied-root", plain / "test/Policy.cpp", (Path(str(plain).swapcase()),), not windows),
+        ("case-varied-test", plain / "TEST/Policy.cpp", (plain,), not windows),
+    ]
+
+
+def _source_policy_metadata_cases(root: Path) -> list[tuple[str, dict[str, str], bool, bool, bool]]:
+    """Raw option fault injection bypasses the normal nonempty-root serializer."""
+    encoded = json.dumps([root.as_posix()])
+    values = [
+        ("missing-option", None, True, True, False),
+        ("malformed-json", "{", True, False, True),
+        ("truncated-matching-root", encoded[:-1], True, False, True),
+        ("non-array", "{}", True, False, True),
+        ("empty-array", "[]", True, False, False),
+        ("unusable-roots", '[null,17,false,{},""]', True, False, True),
+        ("mixed-roots", json.dumps([None, root.as_posix(), ""]), False, False, True),
+        ("dump-explicit-option", encoded, False, True, False),
+    ]
+    cases = [
+        (name, {} if value is None else {"AobusSourceRoots": value}, expected, dump, warning)
+        for name, value, expected, dump, warning in values
+    ]
+    for name, global_value, local_value, expected in (
+        ("local-empty-overrides-global", encoded, "[]", True),
+        ("local-root-overrides-global", "[]", encoded, False),
+    ):
+        options = {"AobusSourceRoots": global_value}
+        options.update({f"{alias}.AobusSourceRoots": local_value for alias in _SOURCE_POLICY_CHECKS})
+        cases.append((name, options, expected, False, False))
+    return cases
+
+
+def _source_policy_case_count(*, windows: bool) -> int:
+    root = Path("source-policy")
+    metadata = _source_policy_metadata_cases(root)
+    # Dump controls execute both --dump-config and a semantic round trip.
+    count = (
+        len(_source_policy_cases(root, windows=windows)) + len(metadata) + sum(dump for _, _, _, dump, _ in metadata)
+    )
+    return count * (2 if windows else 1)
+
+
+def _source_policy_task_count(*, windows: bool) -> int:
+    root = Path("source-policy")
+    return (len(_source_policy_cases(root, windows=windows)) + len(_source_policy_metadata_cases(root))) * (
+        2 if windows else 1
+    )
+
+
+def _run_source_policy_smoke(
+    build_dir: Path,
+    run_dir: Path,
+    *,
+    plugin: Path | None,
+    tools: WindowsFixtureTools | None = None,
+    jobs: int = 1,
+) -> tuple[bool, Path]:
+    if tools is None and plugin is None:
+        raise ValueError("source-policy smoke requires the verified native plugin")
+    if jobs < 1:
+        raise ValueError("source-policy smoke requires at least one worker")
+    case_dir = Path(tempfile.mkdtemp(prefix="source-policy.", dir=run_dir))
+    log = case_dir / "run.log"
+    check = _SOURCE_POLICY_CHECKS[0]
+    selected_checks = ",".join(_SOURCE_POLICY_CHECKS)
+    tasks: list[tuple[str, Path, str, str, bool, bool]] = []
+    if tools is None:
+        host = tidyengine.clang_tool(build_dir, "clang-tidy")
+        flags: tuple[str, ...] = ("-std=c++26",)
+    else:
+        host = tools.tidy
+        flags = (*tools.flags, "/clang:-std=c++26", "/clang:-fdiagnostics-format=clang")
+    # Freeze all case/profile inputs before any worker starts. Distinct filenames
+    # preserve each tested directory layout without sharing mutable marker bytes.
+    for forward_slashes in (False, True) if tools is not None else (False,):
+        spelling = "forward" if forward_slashes else "native"
+        profile_dir = case_dir / spelling
+        cases: list[tuple[str, Path, str, bool, bool, bool]] = []
+        for name, path, roots, expected in _source_policy_cases(profile_dir, windows=tools is not None):
+            option_roots = tuple(Path(str(root).swapcase()) for root in roots) if forward_slashes else roots
+            config = tidyconfig.config_for(tidyconfig.checks_for("STRICT", selected_checks), source_roots=option_roots)
+            cases.append((name, path.with_name(f"{name}.cpp"), config, expected, False, False))
+        metadata_root = profile_dir / "metadata checkout"
+        for name, options, expected, dump, warning in _source_policy_metadata_cases(metadata_root):
+            config = json.dumps({"Checks": "-*," + selected_checks, "CheckOptions": options})
+            cases.append((name, metadata_root / "test" / f"{name}.cpp", config, expected, dump, warning))
+        for name, path, config, expected, dump, warning in cases:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            marker = "POSITIVE" if expected else "NEGATIVE"
+            source = (
+                "namespace std { [[noreturn]] void abort() noexcept; "
+                "namespace filesystem { struct path { path(char const*); }; } }\n"
+                f"void fatalProbe() {{ std::abort(); }} // {marker}:aobus-readability-forbid-raw-fatal\n"
+                f"void throwProbe() {{ throw 1; }} // {marker}:aobus-readability-forbid-raw-throw\n"
+                "void pathProbe(char const* text) { std::filesystem::path value(text); } "
+                f"// {marker}:aobus-portability-explicit-path-conversion\n"
+            )
+            path.write_text(source, encoding="utf-8")
+            source_name = path.as_posix() if forward_slashes else str(path)
+            tasks.append((f"{name}/{spelling}", path, source_name, config, dump, warning))
+
+    def run_case(task: tuple[str, Path, str, str, bool, bool]) -> tuple[bool, Path]:
+        profile, path, source_name, config, dump, expects_configuration_warning = task
+        source = path.read_text(encoding="utf-8")
+        case_log = path.with_suffix(".log")
+        errors: list[str] = []
+        outputs: list[str] = []
+        command = _direct_tidy_command(host, source_name, config, flags=flags, plugin=plugin if tools is None else None)
+        if dump:
+            separator = command.index("--")
+            dumped = subprocess.run(
+                [*command[:separator], "--dump-config", *command[separator:]],
+                cwd=PROJECT_ROOT,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+            outputs.append(f"=== {profile}/dump ===\n{dumped.stdout}")
+            if dumped.returncode != 0 or has_fatal_compiler_error(dumped.stdout):
+                errors.append(f"{profile}: ERROR: --dump-config failed")
+            for alias in _SOURCE_POLICY_CHECKS:
+                if f"{alias}.AobusSourceRoots" not in dumped.stdout:
+                    errors.append(f"{profile}: ERROR: missing dumped source-root option for {alias}")
+            command = [f"-config={dumped.stdout}" if arg.startswith("-config=") else arg for arg in command]
+        result = subprocess.run(command, cwd=PROJECT_ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        configuration_warnings = [
+            line
+            for line in result.stdout.splitlines()
+            if (header := parse_diagnostic_header(line)) is not None
+            and header.severity == "warning"
+            and "AobusSourceRoots" in line
+            and "[clang-tidy-config]" in line
+        ]
+        if bool(configuration_warnings) != expects_configuration_warning:
+            errors.append(f"{profile}: ERROR: unexpected source-root configuration warning state")
+        policy_output = "\n".join(line for line in result.stdout.splitlines() if line not in configuration_warnings)
+        policy_result = subprocess.CompletedProcess(result.args, result.returncode, stdout=policy_output)
+        errors.extend(
+            f"{profile}: {error}"
+            for error in _diagnostic_errors(
+                Fixture(path, check),
+                {path: source},
+                policy_result,
+                direct_host=True,
+                required_checks=_SOURCE_POLICY_CHECKS,
+            )
+        )
+        outputs.append(f"=== {profile} ===\n{result.stdout}")
+        case_log.write_text("\n".join([*outputs, *(f"ERROR: {error}" for error in errors)]), encoding="utf-8")
+        return not errors, case_log
+
+    passed = True
+    with concurrent.futures.ThreadPoolExecutor(max_workers=min(jobs, len(tasks))) as pool:
+        with log.open("w", encoding="utf-8") as sink:
+            for success, case_log in _pool_map_with_context(pool, run_case, tasks):
+                passed = passed and success
+                sink.write(case_log.read_text(encoding="utf-8"))
+                sink.write("\n")
+    return passed, log
 
 
 # One canary source per case; the stage's phase count is derived from this
@@ -564,10 +778,10 @@ def _report_results(
     return passed
 
 
-def _pool_map_with_context(
+def _pool_map_with_context[WorkItem](
     pool: concurrent.futures.Executor,
-    function: Callable[[Fixture], tuple[bool, Path]],
-    fixtures: list[Fixture],
+    function: Callable[[WorkItem], tuple[bool, Path]],
+    fixtures: list[WorkItem],
 ) -> Iterator[tuple[bool, Path]]:
     """Map one fixture task per fresh submitting-thread context snapshot.
 
@@ -657,6 +871,19 @@ def run(
                 )
             phase.status = 0 if diagnostics_passed else 1
 
+        reporter.write("=== Source Policy Scope Smoke ===")
+        policy_jobs = min(worker_count, _source_policy_task_count(windows=windows))
+        with phases.measure(
+            "lint-source-policy", tree="tidy", jobs=policy_jobs, count=_source_policy_case_count(windows=windows)
+        ) as phase:
+            source_policy_passed, source_policy_log = _run_source_policy_smoke(
+                build_dir, run_dir, plugin=plugin if not windows else None, tools=tools, jobs=policy_jobs
+            )
+            phase.status = 0 if source_policy_passed else 1
+        reporter.write(f"  [{'PASS' if source_policy_passed else 'FAIL'}] root-relative production policy")
+        if not source_policy_passed:
+            reporter.write_file(source_policy_log)
+
         reporter.write("=== Compiler Error Detection Smoke ===")
         with phases.measure("lint-compiler-errors", tree="tidy", count=len(_COMPILER_ERROR_SMOKE_CASES)) as phase:
             compiler_errors_passed, compiler_errors_log = _run_compiler_error_smoke(build_dir, run_dir, tools=tools)
@@ -665,7 +892,7 @@ def run(
         if not compiler_errors_passed:
             reporter.write_file(compiler_errors_log)
 
-        failed = not (diagnostics_passed and compiler_errors_passed)
+        failed = not (diagnostics_passed and source_policy_passed and compiler_errors_passed)
         reporter.write(
             "=== LINT INTEGRATION TESTS PASSED ===" if not failed else "=== LINT INTEGRATION TESTS FAILED ==="
         )
