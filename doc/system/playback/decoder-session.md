@@ -29,7 +29,8 @@ Its constructor and one-shot `initialize()` step are private, and it exposes no 
   Complete supported agreeing declarations select exact `Identified` sets without additional PCM reordering, including distinct five/six-channel back and side sets.
   Malformed, conflicting, zero, partial, excess, reserved-bit, or wildcard declarations, nonfirst STREAMINFO, incomplete comments, and optional inspection inability leave both FLAC masks zero and origin `Unknown`, never `Inferred`; later good evidence cannot repair that inspection.
   ALAC applies its [bounded source interpretation](pcm-format.md#alac-source-interpretation) before output adaptation: trustworthy absence identifies mono/stereo only, and complete supported agreeing declarations identify and normalize explicit layouts; bad or uninspectable optional evidence remains zero / `Unknown`.
-  The other current codec producers, AAC, Opus, and MP3, still report zero masks and `Unknown` interpretation evidence.
+  MP3 applies its [bounded source interpretation](pcm-format.md#mp3-source-interpretation) before output adaptation: complete native-index header coverage of a uniform mono or stereo/joint stream is `Identified`, while dual-channel, mixed roles, and incomplete coverage retain zero masks and `Unknown`.
+  The other current codec producers, AAC and Opus, still report zero masks and `Unknown` interpretation evidence.
 - Unsupported or precision-losing encoding requests fail during source-private construction before playback begins.
 - An exhausted session returns a stable empty end-of-stream block; destruction ends the session and releases its codec resources.
 
@@ -97,11 +98,34 @@ The identification packet's output gain reaches libopus unconverted, which appli
 Channel mapping family 1 orders its channels the way Vorbis does, so the session permutes the mapping it hands libopus into the WAV speaker order every PCM surface expects.
 Family 0 is already compatible; family 255 defines no speaker positions and remains in header-defined output-index order.
 
-MP3 construction scans the complete stream with mpg123 before reporting stream
-information. The scan builds an exact frame index and duration even when the
-stream has no Xing or VBRI seek table. Seek rejects negative offsets and offsets
-beyond a known exact duration; sequential decode and stable EOF behavior remain
-unchanged. The scan performs file-size-linear work during decoder preparation.
+MP3 construction requests a growing native frame index, performs a native scan, and seeks back to sample zero before reporting stream information.
+The scan and the return to zero are required; either failure prevents publication.
+Initial native frame information is also required.
+If it is missing, or if it disagrees with the native PCM rate or channel count, open fails rather than publishing an unassigned fallback.
+The scan builds the native seek index and duration even without a Xing or VBRI seek table.
+For a [supported trailing-tag chain](pcm-format.md#mp3-source-interpretation), a complete indexed-frame boundary must independently witness its start before the native input can be shortened.
+The session then reopens and rescans that audio extent before publication, preserving native duration and gapless calculations while keeping tag bytes out of PCM decoding.
+Ambiguous payload markers and malformed tag chains retain the original native input and `Unknown` identity.
+Each scan traverses the input; the growing full index adds allocation and retained-memory costs described by the source policy.
+A successful native scan alone does not prove complete header coverage; identity inspection checks that separately.
+Published identity is the immutable result of complete native-index header coverage, with the initial native prefix exempt, under the [MP3 source policy](pcm-format.md#mp3-source-interpretation).
+It is not the first frame alone, and it does not establish corruption-free audio or file authenticity.
+Seek rejects negative offsets and offsets beyond a known exact duration.
+Sequential decode and stable EOF behavior remain unchanged.
+The session decodes and checks one MPEG frame at a time before exposing PCM, because native gapless trimming can make one read span more than one frame and a bulk read would hide a geometry change.
+Gapless header frames yielding no PCM are consumed rather than mistaken for EOF.
+Returned spans already include the native decoder's in-frame seek skips and gapless trim; PCM positions accumulate those decoded frames, never compressed-frame indices.
+The native output block may grow after open.
+Signed-16 pass-through copies each span into session storage sized to that span, so a later seek can reallocate the native buffer without invalidating the returned block.
+Wider precision-preserving conversions read the native bytes directly and leave converted storage with the shared adapter.
+Both preserve the existing [borrowed-block lifetime](../../../include/ao/audio/PcmBlock.h); partial samples and partial frames remain invalid.
+A rate, channel-count, or precision change is terminal `NotSupported` and contributes no PCM.
+A decoded frame that contradicts a published known role is refused before its PCM is returned.
+A same-count stereo/dual mixture is unknown from open, so its PCM is delivered and the mask is never promoted on read or seek.
+A layer change that preserves rate, channel count, and precision is tolerated.
+A rejected frame does not change published `streamInfo()` or reconfigure the output adapter.
+Repeated reads preserve the error, and flush does not clear it.
+A successful seek clears the error and the next read revalidates the target; later frames with intact geometry are accepted, while a still-contradicting target is rejected again without adopting a different identity.
 
 ## ALAC metadata and PCM
 
@@ -234,6 +258,12 @@ Decoder session and malformed-input tests under [`test/audio/`](../../../test/au
 [`DecoderFactoryTest.cpp`](../../../test/audio/DecoderFactoryTest.cpp) locks ready construction, routing, and initialization failure.
 [`DecoderOutputAdapterTest.cpp`](../../../test/audio/detail/DecoderOutputAdapterTest.cpp) directly locks rejection of precision loss, pass-through behavior, exact byte conversion, and reset.
 [`WavDecoderChannelLayoutTest.cpp`](../../../test/audio/WavDecoderChannelLayoutTest.cpp) locks effective WAV identity, interpretation origin, refusal precedence, output adaptation, and unchanged PCM/seek/EOF behavior.
+[`Mp3DecoderChannelLayoutTest.cpp`](../../../test/audio/Mp3DecoderChannelLayoutTest.cpp) is the channel-layout test authority for uniform mono and stereo/joint identity, dual and mixed-role withholding, same-count stereo/dual unknown admission without promotion, factory parity, exact zero PCM extent, output adaptation, seek/flush/EOF behavior, and refusal of geometry changes before contradictory PCM.
+[`Mp3DecoderTrailingTagTest.cpp`](../../../test/audio/Mp3DecoderTrailingTagTest.cpp) covers supported APEv2/Lyrics3v2/ID3v1 suffixes, read-only descriptor agreement, APEv1 identity withholding, malformed and overlapping candidates, and PCM/seek/EOF preservation after input-boundary selection.
+It also guards ID3v1-only scan reuse against a leading-junk lookahead failure and keeps a same-sized APE-only suffix on the rescan path.
+The initial frame-information failure and frame/native geometry-disagreement checks remain defensive foreign-API guards, not independently driven fixture branches: the pinned mpg123 implementation shares track initialization between `getformat2` and `info2`, and the production signed-16 configuration requests native rates and channel counts without forced geometry conversion.
+Foreign native conversion controls are not production-path coverage; no test-only production hook is used to manufacture those failures.
+The encoded MP3 cases in [`Mp3DecoderSessionTest.cpp`](../../../test/audio/Mp3DecoderSessionTest.cpp) retain native gapless-trimmed totals, VBR scan duration, and exact seek positions, including native in-frame seek skips.
 [`AlacDecoderChannelLayoutTest.cpp`](../../../test/audio/AlacDecoderChannelLayoutTest.cpp) covers ALAC ready-session identity, concrete/factory parity, literal PCM normalization, adaptation, seek-to-zero/flush, and EOF.
 [`DemuxerAlacLayoutTest.cpp`](../../../test/media/mp4/DemuxerAlacLayoutTest.cpp) covers borrowed-entry association and preservation of required extradata/container behavior.
 [`AlacChannelMetadataTest.cpp`](../../../test/audio/AlacChannelMetadataTest.cpp) covers the ALAC metadata matrix, and [`EngineAlacChannelLayoutTest.cpp`](../../../test/audio/EngineAlacChannelLayoutTest.cpp) covers Engine transitions; this map is not an execution record.

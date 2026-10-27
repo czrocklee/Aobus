@@ -383,6 +383,7 @@ add_executable(ao_core_test
     # media file tests
     media/file/MediaFileFixtureTest.cpp
     media/file/TestFile.cpp
+    media/file/ApeTagTest.cpp
     media/file/MpegFrameTest.cpp
     media/file/MpegFileTest.cpp
     media/file/Mp4FileTest.cpp
@@ -509,6 +510,8 @@ add_executable(ao_core_test
     audio/AlacDecoderChannelLayoutTest.cpp
     audio/AlacChannelMetadataTest.cpp
     audio/Mp3DecoderSessionTest.cpp
+    audio/Mp3DecoderChannelLayoutTest.cpp
+    audio/Mp3DecoderTrailingTagTest.cpp
     audio/OpusDecoderSessionTest.cpp
     audio/OpusDecoderMalformedTest.cpp
     audio/WavDecoderSessionTest.cpp

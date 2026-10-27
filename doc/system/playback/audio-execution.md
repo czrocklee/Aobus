@@ -467,7 +467,9 @@ FLAC with absent exact mask keys at five/six channels, nonfirst STREAMINFO, or m
 ALAC above two channels without a declaration, or at any count with bad or uninspectable optional metadata, likewise retains zero/`Unknown`, not a new source-open refusal; mandatory container/configuration and precision errors remain unchanged.
 That best-effort playback admission is not a role-safety or native-routing guarantee: zero-mask paths can use ordinal/default transport through different speaker roles, and native open can still fail.
 Numerical bit-perfectness is independent of channel confidence.
-The other current codec producers, AAC, Opus, and MP3, retain zero masks and `Unknown` source interpretation; neither WAV compatibility sets nor FLAC defaults are ALAC or backend defaults.
+MP3 publishes FC or FL/FR only when its [source policy](pcm-format.md#mp3-source-interpretation) identifies a uniform mono or stereo/joint stream from complete native-index header coverage; dual-channel, mixed roles, and incomplete coverage remain zero / `Unknown`.
+The existing backend admission, splice eligibility, native observation, quality-analysis, and format-equality rules are unchanged.
+The other current codec producers, AAC and Opus, retain zero masks and `Unknown` source interpretation; neither WAV compatibility sets nor FLAC defaults are ALAC or backend defaults.
 ALAC normalization changes no backend admission, native observation, or quality-analysis policy.
 
 Source admission and native delivery evidence are separate decisions.

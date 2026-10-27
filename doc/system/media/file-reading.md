@@ -175,6 +175,7 @@ There is no direct frontend observation. Runtime library workflows translate rea
 
 - [`File.h`](../../../include/ao/media/file/File.h), [`Visitor.h`](../../../include/ao/media/file/Visitor.h), and [`File.cpp`](../../../lib/media/file/File.cpp) own the public commands and shared state.
 - Format readers under [`lib/media/file/`](../../../lib/media/file) own format-specific required indexes, optional parsing, and payload selection.
+- [`ApeTag.h`](../../../lib/media/file/mpeg/ApeTag.h) shares only APE envelope size geometry with the MP3 decoder. Media admission retains its existing geometry-only APE payload policy, including footer-shaped legacy versions; decoder identity separately requires version 2000 and its stricter descriptor/item/chain checks. The helper neither proves an audio boundary nor unifies failure policy.
 - Container primitives under [`include/ao/media/`](../../../include/ao/media) and [`lib/media/`](../../../lib/media) own reusable byte layouts and lower parsing.
 - [`readMediaTrack` and `MediaTrack`](../../../app/runtime/library/MediaTrack.h) own runtime adaptation to `TrackBuilder` and its backing lifetime.
 

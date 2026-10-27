@@ -30,6 +30,7 @@ add_library(ao_media STATIC
     file/detail/VorbisComment.cpp
     file/flac/File.cpp
     file/mp4/File.cpp
+    file/mpeg/ApeTag.cpp
     file/mpeg/File.cpp
     file/mpeg/Frame.cpp
     file/mpeg/id3v2/Frame.cpp

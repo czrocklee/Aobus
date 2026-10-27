@@ -6,6 +6,7 @@
 #include "../detail/Content.h"
 #include "../detail/Decoder.h"
 #include "../detail/Reader.h"
+#include "ApeTag.h"
 #include "Frame.h"
 #include "id3v2/Layout.h"
 #include "id3v2/Reader.h"
@@ -37,9 +38,6 @@ namespace ao::media::file::mpeg
     constexpr std::uint8_t kId3v2FooterFlag = 0x10;
     constexpr std::uint8_t kId3v2MajorVersion4 = 4;
     constexpr std::size_t kApeV2FooterSize = 32;
-    constexpr std::size_t kApeV2SizeOffset = 12;
-    constexpr std::size_t kApeV2FlagsOffset = 20;
-    constexpr std::uint32_t kApeV2ContainsHeaderFlag = 0x80000000U;
     constexpr std::uint8_t kSyncSafeHighBit = 0x80U;
 
     std::optional<std::size_t> id3v2TotalSize(std::span<std::byte const> bytes) noexcept
@@ -76,12 +74,6 @@ namespace ao::media::file::mpeg
              std::memcmp(bytes.data() + endOffset - kId3v1TagSize, kId3v1Magic.data(), kId3v1Magic.size()) == 0;
     }
 
-    std::uint32_t readLittleEndianU32(std::byte const* data) noexcept
-    {
-      return std::to_integer<std::uint32_t>(data[0]) | (std::to_integer<std::uint32_t>(data[1]) << 8U) |
-             (std::to_integer<std::uint32_t>(data[2]) << 16U) | (std::to_integer<std::uint32_t>(data[3]) << 24U);
-    }
-
     Result<std::size_t> trimTrailingTags(std::span<std::byte const> bytes)
     {
       std::size_t payloadEnd = bytes.size();
@@ -103,33 +95,7 @@ namespace ao::media::file::mpeg
         return payloadEnd;
       }
 
-      auto const tagSize = static_cast<std::size_t>(readLittleEndianU32(footer + kApeV2SizeOffset));
-
-      if (tagSize < kApeV2FooterSize || tagSize > payloadEnd)
-      {
-        return makeError(Error::Code::CorruptData, "invalid apev2 trailing tag size");
-      }
-
-      auto totalTagSize = tagSize;
-      auto const flags = readLittleEndianU32(footer + kApeV2FlagsOffset);
-
-      if ((flags & kApeV2ContainsHeaderFlag) != 0)
-      {
-        if (tagSize > payloadEnd - kApeV2FooterSize)
-        {
-          return makeError(Error::Code::CorruptData, "invalid apev2 trailing tag header size");
-        }
-
-        totalTagSize += kApeV2FooterSize;
-        auto const* const header = bytes.data() + payloadEnd - totalTagSize;
-
-        if (std::memcmp(header, kApeV2Magic.data(), kApeV2Magic.size()) != 0)
-        {
-          return makeError(Error::Code::CorruptData, "invalid apev2 trailing tag header");
-        }
-      }
-
-      return payloadEnd - totalTagSize;
+      return readApeTagStart(bytes.first(payloadEnd));
     }
   } // namespace
 
