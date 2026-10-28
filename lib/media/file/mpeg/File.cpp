@@ -8,6 +8,7 @@
 #include "../detail/Reader.h"
 #include "ApeTag.h"
 #include "Frame.h"
+#include "FrameLayout.h"
 #include "id3v2/Layout.h"
 #include "id3v2/Reader.h"
 #include <ao/AudioCodec.h>
@@ -74,11 +75,75 @@ namespace ao::media::file::mpeg
              std::memcmp(bytes.data() + endOffset - kId3v1TagSize, kId3v1Magic.data(), kId3v1Magic.size()) == 0;
     }
 
-    Result<std::size_t> trimTrailingTags(std::span<std::byte const> bytes)
+    bool hasFrameChainPayloadAt(std::span<std::byte const> bytes, FrameView const& firstFrame, std::size_t offset)
+    {
+      auto const firstOffset =
+        static_cast<std::size_t>(static_cast<std::byte const*>(firstFrame.data()) - bytes.data());
+      auto frame = FrameView{firstFrame.data(), bytes.size() - firstOffset, firstFrame.length()};
+      bool overlaps = false;
+
+      while (true)
+      {
+        auto const frameOffset = static_cast<std::size_t>(static_cast<std::byte const*>(frame.data()) - bytes.data());
+        auto const length = frame.length();
+
+        if (length < sizeof(FrameLayout) || length > frame.size())
+        {
+          return false;
+        }
+
+        if (frameOffset < offset && offset - frameOffset < length)
+        {
+          overlaps = true;
+        }
+
+        auto const remaining = bytes.subspan(frameOffset + length);
+
+        // Match locate()'s short terminal-byte tolerance, but account for the
+        // whole chain: tag bytes must not merely complete the overlapping frame.
+        if (remaining.size() < sizeof(FrameLayout))
+        {
+          return overlaps;
+        }
+
+        auto next = FrameView{remaining.data(), remaining.size()};
+
+        if (!next.isValid())
+        {
+          return false;
+        }
+
+        auto const& currentLayout = frame.layout();
+        auto const& nextLayout = next.layout();
+
+        if (currentLayout.versionId() != nextLayout.versionId() || currentLayout.layer() != nextLayout.layer() ||
+            currentLayout.samplingRateIndex() != nextLayout.samplingRateIndex())
+        {
+          return false;
+        }
+
+        if (nextLayout.bitrateIndex() == 0)
+        {
+          if (currentLayout.bitrateIndex() != 0)
+          {
+            return false;
+          }
+
+          std::size_t const paddingSlot = currentLayout.layer() == LayerDescription::LayerI ? 4 : 1;
+          auto const baseLength = length - (currentLayout.paddingBit() != 0 ? paddingSlot : 0);
+          auto const nextLength = baseLength + (nextLayout.paddingBit() != 0 ? paddingSlot : 0);
+          next = FrameView{remaining.data(), remaining.size(), nextLength};
+        }
+
+        frame = next;
+      }
+    }
+
+    Result<std::size_t> trailingTagPayloadEnd(std::span<std::byte const> bytes, bool trimId3v1)
     {
       std::size_t payloadEnd = bytes.size();
 
-      if (hasId3v1Tag(bytes, payloadEnd))
+      if (trimId3v1 && hasId3v1Tag(bytes, payloadEnd))
       {
         payloadEnd -= kId3v1TagSize;
       }
@@ -96,6 +161,49 @@ namespace ao::media::file::mpeg
       }
 
       return readApeTagStart(bytes.first(payloadEnd));
+    }
+
+    Result<std::size_t> trimTrailingTags(std::span<std::byte const> bytes, std::size_t audioStartOffset)
+    {
+      auto payloadEndRes = trailingTagPayloadEnd(bytes, true);
+
+      if (!hasId3v1Tag(bytes, bytes.size()) || bytes.size() - kId3v1TagSize < audioStartOffset)
+      {
+        return payloadEndRes;
+      }
+
+      auto optFrame = std::optional<FrameView>{};
+
+      // Keep the established audio start: MPEG-looking tag values must not replace it.
+      if (payloadEndRes && *payloadEndRes > audioStartOffset)
+      {
+        auto const candidate = bytes.subspan(audioStartOffset, *payloadEndRes - audioStartOffset);
+        optFrame = locate(candidate.data(), candidate.size());
+      }
+
+      if (!optFrame)
+      {
+        auto const untrimmed = bytes.subspan(audioStartOffset);
+        optFrame = locate(untrimmed.data(), untrimmed.size());
+      }
+
+      if (optFrame)
+      {
+        // Keep independently recognized APE bytes outside the frame-chain
+        // witness, even when TAG at physical EOF - 128 lies in preceding audio.
+        auto const retainedEndRes = trailingTagPayloadEnd(bytes, false);
+        auto const markerOffset = bytes.size() - kId3v1TagSize;
+        auto const firstOffset =
+          static_cast<std::size_t>(static_cast<std::byte const*>(optFrame->data()) - bytes.data());
+
+        if (retainedEndRes && firstOffset < *retainedEndRes && markerOffset < *retainedEndRes &&
+            hasFrameChainPayloadAt(bytes.first(*retainedEndRes), *optFrame, markerOffset))
+        {
+          return retainedEndRes;
+        }
+      }
+
+      return payloadEndRes;
     }
   } // namespace
 
@@ -146,7 +254,7 @@ namespace ao::media::file::mpeg
         audioStartOffset = *optId3Size;
       }
 
-      auto const payloadEndRes = trimTrailingTags(fileBytes);
+      auto const payloadEndRes = trimTrailingTags(fileBytes, audioStartOffset);
 
       if (!payloadEndRes)
       {

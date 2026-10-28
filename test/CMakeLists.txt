@@ -386,6 +386,7 @@ add_executable(ao_core_test
     media/file/ApeTagTest.cpp
     media/file/MpegFrameTest.cpp
     media/file/MpegFileTest.cpp
+    media/file/MpegFileTrailingTagTest.cpp
     media/file/Mp4FileTest.cpp
     media/file/id3v2/ReaderTest.cpp
     media/file/id3v2/TestId3v2.cpp

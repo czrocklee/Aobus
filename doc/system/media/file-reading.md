@@ -104,6 +104,14 @@ An infeasible declared count returns `FormatRejected`; genuine allocation failur
 A confirmed MPEG audio frame is required. A table-rate candidate is confirmed by a compatible adjacent frame when enough trailing bytes remain; an exact terminal frame is also accepted. A free-format candidate derives its frame length and bitrate from compatible adjacent frame boundaries. A valid leading ID3v2 envelope and valid trailing ID3v1/APEv2 regions are excluded from the payload. A malformed or oversized leading ID3 envelope may be ignored when a confirmed MPEG frame can still be located. A bounded but malformed ID3 frame sequence contributes no ID3 metadata; MPEG technical properties remain available. Unknown frames and unsupported `TXXX` keys are ignored.
 ID3 Latin-1, UCS-2/UTF-16, and UTF-16BE text is decoded to UTF-8 according to the frame encoding. ID3v2.4 text declared as UTF-8 is passed through after BOM and trailing-terminator handling; scalar validation belongs to library admission, so malformed declared UTF-8 can still be observed by a media visitor and then rejected as one scan-item failure.
 
+A trailing `TAG` marker at physical end of file minus 128 bytes is preserved as audio payload only when it lies inside a declared complete frame of the contiguous chain anchored at the first confirmed MPEG frame, and that chain continues to the independently APE-trimmed end without first trimming ID3v1, tolerating zero to three terminal bytes.
+A resolved free-format chain with per-frame padding follows the same rule. Otherwise the existing ID3v1/APEv2 trimming and error behavior applies: tag bytes that merely complete the overlapping frame do not justify retaining an unaccounted-for tail.
+This overlap check uses a linear, constant-space frame-header walk without decoding samples; adjacent frames must match MPEG version, layer, and sampling-rate index, while table bitrates may vary.
+It does not resynchronize after a broken chain or change APEv2 recognition. A parameter mismatch defeats this overlap exemption rather than adding a general media-file or decoder rejection.
+The rule is a restricted compatibility heuristic, not authenticated writer provenance and not an invariance over arbitrary metadata edits. From bytes alone it cannot distinguish a complete frame whose ancillary region carries an ID3v1-shaped marker, followed by zero to three terminal bytes, from a stream truncated by 125–128 bytes before an appended tag.
+Compatible MPEG-shaped frame headers inside a tag can also complete the chain, so genuine-tag retention is not limited to those four deficits; frame-chain priority over the marker is deliberate.
+Encoded identity hashes the selected payload bytes, so this boundary choice is observable in fingerprints; decoder channel-role evidence such as `Unknown` does not gate payload selection, and the decoder's stricter APE-tag admission is unchanged.
+
 ### Ogg Opus
 
 The first page must begin a logical bitstream, and its serial number selects the only demuxed stream, so a multiplexed or chained file exposes only its first logical bitstream. A later page of that selected stream that repeats the begin-of-stream flag is corrupt. Page checksums are not verified, but page sequence numbers are: a gap in the selected stream rejects the file rather than reassembling a packet from fragments on either side of it or displacing every later seek, while pages of an interleaved foreign serial pass through without disturbing that count. The first packet must be a usable `OpusHead`, and at least one audio packet must follow the two header packets. Demuxing stops cleanly at the first position that does not begin a page and at a page cut short by the end of the file, so an appended tag does not reject the file and a truncated download keeps the audio its complete pages carry. Because a page is atomic, a truncation that reaches into the first audio page leaves no audio packet and rejects the file. A second packet that is not `OpusTags` contributes no metadata and does not reject the file. The selected payload begins at the first audio page rather than the file start, so retagging leaves the recorded audio identity unchanged unless the tag edit changes how many pages the header occupies.
@@ -167,6 +175,11 @@ This boundary writes no persistent state and never modifies source media.
 
 Changing a normalized field mapping changes future import behavior and requires reference and fixture updates. Changing an encoded payload boundary changes persisted identity meaning and requires a database version change or an explicitly specified compatible re-index policy.
 
+Development-era MPEG payload-boundary defects can have cached two kinds of wrong identity: shortened identities that mistook frame bytes for an ID3v1 tag and trimmed genuine audio, and tag-contaminated identities that retained a genuine appended tag as payload.
+Regenerate affected cached identities by rebuilding the unsupported development library under [decision 0020](../../decision/0020-versioning-and-upgrade-policy.md); this correction does not rewrite manifest rows or add a database upgrade or migration.
+Ordinary unchanged-file scans and pending-only identity backfill do not refresh an existing cached identity, so matching a moved file against an affected old identity can fail.
+New imports and later changed-file scans use the corrected payload range; the [scan specification](../library/scan-and-identity.md) owns those refresh boundaries.
+
 ## Frontend observations
 
 There is no direct frontend observation. Runtime library workflows translate read outcomes into their own mutation, scan, progress, and reporting contracts. Frontends neither invoke visitors nor hold mapped-file views.
@@ -186,6 +199,7 @@ There is no direct frontend observation. Runtime library workflows translate rea
 - [`FileTest.cpp`](../../../test/media/file/FileTest.cpp) protects dispatch, mapping, failure atomicity, and move lifetime.
 - [`DemuxerTest.cpp`](../../../test/media/ogg/DemuxerTest.cpp) protects Ogg page scanning, packet reassembly, stream selection, and incomplete endings.
 - Format tests under [`test/media/file/`](../../../test/media/file) protect mappings, properties, covers, payloads, caches, and malformed input.
+- [`MpegFileTrailingTagTest.cpp`](../../../test/media/file/MpegFileTrailingTagTest.cpp) pins suffix-aware frame-chain selection, retagging of truncated inputs, APE/terminal-byte boundaries, and the deliberate byte-only ambiguity limits.
 - [`MediaFileFixtureTest.cpp`](../../../test/media/file/MediaFileFixtureTest.cpp) protects real encoded fixtures across all supported formats.
 - [`MediaTrackTest.cpp`](../../../test/runtime/library/MediaTrackTest.cpp) protects the runtime retention contract.
 
