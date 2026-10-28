@@ -12,7 +12,10 @@
 #include <ao/audio/RenderTarget.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/PlaybackMode.h>
+#include <ao/utility/ScopedRegistration.h>
+#include <ao/utility/ThreadName.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
@@ -21,15 +24,33 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <thread>
 #include <vector>
 
 namespace ao::rt::test
 {
+  using playback_succession::DecoderActivationGate;
+  using playback_succession::DecoderActivationProbe;
   using playback_succession::PlaybackSuccessionFixture;
   using playback_succession::PlaybackSuccessionSeekFixture;
   using playback_succession::PlaybackSuccessionTransportFixture;
   using playback_succession::PlaybackSuccessionTransportFixtureConfig;
   using playback_succession::PreparationReleaseGuard;
+
+  namespace
+  {
+    std::size_t totalDecoderActivations(DecoderActivationProbe::Snapshot const& snapshot)
+    {
+      std::size_t count = 0;
+
+      for (auto const& entry : snapshot.activations)
+      {
+        count += entry.second;
+      }
+
+      return count;
+    }
+  } // namespace
 
   TEST_CASE("PlaybackSuccession - idle fallback advances without a prepared successor")
   {
@@ -78,7 +99,7 @@ namespace ao::rt::test
 
     auto const optFirstToken = playbackTransport.clearPreparedNext();
     REQUIRE(optFirstToken);
-    auto const activationCount = fixture.lookaheadActivationCount(fixture.secondTrackId);
+    auto const activationCount = fixture.decoderActivationCount(fixture.secondTrackId);
 
     SECTION("output edge")
     {
@@ -91,7 +112,7 @@ namespace ao::rt::test
       playbackTransport.seek(std::chrono::milliseconds{0}, PlaybackTransport::SeekMode::Final);
     }
 
-    REQUIRE(fixture.tryWaitForLookaheadAfter(fixture.secondTrackId, activationCount));
+    REQUIRE(fixture.tryWaitForDecoderActivationAfter(fixture.secondTrackId, activationCount));
     auto const optReplacementToken = playbackTransport.clearPreparedNext();
     REQUIRE(optReplacementToken);
     CHECK(*optReplacementToken != *optFirstToken);
@@ -99,47 +120,176 @@ namespace ao::rt::test
     CHECK(playbackTransport.state().transport == audio::Transport::Playing);
   }
 
-  TEST_CASE("PlaybackSuccession - paired mode update replaces lookahead once from the final state")
+  TEST_CASE("PlaybackSuccession - paired mode update replaces lookahead once from the final state", "[concurrency]")
   {
-    auto fixture = PlaybackSuccessionTransportFixture{};
-    fixture.buildThreeTrackManualView();
-    auto& succession = *fixture.successionPtr;
-    REQUIRE(fixture.playAndWait(fixture.firstTrackId));
+    auto probePtr = std::shared_ptr<DecoderActivationProbe>{};
+    auto expected = DecoderActivationProbe::Snapshot{};
+    std::size_t beforeActivations = 0;
 
-    auto signalStates = std::vector<PlaybackSuccessionState>{};
-    auto const shuffleSubscription = succession.onShuffleModeChanged([&](PlaybackSuccession::ShuffleModeChanged const&)
-                                                                     { signalStates.push_back(succession.state()); });
-    auto const repeatSubscription = succession.onRepeatModeChanged([&](PlaybackSuccession::RepeatModeChanged const&)
-                                                                   { signalStates.push_back(succession.state()); });
-    auto activationCount = [&]
     {
-      std::size_t count = 0;
+      auto fixture = PlaybackSuccessionTransportFixture{};
+      fixture.buildThreeTrackManualView();
+      probePtr = fixture.decoderProbePtr;
+      auto& succession = *fixture.successionPtr;
+      REQUIRE(fixture.playAndWait(fixture.firstTrackId));
+      // The aggregate baseline includes the independently scheduled current decoder.
+      REQUIRE(fixture.tryWaitForDecoderActivationAfter(fixture.firstTrackId, 0));
 
-      for (auto const& entry : fixture.decoderProbePtr->snapshot())
+      auto signalStates = std::vector<PlaybackSuccessionState>{};
+      auto const shuffleSubscription = succession.onShuffleModeChanged(
+        [&](PlaybackSuccession::ShuffleModeChanged const&) { signalStates.push_back(succession.state()); });
+      auto const repeatSubscription = succession.onRepeatModeChanged([&](PlaybackSuccession::RepeatModeChanged const&)
+                                                                     { signalStates.push_back(succession.state()); });
+      auto const before = probePtr->snapshot();
+      beforeActivations = totalDecoderActivations(before);
+
+      succession.setPlaybackMode(ShuffleMode::On, RepeatMode::All);
+
+      auto const optSuccessorId = succession.state().optResolvedSuccessor;
+      REQUIRE(optSuccessorId);
+      REQUIRE(*optSuccessorId != fixture.firstTrackId);
+      auto const& successorPath = fixture.trackPaths.at(*optSuccessorId);
+      expected = before;
+      ++expected.activations.at(successorPath);
+      ++expected.outputDecoderConstructions.at(successorPath);
+      REQUIRE(fixture.tryWaitForDecoderActivationAfter(*optSuccessorId, before.activations.at(successorPath)));
+      fixture.transport.executor.drain();
+      REQUIRE(signalStates.size() == 2);
+
+      for (auto const& state : signalStates)
       {
-        count += entry.second;
+        CHECK(state.shuffle == ShuffleMode::On);
+        CHECK(state.repeat == RepeatMode::All);
       }
 
-      return count;
-    };
-    auto const beforeActivations = activationCount();
-
-    succession.setPlaybackMode(ShuffleMode::On, RepeatMode::All);
-
-    REQUIRE(fixture.transport.executor.tryDrainUntil(
-      [&] { return activationCount() > beforeActivations; }, std::chrono::seconds{10}));
-    fixture.transport.executor.drain();
-    REQUIRE(signalStates.size() == 2);
-
-    for (auto const& state : signalStates)
-    {
-      CHECK(state.shuffle == ShuffleMode::On);
-      CHECK(state.repeat == RepeatMode::All);
+      CHECK(succession.state().shuffle == ShuffleMode::On);
+      CHECK(succession.state().repeat == RepeatMode::All);
+      auto const after = probePtr->snapshot();
+      CAPTURE(
+        after.activations, expected.activations, after.outputDecoderConstructions, expected.outputDecoderConstructions);
+      CHECK(after == expected);
+      CHECK(totalDecoderActivations(after) == beforeActivations + 1);
     }
 
-    CHECK(succession.state().shuffle == ShuffleMode::On);
-    CHECK(succession.state().repeat == RepeatMode::All);
-    CHECK(activationCount() == beforeActivations + 1);
+    // Full fixture teardown joins preparation and decode producers. Output opens
+    // also catch an extra source whose second-read probe never ran before stop.
+    auto const settled = probePtr->snapshot();
+    CAPTURE(settled.activations,
+            expected.activations,
+            settled.outputDecoderConstructions,
+            expected.outputDecoderConstructions);
+    CHECK(settled == expected);
+    CHECK(totalDecoderActivations(settled) == beforeActivations + 1);
+  }
+
+  TEST_CASE("PlaybackSuccession - paired mode replacement is independent of delayed current decoder activation",
+            "[concurrency]")
+  {
+    auto const gatePtr = std::make_shared<DecoderActivationGate>();
+    auto probePtr = std::shared_ptr<DecoderActivationProbe>{};
+    auto expected = DecoderActivationProbe::Snapshot{};
+    std::size_t beforeActivations = 0;
+
+    {
+      auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
+        .activationGatePtr = gatePtr,
+      }};
+      auto releaseGuard = utility::ScopedRegistration{[gatePtr] { gatePtr->release(); }};
+      fixture.buildThreeTrackManualView();
+      gatePtr->blockPath(fixture.trackPaths.at(fixture.firstTrackId));
+      probePtr = fixture.decoderProbePtr;
+      auto& succession = *fixture.successionPtr;
+      INFO("The first scripted PCM block must cover preroll so the current gate is reached only after preparation");
+      REQUIRE(fixture.playAndWait(fixture.firstTrackId));
+      REQUIRE(gatePtr->tryWaitForEntry());
+      REQUIRE(gatePtr->isHeld());
+
+      auto const before = probePtr->snapshot();
+      beforeActivations = totalDecoderActivations(before);
+      auto const& currentPath = fixture.trackPaths.at(fixture.firstTrackId);
+      REQUIRE(before.activations.at(currentPath) == 0);
+      REQUIRE(before.activations.at(fixture.trackPaths.at(fixture.secondTrackId)) == 1);
+      REQUIRE(before.activations.at(fixture.trackPaths.at(fixture.thirdTrackId)) == 0);
+
+      succession.setPlaybackMode(ShuffleMode::On, RepeatMode::All);
+
+      auto const optSuccessorId = succession.state().optResolvedSuccessor;
+      REQUIRE(optSuccessorId);
+      REQUIRE(*optSuccessorId != fixture.firstTrackId);
+      auto const& successorPath = fixture.trackPaths.at(*optSuccessorId);
+      expected = before;
+      ++expected.activations.at(currentPath);
+      ++expected.activations.at(successorPath);
+      ++expected.outputDecoderConstructions.at(successorPath);
+      REQUIRE(fixture.tryWaitForDecoderActivationAfter(*optSuccessorId, before.activations.at(successorPath)));
+      fixture.transport.executor.drain();
+      // The replacement reached its probe while the first current decoder was
+      // held. A duplicate current decoder bypasses this one-shot gate and fails.
+      REQUIRE(gatePtr->isHeld());
+      CHECK(fixture.decoderActivationCount(fixture.firstTrackId) == before.activations.at(currentPath));
+
+      // Let the current decoder finish before its source is destroyed.
+      releaseGuard.reset();
+      REQUIRE(fixture.tryWaitForDecoderActivationAfter(fixture.firstTrackId, before.activations.at(currentPath)));
+      CHECK_FALSE(gatePtr->hasTimedOut());
+      auto const after = probePtr->snapshot();
+      CAPTURE(
+        after.activations, expected.activations, after.outputDecoderConstructions, expected.outputDecoderConstructions);
+      CHECK(after == expected);
+      CHECK(succession.state().currentTrackId == fixture.firstTrackId);
+      CHECK(succession.state().shuffle == ShuffleMode::On);
+      CHECK(succession.state().repeat == RepeatMode::All);
+    }
+
+    auto const settled = probePtr->snapshot();
+    CAPTURE(settled.activations,
+            expected.activations,
+            settled.outputDecoderConstructions,
+            expected.outputDecoderConstructions);
+    CHECK(settled == expected);
+    CHECK(totalDecoderActivations(settled) == beforeActivations + 2);
+    CHECK_FALSE(gatePtr->hasTimedOut());
+  }
+
+  TEST_CASE("PlaybackSuccession - activation gate reports timeout and tolerates repeated release", "[concurrency]")
+  {
+    auto gate = DecoderActivationGate{std::chrono::milliseconds{0}};
+    gate.blockPath("current.flac");
+    auto worker = std::jthread{[&]
+                               {
+                                 setCurrentThreadName("ao-gate-timeout");
+                                 gate.enterAndWait("current.flac");
+                               }};
+    REQUIRE(gate.tryWaitForEntry());
+    worker.join();
+    CHECK(gate.hasTimedOut());
+    CHECK_FALSE(gate.isHeld());
+    gate.release();
+    gate.release();
+    gate.enterAndWait("current.flac");
+    CHECK(gate.hasTimedOut());
+  }
+
+  TEST_CASE("PlaybackSuccession - activation gate blocks only the selected decoder once", "[concurrency]")
+  {
+    auto gate = DecoderActivationGate{};
+    gate.blockPath("current.flac");
+    auto worker = std::jthread{};
+    auto const releaseGuard = utility::ScopedRegistration{[&] { gate.release(); }};
+    worker = std::jthread{[&]
+                          {
+                            setCurrentThreadName("ao-gate-current");
+                            gate.enterAndWait("current.flac");
+                          }};
+    REQUIRE(gate.tryWaitForEntry());
+    REQUIRE(gate.isHeld());
+    gate.enterAndWait("other.flac");
+    gate.enterAndWait("current.flac");
+    CHECK(gate.isHeld());
+    gate.release();
+    worker.join();
+    CHECK_FALSE(gate.isHeld());
+    CHECK_FALSE(gate.hasTimedOut());
   }
 
   TEST_CASE("PlaybackSuccession - natural prepared winner is adopted exactly once", "[concurrency]")
@@ -232,13 +382,13 @@ namespace ao::rt::test
     REQUIRE(gatePtr->tryWaitForEntry());
     fixture.transport.executor.drain();
     REQUIRE(fixture.successionPtr->state().currentTrackId == fixture.secondTrackId);
-    auto const activationCount = fixture.lookaheadActivationCount(fixture.thirdTrackId);
+    auto const activationCount = fixture.decoderActivationCount(fixture.thirdTrackId);
 
     releaseGuard.release();
     // On this fixture's single preparation worker, the winner's new lookahead
     // settles after the canceled inspection. Its live decoder must not be
     // mistaken for an unreclaimed explicit candidate for the same track.
-    REQUIRE(fixture.tryWaitForLookaheadAfter(fixture.thirdTrackId, activationCount));
+    REQUIRE(fixture.tryWaitForDecoderActivationAfter(fixture.thirdTrackId, activationCount));
     auto const created = gatePtr->createdPtr->load(std::memory_order_relaxed);
     auto const destroyed = gatePtr->destroyedPtr->load(std::memory_order_relaxed);
     CHECK(destroyed > 0);

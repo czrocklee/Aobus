@@ -17,6 +17,7 @@
 #include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/source/TrackSourceCache.h>
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -42,6 +43,14 @@ namespace ao::rt::test::playback_succession
   class DecoderActivationProbe final
   {
   public:
+    struct Snapshot final
+    {
+      std::map<std::filesystem::path, std::size_t> activations;
+      std::map<std::filesystem::path, std::size_t> outputDecoderConstructions;
+
+      bool operator==(Snapshot const&) const = default;
+    };
+
     DecoderActivationProbe();
     ~DecoderActivationProbe();
 
@@ -52,8 +61,32 @@ namespace ao::rt::test::playback_succession
 
     void registerPath(std::filesystem::path const& path);
     void notify(std::filesystem::path const& path);
+    void notifyOutputDecoderConstruction(std::filesystem::path const& path);
     std::size_t count(std::filesystem::path const& path) const;
-    std::map<std::filesystem::path, std::size_t> snapshot() const;
+    Snapshot snapshot() const;
+
+  private:
+    struct Impl;
+    std::unique_ptr<Impl> _implPtr;
+  };
+
+  class DecoderActivationGate final
+  {
+  public:
+    explicit DecoderActivationGate(std::chrono::milliseconds timeout = std::chrono::seconds{10});
+    ~DecoderActivationGate();
+
+    DecoderActivationGate(DecoderActivationGate const&) = delete;
+    DecoderActivationGate& operator=(DecoderActivationGate const&) = delete;
+    DecoderActivationGate(DecoderActivationGate&&) = delete;
+    DecoderActivationGate& operator=(DecoderActivationGate&&) = delete;
+
+    void blockPath(std::filesystem::path const& path);
+    void enterAndWait(std::filesystem::path const& path);
+    bool tryWaitForEntry(std::chrono::milliseconds timeout = std::chrono::seconds{10});
+    bool isHeld() const;
+    bool hasTimedOut() const;
+    void release();
 
   private:
     struct Impl;
@@ -81,6 +114,7 @@ namespace ao::rt::test::playback_succession
   {
     std::shared_ptr<audio::test::BlockingPreparationGate> blockingGatePtr{};
     std::filesystem::path blockedFileName{};
+    std::shared_ptr<DecoderActivationGate> activationGatePtr{};
     bool failBlockedPreparation = false;
     bool blockEveryLookahead = false;
     std::vector<std::filesystem::path> finalOpenFailureFileNames{};
@@ -107,9 +141,10 @@ namespace ao::rt::test::playback_succession
     void buildFourTrackManualView();
     void buildTwoTrackManualView();
     void queueNaturalAdvance();
+    // Settles explicit start and its successor, not the current decoder's activation.
     Result<> playAndWait(TrackId trackId);
-    std::size_t lookaheadActivationCount(TrackId trackId) const;
-    bool tryWaitForLookaheadAfter(TrackId trackId, std::size_t previousCount);
+    std::size_t decoderActivationCount(TrackId trackId) const;
+    bool tryWaitForDecoderActivationAfter(TrackId trackId, std::size_t previousCount);
 
     std::shared_ptr<DecoderActivationProbe> decoderProbePtr;
     PlaybackTransportFixture<QueuedExecutor> transport;

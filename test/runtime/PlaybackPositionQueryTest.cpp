@@ -59,9 +59,9 @@ namespace ao::rt::test
     fixture.buildThreeTrackManualView();
     auto playback = fixture.createPlayback();
     REQUIRE(fixture.playAndWait(fixture.firstTrackId));
-    auto const activationCount = fixture.lookaheadActivationCount(fixture.secondTrackId);
+    auto const activationCount = fixture.decoderActivationCount(fixture.secondTrackId);
     playback.commands().seek(std::chrono::milliseconds{100});
-    REQUIRE(fixture.tryWaitForLookaheadAfter(fixture.secondTrackId, activationCount));
+    REQUIRE(fixture.tryWaitForDecoderActivationAfter(fixture.secondTrackId, activationCount));
     fixture.transport.executor.drain();
     auto const before = playback.snapshot().transport;
     REQUIRE(before.elapsed == std::chrono::milliseconds{100});
@@ -100,11 +100,11 @@ namespace ao::rt::test
 
     playback.commands().seekBy(
       before.occurrenceId, std::chrono::milliseconds::max(), PlaybackRelativeSeekEndBehavior::Next);
-    auto const activationCount = fixture.lookaheadActivationCount(fixture.thirdTrackId);
+    auto const activationCount = fixture.decoderActivationCount(fixture.thirdTrackId);
     releaseGuard.release();
     // The single worker must retire the old inspection before it can prepare
     // the winner's third-track lookahead. That legitimate decoder stays alive.
-    REQUIRE(fixture.tryWaitForLookaheadAfter(fixture.thirdTrackId, activationCount));
+    REQUIRE(fixture.tryWaitForDecoderActivationAfter(fixture.thirdTrackId, activationCount));
     auto const created = gatePtr->createdPtr->load(std::memory_order_relaxed);
     auto const destroyed = gatePtr->destroyedPtr->load(std::memory_order_relaxed);
     CHECK(destroyed > 0);
