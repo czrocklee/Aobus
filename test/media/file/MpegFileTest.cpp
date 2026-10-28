@@ -13,9 +13,11 @@
 #include <ao/utility/Xxh3.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -430,6 +432,101 @@ namespace ao::media::file::mpeg::test
     CHECK(std::to_integer<std::uint8_t>(range.bytes[1]) == frame[1]);
     CHECK(std::to_integer<std::uint8_t>(range.bytes[2]) == frame[2]);
     CHECK(std::to_integer<std::uint8_t>(range.bytes[3]) == frame[3]);
+  }
+
+  TEST_CASE("MPEG File - retains ID3v1 markers inside complete audio frames")
+  {
+    auto const frameCount = GENERATE(1U, 5U);
+    auto audio = createValidMpegFrames(frameCount);
+    constexpr std::size_t kId3v1TagSize = 128;
+    std::memcpy(audio.data() + audio.size() - kId3v1TagSize, "TAG", 3);
+
+    auto data = wrapId3v2(3, {});
+    auto const expectedOffset = data.size();
+    data.insert_range(data.end(), audio);
+    auto const temp = TempFile{data, ".mp3"};
+    auto const file = TestFile{temp.path};
+    auto const payloadRes = file.audioPayload();
+
+    REQUIRE(payloadRes);
+    CHECK(payloadRes->offset == expectedOffset);
+    CHECK(std::ranges::equal(payloadRes->bytes, std::as_bytes(std::span<std::uint8_t const>{audio})));
+    CHECK(utility::xxh3Hash128(payloadRes->bytes) ==
+          utility::xxh3Hash128(std::as_bytes(std::span<std::uint8_t const>{audio})));
+    CHECK(readContent(file).duration() ==
+          (frameCount == 1U ? std::chrono::milliseconds{26} : std::chrono::milliseconds{130}));
+  }
+
+  TEST_CASE("MPEG File - retains ID3v1 markers inside padded free-format frames")
+  {
+    auto const frameCount = GENERATE(2U, 3U);
+    auto data = createFreeFormatMpegFrames(frameCount);
+    constexpr std::size_t kFrameLength = 720;
+    constexpr std::size_t kId3v1TagSize = 128;
+    constexpr std::uint8_t kPaddingBit = 0x02;
+    data[((frameCount - 1) * kFrameLength) + 2] |= kPaddingBit;
+    data.push_back(0);
+    std::memcpy(data.data() + data.size() - kId3v1TagSize, "TAG", 3);
+    auto const temp = TempFile{data, ".mp3"};
+    auto const file = TestFile{temp.path};
+    auto const payloadRes = file.audioPayload();
+
+    REQUIRE(payloadRes);
+    CHECK(payloadRes->offset == 0);
+    CHECK(std::ranges::equal(payloadRes->bytes, std::as_bytes(std::span<std::uint8_t const>{data})));
+    CHECK(readContent(file).duration() ==
+          (frameCount == 2U ? std::chrono::milliseconds{48} : std::chrono::milliseconds{72}));
+  }
+
+  TEST_CASE("MPEG File - excludes real ID3v1 tags containing MPEG-like bytes")
+  {
+    auto data = createValidMpegFrames(5);
+    auto const audioSize = data.size();
+    auto const expectedSignature = utility::xxh3Hash128(std::as_bytes(std::span<std::uint8_t const>{data}));
+    appendId3v1Tag(data);
+    constexpr std::size_t kTagValueOffset = 4;
+    auto const fakeHeader = std::to_array<std::uint8_t>({0xFF, 0xFB, 0x14, 0x00});
+    std::ranges::copy(fakeHeader, data.begin() + static_cast<std::ptrdiff_t>(audioSize + kTagValueOffset));
+    auto const temp = TempFile{data, ".mp3"};
+    auto const file = TestFile{temp.path};
+    auto const payloadRes = file.audioPayload();
+
+    REQUIRE(payloadRes);
+    CHECK(payloadRes->bytes.size() == audioSize);
+    CHECK(utility::xxh3Hash128(payloadRes->bytes) == expectedSignature);
+    CHECK(readContent(file).duration() == std::chrono::milliseconds{130});
+  }
+
+  TEST_CASE("MPEG File - keeps its first audio frame before MPEG-like APE values and ID3v1")
+  {
+    auto data = createValidMpegFrame();
+    auto const audioSize = data.size();
+    auto const expectedSignature = utility::xxh3Hash128(std::as_bytes(std::span<std::uint8_t const>{data}));
+    // One binary Foo item: 257 value bytes, starting with a false 417-byte frame
+    // whose apparent end includes the following APE footer and real ID3v1 tag.
+    auto const itemHeader = std::to_array<std::uint8_t>({0x01, 0x01, 0, 0, 0x02, 0, 0, 0, 'F', 'o', 'o', 0});
+    data.insert_range(data.end(), itemHeader);
+    auto value = std::vector<std::uint8_t>(257, 0);
+    std::ranges::copy_n(data.begin(), sizeof(FrameLayout), value.begin());
+    data.insert_range(data.end(), value);
+    appendApeV2Footer(data);
+    constexpr std::size_t kApeFooterSize = 32;
+    constexpr std::size_t kApeSizeOffset = 12;
+    constexpr std::size_t kApeItemCountOffset = 16;
+    auto const footerOffset = data.size() - kApeFooterSize;
+    data[footerOffset + kApeSizeOffset] = 0x2D; // 301 bytes: item plus footer.
+    data[footerOffset + kApeSizeOffset + 1] = 0x01;
+    data[footerOffset + kApeItemCountOffset] = 1;
+    appendId3v1Tag(data);
+    auto const temp = TempFile{data, ".mp3"};
+    auto const file = TestFile{temp.path};
+    auto const payloadRes = file.audioPayload();
+
+    REQUIRE(payloadRes);
+    CHECK(payloadRes->offset == 0);
+    CHECK(payloadRes->bytes.size() == audioSize);
+    CHECK(utility::xxh3Hash128(payloadRes->bytes) == expectedSignature);
+    CHECK(readContent(file).duration() == std::chrono::milliseconds{26});
   }
 
   TEST_CASE("MPEG File - audio payload signature ignores tag changes")

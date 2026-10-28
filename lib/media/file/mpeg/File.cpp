@@ -6,7 +6,9 @@
 #include "../detail/Content.h"
 #include "../detail/Decoder.h"
 #include "../detail/Reader.h"
+#include "ApeTag.h"
 #include "Frame.h"
+#include "FrameLayout.h"
 #include "id3v2/Layout.h"
 #include "id3v2/Reader.h"
 #include <ao/AudioCodec.h>
@@ -37,9 +39,6 @@ namespace ao::media::file::mpeg
     constexpr std::uint8_t kId3v2FooterFlag = 0x10;
     constexpr std::uint8_t kId3v2MajorVersion4 = 4;
     constexpr std::size_t kApeV2FooterSize = 32;
-    constexpr std::size_t kApeV2SizeOffset = 12;
-    constexpr std::size_t kApeV2FlagsOffset = 20;
-    constexpr std::uint32_t kApeV2ContainsHeaderFlag = 0x80000000U;
     constexpr std::uint8_t kSyncSafeHighBit = 0x80U;
 
     std::optional<std::size_t> id3v2TotalSize(std::span<std::byte const> bytes) noexcept
@@ -76,17 +75,75 @@ namespace ao::media::file::mpeg
              std::memcmp(bytes.data() + endOffset - kId3v1TagSize, kId3v1Magic.data(), kId3v1Magic.size()) == 0;
     }
 
-    std::uint32_t readLittleEndianU32(std::byte const* data) noexcept
+    bool hasFrameChainPayloadAt(std::span<std::byte const> bytes, FrameView const& firstFrame, std::size_t offset)
     {
-      return std::to_integer<std::uint32_t>(data[0]) | (std::to_integer<std::uint32_t>(data[1]) << 8U) |
-             (std::to_integer<std::uint32_t>(data[2]) << 16U) | (std::to_integer<std::uint32_t>(data[3]) << 24U);
+      auto const firstOffset =
+        static_cast<std::size_t>(static_cast<std::byte const*>(firstFrame.data()) - bytes.data());
+      auto frame = FrameView{firstFrame.data(), bytes.size() - firstOffset, firstFrame.length()};
+      bool overlaps = false;
+
+      while (true)
+      {
+        auto const frameOffset = static_cast<std::size_t>(static_cast<std::byte const*>(frame.data()) - bytes.data());
+        auto const length = frame.length();
+
+        if (length < sizeof(FrameLayout) || length > frame.size())
+        {
+          return false;
+        }
+
+        if (frameOffset < offset && offset - frameOffset < length)
+        {
+          overlaps = true;
+        }
+
+        auto const remaining = bytes.subspan(frameOffset + length);
+
+        // Match locate()'s short terminal-byte tolerance, but account for the
+        // whole chain: tag bytes must not merely complete the overlapping frame.
+        if (remaining.size() < sizeof(FrameLayout))
+        {
+          return overlaps;
+        }
+
+        auto next = FrameView{remaining.data(), remaining.size()};
+
+        if (!next.isValid())
+        {
+          return false;
+        }
+
+        auto const& currentLayout = frame.layout();
+        auto const& nextLayout = next.layout();
+
+        if (currentLayout.versionId() != nextLayout.versionId() || currentLayout.layer() != nextLayout.layer() ||
+            currentLayout.samplingRateIndex() != nextLayout.samplingRateIndex())
+        {
+          return false;
+        }
+
+        if (nextLayout.bitrateIndex() == 0)
+        {
+          if (currentLayout.bitrateIndex() != 0)
+          {
+            return false;
+          }
+
+          std::size_t const paddingSlot = currentLayout.layer() == LayerDescription::LayerI ? 4 : 1;
+          auto const baseLength = length - (currentLayout.paddingBit() != 0 ? paddingSlot : 0);
+          auto const nextLength = baseLength + (nextLayout.paddingBit() != 0 ? paddingSlot : 0);
+          next = FrameView{remaining.data(), remaining.size(), nextLength};
+        }
+
+        frame = next;
+      }
     }
 
-    Result<std::size_t> trimTrailingTags(std::span<std::byte const> bytes)
+    Result<std::size_t> trailingTagPayloadEnd(std::span<std::byte const> bytes, bool trimId3v1)
     {
       std::size_t payloadEnd = bytes.size();
 
-      if (hasId3v1Tag(bytes, payloadEnd))
+      if (trimId3v1 && hasId3v1Tag(bytes, payloadEnd))
       {
         payloadEnd -= kId3v1TagSize;
       }
@@ -103,33 +160,50 @@ namespace ao::media::file::mpeg
         return payloadEnd;
       }
 
-      auto const tagSize = static_cast<std::size_t>(readLittleEndianU32(footer + kApeV2SizeOffset));
+      return readApeTagStart(bytes.first(payloadEnd));
+    }
 
-      if (tagSize < kApeV2FooterSize || tagSize > payloadEnd)
+    Result<std::size_t> trimTrailingTags(std::span<std::byte const> bytes, std::size_t audioStartOffset)
+    {
+      auto payloadEndRes = trailingTagPayloadEnd(bytes, true);
+
+      if (!hasId3v1Tag(bytes, bytes.size()) || bytes.size() - kId3v1TagSize < audioStartOffset)
       {
-        return makeError(Error::Code::CorruptData, "invalid apev2 trailing tag size");
+        return payloadEndRes;
       }
 
-      auto totalTagSize = tagSize;
-      auto const flags = readLittleEndianU32(footer + kApeV2FlagsOffset);
+      auto optFrame = std::optional<FrameView>{};
 
-      if ((flags & kApeV2ContainsHeaderFlag) != 0)
+      // Keep the established audio start: MPEG-looking tag values must not replace it.
+      if (payloadEndRes && *payloadEndRes > audioStartOffset)
       {
-        if (tagSize > payloadEnd - kApeV2FooterSize)
-        {
-          return makeError(Error::Code::CorruptData, "invalid apev2 trailing tag header size");
-        }
+        auto const candidate = bytes.subspan(audioStartOffset, *payloadEndRes - audioStartOffset);
+        optFrame = locate(candidate.data(), candidate.size());
+      }
 
-        totalTagSize += kApeV2FooterSize;
-        auto const* const header = bytes.data() + payloadEnd - totalTagSize;
+      if (!optFrame)
+      {
+        auto const untrimmed = bytes.subspan(audioStartOffset);
+        optFrame = locate(untrimmed.data(), untrimmed.size());
+      }
 
-        if (std::memcmp(header, kApeV2Magic.data(), kApeV2Magic.size()) != 0)
+      if (optFrame)
+      {
+        // Keep independently recognized APE bytes outside the frame-chain
+        // witness, even when TAG at physical EOF - 128 lies in preceding audio.
+        auto const retainedEndRes = trailingTagPayloadEnd(bytes, false);
+        auto const markerOffset = bytes.size() - kId3v1TagSize;
+        auto const firstOffset =
+          static_cast<std::size_t>(static_cast<std::byte const*>(optFrame->data()) - bytes.data());
+
+        if (retainedEndRes && firstOffset < *retainedEndRes && markerOffset < *retainedEndRes &&
+            hasFrameChainPayloadAt(bytes.first(*retainedEndRes), *optFrame, markerOffset))
         {
-          return makeError(Error::Code::CorruptData, "invalid apev2 trailing tag header");
+          return retainedEndRes;
         }
       }
 
-      return payloadEnd - totalTagSize;
+      return payloadEndRes;
     }
   } // namespace
 
@@ -180,7 +254,7 @@ namespace ao::media::file::mpeg
         audioStartOffset = *optId3Size;
       }
 
-      auto const payloadEndRes = trimTrailingTags(fileBytes);
+      auto const payloadEndRes = trimTrailingTags(fileBytes, audioStartOffset);
 
       if (!payloadEndRes)
       {

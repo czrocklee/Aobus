@@ -31,8 +31,8 @@ A nonzero mask names speakers in ascending assigned-bit order; zero assigns no p
 Channel count, not mask population, always owns frame geometry.
 Source interpretation (`Unknown`, `Identified`, or `Inferred`) is separate from format equality and from native mapping observations.
 
-WAV, FLAC, and ALAC publish effective source identity through their respective [WAV](#wav-source-interpretation), [FLAC](#flac-source-interpretation), and [ALAC](#alac-source-interpretation) policies below.
-The other current codec producers, AAC, Opus, and MP3, still report zero masks and `Unknown` interpretation; byte-order conventions alone do not identify them.
+WAV, FLAC, ALAC, and MP3 publish effective source identity through their respective [WAV](#wav-source-interpretation), [FLAC](#flac-source-interpretation), [ALAC](#alac-source-interpretation), and [MP3](#mp3-source-interpretation) policies below.
+The other current codec producers, AAC and Opus, still report zero masks and `Unknown` interpretation; byte-order conventions alone do not identify them.
 ALSA admits identified sources against its native channel-map observations.
 PipeWire admits a complete supported WAVE source declaration and validates the Format param actually read back; the offer is not that observation.
 A two-channel offer is one exact role set: the declared WAVE pair when the source mask is nonzero, and FL/FR only when that mask is zero. The offer never writes a new identity into a zero client mask.
@@ -53,7 +53,7 @@ This also applies to independent native-only evidence: ALSA may clear a stream f
 Core Audio admits complete supported identities through a [bounded AUHAL observation and permutation bridge](audio-execution.md#core-audio-channel-admission).
 Its returned client mode stays canonical; native byte order and initial delivery evidence remain separate, and acceptance does not prove physical routing.
 Core Audio hints preserve exact source identity without native I/O and are neither admission nor observation guarantees.
-The [channel-order reference](../../reference/media/channel-order.md) owns WAV compatibility sets, FLAC's narrower format-default identities, bounded ALAC declarations, and Opus slot permutations.
+The [channel-order reference](../../reference/media/channel-order.md) owns WAV compatibility sets, FLAC's narrower format-default identities, bounded ALAC declarations, uniform MP3 frame-mode slots, and Opus slot permutations.
 Those sets are not a rule for filling a zero PCM or native observation mask.
 A decoder publishing identified speakers normalizes any differing codec order before emitting PCM; it never publishes that codec-native speaker order.
 Existing AAC and Opus byte-order mechanisms remain unchanged: AAC requests FDK `AAC_PCM_OUTPUT_CHANNEL_MAPPING`, and Opus mapping family 1 permutes the channel mapping it hands libopus.
@@ -204,6 +204,96 @@ Known identities remain subject to strict backend role admission; publishing ide
 Optional layout inspection adds no file-rejection gate and does not soften existing required container, cookie, configuration, provider, or requested-precision errors.
 This policy changes neither the distinct FLAC source policy nor native/backend/quality policy.
 
+### MP3 source interpretation
+
+MP3 publishes an immutable effective identity before output adaptation from complete native-index header coverage, not from the output channel count and not from the first frame alone.
+The [channel-order reference](../../reference/media/channel-order.md#mp3) owns the mode vocabulary and canonical slots.
+[`Mp3DecoderSession.cpp`](../../../lib/audio/Mp3DecoderSession.cpp) owns this playback interpretation.
+Source and output masks agree at successful open.
+A nonzero mask is `Identified`; zero is `Unknown`.
+Read and seek never rewrite that identity or promote an unknown stream.
+AAC and Opus remain zero-mask `Unknown` producers.
+Existing backend admission, splice eligibility, native observation, quality-analysis, and format-equality rules are unchanged; identity does not prove native mapping or physical routing.
+MP3 remains a 16-bit lossy decoded signal, so it does not extend the Engine splice whitelist.
+Native seek placement, in-frame seek skips, and gapless trim belong to the [decoder session](decoder-session.md); they are not part of this identity coverage.
+Output adaptation and `PcmBlock` validity are unchanged.
+Publishing FC for mono adds no upmixer: stereo-only raw ALSA devices still cannot accept one-channel geometry, while native `MONO` observations remain unassigned rather than being relabelled FC.
+
+Open requires initial native frame information, agreement between that frame and the native PCM rate and channel count, a successful native scan, and a checked seek back to sample zero.
+Missing frame information fails open.
+It is not an unassigned-identity fallback and does not authorize a count-derived stereo default.
+A frame/PCM geometry disagreement is `NotSupported`, not a reason to guess a mask.
+
+The session requests a growing native frame index before that scan.
+It grows in 16,384-entry (128 KiB) quanta, with eight bytes per index entry plus less than one quantum of rounding.
+The largest capacity reached across both scans is retained for the session lifetime, including any false frames the initial full-input scan parsed from tag values.
+Typical 44.1 kHz MPEG1 Layer III uses about 1.1 MB per hour; Layer I at 48 kHz uses about 3.6 MB per hour.
+A larger quantum reduces allocation frequency, not the fixed-step algorithm's worst-case copying complexity; no allocator-specific timing guarantee is implied.
+A failed growth request or a sampled index after allocation failure does not itself fail open, but incomplete evidence cannot publish identity.
+The initial restored frame supplies the candidate geometry and mask: single-channel mode is canonical FC (`0x4`); standard and joint stereo are FL/FR (`0x3`); dual-channel is already zero.
+That candidate mask is published only when native-index header coverage is complete.
+Otherwise both masks stay zero, origin stays `Unknown`, and native admission continues.
+
+Complete coverage means all of the following:
+
+- The native index step is 1 and its fill equals the positive native frame count.
+- Every index offset lies inside the selected audio extent, and each indexed frame after the first begins exactly where the previous indexed header's length ends.
+- Every indexed header is bounds-valid, uses a known bitrate, and matches the initial rate and channel count.
+- No indexed header is dual-channel.
+- The last indexed frame ends exactly at the selected audio extent: file end, or the independently validated start of a supported trailing-tag chain.
+
+Trailing tags are recognized only in the fixed order `[Lyrics3v2] [APEv2] [ID3v1]`, with each part optional and at most 32 MiB in aggregate.
+ID3v1 is exactly 128 bytes beginning with `TAG`.
+APEv2 accepts a version-2000 footer, optionally paired with a matching leading header, with reserved-zero descriptor bytes, supported descriptor/item flags, an exact item count, bounded printable NUL-terminated keys, and exact value lengths; item values remain opaque.
+The descriptor's read-only bit is accepted, as is each item's read-only bit; a paired header must agree with every footer flag except its required is-header bit.
+A version-1000 APEv1 footer is not recognized for decoder identity: it retains the original native input and `Unknown`, without promising that native decoding accepts an arbitrary legacy tag.
+Lyrics3v2 requires the final ID3v1 tag, `LYRICSBEGIN`, one or more uppercase three-letter field IDs with five-digit decimal value lengths, and an exact six-digit body size followed by `LYRICS200`.
+Its body size excludes those final 15 bytes.
+These are bounded framing checks, not validation of text encoding, metadata meaning, or payload authenticity.
+Repeated, misordered, malformed, or oversized recognized tag chains are not partially repaired by a valid outer tag: the original native input is retained and identity stays `Unknown`.
+Other trailing formats remain unsupported for identity.
+
+A tag-shaped suffix is not sufficient to shorten native input: those bytes could be inside a compressed audio frame.
+The first scan always reads the original full input.
+Only when its step-1 native index witnesses a complete known-length frame ending exactly at the candidate tag start does the session exclude the validated suffix from native reads and seeks before publishing any stream information.
+An exact ID3v1-only suffix reuses that successfully scanned and restored native state while applying the new callback bound: native ID3v1 handling consumes the aligned tag wholesale, including any MPEG-looking body bytes.
+It does not reopen or repeat prefix lookahead; a rejected lookahead probe in the original prefix need not be repeated against the smaller input.
+Any APEv2 or Lyrics3v2 suffix still requires reopening, rescanning, and checked restoration to zero because its values can have contributed false frames to the first index.
+Without that boundary witness it retains the original native input and `Unknown`, rather than truncating a frame.
+For APEv2 and Lyrics3v2, after successful mandatory full-input preparation, the second scan recomputes native duration, gapless trimming, and the index for the selected audio extent.
+Bounded playback then excludes recognized tags from native resynchronization and prevents binary tag values from being decoded as false MPEG frames; it does not rescue a failure of the initial mandatory scan.
+Files without a recognized suffix also reuse the first scan.
+
+The [shared APE envelope reader](../../../lib/media/file/mpeg/ApeTag.h) owns only candidate footer/header size geometry.
+Media payload selection retains its existing admission policy for persisted identities; the decoder separately owns the stricter version, descriptor/item, aggregate-size, and tag-chain checks and the native boundary witness.
+A media envelope error remains `CorruptData`, whereas an unsupported optional decoder tail retains native input and `Unknown`; sharing geometry does not equate those outcomes.
+
+Bytes before the first index offset are an initial native prefix exemption.
+Coverage does not inspect that prefix and does not treat it as a gap.
+The exemption includes leading tags and Xing or Info headers the native decoder accepted and left out of the index.
+It does not authenticate those bytes.
+Standard and joint stereo may alternate; both use the same FL/FR mask.
+A layer change that preserves rate, channel count, and precision does not break coverage.
+
+This coverage is not corruption-free audio and not file authenticity.
+It does not inspect frame payloads, CRC, or sample integrity, and a published mask is not a judgment that the file or its audio is uncorrupted.
+
+Dual-channel or any other mixed role, a gap or resynchronization, an incomplete header, free-format or any other unknown bitrate, or unsupported trailing data withholds identity and keeps native admission.
+This does not make arbitrary malformed tails playable or suppress native decode errors.
+Withholding identity alone does not reject open; mandatory native preparation, geometry, and decode failures remain errors.
+A same-count stereo/dual mixture therefore plays entirely as that initial unknown identity.
+A later uniform stretch is never promoted on read or seek.
+
+Before a decoded frame's PCM is returned, its rate, channel count, and precision are compared with the published geometry.
+A mismatch is terminal `NotSupported`: the frame contributes no PCM, published `streamInfo()` is unchanged, and the output adapter is not reconfigured.
+Repeated reads preserve the error.
+Flush does not clear it or rewrite identity.
+A successful seek clears the error, and the next read revalidates the target before returning its PCM.
+Later frames with intact geometry are accepted, including after an earlier geometry rejection.
+When the published mask identifies a role, a decoded frame whose role contradicts that mask is likewise refused before its PCM is returned.
+Standard and joint stereo are not a contradiction.
+When the published mask is zero, a same-count standard, joint, or dual frame is neither a contradiction nor a promotion.
+
 ### PCM encoding
 
 `SampleEncoding` identifies the exact little-endian bytes exchanged with a backend.
@@ -340,6 +430,8 @@ Changing enum membership, byte layout, candidate order, field meaning, or helper
 - [`FlacMetadataInitializationTest.cpp`](../../../test/audio/FlacMetadataInitializationTest.cpp) covers required-STREAMINFO initialization diagnostics and valid metadata/prefix controls, independently of optional identity inspection.
 - [`FlacWavMaskCompatibilityTest.cpp`](../../../test/audio/FlacWavMaskCompatibilityTest.cpp) locks format-specific WAV/FLAC identity using retained reference-encoder output bytes and independently authored PCM, including trimmed WAV identity versus unknown FLAC for excess masks; it does not run an encoder during the test.
 - [`AlacDecoderChannelLayoutTest.cpp`](../../../test/audio/AlacDecoderChannelLayoutTest.cpp) covers ALAC source/output identity and byte-preserving slot normalization before adaptation; optional metadata and transition coverage are listed in the [decoder test map](decoder-session.md#test-map).
+- [`Mp3DecoderChannelLayoutTest.cpp`](../../../test/audio/Mp3DecoderChannelLayoutTest.cpp) is the channel-layout test authority for uniform MP3 mono and stereo/joint identities, dual and mixed-role withholding, same-count stereo/dual unknown admission without later promotion, output adaptation, and refusal of geometry changes before contradictory PCM.
+- [`Mp3DecoderTrailingTagTest.cpp`](../../../test/audio/Mp3DecoderTrailingTagTest.cpp) covers bounded trailing-tag framing, transactional withholding, payload-marker overlap, and exact PCM/seek/EOF preservation across the native input boundary.
 - [`CoreAudioChannelLayoutTest.cpp`](../../../test/audio/backend/detail/CoreAudioChannelLayoutTest.cpp) locks bounded AUHAL observations, canonical/native separation, exact storage permutations, and immutable-plan refresh.
 - [`CoreAudioBackendTest.cpp`](../../../test/audio/backend/CoreAudioBackendTest.cpp) retains the device-free refusal and prewarm controls; [`CoreAudioBackendNativeTest.cpp`](../../../test/audio/backend/CoreAudioBackendNativeTest.cpp) owns the native open and lifetime controls against a live Core Audio output, and [`CoreAudioBackendNativeFatalProbeTest.cpp`](../../../test/audio/backend/CoreAudioBackendNativeFatalProbeTest.cpp) owns the callback-origin fatal reentry probes.
 

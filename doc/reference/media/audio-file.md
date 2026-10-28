@@ -199,7 +199,7 @@ A Vorbis comment named `CUESHEET` is copied as text and visited through `cueShee
 |---|---|
 | FLAC | All bytes after the final metadata block. |
 | MP4 | Payload of the single non-empty top-level `mdat`, after its compact or extended header; a size `0` `mdat` extends to end of file. Multiple `mdat` atoms are rejected. |
-| MP3 | From the first confirmed MPEG frame through the bytes before validated trailing ID3v1/APEv2. A valid leading ID3v2 envelope is excluded. |
+| MP3 | From the first confirmed MPEG frame through the trailing-tag boundary; a valid leading ID3v2 envelope is excluded. A `TAG` marker at the historical end-of-file-minus-128 position remains payload only inside a complete contiguous frame chain that reaches the APE-trimmed end; otherwise the 128-byte tag is trimmed. The [media file reading specification](../../system/media/file-reading.md#mpeg-audio-and-id3) owns the chain walk, its terminal tolerance, and its byte-only limitations. |
 | WAV | RIFF `data` chunk payload. |
 | Opus | From the start of the first audio page through the end of the file, excluding the identification and tag pages. |
 
@@ -220,6 +220,7 @@ The range excludes known tag and non-audio container regions but does not decode
 ## Compatibility and versioning
 
 Adding an extension requires the single dispatch entry plus parser, scan, payload, and identity tests. Adding a second Ogg codec additionally requires deciding how `.ogg` selects a reader, because that extension does not name one. Changing a field mapping requires this reference and matching fixtures to change together. Changing an encoded payload boundary changes persisted identity semantics and requires a database version increment or an explicitly specified compatible re-index policy.
+The [file-reading compatibility contract](../../system/media/file-reading.md#persistence-and-versioning) specifies regeneration of development-era MPEG identities affected by ID3v1 trailing-tag payload defects: both shortened identities that trimmed frame bytes and tag-contaminated identities that retained a genuine tag.
 
 ## Implementation authority
 

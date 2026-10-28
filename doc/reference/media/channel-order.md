@@ -5,7 +5,7 @@ id: media.channel-order
 
 ## Scope
 
-This reference records WAVE speaker order, WAV compatibility sets, the narrower FLAC format defaults, bounded ALAC channel declarations, and current Opus slot normalization.
+This reference records WAVE speaker order, WAV compatibility sets, the narrower FLAC format defaults, bounded ALAC channel declarations, uniform MP3 frame-mode identities, and current Opus slot normalization.
 [PCM source interpretation](../../system/playback/pcm-format.md) owns their playback applicability; slot conventions alone do not establish published source identity or native delivery.
 
 ## WAVE speaker positions
@@ -110,6 +110,18 @@ libFLAC already returns logical decoded slots; the session adds no PCM reorder.
 The [owning PCM policy](../../system/playback/pcm-format.md#flac-source-interpretation) defines comment parsing, duplicate resolution, best-effort admission, and the distinction from FLAC validity and streamable-subset membership.
 Unknown playback does not certify intended speaker roles or native routing; numerical bit-perfectness is independent of channel confidence.
 None of these source identities proves native delivery or physical wiring.
+
+## MP3
+
+The [mpg123 frame information API](https://www.mpg123.de/api/group__mpg123__status.shtml) distinguishes single-channel, standard stereo, joint stereo, and dual-channel modes.
+Only single-channel mode has one channel; all three other modes return two.
+When the bounded source policy establishes uniform roles, single-channel mode is canonical FC (`0x4`).
+A uniform standard/joint stream, including standard and joint stereo alternating, is FL/FR (`0x3`), with no slot permutation.
+Dual-channel carries independent programs, not an assigned left/right pair, so its slots remain unpositioned and ordered as returned by mpg123.
+These slots are not count-derived defaults, and they are not assigned from one frame.
+Missing initial native frame information fails open; it does not select an unassigned or stereo fallback.
+The [MP3 source policy](../../system/playback/pcm-format.md#mp3-source-interpretation) owns complete native-index header coverage, bounded trailing-tag framing and boundary validation, the initial native prefix exemption, withholding, and midstream stability.
+Coverage does not establish corruption-free audio or file authenticity, and these software identities do not prove native delivery or physical wiring.
 
 ## Opus
 
