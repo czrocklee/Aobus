@@ -3439,6 +3439,7 @@ class CliParseTest(unittest.TestCase):
             winui_dir,
             Path("C:/llvm/bin/clang-cl.exe"),
             required_translation_units=(selected[0],),
+            jobs=args.jobs,
         )
 
     def test_winui_tidy_no_build_skips_the_context_build_but_still_queries(self):
@@ -3473,6 +3474,7 @@ class CliParseTest(unittest.TestCase):
             winui_dir,
             Path("C:/llvm/bin/clang-cl.exe"),
             required_translation_units=(selected[0],),
+            jobs=args.jobs,
         )
 
     def test_winui_tidy_does_not_query_compile_commands_after_a_failed_context_build(self):

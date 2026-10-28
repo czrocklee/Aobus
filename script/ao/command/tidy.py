@@ -560,16 +560,12 @@ def missing_explicit_files(files: list[str]) -> list[str]:
 
 def is_winui_path(path: Path) -> bool:
     """Return whether a selected file belongs to the WinUI frontend."""
-    try:
-        absolute_path(path).relative_to(absolute_path(WINUI_ROOT))
-    except ValueError:
-        return False
-    return True
+    return winuitidy.is_winui_path(path, winui_root=WINUI_ROOT)
 
 
 def requires_winui_compile_context(path: Path) -> bool:
     """Return whether a file is compiled only by the native WinUI project graph."""
-    return is_winui_path(path) or winuitidy.requires_winui_compile_context(path)
+    return winuitidy.requires_winui_compile_context(path)
 
 
 def limits_diagnostics_to_selected_path(invocation: TidyInvocation) -> bool:
@@ -645,7 +641,7 @@ def prepare_winui_compile_commands(
                 ),
                 [build.WINUI_LINT_CONTEXT_TARGET],
             )
-        return winuitidy.compile_commands(winui_dir, clang_cl, required_translation_units=required)
+        return winuitidy.compile_commands(winui_dir, clang_cl, required_translation_units=required, jobs=args.jobs)
 
 
 def write_windows_header_preamble(destination: Path) -> Path:
