@@ -333,7 +333,20 @@ The temporary Windows database merges two native trees.
 `windows-tidy` owns shared code, TUI, and CLI; the Visual Studio `windows-winui` tree owns WinUI and generated C++/WinRT headers.
 When WinUI is in scope, the portal configures the same Visual Studio tree used by `ao.bat check` and builds its Debug `aobus-winui-lint-context` target.
 This target generates native IDL/C++/WinRT projections and both XAML passes for the library and probe contexts without compiling or linking the application, executing probes, or deploying resources.
-The portal then asks MSBuild `GetCompileCommands` for exact compiler state, validates every selected translation unit, excludes generated translation units outside the repository, and merges the commands.
+The current `CMAKE_PROJECT_NAME` and `CMAKE_GENERATOR` select the WinUI solution: Visual Studio 18 uses `.slnx`, while supported legacy Visual Studio 14–17 generators use `.sln`.
+A retained alternate format is ignored; a missing chosen format or unknown generator fails with a regeneration hint, never a stale-format fallback.
+Obsolete project files left by reconfiguration are ignored without deletion.
+Under the build-tree lock, MSBuild evaluates their Debug|x64 `ClCompile` items, including `ExcludedFromBuild`; this is Debug replay ownership, not an all-configuration inventory.
+An unmapped active test source, a stale admission entry, or a selected project that does not compile its source in Debug fails closed.
+A support translation unit may belong to several probes; the map still selects one actual Debug owner rather than admitting all projects.
+When adding a WinUI test translation unit or executable, reconcile its evaluated Debug `ClCompile` membership with `_AUXILIARY_SOURCE_PROJECTS` in `script/ao/core/winuitidy.py`.
+Every active Debug test translation unit outside `app/windows-winui/` needs an entry selecting one real owning project; a new executable using only existing admitted test sources or sources inside `app/windows-winui/` does not by itself need another entry.
+Windows comparisons ignore path case; POSIX comparisons remain exact, and only owned compiler views are mapped to portal paths.
+Each current WinUI project is queried once per extraction: selected replay projects combine `-getItem:ClCompile` with `GetCompileCommands`, while other projects supply only the ownership inventory.
+Metadata queries use at most the caller's `--jobs` width; all workers finish under the build-tree lock before results or failures are published in inventory order.
+A pure snapshot validator reuses the command-scoped results to validate ownership.
+Extraction checks every selected translation unit, excludes generated translation units outside the repository, and supplies exact compiler state without changing compiler path spellings.
+Authoritative roots and candidates use the same normalized, owned-view-aware comparison keys; no alias state is cached across commands.
 Generation failures stop analysis; a prior full product build is not required.
 `--no-build` skips configuration and generation and requires an existing configured and generated tree.
 With `-p` or `BUILD_DIR`, the companion appends `-winui`; default names remain `windows-tidy` and `windows-winui`.

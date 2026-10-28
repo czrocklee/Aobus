@@ -61,6 +61,25 @@ class BuildEnvTest(unittest.TestCase):
                 self.assertFalse(buildenv.requires_build_env("test", arguments))
             self.assertTrue(buildenv.requires_build_env("test", ["--all"]))
 
+    def test_native_preflight_does_not_import_managed_documentation_dependencies(self):
+        environment = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[2] / "script")}
+        for arguments, expected in (
+            (["build", "--target", "ao_utility"], "1"),
+            (["docs", "check"], "0"),
+            (["--python-tools", "docs", "check"], "1"),
+            (["--python-tools", "build", "--target", "ao_utility"], "0"),
+        ):
+            with self.subTest(arguments=arguments):
+                result = subprocess.run(
+                    [sys.executable, "-S", "-m", "ao.core.buildenv", *arguments],
+                    env=environment,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout.strip(), expected)
+
     def test_help_needs_neither_cpp_nor_managed_python_tools(self):
         for module in COMMAND_MODULES:
             for flag in ("-h", "--help"):

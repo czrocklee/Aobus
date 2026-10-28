@@ -3,11 +3,10 @@
 import argparse
 import sys
 
-from ..core import doccheck
-
 HELP = "Check documentation links, reachability, and semantic references"
 NAME = "docs"
 REQUIRES_BUILD_ENV = False
+REQUIRES_PYTHON_TOOLS = True
 
 
 def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
@@ -21,6 +20,9 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
 
 
 def run_check(_args: argparse.Namespace) -> int:
+    # Native preflight imports every command before selecting managed packages.
+    from ..core import doccheck
+
     issues = doccheck.check_tree()
     for issue in issues:
         print(issue.format(), file=sys.stderr)

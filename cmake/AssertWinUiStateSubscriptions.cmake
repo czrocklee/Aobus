@@ -8,8 +8,15 @@
 # vector would split registration from component lifetime and make generation
 # publication responsible for synchronizing a second object graph.
 
-if(NOT ROOT)
+if(NOT DEFINED ROOT OR "${ROOT}" STREQUAL "")
   message(FATAL_ERROR "AssertWinUiStateSubscriptions: ROOT not specified")
+endif()
+if(NOT IS_ABSOLUTE "${ROOT}")
+  set(ROOT "${CMAKE_CURRENT_SOURCE_DIR}/${ROOT}")
+endif()
+if(NOT IS_DIRECTORY "${ROOT}")
+  message(FATAL_ERROR
+          "AssertWinUiStateSubscriptions: ROOT is not a directory: ${ROOT}")
 endif()
 
 set(_ao_forbidden_identifiers

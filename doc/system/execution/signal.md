@@ -74,7 +74,7 @@ Calling an owner-affine operation, including subscription disconnection or a pos
 
 Signals are therefore for notification only.
 A mandatory single-consumer replication phase is a different topology, not an exception protocol; [library change
-publication](../library/runtime/change-publication.md) uses a named ordinary replica callable inside its own
+publication](../library/change-publication.md) uses a named ordinary replica callable inside its own
 non-throwing delivery boundary.
 
 The primitive has no cancellation state.

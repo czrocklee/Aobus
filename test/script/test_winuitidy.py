@@ -1,10 +1,15 @@
 """Tests for extracting WinUI compile commands from MSBuild."""
 
+import contextlib
+import io
 import json
+import ntpath
 import platform
+import posixpath
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 from phase_support import PhaseRecorder as _PhaseRecorder
@@ -12,15 +17,25 @@ from phase_support import PhaseRecorder as _PhaseRecorder
 from ao.core import winuitidy
 
 
+def current_fixture_projects(build_dir):
+    return sorted((build_dir / "app/windows-winui").glob("*.vcxproj"))
+
+
 class WinUiCompileCommandsTest(unittest.TestCase):
     def setUp(self) -> None:
         captured_host = platform.system()
         # platform.system() may invoke Windows "ver" through subprocess.run.
-        self.enterContext(mock.patch("ao.core.workspace_cache.platform.system", return_value=captured_host))
+        self.enterContext(
+            mock.patch.object(winuitidy.workspace_cache, "platform", SimpleNamespace(system=lambda: captured_host))
+        )
+        self.verify_projects = self.enterContext(mock.patch.object(winuitidy, "verify_auxiliary_source_projects"))
+        self.enterContext(
+            mock.patch.object(winuitidy, "_configured_winui_projects", side_effect=current_fixture_projects)
+        )
 
     def test_expands_repository_owned_msbuild_groups(self):
         with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
+            root = Path(temp_dir).resolve()
             source_root = root / "repo"
             build_dir = root / "build"
             generator = root / "vs"
@@ -62,6 +77,11 @@ class WinUiCompileCommandsTest(unittest.TestCase):
                             required_translation_units=(second,),
                         )
 
+            self.verify_projects.assert_called_once()
+            self.assertEqual(self.verify_projects.call_args.args, (build_dir,))
+            self.assertEqual(set(self.verify_projects.call_args.kwargs["evaluated_projects"]), {project})
+            self.assertEqual(run.call_count, 1)
+            self.assertIn("-getItem:ClCompile", run.call_args.args[0])
             self.assertEqual([Path(entry["file"]) for entry in commands], [first, second])
             self.assertTrue(all(str(clang_cl) in str(entry["command"]) for entry in commands))
             self.assertTrue(all("/DWINUI" in str(entry["command"]) for entry in commands))
@@ -72,7 +92,7 @@ class WinUiCompileCommandsTest(unittest.TestCase):
 
     def test_fixed_view_commands_keep_compiler_paths_and_match_physical_owners(self):
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             source = root / "repo"
             view = root / "fixed-source"
             build = root / "build"
@@ -143,7 +163,7 @@ class WinUiCompileCommandsTest(unittest.TestCase):
 
     def test_indexes_header_companions_from_the_winui_include_graph(self):
         with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir) / "repo"
+            root = Path(temp_dir).resolve() / "repo"
             winui_root = root / "app" / "windows-winui"
             source = winui_root / "layout" / "ShellBuilder.cpp"
             bridge = winui_root / "layout" / "ShellBuilder.h"
@@ -167,7 +187,7 @@ class WinUiCompileCommandsTest(unittest.TestCase):
 
     def test_unreachable_header_is_left_for_normal_coverage_handling(self):
         with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir) / "repo"
+            root = Path(temp_dir).resolve() / "repo"
             winui_root = root / "app" / "windows-winui"
             source = winui_root / "App.xaml.cpp"
             header = winui_root / "layout" / "runtime" / "Unused.h"
@@ -187,7 +207,7 @@ class WinUiCompileCommandsTest(unittest.TestCase):
 
     def test_missing_required_translation_unit_fails_closed(self):
         with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
+            root = Path(temp_dir).resolve()
             source_root = root / "repo"
             build_dir = root / "build"
             generator = root / "vs"
@@ -237,7 +257,7 @@ class WinUiCompileCommandsTest(unittest.TestCase):
 
     def test_declared_auxiliary_support_header_uses_its_native_translation_unit(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             source = root / "test/winui/probe/WinUiSilentAudio.cpp"
             header = source.with_suffix(".h")
             source.parent.mkdir(parents=True)
@@ -258,7 +278,7 @@ class WinUiCompileCommandsTest(unittest.TestCase):
 
     def test_extracts_required_auxiliary_sources_from_their_own_projects(self):
         with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
+            root = Path(temp_dir).resolve()
             source_root = root / "repo"
             build_dir = root / "build"
             generator = root / "vs"
@@ -415,10 +435,16 @@ class WinUiCompileCommandsTest(unittest.TestCase):
 class WinUiCompileCommandsPhaseTest(unittest.TestCase):
     def setUp(self) -> None:
         captured_host = platform.system()
-        self.enterContext(mock.patch("ao.core.workspace_cache.platform.system", return_value=captured_host))
+        self.enterContext(
+            mock.patch.object(winuitidy.workspace_cache, "platform", SimpleNamespace(system=lambda: captured_host))
+        )
+        self.enterContext(mock.patch.object(winuitidy, "verify_auxiliary_source_projects"))
+        self.enterContext(
+            mock.patch.object(winuitidy, "_configured_winui_projects", side_effect=current_fixture_projects)
+        )
 
     def _query_fixture(self, temp_dir: str) -> tuple:
-        root = Path(temp_dir)
+        root = Path(temp_dir).resolve()
         source_root = root / "repo"
         build_dir = root / "build"
         generator = root / "vs"
@@ -455,6 +481,134 @@ class WinUiCompileCommandsPhaseTest(unittest.TestCase):
 
         return root, source_root, build_dir, clang_cl, main_source, probe_source, payload
 
+    def test_case_variant_selection_queries_every_declared_native_project_and_preserves_compiler_paths(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            _, source, build, clang, main, _, payload = self._query_fixture(temp_dir)
+            compiler_main = source / "APP/WINDOWS-WINUI/App.xaml.cpp"
+            compiler_main.parent.mkdir(parents=True, exist_ok=True)
+            compiler_main.touch()
+            by_project = {}
+            required = []
+            for relative, project in winuitidy._AUXILIARY_SOURCE_PROJECTS.items():
+                compiler_source = source / relative
+                compiler_source.parent.mkdir(parents=True, exist_ok=True)
+                compiler_source.touch()
+                required.append(source / relative.upper())
+                by_project.setdefault(build / project, []).append(compiler_source)
+                (build / project).touch()
+            unknown = source / "TEST/WINUI/PROBE/Unknown.cpp"
+            unknown.parent.mkdir(parents=True, exist_ok=True)
+            unknown.touch()
+            ordered_projects = sorted(by_project, key=lambda path: str(path).lower())
+            results = [payload(compiler_main)]
+            for project in ordered_projects:
+                results.append(payload(";".join(map(str, [*by_project[project], unknown, main]))))
+            with (
+                mock.patch.object(winuitidy, "PROJECT_ROOT", source),
+                mock.patch.object(winuitidy, "_WINUI_ROOT", main.parent),
+                mock.patch.object(winuitidy, "os", SimpleNamespace(path=ntpath)),
+                mock.patch.object(
+                    winuitidy,
+                    "_AUXILIARY_SOURCE_PROJECTS",
+                    {ntpath.normcase(k).replace("\\", "/"): v for k, v in winuitidy._AUXILIARY_SOURCE_PROJECTS.items()},
+                ),
+                mock.patch.object(winuitidy.subprocess, "run", side_effect=results) as run,
+            ):
+                commands = winuitidy.compile_commands(build, clang, required_translation_units=tuple(required))
+            expected = [compiler_main, *(path for project in ordered_projects for path in by_project[project])]
+            self.assertEqual([Path(command["file"]) for command in commands], expected)
+            self.assertEqual([Path(call.args[0][1]) for call in run.call_args_list[1:]], ordered_projects)
+            for command, path in zip(commands, expected, strict=True):
+                self.assertTrue(command["command"].endswith(f'"{path}"'))
+
+    def test_posix_case_variant_and_unknown_auxiliary_requests_fail_without_querying_extra_projects(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            _, source, build, clang, main, _probe, payload = self._query_fixture(temp_dir)
+            for path_module, required in (
+                (posixpath, source / "TEST/HELPER/WINUILOCALIZATIONPROBE.CPP"),
+                (ntpath, source / "test/helper/Unknown.cpp"),
+                (ntpath, source.parent / "alias/test/helper/WinUiLocalizationProbe.cpp"),
+            ):
+                with (
+                    self.subTest(required=required, platform=path_module.__name__),
+                    mock.patch.object(winuitidy, "PROJECT_ROOT", source),
+                    mock.patch.object(winuitidy, "_WINUI_ROOT", main.parent),
+                    mock.patch.object(winuitidy, "os", SimpleNamespace(path=path_module)),
+                    mock.patch.object(winuitidy.subprocess, "run", return_value=payload(main)) as run,
+                    contextlib.redirect_stderr(io.StringIO()),
+                    self.assertRaises(SystemExit),
+                ):
+                    winuitidy.compile_commands(build, clang, required_translation_units=(required,))
+                self.assertEqual(run.call_count, 2)
+                self.assertIn("-getItem:ClCompile", run.call_args_list[1].args[0])
+                self.assertNotIn("-getTargetResult:GetCompileCommands", run.call_args_list[1].args[0])
+
+    def test_context_admission_uses_platform_case_rules_without_admitting_unknowns_or_aliases(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source = Path(temp_dir).resolve() / "repo"
+            with (
+                mock.patch.object(winuitidy, "PROJECT_ROOT", source),
+                mock.patch.object(winuitidy, "_WINUI_ROOT", source / "app/windows-winui"),
+            ):
+                for path_module, variant_admitted in ((ntpath, True), (posixpath, False)):
+                    with (
+                        mock.patch.object(winuitidy, "os", SimpleNamespace(path=path_module)),
+                        mock.patch.object(
+                            winuitidy,
+                            "_AUXILIARY_SOURCE_PROJECTS",
+                            {
+                                path_module.normcase(k).replace("\\", "/"): v
+                                for k, v in winuitidy._AUXILIARY_SOURCE_PROJECTS.items()
+                            },
+                        ),
+                    ):
+                        for relative in winuitidy._AUXILIARY_SOURCE_PROJECTS:
+                            for spelling in (relative, str(Path(relative).with_suffix(".h"))):
+                                self.assertTrue(winuitidy.requires_winui_compile_context(source / spelling))
+                                self.assertEqual(
+                                    winuitidy.requires_winui_compile_context(source / spelling.upper()),
+                                    variant_admitted,
+                                )
+                        self.assertEqual(
+                            winuitidy.requires_winui_compile_context(source / "APP/WINDOWS-WINUI/Actual.cpp"),
+                            variant_admitted,
+                        )
+                        self.assertEqual(
+                            winuitidy.requires_winui_compile_context(
+                                source.parent / "REPO/APP/WINDOWS-WINUI/Actual.cpp"
+                            ),
+                            variant_admitted,
+                        )
+                        for rejected in (
+                            source / "test/helper/Unknown.cpp",
+                            source / "te\u017ft/helper/WinUiLocalizationProbe.cpp",
+                            source / "app/windows-winui-other/Unknown.cpp",
+                            source.parent / "alias/test/helper/WinUiLocalizationProbe.cpp",
+                            source.parent / "alias/app/windows-winui/App.cpp",
+                        ):
+                            self.assertFalse(winuitidy.requires_winui_compile_context(rejected))
+
+    def test_context_admission_normalizes_authoritative_roots_and_candidate_once(self):
+        root = winuitidy.PROJECT_ROOT
+        real = winuitidy.workspace_cache.canonical_portal_path
+        candidates = (
+            root / "app/windows-winui/App.cpp",
+            root / "src/Ordinary.cpp",
+            root / "test/helper/Unknown.cpp",
+            root / "test/helper/WinUiLocalizationProbe.cpp",
+            root / "test/helper/WinUiLocalizationProbe.h",
+            root.parent / "foreign/test/helper/WinUiLocalizationProbe.cpp",
+        )
+        for candidate in candidates:
+            with (
+                self.subTest(candidate=candidate),
+                mock.patch.object(winuitidy.workspace_cache, "canonical_portal_path", wraps=real) as canonical,
+            ):
+                winuitidy.requires_winui_compile_context(candidate)
+            self.assertEqual(
+                [call.args[0] for call in canonical.call_args_list], [root, winuitidy._WINUI_ROOT, candidate]
+            )
+
     def test_msbuild_query_is_one_aggregated_record(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             (
@@ -487,7 +641,7 @@ class WinUiCompileCommandsPhaseTest(unittest.TestCase):
             self.assertEqual([Path(entry["file"]) for entry in commands], [main_source, probe_source])
             self.assertEqual(
                 recorder.records,
-                [{"name": "compile-commands", "tree": "winui", "count": 2, "status": 0}],
+                [{"name": "compile-commands", "tree": "winui", "jobs": 1, "count": 2, "status": 0}],
             )
 
     def test_msbuild_query_records_the_actual_failure_status(self):
@@ -515,5 +669,5 @@ class WinUiCompileCommandsPhaseTest(unittest.TestCase):
 
             self.assertEqual(
                 recorder.records,
-                [{"name": "compile-commands", "tree": "winui", "count": 1, "status": 3}],
+                [{"name": "compile-commands", "tree": "winui", "jobs": 1, "count": 2, "status": 3}],
             )

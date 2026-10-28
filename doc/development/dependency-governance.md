@@ -37,8 +37,8 @@ Use the owner for the question being asked:
 | vcpkg ports, features, and exact overrides | `vcpkg.json` |
 | macOS compiler, deployment target, and vcpkg tool archive | `script/ao/macos-toolchain.json` |
 | WinUI NuGet closure and trusted source | `app/windows-winui/packages.config`, `app/windows-winui/NuGet.Config` |
-| Python, Ruff, and mypy policy | `script/ao/toolchain.json` |
-| Accepted native Python artifacts | `script/ao/windows-requirements.txt`, `script/ao/macos-requirements.txt` |
+| Python, Ruff, mypy, and documentation-parser policy | `script/ao/toolchain.json` |
+| Accepted Python tooling and documentation-parser artifacts | `script/ao/docs-requirements.txt`, `script/ao/windows-requirements.txt`, `script/ao/macos-requirements.txt` |
 | Configured native resolution | `<build>/aobus-dependencies.json`, verified by `./ao deps report` or `./ao deps verify` |
 
 Do not copy a current version from this guide. Read the owning file or a verified
@@ -178,6 +178,16 @@ The native requirements files are artifact locks with hashes, not alternative
 policy files. Ruff's target version and mypy's `python_version` in
 `pyproject.toml` describe supported language syntax; they need not equal the
 managed interpreter's patch release.
+
+The documentation parser follows the same split: `script/ao/toolchain.json`
+pins the exact markdown-it-py and mdurl versions, and
+`script/ao/docs-requirements.txt` is their shared hash-verified artifact lock.
+The native requirement locks include that file with a pip `-r` line, so the
+native bootstrap installs the same accepted parser wheels, and the CI
+documentation job installs the shared lock directly before
+`python -m ao docs check`. The managed-environment fingerprint covers the
+included lock, so a changed or missing parser pin rebuilds the native
+environment instead of reusing a stale one.
 
 ## Enforcement
 

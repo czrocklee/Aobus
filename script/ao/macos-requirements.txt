@@ -1,3 +1,4 @@
+-r docs-requirements.txt
 ast-serialize==0.6.0 \
     --hash=sha256:093cb8bb91b720d8523580498d031791bb1bbaa048599c3d21085d380e11a596 \
     --hash=sha256:e61580a69faf47e3689795367ed211f2a10fd741478cc0f36a0f128793360aad

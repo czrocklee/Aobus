@@ -13,17 +13,18 @@
 
 include("${CMAKE_CURRENT_LIST_DIR}/AoSourceCode.cmake")
 
-if(NOT PUBLIC_ROOT)
-  message(FATAL_ERROR "AssertUimodelFrontendNeutrality: PUBLIC_ROOT not specified")
-endif()
-
-if(NOT SOURCE_ROOT)
-  message(FATAL_ERROR "AssertUimodelFrontendNeutrality: SOURCE_ROOT not specified")
-endif()
-
-if(NOT TEST_ROOT)
-  message(FATAL_ERROR "AssertUimodelFrontendNeutrality: TEST_ROOT not specified")
-endif()
+foreach(_root_name IN ITEMS PUBLIC_ROOT SOURCE_ROOT TEST_ROOT)
+  if(NOT DEFINED ${_root_name} OR "${${_root_name}}" STREQUAL "")
+    message(FATAL_ERROR "AssertUimodelFrontendNeutrality: ${_root_name} not specified")
+  endif()
+  if(NOT IS_ABSOLUTE "${${_root_name}}")
+    set(${_root_name} "${CMAKE_CURRENT_SOURCE_DIR}/${${_root_name}}")
+  endif()
+  if(NOT IS_DIRECTORY "${${_root_name}}")
+    message(FATAL_ERROR
+            "AssertUimodelFrontendNeutrality: ${_root_name} is not a directory: ${${_root_name}}")
+  endif()
+endforeach()
 
 # Each frontend Aobus ships, spelled as it would appear at the head of a name.
 set(_ao_frontend_name_regex "^(Windows|WinUi|WinUI|Gtk|GTK|Linux|Tui|Cli|Cocoa|AppKit|Qt)([._A-Z0-9]|$)")
@@ -35,11 +36,6 @@ set(_ao_frontend_name_regex "^(Windows|WinUi|WinUI|Gtk|GTK|Linux|Tui|Cli|Cocoa|A
 set(_ao_frontend_vocabulary_regex "(winrt::|Xaml|gtkmm|Gtk::|Gdk::|Glib::|Gio::|Pango::|Cairo::|ftxui::|ftxui/|#[ \t]*(include|import)[ \t]*[<\"](AppKit|Cocoa|Foundation|CoreGraphics)/|@[ \t]*import[ \t]+(AppKit|Cocoa|Foundation|CoreGraphics)[ \t]*([.]|;)|(^|[^A-Za-z0-9_])((NS|CG)[A-Z_]|kCG[A-Z])[A-Za-z0-9_]*)")
 
 function(_ao_assert_frontend_neutral root label)
-  if(NOT IS_DIRECTORY "${root}")
-    message(FATAL_ERROR
-            "AssertUimodelFrontendNeutrality: ${label} root is not a directory: ${root}")
-  endif()
-
   file(GLOB_RECURSE _files LIST_DIRECTORIES false
        "${root}/*.h"
        "${root}/*.hpp"

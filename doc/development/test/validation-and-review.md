@@ -177,9 +177,12 @@ The documentation gate includes naming vocabulary and referenced lint-check
 contracts, so prose changes cannot bypass their semantic validation.
 The ignored local `doc/plan/` tree remains outside documentation discovery;
 its path classification does not make it a supported tracked-document location.
-The documentation job prepares only the Python version from
-`script/ao/toolchain.json` and invokes `python -m ao docs check` with
-`PYTHONPATH=script`; it does not enter the C++ Nix development environment.
+The documentation job prepares the Python version from
+`script/ao/toolchain.json`, installs the hash-locked documentation parser from
+`script/ao/docs-requirements.txt` with `--require-hashes`,
+`--only-binary=:all:`, and `--no-deps`, and invokes `python -m ao docs check`
+with `PYTHONPATH=script`; it does not enter the C++ Nix development
+environment.
 Unknown paths, script or workflow changes, empty comparisons, and manual
 `workflow_dispatch` runs select the full native matrix.
 Renames are compared as deletion plus addition so moving code into a Markdown

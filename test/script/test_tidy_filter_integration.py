@@ -155,6 +155,8 @@ class TidyFilterIntegrationTest(unittest.TestCase):
             # Supply a tiny native context, not fake checker output or filter behavior.
             stack.enter_context(mock.patch.object(tidy, "PROJECT_ROOT", self.source))
             stack.enter_context(mock.patch.object(tidy, "WINUI_ROOT", self.source / "app" / "windows-winui"))
+            stack.enter_context(mock.patch.object(tidy.winuitidy, "PROJECT_ROOT", self.source))
+            stack.enter_context(mock.patch.object(tidy.winuitidy, "_WINUI_ROOT", self.source / "app/windows-winui"))
             stack.enter_context(mock.patch.object(tidy, "prepare_toolchain", return_value=self.toolchain))
             stack.enter_context(mock.patch.object(tidyengine, "compile_command_plan", side_effect=plan_context))
             stack.enter_context(

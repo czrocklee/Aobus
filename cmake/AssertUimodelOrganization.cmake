@@ -3,17 +3,18 @@
 #
 # Guards the UIModel namespace and final folder layout rules.
 
-if(NOT PUBLIC_ROOT)
-  message(FATAL_ERROR "AssertUimodelOrganization: PUBLIC_ROOT not specified")
-endif()
-
-if(NOT SOURCE_ROOT)
-  message(FATAL_ERROR "AssertUimodelOrganization: SOURCE_ROOT not specified")
-endif()
-
-if(NOT TEST_ROOT)
-  message(FATAL_ERROR "AssertUimodelOrganization: TEST_ROOT not specified")
-endif()
+foreach(_root_name IN ITEMS PUBLIC_ROOT SOURCE_ROOT TEST_ROOT)
+  if(NOT DEFINED ${_root_name} OR "${${_root_name}}" STREQUAL "")
+    message(FATAL_ERROR "AssertUimodelOrganization: ${_root_name} not specified")
+  endif()
+  if(NOT IS_ABSOLUTE "${${_root_name}}")
+    set(${_root_name} "${CMAKE_CURRENT_SOURCE_DIR}/${${_root_name}}")
+  endif()
+  if(NOT IS_DIRECTORY "${${_root_name}}")
+    message(FATAL_ERROR
+            "AssertUimodelOrganization: ${_root_name} is not a directory: ${${_root_name}}")
+  endif()
+endforeach()
 
 set(_ao_uimodel_allowed_path_regex
     "^(FrameClock\\.h|field/[^/]+\\.(h|hpp|cpp)|input/[^/]+\\.(h|hpp|cpp)|preference/[^/]+\\.(h|hpp|cpp)|presentation/[^/]+\\.(h|hpp|cpp)|layout/(document|component|shell)/[^/]+\\.(h|hpp|cpp)|library/(list|presentation|track|detail|property|task)/[^/]+\\.(h|hpp|cpp)|playback/(command|now-playing|transport|seek|output|quality|soul)/[^/]+\\.(h|hpp|cpp)|status/activity/[^/]+\\.(h|hpp|cpp))$")
