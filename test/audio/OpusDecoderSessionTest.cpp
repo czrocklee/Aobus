@@ -33,21 +33,8 @@ namespace ao::audio::test
 {
   namespace
   {
-    // Every Opus fixture holds exactly one second of audio past its pre-skip.
+    // The mono/stereo fixtures used for exact-extent checks contain one audible second.
     constexpr std::uint64_t kFixtureFrames = 48000;
-
-    std::vector<std::uint8_t> toUnsignedBytes(std::span<std::byte const> bytes)
-    {
-      auto result = std::vector<std::uint8_t>{};
-      result.reserve(bytes.size());
-
-      for (auto const byte : bytes)
-      {
-        result.push_back(std::to_integer<std::uint8_t>(byte));
-      }
-
-      return result;
-    }
 
     void shiftFixtureAudioGranules(std::vector<std::uint8_t>& fileBytes, std::int64_t shift)
     {
@@ -98,9 +85,10 @@ namespace ao::audio::test
       auto const headRes = media::opus::parseHead(demuxerRes->packet(media::opus::kHeadPacketIndex).bytes);
       REQUIRE(headRes);
 
-      auto const headPacket = toUnsignedBytes(demuxerRes->packet(media::opus::kHeadPacketIndex).bytes);
-      auto const tagsPacket = toUnsignedBytes(demuxerRes->packet(media::opus::kTagsPacketIndex).bytes);
-      auto const audioPacket = toUnsignedBytes(demuxerRes->packet(media::opus::kFirstAudioPacketIndex).bytes);
+      auto const headPacket = ao::test::ogg::toUnsignedBytes(demuxerRes->packet(media::opus::kHeadPacketIndex).bytes);
+      auto const tagsPacket = ao::test::ogg::toUnsignedBytes(demuxerRes->packet(media::opus::kTagsPacketIndex).bytes);
+      auto const audioPacket =
+        ao::test::ogg::toUnsignedBytes(demuxerRes->packet(media::opus::kFirstAudioPacketIndex).bytes);
       auto const pages = std::array{
         ao::test::ogg::Page{.headerType = media::ogg::kBeginOfStreamFlag,
                             .granulePosition = 0,
@@ -117,7 +105,7 @@ namespace ao::audio::test
                             .lacingValues = ao::test::ogg::lacingFor({audioPacket.size()}),
                             .payload = audioPacket},
       };
-      return toUnsignedBytes(ao::test::ogg::makeStream(pages));
+      return ao::test::ogg::toUnsignedBytes(ao::test::ogg::makeStream(pages));
     }
 
     // Magnitude of one frequency in one channel of an interleaved 16-bit block,
@@ -372,8 +360,8 @@ namespace ao::audio::test
 
   TEST_CASE("OpusDecoderSession - presents family 1 channels in WAV speaker order")
   {
-    // libopus emits mapping family 1 in Vorbis channel order, while every PCM
-    // surface in Aobus is WAV speaker order and carries no layout metadata. The
+    // libopus emits mapping family 1 in Vorbis channel order, while every
+    // positioned PCM surface in Aobus follows WAV speaker order. The
     // fixture puts one tone on each speaker, so the decoded order is provable
     // rather than assumed. Vorbis order would place 300 Hz on channel 1 and
     // 900 Hz on channel 2, which is exactly what this catches.
@@ -437,5 +425,58 @@ namespace ao::audio::test
     auto const blockRes = decoder.readNextBlock();
     REQUIRE(blockRes);
     CHECK(blockRes->frames > 0);
+  }
+
+  TEST_CASE("OpusDecoderSession - a borrowed block stays byte-stable across seek and flush until the next read")
+  {
+    // A 500 ms seek at 48 kHz lands on frame 24000.
+    constexpr std::uint64_t kSeekTargetFrames = 24000;
+    constexpr std::uint8_t kSurroundChannels = 6;
+
+    // The surround fixture's six channels make the borrowed extent nontrivial;
+    // S16 and an adapted float output both borrow the same way.
+    auto const encodings = std::vector{
+      SampleEncoding::Signed16Le,
+      SampleEncoding::Float32Le,
+    };
+
+    for (std::size_t index = 0; index < encodings.size(); ++index)
+    {
+      CAPTURE(index);
+
+      auto decoderPtr =
+        ao::test::requireValue(OpusDecoderSession::open(requireAudioFixture("surround.opus"), encodings[index]));
+      auto& decoder = *decoderPtr;
+      REQUIRE(decoder.streamInfo().sourceFormat.channels == kSurroundChannels);
+
+      auto const blockRes = decoder.readNextBlock();
+      REQUIRE(blockRes);
+      CHECK(blockRes->firstFrameIndex == 0);
+      REQUIRE(blockRes->frames > 0);
+      REQUIRE_FALSE(blockRes->bytes.empty());
+
+      // The block's bytes alias decoder-owned memory, so this copy is the
+      // independent record every later view is compared against.
+      auto const borrowed = std::vector<std::byte>{blockRes->bytes.begin(), blockRes->bytes.end()};
+
+      // PcmBlock's bytes stay valid until the next read or close: a seek and a
+      // flush do not borrow the buffer again, so the delivered view keeps its
+      // bytes across both.
+      REQUIRE(decoder.seek(std::chrono::milliseconds{500}));
+      CHECK(std::vector<std::byte>{blockRes->bytes.begin(), blockRes->bytes.end()} == borrowed);
+
+      decoder.flush();
+      CHECK(std::vector<std::byte>{blockRes->bytes.begin(), blockRes->bytes.end()} == borrowed);
+
+      // The next read is the documented end of the view's validity, so only
+      // its metadata is asserted and the old view is not read again.
+      auto const nextRes = decoder.readNextBlock();
+      REQUIRE(nextRes);
+      CHECK(nextRes->frames > 0);
+      CHECK(nextRes->firstFrameIndex == kSeekTargetFrames);
+      CHECK(nextRes->bytes.size() ==
+            frameBytes(decoder.streamInfo().outputFormat) * static_cast<std::size_t>(nextRes->frames));
+      CHECK_FALSE(nextRes->endOfStream);
+    }
   }
 } // namespace ao::audio::test

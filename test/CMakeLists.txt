@@ -514,6 +514,7 @@ add_executable(ao_core_test
     audio/Mp3DecoderChannelLayoutTest.cpp
     audio/Mp3DecoderTrailingTagTest.cpp
     audio/OpusDecoderSessionTest.cpp
+    audio/OpusDecoderChannelLayoutTest.cpp
     audio/OpusDecoderMalformedTest.cpp
     audio/WavDecoderSessionTest.cpp
     audio/WavDecoderChannelLayoutTest.cpp
@@ -901,6 +902,7 @@ aobus_target_test_sources(ao_core_test "${LINUX}" "non-Linux host"
   audio/backend/AlsaBackendReuseTest.cpp
   audio/backend/AlsaProviderTest.cpp
   audio/backend/FlacAlsaPipeWireRouteTest.cpp
+  audio/backend/OpusAlsaChannelLayoutTest.cpp
   audio/backend/detail/PipeWireMonitorParsingTest.cpp
   audio/backend/detail/PipeWireFormatParsingTest.cpp
   audio/backend/detail/AlsaGraphRegistryTest.cpp

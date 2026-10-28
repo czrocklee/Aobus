@@ -32,7 +32,8 @@ Channel count, not mask population, always owns frame geometry.
 Source interpretation (`Unknown`, `Identified`, or `Inferred`) is separate from format equality and from native mapping observations.
 
 WAV, FLAC, ALAC, and MP3 publish effective source identity through their respective [WAV](#wav-source-interpretation), [FLAC](#flac-source-interpretation), [ALAC](#alac-source-interpretation), and [MP3](#mp3-source-interpretation) policies below.
-The other current codec producers, AAC and Opus, still report zero masks and `Unknown` interpretation; byte-order conventions alone do not identify them.
+Opus identifies its mapping families through their RFC 7845 role assignment described in the [channel-order reference](../../reference/media/channel-order.md#opus).
+AAC still reports zero masks and `Unknown` interpretation; byte-order conventions alone do not identify it.
 ALSA admits identified sources against its native channel-map observations.
 PipeWire admits a complete supported WAVE source declaration and validates the Format param actually read back; the offer is not that observation.
 A two-channel offer is one exact role set: the declared WAVE pair when the source mask is nonzero, and FL/FR only when that mask is zero. The offer never writes a new identity into a zero client mask.
@@ -53,12 +54,10 @@ This also applies to independent native-only evidence: ALSA may clear a stream f
 Core Audio admits complete supported identities through a [bounded AUHAL observation and permutation bridge](audio-execution.md#core-audio-channel-admission).
 Its returned client mode stays canonical; native byte order and initial delivery evidence remain separate, and acceptance does not prove physical routing.
 Core Audio hints preserve exact source identity without native I/O and are neither admission nor observation guarantees.
-The [channel-order reference](../../reference/media/channel-order.md) owns WAV compatibility sets, FLAC's narrower format-default identities, bounded ALAC declarations, uniform MP3 frame-mode slots, and Opus slot permutations.
+The [channel-order reference](../../reference/media/channel-order.md) owns WAV compatibility sets, FLAC's narrower format-default identities, bounded ALAC declarations, uniform MP3 frame-mode slots, and Opus family roles and slot permutations.
 Those sets are not a rule for filling a zero PCM or native observation mask.
 A decoder publishing identified speakers normalizes any differing codec order before emitting PCM; it never publishes that codec-native speaker order.
-Existing AAC and Opus byte-order mechanisms remain unchanged: AAC requests FDK `AAC_PCM_OUTPUT_CHANNEL_MAPPING`, and Opus mapping family 1 permutes the channel mapping it hands libopus.
-Neither mechanism itself publishes source identity or proves native delivery.
-Opus mapping family 255 may expose up to 255 channels with no assigned speaker positions, in header-defined output-index order.
+Existing AAC and Opus byte-order mechanisms remain unchanged: AAC requests FDK `AAC_PCM_OUTPUT_CHANNEL_MAPPING`, which itself publishes no source identity or native-delivery proof, and Opus mapping family 1 permutes the channel mapping it hands libopus.
 
 ### WAV source interpretation
 
@@ -212,7 +211,7 @@ The [channel-order reference](../../reference/media/channel-order.md#mp3) owns t
 Source and output masks agree at successful open.
 A nonzero mask is `Identified`; zero is `Unknown`.
 Read and seek never rewrite that identity or promote an unknown stream.
-AAC and Opus remain zero-mask `Unknown` producers.
+AAC remains a zero-mask `Unknown` producer.
 Existing backend admission, splice eligibility, native observation, quality-analysis, and format-equality rules are unchanged; identity does not prove native mapping or physical routing.
 MP3 remains a 16-bit lossy decoded signal, so it does not extend the Engine splice whitelist.
 Native seek placement, in-frame seek skips, and gapless trim belong to the [decoder session](decoder-session.md); they are not part of this identity coverage.
@@ -432,6 +431,7 @@ Changing enum membership, byte layout, candidate order, field meaning, or helper
 - [`AlacDecoderChannelLayoutTest.cpp`](../../../test/audio/AlacDecoderChannelLayoutTest.cpp) covers ALAC source/output identity and byte-preserving slot normalization before adaptation; optional metadata and transition coverage are listed in the [decoder test map](decoder-session.md#test-map).
 - [`Mp3DecoderChannelLayoutTest.cpp`](../../../test/audio/Mp3DecoderChannelLayoutTest.cpp) is the channel-layout test authority for uniform MP3 mono and stereo/joint identities, dual and mixed-role withholding, same-count stereo/dual unknown admission without later promotion, output adaptation, and refusal of geometry changes before contradictory PCM.
 - [`Mp3DecoderTrailingTagTest.cpp`](../../../test/audio/Mp3DecoderTrailingTagTest.cpp) covers bounded trailing-tag framing, transactional withholding, payload-marker overlap, and exact PCM/seek/EOF preservation across the native input boundary.
+- [`OpusDecoderChannelLayoutTest.cpp`](../../../test/audio/OpusDecoderChannelLayoutTest.cpp) locks Opus family 0/1/255 identity publication and per-slot PCM normalization; the [decoder test map](decoder-session.md#test-map) owns its lifetime, factory, and operation coverage.
 - [`CoreAudioChannelLayoutTest.cpp`](../../../test/audio/backend/detail/CoreAudioChannelLayoutTest.cpp) locks bounded AUHAL observations, canonical/native separation, exact storage permutations, and immutable-plan refresh.
 - [`CoreAudioBackendTest.cpp`](../../../test/audio/backend/CoreAudioBackendTest.cpp) retains the device-free refusal and prewarm controls; [`CoreAudioBackendNativeTest.cpp`](../../../test/audio/backend/CoreAudioBackendNativeTest.cpp) owns the native open and lifetime controls against a live Core Audio output, and [`CoreAudioBackendNativeFatalProbeTest.cpp`](../../../test/audio/backend/CoreAudioBackendNativeFatalProbeTest.cpp) owns the callback-origin fatal reentry probes.
 

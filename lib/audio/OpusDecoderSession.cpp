@@ -10,6 +10,7 @@
 #include <ao/AudioCodec.h>
 #include <ao/Contract.h>
 #include <ao/Error.h>
+#include <ao/audio/ChannelLayoutEvidence.h>
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/PcmBlock.h>
 #include <ao/audio/SampleEncoding.h>
@@ -60,6 +61,35 @@ namespace ao::audio
       {0, 2, 1, 6, 5, 3, 4},    // 6.1
       {0, 2, 1, 7, 5, 6, 3, 4}, // 7.1
     });
+
+    // Effective WAVE speaker mask per channel count for the mapping families
+    // RFC 7845 section 5.1.1 assigns roles to: family 0 is mono or stereo and
+    // family 1 covers the Vorbis orders for one through eight channels.
+    constexpr auto kFamilySpeakerMasks = std::to_array<std::uint32_t>({0x4,     // mono FC
+                                                                       0x3,     // stereo FL FR
+                                                                       0x7,     // FL FR FC
+                                                                       0x33,    // FL FR BL BR
+                                                                       0x37,    // FL FR FC BL BR
+                                                                       0x3F,    // FL FR FC LFE BL BR
+                                                                       0x70F,   // FL FR FC LFE BC SL SR
+                                                                       0x63F}); // FL FR FC LFE BL BR SL SR
+
+    static_assert(kFamilySpeakerMasks.size() == media::opus::kMaxSurroundChannels);
+    static_assert(kSurroundToWavOrder.size() == media::opus::kMaxSurroundChannels);
+
+    // Only families 0 and 1 assign these speaker identities. Other families
+    // remain unpositioned here even if the parser later admits more families.
+    std::uint32_t sourceSpeakerMask(media::opus::Head const& head)
+    {
+      if (head.channelMappingFamily != media::opus::kMappingFamilyMonoStereo &&
+          head.channelMappingFamily != media::opus::kMappingFamilySurround)
+      {
+        return 0;
+      }
+
+      AO_EXPECTS(head.channels >= 1 && head.channels <= media::opus::kMaxSurroundChannels);
+      return kFamilySpeakerMasks.at(head.channels - 1U);
+    }
 
     // Returns the channel mapping to hand libopus so its output lands in WAV
     // speaker order. The parsed Head keeps the file's own order untouched.
@@ -155,10 +185,16 @@ namespace ao::audio
 
     void configureStreamInfo()
     {
+      auto const speakerMask = sourceSpeakerMask(head);
       info.sourceFormat = SignalFormat{.sampleRate = media::opus::kDecodedSampleRate,
                                        .channels = head.channels,
                                        .precisionBits = kOpusPcmBitDepth,
-                                       .sampleKind = SampleKind::Integer};
+                                       .sampleKind = SampleKind::Integer,
+                                       .speakerMask = speakerMask};
+      // Families 0 and 1 identify their output slots, while family 255 assigns
+      // no speaker positions and keeps its zero mask unknown.
+      info.sourceChannelLayout.origin =
+        speakerMask != 0U ? ChannelLayoutOrigin::Identified : ChannelLayoutOrigin::Unknown;
       info.isLossy = true;
       info.codec = AudioCodec::Opus;
 
