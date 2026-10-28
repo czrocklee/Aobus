@@ -4,6 +4,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from doccheck_support import parse_links
+
 from ao.core import doccheck
 
 
@@ -212,6 +214,139 @@ class DocCheckTest(unittest.TestCase):
         kinds = {issue.kind for issue in issues}
         self.assertTrue({"broken-link", "broken-anchor", "broken-reference", "plan-link"}.issubset(kinds))
 
+    def test_wrapped_inline_link_reports_missing_target_at_its_opening_line(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir).resolve()
+            guide, _ = self._valid_tree(root)
+            original = guide.read_text(encoding="utf-8")
+            guide.write_text(
+                original + "\nSee [library change\npublication](architecture/runtime/playback.md).\n",
+                encoding="utf-8",
+            )
+
+            issues = doccheck.check_tree(root)
+
+            self.assertEqual(
+                [(issue.path, issue.line, issue.kind, issue.message) for issue in issues],
+                [(guide, 5, "broken-link", "target does not exist: architecture/runtime/playback.md")],
+            )
+            guide.write_text(
+                original + "\nSee [library change\npublication](architecture/playback.md).\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(doccheck.check_tree(root), [])
+
+    def test_wrapped_links_and_reference_labels_preserve_reachability(self):
+        for link in (
+            "[System\nguide](system/guide.md)",
+            "[System\nguide][system guide]",
+            "[Guide][system\nguide]",
+            "[System\nguide][]",
+            "[System\nguide]",
+        ):
+            with self.subTest(link=link), tempfile.TemporaryDirectory() as temp_dir:
+                root = Path(temp_dir)
+                self._write(root, "doc/README.md", f"# Documentation\n\n{link}\n\n[system guide]: system/guide.md\n")
+                self._write(root, "doc/system/guide.md", "# Guide\n")
+
+                self.assertEqual(doccheck.check_tree(root), [])
+
+    def test_wrapped_undefined_reference_reports_its_opening_line(self):
+        links, undefined = parse_links(("# Guide", "", "See [missing", "guide][unknown", "label]."))
+
+        self.assertEqual(links, [])
+        self.assertEqual(undefined, [(3, "unknown label")])
+
+    def test_multiline_code_spans_do_not_supply_links_or_shift_following_line_numbers(self):
+        links, undefined = parse_links(
+            (
+                "# Guide",
+                "",
+                "`[Code",
+                "example](ignored.md)` then [actual",
+                "link](target.md).",
+                "A `[code]` [next",
+                "link](other.md).",
+            )
+        )
+
+        self.assertEqual(links, [(4, "target.md"), (6, "other.md")])
+        self.assertEqual(undefined, [])
+
+    def test_only_equal_backtick_runs_hide_links_within_one_paragraph(self):
+        for source, expected in (
+            ("`unclosed\n[Visible](absent.md)", [(2, "absent.md")]),
+            ("`unclosed\n[Visible](absent.md)\n``different delimiter", [(2, "absent.md")]),
+            ("``code with a ` character\n[Hidden](absent.md)\n``", []),
+            ("`valid multiline\n[Hidden](absent.md)\ncode`", []),
+            (r"\`literal [Visible](absent.md)`", [(1, "absent.md")]),
+        ):
+            with self.subTest(source=source):
+                self.assertEqual(parse_links(tuple(source.splitlines())), (expected, []))
+
+    def test_inline_spans_do_not_cross_list_quote_or_setext_block_boundaries(self):
+        for source in (
+            "- [Draft\n- notes](absent.md)",
+            "1. [Draft\n2. notes](absent.md)",
+            "[Draft\n> notes](absent.md)",
+            "> [Draft\n- notes](absent.md)",
+            "[Draft\n---\nnotes](absent.md)",
+            "[Draft\n===\nnotes](absent.md)",
+        ):
+            with self.subTest(source=source):
+                self.assertEqual(parse_links(tuple(source.splitlines())), ([], []))
+        for source, expected in (
+            ("- [Wrapped\n  label](target.md)", [(1, "target.md")]),
+            ("> [Wrapped\n> label](target.md)", [(1, "target.md")]),
+            ("> [Wrapped\nlabel](target.md)", [(1, "target.md")]),
+            ("- `unclosed\n- [Visible](target.md)`", [(2, "target.md")]),
+            ("`unclosed\n> [Visible](target.md)`", [(2, "target.md")]),
+        ):
+            with self.subTest(source=source):
+                self.assertEqual(parse_links(tuple(source.splitlines())), (expected, []))
+
+    def test_wrapped_link_cannot_cross_blank_lines_or_fences(self):
+        for boundary in ("", "   ", "```markdown\n```", "~~~markdown\n~~~"):
+            with self.subTest(boundary=boundary):
+                lines = tuple(f"[not a link\n{boundary}\nlabel](absent.md)".splitlines())
+
+                self.assertEqual(parse_links(lines), ([], []))
+
+    def test_definition_like_text_cannot_interrupt_an_existing_paragraph(self):
+        # CommonMark 4.7: reference definitions cannot interrupt a paragraph.
+        lines = ("[not a link", "[target]: other.md", "label](absent.md)")
+
+        self.assertEqual(parse_links(lines), ([(1, "absent.md")], []))
+
+    def test_heading_links_do_not_join_surrounding_paragraphs(self):
+        lines = ("[Unclosed prose", "# [Heading](target.md)", "label](absent.md)")
+
+        self.assertEqual(parse_links(lines), ([(2, "target.md")], []))
+
+    def test_empty_link_destinations_do_not_crash_or_invent_missing_targets(self):
+        for link in ("[Here]( )", "[Here](\n)"):
+            with self.subTest(link=link), tempfile.TemporaryDirectory() as temp_dir:
+                root = Path(temp_dir).resolve()
+                self._write(root, "doc/README.md", f"# Documentation\n\n{link}\n")
+
+                self.assertEqual(doccheck.check_tree(root), [])
+
+    def test_wrapped_image_targets_are_checked_but_excluded_from_navigation(self):
+        lines = ("# Guide", "", "![Missing", "image](absent.png)")
+
+        self.assertEqual(parse_links(lines), ([(3, "absent.png")], []))
+        self.assertEqual(parse_links(lines, include_images=False), ([], []))
+
+    def test_wrapped_links_in_fenced_examples_are_ignored(self):
+        for marker in ("```", "~~~"):
+            with self.subTest(marker=marker):
+                links, undefined = parse_links(
+                    (f"{marker}markdown", "[Ignored", "link](absent.md)", marker, "[Visible", "link](target.md)")
+                )
+
+                self.assertEqual(links, [(5, "target.md")])
+                self.assertEqual(undefined, [])
+
     def test_reference_style_links_and_supported_anchors_preserve_reachability(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -237,6 +372,30 @@ class DocCheckTest(unittest.TestCase):
             issues = doccheck.check_tree(root)
 
         self.assertEqual(issues, [])
+
+    def test_heading_anchors_use_rendered_text_without_decoding_code_or_entities_twice(self):
+        lines = ("# &amp;copy;", "# `&amp;copy;`", r"# A \*literal\* _word_", "# Caf&eacute;", r"# \_word\_")
+
+        self.assertEqual(
+            doccheck._parse_markdown(lines).anchors,
+            frozenset({"copy", "ampcopy", "a-literal-word", "café", "_word_"}),
+        )
+
+    def test_unknown_images_report_one_reference_error_without_navigation_errors(self):
+        lines = ("![Missing", "image][unknown]", r"\![Visible][missing]")
+
+        self.assertEqual(parse_links(lines), ([], [(1, "unknown"), (3, "missing")]))
+        # Undefined reference diagnostics are independent of navigation edges:
+        # include_images=False drops image link edges but keeps image
+        # reference-definition diagnostics, unlike the previous seam.
+        self.assertEqual(parse_links(lines, include_images=False), ([], [(1, "unknown"), (3, "missing")]))
+
+    def test_image_alternative_text_does_not_supply_links_or_undefined_references(self):
+        lines = ("![An [inner](ignored.md) and [unknown][missing]](image.png)",)
+
+        self.assertEqual(parse_links(lines), ([(1, "image.png")], []))
+        self.assertEqual(parse_links(lines, include_images=False), ([], []))
+        self.assertEqual(doccheck._parse_markdown(('![Banner <a id="fake"></a>](image.png)',)).anchors, frozenset())
 
     def test_html_anchors_preserve_id_and_name_with_quoted_or_multiline_attributes(self):
         for markup in (
@@ -337,6 +496,10 @@ class DocCheckTest(unittest.TestCase):
     def test_images_are_checked_but_do_not_provide_document_navigation(self):
         for image in (
             "![Hidden](hidden.md)",
+            "![Hidden\nimage](hidden.md)",
+            "![Hidden\nimage][target]\n\n[target]: hidden.md",
+            "![Hidden\nimage][]\n\n[Hidden image]: hidden.md",
+            "![Hidden\nimage]\n\n[Hidden image]: hidden.md",
             "![Hidden][target]\n\n[target]: hidden.md",
             "![Hidden][]\n\n[Hidden]: hidden.md",
             "![Hidden]\n\n[Hidden]: hidden.md",
@@ -353,13 +516,17 @@ class DocCheckTest(unittest.TestCase):
     def test_escaped_image_markers_preserve_document_navigation(self):
         for link in (
             "![Guide](user/guide.md)",
+            "![System\nguide](user/guide.md)",
+            "![System\nguide][target]\n\n[target]: user/guide.md",
+            "![System\nguide][]\n\n[System guide]: user/guide.md",
+            "![System\nguide]\n\n[System guide]: user/guide.md",
             "![Guide][target]\n\n[target]: user/guide.md",
             "![Guide][]\n\n[Guide]: user/guide.md",
             "![Guide]\n\n[Guide]: user/guide.md",
         ):
             for backslashes in range(5):
                 with self.subTest(link=link, backslashes=backslashes), tempfile.TemporaryDirectory() as temp_dir:
-                    root = Path(temp_dir)
+                    root = Path(temp_dir).resolve()
                     prefix = "\\" * backslashes
                     self._write(root, "doc/README.md", "# Documentation\n\n" + prefix + link + "\n")
                     guide = self._write(root, "doc/user/guide.md", "# Guide\n")
@@ -410,10 +577,39 @@ class DocCheckTest(unittest.TestCase):
 
         self.assertEqual(issues, [])
 
+    def test_skill_front_matter_is_not_markdown_and_body_diagnostics_keep_physical_lines(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir).resolve()
+            self._valid_tree(root)
+            skill = self._write(
+                root,
+                ".agents/skills/example/SKILL.md",
+                "---\nname: example\ndescription: >-\n"
+                "  Literal [example](absent.md).\n---\n# Skill\n\n[Real](missing.md)\n",
+            )
+
+            issues = doccheck.check_tree(root)
+
+            self.assertEqual([(issue.path, issue.line, issue.kind) for issue in issues], [(skill, 8, "broken-link")])
+
+    def test_skill_front_matter_cannot_supply_a_heading_anchor(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir).resolve()
+            self._valid_tree(root)
+            skill = self._write(
+                root,
+                ".agents/skills/example/SKILL.md",
+                "---\nname: example\n---\n# Skill\n\n[Fake](#name-example)\n",
+            )
+
+            issues = doccheck.check_tree(root)
+
+            self.assertEqual([(issue.path, issue.line, issue.kind) for issue in issues], [(skill, 6, "broken-anchor")])
+
     def test_component_and_brand_markdown_are_discovered_and_link_checked(self):
         for folder in ("tool", "app", "asset"):
             with self.subTest(folder=folder), tempfile.TemporaryDirectory() as temp_dir:
-                root = Path(temp_dir)
+                root = Path(temp_dir).resolve()
                 self._valid_tree(root)
                 page = self._write(root, f"{folder}/nested/README.md", "# Component\n\n[Missing](absent.md)\n")
                 self._write(root, f"{folder}/nested/implementation.cpp", "[Ignored](absent.md)\n")

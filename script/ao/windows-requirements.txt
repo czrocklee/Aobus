@@ -1,3 +1,4 @@
+-r docs-requirements.txt
 ast-serialize==0.6.0 \
     --hash=sha256:113b58346f9ceb664352032770caca817d4a3c86f611c6088e6ef65ddaa70f0e
 librt==0.13.0 \

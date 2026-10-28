@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
-import html
 import re
 import urllib.parse
 from collections import Counter, deque
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from html.parser import HTMLParser
 from pathlib import Path
+
+from markdown_it import MarkdownIt
+from markdown_it.common.utils import normalizeReference
+from markdown_it.rules_inline import StateInline, image, link
+from markdown_it.token import Token
 
 from . import nameaudit
 from .paths import PROJECT_ROOT, absolute_path
@@ -28,12 +32,7 @@ VALID_STATUSES = frozenset(
     }
 )
 ID_RE = re.compile(r"^[a-z0-9]+(?:[.-][a-z0-9]+)*$")
-LINK_RE = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
-REFERENCE_DEFINITION_RE = re.compile(r"^\s{0,3}\[([^\]]+)\]:\s*(?:<([^>]+)>|(\S+))(?:\s+.*)?$")
-REFERENCE_LINK_RE = re.compile(r"!?\[([^\]]+)\]\[([^\]]*)\]")
-SHORTCUT_REFERENCE_RE = re.compile(r"!?\[([^\]]+)\](?![\[(])")
-HEADING_RE = re.compile(r"^#{1,6}\s+(.+?)\s*#*\s*$")
-INLINE_CODE_RE = re.compile(r"`+[^`]*`+")
+REFERENCE_LABEL_RE = re.compile(r"(?:\\[^\n]|[^\[\]\\])*")
 
 
 @dataclass(frozen=True)
@@ -81,9 +80,13 @@ def check_tree(root: Path = PROJECT_ROOT) -> list[Issue]:
         documents[absolute_path(path)] = document
         issues.extend(metadata_issues)
 
+    parsed = {
+        path: _parse_markdown(("",) * (document.body_line - 1) + document.lines[document.body_line - 1 :])
+        for path, document in documents.items()
+    }
     issues.extend(_check_unique_ids(documents.values()))
-    issues.extend(_check_links(documents, root))
-    issues.extend(_check_reachability(documents, root))
+    issues.extend(_check_links(documents, parsed, root))
+    issues.extend(_check_reachability(documents, parsed, root))
     issues.extend(_check_naming_contract(documents, root))
     return sorted(issues, key=lambda issue: (issue.path.as_posix(), issue.line, issue.kind, issue.message))
 
@@ -148,11 +151,18 @@ def _read_document(path: Path, root: Path) -> tuple[Document, list[Issue]]:
     body_line = 1
     issues: list[Issue] = []
 
-    # Skills have their own metadata schema, including multiline descriptions.
-    if path.is_relative_to(root / "doc") and lines and lines[0] == "---":
-        metadata, body_line, metadata_issues = _parse_metadata(path, lines)
-        issues.extend(metadata_issues)
-        issues.extend(_validate_metadata(path, metadata))
+    if lines and lines[0] == "---":
+        if path.is_relative_to(root / "doc"):
+            metadata, body_line, metadata_issues = _parse_metadata(path, lines)
+            issues.extend(metadata_issues)
+            issues.extend(_validate_metadata(path, metadata))
+        else:
+            # Other discovered locations own their metadata schemas. Extract the
+            # body consistently without imposing doc/'s flat scalar validation.
+            try:
+                body_line = lines.index("---", 1) + 2
+            except ValueError:
+                pass
 
     return Document(path=path, lines=lines, metadata=metadata, body_line=body_line), issues
 
@@ -214,17 +224,15 @@ def _check_unique_ids(documents: Iterable[Document]) -> list[Issue]:
     return issues
 
 
-def _check_links(documents: dict[Path, Document], root: Path) -> list[Issue]:
+def _check_links(documents: dict[Path, Document], parsed: dict[Path, _MarkdownFacts], root: Path) -> list[Issue]:
     issues: list[Issue] = []
-    anchor_cache = {path: _anchors(document.lines) for path, document in documents.items()}
-
-    for document in documents.values():
-        links, undefined_references = _parse_links(document.lines)
-        for line_number, label in undefined_references:
+    for path, document in documents.items():
+        facts = parsed[path]
+        for line_number, label in facts.undefined_references:
             issues.append(
                 Issue(document.path, line_number, "broken-reference", f"reference label is not defined: {label}")
             )
-        for line_number, target in links:
+        for line_number, target, _ in facts.links:
             resolved, fragment = _resolve_link(document.path, target, root)
             if resolved is None:
                 continue
@@ -239,11 +247,18 @@ def _check_links(documents: dict[Path, Document], root: Path) -> list[Issue]:
                 )
                 continue
             if not resolved.exists():
-                issues.append(Issue(document.path, line_number, "broken-link", f"target does not exist: {target}"))
+                issues.append(
+                    Issue(
+                        document.path,
+                        line_number,
+                        "broken-link",
+                        f"target does not exist: {urllib.parse.unquote(target)}",
+                    )
+                )
                 continue
             resolved_key = absolute_path(resolved)
-            if fragment and resolved_key in anchor_cache and fragment not in anchor_cache[resolved_key]:
-                target_name = target.split("#", 1)[0] or document.path.name
+            if fragment and resolved_key in parsed and fragment not in parsed[resolved_key].anchors:
+                target_name = urllib.parse.unquote(target.split("#", 1)[0]) or document.path.name
                 issues.append(
                     Issue(
                         document.path,
@@ -255,7 +270,7 @@ def _check_links(documents: dict[Path, Document], root: Path) -> list[Issue]:
     return issues
 
 
-def _check_reachability(documents: dict[Path, Document], root: Path) -> list[Issue]:
+def _check_reachability(documents: dict[Path, Document], parsed: dict[Path, _MarkdownFacts], root: Path) -> list[Issue]:
     start = absolute_path(root / "doc" / "README.md")
     if start not in documents:
         return [Issue(root / "doc" / "README.md", 1, "index", "documentation root index is missing")]
@@ -268,7 +283,9 @@ def _check_reachability(documents: dict[Path, Document], root: Path) -> list[Iss
             continue
         reachable.add(current)
         document = documents[current]
-        for _, target in _links(document.lines, include_images=False):
+        for _, target, is_image in parsed[current].links:
+            if is_image:
+                continue
             resolved, _ = _resolve_link(document.path, target, root)
             if resolved is None:
                 continue
@@ -290,103 +307,125 @@ def _check_reachability(documents: dict[Path, Document], root: Path) -> list[Iss
     return issues
 
 
-def _links(lines: tuple[str, ...], *, include_images: bool = True) -> list[tuple[int, str]]:
-    return _parse_links(lines, include_images=include_images)[0]
+@dataclass(frozen=True)
+class _MarkdownFacts:
+    # The boolean distinguishes checked image targets from navigation edges.
+    links: tuple[tuple[int, str, bool], ...]
+    undefined_references: tuple[tuple[int, str], ...]
+    anchors: frozenset[str]
 
 
-def _parse_links(
-    lines: tuple[str, ...], *, include_images: bool = True
-) -> tuple[list[tuple[int, str]], list[tuple[int, str]]]:
-    definitions = _reference_definitions(lines)
-    result: list[tuple[int, str]] = []
-    undefined_references: list[tuple[int, str]] = []
-    fence: str | None = None
-    for line_number, line in enumerate(lines, 1):
-        stripped = line.lstrip()
-        if stripped.startswith(("```", "~~~")):
-            marker = stripped[:3]
-            if fence is None:
-                fence = marker
-            elif fence == marker:
-                fence = None
-            continue
-        if fence is not None:
-            continue
-        searchable = INLINE_CODE_RE.sub("", line)
-        if REFERENCE_DEFINITION_RE.match(searchable):
-            continue
-        occupied: list[tuple[int, int]] = []
-        for match in LINK_RE.finditer(searchable):
-            if include_images or not _is_image_link(match):
-                result.append((line_number, _inline_target(match.group(1))))
-            occupied.append(match.span())
-        for match in REFERENCE_LINK_RE.finditer(searchable):
-            label = _normalize_reference_label(match.group(2) or match.group(1))
-            occupied.append(match.span())
-            if not include_images and _is_image_link(match):
-                continue
-            if label in definitions:
-                result.append((line_number, definitions[label]))
-            else:
-                undefined_references.append((line_number, label))
-        for match in SHORTCUT_REFERENCE_RE.finditer(searchable):
-            if any(_spans_overlap(match.span(), span) for span in occupied):
-                continue
-            if not include_images and _is_image_link(match):
-                continue
-            label = _normalize_reference_label(match.group(1))
-            if label in definitions:
-                result.append((line_number, definitions[label]))
-    return result, undefined_references
-
-
-def _is_image_link(match: re.Match[str]) -> bool:
-    if not match.group(0).startswith("!"):
-        return False
-    start = match.start()
-    position = start
-    while position > 0 and match.string[position - 1] == "\\":
-        position -= 1
-    # An odd backslash run escapes the marker, leaving an ordinary link.
-    return (start - position) % 2 == 0
-
-
-def _reference_definitions(lines: tuple[str, ...]) -> dict[str, str]:
-    definitions: dict[str, str] = {}
-    fence: str | None = None
-    for line in lines:
-        stripped = line.lstrip()
-        if stripped.startswith(("```", "~~~")):
-            marker = stripped[:3]
-            if fence is None:
-                fence = marker
-            elif fence == marker:
-                fence = None
-            continue
-        if fence is not None:
-            continue
-        if match := REFERENCE_DEFINITION_RE.match(INLINE_CODE_RE.sub("", line)):
-            label = _normalize_reference_label(match.group(1))
-            # Markdown resolves repeated reference labels using the first definition.
-            definitions.setdefault(label, html.unescape(match.group(2) or match.group(3)))
-    return definitions
-
-
-def _inline_target(raw: str) -> str:
-    raw = raw.strip()
-    if raw.startswith("<") and ">" in raw:
-        target = raw[1 : raw.index(">")]
-    else:
-        target = raw.split(maxsplit=1)[0]
-    return html.unescape(target)
-
-
-def _normalize_reference_label(label: str) -> str:
+def _undefined_reference(state: StateInline, start: int) -> str | None:
+    """Recognize only the checker's explicit-reference diagnostic, not Markdown blocks."""
+    label_end = state.md.helpers.parseLinkLabel(state, start, True)
+    if label_end < 0 or state.src[label_end + 1 : label_end + 2] != "[":
+        return None
+    reference_end = state.md.helpers.parseLinkLabel(state, label_end + 1)
+    if reference_end < 0:
+        return None
+    label = state.src[label_end + 2 : reference_end] or state.src[start + 1 : label_end]
+    if not label.strip() or REFERENCE_LABEL_RE.fullmatch(label) is None:
+        return None
+    if normalizeReference(label) in state.env.get("references", {}):
+        return None
     return " ".join(label.split()).casefold()
 
 
-def _spans_overlap(left: tuple[int, int], right: tuple[int, int]) -> bool:
-    return left[0] < right[1] and right[0] < left[1]
+def _parse_markdown(lines: tuple[str, ...]) -> _MarkdownFacts:
+    """Project links, navigation and anchors from one CommonMark + table parse."""
+    parser = MarkdownIt("commonmark").enable("table")
+    # Block parsing supplies the actual inline containers and their physical maps.
+    # Resolve references first, then observe the standard inline rules in each
+    # container. No second fence, list, definition or code-span scanner is used.
+    parser.core.ruler.disable("inline")
+    image_depth = 0
+    links: list[tuple[int, str, bool]] = []
+    undefined: list[tuple[int, str]] = []
+    block_links: list[tuple[int, str, bool]] = []
+    block_undefined: dict[int, str] = {}
+
+    def observe(rule: Callable[[StateInline, bool], bool], *, is_image: bool) -> Callable[[StateInline, bool], bool]:
+        def observed(state: StateInline, silent: bool) -> bool:
+            nonlocal image_depth
+            start = state.pos
+            token_start = len(state.tokens)
+            if is_image:
+                image_depth += 1
+            try:
+                matched = rule(state, silent)
+            finally:
+                if is_image:
+                    image_depth -= 1
+            if silent or image_depth:
+                return matched
+            if matched:
+                kind, attribute = ("image", "src") if is_image else ("link_open", "href")
+                target = next(token.attrGet(attribute) for token in state.tokens[token_start:] if token.type == kind)
+                assert isinstance(target, str)
+                block_links.append((start, target, is_image))
+            elif state.src.startswith("![" if is_image else "[", start):
+                label = _undefined_reference(state, start + int(is_image))
+                if label is not None:
+                    # An unresolved image is left as ordinary text by Markdown.
+                    # Its following '[' must not emit a second, non-image error.
+                    block_undefined.setdefault(start + int(is_image), label)
+            return matched
+
+        return observed
+
+    parser.inline.ruler.at("link", observe(link, is_image=False))
+    parser.inline.ruler.at("image", observe(image, is_image=True))
+    environment: dict[str, object] = {}
+    tokens = parser.parse("\n".join(lines), environment)
+    anchors: set[str] = set()
+    counts: Counter[str] = Counter()
+    custom = _HtmlAnchorParser()
+    heading = False
+    for token in tokens:
+        if token.type == "heading_open":
+            heading = True
+        elif token.type == "heading_close":
+            heading = False
+        elif token.type == "html_block":
+            custom.feed(token.content)
+        elif token.type == "inline":
+            assert token.map is not None
+            first_line = token.map[0] + 1
+            block_links.clear()
+            block_undefined.clear()
+            children: list[Token] = []
+            parser.inline.parse(token.content, parser, environment, children)
+            links.extend(
+                (first_line + token.content.count("\n", 0, offset), target, is_image)
+                for offset, target, is_image in sorted(block_links)
+            )
+            undefined.extend(
+                (first_line + token.content.count("\n", 0, offset), label)
+                for offset, label in sorted(block_undefined.items())
+            )
+            for child in children:
+                if child.type == "html_inline":
+                    custom.feed(child.content)
+            if heading:
+                base = _heading_slug(_inline_text(children))
+                index = counts[base]
+                counts[base] += 1
+                anchors.add(base if index == 0 else f"{base}-{index}")
+    custom.close()
+    return _MarkdownFacts(tuple(links), tuple(undefined), frozenset(anchors | custom.anchors))
+
+
+def _inline_text(tokens: list[Token]) -> str:
+    return "".join(
+        _inline_text(token.children or [])
+        if token.type == "image"
+        else "\n"
+        if token.type in {"softbreak", "hardbreak"}
+        else token.content
+        if token.type in {"text", "text_special", "code_inline"}
+        else ""
+        for token in tokens
+    )
 
 
 def _resolve_link(source: Path, target: str, root: Path) -> tuple[Path | None, str]:
@@ -414,39 +453,8 @@ class _HtmlAnchorParser(HTMLParser):
             self.anchors.update(value.lower() for name, value in attrs if name in {"id", "name"} and value)
 
 
-def _anchors(lines: tuple[str, ...]) -> frozenset[str]:
-    anchors: set[str] = set()
-    custom = _HtmlAnchorParser()
-    counts: Counter[str] = Counter()
-    fence: str | None = None
-    for line in lines:
-        stripped = line.lstrip()
-        if stripped.startswith(("```", "~~~")):
-            marker = stripped[:3]
-            if fence is None:
-                fence = marker
-            elif fence == marker:
-                fence = None
-            continue
-        if fence is not None:
-            continue
-        custom.feed(INLINE_CODE_RE.sub("", line) + "\n")
-        if match := HEADING_RE.match(line):
-            base = _heading_slug(match.group(1))
-            index = counts[base]
-            counts[base] += 1
-            anchors.add(base if index == 0 else f"{base}-{index}")
-    custom.close()
-    return frozenset(anchors | custom.anchors)
-
-
 def _heading_slug(text: str) -> str:
-    text = html.unescape(text).lower().strip()
-    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
-    text = re.sub(r"\[([^\]]+)\]\[[^\]]*\]", r"\1", text)
-    text = re.sub(r"\[([^\]]+)\]", r"\1", text)
-    text = re.sub(r"<[^>]+>", "", text)
-    text = text.replace("`", "").replace("*", "").replace("_", "").replace("~", "")
+    text = text.lower().strip()
     text = re.sub(r"[^\w\-\s]", "", text, flags=re.UNICODE)
     return re.sub(r"\s", "-", text)
 

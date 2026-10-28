@@ -25,13 +25,12 @@ from ao.command import analyze as analyze_command
 from ao.command import build as build_command
 from ao.command import check as check_command
 from ao.command import coverage as coverage_command
-from ao.command import docs as docs_command
 from ao.command import perf as perf_command
 from ao.command import run as run_command_mod
 from ao.command import test as test_command
 from ao.command import tidy as tidy_command
 from ao.command.build import BuildResult
-from ao.core import builddir, buildenv
+from ao.core import builddir, buildenv, doccheck
 
 # Raw clang-tidy forms rejected by the option type and the programmatic guard.
 # A bare word such as "fix" is intentionally absent: it is not an option.
@@ -291,14 +290,14 @@ class NativePortalTest(unittest.TestCase):
         self.assertEqual(len(linux_pins), 1)
         self.assertEqual(vcpkg_pins, linux_pins)
 
-    def test_macos_managed_python_is_requested_only_for_python_check_commands(self):
+    def test_macos_managed_python_is_requested_for_checks_and_documentation(self):
         for command in ("format", "tidy", "hygiene"):
             self.assertTrue(buildenv.requires_python_tools(command))
+        self.assertTrue(buildenv.requires_python_tools("docs", ["check"]))
         for command, arguments in (
             ("build", []),
             ("check", []),
             ("deps", ["report"]),
-            ("docs", ["check"]),
             ("run", ["cli"]),
             ("test", []),
         ):
@@ -887,10 +886,10 @@ class CliParseTest(unittest.TestCase):
 
     def test_docs_check_failure_reports_issues_and_returns_failure(self):
         args = self.parse(["docs", "check"])
-        issue = docs_command.doccheck.Issue(Path("doc/system/example.md"), 7, "broken-link", "missing target")
+        issue = doccheck.Issue(Path("doc/system/example.md"), 7, "broken-link", "missing target")
         output = io.StringIO()
         with (
-            mock.patch.object(docs_command.doccheck, "check_tree", return_value=[issue]) as check,
+            mock.patch.object(doccheck, "check_tree", return_value=[issue]) as check,
             contextlib.redirect_stderr(output),
         ):
             status = args.func(args)
@@ -904,8 +903,8 @@ class CliParseTest(unittest.TestCase):
         args = self.parse(["docs", "check"])
         output = io.StringIO()
         with (
-            mock.patch.object(docs_command.doccheck, "check_tree", return_value=[]) as check,
-            mock.patch.object(docs_command.doccheck, "discover_markdown", return_value=[Path("doc/README.md")]),
+            mock.patch.object(doccheck, "check_tree", return_value=[]) as check,
+            mock.patch.object(doccheck, "discover_markdown", return_value=[Path("doc/README.md")]),
             contextlib.redirect_stdout(output),
         ):
             status = args.func(args)

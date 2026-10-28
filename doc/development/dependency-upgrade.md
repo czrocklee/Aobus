@@ -237,7 +237,7 @@ ASCII snapshot, the 5,155-track CJK-heavy snapshot, and the four cached lookup
 shapes where performance baselines exist.
 Verify that the dependency report still declares and resolves `script-transliteration`, and exercise both lazy transform constructors so a missing packaged transform is not mistaken for a valid CMake target.
 
-## Updating Python, Ruff, or mypy
+## Updating Python, Ruff, mypy, or the documentation parser
 
 `script/ao/toolchain.json` is the version policy source.
 
@@ -247,14 +247,21 @@ Verify that the dependency report still declares and resolves `script-transliter
    tests require them to match the major/minor selected by
    `script/ao/toolchain.json`; a patch-only Python update leaves the Homebrew
    lock unchanged.
-3. Rebuild `script/ao/windows-requirements.txt` with hashes for every selected
-   Windows wheel and transitive package.
-4. Rebuild `script/ao/macos-requirements.txt` with hashes for the x86_64 and
-   arm64 wheels used by macOS format, tidy, and hygiene commands.
-5. Ensure the Linux Nixpkgs set or a targeted Nix derivation supplies the same
+3. Rebuild `script/ao/docs-requirements.txt` with hashes for the selected
+   markdown-it-py and mdurl wheels when the documentation parser versions
+   change. Compute every hash from the actual wheel bytes downloaded from the
+   official package index, not from an unverified listing.
+4. Rebuild `script/ao/windows-requirements.txt` with hashes for every selected
+   Windows wheel and transitive package. The file includes the documentation
+   parser lock with a pip `-r` line, so a parser change updates that shared
+   file rather than duplicating its hashes.
+5. Rebuild `script/ao/macos-requirements.txt` with hashes for the x86_64 and
+   arm64 wheels used by macOS docs, format, tidy, and hygiene commands, with
+   the same shared `-r` include.
+6. Ensure the Linux Nixpkgs set or a targeted Nix derivation supplies the same
    exact versions. macOS must match Ruff and mypy but remains outside the exact
    Python patch-level contract.
-6. Run the tooling gate on Linux and Windows:
+7. Run the tooling gate on Linux and Windows:
 
 ```bash
 ./ao test --tooling
@@ -267,13 +274,20 @@ ao.bat test --tooling
 macOS does not expose `./ao test --tooling`; its managed checks, governed C++
 dependencies, and native suite gate remain independent.
 
-7. Review new Ruff diagnostics and mypy behavior as policy changes. Keep the
+8. Review new Ruff diagnostics and mypy behavior as policy changes. Keep the
    pin change and any large mechanical cleanup in distinct, understandable
    commits.
 
 Do not change Ruff `target-version` or mypy `python_version` merely because the
 managed interpreter patch release changed. Those settings express the minimum
 Python language target.
+
+The native requirement locks accept only the bounded single-token `-r <path>`
+include spelling. The tooling environment fingerprint reads every nested lock
+reached through that form, and every other pip include or constraint spelling,
+any other pip control line, and variable, quoted or line-continuation forms
+fail the fingerprint closed instead of being ignored, so an unsupported lock
+cannot silently reuse a cached managed environment.
 
 ## Updating compiler-cache tools
 

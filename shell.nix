@@ -19,7 +19,12 @@ let
     + "gtk-unstripped=${if useUnstrippedGtk then "1" else "0"}\n"
   );
   # Keep the portal's interpreter and tools independent of ambient Python paths.
-  portalPython = pkgs.python3.withPackages (packages: [ packages.ruff packages.mypy ]);
+  portalPython = pkgs.python3.withPackages (packages: [
+    packages.ruff
+    packages.mypy
+    packages.markdown-it-py
+    packages.mdurl
+  ]);
   requireToolVersion = name: expected: actual:
     if expected == actual then true else throw (
       "Aobus requires ${name} ${expected}, but pinned Nixpkgs resolves ${actual}. "
@@ -165,11 +170,13 @@ let
       };
     };
   });
-  # The Python lint toolchain is pinned by script/ao/toolchain.json.
+  # The Python lint and documentation toolchain is pinned by script/ao/toolchain.json.
   toolchainMatchesContract =
     requireToolVersion "Python" toolchain.python pkgs.python3.version
       && requireToolVersion "Ruff" toolchain.ruff pkgs.python3Packages.ruff.version
-      && requireToolVersion "mypy" toolchain.mypy pkgs.python3Packages.mypy.version;
+      && requireToolVersion "mypy" toolchain.mypy pkgs.python3Packages.mypy.version
+      && requireToolVersion "markdown-it-py" toolchain.markdown-it-py pkgs.python3Packages.markdown-it-py.version
+      && requireToolVersion "mdurl" toolchain.mdurl pkgs.python3Packages.mdurl.version;
   compilerCacheMatchesContract =
     requireToolVersion "ccache" compilerCache.local.linuxVersion pkgs.ccache.version;
 
@@ -224,7 +231,7 @@ pkgs.mkShell {
       pkg-config
       ninja
       llvmPackages_22.clang
-      portalPython # runs ./ao with the pinned Ruff and mypy packages
+      portalPython # runs ./ao with the pinned Ruff, mypy, and documentation parser packages
       llvmPackages_22.clang-tools
       llvmPackages_22.llvm.dev
       llvmPackages_22.clang-unwrapped.dev

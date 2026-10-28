@@ -63,12 +63,22 @@ Front matter is optional. Preserve an existing `id` when moving a document; when
 An id, when present, remains unique and uses lowercase words separated by dots or hyphens.
 No `type`, `domain`, `summary`, or `status: current` field is required.
 For historical or proposed material, make its status clear to readers in the body; optional `status` metadata does not replace that explanation.
-The checker accepts flat scalar metadata and checks supplied ids and status values, not a type-specific lifecycle or directory taxonomy.
+The checker validates flat scalar metadata and supplied ids and status values under `doc/`, not a type-specific lifecycle or directory taxonomy.
+All discovered Markdown locations exclude a closed leading front-matter block from links, anchors, and navigation; other locations retain their own metadata schemas.
 
 ## Validation
 
 Run `./ao docs check` from the repository root.
-It checks optional metadata integrity, ids, links, Markdown anchors, reference-style links, forbidden local-plan links, and reachability from the documentation home.
+It checks optional metadata integrity, ids, inline and reference-style links, Markdown anchors, forbidden local-plan links, and reachability from the documentation home.
+The governed Markdown parser supplies CommonMark block and inline structure, with the GFM table extension enabled.
+Links, reference definitions, headings, and HTML anchors use that same parse; code examples do not contribute links or anchors.
+Link labels may wrap within an inline container, and diagnostics identify the physical opening line.
+Local-target diagnostics show readable decoded destinations; URL resolution keeps the parser's normalized URL so encoded delimiters and literal percent signs retain their meaning.
+Reference matching retains the raw label, including code-span delimiters, rather than the label's rendered text.
+The checker additionally reports undefined explicit references (`[text][label]` or `[label][]`); undefined shortcut text is not an error.
+Image targets are checked but do not make documentation reachable.
+This is a local-link and navigation checker, not a full GitHub renderer or an external-URL availability check.
+The parser and its dependency are pinned through the [tooling dependency contract](dependency-governance.md#repository-tooling).
 It also checks the [naming tooling contract](lint/naming-checks.md) against the audit vocabulary and registered lint checks.
 It does not require templates, fixed headings, architecture portfolios, RFC dependency declarations, or a particular directory classification.
 

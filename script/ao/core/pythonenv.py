@@ -22,7 +22,12 @@ TOOLCHAIN_FILE = PACKAGE_ROOT / "toolchain.json"
 REQUIREMENTS_FILE = PACKAGE_ROOT / "windows-requirements.txt"
 MACOS_REQUIREMENTS_FILE = PACKAGE_ROOT / "macos-requirements.txt"
 COMPLETE_MARKER = ".aobus-tooling-complete"
+# The digest already covers every governed input (tool versions and the full
+# included lock graph), so any contract change moves every historical
+# fingerprint without a schema bump; bump this only if the digest recipe itself
+# becomes ambiguous about which inputs it covers.
 SCHEMA_VERSION = "2"
+TOOL_REQUIREMENTS = ("python", "ruff", "mypy", "markdown-it-py", "mdurl")
 LOCK_TIMEOUT_SECONDS = 600
 STALE_LOCK_SECONDS = 1_800
 
@@ -31,10 +36,9 @@ def tool_versions(config_file: Path = TOOLCHAIN_FILE) -> dict[str, str]:
     values = json.loads(config_file.read_text(encoding="utf-8"))
     if values.get("schemaVersion") != 1:
         raise RuntimeError(f"unsupported toolchain schema in {config_file}: {values.get('schemaVersion')!r}")
-    required = ("python", "ruff", "mypy")
-    if any(not isinstance(values.get(name), str) or not values[name] for name in required):
+    if any(not isinstance(values.get(name), str) or not values[name] for name in TOOL_REQUIREMENTS):
         raise RuntimeError(f"invalid Aobus toolchain configuration: {config_file}")
-    return {name: values[name] for name in required}
+    return {name: values[name] for name in TOOL_REQUIREMENTS}
 
 
 def validate_base_python(versions: dict[str, str], *, exact_patch: bool = True) -> None:
@@ -47,6 +51,69 @@ def validate_base_python(versions: dict[str, str], *, exact_patch: bool = True) 
         raise RuntimeError(f"Aobus requires Python {requirement} for native tooling; got {actual_text}")
     if importlib.util.find_spec("ensurepip") is None:
         raise RuntimeError("Aobus requires a regular Python installation with ensurepip")
+
+
+def _included_requirements(requirements_file: Path) -> list[Path]:
+    """Return the files referenced by pip ``-r`` include lines.
+
+    Includes resolve relative to the including file, like pip, and nested
+    includes of the same bounded form are read too. Aobus supports only the
+    single-token ``-r <path>`` spelling used by the repository locks; every
+    other pip include or constraint spelling, any other option line, and
+    variable, quoted or line-continuation forms fail closed, so an
+    unsupported lock can never silently keep a stale environment fingerprint.
+    """
+    included: list[Path] = []
+    # pip strips a UTF-8 BOM before recognizing controls, including attached -r.
+    for line in requirements_file.read_text(encoding="utf-8-sig").splitlines():
+        tokens = line.split()
+        directive = tokens[0] if tokens else ""
+        # Empty lines, comments, package lines and pinned-wheel hash lines are
+        # the only non-include content the locks may carry; hash lines are
+        # matched by their exact spelling so they cannot be confused with
+        # option controls.
+        if (
+            not directive
+            or directive.startswith("#")
+            or directive == "--hash"
+            or directive.startswith("--hash=")
+            or not directive.startswith("-")
+        ):
+            continue
+        if line.endswith("\\"):
+            raise RuntimeError(
+                f"unsupported requirements line continuation in {requirements_file}: {line!r}; "
+                "Aobus locks support only single-line '-r <path>' includes"
+            )
+        if directive.startswith(("-c", "--constraint")):
+            raise RuntimeError(
+                f"unsupported requirements constraint in {requirements_file}: {line!r}; "
+                "Aobus locks do not support pip constraint controls"
+            )
+        if directive.startswith(("-r", "--requirement")):
+            if directive == "-r" and len(tokens) == 2 and not any(character in tokens[1] for character in "$%\"'"):
+                included.append(requirements_file.parent / tokens[1])
+                continue
+            raise RuntimeError(
+                f"unsupported requirements include in {requirements_file}: {line!r}; "
+                "Aobus locks support only '-r <path>' with a single literal path next to the lock"
+            )
+        raise RuntimeError(
+            f"unsupported pip requirements control in {requirements_file}: {line!r}; "
+            "Aobus locks support only '-r <path>' include lines"
+        )
+    return included
+
+
+def _lock_input_bytes(requirements_file: Path, stack: tuple[Path, ...] = ()) -> Iterator[bytes]:
+    """Yield the bytes of a lock and every included lock, depth first."""
+    resolved = requirements_file.resolve()
+    if resolved in stack:
+        chain = " -> ".join(str(path) for path in (*stack, resolved))
+        raise RuntimeError(f"requirements include cycle: {chain}")
+    yield requirements_file.read_bytes()
+    for included in _included_requirements(requirements_file):
+        yield from _lock_input_bytes(included, (*stack, resolved))
 
 
 def environment_fingerprint(
@@ -65,7 +132,9 @@ def environment_fingerprint(
         digest.update(b"\0")
     digest.update(json.dumps(versions, sort_keys=True).encode())
     digest.update(b"\0")
-    digest.update(requirements_file.read_bytes())
+    for lock_bytes in _lock_input_bytes(requirements_file):
+        digest.update(lock_bytes)
+        digest.update(b"\0")
     return digest.hexdigest()[:16]
 
 
@@ -121,6 +190,9 @@ def _tools_match(
 
     python_version = tuple(int(part) for part in versions["python"].split("."))
     version_components = 3 if platform_name == "windows" else 2
+    # Ruff and mypy print a version banner that may carry build details, so
+    # their probe matches the pinned prefix; the documentation parser packages
+    # are pinned to the exact distribution version and match it exactly.
     commands = (
         (
             [
@@ -131,11 +203,27 @@ def _tools_match(
                 f"tuple(sys.version_info[:{version_components}]) != {python_version[:version_components]!r})",
             ],
             "",
+            False,
         ),
-        ([str(python), "-I", "-m", "ruff", "--version"], f"ruff {versions['ruff']}"),
-        ([str(python), "-I", "-m", "mypy", "--version"], f"mypy {versions['mypy']}"),
+        ([str(python), "-I", "-m", "ruff", "--version"], f"ruff {versions['ruff']}", False),
+        ([str(python), "-I", "-m", "mypy", "--version"], f"mypy {versions['mypy']}", False),
+        (
+            [
+                str(python),
+                "-I",
+                "-c",
+                "from importlib.metadata import version; print(version('markdown-it-py'))",
+            ],
+            versions["markdown-it-py"],
+            True,
+        ),
+        (
+            [str(python), "-I", "-c", "from importlib.metadata import version; print(version('mdurl'))"],
+            versions["mdurl"],
+            True,
+        ),
     )
-    for command, expected in commands:
+    for command, expected, exact in commands:
         try:
             completed = subprocess.run(
                 command,
@@ -147,7 +235,12 @@ def _tools_match(
             )
         except (OSError, subprocess.TimeoutExpired):
             return False
-        if completed.returncode != 0 or (expected and not completed.stdout.strip().startswith(expected)):
+        if completed.returncode != 0:
+            return False
+        actual = completed.stdout.strip()
+        if exact and actual != expected:
+            return False
+        if not exact and expected and not actual.startswith(expected):
             return False
     return True
 
@@ -189,7 +282,7 @@ def _build_environment(
         fingerprint,
         platform_name=platform_name,
     ):
-        raise RuntimeError("the provisioned Ruff/mypy environment failed its version probe")
+        raise RuntimeError("the provisioned Python tooling environment failed its version probe")
 
 
 @contextlib.contextmanager
@@ -272,7 +365,7 @@ def ensure_environment(
                     fingerprint,
                     platform_name=platform_name,
                 ):
-                    raise RuntimeError("the published Ruff/mypy environment failed its version probe")
+                    raise RuntimeError("the published Python tooling environment failed its version probe")
             finally:
                 if staging.exists():
                     shutil.rmtree(staging)
