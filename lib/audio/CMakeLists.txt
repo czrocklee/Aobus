@@ -13,7 +13,6 @@ add_library(ao_audio STATIC
     NullBackend.cpp
     OpenedModeValidation.cpp
     WavDecoderSession.cpp
-    detail/AacConfigParser.cpp
     detail/DecoderOutputAdapter.cpp
     detail/DecoderError.cpp
     detail/EngineEventQueueInvariants.cpp

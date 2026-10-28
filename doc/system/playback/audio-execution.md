@@ -20,7 +20,7 @@ Application runtime consumes Player through executor-affine playback services an
 - **Control order**: the internal serialization order of concurrent Engine commands.
 - **Event worker**: Engine's single non-realtime worker that applies backend/source/render events and invokes Engine callbacks.
 - **Render session**: one backend attachment correlated to a render generation.
-- **Inspection**: a decoder open with no requested PCM encoding that reports immutable track signal facts without producing playback PCM.
+- **Inspection**: a decoder open with no requested PCM encoding that reports immutable track signal facts without exposing PCM to playback. Source-private construction may decode and cache PCM to establish those facts.
 - **Prewarm format hint**: a non-binding, non-blocking Backend prediction used only to choose an optimistic decoder output before native open.
 - **PCM mode**: one concrete sample rate, channel count, `SampleEncoding`, and effective speaker mask used by a backend render target.
 - **Timeline node**: Engine-owned current or lookahead audio item and its source.
@@ -318,6 +318,7 @@ The successor's source precision may be lower than the current track's precision
 The successor's precision may never exceed what that mode can represent: an S16 current mode followed by 24-bit audio drains, while a packed-24 current mode followed by 16-bit audio may splice.
 
 Current gapless-capable codecs are lossless FLAC, ALAC, and WAV.
+AAC remains lossy and drain-only even when its [actual-output identity](pcm-format.md#aac-source-interpretation) matches the next track's canonical PCM mode; publishing roles adds neither delay/padding trimming nor splice admission.
 Lossy/unknown codecs or format mismatch drain and close; no resampling, channel remapping, or artificial silence forces compatibility.
 Consecutive segments use this same gate and one-lookahead arming contract.
 They splice without a gap when the successor is armed before the current segment ends; a segment shorter than callback/preparation latency can drain before its successor is armed.
@@ -330,6 +331,8 @@ candidate.
 
 Explicit start retains a two-stage acceptance boundary.
 Preparation opens an inspection decoder and records source signal facts.
+AAC inspection and final-decoder construction each privately decode and cache one first packet, so actual geometry and final role identity are ready before the backend hint/open and final-mode comparisons, respectively.
+That bounded priming is part of decoder open, not realtime rendering or native route observation; a required first-payload failure is an inspection/open error, not a deferred first-read error.
 After inspection, Player returns through a stop-token checkpoint to its callback executor and asks Engine to revalidate the captured route before querying `Backend::prewarmFormatHint` under control serialization.
 The hint query is non-blocking, performs no native I/O, and may use only immutable policy or cached observations; a missing or invalid hint skips optimistic decoder preparation.
 The isolated value then resumes on a worker, opens a final decoder in the valid hinted encoding, applies the initial seek, and prerolls a `StreamingSource` without acquiring a device, changing the active generation, or replacing lookahead.
@@ -461,18 +464,19 @@ An absent endpoint means only that the backend could not inspect a direct endpoi
 
 #### Channel compatibility and native evidence
 
-WAV's [source interpretation](pcm-format.md#wav-source-interpretation), FLAC's distinct [source interpretation](pcm-format.md#flac-source-interpretation), and ALAC's [bounded metadata policy](pcm-format.md#alac-source-interpretation) activate canonical PCM with effective speaker identities without a blanket multichannel ban.
-WAV's `Identified` or `Inferred` history and FLAC's and ALAC's `Identified` histories do not establish native mapping or physical routing.
+WAV's [source interpretation](pcm-format.md#wav-source-interpretation), FLAC's distinct [source interpretation](pcm-format.md#flac-source-interpretation), ALAC's [bounded metadata policy](pcm-format.md#alac-source-interpretation), and AAC's [actual-output policy](pcm-format.md#aac-source-interpretation) activate canonical PCM with effective speaker identities without a blanket multichannel ban.
+WAV's `Identified` or `Inferred` history and FLAC's, ALAC's, and AAC's `Identified` histories do not establish native mapping or physical routing.
 FLAC with absent exact mask keys at five/six channels, nonfirst STREAMINFO, or malformed, conflicting, unsupported, incomplete, or safely uninspectable optional identity evidence retains zero masks and `Unknown` rather than a guessed identity.
 ALAC above two channels without a declaration, or at any count with bad or uninspectable optional metadata, likewise retains zero/`Unknown`, not a new source-open refusal; mandatory container/configuration and precision errors remain unchanged.
+AAC with unavailable, incomplete, or unsupported output-role groups likewise retains zero/`Unknown` and FDK output-index order; source count alone never supplies roles, and unknown eight-channel output is not downmixed to six channels.
 That best-effort playback admission is not a role-safety or native-routing guarantee: zero-mask paths can use ordinal/default transport through different speaker roles, and native open can still fail.
 Numerical bit-perfectness is independent of channel confidence.
 MP3 publishes FC or FL/FR only when its [source policy](pcm-format.md#mp3-source-interpretation) identifies a uniform mono or stereo/joint stream from complete native-index header coverage; dual-channel, mixed roles, and incomplete coverage remain zero / `Unknown`.
 Opus identifies the output roles declared by mapping families 0 and 1, while family 255 remains zero / `Unknown`, under the [Opus family policy](../../reference/media/channel-order.md#opus).
-The codec-independent backend admission, splice eligibility, native observation, quality-analysis, and format-equality predicates are unchanged, but unchanged predicates do not mean unchanged acceptance for a given Opus file: where the former zero-mask publication passed as unpositioned transport, an identified family 0/1 source can now be privately permuted onto a same-set native order or refused for a confirmed role conflict.
+The codec-independent backend admission, splice eligibility, native observation, quality-analysis, and format-equality predicates are unchanged, but unchanged predicates do not mean unchanged acceptance for a given AAC or Opus file: where the former zero-mask publication passed as unpositioned transport, a newly identified source can now be privately permuted onto a same-set native order or refused for a confirmed role conflict.
 Missing or compatible partial native observations are not blanket refusals, and the published identity proves neither native mapping nor physical routing.
-AAC retains zero masks and `Unknown` source interpretation; neither WAV compatibility sets nor FLAC defaults are ALAC or backend defaults.
-ALAC normalization changes no backend admission, native observation, or quality-analysis policy.
+Neither WAV compatibility sets nor FLAC defaults are AAC, ALAC, or backend defaults.
+AAC and ALAC slot normalization introduces no new backend admission rule, native observation, or quality-analysis policy.
 
 Source admission and native delivery evidence are separate decisions.
 A backend may admit transport without proving every speaker relationship; the returned canonical client mask must still retain the source identity.
