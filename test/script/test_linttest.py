@@ -942,6 +942,7 @@ class LintTestRunnerTest(unittest.TestCase):
                 mock.patch.object(linttest, "discover_fixtures", return_value=fixtures),
                 mock.patch.object(linttest, "Reporter", RecordingReporter),
                 mock.patch.object(linttest, "_run_diagnostic", side_effect=run_diagnostic),
+                mock.patch.object(linttest, "_run_source_policy_smoke", return_value=(True, result_log)),
                 mock.patch.object(linttest, "_run_compiler_error_smoke", return_value=(True, result_log)),
             ):
                 self.assertEqual(linttest.run(build_dir, jobs=1), 0)
@@ -974,6 +975,7 @@ class LintTestRunnerTest(unittest.TestCase):
             with (
                 mock.patch.object(linttest, "discover_fixtures", return_value=[fixture]),
                 mock.patch.object(linttest, "_run_diagnostic", return_value=(True, result_log)) as run_diagnostic,
+                mock.patch.object(linttest, "_run_source_policy_smoke", return_value=(True, result_log)),
                 mock.patch.object(linttest, "_run_compiler_error_smoke", return_value=(True, result_log)),
                 mock.patch.object(linttest.shutil, "rmtree") as remove_tree,
                 contextlib.redirect_stdout(io.StringIO()),
@@ -1006,6 +1008,7 @@ class StagePhaseInstrumentationTest(unittest.TestCase):
                 mock.patch.object(linttest, "phases", recorder),
                 mock.patch.object(linttest, "discover_fixtures", return_value=[fixture]),
                 mock.patch.object(linttest, "_run_diagnostic", return_value=(False, case_log)),
+                mock.patch.object(linttest, "_run_source_policy_smoke", return_value=(True, case_log)),
                 mock.patch.object(linttest, "_run_compiler_error_smoke", return_value=(True, case_log)),
                 contextlib.redirect_stdout(io.StringIO()),
             ):
@@ -1015,6 +1018,13 @@ class StagePhaseInstrumentationTest(unittest.TestCase):
                 recorder.records,
                 [
                     {"name": "lint-diagnostics", "tree": "tidy", "jobs": 1, "count": 1, "status": 1},
+                    {
+                        "name": "lint-source-policy",
+                        "tree": "tidy",
+                        "jobs": 1,
+                        "count": linttest._source_policy_case_count(windows=False),
+                        "status": 0,
+                    },
                     {"name": "lint-compiler-errors", "tree": "tidy", "count": 4, "status": 0},
                 ],
             )
@@ -1175,6 +1185,7 @@ class WindowsLintFixtureTest(unittest.TestCase):
             mock.patch.object(linttest, "discover_fixtures", return_value=[fixture]),
             mock.patch.object(linttest, "_windows_fixture_tools") as fixture_tools,
             mock.patch.object(linttest, "_run_diagnostic", return_value=(True, log)) as run_diagnostic,
+            mock.patch.object(linttest, "_run_source_policy_smoke", return_value=(True, log)),
             mock.patch.object(linttest, "_run_compiler_error_smoke", return_value=(True, log)),
             contextlib.redirect_stdout(io.StringIO()),
         ):
@@ -1254,6 +1265,7 @@ class WindowsLintFixtureTest(unittest.TestCase):
         with (
             mock.patch.object(linttest, "discover_fixtures", return_value=fixtures),
             mock.patch.object(linttest, "_run_diagnostic", return_value=(True, log)) as diagnostic,
+            mock.patch.object(linttest, "_run_source_policy_smoke", return_value=(True, log)),
             mock.patch.object(linttest, "_run_compiler_error_smoke", return_value=(True, log)) as compiler,
             contextlib.redirect_stdout(io.StringIO()) as output,
         ):

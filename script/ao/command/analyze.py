@@ -2,6 +2,7 @@
 
 import argparse
 import contextlib
+import os
 import re
 import shutil
 import subprocess
@@ -51,7 +52,7 @@ _PATH_SEPARATOR_RE = r"[/\\]"
 
 def project_header_filter(*, source_roots: tuple[Path, ...] | None = None) -> str:
     """Return an analyzer header filter that accepts native and POSIX separators."""
-    roots = source_roots or (absolute_path(PROJECT_ROOT),)
+    roots = tidyconfig.source_roots_or_default(source_roots, project_root=absolute_path(PROJECT_ROOT))
     root = "|".join(re.escape(path.as_posix().rstrip("/")).replace("/", _PATH_SEPARATOR_RE) for path in roots)
     return f"({root}){_PATH_SEPARATOR_RE}(lib|app|include|test|tool{_PATH_SEPARATOR_RE}lint){_PATH_SEPARATOR_RE}.*"
 
@@ -80,16 +81,16 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
 
 
 def classify(path: Path) -> bool:
-    """True when the file should be analyzed; lint integration fixtures are skipped."""
+    """Skip checkout lint fixtures after canonicalizing active owned compiler views."""
+    path = workspace_cache.canonical_portal_path(path, project_root=PROJECT_ROOT)
     try:
-        rel = absolute_path(path).relative_to(absolute_path(PROJECT_ROOT)).as_posix()
+        rel = path.relative_to(absolute_path(PROJECT_ROOT)).as_posix()
     except ValueError:
-        rel = absolute_path(path).as_posix()
+        return True
 
-    rel_slash = "/" + rel
-    if "/test/lint/" in rel_slash:
-        return False
-    return True
+    if os.name == "nt":
+        rel = rel.lower()
+    return not rel.startswith("test/lint/")
 
 
 def analyzer_checks(alpha: bool, only: str | None) -> str:
@@ -136,7 +137,7 @@ def run_command(args: argparse.Namespace) -> int:
                 path = PROJECT_ROOT / path
             if not path.is_file():
                 continue
-            path = absolute_path(path)
+            path = workspace_cache.canonical_portal_path(path, project_root=PROJECT_ROOT)
             if path not in seen and classify(path):
                 seen.add(path)
                 files.append(path)

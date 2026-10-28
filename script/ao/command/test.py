@@ -1063,7 +1063,7 @@ def run_suites(
                 #
                 # Summary consumer disclaimer: the lint suite record encloses
                 # its Windows checker-build/checker-verify children and the
-                # lint-diagnostics/lint-compiler-errors children, so a summary
+                # lint-diagnostics/lint-source-policy/lint-compiler-errors children, so a summary
                 # must not add a suite record and its children to one total. The tooling
                 # suite owns no native tree, so it records none.
                 with phases.measure(

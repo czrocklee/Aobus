@@ -8,6 +8,10 @@ implementation.
 """
 
 import argparse
+import json
+from pathlib import Path
+
+from .paths import PROJECT_ROOT
 
 # The identifier-naming method exemption exempts exactly two WinRT metadata ABI
 # accessors (GetXamlType, GetXmlnsDefinitions) beyond the existing external-method
@@ -18,6 +22,7 @@ import argparse
 CONFIG_BASE = """
 {Checks: 'PLACEHOLDER',
  CheckOptions: [
+  {key: 'AobusSourceRoots', value: SOURCE_ROOTS_JSON},
   {key: 'readability-identifier-length.MinimumVariableNameLength', value: 2},
   {key: 'readability-identifier-length.MinimumParameterNameLength', value: 2},
   {key: 'readability-identifier-length.IgnoredVariableNames', value: '^[_]([^_].*)?$'},
@@ -147,9 +152,25 @@ def checks_for(mode: str, selected: str | None) -> str:
     return RELAXED_CHECKS if mode == "RELAXED" else STRICT_CHECKS
 
 
-def config_for(checks: str) -> str:
-    """Serialize the base config with a check list, compacted identically for every caller."""
-    return " ".join(CONFIG_BASE.replace("PLACEHOLDER", checks).split())
+def source_roots_or_default(roots: tuple[Path, ...] | None, *, project_root: Path) -> tuple[Path, ...]:
+    """Select the checkout default or preserve a nonempty set of validated spellings."""
+    if roots is None:
+        return (project_root,)
+    if not roots:
+        raise ValueError("validated source roots must not be empty")
+    return roots
+
+
+def config_for(checks: str, *, source_roots: tuple[Path, ...] | None = None) -> str:
+    """Serialize check policy and the caller's nonempty validated source roots."""
+    config = " ".join(CONFIG_BASE.replace("PLACEHOLDER", checks).split())
+    if config.count("SOURCE_ROOTS_JSON") != 1:
+        raise ValueError("clang-tidy policy must contain exactly one source-root option placeholder")
+    roots = source_roots_or_default(source_roots, project_root=PROJECT_ROOT)
+    # A JSON array inside the option preserves spaces, semicolons and native
+    # separators; compact only the static policy, never the caller's paths.
+    value = json.dumps(json.dumps([root.as_posix() for root in roots]))
+    return config.replace("SOURCE_ROOTS_JSON", value)
 
 
 # Clang-tidy option names without leading dashes. Dashes are stripped only for

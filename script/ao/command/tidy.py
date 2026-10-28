@@ -140,7 +140,7 @@ def _source_spellings(path: Path, source_roots: tuple[Path, ...]) -> list[Path]:
 
 def project_header_filter(folders: tuple[str, ...], *, source_roots: tuple[Path, ...] | None = None) -> str:
     """Return a project-root filter that accepts native and POSIX separators."""
-    roots = source_roots or (absolute_path(PROJECT_ROOT),)
+    roots = tidyconfig.source_roots_or_default(source_roots, project_root=absolute_path(PROJECT_ROOT))
     root = "|".join(_path_regex(path) for path in roots)
     return f"({root}){_PATH_SEPARATOR_RE}({'|'.join(folders)}){_PATH_SEPARATOR_RE}.*"
 
@@ -151,14 +151,14 @@ RELAXED_HEADER_FOLDERS = ("test", "include")
 
 def exact_header_filter(headers: list[Path], *, source_roots: tuple[Path, ...] | None = None) -> str:
     """Return an anchored filter for mapped headers with either path separator."""
-    roots = source_roots or (absolute_path(PROJECT_ROOT),)
+    roots = tidyconfig.source_roots_or_default(source_roots, project_root=absolute_path(PROJECT_ROOT))
     alternatives = [_path_regex(spelling) for path in headers for spelling in _source_spellings(path, roots)]
     return f"^({'|'.join(alternatives)})$"
 
 
 def path_line_filter(paths: list[Path], *, source_roots: tuple[Path, ...] | None = None) -> str:
     """Limit diagnostics to the explicitly selected paths."""
-    roots = source_roots or (absolute_path(PROJECT_ROOT),)
+    roots = tidyconfig.source_roots_or_default(source_roots, project_root=absolute_path(PROJECT_ROOT))
     # LLVM matches these names literally, unlike the separator-aware header regex.
     names = dict.fromkeys(
         name
@@ -358,22 +358,21 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
 
 
 def classify(path: Path, explicit: bool) -> str:
-    """STRICT for production code, RELAXED for tests, and IGNORE for lint fixtures."""
+    """Classify authoritative checkout paths, including active owned compiler views."""
+    path = workspace_cache.canonical_portal_path(path, project_root=PROJECT_ROOT)
     try:
-        rel = absolute_path(path).relative_to(absolute_path(PROJECT_ROOT)).as_posix()
+        rel = path.relative_to(absolute_path(PROJECT_ROOT)).as_posix()
     except ValueError:
-        rel = absolute_path(path).as_posix()
+        return "STRICT"
 
-    rel_slash = "/" + rel
-
-    if "/test/lint/fixture/" in rel_slash:
+    if os.name == "nt":
+        rel = rel.lower()
+    if rel.startswith("test/lint/fixture/"):
         # Fixture files: check when explicitly requested, skip in batch scans.
         return "STRICT" if explicit else "IGNORE"
-    if "/test/lint/" in rel_slash:
+    if rel.startswith("test/lint/"):
         return "IGNORE"
-    if "/tool/lint/" in rel_slash:
-        return "STRICT"
-    if "/test/" in rel_slash:
+    if rel.startswith("test/"):
         return "RELAXED"
     return "STRICT"
 
@@ -512,7 +511,7 @@ def classify_existing(files: list[str], explicit: bool) -> dict[str, list[Path]]
             path = PROJECT_ROOT / path
         if not path.is_file():
             continue
-        path = absolute_path(path)
+        path = workspace_cache.canonical_portal_path(path, project_root=PROJECT_ROOT)
         if path in seen:
             continue
         seen.add(path)
@@ -532,7 +531,7 @@ def split_existing(files: list[str]) -> tuple[list[str], list[str]]:
             path = PROJECT_ROOT / path
         if not path.is_file():
             continue
-        resolved = absolute_path(path)
+        resolved = workspace_cache.canonical_portal_path(path, project_root=PROJECT_ROOT)
         if resolved in seen:
             continue
         seen.add(resolved)
@@ -949,7 +948,7 @@ def run_command(args: argparse.Namespace, *, resolved_scope: tuple[list[str], bo
                 extra.append("--extra-arg=-Wno-format-nonliteral")
             if toolchain.plugin is not None:
                 extra.append(f"-load={toolchain.plugin}")
-            config = config_for(checks)
+            config = config_for(checks, source_roots=source_roots)
             compile_database = header_database_dir if invocation.is_header else native_database_dir
             if compile_database is None:
                 raise die(f"synthetic compile database was not created for {invocation.selected}")

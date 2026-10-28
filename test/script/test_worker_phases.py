@@ -289,6 +289,9 @@ class LintFixtureWorkerContextTest(PhaseLogFixture):
                 stack.enter_context(mock.patch.object(linttest, "discover_fixtures", return_value=fixtures))
                 stack.enter_context(mock.patch.object(linttest.subprocess, "run", side_effect=native_run))
                 stack.enter_context(
+                    mock.patch.object(linttest, "_run_source_policy_smoke", return_value=(True, smoke_log))
+                )
+                stack.enter_context(
                     mock.patch.object(linttest, "_run_compiler_error_smoke", return_value=(True, smoke_log))
                 )
                 stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
@@ -304,6 +307,7 @@ class LintFixtureWorkerContextTest(PhaseLogFixture):
             command_begin = next(row for row in begins if row["phase"] == "command")
             suite_begin = next(row for row in begins if row["phase"] == "suite")
             diagnostics_begin = next(row for row in begins if row["phase"] == "lint-diagnostics")
+            policy_begin = next(row for row in begins if row["phase"] == "lint-source-policy")
             compiler_begin = next(row for row in begins if row["phase"] == "lint-compiler-errors")
             self.assertEqual(suite_begin["parent_id"], command_begin["phase_id"])
             self.assertEqual(diagnostics_begin["parent_id"], suite_begin["phase_id"])
@@ -311,6 +315,11 @@ class LintFixtureWorkerContextTest(PhaseLogFixture):
             self.assertEqual(diagnostics_begin["tree"], "tidy")
             self.assertEqual(diagnostics_begin["jobs"], 2)
             self.assertEqual(diagnostics_begin["count"], 2)
+            self.assertEqual(policy_begin["parent_id"], suite_begin["phase_id"])
+            self.assertEqual(policy_begin["command"], "test")
+            self.assertEqual(policy_begin["tree"], "tidy")
+            self.assertEqual(policy_begin["jobs"], 2)
+            self.assertEqual(policy_begin["count"], linttest._source_policy_case_count(windows=False))
             self.assertNotIn("lint-syntax", {row["phase"] for row in begins})
 
             # Diagnostic workers run off the main thread inside the open stage,
@@ -324,14 +333,16 @@ class LintFixtureWorkerContextTest(PhaseLogFixture):
             # The diagnostic pool joins before the canary phase opens, and that
             # phase finishes before the suite ends.
             diagnostics_end = next(row for row in ends if row["phase"] == "lint-diagnostics")
+            policy_end = next(row for row in ends if row["phase"] == "lint-source-policy")
             compiler_end = next(row for row in ends if row["phase"] == "lint-compiler-errors")
             suite_end = next(row for row in ends if row["phase"] == "suite")
-            self.assertLess(rows.index(diagnostics_end), rows.index(compiler_begin))
+            self.assertLess(rows.index(diagnostics_end), rows.index(policy_begin))
+            self.assertLess(rows.index(policy_end), rows.index(compiler_begin))
             self.assertLess(rows.index(compiler_end), rows.index(suite_end))
 
             consumer = self.strict_consumer(log_dir)
             self.assertEqual(consumer.returncode, 0, consumer.stderr)
-            self.assertIn("4 phase record(s) measured.", consumer.stdout)
+            self.assertIn("5 phase record(s) measured.", consumer.stdout)
 
 
 class RunParallelTaskReuseTest(PhaseLogFixture):

@@ -5,6 +5,7 @@
 
 #include "check/AstHelpers.h"
 
+#include <clang-tidy/ClangTidyOptions.h>
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclCXX.h>
@@ -310,6 +311,11 @@ namespace clang::tidy::readability
     }
   } // namespace
 
+  void ForbidRawThrowCheck::storeOptions(ClangTidyOptions::OptionMap& options)
+  {
+    _sourceScope.storeOptions(Options, options);
+  }
+
   void ForbidRawThrowCheck::registerMatchers(MatchFinder* finder)
   {
     using namespace clang::ast_matchers;
@@ -326,7 +332,7 @@ namespace clang::tidy::readability
     {
       auto const location = throwExpr->getThrowLoc();
 
-      if (throwExpr->getSubExpr() == nullptr || !aobus::isPolicySource(sourceManager, location) ||
+      if (throwExpr->getSubExpr() == nullptr || !_sourceScope.isPolicySource(sourceManager, location) ||
           isApprovedExceptionCarrier(*result.Context, sourceManager, *throwExpr))
       {
         return;
@@ -348,7 +354,7 @@ namespace clang::tidy::readability
 
     auto const location = catchStmt->getCatchLoc();
 
-    if (!aobus::isPolicySource(sourceManager, location))
+    if (!_sourceScope.isPolicySource(sourceManager, location))
     {
       return;
     }

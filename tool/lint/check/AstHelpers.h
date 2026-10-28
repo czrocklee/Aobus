@@ -3,10 +3,13 @@
 
 #pragma once
 
+#include <clang-tidy/ClangTidyCheck.h>
+#include <clang-tidy/ClangTidyOptions.h>
 #include <clang/Basic/SourceLocation.h>
 
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace clang
 {
@@ -29,9 +32,27 @@ namespace clang::tidy::aobus
   // covered checks skip such ranges before diagnosing.
   bool isInMacro(SourceRange range);
 
-  // True for production project sources and lint fixtures. Ordinary tests and
-  // system headers are outside production policy checks.
-  bool isPolicySource(SourceManager const& sourceManager, SourceLocation location);
+  // Parse the portal's validated source-root option once per check instance.
+  // Root-level ordinary tests and system headers are outside production policy;
+  // lint fixtures remain covered. Unmatched paths never gain a test exemption.
+  class PolicySourceScope final
+  {
+  public:
+    PolicySourceScope(ClangTidyCheck const& check, ClangTidyCheck::OptionsView const& options);
+
+    void storeOptions(ClangTidyCheck::OptionsView const& view, ClangTidyOptions::OptionMap& options) const;
+    bool isPolicySource(SourceManager const& sourceManager, SourceLocation location) const;
+
+  private:
+    struct Root final
+    {
+      std::string path;
+      bool isWindowsPath;
+    };
+
+    std::string _sourceRootsJson;
+    std::vector<Root> _roots;
+  };
 
   bool hasBlockPolicyMarker(Stmt const& block,
                             ASTContext const& context,

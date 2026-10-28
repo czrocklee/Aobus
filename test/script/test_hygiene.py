@@ -822,10 +822,15 @@ class TidyCommandTest(unittest.TestCase):
                     stack.enter_context(mock.patch.object(tidy.tidyengine, "run_parallel", side_effect=run_parallel))
                     stack.enter_context(mock.patch.object(tidy.shutil, "rmtree"))
                     clang_tidy = stack.enter_context(mock.patch.object(tidy.subprocess, "call", return_value=0))
+                    config = stack.enter_context(mock.patch.object(tidy, "config_for", wraps=tidy.config_for))
                     stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
                     stack.enter_context(contextlib.redirect_stderr(io.StringIO()))
 
                     self.assertEqual(tidy.run_command(args), 0)
+                    config.assert_called_once_with(
+                        tidy.checks_for("STRICT", args.check),
+                        source_roots=(tidy.absolute_path(tidy.PROJECT_ROOT),),
+                    )
                     command = clang_tidy.call_args.args[0]
                     database_dir = Path(command[command.index("-p") + 1])
                     synthetic = json.loads((database_dir / "compile_commands.json").read_text(encoding="utf-8"))
