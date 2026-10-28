@@ -32,6 +32,7 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstddef>
 #include <filesystem>
 #include <format>
@@ -48,7 +49,7 @@ namespace ao::rt::test::playback_succession
   struct DecoderActivationProbe::Impl final
   {
     mutable std::mutex mutex;
-    std::map<std::filesystem::path, std::size_t> counts;
+    Snapshot counts;
   };
 
   DecoderActivationProbe::DecoderActivationProbe()
@@ -61,30 +62,113 @@ namespace ao::rt::test::playback_succession
   void DecoderActivationProbe::registerPath(std::filesystem::path const& path)
   {
     auto const lock = std::scoped_lock{_implPtr->mutex};
-    _implPtr->counts.try_emplace(path, 0);
+    _implPtr->counts.activations.try_emplace(path, 0);
+    _implPtr->counts.outputDecoderConstructions.try_emplace(path, 0);
   }
 
   void DecoderActivationProbe::notify(std::filesystem::path const& path)
   {
     auto const lock = std::scoped_lock{_implPtr->mutex};
 
-    if (auto const it = _implPtr->counts.find(path); it != _implPtr->counts.end())
+    if (auto const it = _implPtr->counts.activations.find(path); it != _implPtr->counts.activations.end())
     {
       ++it->second;
     }
   }
 
+  void DecoderActivationProbe::notifyOutputDecoderConstruction(std::filesystem::path const& path)
+  {
+    auto const lock = std::scoped_lock{_implPtr->mutex};
+    ++_implPtr->counts.outputDecoderConstructions[path];
+  }
+
   std::size_t DecoderActivationProbe::count(std::filesystem::path const& path) const
   {
     auto const lock = std::scoped_lock{_implPtr->mutex};
-    auto const it = _implPtr->counts.find(path);
-    return it == _implPtr->counts.end() ? 0 : it->second;
+    auto const it = _implPtr->counts.activations.find(path);
+    return it == _implPtr->counts.activations.end() ? 0 : it->second;
   }
 
-  std::map<std::filesystem::path, std::size_t> DecoderActivationProbe::snapshot() const
+  DecoderActivationProbe::Snapshot DecoderActivationProbe::snapshot() const
   {
     auto const lock = std::scoped_lock{_implPtr->mutex};
     return _implPtr->counts;
+  }
+
+  struct DecoderActivationGate::Impl final
+  {
+    explicit Impl(std::chrono::milliseconds const holdTimeout)
+      : timeout{holdTimeout}
+    {
+    }
+
+    mutable std::mutex mutex;
+    std::condition_variable cv;
+    std::chrono::milliseconds timeout;
+    std::filesystem::path blockedPath;
+    bool entered = false;
+    bool released = false;
+    bool expired = false;
+  };
+
+  DecoderActivationGate::DecoderActivationGate(std::chrono::milliseconds const timeout)
+    : _implPtr{std::make_unique<Impl>(timeout)}
+  {
+  }
+
+  DecoderActivationGate::~DecoderActivationGate() = default;
+
+  void DecoderActivationGate::blockPath(std::filesystem::path const& path)
+  {
+    auto const lock = std::scoped_lock{_implPtr->mutex};
+    _implPtr->blockedPath = path;
+  }
+
+  void DecoderActivationGate::enterAndWait(std::filesystem::path const& path)
+  {
+    auto lock = std::unique_lock{_implPtr->mutex};
+
+    // The first matching decoder is held; a duplicate must remain observable.
+    if (path != _implPtr->blockedPath || _implPtr->entered || _implPtr->released)
+    {
+      return;
+    }
+
+    _implPtr->entered = true;
+    _implPtr->cv.notify_all();
+
+    if (!_implPtr->cv.wait_for(lock, _implPtr->timeout, [&] { return _implPtr->released; }))
+    {
+      _implPtr->expired = true;
+    }
+  }
+
+  bool DecoderActivationGate::tryWaitForEntry(std::chrono::milliseconds const timeout)
+  {
+    auto lock = std::unique_lock{_implPtr->mutex};
+    return _implPtr->cv.wait_for(lock, timeout, [&] { return _implPtr->entered; });
+  }
+
+  bool DecoderActivationGate::isHeld() const
+  {
+    auto const lock = std::scoped_lock{_implPtr->mutex};
+    return _implPtr->entered && !_implPtr->released && !_implPtr->expired;
+  }
+
+  bool DecoderActivationGate::hasTimedOut() const
+  {
+    auto const lock = std::scoped_lock{_implPtr->mutex};
+    return _implPtr->expired;
+  }
+
+  void DecoderActivationGate::release()
+  {
+    {
+      auto const lock = std::scoped_lock{_implPtr->mutex};
+      _implPtr->released = true;
+    }
+
+    _implPtr->cv.notify_all();
   }
 
   PreparationReleaseGuard::PreparationReleaseGuard(std::shared_ptr<audio::test::BlockingPreparationGate> gatePtr)
@@ -140,10 +224,20 @@ namespace ao::rt::test::playback_succession
           .isLossy = isLossy,
           .codec = isLossy ? AudioCodec::Mp3 : AudioCodec::Flac,
         });
+
+        if (optOutputEncoding)
+        {
+          probePtr->notifyOutputDecoderConstruction(path);
+        }
+
         auto* const failureGate =
           optOutputEncoding && path.filename() == config.stagedFailureFileName ? config.stagedFailureGate : nullptr;
+        // One complete second in the selected encoding covers TrackSession's
+        // 500 ms preroll using whole frames, even for 24/32-bit output. If that
+        // policy grows past this block, the bounded activation gate fails setup.
+        auto const firstBlockBytes = audio::bytesPerSecond(outputFormat);
         decoderPtr->setReadScript(
-          {{.data = std::vector<std::byte>(100000, std::byte{0}), .endOfStream = false},
+          {{.data = std::vector<std::byte>(firstBlockBytes, std::byte{0}), .endOfStream = false},
            {.endOfStream = failureGate == nullptr,
             .res = failureGate != nullptr ? Result<>{makeError(Error::Code::IoError, "gated staged decode failure")}
                                           : Result<>{}}});
@@ -164,11 +258,17 @@ namespace ao::rt::test::playback_succession
           return makeError(Error::Code::IoError, "Scripted final decoder setup failure");
         }
 
+        auto const activationGatePtr = config.activationGatePtr;
         decoderPtr->setReadObserver(
-          [probePtr, path, failureGate](std::size_t const readCount)
+          [probePtr, path, failureGate, activationGatePtr](std::size_t const readCount)
           {
             if (readCount == 2)
             {
+              if (activationGatePtr)
+              {
+                activationGatePtr->enterAndWait(path);
+              }
+
               probePtr->notify(path);
 
               if (failureGate != nullptr)
@@ -286,7 +386,7 @@ namespace ao::rt::test::playback_succession
 
   Result<> PlaybackSuccessionTransportFixture::playAndWait(TrackId const trackId)
   {
-    auto const activationCounts = decoderProbePtr->snapshot();
+    auto const activationCounts = decoderProbePtr->snapshot().activations;
     auto startedRes = playFromViewAndWait(*successionPtr, transport.executor, viewId, trackId);
 
     if (!startedRes || !successionPtr->state().optResolvedSuccessor)
@@ -299,7 +399,7 @@ namespace ao::rt::test::playback_succession
     auto const it = activationCounts.find(successorPath);
     auto const previousCount = it == activationCounts.end() ? 0 : it->second;
 
-    if (!tryWaitForLookaheadAfter(successorId, previousCount))
+    if (!tryWaitForDecoderActivationAfter(successorId, previousCount))
     {
       return makeError(Error::Code::InvalidState, "Timed out waiting for playback lookahead activation");
     }
@@ -307,13 +407,13 @@ namespace ao::rt::test::playback_succession
     return {};
   }
 
-  std::size_t PlaybackSuccessionTransportFixture::lookaheadActivationCount(TrackId const trackId) const
+  std::size_t PlaybackSuccessionTransportFixture::decoderActivationCount(TrackId const trackId) const
   {
     return decoderProbePtr->count(trackPaths.at(trackId));
   }
 
-  bool PlaybackSuccessionTransportFixture::tryWaitForLookaheadAfter(TrackId const trackId,
-                                                                    std::size_t const previousCount)
+  bool PlaybackSuccessionTransportFixture::tryWaitForDecoderActivationAfter(TrackId const trackId,
+                                                                            std::size_t const previousCount)
   {
     auto const& path = trackPaths.at(trackId);
     return transport.executor.tryDrainUntil(

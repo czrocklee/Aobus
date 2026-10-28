@@ -258,10 +258,10 @@ namespace ao::rt::test
     REQUIRE(succession.playFromView(fixture.viewId, fixture.thirdTrackId));
     REQUIRE(gatePtr->tryWaitForEntry());
 
-    auto const activationCount = fixture.lookaheadActivationCount(fixture.secondTrackId);
+    auto const activationCount = fixture.decoderActivationCount(fixture.secondTrackId);
     fixture.transport.playbackTransport.seek(std::chrono::milliseconds{0}, PlaybackTransport::SeekMode::Final);
     releaseGuard.release();
-    REQUIRE(fixture.tryWaitForLookaheadAfter(fixture.secondTrackId, activationCount));
+    REQUIRE(fixture.tryWaitForDecoderActivationAfter(fixture.secondTrackId, activationCount));
     CHECK(gatePtr->createdPtr->load(std::memory_order_relaxed) > 0);
     CHECK(gatePtr->destroyedPtr->load(std::memory_order_relaxed) ==
           gatePtr->createdPtr->load(std::memory_order_relaxed));
@@ -292,11 +292,11 @@ namespace ao::rt::test
     REQUIRE(succession.playFromView(fixture.viewId, fixture.thirdTrackId));
     REQUIRE(gatePtr->tryWaitForEntry());
 
-    auto const activationCount = fixture.lookaheadActivationCount(fixture.secondTrackId);
+    auto const activationCount = fixture.decoderActivationCount(fixture.secondTrackId);
     fixture.transport.playbackTransport.setOutputDevice(
       audio::BackendId{"mock_backend"}, audio::DeviceId{"alternate-device"}, audio::ProfileId{audio::kProfileShared});
     releaseGuard.release();
-    REQUIRE(fixture.tryWaitForLookaheadAfter(fixture.secondTrackId, activationCount));
+    REQUIRE(fixture.tryWaitForDecoderActivationAfter(fixture.secondTrackId, activationCount));
     CHECK(gatePtr->createdPtr->load(std::memory_order_relaxed) > 0);
     CHECK(gatePtr->destroyedPtr->load(std::memory_order_relaxed) ==
           gatePtr->createdPtr->load(std::memory_order_relaxed));

@@ -403,7 +403,7 @@ namespace ao::rt::test
     REQUIRE(fixture.successionPtr->state().optResolvedSuccessor == fixture.secondTrackId);
     CHECK(script.committedOpens.load(std::memory_order_relaxed) == 1);
     CHECK(script.startedRoutes.load(std::memory_order_relaxed) == 1);
-    CHECK(fixture.lookaheadActivationCount(fixture.secondTrackId) == 0);
+    CHECK(fixture.decoderActivationCount(fixture.secondTrackId) == 0);
 
     SECTION("the shared preparation has an exact logical-token disarm acknowledgement")
     {
@@ -414,7 +414,7 @@ namespace ao::rt::test
       CHECK_FALSE(fixture.transport.playbackTransport.clearPreparedNext());
       CHECK(script.committedOpens.load(std::memory_order_relaxed) == 1);
       CHECK(script.startedRoutes.load(std::memory_order_relaxed) == 1);
-      CHECK(fixture.lookaheadActivationCount(fixture.secondTrackId) == 0);
+      CHECK(fixture.decoderActivationCount(fixture.secondTrackId) == 0);
     }
 
     SECTION("untouched preparation reaches the authoritative open only after natural drain")
