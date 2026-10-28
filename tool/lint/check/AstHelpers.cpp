@@ -134,6 +134,13 @@ namespace clang::tidy::aobus
       return false;
     }
 
+    auto const fileId = sourceManager.getFileID(spellingLocation);
+
+    if (fileId.isValid() && fileId == _cachedFileId)
+    {
+      return _cachedFileIsPolicySource;
+    }
+
     auto filename = llvm::SmallString<kPolicyPathInlineCapacity>{sourceManager.getFilename(spellingLocation)};
     std::ignore = sourceManager.getFileManager().makeAbsolutePath(filename);
     filename = normalizePolicyPath(filename);
@@ -175,7 +182,15 @@ namespace clang::tidy::aobus
     // Missing or unusable root metadata likewise retains production policy.
     bool const isTestSource = startsWith(relativeFilename, "test/", isWindowsPath);
     bool const isLintFixture = startsWith(relativeFilename, "test/lint/fixture/", isWindowsPath);
-    return !isTestSource || isLintFixture;
+    bool const isPolicySource = !isTestSource || isLintFixture;
+
+    if (fileId.isValid())
+    {
+      _cachedFileId = fileId;
+      _cachedFileIsPolicySource = isPolicySource;
+    }
+
+    return isPolicySource;
   }
 
   bool hasEnclosingFunctionPolicyMarker(Stmt const& statement,

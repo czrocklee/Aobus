@@ -169,6 +169,10 @@ The tidy portal supplies the same validated roots used by its diagnostic filters
 Active owned compiler-view inputs are mapped through the workspace authority to checkout paths before classification and deduplication; unowned outside paths remain strict.
 The direct native fixture host supplies its checkout root through the shared configuration serializer.
 Each checker parses and normalizes this immutable scope at construction, not for each AST match.
+A single-entry FileID cache memoizes only path classification within that check's translation unit and SourceManager epoch.
+Location validity, spelling resolution, and system-header status are still checked on every match; system status can change within one file.
+The cache owns no borrowed filenames, dynamic file map, cross-check state, or cross-TU state.
+A scope is confined to its check's AST traversal thread; its const observer does not promise concurrent access.
 `--dump-config` retains its effective check-local option, including the empty default.
 A dump is an effective-value snapshot: check-local values take precedence over a subsequently added global option, as in ordinary Clang-Tidy option lookup.
 The normal serializer and tidy/analyzer diagnostic filters reject an explicitly empty root set.
@@ -188,7 +192,13 @@ Generated files outside the validated source roots likewise receive no implicit 
 
 The lint suite's source-policy smoke cases run real diagnostics against temporary checkout layouts, including ordinary tests and production sources under misleading ancestors, malformed or missing root metadata, and configuration dump round trips.
 The multi-check smoke explicitly requires every selected alias, with partial-loss controls for each one; ordinary single-check fixtures retain their selected-check contract.
-The stage prepares distinct immutable source files for each case and spelling profile before using the requested bounded worker pool.
+Cache controls cover user/system/user locations in one file, an exempt header followed by production code, both translation-unit orders in one host process, and macro-definition spelling in both directions across the test/production boundary.
+The system-region control enables system diagnostics so the checker itself must reject that region; only header-switch controls broaden the header filter.
+Other cases, including metadata dump round trips, retain normal host diagnostic flags.
+Header includes use relative tokens rather than JSON-escaped absolute paths, including under a non-ASCII parent; line-marker filenames remain encoded string literals, with line numbers derived from the assembled source.
+Windows profiles exercise native and forward separators in both inputs and source literals; case variants change only ASCII letters, preserving non-ASCII filename identity.
+The stage freezes each case's ordered input paths, source snapshots, command, and diagnostic flags before using the requested bounded worker pool.
+The parallel regression observes every translation unit and context header per invocation, as well as the complete prepared batch.
 Each dump and semantic replay remains ordered within its case; aggregate logs remain in inventory order, and phase metadata records worker width separately from host-invocation count.
 These controls supplement the rule fixtures, whose maintained paths all lie inside the intentional lint-fixture exception.
 
