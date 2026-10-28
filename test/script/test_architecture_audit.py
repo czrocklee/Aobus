@@ -615,7 +615,7 @@ class ArchitectureAuditTest(unittest.TestCase):
         missing_root_rejected = run_fixture("Projection.h", "struct SharedValue {};\n", create_source_root=False)
         output = missing_root_rejected.stdout + missing_root_rejected.stderr
         self.assertNotEqual(missing_root_rejected.returncode, 0, output)
-        self.assertIn("source root is not a directory", output)
+        self.assertIn("SOURCE_ROOT is not a directory", output)
 
 
 if __name__ == "__main__":

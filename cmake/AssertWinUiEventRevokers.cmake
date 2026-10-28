@@ -18,8 +18,15 @@
 
 include("${CMAKE_CURRENT_LIST_DIR}/AoSourceCode.cmake")
 
-if(NOT ROOT)
+if(NOT DEFINED ROOT OR "${ROOT}" STREQUAL "")
   message(FATAL_ERROR "AssertWinUiEventRevokers: ROOT not specified")
+endif()
+if(NOT IS_ABSOLUTE "${ROOT}")
+  set(ROOT "${CMAKE_CURRENT_SOURCE_DIR}/${ROOT}")
+endif()
+if(NOT IS_DIRECTORY "${ROOT}")
+  message(FATAL_ERROR
+          "AssertWinUiEventRevokers: ROOT is not a directory: ${ROOT}")
 endif()
 
 file(GLOB_RECURSE _ao_files LIST_DIRECTORIES false
