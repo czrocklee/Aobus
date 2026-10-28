@@ -72,6 +72,12 @@ Cached lookup rows separately cover enough whole-value hits to fill the limit, e
 The configured compiler, sanitizer flags, and CMake build type must match the selected options; a mismatched tree is rejected before running or removing an existing report.
 Its report and terminal summary mark the source revision as `unverified`: the current checkout does not establish which source produced an existing executable.
 Rerun without `--no-build` when the review needs source-attributed evidence.
+Revision provenance observes content-aware Git status without persisting optional stat-only index refreshes.
+It ignores source-discovery Git bindings and pins change visibility rather than inheriting status display defaults.
+Command-local `status.showUntrackedFiles=normal` also reaches nested submodule status processes; `--ignore-submodules=none` prevents submodule-ignore settings from hiding changes.
+The dirty check consumes only the empty-or-not status answer, so `normal`'s directory-collapsed untracked enumeration is equivalent to `all` for this contract.
+Staged, unstaged, and non-ignored untracked changes, including modified or untracked submodule content, mark the checkout dirty under these policies.
+Normal Git ignore and index semantics still apply.
 `-p` selects one exact build tree in the same way as other portal commands.
 The portal validates output destinations, removes the selected reports before launching the workload, and rejects a successful test selection that does not recreate every requested report. Existing output symlinks, special files, directories, and aliases between the v1 and v2 destinations are rejected before removing either report.
 Debug, sanitizer, and profile runs may help diagnosis, but acceptance evidence uses `release` unless the reviewed question explicitly concerns another build mode.

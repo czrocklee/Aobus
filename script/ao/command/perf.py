@@ -79,7 +79,22 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
 
 def _revision() -> str:
     revision = capture(gitfiles.git_command("rev-parse", "--verify", "HEAD"), cwd=PROJECT_ROOT).strip()
-    if capture(gitfiles.git_command("status", "--porcelain"), cwd=PROJECT_ROOT).strip():
+    # Provenance is observational: status must not persist stat-only index refreshes.
+    # Do not opt into source-discovery bindings or change generic Git write policy.
+    # Command-local status configuration wins over every configuration channel and
+    # is inherited by the nested submodule status, so no checkout configuration can
+    # hide non-ignored untracked changes or submodule content changes.
+    if capture(
+        gitfiles.git_command(
+            "--no-optional-locks",
+            "-c",
+            "status.showUntrackedFiles=normal",
+            "status",
+            "--porcelain",
+            "--ignore-submodules=none",
+        ),
+        cwd=PROJECT_ROOT,
+    ).strip():
         revision += "+dirty"
     return revision
 
