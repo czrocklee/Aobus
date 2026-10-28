@@ -5,7 +5,7 @@ id: media.channel-order
 
 ## Scope
 
-This reference records WAVE speaker order, WAV compatibility sets, the narrower FLAC format defaults, bounded ALAC channel declarations, uniform MP3 frame-mode identities, and current Opus slot normalization.
+This reference records WAVE speaker order, WAV compatibility sets, the narrower FLAC format defaults, bounded ALAC channel declarations, uniform MP3 frame-mode identities, and Opus family roles and slot normalization.
 [PCM source interpretation](../../system/playback/pcm-format.md) owns their playback applicability; slot conventions alone do not establish published source identity or native delivery.
 
 ## WAVE speaker positions
@@ -19,7 +19,8 @@ See Microsoft's [WAVEFORMATEXTENSIBLE reference](https://learn.microsoft.com/en-
 
 These sets support Aobus's [WAV compatibility policy](../../system/playback/pcm-format.md#wav-source-interpretation).
 FLAC uses the same format-default identities only for counts 1, 2, 3, 4, 7, and 8; absent a mask declaration, five/six-channel FLAC remains unidentified as explained [below](#flac).
-These sets are not defaults for unidentified PCM or native backend observations.
+Opus mapping families 0 and 1 publish their channel count's row as their identified output-slot roles, bounded by the family applicability of the [Opus section](#opus).
+These sets are not defaults for Opus family 255, unidentified PCM, or native backend observations.
 
 | Channels | Mask | Canonical roles |
 |---:|---:|---|
@@ -132,8 +133,11 @@ Coverage does not establish corruption-free audio or file authenticity, and thes
   The canonical destination-to-decoder permutations are `3:[0,2,1]`, `5:[0,2,1,3,4]`, `6:[0,2,1,5,3,4]`, `7:[0,2,1,6,5,3,4]`, and `8:[0,2,1,7,5,6,3,4]`; counts 1, 2, and 4 are identity.
 - Family 255 defines no speaker positions and may expose up to 255 unassigned channels in header-defined output-index order.
 
-These byte-order mechanisms do not publish source identity: the current Opus session still reports a zero speaker mask and `Unknown` layout origin.
-[`OpusDecoderSession.cpp`](../../../lib/audio/OpusDecoderSession.cpp) owns the mapping, covered by the family-1 speaker-order case in [`OpusDecoderSessionTest.cpp`](../../../test/audio/OpusDecoderSessionTest.cpp).
+Families 0 and 1 assign authoritative roles to their output slots, so the session publishes the channel count's row of the [canonical role sets](#canonical-role-sets) above as `Identified` source identity, with the same mask on its output format.
+The family-1 permutation is what makes that WAVE mask truthful for the emitted PCM, though it still proves neither native delivery nor physical wiring.
+Family 255 keeps its zero mask and `Unknown` origin.
+A mapping table's repeated or silent (255) entries describe output slots, not uniqueness of coded indices, and erase no slot's identity.
+[`OpusDecoderSession.cpp`](../../../lib/audio/OpusDecoderSession.cpp) owns the mapping and identity publication, covered by the family-1 speaker-order case in [`OpusDecoderSessionTest.cpp`](../../../test/audio/OpusDecoderSessionTest.cpp) and by the family, mapping-entry, adaptation, and seek/flush/EOF cases in [`OpusDecoderChannelLayoutTest.cpp`](../../../test/audio/OpusDecoderChannelLayoutTest.cpp).
 
 ## Related documents
 

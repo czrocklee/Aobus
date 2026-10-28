@@ -23,14 +23,15 @@ Its constructor and one-shot `initialize()` step are private, and it exposes no 
 - A decoder created with a requested `SampleEncoding` either produces exactly that interleaved representation or is not published.
 - Decoders preserve inspected sample rate, channel count, sample kind, precision, and effective speaker mask; they do not silently resample, add or remove channels, or reduce precision.
 - A decoder publishing identified speakers normalizes their codec-native layout to the order owned by the [PCM format reference](pcm-format.md); unassigned channels retain their index order.
-  Byte-order normalization alone, such as Opus family 1 mapping, does not establish published layout evidence.
+  Byte-order normalization alone does not establish published layout evidence; Opus identifies through its mapping-family role assignment, not through the permutation that normalization performs.
 - WAV applies its [source interpretation](pcm-format.md#wav-source-interpretation) before output adaptation and retains raw declarations independently; its multichannel and explicit-zero compatibility fallbacks are `Inferred`.
   FLAC finalizes its candidate effective mask before output adaptation and publishes its distinct [source interpretation](pcm-format.md#flac-source-interpretation) only after required initialization and output admission succeed: with complete trustworthy metadata and first-block STREAMINFO, absent exact mask keys select `Identified` format defaults for counts 1/2/3/4/7/8, but zero / `Unknown` for 5/6 because back/side geometry is unresolved.
   Complete supported agreeing declarations select exact `Identified` sets without additional PCM reordering, including distinct five/six-channel back and side sets.
   Malformed, conflicting, zero, partial, excess, reserved-bit, or wildcard declarations, nonfirst STREAMINFO, incomplete comments, and optional inspection inability leave both FLAC masks zero and origin `Unknown`, never `Inferred`; later good evidence cannot repair that inspection.
   ALAC applies its [bounded source interpretation](pcm-format.md#alac-source-interpretation) before output adaptation: trustworthy absence identifies mono/stereo only, and complete supported agreeing declarations identify and normalize explicit layouts; bad or uninspectable optional evidence remains zero / `Unknown`.
   MP3 applies its [bounded source interpretation](pcm-format.md#mp3-source-interpretation) before output adaptation: complete native-index header coverage of a uniform mono or stereo/joint stream is `Identified`, while dual-channel, mixed roles, and incomplete coverage retain zero masks and `Unknown`.
-  The other current codec producers, AAC and Opus, still report zero masks and `Unknown` interpretation evidence.
+  Opus applies its mapping families as [source interpretation](../../reference/media/channel-order.md#opus): families 0 and 1 own authoritative output-slot roles and publish their channel count's WAVE mask with `Identified` interpretation, while family 255 keeps zero masks and `Unknown` evidence in header-defined ordinal order.
+  AAC still reports zero masks and `Unknown` interpretation evidence.
 - Unsupported or precision-losing encoding requests fail during source-private construction before playback begins.
 - An exhausted session returns a stable empty end-of-stream block; destruction ends the session and releases its codec resources.
 
@@ -96,7 +97,7 @@ otherwise land within one packet of the target.
 
 The identification packet's output gain reaches libopus unconverted, which applies the RFC 7845 header gain during decoding.
 Channel mapping family 1 orders its channels the way Vorbis does, so the session permutes the mapping it hands libopus into the WAV speaker order every PCM surface expects.
-Family 0 is already compatible; family 255 defines no speaker positions and remains in header-defined output-index order.
+The [Opus source-identity policy](../../reference/media/channel-order.md#opus) determines source/output masks before the immutable stream information is published.
 
 MP3 construction requests a growing native frame index, performs a native scan, and seeks back to sample zero before reporting stream information.
 The scan and the return to zero are required; either failure prevents publication.
@@ -277,6 +278,11 @@ Existing [`AlacDecoderMalformedMp4Test.cpp`](../../../test/audio/AlacDecoderMalf
 It also covers successor evidence publication, different-role drain/reopen, recoverable malformed-outer-metadata failure before backend open, and rejected `setNext()` preservation of current playback while clearing old lookahead.
 [`EngineFlacTransitionTest.cpp`](../../../test/audio/EngineFlacTransitionTest.cpp) covers six-channel real-FLAC producer transitions: equal known and equal unknown reuse controls, known↔unknown drain/reopen, different nonzero roles, captured PCM, and successor evidence publication.
 [`FlacAlsaPipeWireRouteTest.cpp`](../../../test/audio/backend/FlacAlsaPipeWireRouteTest.cpp) drives real five/six-channel decoders through controlled ALSA and PipeWire parsed-map boundaries: untagged sources retain ordinal bytes across back/side observations, while explicit identities keep strict role checks and same-set permutations. It does not open hardware.
+Linux-only [`OpusAlsaChannelLayoutTest.cpp`](../../../test/audio/backend/OpusAlsaChannelLayoutTest.cpp) drives actual mono and six-channel Opus decodes through the controlled ALSA parsed-map boundary: conflicting current roles are refused where the former zero-mask publication was eligible, same-set native orders are privately permuted, and missing or compatible partial observations retain eligibility.
+Mono `MONO` observations remain unassigned rather than being relabelled FC, and accepted mono maps retain one-channel PCM bytes. These tests do not open hardware or establish stereo-only-device support.
+[`OpusDecoderChannelLayoutTest.cpp`](../../../test/audio/OpusDecoderChannelLayoutTest.cpp) locks family 0/1/255 identity publication with literal per-count masks and exact per-slot PCM comparisons against family-255 ordinal decodes using independently declared RFC speaker roles.
+It covers silent and repeated mapping patterns, including distinguishable seven/eight-channel controls, six-channel family-255 ordinal order, concrete/factory parity and unsupported-family refusal, adaptation, and immutable stream information through reads/seek/flush/EOF.
+The generic borrowed-block byte-validity case across seek/flush until the next read is covered by [`OpusDecoderSessionTest.cpp`](../../../test/audio/OpusDecoderSessionTest.cpp), independent of channel-role identification.
 [`VorbisCommentTest.cpp`](../../../test/media/VorbisCommentTest.cpp) protects the shared raw grammar, borrowed order and bytes, malformed prefixes/tails, visitor abort and exception behavior, large counts, and atomic import collection.
 [`EngineStereoReuseTest.cpp`](../../../test/audio/EngineStereoReuseTest.cpp) retains the real WAV/ALAC stereo fixture and also checks FLAC/ALAC stereo opt-in splicing versus strict draining in both directions, with literal PCM and source-identity publication.
 These controlled Engine cases do not certify native routing or audible gaplessness.

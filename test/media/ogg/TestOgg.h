@@ -40,4 +40,9 @@ namespace ao::test::ogg
   std::vector<std::byte> makeStream(std::span<Page const> pages);
 
   std::vector<std::byte> toBytes(std::span<std::uint8_t const> bytes);
+
+  /**
+   * Unsigned bytes for the given byte values; the inverse of toBytes.
+   */
+  std::vector<std::uint8_t> toUnsignedBytes(std::span<std::byte const> bytes);
 } // namespace ao::test::ogg

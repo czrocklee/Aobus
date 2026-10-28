@@ -468,8 +468,10 @@ ALAC above two channels without a declaration, or at any count with bad or unins
 That best-effort playback admission is not a role-safety or native-routing guarantee: zero-mask paths can use ordinal/default transport through different speaker roles, and native open can still fail.
 Numerical bit-perfectness is independent of channel confidence.
 MP3 publishes FC or FL/FR only when its [source policy](pcm-format.md#mp3-source-interpretation) identifies a uniform mono or stereo/joint stream from complete native-index header coverage; dual-channel, mixed roles, and incomplete coverage remain zero / `Unknown`.
-The existing backend admission, splice eligibility, native observation, quality-analysis, and format-equality rules are unchanged.
-The other current codec producers, AAC and Opus, retain zero masks and `Unknown` source interpretation; neither WAV compatibility sets nor FLAC defaults are ALAC or backend defaults.
+Opus identifies the output roles declared by mapping families 0 and 1, while family 255 remains zero / `Unknown`, under the [Opus family policy](../../reference/media/channel-order.md#opus).
+The codec-independent backend admission, splice eligibility, native observation, quality-analysis, and format-equality predicates are unchanged, but unchanged predicates do not mean unchanged acceptance for a given Opus file: where the former zero-mask publication passed as unpositioned transport, an identified family 0/1 source can now be privately permuted onto a same-set native order or refused for a confirmed role conflict.
+Missing or compatible partial native observations are not blanket refusals, and the published identity proves neither native mapping nor physical routing.
+AAC retains zero masks and `Unknown` source interpretation; neither WAV compatibility sets nor FLAC defaults are ALAC or backend defaults.
 ALAC normalization changes no backend admission, native observation, or quality-analysis policy.
 
 Source admission and native delivery evidence are separate decisions.

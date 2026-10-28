@@ -116,4 +116,17 @@ namespace ao::test::ogg
 
     return result;
   }
+
+  std::vector<std::uint8_t> toUnsignedBytes(std::span<std::byte const> const bytes)
+  {
+    auto result = std::vector<std::uint8_t>{};
+    result.reserve(bytes.size());
+
+    for (auto const byte : bytes)
+    {
+      result.push_back(std::to_integer<std::uint8_t>(byte));
+    }
+
+    return result;
+  }
 } // namespace ao::test::ogg
