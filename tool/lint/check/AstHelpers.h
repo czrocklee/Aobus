@@ -35,6 +35,9 @@ namespace clang::tidy::aobus
   // Parse the portal's validated source-root option once per check instance.
   // Root-level ordinary tests and system headers are outside production policy;
   // lint fixtures remain covered. Unmatched paths never gain a test exemption.
+  // Each fresh ClangTidy check/TU owns one scope for a single SourceManager
+  // epoch with immutable roots and filename resolution; do not reuse it across
+  // managers, reparses or cleared source IDs. Only path classification is cached.
   class PolicySourceScope final
   {
   public:
@@ -52,6 +55,8 @@ namespace clang::tidy::aobus
 
     std::string _sourceRootsJson;
     std::vector<Root> _roots;
+    mutable FileID _cachedFileId;
+    mutable bool _cachedFileIsPolicySource = true;
   };
 
   bool hasBlockPolicyMarker(Stmt const& block,

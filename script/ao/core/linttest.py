@@ -524,14 +524,27 @@ _SOURCE_POLICY_CHECKS = (
 )
 
 
+def _source_policy_ascii_case_variant(path: Path) -> Path:
+    # Vary the ASCII case contract without inventing a different Unicode name.
+    return Path("".join(character.swapcase() if character.isascii() else character for character in str(path)))
+
+
 def _source_policy_cases(root: Path, *, windows: bool = False) -> list[tuple[str, Path, tuple[Path, ...], bool]]:
     plain = root / "plain" / "checkout"
+    unicode_root = root / "josé 测试" / "checkout"
     ancestor = root / "test" / "checkout"
     fixture_ancestor = root / "test" / "lint" / "fixture" / "checkout"
     spaced = root / "test" / "space;and checkout"
     alias = plain / "source"
     return [
         ("production", plain / "lib" / "Policy.cpp", (plain,), True),
+        ("same-file-system", plain / "lib/Policy.cpp", (plain,), True),
+        ("header-file-switch", plain / "lib/Policy.cpp", (plain,), True),
+        ("header-file-switch-unicode", unicode_root / "lib/Policy.cpp", (unicode_root,), True),
+        ("multi-tu-exempt-first", plain / "lib/Policy.cpp", (plain,), True),
+        ("multi-tu-production-first", plain / "lib/Policy.cpp", (plain,), True),
+        ("macro-spelling-exempt-definition", plain / "lib/Policy.cpp", (plain,), True),
+        ("macro-spelling-production-definition", plain / "test/Policy.cpp", (plain,), False),
         ("ordinary-test", plain / "test" / "Policy.cpp", (plain,), False),
         ("fixture", plain / "test/lint/fixture/probe/Policy.cpp", (plain,), True),
         ("nested-test-component", plain / "app/nested/test/Policy.cpp", (plain,), True),
@@ -545,7 +558,7 @@ def _source_policy_cases(root: Path, *, windows: bool = False) -> list[tuple[str
         ("root-encoding", spaced / "lib/Policy.cpp", (spaced,), True),
         ("encoded-root-test", spaced / "test/Policy.cpp", (spaced,), False),
         ("unknown-root", plain / "test/Policy.cpp", (root / "unknown",), True),
-        ("case-varied-root", plain / "test/Policy.cpp", (Path(str(plain).swapcase()),), not windows),
+        ("case-varied-root", plain / "test/Policy.cpp", (_source_policy_ascii_case_variant(plain),), not windows),
         ("case-varied-test", plain / "TEST/Policy.cpp", (plain,), not windows),
     ]
 
@@ -610,7 +623,17 @@ def _run_source_policy_smoke(
     log = case_dir / "run.log"
     check = _SOURCE_POLICY_CHECKS[0]
     selected_checks = ",".join(_SOURCE_POLICY_CHECKS)
-    tasks: list[tuple[str, Path, str, str, bool, bool]] = []
+
+    @dataclass(frozen=True)
+    class PreparedCase:
+        label: str
+        path: Path
+        command: tuple[str, ...]
+        sources: tuple[tuple[Path, str], ...]
+        dump: bool
+        expects_configuration_warning: bool
+
+    tasks: list[PreparedCase] = []
     if tools is None:
         host = tidyengine.clang_tool(build_dir, "clang-tidy")
         flags: tuple[str, ...] = ("-std=c++26",)
@@ -624,7 +647,9 @@ def _run_source_policy_smoke(
         profile_dir = case_dir / spelling
         cases: list[tuple[str, Path, str, bool, bool, bool]] = []
         for name, path, roots, expected in _source_policy_cases(profile_dir, windows=tools is not None):
-            option_roots = tuple(Path(str(root).swapcase()) for root in roots) if forward_slashes else roots
+            option_roots = (
+                tuple(_source_policy_ascii_case_variant(root) for root in roots) if forward_slashes else roots
+            )
             config = tidyconfig.config_for(tidyconfig.checks_for("STRICT", selected_checks), source_roots=option_roots)
             cases.append((name, path.with_name(f"{name}.cpp"), config, expected, False, False))
         metadata_root = profile_dir / "metadata checkout"
@@ -642,18 +667,85 @@ def _run_source_policy_smoke(
                 "void pathProbe(char const* text) { std::filesystem::path value(text); } "
                 f"// {marker}:aobus-portability-explicit-path-conversion\n"
             )
-            path.write_text(source, encoding="utf-8")
-            source_name = path.as_posix() if forward_slashes else str(path)
-            tasks.append((f"{name}/{spelling}", path, source_name, config, dump, warning))
+            sources: dict[Path, str] = {}
+            input_paths: tuple[Path, ...] = (path,)
+            diagnostic_args: tuple[str, ...] = ()
+            separator = "\\" if tools is not None and not forward_slashes else "/"
+            if name == "same-file-system":
+                body = "\n".join(source.splitlines()[1:]) + "\n"
+                system = body.replace("Probe", "SystemProbe").replace("POSITIVE", "NEGATIVE")
+                restored = body.replace("Probe", "RestoredProbe")
+                # Line-marker filenames are string literals, unlike header-name
+                # tokens. Derive presumed lines from the physical buffer.
+                filename = json.dumps(path.as_posix() if forward_slashes else str(path))
+                system_line = source.count("\n") + 2
+                source += f"# {system_line} {filename} 3\n{system}"
+                restored_line = source.count("\n") + 2
+                source += f"# {restored_line} {filename}\n{restored}"
+                # Expose system diagnostics so the check, not host filtering,
+                # must reject the marked region. Other cases keep normal flags.
+                diagnostic_args = ("--system-headers",)
+            elif name in ("header-file-switch", "header-file-switch-unicode"):
+                other = path.parent.parent / "test" / f"{name}-ordinary.h"
+                sources[other] = source.replace("Probe", "HeaderProbe").replace("POSITIVE", "NEGATIVE")
+                # Relative ASCII tokens need no string escaping and remain valid
+                # when an ancestor contains Unicode, quotes or separators.
+                header_name = separator.join(("..", "test", other.name))
+                source = f'#include "{header_name}"\n' + "\n".join(source.splitlines()[1:]) + "\n"
+                diagnostic_args = ("--header-filter=.*",)
+            elif name in ("multi-tu-exempt-first", "multi-tu-production-first"):
+                other = path.parent.parent / "test" / f"{name}-ordinary.cpp"
+                sources[other] = source.replace("POSITIVE", "NEGATIVE")
+                input_paths = (other, path) if name == "multi-tu-exempt-first" else (path, other)
+            elif name in ("macro-spelling-exempt-definition", "macro-spelling-production-definition"):
+                header_directory = "test" if expected else "lib"
+                other = path.parent.parent / header_directory / f"{name}-macros.h"
+                sources[other] = (
+                    source.splitlines()[0] + "\n"
+                    "#define SOURCE_POLICY_FATAL std::abort()\n"
+                    "#define SOURCE_POLICY_THROW throw 1\n"
+                    "#define SOURCE_POLICY_PATH std::filesystem::path macroValue(text)\n"
+                )
+                macro_marker = "NEGATIVE" if expected else "POSITIVE"
+                header_name = separator.join(("..", header_directory, other.name))
+                source = (
+                    f'#include "{header_name}"\n'
+                    "void macroFatalProbe() { SOURCE_POLICY_FATAL; } "
+                    f"// {macro_marker}:aobus-readability-forbid-raw-fatal\n"
+                    "void macroThrowProbe() { SOURCE_POLICY_THROW; } "
+                    f"// {macro_marker}:aobus-readability-forbid-raw-throw\n"
+                    "void macroPathProbe(char const* text) { SOURCE_POLICY_PATH; } "
+                    f"// {macro_marker}:aobus-portability-explicit-path-conversion\n"
+                    + "\n".join(source.splitlines()[1:])
+                    + "\n"
+                )
+            sources[path] = source
+            for source_path, source_text in sources.items():
+                source_path.parent.mkdir(parents=True, exist_ok=True)
+                source_path.write_text(source_text, encoding="utf-8")
+            input_names = tuple(
+                input_path.as_posix() if forward_slashes else str(input_path) for input_path in input_paths
+            )
+            command = _direct_tidy_command(
+                host,
+                input_names[-1],
+                config,
+                flags=flags,
+                plugin=plugin if tools is None else None,
+                tidy_args=(*diagnostic_args, *input_names[:-1]),
+            )
+            tasks.append(
+                PreparedCase(f"{name}/{spelling}", path, tuple(command), tuple(sources.items()), dump, warning)
+            )
 
-    def run_case(task: tuple[str, Path, str, str, bool, bool]) -> tuple[bool, Path]:
-        profile, path, source_name, config, dump, expects_configuration_warning = task
-        source = path.read_text(encoding="utf-8")
-        case_log = path.with_suffix(".log")
+    def run_case(task: PreparedCase) -> tuple[bool, Path]:
+        profile = task.label
+        case_log = task.path.with_suffix(".log")
         errors: list[str] = []
         outputs: list[str] = []
-        command = _direct_tidy_command(host, source_name, config, flags=flags, plugin=plugin if tools is None else None)
-        if dump:
+        sources = dict(task.sources)
+        command = list(task.command)
+        if task.dump:
             separator = command.index("--")
             dumped = subprocess.run(
                 [*command[:separator], "--dump-config", *command[separator:]],
@@ -678,15 +770,15 @@ def _run_source_policy_smoke(
             and "AobusSourceRoots" in line
             and "[clang-tidy-config]" in line
         ]
-        if bool(configuration_warnings) != expects_configuration_warning:
+        if bool(configuration_warnings) != task.expects_configuration_warning:
             errors.append(f"{profile}: ERROR: unexpected source-root configuration warning state")
         policy_output = "\n".join(line for line in result.stdout.splitlines() if line not in configuration_warnings)
         policy_result = subprocess.CompletedProcess(result.args, result.returncode, stdout=policy_output)
         errors.extend(
             f"{profile}: {error}"
             for error in _diagnostic_errors(
-                Fixture(path, check),
-                {path: source},
+                Fixture(task.path, check),
+                sources,
                 policy_result,
                 direct_host=True,
                 required_checks=_SOURCE_POLICY_CHECKS,
