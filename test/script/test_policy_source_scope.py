@@ -653,7 +653,6 @@ class SourcePolicyScopeSmokeTest(unittest.TestCase):
                 peak = 0
                 prepared_bytes = {}
                 call_inputs = {}
-                contexts = []
 
                 def native(
                     command,
@@ -661,7 +660,6 @@ class SourcePolicyScopeSmokeTest(unittest.TestCase):
                     release=release,
                     prepared_bytes=prepared_bytes,
                     call_inputs=call_inputs,
-                    contexts=contexts,
                     root=root,
                     **kwargs,
                 ):
@@ -680,7 +678,6 @@ class SourcePolicyScopeSmokeTest(unittest.TestCase):
                         active += 1
                         peak = max(peak, active)
                         call_inputs.setdefault(key, before)
-                        contexts.append((phases._command_context.get(), phases._parent_phase.get()))
                         if active == 4:
                             release.set()
                     try:
@@ -701,7 +698,6 @@ class SourcePolicyScopeSmokeTest(unittest.TestCase):
                     phases.measure("command", command="test"),
                     phases.measure("lint-source-policy", tree="tidy", jobs=4) as phase,
                 ):
-                    parent = phases._parent_phase.get()
                     success, log = linttest._run_source_policy_smoke(
                         root, root, plugin=None if windows else root / "verified.so", tools=tools, jobs=4
                     )
@@ -744,7 +740,6 @@ class SourcePolicyScopeSmokeTest(unittest.TestCase):
                 ]
                 self.assertEqual(len(multi_input_keys), two_file_cases * (2 if windows else 1))
                 self.assertTrue(all(len(key) == 2 for key in multi_input_keys))
-                self.assertEqual(set(contexts), {("test", parent)})
                 labels = [name for name, *_ in linttest._source_policy_cases(root, windows=windows)]
                 positions = [log.read_text(encoding="utf-8").index(f"=== {name}/native ===") for name in labels]
                 self.assertEqual(positions, sorted(positions))

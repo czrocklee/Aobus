@@ -97,10 +97,12 @@ publishing a host-specific path. It is an identifier, not secret anonymization.
 The summary distinguishes phase `records` from processed `items`. Items are
 summed only when every record in a group supplies a work count; a dash means
 unspecified or partial counts. Counts from nested phases are not unique inputs.
-Worker tasks inherit the submitting command and phase within one process;
-separate subprocess sessions do not acquire invented parent links. Command and
-suite identities come from lightweight registries, so the reporter does not
-load command parsers or native build modules.
+Command and parent context propagate to worker tasks only when those workers
+emit nested phase records; other stage measurements are recorded on the
+submitting thread, and separate subprocess sessions do not acquire invented
+parent links.
+Command and suite identities come from lightweight registries, so the reporter
+does not load command parsers or native build modules.
 
 Phase rows can nest or run in parallel; their elapsed times must not be added to
 estimate job wall time. These are portal-dispatch measurements: shell bootstrap,

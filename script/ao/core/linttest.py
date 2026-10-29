@@ -9,8 +9,7 @@ import subprocess
 import sys
 import tempfile
 from collections import defaultdict
-from collections.abc import Callable, Iterable, Iterator
-from contextvars import copy_context
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -791,7 +790,7 @@ def _run_source_policy_smoke(
     passed = True
     with concurrent.futures.ThreadPoolExecutor(max_workers=min(jobs, len(tasks))) as pool:
         with log.open("w", encoding="utf-8") as sink:
-            for success, case_log in _pool_map_with_context(pool, run_case, tasks):
+            for success, case_log in pool.map(run_case, tasks):
                 passed = passed and success
                 sink.write(case_log.read_text(encoding="utf-8"))
                 sink.write("\n")
@@ -870,24 +869,6 @@ def _report_results(
     return passed
 
 
-def _pool_map_with_context[WorkItem](
-    pool: concurrent.futures.Executor,
-    function: Callable[[WorkItem], tuple[bool, Path]],
-    fixtures: list[WorkItem],
-) -> Iterator[tuple[bool, Path]]:
-    """Map one fixture task per fresh submitting-thread context snapshot.
-
-    Pool workers do not inherit the submitting thread's ``ContextVar`` state, so
-    each fixture runs inside a ``copy_context`` snapshot taken at submit time:
-    a worker's nested ``phases.measure`` keeps the enclosing root command and
-    its stage phase as the parent. Results stay in submission order and are
-    consumed lazily, matching ``pool.map``; each item gets its own snapshot
-    because one shared Context cannot run in several tasks.
-    """
-    futures = [pool.submit(copy_context().run, function, fixture) for fixture in fixtures]
-    return (future.result() for future in futures)
-
-
 def run(
     build_dir: Path,
     *,
@@ -954,11 +935,7 @@ def run(
                 diagnostics_passed = _report_results(
                     "Diagnostics",
                     fixtures,
-                    _pool_map_with_context(
-                        pool,
-                        lambda fixture: _run_diagnostic(fixture, build_dir, run_dir, tools=tools),
-                        fixtures,
-                    ),
+                    pool.map(lambda fixture: _run_diagnostic(fixture, build_dir, run_dir, tools=tools), fixtures),
                     reporter,
                 )
             phase.status = 0 if diagnostics_passed else 1

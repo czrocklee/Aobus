@@ -10,7 +10,6 @@ import tempfile
 import threading
 import unittest
 import xml.etree.ElementTree as ET
-from contextvars import ContextVar
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -330,13 +329,10 @@ class WinUiSourceOwnershipTest(unittest.TestCase):
                         winuitidy.compile_commands(build, clang, required_translation_units=(source,)), expected
                     )
 
-    def test_parallel_queries_overlap_with_caller_width_preserving_order_and_context(self):
+    def test_parallel_queries_overlap_with_caller_width_preserving_order(self):
         source, clang = self.compile_fixture()
         for number in range(6):
             self.project(f"inventory_{number}", [])
-        context = ContextVar("winui-query-test", default="missing")
-        token = context.set("caller")
-        self.addCleanup(context.reset, token)
         expected = None
         for jobs in (1, 2, 4, 20):
             width = min(jobs, 8)
@@ -347,8 +343,6 @@ class WinUiSourceOwnershipTest(unittest.TestCase):
 
             def query(msbuild, project, *, commands, lock=lock, barrier=barrier, completed=completed):
                 nonlocal active, peak
-                self.assertEqual(context.get(), "caller")
-                context.set("worker")
                 with lock:
                     active += 1
                     peak = max(peak, active)
@@ -365,7 +359,6 @@ class WinUiSourceOwnershipTest(unittest.TestCase):
             self.assertEqual(active, 0)
             self.assertEqual(len(completed), 8)
             self.assertEqual(set(completed), set(self.items))
-            self.assertEqual(context.get(), "caller")
             if expected is None:
                 expected = actual
             self.assertEqual(actual, expected)

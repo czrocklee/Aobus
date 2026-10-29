@@ -8,7 +8,6 @@ import xml.etree.ElementTree as ET
 from collections import deque
 from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
-from contextvars import copy_context
 from pathlib import Path
 from types import MappingProxyType
 
@@ -354,8 +353,7 @@ def compile_commands(
     with phases.measure("compile-commands", tree="winui", jobs=width, count=len(inventory)) as phase:
         with ThreadPoolExecutor(max_workers=width) as pool:
             futures = tuple(
-                pool.submit(copy_context().run, _query_project, msbuild, project, commands=selected)
-                for project, selected in inventory
+                pool.submit(_query_project, msbuild, project, commands=selected) for project, selected in inventory
             )
         # Join every worker before observing failures or leaving the caller's lock
         # and workspace-view context. Publish results/errors in inventory order.

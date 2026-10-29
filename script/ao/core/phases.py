@@ -77,27 +77,12 @@ _command_context: ContextVar[str | None] = ContextVar("ao_phase_command", defaul
 
 
 class _Phase:
-    """Mutable holder the with-body assigns; ``status`` 0 means success.
+    """Mutable holder the with-body assigns; ``status`` 0 means success."""
 
-    The property records whether the body assigned ``status`` at all, so an
-    explicit native failure keeps its code even when an exception wrapper
-    (``die`` raising ``SystemExit``) escapes the block afterwards.
-    """
-
-    __slots__ = ("_explicit", "_status")
+    __slots__ = ("status",)
 
     def __init__(self) -> None:
-        self._status: int = 0
-        self._explicit: bool = False
-
-    @property
-    def status(self) -> int:
-        return self._status
-
-    @status.setter
-    def status(self, value: int) -> None:
-        self._status = value
-        self._explicit = True
+        self.status: int = 0
 
 
 def _allowed_commands() -> frozenset[str]:
@@ -139,8 +124,8 @@ def _wrapped_status(state: _Phase, fallback: int) -> int:
     # failure contract: it wins over the exception wrapper's exit code. The
     # untouched default 0 falls back to the wrapper mapping, so a root that
     # never records a phase status still measures the process exit code.
-    value = state._status
-    if state._explicit and isinstance(value, int) and not isinstance(value, bool) and value != 0:
+    value = state.status
+    if isinstance(value, int) and not isinstance(value, bool) and value != 0:
         return value
     return fallback
 
