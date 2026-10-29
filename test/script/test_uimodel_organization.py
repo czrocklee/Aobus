@@ -5,10 +5,16 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from cmake_support import cmake_executable
+
 from ao.core.paths import PROJECT_ROOT
 
 
 class UimodelOrganizationTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.cmake = cmake_executable()
+
     def setUp(self):
         temporary = tempfile.TemporaryDirectory(prefix="aobus organization ")
         self.addCleanup(temporary.cleanup)
@@ -20,7 +26,7 @@ class UimodelOrganizationTest(unittest.TestCase):
     def run_audit(self, roots):
         return subprocess.run(
             [
-                "cmake",
+                self.cmake,
                 *(f"-D{name}={path}" for name, path in roots.items()),
                 "-P",
                 str(PROJECT_ROOT / "cmake/AssertUimodelOrganization.cmake"),
