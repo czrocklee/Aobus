@@ -150,6 +150,22 @@ For focused diagnosis with an already prepared native plugin and compile databas
 ./ao tidy --no-build --check <alias> <fixture>
 ```
 
+## Prefix comparisons
+
+`aobus-modernize-use-starts-with` gives explicit positive or negated prefix advice
+for standard string and string-view `find` comparisons. The starting position
+may be a constant expression evaluating to zero; the value compared against the
+`find` result must be an integer zero literal such as `0` or `0U`.
+Length-limited searches need a proven whole needle before the check can recommend
+`starts_with`; unproved or truncated needles receive no Aobus prefix advice.
+The check emits no replacements.
+
+LLVM's `modernize-use-starts-ends-with` also provides prefix, suffix, `rfind`, and
+`compare` diagnostics. Both checks are enabled by default, so overlapping `find`
+comparisons receive separate diagnostics. The stock fixture assertions validate
+diagnostic presence and text, not the correctness of upstream fix-its; the portal
+does not apply replacements.
+
 ## Semantic function and value naming
 
 The [naming-check reference](naming-checks.md) owns the checker inventory, framework identity proof, dependent-template shapes, and bounded automatic inference for bool, Task, Result, pointer, optional, chrono, and record naming.
