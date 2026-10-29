@@ -59,45 +59,35 @@ void positiveFindStringEqZero()
 {
   auto str = "hello world"s;
   // POSITIVE | use starts_with() member instead of find == 0
-  if (str.find("hello") == 0)
-  {
-  }
+  (void)(str.find("hello") == 0);
 }
 
 void positiveZeroEqFindString()
 {
   auto str = "hello world"s;
   // POSITIVE | use starts_with() member instead of find == 0
-  if (0 == str.find("hello"))
-  {
-  }
+  (void)(0 == str.find("hello"));
 }
 
 void positiveFindCharEqZero()
 {
   auto str = "hello world"s;
   // POSITIVE | use starts_with() member instead of find == 0
-  if (str.find('h') == 0)
-  {
-  }
+  (void)(str.find('h') == 0);
 }
 
 void positiveFindNeqZero()
 {
   auto str = "hello world"s;
   // POSITIVE | use !starts_with() member instead of find != 0
-  if (str.find("hello") != 0)
-  {
-  }
+  (void)(str.find("hello") != 0);
 }
 
 void negativeFindEqOne()
 {
   auto str = "hello world"s;
   // NEGATIVE
-  if (str.find("hello") == 1)
-  {
-  }
+  (void)(str.find("hello") == 1);
 }
 
 void negativeFindNoCompare()
@@ -111,108 +101,84 @@ void negativeFindNoCompare()
 void negativeCustomFindType(Config const& cfg)
 {
   // NEGATIVE - Config::find is not a position lookup and Config has no starts_with()
-  if (cfg.find("hello") == 0)
-  {
-  }
+  (void)(cfg.find("hello") == 0);
 }
 
 void negativeMacroSpelled()
 {
   auto str = "hello world"s;
   // NEGATIVE - the find-and-compare is spelled inside a macro expansion
-  if (AOBUS_AT_START(str, "hello"))
-  {
-  }
+  (void)(AOBUS_AT_START(str, "hello"));
 }
 
 void positiveZeroNeqFindString()
 {
   auto const str = "hello world"s;
   // POSITIVE | use !starts_with() member instead of find != 0
-  if (0 != str.find("hello"))
-  {
-  }
+  (void)(0 != str.find("hello"));
 }
 
 void positiveStringViewEqZero()
 {
   auto const text = std::string_view{"hello world"};
   // POSITIVE | use starts_with() member instead of find == 0
-  if (text.find("hello") == 0)
-  {
-  }
+  (void)(text.find("hello") == 0);
 }
 
 void positiveFindPosZero()
 {
   auto const str = "hello world"s;
   // POSITIVE | use starts_with() member instead of find == 0
-  if (str.find("hello", 0) == 0)
-  {
-  }
+  (void)(str.find("hello", 0) == 0);
 }
 
 void positiveFindPartialMacroArgs()
 {
   auto const str = "prefix"s;
   // POSITIVE | use !starts_with() member instead of find != 0
-  if (str.find(AOBUS_FIND_ARGS) != 0)
-  {
-  }
+  (void)(str.find(AOBUS_FIND_ARGS) != 0);
 }
 
 void positiveFindConstantPosition()
 {
   auto const str = "hello world"s;
   // POSITIVE | use starts_with() member instead of find == 0
-  if (str.find("hello", kStartPosition) == 0)
-  {
-  }
+  (void)(str.find("hello", kStartPosition) == 0);
 }
 
 void positiveFindSizedPosition()
 {
   auto const str = "hello world"s;
   // POSITIVE | use starts_with() member instead of find == 0
-  if (str.find("hello", std::size_t{0}) == 0)
-  {
-  }
+  (void)(str.find("hello", std::size_t{0}) == 0);
 }
 
 void positiveFindFoldedPosition()
 {
   auto const str = "hello world"s;
   // POSITIVE | use starts_with() member instead of find == 0
-  if (str.find("hello", 2 - 2) == 0)
-  {
-  }
+  (void)(str.find("hello", 2 - 2) == 0);
 }
 
 void positiveFindFullNeedleCountEqZero()
 {
   auto const str = "hello world"s;
   // POSITIVE | use starts_with() member instead of find == 0
-  if (str.find("hello", 0, 5) == 0)
-  {
-  }
+  (void)(str.find("hello", 0, 5) == 0);
 }
 
 void positiveFindFullNeedleCountNeqZero()
 {
   auto const str = "hello world"s;
   // POSITIVE | use !starts_with() member instead of find != 0
-  if (str.find("hello", 0, 5) != 0)
-  {
-  }
+  (void)(str.find("hello", 0, 5) != 0);
 }
 
 void negativeFindUnprovedCount(std::size_t needleLength)
 {
   auto const str = "hello world"s;
   // NEGATIVE - a runtime count is not proven to cover the whole needle
-  if (str.find("hello", 0, needleLength) == 0)
-  {
-  }
+  (void)(str.find("hello", 0, needleLength) == 0);
 }
 
 void negativeFindTruncatedCount()
@@ -220,36 +186,28 @@ void negativeFindTruncatedCount()
   auto const str = "hello world"s;
   // The count truncates the needle to "hel", not the whole needle.
   // NEGATIVE
-  if (str.find("hello", 0, 3) == 0)
-  {
-  }
+  (void)(str.find("hello", 0, 3) == 0);
 }
 
 void negativeFindUnknownNeedle(char const* needle)
 {
   auto const text = std::string_view{"hello world"};
   // NEGATIVE - a count alone cannot prove an unknown needle's full length
-  if (text.find(needle, 0, 3) == 0)
-  {
-  }
+  (void)(text.find(needle, 0, 3) == 0);
 }
 
 void positiveFindWideFullCount()
 {
   auto const text = std::u16string_view{u"hello world"};
   // POSITIVE | use starts_with() member instead of find == 0
-  if (text.find(u"hello", 0, 5) == 0)
-  {
-  }
+  (void)(text.find(u"hello", 0, 5) == 0);
 }
 
 void negativeFindWideEmbeddedNul()
 {
   auto const text = std::u16string_view{u"hello world"};
   // NEGATIVE - code-unit width does not change the NUL boundary
-  if (text.find(u"hel\0lo", 0, 6) == 0)
-  {
-  }
+  (void)(text.find(u"hel\0lo", 0, 6) == 0);
 }
 
 void negativeFindNeedleWithEmbeddedNul()
@@ -257,7 +215,5 @@ void negativeFindNeedleWithEmbeddedNul()
   auto const str = "hello world"s;
   // starts_with() measures the needle only up to the embedded NUL.
   // NEGATIVE
-  if (str.find("hel\0lo", 0, 6) == 0)
-  {
-  }
+  (void)(str.find("hel\0lo", 0, 6) == 0);
 }
