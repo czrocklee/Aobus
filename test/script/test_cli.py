@@ -843,8 +843,17 @@ class CliParseTest(unittest.TestCase):
 
     def test_parallel_build_arguments_leave_one_cpu_available_by_default(self):
         with mock.patch.dict(build_command.os.environ, {}, clear=True):
-            with mock.patch.object(build_command.os, "cpu_count", return_value=32):
+            with mock.patch.object(build_command.jobs, "available_cores", return_value=32):
                 self.assertEqual(build_command.parallel_build_arguments(), ["--parallel", "31"])
+
+    def test_parallel_build_arguments_use_every_ci_core_without_overriding_explicit_jobs(self):
+        with (
+            mock.patch.dict(build_command.os.environ, {"GITHUB_ACTIONS": "true"}, clear=True),
+            mock.patch.object(build_command.jobs, "available_cores", return_value=32),
+        ):
+            self.assertEqual(build_command.parallel_build_arguments(), ["--parallel", "32"])
+            with mock.patch.dict(build_command.os.environ, {"CMAKE_BUILD_PARALLEL_LEVEL": "8"}):
+                self.assertEqual(build_command.parallel_build_arguments(), ["--parallel", "8"])
 
     def test_winui_build_environment_uses_the_shared_parallel_limit(self):
         self.assertEqual(
@@ -3781,12 +3790,21 @@ class CliParseTest(unittest.TestCase):
                     self.assertEqual(self.parse(["run", app, "-n"]).app, app)
 
     def test_shard_count_leaves_one_core_free_and_stops_at_the_cap(self):
-        with mock.patch("os.cpu_count", return_value=4):
+        with mock.patch.object(test_command.jobs, "available_cores", return_value=4):
             self.assertEqual(test_command.shard_count(environ={}), 3)
-        with mock.patch("os.cpu_count", return_value=64):
+        with mock.patch.object(test_command.jobs, "available_cores", return_value=64):
             self.assertEqual(test_command.shard_count(environ={}), test_command.SHARD_CAP)
-        with mock.patch("os.cpu_count", return_value=1):
+        with mock.patch.object(test_command.jobs, "available_cores", return_value=1):
             self.assertEqual(test_command.shard_count(environ={}), 1)
+
+    def test_ci_shard_defaults_use_every_core_with_the_existing_cap_and_override(self):
+        with mock.patch.object(test_command.jobs, "available_cores", return_value=4):
+            self.assertEqual(test_command.shard_count(environ={"GITHUB_ACTIONS": "true"}), 4)
+        with mock.patch.object(test_command.jobs, "available_cores", return_value=64):
+            self.assertEqual(test_command.shard_count(environ={"GITHUB_ACTIONS": "true"}), test_command.SHARD_CAP)
+            self.assertEqual(
+                test_command.shard_count(environ={"GITHUB_ACTIONS": "true", test_command.SHARD_ENV: "64"}), 64
+            )
 
     def test_shard_count_environment_override_is_validated(self):
         self.assertEqual(test_command.shard_count(environ={test_command.SHARD_ENV: "3"}), 3)

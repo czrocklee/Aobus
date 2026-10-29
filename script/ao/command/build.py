@@ -11,7 +11,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
 
-from ..core import builddir, buildlock, cmakecache, compiler_cache, msbuild_cache, phases, winui, workspace_cache
+from ..core import builddir, buildlock, cmakecache, compiler_cache, jobs, msbuild_cache, phases, winui, workspace_cache
 from ..core.paths import PROJECT_ROOT
 from ..core.proc import die, run
 
@@ -156,32 +156,24 @@ def validate_build_options(args: argparse.Namespace) -> builddir.PlatformProfile
 
 def parallel_build_jobs() -> int:
     """Return the shared build concurrency limit."""
-    configured = os.environ.get("CMAKE_BUILD_PARALLEL_LEVEL")
-    if configured is not None:
-        try:
-            jobs = int(configured)
-        except ValueError:
-            raise die("CMAKE_BUILD_PARALLEL_LEVEL must be a positive integer.") from None
-        if jobs < 1:
-            raise die("CMAKE_BUILD_PARALLEL_LEVEL must be a positive integer.")
-    else:
-        jobs = max(1, (os.cpu_count() or 1) - 1)
-    return jobs
+    try:
+        return jobs.build_workers()
+    except ValueError as error:
+        raise die(str(error)) from error
 
 
 def parallel_build_arguments() -> list[str]:
     """Return the CMake arguments for the shared build concurrency limit."""
-    jobs = parallel_build_jobs()
-    return ["--parallel", str(jobs)]
+    return ["--parallel", str(parallel_build_jobs())]
 
 
-def _winui_build_environment(jobs: int) -> dict[str, str]:
+def _winui_build_environment(worker_count: int) -> dict[str, str]:
     """Coordinate C++ compilation concurrency across MSBuild projects."""
     return {
         "UseMultiToolTask": "true",
         "EnforceProcessCountAcrossBuilds": "true",
-        "MultiProcMaxCount": str(jobs),
-        "CL_MPCount": str(jobs),
+        "MultiProcMaxCount": str(worker_count),
+        "CL_MPCount": str(worker_count),
     }
 
 

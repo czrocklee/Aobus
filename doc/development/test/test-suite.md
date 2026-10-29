@@ -175,9 +175,10 @@ cases stay in the core suite.
 ## Sharded Catch2 execution
 
 Every Catch2 suite runs as several parallel shards of one binary. The default
-shard count is `min(16, cores - 1)`; `AOBUS_TEST_SHARDS` overrides it in either
-direction, and `AOBUS_TEST_SHARDS=1` restores a single process.
-CI sets the override to `min(16, logical processor count)`.
+shard count is the [shared worker baseline](../build.md#default-parallelism)
+capped at 16; `AOBUS_TEST_SHARDS` overrides it in either direction, and
+`AOBUS_TEST_SHARDS=1` restores a single process. CI exports the same capped
+runner-core default.
 The cap bounds process count: a shard is a whole test process with its own fixtures, temporary
 tree, and, for GTK, its own display and session bus.
 

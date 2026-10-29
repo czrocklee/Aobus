@@ -24,6 +24,7 @@ from ..core import (
     builddir,
     buildlock,
     compiler_cache,
+    jobs,
     linttest,
     phases,
     proc,
@@ -45,16 +46,9 @@ NAME = "test"
 # True when ao.bat must initialize the MSVC/vcpkg build environment first.
 REQUIRES_BUILD_ENV = True
 
-SHARD_ENV = "AOBUS_TEST_SHARDS"
-# The core suite keeps getting faster past this point -- 34.0s to 23.7s between
-# eight and sixteen shards on a sixteen-vCPU Windows guest, 8.6s to 5.9s between
-# eight and thirty-one on a thirty-two core Linux host -- so the cap is not
-# where the curve flattens. It is a bound on process count: unlike a compiler
-# job, a shard is a whole test process with its own fixtures, temporary tree,
-# and, for the GTK suite, its own X server. Sixteen keeps nearly all of the win
-# without letting a large machine start a hundred of them for a suite of a few
-# hundred tests. AOBUS_TEST_SHARDS overrides it in both directions.
-SHARD_CAP = 16
+# Preserve these public command constants while sharing the CI export policy.
+SHARD_ENV = jobs.SHARD_ENV
+SHARD_CAP = jobs.SHARD_CAP
 
 
 def requires_build_environment(args: argparse.Namespace) -> bool:
@@ -403,7 +397,7 @@ def shard_count(*, environ: Mapping[str, str] | None = None) -> int:
     environment = os.environ if environ is None else environ
     configured = environment.get(SHARD_ENV)
     if configured is None:
-        return min(SHARD_CAP, max(1, (os.cpu_count() or 1) - 1))
+        return min(SHARD_CAP, jobs.default_workers(environ=environment))
     try:
         shards = int(configured)
     except ValueError:
@@ -1187,8 +1181,16 @@ def run_command(args: argparse.Namespace) -> int:
             print(f"Building {', '.join(targets)} in {build_dir}...")
             print("=====================================")
             cmake_build_dir = workspace_cache.compiler_build_dir(build_dir)
-            jobs = build.parallel_build_jobs()
-            build_cmd = ["cmake", "--build", str(cmake_build_dir), "--parallel", str(jobs), "--target", *targets]
+            worker_count = build.parallel_build_jobs()
+            build_cmd = [
+                "cmake",
+                "--build",
+                str(cmake_build_dir),
+                "--parallel",
+                str(worker_count),
+                "--target",
+                *targets,
+            ]
             with buildlock.build_tree_lock(build_dir):
                 sanitizer = "sanitizer builds" if args.asan or args.tsan else None
                 build.sync_compiler_cache(build_dir, unsupported_reason=sanitizer)
@@ -1198,7 +1200,7 @@ def run_command(args: argparse.Namespace) -> int:
                 # assigned before the failure handling so a failed build keeps
                 # its code in its own record even though die normalizes the
                 # command exit to 1.
-                with phases.measure("build", tree="native", jobs=jobs) as phase:
+                with phases.measure("build", tree="native", jobs=worker_count) as phase:
                     phase.status = run(build_cmd, cwd=cmake_build_dir if cmake_build_dir != build_dir else PROJECT_ROOT)
                 if phase.status != 0:
                     raise die("test build failed.")

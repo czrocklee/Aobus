@@ -2,10 +2,9 @@
 
 import os
 import re
-import shlex
 import shutil
-import stat
 import subprocess
+import sys
 import tempfile
 import textwrap
 import unittest
@@ -42,18 +41,13 @@ def _step(job: str, name: str) -> str:
 
 
 def _run_body(step: str) -> str:
-    """Return the script of a literal-block (`run: |`) step."""
-    return textwrap.dedent(step.split("        run: |\n", 1)[1])
-
-
-def _install_fake_getconf(directory: Path, output: str, status: int) -> None:
-    """Install a getconf stub reporting a chosen core count or command failure."""
-    stub = directory / "getconf"
-    stub.write_text(
-        f"#!/bin/sh\nprintf '%s\\n' {shlex.quote(output)}\nexit {status}\n",
-        encoding="utf-8",
-    )
-    stub.chmod(stub.stat().st_mode | stat.S_IXUSR)
+    """Return the script of a literal-block (`run: |`) or folded (`run: >-`) step."""
+    if "        run: |\n" in step:
+        return textwrap.dedent(step.split("        run: |\n", 1)[1])
+    if "        run: >-\n" in step:
+        # Folded scalars join their lines with single spaces.
+        return " ".join(textwrap.dedent(step.split("        run: >-\n", 1)[1]).splitlines())
+    raise AssertionError("step has no literal or folded run block")
 
 
 class CoreStepWorkflowTest(unittest.TestCase):
@@ -91,64 +85,65 @@ class CoreStepWorkflowTest(unittest.TestCase):
                 self.assertIn(argument, _step(_job(job_name), "Run hygiene"))
 
 
-@unittest.skipIf(os.name == "nt", "The CI core steps run in Bash; exercise them on a POSIX tooling host.")
+@unittest.skipIf(os.name == "nt", "The CI bash core step runs on a POSIX tooling host.")
 class CoreStepBashTest(unittest.TestCase):
-    def _run_step(self, job_name: str, output: str, status: int = 0) -> tuple[subprocess.CompletedProcess, list[str]]:
-        """Run one extracted core step against a fake getconf; keep the ambient environment.
+    """The extracted bash core step against the real host, not controlled inputs."""
 
-        Returns the process and the GITHUB_ENV assignments it wrote, or an empty
-        list when it failed before creating the file.
-        """
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            _install_fake_getconf(root, output, status)
-            github_env = root / "github-env"
-            process = subprocess.run(
-                ["bash", "-euo", "pipefail", "-c", _run_body(_step(_job(job_name), CORE_STEP_NAME))],
-                env={
-                    **os.environ,
-                    "PATH": f"{root}{os.pathsep}{os.environ.get('PATH', '')}",
-                    "GITHUB_ENV": str(github_env),
-                },
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            assignments = github_env.read_text(encoding="utf-8").splitlines() if github_env.exists() else []
-        return process, assignments
+    # Both POSIX jobs share the bash core step; exercise every call site so a
+    # future mac-only edit does not lose local execution protection.
+    POSIX_JOBS = ("linux", "macos")
 
-    def test_detected_cores_drive_the_build_and_shard_exports(self):
-        for job_name in ("linux", "macos"):
-            # Counts above the cap pin the workflow's literal to ao.command.test.SHARD_CAP.
-            for cores in ("1", "4", "32", "100"):
-                with self.subTest(job=job_name, cores=cores):
-                    process, assignments = self._run_step(job_name, cores)
+    @staticmethod
+    def _run_step(job_name: str, github_env: Path) -> subprocess.CompletedProcess:
+        """Run the extracted core step body; keep the ambient environment."""
+        return subprocess.run(
+            ["bash", "-euo", "pipefail", "-c", _run_body(_step(_job(job_name), CORE_STEP_NAME))],
+            cwd=PROJECT_ROOT,
+            # The workflow's runner provides Python on PATH; native tooling
+            # uses the governed interpreter without requiring an ambient install.
+            env={
+                **os.environ,
+                "PATH": f"{Path(sys.executable).parent}{os.pathsep}{os.environ.get('PATH', '')}",
+                "GITHUB_ENV": str(github_env),
+            },
+            capture_output=True,
+            text=True,
+            check=False,
+        )
 
-                    self.assertEqual(process.returncode, 0, process.stderr)
-                    shards = min(int(cores), test_command.SHARD_CAP)
-                    self.assertEqual(
-                        assignments,
-                        [f"CMAKE_BUILD_PARALLEL_LEVEL={cores}", f"AOBUS_TEST_SHARDS={shards}"],
-                    )
-                    self.assertIn(f"build and tidy jobs={cores}", process.stdout)
-                    self.assertIn(f"test shards={shards}", process.stdout)
+    def test_the_extracted_step_exports_the_real_host_cores(self):
+        for job_name in self.POSIX_JOBS:
+            with self.subTest(job=job_name):
+                with tempfile.TemporaryDirectory() as temporary:
+                    github_env = Path(temporary) / "github-env"
+                    process = self._run_step(job_name, github_env)
+                    assignments = github_env.read_text(encoding="utf-8").splitlines() if github_env.exists() else []
 
-    def test_invalid_core_counts_fail_loud_without_writing_the_environment(self):
-        for job_name in ("linux", "macos"):
-            for output, status in (("", 0), ("0", 0), ("-2", 0), ("text", 0), ("4", 1)):
-                with self.subTest(job=job_name, output=output, status=status):
-                    process, assignments = self._run_step(job_name, output, status)
+                self.assertEqual(process.returncode, 0, process.stderr)
+                self.assertEqual(len(assignments), 2)
+                name, value = assignments[0].split("=", 1)
+                self.assertEqual(name, "CMAKE_BUILD_PARALLEL_LEVEL")
+                cores = int(value)
+                self.assertGreater(cores, 0)
+                self.assertEqual(assignments[1], f"AOBUS_TEST_SHARDS={min(cores, test_command.SHARD_CAP)}")
+                self.assertIn(f"build and tidy jobs={cores}", process.stdout)
+                self.assertIn(f"test shards={min(cores, test_command.SHARD_CAP)}", process.stdout)
 
-                    self.assertNotEqual(process.returncode, 0, process.stdout)
-                    self.assertEqual(assignments, [])
-                    if status == 0:
-                        self.assertIn("expected a positive decimal core count", process.stderr)
-                    else:
-                        self.assertIn("::error::getconf _NPROCESSORS_ONLN failed", process.stderr)
+    def test_an_unwritable_destination_fails_the_step(self):
+        # A directory is not a writable GITHUB_ENV destination, so the export fails.
+        for job_name in self.POSIX_JOBS:
+            with self.subTest(job=job_name):
+                with tempfile.TemporaryDirectory() as temporary:
+                    process = self._run_step(job_name, Path(temporary))
+
+                self.assertNotEqual(process.returncode, 0, process.stdout)
+                self.assertIn("Error:", process.stderr)
 
 
-@unittest.skipIf(os.name != "nt", "The CI core step runs in pwsh; exercise it on a native Windows host.")
-class CoreStepPwshTest(unittest.TestCase):
+@unittest.skipIf(os.name != "nt", "The CI core step runs on Windows; exercise it on a native Windows host.")
+class CoreStepWindowsTest(unittest.TestCase):
+    """The extracted pwsh core step against the real host, not controlled inputs."""
+
     @classmethod
     def setUpClass(cls):
         # CI hosts run pwsh 7; native Windows also accepts the built-in Windows PowerShell.
@@ -157,43 +152,31 @@ class CoreStepPwshTest(unittest.TestCase):
             # This class already runs only on Windows; a missing shell is a host defect.
             raise RuntimeError("Neither pwsh nor powershell.exe is installed on this Windows host")
 
-    def _run_step(self, cores: str | None) -> tuple[subprocess.CompletedProcess, list[str]]:
-        """Run the Windows core step with its native or test-owned input binding.
+    def _run_step(self, github_env: Path) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [
+                self.shell,
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                _run_body(_step(_job("windows"), CORE_STEP_NAME)),
+            ],
+            cwd=PROJECT_ROOT,
+            env={
+                **os.environ,
+                "GITHUB_ENV": str(github_env),
+                "PATH": f"{Path(sys.executable).parent}{os.pathsep}{os.environ.get('PATH', '')}",
+            },
+            capture_output=True,
+            text=True,
+            check=False,
+        )
 
-        Returns the process and the GITHUB_ENV assignments it wrote, or an empty
-        list when it failed before creating the file.
-        """
+    def test_the_extracted_step_exports_the_real_host_cores(self):
         with tempfile.TemporaryDirectory() as temporary:
             github_env = Path(temporary) / "github-env"
-            environment = dict(os.environ)
-            environment["GITHUB_ENV"] = str(github_env)
-            script = _run_body(_step(_job("windows"), CORE_STEP_NAME))
-            if cores is not None:
-                # Windows synthesizes reads of NUMBER_OF_PROCESSORS even when
-                # its raw environment entry was overwritten. Substitute only
-                # that input binding; the validation/cap/export body is intact.
-                self.assertIn("$env:NUMBER_OF_PROCESSORS", script)
-                environment["AOBUS_TEST_RUNNER_CORES"] = cores
-                script = script.replace("$env:NUMBER_OF_PROCESSORS", "$env:AOBUS_TEST_RUNNER_CORES")
-            process = subprocess.run(
-                [self.shell, "-NoProfile", "-NonInteractive", "-Command", script],
-                env=environment,
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            assignments = self._assignments(github_env.read_bytes()) if github_env.exists() else []
-        return process, assignments
-
-    @staticmethod
-    def _assignments(payload: bytes) -> list[str]:
-        # pwsh 7 appends UTF-8; Windows PowerShell 5.1 appends UTF-16 with a BOM.
-        if payload.startswith(b"\xff\xfe"):
-            return payload.decode("utf-16").splitlines()
-        return payload.decode("utf-8").splitlines()
-
-    def test_native_input_binding_reports_a_positive_host_count(self):
-        process, assignments = self._run_step(None)
+            process = self._run_step(github_env)
+            assignments = github_env.read_text(encoding="utf-8").splitlines() if github_env.exists() else []
 
         self.assertEqual(process.returncode, 0, process.stderr)
         self.assertEqual(len(assignments), 2)
@@ -202,30 +185,16 @@ class CoreStepPwshTest(unittest.TestCase):
         cores = int(value)
         self.assertGreater(cores, 0)
         self.assertEqual(assignments[1], f"AOBUS_TEST_SHARDS={min(cores, test_command.SHARD_CAP)}")
+        self.assertIn(f"build and tidy jobs={cores}", process.stdout)
+        self.assertIn(f"test shards={min(cores, test_command.SHARD_CAP)}", process.stdout)
 
-    def test_detected_cores_drive_the_build_and_shard_exports(self):
-        # Counts above the cap pin the workflow's literal to ao.command.test.SHARD_CAP.
-        for cores in ("1", "4", "32", "100"):
-            with self.subTest(cores=cores):
-                process, assignments = self._run_step(cores)
+    def test_an_unwritable_destination_fails_the_step(self):
+        # A directory is not a writable GITHUB_ENV destination, so the export fails.
+        with tempfile.TemporaryDirectory() as temporary:
+            process = self._run_step(Path(temporary))
 
-                self.assertEqual(process.returncode, 0, process.stderr)
-                shards = min(int(cores), test_command.SHARD_CAP)
-                self.assertEqual(
-                    assignments,
-                    [f"CMAKE_BUILD_PARALLEL_LEVEL={cores}", f"AOBUS_TEST_SHARDS={shards}"],
-                )
-                self.assertIn(f"build and tidy jobs={cores}", process.stdout)
-                self.assertIn(f"test shards={shards}", process.stdout)
-
-    def test_invalid_core_counts_fail_loud_without_writing_the_environment(self):
-        for cores in ("", "0", "-2", "text"):
-            with self.subTest(cores=cores):
-                process, assignments = self._run_step(cores)
-
-                self.assertNotEqual(process.returncode, 0, process.stdout)
-                self.assertEqual(assignments, [])
-                self.assertIn("expected a positive integer", process.stderr)
+        self.assertNotEqual(process.returncode, 0, process.stdout)
+        self.assertIn("Error:", process.stderr)
 
 
 if __name__ == "__main__":

@@ -24,6 +24,7 @@ from typing import Literal
 
 from . import builddir, buildlock, cmakecache, compiler_cache, gitfiles, phases, workspace_cache
 from .dedup import DIAGNOSTIC_RE
+from .jobs import build_workers, default_workers
 from .paths import PROJECT_ROOT, absolute_path
 from .proc import die
 
@@ -78,8 +79,7 @@ def windows_llvm_sdk_manifest() -> tuple[str, str, tuple[str, ...]]:
 
 
 def default_jobs() -> int:
-    cpus = os.cpu_count() or 1
-    return max(cpus - 1, 1)
+    return default_workers()
 
 
 def add_scope_arguments(parser: argparse.ArgumentParser, verb: str) -> None:
@@ -93,7 +93,13 @@ def add_scope_arguments(parser: argparse.ArgumentParser, verb: str) -> None:
     parser.add_argument("--check", metavar="<name>", help="run only the specified check")
     parser.add_argument("--debug", action="store_true", help="show debug info (config, system includes)")
     parser.add_argument("-o", "--output", metavar="<file>", help="write diagnostics to <file>")
-    parser.add_argument("-j", "--jobs", type=int, default=default_jobs(), help="parallel jobs (default: nproc - 1)")
+    parser.add_argument(
+        "-j",
+        "--jobs",
+        type=int,
+        default=default_jobs(),
+        help="parallel jobs (default: every core in CI, nproc - 1 locally)",
+    )
     parser.add_argument("-p", "--path", metavar="<dir>", help="build directory with compile_commands.json")
 
 
@@ -213,6 +219,10 @@ def _ensure_compile_db(
 
     print("Generating required headers (gperf)...")
     with phases.measure("generated-headers", tree="tidy"):
+        try:
+            workers = build_workers()
+        except ValueError as error:
+            raise die(str(error)) from error
         _run_tail(
             [
                 "cmake",
@@ -221,7 +231,7 @@ def _ensure_compile_db(
                 "--target",
                 "aobus_generated_headers",
                 "--parallel",
-                str(os.cpu_count() or 1),
+                str(workers),
             ],
             "header generation build",
         )

@@ -242,8 +242,9 @@ MSVC ASan. `ao.bat check release` validates the native IPO graph and builds the
 WinUI Release configuration with LTCG.
 
 The portal uses one concurrency limit for both CMake project scheduling and
-MSBuild's cross-project C++ compiler scheduling. By default it leaves one
-logical processor available. Set `CMAKE_BUILD_PARALLEL_LEVEL` to a positive
+MSBuild's cross-project C++ compiler scheduling. The
+[shared worker baseline](build.md#default-parallelism) leaves one available
+logical processor free locally. Set `CMAKE_BUILD_PARALLEL_LEVEL` to a positive
 integer to override both limits; CI sets it to the full detected logical processor count:
 
 ```powershell
