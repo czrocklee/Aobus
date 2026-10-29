@@ -42,7 +42,7 @@ namespace
 } // namespace
 
 // The MSVC CRT requires this exact external entry-point signature.
-// NOLINTNEXTLINE(aobus-modernize-use-std-numbers,misc-use-internal-linkage)
+// NOLINTNEXTLINE(aobus-modernize-use-sized-integer-types,misc-use-internal-linkage)
 int wmain(int argumentCount, wchar_t** arguments)
 {
   auto* const eventHandle = argumentCount >= 3 ? ::OpenEventW(EVENT_MODIFY_STATE, FALSE, arguments[2]) : nullptr;

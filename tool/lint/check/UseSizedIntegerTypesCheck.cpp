@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "check/UseStdNumbersCheck.h"
+#include "check/UseSizedIntegerTypesCheck.h"
 
 #include <clang-tidy/ClangTidyCheck.h>
 #include <clang/AST/ASTContext.h>
@@ -30,12 +30,12 @@ using clang::ast_matchers::MatchFinder;
 
 namespace clang::tidy::readability
 {
-  UseStdNumbersCheck::UseStdNumbersCheck(StringRef name, ClangTidyContext* context)
+  UseSizedIntegerTypesCheck::UseSizedIntegerTypesCheck(StringRef name, ClangTidyContext* context)
     : ClangTidyCheck{name, context}
   {
   }
 
-  void UseStdNumbersCheck::registerMatchers(MatchFinder* finder)
+  void UseSizedIntegerTypesCheck::registerMatchers(MatchFinder* finder)
   {
     using namespace clang::ast_matchers;
 
@@ -363,7 +363,7 @@ namespace clang::tidy::readability
     }
   } // namespace
 
-  void UseStdNumbersCheck::check(MatchFinder::MatchResult const& result)
+  void UseSizedIntegerTypesCheck::check(MatchFinder::MatchResult const& result)
   {
     auto const optMatch = findBuiltinTypeMatch(result);
 

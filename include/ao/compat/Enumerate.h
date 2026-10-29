@@ -80,7 +80,8 @@ namespace ao::compat::detail
         return *this;
       }
 
-      constexpr Iterator operator++(int) // NOLINT(aobus-modernize-use-std-numbers) -- required postfix signature
+      // NOLINTNEXTLINE(aobus-modernize-use-sized-integer-types) -- required postfix signature
+      constexpr Iterator operator++(int)
       {
         auto previous = *this;
         ++*this;

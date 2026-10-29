@@ -39,7 +39,7 @@ namespace ao::tui
     // POSIX signal handlers must use the C ABI int parameter type. The active
     // count lets teardown wait for a handler that already captured the pipe fd
     // before the global slot was cleared.
-    void exitSignalHandler(int /*signal*/) // NOLINT(aobus-modernize-use-std-numbers)
+    void exitSignalHandler(int /*signal*/) // NOLINT(aobus-modernize-use-sized-integer-types)
     {
       auto const savedErrno = errno;
       gActiveSignalHandlers.fetch_add(1);

@@ -40,7 +40,7 @@ namespace ao::tui::test
 #ifndef _WIN32
     std::atomic_int gPreviousHandlerCount{0}; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
-    void previousSigintHandler(int /*signal*/) // NOLINT(aobus-modernize-use-std-numbers)
+    void previousSigintHandler(int /*signal*/) // NOLINT(aobus-modernize-use-sized-integer-types)
     {
       gPreviousHandlerCount.fetch_add(1);
     }
