@@ -3,24 +3,118 @@
 
 include_guard(GLOBAL)
 
-set(AOBUS_LLVM_SDK_VERSION "22.1.8")
+# The pinned Windows LLVM SDK identity and its required files live in one
+# manifest shared with the Python portal; the archive name, URL, and cache
+# layout are derived from the pinned version so they cannot drift from it.
+set(AOBUS_LLVM_SDK_MANIFEST
+  "${CMAKE_CURRENT_LIST_DIR}/../script/ao/windows-llvm-sdk.json")
+if(NOT EXISTS "${AOBUS_LLVM_SDK_MANIFEST}")
+  message(FATAL_ERROR
+    "The Windows LLVM SDK manifest is missing: ${AOBUS_LLVM_SDK_MANIFEST}")
+endif()
+file(READ "${AOBUS_LLVM_SDK_MANIFEST}" _AOBUS_LLVM_SDK_MANIFEST_JSON)
+# A plain build must refresh the SDK identity when the manifest changes;
+# script-mode inclusion has no directory scope to record that dependency in.
+if(NOT CMAKE_SCRIPT_MODE_FILE)
+  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${AOBUS_LLVM_SDK_MANIFEST}")
+endif()
+
+# Query errors are fatal immediately, preserving missing-member diagnostics.
+# Check JSON types before GET can coerce a non-string into path text.
+function(_aobus_llvm_sdk_manifest_string json label out_var)
+  string(JSON _kind TYPE "${json}" ${ARGN})
+  if(NOT _kind STREQUAL "STRING")
+    message(FATAL_ERROR
+      "The Windows LLVM SDK manifest ${AOBUS_LLVM_SDK_MANIFEST} needs "
+      "'${label}' as a JSON string, found ${_kind}.")
+  endif()
+  string(JSON _value GET "${json}" ${ARGN})
+  # CMake's set() truncates at NUL; reject it before publishing a string value.
+  string(HEX "${_value}" _hex)
+  if(_hex MATCHES "^(..)*00")
+    message(FATAL_ERROR
+      "The Windows LLVM SDK manifest ${AOBUS_LLVM_SDK_MANIFEST} needs '${label}' without NUL bytes.")
+  endif()
+  set("${out_var}" "${_value}" PARENT_SCOPE)
+endfunction()
+
+# Deliberately specific to checked-in SDK paths, not general host filenames.
+set(_AOBUS_LLVM_SDK_REQUIRED_FILE_PATTERN
+  "^[A-Za-z0-9_.+-]+([/][A-Za-z0-9_.+-]+)*$")
+
+string(JSON _AOBUS_LLVM_SDK_MANIFEST_KIND TYPE "${_AOBUS_LLVM_SDK_MANIFEST_JSON}")
+if(NOT _AOBUS_LLVM_SDK_MANIFEST_KIND STREQUAL "OBJECT")
+  message(FATAL_ERROR
+    "The Windows LLVM SDK manifest ${AOBUS_LLVM_SDK_MANIFEST} needs a JSON "
+    "object, found ${_AOBUS_LLVM_SDK_MANIFEST_KIND}.")
+endif()
+
+_aobus_llvm_sdk_manifest_string("${_AOBUS_LLVM_SDK_MANIFEST_JSON}"
+  "version" AOBUS_LLVM_SDK_VERSION "version")
+_aobus_llvm_sdk_manifest_string("${_AOBUS_LLVM_SDK_MANIFEST_JSON}"
+  "archiveSha256" AOBUS_LLVM_SDK_SHA256 "archiveSha256")
+
+if(NOT AOBUS_LLVM_SDK_VERSION MATCHES "^[0-9]+[.][0-9]+[.][0-9]+$")
+  message(FATAL_ERROR
+    "The Windows LLVM SDK manifest ${AOBUS_LLVM_SDK_MANIFEST} needs 'version' "
+    "as an ASCII '<major>.<minor>.<patch>' string, found "
+    "'${AOBUS_LLVM_SDK_VERSION}'.")
+endif()
+string(LENGTH "${AOBUS_LLVM_SDK_SHA256}" _AOBUS_LLVM_SDK_SHA256_LENGTH)
+if(NOT _AOBUS_LLVM_SDK_SHA256_LENGTH EQUAL 64
+   OR NOT AOBUS_LLVM_SDK_SHA256 MATCHES "^[0-9a-f]+$")
+  message(FATAL_ERROR
+    "The Windows LLVM SDK manifest ${AOBUS_LLVM_SDK_MANIFEST} needs "
+    "'archiveSha256' as 64 lowercase hex digits, found "
+    "'${AOBUS_LLVM_SDK_SHA256}'.")
+endif()
+
+string(JSON _AOBUS_LLVM_SDK_REQUIRED_KIND
+  TYPE "${_AOBUS_LLVM_SDK_MANIFEST_JSON}" "requiredFiles")
+if(NOT _AOBUS_LLVM_SDK_REQUIRED_KIND STREQUAL "ARRAY")
+  message(FATAL_ERROR
+    "The Windows LLVM SDK manifest ${AOBUS_LLVM_SDK_MANIFEST} needs "
+    "'requiredFiles' as a JSON array of strings, found "
+    "${_AOBUS_LLVM_SDK_REQUIRED_KIND}.")
+endif()
+string(JSON _AOBUS_LLVM_SDK_REQUIRED_COUNT
+  LENGTH "${_AOBUS_LLVM_SDK_MANIFEST_JSON}" "requiredFiles")
+if(_AOBUS_LLVM_SDK_REQUIRED_COUNT LESS 1)
+  message(FATAL_ERROR
+    "The Windows LLVM SDK manifest ${AOBUS_LLVM_SDK_MANIFEST} needs a "
+    "non-empty 'requiredFiles' array, found "
+    "${_AOBUS_LLVM_SDK_REQUIRED_COUNT} entries.")
+endif()
+
+set(_AOBUS_LLVM_SDK_REQUIRED_FILES "")
+math(EXPR _AOBUS_LLVM_SDK_REQUIRED_LAST "${_AOBUS_LLVM_SDK_REQUIRED_COUNT} - 1")
+foreach(_AOBUS_LLVM_SDK_REQUIRED_INDEX RANGE 0 "${_AOBUS_LLVM_SDK_REQUIRED_LAST}")
+  _aobus_llvm_sdk_manifest_string("${_AOBUS_LLVM_SDK_MANIFEST_JSON}"
+    "requiredFiles[${_AOBUS_LLVM_SDK_REQUIRED_INDEX}]" _aobus_llvm_required_file
+    "requiredFiles" "${_AOBUS_LLVM_SDK_REQUIRED_INDEX}")
+  # String comparisons only: 'OFF', '0', and 'FALSE' are valid path
+  # spellings that CMake truthiness would reject.
+  if(NOT _aobus_llvm_required_file MATCHES "${_AOBUS_LLVM_SDK_REQUIRED_FILE_PATTERN}"
+     OR _aobus_llvm_required_file MATCHES "(^|/)[.][.]?(/|$)")
+    message(FATAL_ERROR
+      "The Windows LLVM SDK manifest ${AOBUS_LLVM_SDK_MANIFEST} needs "
+      "'requiredFiles[${_AOBUS_LLVM_SDK_REQUIRED_INDEX}]' as a non-empty "
+      "portable relative path of forward-slash-separated components, found "
+      "'${_aobus_llvm_required_file}'.")
+  endif()
+  list(APPEND _AOBUS_LLVM_SDK_REQUIRED_FILES "${_aobus_llvm_required_file}")
+endforeach()
+# The Clang resource directory major follows the pinned version instead of
+# being a second fact to update on an SDK upgrade.
+string(REGEX MATCH "^[0-9]+" _AOBUS_LLVM_SDK_RESOURCE_MAJOR "${AOBUS_LLVM_SDK_VERSION}")
+list(APPEND _AOBUS_LLVM_SDK_REQUIRED_FILES
+  "lib/clang/${_AOBUS_LLVM_SDK_RESOURCE_MAJOR}/include/stddef.h")
+
 set(AOBUS_LLVM_SDK_ARCHIVE
   "clang+llvm-${AOBUS_LLVM_SDK_VERSION}-x86_64-pc-windows-msvc.tar.xz")
 set(AOBUS_LLVM_SDK_URL
   "https://github.com/llvm/llvm-project/releases/download/llvmorg-${AOBUS_LLVM_SDK_VERSION}/clang%2Bllvm-${AOBUS_LLVM_SDK_VERSION}-x86_64-pc-windows-msvc.tar.xz")
-set(AOBUS_LLVM_SDK_SHA256
-  "d96c2cc1736f4eb7fa43cb9bbdf56d93551a9ae0a9aadb9c99c3c3b2b712a234")
-
-set(_AOBUS_LLVM_SDK_REQUIRED_FILES
-  "bin/clang-cl.exe"
-  "bin/clang-format.exe"
-  "bin/clang-tidy.exe"
-  "include/clang-tidy/tool/ClangTidyMain.h"
-  "lib/clang/22/include/stddef.h"
-  "lib/clangTidyMain.lib"
-  "lib/cmake/clang/ClangConfig.cmake"
-  "lib/cmake/llvm/LLVMConfig.cmake"
-)
 set(_AOBUS_LLVM_SDK_COMPLETION_MARKER ".aobus-llvm-sdk-complete")
 set(_AOBUS_LLVM_SDK_COMPLETION_CONTENT
   "version=${AOBUS_LLVM_SDK_VERSION}\nsha256=${AOBUS_LLVM_SDK_SHA256}\n")

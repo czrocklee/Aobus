@@ -308,7 +308,8 @@ def _windows_fixture_tools(build_dir: Path, toolchain: tidyengine.TidyToolchain)
     sdk = toolchain.sdk_root
     if toolchain.expected_llvm_version is None or toolchain.resource_dir is None or sdk is None:
         raise die("Windows lint fixtures require a toolchain context prepared for native Windows.")
-    for relative in tidyengine.LLVM_SDK_REQUIRED_FILES:
+    _, _, required_files = tidyengine.windows_llvm_sdk_manifest()
+    for relative in required_files:
         if not (sdk / relative).is_file():
             raise die(f"configured LLVM SDK file not found: {sdk / relative}")
     # The VS x64 environment and cl.exe tolerate empty segments, a trailing

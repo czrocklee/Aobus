@@ -18,6 +18,7 @@ import tempfile
 from collections.abc import Callable, Iterator
 from contextvars import copy_context
 from dataclasses import dataclass, field
+from functools import cache
 from pathlib import Path
 from typing import Literal
 
@@ -26,19 +27,54 @@ from .dedup import DIAGNOSTIC_RE
 from .paths import PROJECT_ROOT, absolute_path
 from .proc import die
 
-PINNED_LLVM_VERSION = "22.1.8"
-PINNED_LLVM_SHA256 = "d96c2cc1736f4eb7fa43cb9bbdf56d93551a9ae0a9aadb9c99c3c3b2b712a234"
+# The pinned Windows LLVM SDK identity lives in one manifest shared with
+# cmake/LlvmSdk.cmake; the archive name, URL, and the Clang resource major are
+# derived from the pinned version.
+LLVM_SDK_MANIFEST = PROJECT_ROOT / "script" / "ao" / "windows-llvm-sdk.json"
 LLVM_SDK_COMPLETION_MARKER = ".aobus-llvm-sdk-complete"
-LLVM_SDK_REQUIRED_FILES = (
-    "bin/clang-cl.exe",
-    "bin/clang-format.exe",
-    "bin/clang-tidy.exe",
-    "include/clang-tidy/tool/ClangTidyMain.h",
-    "lib/clang/22/include/stddef.h",
-    "lib/clangTidyMain.lib",
-    "lib/cmake/clang/ClangConfig.cmake",
-    "lib/cmake/llvm/LLVMConfig.cmake",
-)
+
+
+@cache
+def windows_llvm_sdk_manifest() -> tuple[str, str, tuple[str, ...]]:
+    """Return (version, archiveSha256, requiredFiles) from the shared manifest.
+
+    The required file list gains the Clang resource include derived from the
+    pinned version's major, mirroring the CMake module's evaluation.
+    """
+    try:
+        manifest = json.loads(LLVM_SDK_MANIFEST.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError) as error:
+        raise die(f"cannot read the Windows LLVM SDK manifest {LLVM_SDK_MANIFEST}: {error}") from None
+    except json.JSONDecodeError as error:
+        raise die(f"the Windows LLVM SDK manifest {LLVM_SDK_MANIFEST} is not valid JSON: {error}") from None
+    version = manifest.get("version") if isinstance(manifest, dict) else None
+    archive_sha256 = manifest.get("archiveSha256") if isinstance(manifest, dict) else None
+    required_files = manifest.get("requiredFiles") if isinstance(manifest, dict) else None
+    if (
+        not isinstance(version, str)
+        or re.fullmatch(r"[0-9]+[.][0-9]+[.][0-9]+", version) is None
+        or not isinstance(archive_sha256, str)
+        or re.fullmatch(r"[0-9a-f]{64}", archive_sha256) is None
+        or not isinstance(required_files, list)
+        or not required_files
+        or any(
+            not isinstance(entry, str)
+            or re.fullmatch(r"[A-Za-z0-9_.+-]+(/[A-Za-z0-9_.+-]+)*", entry) is None
+            or any(part in (".", "..") for part in entry.split("/"))
+            for entry in required_files
+        )
+    ):
+        raise die(
+            f"the Windows LLVM SDK manifest {LLVM_SDK_MANIFEST} needs a '<major>.<minor>.<patch>' "
+            "'version', a 64-digit lowercase-hex 'archiveSha256', and a non-empty "
+            "'requiredFiles' array of portable relative SDK paths "
+            "(slash-separated letters, digits, '_', '.', '+', '-'; no '.' or '..' components)"
+        )
+    return (
+        version,
+        archive_sha256,
+        (*required_files, f"lib/clang/{version.split('.', 1)[0]}/include/stddef.h"),
+    )
 
 
 def default_jobs() -> int:
@@ -224,10 +260,11 @@ def llvm_sdk_version(build_dir: Path, *, os_name: str | None = None) -> str:
             f"pinned LLVM SDK version is missing from {build_dir / 'CMakeCache.txt'}; "
             f"reconfigure the {builddir.tidy_preset(os_name)} preset."
         )
-    if configured != PINNED_LLVM_VERSION:
+    pinned_version, _, _ = windows_llvm_sdk_manifest()
+    if configured != pinned_version:
         raise die(
             f"configured LLVM SDK version {configured} does not match the portal pin "
-            f"{PINNED_LLVM_VERSION}; reconfigure the {builddir.tidy_preset(os_name)} preset."
+            f"{pinned_version}; reconfigure the {builddir.tidy_preset(os_name)} preset."
         )
     return configured
 
@@ -236,23 +273,24 @@ def ensure_windows_llvm_sdk(build_dir: Path) -> None:
     """Configure the pinned SDK tree when a native Windows tool is not ready."""
     if builddir.platform_profile().name != "windows":
         return
+    pinned_version, pinned_sha256, required_files = windows_llvm_sdk_manifest()
     root_value = _cmake_cache_value(build_dir, "AOBUS_LLVM_SDK_RESOLVED_ROOT")
     version_value = _cmake_cache_value(build_dir, "AOBUS_LLVM_SDK_RESOLVED_VERSION")
     preprovisioned_root = _cmake_cache_value(build_dir, "AOBUS_LLVM_SDK_ROOT")
     root = Path(root_value) if root_value else None
     if root is not None and not root.is_absolute():
         root = absolute_path(build_dir / root)
-    if version_value == PINNED_LLVM_VERSION and root is not None:
-        complete = all((root / relative).is_file() for relative in LLVM_SDK_REQUIRED_FILES)
+    if version_value == pinned_version and root is not None:
+        complete = all((root / relative).is_file() for relative in required_files)
         if complete and preprovisioned_root:
             return
         if complete:
             marker = root / LLVM_SDK_COMPLETION_MARKER
-            expected_marker = f"version={PINNED_LLVM_VERSION}\nsha256={PINNED_LLVM_SHA256}\n"
+            expected_marker = f"version={pinned_version}\nsha256={pinned_sha256}\n"
             try:
                 if marker.read_text(encoding="utf-8") == expected_marker:
                     return
-            except OSError:
+            except (OSError, UnicodeDecodeError):
                 pass
     ensure_compile_db(
         build_dir,

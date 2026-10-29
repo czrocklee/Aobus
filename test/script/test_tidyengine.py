@@ -20,17 +20,6 @@ from ao.core.paths import absolute_path
 
 
 class ClangToolDiscoveryTest(unittest.TestCase):
-    def test_python_portal_pin_matches_the_cmake_sdk_pin(self):
-        module = (tidyengine.PROJECT_ROOT / "cmake" / "LlvmSdk.cmake").read_text(encoding="utf-8")
-
-        self.assertIn(
-            f'set(AOBUS_LLVM_SDK_VERSION "{tidyengine.PINNED_LLVM_VERSION}")',
-            module,
-        )
-        self.assertIn(tidyengine.PINNED_LLVM_SHA256, module)
-        for relative in tidyengine.LLVM_SDK_REQUIRED_FILES:
-            self.assertIn(f'"{relative}"', module)
-
     def test_cmake_sdk_cache_defaults_to_local_windows_state(self):
         module = (tidyengine.PROJECT_ROOT / "cmake" / "LlvmSdk.cmake").read_text(encoding="utf-8")
 
@@ -127,59 +116,63 @@ class ClangToolDiscoveryTest(unittest.TestCase):
             )
 
     def test_windows_automatic_sdk_with_invalid_marker_is_reconfigured(self):
+        version, _, required_files = tidyengine.windows_llvm_sdk_manifest()
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             build_dir = root / "build"
             sdk = root / "sdk"
             build_dir.mkdir()
-            for relative in tidyengine.LLVM_SDK_REQUIRED_FILES:
+            for relative in required_files:
                 required = sdk / relative
                 required.parent.mkdir(parents=True, exist_ok=True)
                 required.touch()
-            (sdk / tidyengine.LLVM_SDK_COMPLETION_MARKER).write_text("incomplete\n", encoding="utf-8")
             (build_dir / "CMakeCache.txt").write_text(
                 "\n".join(
                     [
                         f"AOBUS_LLVM_SDK_RESOLVED_ROOT:INTERNAL={sdk}",
-                        f"AOBUS_LLVM_SDK_RESOLVED_VERSION:INTERNAL={tidyengine.PINNED_LLVM_VERSION}",
+                        f"AOBUS_LLVM_SDK_RESOLVED_VERSION:INTERNAL={version}",
                         "AOBUS_LLVM_SDK_ROOT:PATH=",
                     ]
                 ),
                 encoding="utf-8",
             )
 
-            with mock.patch.object(
-                tidyengine.builddir,
-                "platform_profile",
-                return_value=tidyengine.builddir.WINDOWS_PROFILE,
-            ):
-                with mock.patch.object(tidyengine, "ensure_compile_db") as ensure:
+            for marker in (b"incomplete\n", b"\xff"):
+                (sdk / tidyengine.LLVM_SDK_COMPLETION_MARKER).write_bytes(marker)
+                with (
+                    self.subTest(marker=marker),
+                    mock.patch.object(
+                        tidyengine.builddir, "platform_profile", return_value=tidyengine.builddir.WINDOWS_PROFILE
+                    ),
+                    mock.patch.object(tidyengine, "ensure_compile_db") as ensure,
+                ):
                     tidyengine.ensure_windows_llvm_sdk(build_dir)
 
-            ensure.assert_called_once_with(
-                build_dir,
-                ["-DAOBUS_BUILD_LINT_PLUGIN=ON"],
-                preset="windows-tidy",
-                reconfigure_preset=True,
-            )
+                ensure.assert_called_once_with(
+                    build_dir,
+                    ["-DAOBUS_BUILD_LINT_PLUGIN=ON"],
+                    preset="windows-tidy",
+                    reconfigure_preset=True,
+                )
 
     def test_windows_automatic_sdk_with_valid_marker_is_reused(self):
+        version, sha256, required_files = tidyengine.windows_llvm_sdk_manifest()
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             build_dir = root / "build"
             sdk = root / "sdk"
             build_dir.mkdir()
-            for relative in tidyengine.LLVM_SDK_REQUIRED_FILES:
+            for relative in required_files:
                 required = sdk / relative
                 required.parent.mkdir(parents=True, exist_ok=True)
                 required.touch()
-            marker = f"version={tidyengine.PINNED_LLVM_VERSION}\nsha256={tidyengine.PINNED_LLVM_SHA256}\n"
+            marker = f"version={version}\nsha256={sha256}\n"
             (sdk / tidyengine.LLVM_SDK_COMPLETION_MARKER).write_text(marker, encoding="utf-8")
             (build_dir / "CMakeCache.txt").write_text(
                 "\n".join(
                     [
                         f"AOBUS_LLVM_SDK_RESOLVED_ROOT:INTERNAL={sdk}",
-                        f"AOBUS_LLVM_SDK_RESOLVED_VERSION:INTERNAL={tidyengine.PINNED_LLVM_VERSION}",
+                        f"AOBUS_LLVM_SDK_RESOLVED_VERSION:INTERNAL={version}",
                         "AOBUS_LLVM_SDK_ROOT:PATH=",
                     ]
                 ),

@@ -2226,11 +2226,12 @@ class CliParseTest(unittest.TestCase):
 
     def test_windows_lint_preflight_verifies_actual_version_and_exact_registry_without_loading_a_plugin(self):
         registry = "\n".join(sorted(tidy_command.EXPECTED_AOBUS_CHECKS))
+        pinned_version, _, _ = tidy_command.tidyengine.windows_llvm_sdk_manifest()
         for version, checks, succeeds in (
-            (tidy_command.tidyengine.PINNED_LLVM_VERSION, registry, True),
+            (pinned_version, registry, True),
             ("0.0.0", registry, False),
-            (tidy_command.tidyengine.PINNED_LLVM_VERSION, "", False),
-            (tidy_command.tidyengine.PINNED_LLVM_VERSION, registry + "\naobus-unexpected", False),
+            (pinned_version, "", False),
+            (pinned_version, registry + "\naobus-unexpected", False),
         ):
             with self.subTest(version=version, succeeds=succeeds), tempfile.TemporaryDirectory() as temporary:
                 host_tree = Path(temporary)
@@ -2239,7 +2240,7 @@ class CliParseTest(unittest.TestCase):
                 (host_tree / "compile_commands.json").touch()
                 (host_tree / "CMakeCache.txt").write_text(
                     f"AOBUS_LLVM_SDK_RESOLVED_ROOT:INTERNAL={sdk.as_posix()}\n"
-                    f"AOBUS_LLVM_SDK_RESOLVED_VERSION:INTERNAL={tidy_command.tidyengine.PINNED_LLVM_VERSION}\n",
+                    f"AOBUS_LLVM_SDK_RESOLVED_VERSION:INTERNAL={pinned_version}\n",
                     encoding="utf-8",
                 )
                 host = host_tree / "tool/lint/AobusClangTidy.exe"

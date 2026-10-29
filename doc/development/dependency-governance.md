@@ -36,6 +36,7 @@ Use the owner for the question being asked:
 | vcpkg registry snapshots | `vcpkg-configuration.json` |
 | vcpkg ports, features, and exact overrides | `vcpkg.json` |
 | macOS compiler, deployment target, and vcpkg tool archive | `script/ao/macos-toolchain.json` |
+| Windows tidy LLVM SDK version, archive SHA-256, and required files | `script/ao/windows-llvm-sdk.json` |
 | WinUI NuGet closure and trusted source | `app/windows-winui/packages.config`, `app/windows-winui/NuGet.Config` |
 | Python, Ruff, mypy, and documentation-parser policy | `script/ao/toolchain.json` |
 | Accepted Python tooling and documentation-parser artifacts | `script/ao/docs-requirements.txt`, `script/ao/windows-requirements.txt`, `script/ao/macos-requirements.txt` |
