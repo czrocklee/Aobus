@@ -990,7 +990,7 @@ def run_non_catch2_suite(
 
 
 def _catch2_suites_for_filter(suites: tuple[str, ...], test_filter: str) -> tuple[str, ...]:
-    """Exclude suites that cannot interpret an explicit Catch2 filter."""
+    """Select Catch2 suites, report exclusions, and reject a tooling-only filter."""
     if not test_filter:
         return suites
 
@@ -1173,8 +1173,8 @@ def run_command(args: argparse.Namespace) -> int:
             portal = "ao.bat" if builddir.platform_profile().name == "windows" else "./ao"
             raise die(f"build directory {build_dir} does not exist. Run {portal} build first to configure the project.")
         build.validate_build_tree(args, build_dir)
-        suites = configured_suites_for(args.suite, build_dir, tsan=args.tsan)
-        suites = _catch2_suites_for_filter(suites, test_filter)
+        configured = configured_suites_for(args.suite, build_dir, tsan=args.tsan)
+        suites = tuple(suite for suite in suites if suite in configured)
 
     if not args.no_build:
         targets = [

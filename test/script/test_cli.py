@@ -2519,6 +2519,30 @@ class CliParseTest(unittest.TestCase):
         run_non_catch2.assert_not_called()
         self.assertIn("Skipping Tooling Tests, Lint Integration", output.getvalue())
 
+    def test_filtered_all_announces_skips_once_and_honors_disabled_suites(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            cache = {**_ENABLED_SUITE_CACHE, "AOBUS_BUILD_GTK": "OFF"}
+            output = io.StringIO()
+            args = self.parse(["test", "--all", "--no-build", "-p", temporary, "Focused*"])
+            with (
+                mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE),
+                mock.patch.object(build_command, "validate_build_tree", return_value="gcc"),
+                mock.patch.object(test_command.compiler_cache, "read_cmake_cache", return_value=cache),
+                mock.patch.object(test_command, "suite_shards", return_value=1),
+                mock.patch.object(
+                    test_command, "run_catch2_suite", return_value=test_command.SuiteOutcome(0, 1)
+                ) as run_suite,
+                mock.patch.object(test_command, "run_non_catch2_suite") as run_other,
+                contextlib.redirect_stdout(output),
+            ):
+                self.assertEqual(test_command.run_command(args), 0)
+
+        self.assertEqual(output.getvalue().count("Skipping Tooling Tests, Lint Integration"), 1)
+        self.assertEqual(
+            [call.args[0] for call in run_suite.call_args_list], ["core", "backend", "tui", "cli", "systemmedia"]
+        )
+        run_other.assert_not_called()
+
     def test_explicit_filter_requires_at_least_one_catch2_suite(self):
         with self.assertRaisesRegex(SystemExit, "1"):
             test_command.run_suites(("tooling",), Path("/tmp/aobus-test-build"), test_filter="[focused]")
