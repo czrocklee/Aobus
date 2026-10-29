@@ -311,7 +311,7 @@ namespace ao::tui
       .exceeded = false,
     };
     // stb owns this callback signature and requires its exact C `int` size.
-    // NOLINTNEXTLINE(aobus-modernize-use-std-numbers)
+    // NOLINTNEXTLINE(aobus-modernize-use-sized-integer-types)
     auto const appendChunk = [](void* context, void* data, int size)
     {
       auto* out = static_cast<PngOutput*>(context);

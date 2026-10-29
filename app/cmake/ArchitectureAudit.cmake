@@ -417,26 +417,9 @@ function(_aobus_run_architecture_audit)
         BASE_DIRECTORY "${AOBUS_SOURCE_DIR}"
         NORMALIZE
         OUTPUT_VARIABLE _root)
-      if(IS_DIRECTORY "${_root}")
-        file(GLOB_RECURSE _root_sources LIST_DIRECTORIES false
-          "${_root}/*.h"
-          "${_root}/*.hh"
-          "${_root}/*.hpp"
-          "${_root}/*.hxx"
-          "${_root}/*.c"
-          "${_root}/*.cc"
-          "${_root}/*.cpp"
-          "${_root}/*.cxx"
-          "${_root}/*.mm"
-          "${_root}/*.inl"
-          "${_root}/*.ipp"
-          "${_root}/*.def")
-        list(APPEND _sources ${_root_sources})
-      elseif(EXISTS "${_root}")
-        list(APPEND _sources "${_root}")
-      else()
-        message(FATAL_ERROR "Architecture rule '${_rule}' root does not exist: ${_root}")
-      endif()
+      ao_raw_source_files(_root_sources "${_root}"
+        "Architecture rule '${_rule}' root does not exist: ${_root}")
+      list(APPEND _sources ${_root_sources})
       list(APPEND ${_absolute_roots_var} "${_root}")
     endforeach()
   endforeach()
@@ -531,5 +514,8 @@ function(_aobus_run_architecture_audit)
 endfunction()
 
 if(CMAKE_SCRIPT_MODE_FILE)
+  # The inventory helpers are only used at script runtime, so including the
+  # module here keeps it out of configure-time processing of this file.
+  include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/AoSourceCode.cmake")
   _aobus_run_architecture_audit()
 endif()

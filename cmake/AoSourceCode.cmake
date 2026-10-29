@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 Aobus Contributors
 #
-# Comment-free source views for the architecture guards.
+# Source inventories and comment-free views for the architecture guards.
 #
-# A guard decides its rule on code, never on prose. Comments here routinely name
+# Code-view guards decide their rules on code, not prose. Comments routinely name
 # the very types the guards forbid - a leaf documents that it takes exact
 # capabilities rather than the whole AppRuntime - and a block comment spans
 # lines, so no line-oriented test can tell the two apart. Treating a line that
 # opens with `*` as commentary reports that doc comment; keeping it hides code
-# that shares the line with the terminator. Both scans below track the comment
+# that shares the line with the terminator. Both code-view scans track the comment
 # state across lines instead, so each guard states its rule and nothing else.
 
 # Appends the code half of _ao_line to _ao_code, carrying _ao_in_comment across
@@ -90,4 +90,36 @@ function(ao_read_code_text out_var file)
 
   string(REGEX REPLACE "[ \t\r\n]+" " " _ao_text "${_ao_text}")
   set("${out_var}" "${_ao_text}" PARENT_SCOPE)
+endfunction()
+
+# ao_raw_source_files(<out_var> <root> <missing_root_diagnostic>)
+#
+# Sets <out_var> to the raw source files under <root>: <root> itself when it is
+# an existing file, or every file below it that ends in a broad source suffix
+# (.h .hh .hpp .hxx .c .cc .cpp .cxx .mm .inl .ipp .def) when it is a
+# directory. An empty directory yields an empty result, and a root that is
+# neither fails closed with <missing_root_diagnostic>, so the guard that names
+# the root reports it with its own context. The result is local to <root>; a
+# caller that scans several roots owns its overlap, dedup, and ordering policy.
+function(ao_raw_source_files out_var root missing_root_diagnostic)
+  if(IS_DIRECTORY "${root}")
+    file(GLOB_RECURSE _ao_raw_sources LIST_DIRECTORIES false
+      "${root}/*.h"
+      "${root}/*.hh"
+      "${root}/*.hpp"
+      "${root}/*.hxx"
+      "${root}/*.c"
+      "${root}/*.cc"
+      "${root}/*.cpp"
+      "${root}/*.cxx"
+      "${root}/*.mm"
+      "${root}/*.inl"
+      "${root}/*.ipp"
+      "${root}/*.def")
+    set("${out_var}" "${_ao_raw_sources}" PARENT_SCOPE)
+  elseif(EXISTS "${root}")
+    set("${out_var}" "${root}" PARENT_SCOPE)
+  else()
+    message(FATAL_ERROR "${missing_root_diagnostic}")
+  endif()
 endfunction()

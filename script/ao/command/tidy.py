@@ -71,50 +71,28 @@ WINDOWS_EXCLUDED_COMPILE_ARGUMENTS = (
 )
 WINDOWS_FORCED_CMAKE_PCH_PATTERN = r'/FI(?:"[^"]*[/\\]cmake_pch\.hxx"|[^\s]*[/\\]cmake_pch\.hxx)'
 
-EXPECTED_AOBUS_CHECKS = frozenset(
-    {
-        "aobus-async-cancellation-guard",
-        "aobus-implicit-bool-conversion-in-init",
-        "aobus-include-convention",
-        "aobus-license-header",
-        "aobus-modernize-braced-initialization",
-        "aobus-modernize-concrete-final",
-        "aobus-modernize-forbid-trailing-return",
-        "aobus-modernize-lambda-params",
-        "aobus-modernize-local-initialization-style",
-        "aobus-modernize-nodiscard-usage",
-        "aobus-modernize-use-ctad",
-        "aobus-modernize-use-erase-if",
-        "aobus-modernize-use-ranges-any-of",
-        "aobus-modernize-use-ranges-contains",
-        "aobus-modernize-use-ranges-min-max",
-        "aobus-modernize-use-ranges-projection",
-        "aobus-modernize-use-starts-with",
-        "aobus-modernize-use-std-numbers",
-        "aobus-modernize-use-std-to-array",
-        "aobus-portability-explicit-path-conversion",
-        "aobus-readability-async-function-naming",
-        "aobus-readability-bool-function-naming",
-        "aobus-readability-c-api-global-qualification",
-        "aobus-readability-chrono-naming-convention",
-        "aobus-readability-control-block-spacing",
-        "aobus-readability-forbid-raw-fatal",
-        "aobus-readability-forbid-raw-throw",
-        "aobus-readability-header-function-definition",
-        "aobus-readability-identifier-naming-extensions",
-        "aobus-readability-member-order",
-        "aobus-readability-optional-naming-and-usage",
-        "aobus-readability-pointer-naming-convention",
-        "aobus-readability-redundant-namespace-qualification",
-        "aobus-readability-redundant-using-directive",
-        "aobus-readability-result-naming-convention",
-        "aobus-readability-std-c-library-qualification",
-        "aobus-readability-unused-suppression-style",
-        "aobus-readability-use-if-init-statement",
-        "aobus-strict-forward-declaration",
-        "aobus-threading-policy",
-    }
-)
+
+def expected_aobus_checks(fixture_dir: Path | None = None) -> frozenset[str]:
+    """Read the working-tree fixture inventory needed by C++ toolchain preflight.
+
+    Include untracked additions just as the lint suite does. Non-blank supported
+    files establish inventory membership, not diagnostic or positive coverage.
+    """
+    from ..core.linttest import FIXTURE_DIR, discover_fixtures
+
+    root = FIXTURE_DIR if fixture_dir is None else fixture_dir
+    try:
+        checks = frozenset(
+            fixture.check
+            for fixture in discover_fixtures(root)
+            if fixture.check.startswith("aobus-") and fixture.path.read_text(encoding="utf-8", errors="replace").strip()
+        )
+    except OSError as error:
+        raise die(f"cannot read Aobus checker fixtures under {root}: {error}") from error
+    if not checks:
+        raise die(f"no non-blank Aobus checker fixtures found under {root}; cannot validate the toolchain registry.")
+    return checks
+
 
 _PATH_SEPARATOR_RE = r"[/\\]"
 
@@ -396,6 +374,9 @@ def find_lint_artifact(build_dir: Path, *, os_name: str | None = None) -> Path |
 
 def verify_tidy_toolchain(toolchain: TidyToolchain) -> None:
     """Fail closed unless clang-tidy has the expected ABI and complete Aobus registry."""
+    from ..core.linttest import FIXTURE_DIR
+
+    expected_checks = expected_aobus_checks(FIXTURE_DIR)
     if toolchain.expected_llvm_version is not None:
         version_command = [toolchain.clang_tidy, "--version"]
         try:
@@ -429,19 +410,22 @@ def verify_tidy_toolchain(toolchain: TidyToolchain) -> None:
         )
     except FileNotFoundError as error:
         raise die(f"clang-tidy tool not found: {toolchain.clang_tidy}") from error
+    if result.returncode != 0:
+        raise die(f"cannot list the selected clang-tidy check registry (exit {result.returncode}): {' '.join(command)}")
     registered_checks = {line.strip() for line in result.stdout.splitlines() if line.strip().startswith("aobus-")}
-    if result.returncode != 0 or registered_checks != EXPECTED_AOBUS_CHECKS:
-        missing = sorted(EXPECTED_AOBUS_CHECKS - registered_checks)
-        unexpected = sorted(registered_checks - EXPECTED_AOBUS_CHECKS)
+    if registered_checks != expected_checks:
+        missing = sorted(expected_checks - registered_checks)
+        unexpected = sorted(registered_checks - expected_checks)
         details = []
         if missing:
-            details.append(f"missing {', '.join(missing)}")
+            details.append(f"fixture checks absent from the selected toolchain: {', '.join(missing)}")
         if unexpected:
-            details.append(f"unexpected {', '.join(unexpected)}")
-        detail = f" ({'; '.join(details)})" if details else ""
+            details.append(f"registered checks without non-blank supported fixtures: {', '.join(unexpected)}")
         raise die(
-            "the selected clang-tidy toolchain did not expose the complete Aobus check registry"
-            f"{detail}; command exited {result.returncode}: {' '.join(command)}"
+            f"Aobus checker registry does not match the working-tree fixtures at {FIXTURE_DIR}:\n  "
+            + "\n  ".join(details)
+            + "\nCheck fixture additions/removals (including untracked files); "
+            "rebuild the toolchain if its checks changed." + f"\nRegistry command: {' '.join(command)}"
         )
 
 

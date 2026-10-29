@@ -133,12 +133,38 @@ Context headers support `POSITIVE` and `NEGATIVE` only.
 Objective-C++ `.mm` fixtures enable blocks in the diagnostic invocation and use their native Clang compile context.
 Declaration-only fixtures require no Foundation link.
 
+C++ toolchain preflight derives its expected `aobus-*` check set from the same
+working-tree fixture discovery as the lint suite, including untracked additions.
+It needs that fixture tree even for a selected production file. Non-blank
+supported files establish inventory membership; they do not prove positive
+coverage. Header-only and marker-free clean inputs are valid fixtures. Native
+`.mm` fixtures participate regardless of host; stock-check groups do not.
+An empty custom inventory fails closed. Diagnostics distinguish fixture checks
+absent from the selected toolchain from registered checks without fixtures.
+Check working-tree additions and removals before assuming a rebuild is needed.
+
 Use `./ao test --lint` for the integration gate.
 For focused diagnosis with an already prepared native plugin and compile database, use:
 
 ```bash
 ./ao tidy --no-build --check <alias> <fixture>
 ```
+
+## Prefix comparisons
+
+`aobus-modernize-use-starts-with` gives explicit positive or negated prefix advice
+for standard string and string-view `find` comparisons. The starting position
+may be a constant expression evaluating to zero; the value compared against the
+`find` result must be an integer zero literal such as `0` or `0U`.
+Length-limited searches need a proven whole needle before the check can recommend
+`starts_with`; unproved or truncated needles receive no Aobus prefix advice.
+The check emits no replacements.
+
+LLVM's `modernize-use-starts-ends-with` also provides prefix, suffix, `rfind`, and
+`compare` diagnostics. Both checks are enabled by default, so overlapping `find`
+comparisons receive separate diagnostics. The stock fixture assertions validate
+diagnostic presence and text, not the correctness of upstream fix-its; the portal
+does not apply replacements.
 
 ## Semantic function and value naming
 

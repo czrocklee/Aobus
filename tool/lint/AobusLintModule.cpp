@@ -38,8 +38,8 @@
 #include "check/UseRangesContainsCheck.h"
 #include "check/UseRangesMinMaxCheck.h"
 #include "check/UseRangesProjectionCheck.h"
+#include "check/UseSizedIntegerTypesCheck.h"
 #include "check/UseStartsWithCheck.h"
-#include "check/UseStdNumbersCheck.h"
 #include "check/UseStdToArrayCheck.h"
 
 #include <clang-tidy/ClangTidyModule.h>
@@ -93,8 +93,8 @@ namespace clang::tidy::readability
         checkFactories.registerCheck<modernize::UseRangesAnyOfCheck>("aobus-modernize-use-ranges-any-of");
         checkFactories.registerCheck<UseEraseIfCheck>("aobus-modernize-use-erase-if");
         checkFactories.registerCheck<UseRangesMinMaxCheck>("aobus-modernize-use-ranges-min-max");
+        checkFactories.registerCheck<UseSizedIntegerTypesCheck>("aobus-modernize-use-sized-integer-types");
         checkFactories.registerCheck<UseStartsWithCheck>("aobus-modernize-use-starts-with");
-        checkFactories.registerCheck<UseStdNumbersCheck>("aobus-modernize-use-std-numbers");
         checkFactories.registerCheck<UseCtadCheck>("aobus-modernize-use-ctad");
         checkFactories.registerCheck<modernize::UseStdToArrayCheck>("aobus-modernize-use-std-to-array");
         checkFactories.registerCheck<IncludeConventionCheck>("aobus-include-convention");

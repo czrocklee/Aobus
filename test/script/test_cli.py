@@ -2225,7 +2225,7 @@ class CliParseTest(unittest.TestCase):
             fixtures.assert_not_called()
 
     def test_windows_lint_preflight_verifies_actual_version_and_exact_registry_without_loading_a_plugin(self):
-        registry = "\n".join(sorted(tidy_command.EXPECTED_AOBUS_CHECKS))
+        registry = "\n".join(sorted(tidy_command.expected_aobus_checks()))
         pinned_version, _, _ = tidy_command.tidyengine.windows_llvm_sdk_manifest()
         for version, checks, succeeds in (
             (pinned_version, registry, True),
@@ -3534,7 +3534,7 @@ class CliParseTest(unittest.TestCase):
         toolchain = tidy_command.TidyToolchain("clang-tidy", Path("plugin.so"), None)
         completed = mock.Mock(
             returncode=0,
-            stdout="\n".join(f"  {name}" for name in sorted(tidy_command.EXPECTED_AOBUS_CHECKS)),
+            stdout="\n".join(f"  {name}" for name in sorted(tidy_command.expected_aobus_checks())),
         )
 
         with mock.patch.object(tidy_command.subprocess, "run", return_value=completed) as run:
@@ -3563,7 +3563,7 @@ class CliParseTest(unittest.TestCase):
         version = mock.Mock(returncode=0, stdout="LLVM version 22.1.8\n")
         checks = mock.Mock(
             returncode=0,
-            stdout="\n".join(f"  {name}" for name in sorted(tidy_command.EXPECTED_AOBUS_CHECKS)),
+            stdout="\n".join(f"  {name}" for name in sorted(tidy_command.expected_aobus_checks())),
         )
 
         with mock.patch.object(tidy_command.subprocess, "run", side_effect=[version, checks]) as run:

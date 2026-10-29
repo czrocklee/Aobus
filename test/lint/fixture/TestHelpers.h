@@ -6,7 +6,7 @@
 #include <vector>
 
 // Helper definitions to simulate Aobus environment
-// --- Mocks for UseStdNumbersCheck ---
+// --- Mocks for UseSizedIntegerTypesCheck ---
 extern "C"
 {
   void some_c_api(long* ptr, std::int32_t val);

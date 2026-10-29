@@ -101,7 +101,7 @@ set(AOBUS_LINT_PLUGIN_SOURCES
   check/ChronoNamingConventionCheck.cpp
   check/MemberOrderCheck.cpp
   check/UseEraseIfCheck.cpp
-  check/UseStdNumbersCheck.cpp
+  check/UseSizedIntegerTypesCheck.cpp
   check/StrictForwardDeclarationCheck.cpp
   check/UseRangesContainsCheck.cpp
   check/UseRangesProjectionCheck.cpp
