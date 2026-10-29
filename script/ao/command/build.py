@@ -284,6 +284,8 @@ def _capture_cache_identity(build_dir: Path) -> dict[str, object] | None:
     if not cache.is_file():
         return None
     entries: dict[str, str] = {}
+    # Deliberately not the shared cmakecache tokenizer: this digest also accepts
+    # allowlisted NAME=value entries without a :TYPE suffix.
     for line in cache.read_text(encoding="utf-8", errors="replace").splitlines():
         key, separator, value = line.partition("=")
         if separator and not key.startswith(("//", "#")) and key.split(":", 1)[0] in _CAPTURE_CACHE_KEYS:
@@ -463,7 +465,7 @@ def validate_build_tree(
         f"Select a compatible build directory or run {portal} build --clean -p {build_dir} with the intended options."
     )
     try:
-        cache = cmakecache.read_cache(build_dir / "CMakeCache.txt")
+        cache = dict(cmakecache.parse_cache((build_dir / "CMakeCache.txt").read_text(encoding="utf-8")))
         version_parts = [cache.get(f"CMAKE_CACHE_{part}_VERSION", "") for part in ("MAJOR", "MINOR", "PATCH")]
         if not all(part.isdecimal() for part in version_parts):
             raise die(f"Cannot determine the CMake version recorded in {build_dir}. {remedy}")
@@ -486,7 +488,7 @@ def validate_build_tree(
                     f"Compiler mismatch in {build_dir}: requested {expected_id}, "
                     f"configured {language} compiler is {identity[1]}. {remedy}"
                 )
-    except OSError as exc:
+    except (OSError, UnicodeDecodeError) as exc:
         raise die(f"Cannot read build configuration in {build_dir}: {exc}. {remedy}") from exc
 
     if not compiler_only:

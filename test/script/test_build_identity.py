@@ -193,13 +193,31 @@ class BuildIdentityTest(unittest.TestCase):
         with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
             self.assertEqual(build.validate_build_tree(self.arguments("build"), self.directory), "msvc")
 
-    def test_unreadable_configuration_dies_with_the_clean_build_remedy(self):
-        # The shared strict reader raises OSError; the identity check wraps it
-        # in its remedy instead of crashing or reconfiguring the tree.
-        with mock.patch.object(build, "run") as run, self.assertRaises(SystemExit):
+    def test_missing_cache_dies_with_the_clean_build_remedy(self):
+        with self.assertRaises(SystemExit):
             build.validate_build_tree(self.arguments("build"), self.directory)
 
-        run.assert_not_called()
+        self.assertIn("Cannot read build configuration", self.stderr.getvalue())
+        self.assertIn("./ao build --clean", self.stderr.getvalue())
+
+    def test_invalid_utf8_cache_dies_with_the_clean_build_remedy(self):
+        # The identity check decodes the cache strictly, so mojibake bytes get
+        # the same remedy as a missing cache instead of a crash.
+        (self.directory / "CMakeCache.txt").write_bytes(b"CMAKE_BUILD_TYPE:STRING=Rel\xffease\n")
+
+        with self.assertRaises(SystemExit):
+            build.validate_build_tree(self.arguments("build"), self.directory)
+
+        self.assertIn("Cannot read build configuration", self.stderr.getvalue())
+        self.assertIn("./ao build --clean", self.stderr.getvalue())
+
+    def test_cache_read_error_dies_with_the_clean_build_remedy(self):
+        # The read error is mocked because chmod is not a portable way to make
+        # a file unreadable on every host.
+        with mock.patch.object(Path, "read_text", side_effect=OSError("permission denied")):
+            with self.assertRaises(SystemExit):
+                build.validate_build_tree(self.arguments("build"), self.directory)
+
         self.assertIn("Cannot read build configuration", self.stderr.getvalue())
         self.assertIn("./ao build --clean", self.stderr.getvalue())
 

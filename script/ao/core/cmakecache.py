@@ -2,8 +2,9 @@
 
 CMake writes cache entries as ``NAME:TYPE=value`` lines; comments start with
 ``//`` or ``#``. Only the first ``=`` separates the raw value, which may itself
-contain ``=``; entry names keep the ``:TYPE`` suffix removed. This module owns
-tokenization only; callers own error, encoding, and fallback policy.
+contain ``=``; entry names keep the ``:TYPE`` suffix removed. The ordered reader
+replaces undecodable bytes; callers own duplicate resolution, whitespace,
+strict decoding, and read-error fallbacks.
 """
 
 from __future__ import annotations
@@ -26,11 +27,3 @@ def read_entries(path: Path) -> list[tuple[str, str]]:
     OSError propagates to the caller, which owns the fallback or diagnostic.
     """
     return list(parse_cache(path.read_text(encoding="utf-8", errors="replace")))
-
-
-def read_cache(path: Path) -> dict[str, str]:
-    """Read a strict UTF-8 cache as a dict where the last duplicate wins.
-
-    OSError and UnicodeDecodeError propagate to the caller's wrapper.
-    """
-    return dict(parse_cache(path.read_text(encoding="utf-8")))

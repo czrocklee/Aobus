@@ -450,6 +450,26 @@ class WinUiSourceOwnershipTest(unittest.TestCase):
         (self.build / "CMakeCache.txt").write_text("", encoding="utf-8")
         self.assert_rejected("CMAKE_PROJECT_NAME")
 
+    def test_cache_lookup_keeps_the_last_duplicate_and_raw_value(self):
+        (self.build / "CMakeCache.txt").write_text(
+            "CMAKE_PROJECT_NAME:STATIC=First\n"
+            "CMAKE_GENERATOR:INTERNAL=Visual Studio 18 2026=x64\n"
+            "CMAKE_PROJECT_NAME:STATIC=Ownership\n",
+            encoding="utf-8",
+        )
+
+        self.assertEqual(winuitidy._cmake_cache_value(self.build, "CMAKE_PROJECT_NAME"), "Ownership")
+        self.assertEqual(winuitidy._cmake_cache_value(self.build, "CMAKE_GENERATOR"), "Visual Studio 18 2026=x64")
+        self.assertIsNone(winuitidy._cmake_cache_value(self.build, "ABSENT"))
+
+    def test_cache_read_error_dies_with_a_cache_diagnostic(self):
+        (self.build / "CMakeCache.txt").unlink()
+
+        with contextlib.redirect_stderr(io.StringIO()) as errors, self.assertRaises(SystemExit):
+            winuitidy._cmake_cache_value(self.build, "CMAKE_PROJECT_NAME")
+
+        self.assertIn("cannot read WinUI CMake cache", errors.getvalue())
+
     def test_malformed_evaluated_items_and_query_failure_fail_closed(self):
         for result, message in (
             (mock.Mock(returncode=3, stdout="native failure"), "exit 3"),

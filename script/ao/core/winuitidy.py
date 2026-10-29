@@ -134,7 +134,8 @@ def _repository_include_distances(
 def _cmake_cache_value(build_dir: Path, name: str) -> str | None:
     cache = build_dir / "CMakeCache.txt"
     try:
-        return next((value for key, value in cmakecache.read_entries(cache) if key == name), None)
+        # CMake's own load_cache keeps the last duplicate of a name.
+        return dict(cmakecache.read_entries(cache)).get(name)
     except OSError as error:
         raise die(f"cannot read WinUI CMake cache {cache}: {error}") from error
 

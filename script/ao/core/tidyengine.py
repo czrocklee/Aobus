@@ -228,19 +228,18 @@ def _ensure_compile_db(
     print("Generated headers are ready.")
 
 
-def _cmake_cache_value(build_dir: Path, name: str) -> str | None:
-    cache = build_dir / "CMakeCache.txt"
+def _cmake_cache(build_dir: Path) -> dict[str, str]:
     try:
-        return next((value.strip() for key, value in cmakecache.read_entries(cache) if key == name), None)
+        return {key: value.strip() for key, value in cmakecache.read_entries(build_dir / "CMakeCache.txt")}
     except OSError:
-        return None
+        return {}
 
 
 def llvm_sdk_root(build_dir: Path, *, os_name: str | None = None) -> Path:
     """Return the exact configured Windows SDK root without consulting PATH."""
     if builddir.platform_profile(os_name).name != "windows":
         raise die("the downloaded LLVM SDK root is only defined for native Windows tidy builds.")
-    configured = _cmake_cache_value(build_dir, "AOBUS_LLVM_SDK_RESOLVED_ROOT")
+    configured = _cmake_cache(build_dir).get("AOBUS_LLVM_SDK_RESOLVED_ROOT")
     if not configured:
         raise die(
             f"pinned LLVM SDK root is missing from {build_dir / 'CMakeCache.txt'}; "
@@ -254,7 +253,7 @@ def llvm_sdk_version(build_dir: Path, *, os_name: str | None = None) -> str:
     """Return the exact LLVM SDK version recorded by the Windows tidy configure."""
     if builddir.platform_profile(os_name).name != "windows":
         raise die("the downloaded LLVM SDK version is only defined for native Windows tidy builds.")
-    configured = _cmake_cache_value(build_dir, "AOBUS_LLVM_SDK_RESOLVED_VERSION")
+    configured = _cmake_cache(build_dir).get("AOBUS_LLVM_SDK_RESOLVED_VERSION")
     if not configured:
         raise die(
             f"pinned LLVM SDK version is missing from {build_dir / 'CMakeCache.txt'}; "
@@ -274,9 +273,10 @@ def ensure_windows_llvm_sdk(build_dir: Path) -> None:
     if builddir.platform_profile().name != "windows":
         return
     pinned_version, pinned_sha256, required_files = windows_llvm_sdk_manifest()
-    root_value = _cmake_cache_value(build_dir, "AOBUS_LLVM_SDK_RESOLVED_ROOT")
-    version_value = _cmake_cache_value(build_dir, "AOBUS_LLVM_SDK_RESOLVED_VERSION")
-    preprovisioned_root = _cmake_cache_value(build_dir, "AOBUS_LLVM_SDK_ROOT")
+    snapshot = _cmake_cache(build_dir)
+    root_value = snapshot.get("AOBUS_LLVM_SDK_RESOLVED_ROOT")
+    version_value = snapshot.get("AOBUS_LLVM_SDK_RESOLVED_VERSION")
+    preprovisioned_root = snapshot.get("AOBUS_LLVM_SDK_ROOT")
     root = Path(root_value) if root_value else None
     if root is not None and not root.is_absolute():
         root = absolute_path(build_dir / root)

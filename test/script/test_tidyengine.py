@@ -155,7 +155,7 @@ class ClangToolDiscoveryTest(unittest.TestCase):
                     reconfigure_preset=True,
                 )
 
-    def test_windows_automatic_sdk_with_valid_marker_is_reused(self):
+    def test_windows_automatic_sdk_with_valid_marker_is_reused_from_one_cache_snapshot(self):
         version, sha256, required_files = tidyengine.windows_llvm_sdk_manifest()
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -171,8 +171,10 @@ class ClangToolDiscoveryTest(unittest.TestCase):
             (build_dir / "CMakeCache.txt").write_text(
                 "\n".join(
                     [
-                        f"AOBUS_LLVM_SDK_RESOLVED_ROOT:INTERNAL={sdk}",
-                        f"AOBUS_LLVM_SDK_RESOLVED_VERSION:INTERNAL={version}",
+                        "AOBUS_LLVM_SDK_RESOLVED_ROOT:INTERNAL=stale",
+                        "AOBUS_LLVM_SDK_RESOLVED_VERSION:INTERNAL=0.0.0",
+                        f"AOBUS_LLVM_SDK_RESOLVED_ROOT:INTERNAL= {sdk} ",
+                        f"AOBUS_LLVM_SDK_RESOLVED_VERSION:INTERNAL= {version} ",
                         "AOBUS_LLVM_SDK_ROOT:PATH=",
                     ]
                 ),
@@ -184,10 +186,16 @@ class ClangToolDiscoveryTest(unittest.TestCase):
                 "platform_profile",
                 return_value=tidyengine.builddir.WINDOWS_PROFILE,
             ):
-                with mock.patch.object(tidyengine, "ensure_compile_db") as ensure:
+                with (
+                    mock.patch.object(tidyengine, "ensure_compile_db") as ensure,
+                    mock.patch.object(
+                        tidyengine.cmakecache, "read_entries", wraps=tidyengine.cmakecache.read_entries
+                    ) as read,
+                ):
                     tidyengine.ensure_windows_llvm_sdk(build_dir)
 
             ensure.assert_not_called()
+            read.assert_called_once_with(build_dir / "CMakeCache.txt")
 
     def test_windows_clang_tidy_supports_a_multi_config_output_directory(self):
         with tempfile.TemporaryDirectory() as temp_dir:
