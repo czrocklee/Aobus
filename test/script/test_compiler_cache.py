@@ -150,6 +150,145 @@ class CompilerCacheContractTest(unittest.TestCase):
                 self.assertFalse(compiler_cache.version_at_least("4.13.6" + suffix, "4.13.6"))
 
 
+class CiR2ExportTest(unittest.TestCase):
+    """The R2 backend export policy that every native CI job shares."""
+
+    @staticmethod
+    def _ci_process_environment(extra: dict[str, str]) -> dict[str, str]:
+        environment = {
+            key: value
+            for key, value in os.environ.items()
+            if not key.startswith(("AOBUS_", "CMAKE_", "SCCACHE_", "R2_", "AWS_")) and key != "PYTHONPATH"
+        }
+        return {**environment, **extra}
+
+    def test_r2_environment_requires_every_credential(self):
+        complete = {"R2_ENDPOINT": "https://r2", "R2_ACCESS_KEY_ID": "key", "R2_SECRET_ACCESS_KEY": "secret"}
+        for missing in complete:
+            with self.subTest(missing=missing):
+                credentials = dict(complete)
+                credentials.pop(missing)
+                self.assertIsNone(compiler_cache.r2_environment(environ=credentials, key_prefix="linux-v1"))
+        self.assertEqual(
+            compiler_cache.r2_environment(environ=complete, key_prefix="macos-arm64-v1"),
+            {
+                "SCCACHE_BUCKET": "aobus-sccache",
+                "SCCACHE_ENDPOINT": "https://r2",
+                "SCCACHE_REGION": "auto",
+                "SCCACHE_S3_KEY_PREFIX": "macos-arm64-v1",
+                "AWS_ACCESS_KEY_ID": "key",
+                "AWS_SECRET_ACCESS_KEY": "secret",
+            },
+        )
+
+    def test_standalone_r2_activation_exports_only_with_credentials(self):
+        for credentials, expected in (
+            ({}, None),
+            ({"R2_ENDPOINT": "https://r2", "R2_SECRET_ACCESS_KEY": "secret"}, None),
+            (
+                {
+                    "R2_ENDPOINT": "https://r2",
+                    "R2_ACCESS_KEY_ID": "key",
+                    "R2_SECRET_ACCESS_KEY": "secret",
+                },
+                [
+                    "SCCACHE_BUCKET=aobus-sccache",
+                    "SCCACHE_ENDPOINT=https://r2",
+                    "SCCACHE_REGION=auto",
+                    "SCCACHE_S3_KEY_PREFIX=windows-v1",
+                    "AWS_ACCESS_KEY_ID=key",
+                    "AWS_SECRET_ACCESS_KEY=secret",
+                ],
+            ),
+        ):
+            with self.subTest(credentials=sorted(credentials)), tempfile.TemporaryDirectory() as temporary:
+                output = Path(temporary) / "github.env"
+                process = subprocess.run(
+                    [
+                        sys.executable,
+                        "script/ao/core/compiler_cache.py",
+                        "activate-r2",
+                        "--github-env",
+                        str(output),
+                        "--key-prefix",
+                        "windows-v1",
+                    ],
+                    cwd=compiler_cache.PROJECT_ROOT,
+                    env=self._ci_process_environment(credentials),
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(process.returncode, 0, process.stderr)
+                if expected is None:
+                    self.assertIn("R2 credentials unavailable; keeping the local disk backend.", process.stdout)
+                    self.assertFalse(output.exists())
+                else:
+                    self.assertNotIn("R2 credentials unavailable", process.stdout)
+                    self.assertEqual(output.read_text(encoding="utf-8").splitlines(), expected)
+
+    def test_r2_activation_without_credentials_never_reads_the_policy_manifest(self):
+        with (
+            tempfile.TemporaryDirectory() as temporary,
+            mock.patch.dict(os.environ, {}, clear=True),
+            mock.patch.object(compiler_cache, "load_policy", side_effect=AssertionError("unrelated policy read")),
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            output = Path(temporary) / "github.env"
+            self.assertEqual(
+                compiler_cache.main(["activate-r2", "--github-env", str(output), "--key-prefix", "linux-v1"]), 0
+            )
+            self.assertFalse(output.exists())
+
+    def test_multiline_credentials_cannot_corrupt_the_ci_environment(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "github.env"
+            process = subprocess.run(
+                [
+                    sys.executable,
+                    "script/ao/core/compiler_cache.py",
+                    "activate-r2",
+                    "--github-env",
+                    str(output),
+                    "--key-prefix",
+                    "linux-v1",
+                ],
+                cwd=compiler_cache.PROJECT_ROOT,
+                env=self._ci_process_environment(
+                    {
+                        "R2_ENDPOINT": "https://r2\nSCCACHE_NOPE=1",
+                        "R2_ACCESS_KEY_ID": "key",
+                        "R2_SECRET_ACCESS_KEY": "secret",
+                    }
+                ),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(process.returncode, 1)
+            self.assertIn("contains a newline", process.stderr)
+            self.assertFalse(output.exists())
+
+    def test_workflow_r2_exports_use_the_shared_helper(self):
+        workflow = (compiler_cache.PROJECT_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        blocks = workflow.split("- name: Activate R2 compiler cache backend")[1:]
+        self.assertEqual(len(blocks), 3)
+        self.assertEqual(workflow.count("activate-r2"), 3)
+        # The per-job key partition stays explicit at the call site.
+        self.assertEqual(workflow.count("--key-prefix linux-v1"), 1)
+        self.assertEqual(workflow.count('--key-prefix "macos-${{ matrix.cache_arch }}-v1"'), 1)
+        self.assertEqual(workflow.count("--key-prefix windows-v1"), 1)
+        # No step repeats the export policy inline; secrets still bind only
+        # through the step environment, never through command arguments.
+        self.assertNotIn("SCCACHE_BUCKET=", workflow)
+        self.assertEqual(workflow.count("R2_ENDPOINT: ${{ secrets.R2_SCCACHE_ENDPOINT }}"), 3)
+        for block in blocks:
+            step = block.split("- name:", 1)[0]
+            self.assertIn("steps.compiler-cache.outcome == 'success'", step)
+            self.assertNotIn("continue-on-error", step)
+            self.assertNotIn("secrets.", step.split("run: >-", 1)[1])
+
+
 class CompilerCacheInstallTest(unittest.TestCase):
     @staticmethod
     def make_zip(path: Path, member: str, contents: bytes = b"cache executable") -> str:
