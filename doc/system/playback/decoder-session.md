@@ -31,7 +31,7 @@ Its constructor and one-shot `initialize()` step are private, and it exposes no 
   ALAC applies its [bounded source interpretation](pcm-format.md#alac-source-interpretation) before output adaptation: trustworthy absence identifies mono/stereo only, and complete supported agreeing declarations identify and normalize explicit layouts; bad or uninspectable optional evidence remains zero / `Unknown`.
   MP3 applies its [bounded source interpretation](pcm-format.md#mp3-source-interpretation) before output adaptation: complete native-index header coverage of a uniform mono or stereo/joint stream is `Identified`, while dual-channel, mixed roles, and incomplete coverage retain zero masks and `Unknown`.
   Opus applies its mapping families as [source interpretation](../../reference/media/channel-order.md#opus): families 0 and 1 own authoritative output-slot roles and publish their channel count's WAVE mask with `Identified` interpretation, while family 255 keeps zero masks and `Unknown` evidence in header-defined ordinal order.
-  AAC still reports zero masks and `Unknown` interpretation evidence.
+  AAC applies its [actual-output source interpretation](pcm-format.md#aac-source-interpretation) before output adaptation and publication: complete bounded FDK output-role groups identify and normalize slots; unavailable or unsupported roles remain zero / `Unknown`.
 - Unsupported or precision-losing encoding requests fail during source-private construction before playback begins.
 - An exhausted session returns a stable empty end-of-stream block; destruction ends the session and releases its codec resources.
 
@@ -58,7 +58,8 @@ Opus is internally a floating-point codec, but decoding it to float would make i
 ## Stream lifecycle and seeking
 
 The playback path first creates a short-lived inspection decoder with no requested encoding.
-Successful inspection supplies complete source and preferred output formats without reading PCM blocks.
+Successful inspection supplies complete source and preferred output formats without a public `readNextBlock()` call.
+AAC construction privately decodes and caches one first packet to establish those facts, including for inspection; inspection is not necessarily a metadata-only operation.
 Explicit-start preparation next creates, seeks, and prerolls an optimistic final decoder in the selected Backend's valid prewarm hint when one is available.
 After a backend selects its exact encoding, playback reuses that prepared decoder on a complete PCM-mode match or creates a fresh ready decoder session with the selected encoding before seeking and preroll.
 The backend-selected encoding is always a member of the inspected signal's lossless output set, so the final decoder retains the same precision-preserving contract as optimistic preparation.
@@ -127,6 +128,54 @@ A layer change that preserves rate, channel count, and precision is tolerated.
 A rejected frame does not change published `streamInfo()` or reconfigure the output adapter.
 Repeated reads preserve the error, and flush does not clear it.
 A successful seek clears the error and the next read revalidates the target; later frames with intact geometry are accepted, while a still-contradicting target is rejected again without adopting a different identity.
+
+## AAC initialization, identity, and seeking
+
+AAC preserves required MP4 track/table/extradata and native AudioSpecificConfig validation before requested-output admission.
+After those checks, an AAC-local preflight uses the fixed 16-bit integer signal facts to reject unsupported requested encodings, including `Unknown`, with `NotSupported` before accessing or decoding the first payload.
+Required container/cookie/ConfigRaw failures therefore retain precedence over an invalid request, and an invalid request retains precedence over a corrupt first payload.
+
+Initialization privately decodes exactly the first required packet through the same packet pipeline used by public reads, with no search for a later usable packet or concealment fallback.
+An empty, inaccessible, corrupt, incompletely consumed, or undecodable payload in the admitted first sample fails `open()` with `DecodeFailed`; there is no ready empty-session fallback.
+Later payload/decode failures remain read failures.
+A silent first block is still valid PCM, and a one-packet stream needs no second packet to become ready.
+
+ConfigRaw may succeed with zero output rate/count/frame size, so neither those provisional fields nor an ASC fallback is the published format.
+The first successful frame supplies actual positive geometry, within the supported eight-channel and 2048-frame bounds, and copied ordered output-role evidence.
+The [AAC role map](../../reference/media/channel-order.md#aac) resolves a complete plan before the single output-adapter configuration; source and output masks agree at successful open.
+Unsupported or unavailable roles yield zero / `Unknown`, not a new layout refusal, partial identity, count default, or `Inferred` fallback.
+Known noncanonical slots normalize by moving whole native 16-bit samples before encoding adaptation; canonical known and unknown layouts bypass that permutation.
+Decoding uses bounded native scratch storage; normalization and adaptation receive only the active decoded samples, never its unused tail.
+
+Every native handle requests mapping1 and explicitly sets both `AAC_PCM_MAX_OUTPUT_CHANNELS` and `AAC_PCM_MIN_OUTPUT_CHANNELS` to zero, disabling downmix and channel extension; failure during construction is `InitFailed`, while failure to prepare an initial seek is `SeekFailed`.
+This prevents FDK's default eight-to-six-channel downmix from silently becoming the inspected signal when priming discovers actual geometry.
+Eight-channel FRONT5 or BACK4 output remains eight-channel PCM with unknown roles, rather than a six-channel mix or a guessed canonical eight-channel identity.
+The numerical decoder and ordinary-stream output representation remain unchanged; disabling that default conversion is an explicit channel-preservation change.
+No limiter, DRC, concealment, or signal-history flags are added.
+
+The initial rate/count and copied ordered `(type,index)` arrays, including availability of each array, form a fixed native signature.
+Every later successfully decoded frame is checked before PCM exposure; supported-geometry rate/count drift or any signature change returns `NotSupported`, including same-mask slot drift and changes to an unknown signature.
+Frame size may vary within the supported bound and is not an identity field.
+This is a fixed-session support restriction, not a claim that every changing AAC stream is corrupt.
+Unknown identity is never promoted, and public stream information is never rewritten by reads, seeks, flush, or errors.
+
+The first converted block is cached in decoder-owned storage before the ready session is returned.
+Priming captures its original packet's `firstFrameIndex` and advances the source exactly once.
+Public read consumes that cache before checking source EOF, without another decode, source advance, or adapter configuration.
+Thus a single-packet file returns its nonempty cached block with EOF before stable empty EOF blocks; repeated information queries do not consume it.
+
+While that first block remains pending, seek prepares a fresh native handle with the same configuration before asking the packet source to seek.
+Native preparation or packet-seek failure preserves the old handle and pending PCM; the source cursor changes only on an admitted packet seek.
+If the covering target is packet0, including offset zero or an offset within that packet, the session retains its original primed handle/cache and restores the next-packet cursor with one advance, without clearing or redecoding packet0.
+For a successful nonzero-packet target, it adopts the fresh handle and only then discards the old pending block.
+Compressed-buffer clearing is not a cold decoder reset: these two paths preserve initial-seek PCM history rather than decoding a target on the handle already warmed by private priming.
+A preparation failure returns `SeekFailed` with its original diagnostic context and location, without losing pending PCM.
+
+Healthy `flush()` retains the cached block and uses only the existing native `AAC_TPDEC_CLEAR_BUFFER` operation.
+After the pending block has been consumed or discarded, existing packet-source seek plus native-clear history semantics remain unchanged, with subsequent decoded frames still checked against the initial signature.
+MP4 duration and packet-level covering `firstFrameIndex` semantics remain unchanged; this is not a new sample-exact seek or later-seek pristine-PCM replay guarantee.
+Priming neither trims AAC delay/padding nor makes AAC gapless-capable.
+Native default algorithmic delay remains the selected provider's behavior; the cached first block can contain silence or nonzero PCM, and is preserved in either case.
 
 ## ALAC metadata and PCM
 
@@ -266,6 +315,9 @@ The initial frame-information failure and frame/native geometry-disagreement che
 Foreign native conversion controls are not production-path coverage; no test-only production hook is used to manufacture those failures.
 The encoded MP3 cases in [`Mp3DecoderSessionTest.cpp`](../../../test/audio/Mp3DecoderSessionTest.cpp) retain native gapless-trimmed totals, VBR scan duration, and exact seek positions, including native in-frame seek skips.
 [`AlacDecoderChannelLayoutTest.cpp`](../../../test/audio/AlacDecoderChannelLayoutTest.cpp) covers ALAC ready-session identity, concrete/factory parity, literal PCM normalization, adaptation, seek-to-zero/flush, and EOF.
+[`AacDecoderChannelLayoutTest.cpp`](../../../test/audio/AacDecoderChannelLayoutTest.cpp) covers final actual-output identity before the first public read, concrete/factory parity, unchanged literal FDK reference windows with a one-native-signed-16-LSB cross-implementation bound at their measured delay-relative phase, exact same-host native PCM and encoding adaptation, all supported encodings, unknown eight-channel output, and independent raw-native packet comparisons for cached first blocks, contiguous output, flush, and pristine initial seeks, plus stable EOF.
+[`AacDecoderMalformedMp4Test.cpp`](../../../test/audio/AacDecoderMalformedMp4Test.cpp) distinguishes rejected zero-sample tables from admitted samples with empty payloads, and covers first-payload failures at open, required-error/request-preflight precedence, and later-payload read failures.
+Linux-only [`AacAlsaChannelLayoutTest.cpp`](../../../test/audio/backend/AacAlsaChannelLayoutTest.cpp) drives real mono AAC PCM through controlled ALSA parsed observations, covering FC, ambiguous/missing positions, confirmed conflicts and the former zero-mask format-value control without opening hardware.
 [`DemuxerAlacLayoutTest.cpp`](../../../test/media/mp4/DemuxerAlacLayoutTest.cpp) covers borrowed-entry association and preservation of required extradata/container behavior.
 [`AlacChannelMetadataTest.cpp`](../../../test/audio/AlacChannelMetadataTest.cpp) covers the ALAC metadata matrix, and [`EngineAlacChannelLayoutTest.cpp`](../../../test/audio/EngineAlacChannelLayoutTest.cpp) covers Engine transitions; this map is not an execution record.
 Existing [`AlacDecoderMalformedMp4Test.cpp`](../../../test/audio/AlacDecoderMalformedMp4Test.cpp) retains malformed-input coverage, and [`EngineStereoReuseTest.cpp`](../../../test/audio/EngineStereoReuseTest.cpp) keeps an explicitly unsupported ALAC `chan` fixture for the zero-mask stereo-alias contract.

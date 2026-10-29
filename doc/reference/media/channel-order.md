@@ -5,7 +5,7 @@ id: media.channel-order
 
 ## Scope
 
-This reference records WAVE speaker order, WAV compatibility sets, the narrower FLAC format defaults, bounded ALAC channel declarations, uniform MP3 frame-mode identities, and Opus family roles and slot normalization.
+This reference records WAVE speaker order, WAV compatibility sets, the narrower FLAC format defaults, bounded ALAC declarations and AAC output-role groups, uniform MP3 frame-mode identities, and Opus family roles and slot normalization.
 [PCM source interpretation](../../system/playback/pcm-format.md) owns their playback applicability; slot conventions alone do not establish published source identity or native delivery.
 
 ## WAVE speaker positions
@@ -21,6 +21,7 @@ These sets support Aobus's [WAV compatibility policy](../../system/playback/pcm-
 FLAC uses the same format-default identities only for counts 1, 2, 3, 4, 7, and 8; absent a mask declaration, five/six-channel FLAC remains unidentified as explained [below](#flac).
 Opus mapping families 0 and 1 publish their channel count's row as their identified output-slot roles, bounded by the family applicability of the [Opus section](#opus).
 These sets are not defaults for Opus family 255, unidentified PCM, or native backend observations.
+AAC resolves its [actual output-role groups](#aac), not a row selected from channel count.
 
 | Channels | Mask | Canonical roles |
 |---:|---:|---|
@@ -123,6 +124,40 @@ These slots are not count-derived defaults, and they are not assigned from one f
 Missing initial native frame information fails open; it does not select an unassigned or stereo fallback.
 The [MP3 source policy](../../system/playback/pcm-format.md#mp3-source-interpretation) owns complete native-index header coverage, bounded trailing-tag framing and boundary validation, the initial native prefix exemption, withholding, and midstream stability.
 Coverage does not establish corruption-free audio or file authenticity, and these software identities do not prove native delivery or physical wiring.
+
+## AAC
+
+The [AAC source policy](../../system/playback/pcm-format.md#aac-source-interpretation) uses FDK's actual decoded output, not an ASC channel count or an encoder's layout label.
+FDK's [`CStreamInfo` output-format contract](https://github.com/mstorsjo/fdk-aac/blob/v2.0.3/libAACdec/include/aacdecoder_lib.h) describes `pChannelType[slot]` and `pChannelIndices[slot]` as properties of each output-buffer slot.
+Actual output `numChannels`, not the internal `aacNumChannels`, owns the array extent and PCM geometry.
+Indices are relative to all channels of that type: center first when present, then left/right pairs.
+The normal-height types are defined by [`AUDIO_CHANNEL_TYPE`](https://github.com/mstorsjo/fdk-aac/blob/v2.0.3/libSYS/include/FDK_audio.h).
+Aobus admits only the following exact populations of each present type:
+
+| FDK type | Population | Complete index-to-WAVE assignment |
+|---|---:|---|
+| `ACT_FRONT` | 1 | `0 → FC (0x4)` |
+| `ACT_FRONT` | 2 | `0 → FL (0x1)`, `1 → FR (0x2)` |
+| `ACT_FRONT` | 3 | `0 → FC (0x4)`, `1 → FL (0x1)`, `2 → FR (0x2)` |
+| `ACT_BACK` | 1 | `0 → BC (0x100)` |
+| `ACT_BACK` | 2 | `0 → BL (0x10)`, `1 → BR (0x20)` |
+| `ACT_SIDE` | 2 | `0 → SL (0x200)`, `1 → SR (0x400)` |
+| `ACT_LFE` | 1 | `0 → LFE (0x8)` |
+
+A group may be absent, but every present group must have exactly its complete index set, without duplicates, holes, or out-of-range indices.
+Both arrays must be available and every actual output slot must resolve to a distinct assigned WAVE position.
+A complete plan publishes the union of those positions as `Identified`, never `Inferred`.
+
+FRONT populations of four or more, BACK populations of three or more, present SIDE populations other than two, multiple LFE channels, `ACT_NONE`, top/bottom positions, unknown types, and unavailable or incomplete arrays leave the entire layout zero / `Unknown`.
+No partial identity, height-bit stripping, WAVE count fallback, or guessed extra front/back roles repairs that evidence.
+For example, FRONT3 identifies FL/FR/FC (`0x7`), whereas FRONT2+BACK1 identifies FL/FR/BC (`0x103`) at the same total count.
+FRONT3+BACK2+LFE1 identifies back 5.1 (`0x3F`); only actual SIDE2 in place of BACK2 identifies side 5.1 (`0x60F`), regardless of a filename or authored encoder label.
+Eight output channels described by FRONT3+BACK4+LFE1 or FRONT5+BACK2+LFE1 remain `Unknown`, not the WAVE eight-channel compatibility set or a guessed front-wide set.
+
+FDK mapping1 remains requested, but that ordering parameter alone establishes neither complete source identity nor native delivery.
+A complete known plan normalizes any noncanonical output slots to ascending WAVE bits by moving whole 16-bit native samples before output adaptation; canonical plans need no copy.
+An unknown plan performs no Aobus role permutation and retains FDK output-index order.
+[`AacDecoderSession.cpp`](../../../lib/audio/AacDecoderSession.cpp) owns this bounded resolver; the [decoder lifecycle](../../system/playback/decoder-session.md#aac-initialization-identity-and-seeking) owns private first-packet priming, immutable signatures, and seek history.
 
 ## Opus
 

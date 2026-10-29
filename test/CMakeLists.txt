@@ -488,7 +488,6 @@ add_executable(ao_core_test
     audio/OpenedModeValidationTest.cpp
     audio/detail/DecoderOutputAdapterTest.cpp
     audio/NullBackendTest.cpp
-    audio/detail/AacConfigParserTest.cpp
     audio/detail/MappedFileCursorTest.cpp
     audio/detail/Mp4PacketSourceTest.cpp
     audio/detail/TimeConversionTest.cpp
@@ -498,6 +497,7 @@ add_executable(ao_core_test
     audio/DecoderErrorTest.cpp
     audio/AacDecoderSessionTest.cpp
     audio/AacDecoderMalformedMp4Test.cpp
+    audio/AacDecoderChannelLayoutTest.cpp
     audio/FlacDecoderSessionTest.cpp
     audio/FlacDecoderChannelLayoutTest.cpp
     audio/FlacCommentCompatibilityTest.cpp
@@ -873,6 +873,7 @@ target_compile_definitions(ao_core_test PRIVATE
     AOBUS_WINDOWS_WINUI_DIR="${CMAKE_SOURCE_DIR}/app/windows-winui")
 
 target_link_libraries(ao_core_test PRIVATE
+    PkgFDKAAC
     ao_fatal_probe_support
     ao_desktop_launch
     ao_app_uimodel
@@ -903,6 +904,7 @@ aobus_target_test_sources(ao_core_test "${LINUX}" "non-Linux host"
   audio/backend/AlsaProviderTest.cpp
   audio/backend/FlacAlsaPipeWireRouteTest.cpp
   audio/backend/OpusAlsaChannelLayoutTest.cpp
+  audio/backend/AacAlsaChannelLayoutTest.cpp
   audio/backend/detail/PipeWireMonitorParsingTest.cpp
   audio/backend/detail/PipeWireFormatParsingTest.cpp
   audio/backend/detail/AlsaGraphRegistryTest.cpp
