@@ -133,6 +133,16 @@ Context headers support `POSITIVE` and `NEGATIVE` only.
 Objective-C++ `.mm` fixtures enable blocks in the diagnostic invocation and use their native Clang compile context.
 Declaration-only fixtures require no Foundation link.
 
+C++ toolchain preflight derives its expected `aobus-*` check set from the same
+working-tree fixture discovery as the lint suite, including untracked additions.
+It needs that fixture tree even for a selected production file. Non-blank
+supported files establish inventory membership; they do not prove positive
+coverage. Header-only and marker-free clean inputs are valid fixtures. Native
+`.mm` fixtures participate regardless of host; stock-check groups do not.
+An empty custom inventory fails closed. Diagnostics distinguish fixture checks
+absent from the selected toolchain from registered checks without fixtures.
+Check working-tree additions and removals before assuming a rebuild is needed.
+
 Use `./ao test --lint` for the integration gate.
 For focused diagnosis with an already prepared native plugin and compile database, use:
 
