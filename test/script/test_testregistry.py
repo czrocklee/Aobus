@@ -1,12 +1,12 @@
 """Exercise the test-source guard against actual CMake executable targets."""
 
-import os
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 
-from ao.core import winui
+from cmake_support import cmake_executable
+
 from ao.core.paths import PROJECT_ROOT
 
 CMAKE_HELPER = PROJECT_ROOT / "cmake" / "AobusTestSources.cmake"
@@ -15,16 +15,7 @@ CMAKE_HELPER = PROJECT_ROOT / "cmake" / "AobusTestSources.cmake"
 class TestRegistryTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.cmake = "cmake"
-        if os.name == "nt":
-            # Tooling-only commands intentionally do not enter an MSVC shell.
-            # Use the governed VS installation, not an unrelated PATH CMake.
-            installation = winui.visual_studio_installation(
-                component="Microsoft.VisualStudio.Component.VC.CMake.Project"
-            )
-            if installation is None:
-                raise RuntimeError("CMake registration fixtures require the configured Visual Studio CMake component")
-            cls.cmake = str(winui.bundled_cmake(installation))
+        cls.cmake = cmake_executable()
 
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()

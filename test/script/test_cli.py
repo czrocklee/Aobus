@@ -2226,11 +2226,12 @@ class CliParseTest(unittest.TestCase):
 
     def test_windows_lint_preflight_verifies_actual_version_and_exact_registry_without_loading_a_plugin(self):
         registry = "\n".join(sorted(tidy_command.EXPECTED_AOBUS_CHECKS))
+        pinned_version, _, _ = tidy_command.tidyengine.windows_llvm_sdk_manifest()
         for version, checks, succeeds in (
-            (tidy_command.tidyengine.PINNED_LLVM_VERSION, registry, True),
+            (pinned_version, registry, True),
             ("0.0.0", registry, False),
-            (tidy_command.tidyengine.PINNED_LLVM_VERSION, "", False),
-            (tidy_command.tidyengine.PINNED_LLVM_VERSION, registry + "\naobus-unexpected", False),
+            (pinned_version, "", False),
+            (pinned_version, registry + "\naobus-unexpected", False),
         ):
             with self.subTest(version=version, succeeds=succeeds), tempfile.TemporaryDirectory() as temporary:
                 host_tree = Path(temporary)
@@ -2239,7 +2240,7 @@ class CliParseTest(unittest.TestCase):
                 (host_tree / "compile_commands.json").touch()
                 (host_tree / "CMakeCache.txt").write_text(
                     f"AOBUS_LLVM_SDK_RESOLVED_ROOT:INTERNAL={sdk.as_posix()}\n"
-                    f"AOBUS_LLVM_SDK_RESOLVED_VERSION:INTERNAL={tidy_command.tidyengine.PINNED_LLVM_VERSION}\n",
+                    f"AOBUS_LLVM_SDK_RESOLVED_VERSION:INTERNAL={pinned_version}\n",
                     encoding="utf-8",
                 )
                 host = host_tree / "tool/lint/AobusClangTidy.exe"
@@ -2518,6 +2519,30 @@ class CliParseTest(unittest.TestCase):
         run_suite.assert_called_once()
         run_non_catch2.assert_not_called()
         self.assertIn("Skipping Tooling Tests, Lint Integration", output.getvalue())
+
+    def test_filtered_all_announces_skips_once_and_honors_disabled_suites(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            cache = {**_ENABLED_SUITE_CACHE, "AOBUS_BUILD_GTK": "OFF"}
+            output = io.StringIO()
+            args = self.parse(["test", "--all", "--no-build", "-p", temporary, "Focused*"])
+            with (
+                mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE),
+                mock.patch.object(build_command, "validate_build_tree", return_value="gcc"),
+                mock.patch.object(test_command.compiler_cache, "read_cmake_cache", return_value=cache),
+                mock.patch.object(test_command, "suite_shards", return_value=1),
+                mock.patch.object(
+                    test_command, "run_catch2_suite", return_value=test_command.SuiteOutcome(0, 1)
+                ) as run_suite,
+                mock.patch.object(test_command, "run_non_catch2_suite") as run_other,
+                contextlib.redirect_stdout(output),
+            ):
+                self.assertEqual(test_command.run_command(args), 0)
+
+        self.assertEqual(output.getvalue().count("Skipping Tooling Tests, Lint Integration"), 1)
+        self.assertEqual(
+            [call.args[0] for call in run_suite.call_args_list], ["core", "backend", "tui", "cli", "systemmedia"]
+        )
+        run_other.assert_not_called()
 
     def test_explicit_filter_requires_at_least_one_catch2_suite(self):
         with self.assertRaisesRegex(SystemExit, "1"):

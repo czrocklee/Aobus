@@ -27,11 +27,11 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 if __package__:
-    from . import msbuild_cache
+    from . import cmakecache, msbuild_cache
 else:
     # CI also invokes this file before the portal's Python environment exists.
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-    from ao.core import msbuild_cache
+    from ao.core import cmakecache, msbuild_cache
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 MANIFEST_PATH = PROJECT_ROOT / "script" / "ao" / "compiler-cache.json"
@@ -687,17 +687,17 @@ def ci_environment(
 
 
 def read_cmake_cache(path: Path) -> dict[str, str]:
-    """Read CMake cache entries shared by launcher and workspace ownership checks."""
+    """Read CMake cache entries shared by launcher and workspace ownership checks.
+
+    Tolerant wrapper over the shared tokenizer: an unreadable cache reads as
+    empty and undecodable bytes are replaced, because the launcher decision is
+    advisory and stale-tree diagnostics own the failure. The last duplicate of
+    a name wins, matching CMake's own cache update.
+    """
     try:
-        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        return dict(cmakecache.read_entries(path))
     except OSError:
         return {}
-    values = {}
-    for line in lines:
-        key, separator, value = line.partition("=")
-        if separator and ":" in key and not key.startswith(("//", "#")):
-            values[key.split(":", 1)[0]] = value
-    return values
 
 
 def _same_launcher(first: str | None, second: str) -> bool:

@@ -1032,6 +1032,7 @@ class StagePhaseInstrumentationTest(unittest.TestCase):
 
 class WindowsLintFixtureTest(unittest.TestCase):
     def setUp(self):
+        self.version, _, self.required_files = tidyengine.windows_llvm_sdk_manifest()
         temporary = tempfile.TemporaryDirectory(prefix="aobus windows fixtures ")
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
@@ -1041,13 +1042,13 @@ class WindowsLintFixtureTest(unittest.TestCase):
         (self.build / "compile_commands.json").write_text("[]", encoding="utf-8")
         (self.build / "CMakeCache.txt").write_text(
             f"AOBUS_LLVM_SDK_RESOLVED_ROOT:INTERNAL={self.sdk.as_posix()}\n"
-            f"AOBUS_LLVM_SDK_RESOLVED_VERSION:INTERNAL={tidyengine.PINNED_LLVM_VERSION}\n",
+            f"AOBUS_LLVM_SDK_RESOLVED_VERSION:INTERNAL={self.version}\n",
             encoding="utf-8",
         )
         self.host = self.build / "tool/lint/AobusClangTidy.exe"
         self.host.parent.mkdir(parents=True)
         self.host.touch()
-        for relative in tidyengine.LLVM_SDK_REQUIRED_FILES:
+        for relative in self.required_files:
             path = self.sdk / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             path.touch()
@@ -1071,7 +1072,7 @@ class WindowsLintFixtureTest(unittest.TestCase):
             clang_tidy=str(self.host),
             plugin=None,
             resource_dir=self.sdk / "lib" / "clang" / "22",
-            expected_llvm_version=tidyengine.PINNED_LLVM_VERSION,
+            expected_llvm_version=self.version,
             sdk_root=self.sdk,
         )
 
@@ -1108,7 +1109,7 @@ class WindowsLintFixtureTest(unittest.TestCase):
         )
 
     def test_every_required_configured_sdk_file_fails_closed_when_missing(self):
-        for relative in tidyengine.LLVM_SDK_REQUIRED_FILES:
+        for relative in self.required_files:
             with self.subTest(relative=relative):
                 path = self.sdk / relative
                 path.unlink()
@@ -1164,7 +1165,7 @@ class WindowsLintFixtureTest(unittest.TestCase):
         self.assertFalse(hasattr(tools, "compiler"))
         # Fixture-only capabilities stay enforced against the context's SDK:
         # the complete required-file set is validated from the verified root.
-        for relative in tidyengine.LLVM_SDK_REQUIRED_FILES:
+        for relative in self.required_files:
             (self.sdk / relative).unlink()
             with (
                 self.subTest(relative=relative),

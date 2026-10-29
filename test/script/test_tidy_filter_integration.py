@@ -68,7 +68,7 @@ def native_filter_tools(*, os_name=None):
         if result.returncode != 0 or version is None:
             raise AssertionError(f"native filter-control version probe failed: {executable}\n{result.stdout}")
         versions.append(version.group(1))
-    major = tidyengine.PINNED_LLVM_VERSION.split(".", 1)[0]
+    major = tidyengine.windows_llvm_sdk_manifest()[0].split(".", 1)[0]
     if versions[0] != versions[1] or versions[0].split(".", 1)[0] != major:
         raise AssertionError(f"native filter controls require matching LLVM {major} versions, got {versions}")
     if expected is not None and versions[0] != expected:

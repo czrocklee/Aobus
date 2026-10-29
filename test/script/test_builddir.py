@@ -237,6 +237,20 @@ class BuildDirTest(unittest.TestCase):
                     builddir.windows_lint_build_dir(Path("C:/state/primary")), Path("C:/state/primary-tidy")
                 )
 
+    def test_windows_state_root_honors_override_localappdata_and_home_fallback(self):
+        # Assert externally visible locations only: the precedence contract is
+        # compiler_cache.state_root's, and Windows consumes it unchanged.
+        self.assertEqual(
+            builddir.windows_state_root(environ={"AOBUS_STATE_ROOT": "C:/chosen"}),
+            Path("C:/chosen"),
+        )
+        self.assertEqual(
+            builddir.windows_state_root(environ={"LOCALAPPDATA": "C:/Users/Alice/AppData/Local"}),
+            Path("C:/Users/Alice/AppData/Local/Aobus"),
+        )
+        with mock.patch("pathlib.Path.home", return_value=Path("C:/Users/Alice")):
+            self.assertEqual(builddir.windows_state_root(environ={}), Path("C:/Users/Alice/AppData/Local/Aobus"))
+
     def test_windows_defaults_to_checkout_isolated_local_app_data(self):
         environment = {
             "LOCALAPPDATA": "C:/Users/Alice/AppData/Local",

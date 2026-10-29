@@ -61,7 +61,7 @@ Runtime evidence and Main Thread Checker remain separate; see [macOS development
 ## Platform coverage
 
 Clang-format is source-based and may run on any native host.
-Linux obtains it from Nix, macOS from the portal-selected `llvm@22`, and Windows from the pinned LLVM SDK in `cmake/LlvmSdk.cmake`.
+Linux obtains it from Nix, macOS from the portal-selected `llvm@22`, and Windows from the LLVM SDK pinned in [`script/ao/windows-llvm-sdk.json`](../../script/ao/windows-llvm-sdk.json), which CMake provisions and validates.
 Clang-tidy must replay a real native compile command with its flags, defines, generated headers, and SDK:
 
 - Linux owns PipeWire, ALSA, POSIX, and GTK translation units.

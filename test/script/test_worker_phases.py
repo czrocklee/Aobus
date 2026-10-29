@@ -1,14 +1,16 @@
-"""Worker-thread phase attribution for the tidy runner and the lint stage.
+"""Worker-thread phase attribution and the lint stage lifecycle.
 
 Pool workers do not inherit the submitting thread's ``ContextVar`` state, so
-the tidy runner and the lint fixture map take a fresh ``copy_context()``
-snapshot per submitted work item. These tests run the real phase writer and
-real thread pools through the actual ``tidy`` runner and the actual
-``linttest.run`` diagnostic route, assert the worker records keep the root
-command and their exact parent phase ids, and run the strict consumer over
-the produced logs. They also pin the two boundaries that propagation must
-not cross: a reused worker thread never leaks one task's context into the
-next, and a bare pool worker started outside any phase stays unparented.
+the tidy runner's parallel map takes a fresh ``copy_context()`` snapshot per
+submitted work item; lint fixture workers run native subprocesses and emit no
+phase records, so the lint stage is validated through the phases the
+submitting thread measures. These tests run the real phase writer and real
+thread pools through the actual ``tidy`` runner and the actual
+``linttest.run`` diagnostic route, assert the records keep the root command
+and their exact parent phase ids, and run the strict consumer over the
+produced logs. They also pin the two boundaries that propagation must not
+cross: a reused worker thread never leaks one task's context into the next,
+and a bare pool worker started outside any phase stays unparented.
 """
 
 import argparse
@@ -243,8 +245,8 @@ class TidyRunnerWorkerContextTest(PhaseLogFixture):
                 self.assertEqual(list(log_dir.glob("*.jsonl")), [])
 
 
-class LintFixtureWorkerContextTest(PhaseLogFixture):
-    def test_lint_workers_inherit_the_test_command_and_stage_parents(self):
+class LintFixtureStageLifecycleTest(PhaseLogFixture):
+    def test_lint_stage_records_keep_the_test_command_and_stage_parents(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             fixture_root = root / "lint-fixture"
@@ -270,12 +272,7 @@ class LintFixtureWorkerContextTest(PhaseLogFixture):
             log_dir = root / "phases"
             self.enable_phase_logging(log_dir)
 
-            worker_contexts = []
-
             def native_run(command, **_keywords):
-                worker_contexts.append(
-                    (threading.get_ident(), phases._command_context.get(), phases._parent_phase.get())
-                )
                 fixture_path = Path(command[-1])
                 return subprocess.CompletedProcess(
                     command, 1, stdout=f"{fixture_path}:2:1: warning: expected [aobus-example]\n"
@@ -321,14 +318,6 @@ class LintFixtureWorkerContextTest(PhaseLogFixture):
             self.assertEqual(policy_begin["jobs"], 2)
             self.assertEqual(policy_begin["count"], linttest._source_policy_case_count(windows=False))
             self.assertNotIn("lint-syntax", {row["phase"] for row in begins})
-
-            # Diagnostic workers run off the main thread inside the open stage,
-            # inheriting the root command and the exact stage parent.
-            main_thread = threading.get_ident()
-            self.assertEqual(len(worker_contexts), 2)
-            self.assertTrue(all(thread != main_thread for thread, _, _ in worker_contexts))
-            self.assertTrue(all(command == "test" for _, command, _ in worker_contexts))
-            self.assertEqual({parent for _, _, parent in worker_contexts}, {diagnostics_begin["phase_id"]})
 
             # The diagnostic pool joins before the canary phase opens, and that
             # phase finishes before the suite ends.

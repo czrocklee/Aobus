@@ -6,7 +6,10 @@ description: Manage Aobus commits, branches, and pull requests. Use before Git o
 # Manage Aobus Git flow
 
 Preserve unrelated changes and use a topic branch unless the user requested
-otherwise. Repository hooks remain authoritative. Read
+otherwise. Repository hooks remain authoritative unless the user explicitly
+authorizes a bypass for the current operation. Keep an authorized bypass local
+to that operation; do not persistently disable hooks or infer permission from a
+general request to commit or publish. Read
 `doc/development/commit-message.md` before committing.
 
 ## History and authorization

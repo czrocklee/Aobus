@@ -56,7 +56,7 @@ Inputs arrive through stable core/runtime values, narrow runtime services, DTO s
 ### One frontend's vocabulary is not a shared model
 
 Portability is not the test. Deciding which component types a shell accepts, which XAML element each one constructs, which style targets are compatible, and which themed surfaces exist is all pure C++ that compiles anywhere - and all of it belongs to one frontend.
-A file that announces which frontend it serves is by that admission not shared, so the Windows-owned `app/windows-winui/layout/LayoutSchema.h`, `GtkThemeSurface.cpp`, and `TuiFramePolicy.h` do not belong in `ao_app_uimodel` whatever they include.
+A file that announces which frontend it serves is by that admission not shared, so the Windows-owned [`LayoutSchema.h`](../../app/windows-winui/include/ao/winui/layout/LayoutSchema.h), `GtkThemeSurface.cpp`, and `TuiFramePolicy.h` do not belong in `ao_app_uimodel` whatever they include.
 
 Such code goes to the frontend target that owns it. Do not create a cross-platform model target solely to make another host's gate compile frontend vocabulary. WinUI keeps these rules in the Windows-only `aobus-winui-lib`, under the `ao::winui` namespace with headers in `app/windows-winui/include/ao/winui/`.
 

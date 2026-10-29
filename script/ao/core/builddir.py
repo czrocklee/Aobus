@@ -48,12 +48,7 @@ def _windows_canonical_path(path: str) -> str | None:
 
 def windows_state_root(*, environ: Mapping[str, str] | None = None) -> Path:
     """Return the native Windows state root shared by Aobus checkouts."""
-    environment = os.environ if environ is None else environ
-    if override := environment.get("AOBUS_STATE_ROOT"):
-        return Path(override)
-    if local_app_data := environment.get("LOCALAPPDATA"):
-        return Path(local_app_data) / "Aobus"
-    return Path.home() / "AppData" / "Local" / "Aobus"
+    return compiler_cache.state_root(environ=environ, system="Windows")
 
 
 def _git_directory(project_root: Path) -> Path | None:

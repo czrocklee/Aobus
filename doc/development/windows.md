@@ -564,7 +564,13 @@ of acceptance. Record the checks performed and remaining limits with the change.
 ## LLVM SDK and native lint tools
 
 Windows format/tidy uses the official LLVM development archive pinned by
-`cmake/LlvmSdk.cmake`. On first native C++ format or tidy configure, CMake
+[`script/ao/windows-llvm-sdk.json`](../../script/ao/windows-llvm-sdk.json);
+`cmake/LlvmSdk.cmake` provisions that archive. The portal reads the manifest
+lazily when Windows SDK code needs it, not while registering commands.
+Required-file entries use portable forward-slash-separated components containing
+ASCII letters, digits, `_`, `.`, `+`, or `-`; `.` and `..` components are rejected.
+This keeps the same relative-path interpretation in CMake and Python on every host.
+On first native C++ format or tidy configure, CMake
 downloads it, verifies SHA-256, and extracts it below
 `%LOCALAPPDATA%\Aobus\cache\llvm` by default. Later trees reuse the verified
 cache. Concurrent provisioning is locked, and incomplete or stale SDKs are not

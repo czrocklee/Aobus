@@ -68,7 +68,7 @@ class SetupCommandTest(unittest.TestCase):
             with (
                 mock.patch.object(tidyengine, "ensure_windows_llvm_sdk") as ensure,
                 mock.patch.object(
-                    tidyengine, "llvm_sdk_version", return_value=tidyengine.PINNED_LLVM_VERSION
+                    tidyengine, "llvm_sdk_version", return_value=tidyengine.windows_llvm_sdk_manifest()[0]
                 ) as version,
                 mock.patch.object(tidyengine, "llvm_sdk_root", return_value=Path("C:/cache/llvm")) as root,
                 mock.patch.object(tidy_command, "prepare_toolchain") as prepare,
@@ -79,7 +79,7 @@ class SetupCommandTest(unittest.TestCase):
         version.assert_called_once_with(host)
         root.assert_called_once_with(host)
         prepare.assert_not_called()
-        self.assertIn(tidyengine.PINNED_LLVM_VERSION, stdout.getvalue())
+        self.assertIn(tidyengine.windows_llvm_sdk_manifest()[0], stdout.getvalue())
 
     def test_llvm_sdk_derives_the_build_dir_override_sibling_and_skips_the_product_root(self):
         override = Path("C:/state/primary")
@@ -87,7 +87,7 @@ class SetupCommandTest(unittest.TestCase):
             mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
             mock.patch.dict(os.environ, {"BUILD_DIR": str(override)}, clear=False),
             mock.patch.object(tidyengine, "ensure_windows_llvm_sdk") as ensure,
-            mock.patch.object(tidyengine, "llvm_sdk_version", return_value=tidyengine.PINNED_LLVM_VERSION),
+            mock.patch.object(tidyengine, "llvm_sdk_version", return_value=tidyengine.windows_llvm_sdk_manifest()[0]),
             mock.patch.object(tidyengine, "llvm_sdk_root", return_value=Path("C:/cache/llvm")),
         ):
             with contextlib.redirect_stdout(io.StringIO()):

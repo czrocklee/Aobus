@@ -20,5 +20,5 @@ Linux and macOS build a module loaded by the matching native `clang-tidy` execut
 Windows builds `AobusClangTidy.exe`, linking the same checks with `clangTidyMain` from the pinned official development SDK rather than loading an external C++ DLL into the official executable.
 
 The [Windows SDK guide](../../doc/development/windows.md#llvm-sdk-and-native-lint-tools) owns automatic cache validation and locking, offline provisioning, and the distinction between `AOBUS_LLVM_SDK_CACHE_ROOT` and `AOBUS_LLVM_SDK_ROOT`.
-The version, archive, hash, and required-file checks are defined in [`LlvmSdk.cmake`](../../cmake/LlvmSdk.cmake).
+The pinned version, archive hash, and required files are owned by [`script/ao/windows-llvm-sdk.json`](../../script/ao/windows-llvm-sdk.json); [`LlvmSdk.cmake`](../../cmake/LlvmSdk.cmake) owns provisioning and validation of that archive.
 Use the [macOS guide](../../doc/development/macos.md) for its native LLVM environment.

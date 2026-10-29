@@ -719,7 +719,7 @@ jobs:
         with:
           path: C:\aobus-state\cache\llvm\toolchains
           key: >-
-            windows-llvm-v1-${{ runner.arch }}-${{ hashFiles('cmake/LlvmSdk.cmake') }}
+            windows-llvm-v1-${{ runner.arch }}-${{ hashFiles('cmake/LlvmSdk.cmake', 'script/ao/windows-llvm-sdk.json') }}
 
       - name: Check Windows build prerequisites
         id: windows-prerequisites

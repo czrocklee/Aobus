@@ -107,7 +107,7 @@ the portal's native LLVM 22 environment and require the compiler and checker to
 report the same release version; Windows uses the exact configured SDK.
 Configured-tool or version failures never become skips.
 
-Each suite is registered once in `script/ao/command/test.py` through `SUITES`
+Each suite is registered once in [`script/ao/core/test_suites.py`](../../../script/ao/core/test_suites.py) through `SUITES`
 and the native groups are defined by `script/ao/core/builddir.py` platform profiles.
 The registry defines the display name, runner kind, and optional CMake target.
 Both `ao test --all` and `ao check` resolve the same native `all` group, so the

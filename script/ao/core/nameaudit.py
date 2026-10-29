@@ -40,7 +40,6 @@ ROLE_ALLOWED_PREFIXES: dict[str, tuple[str, ...]] = {
 
 ROLE_SUFFIXES = tuple(sorted(ROLE_ALLOWED_PREFIXES, key=len, reverse=True))
 GENERIC_SUFFIXES = ("Utils", "Util", "Utility", "Types")
-LEGACY_GENERIC_FILES: frozenset[str] = frozenset()
 
 RECORD_DEFINITION_RE = re.compile(r"\b(?:class|struct)\s+([A-Z][A-Za-z0-9_]*)\b[^;{}]*\{", re.DOTALL)
 TEST_DOUBLE_RE = re.compile(r"^(?:Fake|Mock|Spy|Stub)[A-Z]")
@@ -140,11 +139,10 @@ def audit_files(files: Iterable[Path], root: Path = PROJECT_ROOT) -> list[Issue]
 
 def _audit_file_name(path: Path, root: Path) -> list[Issue]:
     relative = _relative(path, root)
-    rel = relative.as_posix()
     stem = relative.stem
     issues: list[Issue] = []
 
-    if stem.endswith(GENERIC_SUFFIXES) and rel not in LEGACY_GENERIC_FILES:
+    if stem.endswith(GENERIC_SUFFIXES):
         issues.append(
             Issue(
                 path,

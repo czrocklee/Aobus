@@ -1141,6 +1141,31 @@ class CompilerCacheActivationTest(unittest.TestCase):
             self.assertEqual(compiler_cache.cmake_launcher_arguments(environment, build_dir=build), [])
 
 
+class CMakeCacheReadTest(unittest.TestCase):
+    def test_unreadable_cache_reads_as_empty(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            missing = Path(temporary) / "missing-tree" / "CMakeCache.txt"
+
+            self.assertEqual(compiler_cache.read_cmake_cache(missing), {})
+
+    def test_invalid_bytes_are_replaced_instead_of_fatal(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            cache = Path(temporary) / "CMakeCache.txt"
+            cache.write_bytes(b"AOBUS_BUILD_TESTS:BOOL=O\xffN\n")
+
+            self.assertEqual(compiler_cache.read_cmake_cache(cache), {"AOBUS_BUILD_TESTS": "O\ufffdN"})
+
+    def test_last_duplicate_wins_and_raw_values_keep_separators(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            cache = Path(temporary) / "CMakeCache.txt"
+            cache.write_text(
+                "SEPARATED:STRING=a=b\nKEY:STRING=first\n// comment\nKEY:BOOL=last\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(compiler_cache.read_cmake_cache(cache), {"SEPARATED": "a=b", "KEY": "last"})
+
+
 class CompilerCacheCliTest(unittest.TestCase):
     def test_setup_shared_workspace_flags_reach_persistent_setup(self):
         for option, expected in (("--shared-workspaces", True), ("--no-shared-workspaces", False)):
