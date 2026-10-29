@@ -18,6 +18,8 @@
 # Exits with FATAL_ERROR in enforce mode if any non-excluded file under ROOTS
 # matches FORBIDDEN_REGEX. Report mode prints the same findings as warnings.
 
+include("${CMAKE_CURRENT_LIST_DIR}/AoSourceCode.cmake")
+
 if(NOT ROOTS)
   message(FATAL_ERROR "AssertNoForbiddenIncludes: ROOTS not specified")
 endif()
@@ -56,26 +58,12 @@ endif()
 set(_findings "")
 set(_finding_count 0)
 
+# Each root expands through the shared raw source inventory; a root that is a
+# directory contributes every broad-suffix file below it, and a file root is
+# scanned as itself regardless of its suffix.
 foreach(root IN LISTS ROOTS)
-  if(IS_DIRECTORY "${root}")
-    file(GLOB_RECURSE sources
-      "${root}/*.h"
-      "${root}/*.hh"
-      "${root}/*.hpp"
-      "${root}/*.hxx"
-      "${root}/*.c"
-      "${root}/*.cc"
-      "${root}/*.cpp"
-      "${root}/*.cxx"
-      "${root}/*.mm"
-      "${root}/*.inl"
-      "${root}/*.ipp"
-      "${root}/*.def")
-  elseif(EXISTS "${root}")
-    set(sources "${root}")
-  else()
-    message(FATAL_ERROR "AssertNoForbiddenIncludes: root does not exist: ${root}")
-  endif()
+  ao_raw_source_files(sources "${root}"
+    "AssertNoForbiddenIncludes: root does not exist: ${root}")
 
   foreach(source IN LISTS sources)
     if(_exclude_regex AND source MATCHES "${_exclude_regex}")
