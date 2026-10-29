@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
-from . import builddir, buildlock, compiler_cache, gitfiles, phases, workspace_cache
+from . import builddir, buildlock, cmakecache, compiler_cache, gitfiles, phases, workspace_cache
 from .dedup import DIAGNOSTIC_RE
 from .paths import PROJECT_ROOT, absolute_path
 from .proc import die
@@ -195,14 +195,9 @@ def _ensure_compile_db(
 def _cmake_cache_value(build_dir: Path, name: str) -> str | None:
     cache = build_dir / "CMakeCache.txt"
     try:
-        lines = cache.read_text(encoding="utf-8", errors="replace").splitlines()
+        return next((value.strip() for key, value in cmakecache.read_entries(cache) if key == name), None)
     except OSError:
         return None
-    prefix = f"{name}:"
-    for line in lines:
-        if line.startswith(prefix) and "=" in line:
-            return line.split("=", 1)[1].strip()
-    return None
 
 
 def llvm_sdk_root(build_dir: Path, *, os_name: str | None = None) -> Path:

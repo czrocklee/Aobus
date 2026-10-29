@@ -11,7 +11,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
 
-from ..core import builddir, buildlock, compiler_cache, msbuild_cache, phases, winui, workspace_cache
+from ..core import builddir, buildlock, cmakecache, compiler_cache, msbuild_cache, phases, winui, workspace_cache
 from ..core.paths import PROJECT_ROOT
 from ..core.proc import die, run
 
@@ -463,11 +463,7 @@ def validate_build_tree(
         f"Select a compatible build directory or run {portal} build --clean -p {build_dir} with the intended options."
     )
     try:
-        cache = {}
-        for line in (build_dir / "CMakeCache.txt").read_text(encoding="utf-8").splitlines():
-            key, separator, value = line.partition("=")
-            if separator and ":" in key and not key.startswith(("//", "#")):
-                cache[key.split(":", 1)[0]] = value
+        cache = cmakecache.read_cache(build_dir / "CMakeCache.txt")
         version_parts = [cache.get(f"CMAKE_CACHE_{part}_VERSION", "") for part in ("MAJOR", "MINOR", "PATCH")]
         if not all(part.isdecimal() for part in version_parts):
             raise die(f"Cannot determine the CMake version recorded in {build_dir}. {remedy}")

@@ -12,7 +12,7 @@ from contextvars import copy_context
 from pathlib import Path
 from types import MappingProxyType
 
-from . import phases, workspace_cache
+from . import cmakecache, phases, workspace_cache
 from .paths import PROJECT_ROOT, absolute_path
 from .proc import die
 
@@ -135,16 +135,9 @@ def _repository_include_distances(
 def _cmake_cache_value(build_dir: Path, name: str) -> str | None:
     cache = build_dir / "CMakeCache.txt"
     try:
-        lines = cache.read_text(encoding="utf-8", errors="replace").splitlines()
+        return next((value for key, value in cmakecache.read_entries(cache) if key == name), None)
     except OSError as error:
         raise die(f"cannot read WinUI CMake cache {cache}: {error}") from error
-    prefix = f"{name}:"
-    for line in lines:
-        if not line.startswith(prefix):
-            continue
-        _, _, value = line.partition("=")
-        return value
-    return None
 
 
 def _parse_msbuild_json(output: str) -> dict[str, object]:
