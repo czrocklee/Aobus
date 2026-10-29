@@ -14,6 +14,7 @@ from pathlib import Path, PureWindowsPath
 from ..core import builddir, buildlock, cmakecache, compiler_cache, jobs, msbuild_cache, phases, winui, workspace_cache
 from ..core.paths import PROJECT_ROOT
 from ..core.proc import die, run
+from ..core.test_suites import WINUI_CHECK_TARGET as WINUI_CHECK_TARGET
 
 HELP = "Configure and build a native flavor"
 NAME = "build"
@@ -38,10 +39,11 @@ examples:
   ao.bat build --target aobus        # build only the CLI target
   ao.bat build --target winui        # build WinUI through the dedicated MSBuild tree
   ao.bat build release --target winui  # build Release WinUI with IPO/LTCG
+  ao.bat build --target aobus-winui-check  # build WinUI and validate its native probes
   ao.bat build --target aobus-winui-lint-context  # generate WinUI headers without compiling the app
 """
 
-WINUI_TARGETS = frozenset({"winui", "aobus-winui"})
+WINUI_TARGETS = frozenset({"winui", "aobus-winui", WINUI_CHECK_TARGET})
 WINUI_LINT_CONTEXT_TARGET = "aobus-winui-lint-context"
 
 # Private WinUI MSBuild capture (`--msbuild-capture`): one fixed binary-logger
@@ -538,8 +540,8 @@ def do_build(args: argparse.Namespace, targets: list[str]) -> BuildResult:
 
     capture_request = getattr(args, "msbuild_capture", None)
     if capture_request is not None:
-        if profile.name != "windows" or not requested_winui or lint_context:
-            raise die("--msbuild-capture is available only for full native Windows WinUI builds.")
+        if profile.name != "windows" or not requested_winui or lint_context or WINUI_CHECK_TARGET in targets:
+            raise die("--msbuild-capture is available only for shipping native Windows WinUI builds.")
         if (reason := _capture_syntax_error(capture_request)) is not None:
             raise die(reason)
     phase_tree = "winui" if requested_winui else "native"
@@ -599,6 +601,13 @@ def do_build(args: argparse.Namespace, targets: list[str]) -> BuildResult:
                 configure.append(f"-DAOBUS_BUILD_SYSTEM_MEDIA={system_media.upper()}")
             configure.extend(compiler_cache.cmake_launcher_arguments(build_dir=build_dir))
             configure.extend(workspace.cmake_arguments)
+            if WINUI_CHECK_TARGET in targets:
+                query = cmake_build_dir / ".cmake" / "api" / "v1" / "query" / "codemodel-v2"
+                try:
+                    query.parent.mkdir(parents=True, exist_ok=True)
+                    query.touch()
+                except OSError as error:
+                    raise die(f"cannot prepare the WinUI build-graph query {query}: {error}") from error
             if args.asan:
                 sanitizer_name = "ASan" if profile.name == "windows" else "ASan/UBSan"
                 print(f"{sanitizer_name} enabled for this build.")
@@ -618,13 +627,22 @@ def do_build(args: argparse.Namespace, targets: list[str]) -> BuildResult:
             if configure_phase.status != 0:
                 raise die("configure failed.")
             compiler = validate_build_tree(args, build_dir)
+            configuration = "Debug" if args.flavor == "debug" else "Release"
+            if WINUI_CHECK_TARGET in targets:
+                try:
+                    winui.verify_build_graph(cmake_build_dir, configuration)
+                except RuntimeError as exc:
+                    raise die(str(exc)) from exc
 
             build = ["cmake", "--build", str(cmake_build_dir)]
             if requested_winui:
-                build += ["--config", "Debug" if args.flavor == "debug" else "Release"]
+                build += ["--config", configuration]
             parallel_jobs = parallel_build_jobs()
             build += ["--parallel", str(parallel_jobs)]
-            canonical_targets = ["aobus-winui"] if requested_winui and not lint_context else targets
+            if requested_winui and not lint_context:
+                canonical_targets = [WINUI_CHECK_TARGET if WINUI_CHECK_TARGET in targets else "aobus-winui"]
+            else:
+                canonical_targets = targets
             for target in canonical_targets:
                 build += ["--target", target]
             if args.verbose:

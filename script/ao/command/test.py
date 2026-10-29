@@ -1124,10 +1124,13 @@ def _run_winui_audit(args: argparse.Namespace) -> int:
         build_args.verbose = False
         build_args.gtk = None
         build_args.system_media = None
-        build_dir = build.do_build(build_args, targets=["winui"]).build_dir
+        build_dir = build.do_build(build_args, targets=[build.WINUI_CHECK_TARGET]).build_dir
     executable = build_dir / "app" / "windows-winui" / "automation-probe" / "Debug" / "ao_winui_automation_probe.exe"
     if not executable.is_file():
-        raise die(f"WinUI naming probe does not exist: {executable}. Run ao.bat build --target winui first.")
+        raise die(
+            f"WinUI naming probe does not exist: {executable}. "
+            f"Run ao.bat build --target {build.WINUI_CHECK_TARGET} first."
+        )
     with phases.measure("suite", tree="winui", count=1, suite="winui") as phase:
         phase.status = run([str(executable)], cwd=executable.parent, log=build_dir / "build.log", append=True)
     return phase.status

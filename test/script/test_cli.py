@@ -968,6 +968,85 @@ class CliParseTest(unittest.TestCase):
         self.assertEqual(result.preset, "windows-winui")
 
     @mock.patch.object(build_command, "validate_build_tree", return_value="msvc")
+    def test_windows_winui_check_selects_the_validation_aggregate(self, _validate_build_tree):
+        for flavor in ("debug", "release"):
+            configuration = "Debug" if flavor == "debug" else "Release"
+            for targets in ([build_command.WINUI_CHECK_TARGET], ["winui", build_command.WINUI_CHECK_TARGET]):
+                with self.subTest(flavor=flavor, targets=targets), tempfile.TemporaryDirectory() as temp_dir:
+                    args = self.parse(["build", flavor, "-p", temp_dir])
+                    with (
+                        mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
+                        mock.patch.object(build_command.winui, "require_build_host"),
+                        mock.patch.object(build_command.winui, "verify_build_graph") as verify_graph,
+                        mock.patch.object(build_command, "run", return_value=0) as run,
+                    ):
+                        result = build_command.do_build(args, targets)
+                    verify_graph.assert_called_once_with(Path(temp_dir), configuration)
+                    self.assertTrue((Path(temp_dir) / ".cmake/api/v1/query/codemodel-v2").is_file())
+                    command = run.call_args_list[1].args[0]
+                    self.assertEqual(
+                        [command[index + 1] for index, value in enumerate(command) if value == "--target"],
+                        [build_command.WINUI_CHECK_TARGET],
+                    )
+                    self.assertEqual(command[command.index("--config") + 1], configuration)
+                    self.assertEqual(result.preset, "windows-winui")
+
+    @mock.patch.object(build_command, "validate_build_tree", return_value="msvc")
+    def test_winui_graph_failure_stops_before_building_probes(self, _validate_build_tree):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            args = self.parse(["build", "-p", temp_dir])
+            with (
+                mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
+                mock.patch.object(build_command.winui, "require_build_host"),
+                mock.patch.object(build_command.winui, "verify_build_graph", side_effect=RuntimeError("probe leak")),
+                mock.patch.object(build_command, "run", return_value=0) as run,
+                contextlib.redirect_stderr(io.StringIO()),
+                self.assertRaises(SystemExit),
+            ):
+                build_command.do_build(args, [build_command.WINUI_CHECK_TARGET])
+            self.assertEqual(run.call_count, 1)
+            self.assertNotIn("--build", run.call_args.args[0])
+
+    def test_winui_query_io_failure_is_reported_before_configure(self):
+        for operation in ("mkdir", "touch"):
+            with self.subTest(operation=operation), tempfile.TemporaryDirectory() as temp_dir:
+                if operation == "mkdir":
+                    (Path(temp_dir) / ".cmake").write_text("preserve this file", encoding="utf-8")
+                touch_failure = (
+                    mock.patch.object(Path, "touch", side_effect=PermissionError("query denied"))
+                    if operation == "touch"
+                    else contextlib.nullcontext()
+                )
+                args = self.parse(["build", "-p", temp_dir])
+                with (
+                    touch_failure,
+                    mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
+                    mock.patch.object(build_command.winui, "require_build_host"),
+                    mock.patch.object(build_command, "run") as run,
+                    contextlib.redirect_stderr(io.StringIO()) as errors,
+                    self.assertRaises(SystemExit),
+                ):
+                    build_command.do_build(args, [build_command.WINUI_CHECK_TARGET])
+                self.assertIn("cannot prepare the WinUI build-graph query", errors.getvalue())
+                run.assert_not_called()
+
+    def test_winui_check_rejects_native_target_mixing_and_other_platforms_before_configure(self):
+        for profile, targets in (
+            (builddir.LINUX_PROFILE, [build_command.WINUI_CHECK_TARGET]),
+            (builddir.MACOS_PROFILE, [build_command.WINUI_CHECK_TARGET]),
+            (builddir.WINDOWS_PROFILE, [build_command.WINUI_CHECK_TARGET, "ao_core_test"]),
+        ):
+            with (
+                self.subTest(profile=profile.name, targets=targets),
+                mock.patch.object(builddir, "platform_profile", return_value=profile),
+                mock.patch.object(build_command, "run") as run,
+                contextlib.redirect_stderr(io.StringIO()),
+            ):
+                with self.assertRaises(SystemExit):
+                    build_command.do_build(self.parse(["build"]), targets)
+                run.assert_not_called()
+
+    @mock.patch.object(build_command, "validate_build_tree", return_value="msvc")
     def test_windows_release_selects_the_normal_release_preset(self, _validate_build_tree):
         with tempfile.TemporaryDirectory() as temp_dir:
             args = self.parse(["build", "release", "-p", temp_dir])
@@ -1101,7 +1180,7 @@ class CliParseTest(unittest.TestCase):
                 mock.patch.object(build_command.winui, "require_build_host"),
                 mock.patch.object(build_command, "run") as run,
             ):
-                for other in ("winui", "aobus-winui", "ao_core_test"):
+                for other in ("winui", "aobus-winui", build_command.WINUI_CHECK_TARGET, "ao_core_test"):
                     with self.subTest(other=other):
                         with self.assertRaises(SystemExit):
                             build_command.do_build(args, [build_command.WINUI_LINT_CONTEXT_TARGET, other])
@@ -1883,7 +1962,7 @@ class CliParseTest(unittest.TestCase):
             do_build.call_args_list,
             [
                 mock.call(args, targets=["all", "aobus_guardrails", "ao_perf_baseline"]),
-                mock.call(mock.ANY, targets=["winui"]),
+                mock.call(mock.ANY, targets=[build_command.WINUI_CHECK_TARGET]),
             ],
         )
         self.assertEqual(

@@ -15,9 +15,11 @@ class SuiteSpec:
     target: str | None = None
 
 
+WINUI_CHECK_TARGET = "aobus-winui-check"
+
 SUITES = {
     "appkit": SuiteSpec("AppKit Smoke", "appkit", "ao_appkit_smoke"),
-    "winui": SuiteSpec("WinUI Naming Audit", "winui", "aobus-winui"),
+    "winui": SuiteSpec("WinUI Naming Audit", "winui", WINUI_CHECK_TARGET),
     "core": SuiteSpec("Core", "catch2", "ao_core_test"),
     "backend": SuiteSpec("Backend", "catch2", "ao_backend_test"),
     "tui": SuiteSpec("TUI", "catch2", "ao_tui_test"),

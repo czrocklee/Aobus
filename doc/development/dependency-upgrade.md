@@ -182,8 +182,12 @@ For Windows App SDK or C++/WinRT upgrades:
    repository signer fingerprints and source mapping.
 4. Update the Windows App Runtime identity, installer URL, and SHA-256 in the
    contract when the SDK requires a new runtime.
-5. Run `ao.bat doctor winui`, a clean `ao.bat build --target winui`, dependency
-   verification for its build tree, and an interactive RDP smoke launch.
+5. Run `ao.bat doctor winui`, a clean `ao.bat build --target winui`, then
+   `ao.bat check`, dependency verification for the configured trees, and an
+   interactive RDP smoke launch. The clean build exercises the application
+   target; `check` verifies that the shipping and default build graphs exclude
+   probes, builds all eight native probes through `aobus-winui-check`, and runs
+   the two console checks.
 
 The NuGet package graph and installed Windows App Runtime are related but
 separate. Updating one without auditing the other is incomplete.
