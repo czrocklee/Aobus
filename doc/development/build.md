@@ -67,6 +67,24 @@ Both use the shared governed vcpkg manifest rather than Linux's Nix resolver.
 The native AppKit desktop remains a development slice and is launched with `./ao run appkit`; macOS also builds the core, CLI, and TUI with Core Audio.
 Windows uses `ao.bat` to initialize the Visual Studio environment and provision the pinned Python tooling.
 
+## Default parallelism
+
+Build, tidy, lint-fixture, tooling and Catch2 shard defaults share the worker
+baseline in `script/ao/core/jobs.py`: use the available logical cores, reserving
+one locally but none on GitHub Actions, with a minimum of one worker. Discovery
+respects process affinity where available. Each consumer retains its own cap;
+explicit build, job and shard overrides take precedence. Coverage keeps its
+all-core `-j` exception: its default stays at the full logical core count and
+does not reserve one locally.
+
+CI's bootstrap helper uses the same affinity-aware count for build and tidy
+work and the capped Catch2 shard default before native work begins; an unknown
+or nonpositive count fails before exports are written. The helper uses only
+the Python standard library, so it runs on the runner's pre-installed
+interpreter before the managed portal environment exists. The
+[test-suite reference](test/test-suite.md#sharded-catch2-execution) owns shard limits and the
+single-process exceptions.
+
 ## Measure native validation
 
 Set `AOBUS_PHASE_LOG_DIR` to an output directory outside the checkout to collect

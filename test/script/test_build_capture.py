@@ -959,6 +959,19 @@ class MsbuildCaptureWinuiFlowTest(unittest.TestCase):
         self.assertEqual(calls, [])
         self.assertFalse(self.leaf.exists())
 
+    def test_capture_rejects_the_validation_aggregate_before_creating_evidence(self):
+        calls = []
+        with self.native_windows(self.native_run(calls)):
+            with (
+                contextlib.redirect_stderr(io.StringIO()) as stderr,
+                self.assertRaises(SystemExit) as raised,
+            ):
+                build.do_build(self.args(str(self.leaf), target=build.WINUI_CHECK_TARGET), [build.WINUI_CHECK_TARGET])
+        self.assertEqual(raised.exception.code, 1)
+        self.assertIn("shipping native Windows WinUI builds", stderr.getvalue())
+        self.assertEqual(calls, [])
+        self.assertFalse(self.leaf.exists())
+
     def test_capture_rejects_non_windows_profiles_before_any_run(self):
         calls = []
         with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):

@@ -73,28 +73,13 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      # Every runner core builds, tidies, and shards tests; the shard cap mirrors
-      # ao.command.test.SHARD_CAP.
+      # Every runner core builds, tidies, and shards tests; jobs.py owns the
+      # strict core detection and the shard cap (ao.command.test.SHARD_CAP).
       - name: Use every runner core
         shell: bash
-        run: |
-          if ! cores="$(getconf _NPROCESSORS_ONLN)"; then
-            echo "::error::getconf _NPROCESSORS_ONLN failed to report the runner core count." >&2
-            exit 1
-          fi
-          if [[ ! "$cores" =~ ^[1-9][0-9]*$ ]]; then
-            echo "getconf _NPROCESSORS_ONLN reported '$cores'; expected a positive decimal core count." >&2
-            exit 1
-          fi
-          shards="$cores"
-          if (( shards > 16 )); then
-            shards=16
-          fi
-          {
-            echo "CMAKE_BUILD_PARALLEL_LEVEL=$cores"
-            echo "AOBUS_TEST_SHARDS=$shards"
-          } >> "$GITHUB_ENV"
-          echo "Detected $cores runner cores: build and tidy jobs=$cores, test shards=$shards."
+        run: >-
+          python3 script/ao/core/jobs.py export-ci
+          --github-env "$GITHUB_ENV"
 
       - name: Install Nix
         uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b  # v31.11.3
@@ -128,7 +113,7 @@ jobs:
       # to the disk cache when credentials are empty, so secretless runs
       # (fork PRs, Dependabot) must not see SCCACHE_BUCKET at all. The
       # secrets context is not allowed in steps.if, so the guard runs in
-      # the step body.
+      # the helper's step body.
       - name: Activate R2 compiler cache backend
         if: ${{ steps.compiler-cache.outcome == 'success' }}
         shell: bash
@@ -136,19 +121,10 @@ jobs:
           R2_ENDPOINT: ${{ secrets.R2_SCCACHE_ENDPOINT }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_SCCACHE_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SCCACHE_SECRET_ACCESS_KEY }}
-        run: |
-          if [[ -z "$R2_ENDPOINT" || -z "$R2_ACCESS_KEY_ID" || -z "$R2_SECRET_ACCESS_KEY" ]]; then
-            echo 'R2 credentials unavailable; keeping the local disk backend.'
-            exit 0
-          fi
-          {
-            echo "SCCACHE_BUCKET=aobus-sccache"
-            echo "SCCACHE_ENDPOINT=$R2_ENDPOINT"
-            echo "SCCACHE_REGION=auto"
-            echo "SCCACHE_S3_KEY_PREFIX=linux-v1"
-            echo "AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID"
-            echo "AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY"
-          } >> "$GITHUB_ENV"
+        run: >-
+          python3 script/ao/core/compiler_cache.py activate-r2
+          --github-env "$GITHUB_ENV"
+          --key-prefix linux-v1
 
       - name: Reset compiler cache statistics
         if: ${{ steps.compiler-cache.outcome == 'success' }}
@@ -281,27 +257,13 @@ jobs:
           persist-credentials: false
 
       # Every runner core builds, tidies, and shards tests on both matrix
-      # architectures; the shard cap mirrors ao.command.test.SHARD_CAP.
+      # architectures; jobs.py owns the strict core detection and the shard cap
+      # (ao.command.test.SHARD_CAP).
       - name: Use every runner core
         shell: bash
-        run: |
-          if ! cores="$(getconf _NPROCESSORS_ONLN)"; then
-            echo "::error::getconf _NPROCESSORS_ONLN failed to report the runner core count." >&2
-            exit 1
-          fi
-          if [[ ! "$cores" =~ ^[1-9][0-9]*$ ]]; then
-            echo "getconf _NPROCESSORS_ONLN reported '$cores'; expected a positive decimal core count." >&2
-            exit 1
-          fi
-          shards="$cores"
-          if (( shards > 16 )); then
-            shards=16
-          fi
-          {
-            echo "CMAKE_BUILD_PARALLEL_LEVEL=$cores"
-            echo "AOBUS_TEST_SHARDS=$shards"
-          } >> "$GITHUB_ENV"
-          echo "Detected $cores runner cores: build and tidy jobs=$cores, test shards=$shards."
+        run: >-
+          python3 script/ao/core/jobs.py export-ci
+          --github-env "$GITHUB_ENV"
 
       - name: Configure local state
         shell: bash
@@ -392,7 +354,7 @@ jobs:
       # to the disk cache when credentials are empty, so secretless runs
       # (fork PRs, Dependabot) must not see SCCACHE_BUCKET at all. The
       # secrets context is not allowed in steps.if, so the guard runs in
-      # the step body.
+      # the helper's step body.
       - name: Activate R2 compiler cache backend
         if: ${{ steps.compiler-cache.outcome == 'success' }}
         shell: bash
@@ -400,19 +362,10 @@ jobs:
           R2_ENDPOINT: ${{ secrets.R2_SCCACHE_ENDPOINT }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_SCCACHE_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SCCACHE_SECRET_ACCESS_KEY }}
-        run: |
-          if [[ -z "$R2_ENDPOINT" || -z "$R2_ACCESS_KEY_ID" || -z "$R2_SECRET_ACCESS_KEY" ]]; then
-            echo 'R2 credentials unavailable; keeping the local disk backend.'
-            exit 0
-          fi
-          {
-            echo "SCCACHE_BUCKET=aobus-sccache"
-            echo "SCCACHE_ENDPOINT=$R2_ENDPOINT"
-            echo "SCCACHE_REGION=auto"
-            echo "SCCACHE_S3_KEY_PREFIX=macos-${{ matrix.cache_arch }}-v1"
-            echo "AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID"
-            echo "AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY"
-          } >> "$GITHUB_ENV"
+        run: >-
+          python3 script/ao/core/compiler_cache.py activate-r2
+          --github-env "$GITHUB_ENV"
+          --key-prefix "macos-${{ matrix.cache_arch }}-v1"
 
       - name: Restore managed macOS tools
         id: macos-state
@@ -578,19 +531,13 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      # Every runner core builds, tidies, and shards tests; the shard cap
-      # mirrors ao.command.test.SHARD_CAP.
+      # Every runner core builds, tidies, and shards tests; jobs.py owns the
+      # strict core detection and the shard cap (ao.command.test.SHARD_CAP).
       - name: Use every runner core
         shell: pwsh
-        run: |
-          $cores = 0
-          if (-not [int]::TryParse($env:NUMBER_OF_PROCESSORS, [ref]$cores) -or $cores -le 0) {
-            throw "NUMBER_OF_PROCESSORS is '$env:NUMBER_OF_PROCESSORS'; expected a positive integer."
-          }
-          $shards = [Math]::Min($cores, 16)
-          "CMAKE_BUILD_PARALLEL_LEVEL=$cores" >> $env:GITHUB_ENV
-          "AOBUS_TEST_SHARDS=$shards" >> $env:GITHUB_ENV
-          Write-Host "Detected $cores runner cores: build and tidy jobs=$cores, test shards=$shards."
+        run: >-
+          python script/ao/core/jobs.py export-ci
+          --github-env "$env:GITHUB_ENV"
 
       - name: Read compiler cache contract
         id: compiler-cache-contract
@@ -620,27 +567,18 @@ jobs:
       # to the disk cache when credentials are empty, so secretless runs
       # (fork PRs, Dependabot) must not see SCCACHE_BUCKET at all. The
       # secrets context is not allowed in steps.if, so the guard runs in
-      # the step body.
+      # the helper's step body.
       - name: Activate R2 compiler cache backend
         if: ${{ steps.compiler-cache.outcome == 'success' }}
-        shell: bash
+        shell: pwsh
         env:
           R2_ENDPOINT: ${{ secrets.R2_SCCACHE_ENDPOINT }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_SCCACHE_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SCCACHE_SECRET_ACCESS_KEY }}
-        run: |
-          if [[ -z "$R2_ENDPOINT" || -z "$R2_ACCESS_KEY_ID" || -z "$R2_SECRET_ACCESS_KEY" ]]; then
-            echo 'R2 credentials unavailable; keeping the local disk backend.'
-            exit 0
-          fi
-          {
-            echo "SCCACHE_BUCKET=aobus-sccache"
-            echo "SCCACHE_ENDPOINT=$R2_ENDPOINT"
-            echo "SCCACHE_REGION=auto"
-            echo "SCCACHE_S3_KEY_PREFIX=windows-v1"
-            echo "AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID"
-            echo "AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY"
-          } >> "$GITHUB_ENV"
+        run: >-
+          python script/ao/core/compiler_cache.py activate-r2
+          --github-env "$env:GITHUB_ENV"
+          --key-prefix windows-v1
 
       - name: Capture Windows image version
         id: windows-image

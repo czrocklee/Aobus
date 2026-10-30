@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import builddir, phases, tidyconfig, tidyengine
+from .jobs import default_workers
 from .paths import PROJECT_ROOT
 from .proc import die
 
@@ -927,7 +928,7 @@ def run(
     failed = True
     try:
         reporter.write(f"=== Diagnostic Verification ({len(fixtures)} fixtures) ===")
-        worker_count = min(jobs or max((os.cpu_count() or 1) - 1, 1), len(fixtures))
+        worker_count = min(jobs or default_workers(), len(fixtures))
         # The phase encloses the whole executor so it also covers the lazy
         # pool.map consumption inside _report_results; Reporter line ordering
         # is untouched by the record.

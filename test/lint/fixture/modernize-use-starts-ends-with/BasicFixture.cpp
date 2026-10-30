@@ -48,27 +48,21 @@ void positiveFindStringEqZero()
 {
   auto str = "hello world"s;
   // POSITIVE | use starts_with instead of find
-  if (str.find("hello") == 0)
-  {
-  }
+  (void)(str.find("hello") == 0);
 }
 
 void positiveZeroEqFindString()
 {
   auto str = "hello world"s;
   // POSITIVE | use starts_with instead of find
-  if (0 == str.find("hello"))
-  {
-  }
+  (void)(0 == str.find("hello"));
 }
 
 void positiveFindCharEqZero()
 {
   auto str = "hello world"s;
   // POSITIVE | use starts_with instead of find
-  if (str.find('h') == 0)
-  {
-  }
+  (void)(str.find('h') == 0);
 }
 
 void positiveFindNeqZero()
@@ -77,18 +71,14 @@ void positiveFindNeqZero()
   // The stock title alone does not express negation. The Aobus fixture
   // separately asserts explicit !starts_with() diagnostic text.
   // POSITIVE | use starts_with instead of find
-  if (str.find("hello") != 0)
-  {
-  }
+  (void)(str.find("hello") != 0);
 }
 
 void negativeFindEqOne()
 {
   auto str = "hello world"s;
   // NEGATIVE
-  if (str.find("hello") == 1)
-  {
-  }
+  (void)(str.find("hello") == 1);
 }
 
 void negativeFindNoCompare()
@@ -102,45 +92,35 @@ void negativeFindNoCompare()
 void negativeCustomFindType(Config const& cfg)
 {
   // NEGATIVE - Config::find is not a position lookup and Config has no starts_with()
-  if (cfg.find("hello") == 0)
-  {
-  }
+  (void)(cfg.find("hello") == 0);
 }
 
 void negativeMacroSpelled()
 {
   auto str = "hello world"s;
   // NEGATIVE - the find-and-compare is spelled inside a macro expansion
-  if (AOBUS_AT_START(str, "hello"))
-  {
-  }
+  (void)(AOBUS_AT_START(str, "hello"));
 }
 
 void positiveZeroNeqFindString()
 {
   auto const str = "hello world"s;
   // POSITIVE | use starts_with instead of find
-  if (0 != str.find("hello"))
-  {
-  }
+  (void)(0 != str.find("hello"));
 }
 
 void positiveStringViewEqZero()
 {
   auto const text = std::string_view{"hello world"};
   // POSITIVE | use starts_with instead of find
-  if (text.find("hello") == 0)
-  {
-  }
+  (void)(text.find("hello") == 0);
 }
 
 void positiveFindPosZero()
 {
   auto const str = "hello world"s;
   // POSITIVE | use starts_with instead of find
-  if (str.find("hello", 0) == 0)
-  {
-  }
+  (void)(str.find("hello", 0) == 0);
 }
 
 void positiveFindPartialMacroArgs()
@@ -149,9 +129,7 @@ void positiveFindPartialMacroArgs()
   // The stock fix-it spans the macro expansion; this control asserts the
   // diagnostic only, and the portal does not apply stock fixes.
   // POSITIVE | use starts_with instead of find
-  if (str.find(AOBUS_FIND_ARGS) != 0)
-  {
-  }
+  (void)(str.find(AOBUS_FIND_ARGS) != 0);
 }
 
 void negativeFindTruncatedNeedle()
@@ -160,34 +138,26 @@ void negativeFindTruncatedNeedle()
   // The third argument truncates the needle; position 0 does not establish
   // that the whole needle is a prefix.
   // NEGATIVE
-  if (text.find("ab", 0, 1) == 0)
-  {
-  }
+  (void)(text.find("ab", 0, 1) == 0);
 }
 
 void positiveRfindPosZero()
 {
   auto const str = "hello world"s;
   // POSITIVE | use starts_with instead of rfind
-  if (str.rfind("hello", 0) == 0)
-  {
-  }
+  (void)(str.rfind("hello", 0) == 0);
 }
 
 void positiveRfindEndsWith()
 {
   auto const str = "hello world"s;
   // POSITIVE | use ends_with instead of rfind
-  if (str.rfind("world") == str.size() - 5)
-  {
-  }
+  (void)(str.rfind("world") == str.size() - 5);
 }
 
 void positiveCompareEqZero()
 {
   auto const str = "hello world"s;
   // POSITIVE | use starts_with instead of compare
-  if (str.compare(0, 5, "hello") == 0)
-  {
-  }
+  (void)(str.compare(0, 5, "hello") == 0);
 }

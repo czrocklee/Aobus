@@ -74,7 +74,8 @@ class WinUiSuiteTest(unittest.TestCase):
             self.assertEqual(measured[0][:2], ("suite", {"tree": "winui", "count": 1, "suite": "winui"}))
             self.assertEqual(measured[0][2].status, 7)
 
-    def test_build_uses_portal_winui_target_and_returned_tree(self):
+    def test_build_uses_portal_winui_validation_target_and_returned_tree(self):
+        self.assertEqual(test.SUITES["winui"].target, test.build.WINUI_CHECK_TARGET)
         with tempfile.TemporaryDirectory() as directory:
             tree = Path(directory)
             self.probe(tree)
@@ -83,7 +84,7 @@ class WinUiSuiteTest(unittest.TestCase):
                 mock.patch.object(test, "run", return_value=0),
             ):
                 self.assertEqual(test.run_command(self.options(tree, no_build=False)), 0)
-            self.assertEqual(build.call_args.kwargs, {"targets": ["winui"]})
+            self.assertEqual(build.call_args.kwargs, {"targets": [test.build.WINUI_CHECK_TARGET]})
             self.assertEqual(build.call_args.args[0].flavor, "debug")
             self.assertFalse(build.call_args.args[0].clean)
 

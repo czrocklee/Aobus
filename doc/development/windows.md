@@ -237,13 +237,26 @@ session can build and verify but cannot display WinUI.
 For offline deployment without SDKs, Python, or network access, see
 [staging prerequisites](#stage-offline-prerequisites).
 
-`ao.bat check` builds Debug WinUI after the native Debug graph except under
-MSVC ASan. `ao.bat check release` validates the native IPO graph and builds the
-WinUI Release configuration with LTCG.
+`build --target winui` builds and deploys only the shipping application, without
+building or executing probes. `ao.bat check` builds the `aobus-winui-check`
+validation aggregate after the native Debug graph except under MSVC ASan.
+The aggregate builds the application and every native probe, deploys the probes'
+XBF/PRI resources, then executes the track-item and localization console checks.
+It never launches GUI probes. For this validation alone, use
+`ao.bat build --target aobus-winui-check`. As a utility target, each requested
+aggregate build repeats the deployment commands and both console checks; a
+console-check failure fails the build.
+Before building it, the portal verifies the fresh CMake codemodel: neither the
+shipping nor default build may transitively depend on probes, and the validation
+aggregate must include the application and every configured probe.
+
+`ao.bat check release` validates the native IPO graph and the same WinUI
+validation aggregate in Release with LTCG.
 
 The portal uses one concurrency limit for both CMake project scheduling and
-MSBuild's cross-project C++ compiler scheduling. By default it leaves one
-logical processor available. Set `CMAKE_BUILD_PARALLEL_LEVEL` to a positive
+MSBuild's cross-project C++ compiler scheduling. The
+[shared worker baseline](build.md#default-parallelism) leaves one available
+logical processor free locally. Set `CMAKE_BUILD_PARALLEL_LEVEL` to a positive
 integer to override both limits; CI sets it to the full detected logical processor count:
 
 ```powershell
@@ -299,8 +312,8 @@ include applicable notices, and verify its hash after transfer.
 
 ### Soul lifecycle probe
 
-The WinUI build also produces `ao_winui_soul_probe`, a separate native GUI
-executable built by `ao.bat check` but not run by unattended suites. From a
+`ao.bat check` also produces `ao_winui_soul_probe`, a separate native GUI
+executable not run by unattended suites. From a
 logged-in desktop, run
 `<reported-build-dir>\app\windows-winui\soul-probe\Debug\ao_winui_soul_probe.exe`.
 It removes and reinserts the same Soul in a real XAML tree, checking that both a
@@ -357,7 +370,7 @@ externality or overlap check ran. Accepted inputs still require a desktop.
 
 ### Track and navigation probes
 
-The WinUI build also executes `ao_winui_track_item_probe`, a console check of the
+The WinUI validation aggregate executes `ao_winui_track_item_probe`, a console check of the
 real generated TrackRowItem projection and lazy item view. Its nine scenarios
 cover bounded materialization, null retry, cache identity and eviction, IndexOf,
 GetMany, iterator lifetime, oversized-count rejection, duplicate-inclusive
@@ -424,7 +437,7 @@ and probes before another portal build or hygiene refresh can relink them.
 
 ### UI Automation naming gate
 
-`ao.bat test --winui` is a Windows-only explicit suite: it builds the Debug configuration of the dedicated WinUI tree plus the `ao_winui_automation_probe` executable (CMake target `ao_winui_automation_probe`), then runs that probe on a desktop. `-n/--no-build` reuses an existing dedicated WinUI tree, and `-p` selects that dedicated tree. Ordinary `check` and `all` runs build the WinUI graph but never execute GUI probes.
+`ao.bat test --winui` is a Windows-only explicit suite: it builds the Debug `aobus-winui-check` aggregate in the dedicated WinUI tree, then runs `ao_winui_automation_probe` on a desktop. `-n/--no-build` reuses an existing dedicated WinUI tree, and `-p` selects that dedicated tree. Reuse requires a recent `aobus-winui-check` aggregate build in that tree: the shipping-only `build --target winui` does not build or refresh the automation probe. Missing probes fail, but `-n` does not detect stale binaries. Ordinary `check` builds the WinUI validation graph but never executes GUI probes; the `all` test group does not include this explicit desktop suite.
 
 The probe requires an authenticated interactive console: it exits with a diagnostic instead of starting a GUI whenever the process is not in the active console session (no session 0, no silent skip, no fallback), so an unattended host fails rather than reports false success. CI runs it as a separate required Windows gate after `check`; the runner must provide that session. The gate does not provision or bypass desktop login.
 
@@ -449,7 +462,8 @@ new absolute guest-local directory, separate from the source and selected build
 trees. Existing destinations, remote storage, whitespace, quotes, and
 logger-delimiter characters are rejected; use a plain directory spelling for
 the initial capture interface. The option is unavailable for Ninja targets, other platforms, and
-`check`; it does not expose arbitrary native build arguments.
+`check`, the `aobus-winui-check` aggregate, or the generation-only lint-context
+target; it does not expose arbitrary native build arguments.
 
 The normal portal still configures and builds the real WinUI target under its
 build-tree lock. Capture adds a binary log with `ProjectImports=None`, private
@@ -623,7 +637,7 @@ not application compilation, linking, probe execution, or resource deployment.
 `ao.bat check` still owns the full product build and tests. To diagnose generation
 separately, run `ao.bat build --target aobus-winui-lint-context`; tidy consumes the
 Debug context, even after a Release product build. Private `--msbuild-capture`
-remains restricted to full WinUI builds, not this nested generation target.
+remains restricted to shipping WinUI builds, not validation or generation targets.
 Tidy reports and defers platform-incompatible files
 for batch scopes; an explicitly named uncovered file fails. Complete shared C++
 coverage still requires the affected Linux, macOS, and Windows native tidy

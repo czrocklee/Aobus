@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from . import compiler_cache, phases, pythoncheck, workspace_cache
+from .jobs import default_workers
 from .paths import PROJECT_ROOT
 
 TEST_DIR = PROJECT_ROOT / "test" / "script"
@@ -34,8 +35,7 @@ def _run_modules(modules: list[str], env: dict[str, str]) -> list[subprocess.Com
             text=True,
         )
 
-    cpus = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else os.cpu_count() or 1
-    workers = max(1, min(cpus, len(modules)))
+    workers = max(1, min(default_workers(), len(modules)))
     with ThreadPoolExecutor(max_workers=workers) as pool:
         return list(pool.map(run_module, modules))
 

@@ -128,6 +128,28 @@ class ToolTestRunnerTest(unittest.TestCase):
             search_path = call.kwargs["env"]["PYTHONPATH"].split(os.pathsep)
             self.assertEqual(search_path[:2], [str(tooltest.PROJECT_ROOT / "script"), str(tooltest.TEST_DIR)])
 
+    def test_worker_pool_shares_the_baseline_capped_by_the_module_count(self):
+        completed = tooltest.subprocess.CompletedProcess([], 0, stdout="Ran 1 test in 0.001s\n\nOK\n")
+        for baseline, modules, expected in (
+            (6, ["test_alpha", "test_beta", "test_gamma"], 3),
+            (2, ["test_alpha"], 1),
+        ):
+            with self.subTest(baseline=baseline, modules=modules):
+                with (
+                    mock.patch.object(tooltest.pythoncheck, "run_paths", return_value=0),
+                    mock.patch.object(tooltest, "test_modules", return_value=modules),
+                    mock.patch.object(tooltest.subprocess, "run", return_value=completed),
+                    mock.patch.object(tooltest, "default_workers", return_value=baseline),
+                    mock.patch.object(tooltest, "ThreadPoolExecutor") as executor,
+                    contextlib.redirect_stdout(io.StringIO()),
+                ):
+                    # The mocked pool never invokes run_module, so its map feeds
+                    # _run_modules' collection directly with per-module results.
+                    pool = executor.return_value.__enter__.return_value
+                    pool.map.return_value = [completed] * len(modules)
+                    self.assertEqual(tooltest.run(), 0)
+                executor.assert_called_once_with(max_workers=expected)
+
     def test_host_shared_workspace_activation_is_not_inherited_by_unit_tests(self):
         completed = tooltest.subprocess.CompletedProcess([], 0, stdout="Ran 1 test in 0.001s\n\nOK\n")
         inherited = {

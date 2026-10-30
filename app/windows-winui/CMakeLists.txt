@@ -241,7 +241,7 @@ target_link_libraries(ao_winui_localization_probe PRIVATE
 
 # A real XAML unload/reload probe: built by native checks, run only in an
 # interactive desktop session. The shipping executable has no test switches.
-add_executable(ao_winui_soul_probe WIN32
+add_executable(ao_winui_soul_probe WIN32 EXCLUDE_FROM_ALL
   ${CMAKE_SOURCE_DIR}/test/winui/probe/WinUiSoulProbe.cpp)
 aobus_enable_windows_utf8_manifest(ao_winui_soul_probe)
 target_include_directories(ao_winui_soul_probe PRIVATE
@@ -285,7 +285,7 @@ target_link_options(ao_winui_track_item_probe PRIVATE /ENTRY:mainCRTStartup)
 # A real loaded-XAML track table probe: built by native checks, run only in an
 # interactive desktop session like the Soul probe. The shipping executable has
 # no test switches.
-add_executable(ao_winui_track_table_probe WIN32
+add_executable(ao_winui_track_table_probe WIN32 EXCLUDE_FROM_ALL
   ${CMAKE_SOURCE_DIR}/test/winui/probe/WinUiTrackTableProbe.cpp
   ${CMAKE_SOURCE_DIR}/test/winui/probe/WinUiSilentAudio.cpp)
 aobus_enable_windows_utf8_manifest(ao_winui_track_table_probe)
@@ -319,7 +319,7 @@ aobus_enable_windows_app_sdk(ao_winui_track_table_probe APPLICATION)
 
 # The shipping quality tooltip over real decoder/runtime publications. Built
 # by native checks, but property observations require an interactive desktop.
-add_executable(ao_winui_quality_tooltip_probe WIN32
+add_executable(ao_winui_quality_tooltip_probe WIN32 EXCLUDE_FROM_ALL
   ${CMAKE_SOURCE_DIR}/test/winui/probe/WinUiQualityToolTipProbe.cpp)
 aobus_enable_windows_utf8_manifest(ao_winui_quality_tooltip_probe)
 # Private admission runs in a GUI logon that may not have the compiler's
@@ -358,7 +358,7 @@ set_target_properties(ao_winui_quality_tooltip_probe PROPERTIES
 aobus_enable_windows_app_sdk(ao_winui_quality_tooltip_probe APPLICATION)
 
 # Loaded shipping-shell naming audit; executed by the explicit desktop suite.
-add_executable(ao_winui_automation_probe WIN32
+add_executable(ao_winui_automation_probe WIN32 EXCLUDE_FROM_ALL
   ${AOBUS_NO_COVER_ASSETS}
   ${AOBUS_SHELL_LAYOUT_ASSETS}
   ${CMAKE_SOURCE_DIR}/test/winui/probe/WinUiAutomationProbe.cpp
@@ -392,7 +392,7 @@ aobus_enable_windows_app_sdk(ao_winui_automation_probe APPLICATION)
 
 # Real status controls and native automation providers; manually executed on
 # an authenticated desktop, never from the unattended build.
-add_executable(ao_winui_activity_status_probe WIN32
+add_executable(ao_winui_activity_status_probe WIN32 EXCLUDE_FROM_ALL
   ${CMAKE_SOURCE_DIR}/test/winui/probe/WinUiActivityStatusProbe.cpp)
 aobus_enable_windows_utf8_manifest(ao_winui_activity_status_probe)
 target_include_directories(ao_winui_activity_status_probe PRIVATE
@@ -417,7 +417,7 @@ set_target_properties(ao_winui_activity_status_probe PROPERTIES
 aobus_enable_windows_app_sdk(ao_winui_activity_status_probe APPLICATION)
 
 # Real scoped Credits controls; manually executed on an authenticated desktop.
-add_executable(ao_winui_credits_probe WIN32
+add_executable(ao_winui_credits_probe WIN32 EXCLUDE_FROM_ALL
   ${CMAKE_SOURCE_DIR}/test/winui/probe/WinUiCreditsProbe.cpp)
 aobus_enable_windows_utf8_manifest(ao_winui_credits_probe)
 target_include_directories(ao_winui_credits_probe PRIVATE
@@ -484,20 +484,6 @@ target_link_libraries(aobus-winui PRIVATE
 # entry explicitly so the linker extracts that object without /WHOLEARCHIVE,
 # which would also extract and duplicate generated XAML metadata providers.
 target_link_options(aobus-winui PRIVATE /ENTRY:wWinMainCRTStartup)
-# Keep library-linked probes as build-only dependencies: referencing their
-# application projects directly would import their WinMD/PRI closure into the product.
-add_custom_target(ao_winui_credits_probe_build DEPENDS ao_winui_credits_probe)
-add_custom_target(ao_winui_soul_probe_build DEPENDS ao_winui_soul_probe)
-add_custom_target(ao_winui_track_table_probe_build DEPENDS ao_winui_track_table_probe)
-add_custom_target(ao_winui_quality_tooltip_probe_build DEPENDS ao_winui_quality_tooltip_probe)
-add_custom_target(ao_winui_activity_status_probe_build DEPENDS ao_winui_activity_status_probe)
-add_custom_target(ao_winui_automation_probe_build DEPENDS ao_winui_automation_probe)
-add_custom_target(ao_winui_track_item_probe_build
-  COMMAND $<TARGET_FILE:ao_winui_track_item_probe>
-  DEPENDS ao_winui_track_item_probe
-  COMMENT "Verifying the native WinUI track item contract"
-  VERBATIM)
-add_dependencies(aobus-winui ao_winui_localization_probe ao_winui_track_item_probe_build ao_winui_track_table_probe_build ao_winui_activity_status_probe_build ao_winui_automation_probe_build ao_winui_soul_probe_build ao_winui_credits_probe_build ao_winui_quality_tooltip_probe_build)
 # The static-library project emits the XBF files at its output root, while
 # MSBuild's project-reference copy namespaces them under Aobus. The merged
 # application PRI retains the root-relative XBF paths, so deploy those exact
@@ -509,61 +495,10 @@ add_custom_command(TARGET aobus-winui POST_BUILD
   COMMAND "${CMAKE_COMMAND}" -E copy_if_different
           "$<TARGET_FILE_DIR:aobus-winui-lib>/MainWindow.xbf"
           "$<TARGET_FILE_DIR:aobus-winui>/MainWindow.xbf"
-  # The Soul probe parses the same shipping App.xaml, so it needs the
-  # root-relative XBF and the merged application PRI that maps the ms-appx
-  # locator. This build depends on the probe and owns both artifacts.
-  COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-          "$<TARGET_FILE_DIR:aobus-winui-lib>/App.xbf"
-          "$<TARGET_FILE_DIR:ao_winui_soul_probe>/App.xbf"
-  COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-          "$<TARGET_FILE_DIR:aobus-winui>/Aobus.pri"
-          "$<TARGET_FILE_DIR:ao_winui_soul_probe>/ao_winui_soul_probe.pri"
-  # The track table probe loads the shipping frame's compiled header template
-  # and resolves MRT resources, so it takes both root-relative XBFs and a PRI
-  # named after its own executable. It runs manually on a desktop, not here.
-  COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-          "$<TARGET_FILE_DIR:aobus-winui-lib>/App.xbf"
-          "$<TARGET_FILE_DIR:ao_winui_track_table_probe>/App.xbf"
-  COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-          "$<TARGET_FILE_DIR:aobus-winui-lib>/MainWindow.xbf"
-          "$<TARGET_FILE_DIR:ao_winui_track_table_probe>/MainWindow.xbf"
-  COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-          "$<TARGET_FILE_DIR:aobus-winui>/Aobus.pri"
-          "$<TARGET_FILE_DIR:ao_winui_track_table_probe>/ao_winui_track_table_probe.pri"
-  COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-          "$<TARGET_FILE_DIR:aobus-winui-lib>/App.xbf"
-          "$<TARGET_FILE_DIR:ao_winui_activity_status_probe>/App.xbf"
-  COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-          "$<TARGET_FILE_DIR:aobus-winui-lib>/MainWindow.xbf"
-          "$<TARGET_FILE_DIR:ao_winui_activity_status_probe>/MainWindow.xbf"
-  COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-          "$<TARGET_FILE_DIR:aobus-winui>/Aobus.pri"
-          "$<TARGET_FILE_DIR:ao_winui_activity_status_probe>/ao_winui_activity_status_probe.pri"
-  COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-          "$<TARGET_FILE_DIR:aobus-winui-lib>/App.xbf"
-          "$<TARGET_FILE_DIR:ao_winui_automation_probe>/App.xbf"
-  COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-          "$<TARGET_FILE_DIR:aobus-winui-lib>/MainWindow.xbf"
-          "$<TARGET_FILE_DIR:ao_winui_automation_probe>/MainWindow.xbf"
-  COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-          "$<TARGET_FILE_DIR:aobus-winui>/Aobus.pri"
-          "$<TARGET_FILE_DIR:ao_winui_automation_probe>/ao_winui_automation_probe.pri"
-  COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-          "$<TARGET_FILE_DIR:aobus-winui-lib>/App.xbf"
-          "$<TARGET_FILE_DIR:ao_winui_credits_probe>/App.xbf"
-  COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-          "$<TARGET_FILE_DIR:aobus-winui>/Aobus.pri"
-          "$<TARGET_FILE_DIR:ao_winui_credits_probe>/ao_winui_credits_probe.pri"
-  # The quality tooltip probe uses the same shipping application resources.
-  COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-          "$<TARGET_FILE_DIR:aobus-winui-lib>/App.xbf"
-          "$<TARGET_FILE_DIR:ao_winui_quality_tooltip_probe>/App.xbf"
-  COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-          "$<TARGET_FILE_DIR:aobus-winui>/Aobus.pri"
-          "$<TARGET_FILE_DIR:ao_winui_quality_tooltip_probe>/ao_winui_quality_tooltip_probe.pri"
-  COMMAND $<TARGET_FILE:ao_winui_localization_probe>
-  COMMENT "Deploying compiled XAML and verifying the WinUI localization contract"
+  COMMENT "Deploying compiled WinUI application XAML"
   VERBATIM)
+
+include("${CMAKE_CURRENT_SOURCE_DIR}/Validation.cmake")
 
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES
   ${AOBUS_WINUI_LIBRARY_SOURCES}

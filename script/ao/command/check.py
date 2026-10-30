@@ -150,7 +150,7 @@ def run_command(args: argparse.Namespace) -> int:
                 primary_path_was_explicit=args.path is not None,
             )
         )
-        winui_result = build.do_build(winui_args, targets=["winui"])
+        winui_result = build.do_build(winui_args, targets=[build.WINUI_CHECK_TARGET])
         print("Verifying WinUI dependency resolution...")
         try:
             with phases.measure("dependency", tree="winui"):

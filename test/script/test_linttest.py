@@ -985,6 +985,39 @@ class LintTestRunnerTest(unittest.TestCase):
             run_diagnostic.assert_called_once_with(fixture, build_dir, mock.ANY, tools=None)
             remove_tree.assert_called_once()
 
+    def test_default_worker_count_shares_the_baseline_capped_by_the_fixture_count(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_dir = Path(temp_dir) / "build"
+            build_dir.mkdir()
+            (build_dir / "compile_commands.json").touch()
+            plugin = build_dir / "tool" / "lint" / "libAobusLintPlugin.so"
+            plugin.parent.mkdir(parents=True)
+            plugin.touch()
+            fixtures = []
+            for name in ("First", "Second"):
+                path = Path(temp_dir) / f"{name}.cpp"
+                path.write_text("int original;\n", encoding="utf-8")
+                fixtures.append(linttest.Fixture(path, "aobus-example"))
+            result_log = Path(temp_dir) / "case.log"
+            result_log.touch()
+
+            for jobs, expected in ((None, 2), (3, 2), (1, 1)):
+                with self.subTest(jobs=jobs):
+                    with (
+                        mock.patch.object(linttest, "discover_fixtures", return_value=fixtures),
+                        mock.patch.object(linttest, "default_workers", return_value=5),
+                        mock.patch.object(linttest.concurrent.futures, "ThreadPoolExecutor") as executor,
+                        mock.patch.object(linttest, "_run_source_policy_smoke", return_value=(True, result_log)),
+                        mock.patch.object(linttest, "_run_compiler_error_smoke", return_value=(True, result_log)),
+                        contextlib.redirect_stdout(io.StringIO()),
+                    ):
+                        # The mocked pool never runs a diagnostic, so its map feeds
+                        # the stage report directly with per-fixture results.
+                        pool = executor.return_value.__enter__.return_value
+                        pool.map.return_value = [(True, result_log)] * len(fixtures)
+                        self.assertEqual(linttest.run(build_dir, jobs=jobs), 0)
+                    executor.assert_called_once_with(max_workers=expected)
+
 
 class StagePhaseInstrumentationTest(unittest.TestCase):
     def test_stages_record_counts_and_failure_statuses_in_order(self):

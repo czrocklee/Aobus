@@ -755,6 +755,31 @@ def _write_github_environment(path: Path, updates: Mapping[str, str]) -> None:
             stream.write(f"{key}={value}\n")
 
 
+def r2_environment(*, environ: Mapping[str, str], key_prefix: str) -> dict[str, str] | None:
+    """Return the R2 backend exports, or None when credentials are absent.
+
+    sccache selects the S3 backend whenever SCCACHE_BUCKET is set and does not
+    fall back to the disk cache when credentials are empty, so secretless runs
+    (fork PRs, Dependabot) must not see SCCACHE_BUCKET at all. CI binds the R2
+    secrets to the step-local R2_ENDPOINT, R2_ACCESS_KEY_ID, and
+    R2_SECRET_ACCESS_KEY names; the credentials stay in the environment
+    instead of process arguments so they never reach logs.
+    """
+    endpoint = environ.get("R2_ENDPOINT", "")
+    access_key_id = environ.get("R2_ACCESS_KEY_ID", "")
+    secret_access_key = environ.get("R2_SECRET_ACCESS_KEY", "")
+    if not endpoint or not access_key_id or not secret_access_key:
+        return None
+    return {
+        "SCCACHE_BUCKET": "aobus-sccache",
+        "SCCACHE_ENDPOINT": endpoint,
+        "SCCACHE_REGION": "auto",
+        "SCCACHE_S3_KEY_PREFIX": key_prefix,
+        "AWS_ACCESS_KEY_ID": access_key_id,
+        "AWS_SECRET_ACCESS_KEY": secret_access_key,
+    }
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Aobus compiler-cache policy helper")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -763,15 +788,24 @@ def _parser() -> argparse.ArgumentParser:
     activate.add_argument("--github-env", type=Path, required=True)
     activate.add_argument("--state-root", type=Path, required=True)
     activate.add_argument("--platform", choices=("Linux", "Darwin", "Windows"), required=True)
+    r2 = subparsers.add_parser("activate-r2", help="export the R2 backend only when credentials exist")
+    r2.add_argument("--github-env", type=Path, required=True)
+    r2.add_argument("--key-prefix", required=True)
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
-        policy = load_policy()
         if args.command == "ci-contract":
-            print(f"version={policy.ci_version}")
+            print(f"version={load_policy().ci_version}")
+            return 0
+        if args.command == "activate-r2":
+            updates = r2_environment(environ=os.environ, key_prefix=args.key_prefix)
+            if updates is None:
+                print("R2 credentials unavailable; keeping the local disk backend.")
+                return 0
+            _write_github_environment(args.github_env, updates)
             return 0
         updates = ci_environment(environ=os.environ, system=args.platform, state=args.state_root)
         _write_github_environment(args.github_env, updates)

@@ -15,7 +15,7 @@ from phase_support import PhaseRecorder as _PhaseRecorder
 
 from ao.command import format as format_command
 from ao.command import tidy as tidy_command
-from ao.core import gitfiles, tidyengine
+from ao.core import gitfiles, jobs, tidyengine
 from ao.core.paths import absolute_path
 
 
@@ -299,7 +299,7 @@ class CompileDatabaseProvisioningTest(unittest.TestCase):
                         "--target",
                         "aobus_generated_headers",
                         "--parallel",
-                        str(tidyengine.os.cpu_count() or 1),
+                        str(jobs.build_workers()),
                     ],
                     "header generation build",
                 ),
@@ -313,8 +313,12 @@ class CompileDatabaseProvisioningTest(unittest.TestCase):
                 if what == "configure":
                     (build_dir / "compile_commands.json").write_text("[]", encoding="utf-8")
 
-            with mock.patch.object(tidyengine, "_run_tail", side_effect=run_tail) as run:
+            with (
+                mock.patch.object(tidyengine, "build_workers", return_value=3) as workers,
+                mock.patch.object(tidyengine, "_run_tail", side_effect=run_tail) as run,
+            ):
                 tidyengine.ensure_compile_db(build_dir, preset="windows-tidy")
+            workers.assert_called_once_with()
 
             self.assertEqual(
                 run.call_args_list[1].args,
@@ -326,11 +330,35 @@ class CompileDatabaseProvisioningTest(unittest.TestCase):
                         "--target",
                         "aobus_generated_headers",
                         "--parallel",
-                        str(tidyengine.os.cpu_count() or 1),
+                        "3",
                     ],
                     "header generation build",
                 ),
             )
+
+    def test_generated_headers_parallel_follows_the_build_override(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_dir = Path(temp_dir)
+            (build_dir / "compile_commands.json").write_text("[]", encoding="utf-8")
+
+            with (
+                mock.patch.dict(os.environ, {jobs.BUILD_PARALLEL_ENV: "3"}),
+                mock.patch.object(tidyengine, "_run_tail") as run_tail,
+            ):
+                tidyengine.ensure_compile_db(build_dir, preset="windows-tidy", reconfigure_preset=True)
+            self.assertEqual(run_tail.call_args_list[1].args[0][-2:], ["--parallel", "3"])
+
+            # A broken override fails through die() instead of a raw traceback.
+            errors = io.StringIO()
+            with (
+                mock.patch.dict(os.environ, {jobs.BUILD_PARALLEL_ENV: "none"}),
+                mock.patch.object(tidyengine, "_run_tail") as run_tail,
+                contextlib.redirect_stderr(errors),
+                self.assertRaises(SystemExit),
+            ):
+                tidyengine.ensure_compile_db(build_dir, preset="windows-tidy", reconfigure_preset=True)
+            self.assertEqual([call.args[1] for call in run_tail.call_args_list], ["configure"])
+            self.assertIn("Error: CMAKE_BUILD_PARALLEL_LEVEL must be a positive integer.", errors.getvalue())
 
 
 class CompileDatabasePhaseInstrumentationTest(unittest.TestCase):
@@ -1329,6 +1357,12 @@ class HeaderCompileDatabaseTest(unittest.TestCase):
                     [tidyengine.CompileCommandTarget(header, source)],
                     root / "synthetic",
                 )
+
+
+class DefaultJobsTest(unittest.TestCase):
+    def test_default_jobs_follow_the_shared_worker_baseline(self):
+        with mock.patch.object(tidyengine, "default_workers", return_value=9):
+            self.assertEqual(tidyengine.default_jobs(), 9)
 
 
 class RunnerPortabilityTest(unittest.TestCase):

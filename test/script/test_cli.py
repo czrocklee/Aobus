@@ -843,8 +843,17 @@ class CliParseTest(unittest.TestCase):
 
     def test_parallel_build_arguments_leave_one_cpu_available_by_default(self):
         with mock.patch.dict(build_command.os.environ, {}, clear=True):
-            with mock.patch.object(build_command.os, "cpu_count", return_value=32):
+            with mock.patch.object(build_command.jobs, "available_cores", return_value=32):
                 self.assertEqual(build_command.parallel_build_arguments(), ["--parallel", "31"])
+
+    def test_parallel_build_arguments_use_every_ci_core_without_overriding_explicit_jobs(self):
+        with (
+            mock.patch.dict(build_command.os.environ, {"GITHUB_ACTIONS": "true"}, clear=True),
+            mock.patch.object(build_command.jobs, "available_cores", return_value=32),
+        ):
+            self.assertEqual(build_command.parallel_build_arguments(), ["--parallel", "32"])
+            with mock.patch.dict(build_command.os.environ, {"CMAKE_BUILD_PARALLEL_LEVEL": "8"}):
+                self.assertEqual(build_command.parallel_build_arguments(), ["--parallel", "8"])
 
     def test_winui_build_environment_uses_the_shared_parallel_limit(self):
         self.assertEqual(
@@ -957,6 +966,85 @@ class CliParseTest(unittest.TestCase):
         self.assertEqual(build_env["MultiProcMaxCount"], "8")
         self.assertEqual(build_env["CL_MPCount"], "8")
         self.assertEqual(result.preset, "windows-winui")
+
+    @mock.patch.object(build_command, "validate_build_tree", return_value="msvc")
+    def test_windows_winui_check_selects_the_validation_aggregate(self, _validate_build_tree):
+        for flavor in ("debug", "release"):
+            configuration = "Debug" if flavor == "debug" else "Release"
+            for targets in ([build_command.WINUI_CHECK_TARGET], ["winui", build_command.WINUI_CHECK_TARGET]):
+                with self.subTest(flavor=flavor, targets=targets), tempfile.TemporaryDirectory() as temp_dir:
+                    args = self.parse(["build", flavor, "-p", temp_dir])
+                    with (
+                        mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
+                        mock.patch.object(build_command.winui, "require_build_host"),
+                        mock.patch.object(build_command.winui, "verify_build_graph") as verify_graph,
+                        mock.patch.object(build_command, "run", return_value=0) as run,
+                    ):
+                        result = build_command.do_build(args, targets)
+                    verify_graph.assert_called_once_with(Path(temp_dir), configuration)
+                    self.assertTrue((Path(temp_dir) / ".cmake/api/v1/query/codemodel-v2").is_file())
+                    command = run.call_args_list[1].args[0]
+                    self.assertEqual(
+                        [command[index + 1] for index, value in enumerate(command) if value == "--target"],
+                        [build_command.WINUI_CHECK_TARGET],
+                    )
+                    self.assertEqual(command[command.index("--config") + 1], configuration)
+                    self.assertEqual(result.preset, "windows-winui")
+
+    @mock.patch.object(build_command, "validate_build_tree", return_value="msvc")
+    def test_winui_graph_failure_stops_before_building_probes(self, _validate_build_tree):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            args = self.parse(["build", "-p", temp_dir])
+            with (
+                mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
+                mock.patch.object(build_command.winui, "require_build_host"),
+                mock.patch.object(build_command.winui, "verify_build_graph", side_effect=RuntimeError("probe leak")),
+                mock.patch.object(build_command, "run", return_value=0) as run,
+                contextlib.redirect_stderr(io.StringIO()),
+                self.assertRaises(SystemExit),
+            ):
+                build_command.do_build(args, [build_command.WINUI_CHECK_TARGET])
+            self.assertEqual(run.call_count, 1)
+            self.assertNotIn("--build", run.call_args.args[0])
+
+    def test_winui_query_io_failure_is_reported_before_configure(self):
+        for operation in ("mkdir", "touch"):
+            with self.subTest(operation=operation), tempfile.TemporaryDirectory() as temp_dir:
+                if operation == "mkdir":
+                    (Path(temp_dir) / ".cmake").write_text("preserve this file", encoding="utf-8")
+                touch_failure = (
+                    mock.patch.object(Path, "touch", side_effect=PermissionError("query denied"))
+                    if operation == "touch"
+                    else contextlib.nullcontext()
+                )
+                args = self.parse(["build", "-p", temp_dir])
+                with (
+                    touch_failure,
+                    mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
+                    mock.patch.object(build_command.winui, "require_build_host"),
+                    mock.patch.object(build_command, "run") as run,
+                    contextlib.redirect_stderr(io.StringIO()) as errors,
+                    self.assertRaises(SystemExit),
+                ):
+                    build_command.do_build(args, [build_command.WINUI_CHECK_TARGET])
+                self.assertIn("cannot prepare the WinUI build-graph query", errors.getvalue())
+                run.assert_not_called()
+
+    def test_winui_check_rejects_native_target_mixing_and_other_platforms_before_configure(self):
+        for profile, targets in (
+            (builddir.LINUX_PROFILE, [build_command.WINUI_CHECK_TARGET]),
+            (builddir.MACOS_PROFILE, [build_command.WINUI_CHECK_TARGET]),
+            (builddir.WINDOWS_PROFILE, [build_command.WINUI_CHECK_TARGET, "ao_core_test"]),
+        ):
+            with (
+                self.subTest(profile=profile.name, targets=targets),
+                mock.patch.object(builddir, "platform_profile", return_value=profile),
+                mock.patch.object(build_command, "run") as run,
+                contextlib.redirect_stderr(io.StringIO()),
+            ):
+                with self.assertRaises(SystemExit):
+                    build_command.do_build(self.parse(["build"]), targets)
+                run.assert_not_called()
 
     @mock.patch.object(build_command, "validate_build_tree", return_value="msvc")
     def test_windows_release_selects_the_normal_release_preset(self, _validate_build_tree):
@@ -1092,7 +1180,7 @@ class CliParseTest(unittest.TestCase):
                 mock.patch.object(build_command.winui, "require_build_host"),
                 mock.patch.object(build_command, "run") as run,
             ):
-                for other in ("winui", "aobus-winui", "ao_core_test"):
+                for other in ("winui", "aobus-winui", build_command.WINUI_CHECK_TARGET, "ao_core_test"):
                     with self.subTest(other=other):
                         with self.assertRaises(SystemExit):
                             build_command.do_build(args, [build_command.WINUI_LINT_CONTEXT_TARGET, other])
@@ -1874,7 +1962,7 @@ class CliParseTest(unittest.TestCase):
             do_build.call_args_list,
             [
                 mock.call(args, targets=["all", "aobus_guardrails", "ao_perf_baseline"]),
-                mock.call(mock.ANY, targets=["winui"]),
+                mock.call(mock.ANY, targets=[build_command.WINUI_CHECK_TARGET]),
             ],
         )
         self.assertEqual(
@@ -3781,12 +3869,21 @@ class CliParseTest(unittest.TestCase):
                     self.assertEqual(self.parse(["run", app, "-n"]).app, app)
 
     def test_shard_count_leaves_one_core_free_and_stops_at_the_cap(self):
-        with mock.patch("os.cpu_count", return_value=4):
+        with mock.patch.object(test_command.jobs, "available_cores", return_value=4):
             self.assertEqual(test_command.shard_count(environ={}), 3)
-        with mock.patch("os.cpu_count", return_value=64):
+        with mock.patch.object(test_command.jobs, "available_cores", return_value=64):
             self.assertEqual(test_command.shard_count(environ={}), test_command.SHARD_CAP)
-        with mock.patch("os.cpu_count", return_value=1):
+        with mock.patch.object(test_command.jobs, "available_cores", return_value=1):
             self.assertEqual(test_command.shard_count(environ={}), 1)
+
+    def test_ci_shard_defaults_use_every_core_with_the_existing_cap_and_override(self):
+        with mock.patch.object(test_command.jobs, "available_cores", return_value=4):
+            self.assertEqual(test_command.shard_count(environ={"GITHUB_ACTIONS": "true"}), 4)
+        with mock.patch.object(test_command.jobs, "available_cores", return_value=64):
+            self.assertEqual(test_command.shard_count(environ={"GITHUB_ACTIONS": "true"}), test_command.SHARD_CAP)
+            self.assertEqual(
+                test_command.shard_count(environ={"GITHUB_ACTIONS": "true", test_command.SHARD_ENV: "64"}), 64
+            )
 
     def test_shard_count_environment_override_is_validated(self):
         self.assertEqual(test_command.shard_count(environ={test_command.SHARD_ENV: "3"}), 3)
