@@ -941,6 +941,7 @@ def _run(args: argparse.Namespace) -> int:
                 f"--aspects={_ASPECT}",
                 f"--output_groups={_OUTPUT_GROUP}",
                 f"--build_event_json_file={bep.absolute()}",
+                "--experimental_build_event_upload_strategy=local",
                 "--remote_download_outputs=all",
                 "--norun_validations",
             ]

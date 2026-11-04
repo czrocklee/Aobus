@@ -307,78 +307,72 @@ def _steps(job: str) -> list[tuple[str, str]]:
 
 
 class BazelRemoteCacheWorkflowTest(unittest.TestCase):
-    """Rollout-gated R2 cache: explicit consumers and a draining stop."""
+    """Existing writer credentials stay on trusted paths, never a claimed PR read role."""
 
     def test_only_jobs_with_a_pinned_proxy_start_it(self):
         workflow = WORKFLOW.read_text(encoding="utf-8")
         starters = [name for name in re.findall(r"\n  (\w+):\n", workflow) if f"- name: {REMOTE_START}\n" in _job(name)]
-        # bazel-remote refuses Windows builds upstream.
-        self.assertEqual(starters, ["linux", "macos_bazel"])
+        self.assertEqual(starters, ["linux", "linux_bazel", "macos_bazel"])
+        self.assertNotIn("R2_BAZEL_READ_", workflow)
 
-    def test_remote_cache_rollout_requires_explicit_repository_opt_in(self):
-        for job_name in ("linux", "macos_bazel"):
-            with self.subTest(job=job_name):
-                start = dict(_steps(_job(job_name)))[REMOTE_START]
-                condition = start.split("        if: ", 1)[1].split("\n", 1)[0]
-                # Missing repository variables evaluate to an empty string, not
-                # true. This switch is rollout-only, never backend authorization.
-                self.assertEqual(condition, "${{ vars.AOBUS_BAZEL_R2_CACHE_AUTHORIZED == 'true' }}")
+    def test_automatic_cache_stays_main_push_and_rollout_gated(self):
+        start = dict(_steps(_job("linux")))[REMOTE_START]
+        self.assertIn(
+            "if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && "
+            "vars.AOBUS_BAZEL_R2_CACHE_AUTHORIZED == 'true' }}",
+            start,
+        )
 
-    def test_start_selects_read_only_secret_names_without_falling_back_to_writer_values(self):
-        for job_name in ("linux", "macos_bazel"):
+    def test_manual_writer_paths_are_explicit_and_separate_from_the_main_prefix(self):
+        linux = _job("linux_bazel")
+        self.assertIn("github.event_name == 'workflow_dispatch' && inputs.mode == 'bazel'", linux)
+        start = dict(_steps(linux))[REMOTE_START]
+        self.assertIn("if: ${{ inputs.r2 }}", start)
+        self.assertIn("bazel-ci-validation/$GITHUB_RUN_ID/$GITHUB_RUN_ATTEMPT/linux", start)
+        mac_start = dict(_steps(_job("macos_bazel")))[REMOTE_START]
+        self.assertIn("github.event_name == 'workflow_dispatch' && inputs.mode == 'bazel' && inputs.r2", mac_start)
+        self.assertIn("bazel-ci-validation/{0}/{1}/macos-{2}", mac_start)
+        for job in (linux, _job("macos_bazel")):
+            required = dict(_steps(job))["Require requested R2 cache"]
+            self.assertIn('run: test -n "$CACHE_URL"', required)
+            self.assertNotIn("continue-on-error:", required)
+
+    def test_proxy_reuses_the_existing_credential_bindings_without_exposing_them_to_build_steps(self):
+        for job_name in ("linux", "linux_bazel", "macos_bazel"):
             with self.subTest(job=job_name):
                 steps = dict(_steps(_job(job_name)))
                 start = steps[REMOTE_START]
-                self.assertIn("        id: bazel-remote\n", start)
-                self.assertIn("        continue-on-error: true\n", start)
                 self.assertEqual(
                     {key: value for key, value in _env(start).items() if key.startswith("R2_")},
                     {
-                        "R2_ENDPOINT": "${{ secrets[github.event_name == 'push' && "
-                        "github.ref == 'refs/heads/main' && 'R2_SCCACHE_ENDPOINT' || 'R2_BAZEL_READ_ENDPOINT'] }}",
-                        "R2_ACCESS_KEY_ID": "${{ secrets[github.event_name == 'push' && "
-                        "github.ref == 'refs/heads/main' && "
-                        "'R2_SCCACHE_ACCESS_KEY_ID' || 'R2_BAZEL_READ_ACCESS_KEY_ID'] }}",
-                        "R2_SECRET_ACCESS_KEY": "${{ secrets[github.event_name == 'push' && "
-                        "github.ref == 'refs/heads/main' && "
-                        "'R2_SCCACHE_SECRET_ACCESS_KEY' || 'R2_BAZEL_READ_SECRET_ACCESS_KEY'] }}",
+                        "R2_ENDPOINT": "${{ secrets.R2_SCCACHE_ENDPOINT }}",
+                        "R2_ACCESS_KEY_ID": "${{ secrets.R2_SCCACHE_ACCESS_KEY_ID }}",
+                        "R2_SECRET_ACCESS_KEY": "${{ secrets.R2_SCCACHE_SECRET_ACCESS_KEY }}",
                     },
                 )
-                run = " ".join(start.split("        run: >-\n", 1)[1].split())
-                self.assertNotIn("secrets.", run)
-                self.assertTrue(run.startswith("python3 script/ao/core/bazel_remote_cache.py start "), run)
-                self.assertIn(f'--trusted-writer "{TRUSTED_MAIN_PUSH}"', run)
-                # Secret names, not values, are selected before lookup. Empty
-                # read credentials cannot select a writer value through ||.
-                self.assertNotIn("|| secrets", start)
-                # No extra secret bindings for consumers/stop. Repository writer
-                # secrets still need migration: editable conditions are not auth.
+                self.assertNotIn("secrets.", start.split("        run: >-\n", 1)[1])
                 for name, step in steps.items():
                     if name == REMOTE_STOP or "./ao bazel " in step:
                         self.assertNotIn("secrets.", step, name)
 
-    def test_every_cached_bazel_step_maps_the_url_and_the_stop_drains_after_the_last(self):
-        for job_name in ("linux", "macos_bazel"):
+    def test_every_cached_bazel_step_maps_the_url_and_stop_always_follows_consumers(self):
+        for job_name in ("linux", "linux_bazel", "macos_bazel"):
             with self.subTest(job=job_name):
                 steps = _steps(_job(job_name))
                 names = [name for name, _ in steps]
                 consumers = [
                     name
                     for name, step in steps
-                    if re.search(r"\./ao bazel (test|lint|hygiene)\b", step.split("        run:", 1)[-1])
+                    if re.search(r"\./ao bazel (build|test|lint|hygiene)\b", step.split("        run:", 1)[-1])
                 ]
                 mapped = [name for name, step in steps if f"{bazel.REMOTE_CACHE_ENVIRONMENT}: {REMOTE_URL}" in step]
                 self.assertTrue(consumers)
                 self.assertEqual(mapped, consumers)
-                self.assertEqual(sum(bazel.REMOTE_CACHE_ENVIRONMENT in step for _, step in steps), len(consumers))
                 self.assertLess(names.index(REMOTE_START), names.index(consumers[0]))
+                self.assertGreater(names.index(REMOTE_STOP), names.index(consumers[-1]))
                 stop = dict(steps)[REMOTE_STOP]
-                self.assertEqual(names.index(REMOTE_STOP), names.index(consumers[-1]) + 1)
-                self.assertIn("        if: ${{ always() && steps.bazel-remote.outcome == 'success' }}\n", stop)
-                self.assertIn("        continue-on-error: true\n", stop)
-                state = '--state "$RUNNER_TEMP/aobus-bazel-remote"'
-                self.assertEqual(_inline_run(stop), f"python3 script/ao/core/bazel_remote_cache.py stop {state}")
-                self.assertIn(state, dict(steps)[REMOTE_START])
+                self.assertIn("if: ${{ always() && steps.bazel-remote.outcome == 'success' }}", stop)
+                self.assertIn('--state "$RUNNER_TEMP/aobus-bazel-remote"', stop)
 
 
 @unittest.skipUnless(sys.platform == "linux", "The CI cache steps require Linux Bash and GNU find.")

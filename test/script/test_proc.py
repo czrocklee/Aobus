@@ -155,9 +155,15 @@ if scenario == "stdout":
 elif scenario == "log":
     proc.open = lambda *args: FailedSink()
 
+# A Windows venv redirector retains inherited pipe handles while waiting for
+# base Python. This fixture needs EOF before its controller releases the child.
+# Keep this portal in sys.executable, but give the installer sole pipe ownership.
+installer_python = Path(sys.base_prefix) / "python.exe" if sys.platform == "win32" else Path(sys.executable)
+assert installer_python.is_file(), "governed base installer interpreter is missing"
+
 try:
     with buildlock.build_tree_lock(root / "tree"), buildlock.shared_file_lock(root / "restore.lock"):
-        argv = [sys.executable, "-c", sys.argv[4], str(port), scenario]
+        argv = [str(installer_python), "-c", sys.argv[4], str(port), scenario]
         if scenario == "interrupt":
             bazel_provision._run_logged(argv, root / "install.log")
         else:
@@ -180,6 +186,8 @@ _CONTROLLED_INSTALLER = r"""
 import os
 import socket
 import sys
+if sys.platform == "win32":
+    assert sys.prefix == sys.base_prefix, "controlled installer must bypass the venv redirector"
 connection = socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=15)
 connection.sendall(b"R")
 if sys.argv[2] in ("stdout", "log"):

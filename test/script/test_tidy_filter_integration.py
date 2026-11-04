@@ -15,7 +15,7 @@ from pathlib import Path
 from unittest import mock
 
 from ao.command import tidy
-from ao.core import builddir, tidyengine
+from ao.core import builddir, tidyengine, windows_llvm_sdk
 
 
 def native_filter_tools(*, os_name=None):
@@ -30,13 +30,30 @@ def native_filter_tools(*, os_name=None):
     resource = None
     if (os.name if os_name is None else os_name) == "nt":
         build = builddir.windows_lint_build_dir(builddir.build_dir("debug"))
-        if not (build / "CMakeCache.txt").is_file():
-            unavailable("prepare native filter controls with ao.bat setup llvm-sdk")
-        sdk = tidyengine.llvm_sdk_root(build)
-        expected = tidyengine.llvm_sdk_version(build)
+        try:
+            (build / "CMakeCache.txt").stat()
+        except FileNotFoundError:
+            manifest = windows_llvm_sdk.read_manifest(windows_llvm_sdk.MANIFEST)
+            if not os.environ.get("AOBUS_LLVM_SDK_ROOT"):
+                if not any(
+                    os.environ.get(key) for key in ("AOBUS_LLVM_SDK_CACHE_ROOT", "AOBUS_STATE_ROOT", "LOCALAPPDATA")
+                ):
+                    unavailable("prepare native filter controls with ao.bat bazel provision")
+                cached = windows_llvm_sdk.cache_root(os.environ, manifest)
+                try:
+                    cached.stat()
+                except FileNotFoundError:
+                    unavailable("prepare native filter controls with ao.bat bazel provision")
+            sdk, _ = windows_llvm_sdk.ready_root(os.environ, manifest)
+            expected = manifest.version
+            resource = sdk / "lib" / "clang" / expected.split(".", 1)[0]
+        else:
+            # A configured context is authoritative, even when broken.
+            sdk = tidyengine.llvm_sdk_root(build)
+            expected = tidyengine.llvm_sdk_version(build)
+            resource = tidyengine.clang_resource_dir(build)
         compiler = str(sdk / "bin" / "clang-cl.exe")
         checker = str(sdk / "bin" / "clang-tidy.exe")
-        resource = tidyengine.clang_resource_dir(build)
     elif sys.platform == "darwin" and (root := os.environ.get("AOBUS_LLVM_ROOT")):
         # The macOS portal selects Homebrew llvm@22, not an SDK patch pin.
         compiler = str(Path(root) / "bin" / "clang++")
@@ -410,8 +427,19 @@ class FilterToolPreflightTest(unittest.TestCase):
         (self.sdk / "bin").mkdir(parents=True)
         for name in ("clang-cl.exe", "clang-tidy.exe"):
             (self.sdk / "bin" / name).touch()
+        self.manifest = windows_llvm_sdk.read_manifest(windows_llvm_sdk.MANIFEST)
+        for relative in self.manifest.required_files:
+            path = self.sdk / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.touch()
+        self.environment = {
+            key: value
+            for key, value in os.environ.items()
+            if key not in ("AOBUS_LLVM_SDK_ROOT", "AOBUS_LLVM_SDK_CACHE_ROOT", "AOBUS_STATE_ROOT", "LOCALAPPDATA")
+        }
+        self.environment["CI"] = "false"
         patchers = (
-            mock.patch.dict(os.environ, {"CI": "false"}),
+            mock.patch.dict(os.environ, self.environment, clear=True),
             mock.patch.object(sys, "platform", "linux"),
             mock.patch.object(builddir, "build_dir", return_value=self.build),
             mock.patch.object(builddir, "windows_lint_build_dir", return_value=self.build),
@@ -466,10 +494,145 @@ class FilterToolPreflightTest(unittest.TestCase):
 
     def test_missing_windows_sdk_is_optional_only_outside_ci(self):
         (self.build / "CMakeCache.txt").unlink()
-        for ci, error in (("true", AssertionError), ("false", unittest.SkipTest)):
-            with self.subTest(ci=ci), mock.patch.dict(os.environ, {"CI": ci}):
-                with self.assertRaisesRegex(error, "setup llvm-sdk"):
-                    native_filter_tools(os_name="nt")
+        for selection in ({}, {"AOBUS_STATE_ROOT": str(self.root / "absent-state")}):
+            for ci, error in (("true", AssertionError), ("false", unittest.SkipTest)):
+                with (
+                    self.subTest(selection=selection, ci=ci),
+                    mock.patch.dict(os.environ, {**selection, "CI": ci}),
+                    self.versions() as probe,
+                ):
+                    with self.assertRaisesRegex(error, "bazel provision"):
+                        native_filter_tools(os_name="nt")
+                    probe.assert_not_called()
+        self.lookup.assert_not_called()
+
+    def test_ready_windows_sdk_without_cmake_uses_governed_selection_and_version_probes(self):
+        (self.build / "CMakeCache.txt").unlink()
+        selections = (
+            {"AOBUS_LLVM_SDK_ROOT": str(self.sdk)},
+            {"AOBUS_LLVM_SDK_CACHE_ROOT": str(self.root / "llvm-cache")},
+            {"AOBUS_STATE_ROOT": str(self.root / "state")},
+            {"LOCALAPPDATA": str(self.root / "local")},
+        )
+        for selection in selections:
+            with self.subTest(selection=selection), mock.patch.dict(os.environ, selection):
+                if "AOBUS_LLVM_SDK_ROOT" in selection:
+                    sdk = self.sdk
+                else:
+                    sdk = windows_llvm_sdk.cache_root(os.environ, self.manifest)
+                    for relative in self.manifest.required_files:
+                        path = sdk / relative
+                        path.parent.mkdir(parents=True, exist_ok=True)
+                        path.touch()
+                    (sdk / windows_llvm_sdk.MARKER).write_text(
+                        windows_llvm_sdk.marker_text(self.manifest), encoding="utf-8"
+                    )
+                before = {path: path.read_bytes() for path in self.root.rglob("*") if path.is_file()}
+                with self.versions() as probe:
+                    compiler, toolchain, version = native_filter_tools(os_name="nt")
+                self.assertEqual(compiler, str(sdk / "bin" / "clang-cl.exe"))
+                self.assertEqual(toolchain.clang_tidy, str(sdk / "bin" / "clang-tidy.exe"))
+                self.assertEqual(toolchain.resource_dir, sdk / "lib" / "clang" / "22")
+                self.assertEqual(version, "22.1.8")
+                self.assertEqual(
+                    probe.call_args_list,
+                    [
+                        mock.call(
+                            [executable, "--version"],
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT,
+                            text=True,
+                            encoding="utf-8",
+                            errors="replace",
+                            timeout=30,
+                        )
+                        for executable in (compiler, toolchain.clang_tidy)
+                    ],
+                )
+                self.assertEqual({path: path.read_bytes() for path in self.root.rglob("*") if path.is_file()}, before)
+        self.lookup.assert_not_called()
+        tidyengine.llvm_sdk_root.assert_not_called()
+
+    def test_existing_windows_cmake_context_wins_and_broken_context_never_falls_back(self):
+        with (
+            mock.patch.dict(os.environ, {"AOBUS_LLVM_SDK_ROOT": str(self.root / "invalid")}),
+            mock.patch.object(windows_llvm_sdk, "ready_root") as ready,
+            self.versions(),
+        ):
+            compiler, toolchain, _ = native_filter_tools(os_name="nt")
+            self.assertEqual(compiler, str(self.sdk / "bin" / "clang-cl.exe"))
+            self.assertEqual(toolchain.resource_dir, self.sdk / "lib" / "clang" / "22")
+            for helper in ("llvm_sdk_root", "llvm_sdk_version", "clang_resource_dir"):
+                with (
+                    self.subTest(helper=helper),
+                    mock.patch.object(tidyengine, helper, side_effect=SystemExit("broken")),
+                ):
+                    with self.assertRaisesRegex(SystemExit, "broken"):
+                        native_filter_tools(os_name="nt")
+            ready.assert_not_called()
+        self.lookup.assert_not_called()
+
+    def test_invalid_selected_windows_sdk_never_becomes_optional(self):
+        (self.build / "CMakeCache.txt").unlink()
+        for selected in (str(self.root / "absent-sdk"), "relative-sdk", str(self.sdk)):
+            if selected == str(self.sdk):
+                (self.sdk / "bin" / "clang-tidy.exe").unlink()
+            for ci in ("true", "false"):
+                with (
+                    self.subTest(selected=selected, ci=ci),
+                    mock.patch.dict(os.environ, {"AOBUS_LLVM_SDK_ROOT": selected, "CI": ci}),
+                    self.versions() as probe,
+                ):
+                    with self.assertRaises(windows_llvm_sdk.WindowsLlvmSdkError):
+                        native_filter_tools(os_name="nt")
+                    probe.assert_not_called()
+        self.lookup.assert_not_called()
+
+    def test_existing_invalid_windows_cache_never_becomes_optional(self):
+        (self.build / "CMakeCache.txt").unlink()
+        with mock.patch.dict(os.environ, {"AOBUS_LLVM_SDK_CACHE_ROOT": str(self.root / "cache")}):
+            sdk = windows_llvm_sdk.cache_root(os.environ, self.manifest)
+            sdk.mkdir(parents=True)
+            for invalid in ("missing-files", "missing-marker", "wrong-marker"):
+                if invalid != "missing-files":
+                    for relative in self.manifest.required_files:
+                        path = sdk / relative
+                        path.parent.mkdir(parents=True, exist_ok=True)
+                        path.touch()
+                if invalid == "wrong-marker":
+                    (sdk / windows_llvm_sdk.MARKER).write_text("wrong pin\n", encoding="utf-8")
+                for ci in ("true", "false"):
+                    with (
+                        self.subTest(invalid=invalid, ci=ci),
+                        mock.patch.dict(os.environ, {"CI": ci}),
+                        self.versions() as probe,
+                    ):
+                        with self.assertRaises(windows_llvm_sdk.WindowsLlvmSdkError):
+                            native_filter_tools(os_name="nt")
+                        probe.assert_not_called()
+        self.lookup.assert_not_called()
+
+    def test_ready_windows_sdk_still_requires_exact_matching_native_versions(self):
+        (self.build / "CMakeCache.txt").unlink()
+        with mock.patch.dict(os.environ, {"AOBUS_LLVM_SDK_ROOT": str(self.sdk)}):
+            for versions in (("22.1.9", "22.1.9"), ("22.1.8", "22.1.7")):
+                with self.subTest(versions=versions), self.versions(*versions) as probe:
+                    with self.assertRaises(AssertionError):
+                        native_filter_tools(os_name="nt")
+                    self.assertEqual(probe.call_count, 2)
+        self.lookup.assert_not_called()
+
+    def test_windows_sdk_permission_errors_propagate_without_fallback(self):
+        (self.build / "CMakeCache.txt").unlink()
+        with (
+            mock.patch.dict(os.environ, {"AOBUS_LLVM_SDK_ROOT": str(self.sdk)}),
+            mock.patch.object(windows_llvm_sdk, "ready_root", side_effect=PermissionError("denied")),
+            self.versions() as probe,
+        ):
+            with self.assertRaisesRegex(PermissionError, "denied"):
+                native_filter_tools(os_name="nt")
+            probe.assert_not_called()
+        self.lookup.assert_not_called()
 
     def test_configured_missing_tool_never_becomes_an_optional_skip(self):
         self.checker.unlink()

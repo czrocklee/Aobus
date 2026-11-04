@@ -281,7 +281,7 @@ class CiR2ExportTest(unittest.TestCase):
         # No step repeats the export policy inline; secrets still bind only
         # through the step environment, never through command arguments.
         self.assertNotIn("SCCACHE_BUCKET=", workflow)
-        # Bazel's proxy has separate read/write role bindings, covered by
+        # Bazel's trusted manual validation reuses these credentials, covered by
         # test_bazel_ci_cache; these assertions own compiler-cache activation.
         for block in blocks:
             step = block.split("- name:", 1)[0]

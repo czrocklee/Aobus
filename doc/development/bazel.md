@@ -871,8 +871,9 @@ generated/external locations retain the producing execution root.
 The public gate reconciles exactly one current owner/aspect completion per
 requested owner, recursive named file sets, the context/report index and locally
 materialized artifacts. It requires successful native completion and a complete
-BEP; `--remote_download_outputs=all` does not permit a remote URI to stand in for
-a missing local report. Warnings and ordinary compiler errors are cacheable
+BEP. Report builds explicitly select local BEP artifact URIs even with a remote
+action cache; `--remote_download_outputs=all` does not permit a remote URI to
+stand in for a missing local report. Warnings and ordinary compiler errors are cacheable
 negative reports; crashes, missing tools/context, missing or skipped compile
 commands and malformed or incomplete attempts must fail instead of becoming
 clean reports. Exit zero and an empty log
@@ -1117,52 +1118,73 @@ failure of those gates.
 The archive excludes servers, install bases, output trees, repositories, provider
 installations and Nix state; it adds no remote endpoint or dependency manager.
 
-The Linux and `macos_bazel` jobs contain an optional R2 path through a loopback
-[bazel-remote](https://github.com/buchgr/bazel-remote) proxy, but **Bazel R2 is
-default-off**. Both start steps require the repository variable
-`AOBUS_BAZEL_R2_CACHE_AUTHORIZED` to equal `true`; without it, Bazel keeps its
-local/Actions disk cache. Keep the variable unset until writer keys have been
-removed from repository-level secrets and a protected main-only writer-secret
-and backend boundary has been configured and validated, together with actual
-backend-read-only credentials for other runs. A PR-editable YAML condition, this
-rollout switch, or disabling proxy uploaders is not authorization. Moving secrets
-behind that boundary also requires the workflow to access them through the
-protected context; merely adding new secrets is insufficient.
+### Standalone Bazel CI and R2 validation
 
-When enabled, the [remote-cache helper](../../script/ao/core/bazel_remote_cache.py)
-downloads the version and SHA-256 that
-[`bazel-remote.json`](../../script/ao/bazel-remote.json) pins. Its objects use the
-compiler cache bucket's `bazel-v1/` prefix. Main pushes select the legacy
-`R2_SCCACHE_*` writer secret names; other runs select
-`R2_BAZEL_READ_ENDPOINT`, `R2_BAZEL_READ_ACCESS_KEY_ID` and
-`R2_BAZEL_READ_SECRET_ACCESS_KEY`. Missing read credentials never fall back to
-writers: the helper starts nothing. All three legacy compiler-cache R2
-activation steps also require a successful compiler-cache setup and an exact
-push to `refs/heads/main`; other runs keep local sccache. These conditions avoid
-writer delivery on those non-main paths in the current workflow, but cannot
-protect repository secrets from a malicious PR workflow edit. They do not remove
-the external authorization prerequisite above.
+The existing CI workflow accepts a manual `mode=bazel` selection. It skips the
+Aobus CMake project jobs while retaining documentation validation, then runs
+Linux, macOS Intel/ARM64 and Windows Bazel jobs. Each builds its shipping
+frontends explicitly, runs the default tests, verifies compile contracts, runs
+lint fixtures and checks scoped Bazel hygiene. Linux also runs headless GTK;
+Linux and Windows run portal tooling tests. These manual native jobs fail on
+errors rather than masking them with job-level `continue-on-error`. Normal
+PR/push runs retain the existing CMake completion gates; macOS/Windows Bazel
+jobs remain advisory there. No standalone sanitizer, coverage or full
+`ao check` equivalence is implied. Package providers and isolated tooling
+fixtures may still use CMake; the project itself is not configured or built
+with it in this route.
 
-Each Bazel `test`, `lint` and `hygiene` step maps the helper's `url` output to
-`AOBUS_BAZEL_REMOTE_CACHE`. Startup rejects occupied fixed ports and checks that
-its own child is live even when HTTP status answers. bazel-remote's gRPC
-dependency check treats an action result whose blobs have expired as a miss,
-so an age-based R2 lifecycle rule on the prefix costs rebuilds, not failures.
-Its shutdown abandons queued uploads, so the stop step first waits for uploads
-with a bounded drain, matching acknowledged writes and backend completions by
-object kind/hash. It reports downloads, misses, failures and unfinished uploads;
-a drain timeout or stall does not imply every upload completed. These lifecycle
-regressions do not establish live R2 readiness, upload/drain behavior or backend
-permissions; deployment acceptance
-remains outstanding. bazel-remote does not build for Windows;
-`windows_bazel` uses only the restored Actions caches.
+For a reviewed, trusted checkout, explicitly select `r2=true` together with
+`mode=bazel`. This reuses the existing `R2_SCCACHE_ENDPOINT`,
+`R2_SCCACHE_ACCESS_KEY_ID` and `R2_SCCACHE_SECRET_ACCESS_KEY` secrets and the
+`aobus-sccache` bucket; no new bucket or credential is required. Native
+Linux/macOS jobs use run/attempt-specific `bazel-ci-validation/` prefixes,
+separate from the automatic main cache's `bazel-v1/` prefix. Routine PR runs do
+not bind R2 credentials. Automatic main-push use remains separately gated by
+`AOBUS_BAZEL_R2_CACHE_AUTHORIZED=true`; all three compiler-cache R2 activation
+steps likewise remain main-push-only.
 
-The Linux job also runs the optional [hygiene gate](#hygiene-gate) on the hygiene
-scope; neither the Bazel aggregation nor the cache save depends on it. Optional
-`macos_bazel` (Intel and ARM64) and `windows_bazel` jobs exercise the CMake-free
-path: `provision`, `test`, `verify` and `hygiene`. They restore the vcpkg, tool,
-NuGet and LLVM SDK caches that the check jobs save, never save an Actions cache
-themselves, and do not fail the workflow.
+This manual selection explicitly trusts the chosen workflow and checkout.
+Reused bucket-level writer credentials retain their write rights, including in
+an upload-disabled consumer. Prefix separation, a YAML condition and disabling
+upload workers are **not backend authorization**. Repository-level secrets
+remain addressable by a malicious same-repository workflow edit; this route
+does not claim to isolate that threat. Fork/secretless runs cannot perform the
+requested live validation. A requested R2 run fails on missing credentials or
+an absent proxy URL rather than silently passing with local cache only.
+
+The [remote-cache helper](../../script/ao/core/bazel_remote_cache.py) downloads
+the version and SHA-256 that
+[`bazel-remote.json`](../../script/ao/bazel-remote.json) pins. Each cached Bazel
+build/test/lint/hygiene step selects its loopback URL explicitly. Startup
+rejects occupied fixed ports and checks that its own child is live even when
+HTTP status answers. Shutdown first waits for uploads with a bounded drain,
+matching acknowledged writes and backend completions by object kind/hash;
+timeout or stalled progress does not imply completion. An optional structured
+stop receipt records prefix, traffic, failures and unfinished uploads without
+credentials. Expired backend blobs make bazel-remote's gRPC dependency check
+miss; a lifecycle rule is a storage/retention choice, not build correctness.
+
+The dedicated Linux [R2 proof](../../script/ao/core/bazel_cache_probe.py) uses no
+Actions cache restore. It builds one canary with a fresh client and proxy,
+requires nonzero accepted uploads and a successful drain, then stops that
+proxy. A second empty client and proxy build the same canary with uploads
+disabled. BEP artifact uploads are kept local too: disabling action-result
+uploads alone does not disable that separate uploader. Acceptance requires an
+actual remote-cache-hit `CppCompile` record
+for that canary in the structured execution log, a complete successful BEP and
+backend downloads, not merely a ready server or a warm local proxy. This proves
+same-runner producer/consumer use, not cross-host cache portability. The probe
+never deletes a prior cache. Artifacts retain receipts, BEPs, execution logs
+and client build logs, not raw proxy logs or cache contents. Workflow presence
+and unit regressions alone are not evidence that a live R2 run passed.
+
+The current helper has no pinned Windows proxy binary, so `windows_bazel` uses
+its restored dependency/tool caches and local Bazel cache. That is a limitation
+of this integration, not a prohibition on a Windows Bazel client using a
+separately hosted remote cache. The existing Linux mixed job also runs optional
+Bazel hygiene independently of its mandatory Bazel aggregation and cache save.
+Native Bazel jobs restore dependency/tool caches but do not publish Actions
+caches themselves.
 
 ## Completion
 

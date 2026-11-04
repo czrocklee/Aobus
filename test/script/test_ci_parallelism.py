@@ -19,6 +19,8 @@ CORE_STEP_NAME = "Use every runner core"
 # core step must already have exported its environment by then.
 FIRST_PORTAL_STEP = {
     "linux": "Check Bazel portable slice",
+    "linux_bazel": "Provision Bazel tree",
+    "r2_bazel": "Verify R2 producer and fresh consumer",
     "macos": "Prepare vcpkg binary cache",
     "windows": "Prepare vcpkg binary cache",
     "macos_bazel": "Provision Bazel tree",
@@ -31,6 +33,7 @@ HYGIENE_JOBS_ARGUMENT = {
 }
 BAZEL_HYGIENE_JOBS_ARGUMENT = {
     "linux": '--jobs "$CMAKE_BUILD_PARALLEL_LEVEL"',
+    "linux_bazel": '--jobs "$CMAKE_BUILD_PARALLEL_LEVEL"',
     "macos_bazel": '--jobs "$CMAKE_BUILD_PARALLEL_LEVEL"',
     "windows_bazel": "--jobs $env:CMAKE_BUILD_PARALLEL_LEVEL",
 }
@@ -84,6 +87,8 @@ class CoreStepWorkflowTest(unittest.TestCase):
     def test_core_steps_use_each_platforms_ci_shell(self):
         for job_name, shell in (
             ("linux", "bash"),
+            ("linux_bazel", "bash"),
+            ("r2_bazel", "bash"),
             ("macos", "bash"),
             ("windows", "pwsh"),
             ("macos_bazel", "bash"),
@@ -107,7 +112,7 @@ class CoreStepBashTest(unittest.TestCase):
 
     # Both POSIX jobs share the bash core step; exercise every call site so a
     # future mac-only edit does not lose local execution protection.
-    POSIX_JOBS = ("linux", "macos", "macos_bazel")
+    POSIX_JOBS = ("linux", "linux_bazel", "r2_bazel", "macos", "macos_bazel")
 
     @staticmethod
     def _run_step(job_name: str, github_env: Path) -> subprocess.CompletedProcess:

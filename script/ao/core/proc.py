@@ -63,7 +63,7 @@ def run(
         if status_unavailable is not None:
             child.returncode = 1
             raise status_unavailable
-        if os.name == "nt":
+        if sys.platform == "win32":
             return child.poll()
         if child.returncode is None:
             try:
@@ -80,7 +80,7 @@ def run(
         return child.returncode
 
     def wait(child: subprocess.Popen[bytes]) -> int:
-        if os.name == "nt":
+        if sys.platform == "win32":
             return child.wait()
         while (status := poll(child)) is None:
             time.sleep(0.1)

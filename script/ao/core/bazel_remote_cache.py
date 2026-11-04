@@ -1,10 +1,10 @@
 """Run CI's Bazel remote cache: a pinned bazel-remote proxy over the shared R2 bucket.
 
 Bazel reaches a loopback bazel-remote whose local directory fronts the bucket
-the compiler cache uses, under a Bazel-only key prefix. Only trusted main
-pushes use writer credentials; other runs require separately configured
-backend-read-only credentials, or keep Bazel's disk cache. The uploader flag
-is not an authorization boundary. The gRPC action-cache dependency check
+the compiler cache uses, under a Bazel-only key prefix. The caller controls
+which trusted jobs receive credentials; secretless runs keep their disk cache.
+Neither the uploader flag nor an isolated validation prefix is a backend
+authorization boundary. The gRPC action-cache dependency check
 treats a result whose blobs have expired from R2 as a miss, so an age-based
 lifecycle rule on the prefix costs rebuilds, not failures. bazel-remote's
 graceful shutdown abandons queued proxy uploads, so ``stop`` drains them,
@@ -78,6 +78,15 @@ class Activity:
         return self.queued - self.uploaded
 
 
+def validated_key_prefix(value: str) -> str:
+    """Validate a relative R2 object prefix before any proxy or proof side effect."""
+    if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*", value):
+        raise RemoteCacheError("Bazel remote-cache key prefix must be a nonempty relative ASCII path")
+    if any(segment in {".", ".."} for segment in value.split("/")):
+        raise RemoteCacheError("Bazel remote-cache key prefix must not contain . or .. segments")
+    return value
+
+
 def artifact(runner_os: str, runner_arch: str, manifest: Path = MANIFEST_PATH) -> Artifact:
     """Select the pinned release binary for a GitHub runner OS and architecture."""
     key = _ARTIFACT_KEYS.get((runner_os, runner_arch))
@@ -136,7 +145,8 @@ def install(
     return binary
 
 
-def server_command(binary: Path, data: Path, *, upload: bool) -> list[str]:
+def server_command(binary: Path, data: Path, *, upload: bool, key_prefix: str = KEY_PREFIX) -> list[str]:
+    key_prefix = validated_key_prefix(key_prefix)
     return [
         str(binary),
         "--dir",
@@ -150,7 +160,7 @@ def server_command(binary: Path, data: Path, *, upload: bool) -> list[str]:
         "--s3.bucket",
         R2_BUCKET,
         "--s3.prefix",
-        KEY_PREFIX,
+        key_prefix,
         "--s3.auth_method",
         "access_key",
         "--s3.region",
@@ -177,7 +187,8 @@ def server_environment(environ: Mapping[str, str], credentials: R2Credentials) -
     return environment
 
 
-def activity(log: str) -> Activity:
+def activity(log: str, *, key_prefix: str = KEY_PREFIX) -> Activity:
+    key_prefix = validated_key_prefix(key_prefix)
     queued: Counter[tuple[str, str]] = Counter()
     uploaded: Counter[tuple[str, str]] = Counter()
     failures = downloaded = misses = 0
@@ -191,7 +202,7 @@ def activity(log: str) -> Activity:
         elif match := re.search(r" GRPC (AC|CAS) PUT ([0-9a-f]{64}) OK$", line):
             queued[match.group(1), match.group(2)] += 1
         elif match := re.search(
-            rf" S3 (UPLOAD|DOWNLOAD) {re.escape(R2_BUCKET)} {KEY_PREFIX}/"
+            rf" S3 (UPLOAD|DOWNLOAD) {re.escape(R2_BUCKET)} {re.escape(key_prefix)}/"
             r"(ac|cas\.v2)/[0-9a-f]{2}/([0-9a-f]{64}) (.*)$",
             line,
         ):
@@ -214,6 +225,9 @@ def _require_free_addresses() -> None:
         host, port = address.rsplit(":", 1)
         with socket.socket() as probe:
             try:
+                # Match the server's bind policy: closed connections in TIME_WAIT
+                # are reusable, but a live listener still owns its address.
+                probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 probe.bind((host, int(port)))
             except OSError as exc:
                 raise RemoteCacheError(f"Bazel remote-cache address {address} is unavailable") from exc
@@ -241,9 +255,11 @@ def start(
     runner_arch: str,
     *,
     upload: bool,
+    key_prefix: str = KEY_PREFIX,
     environ: Mapping[str, str] = os.environ,
     ready_seconds: float = 60,
 ) -> None:
+    key_prefix = validated_key_prefix(key_prefix)
     credentials = r2_credentials(environ)
     if credentials is None:
         print("R2 credentials unavailable; Bazel keeps its local disk cache.")
@@ -254,7 +270,7 @@ def start(
     log = state / LOG_NAME
     with log.open("wb") as output:
         process = subprocess.Popen(
-            server_command(binary, state / "data", upload=upload),
+            server_command(binary, state / "data", upload=upload, key_prefix=key_prefix),
             stdin=subprocess.DEVNULL,
             stdout=output,
             stderr=subprocess.STDOUT,
@@ -275,7 +291,9 @@ def start(
             if status is not None:
                 break
             time.sleep(0.5)
-        (state / SERVER_NAME).write_text(json.dumps({"pid": process.pid, "upload": upload}), encoding="utf-8")
+        (state / SERVER_NAME).write_text(
+            json.dumps({"pid": process.pid, "upload": upload, "key_prefix": key_prefix}), encoding="utf-8"
+        )
         # Each Bazel step maps this output explicitly; other steps never see it.
         _write_github_output(github_output, {"url": f"grpc://{GRPC_ADDRESS}"})
     except BaseException:
@@ -284,13 +302,14 @@ def start(
         process.wait()
         (state / SERVER_NAME).unlink(missing_ok=True)
         raise
-    mode = "uploads from this trusted run" if upload else "read-only"
-    print(f"Bazel remote cache ready ({mode}): {R2_BUCKET}/{KEY_PREFIX} through grpc://{GRPC_ADDRESS}")
+    mode = "uploads from this trusted run" if upload else "uploads disabled"
+    print(f"Bazel remote cache ready ({mode}): {R2_BUCKET}/{key_prefix} through grpc://{GRPC_ADDRESS}")
 
 
 def drain(
     read_log: Callable[[], str],
     *,
+    key_prefix: str = KEY_PREFIX,
     timeout: float = 900,
     quiet: float = 30,
     clock: Callable[[], float] = time.monotonic,
@@ -298,11 +317,11 @@ def drain(
 ) -> Activity:
     """Wait until every queued upload finished, or until uploads stall for the quiet period."""
     deadline = clock() + timeout
-    current = activity(read_log())
+    current = activity(read_log(), key_prefix=key_prefix)
     last_progress = clock()
     while current.pending > 0 and clock() < deadline and clock() - last_progress < quiet:
         sleep(1)
-        observed = activity(read_log())
+        observed = activity(read_log(), key_prefix=key_prefix)
         if observed.uploaded != current.uploaded:
             last_progress = clock()
         current = observed
@@ -310,6 +329,8 @@ def drain(
 
 
 def _terminate(pid: int) -> None:
+    if sys.platform == "win32":
+        raise RemoteCacheError("Bazel remote-cache termination requires native Linux/macOS")
     try:
         os.kill(pid, signal.SIGTERM)
         for _ in range(20):
@@ -320,30 +341,67 @@ def _terminate(pid: int) -> None:
         pass
 
 
-def stop(state: Path, *, timeout: float = 900) -> bool:
-    """Drain uploads, report proxy traffic, and terminate the server; False when uploads were lost."""
+def stop(state: Path, *, timeout: float = 900, report: Path | None = None) -> bool:
+    """Drain and stop the owned server, optionally recording versioned traffic evidence."""
     server_file = state / SERVER_NAME
-    if not server_file.is_file():
+    started = server_file.is_file()
+    key_prefix = KEY_PREFIX
+    upload = False
+    result = Activity(0, 0, 0, 0, 0)
+    if not started:
         print("No Bazel remote cache was started.")
-        return True
-    server = json.loads(server_file.read_text(encoding="utf-8"))
-    log = state / LOG_NAME
+    else:
+        server = json.loads(server_file.read_text(encoding="utf-8"))
+        log = state / LOG_NAME
 
-    def read_log() -> str:
-        return log.read_text(encoding="utf-8", errors="replace")
+        def read_log() -> str:
+            return log.read_text(encoding="utf-8", errors="replace")
 
-    # A read-only server queues nothing for R2.
-    result = drain(read_log, timeout=timeout) if server["upload"] else activity(read_log())
-    if status := _status():
-        print(f"bazel-remote local cache: {status.get('NumFiles')} file(s), {status.get('CurrSize')} byte(s)")
-    uploads = f"{result.uploaded} of {result.queued} queued upload(s)" if server["upload"] else "read-only"
-    print(
-        f"R2 {R2_BUCKET}/{KEY_PREFIX}: {result.downloaded} download(s), {result.download_misses} miss(es), "
-        f"{uploads}, {result.upload_failures} failed upload(s)"
-    )
-    _terminate(int(server["pid"]))
-    server_file.unlink()
-    lost = max(result.pending, 0) if server["upload"] else 0
+        try:
+            key_prefix = validated_key_prefix(server.get("key_prefix", KEY_PREFIX))
+            upload = server["upload"]
+            # A server with uploaders disabled queues nothing for R2.
+            result = (
+                drain(read_log, key_prefix=key_prefix, timeout=timeout)
+                if upload
+                else activity(read_log(), key_prefix=key_prefix)
+            )
+            if status := _status():
+                print(f"bazel-remote local cache: {status.get('NumFiles')} file(s), {status.get('CurrSize')} byte(s)")
+            uploads = f"{result.uploaded} of {result.queued} queued upload(s)" if upload else "uploads disabled"
+            print(
+                f"R2 {R2_BUCKET}/{key_prefix}: {result.downloaded} download(s), {result.download_misses} miss(es), "
+                f"{uploads}, {result.upload_failures} failed upload(s)"
+            )
+        finally:
+            _terminate(int(server["pid"]))
+            server_file.unlink(missing_ok=True)
+    lost = max(result.pending, 0) if upload else 0
+    if report is not None:
+        report.parent.mkdir(parents=True, exist_ok=True)
+        report.write_text(
+            json.dumps(
+                {
+                    "schemaVersion": 1,
+                    "bucket": R2_BUCKET,
+                    "keyPrefix": key_prefix,
+                    "started": started,
+                    "upload": upload,
+                    "activity": {
+                        "queued": result.queued,
+                        "uploaded": result.uploaded,
+                        "pending": result.pending,
+                        "uploadFailures": result.upload_failures,
+                        "downloaded": result.downloaded,
+                        "downloadMisses": result.download_misses,
+                    },
+                    "lostUploads": lost,
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
     if lost or result.upload_failures:
         print(
             f"::warning::{lost} upload(s) were still queued and {result.upload_failures} failed; "
@@ -361,8 +419,10 @@ def _parser() -> argparse.ArgumentParser:
     start_parser.add_argument("--runner-os", required=True)
     start_parser.add_argument("--runner-arch", required=True)
     start_parser.add_argument("--trusted-writer", choices=("true", "false"), required=True)
+    start_parser.add_argument("--key-prefix", default=KEY_PREFIX, help="relative S3 object prefix (not authorization)")
     stop_parser = subparsers.add_parser("stop", help="drain queued uploads and stop the proxy")
     stop_parser.add_argument("--state", type=Path, required=True)
+    stop_parser.add_argument("--report", type=Path, help="write a versioned JSON receipt of observed proxy traffic")
     return parser
 
 
@@ -372,10 +432,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "start":
             args.state.mkdir(parents=True, exist_ok=True)
             start(
-                args.state, args.github_output, args.runner_os, args.runner_arch, upload=args.trusted_writer == "true"
+                args.state,
+                args.github_output,
+                args.runner_os,
+                args.runner_arch,
+                upload=args.trusted_writer == "true",
+                key_prefix=args.key_prefix,
             )
             return 0
-        return 0 if stop(args.state) else 1
+        return 0 if stop(args.state, report=args.report) else 1
     except (RemoteCacheError, OSError, ValueError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1

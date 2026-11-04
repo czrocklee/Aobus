@@ -649,6 +649,7 @@ class RunOrchestrationTest(unittest.TestCase):
         self.assertIn("--aspects=//bazel/lint:lint.bzl%lint_aspect", targets)
         self.assertIn("--output_groups=aobus_lint", targets)
         self.assertIn("--remote_download_outputs=all", targets)
+        self.assertIn("--experimental_build_event_upload_strategy=local", targets)
         self.assertIn("--norun_validations", targets)
         self.assertTrue(any(target.startswith("--build_event_json_file=") for target in targets))
         self.assertEqual(self.read_calls[0][1], [owner])

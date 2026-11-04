@@ -141,7 +141,7 @@ class BazelWorkflowTests(unittest.TestCase):
         self.assertIn('dbus-run-session --config-file="$runtime/dbus.conf"', native)
         self.assertLess(linux.index(native_name), linux.index("      - name: Run hygiene"))
 
-    def test_bazel_only_jobs_are_optional_cmake_free_and_never_publish_caches(self) -> None:
+    def test_bazel_jobs_are_strict_when_manually_selected_and_never_publish_actions_caches(self) -> None:
         workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
         for job_name, launcher, prerequisites in (
             ("macos_bazel", "./ao", []),
@@ -149,25 +149,34 @@ class BazelWorkflowTests(unittest.TestCase):
         ):
             with self.subTest(job=job_name):
                 job = re.split(r"\n(?=  \w+:\n)", workflow.split(f"\n  {job_name}:\n", 1)[1], maxsplit=1)[0]
-                self.assertIn("\n    continue-on-error: true\n", job)
+                self.assertIn(
+                    "continue-on-error: ${{ github.event_name != 'workflow_dispatch' || inputs.mode != 'bazel' }}",
+                    job,
+                )
                 self.assertNotIn("actions/cache/save@", job)
                 commands = [
                     shlex.split(line.strip().removeprefix("run: "), posix=False)
                     for line in job.splitlines()
                     if line.strip().removeprefix("run: ").startswith(launcher + " ")
                 ]
-                self.assertEqual(
-                    [command[1:3] for command in commands],
-                    [
-                        *prerequisites,
-                        ["bazel", "setup"],
-                        ["bazel", "provision"],
-                        ["bazel", "test"],
-                        ["bazel", "verify"],
-                        ["bazel", "hygiene"],
-                    ],
-                )
-                trees = {command[command.index("--path") + 1] for command in commands if "--path" in command}
+                actions = [command[1:3] for command in commands]
+                for required in (
+                    *prerequisites,
+                    ["bazel", "setup"],
+                    ["bazel", "provision"],
+                    ["bazel", "build"],
+                    ["bazel", "test"],
+                    ["bazel", "verify"],
+                    ["bazel", "hygiene"],
+                ):
+                    self.assertIn(required, actions)
+                self.assertNotIn(["check"], actions)
+                self.assertIn("//test:lint_test", job)
+                trees = {
+                    command[command.index("--path") + 1]
+                    for command in commands
+                    if command[1] == "bazel" and "--path" in command
+                }
                 self.assertEqual(len(trees), 1)
 
 

@@ -1,9 +1,12 @@
 """Tests for CI's Bazel remote-cache proxy over the shared R2 bucket."""
 
 import contextlib
+import errno
 import hashlib
 import io
 import json
+import socket
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -54,6 +57,15 @@ class PinnedArtifactTest(unittest.TestCase):
         # bazel-remote refuses Windows builds upstream.
         with self.assertRaisesRegex(remote.RemoteCacheError, "no pinned bazel-remote for Windows X64"):
             remote.artifact("Windows", "X64")
+
+    def test_windows_termination_refuses_unsupported_signals(self):
+        with (
+            mock.patch.object(remote.sys, "platform", "win32"),
+            mock.patch.object(remote.os, "kill") as kill,
+            self.assertRaisesRegex(remote.RemoteCacheError, "requires native Linux/macOS"),
+        ):
+            remote._terminate(4242)
+        kill.assert_not_called()
 
     def test_entries_need_an_https_url_and_a_lowercase_digest(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -107,7 +119,9 @@ class InstallTest(unittest.TestCase):
         fetch = self.fetch(self.payload)
         binary = remote.install(self.selected, self.directory, fetch=fetch)
         self.assertEqual(binary.read_bytes(), self.payload)
-        self.assertTrue(binary.stat().st_mode & 0o100)
+        if sys.platform != "win32":
+            # The proxy runs on Unix; Windows stat has no Unix execute-bit contract.
+            self.assertTrue(binary.stat().st_mode & 0o100)
         self.assertEqual(remote.install(self.selected, self.directory, fetch=fetch), binary)
         fetch.assert_called_once()
 
@@ -122,6 +136,46 @@ class InstallTest(unittest.TestCase):
         fetch = self.fetch(self.payload)
         self.assertEqual(remote.install(self.selected, self.directory, fetch=fetch).read_bytes(), self.payload)
         fetch.assert_called_once()
+
+
+@unittest.skipUnless(sys.platform in {"linux", "darwin"}, "the pinned proxy runs on native Linux/macOS")
+class AddressAvailabilityTest(unittest.TestCase):
+    def test_a_closed_server_address_is_reusable_before_time_wait_expires(self):
+        with socket.socket() as listener, socket.socket() as client:
+            listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            listener.settimeout(2)
+            listener.bind(("127.0.0.1", 0))
+            listener.listen(1)
+            address = listener.getsockname()
+            client.settimeout(2)
+            client.connect(address)
+            with listener.accept()[0] as connection:
+                connection.settimeout(2)
+                # Observe both FINs after a server-initiated close, without sleeps.
+                connection.shutdown(socket.SHUT_WR)
+                self.assertEqual(client.recv(1), b"")
+                client.shutdown(socket.SHUT_WR)
+                self.assertEqual(connection.recv(1), b"")
+        endpoint = f"{address[0]}:{address[1]}"
+        with mock.patch.multiple(remote, HTTP_ADDRESS=endpoint, GRPC_ADDRESS=endpoint):
+            remote._require_free_addresses()
+
+    def test_an_active_listener_still_blocks_either_server_address(self):
+        with socket.socket() as listener:
+            listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            listener.bind(("127.0.0.1", 0))
+            listener.listen(1)
+            address = listener.getsockname()
+            endpoint = f"{address[0]}:{address[1]}"
+            for name in ("HTTP_ADDRESS", "GRPC_ADDRESS"):
+                with (
+                    self.subTest(address=name),
+                    mock.patch.multiple(remote, HTTP_ADDRESS="127.0.0.1:0", GRPC_ADDRESS="127.0.0.1:0"),
+                    mock.patch.object(remote, name, endpoint),
+                    self.assertRaises(remote.RemoteCacheError) as raised,
+                ):
+                    remote._require_free_addresses()
+                self.assertEqual(raised.exception.__cause__.errno, errno.EADDRINUSE)
 
 
 class StartTest(unittest.TestCase):
@@ -143,8 +197,8 @@ class StartTest(unittest.TestCase):
         self.socket = stack.enter_context(mock.patch.object(remote.socket, "socket"))
         stack.enter_context(mock.patch.object(remote.time, "sleep"))
 
-    def start(self, *, upload: bool, environ: dict[str, str]) -> None:
-        remote.start(self.state, self.output, "Linux", "X64", upload=upload, environ=environ)
+    def start(self, *, upload: bool, environ: dict[str, str], key_prefix: str = remote.KEY_PREFIX) -> None:
+        remote.start(self.state, self.output, "Linux", "X64", upload=upload, environ=environ, key_prefix=key_prefix)
 
     def test_secretless_runs_start_nothing_and_publish_no_cache(self):
         for environ in (
@@ -208,7 +262,63 @@ class StartTest(unittest.TestCase):
                 argv = self.popen.call_args.args[0]
                 self.assertEqual(argv[argv.index("--num_uploaders") + 1] != "0", upload)
                 server = json.loads((self.state / remote.SERVER_NAME).read_text(encoding="utf-8"))
-                self.assertEqual(server, {"pid": 4242, "upload": upload})
+                self.assertEqual(server, {"pid": 4242, "upload": upload, "key_prefix": remote.KEY_PREFIX})
+
+    def test_the_cli_passes_an_isolated_prefix_to_the_server_and_persists_it(self):
+        prefix = "bazel-validation.ci/run-42"
+        with mock.patch.dict(remote.os.environ, CREDENTIALS, clear=True):
+            self.assertEqual(
+                remote.main(
+                    [
+                        "start",
+                        "--state",
+                        str(self.state),
+                        "--github-output",
+                        str(self.output),
+                        "--runner-os",
+                        "Linux",
+                        "--runner-arch",
+                        "X64",
+                        "--trusted-writer",
+                        "true",
+                        "--key-prefix",
+                        prefix,
+                    ]
+                ),
+                0,
+            )
+        argv = self.popen.call_args.args[0]
+        self.assertEqual(argv[argv.index("--s3.prefix") + 1], prefix)
+        self.assertEqual(
+            json.loads((self.state / remote.SERVER_NAME).read_text(encoding="utf-8")),
+            {"pid": 4242, "upload": True, "key_prefix": prefix},
+        )
+
+    def test_unsafe_prefixes_fail_before_any_install_or_server_io(self):
+        for prefix in (
+            "",
+            "/",
+            "/absolute",
+            ".",
+            "..",
+            "a/./b",
+            "a/../b",
+            "a//b",
+            "a/",
+            "a\\b",
+            "a:b",
+            "a b",
+            "a\nb",
+            "a[0]",
+            "a?b",
+            "non-ascii-é",
+        ):
+            with self.subTest(prefix=prefix), self.assertRaises(remote.RemoteCacheError):
+                self.start(upload=True, environ=CREDENTIALS, key_prefix=prefix)
+        self.install.assert_not_called()
+        self.socket.assert_not_called()
+        self.popen.assert_not_called()
+        self.assertEqual(self.output.read_text(encoding="utf-8"), "")
 
     def test_the_cache_url_is_published_only_once_the_server_answers(self):
         self.status.side_effect = [None, None, {"NumFiles": 0}]
@@ -288,9 +398,28 @@ class ActivityTest(unittest.TestCase):
         # Backend completion can precede the successful client-reply log line.
         self.assertEqual((result.queued, result.uploaded, result.pending), (1, 1, 0))
 
+    def test_selected_prefix_matches_exactly_including_literal_dots_and_path_boundaries(self):
+        prefix = "validation.ci/42"
+        for other in ("validationXci/42", "validation.ci/420", "validation.ci/42/child", remote.KEY_PREFIX):
+            log = "\n".join([WRITE, UPLOADED, DOWNLOADED, MISSED]).replace(remote.KEY_PREFIX, other)
+            with self.subTest(other=other):
+                result = remote.activity(log, key_prefix=prefix)
+                self.assertEqual(result, remote.Activity(1, 0, 0, 0, 0))
+                self.assertEqual(result.pending, 1)
+        selected = "\n".join([WRITE, UPLOADED, DOWNLOADED, MISSED]).replace(remote.KEY_PREFIX, prefix)
+        self.assertEqual(remote.activity(selected, key_prefix=prefix), remote.Activity(1, 1, 0, 1, 1))
+
+    def test_other_prefix_upload_errors_do_not_contaminate_selected_evidence(self):
+        prefix = "validation/42"
+        selected = UPLOADED.replace(remote.KEY_PREFIX, prefix)
+        result = remote.activity("\n".join([WRITE, selected, UPLOAD_DENIED]), key_prefix=prefix)
+        self.assertEqual((result.pending, result.upload_failures), (0, 0))
+
 
 class DrainTest(unittest.TestCase):
-    def drain(self, logs: list[str], **options: float) -> tuple[remote.Activity, float]:
+    def drain(
+        self, logs: list[str], *, key_prefix: str = remote.KEY_PREFIX, **options: float
+    ) -> tuple[remote.Activity, float]:
         now = [0.0]
         reads = iter(logs)
         latest = [logs[0]]
@@ -302,7 +431,7 @@ class DrainTest(unittest.TestCase):
         def sleep(seconds: float) -> None:
             now[0] += seconds
 
-        result = remote.drain(read_log, clock=lambda: now[0], sleep=sleep, **options)
+        result = remote.drain(read_log, key_prefix=key_prefix, clock=lambda: now[0], sleep=sleep, **options)
         return result, now[0]
 
     def test_waits_until_every_queued_write_is_uploaded(self):
@@ -316,6 +445,14 @@ class DrainTest(unittest.TestCase):
         result, elapsed = self.drain([initial, initial, f"{initial}\n{UPLOADED}"])
         self.assertEqual((result.queued, result.uploaded, result.pending), (1, 1, 0))
         self.assertEqual(elapsed, 2)
+
+    def test_only_the_selected_prefix_can_finish_the_drain(self):
+        prefix = "validation.ci/42"
+        initial = f"{WRITE}\n{UPLOADED}"
+        selected = UPLOADED.replace(remote.KEY_PREFIX, prefix)
+        result, elapsed = self.drain([initial, f"{initial}\n{selected}"], key_prefix=prefix)
+        self.assertEqual((result.queued, result.uploaded, result.pending), (1, 1, 0))
+        self.assertEqual(elapsed, 1)
 
     def test_stalled_uploads_end_after_the_quiet_period(self):
         result, elapsed = self.drain([f"{WRITE}\n{AC_PUT}\n{UPLOADED}"], quiet=5)
@@ -340,11 +477,14 @@ class StopTest(unittest.TestCase):
         self.terminate = stack.enter_context(mock.patch.object(remote, "_terminate"))
         stack.enter_context(mock.patch.object(remote, "_status", return_value=None))
 
-    def stop(self, *, upload: bool, log: str) -> bool:
-        (self.state / remote.SERVER_NAME).write_text(json.dumps({"pid": 4242, "upload": upload}), encoding="utf-8")
+    def stop(self, *, upload: bool, log: str, key_prefix: str | None = None, report: Path | None = None) -> bool:
+        server = {"pid": 4242, "upload": upload}
+        if key_prefix is not None:
+            server["key_prefix"] = key_prefix
+        (self.state / remote.SERVER_NAME).write_text(json.dumps(server), encoding="utf-8")
         (self.state / remote.LOG_NAME).write_text(log, encoding="utf-8")
         with mock.patch.object(remote, "drain", wraps=remote.drain) as drain:
-            stopped = remote.stop(self.state, timeout=0)
+            stopped = remote.stop(self.state, timeout=0, report=report)
         self.drained = drain.called
         return stopped
 
@@ -352,23 +492,110 @@ class StopTest(unittest.TestCase):
         self.assertTrue(remote.stop(self.state))
         self.terminate.assert_not_called()
 
-    def test_read_only_runs_do_not_wait_for_writes_they_never_queue(self):
+    def test_upload_disabled_runs_do_not_wait_for_backend_writes(self):
         self.assertTrue(self.stop(upload=False, log="\n".join([WRITE, AC_PUT, DOWNLOADED])))
         self.assertFalse(self.drained)
         self.terminate.assert_called_once_with(4242)
-        self.assertIn("1 download(s), 0 miss(es), read-only", self.stdout.getvalue())
+        self.assertIn("1 download(s), 0 miss(es), uploads disabled", self.stdout.getvalue())
         self.assertFalse((self.state / remote.SERVER_NAME).exists())
 
     def test_lost_or_failed_uploads_are_reported_after_stopping(self):
-        self.assertFalse(self.stop(upload=True, log="\n".join([WRITE, AC_PUT, CAS_PUT, UPLOADED, UPLOAD_DENIED])))
+        report = self.state / "receipt.json"
+        self.assertFalse(
+            self.stop(upload=True, log="\n".join([WRITE, AC_PUT, CAS_PUT, UPLOADED, UPLOAD_DENIED]), report=report)
+        )
         self.assertTrue(self.drained)
         self.terminate.assert_called_once_with(4242)
         self.assertIn("::warning::1 upload(s) were still queued and 1 failed", self.stdout.getvalue())
+        receipt = json.loads(report.read_text(encoding="utf-8"))
+        self.assertEqual(receipt["keyPrefix"], remote.KEY_PREFIX)
+        self.assertEqual(receipt["lostUploads"], 1)
+        self.assertEqual(receipt["activity"]["pending"], 1)
+        self.assertEqual(receipt["activity"]["uploadFailures"], 1)
 
     def test_an_unacknowledged_object_cannot_hide_a_lost_upload(self):
         self.assertFalse(self.stop(upload=True, log="\n".join([CANCELLED, OTHER_UPLOADED, WRITE])))
         self.terminate.assert_called_once_with(4242)
         self.assertIn("::warning::1 upload(s) were still queued", self.stdout.getvalue())
+
+    def test_stop_cli_reports_versioned_counts_for_the_recorded_prefix_only(self):
+        prefix = "validation.ci/42"
+        report = self.state / "reports/receipt.json"
+        (self.state / remote.SERVER_NAME).write_text(
+            json.dumps({"pid": 4242, "upload": True, "key_prefix": prefix}), encoding="utf-8"
+        )
+        selected = "\n".join([WRITE, UPLOADED, DOWNLOADED, MISSED]).replace(remote.KEY_PREFIX, prefix)
+        (self.state / remote.LOG_NAME).write_text(f"{selected}\n{UPLOAD_DENIED}\n{DOWNLOADED}", encoding="utf-8")
+        self.assertEqual(remote.main(["stop", "--state", str(self.state), "--report", str(report)]), 0)
+        self.terminate.assert_called_once_with(4242)
+        self.assertFalse((self.state / remote.SERVER_NAME).exists())
+        self.assertIn(f"R2 aobus-sccache/{prefix}:", self.stdout.getvalue())
+        self.assertEqual(
+            json.loads(report.read_text(encoding="utf-8")),
+            {
+                "schemaVersion": 1,
+                "bucket": "aobus-sccache",
+                "keyPrefix": prefix,
+                "started": True,
+                "upload": True,
+                "activity": {
+                    "queued": 1,
+                    "uploaded": 1,
+                    "pending": 0,
+                    "uploadFailures": 0,
+                    "downloaded": 1,
+                    "downloadMisses": 1,
+                },
+                "lostUploads": 0,
+            },
+        )
+
+    def test_upload_disabled_consumer_reports_downloads_for_its_recorded_prefix(self):
+        prefix = "validation.ci/42"
+        report = self.state / "consumer.json"
+        selected = DOWNLOADED.replace(remote.KEY_PREFIX, prefix)
+        self.assertTrue(self.stop(upload=False, log=f"{selected}\n{DOWNLOADED}", key_prefix=prefix, report=report))
+        receipt = json.loads(report.read_text(encoding="utf-8"))
+        self.assertFalse(receipt["upload"])
+        self.assertEqual(receipt["activity"]["downloaded"], 1)
+        self.assertEqual(receipt["lostUploads"], 0)
+        self.assertFalse(self.drained)
+
+    def test_no_server_report_does_not_claim_remote_cache_activity(self):
+        report = self.state / "receipt.json"
+        self.assertTrue(remote.stop(self.state, report=report))
+        receipt = json.loads(report.read_text(encoding="utf-8"))
+        self.assertFalse(receipt["started"])
+        self.assertFalse(receipt["upload"])
+        self.assertEqual(receipt["keyPrefix"], remote.KEY_PREFIX)
+        self.assertEqual(
+            receipt["activity"],
+            {
+                "queued": 0,
+                "uploaded": 0,
+                "pending": 0,
+                "uploadFailures": 0,
+                "downloaded": 0,
+                "downloadMisses": 0,
+            },
+        )
+        self.assertEqual(receipt["lostUploads"], 0)
+        self.terminate.assert_not_called()
+
+    def test_log_read_failure_still_cleans_up_the_owned_server(self):
+        (self.state / remote.SERVER_NAME).write_text(json.dumps({"pid": 4242, "upload": True}), encoding="utf-8")
+        with self.assertRaises(FileNotFoundError):
+            remote.stop(self.state)
+        self.terminate.assert_called_once_with(4242)
+        self.assertFalse((self.state / remote.SERVER_NAME).exists())
+
+    def test_report_write_failure_occurs_after_owned_server_cleanup(self):
+        not_directory = self.state / "not-a-directory"
+        not_directory.write_text("fixture", encoding="utf-8")
+        with self.assertRaises(OSError):
+            self.stop(upload=True, log=f"{WRITE}\n{UPLOADED}", report=not_directory / "receipt.json")
+        self.terminate.assert_called_once_with(4242)
+        self.assertFalse((self.state / remote.SERVER_NAME).exists())
 
     def test_a_complete_drain_succeeds(self):
         self.assertTrue(self.stop(upload=True, log="\n".join([WRITE, UPLOADED])))
