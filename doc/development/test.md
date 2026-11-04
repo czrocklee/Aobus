@@ -43,6 +43,34 @@ adapter behavior.
 For detailed layer selection guidance with boundary-case tables, see
 `doc/development/test/layer-selection.md`.
 
+## Bazel support tests
+
+Python tests of the Bazel support layer own its generators, integration mechanisms,
+and specific failure boundaries, not verification of the entire product build.
+Test generated consumer interfaces, argument forwarding, environment isolation,
+host/target and configuration selection, input invalidation, and failure propagation
+with the smallest representative fixtures that distinguish correct behavior from a
+plausible defect.
+
+Do not maintain a second dependency, source, or target inventory in expected values,
+reconstruct the complete build graph, or multiply every dependency across every
+platform and configuration without a distinct behavioral reason.
+A source/target assertion needs an independently required ownership or consumer
+boundary; the current BUILD syntax or list order is not itself a contract.
+Literal expected values are appropriate for transformations and required consumer
+outputs, but copying configuration or the production algorithm is not an independent
+oracle. Compare exact generated text only when its spelling is an externally
+consumed format contract.
+
+Keep production selection and validation logic real; fake external I/O at its
+boundary. A subprocess fake must discriminate the executable, query, and module
+relevant to the tested contract rather than return a valid answer for any command.
+Use a small number of real integration probes to establish that Bazel consumes the
+generated interfaces. Actual build, compiler, linker, and runtime acceptance belongs
+to the affected native build/test gates, not Python assertions about dummy artifacts.
+This boundary does not exclude C++ business tests from `./ao bazel test` or weaken
+required [completion validation](test/validation-and-review.md).
+
 ## Naming and tags
 
 Name tests as behavior contracts: `"Component - behavior under condition"`.

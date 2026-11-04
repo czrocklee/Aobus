@@ -3,6 +3,12 @@
 
 #include "TestFixtureSupport.h"
 
+#ifdef AOBUS_BAZEL_TEST_RUNFILES
+#include <rules_cc/cc/runfiles/runfiles.h>
+#elifndef AOBUS_TEST_SOURCE_DIR
+#error "CMake test support requires AOBUS_TEST_SOURCE_DIR"
+#endif
+
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
@@ -13,9 +19,14 @@
 #include <random>
 #include <span>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <system_error>
 #include <utility>
+#ifdef AOBUS_BAZEL_TEST_RUNFILES
+#include <cstdlib>
+#include <memory>
+#endif
 
 namespace ao::test
 {
@@ -127,5 +138,37 @@ namespace ao::test
   {
     auto input = std::ifstream{path, std::ios::binary};
     return {std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
+  }
+
+#ifdef AOBUS_BAZEL_TEST_RUNFILES
+  std::string resolveBazelTestRunfile(std::string_view relativePath)
+  {
+    using rules_cc::cc::runfiles::Runfiles;
+    auto error = std::string{};
+    auto runfilesPtr = std::unique_ptr<Runfiles>{Runfiles::CreateForTest(BAZEL_CURRENT_REPOSITORY, &error)};
+
+    if (!runfilesPtr)
+    {
+      throw std::runtime_error{"Cannot initialize Bazel test runfiles: " + error};
+    }
+
+    auto const* const workspace = std::getenv("TEST_WORKSPACE");
+
+    if (workspace == nullptr || *workspace == '\0')
+    {
+      throw std::runtime_error{"Bazel test runfiles require a nonempty TEST_WORKSPACE"};
+    }
+
+    return runfilesPtr->Rlocation(std::string{workspace} + "/" + std::string{relativePath});
+  }
+#endif
+
+  std::filesystem::path testInputPath(std::string_view const workspaceRelativePath)
+  {
+#ifdef AOBUS_BAZEL_TEST_RUNFILES
+    return std::filesystem::path{resolveBazelTestRunfile(workspaceRelativePath)};
+#else
+    return std::filesystem::path{AOBUS_TEST_SOURCE_DIR} / std::filesystem::path{std::string{workspaceRelativePath}};
+#endif
   }
 } // namespace ao::test

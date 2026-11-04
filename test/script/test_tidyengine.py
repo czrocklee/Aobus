@@ -954,12 +954,12 @@ class FilteredCompileDatabaseTest(unittest.TestCase):
                         {
                             "directory": str(root),
                             "file": str(first),
-                            "arguments": ["cl.exe", "/ZC:PREPROCESSOR", "/GL", "/c", str(first)],
+                            "arguments": ["cl.exe", "/ZC:PREPROCESSOR", "/GL", "/wx", "/WX-", "/c", str(first)],
                         },
                         {
                             "directory": str(root),
                             "file": str(second),
-                            "command": f"cl.exe /Zc:preprocessor /Zc:preprocessor- /GL /GL- /c {second}",
+                            "command": f"cl.exe /Zc:preprocessor /Zc:preprocessor- /GL /GL- /WX /WX- /c {second}",
                         },
                     ]
                 ),
@@ -969,16 +969,18 @@ class FilteredCompileDatabaseTest(unittest.TestCase):
             database_dir = tidyengine.write_filtered_compile_database(
                 build_dir,
                 destination,
-                ("/Zc:preprocessor", "/GL"),
+                ("/Zc:preprocessor", "/GL", "/WX"),
             )
 
             self.assertEqual(database_dir, destination)
             entries = json.loads((destination / "compile_commands.json").read_text(encoding="utf-8"))
-            self.assertEqual(entries[0]["arguments"], ["cl.exe", "/c", str(first)])
+            self.assertEqual(entries[0]["arguments"], ["cl.exe", "/WX-", "/c", str(first)])
             self.assertNotIn(" /Zc:preprocessor ", entries[1]["command"])
             self.assertIn("/Zc:preprocessor-", entries[1]["command"])
             self.assertNotIn(" /GL ", entries[1]["command"])
             self.assertIn("/GL-", entries[1]["command"])
+            self.assertNotIn(" /WX ", entries[1]["command"])
+            self.assertIn("/WX-", entries[1]["command"])
 
     def test_merge_filters_and_prefers_authoritative_translation_units(self):
         with tempfile.TemporaryDirectory() as temp_dir:

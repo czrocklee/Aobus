@@ -1,0 +1,63 @@
+# ./ao bazel owns environment, launch configuration and external output selection.
+common --enable_bzlmod
+common --repo_contents_cache=
+
+# Only the governed native toolchains may satisfy C++ resolution. The Apple
+# defaults are registered independently of rules_cc's generic native defaults.
+common --repo_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1
+common --repo_env=BAZEL_NO_APPLE_CPP_TOOLCHAIN=1
+
+# Keep repository channels separate from the selected native SDK metadata.
+# Bazel 9.2's double equals unsets a variable; NAME= leaves an empty path entry.
+# The resolver still receives its explicit SDK and Windows INCLUDE/LIB ABI.
+common --repo_env==CPLUS_INCLUDE_PATH
+common --repo_env==C_INCLUDE_PATH
+common --repo_env==OBJC_INCLUDE_PATH
+common --repo_env==CPATH
+common --repo_env==LIBRARY_PATH
+common --repo_env==LD_LIBRARY_PATH
+common --repo_env==CFLAGS
+common --repo_env==CXXFLAGS
+common --repo_env==CPPFLAGS
+common --repo_env==LDFLAGS
+common --repo_env==BAZEL_COPTS
+common --repo_env==BAZEL_CXXOPTS
+common --repo_env==BAZEL_LINKOPTS
+common --repo_env==BAZEL_LINKLIBS
+common --repo_env==NIX_CFLAGS_COMPILE
+common --repo_env==NIX_CFLAGS_COMPILE_FOR_TARGET
+common --repo_env==NIX_CFLAGS_COMPILE_FOR_BUILD
+common --repo_env==NIX_CFLAGS_LINK
+common --repo_env==NIX_CFLAGS_LINK_FOR_TARGET
+common --repo_env==NIX_CFLAGS_LINK_FOR_BUILD
+common --repo_env==NIX_LDFLAGS
+common --repo_env==NIX_LDFLAGS_FOR_TARGET
+common --repo_env==NIX_LDFLAGS_FOR_BUILD
+
+build --enable_platform_specific_config
+build --incompatible_strict_action_env
+build --action_env=NIX_CFLAGS_COMPILE=
+build --action_env=NIX_CFLAGS_COMPILE_FOR_TARGET=
+build --action_env=NIX_LDFLAGS=
+build --action_env=NIX_LDFLAGS_FOR_TARGET=
+build --action_env=CPLUS_INCLUDE_PATH=
+build --action_env=C_INCLUDE_PATH=
+build --action_env=CPATH=
+build --action_env=LIBRARY_PATH=
+build --action_env=LD_LIBRARY_PATH=
+
+# Profiles select native compilation modes; toolchains implement their flags.
+build:debug --compilation_mode=dbg
+build:release --compilation_mode=opt
+
+# REPO.bazel selects the owned-target warning feature. Compiler switches,
+# language/ABI defaults and hardening are defined by the selected toolchain.
+build:linux --extra_toolchains=@aobus_toolchain//:registered_nix_clang
+build:macos --extra_toolchains=@aobus_toolchain//:registered_llvm22
+build:windows --extra_toolchains=@aobus_toolchain//:registered_msvc
+
+# Native executable resource validation is cached and owned by Bazel.
+build:windows --aspects=//bazel:windows_utf8_manifest.bzl%windows_utf8_manifest_aspect
+build:windows --run_validations
+
+test --test_output=errors

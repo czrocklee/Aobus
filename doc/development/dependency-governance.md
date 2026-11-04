@@ -5,7 +5,8 @@ id: development.dependency-governance
 
 This page explains how to identify the authoritative dependency input, inspect a
 resolved dependency, and decide whether a pin belongs in the shared contract.
-Use the [dependency upgrade workflow](dependency-upgrade.md) to change pins.
+It also identifies binary-distribution checks that version acceptance does not
+replace. Use the [dependency upgrade workflow](dependency-upgrade.md) to change pins.
 
 ## Policy goal
 
@@ -37,6 +38,7 @@ Use the owner for the question being asked:
 | vcpkg ports, features, and exact overrides | `vcpkg.json` |
 | macOS compiler, deployment target, and vcpkg tool archive | `script/ao/macos-toolchain.json` |
 | Windows tidy LLVM SDK version, archive SHA-256, and required files | `script/ao/windows-llvm-sdk.json` |
+| CI Bazel remote-cache proxy version and artifact SHA-256 | `script/ao/bazel-remote.json` |
 | WinUI NuGet closure and trusted source | `app/windows-winui/packages.config`, `app/windows-winui/NuGet.Config` |
 | Python, Ruff, mypy, and documentation-parser policy | `script/ao/toolchain.json` |
 | Accepted Python tooling and documentation-parser artifacts | `script/ao/docs-requirements.txt`, `script/ao/windows-requirements.txt`, `script/ao/macos-requirements.txt` |
@@ -44,6 +46,20 @@ Use the owner for the question being asked:
 
 Do not copy a current version from this guide. Read the owning file or a verified
 build report.
+The [Bazel development slice](bazel.md) projects an already resolved provider
+into disposable imports; it resolves nothing itself and adds no version
+authority. Its `config/bazel/dependencies.json` holds only structural import
+contracts — static header and archive interface fallbacks, exact library
+spellings and closure order, metadata-token preconditions, ABI defines, and
+native repair entries — with no per-package accepted-version entries. A
+version is accepted here, in the shared contract and resolver inputs; at
+preparation time the observed provider is matched against its installed
+headers, pkg-config metadata and tools, so an upgrade this policy accepts
+passes the unchanged structural checks without a Bazel-side version edit.
+Centralization alone is not a reason to promote more dependencies into the
+shared contract. See [imported
+interfaces](bazel.md#imported-interfaces-and-compilation) for the structural
+checks applied to observed provider identity.
 
 ## Locating an existing dependency
 
@@ -223,6 +239,31 @@ Atomicity means the default branch remains in one verifiable state. A normal
 governed update changes policy and every affected resolver path together; a
 security-first update may use the bounded exception mechanism. It does not mean
 unrelated tool updates or formatting changes belong in the same change.
+
+## Binary distribution
+
+A development executable or application bundle is not automatically a complete
+release package. Check the actual incorporated libraries, copied runtime files
+and assets, not every dependency used by build tools. Include the project's
+[MIT notice](../../LICENSE), applicable third-party notices and the
+[brand notice](../../asset/brand/LICENSE.txt) when its assets are bundled; verify
+redistribution terms for the selected SDK/runtime payloads.
+
+Both native macOS and Windows triplets link mpg123 statically. The existing
+[LGPL distribution boundary](windows.md#distribution-and-storage-boundaries)
+also applies to macOS binaries: choose and validate a compliance route before
+publishing. A successful build or public application source alone does not
+establish usable library modification/relinking materials.
+
+FDK-AAC has separate obligations. Its [NOTICE](https://gitlab.freedesktop.org/wtaymans/fdk-aac-stripped/-/raw/9896ddc0d08bb3f764f01d5e372bec1c068ad8f5/NOTICE)
+requires the complete license text with binary distributions and free
+availability of the complete codec source and modifications to recipients;
+it grants no patent license. The manifest does not request the vcpkg port's
+`he-aac` feature; the current registry's default uses a stripped fork, whereas
+Linux selects upstream FDK-AAC through `shell.nix`. Verify the actual installed
+source, patches and features rather than inferring either universal HE-AAC
+support or patent clearance. Preserve those inputs for the selected release and
+qualify unresolved licensing or patent questions before distribution.
 
 ## Non-goals
 

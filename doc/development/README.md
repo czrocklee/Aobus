@@ -12,6 +12,7 @@ Product structure and behavior live in the [system guide](../system/README.md), 
 - [macOS](macos.md) and [Windows](windows.md): native bootstrap, toolchains, state, platform commands, and limitations. Use `ao.bat` on Windows.
 - [Compiler cache](compiler-cache.md): optional setup, shared workspaces, and cache ownership.
 - [Optimized builds](optimized-builds.md): Release, IPO/LTO, profiling, and performance investigation.
+- [Bazel development slice](bazel.md): opt-in Core and native frontend development builds using pinned providers; CMake retains full completion and release gates.
 
 ## Implement a change
 

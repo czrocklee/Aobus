@@ -1,0 +1,76 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("//bazel:gperf.bzl", "gperf_header")
+
+package(default_visibility = ["//visibility:public"])
+
+# CMake writes ${CMAKE_BINARY_DIR}/generated/query/UnitDispatch.h and adds that
+# generated directory to the include path. ExecutionPlan.cpp includes
+# "query/UnitDispatch.h". The header interface below preserves that spelling
+# without a CMake output or a workspace-root include.
+gperf_header(
+    name = "unit_dispatch",
+    src = "UnitDispatch.gperf",
+    out = "generated/query/UnitDispatch.h",
+    visibility = ["//visibility:private"],
+)
+
+cc_library(
+    name = "unit_dispatch_header",
+    hdrs = [":unit_dispatch"],
+    includes = ["generated"],
+    visibility = ["//visibility:private"],
+)
+
+# CMake ao_query sources. Private headers stay in srcs so :query does not
+# re-export them. The generated unit table is an implementation header.
+cc_library(
+    name = "query",
+    linkstatic = True,
+    srcs = [
+        "detail/CompletionTokenRules.h",
+        "detail/CompletionTokenizer.h",
+        "detail/CreditField.h",
+        "detail/Lexical.h",
+        "detail/Normalize.h",
+        "detail/QueryError.h",
+        "Completion.cpp",
+        "detail/CompletionTokenizer.cpp",
+        "ExecutionPlan.cpp",
+        "FieldCatalog.cpp",
+        "Field.cpp",
+        "FormatExpression.cpp",
+        "PlanEvaluator.cpp",
+        "Expression.cpp",
+        "Parser.cpp",
+        "Predicate.cpp",
+        "detail/QueryError.cpp",
+        "Serializer.cpp",
+    ],
+    implementation_deps = [
+        ":unit_dispatch_header",
+        "//lib/utility:unicode_text",
+        "@aobus_native_deps//:gsl_lite",
+        "@aobus_native_deps//:lexy",
+    ],
+    deps = [
+        "//include:query_headers",
+        "//lib/library:library",
+        "@aobus_native_deps//:boost",
+    ],
+)
+
+# Test-only include spelling lib/query/.... Not a public hdr of :query, and
+# not an includes entry that resolves to the workspace root.
+cc_library(
+    name = "test_headers",
+    testonly = True,
+    hdrs = [
+        "detail/CompletionTokenizer.h",
+        "detail/Normalize.h",
+        "detail/QueryError.h",
+    ],
+    include_prefix = "lib/query",
+    strip_include_prefix = ".",
+    visibility = ["//test:__pkg__"],
+    deps = ["//include:query_headers"],
+)

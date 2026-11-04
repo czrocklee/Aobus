@@ -225,6 +225,58 @@ class PythonCheckRunnerTest(unittest.TestCase):
                     ],
                 )
 
+    def test_explicit_managed_interpreter_runs_the_tools_and_owns_their_caches(self):
+        environment = Path("managed tool env").absolute()
+        for platform, python in (
+            ("win32", environment / "Scripts" / "python.exe"),
+            ("darwin", environment / "bin" / "python"),
+        ):
+            with (
+                self.subTest(platform=platform),
+                mock.patch.object(pythoncheck.sys, "platform", platform),
+                mock.patch.object(pythoncheck, "run", return_value=0) as run,
+            ):
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(pythoncheck.run_paths(["script/a.py"], python=python), 0)
+                self.assertEqual(
+                    [call.args[0] for call in run.call_args_list],
+                    [
+                        [
+                            str(python),
+                            "-I",
+                            "-m",
+                            "ruff",
+                            "check",
+                            "--cache-dir",
+                            str(environment / ".ruff_cache"),
+                            "script/a.py",
+                        ],
+                        [
+                            str(python),
+                            "-I",
+                            "-m",
+                            "mypy",
+                            "--cache-dir",
+                            str(environment / ".mypy_cache"),
+                            "script/a.py",
+                        ],
+                    ],
+                )
+                self.assertEqual(
+                    pythoncheck.ruff_command("format", "--check", "script/a.py", python=python),
+                    (
+                        str(python),
+                        "-I",
+                        "-m",
+                        "ruff",
+                        "format",
+                        "--cache-dir",
+                        str(environment / ".ruff_cache"),
+                        "--check",
+                        "script/a.py",
+                    ),
+                )
+
     def test_log_is_forwarded_to_the_process_runner(self):
         with mock.patch.object(pythoncheck, "run", return_value=0) as run:
             with contextlib.redirect_stdout(io.StringIO()):

@@ -1,0 +1,127 @@
+# Native development tests; ./ao check retains complete completion/release gates.
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "CMakeLists.txt",
+    "cmake/AppVersion.h.in",
+    "config/bazel/dependencies.json",
+    "dependency-contract.json",
+    "nixpkgs.json",
+    "vcpkg.json",
+    "vcpkg-configuration.json",
+    "script/ao/core/bazel_resolver.py",
+    "script/ao/__init__.py",
+    "script/ao/core/__init__.py",
+    "script/ao/core/bazel_lint_sdk.py",
+    "script/ao/core/windows_llvm_sdk.py",
+    "script/ao/core/bazel_lint_action.py",
+    "script/ao/core/bazel_lint_fixture.py",
+    "script/ao/windows-llvm-sdk.json",
+    "shell.nix",
+    "script/ao/macos-toolchain.json",
+    "doc/reference/shell/component-vocabulary.md",
+])
+
+# Runtime module inputs for the lint fixture suite, which replays ao tidy.
+filegroup(
+    name = "ao_python_sources",
+    srcs = glob(["script/ao/**/*.py"]),
+)
+
+# The cacheable lint verification and analysis actions import only these
+# stdlib-only modules, so other portal edits keep their reports cached.
+# test_bazel_lint_action compares this list with the helper's real imports.
+filegroup(
+    name = "ao_lint_action_sources",
+    srcs = [
+        "script/ao/__init__.py",
+        "script/ao/core/__init__.py",
+        "script/ao/core/bazel_lint_reports.py",
+        "script/ao/core/dedup.py",
+        "script/ao/core/paths.py",
+        "script/ao/core/tidyconfig.py",
+        "script/ao/core/tidydiagnostics.py",
+        "script/ao/core/tidypolicy.py",
+    ],
+)
+
+# The launcher selects one aggregate, not a second Python inventory. Native
+# GUI/backend/manual harnesses remain explicitly selected by their own labels.
+# test_suite.tests is non-configurable; platform compatibility belongs to its tests.
+test_suite(
+    name = "tests",
+    tests = [
+        "//test:utility_test",
+        "//test:library_test",
+        "//test:query_test",
+        "//test:async_test",
+        "//test:media_test",
+        "//test:media_fixture_test",
+        "//test:audio_test",
+        "//test:audio_platform_test",
+        "//test:runtime_test",
+        "//test:uimodel_test",
+        "//test:i18n_test",
+        "//test:desktop_test",
+        "//test:winui_test",
+        "//test:cli_test",
+        "//test:tui_test",
+        "//test:systemmedia_test",
+    ],
+)
+
+test_suite(
+    name = "utility_tests",
+    tests = ["//test:utility_test"],
+)
+
+test_suite(
+    name = "library_tests",
+    tests = ["//test:library_test"],
+)
+
+test_suite(
+    name = "query_tests",
+    tests = ["//test:query_test"],
+)
+
+test_suite(
+    name = "async_tests",
+    tests = ["//test:async_test"],
+)
+
+test_suite(
+    name = "uimodel_tests",
+    tests = ["//test:uimodel_test"],
+)
+
+test_suite(
+    name = "cli_tests",
+    tests = ["//test:cli_test"],
+)
+
+test_suite(
+    name = "tui_tests",
+    tests = ["//test:tui_test"],
+)
+
+test_suite(
+    name = "tui_system_media_tests",
+    tests = ["//test:systemmedia_test"],
+)
+
+test_suite(
+    name = "audio_tests",
+    tests = [
+        "//test:audio_test",
+        "//test:audio_platform_test",
+    ],
+)
+
+test_suite(
+    name = "media_tests",
+    tests = [
+        "//test:media_test",
+        "//test:media_fixture_test",
+    ],
+)

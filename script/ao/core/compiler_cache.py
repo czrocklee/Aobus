@@ -755,28 +755,48 @@ def _write_github_environment(path: Path, updates: Mapping[str, str]) -> None:
             stream.write(f"{key}={value}\n")
 
 
+# CI caches share this bucket under distinct key prefixes.
+R2_BUCKET = "aobus-sccache"
+
+
+@dataclass(frozen=True)
+class R2Credentials:
+    endpoint: str
+    access_key_id: str
+    secret_access_key: str
+
+
+def r2_credentials(environ: Mapping[str, str]) -> R2Credentials | None:
+    """Return the step-local R2 secrets, or None unless every one is present.
+
+    CI binds the R2 secrets to the step-local R2_ENDPOINT, R2_ACCESS_KEY_ID,
+    and R2_SECRET_ACCESS_KEY names; secretless runs (fork PRs, Dependabot) see
+    none of them. The credentials stay in the environment instead of process
+    arguments so they never reach logs.
+    """
+    credentials = R2Credentials(
+        environ.get("R2_ENDPOINT", ""), environ.get("R2_ACCESS_KEY_ID", ""), environ.get("R2_SECRET_ACCESS_KEY", "")
+    )
+    return credentials if all(vars(credentials).values()) else None
+
+
 def r2_environment(*, environ: Mapping[str, str], key_prefix: str) -> dict[str, str] | None:
     """Return the R2 backend exports, or None when credentials are absent.
 
     sccache selects the S3 backend whenever SCCACHE_BUCKET is set and does not
     fall back to the disk cache when credentials are empty, so secretless runs
-    (fork PRs, Dependabot) must not see SCCACHE_BUCKET at all. CI binds the R2
-    secrets to the step-local R2_ENDPOINT, R2_ACCESS_KEY_ID, and
-    R2_SECRET_ACCESS_KEY names; the credentials stay in the environment
-    instead of process arguments so they never reach logs.
+    must not see SCCACHE_BUCKET at all.
     """
-    endpoint = environ.get("R2_ENDPOINT", "")
-    access_key_id = environ.get("R2_ACCESS_KEY_ID", "")
-    secret_access_key = environ.get("R2_SECRET_ACCESS_KEY", "")
-    if not endpoint or not access_key_id or not secret_access_key:
+    credentials = r2_credentials(environ)
+    if credentials is None:
         return None
     return {
-        "SCCACHE_BUCKET": "aobus-sccache",
-        "SCCACHE_ENDPOINT": endpoint,
+        "SCCACHE_BUCKET": R2_BUCKET,
+        "SCCACHE_ENDPOINT": credentials.endpoint,
         "SCCACHE_REGION": "auto",
         "SCCACHE_S3_KEY_PREFIX": key_prefix,
-        "AWS_ACCESS_KEY_ID": access_key_id,
-        "AWS_SECRET_ACCESS_KEY": secret_access_key,
+        "AWS_ACCESS_KEY_ID": credentials.access_key_id,
+        "AWS_SECRET_ACCESS_KEY": credentials.secret_access_key,
     }
 
 

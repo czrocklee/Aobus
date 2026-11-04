@@ -9,29 +9,13 @@ from collections import deque
 from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from types import MappingProxyType
 
-from . import cmakecache, phases, workspace_cache
+from . import cmakecache, phases, tidypolicy, workspace_cache
 from .paths import PROJECT_ROOT, absolute_path
 from .proc import die
 
 _WINUI_ROOT = PROJECT_ROOT / "app" / "windows-winui"
-_AUXILIARY_SOURCE_PROJECTS = MappingProxyType(
-    {
-        os.path.normcase(source).replace("\\", "/"): project
-        for source, project in {
-            "test/helper/WinUiLocalizationProbe.cpp": "app/windows-winui/ao_winui_localization_probe.vcxproj",
-            "test/helper/WinUiTrackItemProbe.cpp": "app/windows-winui/ao_winui_track_item_probe.vcxproj",
-            "test/winui/probe/WinUiActivityStatusProbe.cpp": "app/windows-winui/ao_winui_activity_status_probe.vcxproj",
-            "test/winui/probe/WinUiAutomationProbe.cpp": "app/windows-winui/ao_winui_automation_probe.vcxproj",
-            "test/winui/probe/WinUiCreditsProbe.cpp": "app/windows-winui/ao_winui_credits_probe.vcxproj",
-            "test/winui/probe/WinUiQualityToolTipProbe.cpp": "app/windows-winui/ao_winui_quality_tooltip_probe.vcxproj",
-            "test/winui/probe/WinUiSilentAudio.cpp": "app/windows-winui/ao_winui_automation_probe.vcxproj",
-            "test/winui/probe/WinUiSoulProbe.cpp": "app/windows-winui/ao_winui_soul_probe.vcxproj",
-            "test/winui/probe/WinUiTrackTableProbe.cpp": "app/windows-winui/ao_winui_track_table_probe.vcxproj",
-        }.items()
-    }
-)
+_AUXILIARY_SOURCE_PROJECTS = tidypolicy.WINUI_AUXILIARY_SOURCE_PROJECTS
 _TRANSLATION_UNIT_SUFFIXES = frozenset((".c", ".cc", ".cpp", ".cxx"))
 _INCLUDE_DIRECTIVE_RE = re.compile(r'^\s*#\s*include\s*([<"])([^">]+)[">]', re.MULTILINE)
 
@@ -66,11 +50,9 @@ def requires_winui_compile_context(path: Path) -> bool:
     relative = _relative_key(key, source_key)
     if relative is None:
         return False
-    return (
-        _relative_key(key, frontend_key) is not None
-        or relative in _AUXILIARY_SOURCE_PROJECTS
-        or (relative[-2:].lower() == ".h" and relative[:-2] + ".cpp" in _AUXILIARY_SOURCE_PROJECTS)
-    )
+    if _relative_key(key, frontend_key) is not None:
+        return True
+    return tidypolicy.winui_auxiliary_context(relative, _AUXILIARY_SOURCE_PROJECTS)
 
 
 def _resolve_include(

@@ -539,6 +539,19 @@ int unexpected;
                 self.assertEqual(header.severity, severity)
                 self.assertEqual(header.is_error, severity in ("error", "fatal error"))
 
+    def test_diagnostic_locations_belong_to_the_first_header_not_quoted_messages(self):
+        for line, location in (
+            ("warning: quoted other/Table.def:1:1: warning: text", None),
+            ("clang-tidy: warning: quoted other/Table.def(1,1): warning: text", None),
+            ("first.cpp:2:3: warning: quoted other.cpp(4,5): error: text", "first.cpp"),
+            ("first.cpp(2,3): warning: quoted other.cpp:4:5: error: text", "first.cpp"),
+            (r"C:\source\Header.h(7): note: referenced here", r"C:\source\Header.h"),
+        ):
+            with self.subTest(line=line):
+                header = linttest.parse_diagnostic_header(line)
+                self.assertIsNotNone(header)
+                self.assertEqual(header.path, location)
+
     def test_bare_or_driver_headers_never_reinterpret_quoted_locations(self):
         # Both directions of the quoting bug: a bare warning whose message
         # quotes an error location is not a false failure, and a bare or

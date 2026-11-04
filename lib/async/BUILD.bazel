@@ -1,0 +1,28 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# CMake ao_async: six static sources, public ao_utility and Boost::headers.
+# Public headers are //include:async_headers. This library does not include
+# gsl-lite. There is no platform source or system-library select: CMake does
+# not link Ws2_32 or Mswsock, and
+# Asio's MSVC #pragma comment(lib) in socket_types.hpp is unchanged by
+# BOOST_ALL_NO_LIB. The GCC 15/16 TSan -Wno-mismatched-new-delete workaround
+# is not a Linux clang 22 Bazel flag, and this slice adds no TSan config.
+cc_library(
+    name = "async",
+    linkstatic = True,
+    srcs = [
+        "LoopExecutor.cpp",
+        "OperationCancelled.cpp",
+        "Parallel.cpp",
+        "QueuedExecutorBase.cpp",
+        "Runtime.cpp",
+        "LifetimeScope.cpp",
+    ],
+    deps = [
+        "//include:async_headers",
+        "//lib/utility:utility",
+        "@aobus_native_deps//:boost",
+    ],
+)

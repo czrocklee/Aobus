@@ -1,0 +1,417 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+load(":winui.bzl", "winui_app", "winui_codegen", "winui_probe", "winui_resources")
+
+package(default_visibility = ["//visibility:private"])
+
+# The authored WinUI translation units mirror the CMake
+# AOBUS_WINUI_LIBRARY_SOURCES membership; the Bazel support tests keep both
+# lists in step. The single assignment is reused by the library and the XAML
+# code generator so the two can never drift apart.
+WINUI_SOURCES = [
+    "App.xaml.cpp",
+    "app/DestructiveLibraryRestart.cpp",
+    "app/DesktopOutputSelection.cpp",
+    "app/DesktopSettingsYamlSchema.cpp",
+    "app/DispatcherQueueAdmission.cpp",
+    "app/DispatcherQueueExecutor.cpp",
+    "app/LibraryWindowSession.cpp",
+    "app/LibrarySession.cpp",
+    "app/SelectedRootCommit.cpp",
+    "app/SettingsPersistence.cpp",
+    "app/StartupWarnings.cpp",
+    "image/CoverArtPresenter.cpp",
+    "image/CoverArtPlaceholderRenderer.cpp",
+    "input/KeyChordAccelerator.cpp",
+    "input/KeymapAcceleratorPlan.cpp",
+    "input/KeymapAccelerators.cpp",
+    "input/SystemCharacterKey.cpp",
+    "library/LibraryTransferAdapter.cpp",
+    "library/LibraryTransferCoordinator.cpp",
+    "list/ListAuthoringAdapter.cpp",
+    "list/ListAuthoringCoordinator.cpp",
+    "layout/ElementKind.cpp",
+    "layout/LayoutSchema.cpp",
+    "layout/LayoutDialect.cpp",
+    "layout/PlacementPlan.cpp",
+    "layout/ShellCommands.cpp",
+    "layout/ShellDocument.cpp",
+    "layout/ShellState.cpp",
+    "layout/StyleLookup.cpp",
+    "layout/ThemeSurface.cpp",
+    "layout/component/container/ContainerComponents.cpp",
+    "layout/component/generic/GenericComponents.cpp",
+    "layout/component/playback/NowPlayingInfo.cpp",
+    "layout/component/playback/PlaybackComponents.cpp",
+    "layout/component/playback/SoulButton.cpp",
+    "layout/component/shell/NavigationPane.cpp",
+    "layout/component/shell/PaneSplitter.cpp",
+    "layout/component/shell/ShellComponents.cpp",
+    "layout/component/status/StatusComponents.cpp",
+    "layout/component/track/TrackCoverArt.cpp",
+    "layout/component/track/TrackDetail.cpp",
+    "layout/component/track/TrackComponents.cpp",
+    "layout/component/track/TrackTable.cpp",
+    "layout/runtime/ActionBinder.cpp",
+    "layout/runtime/ActionRegistry.cpp",
+    "layout/runtime/CommonLayoutProps.cpp",
+    "layout/runtime/ComponentRegistry.cpp",
+    "layout/runtime/FocusedDetail.cpp",
+    "layout/runtime/LayoutHost.cpp",
+    "layout/runtime/ResourceLookup.cpp",
+    "layout/ShellBuilder.cpp",
+    "layout/ShellPresetSource.cpp",
+    "platform/ScopedBooleanFlag.cpp",
+    "platform/ProcessLauncher.cpp",
+    "platform/SmtcBridge.cpp",
+    "platform/StringResources.cpp",
+    "platform/WinUiErrorBoundary.cpp",
+    "playback/AobusSoulControl.cpp",
+    "playback/AudioPipelineToolTip.cpp",
+    "playback/MainWindowPlayback.cpp",
+    "playback/OutputDeviceControl.cpp",
+    "playback/PlaybackTimeControl.cpp",
+    "playback/SeekControl.cpp",
+    "playback/SoulTransportButton.cpp",
+    "playback/TransportButton.cpp",
+    "playback/VolumeControl.cpp",
+    "shell/MainWindowShell.cpp",
+    "status/ActivityStatusControl.cpp",
+    "theme/Theme.cpp",
+    "theme/SurfaceBrushes.cpp",
+    "theme/ThemeCoordinator.cpp",
+    "track/MainWindowTrack.cpp",
+    "track/TrackCellItem.cpp",
+    "track/TrackCreditsEditorControl.cpp",
+    "track/TrackPropertiesCredits.cpp",
+    "track/TrackDetailControl.cpp",
+    "track/TrackItemView.cpp",
+    "track/QuickFilterCompletionAdapter.cpp",
+    "track/TrackListController.cpp",
+    "track/TrackPropertiesAdapter.cpp",
+    "track/TrackPropertiesCoordinator.cpp",
+    "track/TrackQuickFilterControl.cpp",
+    "track/TrackRevealAdapter.cpp",
+    "track/TrackRowItem.cpp",
+    "MainWindow.xaml.cpp",
+]
+
+# Keep the full authored inventory for SDK generation, independently of the
+# ordinary C++ compilation owners below.
+WINUI_HEADERS = glob(["**/*.h"])
+
+# CMake's ao_core_test compiles these rules on every host: none needs WinRT,
+# the WinUI SDK, generated XAML or the native frontend's forced PCH.
+MODEL_SOURCES = [
+    "app/DesktopOutputSelection.cpp",
+    "app/DesktopSettingsYamlSchema.cpp",
+    "app/DestructiveLibraryRestart.cpp",
+    "app/DispatcherQueueAdmission.cpp",
+    "app/SelectedRootCommit.cpp",
+    "app/SettingsPersistence.cpp",
+    "app/StartupWarnings.cpp",
+    "layout/ElementKind.cpp",
+    "layout/LayoutSchema.cpp",
+    "layout/LayoutDialect.cpp",
+    "layout/PlacementPlan.cpp",
+    "layout/ShellCommands.cpp",
+    "layout/ShellDocument.cpp",
+    "layout/ShellState.cpp",
+    "layout/StyleLookup.cpp",
+    "layout/ThemeSurface.cpp",
+    "theme/Theme.cpp",
+    "input/KeyChordAccelerator.cpp",
+    "input/KeymapAcceleratorPlan.cpp",
+    "library/LibraryTransferAdapter.cpp",
+    "track/QuickFilterCompletionAdapter.cpp",
+    "track/TrackRevealAdapter.cpp",
+    "track/TrackPropertiesAdapter.cpp",
+    "list/ListAuthoringAdapter.cpp",
+]
+
+MODEL_HEADERS = glob(
+    ["include/ao/winui/**/*.h"],
+    exclude = ["include/ao/winui/WinUiErrorBoundary.h"],
+)
+
+# Preserve the source-private include used by the admission tests without
+# exporting all of app/ as an include root.
+cc_library(
+    name = "admission_headers",
+    hdrs = ["app/DispatcherQueueAdmission.h"],
+    include_prefix = "windows-winui",
+    strip_include_prefix = ".",
+    deps = ["//bazel:compile_contract"],
+)
+
+cc_library(
+    name = "model",
+    srcs = MODEL_SOURCES,
+    hdrs = MODEL_HEADERS,
+    includes = ["include"],
+    linkstatic = True,
+    implementation_deps = [
+        "//app/i18n:i18n",
+        "//include:yaml_headers",
+        "//lib/utility:unicode_text",
+    ],
+    deps = [
+        ":admission_headers",
+        "//app/uimodel:uimodel",
+        "@aobus_native_deps//:rapidyaml",
+    ],
+    visibility = ["//test:__pkg__"],
+)
+
+# Native diagnostic handling is also consumed by core tests. Share the
+# product's governed projection, not the full frontend or a second WinRT ABI.
+cc_library(
+    name = "error_boundary",
+    srcs = ["platform/WinUiErrorBoundary.cpp"],
+    hdrs = ["include/ao/winui/WinUiErrorBoundary.h"],
+    includes = ["include"],
+    linkstatic = True,
+    target_compatible_with = ["@platforms//os:windows"],
+    deps = [
+        ":generated",
+        "//app/runtime:runtime",
+    ],
+    visibility = ["//test:__pkg__"],
+)
+
+# Controlled source runfiles for existing shell-document/wiring tests. These
+# are observations of authored inputs, not a checkout-root runtime fallback.
+filegroup(
+    name = "model_test_inputs",
+    srcs = [
+        "CMakeLists.txt",
+        "MainWindow.xaml.cpp",
+        "layout/ShellBuilder.cpp",
+        "layout/windows_classic_layout.yaml",
+        "layout/windows_modern_layout.yaml",
+    ],
+    testonly = True,
+    visibility = ["//test:__pkg__"],
+)
+
+filegroup(
+    name = "native_test_inputs",
+    srcs = glob(["**/*.cpp", "**/*.h", "**/*.xaml", "**/*.yaml"]),
+    testonly = True,
+    visibility = ["//test:__pkg__"],
+)
+
+# WinUI code generation: the XAML compiler, MIDL projection, and the generated
+# header tree. The rule's default outputs and CcInfo expose the generated
+# headers; the "cpp" output group supplies the standalone generated
+# wrappers for the SDK's four standalone generated translation units.
+winui_codegen(
+    name = "generated",
+    srcs = WINUI_SOURCES,
+    hdrs = WINUI_HEADERS,
+    idl = "Project.idl",
+    xaml = [
+        "App.xaml",
+        "MainWindow.xaml",
+    ],
+    target_compatible_with = ["@platforms//os:windows"],
+    # The stream adapter shares this product's locked C++/WinRT projection.
+    # This grants generated headers only, never a frontend binary dependency.
+    visibility = ["//app/windows:__pkg__"],
+)
+
+# The generated standalone translation units enter compilation only through
+# this forwarding filegroup. Other generated fragments are included by their
+# authored or generated owners and must never be compiled separately.
+filegroup(
+    name = "generated_cpp",
+    srcs = [":generated"],
+    output_group = "cpp",
+)
+
+# aobus-winui-lib: the native remainder over the shared model and diagnostic
+# owners. Keep WINUI_SOURCES complete for SDK generation and CMake parity;
+# filter only the compilation inputs so no product unit is compiled twice.
+cc_library(
+    name = "winui",
+    srcs = [source for source in WINUI_SOURCES if source not in MODEL_SOURCES + ["platform/WinUiErrorBoundary.cpp"]] + [":generated_cpp"],
+    hdrs = [header for header in WINUI_HEADERS if header not in MODEL_HEADERS + [
+        "app/DispatcherQueueAdmission.h",
+        "include/ao/winui/WinUiErrorBoundary.h",
+    ]],
+    # CMake force-includes pch.h through target_precompile_headers. Preserve
+    # its framework/generated-type declarations without a second PCH cache.
+    copts = [
+        "/bigobj",
+        "/FIpch.h",
+    ],
+    includes = [
+        ".",
+        "include",
+    ],
+    linkopts = [
+        "runtimeobject.lib",
+        "shell32.lib",
+    ],
+    linkstatic = True,
+    target_compatible_with = ["@platforms//os:windows"],
+    implementation_deps = [
+        "//app/i18n:completion",
+        "//app/i18n:i18n",
+        "//app/i18n:ordering",
+        "//lib/utility:unicode_text",
+    ],
+    deps = [
+        ":error_boundary",
+        ":generated",
+        ":model",
+        "//app/desktop:desktop_launch",
+        "//app/runtime:runtime",
+        "//app/uimodel:uimodel",
+        "//app/windows:windows_platform",
+        "@aobus_native_deps//:rapidyaml",
+        "@aobus_winui_sdk//:headers",
+    ],
+)
+
+# Deployed WinUI resources: compiled XAML (App.xbf, MainWindow.xbf), the merged
+# Aobus.pri, the catalog resw intermediates, and the packaged content assets.
+# The assets attr carries the brand and no-cover artwork; the shell layout
+# YAML files are owned by this package and declared explicitly.
+winui_resources(
+    name = "resources",
+    assets = ["//asset:winui_assets"],
+    catalog = "//app/i18n:catalog_intermediates",
+    generated = ":generated",
+    srcs = [
+        "layout/windows_classic_layout.yaml",
+        "layout/windows_modern_layout.yaml",
+    ],
+    target_compatible_with = ["@platforms//os:windows"],
+)
+
+# The final shipping link. App.xaml.g.hpp defines wWinMain in the generated
+# XamlTypeInfo object; the Unicode CRT entry extracts it from the real winui
+# archive without whole-archiving duplicate XAML metadata providers. The GUI
+# manifest already owns UTF-8, DPI and long paths; do not merge the separate
+# console assembly identity into it. MRT requires the canonical Aobus name.
+cc_binary(
+    name = "Aobus",
+    srcs = [],
+    additional_linker_inputs = ["app.manifest"],
+    linkopts = [
+        "/MANIFEST:EMBED",
+        "/ENTRY:wWinMainCRTStartup",
+        "/MANIFESTINPUT:$(location app.manifest)",
+        "/SUBSYSTEM:WINDOWS",
+        "runtimeobject.lib",
+        "shell32.lib",
+    ],
+    linkstatic = True,
+    target_compatible_with = ["@platforms//os:windows"],
+    deps = [
+        ":winui",
+        "@aobus_winui_sdk//:bootstrap",
+    ],
+)
+
+# Independently entered CMake probes, never switches on the shipping app.
+# All reuse the actual archive, generated projection and catalog/PRI owner.
+# In particular localization pulls StringResources from :winui, not a second
+# compilation of that product unit. GUI probes remain explicitly manual.
+winui_probe(
+    name = "ao_winui_localization_probe",
+    srcs = ["//test:helper/WinUiLocalizationProbe.cpp"],
+    console = True,
+    deps = ["//app/i18n:i18n"],
+)
+
+winui_probe(
+    name = "ao_winui_track_item_probe",
+    srcs = ["//test:helper/WinUiTrackItemProbe.cpp"],
+    console = True,
+    deps = [
+        "//app/i18n:i18n",
+        "//lib/utility:unicode_text",
+    ],
+)
+
+winui_probe(
+    name = "ao_winui_soul_probe",
+    srcs = ["//test:winui/probe/WinUiSoulProbe.cpp"],
+)
+
+winui_probe(
+    name = "ao_winui_track_table_probe",
+    srcs = [
+        "//test:winui/probe/WinUiSilentAudio.cpp",
+        "//test:winui/probe/WinUiSilentAudio.h",
+        "//test:winui/probe/WinUiTrackTableProbe.cpp",
+    ],
+    deps = [
+        "//app/i18n:completion",
+        "//app/i18n:i18n",
+        "//app/i18n:ordering",
+        "//lib/audio:test_headers",
+        "//lib/utility:unicode_text",
+    ],
+)
+
+winui_probe(
+    name = "ao_winui_quality_tooltip_probe",
+    srcs = ["//test:winui/probe/WinUiQualityToolTipProbe.cpp"],
+    checkout_root = True,
+    deps = [
+        "//app/i18n:i18n",
+        "//app/runtime:runtime",
+        "//app/uimodel:uimodel",
+        "//lib/audio:test_headers",
+        "//lib/utility:unicode_text",
+    ],
+)
+
+winui_probe(
+    name = "ao_winui_automation_probe",
+    srcs = [
+        "//test:winui/probe/WinUiAutomationProbe.cpp",
+        "//test:winui/probe/WinUiSilentAudio.cpp",
+        "//test:winui/probe/WinUiSilentAudio.h",
+    ],
+    copts = ["/FIpch.h"],
+    linkopts = ["comctl32.lib"],
+    deps = [
+        "//app/i18n:completion",
+        "//app/i18n:i18n",
+        "//app/i18n:ordering",
+        "//lib/audio:test_headers",
+        "//lib/utility:unicode_text",
+    ],
+)
+
+winui_probe(
+    name = "ao_winui_activity_status_probe",
+    srcs = ["//test:winui/probe/WinUiActivityStatusProbe.cpp"],
+    deps = [
+        "//app/i18n:i18n",
+        "//lib/utility:unicode_text",
+    ],
+)
+
+winui_probe(
+    name = "ao_winui_credits_probe",
+    srcs = ["//test:winui/probe/WinUiCreditsProbe.cpp"],
+    deps = [
+        "//app/i18n:i18n",
+        "//lib/utility:unicode_text",
+    ],
+)
+
+# A runnable development product with executable-local PRI/XBF/assets and the
+# SDK's selected bootstrap payload, not a launcher around a CMake build.
+winui_app(
+    name = "aobus-winui",
+    deps = [":Aobus"],
+    resources = ":resources",
+    runtime = "@aobus_winui_sdk//:runtime",
+    target_compatible_with = ["@platforms//os:windows"],
+    visibility = ["//visibility:public"],
+)

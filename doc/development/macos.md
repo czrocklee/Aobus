@@ -109,6 +109,12 @@ Release IPO is checked for C++ only. C++ translation units and final links use
 ThinLTO; Objective-C++ translation units use normal Release optimization.
 See [optimized builds](optimized-builds.md).
 
+The native triplets link third-party libraries statically. Before publishing
+binaries or an AppKit bundle, review the shared
+[binary-distribution obligations](dependency-governance.md#binary-distribution),
+including mpg123's library modification/relinking requirements. Development
+build and smoke-test success is not release-compliance evidence.
+
 ## Build and tool state
 
 Default build trees are `/tmp/build/<checkout-directory>/<flavor>` and contain
@@ -222,6 +228,42 @@ the portal: dependencies and disposable test repositories must remain independen
 Neither the binding nor these discovery options prove a write-free checkout.
 
 ## Native desktop development slice
+
+### Bazel AppKit product
+
+The explicit `//app/macos-appkit:aobus-appkit` target builds the existing
+incremental AppKit product as `Aobus.app`; it is outside Bazel's default test
+aggregate. After `./ao bazel provision` installs the tree's vcpkg manifest, use the
+[Bazel workflow](bazel.md) from the repository root:
+
+```bash
+./ao bazel build -- //app/macos-appkit:aobus-appkit
+./ao bazel run -- //app/macos-appkit:aobus-appkit -- \
+  --state-root /tmp/aobus-bazel-appkit-state --library /tmp/aobus-bazel-appkit-music
+```
+
+Use separate disposable state and library directories, not your personal data:
+the shipping application opens and scans `--library`, and an unisolated launch
+can use its normal saved state. These are existing shipping arguments, not smoke
+scenario controls.
+
+The package-local Objective-C++ rule uses public `cc_common` APIs with the
+existing governed Homebrew compiler and SDK. ARC, mode flags, warnings and
+external-header policy belong to that toolchain, not a default Apple/Xcode
+Bazel toolchain or a new compiler pin. The bundle action declares the original
+Info.plist template, icon, brand license, catalog inventory and minimum-OS
+metadata; Python retains the existing catalog SDK's host-absolute interpreter
+boundary. Shared desktop launch uses the existing static vcpkg Boost.Process
+and Boost.Filesystem artifacts without another installer.
+
+This is the same incremental native frontend, not GTK/WinUI feature parity or
+a new GUI smoke framework. The explicit Bazel
+`//app/macos-appkit:ao_appkit_smoke` bundle builds the same existing smoke scenario
+units and preserves their separate identity and controls; it is not an unattended
+test. CMake retains complete native product/release gates and the scenario runner
+below. This development bundle adds no installation,
+signing or notarization workflow. Bazel product build/run support is not native
+GUI acceptance and does not establish ARM64 validation.
 
 ### AppKit smoke scenarios
 

@@ -26,6 +26,9 @@
 #include <thread>
 #include <tuple>
 #include <utility>
+#ifdef AOBUS_BAZEL_TUI_EXECUTABLE
+#include <cstdlib>
+#endif
 
 namespace ao::systemmedia::test
 {
@@ -114,10 +117,19 @@ namespace ao::systemmedia::test
     auto const configOption = "--config-file=" + configPath.string();
     auto const addressOption = "--address=" + listenAddress;
     ::GError* error = nullptr;
+    auto const* daemon = "dbus-daemon";
+#ifdef AOBUS_BAZEL_TUI_EXECUTABLE
+    daemon = std::getenv("AOBUS_TEST_DBUS_DAEMON");
+
+    if (daemon == nullptr || !std::filesystem::path{daemon}.is_absolute() || !std::filesystem::is_regular_file(daemon))
+    {
+      throw std::runtime_error{"Bazel TUI process tests require a declared D-Bus daemon"};
+    }
+#endif
     // Inherit stderr so a startup failure retains the daemon's diagnostic in test output.
     _process = ::g_subprocess_new(G_SUBPROCESS_FLAGS_STDOUT_PIPE,
                                   &error,
-                                  "dbus-daemon",
+                                  daemon,
                                   configOption.c_str(),
                                   "--nofork",
                                   "--print-address",

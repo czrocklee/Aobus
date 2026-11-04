@@ -50,8 +50,8 @@ class FormatCommandTest(unittest.TestCase):
                     with contextlib.redirect_stdout(io.StringIO()):
                         self.assertEqual(format_command.run_command(args), 0)
 
-        clang.assert_called_once_with(["lib/Foo.cpp"], check=True, build_dir=None)
-        ruff.assert_called_once_with(["script/foo.py"], check=True)
+        clang.assert_called_once_with(["lib/Foo.cpp"], check=True, build_dir=None, clang_format=None)
+        ruff.assert_called_once_with(["script/foo.py"], check=True, python=None)
 
     def test_ruff_format_uses_shared_cache_commands_and_preserves_tool_failures(self):
         # Mocked platform argv is not proof of a native filesystem or cache write.
@@ -125,6 +125,19 @@ class FormatCommandTest(unittest.TestCase):
             [pinned, "--dry-run", "-Werror", "lib/Foo.cpp"],
             cwd=format_command.PROJECT_ROOT,
         )
+
+    def test_explicit_clang_format_replaces_the_windows_lint_tree_selection(self):
+        explicit = r"C:\sdk\bin\clang-format.exe"
+        with (
+            mock.patch.object(
+                format_command.builddir, "platform_profile", return_value=format_command.builddir.WINDOWS_PROFILE
+            ),
+            mock.patch.object(format_command.builddir, "tidy_dir", side_effect=AssertionError("no lint tree")),
+            mock.patch.object(format_command.tidyengine, "ensure_windows_llvm_sdk", side_effect=AssertionError("no")),
+            mock.patch.object(format_command.subprocess, "run", return_value=mock.Mock(returncode=0)) as run,
+        ):
+            self.assertEqual(format_command.run_clang_format(["lib/Foo.cpp"], check=False, clang_format=explicit), 0)
+        run.assert_called_once_with([explicit, "-i", "lib/Foo.cpp"], cwd=format_command.PROJECT_ROOT)
 
     def test_windows_format_provisions_the_explicit_tree_without_visiting_default(self):
         selected = Path("/custom/builds/tidy")
@@ -731,8 +744,8 @@ class TidyCommandTest(unittest.TestCase):
                                                     self.assertEqual(tidy.run_command(args), 1)
 
     def test_mapped_header_runs_as_main_file_with_synthetic_native_flags(self):
-        for suffix in (".cpp", ".mm"):
-            with self.subTest(suffix=suffix):
+        for suffix, windows in ((".cpp", True), (".mm", True), (".cpp", False), (".mm", False)):
+            with self.subTest(suffix=suffix, windows=windows):
                 args = Namespace(
                     files=["include/ao/Foo.h"],
                     all=False,
@@ -750,10 +763,10 @@ class TidyCommandTest(unittest.TestCase):
                 header = Path("include/ao/Foo.h")
                 translation_unit = Path(f"lib/Foo{suffix}")
                 native_language = "-x objective-c++ -fobjc-arc" if suffix == ".mm" else ""
-                toolchain = tidy.TidyToolchain(
-                    "AobusClangTidy.exe",
-                    None,
-                    Path("C:/llvm/lib/clang/22"),
+                toolchain = (
+                    tidy.TidyToolchain("AobusClangTidy.exe", None, Path("C:/llvm/lib/clang/22"))
+                    if windows
+                    else tidy.TidyToolchain("clang-tidy", Path("plugin"), None)
                 )
 
                 def run_parallel(invocations, _jobs, tmpdir, runner):
@@ -841,8 +854,14 @@ class TidyCommandTest(unittest.TestCase):
                 self.assertIn("-DAOBUS_NATIVE_FLAGS=1", synthetic[0]["command"])
                 self.assertIn(str(tidy.absolute_path(header)), synthetic[0]["command"])
                 self.assertNotIn(str(tidy.absolute_path(translation_unit)), synthetic[0]["command"])
-                self.assertIn(f"--extra-arg-before=-resource-dir={toolchain.resource_dir}", command)
-                self.assertIn("--extra-arg-before=-D_USE_STD_VECTOR_ALGORITHMS=0", command)
+                if windows:
+                    self.assertIn(f"--extra-arg-before=-resource-dir={toolchain.resource_dir}", command)
+                    self.assertIn("--extra-arg-before=-D_USE_STD_VECTOR_ALGORITHMS=0", command)
+                    self.assertNotIn("--extra-arg=-Wno-error", command)
+                else:
+                    # Native -Werror must not make an analysis-only compiler
+                    # warning in a header main a fatal error.
+                    self.assertIn("--extra-arg=-Wno-error", command)
                 self.assertTrue(any(argument.startswith("-header-filter=^(") for argument in command))
                 line_filters = [argument for argument in command if argument.startswith("-line-filter=")]
                 self.assertEqual(len(line_filters), 1)
@@ -856,7 +875,10 @@ class TidyCommandTest(unittest.TestCase):
                 )
                 self.assertNotIn(str(tidy.absolute_path(translation_unit)), names)
                 self.assertNotIn(tidy.absolute_path(translation_unit).as_posix(), names)
-                self.assertFalse(any(argument.startswith("-load=") for argument in command))
+                self.assertEqual(
+                    [argument for argument in command if argument.startswith("-load=")],
+                    [] if windows else ["-load=plugin"],
+                )
 
                 if suffix == ".mm":
                     self.assertIn("-x objective-c++ -fobjc-arc", synthetic[0]["command"])
@@ -978,6 +1000,19 @@ class HygieneCommandTest(unittest.TestCase):
                 self.assertIn(label, self.stderr.getvalue())
                 self.assertNotIn("Lint findings", self.stderr.getvalue())
                 stage.return_value = 0
+
+    def test_caller_lint_stage_replaces_tidy_with_the_same_scope_and_failure_report(self):
+        stage = mock.Mock(return_value=1)
+        args = _hygiene_args(files=list(self.files))
+        managed = Path("managed tool env") / "bin" / "python"
+        self.assertEqual(
+            hygiene.run_command(args, clang_format="sdk-clang-format", python=managed, lint=("bazel lint", stage)), 1
+        )
+        self.assertEqual(self.format.call_args.kwargs["clang_format"], "sdk-clang-format")
+        self.assertEqual(self.format.call_args.kwargs["python"], managed)
+        stage.assert_called_once_with(self.files, True)
+        self.tidy.assert_not_called()
+        self.assertIn("Lint findings", self.stderr.getvalue())
 
     def test_subcommand_args_use_the_real_parser_defaults(self):
         args = _hygiene_args(jobs=4)

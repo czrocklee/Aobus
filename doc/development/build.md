@@ -22,6 +22,17 @@ ignores ambient Python packages or an activated virtualenv.
 `build` performs an incremental debug build. `check` builds and runs the enabled suites in the native `all` group; `hygiene` separately checks the selected source scope.
 Choose completion checks from [validation and review](test/validation-and-review.md), not from a second gate list here.
 
+Ordinary Linux Debug explicitly uses `-O0`. For Nix-wrapped compilers,
+[the Debug launcher policy](../../cmake/NixHardening.cmake) removes only
+optimization-dependent `fortify`/`fortify3` from the reported Nix hardening policy;
+other hardening remains. The generated build retains this environment prefix
+for direct Ninja/Make and IDE builds without overwriting the original compiler-cache
+launcher. Compilation databases omit launcher environments, so replaying a wrapped
+compiler also needs that Debug policy. Release/profile and sanitizer builds retain
+their existing policy; sanitizer Debug can still inherit Nix's optimization.
+Compiler caches do not see the wrapper environment, so the same prefix keys Debug
+objects by the injected policy; see [Nix compiler identity](compiler-cache.md#nix-compiler-identity).
+
 ### Linux frontend features
 
 Linux builds enable GTK and native system-media support by default.
@@ -150,6 +161,7 @@ speedup. For private Windows incremental-build evidence, use the
 ## Dependencies and optional setup
 
 - [Dependency governance](dependency-governance.md) explains resolver ownership; `./ao deps report` shows governed versions and native identities.
+- [Bazel development slice](bazel.md): opt-in `ao bazel` commands for Core and native frontend development; CMake retains full completion and release gates.
 - [Dependency upgrade](dependency-upgrade.md) owns pin changes, including C++, Python, Ruff, and mypy.
 - [Concept metrics](concept-metrics.md) owns `./ao deps report --concepts` and its interpretation.
 - [Compiler cache](compiler-cache.md) explains explicit setup and shared-workspace opt-in; existing cache environment overrides remain authoritative.

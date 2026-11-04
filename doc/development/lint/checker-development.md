@@ -329,6 +329,7 @@ Each tree uses its own `compile_commands.json` output-to-source mapping, includi
 The audited Visual Studio WinUI companion remains the exception: an explicit Windows tidy tree uses its `-winui` sibling, and Visual Studio-only headers use a small audited companion map because that generator provides no Ninja graph.
 
 The portal copies selected compiler flags into a temporary compilation database and checks the header as the main file.
+Unix replay appends `-Wno-error`: a compiler warning that only the header main raises must stay a disabled compiler diagnostic, not become a fatal error under the native `-Werror`.
 On Windows it removes the translation unit's `/TP` after replacing the input because the invocation supplies `-x c++-header`.
 It also removes the CMake-generated forced PCH to avoid redeclaring the headers that PCH aggregates, while retaining other forced includes.
 For WinUI it suppresses only the nonportable-include-path compiler diagnostic because generated C++/WinRT headers preserve schema casing while Windows resolves paths case-insensitively.

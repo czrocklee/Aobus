@@ -13,6 +13,8 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
+from cmake_support import cmake_executable
+
 from ao.core import buildlock
 
 _CONTENDER_SCRIPT = """
@@ -132,6 +134,25 @@ class BuildTreeLockTest(unittest.TestCase):
 
             self.assertEqual(output.getvalue(), "")
 
+    def test_contended_build_tree_reports_waiting_only_on_stderr(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_dir = Path(temp_dir) / "debug"
+            output, diagnostics = io.StringIO(), io.StringIO()
+            with (
+                redirect_stdout(output),
+                redirect_stderr(diagnostics),
+                mock.patch.object(buildlock, "_try_lock", return_value=False),
+                mock.patch.object(buildlock, "_lock") as acquire,
+                mock.patch.object(buildlock, "_unlock") as release,
+                buildlock.build_tree_lock(build_dir),
+            ):
+                acquire.assert_called_once()
+                release.assert_not_called()
+
+            self.assertEqual(output.getvalue(), "")
+            self.assertEqual(diagnostics.getvalue(), f"Waiting for active build in {build_dir}...\n")
+            release.assert_called_once_with(acquire.call_args.args[0])
+
     def test_lock_file_failure_reports_portal_error(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             parent = Path(temp_dir) / "not-a-directory"
@@ -192,6 +213,27 @@ class BuildTreeLockTest(unittest.TestCase):
             ],
         )
         sleep.assert_called_once_with(0.1)
+
+
+class SharedFileLockTest(unittest.TestCase):
+    def test_cmake_file_lock_is_excluded_until_the_shared_lock_is_released(self):
+        temporary = tempfile.TemporaryDirectory(prefix="aobus-shared-lock-")
+        self.addCleanup(temporary.cleanup)
+        lock = Path(temporary.name) / "cache/restore.lock"
+        script = Path(temporary.name) / "probe.cmake"
+        script.write_text(
+            f'file(LOCK "{lock.as_posix()}" TIMEOUT 0 RESULT_VARIABLE result)\nmessage(STATUS "lock=${{result}}")\n',
+            encoding="utf-8",
+        )
+
+        def cmake_lock():
+            result = subprocess.run([cmake_executable(), "-P", str(script)], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            return result.stdout
+
+        with buildlock.shared_file_lock(lock):
+            self.assertNotIn("lock=0\n", cmake_lock())
+        self.assertIn("lock=0\n", cmake_lock())
 
 
 if __name__ == "__main__":

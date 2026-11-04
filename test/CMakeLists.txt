@@ -25,15 +25,6 @@ set_property(SOURCE
   systemmedia/linux/MprisBridgeTest.cpp
   APPEND PROPERTY COMPILE_DEFINITIONS AUDIO_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test/data/audio"
 )
-set_property(SOURCE
-  runtime/library/LibraryFormatFixtureTest.cpp
-  runtime/library/LibraryYamlModeFixtureTest.cpp
-  APPEND PROPERTY COMPILE_DEFINITIONS LIBRARY_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test/data/library"
-)
-set_property(SOURCE
-  uimodel/layout/component/LayoutSchemaTest.cpp
-  APPEND PROPERTY COMPILE_DEFINITIONS AOBUS_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
-)
 # GCC 16 attributes a reply vector destroyed inside this file's Asio coroutine
 # frames to the frame itself after inlining and reports a non-heap free.
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
@@ -128,6 +119,8 @@ add_library(ao_test_support_common STATIC
     TestFixtureSupport.cpp
     FilesystemTestSupport.cpp
 )
+target_compile_definitions(ao_test_support_common PRIVATE
+    AOBUS_TEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 if(WIN32)
   target_sources(ao_test_support_common PRIVATE FilesystemTestSupportWindows.cpp)
   target_link_libraries(ao_test_support_common PRIVATE advapi32)
@@ -867,9 +860,6 @@ target_include_directories(ao_core_test PRIVATE
 # is the point of gating them everywhere: a change made on Linux to shared
 # layout validation must fail here rather than on the next Windows run.
 target_compile_definitions(ao_core_test PRIVATE
-    AOBUS_WINDOWS_LAYOUT_DIR="${CMAKE_SOURCE_DIR}/app/windows-winui/layout"
-    AOBUS_WINDOWS_SHELL_BUILDER_SOURCE="${CMAKE_SOURCE_DIR}/app/windows-winui/layout/ShellBuilder.cpp"
-    AOBUS_WINDOWS_WINUI_CMAKE="${CMAKE_SOURCE_DIR}/app/windows-winui/CMakeLists.txt"
     AOBUS_WINDOWS_WINUI_DIR="${CMAKE_SOURCE_DIR}/app/windows-winui")
 
 target_link_libraries(ao_core_test PRIVATE
@@ -956,8 +946,6 @@ if(WIN32)
     audio/backend/WasapiFormatTestSupport.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/platform/WinUiErrorBoundary.cpp
   )
-  target_compile_definitions(ao_core_test PRIVATE
-    AOBUS_WINDOWS_FRAME_XAML="${CMAKE_SOURCE_DIR}/app/windows-winui/MainWindow.xaml")
   target_link_libraries(ao_core_test PRIVATE advapi32 ao_windows_platform PkgRapidYaml)
 endif()
 aobus_target_test_sources(ao_core_test "${WIN32}" "non-Windows host"

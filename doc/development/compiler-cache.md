@@ -80,6 +80,35 @@ CCACHE_MAXSIZE='<printed-capacity>' <printed-executable> --dir <printed-cache-di
 $env:CCACHE_MAXSIZE = '<printed-capacity>'; & '<printed-executable>' --dir '<printed-cache-directory>' --show-stats
 ```
 
+## Nix compiler identity
+
+Every Nix store file has mtime 1, and wrappers generated from one template can
+share a size, so ccache's default `compiler_check=mtime` can serve one pinned
+compiler's objects to another. In the governed Linux shell, generated builds
+append `compiler_check=content` to the managed ccache launcher in every
+configuration; explicit launchers are unchanged. sccache already keys compilers
+by executable content.
+
+Neither cache hashes the wrapper's hardening environment. Ordinary Debug, which
+[injects its own policy](build.md#linux), also keys its objects by that policy
+and keeps the caller's inputs in the key. At build time, including direct Ninja
+and IDE builds, its prefix appends `<build>/nix-debug-hardening.policy` to
+`CCACHE_EXTRAFILES` and the policy digest to `SCCACHE_C_CUSTOM_CACHE_BUSTER`.
+Because that environment value replaces ccache's configured
+`extra_files_to_hash`, configure carries the configured value into it; an edit
+to that ccache setting reaches Debug keys at the next configure, which every
+`./ao build` performs. Configured path lists remain opaque, including literal
+semicolons in Linux filenames. A ccache launcher's effective Debug arguments
+receive the policy file in each `extra_files_to_hash` setting after generator
+expressions are evaluated. A conditional executable is never queried during
+configure; such launchers must supply extra inputs through the build-time
+environment or explicit arguments rather than relying on a lower-level ccache
+configuration snapshot. Other configurations use the pinned shell's ambient
+policy: Nixpkgs default changes arrive with a new compiler wrapper, but an edit
+to the shell's own hardening
+override alone is not keyed. Adopting these keys changes affected cache keys
+once; existing entries need no cleanup.
+
 ## Optional cross-workspace reuse
 
 Ordinary setup preserves the saved preference and defaults it to disabled for a

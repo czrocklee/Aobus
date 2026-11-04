@@ -108,7 +108,7 @@ target_link_libraries(aobus-tui PRIVATE
     ftxui::component
     ftxui::dom
     ftxui::screen
-    mimalloc
+    ${AOBUS_MIMALLOC_TARGET}
 )
 
 target_include_directories(aobus-tui PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")

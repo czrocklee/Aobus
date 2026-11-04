@@ -33,8 +33,12 @@
 #include <winrt/Windows.UI.h>
 
 // The XAML type provider constructs these implementation types directly.
+// Header-main analysis keeps the framework prefix but parses implementation
+// headers as their own main files, not first through this aggregate.
+#ifndef AOBUS_LINT_HEADER_MAIN
 #include "MainWindow.xaml.h"
 #include "playback/AobusSoulControl.h"
 #include "track/TrackCellItem.h"
 #include "track/TrackRowItem.h"
+#endif
 // NOLINTEND(misc-include-cleaner)

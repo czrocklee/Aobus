@@ -11,6 +11,7 @@ Use project commands as the public entry points:
 - `./ao tidy` runs C++ clang-tidy plus Python Ruff and mypy for files in scope.
 - `./ao hygiene` is the check-only commit gate: format check, source audits, then tidy.
 - `./ao test --lint` tests the Aobus clang-tidy plugin fixtures; it is not the Python lint command.
+- `./ao bazel lint` is the explicit Bazel-backed C++ report route; it does not run Ruff/mypy or replace `./ao tidy`.
 
 Use the corresponding `ao.bat` commands on native Windows.
 Do not call clang-tidy, Ruff, or mypy directly during normal repository work.
@@ -31,6 +32,34 @@ Empty subsets are skipped, a formatting failure stops later stages, and reposito
 - Non-fixture files under `test/lint/` are ignored by normal tidy runs.
 - Fixtures under `test/lint/fixture/` are skipped in batch scans and checked only when explicitly named. `./ao test --lint` owns their diagnostics.
 - Python files in scope are checked against `pyproject.toml` by Ruff and mypy through `./ao tidy`.
+
+### Frontend adjustments
+
+The [shared frontend policy](../../script/ao/core/tidypolicy.py) follows the
+compilation context. GTK contexts disable `cppcoreguidelines-owning-memory` and
+nonliteral-format warnings: widget trees own their children and use printf-style
+APIs. WinUI contexts scope warnings to the selected source/header rather than the
+implementation headers gathered by the forced include; changed headers receive
+their own header-main analysis. On Windows, generated C++/WinRT include spelling
+is accepted without nonportable-include-path warnings.
+
+### Bazel-backed reports
+
+`./ao bazel lint` is explicit/manual locally and has bounded native Debug evidence on Linux, macOS and Windows. The Linux workflow contains a representative lint step; current-head CI status remains a separate gate.
+It accepts the same file/`--folder`/`--commit`/`--all` selectors plus repeatable `--target`; `--target` alone covers every actual translation unit and paired header main in those owners, not unpaired declared headers.
+Without `--target`, scope maps through actual Bazel `srcs` owners (including filegroups and aliases), not a dependency closure; with `--target`, those owners restrict the request and the selected scope gates the reports.
+A header without a same-component companion, or an include fragment, is analyzed in the native context of a translation unit whose report recorded including it. Fragment warnings are scoped to its normalized file identity; consumer compiler errors and unlocated diagnostics remain, and scoping cannot hide an incomplete attempt.
+Deferral is limited to platform-incompatible files; a compatible header or fragment that no analyzed translation unit includes, or a compatible selected path with no owner, fails rather than producing a partial pass.
+`--all` selects the project C++ scope with the same rules.
+
+Reports are cached from actual native compile contexts and gated from the current BEP: 0 clean, 1 findings, 2 incomplete.
+Cached warnings still fail.
+`--check` and `--header-filter` are analysis-keyed; scope is not.
+`--clang-tidy-arg` accepts only the documented diagnostic-only allowlist, and other raw options are rejected before preparation.
+The existing ownership/suppression policy, including stale `NOLINT` detection, applies; the route never exports or applies fixes.
+Windows Clang replay excludes MSVC `/WX` warning promotion alongside audited code-generation flags: Clang-only compatibility warnings must not become MSVC hard errors. Unix replay appends `-Wno-error` for the same reason. Native product compilation keeps its warning promotion; the linter's configured checks and genuine compiler-error failures are unchanged.
+The manual fixture entry is `./ao bazel test -- //test:lint_test`; native fixtures pass on Linux, macOS Debug and Windows (with explicit Objective-C++ deferrals) and remain outside the default aggregate.
+See the [Bazel lint workflow and report contracts](bazel.md#lint-reports).
 
 ## Objective-C diagnostics
 
@@ -61,7 +90,7 @@ Runtime evidence and Main Thread Checker remain separate; see [macOS development
 ## Platform coverage
 
 Clang-format is source-based and may run on any native host.
-Linux obtains it from Nix, macOS from the portal-selected `llvm@22`, and Windows from the LLVM SDK pinned in [`script/ao/windows-llvm-sdk.json`](../../script/ao/windows-llvm-sdk.json), which CMake provisions and validates.
+Linux obtains it from Nix, macOS from the portal-selected `llvm@22`, and Windows from the LLVM SDK pinned in [`script/ao/windows-llvm-sdk.json`](../../script/ao/windows-llvm-sdk.json), which CMake or `ao.bat bazel provision` provisions and validates.
 Clang-tidy must replay a real native compile command with its flags, defines, generated headers, and SDK:
 
 - Linux owns PipeWire, ALSA, POSIX, and GTK translation units.
@@ -191,8 +220,8 @@ Both supported tooling environments must match exact versions in `script/ao/tool
 
 ## Diagnostic-only runs
 
-`./ao tidy` and `./ao analyze` are diagnostic-only: the portal never exports or applies replacements, even when an upstream or custom diagnostic carries hint ranges.
-A shared validator in `script/ao/core/tidyconfig.py` enforces the same boundary for both commands.
+`./ao tidy`, `./ao analyze` and `./ao bazel lint` are diagnostic-only: the portal never exports or applies replacements, even when an upstream or custom diagnostic carries hint ranges.
+A shared validator in `script/ao/core/tidyconfig.py` enforces the same boundary for these commands; the Bazel route additionally restricts raw arguments to its documented allowlist.
 Raw clang-tidy arguments that request fixes are rejected: `-fix`, `-fix-errors`, `-fix-notes`, and `-export-fixes` in their single-dash, double-dash, and `=`-joined forms.
 A standalone `@responsefile` argument is rejected as well because a response file can hide those flags; the portal fails closed rather than expanding it.
 The owning argument parser rejects these options before source-scope resolution, compiler-cache activation, workspace setup, or native compiler-environment selection.
@@ -206,6 +235,7 @@ Prefer hand edits for ownership, public API, behavior, naming, readability trade
 ## Verification
 
 After C++ lint edits, rerun the narrowest `./ao tidy` scope covering modified C++ files.
+`./ao bazel lint` is an explicit alternative for C++ report scope; it does not replace the native tidy pass while Windows and release/ARM64 parity are pending.
 After Python hygiene edits, rerun `./ao tidy` for modified Python and `./ao test --tooling` when tooling behavior changed.
 Run focused build or test validation when a lint fix changes behavior, ownership, public API, or test semantics.
 

@@ -18,14 +18,21 @@ CORE_STEP_NAME = "Use every runner core"
 # The first step of each native job that runs portal build or cache work; the
 # core step must already have exported its environment by then.
 FIRST_PORTAL_STEP = {
-    "linux": "Build and test with private PipeWire",
+    "linux": "Check Bazel portable slice",
     "macos": "Prepare vcpkg binary cache",
     "windows": "Prepare vcpkg binary cache",
+    "macos_bazel": "Provision Bazel tree",
+    "windows_bazel": "Provision Bazel tree",
 }
 HYGIENE_JOBS_ARGUMENT = {
     "linux": '--jobs "$CMAKE_BUILD_PARALLEL_LEVEL"',
     "macos": '--jobs "$CMAKE_BUILD_PARALLEL_LEVEL"',
     "windows": "--jobs $env:CMAKE_BUILD_PARALLEL_LEVEL",
+}
+BAZEL_HYGIENE_JOBS_ARGUMENT = {
+    "linux": '--jobs "$CMAKE_BUILD_PARALLEL_LEVEL"',
+    "macos_bazel": '--jobs "$CMAKE_BUILD_PARALLEL_LEVEL"',
+    "windows_bazel": "--jobs $env:CMAKE_BUILD_PARALLEL_LEVEL",
 }
 
 
@@ -53,7 +60,7 @@ def _run_body(step: str) -> str:
 class CoreStepWorkflowTest(unittest.TestCase):
     def test_every_native_job_runs_one_core_step_right_after_checkout(self):
         workflow = WORKFLOW.read_text(encoding="utf-8")
-        self.assertEqual(workflow.count(f"      - name: {CORE_STEP_NAME}\n"), 3)
+        self.assertEqual(workflow.count(f"      - name: {CORE_STEP_NAME}\n"), len(FIRST_PORTAL_STEP))
         for job_name in FIRST_PORTAL_STEP:
             with self.subTest(job=job_name):
                 job = _job(job_name)
@@ -75,7 +82,13 @@ class CoreStepWorkflowTest(unittest.TestCase):
                 self.assertNotIn("\n        if:", step)
 
     def test_core_steps_use_each_platforms_ci_shell(self):
-        for job_name, shell in (("linux", "bash"), ("macos", "bash"), ("windows", "pwsh")):
+        for job_name, shell in (
+            ("linux", "bash"),
+            ("macos", "bash"),
+            ("windows", "pwsh"),
+            ("macos_bazel", "bash"),
+            ("windows_bazel", "pwsh"),
+        ):
             with self.subTest(job=job_name):
                 self.assertIn(f"        shell: {shell}\n", _step(_job(job_name), CORE_STEP_NAME))
 
@@ -83,6 +96,9 @@ class CoreStepWorkflowTest(unittest.TestCase):
         for job_name, argument in HYGIENE_JOBS_ARGUMENT.items():
             with self.subTest(job=job_name):
                 self.assertIn(argument, _step(_job(job_name), "Run hygiene"))
+        for job_name, argument in BAZEL_HYGIENE_JOBS_ARGUMENT.items():
+            with self.subTest(job=job_name):
+                self.assertIn(argument, _step(_job(job_name), "Check Bazel hygiene gate"))
 
 
 @unittest.skipIf(os.name == "nt", "The CI bash core step runs on a POSIX tooling host.")
@@ -91,7 +107,7 @@ class CoreStepBashTest(unittest.TestCase):
 
     # Both POSIX jobs share the bash core step; exercise every call site so a
     # future mac-only edit does not lose local execution protection.
-    POSIX_JOBS = ("linux", "macos")
+    POSIX_JOBS = ("linux", "macos", "macos_bazel")
 
     @staticmethod
     def _run_step(job_name: str, github_env: Path) -> subprocess.CompletedProcess:

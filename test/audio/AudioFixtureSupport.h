@@ -3,6 +3,9 @@
 
 #pragma once
 
+// NOLINTNEXTLINE(misc-include-cleaner): Preserve the existing fixture directory lookup API.
+#include "AudioFixtureDirectory.h"
+
 #include <cstdint>
 #include <filesystem>
 #include <string>
