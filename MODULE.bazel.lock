@@ -190,10 +190,16 @@
   "moduleExtensions": {
     "//bazel:dependencies.bzl%dependencies": {
       "general": {
-        "bzlTransitiveDigest": "pqNCFVfqKt/yE1fJ8QI0GpWDNYOU1bQRjbLxNHkp+nk=",
+        "bzlTransitiveDigest": "MOThyJYXC2ICdboBpmwaWcmprJMQha4ydcV9qIiYuqo=",
         "usagesDigest": "xq8tDLFxkt99+Cam7irGlY+r5AqIF1Jz2wKQMKyaC90=",
-        "recordedInputs": [],
+        "recordedInputs": [
+          "REPO_MAPPING:,aobus_environment +dependencies+aobus_environment"
+        ],
         "generatedRepoSpecs": {
+          "aobus_environment": {
+            "repoRuleId": "@@//bazel:environment.bzl%environment_repository",
+            "attributes": {}
+          },
           "aobus_native_deps": {
             "repoRuleId": "@@//bazel:dependencies.bzl%_governed_repository",
             "attributes": {
@@ -229,9 +235,11 @@
     },
     "//bazel/lint:policy.bzl%lint_policy": {
       "general": {
-        "bzlTransitiveDigest": "2znIgEYzkVui0/ItNoaKKbwiMckSawbqGEt5+gWQxQA=",
+        "bzlTransitiveDigest": "wfhDlt8qzLTQ8KLF30DnDEDYWHADyGT5LwQKvYlueYk=",
         "usagesDigest": "RvowExNtaGUaK4UBSm0aLtioKISo5vgPyeT4Dxpg7io=",
-        "recordedInputs": [],
+        "recordedInputs": [
+          "REPO_MAPPING:,aobus_environment +dependencies+aobus_environment"
+        ],
         "generatedRepoSpecs": {
           "aobus_lint_policy": {
             "repoRuleId": "@@//bazel/lint:policy.bzl%lint_policy_repository",
@@ -246,9 +254,11 @@
     },
     "//bazel/lint:sdk.bzl%lint_sdk": {
       "general": {
-        "bzlTransitiveDigest": "7viFB+QRO5M0xVePeERUT7CBCvX8eQrYiM/WS5m8BkU=",
+        "bzlTransitiveDigest": "l9/0pS6Iw6VWUtBLo/HMQyTao3l1lfQexTu6SvJwqNc=",
         "usagesDigest": "4Oi/yYx1qHfRWvvXoW6P8bD3uLQefL1QbxMhi0ezvLM=",
-        "recordedInputs": [],
+        "recordedInputs": [
+          "REPO_MAPPING:,aobus_environment +dependencies+aobus_environment"
+        ],
         "generatedRepoSpecs": {
           "aobus_lint_sdk": {
             "repoRuleId": "@@//bazel/lint:sdk.bzl%lint_sdk_repository",

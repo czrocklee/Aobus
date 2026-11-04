@@ -241,6 +241,12 @@ def repository_plan(tree: Path, request: dict[str, Any], environment: Mapping[st
         }
     lookup = {key.upper(): value for key, value in environment.items()}
     selected = lookup.get("AOBUS_NUGET_PACKAGES_DIR", "")
+    if not selected:
+        from .bazel_provision import restored_nuget_packages
+
+        # Keep the default ready-cache lookup lazy: a TUI build needs no NuGet.
+        if restored := restored_nuget_packages(environment):
+            selected = str(restored)
     root = Path(selected)
     if not selected or not root.is_absolute() or not root.is_dir():
         raise BazelWorkspaceError(

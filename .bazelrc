@@ -46,7 +46,9 @@ build --action_env=CPATH=
 build --action_env=LIBRARY_PATH=
 build --action_env=LD_LIBRARY_PATH=
 
-# Profiles select native compilation modes; toolchains implement their flags.
+# Bare commands default to Debug; providers follow each consumer's actual mode.
+# fastbuild has no accepted native SDK mapping and is rejected by imports.
+build --compilation_mode=dbg
 build:debug --compilation_mode=dbg
 build:release --compilation_mode=opt
 

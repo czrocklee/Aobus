@@ -219,11 +219,11 @@ header_origin_aspect = aspect(
     provides = [HeaderOriginInfo],
 )
 
-def _output_stem(main):
-    # A main-derived stem keeps unchanged reports cacheable when sources are
-    # added or removed. The index names each main; a bare hash keeps Windows
-    # report paths as short as the former ordinals allowed.
-    return "%x" % (hash(main.path) & 0xffffffff)
+def _output_stem(identity):
+    # Native outputs distinguish source/PIC contexts sharing a main. Hash the
+    # complete report identity, not its ordinal, so unrelated sources do not
+    # invalidate unchanged reports. Keep the bare hash short for Windows paths.
+    return "%x" % (hash(json.encode(identity)) & 0xffffffff)
 
 def _lint_impl(target, ctx):
     if ctx.label.repo_name:
@@ -279,14 +279,14 @@ def _lint_impl(target, ctx):
                 "configuration": ctx.bin_dir.path,
                 "source": source.path,
                 "main": main.path,
-                "outputs": [f.path for f in action.outputs.to_list()],
+                "outputs": sorted([f.path for f in action.outputs.to_list()]),
                 "mode": "RELAXED" if main.short_path.startswith("test/") and not main.short_path.startswith("test/lint/fixture/") else "STRICT",
                 "platform": LINT_SDK_HOST,
             }
-            stem = _output_stem(main)
+            stem = _output_stem(identity)
             if stem in stems:
-                fail("Lint output stem %s is shared by %s and %s" % (stem, stems[stem], main.path))
-            stems[stem] = main.path
+                fail("Lint output stem %s is shared by %s and %s" % (stem, stems[stem], identity))
+            stems[stem] = identity
             stem = ctx.label.name + ".aobus-lint/" + stem
             context = ctx.actions.declare_file(stem + ".context.json")
             report = ctx.actions.declare_file(stem + ".report.json")

@@ -1,9 +1,10 @@
 """Render the existing lint policy without introducing a scope-dependent cache key."""
 
+load("//bazel:environment.bzl", "ENVIRONMENT_ATTRIBUTE", "repository_environment")
+
 def _policy_impl(ctx):
-    python = ctx.getenv("AOBUS_BAZEL_PYTHON")
-    if not python:
-        fail("Prepare native lint policy through ./ao bazel")
+    selected, environment = repository_environment(ctx)
+    python = selected["python"]
     root = ctx.path(ctx.attr.root).dirname
     helper = ctx.path(ctx.attr.helper)
     ctx.watch_tree(root.get_child("script/ao"))
@@ -21,9 +22,15 @@ def _policy_impl(ctx):
             "clang_tidy_args": [],
         }))
         configuration = ctx.path("configuration.json")
+    clean = {key: None for key in ctx.os.environ.keys()}
+    clean.update(environment)
+    ctx.file("_tmp/.keep", "", executable = False)
+    for key in ["TMP", "TEMP", "TMPDIR"]:
+        clean[key] = str(ctx.path("_tmp"))
+    clean["PYTHONDONTWRITEBYTECODE"] = "1"
     result = ctx.execute(
         [python, "-I", "-S", "-B", "-X", "utf8", str(helper), "prepare", "--configuration", str(configuration), "--output", str(ctx.path("policy.json"))],
-        environment = {"PYTHONDONTWRITEBYTECODE": "1"},
+        environment = clean,
         quiet = True,
     )
     if result.return_code:
@@ -33,6 +40,7 @@ def _policy_impl(ctx):
 lint_policy_repository = repository_rule(
     implementation = _policy_impl,
     attrs = {
+        "_environment": ENVIRONMENT_ATTRIBUTE,
         "root": attr.label(default = Label("//:CMakeLists.txt"), allow_single_file = True),
         "helper": attr.label(default = Label("//:script/ao/core/bazel_lint_action.py"), allow_single_file = True),
     },

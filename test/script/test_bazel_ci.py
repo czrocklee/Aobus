@@ -57,6 +57,7 @@ class StandaloneBazelCiTest(unittest.TestCase):
                 source = job(name)
                 for operation in (
                     "Build Bazel products",
+                    "Test direct Bazel entry",
                     "Test Bazel graph",
                     "Verify Bazel compile contracts",
                     "Test Bazel lint fixtures",
@@ -85,6 +86,79 @@ class StandaloneBazelCiTest(unittest.TestCase):
         for name in ("linux_bazel", "windows_bazel"):
             self.assertIn("test --tooling", step(job(name), "Test portal tooling"))
 
+    def test_direct_bazel_entry_invokes_the_pinned_executable_in_its_own_output_root(self):
+        for name in ("linux_bazel", "macos_bazel", "windows_bazel"):
+            with self.subTest(job=name):
+                source = job(name)
+                direct = step(source, "Test direct Bazel entry")
+                self.assertLess(source.index("Build Bazel products"), source.index("Test direct Bazel entry"))
+                self.assertLess(source.index("Test direct Bazel entry"), source.index("Test Bazel graph"))
+                self.assertNotIn("continue-on-error:", direct)
+                # The documented bare commands, never portal generation or R2 credentials.
+                self.assertIn("//app/tui:aobus-tui", direct)
+                self.assertIn("--config=release", direct)
+                self.assertIn("//test/lint:cache_clean", direct)
+                self.assertNotIn("./ao", direct)
+                self.assertNotIn("ao.bat", direct)
+                self.assertNotIn("--remote_cache", direct)
+                self.assertNotIn("secrets.", direct)
+                # A fresh guest-local output root with its own symlink prefix,
+                # the managed disk cache, the exported job count and local BEP.
+                self.assertIn("aobus-bare", direct)
+                self.assertIn("--output_base=", direct)
+                self.assertIn("--symlink_prefix=", direct)
+                self.assertIn("--disk_cache=", direct)
+                self.assertIn("AOBUS_STATE_ROOT", direct)
+                self.assertIn("--jobs=", direct)
+                self.assertIn("CMAKE_BUILD_PARALLEL_LEVEL", direct)
+                self.assertIn("--lockfile_mode=off", direct)
+                self.assertIn("debug-run.bep.json", direct)
+                self.assertIn("release-build.bep.json", direct)
+                self.assertIn("--experimental_build_event_upload_strategy=local", direct)
+                # Legacy portal request/report selection is cleared, not reused.
+                self.assertIn("AOBUS_BAZEL_CONFIGURATION", direct)
+                self.assertIn("AOBUS_BAZEL_PYTHON", direct)
+        linux = job("linux_bazel")
+        ready = step(linux, "Resolve pinned Bazel executable")
+        self.assertIn("nix-shell --run", ready)
+        self.assertIn("command -v bazel", ready)
+        self.assertIn("GITHUB_OUTPUT", ready)
+        self.assertNotIn("GITHUB_ENV", ready)
+        self.assertLess(linux.index("Resolve pinned Bazel executable"), linux.index("Test direct Bazel entry"))
+        linux_direct = step(linux, "Test direct Bazel entry")
+        self.assertIn("${{ steps.bazel-executable.outputs.executable }}", linux_direct)
+        self.assertNotIn("AOBUS_BAZEL_VCPKG_PREFIX", linux_direct)
+        macos = job("macos_bazel")
+        macos_direct = step(macos, "Test direct Bazel entry")
+        self.assertIn("AOBUS_BAZEL_VCPKG_PREFIX", macos_direct)
+        self.assertIn("aobus_macos_triplet", macos_direct)
+        self.assertIn("AOBUS_STATE_ROOT/cache/bazel", macos_direct)
+        self.assertIn(".bazelversion", macos_direct)
+        self.assertIn("tools/bazel", macos_direct)
+        self.assertNotIn("aobus-osx", macos)
+        windows = job("windows_bazel")
+        windows_direct = step(windows, "Test direct Bazel entry")
+        self.assertIn("AOBUS_BAZEL_VCPKG_PREFIX", windows_direct)
+        self.assertIn("vcpkg_triplets", windows_direct)
+        self.assertIn("$python -I -S -B -X utf8", windows_direct)
+        self.assertIn("pycache_prefix=$bare\\_tmp\\pycache", windows_direct)
+        self.assertNotIn("$env:PYTHONPATH =", windows_direct)
+        self.assertNotIn("if ($env:AOBUS_PYTHON)", windows_direct)
+        self.assertIn("AOBUS_STATE_ROOT\\cache\\bazel", windows_direct)
+        self.assertIn(".bazelversion", windows_direct)
+        self.assertIn("tools\\bazel", windows_direct)
+        self.assertIn("BAZEL_SH", windows_direct)
+        self.assertIn("bash.exe", windows_direct)
+        self.assertIn("LASTEXITCODE", windows_direct)
+        self.assertNotIn("x64-windows-static-md", windows)
+        for name in ("linux_bazel", "macos_bazel"):
+            self.assertIn("aobus-bare/*.bep.json", step(job(name), "Preserve Bazel evidence"))
+        direct_evidence = step(windows, "Preserve direct Bazel evidence")
+        self.assertIn("D:\\aobus-bare\\*.bep.json", direct_evidence)
+        self.assertNotIn("aobus-state", direct_evidence)
+        self.assertNotIn("build.log", direct_evidence)
+        self.assertNotIn("spawns.json", direct_evidence)
+
     def test_windows_tooling_fails_before_expensive_product_work(self):
         windows = job("windows_bazel")
         self.assertLess(windows.index("Provision Bazel tree"), windows.index("Test portal tooling"))
@@ -110,7 +184,7 @@ class StandaloneBazelCiTest(unittest.TestCase):
         windows = job("windows_bazel")
         # The pinned action joins an LCA of only "D:" into drive-relative "D:.",
         # which resolves against the checkout rather than the external build tree.
-        for title in ("Preserve Bazel evidence", "Preserve portal tooling evidence"):
+        for title in ("Preserve Bazel evidence", "Preserve direct Bazel evidence", "Preserve portal tooling evidence"):
             with self.subTest(step=title):
                 evidence = step(windows, title)
                 self.assertIn("if: ${{ always() }}", evidence)
@@ -127,6 +201,7 @@ class StandaloneBazelCiTest(unittest.TestCase):
             ("linux_bazel", "Preserve Bazel evidence"),
             ("macos_bazel", "Preserve Bazel evidence"),
             ("windows_bazel", "Preserve Bazel evidence"),
+            ("windows_bazel", "Preserve direct Bazel evidence"),
             ("windows_bazel", "Preserve portal tooling evidence"),
             ("r2_bazel", "Preserve R2 proof"),
         ):

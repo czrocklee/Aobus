@@ -10,6 +10,7 @@ exports_files([
     "vcpkg.json",
     "vcpkg-configuration.json",
     "script/ao/core/bazel_resolver.py",
+    "script/ao/core/bazel_environment.py",
     "script/ao/__init__.py",
     "script/ao/core/__init__.py",
     "script/ao/core/bazel_lint_sdk.py",

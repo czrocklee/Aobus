@@ -39,6 +39,7 @@ Use the owner for the question being asked:
 | macOS compiler, deployment target, and vcpkg tool archive | `script/ao/macos-toolchain.json` |
 | Windows tidy LLVM SDK version, archive SHA-256, and required files | `script/ao/windows-llvm-sdk.json` |
 | CI Bazel remote-cache proxy version and artifact SHA-256 | `script/ao/bazel-remote.json` |
+| Bazel version for the development slice | `script/ao/bazel-toolchain.json`, `.bazelversion` |
 | WinUI NuGet closure and trusted source | `app/windows-winui/packages.config`, `app/windows-winui/NuGet.Config` |
 | Python, Ruff, mypy, and documentation-parser policy | `script/ao/toolchain.json` |
 | Accepted Python tooling and documentation-parser artifacts | `script/ao/docs-requirements.txt`, `script/ao/windows-requirements.txt`, `script/ao/macos-requirements.txt` |
@@ -46,13 +47,16 @@ Use the owner for the question being asked:
 
 Do not copy a current version from this guide. Read the owning file or a verified
 build report.
-The [Bazel development slice](bazel.md) projects an already resolved provider
-into disposable imports; it resolves nothing itself and adds no version
-authority. Its `config/bazel/dependencies.json` holds only structural import
-contracts — static header and archive interface fallbacks, exact library
-spellings and closure order, metadata-token preconditions, ABI defines, and
-native repair entries — with no per-package accepted-version entries. A
-version is accepted here, in the shared contract and resolver inputs; at
+The [Bazel development slice](bazel.md) projects governed providers into
+disposable imports and adds no independent version authority.
+Its repository-time bootstrap enters the pinned Nix shell on Linux, allowing
+Nix to realize missing pinned outputs. Native macOS and Windows discovery
+instead validates ready, explicitly selected SDKs; repository fetch does not
+install their producers, ports, Python or SDKs. Its `config/bazel/dependencies.json` holds only
+structural import contracts — static header and archive interface fallbacks,
+exact library spellings and closure order, metadata-token preconditions, ABI
+defines, and native repair entries — with no per-package accepted-version
+entries. A version is accepted here, in the shared contract and resolver inputs; at
 preparation time the observed provider is matched against its installed
 headers, pkg-config metadata and tools, so an upgrade this policy accepts
 passes the unchanged structural checks without a Bazel-side version edit.

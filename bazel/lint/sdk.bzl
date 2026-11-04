@@ -1,5 +1,7 @@
 """Lazy, ready-only import of the governed native lint LLVM SDK."""
 
+load("//bazel:environment.bzl", "ENVIRONMENT_ATTRIBUTE", "repository_environment")
+
 _ENVIRONMENT = [
     "PATH",
     "PATHEXT",
@@ -25,9 +27,8 @@ _ENVIRONMENT = [
 ]
 
 def _lint_sdk_impl(ctx):
-    python = ctx.getenv("AOBUS_BAZEL_PYTHON")
-    if not python:
-        fail("Import the existing lint SDK through ./ao bazel and its governed Python")
+    selected, prepared = repository_environment(ctx)
+    python = selected["python"]
     ctx.watch(ctx.path(python))
     name = ctx.os.name.lower()
     host = "windows" if name.startswith("windows") else "macos" if name.startswith("mac") else name
@@ -35,9 +36,8 @@ def _lint_sdk_impl(ctx):
         fail("Unsupported lint execution host: " + name)
     environment = {}
     for key in _ENVIRONMENT:
-        value = ctx.getenv(key)
-        if value != None:
-            environment[key] = value
+        if key in prepared:
+            environment[key] = prepared[key]
     helper = ctx.path(ctx.attr.helper)
     windows_manifest = ctx.path(ctx.attr.windows_manifest)
     macos_contract = ctx.path(ctx.attr.macos_contract)
@@ -95,6 +95,7 @@ def _lint_sdk_impl(ctx):
 lint_sdk_repository = repository_rule(
     implementation = _lint_sdk_impl,
     attrs = {
+        "_environment": ENVIRONMENT_ATTRIBUTE,
         "helper": attr.label(default = Label("//:script/ao/core/bazel_lint_sdk.py"), allow_single_file = True),
         # The helper's package imports; test_bazel_lint_sdk compares them with its real imports.
         "modules": attr.label_list(

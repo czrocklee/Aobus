@@ -74,7 +74,8 @@ jobs:
           (github.event_name != 'workflow_dispatch' || inputs.mode != 'bazel') &&
           (needs.changes.result != 'success' || needs.changes.outputs.docs-only != 'true') }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    # This job retains both Bazel gates and the full CMake completion route.
+    timeout-minutes: 180
     env:
       SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
       AOBUS_PHASE_LOG_DIR: /tmp/aobus-phases-${{ github.run_id }}-${{ github.run_attempt }}
@@ -1030,6 +1031,14 @@ jobs:
         run: echo "AOBUS_STATE_ROOT=$RUNNER_TEMP/aobus-state" >> "$GITHUB_ENV"
       - name: Provision Bazel tree
         run: ./ao bazel setup
+      # Only the pinned executable path leaves the nix child; no SDK variables
+      # from the shell environment propagate into the job.
+      - name: Resolve pinned Bazel executable
+        id: bazel-executable
+        shell: bash
+        run: >-
+          nix-shell --run 'bazel="$(command -v bazel)"; test -n "$bazel";
+          printf "executable=%s\n" "$bazel" >> "$GITHUB_OUTPUT"'
       - name: Start Bazel remote cache
         id: bazel-remote
         if: ${{ inputs.r2 }}
@@ -1056,6 +1065,33 @@ jobs:
         run: >-
           ./ao bazel build --path "$RUNNER_TEMP/aobus-bazel-debug" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL" --
           //app/cli:aobus //app/tui:aobus-tui //app/linux-gtk:aobus-gtk //test:backend_test
+      # Direct-entry acceptance for the documented bare development slice: the
+      # pinned executable itself, a fresh guest-local output root separate from
+      # the portal tree, the managed disk cache and local-only BEP evidence.
+      - name: Test direct Bazel entry
+        shell: bash
+        env:
+          AOBUS_BAZEL_EXECUTABLE: ${{ steps.bazel-executable.outputs.executable }}
+        run: |
+          set -euo pipefail
+          unset AOBUS_BAZEL_CONFIGURATION AOBUS_BAZEL_PYTHON AOBUS_NIX_DEPENDENCY_REPORT \
+            AO_NIX_PORTAL_PYTHON AOBUS_BAZEL_REMOTE_CACHE
+          bare_root="$RUNNER_TEMP/aobus-bare"
+          mkdir -p "$bare_root" "$AOBUS_STATE_ROOT/cache/bazel"
+          "$AOBUS_BAZEL_EXECUTABLE" --output_base="$bare_root/state/output" \
+            run --jobs="$CMAKE_BUILD_PARALLEL_LEVEL" --lockfile_mode=off \
+            --disk_cache="$AOBUS_STATE_ROOT/cache/bazel" \
+            --symlink_prefix="$bare_root/bazel-" \
+            --build_event_json_file="$bare_root/debug-run.bep.json" \
+            --experimental_build_event_upload_strategy=local \
+            //app/tui:aobus-tui -- --help
+          "$AOBUS_BAZEL_EXECUTABLE" --output_base="$bare_root/state/output" \
+            build --config=release --jobs="$CMAKE_BUILD_PARALLEL_LEVEL" --lockfile_mode=off \
+            --disk_cache="$AOBUS_STATE_ROOT/cache/bazel" \
+            --symlink_prefix="$bare_root/bazel-" \
+            --build_event_json_file="$bare_root/release-build.bep.json" \
+            --experimental_build_event_upload_strategy=local \
+            //test/lint:cache_clean
       - name: Test Bazel graph
         env:
           AOBUS_BAZEL_REMOTE_CACHE: ${{ steps.bazel-remote.outputs.url }}
@@ -1092,6 +1128,7 @@ jobs:
             ${{ runner.temp }}/aobus-bazel-debug/build.log
             ${{ runner.temp }}/aobus-bazel-debug/lint/run-*/run.receipt.json
             ${{ runner.temp }}/aobus-bazel-debug/lint/run-*/*.bep.json
+            ${{ runner.temp }}/aobus-bare/*.bep.json
             ${{ runner.temp }}/bazel-r2-stop.json
           if-no-files-found: warn
 
@@ -1307,6 +1344,42 @@ jobs:
           ./ao bazel build --path "$RUNNER_TEMP/aobus-bazel-debug" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL" --
           //app/cli:aobus //app/tui:aobus-tui //app/macos-appkit:aobus-appkit
 
+      # Direct-entry acceptance for the documented bare development slice: the
+      # managed executable, the matrix-architecture triplet from the existing
+      # launcher source, a fresh guest-local output root separate from the
+      # portal tree, the managed disk cache and local-only BEP evidence.
+      - name: Test direct Bazel entry
+        shell: bash
+        run: |
+          set -euo pipefail
+          unset AOBUS_BAZEL_CONFIGURATION AOBUS_BAZEL_PYTHON AOBUS_NIX_DEPENDENCY_REPORT \
+            AO_NIX_PORTAL_PYTHON AOBUS_BAZEL_REMOTE_CACHE
+          source script/ao/macos-vcpkg-bootstrap.sh
+          vcpkg_triplet="$(aobus_macos_triplet "$(uname -m)")"
+          export AOBUS_BAZEL_VCPKG_PREFIX="$RUNNER_TEMP/aobus-bazel-debug/vcpkg_installed/$vcpkg_triplet"
+          read -r bazel_version < .bazelversion
+          bazel_executable="$AOBUS_STATE_ROOT/tools/bazel/$bazel_version/bazel"
+          if [[ ! -x "$bazel_executable" ]]; then
+            echo "::error::Managed Bazel is missing: $bazel_executable" >&2
+            exit 1
+          fi
+          bare_root="$RUNNER_TEMP/aobus-bare"
+          mkdir -p "$bare_root" "$AOBUS_STATE_ROOT/cache/bazel"
+          "$bazel_executable" --output_base="$bare_root/state/output" \
+            run --jobs="$CMAKE_BUILD_PARALLEL_LEVEL" --lockfile_mode=off \
+            --disk_cache="$AOBUS_STATE_ROOT/cache/bazel" \
+            --symlink_prefix="$bare_root/bazel-" \
+            --build_event_json_file="$bare_root/debug-run.bep.json" \
+            --experimental_build_event_upload_strategy=local \
+            //app/tui:aobus-tui -- --help
+          "$bazel_executable" --output_base="$bare_root/state/output" \
+            build --config=release --jobs="$CMAKE_BUILD_PARALLEL_LEVEL" --lockfile_mode=off \
+            --disk_cache="$AOBUS_STATE_ROOT/cache/bazel" \
+            --symlink_prefix="$bare_root/bazel-" \
+            --build_event_json_file="$bare_root/release-build.bep.json" \
+            --experimental_build_event_upload_strategy=local \
+            //test/lint:cache_clean
+
       - name: Test Bazel graph
         env:
           AOBUS_BAZEL_REMOTE_CACHE: ${{ steps.bazel-remote.outputs.url }}
@@ -1344,6 +1417,7 @@ jobs:
             ${{ runner.temp }}/aobus-bazel-debug/build.log
             ${{ runner.temp }}/aobus-bazel-debug/lint/run-*/run.receipt.json
             ${{ runner.temp }}/aobus-bazel-debug/lint/run-*/*.bep.json
+            ${{ runner.temp }}/aobus-bare/*.bep.json
             ${{ runner.temp }}/bazel-r2-stop.json
           if-no-files-found: warn
 
@@ -1456,6 +1530,61 @@ jobs:
           .\ao.bat bazel build --path D:\aobus-bazel-debug --jobs $env:CMAKE_BUILD_PARALLEL_LEVEL --
           //app/cli:aobus //app/tui:aobus-tui //app/windows-winui:aobus-winui
 
+      # Direct-entry acceptance for the documented bare development slice: the
+      # managed executable, the source-locked target triplet, the Git for
+      # Windows bash, a fresh guest-local output root separate from the portal
+      # tree, the managed disk cache and local-only BEP evidence.
+      - name: Test direct Bazel entry
+        shell: pwsh
+        run: |
+          foreach ($name in @(
+            'AOBUS_BAZEL_CONFIGURATION', 'AOBUS_BAZEL_PYTHON', 'AOBUS_NIX_DEPENDENCY_REPORT',
+            'AO_NIX_PORTAL_PYTHON', 'AOBUS_BAZEL_REMOTE_CACHE'
+          )) {
+            Remove-Item "Env:$name" -ErrorAction SilentlyContinue
+          }
+          $bare = 'D:\aobus-bare'
+          New-Item -ItemType Directory -Force -Path "$bare\_tmp" | Out-Null
+          $contract = Get-Content script/ao/toolchain.json -Raw | ConvertFrom-Json
+          $python = Join-Path $env:AOBUS_STATE_ROOT "tools\python\$($contract.python)\python.exe"
+          if (-not (Test-Path $python)) { throw "Governed Python is missing: $python" }
+          $tripletOutput = & $python -I -S -B -X utf8 -X "pycache_prefix=$bare\_tmp\pycache" -c 'import sys; sys.path.insert(0, "script"); from ao.core.bazel_workspace import vcpkg_triplets; print(vcpkg_triplets(host="windows")[0])'
+          $tripletExit = $LASTEXITCODE
+          if ($tripletExit -ne 0) { exit $tripletExit }
+          $triplet = ($tripletOutput -join '').Trim()
+          if ([string]::IsNullOrWhiteSpace($triplet)) { throw 'Native target triplet was not reported.' }
+          $env:AOBUS_BAZEL_VCPKG_PREFIX = "D:\aobus-bazel-debug\vcpkg_installed\$triplet"
+          $git = (Get-Command git -ErrorAction Stop).Source
+          $bash = $null
+          $parent = $git
+          foreach ($i in 1..3) {
+            $parent = Split-Path $parent -ErrorAction Stop
+            $probe = Join-Path $parent 'usr\bin\bash.exe'
+            if (Test-Path $probe) { $bash = $probe; break }
+          }
+          if (-not $bash) { throw "Git for Windows usr\bin\bash.exe was not found beside git: $git" }
+          $env:BAZEL_SH = $bash
+          $version = (Get-Content .bazelversion -Raw).Trim()
+          $bazel = Join-Path $env:AOBUS_STATE_ROOT "tools\bazel\$version\bazel.exe"
+          if (-not (Test-Path $bazel)) { throw "Managed Bazel is missing: $bazel" }
+          New-Item -ItemType Directory -Force -Path (Join-Path $env:AOBUS_STATE_ROOT 'cache\bazel') | Out-Null
+          & $bazel "--output_base=$bare\state\output" run `
+            "--jobs=$env:CMAKE_BUILD_PARALLEL_LEVEL" --lockfile_mode=off `
+            "--disk_cache=$env:AOBUS_STATE_ROOT\cache\bazel" `
+            "--symlink_prefix=$bare\bazel-" `
+            "--build_event_json_file=$bare\debug-run.bep.json" `
+            --experimental_build_event_upload_strategy=local `
+            //app/tui:aobus-tui -- --help
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $bazel "--output_base=$bare\state\output" build `
+            --config=release "--jobs=$env:CMAKE_BUILD_PARALLEL_LEVEL" --lockfile_mode=off `
+            "--disk_cache=$env:AOBUS_STATE_ROOT\cache\bazel" `
+            "--symlink_prefix=$bare\bazel-" `
+            "--build_event_json_file=$bare\release-build.bep.json" `
+            --experimental_build_event_upload_strategy=local `
+            //test/lint:cache_clean
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Test Bazel graph
         shell: pwsh
         run: .\ao.bat bazel test --path D:\aobus-bazel-debug --jobs $env:CMAKE_BUILD_PARALLEL_LEVEL
@@ -1483,6 +1612,17 @@ jobs:
             D:\aobus-bazel-debug\build.log
             D:\aobus-bazel-debug\lint\run-*\run.receipt.json
             D:\aobus-bazel-debug\lint\run-*\*.bep.json
+          if-no-files-found: warn
+
+      # The bare-entry BEP files live outside the portal trees. A separate
+      # upload keeps every artifact root below the drive root; joining them
+      # into one upload would resolve its LCA against the checkout.
+      - name: Preserve direct Bazel evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: bazel-windows-direct-${{ github.run_attempt }}
+          path: D:\aobus-bare\*.bep.json
           if-no-files-found: warn
 
       - name: Preserve portal tooling evidence

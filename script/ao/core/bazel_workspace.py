@@ -86,7 +86,11 @@ def _write_json(path: Path, value: object) -> None:
 
 
 def native_platform() -> str:
-    return builddir.platform_profile().name
+    # Host detection must not select build trees or create checkout-local state.
+    host = {"linux": "linux", "darwin": "macos", "win32": "windows"}.get(sys.platform)
+    if host is None:
+        raise BazelWorkspaceError(f"unsupported native Bazel host: {sys.platform}")
+    return host
 
 
 def _source_root() -> str:
@@ -574,9 +578,9 @@ def _verify_linux_resolution(manifest: dict[str, Any], expected: dict[str, list[
             raise BazelWorkspaceError(f"resolved metadata {metadata} does not match the Nix report")
 
 
-def vcpkg_triplets() -> tuple[str, str]:
+def vcpkg_triplets(*, host: str | None = None) -> tuple[str, str]:
     """Return the native (target, host) vcpkg triplets, matching the native CMake presets."""
-    host = native_platform()
+    host = native_platform() if host is None else host
     if host == "windows":
         return "x64-windows-static-md", "x64-windows"
     if host == "macos":
@@ -2943,7 +2947,6 @@ def prepare_workspace(
     request = {
         "schema": 1,
         "host": host,
-        "config": config,
         "prefix": None if host == "linux" else str(vcpkg_prefix(prefix, tree)),
         # The WinUI quality probe needs the original checkout, not Bazel's execution root or a compiler view.
         "source": _source_root(),

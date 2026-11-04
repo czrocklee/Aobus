@@ -47,6 +47,39 @@ def _app_version(root: Path) -> str:
     return match[1]
 
 
+def configured_repository(plans: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """Select an SDK interface in its consumer configuration, including exec tools."""
+    if set(plans) != {"debug", "release"}:
+        raise ValueError("configured repositories require Debug and Release interfaces")
+    targets = set(plans["debug"]["targets"])
+    if targets != set(plans["release"]["targets"]):
+        raise ValueError("Debug and Release SDKs expose different consumer interfaces")
+    result: dict[str, Any] = {"files": {}, "links": []}
+    for config, plan in plans.items():
+        for name, content in plan["files"].items():
+            result["files"][config + "/" + name] = content
+        result["links"].extend({**link, "destination": config + "/" + link["destination"]} for link in plan["links"])
+    lines = [
+        'package(default_visibility = ["//visibility:public"])',
+        'config_setting(name = "_debug", values = {"compilation_mode": "dbg"})',
+        'config_setting(name = "_release", values = {"compilation_mode": "opt"})',
+    ]
+    for target in sorted(targets):
+        lines.append(
+            "alias(name = "
+            + json.dumps(target)
+            + ", actual = select({"
+            + '":_debug": '
+            + json.dumps("//debug:" + target)
+            + ", "
+            + '":_release": '
+            + json.dumps("//release:" + target)
+            + '}, no_match_error = "Native SDK imports support dbg or opt; fastbuild is not supported"))'
+        )
+    result["files"]["BUILD.bazel"] = "\n".join(lines) + "\n"
+    return result
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--request", type=Path, required=True)
@@ -101,8 +134,8 @@ def main() -> int:
         request = json.loads(args.request.read_text(encoding="utf-8"))
         if request.get("schema") != 1 or request["host"] != workspace.native_platform():
             raise ValueError("prepared configuration does not match the native host")
-        host, config = request["host"], request["config"]
-        if config not in {"debug", "release"}:
+        host, config = request["host"], request.get("config")
+        if config not in {None, "debug", "release"}:
             raise ValueError("unsupported provider configuration")
         prefix = Path(request["prefix"]) if request.get("prefix") else None
         if prefix is not None and args.group in {"native", "test", "tools"}:
@@ -126,22 +159,43 @@ def main() -> int:
         tree = output / "resolution"
         tree.mkdir(exist_ok=True)
         if args.group in {"native", "test"}:
-            generated = workspace.refresh_dependencies(
-                tree, config, prefix=str(prefix) if prefix else None, group=args.group
-            )
-            repository = generated / args.group
-            plan = json.loads((repository / "repository.json").read_text(encoding="utf-8"))
-            result["links"] = plan["links"]
-            files.update(plan["watch_files"])
-            directories.update(plan["watch_directories"])
-            for name in ("BUILD.bazel", "manifest.json"):
-                result["files"][name] = (repository / name).read_text(encoding="utf-8")
+            plans = {}
+            for selected in (config,) if config else ("debug", "release"):
+                generated = workspace.refresh_dependencies(
+                    tree / selected, selected, prefix=str(prefix) if prefix else None, group=args.group
+                )
+                repository = generated / args.group
+                plan = json.loads((repository / "repository.json").read_text(encoding="utf-8"))
+                manifest = json.loads((repository / "manifest.json").read_text(encoding="utf-8"))
+                files.update(plan["watch_files"])
+                directories.update(plan["watch_directories"])
+                plans[selected] = {
+                    "targets": manifest["targets"],
+                    "links": plan["links"],
+                    "files": {
+                        name: (repository / name).read_text(encoding="utf-8")
+                        for name in ("BUILD.bazel", "manifest.json")
+                    },
+                }
+            projection = plans[config] if config else configured_repository(plans)
+            result["links"] = projection["links"]
+            result["files"] = projection["files"]
         elif args.group == "winui":
             from ao.core.bazel_winui import repository_plan
 
-            plan = repository_plan(tree / "winui", request, environment)
-            result["links"] = plan["links"]
-            result["files"] = plan["files"]
+            if config:
+                projection = repository_plan(tree / "winui", request, environment)
+            else:
+                plans = {}
+                for selected in ("debug", "release"):
+                    plan = repository_plan(tree / ("winui-" + selected), {**request, "config": selected}, environment)
+                    plans[selected] = {
+                        **plan,
+                        "targets": ["headers", "bootstrap", "runtime", "tools", "sdk.json", "sdk-diagnostics.json"],
+                    }
+                projection = configured_repository(plans)
+            result["links"] = projection["links"]
+            result["files"] = projection["files"]
         elif args.group == "tools":
             identity, executable, runtime, evidence = (
                 workspace._linux_gperf() if prefix is None else workspace._native_gperf(prefix, host)

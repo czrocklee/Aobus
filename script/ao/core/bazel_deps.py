@@ -686,6 +686,7 @@ class _Adapter:
         ]
         manifests: list[dict[str, Any]] = []
         targets: set[str] = set()
+        public_targets: set[str] = {"manifest.json"}
         header_trees: dict[tuple[str, Path], tuple[Path, str, list[Path]]] = {}
         windows_shared_imports: dict[tuple[str, str], tuple[str, str]] = {}
         mode = "dbg" if self.spec["config"] == "Debug" else "opt"
@@ -699,6 +700,8 @@ class _Adapter:
         def rule(kind: str, name: str, **attrs: object) -> None:
             _require(name not in targets, f"generated target name collision: {name}")
             targets.add(name)
+            if not name.startswith("_") and attrs.get("visibility") != ["//visibility:private"]:
+                public_targets.add(name)
             lines.append(f"{kind}(name = {json.dumps(name)},")
             guarded = (
                 "deps"
@@ -887,6 +890,7 @@ class _Adapter:
             "configuration": self.spec,
             "materialization": "repository",
             "packages": manifests,
+            "targets": sorted(public_targets),
             "counts": {
                 "automatic": sum(p[2] == "automatic" for p in self.packages),
                 "manual_fallback": sum(p[2] == "manual_fallback" for p in self.packages),

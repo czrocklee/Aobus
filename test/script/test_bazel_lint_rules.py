@@ -14,14 +14,22 @@ from ao.core.paths import PROJECT_ROOT
 
 
 def _declarations(path, names):
-    tree = ast.parse(path.read_text(encoding="utf-8"))
+    class ListKeys(ast.NodeTransformer):
+        def visit_Call(self, node):
+            self.generic_visit(node)
+            # Starlark dict.keys() returns a list, including for concatenation.
+            if isinstance(node.func, ast.Attribute) and node.func.attr == "keys":
+                return ast.Call(func=ast.Name(id="list", ctx=ast.Load()), args=[node], keywords=[])
+            return node
+
+    tree = ListKeys().visit(ast.parse(path.read_text(encoding="utf-8")))
     declarations = [
         node
         for node in tree.body
         if (isinstance(node, ast.FunctionDef) and node.name in names)
         or (isinstance(node, ast.Assign) and any(target.id in names for target in node.targets))
     ]
-    return compile(ast.Module(body=declarations, type_ignores=[]), str(path), "exec")
+    return compile(ast.fix_missing_locations(ast.Module(body=declarations, type_ignores=[])), str(path), "exec")
 
 
 class _Inputs:
@@ -293,6 +301,161 @@ class ConsumerMainTest(unittest.TestCase):
         ):
             with self.subTest(selected=selected, pairs=pairs), self.assertRaises(AssertionError):
                 self.mains(selected, pairs)
+
+
+class LintOutputIdentityTest(unittest.TestCase):
+    def setUp(self):
+        def fail(message):
+            raise ValueError(message)
+
+        self.cc_info, self.origins, self.verification = object(), object(), object()
+        self.functions = {
+            "CcInfo": self.cc_info,
+            "HeaderOriginInfo": self.origins,
+            "LintVerificationInfo": self.verification,
+            "OutputGroupInfo": SimpleNamespace,
+            "LINT_CONSUMERS": {},
+            "LINT_SDK_HOST": "linux",
+            "CATALOG_TOOLS": {"python": "native-python"},
+            "depset": _Inputs,
+            "fail": fail,
+            "json": SimpleNamespace(encode=json.dumps),
+            "native_environment": lambda _ctx, action, _language: action.env,
+            "_arguments": lambda *_args: SimpleNamespace(add_all=lambda *_values: None),
+        }
+        names = {
+            "_HEADER_SUFFIXES",
+            "_SOURCE_SUFFIXES",
+            "_COMPILE_MNEMONICS",
+            "_header_inputs",
+            "_paired",
+            "_component",
+            "_consumer_mains",
+            "_action_key",
+            "_output_stem",
+            "_lint_impl",
+        }
+        exec(_declarations(PROJECT_ROOT / "bazel/lint/lint.bzl", names), self.functions)
+        self.source = _file("test/lint/CacheClean.cpp", path="bazel-out/k8-opt/bin/test/lint/CacheClean.cpp")
+        self.source.is_source = False
+        self.paired = _file("test/lint/CacheClean.h")
+        self.consumer = _file("test/lint/Shared.h")
+
+    def action(self, *, pic=False, source=None):
+        source = source or self.source
+        output = "bazel-out/k8-opt/bin/test/lint/_objs/cache_clean/" + source.basename
+        output += ".pic.o" if pic else ".o"
+        return SimpleNamespace(
+            mnemonic="CppCompile",
+            inputs=_Inputs([source]),
+            outputs=_Inputs([_file(output), _file(output + ".d")]),
+            argv=["native-c++", "-fPIC" if pic else "-fno-PIC", "-c", source.path, "-o", output],
+            env={"NATIVE_CONTEXT": "pic" if pic else "non-pic"},
+        )
+
+    def analyze(self, actions, *, headers=True):
+        class Target(dict):
+            pass
+
+        class Label(str):
+            name = "cache_clean"
+            repo_name = ""
+
+        label = Label("//test/lint:cache_clean")
+        self.functions["LINT_CONSUMERS"] = {label: [[self.source.path, self.consumer.path]]} if headers else {}
+        target = Target({self.origins: SimpleNamespace(origins=_Inputs())})
+        target.actions = actions
+        declared, written, runs = [], {}, []
+
+        def declare(name):
+            declared.append(name)
+            return _file(name, path="bazel-out/k8-opt/bin/test/lint/" + name)
+
+        verification = SimpleNamespace(
+            policy=_file("policy.json"),
+            sdk=_file("sdk.json"),
+            result=_file("verified.json"),
+            host=_file("native-tidy"),
+            plugin=None,
+            inputs=_Inputs(),
+        )
+        sources = {file.path: file for action in actions for file in action.inputs.to_list()}
+        ctx = SimpleNamespace(
+            label=label,
+            bin_dir=SimpleNamespace(path="bazel-out/k8-opt/bin"),
+            rule=SimpleNamespace(
+                files=SimpleNamespace(
+                    srcs=list(sources.values()), hdrs=[self.paired, self.consumer] if headers else []
+                ),
+                attr=SimpleNamespace(),
+            ),
+            attr=SimpleNamespace(_verification={self.verification: verification}),
+            actions=SimpleNamespace(
+                declare_file=declare,
+                write=lambda file, text: written.update({file.path: json.loads(text)}),
+                run=lambda **kwargs: runs.append(kwargs),
+            ),
+        )
+        self.functions["_lint_impl"](target, ctx)
+        self.assertEqual(len(declared), len(set(declared)))
+        contexts = {path: value for path, value in written.items() if path.endswith(".context.json")}
+        index = written["bazel-out/k8-opt/bin/test/lint/cache_clean.aobus-lint.index.json"]
+        return contexts, runs, index
+
+    def test_pic_and_non_pic_actions_keep_separate_source_paired_header_and_consumer_reports(self):
+        actions = [self.action(), self.action(pic=True)]
+        contexts, runs, index = self.analyze(actions)
+        self.assertEqual(len(contexts), 6)
+        self.assertEqual(len(runs), 6)
+        self.assertEqual(len(index["reports"]), 6)
+        for action in actions:
+            captured = [context for context in contexts.values() if context["argv"] == action.argv]
+            self.assertEqual(
+                {context["main"] for context in captured}, {self.source.path, self.paired.path, self.consumer.path}
+            )
+            for context in captured:
+                self.assertEqual(context["source"], self.source.path)
+                self.assertEqual(context["outputs"], sorted(file.path for file in action.outputs.to_list()))
+            native_runs = [run for run in runs if run["env"] == action.env]
+            self.assertEqual(len(native_runs), 3)
+            self.assertTrue(all(action.inputs in run["inputs"].transitive for run in native_runs))
+        self.assertEqual({entry["report"] for entry in index["reports"]}, {run["outputs"][0].path for run in runs})
+        for path in contexts:
+            self.assertRegex(Path(path).name, r"^[0-9a-f]{1,8}\.context\.json$")
+
+    def test_unchanged_contexts_keep_paths_and_contents_when_actions_or_outputs_reorder_and_sources_are_added(self):
+        actions = [self.action(), self.action(pic=True)]
+        original, _, _ = self.analyze(actions)
+        for action in actions:
+            action.outputs = _Inputs(reversed(action.outputs.to_list()))
+        added = self.action(source=_file("test/lint/Additional.cpp"))
+        expanded, _, _ = self.analyze([added, *reversed(actions)])
+        self.assertEqual({path: expanded[path] for path in original}, original)
+        self.assertEqual(len(expanded), len(original) + 1)
+
+    def test_stems_distinguish_every_report_identity_field_without_embedding_paths(self):
+        identity = {
+            "owner": "//test/lint:cache_clean",
+            "configuration": "bazel-out/k8-opt/bin",
+            "source": self.source.path,
+            "main": self.consumer.path,
+            "outputs": ["bazel-out/k8-opt/bin/test/lint/CacheClean.o"],
+            "mode": "RELAXED",
+            "platform": "linux",
+        }
+        stem = self.functions["_output_stem"](identity)
+        self.assertRegex(stem, r"^[0-9a-f]{1,8}$")
+        for field, value in identity.items():
+            with self.subTest(field=field):
+                changed = ["different-output.o"] if field == "outputs" else value + "-different"
+                self.assertNotEqual(stem, self.functions["_output_stem"](dict(identity, **{field: changed})))
+
+    def test_hash_collision_fails_analysis_with_both_native_context_identities(self):
+        self.functions["hash"] = lambda _value: 1
+        with self.assertRaisesRegex(ValueError, r"Lint output stem 1 is shared") as raised:
+            self.analyze([self.action(), self.action(pic=True)], headers=False)
+        self.assertIn("CacheClean.cpp.o", str(raised.exception))
+        self.assertIn("CacheClean.cpp.pic.o", str(raised.exception))
 
 
 class LintRuntimeEnvironmentTest(unittest.TestCase):

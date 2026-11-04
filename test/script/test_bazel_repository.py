@@ -253,6 +253,7 @@ class RepositoryRuleTest(unittest.TestCase):
         def attribute(**kwargs):
             return kwargs
 
+        self.environment_rules = []
         self.namespace = {
             "attr": SimpleNamespace(string=attribute, label=attribute, label_list=attribute),
             "Label": str,
@@ -260,17 +261,29 @@ class RepositoryRuleTest(unittest.TestCase):
             "module_extension": attribute,
             "json": SimpleNamespace(encode=json.dumps, decode=json.loads),
             "fail": self.fail,
+            "load": self.load,
         }
         source = (workspace.PROJECT_ROOT / "bazel/dependencies.bzl").read_text(encoding="utf-8")
         exec(compile(ast.parse(source), "dependencies.bzl", "exec"), self.namespace)
         attributes = self.namespace["_governed_repository"]["attrs"]
         self.policy = attributes["policy"]["default"]
         self.resolver = attributes["resolver"]["default"]
+        host = "windows" if sys.platform == "win32" else "macos" if sys.platform == "darwin" else "linux"
+        # Real minimal mode-neutral metadata: the shared environment json doubles
+        # as the resolver request, exactly as the environment repository publishes it.
+        self.environment = {
+            "schema": 1,
+            "host": host,
+            "python": "python",
+            "environment": {"PATH": "/prepared/tools/bin", "TEMP": "shared-environment-temporary"},
+        }
+        self.file("environment.json", json.dumps(self.environment), executable=False)
         self.ctx = SimpleNamespace(
-            getenv={"AOBUS_BAZEL_CONFIGURATION": str(self.root / "request.json"), "AOBUS_BAZEL_PYTHON": "python"}.get,
             path=self.path,
             watch=lambda path: self.watches.add(str(path)),
-            attr=SimpleNamespace(resolver=self.resolver, policy=self.policy, group="tools"),
+            attr=SimpleNamespace(
+                resolver=self.resolver, policy=self.policy, group="tools", _environment="environment.json"
+            ),
             # Match the real filesystem separators used by _RepositoryPath.
             os=SimpleNamespace(
                 name="windows" if sys.platform == "win32" else sys.platform,
@@ -280,6 +293,31 @@ class RepositoryRuleTest(unittest.TestCase):
             execute=self.execute,
             read=lambda path: Path(str(path)).read_text(encoding="utf-8"),
         )
+
+    def load(self, label, *names):
+        """Bridge the shared environment without testing its helper module."""
+        self.assertEqual(label, "//bazel:environment.bzl")
+
+        def repository_environment(ctx):
+            path = ctx.path(ctx.attr._environment)
+            data = json.loads(ctx.read(path))
+            if (
+                not isinstance(data, dict)
+                or data.get("schema") != 1
+                or not isinstance(data.get("environment"), dict)
+                or not isinstance(data.get("python"), str)
+            ):
+                self.fail("Invalid shared native environment")
+            ctx.watch(path)
+            return data, dict(data["environment"])
+
+        self.namespace["repository_environment"] = repository_environment
+        self.namespace["ENVIRONMENT_ATTRIBUTE"] = self.namespace["attr"].label(
+            default="@aobus_environment//:environment.json", allow_single_file=True
+        )
+        self.namespace["environment_repository"] = lambda **kwargs: self.environment_rules.append(kwargs)
+        for name in names:
+            self.assertIn(name, self.namespace)
 
     def path(self, value):
         value = str(value)
@@ -320,23 +358,38 @@ class RepositoryRuleTest(unittest.TestCase):
                 "--request",
             ],
         )
+        environment = options["environment"]
         for name in ("TEMP", "TMP", "TMPDIR"):
-            self.assertEqual(options["environment"][name], scratch)
-        self.assertIsNone(options["environment"]["UNRELATED"])
+            self.assertEqual(environment[name], scratch)
+        # Resolver scratch stays repository-owned even when the shared
+        # environment publishes its own TEMP; client values stay closed.
+        self.assertEqual(environment["PATH"], "/prepared/tools/bin")
+        self.assertIsNone(environment["UNRELATED"])
+        self.assertEqual(environment["PYTHONDONTWRITEBYTECODE"], "1")
         self.assertTrue(Path(scratch).is_dir())
 
-    def test_shared_policy_retains_only_dependency_and_sdk_inputs(self):
+    def test_shared_environment_json_is_the_watched_mode_neutral_request(self):
+        self.namespace["_governed_repository_impl"](self.ctx)
+        self.assertIn(str(self.root / "environment.json"), self.watches)
+        argv, _ = self.invocations[0]
+        scratch = str(self.root / "_tmp")
+        forwarded = {**self.environment["environment"], "TEMP": scratch, "TMP": scratch, "TMPDIR": scratch}
         self.assertEqual(
-            set(self.policy),
-            {
-                "//:config/bazel/dependencies.json",
-                "//:dependency-contract.json",
-                "//:nixpkgs.json",
-                "//:vcpkg.json",
-                "//:vcpkg-configuration.json",
-                "//:script/ao/macos-toolchain.json",
-            },
+            argv[10:-1],
+            [
+                str(self.root / "environment.json"),
+                "--group",
+                "tools",
+                "--output",
+                str(self.root / "_resolution"),
+                "--environment-json",
+            ],
         )
+        self.assertEqual(json.loads(argv[-1]), forwarded)
+
+    def test_shared_policy_retains_only_dependency_contract_inputs(self):
+        # SDK and bootstrap inputs moved to the shared environment repository.
+        self.assertEqual(set(self.policy), {"//:config/bazel/dependencies.json", "//:dependency-contract.json"})
         self.namespace["_governed_repository_impl"](self.ctx)
         self.assertLessEqual({str(self.path(label)) for label in self.policy}, self.watches)
 
@@ -359,16 +412,10 @@ class RepositoryRuleTest(unittest.TestCase):
 
 
 class LaunchConfigurationTest(unittest.TestCase):
-    def test_windows_runtime_profile_is_explicit_in_both_launcher_and_rule(self):
+    def test_windows_runtime_profile_is_explicit_in_the_generated_launcher(self):
+        # The repository rule no longer selects the runtime profile; the shared
+        # environment repository consumes these launcher repo_env selectors.
         runtime = {"USERPROFILE", "LOCALAPPDATA", "APPDATA", "HOMEDRIVE", "HOMEPATH", "SYSTEMROOT", "SYSTEMDRIVE"}
-        tree_ast = ast.parse((workspace.PROJECT_ROOT / "bazel/dependencies.bzl").read_text())
-        names = next(
-            ast.literal_eval(node.value)
-            for node in tree_ast.body
-            if isinstance(node, ast.Assign)
-            and any(isinstance(target, ast.Name) and target.id == "_ENVIRONMENT" for target in node.targets)
-        )
-        self.assertLessEqual(runtime, set(names))
         with tempfile.TemporaryDirectory(prefix="aobus-native-runtime-") as temporary:
             root = Path(temporary)
             environment = {name: str(root / name.lower()) for name in runtime}
@@ -397,9 +444,6 @@ class LaunchConfigurationTest(unittest.TestCase):
                 self.assertIn("--repo_env=" + name + "=", rc)
             self.assertNotIn("UNRELATED_CLIENT_VALUE", rc)
             self.assertNotIn("volatile-", rc)
-            self.assertNotIn("TEMP", names)
-            self.assertNotIn("TMP", names)
-            self.assertNotIn("TMPDIR", names)
 
     def test_nix_share_metadata_is_declared_without_ambient_pkgconfig_paths(self):
         with tempfile.TemporaryDirectory(prefix="aobus-nix-metadata-") as temporary:
@@ -462,10 +506,12 @@ class LaunchConfigurationTest(unittest.TestCase):
                 stamp = (prepared / "aobus.bazelrc").stat().st_mtime_ns
                 self.assertEqual(workspace.prepare_workspace(tree, "debug"), prepared)
                 self.assertEqual((prepared / "aobus.bazelrc").stat().st_mtime_ns, stamp)
-            self.assertEqual(request["config"], "debug")
+            # The portal request is mode-neutral; the generated rc selects the profile.
+            self.assertNotIn("config", request)
             self.assertIsNone(request["prefix"])
             self.assertIn("--repo_env=AOBUS_BAZEL_CONFIGURATION=", rc)
             self.assertIn("--repo_env=AOBUS_BAZEL_PYTHON=", rc)
+            self.assertIn('build "--config=debug"', rc)
             self.assertNotIn("--repo_env=CC=", rc)
             self.assertNotIn("--repo_env=CXX=", rc)
             self.assertNotIn("--batch", rc)

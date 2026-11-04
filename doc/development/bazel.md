@@ -94,6 +94,56 @@ replayed from the combined `<tree>/build.log`. `run` inherits the caller's stand
 input, output and error, preserving terminal detection for interactive frontends;
 it does not overwrite an existing build log.
 
+### Direct Bazel without the portal
+
+The checkout also accepts bare native Bazel commands run from the repository
+root. No pre-entered Nix shell and no generated `aobus.bazelrc` are needed on
+Linux: the tracked [repository rc](../../.bazelrc) supplies the default Debug
+mode, host toolchain selection and repository-channel clearing, and the
+[`aobus_environment` repository](#architecture) prepares the pinned Nix SDK by
+entering `nix-shell --pure` itself.
+
+```bash
+bazel build --jobs=8 //app/cli:aobus //app/tui:aobus-tui
+bazel run //app/tui:aobus-tui -- --help
+bazel test --jobs=8 //:tests
+bazel build --config=release --jobs=8 //app/cli:aobus //app/tui:aobus-tui
+```
+
+Bazel 9.2 ([`.bazelversion`](../../.bazelversion)) with a JVM, and Nix with
+`nix-shell` on `PATH` on Linux, are installed prerequisites; a bare invocation
+never auto-installs Bazel or a JDK. The pinned Nix environment's `bazel` wrapper
+selects `.bazelversion` and its system rc supplies the distribution JDK, so an
+independently installed Bazel or Bazelisk must be pinned to the same version.
+Bare commands default to Debug; `--config=release` selects `opt`. Imported SDK
+interfaces follow each consumer's actual compilation mode, so optimized
+execution tools resolve their Release interfaces beside a Debug target, and
+`fastbuild` has no accepted native SDK mapping: analysis fails rather than
+falling back.
+
+On native macOS and Windows, bare commands still require the existing explicit
+setup and an already provisioned SDK ([macOS setup](macos.md) or
+[Windows setup](windows.md), or `ao bazel provision`); repository fetch never
+installs Python, SDKs, ports or the WinUI runtime. The managed Bazel executable
+is not automatically on `PATH`: use the pinned executable that `ao bazel setup`
+prints, or a Bazelisk pinned to `.bazelversion`; there is no new installer.
+`AOBUS_BAZEL_VCPKG_PREFIX` must explicitly select the installed target-triplet
+prefix — `x64-windows-static-md` on Windows, whose host tools come from the
+separate `x64-windows` triplet, or `x64-aobus-osx`/`arm64-aobus-osx` on macOS —
+including its host tools and both Debug and Release artifacts. An invalid
+explicit prefix fails; there is no fallback. Export it or pass it through a
+standard local Bazel `--repo_env` configuration; the repository tracks no
+absolute-path configuration.
+
+Changing the host installation selection — Visual Studio, Xcode or SDK
+selection — may require `bazel fetch --force --configure` before repository
+rules observe it; automatic selection is watched host state, not a complete
+registry-drift guarantee. A warm output base reuses the fetched environment
+instead of re-entering Nix on every invocation, but that is not a performance
+guarantee, and private experiment metrics are not production acceptance. A
+bare build or test success is not a lint, hygiene or completion gate; the
+explicit actions above retain those roles.
+
 ## Scope
 
 The graph covers static Core utility, LMDB/library, query, coroutine primitives,
@@ -349,7 +399,8 @@ lock: the portal serializes writers and Bazel owns its server/output-base lock.
 
 The [workspace launcher](../../script/ao/core/bazel_workspace.py) writes:
 
-- `<tree>/configuration/request.json`: native host, profile and selected provider;
+- `<tree>/configuration/request.json`: mode-neutral native host, selected
+  provider prefix and the original checkout source;
 - `<tree>/configuration/aobus.bazelrc`: launch environment, output/cache selection
   and startup `--max_idle_secs=900`;
 - `<tree>/build.log`: noninteractive invocation output.
@@ -384,7 +435,9 @@ bazel --bazelrc=/tmp/build/aobus-bazel-debug/configuration/aobus.bazelrc test //
 
 No hidden artifact refresh is required. Missing configuration fails with setup
 instructions. Reprepare when changing provider/profile; an old rc does not
-certify another host environment or replace native prerequisites.
+certify another host environment or replace native prerequisites. Bare
+commands that skip the generated rc entirely are covered in
+[Direct Bazel without the portal](#direct-bazel-without-the-portal).
 The portal pairs Debug/Release providers with Bazel `compilation_mode=dbg|opt`;
 imported APIs use select guards requiring the matching mode, while host execution
 tools are selected independently.
@@ -397,12 +450,28 @@ boundary against rewritten inputs or arbitrary direct Bazel overrides.
 ## Architecture
 
 ```text
-./ao selects environment, provider and external tree; writes launch configuration
+bazel, or ./ao bazel for managed launch/output selection
   -> persistent Bazel server
-     -> repository rules invoke the governed Python resolver when inputs change
+     -> shared governed host environment, refreshed when watched inputs change
+     -> repository rules invoke the governed Python resolver
      -> imported interfaces, native tools and project BUILD graph
      -> generation, compilation, linking, tests and cached actions
 ```
+
+One [`aobus_environment` repository](../../bazel/environment.bzl) is shared
+within each output base and refreshed when its watched inputs change.
+It runs the [environment helper](../../script/ao/core/bazel_environment.py)
+and publishes a mode-neutral host environment. Linux enters the pinned
+`nix-shell --pure` itself, independent of the caller's Nix environment;
+Nix may download or build missing pinned store outputs. macOS reuses the existing
+Homebrew Python/LLVM/pkgconf and the selected SDK; Windows reuses the governed
+base Python and captures the Visual Studio environment through the existing
+batch. Native macOS/Windows discovery never installs SDKs, ports, Python or
+runtimes. The Python discovery helper itself only validates ready inputs;
+an invalid explicit selection fails without fallback. Every projection repository
+— dependencies, tools, toolchain and the lazy lint SDK/policy — consumes that
+shared `environment.json` and its recorded interpreter instead of
+per-invocation portal state.
 
 The portal is a launcher, not an outer dependency freshness engine.
 [Repository rules](../../bazel/dependencies.bzl) invoke the
@@ -445,6 +514,8 @@ mutation during resolution/build is unsupported.
 
 The governed repositories provide:
 
+- `@aobus_environment`: the shared mode-neutral host environment and selected
+  interpreter consumed by every other repository here;
 - `@aobus_native_deps`: Core libraries/codecs, Linux ALSA/PipeWire/SPA/udev,
   GTKmm, and host-selected Boost.Process/Boost.Filesystem interfaces;
 - `@aobus_test_deps`: static Catch2/Catch2Main and reviewed FakeIt Catch integration;
@@ -456,6 +527,12 @@ The governed repositories provide:
 - `@aobus_winui_sdk`: the installed WinUI NuGet SDK's headers, bootstrap sources,
   import libraries, runtime payload and generation tools, projected lazily from
   the restored NuGet cache for the [WinUI product](#winui-product) and its shared projection.
+
+Native, test and WinUI SDK repositories expose both Debug and Release
+interfaces and alias them to each consumer's actual `compilation_mode`
+(`dbg`/`opt`); `fastbuild` has no accepted SDK mapping and fails analysis
+instead of falling back. Execution tools resolve their own optimized
+interfaces independently of the target mode.
 
 [Header ownership](../../script/ao/core/bazel_headers.py) comes from installed
 per-port vcpkg `.list` files. Sparse imports project only reviewed owned closures,
@@ -922,7 +999,10 @@ exceptions, compiler-warning promotion and stale-suppression behavior.
 The [checker build](../../tool/lint/build.bzl) consumes a ready installed LLVM
 SDK without CMake configuration, new dependency pins or installed CMake-export
 parsing. Explicit Windows `ao.bat bazel provision` installs that governed SDK;
-ordinary lint does not. Both checker forms use C++23 and the selected SDK ABI.
+ordinary lint does not. The lazy [lint SDK](../../bazel/lint/sdk.bzl) and
+[policy](../../bazel/lint/policy.bzl) repositories consume the same shared
+`@aobus_environment` host metadata instead of a portal-selected interpreter;
+they import a ready SDK and never install one. Both checker forms use C++23 and the selected SDK ABI.
 Unix builds the existing plugin against its externally supplied host, excluding
 product sanitizer instrumentation from compilation and linking. Windows builds
 the linked `AobusClangTidy` host optimized with `/MT`, independently of product
@@ -1048,9 +1128,10 @@ and link actions disable implicit Clang configuration files. On Windows the
 validated original compiler environment selects the host tool/runtime directory
 and exact `INCLUDE`/`LIB` trees for identity, not resolver scratch or ambient
 include paths. Directory membership changes also invalidate resolution.
-Shell-backed rules need `BAZEL_SH`; Windows preparation selects the
+Shell-backed rules need `BAZEL_SH`; the Windows portal selects the
 `usr/bin/bash.exe` that Git for Windows installs beside `git`, unless the caller
-sets `BAZEL_SH`.
+sets `BAZEL_SH`. Bare Windows callers must make Git Bash discoverable by Bazel
+or set `BAZEL_SH` explicitly.
 
 Keep selected SDK/tool installations stable while resolution and actions run;
 identity collection is not an atomic installation snapshot. These are native
@@ -1059,7 +1140,11 @@ syscall/dynamic-loader closure; the project does not emulate loader search paths
 Runtime libraries, .NET/registry state and other inputs outside the enumerated
 families remain trusted host state; changing
 those is not certified by the selected SDK identity. Linux similarly trusts
-immutable native Nix SDK state. None is an RBE contract.
+immutable native Nix SDK state. None is an RBE contract. Changing the host's
+installation selection — Visual Studio, Xcode or SDK selection — can require
+`bazel fetch --force --configure` before repository rules observe the new
+selection; the bootstrap treats it as watched host state, not a complete
+registry-drift guarantee.
 
 The supported Windows shared-source route exports the same Linux checkout
 read-only as a fixed virtiofs volume, tested as `Y:`, with guest-local NTFS
@@ -1190,7 +1275,9 @@ caches themselves.
 
 `ao bazel build` does not run formatting, hygiene, Ruff, mypy, docs checks,
 `verify` or `lint`. Required executable validation is an artifact contract, not
-a general quality gate. `ao bazel lint` is an explicit report gate, not part of
+a general quality gate. Direct bare `bazel build`/`test` success carries the
+same boundary: a raw successful build is not a lint, hygiene or completion
+result. `ao bazel lint` is an explicit report gate, not part of
 `ao bazel test` or `verify`. `ao bazel test` does not replace `./ao check`,
 tooling, lint, hygiene, sanitizers, physical-output or product validation;
 select checks through
