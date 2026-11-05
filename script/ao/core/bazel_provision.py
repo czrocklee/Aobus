@@ -19,8 +19,10 @@ import urllib.request
 from collections.abc import Mapping
 from pathlib import Path
 
+from . import bazel_native as native
+from . import bazel_providers as providers
 from . import builddir, buildlock, dependency_policy, proc, windows_llvm_sdk
-from .bazel_workspace import BazelWorkspaceError, native_platform, vcpkg_prefix, vcpkg_triplets
+from .bazel_native import BazelWorkspaceError
 from .paths import PROJECT_ROOT
 
 NUGET_LOCK = PROJECT_ROOT / "app/windows-winui/packages.config"
@@ -41,7 +43,7 @@ def _vcpkg() -> Path:
     root = os.environ.get("VCPKG_ROOT")
     if not root:
         raise BazelWorkspaceError("vcpkg provisioning requires VCPKG_ROOT from the native launcher")
-    executable = Path(root) / ("vcpkg.exe" if native_platform() == "windows" else "vcpkg")
+    executable = Path(root) / ("vcpkg.exe" if native.native_platform() == "windows" else "vcpkg")
     if not executable.is_file():
         raise BazelWorkspaceError(f"VCPKG_ROOT has no vcpkg executable: {executable}")
     return executable
@@ -50,7 +52,7 @@ def _vcpkg() -> Path:
 def install_vcpkg(tree: Path) -> Path:
     """Install the manifest into the tree with vcpkg.cmake's manifest arguments."""
     vcpkg = _vcpkg()
-    target, host = vcpkg_triplets()
+    target, host = providers.vcpkg_triplets()
     argv = [
         str(vcpkg),
         "install",
@@ -64,10 +66,10 @@ def install_vcpkg(tree: Path) -> Path:
         f"--host-triplet={host}",
         f"--overlay-ports={PROJECT_ROOT / 'cmake/vcpkg-ports'}",
     ]
-    if native_platform() == "macos":
+    if native.native_platform() == "macos":
         argv.append(f"--overlay-triplets={PROJECT_ROOT / 'cmake/vcpkg-triplets'}")
     _run_logged(argv, tree / "vcpkg-install.log")
-    return vcpkg_prefix(None, tree)
+    return providers.vcpkg_prefix(None, tree)
 
 
 def _nuget_packages(environ: Mapping[str, str]) -> tuple[Path, str]:
@@ -198,7 +200,7 @@ def install_llvm_sdk() -> Path:
 
 
 def provision(tree: Path) -> None:
-    host = native_platform()
+    host = native.native_platform()
     if host == "linux":
         print("Nothing to provision: Linux dependencies come from the pinned Nix shell")
         return

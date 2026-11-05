@@ -10,26 +10,30 @@ import tempfile
 import unittest
 from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
+from ao.core import bazel_dependencies as dependencies
 from ao.core import bazel_deps, bazel_resolver, dependency_policy
-from ao.core import bazel_workspace as workspace
+from ao.core import bazel_host_tools as host_tools
+from ao.core import bazel_native as native
+from ao.core import bazel_providers as providers
 
 
 class FrontendDependencyPolicyTest(unittest.TestCase):
     def test_frontend_imports_follow_the_actual_platform_consumers(self):
-        policy = workspace._json(workspace.POLICY)
+        policy = native.read_json(providers.POLICY)
         # Only genuinely host-specific consumers are filtered; the module and
         # input inventories are witnessed by the actual refresh projections.
         for host, expected in (("linux", {"giomm"}), ("macos", {"date_tz"}), ("windows", set())):
             with self.subTest(host=host):
-                packages = {p["name"] for p in workspace._package_groups(policy, host=host)["native"]}
+                packages = {p["name"] for p in providers.package_groups(policy, host=host)["native"]}
                 self.assertEqual(packages & {"giomm", "date_tz"}, expected)
         for name, platforms in (("giomm", ["windows"]), ("date_tz", ["linux"])):
             changed = copy.deepcopy(policy)
             next(p for p in changed["packages"]["native"] if p["name"] == name)["platforms"] = platforms
-            with self.subTest(name=name), self.assertRaisesRegex(workspace.BazelWorkspaceError, "platform"):
-                workspace._package_groups(changed, host="windows")
+            with self.subTest(name=name), self.assertRaisesRegex(native.BazelWorkspaceError, "platform"):
+                providers.package_groups(changed, host="windows")
 
     def test_mimalloc_metadata_translation_is_one_closed_producer_rule_on_every_host(self):
         # A future dotted release translates identically on every host; no per-host
@@ -38,34 +42,34 @@ class FrontendDependencyPolicyTest(unittest.TestCase):
         for host in ("linux", "macos", "windows"):
             with self.subTest(host=host):
                 self.assertEqual(
-                    workspace._metadata_versions("mimalloc", "4.1.2", ["mimalloc"], host), {"mimalloc": "4.1"}
+                    dependencies._metadata_versions("mimalloc", "4.1.2", ["mimalloc"], host), {"mimalloc": "4.1"}
                 )
         for version, expected in (("3.5.3", "3.5"), ("4.10.2", "4.10"), ("100.2.0", "100.2")):
             with self.subTest(version=version):
                 self.assertEqual(
-                    workspace._metadata_versions("mimalloc", version, ["mimalloc"], "linux"),
+                    dependencies._metadata_versions("mimalloc", version, ["mimalloc"], "linux"),
                     {"mimalloc": expected},
                 )
         for version in ("3.5", "3.5.3.1", "3.5.3-unstable", "v3.5.3"):
             with (
                 self.subTest(version=version),
-                self.assertRaisesRegex(workspace.BazelWorkspaceError, "metadata version"),
+                self.assertRaisesRegex(native.BazelWorkspaceError, "metadata version"),
             ):
-                workspace._metadata_versions("mimalloc", version, ["mimalloc"], "linux")
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "metadata version"):
-            workspace._metadata_versions("mimalloc", "3.5.3", ["other"], "linux")
+                dependencies._metadata_versions("mimalloc", version, ["mimalloc"], "linux")
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "metadata version"):
+            dependencies._metadata_versions("mimalloc", "3.5.3", ["other"], "linux")
 
     def test_unicode_only_macos_filter_queries_its_own_metadata(self):
-        policy = workspace._json(workspace.POLICY)
+        policy = native.read_json(providers.POLICY)
         spec = {"platform": "macos", "config": "Release", "provider": {"name": "vcpkg", "version": "selected-status"}}
-        with patch.object(workspace, "_metadata_flags", return_value=["-licuuc", "-licudata", "-lc++"]) as flags:
-            result = workspace._macos_icu_runtime_patch(spec, policy["macos_icu_runtime_remove"], package="icu_uc")
+        with patch.object(dependencies, "_metadata_flags", return_value=["-licuuc", "-licudata", "-lc++"]) as flags:
+            result = dependencies._macos_icu_runtime_patch(spec, policy["macos_icu_runtime_remove"], package="icu_uc")
         flags.assert_called_once_with(spec, "--libs", package="icu_uc")
         self.assertEqual(result["when"]["package"], "icu_uc")
         self.assertEqual(result["remove"], {"libraries": [{"name": "c++", "kind": "system"}]})
 
     def test_path_has_one_real_object_owner_and_unicode_uses_only_uc(self):
-        tree = ast.parse((workspace.PROJECT_ROOT / "lib/utility/BUILD.bazel").read_text())
+        tree = ast.parse((native.PROJECT_ROOT / "lib/utility/BUILD.bazel").read_text())
         rules = {}
         for node in tree.body:
             if (
@@ -120,11 +124,11 @@ class FrontendProjectionTest(unittest.TestCase):
             path = self.include / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(text, encoding="utf-8")
-        policy = workspace._json(workspace.POLICY)
+        policy = native.read_json(providers.POLICY)
         names = {"icu", "icu_uc", "cli11", "spdlog", "ftxui", "mimalloc", "stb", "giomm"}
         policy["packages"] = {"native": [p for p in policy["packages"]["native"] if p["name"] in names], "test": []}
         self.policy = self.root / "policy.json"
-        workspace._write_json(self.policy, policy)
+        native.write_json(self.policy, policy)
         self.versions = {
             "icu": "78.3",
             "icu_uc": "78.3",
@@ -167,7 +171,7 @@ class FrontendProjectionTest(unittest.TestCase):
 
     def provider_spec(self, policy, *, identity_path):
         names = [p["name"] for group in policy["packages"].values() for p in group]
-        workspace._write_json(
+        native.write_json(
             identity_path,
             {
                 "inputs": {"glib": {"version": "2.88.3"}},
@@ -229,20 +233,20 @@ class FrontendProjectionTest(unittest.TestCase):
 
     def refresh(self, group="native", config="debug"):
         with (
-            patch.object(workspace, "POLICY", self.policy),
-            patch.object(workspace, "native_platform", return_value="linux"),
-            patch.object(workspace, "_linux_provider", side_effect=self.provider_spec) as provider,
-            patch.object(workspace, "_verify_linux_resolution"),
+            patch.object(providers, "POLICY", self.policy),
+            patch.object(native, "native_platform", return_value="linux"),
+            patch.object(providers, "linux_provider", side_effect=self.provider_spec) as provider,
+            patch.object(providers, "verify_linux_resolution"),
             patch.object(bazel_deps.subprocess, "run", side_effect=self.query),
         ):
-            generated = workspace.refresh_dependencies(self.root / (group + config), config, group=group)
-        return generated / group, provider.call_args.args[0]
+            resolution = dependencies.resolve_dependencies(self.root / (group + config), config, group=group)
+        return resolution, provider.call_args.args[0]
 
     def test_linux_refresh_projects_each_frontend_interface_from_provider_metadata(self):
         # Dummy archive bytes stand in for real payloads: this is projection
         # coverage over the provider report, not compiler or linker acceptance.
         repository, _ = self.refresh()
-        manifest = workspace._json(repository / "manifest.json")
+        manifest = repository["manifest"]
         packages = {p["name"]: p for p in manifest["packages"]}
         # The unicode-only import keeps a narrower archive closure than full ICU.
         self.assertEqual([p["name"] for p in packages["icu_uc"]["resolved_libraries"]], ["icuuc", "icudata"])
@@ -253,6 +257,13 @@ class FrontendProjectionTest(unittest.TestCase):
         # Provider metadata defines and link flags project into the interface.
         self.assertEqual(packages["spdlog"]["interface"]["defines"], self.defines)
         self.assertEqual(packages["spdlog"]["interface"]["linkopts"], ["-pthread"])
+        admitted = {p["name"]: p for p in repository["packages"]}
+        self.assertEqual(admitted["spdlog"]["defines"], self.defines)
+        self.assertEqual(admitted["spdlog"]["linkopts"], ["-pthread"])
+        self.assertEqual(
+            [Path(library["source"]).name for library in admitted["icu_uc"]["libraries"]],
+            ["libicuuc.so", "libicudata.so"],
+        )
         # Header-only consumers keep their selected include directories.
         self.assertEqual(packages["stb"]["interface"]["header_dirs"], [str(self.include / "stb")])
         self.assertIn(str(self.include / "gio-unix-2.0"), packages["giomm"]["interface"]["header_dirs"])
@@ -268,12 +279,12 @@ class FrontendProjectionTest(unittest.TestCase):
             self.defines = defines
             with (
                 self.subTest(defines=defines),
-                self.assertRaisesRegex(workspace.BazelWorkspaceError, "compiled std::format ABI"),
+                self.assertRaisesRegex(native.BazelWorkspaceError, "compiled std::format ABI"),
             ):
                 self.refresh()
         self.defines = ["SPDLOG_SHARED_LIB", "SPDLOG_COMPILED_LIB", "SPDLOG_USE_STD_FORMAT"]
         self.libraries["ftxui"].pop()
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "complete component/dom/screen"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "complete component/dom/screen"):
             self.refresh()
 
     def test_future_provider_observations_pass_the_unchanged_structural_interface(self):
@@ -284,19 +295,18 @@ class FrontendProjectionTest(unittest.TestCase):
         (self.include / "mimalloc.h").write_text("#define MI_MALLOC_VERSION 40001\n")
         (self.pc / "mimalloc.pc").write_text("Name: mimalloc\nVersion: 4.0\n", encoding="utf-8")
         repository, _ = self.refresh()
-        manifest = workspace._json(repository / "manifest.json")
+        manifest = repository["manifest"]
         self.assertEqual(manifest["modules"]["mimalloc"]["version"], "4.0")
 
     def test_catalog_refresh_selects_only_icu_and_passes_its_compilation_mode(self):
-        # The generated select/no_match_error behavior is owned by the adapter
-        # tests; this keeps the refresh-level mode pass-through witness.
-        for config, mode in (("debug", "dbg"), ("release", "opt")):
+        # Native Starlark owns mode selection; this witnesses admission forwarding.
+        for config in ("debug", "release"):
             repository, _ = self.refresh("catalog", config)
             with self.subTest(config=config):
-                manifest = workspace._json(repository / "manifest.json")
+                manifest = repository["manifest"]
                 self.assertEqual([p["name"] for p in manifest["packages"]], ["icu"])
-                build = (repository / "BUILD.bazel").read_text()
-                self.assertIn('"compilation_mode": "' + mode + '"', build)
+                self.assertEqual(manifest["configuration"]["config"], config.title())
+                self.assertEqual([p["name"] for p in repository["packages"]], ["icu"])
 
 
 class StbInterfaceTest(unittest.TestCase):
@@ -319,24 +329,24 @@ class StbInterfaceTest(unittest.TestCase):
             encoding="utf-8",
         )
         self.assertEqual(
-            workspace._stb_interface([self.provider], "linux", "2.19"),
+            dependencies._stb_interface([self.provider], "linux", "2.19"),
             {"header_dirs": [str(self.provider / "include/stb")]},
         )
         # A banner without the actually consumed resize API is not a valid interface.
         header.write_text("/* stb_image_resize2 - v2.19 - future release */\n", encoding="utf-8")
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "stb resize2 interface is missing"):
-            workspace._stb_interface([self.provider], "linux", "2.19")
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "stb resize2 interface is missing"):
+            dependencies._stb_interface([self.provider], "linux", "2.19")
         # Native hosts still compare the observed version against the overlay owner.
-        native = self.provider / "include/stb_image_resize2.h"
-        native.write_text(
+        native_header = self.provider / "include/stb_image_resize2.h"
+        native_header.write_text(
             "/* stb_image_resize2 - fixture overlay */\n#define stbir_resize_uint8_srgb 1\n#define STBIR_RGBA 1\n",
             encoding="utf-8",
         )
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "does not match the governed overlay"):
-            workspace._stb_interface([self.provider], "windows", "9.9.9")
-        overlay = workspace._json(workspace.PROJECT_ROOT / "cmake/vcpkg-ports/stb/vcpkg.json")
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "does not match the governed overlay"):
+            dependencies._stb_interface([self.provider], "windows", "9.9.9")
+        overlay = native.read_json(native.PROJECT_ROOT / "cmake/vcpkg-ports/stb/vcpkg.json")
         self.assertEqual(
-            workspace._stb_interface([self.provider], "windows", overlay["version-string"]),
+            dependencies._stb_interface([self.provider], "windows", overlay["version-string"]),
             {"header_dirs": [str(self.provider / "include")]},
         )
 
@@ -347,7 +357,7 @@ class NativeFrontendArtifactTest(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name).resolve()
         self.prefix = self.root / "provider"
-        self.policy = workspace._json(workspace.POLICY)
+        self.policy = native.read_json(providers.POLICY)
         self.packages = {p["name"]: p for p in self.policy["packages"]["native"]}
         for marker in (
             "CLI/Version.hpp",
@@ -377,7 +387,7 @@ class NativeFrontendArtifactTest(unittest.TestCase):
             (selected / "lib" / (mimalloc + ".lib")).write_bytes(b"static fixture")
 
     def interface(self, name, host, config):
-        return workspace._library_interface(self.packages[name], [self.prefix], config, host, self.policy)
+        return dependencies._library_interface(self.packages[name], [self.prefix], config, host, self.policy)
 
     def test_native_static_artifacts_follow_each_configuration(self):
         # Dummy archive bytes stand in for real payloads: this owns the
@@ -434,7 +444,7 @@ class NativeFrontendArtifactTest(unittest.TestCase):
             with (
                 self.subTest(name=name, mutation=next(iter(mutation))),
                 patch.dict(self.policy["library_fallbacks"][name]["windows"], mutation),
-                self.assertRaisesRegex(workspace.BazelWorkspaceError, message),
+                self.assertRaisesRegex(native.BazelWorkspaceError, message),
             ):
                 self.interface(name, "windows", "release")
 
@@ -442,7 +452,7 @@ class NativeFrontendArtifactTest(unittest.TestCase):
         header = self.prefix / "include/mimalloc.h"
         static = header.read_text(encoding="utf-8")
         header.write_text(static.replace("#if !defined(MI_SHARED_LIB)", "#if 0"), encoding="utf-8")
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "static mimalloc"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "static mimalloc"):
             self.interface("mimalloc", "windows", "release")
 
     def test_date_tz_artifact_consumer_keeps_its_reviewed_abi_definitions(self):
@@ -454,13 +464,13 @@ class NativeFrontendArtifactTest(unittest.TestCase):
                 self.assertEqual(interface["defines"], ["ONLY_C_LOCALE=0", "HAS_STRING_VIEW=1", "USE_OS_TZDB=1"])
                 self.assertEqual(interface["linkopts"], ["-pthread"])
                 self.assertEqual(interface["libraries"][0]["name"], "date-tz")
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "no reviewed"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "no reviewed"):
             self.interface("date_tz", "windows", "debug")
 
     def test_missing_archive_and_old_dll_shapes_never_change_static_linkage(self):
         missing = self.prefix / "lib/mimalloc.lib"
         missing.unlink()
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "missing/ambiguous"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "missing/ambiguous"):
             self.interface("mimalloc", "windows", "release")
         # Restore the valid baseline so the old-shape negatives below prove the
         # shape rejection itself, not the missing archive.
@@ -473,7 +483,7 @@ class NativeFrontendArtifactTest(unittest.TestCase):
                 old.write_bytes(b"old shared SDK artifact")
                 with (
                     self.subTest(config=config, relative=relative),
-                    self.assertRaisesRegex(workspace.BazelWorkspaceError, "unsupported static provider shape"),
+                    self.assertRaisesRegex(native.BazelWorkspaceError, "unsupported static provider shape"),
                 ):
                     self.interface("mimalloc", "windows", config)
                 old.unlink()
@@ -492,11 +502,11 @@ class WindowsCli11RefreshTest(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name).resolve()
         self.prefix = self.root / "installed/x64-windows-static-md"
-        policy = workspace._json(workspace.POLICY)
+        policy = native.read_json(providers.POLICY)
         cli11 = next(p for p in policy["packages"]["native"] if p["name"] == "cli11")
         policy["packages"] = {"native": [cli11], "test": []}
         self.policy_path = self.root / "cli11-policy.json"
-        workspace._write_json(self.policy_path, policy)
+        native.write_json(self.policy_path, policy)
         self.include = self.prefix / "include"
         self.header = self.include / "CLI/Version.hpp"
         self.header.parent.mkdir(parents=True)
@@ -532,7 +542,7 @@ class WindowsCli11RefreshTest(unittest.TestCase):
         )
 
     def provider(self, prefix, config, host, *, identity_path, policy):
-        workspace._write_json(identity_path, {"packages": {"cli11": {"version": self.observations["raw_status"]}}})
+        native.write_json(identity_path, {"packages": {"cli11": {"version": self.observations["raw_status"]}}})
         return (
             {
                 "provider": {"name": "vcpkg", "version": "fixture", "evidence": []},
@@ -576,18 +586,17 @@ class WindowsCli11RefreshTest(unittest.TestCase):
         elif pcfile.exists():
             pcfile.unlink()
         with (
-            patch.object(workspace, "POLICY", self.policy_path),
-            patch.object(workspace, "native_platform", return_value="windows"),
-            patch.object(workspace, "vcpkg_prefix", return_value=self.prefix),
-            patch.object(workspace, "_native_provider", side_effect=self.provider),
-            patch.object(workspace, "_evidence", return_value=[]),
+            patch.object(providers, "POLICY", self.policy_path),
+            patch.object(native, "native_platform", return_value="windows"),
+            patch.object(providers, "vcpkg_prefix", return_value=self.prefix),
+            patch.object(providers, "native_provider", side_effect=self.provider),
+            patch.object(native, "evidence", return_value=[]),
             patch.object(bazel_deps.subprocess, "run", side_effect=self.query),
         ):
-            generated = workspace.refresh_dependencies(self.root / tree, "release", prefix=self.prefix, group="native")
-        return generated / "native"
+            return dependencies.resolve_dependencies(self.root / tree, "release", prefix=self.prefix, group="native")
 
     def package(self, repository):
-        return workspace._json(repository / "manifest.json")["packages"][0]
+        return repository["manifest"]["packages"][0]
 
     def test_metadata_and_reviewed_fallback_export_the_same_consumer_interface(self):
         self.install("2.6.2")
@@ -599,20 +608,12 @@ class WindowsCli11RefreshTest(unittest.TestCase):
                 self.assertEqual([item["name"] for item in package["resolved_libraries"]], ["CLI11"])
                 self.assertEqual(package["interface"]["linkopts"], ["Shell32.lib"])
                 self.assertIn("CLI11_COMPILE", package["interface"]["defines"])
-                interfaces.append(
-                    (
-                        {
-                            field: package["interface"][field]
-                            for field in ("header_dirs", "defines", "linkopts", "copts", "runtime")
-                        },
-                        package["resolved_libraries"],
-                    )
-                )
+                interfaces.append(repository["packages"][0])
         # The reviewed fallback exists so the same consumer interface is
         # exported with or without installed pkg-config metadata.
         self.assertEqual(interfaces[0], interfaces[1])
-        build = (repository / "BUILD.bazel").read_text()
-        self.assertIn('linkopts = ["Shell32.lib"]', build)
+        self.assertEqual(interfaces[0]["linkopts"], ["Shell32.lib"])
+        self.assertEqual(interfaces[0]["libraries"][0]["source"], str(self.prefix / "lib/CLI11.lib"))
 
     def test_a_coherent_future_cli11_release_passes_the_structural_interface(self):
         self.install("2.7.0")
@@ -625,7 +626,7 @@ class WindowsCli11RefreshTest(unittest.TestCase):
         baseline = dict(self.observations)
         for observation, value, error, message in (
             ("metadata", "2.6.1", bazel_deps.BazelDependencyError, "module version mismatch: CLI11"),
-            ("header", "2.6.1", workspace.BazelWorkspaceError, "header version mismatch"),
+            ("header", "2.6.1", native.BazelWorkspaceError, "header version mismatch"),
         ):
             with self.subTest(observation=observation):
                 if observation == "header":
@@ -644,7 +645,7 @@ class FrontendNixClosureTest(unittest.TestCase):
     def test_giomm_declares_only_the_three_selected_derivations_outputs(self):
         with tempfile.TemporaryDirectory(prefix="aobus-giomm-outputs-") as directory:
             root = Path(directory).resolve()
-            policy = workspace._json(workspace.POLICY)
+            policy = native.read_json(providers.POLICY)
             policy["packages"] = {
                 "native": [p for p in policy["packages"]["native"] if p["name"] == "giomm"],
                 "test": [],
@@ -654,11 +655,11 @@ class FrontendNixClosureTest(unittest.TestCase):
                 for output in selected:
                     (output / "lib/pkgconfig").mkdir(parents=True)
             report = root / "report.json"
-            workspace._write_json(
+            native.write_json(
                 report,
                 {
                     "schemaVersion": 1,
-                    "nixpkgsRevision": workspace._json(workspace.PROJECT_ROOT / "nixpkgs.json")["rev"],
+                    "nixpkgsRevision": native.read_json(native.PROJECT_ROOT / "nixpkgs.json")["rev"],
                 },
             )
 
@@ -679,19 +680,21 @@ class FrontendNixClosureTest(unittest.TestCase):
 
             with (
                 patch.dict(os.environ, {"AOBUS_NIX_DEPENDENCY_REPORT": str(report)}),
-                patch.object(workspace, "_nix_dependency", side_effect=dependency) as dependencies,
-                patch.object(workspace, "_nix_root", side_effect=nix_root),
-                patch.object(workspace, "_executable", return_value="/selected/resolver"),
-                patch.object(workspace.subprocess, "run", side_effect=query),
+                patch.object(providers, "nix_dependency", side_effect=dependency) as selected_dependencies,
+                patch.object(providers, "nix_root", side_effect=nix_root),
+                patch.object(native, "executable", return_value="/selected/resolver"),
+                patch.object(providers.subprocess, "run", side_effect=query),
             ):
-                base, versions, expected = workspace._linux_provider(policy, identity_path=root / "identity.json")
+                base, versions, expected = providers.linux_provider(policy, identity_path=root / "identity.json")
             all_outputs = sorted(output for outputs in roots.values() for output in outputs)
             self.assertEqual(expected, {"giomm": all_outputs})
-            self.assertEqual({call.args[1] for call in dependencies.call_args_list}, {"glibmm", "glib", "libsigcxx"})
+            self.assertEqual(
+                {call.args[1] for call in selected_dependencies.call_args_list}, {"glibmm", "glib", "libsigcxx"}
+            )
             self.assertEqual(versions, {"giomm": "fixture"})
             self.assertTrue(set(map(str, all_outputs)) <= set(base["allowed_roots"]))
             self.assertNotIn("/nix/store", base["allowed_roots"])
-            identity = workspace._json(root / "identity.json")
+            identity = native.read_json(root / "identity.json")
             self.assertEqual(set(identity["inputs"]), {"glib", "libsigcxx"})
             self.assertEqual(identity["inputs"]["glib"]["outputs"], list(map(str, roots["glib"])))
 
@@ -703,7 +706,7 @@ class CatalogToolsRepositoryTest(unittest.TestCase):
             root.mkdir(parents=True)
             (root / "CMakeLists.txt").write_text("project(aobus VERSION 4.5.6)\n")
             request = root / "request.json"
-            workspace._write_json(request, {"schema": 1, "host": "linux", "config": "debug"})
+            native.write_json(request, {"schema": 1, "host": "linux", "config": "debug"})
             executable = root / "provider/bin/gperf"
             executable.parent.mkdir(parents=True)
             executable.write_bytes(b"SDK fixture")
@@ -726,25 +729,34 @@ class CatalogToolsRepositoryTest(unittest.TestCase):
                 "provider": "nix",
                 "version": "fixture-glib",
                 "root": str(resource_runtime.parent.parent),
+                "outputs": [str(resource_compiler.parent.parent), str(resource_runtime.parent.parent)],
             }
             output = root / "repository/resolution"
 
+            def version(argv, **kwargs):
+                self.assertEqual(argv, [str(executable), "--version"])
+                return subprocess.CompletedProcess(argv, 0, "GNU gperf 3.3\n", "")
+
             def imports(tree, config, *, prefix, group):
                 self.assertEqual(group, "catalog")
-                generated = tree / "generated"
-                repository = generated / "catalog"
-                repository.mkdir(parents=True)
-                workspace._write_json(
-                    repository / "repository.json",
-                    {
-                        "links": [{"source": str(sdk), "destination": "artifacts/icu/header.h"}],
-                        "watch_files": [str(root / (config + "-status"))],
-                        "watch_directories": [str(root / (config + "-pc"))],
-                    },
-                )
-                (repository / "BUILD.bazel").write_text('cc_library(name = "icu")\n')
-                (repository / "manifest.json").write_text("{}\n")
-                return generated
+                return {
+                    "packages": [
+                        {
+                            "name": "icu",
+                            "headers": [
+                                {"root": str(sdk.parent), "index": 0, "files": [{"source": str(sdk), "path": sdk.name}]}
+                            ],
+                            "includes": [{"tree": 0, "path": "."}],
+                            "defines": [],
+                            "linkopts": [],
+                            "libraries": [],
+                            "runtime": [],
+                        }
+                    ],
+                    "manifest": {"configuration": {"config": config.title()}},
+                    "watch_files": [str(root / (config + "-status"))],
+                    "watch_directories": [str(root / (config + "-pc"))],
+                }
 
             tools = {
                 "python": str(python),
@@ -767,70 +779,116 @@ class CatalogToolsRepositoryTest(unittest.TestCase):
                 patch.dict(os.environ, {}, clear=True),
                 patch.object(sys, "addaudithook"),
                 patch("ao.core.paths.PROJECT_ROOT", root),
-                patch.object(workspace, "_INPUT_PROBE", None),
-                patch.object(workspace, "native_platform", return_value="linux"),
-                patch.object(workspace, "_linux_gperf", return_value=({"version": "3.3"}, executable, [], [])),
-                patch.object(workspace, "refresh_dependencies", side_effect=imports) as refresh,
-                patch.object(workspace, "_catalog_sdk", return_value=(tools, [sdk, python], [])),
-                patch.object(workspace, "_linux_dbus", return_value=({"provider": "nix"}, daemon, [], [])),
+                patch.object(native, "PROJECT_ROOT", root),
+                native.capture_probes(None),
+                patch.object(native, "native_platform", return_value="linux"),
+                patch.object(host_tools, "_linux_gperf", return_value=({"version": "3.3"}, executable, [], [])),
+                patch.object(dependencies, "resolve_dependencies", side_effect=imports) as refresh,
+                patch.object(host_tools, "_catalog_sdk", return_value=(tools, [sdk, python], [])),
                 patch.object(
-                    workspace,
+                    host_tools,
+                    "_linux_dbus",
+                    return_value=({"provider": "nix", "outputs": [str(daemon.parent.parent)]}, daemon, [], []),
+                ),
+                patch.object(
+                    host_tools,
                     "_linux_gresource",
                     return_value=(resource_identity, resource_compiler, [resource_runtime], [resource_evidence]),
                 ),
-                patch.object(subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "GNU gperf 3.3\n", "")),
+                patch.object(host_tools.subprocess, "run", side_effect=version),
             ):
                 self.assertEqual(bazel_resolver.main(), 0)
             self.assertEqual({call.args[1] for call in refresh.call_args_list}, {"debug", "release"})
-            plan = workspace._json(output / "repository.json")
-            destinations = [link["destination"] for link in plan["links"]]
-            self.assertIn("catalog-debug/artifacts/icu/header.h", destinations)
-            self.assertIn("catalog-release/artifacts/icu/header.h", destinations)
+            plan = native.read_json(output / "repository.json")
+            for config in ("debug", "release"):
+                admitted = plan["imports"]["catalog-" + config]
+                self.assertEqual(admitted["config"], config)
+                self.assertEqual(
+                    admitted["packages"][0]["headers"][0]["files"], [{"source": str(sdk), "path": sdk.name}]
+                )
+                self.assertEqual(admitted["manifest"]["configuration"]["config"], config.title())
+            self.assertEqual(plan["links"], [])
+            self.assertEqual(plan["files"], {})
             self.assertIn(str(root / "debug-status"), plan["watch_files"])
             self.assertIn(str(root / "release-pc"), plan["watch_directories"])
-            self.assertEqual(plan["files"]["app_version.bzl"], 'APP_VERSION = "4.5.6"\n')
+            facts = plan["host_tools"]
+            self.assertEqual(facts["app_version"], "4.5.6")
             self.assertEqual(
-                ast.literal_eval(plan["files"]["test_tools.bzl"].split("=", 1)[1].strip()),
-                {"dbus_daemon": str(daemon), "dbus_daemon_directory": str(daemon.parent)},
+                facts["test_tools"], {"dbus_daemon": str(daemon), "dbus_daemon_directory": str(daemon.parent)}
             )
-            self.assertEqual(ast.literal_eval(plan["files"]["catalog_tools.bzl"].split("=", 1)[1].strip()), tools)
+            self.assertEqual(facts["catalog"]["tools"], tools)
+            self.assertEqual(set(facts["catalog"]["artifacts"]), {str(sdk), str(python)})
+            self.assertEqual(facts["resource"]["identity"], resource_identity)
+            self.assertEqual(facts["resource"]["executable"], str(resource_compiler))
+            self.assertEqual(facts["resource"]["runtime"], [str(resource_runtime)])
+            self.assertEqual(facts["resource"]["evidence"], [str(resource_evidence)])
+            self.assertLessEqual(
+                {str(resource_compiler), str(resource_runtime), str(resource_evidence)}, set(plan["watch_files"])
+            )
+            self.assertIn(str(resource_compiler.parent), plan["watch_directories"])
+
+            # Consume these same facts at the real Starlark materialization and
+            # declaration seam; Python no longer serializes BUILD programs.
+            generated, links, rules, selections = {}, {}, {}, []
+            ctx = SimpleNamespace(
+                path=lambda source: SimpleNamespace(realpath=Path(source).resolve()),
+                symlink=lambda source, destination: links.update({str(source): destination}),
+                file=lambda name, content, **kwargs: generated.update({name: content}),
+            )
+            namespace = {"json": SimpleNamespace(encode=json.dumps), "fail": self.fail}
+            materializer = native.PROJECT_ROOT / "bazel/host_tools_repository.bzl"
+            exec(compile(materializer.read_text(encoding="utf-8"), str(materializer), "exec"), namespace)
+            namespace["materialize_host_tools"](ctx, facts)
             for name in ("catalog_tools.bzl", "test_tools.bzl"):
-                text = plan["files"][name]
+                text = generated[name]
                 self.assertIn("Åsa", text)
                 self.assertIn("音乐", text)
                 # Python parses JSON Unicode escapes, but Starlark does not.
                 self.assertNotRegex(text, r"\\u[0-9a-fA-F]{4}")
-            build = plan["files"]["BUILD.bazel"]
-            ast.parse(build)
-            # The selected stdlib SDK is reachable without freezing its enumeration index.
-            self.assertIn("stdlib-音乐.py", build)
-            self.assertNotRegex(build, r"\\u[0-9a-fA-F]{4}")
-            self.assertIn('"//catalog-debug:icu"', build)
-            self.assertIn('"//catalog-release:icu"', build)
-            self.assertIn('name = "catalog_tools"', build)
-            self.assertIn('name = "dbus_daemon"', build)
-            self.assertNotIn("//conditions:default", build)
-            rules = {
-                ast.literal_eval(next(field.value for field in node.value.keywords if field.arg == "name")): {
-                    field.arg: ast.literal_eval(field.value) for field in node.value.keywords
-                }
-                for node in ast.parse(build).body
-                if isinstance(node, ast.Expr)
-                and isinstance(node.value, ast.Call)
-                and getattr(node.value.func, "id", None) in {"alias", "filegroup"}
-                and not any(isinstance(field.value, ast.Call) for field in node.value.keywords)
+            self.assertEqual(ast.literal_eval(generated["catalog_tools.bzl"].split("=", 1)[1].strip()), tools)
+            self.assertEqual(
+                ast.literal_eval(generated["test_tools.bzl"].split("=", 1)[1].strip()), facts["test_tools"]
+            )
+            self.assertEqual(ast.literal_eval(generated["app_version.bzl"].split("=", 1)[1].strip()), "4.5.6")
+            data = ast.literal_eval(generated["host_tools_data.bzl"].split("=", 1)[1].strip())
+
+            def rule(**fields):
+                rules[fields["name"]] = fields
+
+            def select(choices, **kwargs):
+                selections.append((choices, kwargs))
+                return choices
+
+            declarations = native.PROJECT_ROOT / "bazel/host_tools.bzl"
+            namespace = {
+                "native": SimpleNamespace(
+                    alias=rule, filegroup=rule, config_setting=rule, exports_files=lambda *a: None
+                ),
+                "select": select,
             }
-            links = {link["source"]: link["destination"] for link in plan["links"]}
+            exec(compile(declarations.read_text(encoding="utf-8"), str(declarations), "exec"), namespace)
+            namespace["host_tools"](data)
+            self.assertIn(links[str(sdk)], rules["catalog_tools"]["srcs"])
+            self.assertIn(links[str(python)], rules["catalog_tools"]["srcs"])
+            self.assertIn(links[str(daemon)], rules["dbus_daemon"]["srcs"])
+            self.assertEqual(rules["gperf"]["actual"], links[str(executable)])
             self.assertEqual(rules["glib_compile_resources"]["actual"], links[str(resource_compiler)])
             self.assertEqual(
                 set(rules["glib_compile_resources_runtime"]["srcs"]),
                 {links[str(resource_runtime)], links[str(resource_evidence)]},
             )
-            self.assertLessEqual(
-                {str(resource_compiler), str(resource_runtime), str(resource_evidence)}, set(plan["watch_files"])
+            self.assertEqual(rules["_catalog_debug"]["values"], {"compilation_mode": "dbg"})
+            self.assertEqual(rules["_catalog_release"]["values"], {"compilation_mode": "opt"})
+            self.assertEqual(
+                selections,
+                [
+                    (
+                        {":_catalog_debug": "//catalog-debug:icu", ":_catalog_release": "//catalog-release:icu"},
+                        {"no_match_error": "Catalog ICU requires dbg or opt"},
+                    )
+                ],
             )
-            self.assertIn(str(resource_compiler.parent), plan["watch_directories"])
-            self.assertEqual(json.loads(plan["files"]["manifest.json"])["resource_tool"], resource_identity)
+            self.assertEqual(json.loads(generated["manifest.json"])["resource_tool"], resource_identity)
 
 
 class CatalogSdkTest(unittest.TestCase):
@@ -859,7 +917,7 @@ class CatalogSdkTest(unittest.TestCase):
         return contract
 
     def contract(self, version):
-        return patch.object(workspace.dependency_policy, "load_contract", return_value=self.fixture_contract(version))
+        return patch.object(dependency_policy, "load_contract", return_value=self.fixture_contract(version))
 
     def write_uvernum(self, uvernum, version):
         components = version.split(".")
@@ -913,8 +971,8 @@ class CatalogSdkTest(unittest.TestCase):
         with (
             patch.object(sys, "executable", str(executable)),
             patch.object(sys, "base_prefix", str(python)),
-            patch.object(workspace.sysconfig, "get_path", return_value=str(stdlib)),
-            patch.object(workspace.sysconfig, "get_config_var", side_effect=config),
+            patch.object(host_tools.sysconfig, "get_path", return_value=str(stdlib)),
+            patch.object(host_tools.sysconfig, "get_config_var", side_effect=config),
         ):
             yield executable, extension, native_runtime
 
@@ -939,11 +997,11 @@ class CatalogSdkTest(unittest.TestCase):
         extension = extensions / "_struct.so"
         extension.write_bytes(b"native Python extension fixture")
         report = root / "report.json"
-        workspace._write_json(
+        native.write_json(
             report,
             {
                 "schemaVersion": 1,
-                "nixpkgsRevision": workspace._json(workspace.PROJECT_ROOT / "nixpkgs.json")["rev"],
+                "nixpkgsRevision": native.read_json(native.PROJECT_ROOT / "nixpkgs.json")["rev"],
             },
         )
         with (
@@ -956,8 +1014,8 @@ class CatalogSdkTest(unittest.TestCase):
                 },
             ),
             patch.object(
-                workspace,
-                "_nix_dependency",
+                providers,
+                "nix_dependency",
                 side_effect=lambda report, name: (
                     provider,
                     self.icu_version,
@@ -965,52 +1023,52 @@ class CatalogSdkTest(unittest.TestCase):
                     [provider],
                 ),
             ),
-            patch.object(workspace, "_nix_root", return_value=provider),
-            patch.object(workspace.sysconfig, "get_path", return_value=str(stdlib)),
+            patch.object(providers, "nix_root", return_value=provider),
+            patch.object(host_tools.sysconfig, "get_path", return_value=str(stdlib)),
             patch.object(
-                workspace.sysconfig,
+                host_tools.sysconfig,
                 "get_config_var",
                 side_effect=lambda name: str(extensions) if name == "DESTSHARED" else None,
             ),
             patch.object(subprocess, "run", side_effect=self.genrb_version),
             self.contract(self.icu_version),
         ):
-            tools, inputs, evidence = workspace._catalog_sdk(root / "resolution", None, "linux")
+            tools, inputs, evidence = host_tools._catalog_sdk(root / "resolution", None, "linux")
             self.assertEqual(self.genrb_queries, [[str(self.genrb), "-V"]])
-            self.assertIn(workspace.PROJECT_ROOT / "dependency-contract.json", evidence)
+            self.assertIn(native.PROJECT_ROOT / "dependency-contract.json", evidence)
             self.assertIn(uvernum, evidence)
             # A tool report that drifts from the selected provider version fails.
             for reported in ("77.1", "78.3.1", "78.30", "78.3rc", "78.3-beta"):
                 self.icu_report = reported
                 with (
                     self.subTest(reported=reported),
-                    self.assertRaisesRegex(workspace.BazelWorkspaceError, "does not report ICU version 78.3"),
+                    self.assertRaisesRegex(native.BazelWorkspaceError, "does not report ICU version 78.3"),
                 ):
-                    workspace._catalog_sdk(root / ("wrong-" + reported), None, "linux")
+                    host_tools._catalog_sdk(root / ("wrong-" + reported), None, "linux")
             self.icu_report = "78.3"
             # The installed header must carry the actual provider macros.
             self.write_uvernum(uvernum, "78.4")
-            with self.assertRaisesRegex(workspace.BazelWorkspaceError, "header version mismatch"):
-                workspace._catalog_sdk(root / "wrong-header", None, "linux")
+            with self.assertRaisesRegex(native.BazelWorkspaceError, "header version mismatch"):
+                host_tools._catalog_sdk(root / "wrong-header", None, "linux")
             self.write_uvernum(uvernum, "78.3")
             # A future three-component release needs the fixture contract's approval.
             self.icu_version = "79.2.1"
             self.icu_report = "79.2.1"
             self.write_uvernum(uvernum, "79.2.1")
             with self.assertRaisesRegex(
-                workspace.BazelWorkspaceError, "ICU 79.2.1 does not satisfy dependency-contract.json"
+                native.BazelWorkspaceError, "ICU 79.2.1 does not satisfy dependency-contract.json"
             ):
-                workspace._catalog_sdk(root / "contract-drift", None, "linux")
+                host_tools._catalog_sdk(root / "contract-drift", None, "linux")
             with self.contract("79.2.1"):
-                tools, inputs, evidence = workspace._catalog_sdk(root / "upgraded", None, "linux")
+                tools, inputs, evidence = host_tools._catalog_sdk(root / "upgraded", None, "linux")
             self.assertIn(uvernum, evidence)
             # Only two- or three-component numeric ICU releases are producer formats.
             self.icu_version = "78.3.1.2"
             self.icu_report = "78.3.1.2"
             self.write_uvernum(uvernum, "78.3.1.2")
             with self.contract("78.3.1.2"):
-                with self.assertRaisesRegex(workspace.BazelWorkspaceError, "unsupported ICU provider version"):
-                    workspace._catalog_sdk(root / "bad-format", None, "linux")
+                with self.assertRaisesRegex(native.BazelWorkspaceError, "unsupported ICU provider version"):
+                    host_tools._catalog_sdk(root / "bad-format", None, "linux")
             self.icu_version = "78.3"
             self.icu_report = "78.3"
             self.write_uvernum(uvernum, "78.3")
@@ -1067,14 +1125,14 @@ class CatalogSdkTest(unittest.TestCase):
                     patch.object(subprocess, "run", side_effect=self.genrb_version),
                     self.contract(self.icu_version),
                 ):
-                    tools, inputs, evidence = workspace._catalog_sdk(base / "resolution", prefix, host)
+                    tools, inputs, evidence = host_tools._catalog_sdk(base / "resolution", prefix, host)
                     self.assertEqual(self.genrb_queries[-1], [str(self.genrb), "-V"])
                     self.assertEqual(Path(tools["genrb"]).parent, tool_bin)
                     self.assertIn(executable, inputs)
                     self.assertIn(native_runtime, inputs)
                     self.assertIn(extension, inputs)
                     self.assertIn(uvernum, evidence)
-                    self.assertIn(workspace.PROJECT_ROOT / "dependency-contract.json", evidence)
+                    self.assertIn(native.PROJECT_ROOT / "dependency-contract.json", evidence)
                     if host == "windows":
                         self.assertEqual(tools["SystemRoot"], str(base / "windows"))
                         self.assertEqual(tools["UserProfile"], str(base / "profile"))
@@ -1084,19 +1142,19 @@ class CatalogSdkTest(unittest.TestCase):
                             any(path.name.lower().startswith("icu") and path.suffix == ".dll" for path in inputs)
                         )
                         (tool_bin / "icutu78.dll").write_bytes(b"old shared SDK artifact")
-                        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "DLL-bearing Windows static ICU"):
-                            workspace._catalog_sdk(base / "old-shared-runtime", prefix, host)
+                        with self.assertRaisesRegex(native.BazelWorkspaceError, "DLL-bearing Windows static ICU"):
+                            host_tools._catalog_sdk(base / "old-shared-runtime", prefix, host)
                         (tool_bin / "icutu78.dll").unlink()
                         ownership.write_text(f"{prefix.name}/tools/icu/bin/genrb.exe\n", encoding="utf-8")
-                        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "tools manifest"):
-                            workspace._catalog_sdk(base / "unowned-pkgdata", prefix, host)
+                        with self.assertRaisesRegex(native.BazelWorkspaceError, "tools manifest"):
+                            host_tools._catalog_sdk(base / "unowned-pkgdata", prefix, host)
                         ownership.write_text(
                             f"{prefix.name}/tools/icu/bin/genrb.exe\n{prefix.name}/tools/icu/bin/pkgdata.exe\n",
                             encoding="utf-8",
                         )
                     # A changed raw port revision with the same upstream stays structurally valid.
                     status.write_text(status_text("2"), encoding="utf-8")
-                    tools, _, _ = workspace._catalog_sdk(base / "revised-port", prefix, host)
+                    tools, _, _ = host_tools._catalog_sdk(base / "revised-port", prefix, host)
                     self.assertEqual(Path(tools["genrb"]).parent, tool_bin)
 
     def test_windows_sdk_admission_follows_the_contract_and_raw_features(self):
@@ -1142,27 +1200,27 @@ class CatalogSdkTest(unittest.TestCase):
         ):
             # The fixture contract admits only its own ICU release on the native branch.
             with self.assertRaisesRegex(
-                workspace.BazelWorkspaceError, "ICU 79.1 does not satisfy dependency-contract.json"
+                native.BazelWorkspaceError, "ICU 79.1 does not satisfy dependency-contract.json"
             ):
-                workspace._catalog_sdk(base / "contract-drift", prefix, "windows")
+                host_tools._catalog_sdk(base / "contract-drift", prefix, "windows")
             with self.contract("79.1"):
                 # An approved contract change plus a coherent next SDK passes structurally;
                 # the catalog helper reads the contract, never a Bazel policy pin.
-                tools, _, evidence = workspace._catalog_sdk(base / "resolution", prefix, "windows")
+                tools, _, evidence = host_tools._catalog_sdk(base / "resolution", prefix, "windows")
                 self.assertEqual(self.genrb_queries[-1], [str(self.genrb), "-V"])
                 self.assertEqual(tools["genrb"], str(tool_bin / "genrb.exe"))
                 self.assertIn(uvernum, evidence)
                 self.assertIn(ownership, evidence)
-                self.assertIn(workspace.PROJECT_ROOT / "dependency-contract.json", evidence)
+                self.assertIn(native.PROJECT_ROOT / "dependency-contract.json", evidence)
                 # The installed header must match the actual provider observation.
                 self.write_uvernum(uvernum, "78.3")
-                with self.assertRaisesRegex(workspace.BazelWorkspaceError, "header version mismatch"):
-                    workspace._catalog_sdk(base / "wrong-header", prefix, "windows")
+                with self.assertRaisesRegex(native.BazelWorkspaceError, "header version mismatch"):
+                    host_tools._catalog_sdk(base / "wrong-header", prefix, "windows")
                 self.write_uvernum(uvernum, "79.1")
                 # The actual tool report must match the provider version.
                 self.icu_report = "78.3"
-                with self.assertRaisesRegex(workspace.BazelWorkspaceError, "does not report ICU version 79.1"):
-                    workspace._catalog_sdk(base / "wrong-tool", prefix, "windows")
+                with self.assertRaisesRegex(native.BazelWorkspaceError, "does not report ICU version 79.1"):
+                    host_tools._catalog_sdk(base / "wrong-tool", prefix, "windows")
                 self.icu_report = "79.1"
             # Raw core/tools features remain required independently of contract admission.
             status.write_text(
@@ -1171,9 +1229,9 @@ class CatalogSdkTest(unittest.TestCase):
                 encoding="utf-8",
             )
             with self.assertRaisesRegex(
-                workspace.BazelWorkspaceError, "catalog tools require installed ICU core/tools features"
+                native.BazelWorkspaceError, "catalog tools require installed ICU core/tools features"
             ):
-                workspace._catalog_sdk(base / "missing-tools-feature", prefix, "windows")
+                host_tools._catalog_sdk(base / "missing-tools-feature", prefix, "windows")
 
     def test_private_bus_tool_is_selected_from_reported_outputs_not_path(self):
         with tempfile.TemporaryDirectory(prefix="aobus-dbus-sdk-") as directory:
@@ -1183,21 +1241,21 @@ class CatalogSdkTest(unittest.TestCase):
             daemon.parent.mkdir(parents=True)
             daemon.write_bytes(b"private bus SDK fixture")
             report = root / "report.json"
-            workspace._write_json(
+            native.write_json(
                 report,
                 {
                     "schemaVersion": 1,
-                    "nixpkgsRevision": workspace._json(workspace.PROJECT_ROOT / "nixpkgs.json")["rev"],
+                    "nixpkgsRevision": native.read_json(native.PROJECT_ROOT / "nixpkgs.json")["rev"],
                 },
             )
             with (
                 patch.dict(os.environ, {"AOBUS_NIX_DEPENDENCY_REPORT": str(report), "PATH": ""}),
                 patch.object(
-                    workspace, "_nix_dependency", return_value=(provider, "fixture", "/nix/store/dbus.drv", [provider])
+                    providers, "nix_dependency", return_value=(provider, "fixture", "/nix/store/dbus.drv", [provider])
                 ) as selected,
-                patch.object(workspace, "_nix_root", return_value=provider),
+                patch.object(providers, "nix_root", return_value=provider),
             ):
-                identity, executable, runtime, evidence = workspace._linux_dbus()
+                identity, executable, runtime, evidence = host_tools._linux_dbus()
             self.assertEqual(selected.call_args.args[1], "dbus")
             self.assertEqual(executable, daemon)
             self.assertEqual(identity["outputs"], [str(provider)])
@@ -1211,7 +1269,7 @@ class AppVersionProjectionTest(unittest.TestCase):
             root = Path(directory)
             path = root / "CMakeLists.txt"
             path.write_text("# project(aobus VERSION 9.9.9)\nproject(aobus\n VERSION 1.2.3)\n")
-            self.assertEqual(bazel_resolver._app_version(root), "1.2.3")
+            self.assertEqual(host_tools._app_version(root), "1.2.3")
             for text in (
                 "",
                 "project(other VERSION 1.2.3)",
@@ -1220,7 +1278,7 @@ class AppVersionProjectionTest(unittest.TestCase):
             ):
                 path.write_text(text)
                 with self.subTest(text=text), self.assertRaisesRegex(ValueError, "project"):
-                    bazel_resolver._app_version(root)
+                    host_tools._app_version(root)
 
 
 if __name__ == "__main__":

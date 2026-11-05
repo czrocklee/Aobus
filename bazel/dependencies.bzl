@@ -1,6 +1,9 @@
 """Let Bazel own governed dependency resolution, invalidation and materialization."""
 
 load("//bazel:environment.bzl", "ENVIRONMENT_ATTRIBUTE", "environment_repository", "repository_environment")
+load("//bazel:import_repository.bzl", "materialize_aliases", "materialize_imports")
+load("//bazel:host_tools_repository.bzl", "materialize_host_tools")
+load("//bazel:toolchain_repository.bzl", "materialize_toolchain")
 
 def _watch_path(ctx, path):
     value = str(path)
@@ -87,6 +90,27 @@ def _governed_repository_impl(ctx):
         ctx.symlink(ctx.path(item["source"]), destination)
     for name, content in resolved["files"].items():
         ctx.file(name, content, executable = False)
+    interfaces = {}
+    for subpackage, projection in resolved.get("imports", {}).items():
+        interfaces[subpackage] = materialize_imports(
+            ctx,
+            subpackage,
+            projection["config"],
+            projection["packages"],
+            projection["manifest"],
+        )
+    if "host_tools" in resolved:
+        materialize_host_tools(ctx, resolved["host_tools"])
+    if "toolchain" in resolved:
+        materialize_toolchain(ctx, resolved["toolchain"])
+    if ctx.attr.group in ["native", "test"] and "" not in interfaces:
+        if sorted(interfaces.keys()) != ["debug", "release"]:
+            fail("Configured SDK imports require Debug and Release interfaces")
+        if interfaces["debug"] != interfaces["release"]:
+            fail("Debug and Release SDKs expose different consumer interfaces")
+        materialize_aliases(ctx, interfaces["debug"])
+    elif "aliases" in resolved:
+        materialize_aliases(ctx, resolved["aliases"])
 
 _governed_repository = repository_rule(
     implementation = _governed_repository_impl,

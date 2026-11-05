@@ -575,6 +575,19 @@ def _verify_driver(
     return 1 if errors else 0
 
 
+def _expected_hardening_environment(config: str) -> dict[str, str]:
+    """Independent verification oracle, never an input to toolchain construction."""
+    from . import bazel_compiler_probe
+
+    if config not in {"debug", "release"}:
+        raise ValueError(f"unsupported hardening verification configuration: {config}")
+    observed = bazel_compiler_probe.nix_cc_wrapper()
+    # Check the established unoptimized/optimized contract independently of the
+    # Starlark generation helper, so a wrong generated environment can fail.
+    flags = [flag for flag in observed["hardeningEnable"] if config == "release" or flag not in {"fortify", "fortify3"}]
+    return {"NIX_HARDENING_ENABLE_" + observed["suffixSalt"]: " ".join(flags)}
+
+
 def verify(executable: Path, tree: Path, prepared: Path, config: str, jobs: int = 2) -> int:
     """Expand default test suites, then analyze their leaves in a caller-locked tree.
 
@@ -584,9 +597,10 @@ def verify(executable: Path, tree: Path, prepared: Path, config: str, jobs: int 
     actions without pretending to run that Nix-specific diagnostic. No stage runs
     after the first failure. This is analysis evidence, not a product build/test.
     """
+    from . import bazel_native as native
     from . import bazel_workspace as workspace
 
-    host = workspace.native_platform()
+    host = native.native_platform()
     if host not in {"linux", "macos", "windows"}:
         print("Bazel compile-contract verify requires native Linux, macOS or Windows", file=sys.stderr)
         return 1
@@ -672,16 +686,16 @@ def verify(executable: Path, tree: Path, prepared: Path, config: str, jobs: int 
 
     save()
     try:
-        workspace.require_supported_source()
+        native.require_supported_source()
         # An empty mapping still checks the common cleared action channels.
         # Only Linux has an additional salted Nix hardening policy.
         expected_environment = {}
         expected_tool_environment = None
         if host == "linux":
-            expected_environment = workspace.linux_hardening_environment(config)
+            expected_environment = _expected_hardening_environment(config)
             if not expected_environment:
                 raise ValueError("empty Nix hardening environment policy")
-            expected_tool_environment = workspace.linux_hardening_environment("release")
+            expected_tool_environment = _expected_hardening_environment("release")
             if not expected_tool_environment:
                 raise ValueError("empty execution-configuration Nix hardening environment policy")
             receipt["expected_tool_environment"] = expected_tool_environment
@@ -702,7 +716,7 @@ def verify(executable: Path, tree: Path, prepared: Path, config: str, jobs: int 
         print(f"Bazel default test selection ({config}); receipt: {receipt_path}", file=sys.stderr, flush=True)
         with Path(selection["stdout"]).open("wb") as out, Path(selection["stderr"]).open("wb") as err:
             result = subprocess.run(
-                selection["argv"], cwd=PROJECT_ROOT, env=workspace.child_environment(), stdout=out, stderr=err
+                selection["argv"], cwd=PROJECT_ROOT, env=native.child_environment(), stdout=out, stderr=err
             )
         selection["exit"] = result.returncode
         selection["status"] = "exited"
@@ -763,7 +777,7 @@ def verify(executable: Path, tree: Path, prepared: Path, config: str, jobs: int 
             )
             with Path(query["stdout"]).open("wb") as out, Path(query["stderr"]).open("wb") as err:
                 result = subprocess.run(
-                    query["argv"], cwd=PROJECT_ROOT, env=workspace.child_environment(), stdout=out, stderr=err
+                    query["argv"], cwd=PROJECT_ROOT, env=native.child_environment(), stdout=out, stderr=err
                 )
             query["exit"] = result.returncode
             query["status"] = "exited"
@@ -883,7 +897,7 @@ def verify(executable: Path, tree: Path, prepared: Path, config: str, jobs: int 
                         result = subprocess.run(
                             source_location["argv"],
                             cwd=PROJECT_ROOT,
-                            env=workspace.child_environment(),
+                            env=native.child_environment(),
                             stdout=out,
                             stderr=err,
                         )
@@ -933,7 +947,7 @@ def verify(executable: Path, tree: Path, prepared: Path, config: str, jobs: int 
         print(f"Bazel compile contracts passed ({config}); receipt: {receipt_path}")
         return 0
     except (
-        workspace.BazelWorkspaceError,
+        native.BazelWorkspaceError,
         OSError,
         subprocess.SubprocessError,
         ValueError,

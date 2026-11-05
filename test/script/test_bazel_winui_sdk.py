@@ -25,7 +25,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from ao.core import bazel_winui, bazel_workspace, dependency_policy
+from ao.core import bazel_native as native
+from ao.core import bazel_provision, bazel_winui, dependency_policy
 
 SDK = bazel_winui.WINDOWS_SDK_VERSION
 VC_VERSION = "14.44.35207"
@@ -859,7 +860,7 @@ class WindowsRepositoryPlanTest(unittest.TestCase):
     def test_optional_vc_include_roots_are_observed_before_later_installation(self):
         optional = (self.vc / "atlmfc/include", self.visual_studio / "VC/Auxiliary/VS/include")
         observed = []
-        with mock.patch.object(bazel_workspace, "_INPUT_PROBE", observed.append):
+        with native.capture_probes(observed.append):
             before = self.plan()
         self.assertLessEqual(set(optional), set(observed))
         before_sources = {link["source"] for link in before["links"]}
@@ -990,6 +991,10 @@ class WindowsRepositoryPlanTest(unittest.TestCase):
         for environment in variants:
             with (
                 self.subTest(environment=environment),
+                # The absent/empty selection lazily reads the machine's managed
+                # ready cache; a clean machine has none, so keep that external
+                # state hermetic instead of admitting this runner's real cache.
+                mock.patch.object(bazel_provision, "restored_nuget_packages", return_value=None),
                 self.assertRaisesRegex(
                     bazel_winui.BazelWorkspaceError, "requires a restored NuGet cache: run `ao.bat bazel provision`"
                 ),

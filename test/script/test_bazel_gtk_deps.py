@@ -9,36 +9,39 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
 
+from ao.core import bazel_dependencies as dependencies
 from ao.core import bazel_deps
-from ao.core import bazel_workspace as workspace
+from ao.core import bazel_host_tools as host_tools
+from ao.core import bazel_native as native
+from ao.core import bazel_providers as providers
 
 
 class GtkSdkPolicyTest(unittest.TestCase):
     def test_gtk_and_process_imports_follow_their_actual_platform_consumers(self):
-        policy = workspace._load_policy()
+        policy = providers.load_policy()
         for host, expected in (
             ("linux", {"gtkmm", "boost_process"}),
             ("macos", {"boost_process"}),
             ("windows", {"boost_process"}),
         ):
             with self.subTest(host=host):
-                names = {p["name"] for p in workspace._package_groups(policy, host=host)["native"]}
+                names = {p["name"] for p in providers.package_groups(policy, host=host)["native"]}
                 self.assertEqual(names & {"gtkmm", "boost_process"}, expected)
         changed = copy.deepcopy(policy)
         next(p for p in changed["packages"]["native"] if p["name"] == "gtkmm")["platforms"] = ["windows"]
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "platform contract"):
-            workspace._package_groups(changed, host="linux")
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "platform contract"):
+            providers.package_groups(changed, host="linux")
         for platforms in (["windows"], ["linux"], ["macos"], ["linux", "windows"], ["linux", "macos"]):
             changed = copy.deepcopy(policy)
             next(p for p in changed["packages"]["native"] if p["name"] == "boost_process")["platforms"] = platforms
             with (
                 self.subTest(platforms=platforms),
-                self.assertRaisesRegex(workspace.BazelWorkspaceError, "platform contract"),
+                self.assertRaisesRegex(native.BazelWorkspaceError, "platform contract"),
             ):
-                workspace._package_groups(changed, host="macos")
+                providers.package_groups(changed, host="macos")
 
     def test_gtk_sdk_inputs_are_closed_and_not_a_generic_additional_input_registry(self):
-        policy = workspace._load_policy()
+        policy = providers.load_policy()
         for name, field, value, message in (
             ("gtkmm", "nix_inputs", ["glib"], "closed GTK"),
             ("gtkmm", "modules", ["gtk4"], "closed GTK"),
@@ -48,13 +51,13 @@ class GtkSdkPolicyTest(unittest.TestCase):
         ):
             changed = copy.deepcopy(policy)
             next(p for p in changed["packages"]["native"] if p["name"] == name)[field] = value
-            with self.subTest(name=name, field=field), self.assertRaisesRegex(workspace.BazelWorkspaceError, message):
-                workspace._package_groups(changed, host="linux")
+            with self.subTest(name=name, field=field), self.assertRaisesRegex(native.BazelWorkspaceError, message):
+                providers.package_groups(changed, host="linux")
 
     def test_gtk_provider_keeps_transitive_source_identities_separate_from_gtkmm_outputs(self):
         with tempfile.TemporaryDirectory(prefix="aobus-gtk-inputs-") as temporary:
             root = Path(temporary).resolve()
-            policy = workspace._load_policy()
+            policy = providers.load_policy()
             gtkmm = next(p for p in policy["packages"]["native"] if p["name"] == "gtkmm")
             policy["packages"] = {"native": [gtkmm], "test": []}
             sources = [gtkmm["nix"], *gtkmm["nix_inputs"]]
@@ -62,11 +65,11 @@ class GtkSdkPolicyTest(unittest.TestCase):
             for output in outputs.values():
                 (output / "lib/pkgconfig").mkdir(parents=True)
             report = root / "report.json"
-            workspace._write_json(
+            native.write_json(
                 report,
                 {
                     "schemaVersion": 1,
-                    "nixpkgsRevision": workspace._json(workspace.PROJECT_ROOT / "nixpkgs.json")["rev"],
+                    "nixpkgsRevision": native.read_json(native.PROJECT_ROOT / "nixpkgs.json")["rev"],
                 },
             )
 
@@ -82,17 +85,17 @@ class GtkSdkPolicyTest(unittest.TestCase):
 
             with (
                 patch.dict(os.environ, {"AOBUS_NIX_DEPENDENCY_REPORT": str(report)}),
-                patch.object(workspace, "_nix_dependency", side_effect=dependency),
+                patch.object(providers, "nix_dependency", side_effect=dependency),
                 patch.object(
-                    workspace,
-                    "_nix_root",
+                    providers,
+                    "nix_root",
                     side_effect=lambda path: next(output for output in outputs.values() if path.is_relative_to(output)),
                 ),
-                patch.object(workspace, "_executable", side_effect=lambda name, **kwargs: "/selected/" + name),
+                patch.object(native, "executable", side_effect=lambda name, **kwargs: "/selected/" + name),
                 patch.object(subprocess, "run", side_effect=query),
             ):
-                base, versions, expected = workspace._linux_provider(policy, identity_path=root / "identity.json")
-            identity = workspace._json(root / "identity.json")
+                base, versions, expected = providers.linux_provider(policy, identity_path=root / "identity.json")
+            identity = native.read_json(root / "identity.json")
             self.assertEqual(identity["packages"]["gtkmm"]["outputs"], [str(outputs["gtkmm"])])
             self.assertEqual(set(identity["inputs"]), set(sources) - {"gtkmm"})
             self.assertEqual(identity["inputs"]["gtk4"]["outputs"], [str(outputs["gtk4"])])
@@ -131,10 +134,10 @@ class GtkProjectionTest(unittest.TestCase):
         self.resolver = self.root / "resolver"
         self.resolver.write_bytes(b"fixture tool, not executed")
         self.resolver.chmod(0o755)
-        policy = workspace._load_policy()
+        policy = providers.load_policy()
         policy["packages"] = {"native": [p for p in policy["packages"]["native"] if p["name"] == "gtkmm"], "test": []}
         self.policy = self.root / "policy.json"
-        workspace._write_json(self.policy, policy)
+        native.write_json(self.policy, policy)
         self.observed = "4.99.1"
         self.metadata_version = self.observed
         self.cairo_observed = "1.99.2"
@@ -143,7 +146,7 @@ class GtkProjectionTest(unittest.TestCase):
         self.header_provider = self.gtk
 
     def provider(self, policy, *, identity_path):
-        workspace._write_json(
+        native.write_json(
             identity_path,
             {
                 "packages": {"gtkmm": {"outputs": [str(self.gtkmm)]}},
@@ -210,17 +213,17 @@ class GtkProjectionTest(unittest.TestCase):
             )
 
         with (
-            patch.object(workspace, "POLICY", self.policy),
-            patch.object(workspace, "native_platform", return_value="linux"),
-            patch.object(workspace, "_linux_provider", side_effect=self.provider),
-            patch.object(workspace, "_nix_root", side_effect=nix_root),
+            patch.object(providers, "POLICY", self.policy),
+            patch.object(native, "native_platform", return_value="linux"),
+            patch.object(providers, "linux_provider", side_effect=self.provider),
+            patch.object(providers, "nix_root", side_effect=nix_root),
             patch.object(subprocess, "run", side_effect=self.query),
         ):
-            return workspace.refresh_dependencies(self.root / "resolution", "debug", group="native") / "native"
+            return dependencies.resolve_dependencies(self.root / "resolution", "debug", group="native")
 
     def test_metadata_projects_the_observed_gtkmm_version_and_rendering_closure(self):
         repository = self.refresh()
-        manifest = workspace._json(repository / "manifest.json")
+        manifest = repository["manifest"]
         package = manifest["packages"][0]
         self.assertEqual(manifest["modules"]["gtkmm-4.0"]["version"], self.observed)
         self.assertEqual(manifest["modules"]["cairo-ft"]["version"], self.cairo_observed)
@@ -230,18 +233,28 @@ class GtkProjectionTest(unittest.TestCase):
         )
         self.assertIn(str(self.gtk / "include"), package["interface"]["header_dirs"])
         self.assertIn(str(self.fontconfig / "include"), package["interface"]["header_dirs"])
-        self.assertIn("copts = []", (repository / "BUILD.bazel").read_text())
+        normalized = repository["packages"][0]
+        self.assertNotIn("copts", normalized)
+        self.assertEqual(
+            [library["source"] for library in normalized["libraries"]],
+            [
+                str(self.gtkmm / "lib/libgtkmm-4.0.so"),
+                str(self.gtk / "lib/libgtk-4.so"),
+                str(self.cairo / "lib/libcairo.so"),
+                str(self.fontconfig / "lib/libfontconfig.so"),
+            ],
+        )
 
     def test_missing_metadata_and_mismatched_gtkmm_version_never_fall_back(self):
         self.metadata_version = "4.99.2"
         with self.assertRaisesRegex(bazel_deps.BazelDependencyError, "module version mismatch: gtkmm-4.0"):
             self.refresh()
         (self.cairo / "lib/pkgconfig/cairo-ft.pc").unlink()
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "incomplete pkg-config module group"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "incomplete pkg-config module group"):
             self.refresh()
         (self.cairo / "lib/pkgconfig/cairo-fc.pc").unlink()
         (self.pcdirs[0] / "gtkmm-4.0.pc").unlink()
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "gtkmm requires complete"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "gtkmm requires complete"):
             self.refresh()
 
     def test_cairo_backend_metadata_must_match_its_own_provider_not_gtkmm(self):
@@ -258,7 +271,7 @@ class GtkProjectionTest(unittest.TestCase):
 
     def test_gtk_headers_cannot_escape_into_another_globally_allowed_package(self):
         self.header_provider = self.foreign
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "does not match Nix report outputs"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "does not match Nix report outputs"):
             self.refresh()
 
 
@@ -309,7 +322,7 @@ class BoostProcessSdkTest(unittest.TestCase):
 
     def interface(self):
         with patch.object(subprocess, "run", side_effect=self.query):
-            return workspace._linux_boost_process_interface(self.spec, [self.provider], self.version)
+            return dependencies._linux_boost_process_interface(self.spec, [self.provider], self.version)
 
     def test_installed_process_v2_exports_its_shared_filesystem_consumer_abi(self):
         interface = self.interface()
@@ -326,19 +339,19 @@ class BoostProcessSdkTest(unittest.TestCase):
 
     def test_wrong_header_library_version_missing_library_or_v1_only_library_is_rejected(self):
         self.header.write_text("#define BOOST_VERSION 109000\n")
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "header version mismatch"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "header version mismatch"):
             self.interface()
         self.header.write_text("#define BOOST_VERSION 109100\n")
         self.library_version = "1.90.0"
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "shared library ABI/version mismatch"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "shared library ABI/version mismatch"):
             self.interface()
         self.library_version = self.version
         self.symbol = "boost::process::v1::launcher("
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "shared library ABI/version mismatch"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "shared library ABI/version mismatch"):
             self.interface()
         self.symbol = "boost::process::v2::process_environment::do_setup("
         (self.provider / "lib/libboost_filesystem.so").unlink()
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "missing/ambiguous shared"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "missing/ambiguous shared"):
             self.interface()
 
     def test_a_process_library_alias_cannot_escape_the_selected_boost_outputs(self):
@@ -354,7 +367,7 @@ class BoostProcessSdkTest(unittest.TestCase):
 
         with (
             patch.object(Path, "resolve", resolve),
-            self.assertRaisesRegex(workspace.BazelWorkspaceError, "escapes/missing"),
+            self.assertRaisesRegex(native.BazelWorkspaceError, "escapes/missing"),
         ):
             self.interface()
 
@@ -363,21 +376,21 @@ class BoostProcessSdkTest(unittest.TestCase):
             with (
                 patch.dict(self.spec, {field: value}),
                 self.subTest(field=field),
-                self.assertRaisesRegex(workspace.BazelWorkspaceError, "Linux shared Nix"),
+                self.assertRaisesRegex(native.BazelWorkspaceError, "Linux shared Nix"),
             ):
                 self.interface()
 
     def test_refresh_does_not_treat_the_header_only_boost_pc_as_process_metadata(self):
-        policy = workspace._load_policy()
+        policy = providers.load_policy()
         policy["packages"] = {
             "native": [p for p in policy["packages"]["native"] if p["name"] == "boost_process"],
             "test": [],
         }
         policy_path = self.root / "policy.json"
-        workspace._write_json(policy_path, policy)
+        native.write_json(policy_path, policy)
 
         def provider(policy, *, identity_path):
-            workspace._write_json(identity_path, {"packages": {"boost_process": {"outputs": [str(self.provider)]}}})
+            native.write_json(identity_path, {"packages": {"boost_process": {"outputs": [str(self.provider)]}}})
             return (
                 {
                     "provider": {"name": "nix", "version": "fixture", "evidence": []},
@@ -391,14 +404,14 @@ class BoostProcessSdkTest(unittest.TestCase):
             )
 
         with (
-            patch.object(workspace, "POLICY", policy_path),
-            patch.object(workspace, "native_platform", return_value="linux"),
-            patch.object(workspace, "_linux_provider", side_effect=provider),
-            patch.object(workspace, "_nix_root", return_value=self.provider),
+            patch.object(providers, "POLICY", policy_path),
+            patch.object(native, "native_platform", return_value="linux"),
+            patch.object(providers, "linux_provider", side_effect=provider),
+            patch.object(providers, "nix_root", return_value=self.provider),
             patch.object(subprocess, "run", side_effect=self.query),
         ):
-            generated = workspace.refresh_dependencies(self.root / "resolution", "debug", group="native")
-        manifest = workspace._json(generated / "native/manifest.json")
+            resolution = dependencies.resolve_dependencies(self.root / "resolution", "debug", group="native")
+        manifest = resolution["manifest"]
         self.assertEqual(manifest["packages"][0]["origin"], "manual_fallback")
         self.assertEqual(
             [item["name"] for item in manifest["packages"][0]["resolved_libraries"]],
@@ -424,7 +437,7 @@ class GResourceSdkTest(unittest.TestCase):
             self.runtime.append(path)
         self.aliases = {Path("/nix/store/fixture-glib-dev"): self.dev, Path("/nix/store/fixture-glib-out"): self.out}
         self.report_path = self.root / "report.json"
-        self.pin = workspace._json(workspace.PROJECT_ROOT / "nixpkgs.json")["rev"]
+        self.pin = native.read_json(native.PROJECT_ROOT / "nixpkgs.json")["rev"]
         self.report = {
             "schemaVersion": 1,
             "nixpkgsRevision": self.pin,
@@ -451,7 +464,7 @@ class GResourceSdkTest(unittest.TestCase):
 
     @contextmanager
     def sdk(self):
-        workspace._write_json(self.report_path, self.report)
+        native.write_json(self.report_path, self.report)
         original_is_dir = Path.is_dir
 
         def nix_root(path):
@@ -470,8 +483,8 @@ class GResourceSdkTest(unittest.TestCase):
                     "NIX_CFLAGS_COMPILE": "-I/ambient",
                 },
             ),
-            patch.object(workspace, "native_platform", return_value="linux"),
-            patch.object(workspace, "_nix_root", side_effect=nix_root),
+            patch.object(native, "native_platform", return_value="linux"),
+            patch.object(providers, "nix_root", side_effect=nix_root),
             patch.object(Path, "is_dir", lambda path: path in self.aliases or original_is_dir(path)),
             patch.object(subprocess, "run", side_effect=self.query),
         ):
@@ -479,21 +492,21 @@ class GResourceSdkTest(unittest.TestCase):
 
     def test_report_owned_resource_compiler_declares_glib_runtime_and_provider_evidence(self):
         with self.sdk():
-            identity, compiler, runtime, evidence = workspace._linux_gresource()
+            identity, compiler, runtime, evidence = host_tools._linux_gresource()
         self.assertEqual(compiler, self.compiler)
         self.assertEqual(set(runtime), set(self.runtime))
         self.assertEqual(identity["version"], "2.99.1")
         self.assertEqual(identity["deriver"], "/nix/store/fixture-glib.drv")
         self.assertEqual(set(identity["outputs"]), {str(self.dev), str(self.out)})
-        self.assertEqual(evidence, [self.report_path, workspace.PROJECT_ROOT / "nixpkgs.json"])
+        self.assertEqual(evidence, [self.report_path, native.PROJECT_ROOT / "nixpkgs.json"])
         self.assertEqual(self.queries, [[str(self.compiler), "--version"]])
 
     def test_wrong_platform_schema_revision_or_noncanonical_output_is_rejected_before_tool_probe(self):
         with (
-            patch.object(workspace, "native_platform", return_value="macos"),
-            self.assertRaisesRegex(workspace.BazelWorkspaceError, "Linux Nix"),
+            patch.object(native, "native_platform", return_value="macos"),
+            self.assertRaisesRegex(native.BazelWorkspaceError, "Linux Nix"),
         ):
-            workspace._linux_gresource()
+            host_tools._linux_gresource()
         baseline = copy.deepcopy(self.report)
         for field, value in (
             ("schemaVersion", 2),
@@ -505,8 +518,8 @@ class GResourceSdkTest(unittest.TestCase):
                 self.report["dependencies"]["glib"]["outputs"]["dev"] = value
             else:
                 self.report[field] = value
-            with self.subTest(field=field), self.sdk(), self.assertRaises(workspace.BazelWorkspaceError):
-                workspace._linux_gresource()
+            with self.subTest(field=field), self.sdk(), self.assertRaises(native.BazelWorkspaceError):
+                host_tools._linux_gresource()
         self.assertEqual(self.queries, [])
 
     def test_tool_version_requires_the_exact_numeric_provider_report_and_success(self):
@@ -515,15 +528,15 @@ class GResourceSdkTest(unittest.TestCase):
             with (
                 self.subTest(reported=reported, status=status),
                 self.sdk(),
-                self.assertRaisesRegex(workspace.BazelWorkspaceError, "does not report GLib version"),
+                self.assertRaisesRegex(native.BazelWorkspaceError, "does not report GLib version"),
             ):
-                workspace._linux_gresource()
+                host_tools._linux_gresource()
 
     def test_tool_and_runtime_must_be_owned_by_the_selected_glib_outputs(self):
         for path in (self.compiler, self.runtime[0]):
             self.escape = path
-            with self.subTest(path=path), self.sdk(), self.assertRaisesRegex(workspace.BazelWorkspaceError, "escapes"):
-                workspace._linux_gresource()
+            with self.subTest(path=path), self.sdk(), self.assertRaisesRegex(native.BazelWorkspaceError, "escapes"):
+                host_tools._linux_gresource()
         self.assertEqual(self.queries, [])
 
     def test_a_second_tool_or_missing_adjacent_runtime_never_uses_path_fallback(self):
@@ -532,16 +545,16 @@ class GResourceSdkTest(unittest.TestCase):
         second.write_bytes(b"ambiguous compiler fixture")
         with (
             self.sdk(),
-            self.assertRaisesRegex(workspace.BazelWorkspaceError, "missing/ambiguous glib-compile-resources"),
+            self.assertRaisesRegex(native.BazelWorkspaceError, "missing/ambiguous glib-compile-resources"),
         ):
-            workspace._linux_gresource()
+            host_tools._linux_gresource()
         second.unlink()
         self.runtime[0].unlink()
         with (
             self.sdk(),
-            self.assertRaisesRegex(workspace.BazelWorkspaceError, "missing/ambiguous resource compiler GLib runtime"),
+            self.assertRaisesRegex(native.BazelWorkspaceError, "missing/ambiguous resource compiler GLib runtime"),
         ):
-            workspace._linux_gresource()
+            host_tools._linux_gresource()
 
 
 if __name__ == "__main__":

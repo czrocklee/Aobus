@@ -8,7 +8,15 @@ load("@rules_cc//cc/toolchains:tool_map.bzl", "cc_tool_map")
 load("@rules_cc//cc/toolchains:toolchain.bzl", "cc_toolchain")
 load(":compiler_policy.bzl", "UNIX_WARNINGS")
 
-def linux_toolchain(tools, builtin_include_directories, hardening_environment, constraint_cpu):
+def _hardening_environment(nix_cc_wrapper, optimized):
+    # Fortify makes the Nix wrapper inject -O2 and requires optimized libc headers.
+    # Preserve every other observed flag, including new names and an empty policy.
+    flags = nix_cc_wrapper["hardeningEnable"]
+    if not optimized:
+        flags = [flag for flag in flags if flag not in ["fortify", "fortify3"]]
+    return {"NIX_HARDENING_ENABLE_" + nix_cc_wrapper["suffixSalt"]: " ".join(flags)}
+
+def linux_toolchain(tools, builtin_include_directories, nix_cc_wrapper, constraint_cpu):
     """Declare the fixed native graph using caller-relative tool/input labels."""
     native.exports_files([
         "identity.json",
@@ -24,7 +32,7 @@ def linux_toolchain(tools, builtin_include_directories, hardening_environment, c
     )
 
     # Keep the lexical source basename: Nix and LLVM wrappers dispatch on argv[0].
-    # The resolver supplies local source labels, not resolved compiler executables.
+    # The repository supplies local source labels, not resolved compiler executables.
     cc_tool(
         name = "clang",
         src = tools["clang"],
@@ -191,7 +199,7 @@ def linux_toolchain(tools, builtin_include_directories, hardening_environment, c
             "@rules_cc//cc/toolchains/actions:link_actions",
         ],
         data = [":identity"],
-        env = hardening_environment["dbg"],
+        env = _hardening_environment(nix_cc_wrapper, optimized = False),
         requires_any_of = [":is_dbg"],
     )
 
@@ -202,7 +210,7 @@ def linux_toolchain(tools, builtin_include_directories, hardening_environment, c
             "@rules_cc//cc/toolchains/actions:link_actions",
         ],
         data = [":identity"],
-        env = hardening_environment["opt"],
+        env = _hardening_environment(nix_cc_wrapper, optimized = True),
         requires_any_of = [":is_opt"],
     )
 
@@ -213,7 +221,7 @@ def linux_toolchain(tools, builtin_include_directories, hardening_environment, c
             "@rules_cc//cc/toolchains/actions:link_actions",
         ],
         data = [":identity"],
-        env = hardening_environment["fastbuild"],
+        env = _hardening_environment(nix_cc_wrapper, optimized = False),
         requires_any_of = [":is_fastbuild"],
     )
 

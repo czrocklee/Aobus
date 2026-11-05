@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ao.core import bazel_workspace
+from ao.core import bazel_dependencies as dependencies
 from ao.core.paths import PROJECT_ROOT
 
 
@@ -217,9 +217,9 @@ class BazelCompileInterfacePatchTest(unittest.TestCase):
                 ["-I", str(equivalent)],
                 ["-isystem", str(equivalent)],
             ):
-                with self.subTest(flags=flags), patch.object(bazel_workspace, "_metadata_flags", return_value=flags):
+                with self.subTest(flags=flags), patch.object(dependencies, "_metadata_flags", return_value=flags):
                     self.assertIsNone(
-                        bazel_workspace._compile_interface_patch(spec, "lmdb", {"header_dirs": [str(include)]})
+                        dependencies._compile_interface_patch(spec, "lmdb", {"header_dirs": [str(include)]})
                     )
 
     def test_metadata_flag_tokenization_matches_the_adapter_for_quoted_paths(self):
@@ -229,9 +229,9 @@ class BazelCompileInterfacePatchTest(unittest.TestCase):
             "packages": [{"name": "lmdb", "modules": ["lmdb"]}],
         }
         output = '-I"/provider with spaces/include" -DC4_CPP=17 /permissive-'
-        with patch.object(bazel_workspace.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, output)):
+        with patch.object(dependencies.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, output)):
             self.assertEqual(
-                bazel_workspace._metadata_flags(spec, "--cflags", package="lmdb"),
+                dependencies._metadata_flags(spec, "--cflags", package="lmdb"),
                 ["-I/provider with spaces/include", "-DC4_CPP=17", "/permissive-"],
             )
 

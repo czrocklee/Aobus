@@ -1,7 +1,6 @@
 """Behavior tests for the bounded Bazel portal and provider adapter."""
 
 import argparse
-import ast
 import copy
 import hashlib
 import io
@@ -19,7 +18,11 @@ from unittest.mock import Mock, patch
 
 from ao.__main__ import make_parser
 from ao.command import bazel, coverage
+from ao.core import bazel_dependencies as dependencies
 from ao.core import bazel_deps as deps
+from ao.core import bazel_host_tools as host_tools
+from ao.core import bazel_native as native
+from ao.core import bazel_providers as providers
 from ao.core import bazel_workspace as workspace
 from ao.core import buildenv
 from ao.core.paths import PROJECT_ROOT
@@ -217,7 +220,7 @@ class BazelParserTests(unittest.TestCase):
             ["--copt=-fms-runtime-lib=static"],
             ["--define=gsl_CONFIG_CONTRACT_CHECKING_OFF=1"],
         ):
-            with self.subTest(arguments=arguments), self.assertRaisesRegex(workspace.BazelWorkspaceError, "CRT/GSL"):
+            with self.subTest(arguments=arguments), self.assertRaisesRegex(native.BazelWorkspaceError, "CRT/GSL"):
                 bazel.validate_forwarded_arguments(arguments)
 
 
@@ -231,7 +234,7 @@ class BazelHygieneTests(unittest.TestCase):
             files = ["script/ao/command/bazel.py", "lib/utility/Base64.cpp"]
         args = make_parser().parse_args(["bazel", "hygiene", *arguments])
         with (
-            patch.object(workspace, "native_platform", return_value=host),
+            patch.object(native, "native_platform", return_value=host),
             patch.dict(os.environ, {"AOBUS_STATE_ROOT": self.STATE, **(environment or {})}),
             patch("ao.core.gitfiles.changed_files", return_value=files),
             patch("ao.core.pythonenv.ensure_environment", return_value=self.TOOLS) as tools,
@@ -270,12 +273,12 @@ class BazelHygieneTests(unittest.TestCase):
             with (
                 self.subTest(explicit=explicit),
                 patch("ao.core.pythoncheck.run_paths", return_value=0) as python,
-                patch("ao.core.bazel_lint.run", return_value=1) as native,
+                patch("ao.core.bazel_lint.run", return_value=1) as native_lint,
                 patch("sys.stdout", new_callable=io.StringIO),
             ):
                 self.assertEqual(lint(files, explicit), 1)
             python.assert_called_once_with(["script/ao/command/bazel.py"], python=None)
-            selected = vars(native.call_args.args[0])
+            selected = vars(native_lint.call_args.args[0])
             self.assertEqual(selected.pop("_resolved_sources"), ["lib/utility/Base64.cpp"])
             self.assertEqual(selected.keys(), defaults.keys())
             expected = {
@@ -317,7 +320,7 @@ class BazelHygieneTests(unittest.TestCase):
             args = make_parser().parse_args(["bazel", "hygiene"])
             with (
                 self.subTest(host=host),
-                patch.object(workspace, "native_platform", return_value=host),
+                patch.object(native, "native_platform", return_value=host),
                 patch("ao.core.gitfiles.changed_files", return_value=[]) as changed,
                 patch("ao.core.windows_llvm_sdk.ready_root", side_effect=AssertionError("no SDK for empty scope")),
                 patch("ao.core.pythonenv.ensure_environment", side_effect=AssertionError("no empty tooling stage")),
@@ -333,7 +336,7 @@ class BazelHygieneTests(unittest.TestCase):
         source = "script/ao/core/pythoncheck.py"
         args = make_parser().parse_args(["bazel", "hygiene", source])
         with (
-            patch.object(workspace, "native_platform", return_value="windows"),
+            patch.object(native, "native_platform", return_value="windows"),
             patch.dict(os.environ, {"AOBUS_STATE_ROOT": self.STATE}),
             patch("ao.core.windows_llvm_sdk.ready_root", side_effect=AssertionError("SDK not provisioned")),
             patch("ao.core.pythonenv.ensure_environment", return_value=self.TOOLS) as tools,
@@ -353,13 +356,13 @@ class BazelHygieneTests(unittest.TestCase):
             args = make_parser().parse_args(["bazel", "hygiene", source])
             with (
                 self.subTest(host=host),
-                patch.object(workspace, "native_platform", return_value=host),
+                patch.object(native, "native_platform", return_value=host),
                 patch("ao.core.windows_llvm_sdk.ready_root", return_value=(Path("sdk"), True)) as sdk,
                 patch("ao.core.pythonenv.ensure_environment", side_effect=AssertionError("no Python scope")),
                 patch("ao.command.format.run_clang_format", return_value=0) as formatting,
                 patch("ao.command.name_audit.run_command", return_value=0),
                 patch("ao.core.pythoncheck.run_paths", side_effect=AssertionError("no Python stage")),
-                patch("ao.core.bazel_lint.run", return_value=0) as native,
+                patch("ao.core.bazel_lint.run", return_value=0) as native_lint,
                 patch("sys.stdout", new_callable=io.StringIO),
             ):
                 self.assertEqual(bazel.run(args), 0)
@@ -369,7 +372,7 @@ class BazelHygieneTests(unittest.TestCase):
                 build_dir=None,
                 clang_format=str(Path("sdk/bin/clang-format.exe")) if host == "windows" else None,
             )
-            self.assertEqual(native.call_args.args[0]._resolved_sources, [source])
+            self.assertEqual(native_lint.call_args.args[0]._resolved_sources, [source])
             if host == "windows":
                 sdk.assert_called_once()
             else:
@@ -386,7 +389,7 @@ class BazelHygieneTests(unittest.TestCase):
             return 0
 
         with (
-            patch.object(workspace, "native_platform", return_value="windows"),
+            patch.object(native, "native_platform", return_value="windows"),
             patch.dict(os.environ, {"AOBUS_STATE_ROOT": self.STATE}),
             patch("ao.core.gitfiles.changed_files", return_value=sources) as changed,
             patch("ao.core.windows_llvm_sdk.ready_root", return_value=(Path("sdk"), True)),
@@ -395,7 +398,7 @@ class BazelHygieneTests(unittest.TestCase):
             patch("ao.command.format.run_ruff_format", return_value=0) as formatting,
             patch("ao.command.name_audit.run_command", return_value=0),
             patch("ao.core.pythoncheck.run_paths", return_value=0) as python,
-            patch("ao.core.bazel_lint.run", side_effect=lint) as native,
+            patch("ao.core.bazel_lint.run", side_effect=lint) as native_lint,
             patch("sys.stdout", new_callable=io.StringIO),
         ):
             self.assertEqual(bazel.run(args), 0)
@@ -403,13 +406,13 @@ class BazelHygieneTests(unittest.TestCase):
         tools.assert_called_once_with(PROJECT_ROOT, Path(self.STATE), platform_name="windows")
         formatting.assert_called_once_with([sources[0]], check=True, python=self.TOOLS)
         python.assert_called_once_with([sources[0]], python=self.TOOLS)
-        native.assert_called_once()
+        native_lint.assert_called_once()
         self.assertEqual(sys.executable, portal_python)
 
     def test_tool_environment_failure_stops_before_any_stage(self):
         args = make_parser().parse_args(["bazel", "hygiene", "script/ao/command/bazel.py"])
         with (
-            patch.object(workspace, "native_platform", return_value="macos"),
+            patch.object(native, "native_platform", return_value="macos"),
             patch.dict(os.environ, {"AOBUS_STATE_ROOT": self.STATE}),
             patch("ao.core.pythonenv.ensure_environment", side_effect=RuntimeError("no locked wheel")),
             patch("ao.command.hygiene.run_command", side_effect=AssertionError("no gate without tools")),
@@ -434,7 +437,7 @@ class BazelHygieneTests(unittest.TestCase):
             (root / "bin/clang-format.exe").unlink()
             args = make_parser().parse_args(["bazel", "hygiene", "lib/utility/Base64.cpp"])
             with (
-                patch.object(workspace, "native_platform", return_value="windows"),
+                patch.object(native, "native_platform", return_value="windows"),
                 patch.dict(os.environ, {"AOBUS_LLVM_SDK_ROOT": temporary}),
                 patch("ao.command.hygiene.run_command", side_effect=AssertionError("no gate without an SDK")),
                 patch("sys.stderr", new_callable=io.StringIO) as stderr,
@@ -464,16 +467,16 @@ class NixDependencyMetadataTests(unittest.TestCase):
         self.installed = {self.bin, self.out, self.dev}
         for patcher in (
             patch.object(Path, "is_dir", lambda path: path in self.installed),
-            patch.object(workspace, "_nix_root", side_effect=lambda path: path),
-            patch.object(workspace, "_executable", side_effect=AssertionError("no Nix CLI discovery")),
-            patch.object(workspace.subprocess, "run", side_effect=AssertionError("no Nix CLI query")),
+            patch.object(providers, "nix_root", side_effect=lambda path: path),
+            patch.object(native, "executable", side_effect=AssertionError("no Nix CLI discovery")),
+            patch.object(providers.subprocess, "run", side_effect=AssertionError("no Nix CLI query")),
         ):
             patcher.start()
             self.addCleanup(patcher.stop)
 
     def test_reported_selected_bin_and_sibling_outputs_do_not_require_derivation_file(self):
         with patch.object(Path, "is_file", side_effect=AssertionError("drv file presence is not authority")):
-            root, version, derivation, outputs = workspace._nix_dependency(self.report, "fixture")
+            root, version, derivation, outputs = providers.nix_dependency(self.report, "fixture")
         self.assertEqual(root, self.bin)
         self.assertEqual(version, "1.2.3")
         self.assertEqual(derivation, "/nix/store/package.drv")
@@ -487,8 +490,8 @@ class NixDependencyMetadataTests(unittest.TestCase):
             del entry[key]
             reports.append({"dependencies": {"fixture": entry}})
         for report in reports:
-            with self.subTest(report=report), self.assertRaisesRegex(workspace.BazelWorkspaceError, "re-enter"):
-                workspace._nix_dependency(report, "fixture")
+            with self.subTest(report=report), self.assertRaisesRegex(native.BazelWorkspaceError, "re-enter"):
+                providers.nix_dependency(report, "fixture")
 
     def test_all_metadata_types_and_output_names_are_validated(self):
         for key, value in (
@@ -511,8 +514,8 @@ class NixDependencyMetadataTests(unittest.TestCase):
         ):
             report = copy.deepcopy(self.report)
             report["dependencies"]["fixture"][key] = value
-            with self.subTest(key=key, value=value), self.assertRaisesRegex(workspace.BazelWorkspaceError, "re-enter"):
-                workspace._nix_dependency(report, "fixture")
+            with self.subTest(key=key, value=value), self.assertRaisesRegex(native.BazelWorkspaceError, "re-enter"):
+                providers.nix_dependency(report, "fixture")
 
     def test_raw_store_roots_are_validated_before_canonicalization_or_absence_filtering(self):
         for value in (
@@ -535,14 +538,14 @@ class NixDependencyMetadataTests(unittest.TestCase):
                 entry[field] = {**entry["outputs"], "doc": value} if field == "outputs" else value
                 with (
                     self.subTest(field=field, value=value),
-                    patch.object(workspace, "_nix_root", side_effect=AssertionError("invalid raw root")),
-                    self.assertRaisesRegex(workspace.BazelWorkspaceError, "re-enter"),
+                    patch.object(providers, "nix_root", side_effect=AssertionError("invalid raw root")),
+                    self.assertRaisesRegex(native.BazelWorkspaceError, "re-enter"),
                 ):
-                    workspace._nix_dependency(report, "fixture")
+                    providers.nix_dependency(report, "fixture")
         for value in ("/nix/store/package", "/nix/store/.drv", "/nix/store/package.drv/nested"):
             self.entry["drvPath"] = value
-            with self.subTest(derivation=value), self.assertRaisesRegex(workspace.BazelWorkspaceError, "re-enter"):
-                workspace._nix_dependency(self.report, "fixture")
+            with self.subTest(derivation=value), self.assertRaisesRegex(native.BazelWorkspaceError, "re-enter"):
+                providers.nix_dependency(self.report, "fixture")
 
     def test_selected_root_must_be_declared_and_installed(self):
         for installed in (True, False):
@@ -551,16 +554,16 @@ class NixDependencyMetadataTests(unittest.TestCase):
                 del report["dependencies"]["fixture"]["outputs"]["bin"]
             else:
                 self.installed.remove(self.bin)
-            with self.subTest(installed=installed), self.assertRaisesRegex(workspace.BazelWorkspaceError, "re-enter"):
-                workspace._nix_dependency(report, "fixture")
+            with self.subTest(installed=installed), self.assertRaisesRegex(native.BazelWorkspaceError, "re-enter"):
+                providers.nix_dependency(report, "fixture")
 
     def test_canonical_output_aliases_are_deduplicated_and_selected_root_is_retained(self):
         alias = Path("/nix/store/package-alias")
         self.installed.add(alias)
         self.entry["storePath"] = alias.as_posix()
         self.entry["outputs"]["alias"] = alias.as_posix()
-        with patch.object(workspace, "_nix_root", side_effect=lambda path: self.bin if path == alias else path):
-            root, _, _, outputs = workspace._nix_dependency(self.report, "fixture")
+        with patch.object(providers, "nix_root", side_effect=lambda path: self.bin if path == alias else path):
+            root, _, _, outputs = providers.nix_dependency(self.report, "fixture")
         self.assertEqual(root, self.bin)
         self.assertEqual(outputs, [self.bin, self.dev, self.out])
 
@@ -570,7 +573,7 @@ class BazelWorkspaceTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory(prefix="aobus-bazel-test-")
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name).resolve()
-        self.small_policy = workspace._json(workspace.POLICY)
+        self.small_policy = native.read_json(providers.POLICY)
         self.small_policy["packages"]["native"] = [self.small_policy["packages"]["native"][0]]
         self.small_policy["packages"]["test"] = [self.small_policy["packages"]["test"][0]]
         self.small_policy_path = self.root / "policy.json"
@@ -581,11 +584,11 @@ class BazelWorkspaceTests(unittest.TestCase):
         path.write_text(json.dumps(value), encoding="utf-8")
 
     def test_checkout_paths_and_existing_cmake_trees_are_rejected(self):
-        for path in (workspace.PROJECT_ROOT, workspace.PROJECT_ROOT / "build/bazel", workspace.PROJECT_ROOT.parent):
-            with self.subTest(path=path), self.assertRaisesRegex(workspace.BazelWorkspaceError, "outside"):
+        for path in (native.PROJECT_ROOT, native.PROJECT_ROOT / "build/bazel", native.PROJECT_ROOT.parent):
+            with self.subTest(path=path), self.assertRaisesRegex(native.BazelWorkspaceError, "outside"):
                 workspace.workspace_path(str(path), "debug")
         (self.root / "CMakeCache.txt").touch()
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "CMake tree"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "CMake tree"):
             workspace.workspace_path(str(self.root), "debug")
 
     @unittest.skipIf(os.name == "nt", "Native Windows aliases are covered by the canonical-anchor regression")
@@ -594,9 +597,9 @@ class BazelWorkspaceTests(unittest.TestCase):
         source.mkdir()
         alias = self.root / "source-alias"
         alias.symlink_to(source, target_is_directory=True)
-        with patch.object(workspace, "PROJECT_ROOT", alias):
+        with patch.object(native, "PROJECT_ROOT", alias):
             for selected in (source, source / "build", source.parent):
-                with self.subTest(selected=selected), self.assertRaises(workspace.BazelWorkspaceError):
+                with self.subTest(selected=selected), self.assertRaises(native.BazelWorkspaceError):
                     workspace.workspace_path(str(selected), "debug")
 
     def test_workspace_path_compares_mapped_and_unc_source_anchors_canonically(self):
@@ -609,11 +612,11 @@ class BazelWorkspaceTests(unittest.TestCase):
 
             with (
                 self.subTest(alias=alias),
-                patch.object(workspace, "PROJECT_ROOT", alias),
+                patch.object(native, "PROJECT_ROOT", alias),
                 patch.object(Path, "resolve", resolve),
             ):
                 for selected in (canonical, canonical / "build", canonical.parent):
-                    with self.subTest(selected=selected), self.assertRaises(workspace.BazelWorkspaceError):
+                    with self.subTest(selected=selected), self.assertRaises(native.BazelWorkspaceError):
                         workspace.workspace_path(str(selected), "debug")
 
     def test_build_dir_override_is_exact_and_external(self):
@@ -632,7 +635,7 @@ class BazelWorkspaceTests(unittest.TestCase):
             "CXX": "/nix/store/clang++",
             "PATH": "/tools",
         }
-        self.assertEqual(workspace.child_environment(source), {"CXX": "/nix/store/clang++", "PATH": "/tools"})
+        self.assertEqual(native.child_environment(source), {"CXX": "/nix/store/clang++", "PATH": "/tools"})
         self.assertEqual(source["NIX_CFLAGS_COMPILE_FOR_TARGET"], "bad")
 
     def test_tool_admission_requires_a_successful_exact_version_report(self):
@@ -649,7 +652,7 @@ class BazelWorkspaceTests(unittest.TestCase):
                 if accepted:
                     workspace._tool_version(executable, "9.2.0")
                 else:
-                    with self.assertRaisesRegex(workspace.BazelWorkspaceError, "9.2.0"):
+                    with self.assertRaisesRegex(native.BazelWorkspaceError, "9.2.0"):
                         workspace._tool_version(executable, "9.2.0")
                 self.assertEqual(query.call_args.args[0], [str(executable), "--version"])
 
@@ -658,7 +661,7 @@ class BazelWorkspaceTests(unittest.TestCase):
         result = subprocess.CompletedProcess([], 0, "bazel 9.2.0- (@non-git)\n")
         with patch.object(workspace.subprocess, "run", return_value=result):
             workspace._tool_version(Path("/nix/store/hash-bazel/bin/bazel"), "9.2.0")
-            with self.assertRaises(workspace.BazelWorkspaceError):
+            with self.assertRaises(native.BazelWorkspaceError):
                 workspace._tool_version(Path("/ambient/bazel"), "9.2.0")
 
     def test_native_setup_rejects_download_hash_before_install(self):
@@ -675,14 +678,14 @@ class BazelWorkspaceTests(unittest.TestCase):
             Path(path).write_bytes(b"wrong")
 
         with (
-            patch.object(workspace, "_json", return_value=lock),
-            patch.object(workspace, "native_platform", return_value="macos"),
+            patch.object(native, "read_json", return_value=lock),
+            patch.object(native, "native_platform", return_value="macos"),
             patch.object(workspace, "_artifact_key", return_value="darwin-arm64"),
             patch.object(workspace, "_managed_tool", return_value=executable),
             patch.object(workspace.urllib.request, "urlretrieve", side_effect=download),
             patch.dict(os.environ, {}, clear=True),
         ):
-            with self.assertRaisesRegex(workspace.BazelWorkspaceError, "SHA-256"):
+            with self.assertRaisesRegex(native.BazelWorkspaceError, "SHA-256"):
                 workspace.bazel_executable(setup=True)
         self.assertFalse(executable.exists())
 
@@ -697,8 +700,8 @@ class BazelWorkspaceTests(unittest.TestCase):
             },
         }
         with (
-            patch.object(workspace, "_json", return_value=lock),
-            patch.object(workspace, "native_platform", return_value="macos"),
+            patch.object(native, "read_json", return_value=lock),
+            patch.object(native, "native_platform", return_value="macos"),
             patch.object(workspace, "_artifact_key", return_value="darwin-arm64"),
             patch.object(workspace, "_managed_tool", return_value=executable),
             patch.object(
@@ -727,7 +730,7 @@ class BazelWorkspaceTests(unittest.TestCase):
             if existing:
                 executable.write_bytes(b"old binary")
             with patch.object(workspace.os, "replace") as replace:
-                with self.assertRaisesRegex(workspace.BazelWorkspaceError, "SHA-256"):
+                with self.assertRaisesRegex(native.BazelWorkspaceError, "SHA-256"):
                     workspace._publish_tool(download, executable, "0" * 64)
             replace.assert_not_called()
             if existing:
@@ -756,25 +759,25 @@ class BazelWorkspaceTests(unittest.TestCase):
     def test_write_json_preserves_content_and_does_not_rewrite_equivalent_values(self):
         path = self.root / "nested/target.json"
         payload = {"zeta": "café \u2713\n\x01", "alpha": {"b": 2, "a": [1, 2]}}
-        workspace._write_json(path, payload)
+        native.write_json(path, payload)
         self.assertEqual(json.loads(path.read_text(encoding="utf-8")), payload)
         first = path.read_bytes()
         old = 1_000_000_000_000_000_000
         os.utime(path, ns=(old, old))
         sentinel = path.stat().st_mtime_ns
         equivalent = {"alpha": {"a": [1, 2], "b": 2}, "zeta": payload["zeta"]}
-        workspace._write_json(path, equivalent)
+        native.write_json(path, equivalent)
         self.assertEqual(path.read_bytes(), first)
         self.assertEqual(path.stat().st_mtime_ns, sentinel)
 
     def test_write_json_rewrites_changed_values_with_new_bytes_and_timestamp(self):
         path = self.root / "target.json"
-        workspace._write_json(path, {"value": 1})
+        native.write_json(path, {"value": 1})
         first = path.read_bytes()
         old = 1_000_000_000_000_000_000
         os.utime(path, ns=(old, old))
         sentinel = path.stat().st_mtime_ns
-        workspace._write_json(path, {"value": 2})
+        native.write_json(path, {"value": 2})
         self.assertEqual(json.loads(path.read_text(encoding="utf-8")), {"value": 2})
         self.assertNotEqual(path.read_bytes(), first)
         self.assertNotEqual(path.stat().st_mtime_ns, sentinel)
@@ -785,7 +788,7 @@ class BazelWorkspaceTests(unittest.TestCase):
         first = path.read_bytes()
         with patch.object(Path, "read_bytes", side_effect=PermissionError("denied")):
             with self.assertRaises(PermissionError):
-                workspace._write_json(path, {"value": 1})
+                native.write_json(path, {"value": 1})
         self.assertEqual(path.read_bytes(), first)
 
     def provider(self):
@@ -859,7 +862,7 @@ class BazelWorkspaceTests(unittest.TestCase):
             resolved = paths.get(path, path).resolve()
             return next(root for root in roots if resolved.is_relative_to(root))
 
-        with patch.object(Path, "is_dir", is_dir), patch.object(workspace, "_nix_root", side_effect=store_root):
+        with patch.object(Path, "is_dir", is_dir), patch.object(providers, "nix_root", side_effect=store_root):
             yield
 
     def linux_provider(self, *, wrong_metadata=False, split_library_output=False):
@@ -869,7 +872,7 @@ class BazelWorkspaceTests(unittest.TestCase):
         report_path = self.root / "nix-report.json"
         report = {
             "schemaVersion": 1,
-            "nixpkgsRevision": workspace._json(workspace.PROJECT_ROOT / "nixpkgs.json")["rev"],
+            "nixpkgsRevision": native.read_json(native.PROJECT_ROOT / "nixpkgs.json")["rev"],
             "dependencies": {
                 "icu": self.nix_entry(icu, "78.3", {"out": icu, "dev": dev}),
                 "catch2": self.nix_entry(catch, "3.16.0", {"out": catch}),
@@ -905,16 +908,16 @@ class BazelWorkspaceTests(unittest.TestCase):
                 },
             ),
             patch.object(
-                workspace,
-                "_executable",
+                native,
+                "executable",
                 side_effect=lambda name, **kwargs: {"pkg-config": "/tools/pkg-config", "readelf": "/tools/readelf"}[
                     name
                 ],
             ),
             self.nix_paths(roots),
-            patch.object(workspace.subprocess, "run", side_effect=query),
+            patch.object(providers.subprocess, "run", side_effect=query),
         ):
-            return workspace._linux_provider(self.small_policy, identity_path=self.root / "identity.json")
+            return providers.linux_provider(self.small_policy, identity_path=self.root / "identity.json")
 
     def test_linux_provider_whitelists_only_package_report_outputs_and_metadata(self):
         base, versions, expected = self.linux_provider()
@@ -939,7 +942,7 @@ class BazelWorkspaceTests(unittest.TestCase):
         for wrong_metadata in (True, "catch2"):
             with (
                 self.subTest(wrong_metadata=wrong_metadata),
-                self.assertRaisesRegex(workspace.BazelWorkspaceError, "does not match the Nix report"),
+                self.assertRaisesRegex(native.BazelWorkspaceError, "does not match the Nix report"),
             ):
                 self.linux_provider(wrong_metadata=wrong_metadata)
 
@@ -963,9 +966,9 @@ class BazelWorkspaceTests(unittest.TestCase):
                 }
             ],
         }
-        with patch.object(workspace, "_nix_root", side_effect=lambda path: path.parent):
-            with self.assertRaisesRegex(workspace.BazelWorkspaceError, "resolved library"):
-                workspace._verify_linux_resolution(manifest, {"icu": [expected]})
+        with patch.object(providers, "nix_root", side_effect=lambda path: path.parent):
+            with self.assertRaisesRegex(native.BazelWorkspaceError, "resolved library"):
+                providers.verify_linux_resolution(manifest, {"icu": [expected]})
 
     def test_linux_resolution_accepts_siblings_but_rejects_other_packages_headers_and_libraries(self):
         root, dev, other = (self.root / name for name in ("package-out", "package-dev", "other-package"))
@@ -981,7 +984,7 @@ class BazelWorkspaceTests(unittest.TestCase):
         }
         expected = {"icu": [root, dev], "lmdb": [other]}
         with self.nix_paths([root, dev, other]):
-            workspace._verify_linux_resolution(manifest, expected)
+            providers.verify_linux_resolution(manifest, expected)
             for role in ("header", "library"):
                 foreign = copy.deepcopy(manifest)
                 package = foreign["packages"][0]
@@ -989,17 +992,17 @@ class BazelWorkspaceTests(unittest.TestCase):
                     package["interface"]["header_dirs"] = [str(other / "include")]
                 else:
                     package["resolved_libraries"][0]["file"] = str(other / "lib/libicu.so")
-                with self.subTest(role=role), self.assertRaisesRegex(workspace.BazelWorkspaceError, "library/header"):
-                    workspace._verify_linux_resolution(foreign, expected)
+                with self.subTest(role=role), self.assertRaisesRegex(native.BazelWorkspaceError, "library/header"):
+                    providers.verify_linux_resolution(foreign, expected)
 
     def test_linux_resolution_metadata_uses_only_selected_group_output_union(self):
         root, transitive, other_group = (self.root / name for name in ("icu", "lmdb", "catch2"))
         manifest = {"packages": [], "modules": {"transitive": {"metadata": str(transitive / "lib/pkgconfig/lmdb.pc")}}}
         with self.nix_paths([root, transitive, other_group]):
-            workspace._verify_linux_resolution(manifest, {"icu": [root], "lmdb": [transitive]})
+            providers.verify_linux_resolution(manifest, {"icu": [root], "lmdb": [transitive]})
             manifest["modules"]["transitive"]["metadata"] = str(other_group / "lib/pkgconfig/catch2.pc")
-            with self.assertRaisesRegex(workspace.BazelWorkspaceError, "resolved metadata"):
-                workspace._verify_linux_resolution(manifest, {"icu": [root], "lmdb": [transitive]})
+            with self.assertRaisesRegex(native.BazelWorkspaceError, "resolved metadata"):
+                providers.verify_linux_resolution(manifest, {"icu": [root], "lmdb": [transitive]})
 
     @unittest.skipUnless(sys.platform == "linux", "Nix multicall dispatch is a Linux provider boundary")
     def test_executable_preserves_pkg_config_multicall_symlink_invocation_name(self):
@@ -1015,19 +1018,19 @@ class BazelWorkspaceTests(unittest.TestCase):
         executable.chmod(0o755)
         alias = executable.with_name("pkg-config")
         alias.symlink_to(executable.name)
-        with patch.object(workspace.shutil, "which", return_value=str(alias)):
-            selected = workspace._executable("pkg-config")
+        with patch.object(native.shutil, "which", return_value=str(alias)):
+            selected = native.executable("pkg-config")
         self.assertEqual(selected, str(alias))
         result = subprocess.run([selected, "--version"], capture_output=True, text=True, check=True)
         self.assertEqual(result.stdout, "1.0\n")
 
     def test_vcpkg_explicit_triplet_requires_status_and_headers(self):
         prefix = self.provider()
-        self.assertEqual(workspace.vcpkg_prefix(str(prefix), None), prefix)
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "triplet"):
-            workspace.vcpkg_prefix(str(prefix.parent), None)
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "prepared vcpkg prefix"):
-            workspace.vcpkg_prefix(None, None)
+        self.assertEqual(providers.vcpkg_prefix(str(prefix), None), prefix)
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "triplet"):
+            providers.vcpkg_prefix(str(prefix.parent), None)
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "prepared vcpkg prefix"):
+            providers.vcpkg_prefix(None, None)
 
     def test_tree_selects_its_provisioned_triplet_and_never_cmake_metadata(self):
         prefix = self.provider()
@@ -1038,32 +1041,32 @@ class BazelWorkspaceTests(unittest.TestCase):
         )
         tree = self.root / "bazel-debug"
         with (
-            patch.object(workspace, "native_platform", return_value="windows"),
+            patch.object(native, "native_platform", return_value="windows"),
             patch.object(workspace.builddir, "build_dir", return_value=cmake),
         ):
-            with self.assertRaisesRegex(workspace.BazelWorkspaceError, "run `ao bazel provision`"):
-                workspace.vcpkg_prefix(None, tree)
+            with self.assertRaisesRegex(native.BazelWorkspaceError, "run `ao bazel provision`"):
+                providers.vcpkg_prefix(None, tree)
             tree.mkdir()
             prefix.parent.rename(tree / "vcpkg_installed")
             self.assertEqual(
-                workspace.vcpkg_prefix(None, tree), (tree / "vcpkg_installed/x64-windows-static-md").resolve()
+                providers.vcpkg_prefix(None, tree), (tree / "vcpkg_installed/x64-windows-static-md").resolve()
             )
 
     def test_vcpkg_triplets_follow_the_native_presets(self):
-        with patch.object(workspace, "native_platform", return_value="windows"):
-            self.assertEqual(workspace.vcpkg_triplets(), ("x64-windows-static-md", "x64-windows"))
-        with patch.object(workspace, "native_platform", return_value="macos"):
-            with patch.dict(workspace.os.environ, {"AOBUS_VCPKG_TRIPLET": "arm64-aobus-osx"}):
-                self.assertEqual(workspace.vcpkg_triplets(), ("arm64-aobus-osx", "arm64-aobus-osx"))
-            with patch.dict(workspace.os.environ, clear=True):
-                with self.assertRaisesRegex(workspace.BazelWorkspaceError, "AOBUS_VCPKG_TRIPLET"):
-                    workspace.vcpkg_triplets()
-        with patch.object(workspace, "native_platform", return_value="linux"):
-            with self.assertRaisesRegex(workspace.BazelWorkspaceError, "Nix"):
-                workspace.vcpkg_triplets()
+        with patch.object(native, "native_platform", return_value="windows"):
+            self.assertEqual(providers.vcpkg_triplets(), ("x64-windows-static-md", "x64-windows"))
+        with patch.object(native, "native_platform", return_value="macos"):
+            with patch.dict(providers.os.environ, {"AOBUS_VCPKG_TRIPLET": "arm64-aobus-osx"}):
+                self.assertEqual(providers.vcpkg_triplets(), ("arm64-aobus-osx", "arm64-aobus-osx"))
+            with patch.dict(providers.os.environ, clear=True):
+                with self.assertRaisesRegex(native.BazelWorkspaceError, "AOBUS_VCPKG_TRIPLET"):
+                    providers.vcpkg_triplets()
+        with patch.object(native, "native_platform", return_value="linux"):
+            with self.assertRaisesRegex(native.BazelWorkspaceError, "Nix"):
+                providers.vcpkg_triplets()
         presets = {
             preset["name"]: preset.get("cacheVariables", {})
-            for preset in json.loads((workspace.PROJECT_ROOT / "CMakePresets.json").read_text(encoding="utf-8"))[
+            for preset in json.loads((native.PROJECT_ROOT / "CMakePresets.json").read_text(encoding="utf-8"))[
                 "configurePresets"
             ]
         }
@@ -1079,7 +1082,7 @@ class BazelWorkspaceTests(unittest.TestCase):
 
     def test_native_provider_filters_host_triplet_and_selects_debug_paths(self):
         prefix = self.provider()
-        base, versions = workspace._native_provider(
+        base, versions = providers.native_provider(
             prefix, "debug", "windows", identity_path=self.root / "provider-identity.json", policy=self.small_policy
         )
         self.assertEqual(versions, {"icu": "78.3", "catch2": "3.99.1"})
@@ -1105,7 +1108,7 @@ class BazelWorkspaceTests(unittest.TestCase):
         prefix = self.provider()
 
         def provider():
-            return workspace._native_provider(
+            return providers.native_provider(
                 prefix, "debug", "windows", identity_path=self.root / "provider.json", policy=self.small_policy
             )
 
@@ -1117,29 +1120,29 @@ class BazelWorkspaceTests(unittest.TestCase):
         host = prefix.parent / "x64-windows"
         self.assertNotIn(str(host), base["allowed_roots"])
         self.assertIn(str(host / "tools/pkgconf/pkgconf-8.dll"), base["allowed_roots"])
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "x64-windows-static-md"):
-            workspace._native_provider(
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "x64-windows-static-md"):
+            providers.native_provider(
                 host, "debug", "windows", identity_path=self.root / "wrong.json", policy=self.small_policy
             )
         owned = prefix.parent / "vcpkg/info/pkgconf_3.0.3_x64-windows.list"
         original = owned.read_text(encoding="utf-8")
         owned.write_text(original.replace("x64-windows/tools/pkgconf/pkgconf.exe\n", ""), encoding="utf-8")
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "unowned|ownership"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "unowned|ownership"):
             provider()
         owned.write_text(original, encoding="utf-8")
         runtime = host / "tools/pkgconf/pkgconf-8.dll"
         # An installed DLL remains a tool input even if its ownership entry disappears.
         owned.write_text(original.replace("x64-windows/tools/pkgconf/pkgconf-8.dll\n", ""), encoding="utf-8")
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "unowned"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "unowned"):
             provider()
         owned.write_text(original, encoding="utf-8")
         extra = runtime.with_name("unowned.dll")
         extra.touch()
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "unowned"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "unowned"):
             provider()
         extra.unlink()
         runtime.unlink()
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "missing|runtime"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "missing|runtime"):
             provider()
 
     def test_native_selected_directory_alias_cannot_authorize_opposite_configuration(self):
@@ -1153,9 +1156,9 @@ class BazelWorkspaceTests(unittest.TestCase):
                 self.symlink_or_skip(path, opposite / directory, directory=True)
                 with (
                     self.subTest(config=config, directory=directory),
-                    self.assertRaisesRegex(workspace.BazelWorkspaceError, "configuration|native provider root"),
+                    self.assertRaisesRegex(native.BazelWorkspaceError, "configuration|native provider root"),
                 ):
-                    workspace._native_provider(
+                    providers.native_provider(
                         prefix,
                         config,
                         "windows",
@@ -1179,8 +1182,8 @@ class BazelWorkspaceTests(unittest.TestCase):
                 shutil.copyfile(path, target)
                 path.unlink()
             self.symlink_or_skip(path, target, directory=directory)
-            with self.subTest(path=path), self.assertRaisesRegex(workspace.BazelWorkspaceError, "native provider"):
-                workspace._native_provider(
+            with self.subTest(path=path), self.assertRaisesRegex(native.BazelWorkspaceError, "native provider"):
+                providers.native_provider(
                     prefix,
                     "debug",
                     "windows",
@@ -1202,7 +1205,7 @@ class BazelWorkspaceTests(unittest.TestCase):
             opposite = prefix / ("" if config == "debug" else "debug")
             metadata = selected / "lib/pkgconfig/catch2-with-main.pc"
             metadata.write_text("Name: Catch2\nVersion: 3.99.1\n")
-            base, _ = workspace._native_provider(
+            base, _ = providers.native_provider(
                 prefix, config, "windows", identity_path=self.root / "pc-identity.json", policy=self.small_policy
             )
             spec = {
@@ -1219,7 +1222,6 @@ class BazelWorkspaceTests(unittest.TestCase):
                     }
                 ],
             }
-            output = self.root / f"projection-{config}"
             query_state = {
                 "pc_dir": str(metadata.parent),
                 "library_dir": selected / "lib",
@@ -1243,10 +1245,12 @@ class BazelWorkspaceTests(unittest.TestCase):
             with patch.object(deps.subprocess, "run", side_effect=query):
                 adapter = deps._Adapter(spec, {"schema": 1, "patches": []})
                 adapter.prepare()
-                plan = {}
-                good = adapter.build(output, plan=plan)
-                self.assertGreater(good["packages"][0]["declared_headers"], 0)
-                self.assertIn(selected / "lib" / (query_state["library_name"] + ".lib"), [p[0] for p in plan.values()])
+                good = adapter.resolve()
+                self.assertGreater(good["manifest"]["packages"][0]["declared_headers"], 0)
+                self.assertEqual(
+                    good["packages"][0]["libraries"][0]["source"],
+                    str(selected / "lib" / (query_state["library_name"] + ".lib")),
+                )
                 query_state["library_dir"] = opposite / "lib"
                 query_state["library_name"] = "Catch2" if config == "debug" else "Catch2d"
                 with self.subTest(config=config), self.assertRaisesRegex(deps.BazelDependencyError, "outside"):
@@ -1256,14 +1260,14 @@ class BazelWorkspaceTests(unittest.TestCase):
         prefix = self.provider()
         status = prefix.parent / "vcpkg/status"
         status.write_text(status.read_text().replace("Feature: tools", "Feature: unexpected"))
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "features"):
-            workspace._native_provider(
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "features"):
+            providers.native_provider(
                 prefix, "debug", "windows", identity_path=self.root / "identity.json", policy=self.small_policy
             )
 
     def test_windows_static_icu_patch_guards_archive_order_and_translates_only_system_tail(self):
         prefix = self.provider()
-        policy = workspace._json(workspace.POLICY)["windows_icu"]
+        policy = native.read_json(providers.POLICY)["windows_icu"]
         systems = ["kernel32", "user32", "gdi32", "winspool", "shell32", "ole32", "oleaut32", "comdlg32", "advapi32"]
         for config, suffix in (("Debug", "d"), ("Release", "")):
             spec = {
@@ -1275,8 +1279,8 @@ class BazelWorkspaceTests(unittest.TestCase):
             }
             archives = ["icuin" + suffix, "icuuc" + suffix, "icudt" + suffix]
             flags = ["-l" + name for name in archives + systems]
-            with patch.object(workspace, "_metadata_flags", return_value=flags):
-                result = workspace._windows_icu_patch(spec, policy, prefix)
+            with patch.object(dependencies, "_metadata_flags", return_value=flags):
+                result = dependencies._windows_icu_patch(spec, policy, prefix)
             self.assertEqual(result["id"], "windows-icu-system-links")
             self.assertEqual(result["when"]["provider_version"], "exact-status")
             self.assertEqual(result["when"]["config"], config)
@@ -1290,8 +1294,8 @@ class BazelWorkspaceTests(unittest.TestCase):
             # The unicode-only import shares the identity gate with a narrower closure.
             uc_archives = ["icuuc" + suffix, "icudt" + suffix]
             uc_flags = ["-l" + name for name in uc_archives + systems]
-            with patch.object(workspace, "_metadata_flags", return_value=uc_flags):
-                uc_result = workspace._windows_icu_patch(spec, policy, prefix, package="icu_uc")
+            with patch.object(dependencies, "_metadata_flags", return_value=uc_flags):
+                uc_result = dependencies._windows_icu_patch(spec, policy, prefix, package="icu_uc")
             self.assertEqual(uc_result["when"]["package"], "icu_uc")
             self.assertEqual(
                 [item["name"] for item in uc_result["expect"]["present"]["libraries"] if item["kind"] == "static"],
@@ -1300,19 +1304,19 @@ class BazelWorkspaceTests(unittest.TestCase):
             for invalid in (flags[:-1], [*flags, "-lunknown"], flags[3:4] + flags[:3] + flags[4:], flags[1:]):
                 with (
                     self.subTest(config=config, flags=invalid),
-                    patch.object(workspace, "_metadata_flags", return_value=invalid),
+                    patch.object(dependencies, "_metadata_flags", return_value=invalid),
                 ):
-                    with self.assertRaisesRegex(workspace.BazelWorkspaceError, "sequence/interleaving"):
-                        workspace._windows_icu_patch(spec, policy, prefix)
+                    with self.assertRaisesRegex(native.BazelWorkspaceError, "sequence/interleaving"):
+                        dependencies._windows_icu_patch(spec, policy, prefix)
             # The structural map admits any coherent installed release; only the triplet stays fixed.
-            with self.assertRaisesRegex(workspace.BazelWorkspaceError, "unsupported Windows static ICU provider"):
-                workspace._windows_icu_patch(spec, policy, prefix.parent / "x64-windows")
+            with self.assertRaisesRegex(native.BazelWorkspaceError, "unsupported Windows static ICU provider"):
+                dependencies._windows_icu_patch(spec, policy, prefix.parent / "x64-windows")
 
     def test_macos_runtime_patch_removes_only_reviewed_trailing_implicit_libraries(self):
-        policy = workspace._json(workspace.POLICY)["macos_icu_runtime_remove"]
+        policy = native.read_json(providers.POLICY)["macos_icu_runtime_remove"]
         spec = {"platform": "macos", "config": "Release", "provider": {"name": "vcpkg", "version": "prefix:status"}}
-        with patch.object(workspace, "_metadata_flags", return_value=["-licuuc", "-lc++", "-lpthread", "-lm"]):
-            result = workspace._macos_icu_runtime_patch(spec, policy)
+        with patch.object(dependencies, "_metadata_flags", return_value=["-licuuc", "-lc++", "-lpthread", "-lm"]):
+            result = dependencies._macos_icu_runtime_patch(spec, policy)
         self.assertEqual(result["when"]["provider_version"], "prefix:status")
         self.assertEqual(
             result["remove"]["libraries"],
@@ -1323,11 +1327,11 @@ class BazelWorkspaceTests(unittest.TestCase):
             ],
         )
         self.assertEqual(result["expect"]["present"], result["remove"])
-        with patch.object(workspace, "_metadata_flags", return_value=["-licuuc", "-lunknown"]):
-            self.assertIsNone(workspace._macos_icu_runtime_patch(spec, policy))
-        with patch.object(workspace, "_metadata_flags", return_value=["-lc++", "-licuuc"]):
-            with self.assertRaisesRegex(workspace.BazelWorkspaceError, "interleaving"):
-                workspace._macos_icu_runtime_patch(spec, policy)
+        with patch.object(dependencies, "_metadata_flags", return_value=["-licuuc", "-lunknown"]):
+            self.assertIsNone(dependencies._macos_icu_runtime_patch(spec, policy))
+        with patch.object(dependencies, "_metadata_flags", return_value=["-lc++", "-licuuc"]):
+            with self.assertRaisesRegex(native.BazelWorkspaceError, "interleaving"):
+                dependencies._macos_icu_runtime_patch(spec, policy)
 
     def test_refresh_rechecks_header_membership_against_current_ownership_inventory(self):
         prefix = self.provider()
@@ -1342,53 +1346,60 @@ class BazelWorkspaceTests(unittest.TestCase):
         tree = self.root / "bazel"
         observed = []
         with (
-            patch.object(workspace, "native_platform", return_value="windows"),
-            patch.object(workspace, "POLICY", self.small_policy_path),
-            patch.object(workspace, "_INPUT_PROBE", observed.append),
+            patch.object(native, "native_platform", return_value="windows"),
+            patch.object(providers, "POLICY", self.small_policy_path),
+            native.capture_probes(observed.append),
         ):
-            generated = workspace.refresh_dependencies(tree, "debug", prefix=str(prefix), group="test")
-            first = workspace._json(generated / "test/manifest.json")
+            first = dependencies.resolve_dependencies(tree, "debug", prefix=str(prefix), group="test")
             added = prefix / "include/new-header.h"
             added.touch()
-            workspace.refresh_dependencies(tree, "debug", prefix=str(prefix), group="test")
-            self.assertEqual(first, workspace._json(generated / "test/manifest.json"))
+            unchanged = dependencies.resolve_dependencies(tree, "debug", prefix=str(prefix), group="test")
+            self.assertEqual(first["manifest"], unchanged["manifest"])
+            self.assertEqual(first["packages"], unchanged["packages"])
             with inventory.open("a", encoding="utf-8") as stream:
                 stream.write(f"{prefix.name}/include/new-header.h\n")
-            workspace.refresh_dependencies(tree, "debug", prefix=str(prefix), group="test")
-        manifest = workspace._json(generated / "test/manifest.json")
+            resolution = dependencies.resolve_dependencies(tree, "debug", prefix=str(prefix), group="test")
+        manifest = resolution["manifest"]
         self.assertEqual(manifest["packages"][0]["declared_headers"], 2)
         self.assertEqual(manifest["applied_patches"], ["catch2-static-fallback"])
         self.assertEqual(
             manifest["packages"][0]["resolved_libraries"][0]["file"],
             str(prefix / "debug/lib/manual-link/Catch2Maind.lib"),
         )
-        plan = workspace._json(generated / "test/repository.json")
-        self.assertIn(str(added), [link["source"] for link in plan["links"]])
-        self.assertIn(str(inventory), plan["watch_files"])
+        self.assertIn(
+            str(added),
+            [
+                file["source"]
+                for package in resolution["packages"]
+                for header in package["headers"]
+                for file in header["files"]
+            ],
+        )
+        self.assertIn(str(inventory), resolution["watch_files"])
         self.assertIn(prefix / "debug/lib/pkgconfig/catch2-with-main.pc", observed)
-        self.assertIn(str(prefix / "debug/lib"), plan["watch_directories"])
-        self.assertFalse((generated / "test/artifacts").exists())
+        self.assertIn(str(prefix / "debug/lib"), resolution["watch_directories"])
+        self.assertFalse((tree / "generated").exists())
 
     def test_policy_requires_explicit_package_arrays_without_singleton_coercion(self):
         for group in ("native", "test"):
-            policy = workspace._json(workspace.POLICY)
+            policy = native.read_json(providers.POLICY)
             policy["packages"][group] = policy["packages"][group][0]
             with (
                 self.subTest(group=group),
-                self.assertRaisesRegex(workspace.BazelWorkspaceError, "unsupported Bazel dependency groups"),
+                self.assertRaisesRegex(native.BazelWorkspaceError, "unsupported Bazel dependency groups"),
             ):
-                workspace._package_groups(policy)
+                providers.package_groups(policy)
 
     def test_shipped_policy_is_accepted_by_the_version_free_loader(self):
-        workspace._load_policy()
+        providers.load_policy()
 
     def test_policy_loader_rejects_the_previous_review_schema(self):
-        policy = workspace._json(workspace.POLICY)
+        policy = native.read_json(providers.POLICY)
         policy["schema"] = 2
         self.write_json(self.root / "old-schema.json", policy)
-        with patch.object(workspace, "POLICY", self.root / "old-schema.json"):
-            with self.assertRaisesRegex(workspace.BazelWorkspaceError, "unsupported Bazel dependency policy schema"):
-                workspace._load_policy()
+        with patch.object(providers, "POLICY", self.root / "old-schema.json"):
+            with self.assertRaisesRegex(native.BazelWorkspaceError, "unsupported Bazel dependency policy schema"):
+                providers.load_policy()
 
     def test_policy_loader_recursively_rejects_reintroduced_version_fields(self):
         # A hand-edited schema number must not silently ignore legacy version pins.
@@ -1400,7 +1411,7 @@ class BazelWorkspaceTests(unittest.TestCase):
             ((), "metadata_versions", {"mimalloc": {}}),
         )
         for path, field, value in injections:
-            policy = workspace._json(workspace.POLICY)
+            policy = native.read_json(providers.POLICY)
             target = policy
             for key in path:
                 target = target[key]
@@ -1408,12 +1419,10 @@ class BazelWorkspaceTests(unittest.TestCase):
             self.write_json(self.root / "policy.json", policy)
             with (
                 self.subTest(path=path, field=field),
-                patch.object(workspace, "POLICY", self.root / "policy.json"),
-                self.assertRaisesRegex(
-                    workspace.BazelWorkspaceError, "dependency version policy belongs to the existing"
-                ),
+                patch.object(providers, "POLICY", self.root / "policy.json"),
+                self.assertRaisesRegex(native.BazelWorkspaceError, "dependency version policy belongs to the existing"),
             ):
-                workspace._load_policy()
+                providers.load_policy()
 
     def test_native_provider_records_all_ports_and_rejects_incoherent_boost(self):
         prefix = self.provider()
@@ -1445,7 +1454,7 @@ class BazelWorkspaceTests(unittest.TestCase):
             "mimalloc": "fixture",
             "stb": "fixture",
         }
-        for name in workspace._json(workspace.PROJECT_ROOT / "vcpkg.json")["dependencies"]:
+        for name in native.read_json(native.PROJECT_ROOT / "vcpkg.json")["dependencies"]:
             if isinstance(name, str) and name.startswith("boost-"):
                 additions[name] = "1.91.0"
         with status.open("a", encoding="utf-8") as stream:
@@ -1457,32 +1466,32 @@ class BazelWorkspaceTests(unittest.TestCase):
             stream.write(
                 f"\n\nPackage: spdlog\nFeature: tz-offset\nArchitecture: {prefix.name}\nStatus: install ok installed\n"
             )
-        _, versions = workspace._native_provider(
+        _, versions = providers.native_provider(
             prefix, "release", "windows", identity_path=self.root / "full-identity.json"
         )
         self.assertEqual(versions["rapidyaml"], "0.16.0")
         self.assertEqual(versions["boost"], "1.91.0")
         self.assertEqual(versions["lexy"], "2025.5.0")
-        identity = workspace._json(self.root / "full-identity.json")
+        identity = native.read_json(self.root / "full-identity.json")
         self.assertEqual(identity["packages"]["c4core"]["version"], "0.5.0")
         status.write_text(
             status.read_text().replace("Package: boost-pfr\nVersion: 1.91.0", "Package: boost-pfr\nVersion: 1.90.0")
         )
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "inconsistent"):
-            workspace._native_provider(prefix, "release", "windows", identity_path=self.root / "full-identity.json")
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "inconsistent"):
+            providers.native_provider(prefix, "release", "windows", identity_path=self.root / "full-identity.json")
 
     def test_metadata_fallback_rejects_partial_or_ambiguous_metadata(self):
         first, second = self.root / "pc-one", self.root / "pc-two"
         first.mkdir()
         second.mkdir()
         spec = {"pkg_config": {"pc_dirs": [str(first), str(second)]}}
-        self.assertFalse(workspace._has_metadata(spec, ["ryml"]))
+        self.assertFalse(dependencies._has_metadata(spec, ["ryml"]))
         (first / "ryml.pc").touch()
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "incomplete"):
-            workspace._has_metadata(spec, ["ryml", "c4core"])
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "incomplete"):
+            dependencies._has_metadata(spec, ["ryml", "c4core"])
         (second / "ryml.pc").touch()
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "ambiguous"):
-            workspace._has_metadata(spec, ["ryml"])
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "ambiguous"):
+            dependencies._has_metadata(spec, ["ryml"])
 
     def installed_artifacts(self, root, names, *, shared=True):
         (root / "include").mkdir(parents=True, exist_ok=True)
@@ -1499,9 +1508,9 @@ class BazelWorkspaceTests(unittest.TestCase):
         root = self.root / "triplet"
         self.installed_artifacts(root, ["lmdb"], shared=False)
         (root / "include/lmdb.h").touch()
-        policy = workspace._json(workspace.POLICY)
+        policy = native.read_json(providers.POLICY)
         for config in ("debug", "release"):
-            interface = workspace._library_interface({"name": "lmdb"}, [root], config, "windows", policy)
+            interface = dependencies._library_interface({"name": "lmdb"}, [root], config, "windows", policy)
             selected = root / ("debug" if config == "debug" else "")
             self.assertEqual(
                 interface["libraries"], [{"name": "lmdb", "file": str(selected / "lib/lmdb.lib"), "kind": "static"}]
@@ -1511,20 +1520,20 @@ class BazelWorkspaceTests(unittest.TestCase):
             runtime.touch()
             with (
                 self.subTest(config=config),
-                self.assertRaisesRegex(workspace.BazelWorkspaceError, "unsupported static provider shape"),
+                self.assertRaisesRegex(native.BazelWorkspaceError, "unsupported static provider shape"),
             ):
-                workspace._library_interface({"name": "lmdb"}, [root], config, "windows", policy)
+                dependencies._library_interface({"name": "lmdb"}, [root], config, "windows", policy)
             runtime.unlink()
         (root / "lib/lmdb.lib").unlink()
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "missing/ambiguous"):
-            workspace._library_interface({"name": "lmdb"}, [root], "release", "windows", policy)
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "missing/ambiguous"):
+            dependencies._library_interface({"name": "lmdb"}, [root], "release", "windows", policy)
 
     def test_windows_rapidyaml_fallback_uses_reviewed_static_c4core_without_cmake(self):
         root = self.root / "triplet"
         self.installed_artifacts(root, ["ryml", "c4core"], shared=False)
         (root / "include/ryml").mkdir()
         (root / "include/ryml/ryml.hpp").touch()
-        policy = workspace._json(workspace.POLICY)
+        policy = native.read_json(providers.POLICY)
         for config in ("debug", "release"):
             with (
                 self.subTest(config=config),
@@ -1532,7 +1541,7 @@ class BazelWorkspaceTests(unittest.TestCase):
                     Path, "read_text", side_effect=AssertionError("artifact fallback must not read CMake exports")
                 ),
             ):
-                interface = workspace._library_interface({"name": "rapidyaml"}, [root], config, "windows", policy)
+                interface = dependencies._library_interface({"name": "rapidyaml"}, [root], config, "windows", policy)
             selected = root / ("debug" if config == "debug" else "")
             self.assertEqual(interface["header_dirs"], [str(root / "include"), str(root / "include/ryml")])
             self.assertEqual(interface["defines"], ["C4_CPP=17"])
@@ -1548,7 +1557,7 @@ class BazelWorkspaceTests(unittest.TestCase):
         root = self.root / "triplet"
         self.installed_artifacts(root, ["ryml", "c4core"], shared=False)
         (root / "include/ryml.hpp").touch()
-        policy = workspace._json(workspace.POLICY)
+        policy = native.read_json(providers.POLICY)
         for config in ("debug", "release"):
             selected = root / ("debug" if config == "debug" else "")
             for library in ("ryml", "c4core"):
@@ -1558,16 +1567,16 @@ class BazelWorkspaceTests(unittest.TestCase):
                     path.touch()
                     with (
                         self.subTest(config=config, relative=relative),
-                        self.assertRaisesRegex(workspace.BazelWorkspaceError, "unsupported static provider shape"),
+                        self.assertRaisesRegex(native.BazelWorkspaceError, "unsupported static provider shape"),
                     ):
-                        workspace._library_interface({"name": "rapidyaml"}, [root], config, "windows", policy)
+                        dependencies._library_interface({"name": "rapidyaml"}, [root], config, "windows", policy)
                     path.unlink()
         (root / "debug/lib/c4core.lib").unlink()
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "missing/ambiguous"):
-            workspace._library_interface({"name": "rapidyaml"}, [root], "debug", "windows", policy)
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "missing/ambiguous"):
+            dependencies._library_interface({"name": "rapidyaml"}, [root], "debug", "windows", policy)
 
     def test_native_manual_archive_symlink_cannot_cross_configurations(self):
-        policy = workspace._json(workspace.POLICY)
+        policy = native.read_json(providers.POLICY)
         for host, package, marker, libraries in (
             ("windows", "rapidyaml", "ryml.hpp", ("ryml", "c4core")),
             ("macos", "rapidyaml", "ryml.hpp", ("ryml", "c4core")),
@@ -1584,19 +1593,19 @@ class BazelWorkspaceTests(unittest.TestCase):
                     for name in libraries:
                         filename = f"{name}.lib" if host == "windows" else f"lib{name}.a"
                         (current / "lib" / filename).touch()
-                workspace._library_interface({"name": package}, [root], config, host, policy)
+                dependencies._library_interface({"name": package}, [root], config, host, policy)
                 filename = libraries[0] + ".lib" if host == "windows" else "lib" + libraries[0] + ".a"
                 archive = selected / "lib" / filename
                 archive.unlink()
                 self.symlink_or_skip(archive, opposite / "lib" / filename)
                 with (
                     self.subTest(host=host, package=package, config=config),
-                    self.assertRaisesRegex(workspace.BazelWorkspaceError, "configuration"),
+                    self.assertRaisesRegex(native.BazelWorkspaceError, "configuration"),
                 ):
-                    workspace._library_interface({"name": package}, [root], config, host, policy)
+                    dependencies._library_interface({"name": package}, [root], config, host, policy)
 
     def test_catch2_manual_archive_symlink_cannot_cross_configurations(self):
-        policy = workspace._json(workspace.POLICY)["catch2_fallback"]
+        policy = native.read_json(providers.POLICY)["catch2_fallback"]
         for host in ("windows", "macos"):
             for config in ("debug", "release"):
                 root = self.root / f"catch2-{host}-{config}"
@@ -1620,9 +1629,9 @@ class BazelWorkspaceTests(unittest.TestCase):
                 }
                 with (
                     self.subTest(host=host, config=config),
-                    self.assertRaisesRegex(workspace.BazelWorkspaceError, "configuration"),
+                    self.assertRaisesRegex(native.BazelWorkspaceError, "configuration"),
                 ):
-                    workspace._catch_fallback(spec, policy, root)
+                    dependencies._catch_fallback(spec, policy, root)
 
     def test_macos_complete_fallback_requires_selected_static_archives(self):
         root = self.root / "triplet"
@@ -1632,8 +1641,8 @@ class BazelWorkspaceTests(unittest.TestCase):
             file = root / "debug/lib" / f"lib{name}.a"
             file.parent.mkdir(parents=True, exist_ok=True)
             file.touch()
-        interface = workspace._library_interface(
-            {"name": "rapidyaml"}, [root], "debug", "macos", workspace._json(workspace.POLICY)
+        interface = dependencies._library_interface(
+            {"name": "rapidyaml"}, [root], "debug", "macos", native.read_json(providers.POLICY)
         )
         self.assertEqual(interface["defines"], ["C4_CPP=17"])
         self.assertTrue(
@@ -1642,9 +1651,9 @@ class BazelWorkspaceTests(unittest.TestCase):
                 for item in interface["libraries"]
             )
         )
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "missing/ambiguous"):
-            workspace._library_interface(
-                {"name": "rapidyaml"}, [root], "release", "macos", workspace._json(workspace.POLICY)
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "missing/ambiguous"):
+            dependencies._library_interface(
+                {"name": "rapidyaml"}, [root], "release", "macos", native.read_json(providers.POLICY)
             )
 
     def test_header_fallback_requires_exact_provider_version_and_unique_root(self):
@@ -1652,15 +1661,15 @@ class BazelWorkspaceTests(unittest.TestCase):
         marker = root / "include/boost/version.hpp"
         marker.parent.mkdir(parents=True)
         marker.write_text("#define BOOST_VERSION 109100\n")
-        self.assertEqual(workspace._header_root([root], "boost/version.hpp"), root / "include")
-        workspace._verify_header_version(marker, "1.91.0", ["BOOST_VERSION"], encoded=True)
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "header version mismatch"):
-            workspace._verify_header_version(marker, "1.90.0", ["BOOST_VERSION"], encoded=True)
+        self.assertEqual(native.header_root([root], "boost/version.hpp"), root / "include")
+        native.verify_header_version(marker, "1.91.0", ["BOOST_VERSION"], encoded=True)
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "header version mismatch"):
+            native.verify_header_version(marker, "1.90.0", ["BOOST_VERSION"], encoded=True)
         other = self.root / "other/include/boost/version.hpp"
         other.parent.mkdir(parents=True)
         other.touch()
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "missing/ambiguous"):
-            workspace._header_root([root, other.parents[2]], "boost/version.hpp")
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "missing/ambiguous"):
+            native.header_root([root, other.parents[2]], "boost/version.hpp")
 
     def gperf_report(self):
         root = self.root / "nix-gperf"
@@ -1673,7 +1682,7 @@ class BazelWorkspaceTests(unittest.TestCase):
             report,
             {
                 "schemaVersion": 1,
-                "nixpkgsRevision": workspace._json(workspace.PROJECT_ROOT / "nixpkgs.json")["rev"],
+                "nixpkgsRevision": native.read_json(native.PROJECT_ROOT / "nixpkgs.json")["rev"],
                 "dependencies": {"gperf": self.nix_entry(root, "3.3", {"out": root})},
             },
         )
@@ -1684,27 +1693,27 @@ class BazelWorkspaceTests(unittest.TestCase):
         with (
             patch.dict(os.environ, {"AOBUS_NIX_DEPENDENCY_REPORT": str(report)}),
             self.nix_paths([root]),
-            patch.object(workspace.shutil, "which", side_effect=AssertionError("no ambient gperf lookup")),
+            patch.object(native.shutil, "which", side_effect=AssertionError("no ambient gperf lookup")),
         ):
-            identity, selected, runtime, evidence = workspace._linux_gperf()
+            identity, selected, runtime, evidence = host_tools._linux_gperf()
             self.assertEqual(selected, executable)
             self.assertEqual(runtime, [])
             self.assertEqual(identity["deriver"], "/nix/store/nix-gperf.drv")
             self.assertEqual(identity["version"], "3.3")
             self.assertIn(report, evidence)
             executable.unlink()
-            with self.assertRaisesRegex(workspace.BazelWorkspaceError, "does not match the Nix report"):
-                workspace._linux_gperf()
-        with patch.dict(os.environ, {}, clear=True), self.assertRaisesRegex(workspace.BazelWorkspaceError, "report"):
-            workspace._linux_gperf()
-        value = workspace._json(report)
+            with self.assertRaisesRegex(native.BazelWorkspaceError, "does not match the Nix report"):
+                host_tools._linux_gperf()
+        with patch.dict(os.environ, {}, clear=True), self.assertRaisesRegex(native.BazelWorkspaceError, "report"):
+            host_tools._linux_gperf()
+        value = native.read_json(report)
         value["dependencies"].clear()
         self.write_json(report, value)
         with (
             patch.dict(os.environ, {"AOBUS_NIX_DEPENDENCY_REPORT": str(report)}),
-            self.assertRaisesRegex(workspace.BazelWorkspaceError, "gperf output identity.*re-enter"),
+            self.assertRaisesRegex(native.BazelWorkspaceError, "gperf output identity.*re-enter"),
         ):
-            workspace._linux_gperf()
+            host_tools._linux_gperf()
 
     def test_linux_gperf_rejects_foreign_symlink_target_and_stale_report(self):
         root, executable, report = self.gperf_report()
@@ -1717,17 +1726,17 @@ class BazelWorkspaceTests(unittest.TestCase):
         with (
             patch.dict(os.environ, {"AOBUS_NIX_DEPENDENCY_REPORT": str(report)}),
             self.nix_paths([root, other]),
-            self.assertRaisesRegex(workspace.BazelWorkspaceError, "does not match the Nix report"),
+            self.assertRaisesRegex(native.BazelWorkspaceError, "does not match the Nix report"),
         ):
-            workspace._linux_gperf()
-        value = workspace._json(report)
+            host_tools._linux_gperf()
+        value = native.read_json(report)
         value["nixpkgsRevision"] = "stale"
         self.write_json(report, value)
         with (
             patch.dict(os.environ, {"AOBUS_NIX_DEPENDENCY_REPORT": str(report)}),
-            self.assertRaisesRegex(workspace.BazelWorkspaceError, "does not match nixpkgs"),
+            self.assertRaisesRegex(native.BazelWorkspaceError, "does not match nixpkgs"),
         ):
-            workspace._linux_gperf()
+            host_tools._linux_gperf()
 
     def test_linux_gperf_accepts_only_its_reported_sibling_output_symlink(self):
         root, executable, report = self.gperf_report()
@@ -1738,23 +1747,23 @@ class BazelWorkspaceTests(unittest.TestCase):
         target.chmod(0o755)
         executable.unlink()
         self.symlink_or_skip(executable, target)
-        value = workspace._json(report)
+        value = native.read_json(report)
         value["dependencies"]["gperf"]["outputs"]["bin"] = "/nix/store/nix-gperf-bin"
         self.write_json(report, value)
         with (
             patch.dict(os.environ, {"AOBUS_NIX_DEPENDENCY_REPORT": str(report)}),
             self.nix_paths([root, sibling]),
-            patch.object(workspace.shutil, "which", side_effect=AssertionError("no ambient gperf lookup")),
-            patch.object(workspace.subprocess, "run", side_effect=AssertionError("no Nix queries")),
+            patch.object(native.shutil, "which", side_effect=AssertionError("no ambient gperf lookup")),
+            patch.object(host_tools.subprocess, "run", side_effect=AssertionError("no Nix queries")),
         ):
-            identity, selected, _, _ = workspace._linux_gperf()
+            identity, selected, _, _ = host_tools._linux_gperf()
             self.assertEqual(selected, executable)
             self.assertNotEqual(selected, target)
             self.assertEqual(identity["deriver"], "/nix/store/nix-gperf.drv")
             del value["dependencies"]["gperf"]["outputs"]["bin"]
             self.write_json(report, value)
-            with self.assertRaisesRegex(workspace.BazelWorkspaceError, "does not match the Nix report"):
-                workspace._linux_gperf()
+            with self.assertRaisesRegex(native.BazelWorkspaceError, "does not match the Nix report"):
+                host_tools._linux_gperf()
 
     def native_gperf(self, host="windows"):
         installed = self.root / "installed"
@@ -1791,11 +1800,11 @@ class BazelWorkspaceTests(unittest.TestCase):
                 unrelated.parent.mkdir()
                 unrelated.touch()
                 with (
-                    patch.object(workspace.shutil, "which", side_effect=AssertionError("no ambient fallback")),
-                    patch.object(workspace, "_host_machine", return_value="AMD64"),
-                    patch.object(workspace.platform, "machine", side_effect=AssertionError("no uname/WMI query")),
+                    patch.object(native.shutil, "which", side_effect=AssertionError("no ambient fallback")),
+                    patch.object(native, "host_machine", return_value="AMD64"),
+                    patch.object(native.platform, "machine", side_effect=AssertionError("no uname/WMI query")),
                 ):
-                    identity, selected, dlls, evidence = workspace._native_gperf(target, host)
+                    identity, selected, dlls, evidence = host_tools._native_gperf(target, host)
                 self.assertEqual(identity["host_machine"], "AMD64")
                 self.assertEqual(selected, executable)
                 self.assertNotEqual(identity["triplet"], target.name)
@@ -1812,20 +1821,20 @@ class BazelWorkspaceTests(unittest.TestCase):
         status.write_text(
             original + "\nPackage: gperf\nVersion: 3.2\nArchitecture: x64-windows\nStatus: install ok installed\n"
         )
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "ambiguous installed gperf host"):
-            workspace._native_gperf(target, "windows")
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "ambiguous installed gperf host"):
+            host_tools._native_gperf(target, "windows")
         status.write_text(original.replace("install ok installed", "deinstall ok not-installed"))
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "host port is not installed"):
-            workspace._native_gperf(target, "windows")
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "host port is not installed"):
+            host_tools._native_gperf(target, "windows")
 
     def test_native_gperf_requires_manifest_host_request_and_exact_installed_executable(self):
         target, executable, _ = self.native_gperf()
-        with patch.object(workspace, "_json", return_value={"dependencies": [{"name": "gperf", "host": False}]}):
-            with self.assertRaisesRegex(workspace.BazelWorkspaceError, "host:true"):
-                workspace._native_gperf(target, "windows")
+        with patch.object(native, "read_json", return_value={"dependencies": [{"name": "gperf", "host": False}]}):
+            with self.assertRaisesRegex(native.BazelWorkspaceError, "host:true"):
+                host_tools._native_gperf(target, "windows")
         executable.unlink()
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "host executable is missing"):
-            workspace._native_gperf(target, "windows")
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "host executable is missing"):
+            host_tools._native_gperf(target, "windows")
 
     def test_native_gperf_tool_and_adjacent_runtime_cannot_escape_narrow_directory(self):
         target, executable, _ = self.native_gperf()
@@ -1834,8 +1843,8 @@ class BazelWorkspaceTests(unittest.TestCase):
         outside.write_bytes(b"not selected")
         executable.unlink()
         self.symlink_or_skip(executable, outside)
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "escapes intended"):
-            workspace._native_gperf(target, "windows")
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "escapes intended"):
+            host_tools._native_gperf(target, "windows")
         executable.unlink()
         executable.write_bytes(b"host tool")
         runtime = executable.with_name("runtime.dll")
@@ -1843,8 +1852,8 @@ class BazelWorkspaceTests(unittest.TestCase):
         ownership = target.parent / "vcpkg/info/gperf_3.3_x64-windows.list"
         with ownership.open("a", encoding="utf-8") as stream:
             stream.write("x64-windows/tools/gperf/runtime.dll\n")
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "escapes intended"):
-            workspace._native_gperf(target, "windows")
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "escapes intended"):
+            host_tools._native_gperf(target, "windows")
 
     def resolve_gperf(self, executable, runtime, evidence):
         request = self.root / "request.json"
@@ -1882,25 +1891,25 @@ class BazelWorkspaceTests(unittest.TestCase):
             from pathlib import Path
             from unittest.mock import patch
             sys.path.insert(0, sys.argv.pop(1))
-            from ao.core import bazel_resolver, bazel_workspace
+            from ao.core import bazel_resolver
+            from ao.core import bazel_native as native
+            from ao.core import bazel_dependencies as dependencies
+            from ao.core import bazel_host_tools as host_tools
             selection = ({'version': '3.3'}, Path(sys.argv.pop(1)),
                          [Path(p) for p in sys.argv.pop(1).split('|') if p], [Path(sys.argv.pop(1))])
             fixtures = Path(sys.argv.pop(1))
 
             def catalog(tree, config, *, prefix, group):
                 assert prefix is None and group == 'catalog'
-                repository = tree / 'generated/catalog'
-                repository.mkdir(parents=True, exist_ok=True)
-                plan = {
-                    'links': [{'source': str(fixtures / config / 'libicuuc.a'),
-                               'destination': 'artifacts/icu/lib/libicuuc.a'}],
+                return {
+                    'packages': [{'name': 'icu', 'headers': [], 'includes': [], 'defines': [],
+                                  'linkopts': [], 'runtime': [], 'libraries': [
+                                      {'index': 0, 'kind': 'static', 'source': str(fixtures / config / 'libicuuc.a'),
+                                       'basename': 'libicuuc.a', 'runtime': None}]}],
+                    'manifest': {'config': config, 'package': 'icu'},
                     'watch_files': [str(fixtures / config / 'status')],
                     'watch_directories': [str(fixtures / config / 'pkgconfig')],
                 }
-                (repository / 'repository.json').write_text(json.dumps(plan))
-                (repository / 'BUILD.bazel').write_text('cc_library(name = "icu")\\n')
-                (repository / 'manifest.json').write_text(json.dumps({'config': config, 'package': 'icu'}))
-                return repository.parent
 
             sdk = (
                 {'python': sys.executable, 'genrb': str(fixtures / 'bin/genrb'),
@@ -1909,18 +1918,18 @@ class BazelWorkspaceTests(unittest.TestCase):
                  fixtures / 'bin/pkgdata', fixtures / 'catalog-sdk.json'],
                 [fixtures / 'catalog-sdk.json'],
             )
-            dbus = ({'provider': 'fixture'}, fixtures / 'bin/dbus-daemon',
+            dbus = ({'provider': 'fixture', 'outputs': [str(fixtures)]}, fixtures / 'bin/dbus-daemon',
                     [fixtures / 'lib/libdbus-1.so'], [fixtures / 'dbus-report.json'])
-            resource = ({'provider': 'fixture'}, fixtures / 'bin/glib-compile-resources',
+            resource = ({'provider': 'fixture', 'outputs': [str(fixtures)]}, fixtures / 'bin/glib-compile-resources',
                         [fixtures / 'lib/libglib-2.0.so'], [fixtures / 'glib-report.json'])
             with (
-                patch.object(bazel_workspace, 'native_platform', return_value='linux'),
-                patch.object(bazel_workspace, '_linux_gperf', return_value=selection),
-                patch.object(bazel_workspace, 'refresh_dependencies', side_effect=catalog) as imports,
-                patch.object(bazel_workspace, '_catalog_sdk', return_value=sdk),
-                patch.object(bazel_workspace, '_linux_dbus', return_value=dbus),
-                patch.object(bazel_workspace, '_linux_gresource', return_value=resource),
-                patch.object(bazel_resolver, '_app_version', return_value='1.2.3'),
+                patch.object(native, 'native_platform', return_value='linux'),
+                patch.object(host_tools, '_linux_gperf', return_value=selection),
+                patch.object(dependencies, 'resolve_dependencies', side_effect=catalog) as imports,
+                patch.object(host_tools, '_catalog_sdk', return_value=sdk),
+                patch.object(host_tools, '_linux_dbus', return_value=dbus),
+                patch.object(host_tools, '_linux_gresource', return_value=resource),
+                patch.object(host_tools, '_app_version', return_value='1.2.3'),
             ):
                 status = bazel_resolver.main()
                 if status == 0:
@@ -1935,7 +1944,7 @@ class BazelWorkspaceTests(unittest.TestCase):
                 "-B",
                 "-c",
                 controller,
-                str(workspace.PROJECT_ROOT / "script"),
+                str(native.PROJECT_ROOT / "script"),
                 str(executable),
                 "|".join(map(str, runtime)),
                 str(evidence),
@@ -1954,7 +1963,7 @@ class BazelWorkspaceTests(unittest.TestCase):
             check=False,
         )
         self.assertEqual(result.stderr, "")
-        return result.returncode, workspace._json(output / "repository.json")
+        return result.returncode, native.read_json(output / "repository.json")
 
     @unittest.skipIf(os.name == "nt", "POSIX executable fixture; native Windows tools need native validation")
     def test_gperf_repository_plan_declares_runtime_and_evidence_watches_without_copying(self):
@@ -1966,51 +1975,38 @@ class BazelWorkspaceTests(unittest.TestCase):
         runtime.write_bytes(b"runtime one")
         status, plan = self.resolve_gperf(executable, [runtime], report)
         self.assertEqual(status, 0, plan.get("error"))
-        self.assertEqual(
-            [link for link in plan["links"] if link["destination"].startswith("bin/")],
-            [
-                {"source": str(executable), "destination": "bin/gperf"},
-                {"source": str(runtime), "destination": "bin/dependency.dll"},
-            ],
-        )
-        build = plan["files"]["BUILD.bazel"]
-        self.assertIn('alias(name = "gperf", actual = "bin/gperf")', build)
-        self.assertIn('filegroup(name = "gperf_runtime", srcs = ["bin/dependency.dll"])', build)
+        facts = plan["host_tools"]
+        self.assertEqual(facts["gperf"]["executable"], str(executable))
+        self.assertEqual(facts["gperf"]["runtime"], [str(runtime)])
+        self.assertEqual(facts["gperf"]["evidence"], [str(report)])
+        self.assertEqual(facts["gperf"]["identity"], {"version": "3.3"})
+        self.assertEqual(plan["links"], [])
+        self.assertEqual(plan["files"], {})
         self.assertLessEqual({str(executable), str(runtime), str(report)}, set(plan["watch_files"]))
         self.assertIn(str(executable.parent), plan["watch_directories"])
-        manifest = json.loads(plan["files"]["manifest.json"])
-        self.assertEqual(manifest["artifacts"], plan["links"])
         fixtures = self.root / "tool-inputs"
         for config in ("debug", "release"):
-            self.assertIn(
-                {
-                    "source": str(fixtures / config / "libicuuc.a"),
-                    "destination": f"catalog-{config}/artifacts/icu/lib/libicuuc.a",
-                },
-                plan["links"],
-            )
+            admitted = plan["imports"]["catalog-" + config]
+            self.assertEqual(admitted["config"], config)
+            self.assertEqual(admitted["packages"][0]["libraries"][0]["source"], str(fixtures / config / "libicuuc.a"))
             self.assertIn(str(fixtures / config / "status"), plan["watch_files"])
             self.assertIn(str(fixtures / config / "pkgconfig"), plan["watch_directories"])
             self.assertEqual(
-                json.loads(plan["files"][f"catalog-{config}/manifest.json"]),
+                admitted["manifest"],
                 {"config": config, "package": "icu"},
             )
-        self.assertEqual(set(manifest["catalog_imports"]), {"debug", "release"})
-        self.assertTrue(
-            {
-                str(fixtures / "stdlib.py"),
-                str(fixtures / "catalog-sdk.json"),
-                str(fixtures / "bin/dbus-daemon"),
-                str(fixtures / "lib/libdbus-1.so"),
-                str(fixtures / "dbus-report.json"),
-            }
-            <= {link["source"] for link in plan["links"]}
+        self.assertLessEqual(
+            {str(fixtures / "stdlib.py"), str(fixtures / "catalog-sdk.json")},
+            set(facts["catalog"]["artifacts"]),
         )
-        self.assertIn('filegroup(name = "catalog_tools"', build)
-        self.assertIn('filegroup(name = "dbus_daemon"', build)
-        self.assertEqual(plan["files"]["app_version.bzl"], 'APP_VERSION = "1.2.3"\n')
+        self.assertEqual(facts["catalog"]["evidence"], [str(fixtures / "catalog-sdk.json")])
         self.assertEqual(
-            ast.literal_eval(plan["files"]["test_tools.bzl"].split("=", 1)[1].strip()),
+            set(facts["dbus"]["artifacts"]),
+            {str(fixtures / name) for name in ("bin/dbus-daemon", "lib/libdbus-1.so", "dbus-report.json")},
+        )
+        self.assertEqual(facts["app_version"], "1.2.3")
+        self.assertEqual(
+            facts["test_tools"],
             {
                 "dbus_daemon": str(fixtures / "bin/dbus-daemon"),
                 "dbus_daemon_directory": str(fixtures / "bin"),
@@ -2019,11 +2015,10 @@ class BazelWorkspaceTests(unittest.TestCase):
         self.assertFalse((self.root / "repository/bin").exists())
         status, plan = self.resolve_gperf(executable, [], report)
         self.assertEqual(status, 0, plan.get("error"))
-        self.assertEqual(
-            [link for link in plan["links"] if link["destination"].startswith("bin/")],
-            [{"source": str(executable), "destination": "bin/gperf"}],
-        )
-        self.assertEqual(json.loads(plan["files"]["manifest.json"])["artifacts"], plan["links"])
+        self.assertEqual(plan["host_tools"]["gperf"]["executable"], str(executable))
+        self.assertEqual(plan["host_tools"]["gperf"]["runtime"], [])
+        self.assertEqual(plan["links"], [])
+        self.assertEqual(plan["files"], {})
         self.assertNotIn(str(runtime), plan["watch_files"])
 
     @unittest.skipIf(os.name == "nt", "POSIX executable fixture; native Windows tools need native validation")
@@ -2052,9 +2047,9 @@ class BazelWorkspaceTests(unittest.TestCase):
         header.parent.mkdir(parents=True)
         header.write_text("#define LEXY_DETAIL_CONFIG_HPP_INCLUDED\n")
         evidence = self.root / "lexy-identity.json"
-        interface = workspace._lexy_interface([root], "linux", "2025.05.0", evidence)
+        interface = dependencies._lexy_interface([root], "linux", "2025.05.0", evidence)
         self.assertEqual(interface, {"header_dirs": [str(root / "include")]})
-        identity = workspace._json(evidence)
+        identity = native.read_json(evidence)
         self.assertEqual(identity["provider_version"], "2025.05.0")
         self.assertIn("no upstream version macro", identity["version_evidence"])
         self.assertEqual(identity["header"]["sha256"], hashlib.sha256(header.read_bytes()).hexdigest())
@@ -2063,24 +2058,30 @@ class BazelWorkspaceTests(unittest.TestCase):
             "platform": "linux",
             "config": "Debug",
             "linkage": "static",
-            "provider": {"name": "nix", "version": "deriver", "evidence": workspace._evidence([evidence])},
+            "provider": {"name": "nix", "version": "deriver", "evidence": native.evidence([evidence])},
             "allowed_roots": [str(root), str(evidence)],
             "packages": [{"name": "lexy", "modules": []}],
         }
         with patch.object(deps.subprocess, "run", side_effect=AssertionError("no metadata or CMake needed")):
-            adapter = deps._Adapter(spec, {"schema": 1, "patches": [workspace._manual_patch(spec, "lexy", interface)]})
+            adapter = deps._Adapter(
+                spec, {"schema": 1, "patches": [dependencies._manual_patch(spec, "lexy", interface)]}
+            )
             adapter.prepare()
-            plan = {}
-            manifest = adapter.build(self.root / "lexy-projection", plan=plan)
-        self.assertEqual([source for source, _ in plan.values()], [header])
+            resolution = adapter.resolve()
+            manifest = resolution["manifest"]
+        self.assertEqual(
+            resolution["packages"][0]["headers"][0]["files"],
+            [{"source": str(header), "path": "lexy/_detail/config.hpp"}],
+        )
         self.assertEqual(manifest["counts"], {"automatic": 0, "manual_fallback": 1})
         self.assertEqual(manifest["packages"][0]["name"], "lexy")
         self.assertEqual(manifest["packages"][0]["resolved_libraries"], [])
         self.assertEqual(manifest["packages"][0]["declared_headers"], 1)
-        self.assertIn('name = "lexy"', (self.root / "lexy-projection/BUILD.bazel").read_text())
+        self.assertEqual(resolution["packages"][0]["name"], "lexy")
+        self.assertFalse((self.root / "lexy-projection").exists())
         header.write_text("not lexy")
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "unrecognized lexy"):
-            workspace._lexy_interface([root], "linux", "2025.05.0", evidence)
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "unrecognized lexy"):
+            dependencies._lexy_interface([root], "linux", "2025.05.0", evidence)
 
     def test_lexy_native_header_marker_cannot_escape_provider(self):
         root = self.root / "lexy"
@@ -2089,8 +2090,8 @@ class BazelWorkspaceTests(unittest.TestCase):
         outside = self.root / "outside.hpp"
         outside.write_text("#define LEXY_DETAIL_CONFIG_HPP_INCLUDED\n")
         self.symlink_or_skip(marker, outside)
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "escapes intended"):
-            workspace._lexy_interface([root], "windows", "2025.5.0", self.root / "identity.json")
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "escapes intended"):
+            dependencies._lexy_interface([root], "windows", "2025.5.0", self.root / "identity.json")
 
     def test_preparation_failure_prevents_bazel_execution(self):
         args = argparse.Namespace(
@@ -2103,7 +2104,7 @@ class BazelWorkspaceTests(unittest.TestCase):
             remote_cache=None,
         )
         with (
-            patch.object(workspace, "prepare_workspace", side_effect=workspace.BazelWorkspaceError("stale input")),
+            patch.object(workspace, "prepare_workspace", side_effect=native.BazelWorkspaceError("stale input")),
             patch.object(workspace, "execute") as execute,
             patch("sys.stderr"),
             self.assertRaises(SystemExit),
@@ -2122,7 +2123,7 @@ class BazelWorkspaceTests(unittest.TestCase):
                 self.subTest(action=action),
                 patch.object(workspace, "prepare_workspace", return_value=prepared) as prepare,
                 patch.object(
-                    workspace, "refresh_dependencies", side_effect=AssertionError("outer refresh is forbidden")
+                    dependencies, "resolve_dependencies", side_effect=AssertionError("outer resolution is forbidden")
                 ),
                 patch.object(workspace, "bazel_executable", return_value=Path("bazel")),
                 patch.object(workspace, "execute", return_value=7) as execute,
@@ -2184,10 +2185,10 @@ class BazelWorkspaceTests(unittest.TestCase):
                 log.write_bytes(b"preserved failure evidence")
                 with (
                     self.subTest(declared=declared, canonical=canonical, action=action),
-                    patch.object(workspace, "native_platform", return_value="windows"),
-                    patch.object(workspace, "PROJECT_ROOT", source),
+                    patch.object(native, "native_platform", return_value="windows"),
+                    patch.object(native, "PROJECT_ROOT", source),
                     patch.object(workspace.subprocess, "run") as run,
-                    self.assertRaisesRegex(workspace.BazelWorkspaceError, "require a local source checkout"),
+                    self.assertRaisesRegex(native.BazelWorkspaceError, "require a local source checkout"),
                 ):
                     workspace.execute(
                         Path("bazel.exe"), self.root, self.root / "no-generated-inputs", action, "debug", []
@@ -2202,8 +2203,8 @@ class BazelWorkspaceTests(unittest.TestCase):
             source.resolve.return_value = PureWindowsPath(canonical)
             with (
                 self.subTest(canonical=canonical),
-                patch.object(workspace, "native_platform", return_value="windows"),
-                patch.object(workspace, "PROJECT_ROOT", source),
+                patch.object(native, "native_platform", return_value="windows"),
+                patch.object(native, "PROJECT_ROOT", source),
                 patch.object(workspace.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as run,
             ):
                 self.assertEqual(workspace.execute(Path("bazel.exe"), self.root, generated, "test", "debug", []), 0)
@@ -2224,8 +2225,8 @@ class BazelWorkspaceTests(unittest.TestCase):
 
                 with (
                     self.subTest(action=action, status=status),
-                    patch.object(workspace, "native_platform", return_value="windows"),
-                    patch.object(workspace, "PROJECT_ROOT", self.root),
+                    patch.object(native, "native_platform", return_value="windows"),
+                    patch.object(native, "PROJECT_ROOT", self.root),
                     patch.object(workspace.subprocess, "run", side_effect=launch) as run,
                     patch("sys.stdout", new_callable=io.StringIO) as output,
                 ):
@@ -2251,8 +2252,8 @@ class BazelWorkspaceTests(unittest.TestCase):
                 with (
                     self.subTest(action=action, targets=targets),
                     patch.object(workspace, "DEFAULT_TEST_TARGETS", default_labels),
-                    patch.object(workspace, "native_platform", return_value="windows"),
-                    patch.object(workspace, "PROJECT_ROOT", self.root),
+                    patch.object(native, "native_platform", return_value="windows"),
+                    patch.object(native, "PROJECT_ROOT", self.root),
                     patch.object(workspace.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as run,
                 ):
                     self.assertEqual(
@@ -2270,10 +2271,10 @@ class BazelWorkspaceTests(unittest.TestCase):
         generated = self.root / "configuration"
         executable = Path("/tools/bazel")
         with (
-            patch.object(workspace, "native_platform", return_value="linux"),
+            patch.object(native, "native_platform", return_value="linux"),
             patch.object(
-                workspace,
-                "_executable",
+                native,
+                "executable",
                 side_effect=AssertionError("execution must use prepared toolchain configuration"),
             ),
             patch.object(workspace.subprocess, "run", return_value=subprocess.CompletedProcess([], 7)) as run,
@@ -2293,7 +2294,7 @@ class BazelWorkspaceTests(unittest.TestCase):
     def test_execute_deps_fetches_only_governed_repositories_with_prepared_rc(self):
         prepared = self.root / "configuration"
         with (
-            patch.object(workspace, "native_platform", return_value="linux"),
+            patch.object(native, "native_platform", return_value="linux"),
             patch.object(workspace.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as run,
             patch("sys.stdout"),
         ):
@@ -2317,7 +2318,7 @@ class BazelWorkspaceTests(unittest.TestCase):
             arguments = ["--test_filter=Decoder*", "--noremote_upload_local_results"]
             with (
                 self.subTest(action=action),
-                patch.object(workspace, "native_platform", return_value="linux"),
+                patch.object(native, "native_platform", return_value="linux"),
                 patch.object(workspace.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as run,
                 patch("sys.stdout"),
             ):
@@ -2347,7 +2348,7 @@ class BazelWorkspaceTests(unittest.TestCase):
             arguments = ["deps(//test:media_test)", "--output=jsonproto"]
             with (
                 self.subTest(action=action),
-                patch.object(workspace, "native_platform", return_value="linux"),
+                patch.object(native, "native_platform", return_value="linux"),
                 patch.object(
                     workspace.subprocess,
                     "run",
@@ -2369,9 +2370,9 @@ class BazelWorkspaceTests(unittest.TestCase):
         for action in ("query", "cquery", "aquery", "run"):
             with (
                 self.subTest(action=action),
-                patch.object(workspace, "native_platform", return_value="linux"),
+                patch.object(native, "native_platform", return_value="linux"),
                 patch.object(workspace.subprocess, "run") as run,
-                self.assertRaisesRegex(workspace.BazelWorkspaceError, "requires an explicit"),
+                self.assertRaisesRegex(native.BazelWorkspaceError, "requires an explicit"),
             ):
                 workspace.execute(Path("bazel"), self.root, self.root / "configuration", action, "debug", [])
             run.assert_not_called()

@@ -9,7 +9,6 @@ Plans do not certify complete ABI/runtime closure or build provenance.
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import re
 import shlex
@@ -284,7 +283,6 @@ class _Adapter:
         self.pcdirs: list[Path] = []
         self.pcfiles: dict[str, list[Path]] = {}
         self.readelf: Path | None = None
-        self.protected: list[Path] = []
         if "pkg_config" in spec:
             pc = _keys(spec["pkg_config"], {"executable", "pc_dirs"}, {"executable", "pc_dirs"})
             self.pc = self.executable(pc["executable"])
@@ -362,7 +360,6 @@ class _Adapter:
         path = _resolve(original)
         _require(path.is_file() and (os.name == "nt" or os.access(path, os.X_OK)), f"not executable: {path}")
         self.record(path, "resolver_tool")
-        self.protected.append(original)
         # Multicall tools can select their behavior from the invocation basename.
         return original
 
@@ -659,123 +656,45 @@ class _Adapter:
                 self.path(str(path))
                 yield path
 
-    def build(self, output: Path, *, plan: dict[Path, tuple[Path, str]]) -> dict[str, Any]:
-        """Render repository metadata and return explicit, unmaterialized artifact links."""
-        _require(output.is_absolute(), f"path must be absolute: {output}")
-        _require(not output.is_symlink(), "output directory must not be a symlink")
-        resolved_output = _resolve(output, strict=False)
-        for root in self.roots:
-            _require(
-                not root.is_relative_to(resolved_output) and not resolved_output.is_relative_to(root),
-                "output must not overlap provider roots",
-            )
-        for protected in [Path(__file__).absolute(), *self.protected, *(Path(p) for p in self.inputs)]:
-            locations = (_resolve(protected.parent) / protected.name, _resolve(protected))
-            _require(
-                not any(p.is_relative_to(resolved_output) for p in locations),
-                f"output must not contain input: {protected}",
-            )
-        for name in ("BUILD.bazel", "manifest.json", "repository.json"):
-            _require(not (output / name).is_symlink(), f"repository metadata must not be a symlink: {output / name}")
-        output.mkdir(parents=True, exist_ok=True)
-        lines = [
-            'load("@rules_cc//cc:defs.bzl", "cc_import", "cc_library")',
-            'package(default_visibility = ["//visibility:public"])',
-            'exports_files(["manifest.json"])',
-            "",
-        ]
+    def resolve(self) -> dict[str, Any]:
+        """Validate installed interfaces and report facts, never generate Bazel rules."""
         manifests: list[dict[str, Any]] = []
-        targets: set[str] = set()
-        public_targets: set[str] = {"manifest.json"}
-        header_trees: dict[tuple[str, Path], tuple[Path, str, list[Path]]] = {}
-        windows_shared_imports: dict[tuple[str, str], tuple[str, str]] = {}
-        mode = "dbg" if self.spec["config"] == "Debug" else "opt"
-        lines.extend(
-            [
-                'config_setting(name = "_prepared_mode", values = {"compilation_mode": ' + json.dumps(mode) + "})",
-                "",
-            ]
-        )
-
-        def rule(kind: str, name: str, **attrs: object) -> None:
-            _require(name not in targets, f"generated target name collision: {name}")
-            targets.add(name)
-            if not name.startswith("_") and attrs.get("visibility") != ["//visibility:private"]:
-                public_targets.add(name)
-            lines.append(f"{kind}(name = {json.dumps(name)},")
-            guarded = (
-                "deps"
-                if kind == "cc_library"
-                else "srcs"
-                if kind == "filegroup"
-                else next(
-                    (key for key in ("static_library", "interface_library", "shared_library") if key in attrs), None
-                )
-            )
-            for key, value in attrs.items():
-                rendered = json.dumps(value)
-                if key == guarded and not name.startswith("_headers_"):
-                    rendered = (
-                        'select({":_prepared_mode": '
-                        + rendered
-                        + "}, no_match_error = "
-                        + json.dumps("Prepared " + self.spec["config"] + " dependencies require -c " + mode)
-                        + ")"
-                    )
-                lines.append(f"    {key} = {rendered},")
-            lines.append(")\n")
-
-        def project(source: Path, relative: Path, role: str) -> str:
-            source = self.path(str(source))
-            self.record(source, role)
-            _require(
-                relative not in plan or plan[relative] == (source, role),
-                f"generated artifact path collision: {relative}",
-            )
-            plan[relative] = (source, role)
-            return relative.as_posix()
+        packages: list[dict[str, Any]] = []
 
         for name, interface, origin in self.packages:
             self.linkage = self.package_linkages[name]
-            hdrs: list[str] = []
-            includes: list[str] = []
-            deps: list[str] = []
+            headers: list[dict[str, Any]] = []
+            includes: list[dict[str, Any]] = []
+            header_trees: dict[Path, int] = {}
+            libraries: list[dict[str, Any]] = []
             runtime: list[str] = []
-            runtime_extra: list[str] = []
             resolved: list[dict[str, Any]] = []
-            base = Path("artifacts") / name
             roots = [self.path(directory, directory=True) for directory in interface.header_dirs]
-            declared_headers = 0
             for root in roots:
                 # Choose only this package's declared parents. Sharing a different
                 # package's parent would widen a child-only header interface.
                 # Nested roots retain their tree for wrappers including ../c4.
                 anchor = min((parent for parent in roots if root.is_relative_to(parent)), key=lambda p: len(p.parts))
-                tree_key = (name, anchor)
-                if tree_key not in header_trees:
+                if anchor not in header_trees:
                     files = (
                         sorted(file for file in self.header_files[name] if file.is_relative_to(anchor))
                         if name in self.header_files
                         else sorted(self.headers(anchor))
                     )
                     _require(files, f"empty header directory: {anchor}")
-                    # Compact internal names limit deep Windows output paths;
-                    # rule() rejects target collisions instead of merging trees.
-                    identity = name + "_" + str(roots.index(anchor))
-                    prefix = Path("artifacts") / "_headers" / identity
-                    target = "_headers_" + identity
-                    rule(
-                        "filegroup",
-                        target,
-                        srcs=[project(file, prefix / file.relative_to(anchor), "header") for file in files],
-                    )
-                    header_trees[tree_key] = (prefix, ":" + target, files)
-                prefix, label, files = header_trees[tree_key]
-                _require(any(file.is_relative_to(root) for file in files), f"empty header directory: {root}")
-                includes.append((prefix / root.relative_to(anchor)).as_posix())
-                if label not in hdrs:
-                    hdrs.append(label)
-                    declared_headers += len(files)
+                    inventory = []
+                    for file in files:
+                        source = self.path(str(file))
+                        self.record(source, "header")
+                        inventory.append({"source": str(source), "path": file.relative_to(anchor).as_posix()})
+                    header_trees[anchor] = len(headers)
+                    headers.append({"root": str(anchor), "index": roots.index(anchor), "files": inventory})
+                tree = header_trees[anchor]
+                _require(
+                    any(Path(file["path"]).is_relative_to(root.relative_to(anchor)) for file in headers[tree]["files"]),
+                    f"empty header directory: {root}",
+                )
+                includes.append({"tree": tree, "path": root.relative_to(anchor).as_posix()})
             for value in interface.defines:
                 _require(re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*(?:=.*)?", value), f"invalid define: {value}")
             for value in interface.copts:
@@ -820,59 +739,29 @@ class _Adapter:
                     continue
                 if library.file is None:
                     raise BazelDependencyError("resolved library has no file")
-                # Windows copies dependency DLLs beside each binary. Overlapping
-                # interfaces must reuse one import and File, not competing
-                # projections of the same SDK payload. Header scopes stay local.
-                shared_key = (
-                    (library.file, library.runtime)
-                    if self.platform == "windows" and library.kind == "shared" and library.runtime is not None
-                    else None
+                libraries.append(
+                    {
+                        "index": index,
+                        "kind": library.kind,
+                        "source": library.file,
+                        "basename": library.soname or Path(library.file).name,
+                        "runtime": library.runtime,
+                    }
                 )
-                if shared_key is not None and shared_key in windows_shared_imports:
-                    target, dllpath = windows_shared_imports[shared_key]
-                    deps.append(":" + target)
-                    runtime.append(dllpath)
-                    continue
-                file = Path(library.file)
-                path = project(file, base / "lib" / str(index) / (library.soname or file.name), "library")
-                attribute = (
-                    "static_library"
-                    if library.kind == "static"
-                    else "interface_library"
-                    if self.platform == "windows"
-                    else "shared_library"
-                )
-                attrs: dict[str, object] = {attribute: path}
-                attrs["visibility"] = ["//visibility:private"]
-                if library.runtime is not None:
-                    dll = Path(library.runtime)
-                    dllpath = project(dll, base / "lib" / str(index) / dll.name, "runtime")
-                    attrs["shared_library"] = dllpath
-                    runtime.append(dllpath)
-                target = name + "_import_" + str(index)
-                rule("cc_import", target, **attrs)
-                deps.append(":" + target)
-                if shared_key is not None:
-                    windows_shared_imports[shared_key] = (target, dllpath)
-            for index, value in enumerate(interface.runtime):
+            for value in interface.runtime:
                 file = self.artifact_path(value, runtime=True)
-                projected = project(file, base / "runtime" / str(index) / file.name, "runtime")
-                runtime.append(projected)
-                runtime_extra.append(projected)
-            rule("filegroup", name + "_runtime", srcs=runtime)
-            # interface.runtime is not a cc_import. Keep every extra in the full
-            # runtime data set and publish that same set alone for staging.
-            rule("filegroup", name + "_runtime_extra", srcs=runtime_extra)
-            rule(
-                "cc_library",
-                name,
-                hdrs=hdrs,
-                includes=includes,
-                defines=interface.defines,
-                copts=[],
-                linkopts=linkopts,
-                deps=deps,
-                data=runtime,
+                self.record(file, "runtime")
+                runtime.append(str(file))
+            packages.append(
+                {
+                    "name": name,
+                    "headers": headers,
+                    "includes": includes,
+                    "defines": interface.defines.copy(),
+                    "linkopts": linkopts,
+                    "libraries": libraries,
+                    "runtime": runtime,
+                }
             )
             manifests.append(
                 {
@@ -881,21 +770,22 @@ class _Adapter:
                     "linkage": self.linkage,
                     "interface": interface.json(),
                     "resolved_libraries": resolved,
-                    "declared_headers": declared_headers,
+                    "declared_headers": sum(len(tree["files"]) for tree in headers),
                 }
             )
-        (output / "BUILD.bazel").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
         return {
-            "generator": GENERATOR,
-            "configuration": self.spec,
-            "materialization": "repository",
-            "packages": manifests,
-            "targets": sorted(public_targets),
-            "counts": {
-                "automatic": sum(p[2] == "automatic" for p in self.packages),
-                "manual_fallback": sum(p[2] == "manual_fallback" for p in self.packages),
+            "packages": packages,
+            "manifest": {
+                "generator": GENERATOR,
+                "configuration": self.spec,
+                "materialization": "repository",
+                "packages": manifests,
+                "counts": {
+                    "automatic": sum(p[2] == "automatic" for p in self.packages),
+                    "manual_fallback": sum(p[2] == "manual_fallback" for p in self.packages),
+                },
+                "modules": self.modules,
+                "applied_patches": self.applied,
+                "inputs": [self.inputs[key] for key in sorted(self.inputs)],
             },
-            "modules": self.modules,
-            "applied_patches": self.applied,
-            "inputs": [self.inputs[key] for key in sorted(self.inputs)],
         }

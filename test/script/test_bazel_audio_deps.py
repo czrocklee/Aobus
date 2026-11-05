@@ -8,17 +8,28 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from ao.core import bazel_dependencies as dependencies
 from ao.core import bazel_deps, dependency_policy
-from ao.core import bazel_workspace as workspace
+from ao.core import bazel_native as native
+from ao.core import bazel_providers as providers
+
+
+def observed_sources(resolution):
+    return (
+        [file["source"] for p in resolution["packages"] for tree in p["headers"] for file in tree["files"]]
+        + [library["source"] for p in resolution["packages"] for library in p["libraries"]]
+        + [path for p in resolution["packages"] for path in p["runtime"]]
+        + [library["runtime"] for p in resolution["packages"] for library in p["libraries"] if library["runtime"]]
+    )
 
 
 class BazelAudioPolicyTest(unittest.TestCase):
     def setUp(self):
-        self.policy = workspace._json(workspace.POLICY)
+        self.policy = native.read_json(providers.POLICY)
 
     def test_linux_backends_are_selected_only_by_the_explicit_audio_os_contract(self):
         for host in ("linux", "macos", "windows"):
-            names = {p["name"] for p in workspace._package_groups(self.policy, host=host)["native"]}
+            names = {p["name"] for p in providers.package_groups(self.policy, host=host)["native"]}
             with self.subTest(host=host):
                 self.assertEqual(
                     names & {"alsa", "pipewire", "udev"}, {"alsa", "pipewire", "udev"} if host == "linux" else set()
@@ -28,16 +39,16 @@ class BazelAudioPolicyTest(unittest.TestCase):
             next(p for p in policy["packages"]["native"] if p["name"] == name)["platforms"] = platforms
             with (
                 self.subTest(name=name, platforms=platforms),
-                self.assertRaisesRegex(workspace.BazelWorkspaceError, "platform"),
+                self.assertRaisesRegex(native.BazelWorkspaceError, "platform"),
             ):
-                workspace._package_groups(policy, host="windows")
+                providers.package_groups(policy, host="windows")
 
     def test_unknown_and_duplicate_packages_fail_before_platform_filtering(self):
         for name in ("unknown", "opus"):
             policy = copy.deepcopy(self.policy)
             policy["packages"]["native"].append({"name": name, "platforms": ["linux"]})
-            with self.subTest(name=name), self.assertRaisesRegex(workspace.BazelWorkspaceError, "unknown or duplicate"):
-                workspace._package_groups(policy, host="windows")
+            with self.subTest(name=name), self.assertRaisesRegex(native.BazelWorkspaceError, "unknown or duplicate"):
+                providers.package_groups(policy, host="windows")
 
     def test_metadata_version_translations_follow_closed_producer_formats(self):
         # ALAC: a full three-part release, with the producer's optional unstable date suffix.
@@ -47,20 +58,20 @@ class BazelAudioPolicyTest(unittest.TestCase):
             ("1.2.3-unstable-2027-01-05", "1.2.3"),
         ):
             with self.subTest(version=version):
-                self.assertEqual(workspace._metadata_versions("alac", version, ["alac"], "linux"), {"alac": release})
+                self.assertEqual(dependencies._metadata_versions("alac", version, ["alac"], "linux"), {"alac": release})
         # Non-Linux ALAC observations keep their own provider's identity spelling.
         self.assertEqual(
-            workspace._metadata_versions("alac", "2017-11-03-c38887c5", ["alac"], "windows"),
+            dependencies._metadata_versions("alac", "2017-11-03-c38887c5", ["alac"], "windows"),
             {"alac": "2017-11-03-c38887c5"},
         )
         # udev: any dotted numeric release maps to its major component.
         for version, major in (("261.3", "261"), ("262.0", "262"), ("261.3.1", "261"), ("261", "261")):
             with self.subTest(version=version):
                 self.assertEqual(
-                    workspace._metadata_versions("udev", version, ["libudev"], "linux"), {"libudev": major}
+                    dependencies._metadata_versions("udev", version, ["libudev"], "linux"), {"libudev": major}
                 )
         # Identity packages keep the provider's spelling for any future release.
-        self.assertEqual(workspace._metadata_versions("opus", "1.7.0", ["opus"], "linux"), {"opus": "1.7.0"})
+        self.assertEqual(dependencies._metadata_versions("opus", "1.7.0", ["opus"], "linux"), {"opus": "1.7.0"})
         for name, version, modules in (
             ("alac", "0.0.7-unstable-new", ["alac"]),
             ("alac", "0.0.7-unstable-2026-4-10", ["alac"]),
@@ -72,9 +83,9 @@ class BazelAudioPolicyTest(unittest.TestCase):
         ):
             with (
                 self.subTest(name=name, version=version, modules=modules),
-                self.assertRaisesRegex(workspace.BazelWorkspaceError, "metadata version"),
+                self.assertRaisesRegex(native.BazelWorkspaceError, "metadata version"),
             ):
-                workspace._metadata_versions(name, version, modules, "linux")
+                dependencies._metadata_versions(name, version, modules, "linux")
 
     def test_metadata_groups_reject_partial_and_ambiguous_provider_interfaces(self):
         with tempfile.TemporaryDirectory(prefix="aobus-audio-metadata-") as directory:
@@ -83,13 +94,13 @@ class BazelAudioPolicyTest(unittest.TestCase):
             first.mkdir()
             second.mkdir()
             spec = {"pkg_config": {"pc_dirs": [str(first), str(second)]}}
-            self.assertFalse(workspace._has_metadata(spec, ["flac", "opus"]))
+            self.assertFalse(dependencies._has_metadata(spec, ["flac", "opus"]))
             (first / "flac.pc").touch()
-            with self.assertRaisesRegex(workspace.BazelWorkspaceError, "incomplete"):
-                workspace._has_metadata(spec, ["flac", "opus"])
+            with self.assertRaisesRegex(native.BazelWorkspaceError, "incomplete"):
+                dependencies._has_metadata(spec, ["flac", "opus"])
             (second / "flac.pc").touch()
-            with self.assertRaisesRegex(workspace.BazelWorkspaceError, "ambiguous"):
-                workspace._has_metadata(spec, ["flac"])
+            with self.assertRaisesRegex(native.BazelWorkspaceError, "ambiguous"):
+                dependencies._has_metadata(spec, ["flac"])
 
     def test_opus_parent_include_supplement_is_guarded_and_not_redundant(self):
         spec = {"platform": "linux", "config": "Debug", "provider": {"name": "nix", "version": "revision"}}
@@ -104,8 +115,8 @@ class BazelAudioPolicyTest(unittest.TestCase):
 
             return query
 
-        with patch.object(workspace, "_metadata_flags", side_effect=metadata_flags(["-I/provider/include/opus"])):
-            result = workspace._compile_interface_patch(spec, "opus", interface)
+        with patch.object(dependencies, "_metadata_flags", side_effect=metadata_flags(["-I/provider/include/opus"])):
+            result = dependencies._compile_interface_patch(spec, "opus", interface)
         self.assertEqual(
             result["when"],
             {
@@ -118,8 +129,8 @@ class BazelAudioPolicyTest(unittest.TestCase):
         )
         self.assertEqual(result["expect"]["missing"], result["add"])
         self.assertEqual(result["satisfy"], [])
-        with patch.object(workspace, "_metadata_flags", side_effect=metadata_flags(["-I/provider/include"])):
-            self.assertIsNone(workspace._compile_interface_patch(spec, "opus", interface))
+        with patch.object(dependencies, "_metadata_flags", side_effect=metadata_flags(["-I/provider/include"])):
+            self.assertIsNone(dependencies._compile_interface_patch(spec, "opus", interface))
 
 
 class BazelAudioSpecTest(unittest.TestCase):
@@ -137,7 +148,7 @@ class BazelAudioSpecTest(unittest.TestCase):
         self.pc = self.provider / "lib/pkgconfig"
         self.pc.mkdir(parents=True)
         (self.pc / "opus.pc").write_text("Name: opus\nVersion: 1.6.1\n", encoding="utf-8")
-        policy = workspace._json(workspace.POLICY)
+        policy = native.read_json(providers.POLICY)
         policy["packages"] = {
             "native": [p for p in policy["packages"]["native"] if p["name"] == "opus"],
             "test": [p for p in policy["packages"]["test"] if p["name"] == "fakeit"],
@@ -152,7 +163,7 @@ class BazelAudioSpecTest(unittest.TestCase):
         (self.provider / "lib/libopus.so").write_bytes(b"fixture shared codec")
 
     def provider_spec(self, policy, *, identity_path):
-        workspace._write_json(
+        native.write_json(
             identity_path, {"packages": {name: {"outputs": [str(self.provider)]} for name in self.versions}}
         )
         return (
@@ -199,25 +210,27 @@ class BazelAudioSpecTest(unittest.TestCase):
             return ["-I" + str(self.provider / "include/opus")]
 
         with (
-            patch.object(workspace, "native_platform", return_value="linux"),
-            patch.object(workspace, "POLICY", self.policy),
-            patch.object(workspace, "_linux_provider", side_effect=self.provider_spec),
-            patch.object(workspace, "_metadata_flags", side_effect=metadata_flags),
-            patch.object(workspace, "_verify_linux_resolution"),
+            patch.object(native, "native_platform", return_value="linux"),
+            patch.object(providers, "POLICY", self.policy),
+            patch.object(providers, "linux_provider", side_effect=self.provider_spec),
+            patch.object(dependencies, "_metadata_flags", side_effect=metadata_flags),
+            patch.object(providers, "verify_linux_resolution"),
             patch.object(bazel_deps.subprocess, "run", side_effect=self.query),
             patch.object(bazel_deps, "_Adapter", wraps=bazel_deps._Adapter) as adapters,
         ):
-            for group in ("native", "test"):
-                workspace.refresh_dependencies(self.tree, "debug", group=group)
+            self.resolutions = {
+                group: dependencies.resolve_dependencies(self.tree, "debug", group=group)
+                for group in ("native", "test")
+            }
             return adapters.call_args_list
 
     def test_linux_specs_keep_metadata_opus_and_complete_header_only_catch_fakeit(self):
         calls = self.refresh()
         self.assertEqual(len(calls), 2)
-        native = workspace._json(self.tree / "generated/native/manifest.json")["configuration"]
-        tests = workspace._json(self.tree / "generated/test/manifest.json")["configuration"]
+        native_config = self.resolutions["native"]["manifest"]["configuration"]
+        tests = self.resolutions["test"]["manifest"]["configuration"]
         self.assertEqual(
-            native["packages"], [{"name": "opus", "modules": ["opus"], "expected_versions": {"opus": "1.6.1"}}]
+            native_config["packages"], [{"name": "opus", "modules": ["opus"], "expected_versions": {"opus": "1.6.1"}}]
         )
         self.assertEqual(tests["packages"], [{"name": "fakeit", "modules": []}])
         fallback = calls[1].args[1]["patches"][0]
@@ -236,13 +249,12 @@ class BazelAudioSpecTest(unittest.TestCase):
         self.assertEqual(fallback["expect"]["missing"], fallback["add"])
         (self.provider / "include/catch/new-header.hpp").touch()
         self.assertEqual(len(self.refresh()), 2)
-        plan = workspace._json(self.tree / "generated/test/repository.json")
-        self.assertIn(str(self.provider / "include/catch/new-header.hpp"), [link["source"] for link in plan["links"]])
+        self.assertIn(str(self.provider / "include/catch/new-header.hpp"), observed_sources(self.resolutions["test"]))
         self.assertFalse((self.tree / "generated/test/artifacts").exists())
 
     def test_missing_opus_metadata_cannot_publish_header_only_codec_fallback(self):
         (self.pc / "opus.pc").unlink()
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "no reviewed fallback"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "no reviewed fallback"):
             self.refresh()
 
     def test_future_fakeit_and_opus_observations_are_admitted_and_missing_catch_header_fails(self):
@@ -251,12 +263,12 @@ class BazelAudioSpecTest(unittest.TestCase):
         self.versions["fakeit"] = "2.6.0"
         self.versions["opus"] = "1.7.0"
         self.refresh()
-        native = workspace._json(self.tree / "generated/native/manifest.json")["configuration"]
-        self.assertEqual(native["packages"][0]["expected_versions"], {"opus": "1.7.0"})
+        native_config = self.resolutions["native"]["manifest"]["configuration"]
+        self.assertEqual(native_config["packages"][0]["expected_versions"], {"opus": "1.7.0"})
         self.versions["fakeit"] = "2.5.0"
         self.versions["opus"] = "1.6.1"
         (self.provider / "include/catch/fakeit.hpp").unlink()
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "governed header"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "governed header"):
             self.refresh()
 
 
@@ -291,14 +303,14 @@ class BazelNativeAudioInterfaceTest(unittest.TestCase):
                 }
             }
             identity_path = root / "identity.json"
-            _, versions = workspace._native_provider(
+            _, versions = providers.native_provider(
                 prefix, "debug", "windows", identity_path=identity_path, policy=policy
             )
             self.assertEqual(versions, {"alac": "2017-11-03-c38887c5"})
-            self.assertEqual(workspace._json(identity_path)["packages"]["alac"]["version"], "2017-11-03-c38887c5#4")
+            self.assertEqual(native.read_json(identity_path)["packages"]["alac"]["version"], "2017-11-03-c38887c5#4")
             status.write_text(status.read_text().replace("Port-Version: 4", "Port-Version: invalid"), encoding="utf-8")
             with self.assertRaisesRegex(dependency_policy.DependencyPolicyError, "port revision"):
-                workspace._native_provider(prefix, "debug", "windows", identity_path=identity_path, policy=policy)
+                providers.native_provider(prefix, "debug", "windows", identity_path=identity_path, policy=policy)
 
     def test_alac_complete_archive_interface_is_configuration_and_shape_guarded(self):
         with tempfile.TemporaryDirectory(prefix="aobus-alac-interface-") as directory:
@@ -308,7 +320,7 @@ class BazelNativeAudioInterfaceTest(unittest.TestCase):
             header.touch()
             # Read the reviewed fallback from the shipped policy: the fixture archive
             # spellings witness the real JSON instead of mirroring it here.
-            policy = {"library_fallbacks": workspace._json(workspace.POLICY)["library_fallbacks"]}
+            policy = {"library_fallbacks": native.read_json(providers.POLICY)["library_fallbacks"]}
             for config in ("debug", "release"):
                 selected = root / ("debug" if config == "debug" else "")
                 (selected / "lib").mkdir(parents=True, exist_ok=True)
@@ -316,18 +328,18 @@ class BazelNativeAudioInterfaceTest(unittest.TestCase):
                     file = selected / "lib" / archive
                     file.write_bytes(b"fixture static archive")
                     with self.subTest(host=host, config=config):
-                        interface = workspace._library_interface({"name": "alac"}, [root], config, host, policy)
+                        interface = dependencies._library_interface({"name": "alac"}, [root], config, host, policy)
                         self.assertEqual(interface["header_dirs"], [str(root / "include")])
                         self.assertEqual(
                             interface["libraries"], [{"name": "libalac", "kind": "static", "file": str(file)}]
                         )
                         file.unlink()
-                        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "missing/ambiguous"):
-                            workspace._library_interface({"name": "alac"}, [root], config, host, policy)
+                        with self.assertRaisesRegex(native.BazelWorkspaceError, "missing/ambiguous"):
+                            dependencies._library_interface({"name": "alac"}, [root], config, host, policy)
                         file.write_bytes(b"fixture static archive")
             (root / "debug/lib/libalacd.lib").touch()
-            with self.assertRaisesRegex(workspace.BazelWorkspaceError, "unsupported static provider shape"):
-                workspace._library_interface({"name": "alac"}, [root], "debug", "windows", policy)
+            with self.assertRaisesRegex(native.BazelWorkspaceError, "unsupported static provider shape"):
+                dependencies._library_interface({"name": "alac"}, [root], "debug", "windows", policy)
 
 
 class BazelWindowsAudioInterfaceTest(unittest.TestCase):
@@ -354,7 +366,7 @@ class BazelWindowsAudioInterfaceTest(unittest.TestCase):
             header = self.prefix / "include" / marker
             header.parent.mkdir(parents=True, exist_ok=True)
             header.write_text(content, encoding="utf-8")
-        policy = workspace._json(workspace.POLICY)
+        policy = native.read_json(providers.POLICY)
         policy["packages"] = {
             "native": [p for p in policy["packages"]["native"] if p["name"] in {"icu", "flac"}],
             "test": [],
@@ -391,7 +403,7 @@ class BazelWindowsAudioInterfaceTest(unittest.TestCase):
         return self.prefix / ("debug" if config == "debug" else "")
 
     def provider(self, prefix, config, host, *, identity_path, policy):
-        workspace._write_json(
+        native.write_json(
             identity_path,
             {
                 "packages": {
@@ -431,7 +443,7 @@ class BazelWindowsAudioInterfaceTest(unittest.TestCase):
             if module != "flac":
                 if self.active_config == "debug":
                     libraries = [name + "d" for name in libraries]
-                libraries += workspace._json(self.policy_path)["windows_icu"]["system_libraries"]
+                libraries += native.read_json(self.policy_path)["windows_icu"]["system_libraries"]
             text = f'-L"{selected / "lib"}" ' + " ".join("-l" + name for name in libraries)
         else:
             self.fail(f"unexpected pkg-config query: {argv}")
@@ -440,22 +452,22 @@ class BazelWindowsAudioInterfaceTest(unittest.TestCase):
     def refresh(self, config, contract=None):
         self.active_config = config
         with (
-            patch.object(workspace, "native_platform", return_value="windows"),
-            patch.object(workspace, "POLICY", self.policy_path),
-            patch.object(workspace, "vcpkg_prefix", return_value=self.prefix),
-            patch.object(workspace, "_native_provider", side_effect=self.provider),
+            patch.object(native, "native_platform", return_value="windows"),
+            patch.object(providers, "POLICY", self.policy_path),
+            patch.object(providers, "vcpkg_prefix", return_value=self.prefix),
+            patch.object(providers, "native_provider", side_effect=self.provider),
             patch.object(bazel_deps.subprocess, "run", side_effect=self.query),
             patch.object(
-                workspace.dependency_policy,
+                dependency_policy,
                 "load_contract",
                 return_value=dependency_policy.load_contract() if contract is None else contract,
             ),
         ):
-            workspace.refresh_dependencies(self.tree, config, group="native")
-        return workspace._json(self.tree / "generated/native/manifest.json")
+            self.resolution = dependencies.resolve_dependencies(self.tree, config, group="native")
+        return self.resolution["manifest"]
 
     def plan_sources(self):
-        return [link["source"] for link in workspace._json(self.tree / "generated/native/repository.json")["links"]]
+        return observed_sources(self.resolution)
 
     def test_static_interfaces_select_config_archives_and_reviewed_system_links(self):
         for config in ("debug", "release"):
@@ -491,9 +503,15 @@ class BazelWindowsAudioInterfaceTest(unittest.TestCase):
                 self.assertNotIn("U_STATIC_IMPLEMENTATION", icu["interface"]["defines"])
                 self.assertEqual(
                     icu["interface"]["linkopts"],
-                    [name + ".lib" for name in workspace._json(self.policy_path)["windows_icu"]["system_libraries"]],
+                    [name + ".lib" for name in native.read_json(self.policy_path)["windows_icu"]["system_libraries"]],
                 )
                 self.assertIn("windows-icu-system-links", manifest["applied_patches"])
+                admitted = next(p for p in self.resolution["packages"] if p["name"] == "icu")
+                self.assertEqual(admitted["linkopts"], icu["interface"]["linkopts"])
+                self.assertEqual(
+                    [library["source"] for library in admitted["libraries"]],
+                    [str(selected / "lib" / (name + suffix + ".lib")) for name in ("icuin", "icuuc", "icudt")],
+                )
                 sources = self.plan_sources()
                 self.assertIn(str(selected / "lib/FLAC.lib"), sources)
                 self.assertIn(str(selected / "lib/ogg.lib"), sources)
@@ -506,14 +524,14 @@ class BazelWindowsAudioInterfaceTest(unittest.TestCase):
             header = self.prefix / "include/unicode" / name
             reviewed = header.read_text(encoding="utf-8")
             header.write_text(reviewed.replace("#elif 1", "#elif defined(U_STATIC_IMPLEMENTATION)"), encoding="utf-8")
-            with self.subTest(header=name), self.assertRaisesRegex(workspace.BazelWorkspaceError, "static ICU"):
+            with self.subTest(header=name), self.assertRaisesRegex(native.BazelWorkspaceError, "static ICU"):
                 self.refresh("release")
             header.write_text(reviewed, encoding="utf-8")
 
     def test_static_flac_export_header_must_not_import_dll_symbols(self):
         header = self.prefix / "include/FLAC/export.h"
         header.write_text(header.read_text(encoding="utf-8").replace("#if 1", "#if 0"), encoding="utf-8")
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "static FLAC"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "static FLAC"):
             self.refresh("release")
 
     def test_missing_ogg_archive_fails_the_static_flac_closure(self):
@@ -536,7 +554,7 @@ class BazelWindowsAudioInterfaceTest(unittest.TestCase):
 
     def test_missing_flac_metadata_has_no_reviewed_windows_fallback(self):
         (self.selected("release") / "lib/pkgconfig/flac.pc").unlink()
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "metadata is missing; no reviewed fallback"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "metadata is missing; no reviewed fallback"):
             self.refresh("release")
 
     def test_contract_approved_icu_sdk_update_admits_the_coherent_interface(self):
@@ -548,7 +566,7 @@ class BazelWindowsAudioInterfaceTest(unittest.TestCase):
             self.root / "vcpkg/info/icu_78.4_x64-windows-static-md.list"
         )
         # A stale installed header is not admitted under the new observation.
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "header version mismatch"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "header version mismatch"):
             self.refresh("release", upgraded)
         uvernum = self.prefix / "include/unicode/uvernum.h"
         uvernum.write_text(
@@ -599,7 +617,7 @@ class BazelWindowsAudioCodecProjectionTest(unittest.TestCase):
         # Producer observations; the closure comparison against the shipped policy
         # is the behavior under test, not a mirror of it.
         self.metadata_libraries = {"fdk-aac": ["fdk-aac"], "libmpg123": ["mpg123", "shlwapi"], "opus": ["opus"]}
-        policy = workspace._json(workspace.POLICY)
+        policy = native.read_json(providers.POLICY)
         policy["packages"] = {
             "native": [p for p in policy["packages"]["native"] if p["name"] in {"fdk_aac", "mpg123", "opus"}],
             "test": [],
@@ -611,7 +629,7 @@ class BazelWindowsAudioCodecProjectionTest(unittest.TestCase):
 
     def provider(self, prefix, config, host, *, identity_path, policy):
         status = {"mpg123": "1.33.7", "fdk-aac": "2.0.3", "opus": "1.6.1"}
-        workspace._write_json(
+        native.write_json(
             identity_path,
             {"packages": {port: {"version": version + "#0"} for port, version in status.items()}},
         )
@@ -655,16 +673,14 @@ class BazelWindowsAudioCodecProjectionTest(unittest.TestCase):
 
     def refresh(self):
         with (
-            patch.object(workspace, "native_platform", return_value="windows"),
-            patch.object(workspace, "POLICY", self.policy_path),
-            patch.object(workspace, "vcpkg_prefix", return_value=self.prefix),
-            patch.object(workspace, "_native_provider", side_effect=self.provider),
+            patch.object(native, "native_platform", return_value="windows"),
+            patch.object(providers, "POLICY", self.policy_path),
+            patch.object(providers, "vcpkg_prefix", return_value=self.prefix),
+            patch.object(providers, "native_provider", side_effect=self.provider),
             patch.object(bazel_deps.subprocess, "run", side_effect=self.query),
         ):
-            workspace.refresh_dependencies(self.tree, "release", group="native")
-        manifest = workspace._json(self.tree / "generated/native/manifest.json")
-        sources = [link["source"] for link in workspace._json(self.tree / "generated/native/repository.json")["links"]]
-        return manifest, sources
+            resolution = dependencies.resolve_dependencies(self.tree, "release", group="native")
+        return resolution["manifest"], observed_sources(resolution)
 
     def test_windows_codec_closures_resolve_archives_and_reviewed_sdk_tails(self):
         manifest, sources = self.refresh()
@@ -702,7 +718,7 @@ class BazelWindowsAudioCodecProjectionTest(unittest.TestCase):
     def test_windows_codec_without_the_reviewed_sdk_tail_fails_closed(self):
         self.metadata_libraries["libmpg123"] = ["mpg123"]
         with self.assertRaisesRegex(
-            workspace.BazelWorkspaceError, "unreviewed Windows static library sequence/interleaving"
+            native.BazelWorkspaceError, "unreviewed Windows static library sequence/interleaving"
         ):
             self.refresh()
 
@@ -749,7 +765,7 @@ class BazelNativeFakeItHeaderTest(unittest.TestCase):
         resolver.touch()
         resolver.chmod(0o755)
         versions = {"catch2": "3.7.0", "fakeit": "2.5.0"}
-        policy = workspace._json(workspace.POLICY)
+        policy = native.read_json(providers.POLICY)
         policy["packages"] = {"native": [], "test": policy["packages"]["test"]}
         policy_path = root / "policy.json"
         policy_path.write_text(json.dumps(policy), encoding="utf-8")
@@ -757,7 +773,7 @@ class BazelNativeFakeItHeaderTest(unittest.TestCase):
         tree.mkdir()
 
         def provider(selected_prefix, config, selected_host, *, identity_path, policy):
-            workspace._write_json(
+            native.write_json(
                 identity_path,
                 {"packages": {name: {"version": version + "#0"} for name, version in versions.items()}},
             )
@@ -793,16 +809,14 @@ class BazelNativeFakeItHeaderTest(unittest.TestCase):
 
         def refresh():
             with (
-                patch.object(workspace, "native_platform", return_value=host),
-                patch.object(workspace, "POLICY", policy_path),
-                patch.object(workspace, "vcpkg_prefix", return_value=prefix),
-                patch.object(workspace, "_native_provider", side_effect=provider),
+                patch.object(native, "native_platform", return_value=host),
+                patch.object(providers, "POLICY", policy_path),
+                patch.object(providers, "vcpkg_prefix", return_value=prefix),
+                patch.object(providers, "native_provider", side_effect=provider),
                 patch.object(bazel_deps.subprocess, "run", side_effect=query),
             ):
-                workspace.refresh_dependencies(tree, "release", group="test")
-            manifest = workspace._json(tree / "generated/test/manifest.json")
-            sources = [link["source"] for link in workspace._json(tree / "generated/test/repository.json")["links"]]
-            return manifest, sources
+                resolution = dependencies.resolve_dependencies(tree, "release", group="test")
+            return resolution["manifest"], observed_sources(resolution)
 
         return prefix, refresh
 
@@ -836,7 +850,7 @@ class BazelNativeFakeItHeaderTest(unittest.TestCase):
             with self.subTest(host=host):
                 _, refresh = self.arrange(host, fakeit_child=False)
                 with self.assertRaisesRegex(
-                    workspace.BazelWorkspaceError,
+                    native.BazelWorkspaceError,
                     "missing/ambiguous governed header fakeit/single_header/catch/fakeit.hpp",
                 ):
                     refresh()
@@ -847,7 +861,7 @@ class BazelMacAudioMetadataTest(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory(prefix="aobus-mac-codec-metadata-")
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name).resolve()
-        self.policy = workspace._json(workspace.POLICY)
+        self.policy = native.read_json(providers.POLICY)
         self.cases = {
             "flac": ("flac", "1.5.0", ["FLAC", "m", "ogg"], "m"),
             "fdk_aac": ("fdk-aac", "2.0.3", ["fdk-aac", "c++"], "c++"),
@@ -868,8 +882,10 @@ class BazelMacAudioMetadataTest(unittest.TestCase):
         _, _, libraries, _ = self.cases[name]
         spec = self.spec() if spec is None else spec
         flags = ["-L/selected/config/lib", *["-l" + library for library in libraries]] if flags is None else flags
-        with patch.object(workspace, "_metadata_flags", return_value=flags) as query:
-            result = workspace._macos_audio_runtime_patch(spec, name, self.policy["macos_audio_runtime_remove"][name])
+        with patch.object(dependencies, "_metadata_flags", return_value=flags) as query:
+            result = dependencies._macos_audio_runtime_patch(
+                spec, name, self.policy["macos_audio_runtime_remove"][name]
+            )
             query.assert_called_once_with(spec, "--libs", package=name)
             return result
 
@@ -909,7 +925,7 @@ class BazelMacAudioMetadataTest(unittest.TestCase):
                 [*libraries, implicit],
             ):
                 with self.subTest(name=name, sequence=sequence):
-                    with self.assertRaisesRegex(workspace.BazelWorkspaceError, "metadata library sequence"):
+                    with self.assertRaisesRegex(native.BazelWorkspaceError, "metadata library sequence"):
                         self.guarded_patch(name, flags=["-l" + value for value in sequence])
 
     def test_macos_codec_spec_bounds_are_not_reinterpreted(self):
@@ -921,8 +937,8 @@ class BazelMacAudioMetadataTest(unittest.TestCase):
         ):
             spec = self.spec()
             spec[field] = value
-            with self.subTest(field=field), self.assertRaisesRegex(workspace.BazelWorkspaceError, "macOS codec spec"):
-                workspace._macos_audio_runtime_patch(spec, "flac", self.policy["macos_audio_runtime_remove"]["flac"])
+            with self.subTest(field=field), self.assertRaisesRegex(native.BazelWorkspaceError, "macOS codec spec"):
+                dependencies._macos_audio_runtime_patch(spec, "flac", self.policy["macos_audio_runtime_remove"]["flac"])
 
     def test_adapter_preserves_static_order_and_automatic_counts_without_implicit_system_libs(self):
         provider = self.root / "provider with spaces"
@@ -981,13 +997,16 @@ class BazelMacAudioMetadataTest(unittest.TestCase):
                 ):
                     adapter = bazel_deps._Adapter(spec, {"schema": 1, "patches": []})
                     adapter.prepare()
-                    adapter.build(out, plan={})
+                    adapter.resolve()
                 adapter = bazel_deps._Adapter(spec, {"schema": 1, "patches": patches})
                 adapter.prepare()
-                plan = {}
-                manifest = adapter.build(out, plan=plan)
-            self.assertTrue(plan)
-            self.assertFalse((out / "artifacts").exists())
+                resolution = adapter.resolve()
+                manifest = resolution["manifest"]
+            self.assertEqual(
+                next(p for p in resolution["packages"] if p["name"] == "flac")["libraries"][0]["source"],
+                str(libdir / "libFLAC.a"),
+            )
+            self.assertFalse(out.exists())
             self.assertEqual(manifest["counts"], {"automatic": 4, "manual_fallback": 0})
             for package in manifest["packages"]:
                 libraries = self.cases[package["name"]][2]

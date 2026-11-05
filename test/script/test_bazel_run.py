@@ -8,15 +8,15 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ao.core import bazel_workspace as workspace
+from ao.core import bazel_native as native
 
 _CONTROLLER = """
 import sys
 from pathlib import Path
 sys.path.insert(0, sys.argv[1])
-from ao.core import bazel_workspace as workspace
+from ao.core import bazel_native as native, bazel_workspace as workspace
 root = Path(sys.argv[2])
-workspace.PROJECT_ROOT = root
+native.PROJECT_ROOT = root
 raise SystemExit(workspace.execute(
     Path(sys.argv[3]), root, root / 'configuration', 'run', 'debug',
     ['//fixture:frontend', '--', '--help'],
@@ -39,7 +39,7 @@ class BazelRunStreamsTest(unittest.TestCase):
             "-B",
             "-c",
             _CONTROLLER,
-            str(workspace.PROJECT_ROOT / "script"),
+            str(native.PROJECT_ROOT / "script"),
             str(self.root),
             str(executable),
         ]

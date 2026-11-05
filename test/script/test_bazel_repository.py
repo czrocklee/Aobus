@@ -9,7 +9,11 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from ao.core import bazel_compiler_probe as compiler_probe
+from ao.core import bazel_dependencies as dependencies
 from ao.core import bazel_deps as deps
+from ao.core import bazel_native as native
+from ao.core import bazel_providers as providers
 from ao.core import bazel_workspace as workspace
 from ao.core.bazel_resolver import _audit_executable, _external_input
 
@@ -39,41 +43,46 @@ class RepositoryPlanTest(unittest.TestCase):
             "packages": [selected],
         }
         interface = {"header_dirs": [str(include)], "copts": list(copts)}
-        adapter = deps._Adapter(spec, {"schema": 1, "patches": [workspace._manual_patch(spec, package, interface)]})
+        adapter = deps._Adapter(spec, {"schema": 1, "patches": [dependencies._manual_patch(spec, package, interface)]})
         adapter.prepare()
         if owned:
             adapter.header_files[package] = [header]
-        output = self.root / (name + "-output")
-        output.mkdir()
-        plan = {}
-        manifest = adapter.build(output, plan=plan)
-        return output, plan, manifest
+        return adapter.resolve()
 
     def test_owned_headers_are_sparse_without_materializing_provider_payloads(self):
-        output, plan, manifest = self.render()
-        self.assertEqual(len(plan), 1)
-        self.assertEqual(next(iter(plan.values()))[0].name, "fixture.h")
-        self.assertFalse((output / "artifacts").exists())
-        self.assertEqual(manifest["packages"][0]["declared_headers"], 1)
-        self.assertFalse((output / "interfaces.bzl").exists())
-        self.assertFalse((output / "MODULE.bazel").exists())
+        resolution = self.render()
+        self.assertEqual(
+            resolution["packages"][0]["headers"],
+            [
+                {
+                    "root": str(self.root / "first/include"),
+                    "index": 0,
+                    "files": [{"source": str(self.root / "first/include/fixture.h"), "path": "fixture.h"}],
+                }
+            ],
+        )
+        self.assertEqual(resolution["manifest"]["packages"][0]["declared_headers"], 1)
+        self.assertEqual(list(self.root.iterdir()), [self.root / "first"])
 
-    def test_interface_paths_do_not_embed_the_provider_prefix(self):
-        first, first_plan, _ = self.render("first")
-        second, second_plan, _ = self.render("second")
-        self.assertEqual(list(first_plan), list(second_plan))
-        self.assertEqual((first / "BUILD.bazel").read_bytes(), (second / "BUILD.bazel").read_bytes())
-        self.assertNotIn(str(self.root), (first / "BUILD.bazel").read_text())
+    def test_relocated_providers_retain_lexical_header_paths_and_search_topology(self):
+        first = self.render("first")["packages"][0]
+        second = self.render("second")["packages"][0]
+        self.assertEqual(first["includes"], [{"tree": 0, "path": "."}])
+        self.assertEqual(second["includes"], first["includes"])
+        for name, package in (("first", first), ("second", second)):
+            tree = package["headers"][0]
+            self.assertEqual(tree["root"], str(self.root / name / "include"))
+            self.assertEqual(
+                tree["files"], [{"source": str(self.root / name / "include/fixture.h"), "path": "fixture.h"}]
+            )
 
-    def test_prepared_modes_have_no_default_fallback(self):
-        for config, mode in (("Debug", "dbg"), ("Release", "opt")):
+    def test_admission_retains_configuration_without_a_python_target_inventory(self):
+        for config in ("Debug", "Release"):
             with self.subTest(config=config):
-                output, _, _ = self.render(config.lower(), config=config)
-                build = (output / "BUILD.bazel").read_text()
-                self.assertIn(json.dumps(mode), build)
-                self.assertIn("no_match_error", build)
-                self.assertIn(f"Prepared {config} dependencies require -c {mode}", build)
-                self.assertNotIn("//conditions:default", build)
+                resolution = self.render(config.lower(), config=config)
+                self.assertEqual(resolution["manifest"]["configuration"]["config"], config)
+                self.assertNotIn("targets", resolution["manifest"])
+                self.assertEqual([package["name"] for package in resolution["packages"]], ["fixture"])
 
     def test_unknown_or_unsatisfied_compile_requirements_are_not_silently_discarded(self):
         for index, flag in enumerate(("-pthread", "-fPIC", "-msse2")):
@@ -81,18 +90,19 @@ class RepositoryPlanTest(unittest.TestCase):
                 self.render(str(index), copts=(flag,))
 
     def test_exact_pipewire_requirement_is_evidence_not_dead_wrapper_copts(self):
-        output, _, manifest = self.render(package="pipewire", copts=("-fno-strict-aliasing", "-fno-strict-overflow"))
+        resolution = self.render(package="pipewire", copts=("-fno-strict-aliasing", "-fno-strict-overflow"))
+        manifest = resolution["manifest"]
         self.assertEqual(
             manifest["packages"][0]["interface"]["copts"], ["-fno-strict-aliasing", "-fno-strict-overflow"]
         )
-        self.assertIn("copts = []", (output / "BUILD.bazel").read_text())
+        self.assertNotIn("copts", resolution["packages"][0])
 
     def test_gtkmm_accepts_only_empty_or_complete_linux_sse_requirements_without_wrapper_copts(self):
         for name, copts in (("portable", ()), ("x86", ("-mfpmath=sse", "-msse", "-msse2"))):
             with self.subTest(name=name):
-                output, _, manifest = self.render(name, package="gtkmm", copts=copts)
-                self.assertEqual(manifest["packages"][0]["interface"]["copts"], list(copts))
-                self.assertIn("copts = []", (output / "BUILD.bazel").read_text())
+                resolution = self.render(name, package="gtkmm", copts=copts)
+                self.assertEqual(resolution["manifest"]["packages"][0]["interface"]["copts"], list(copts))
+                self.assertNotIn("copts", resolution["packages"][0])
 
     def test_gtkmm_partial_extra_unknown_and_nonlinux_compile_requirements_fail_closed(self):
         for index, (platform, copts, message) in enumerate(
@@ -112,7 +122,7 @@ class RepositoryPlanTest(unittest.TestCase):
 
 class ReadInventoryTest(unittest.TestCase):
     def test_watch_path_normalization_preserves_posix_case_and_uses_windows_semantics(self):
-        source = ast.parse((workspace.PROJECT_ROOT / "bazel/dependencies.bzl").read_text())
+        source = ast.parse((native.PROJECT_ROOT / "bazel/dependencies.bzl").read_text())
         function = next(
             node for node in source.body if isinstance(node, ast.FunctionDef) and node.name == "_watch_path"
         )
@@ -152,12 +162,12 @@ class ReadInventoryTest(unittest.TestCase):
             absent.parent.mkdir(parents=True)
             present.write_text("version marker")
             observed = []
-            with patch.object(workspace, "_INPUT_PROBE", observed.append):
-                self.assertEqual(workspace._rapidyaml_version_header(include), present)
+            with native.capture_probes(observed.append):
+                self.assertEqual(dependencies._rapidyaml_version_header(include), present)
             self.assertEqual(set(observed), {present, absent})
             absent.write_text("new conflicting marker")
-            with self.assertRaisesRegex(workspace.BazelWorkspaceError, "ambiguous"):
-                workspace._rapidyaml_version_header(include)
+            with self.assertRaisesRegex(native.BazelWorkspaceError, "ambiguous"):
+                dependencies._rapidyaml_version_header(include)
 
     def test_adapter_retains_lexical_alias_watch_before_returning_canonical_payload(self):
         with tempfile.TemporaryDirectory(prefix="aobus-alias-probes-") as temporary:
@@ -201,8 +211,8 @@ class ReadInventoryTest(unittest.TestCase):
             root = Path(temporary).resolve()
             spelling = root / "nested" / ".." / "payload"
             observed = []
-            with patch.object(workspace, "_INPUT_PROBE", observed.append):
-                self.assertEqual(workspace._native_path(spelling, root), root / "payload")
+            with native.capture_probes(observed.append):
+                self.assertEqual(native.native_path(spelling, root), root / "payload")
             self.assertEqual(observed, [spelling.absolute()])
 
 
@@ -249,6 +259,9 @@ class RepositoryRuleTest(unittest.TestCase):
         self.directory_reads = set()
         self.inventory = {"watch_files": [], "watch_directories": [], "links": [], "files": {}}
         self.invocations = []
+        self.materialized_imports = []
+        self.materialized_aliases = []
+        self.public_interfaces = {"debug": ["fixture"], "release": ["fixture"]}
 
         def attribute(**kwargs):
             return kwargs
@@ -263,7 +276,7 @@ class RepositoryRuleTest(unittest.TestCase):
             "fail": self.fail,
             "load": self.load,
         }
-        source = (workspace.PROJECT_ROOT / "bazel/dependencies.bzl").read_text(encoding="utf-8")
+        source = (native.PROJECT_ROOT / "bazel/dependencies.bzl").read_text(encoding="utf-8")
         exec(compile(ast.parse(source), "dependencies.bzl", "exec"), self.namespace)
         attributes = self.namespace["_governed_repository"]["attrs"]
         self.policy = attributes["policy"]["default"]
@@ -295,7 +308,26 @@ class RepositoryRuleTest(unittest.TestCase):
         )
 
     def load(self, label, *names):
-        """Bridge the shared environment without testing its helper module."""
+        """Fake environment and native materialization at their public boundaries."""
+        if label == "//bazel:import_repository.bzl":
+
+            def materialize_imports(ctx, subpackage, config, packages, manifest):
+                self.assertIs(ctx, self.ctx)
+                self.materialized_imports.append((subpackage, config, packages, manifest))
+                return self.public_interfaces[config]
+
+            def materialize_aliases(ctx, targets):
+                self.assertIs(ctx, self.ctx)
+                self.materialized_aliases.append(targets)
+
+            self.namespace.update(materialize_imports=materialize_imports, materialize_aliases=materialize_aliases)
+            self.assertEqual(set(names), {"materialize_imports", "materialize_aliases"})
+            return
+        if label in {"//bazel:host_tools_repository.bzl", "//bazel:toolchain_repository.bzl"}:
+            name = "materialize_host_tools" if "host_tools" in label else "materialize_toolchain"
+            self.assertEqual(names, (name,))
+            self.namespace[name] = lambda *args: self.fail("unexpected SDK materialization")
+            return
         self.assertEqual(label, "//bazel:environment.bzl")
 
         def repository_environment(ctx):
@@ -322,7 +354,7 @@ class RepositoryRuleTest(unittest.TestCase):
     def path(self, value):
         value = str(value)
         if value.startswith("//"):
-            path = workspace.PROJECT_ROOT / value[2:].replace(":", "/").lstrip("/")
+            path = native.PROJECT_ROOT / value[2:].replace(":", "/").lstrip("/")
         else:
             path = self.root / value
         return _RepositoryPath(path, self.directory_reads)
@@ -406,9 +438,62 @@ class RepositoryRuleTest(unittest.TestCase):
         self.assertNotIn(str(self.root / "_tmp/probe.pyc"), self.watches)
         self.assertNotIn(str(self.root / "_tmp"), self.directory_reads)
         # Portal modules the resolver never imported are not repository inputs.
-        core = workspace.PROJECT_ROOT / "script/ao/core"
+        core = native.PROJECT_ROOT / "script/ao/core"
         self.assertFalse({str(path) for path in core.glob("*.py")} & self.watches)
         self.assertNotIn(str(core), self.directory_reads)
+
+    def test_selected_configuration_forwards_observations_without_requesting_mode_aliases(self):
+        self.ctx.attr.group = "native"
+        packages = [
+            {
+                "name": "fixture",
+                "headers": [],
+                "includes": [],
+                "libraries": [],
+                "runtime": [],
+                "defines": ["SELECTED_DEBUG"],
+                "linkopts": [],
+            }
+        ]
+        manifest = {"configuration": {"config": "Debug"}, "materialization": "repository"}
+        self.inventory["imports"] = {"": {"config": "debug", "packages": packages, "manifest": manifest}}
+        self.namespace["_governed_repository_impl"](self.ctx)
+        self.assertEqual(self.materialized_imports, [("", "debug", packages, manifest)])
+        self.assertEqual(self.materialized_aliases, [])
+
+    def test_matching_configuration_interfaces_are_delegated_to_native_mode_aliases(self):
+        self.ctx.attr.group = "native"
+        self.inventory["imports"] = {
+            config: {"config": config, "packages": [], "manifest": {"selected": config}}
+            for config in ("debug", "release")
+        }
+        self.namespace["_governed_repository_impl"](self.ctx)
+        self.assertEqual(
+            self.materialized_imports,
+            [
+                ("debug", "debug", [], {"selected": "debug"}),
+                ("release", "release", [], {"selected": "release"}),
+            ],
+        )
+        self.assertEqual(self.materialized_aliases, [["fixture"]])
+
+    def test_missing_or_incompatible_configuration_interfaces_fail_before_alias_materialization(self):
+        self.ctx.attr.group = "native"
+        self.inventory["imports"] = {"debug": {"config": "debug", "packages": [], "manifest": {}}}
+        with self.assertRaisesRegex(AssertionError, "require Debug and Release"):
+            self.namespace["_governed_repository_impl"](self.ctx)
+        self.inventory["imports"]["release"] = {"config": "release", "packages": [], "manifest": {}}
+        self.public_interfaces["release"] = ["different_consumer"]
+        with self.assertRaisesRegex(AssertionError, "different consumer interfaces"):
+            self.namespace["_governed_repository_impl"](self.ctx)
+        self.assertEqual(self.materialized_aliases, [])
+
+    def test_winui_consumer_aliases_are_delegated_without_python_build_serialization(self):
+        self.ctx.attr.group = "winui"
+        self.inventory["aliases"] = ["fixture_sdk"]
+        self.namespace["_governed_repository_impl"](self.ctx)
+        self.assertEqual(self.materialized_aliases, [["fixture_sdk"]])
+        self.assertEqual(self.materialized_imports, [])
 
 
 class LaunchConfigurationTest(unittest.TestCase):
@@ -432,8 +517,8 @@ class LaunchConfigurationTest(unittest.TestCase):
             )
             with (
                 patch.dict(workspace.os.environ, environment, clear=True),
-                patch.object(workspace, "native_platform", return_value="windows"),
-                patch.object(workspace, "vcpkg_prefix", return_value=root / "provider"),
+                patch.object(native, "native_platform", return_value="windows"),
+                patch.object(providers, "vcpkg_prefix", return_value=root / "provider"),
                 patch.object(workspace.builddir, "windows_state_root", return_value=root / "state"),
             ):
                 prepared = workspace.prepare_workspace(root / "build", "debug", prefix=str(root / "provider"))
@@ -457,7 +542,7 @@ class LaunchConfigurationTest(unittest.TestCase):
                 json.dumps(
                     {
                         "schemaVersion": 1,
-                        "nixpkgsRevision": workspace._json(workspace.PROJECT_ROOT / "nixpkgs.json")["rev"],
+                        "nixpkgsRevision": native.read_json(native.PROJECT_ROOT / "nixpkgs.json")["rev"],
                         "dependencies": {
                             "catch2": {
                                 "version": "1",
@@ -478,27 +563,28 @@ class LaunchConfigurationTest(unittest.TestCase):
             original_is_dir = Path.is_dir
             with (
                 patch.dict(workspace.os.environ, {"AOBUS_NIX_DEPENDENCY_REPORT": str(report)}, clear=True),
-                patch.object(workspace, "_nix_root", return_value=provider),
+                patch.object(providers, "nix_root", return_value=provider),
                 patch.object(Path, "is_dir", lambda path: path == Path("/nix/store/catch2") or original_is_dir(path)),
-                patch.object(workspace, "_executable", return_value="/fixture/pkgconf"),
+                patch.object(native, "executable", return_value="/fixture/pkgconf"),
                 patch.object(
-                    workspace.subprocess, "run", return_value=workspace.subprocess.CompletedProcess([], 1, "", "")
+                    providers.subprocess, "run", return_value=providers.subprocess.CompletedProcess([], 1, "", "")
                 ),
             ):
-                base, _, _ = workspace._linux_provider(policy, identity_path=root / "identity.json")
+                base, _, _ = providers.linux_provider(policy, identity_path=root / "identity.json")
             self.assertEqual(base["pkg_config"]["pc_dirs"], [str(pcdir)])
 
     def test_preparation_writes_configuration_without_resolving_or_hashing_dependencies(self):
         with tempfile.TemporaryDirectory(prefix="aobus-bazel-launch-") as temporary:
             tree = Path(temporary)
             with (
-                patch.object(workspace, "native_platform", return_value="linux"),
-                patch.object(workspace, "_executable", side_effect=AssertionError("outer compiler probe")),
-                patch.object(workspace, "refresh_dependencies", side_effect=AssertionError("outer dependency refresh")),
-                patch.object(workspace, "_toolchain_identity", side_effect=AssertionError("outer toolchain hash")),
+                patch.object(native, "native_platform", return_value="linux"),
+                patch.object(native, "executable", side_effect=AssertionError("outer compiler probe")),
                 patch.object(
-                    workspace, "linux_hardening_environment", side_effect=AssertionError("outer toolchain policy")
+                    dependencies, "resolve_dependencies", side_effect=AssertionError("outer dependency resolution")
                 ),
+                patch.object(compiler_probe, "probe_compiler", side_effect=AssertionError("outer compiler probe")),
+                patch.object(compiler_probe, "_compiler_identity", side_effect=AssertionError("outer compiler hash")),
+                patch.object(compiler_probe, "nix_cc_wrapper", side_effect=AssertionError("outer compiler report")),
             ):
                 prepared = workspace.prepare_workspace(tree, "debug")
                 request = json.loads((prepared / "request.json").read_text())

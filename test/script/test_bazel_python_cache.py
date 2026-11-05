@@ -57,7 +57,10 @@ _PROJECT_IMPORT_PROBE = textwrap.dedent("""\
                 directories.add(os.path.abspath(os.fsdecode(values[0])))
     sys.addaudithook(audit)
     from ao.core.bazel_resolver import _external_input
-    from ao.core import bazel_workspace, bazel_deps, bazel_headers
+    from ao.core import (
+        bazel_native, bazel_providers, bazel_dependencies, bazel_host_tools,
+        bazel_compiler_probe, bazel_deps, bazel_headers,
+    )
     print(json.dumps({
         'files': sorted(
             path for path in files
@@ -180,13 +183,19 @@ class PythonCachePrefixTest(unittest.TestCase):
             {
                 str(core.parent / "__init__.py"),
                 str(core / "__init__.py"),
-                str(core / "bazel_workspace.py"),
+                str(core / "bazel_native.py"),
+                str(core / "bazel_providers.py"),
+                str(core / "bazel_dependencies.py"),
+                str(core / "bazel_host_tools.py"),
+                str(core / "bazel_compiler_probe.py"),
                 str(core / "bazel_deps.py"),
                 str(core / "bazel_headers.py"),
             },
             imported_sources,
         )
-        self.assertNotIn(str(core / "tidyengine.py"), imported_sources)
+        self.assertFalse((core / "bazel_toolchain.py").exists())
+        self.assertNotIn(str(core / "bazel_toolchain.py"), files)
+        self.assertNotIn(str(core / "bazel_workspace.py"), imported_sources)
         self.assertFalse(any(Path(path).is_relative_to(project) and path.endswith(".pyc") for path in files))
         self.assertLessEqual({str(project / "script"), str(core.parent), str(core)}, set(inventory["directories"]))
 

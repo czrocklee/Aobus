@@ -96,8 +96,11 @@ class StandaloneBazelCiTest(unittest.TestCase):
                 self.assertNotIn("continue-on-error:", direct)
                 # The documented bare commands, never portal generation or R2 credentials.
                 self.assertIn("//app/tui:aobus-tui", direct)
-                self.assertIn("--config=release", direct)
-                self.assertIn("//test/lint:cache_clean", direct)
+                release = direct.split("--config=release", 1)[1]
+                self.assertIn("//test/lint:cache_clean", release)
+                # The canary alone has no provider deps; a Release product must
+                # link the target-mode SDK aliases and consume the catalog too.
+                self.assertIn("//app/tui:aobus-tui", release)
                 self.assertNotIn("./ao", direct)
                 self.assertNotIn("ao.bat", direct)
                 self.assertNotIn("--remote_cache", direct)

@@ -1,8 +1,6 @@
 """Mutable native SDK inputs must change the compiler's action identity."""
 
-import ast
 import hashlib
-import json
 import os
 import subprocess
 import tempfile
@@ -10,7 +8,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ao.core import bazel_workspace as workspace
+from ao.core import bazel_compiler_probe as compiler_probe
+from ao.core import bazel_native as native
 
 
 class MacosToolchainIdentityTest(unittest.TestCase):
@@ -56,66 +55,63 @@ class MacosToolchainIdentityTest(unittest.TestCase):
     def identity(self):
         with (
             patch.dict(os.environ, self.environment),
-            patch.object(workspace, "_host_machine", return_value="arm64"),
-            patch.object(workspace.subprocess, "run", side_effect=self.query),
+            patch.object(native, "host_machine", return_value="arm64"),
+            patch.object(compiler_probe.platform, "machine", return_value="arm64"),
+            patch.object(compiler_probe.subprocess, "run", side_effect=self.query),
         ):
-            workspace._toolchain_identity(self.generated, "macos")
-        return self.generated / "toolchain/identity.json"
+            return compiler_probe.probe_compiler("macos")["identity"]
 
-    def test_selected_linker_is_exported_without_relocating_native_tools(self):
+    def test_selected_sdk_is_raw_metadata_without_graph_policy_or_native_tool_relocation(self):
         with (
             patch.dict(os.environ, self.environment),
-            patch.object(workspace.platform, "machine", return_value="arm64"),
-            patch.object(workspace.subprocess, "run", side_effect=self.query),
+            patch.object(native, "host_machine", return_value="ARM64"),
+            patch.object(compiler_probe.platform, "machine", return_value="ARM64"),
+            patch.object(compiler_probe.subprocess, "run", side_effect=self.query),
         ):
-            workspace._macos_toolchain(self.generated)
-        # These assignments are the emitted Starlark data interface, not the
-        # implementation spelling or a second product-graph inventory.
-        source = (self.generated / "toolchain/native_paths.bzl").read_text(encoding="utf-8")
-        metadata = {node.targets[0].id: ast.literal_eval(node.value) for node in ast.parse(source).body}
-        self.assertIn("Åsa", source)
-        self.assertEqual(metadata["SHIM"], str(self.shim))
-        self.assertEqual(metadata["LINKER"], str(self.linker))
-        self.assertEqual(metadata["SDK"], str(self.sdk))
-        self.assertEqual(metadata["CONSTRAINT_CPU"], "aarch64")
+            data = compiler_probe.probe_compiler("macos")
+        sdk = data["sdk"]
+        self.assertEqual(set(data), {"platform", "sdk", "identity"})
+        self.assertEqual(data["platform"], "macos")
+        self.assertEqual(set(sdk), {"machine", "llvm", "llvm_real", "sdk", "shim", "linker", "deployment"})
+        self.assertIn("Åsa", sdk["shim"])
+        self.assertEqual(sdk["shim"], str(self.shim))
+        self.assertEqual(sdk["linker"], str(self.linker))
+        self.assertEqual(sdk["sdk"], str(self.sdk))
+        self.assertEqual(sdk["machine"], "ARM64")
         self.assertFalse((self.generated / "toolchain/bin").exists())
 
     def test_in_place_native_changes_invalidate_even_with_unchanged_versions_and_mtimes(self):
-        baseline = self.identity().read_bytes()
+        baseline = self.identity()
         for path in self.inputs:
             with self.subTest(path=path.relative_to(self.root)):
                 stat = path.stat()
                 path.write_bytes(b"modified")
                 os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns))
                 changed = self.identity()
-                self.assertNotEqual(changed.read_bytes(), baseline)
-                record = next(item for item in json.loads(changed.read_text())["files"] if item["path"] == str(path))
+                self.assertNotEqual(changed, baseline)
+                record = next(item for item in changed["files"] if item["path"] == str(path))
                 self.assertEqual(record["sha256"], hashlib.sha256(b"modified").hexdigest())
                 path.write_bytes(b"original")
-                self.assertEqual(self.identity().read_bytes(), baseline)
+                self.assertEqual(self.identity(), baseline)
 
-    def test_header_addition_and_removal_change_identity_without_rewriting_unchanged_output(self):
-        identity = self.identity()
-        baseline = identity.read_bytes()
-        sentinel = 1_000_000_000_000_000_000
-        os.utime(identity, ns=(sentinel, sentinel))
-        self.identity()
-        self.assertEqual(identity.stat().st_mtime_ns, sentinel)
+    def test_header_addition_and_removal_change_identity_and_unchanged_inputs_are_repeatable(self):
+        baseline = self.identity()
+        self.assertEqual(self.identity(), baseline)
         added = self.sdk / "usr/include/new.h"
         added.write_bytes(b"new header")
-        self.assertNotEqual(self.identity().read_bytes(), baseline)
+        self.assertNotEqual(self.identity(), baseline)
         added.unlink()
-        self.assertEqual(self.identity().read_bytes(), baseline)
+        self.assertEqual(self.identity(), baseline)
 
     def test_optional_sdk_search_directory_is_watched_before_installation(self):
         directory = self.sdk / "usr/local/include"
         observed = []
-        with patch.object(workspace, "_INPUT_PROBE", observed.append):
-            baseline = self.identity().read_bytes()
+        with native.capture_probes(observed.append):
+            baseline = self.identity()
         self.assertIn(directory, observed)
         directory.mkdir(parents=True)
         (directory / "new.h").write_bytes(b"new native SDK header")
-        self.assertNotEqual(self.identity().read_bytes(), baseline)
+        self.assertNotEqual(self.identity(), baseline)
 
 
 if __name__ == "__main__":

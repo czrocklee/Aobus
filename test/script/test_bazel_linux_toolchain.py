@@ -1,13 +1,17 @@
 """Nix SDK metadata, bounded compiler built-ins and repository-owned tool links."""
 
 import ast
+import json
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
-from ao.core import bazel_workspace as workspace
+from ao.core import bazel_compiler_probe as compiler_probe
+from ao.core import bazel_native as native
+from ao.core import bazel_providers as providers
 
 
 class LinuxToolchainProjectionTest(unittest.TestCase):
@@ -15,6 +19,18 @@ class LinuxToolchainProjectionTest(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory(prefix="aobus-linux-toolchain-")
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
+
+        def fail(message):
+            raise AssertionError(message)
+
+        namespace = {
+            "json": SimpleNamespace(encode=json.dumps),
+            "fail": fail,
+            "type": lambda value: {dict: "dict", str: "string"}.get(type(value), type(value).__name__),
+        }
+        source = (native.PROJECT_ROOT / "bazel/toolchain_repository.bzl").read_text(encoding="utf-8")
+        exec(compile(source, "toolchain_repository.bzl", "exec"), namespace)
+        self.materialize = namespace["materialize_toolchain"]
         self.sdk = self.root / "compiler"
         include = self.sdk / "include/c++"
         include.mkdir(parents=True)
@@ -31,7 +47,7 @@ class LinuxToolchainProjectionTest(unittest.TestCase):
             file.parent.mkdir(exist_ok=True)
             file.write_text("owned tool fixture\n")
             file.chmod(0o755)
-            tools[role] = str(file)
+            tools[role] = file.as_posix()
         self.wrapper = {
             "suffixSalt": "fixture_target",
             "hardeningEnable": ["fortify", "fortify3", "stackprotector", "relro"],
@@ -41,22 +57,38 @@ class LinuxToolchainProjectionTest(unittest.TestCase):
         self.stderr = f"#include <...> search starts here:\n {include}\nEnd of search list.\n"
 
     def render(self):
+        def query(command, **kwargs):
+            self.assertEqual(command[0], self.wrapper["tools"]["clang++"])
+            self.assertEqual(command[1:], ["-E", "-x", "c++", "-std=c++26", "-no-canonical-prefixes", "-", "-v"])
+            self.assertTrue(kwargs["check"])
+            return subprocess.CompletedProcess(command, 0, "", self.stderr)
+
         with (
-            patch.object(workspace, "_linux_cc_wrapper", return_value=self.wrapper),
-            patch.object(workspace, "_nix_root", return_value=self.sdk.resolve()),
-            patch.object(workspace, "_host_machine", return_value="x86_64"),
-            patch.object(
-                workspace.subprocess,
-                "run",
-                return_value=subprocess.CompletedProcess([], 0, "", self.stderr),
-            ) as run,
+            patch.object(compiler_probe, "nix_cc_wrapper", return_value=self.wrapper),
+            patch.object(providers, "nix_root", return_value=self.sdk.resolve()),
+            patch.object(native, "host_machine", return_value="x86_64"),
+            patch.object(compiler_probe.subprocess, "run", side_effect=query) as run,
         ):
-            generated = self.root / "generated"
-            links = workspace._linux_toolchain(generated)
+            data = compiler_probe.probe_compiler("linux")
+        generated = self.root / "generated"
+        directory = generated / "toolchain"
+        directory.mkdir(parents=True, exist_ok=True)
+        links = []
+        context = SimpleNamespace(
+            path=lambda source: source,
+            symlink=lambda source, destination: links.append({"source": source, "destination": destination}),
+            file=lambda name, content, **_: (directory / name).write_text(content, encoding="utf-8"),
+        )
+        self.materialize(context, data)
+        self.assertEqual(set(data), {"platform", "sdk", "identity"})
+        self.assertEqual(data["sdk"]["tools"], self.wrapper["tools"])
+        self.assertEqual({link["source"] for link in links}, set(self.wrapper["tools"].values()))
+        self.assertEqual(json.loads((directory / "identity.json").read_text()), data["identity"])
         metadata = {}
         for node in ast.parse((generated / "toolchain/native_paths.bzl").read_text()).body:
             if isinstance(node, ast.Assign):
                 metadata[node.targets[0].id] = ast.literal_eval(node.value)
+        self.assertEqual(set(metadata), {"TOOLS", "BUILTIN_INCLUDE_DIRECTORIES", "NIX_CC_WRAPPER", "CONSTRAINT_CPU"})
         return generated, links, metadata, run
 
     def test_toolchain_projects_tools_without_copying_the_provider(self):
@@ -72,7 +104,7 @@ class LinuxToolchainProjectionTest(unittest.TestCase):
         self.assertIn("-std=c++26", run.call_args.args[0])
 
     def test_generated_build_loads_only_the_linux_macro_and_passes_local_metadata(self):
-        with patch.object(workspace, "PROJECT_ROOT", self.root / "no-policy-templates"):
+        with patch.object(native, "PROJECT_ROOT", self.root / "no-policy-templates"):
             generated, _, metadata, _ = self.render()
         tree = ast.parse((generated / "toolchain/BUILD.bazel").read_text())
         calls = [node.value for node in tree.body]
@@ -89,20 +121,18 @@ class LinuxToolchainProjectionTest(unittest.TestCase):
             {
                 "tools": "TOOLS",
                 "builtin_include_directories": "BUILTIN_INCLUDE_DIRECTORIES",
-                "hardening_environment": "HARDENING_ENVIRONMENT",
+                "nix_cc_wrapper": "NIX_CC_WRAPPER",
                 "constraint_cpu": "CONSTRAINT_CPU",
             },
         )
 
-    def test_all_modes_are_metadata_not_preselected_compiler_options(self):
+    def test_raw_wrapper_metadata_does_not_preselect_modes_or_compiler_options(self):
         generated, _, metadata, _ = self.render()
-        policies = metadata["HARDENING_ENVIRONMENT"]
-        self.assertEqual(set(policies), {"dbg", "opt", "fastbuild"})
-        self.assertEqual(policies["dbg"], {"NIX_HARDENING_ENABLE_fixture_target": "stackprotector relro"})
-        self.assertEqual(policies["fastbuild"], policies["dbg"])
         self.assertEqual(
-            policies["opt"], {"NIX_HARDENING_ENABLE_fixture_target": "fortify fortify3 stackprotector relro"}
+            metadata["NIX_CC_WRAPPER"],
+            {"suffixSalt": "fixture_target", "hardeningEnable": ["fortify", "fortify3", "stackprotector", "relro"]},
         )
+        self.assertNotIn("HARDENING_ENVIRONMENT", metadata)
         source = (generated / "toolchain/native_paths.bzl").read_text()
         self.assertNotIn("-O0", source)
         self.assertNotIn("-O2", source)
@@ -110,7 +140,7 @@ class LinuxToolchainProjectionTest(unittest.TestCase):
 
     def test_lexical_tool_paths_are_not_canonicalized_for_multicall_dispatch(self):
         (self.sdk / "bin/alias").mkdir()
-        lexical = str(self.sdk / "bin/alias/../llvm-strip")
+        lexical = (self.sdk / "bin/alias/../llvm-strip").as_posix()
         self.wrapper["tools"]["strip"] = lexical
         _, links, _, _ = self.render()
         self.assertIn({"source": lexical, "destination": "tools/llvm-strip"}, links)
@@ -119,34 +149,36 @@ class LinuxToolchainProjectionTest(unittest.TestCase):
         application = self.root / "application/include"
         application.mkdir(parents=True)
         self.stderr = f"#include <...> search starts here:\n {application}\nEnd of search list.\n"
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "outside its declared Nix SDK roots"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "outside its declared Nix SDK roots"):
             self.render()
 
     def test_missing_or_empty_builtin_interface_fails_closed(self):
         for output in ("no search metadata", "#include <...> search starts here:\nEnd of search list.\n"):
             with self.subTest(output=output):
                 self.stderr = output
-                with self.assertRaisesRegex(workspace.BazelWorkspaceError, "include"):
+                with self.assertRaisesRegex(native.BazelWorkspaceError, "include"):
                     self.render()
 
     def test_missing_or_ambiguous_tools_are_rejected(self):
         del self.wrapper["tools"]["ar"]
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "SDK metadata"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "SDK metadata"):
             self.render()
         self.wrapper["tools"]["ar"] = self.wrapper["tools"]["clang"]
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "duplicate.*basename"):
+        with self.assertRaisesRegex(AssertionError, "duplicate.*basename"):
             self.render()
 
     def test_whole_store_or_nonroot_compiler_allowlists_are_rejected(self):
         self.wrapper["builtinRoots"] = [str(self.include)]
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "built-in root"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "built-in root"):
             self.render()
 
 
 class LinuxToolchainModesTest(unittest.TestCase):
     def setUp(self):
-        self.tree = ast.parse((workspace.PROJECT_ROOT / "bazel/linux_toolchain.bzl").read_text())
-        self.macro = next(node for node in self.tree.body if isinstance(node, ast.FunctionDef))
+        self.tree = ast.parse((native.PROJECT_ROOT / "bazel/linux_toolchain.bzl").read_text())
+        self.macro = next(
+            node for node in self.tree.body if isinstance(node, ast.FunctionDef) and node.name == "linux_toolchain"
+        )
         self.calls = {}
         for node in self.macro.body:
             if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
@@ -187,7 +219,7 @@ class LinuxToolchainModesTest(unittest.TestCase):
         self.assertEqual(self.macro.name, "linux_toolchain")
         self.assertEqual(
             [arg.arg for arg in self.macro.args.args],
-            ["tools", "builtin_include_directories", "hardening_environment", "constraint_cpu"],
+            ["tools", "builtin_include_directories", "nix_cc_wrapper", "constraint_cpu"],
         )
         self.assertFalse(
             any(isinstance(node, ast.Call) and ast.unparse(node.func) == "Label" for node in ast.walk(self.tree))
@@ -244,7 +276,9 @@ class LinuxToolchainModesTest(unittest.TestCase):
                 self.assertEqual(ast.literal_eval(arguments["requires_any_of"]), [":is_" + mode])
                 _, policy = calls[mode + "_hardening"]
                 self.assertEqual(ast.literal_eval(policy["requires_any_of"]), [":is_" + mode])
-                self.assertEqual(ast.unparse(policy["env"]), f"hardening_environment['{mode}']")
+                self.assertEqual(
+                    ast.unparse(policy["env"]), f"_hardening_environment(nix_cc_wrapper, optimized={mode == 'opt'})"
+                )
                 self.assertIn("@rules_cc//cc/toolchains/actions:link_actions", ast.literal_eval(policy["actions"]))
         _, optimized_link = calls["opt_link"]
         self.assertEqual(ast.literal_eval(optimized_link["actions"]), ["@rules_cc//cc/toolchains/actions:link_actions"])

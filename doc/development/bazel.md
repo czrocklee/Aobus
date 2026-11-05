@@ -16,6 +16,10 @@ has bounded native Debug evidence on Linux, macOS and Windows.
 Existing `./ao tidy`, hygiene and CMake-backed fixture commands remain the
 default and are not replaced automatically.
 
+The dated [repository-bootstrap handoff](bazel-bootstrap-handoff.md) records the
+implementation checkpoint and remaining native acceptance work, not an additional
+usage contract.
+
 ## Setup and commands
 
 Run from the repository root through `./ao`; Windows uses `ao.bat`.
@@ -475,11 +479,43 @@ per-invocation portal state.
 
 The portal is a launcher, not an outer dependency freshness engine.
 [Repository rules](../../bazel/dependencies.bzl) invoke the
-[resolver](../../script/ao/core/bazel_resolver.py), reusing existing provider
-identity, metadata and guarded-interface logic. Python returns metadata and
-explicit artifact links, never installs/builds dependencies. Bazel owns
-materialization, watched-input invalidation and repository failure handling;
-the launcher does not stage and compare whole Python-owned artifact trees.
+[resolver](../../script/ao/core/bazel_resolver.py), which composes independent
+native observations without importing the launcher. Responsibilities follow the
+input contract:
+
+- [Native inputs](../../script/ao/core/bazel_native.py) own host/path admission,
+  sanitized child environments and scoped probe observation; observers are
+  restored on exit, not assigned through launcher globals.
+- [Providers](../../script/ao/core/bazel_providers.py) admit Nix report identity
+  and installed vcpkg status/features; [library interfaces](../../script/ao/core/bazel_dependencies.py)
+  apply reviewed metadata repairs and ABI checks through the existing artifact
+  adapter and header-ownership owner.
+- [Host tools](../../script/ao/core/bazel_host_tools.py) observe selected
+  executables and their declared ICU/Python/runtime inputs.
+- [Compiler probes](../../script/ao/core/bazel_compiler_probe.py) admit exact
+  installed tool/include interfaces, raw host/Nix metadata and the existing
+  aggregate SDK identity. They do not return Bazel labels, CPU constraints,
+  projection destinations or per-mode action environments.
+- The [launcher](../../script/ao/core/bazel_workspace.py) owns managed Bazel,
+  launch/output/cache selection, argument forwarding, terminal inheritance and logs.
+
+Library, host-tool and compiler probes return data directly, without temporary
+BUILD/native-path programs for the resolver to reread. The
+[library projection](../../bazel/import_repository.bzl),
+[host-tool projection](../../bazel/host_tools_repository.bzl) and
+[compiler projection](../../bazel/toolchain_repository.bzl) materialize sparse
+artifacts, data-only values and fixed BUILD entrypoints. The compiler projection
+owns tool labels, collision checks and native-machine-to-Bazel CPU constraints. Checked-in
+[import declarations](../../bazel/imports.bzl),
+[host-tool declarations](../../bazel/host_tools.bzl) and existing compiler
+macros own the graph. Declaration-only edits do not load back into native
+provider discovery. WinUI's configured root aliases share the import selection;
+its independent, lazy [platform SDK projection](../../script/ao/core/bazel_winui.py)
+retains its existing generation path.
+
+Python never installs/builds dependencies. Bazel owns materialization,
+watched-input invalidation and repository failure handling; the launcher does
+not stage and compare whole Python-owned artifact trees.
 
 The read inventory includes source/policy inputs, provider metadata, directory
 membership, negative probes and declared tools. Python audit events supplement
@@ -547,7 +583,7 @@ might contain incompatible same-SONAME libraries. These hints do not inventory t
 complete recursive runtime closure.
 
 The [adapter](../../script/ao/core/bazel_deps.py) and
-[provider projection](../../script/ao/core/bazel_workspace.py) prefer metadata.
+[library interface resolver](../../script/ao/core/bazel_dependencies.py) prefer metadata.
 Missing module groups permit only complete reviewed fallbacks; partial groups
 fail. Windows and macOS default to static dependency imports; Linux defaults to
 shared imports with reviewed per-package static interfaces. Windows static
@@ -637,8 +673,9 @@ Native Bazel feature merging applies:
 Main-repository Starlark definitions are instantiated by a thin host-selected
 BUILD in `@aobus_toolchain`, retaining external target names and caller-relative
 tool inputs. Compiler policy edits follow Bazel load/analysis edges rather than
-rerunning native provider discovery; Python emits only metadata, links and the
-thin call, not copies of policy templates. Unselected hosts are not eagerly
+rerunning native provider discovery. Python returns compiler facts and identity;
+the checked-in repository projection creates tool links, data and the fixed call,
+not copies of policy templates. Unselected hosts are not eagerly
 loaded through separate main BUILD packages.
 
 [Shared Unix warning values](../../bazel/compiler_policy.bzl) precede ordinary
@@ -693,8 +730,12 @@ The builtin include allowlist contains compiler, standard C++ library and sysroo
 include directories, never the whole Nix store or application dependency roots.
 
 Actual Bazel mode features select arguments and salted
-`NIX_HARDENING_ENABLE_<suffix>` action environments; Python supplies metadata,
-not profile-specific `--copt` branches. Toolchain identity is declared data of
+`NIX_HARDENING_ENABLE_<suffix>` action environments. The compiler probe supplies
+only the report's raw suffix and enabled flag list; the Linux Starlark macro
+constructs the salted environment and applies the mode-specific fortify rule.
+The compile-contract checker derives its expectations independently from the raw
+report; its verification oracle is never used to generate build configuration.
+Toolchain identity is declared data of
 tools and policy arguments, including mode-specific hardening, so compilation
 and link action keys include it.
 
@@ -737,7 +778,7 @@ that host-tool contract.
 
 Windows `request.json` captures original `INCLUDE`, `LIB`, `PATH`, `TMP`, VC/SDK
 versions/roots and optional `NETFXSDKDir` before resolver scratch TMP replacement.
-The [workspace projection](../../script/ao/core/bazel_workspace.py) validates exact
+The [compiler SDK probe](../../script/ao/core/bazel_compiler_probe.py) validates exact
 selected VC/SDK interfaces, versioned SDK directories and x64 libraries, never a
 whole SDK root or provider-header exemption. Checked auxiliary VS includes and
 selected NETFX `include/um` and `lib/um/x64` follow the same narrow validation.

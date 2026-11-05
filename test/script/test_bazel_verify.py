@@ -12,6 +12,7 @@ from unittest.mock import patch
 from ao.__main__ import make_parser
 from ao.command import bazel
 from ao.core import bazel_contract
+from ao.core import bazel_native as native
 from ao.core import bazel_workspace as workspace
 
 
@@ -98,7 +99,7 @@ class BazelVerifyDispatchTests(unittest.TestCase):
             output, diagnostics = io.StringIO(), io.StringIO()
             args = make_parser().parse_args(["bazel", "verify", "--config", config, "--path", str(tree), "--jobs", "3"])
             with (
-                patch.object(workspace, "native_platform", return_value=host),
+                patch.object(native, "native_platform", return_value=host),
                 patch.object(workspace, "workspace_path", return_value=tree) as select,
                 patch.object(bazel, "build_tree_lock", side_effect=lock),
                 patch.object(workspace, "prepare_workspace", side_effect=prepare),
@@ -120,7 +121,7 @@ class BazelVerifyDispatchTests(unittest.TestCase):
         args = make_parser().parse_args(["bazel", "verify"])
         output, diagnostics = io.StringIO(), io.StringIO()
         with (
-            patch.object(workspace, "native_platform", return_value="unsupported"),
+            patch.object(native, "native_platform", return_value="unsupported"),
             patch.object(workspace, "workspace_path") as select,
             patch.object(bazel, "build_tree_lock") as lock,
             patch.object(workspace, "prepare_workspace") as prepare,
@@ -142,8 +143,8 @@ class BazelVerifyDispatchTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="aobus-bazel-verify-cli-") as temporary:
             args = make_parser().parse_args(["bazel", "verify", "--path", temporary])
             with (
-                patch.object(workspace, "native_platform", return_value="linux"),
-                patch.object(workspace, "prepare_workspace", side_effect=workspace.BazelWorkspaceError("stale input")),
+                patch.object(native, "native_platform", return_value="linux"),
+                patch.object(workspace, "prepare_workspace", side_effect=native.BazelWorkspaceError("stale input")),
                 patch.object(workspace, "bazel_executable") as executable,
                 patch.object(workspace, "execute") as execute,
                 patch.object(bazel_contract, "verify") as analyze,
@@ -172,7 +173,7 @@ class BazelAnalysisOutputTests(unittest.TestCase):
                     )
                     with (
                         self.subTest(action=action, status=status),
-                        patch.object(workspace, "native_platform", return_value="linux"),
+                        patch.object(native, "native_platform", return_value="linux"),
                         patch.object(workspace, "prepare_workspace", return_value=prepared),
                         patch.object(workspace, "bazel_executable", return_value=Path("mock-bazel")),
                         patch.object(

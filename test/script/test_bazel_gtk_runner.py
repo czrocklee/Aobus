@@ -11,6 +11,7 @@ from unittest.mock import patch
 from ao.__main__ import make_parser
 from ao.command import bazel
 from ao.command import test as test_command
+from ao.core import bazel_native as native
 from ao.core import bazel_workspace as workspace
 
 
@@ -145,7 +146,7 @@ class BazelHeadlessRunTests(unittest.TestCase):
                     "G_DEBUG": "gc-friendly",
                 },
             ),
-            patch.object(workspace, "native_platform", return_value="linux"),
+            patch.object(native, "native_platform", return_value="linux"),
             patch.object(workspace, "prepare_workspace", side_effect=prepare) as prepare_workspace,
             patch.object(workspace, "bazel_executable", return_value=self.executable) as executable,
             patch.object(workspace, "execute", side_effect=execute) as launch,
@@ -175,7 +176,7 @@ class BazelHeadlessRunTests(unittest.TestCase):
             diagnostics = io.StringIO()
             with (
                 self.subTest(targets=targets, host=host),
-                patch.object(workspace, "native_platform", return_value=host),
+                patch.object(native, "native_platform", return_value=host),
                 patch.object(workspace, "workspace_path") as select,
                 patch.object(workspace, "prepare_workspace") as prepare,
                 patch.object(workspace, "bazel_executable") as executable,
@@ -238,7 +239,7 @@ class BazelHeadlessRunTests(unittest.TestCase):
             raise RuntimeError("bazel failed")
 
         with (
-            patch.object(workspace, "native_platform", return_value="linux"),
+            patch.object(native, "native_platform", return_value="linux"),
             patch.object(workspace, "prepare_workspace", return_value=self.prepared),
             patch.object(workspace, "bazel_executable", return_value=self.executable),
             patch.object(workspace, "execute", side_effect=execute),
@@ -256,7 +257,7 @@ class BazelHeadlessRunTests(unittest.TestCase):
             ["bazel", "test", "--path", str(self.tree), "--headless", "--", "//test:gtk_test"]
         )
         with (
-            patch.object(workspace, "native_platform", return_value="linux"),
+            patch.object(native, "native_platform", return_value="linux"),
             patch.object(workspace, "prepare_workspace", return_value=self.prepared),
             patch.object(workspace, "bazel_executable") as executable,
             patch.object(workspace, "execute") as launch,
@@ -285,7 +286,7 @@ class BazelHeadlessRunTests(unittest.TestCase):
 
             with (
                 self.subTest(action=action),
-                patch.object(workspace, "native_platform", return_value="linux"),
+                patch.object(native, "native_platform", return_value="linux"),
                 patch.object(workspace, "prepare_workspace", return_value=self.prepared),
                 patch.object(workspace, "bazel_executable", return_value=self.executable),
                 patch.object(workspace, "execute", side_effect=execute),

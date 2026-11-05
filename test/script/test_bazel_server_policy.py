@@ -8,6 +8,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from ao.command.bazel import validate_forwarded_arguments
+from ao.core import bazel_native as native
+from ao.core import bazel_providers as providers
 from ao.core import bazel_workspace as workspace
 
 
@@ -21,8 +23,8 @@ class BazelServerPolicyTest(unittest.TestCase):
         environment = {"AOBUS_STATE_ROOT": str(self.root / "state")} if environment is None else environment
         with (
             patch.dict(os.environ, environment, clear=True),
-            patch.object(workspace, "native_platform", return_value=host),
-            patch.object(workspace, "vcpkg_prefix", return_value=self.root / "provider"),
+            patch.object(native, "native_platform", return_value=host),
+            patch.object(providers, "vcpkg_prefix", return_value=self.root / "provider"),
             patch.object(workspace.Path, "home", return_value=self.root / "home"),
             patch.object(workspace.builddir, "windows_state_root", return_value=self.root / "windows-state"),
         ):
@@ -113,7 +115,7 @@ class BazelServerPolicyTest(unittest.TestCase):
             for spelling in (option, option.replace("_", "-")):
                 for arguments in ([f"--{spelling}=value"], [f"--{spelling}", "value"]):
                     with self.subTest(arguments=arguments):
-                        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "managed by ao"):
+                        with self.assertRaisesRegex(native.BazelWorkspaceError, "managed by ao"):
                             validate_forwarded_arguments(arguments)
 
 

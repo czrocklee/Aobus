@@ -1,6 +1,5 @@
 """Contracts for governed metadata and unmaterialized Bazel repository plans."""
 
-import ast
 import copy
 import hashlib
 import os
@@ -95,11 +94,19 @@ class BazelDependencyTest(unittest.TestCase):
     def generate(self):
         adapter = g._Adapter(self.spec, self.patches)
         adapter.prepare()
-        self.links = {}
-        return adapter.build(self.out, plan=self.links)
+        self.resolution = adapter.resolve()
+        return self.resolution["manifest"]
+
+    def package(self, name="foo"):
+        return next(package for package in self.resolution["packages"] if package["name"] == name)
 
     def artifact(self, path):
-        return self.links[path.relative_to(self.out)][0]
+        for package in self.resolution["packages"]:
+            for tree in package["headers"]:
+                for file in tree["files"]:
+                    if Path(tree["root"]) / file["path"] == path:
+                        return Path(file["source"])
+        raise AssertionError(f"Header observation missing: {path}")
 
     def patch(self, add, *, missing=None, present=None, requirements=None, remove=None):
         requirements = requirements or []
@@ -164,26 +171,17 @@ class BazelDependencyTest(unittest.TestCase):
         self.metadata[name] = {"version": "2", "requires": list(requires), "private": list(private)}
         return path
 
-    def generated_rule(self, name):
-        tree = ast.parse((self.out / "BUILD.bazel").read_text(encoding="utf-8"))
-        for node in tree.body:
-            if not isinstance(node, ast.Expr) or not isinstance(node.value, ast.Call):
-                continue
-            fields = {keyword.arg: keyword.value for keyword in node.value.keywords}
-            if "name" in fields and ast.literal_eval(fields["name"]) == name:
-                return {
-                    key: ast.literal_eval(value.args[0])[":_prepared_mode"]
-                    if isinstance(value, ast.Call)
-                    else ast.literal_eval(value)
-                    for key, value in fields.items()
-                }
-        raise AssertionError(f"Generated rule missing: {name}")
-
     def include_root(self, package="foo", index=0):
-        return self.out / self.generated_rule(package)["includes"][index]
+        observation = self.package(package)
+        include = observation["includes"][index]
+        return Path(observation["headers"][include["tree"]]["root"]) / include["path"]
 
     def snapshot(self):
-        return {p.relative_to(self.out).as_posix(): p.read_bytes() for p in self.out.rglob("*") if p.is_file()}
+        return {
+            p.relative_to(self.root).as_posix(): p.read_bytes()
+            for p in self.root.rglob("*")
+            if p.is_file() and not p.is_relative_to(self.provider)
+        }
 
     def symlink(self, source, target, *, directory=False):
         try:
@@ -196,22 +194,29 @@ class BazelDependencyTest(unittest.TestCase):
         self.assertEqual(manifest["counts"], {"automatic": 1, "manual_fallback": 0})
         self.assertEqual(manifest["modules"]["foo"]["version"], "1.2.3")
         self.assertEqual(manifest["materialization"], "repository")
-        self.assertFalse((self.out / "artifacts").exists())
-        build = (self.out / "BUILD.bazel").read_text(encoding="utf-8")
-        self.assertIn('defines = ["FOO_API=1"]', build)
-        headers = self.generated_rule("foo")["hdrs"]
-        self.assertEqual(len(headers), 1)
-        self.assertTrue(headers[0].startswith(":"))
+        self.assertFalse(self.out.exists())
+        self.assertNotIn("targets", manifest)
         self.assertEqual(
-            self.generated_rule(headers[0][1:])["srcs"],
-            [(self.include_root() / "foo.h").relative_to(self.out).as_posix()],
+            self.package(),
+            {
+                "name": "foo",
+                "headers": [
+                    {
+                        "root": str(self.header.parent),
+                        "index": 0,
+                        "files": [{"source": str(self.header), "path": "foo.h"}],
+                    }
+                ],
+                "includes": [{"tree": 0, "path": "."}],
+                "defines": ["FOO_API=1"],
+                "linkopts": [],
+                "libraries": [
+                    {"index": 0, "kind": "static", "source": str(self.lib), "basename": "libfoo.a", "runtime": None}
+                ],
+                "runtime": [],
+            },
         )
-        self.assertEqual(self.generated_rule("foo_import_0")["static_library"], "artifacts/foo/lib/0/libfoo.a")
-        self.assertEqual(self.generated_rule("foo_import_0")["visibility"], ["//visibility:private"])
         self.assertNotIn("tools", manifest["packages"][0]["interface"])
-        self.assertNotIn('filegroup(name = "foo_tools"', build)
-        self.assertNotIn('"-I', build)
-        self.assertNotIn('"-L', build)
         self.assertEqual(
             {role for entry in manifest["inputs"] for role in entry["roles"]},
             {"resolver_tool", "pkg_config_metadata", "library", "header"},
@@ -233,9 +238,9 @@ class BazelDependencyTest(unittest.TestCase):
         manifest = self.generate()
         self.assertEqual(manifest["counts"], {"automatic": 1, "manual_fallback": 1})
         self.assertEqual([p["linkage"] for p in manifest["packages"]], ["shared", "static"])
-        build = (self.out / "BUILD.bazel").read_text()
-        self.assertIn("artifacts/foo/lib/0/libfoo.so.42", build)
-        self.assertIn("artifacts/rapidyaml/lib/0/libryml.a", build)
+        self.assertEqual(self.package()["libraries"][0]["source"], str(self.lib))
+        self.assertEqual(self.package("rapidyaml")["libraries"][0]["source"], str(static))
+        self.assertEqual(self.package("rapidyaml")["libraries"][0]["kind"], "static")
         self.spec["packages"][1]["linkage"] = "unknown"
         with self.assertRaisesRegex(g.BazelDependencyError, "unsupported package linkage"):
             self.generate()
@@ -255,12 +260,11 @@ class BazelDependencyTest(unittest.TestCase):
         changed = self.generate()
         before = {x["path"]: x["sha256"] for x in first["inputs"]}
         after = {x["path"]: x["sha256"] for x in changed["inputs"]}
-        for source, generated in (
-            (self.header, self.include_root() / "foo.h"),
-            (self.lib, self.out / "artifacts/foo/lib/0/libfoo.a"),
-        ):
+        for source in (self.header, self.lib):
             self.assertNotEqual(before[str(source)], after[str(source)])
-            self.assertEqual(self.artifact(generated), source)
+            self.assertEqual(after[str(source)], hashlib.sha256(source.read_bytes()).hexdigest())
+        self.assertEqual(self.artifact(self.include_root() / "foo.h"), self.header)
+        self.assertEqual(self.package()["libraries"][0]["source"], str(self.lib))
 
     def test_nested_include_roots_preserve_relative_sibling_headers_and_search_order(self):
         include = self.header.parent
@@ -276,13 +280,16 @@ class BazelDependencyTest(unittest.TestCase):
                 self.cflags = " ".join(f'-I"{root}"' for root in roots)
                 self.write_pc()
                 manifest = self.generate()
-                generated = self.generated_rule("foo")["includes"]
-                index = 1 if nested_first else 0
-                parent = self.include_root(index=index).relative_to(self.out).as_posix()
-                expected = [parent + "/ryml", parent] if nested_first else [parent, parent + "/ryml"]
-                self.assertEqual(generated, expected)
-                self.assertEqual(self.artifact(self.out / parent / "c4/yml/std/std.hpp"), sibling)
-                self.assertEqual(self.artifact(self.out / parent / "ryml/ryml_std.hpp"), nested / "ryml_std.hpp")
+                self.assertEqual(
+                    self.package()["includes"],
+                    [{"tree": 0, "path": "ryml"}, {"tree": 0, "path": "."}]
+                    if nested_first
+                    else [{"tree": 0, "path": "."}, {"tree": 0, "path": "ryml"}],
+                )
+                self.assertEqual(self.package()["headers"][0]["index"], 1 if nested_first else 0)
+                self.assertEqual(self.package()["headers"][0]["root"], str(include))
+                self.assertEqual(self.artifact(include / "c4/yml/std/std.hpp"), sibling)
+                self.assertEqual(self.artifact(include / "ryml/ryml_std.hpp"), nested / "ryml_std.hpp")
                 self.assertEqual(manifest["packages"][0]["declared_headers"], 3)
 
     def test_empty_nested_include_root_still_fails_closed(self):
@@ -301,7 +308,7 @@ class BazelDependencyTest(unittest.TestCase):
         self.assertEqual(self.artifact(self.include_root() / "extra.h"), extra)
         extra.unlink()
         self.generate()
-        self.assertNotIn((self.include_root() / "extra.h").relative_to(self.out), self.links)
+        self.assertEqual(self.package()["headers"][0]["files"], [{"source": str(self.header), "path": "foo.h"}])
 
     def test_unknown_keys_in_spec_and_nested_metadata_are_rejected(self):
         for owner in (self.spec, self.spec["provider"], self.spec["packages"][0], self.spec["pkg_config"]):
@@ -363,7 +370,7 @@ class BazelDependencyTest(unittest.TestCase):
         self.assertEqual(interface.defines, ["FOO_API=1"])
         self.assertEqual(interface.copts, ["-mfpmath=sse", "-msse", "-msse2", "-pthread", "-fPIC"])
         with self.assertRaisesRegex(g.BazelDependencyError, "unsatisfied compile requirements"):
-            adapter.build(self.out, plan={})
+            adapter.resolve()
 
     def test_pipewire_spa_requirements_are_recorded_for_explicit_consumer_application(self):
         self.metadata_file("libspa-0.2")
@@ -374,7 +381,7 @@ class BazelDependencyTest(unittest.TestCase):
         self.assertIn("libspa-0.2", result["modules"])
         self.assertIn("_REENTRANT", result["packages"][0]["interface"]["defines"])
         self.assertEqual(result["packages"][0]["interface"]["copts"], ["-fno-strict-aliasing", "-fno-strict-overflow"])
-        self.assertEqual(self.generated_rule("pipewire")["copts"], [])
+        self.assertNotIn("copts", self.package("pipewire"))
         for flag in ("-fstrict-aliasing", "-fno-unknown"):
             self.cflags += " " + flag
             with self.subTest(flag=flag), self.assertRaisesRegex(g.BazelDependencyError, "unsupported compile flag"):
@@ -410,7 +417,7 @@ class BazelDependencyTest(unittest.TestCase):
             recorded[str(private)], next(i["sha256"] for i in second["inputs"] if i["path"] == str(private))
         )
 
-    def test_shared_resolver_rejection_does_not_render_a_new_build_plan(self):
+    def test_shared_resolver_rejection_fails_without_writing_repository_files(self):
         self.shared()
         self.generate()
         before = self.snapshot()
@@ -559,6 +566,8 @@ class BazelDependencyTest(unittest.TestCase):
         self.libs = "-lm"
         manifest = self.generate()
         self.assertEqual(manifest["packages"][0]["resolved_libraries"], [{"name": "m", "kind": "system"}])
+        self.assertEqual(self.package()["libraries"], [])
+        self.assertEqual(self.package()["linkopts"], ["-lm"])
         (self.lib.parent / "libm.a").write_bytes(b"local m")
         with self.assertRaisesRegex(g.BazelDependencyError, "system/provider library ambiguity"):
             self.generate()
@@ -778,8 +787,7 @@ class BazelDependencyTest(unittest.TestCase):
         self.patch(additions, missing=copy.deepcopy(additions))
         manifest = self.generate()
         self.assertEqual(self.artifact(self.include_root(index=1) / "extra.h"), extra / "extra.h")
-        self.assertEqual(self.artifact(self.out / "artifacts/foo/runtime/0/resource.dat"), data)
-        self.assertEqual(self.generated_rule("foo_runtime_extra")["srcs"], ["artifacts/foo/runtime/0/resource.dat"])
+        self.assertEqual(self.package()["runtime"], [str(data)])
         self.assertTrue({"header", "runtime"} <= {r for i in manifest["inputs"] for r in i["roles"]})
 
     def test_windows_shared_import_requires_guarded_dll_and_thread_flag_translation(self):
@@ -795,12 +803,13 @@ class BazelDependencyTest(unittest.TestCase):
         present = {"libraries": [old], "copts": ["-pthread"], "linkopts": ["-pthread"]}
         self.patch({"libraries": [new]}, missing={"libraries": [new]}, present=present, remove=copy.deepcopy(present))
         manifest = self.generate()
-        build = (self.out / "BUILD.bazel").read_text(encoding="utf-8")
-        self.assertIn("interface_library", build)
-        self.assertIn("shared_library", build)
-        self.assertNotIn("-pthread", build)
+        self.assertEqual(
+            self.package()["libraries"],
+            [{"index": 0, "kind": "shared", "source": str(self.lib), "basename": "foo.lib", "runtime": str(dll)}],
+        )
+        self.assertEqual(self.package()["linkopts"], [])
+        self.assertNotIn("-pthread", self.package()["defines"])
         self.assertEqual(manifest["packages"][0]["resolved_libraries"][0]["runtime"], str(dll))
-        self.assertEqual(self.artifact(self.out / "artifacts/foo/lib/0/foo.dll"), dll)
 
     def test_windows_sdk_link_options_are_transitive_and_limited_to_declared_names(self):
         self.spec.update(platform="windows", system_libraries=[])
@@ -813,8 +822,8 @@ class BazelDependencyTest(unittest.TestCase):
             self.generate()
         self.spec["system_libraries"] = ["Shell32"]
         self.generate()
-        self.assertEqual(self.generated_rule("foo")["linkopts"], ["Shell32.lib"])
-        self.assertEqual(self.generated_rule("foo")["deps"], [":foo_import_0"])
+        self.assertEqual(self.package()["linkopts"], ["Shell32.lib"])
+        self.assertEqual([library["source"] for library in self.package()["libraries"]], [str(self.lib)])
         for option in ("Other.lib", "../Shell32.lib", "C:/SDK/Shell32.lib", "-lShell32"):
             with self.subTest(option=option):
                 interface["linkopts"] = [option]
@@ -833,7 +842,7 @@ class BazelDependencyTest(unittest.TestCase):
         with self.assertRaisesRegex(g.BazelDependencyError, "static provider/system library link order"):
             self.generate()
 
-    def test_windows_overlapping_interfaces_share_only_identical_shared_payloads(self):
+    def test_windows_overlapping_interfaces_retain_payload_identity_and_narrow_headers(self):
         original_spec = copy.deepcopy(self.spec)
         self.lib = self.provider / "lib/foo.lib"
         self.lib.write_bytes(b"import library")
@@ -875,33 +884,35 @@ class BazelDependencyTest(unittest.TestCase):
                     self.spec["packages"].append(package)
                     self.patches["patches"].append(second)
                     manifest = self.generate()
-                    shared = difference is None
-                    dependency = ":foo_import_0" if shared else ":bar_import_0"
-                    self.assertEqual(self.generated_rule("bar")["deps"], [dependency])
-                    self.assertEqual(self.generated_rule("bar")["defines"], ["BAR_API=1"])
-                    self.assertEqual(self.generated_rule("foo")["defines"], [])
-                    self.assertEqual(self.generated_rule("bar")["includes"], ["artifacts/_headers/bar_0"])
-                    self.assertEqual(self.generated_rule("_headers_bar_0")["srcs"], ["artifacts/_headers/bar_0/bar.h"])
-                    expected = (
-                        ["artifacts/foo/lib/0/foo.dll"]
-                        if shared
-                        else []
-                        if difference == "kind"
-                        else ["artifacts/bar/lib/0/foo.dll"]
+                    first, second = self.package(), self.package("bar")
+                    self.assertEqual(second["defines"], ["BAR_API=1"])
+                    self.assertEqual(first["defines"], [])
+                    self.assertEqual(
+                        second["headers"],
+                        [
+                            {
+                                "root": str(child),
+                                "index": 0,
+                                "files": [{"source": str(child / "bar.h"), "path": "bar.h"}],
+                            }
+                        ],
                     )
-                    self.assertEqual(self.generated_rule("bar_runtime")["srcs"], expected)
-                    self.assertEqual(self.generated_rule("bar")["data"], expected)
-                    self.assertEqual(self.generated_rule("bar_runtime_extra")["srcs"], [])
+                    self.assertEqual(second["runtime"], [])
+                    self.assertEqual(
+                        second["libraries"],
+                        [
+                            {
+                                "index": 0,
+                                "kind": imported["kind"],
+                                "source": imported["file"],
+                                "basename": "foo.lib",
+                                "runtime": imported.get("runtime"),
+                            }
+                        ],
+                    )
+                    self.assertEqual(first["libraries"] == second["libraries"], difference is None)
                     self.assertEqual(len(manifest["packages"]), 2)
                     self.assertEqual(manifest["packages"][1]["resolved_libraries"][0], imported)
-                    self.assertEqual(sum(role == "library" for _, role in self.links.values()), 1 if shared else 2)
-                    self.assertEqual(
-                        sum(role == "runtime" for _, role in self.links.values()),
-                        1 if shared or difference == "kind" else 2,
-                    )
-                    if shared:
-                        with self.assertRaisesRegex(AssertionError, "Generated rule missing"):
-                            self.generated_rule("bar_import_0")
 
     def test_windows_shared_codec_private_runtime_is_planned_without_a_private_link_library(self):
         self.spec.update(platform="windows", linkage="shared")
@@ -922,21 +933,21 @@ class BazelDependencyTest(unittest.TestCase):
         package = first["packages"][0]
         self.assertEqual([item["name"] for item in package["resolved_libraries"]], ["foo"])
         self.assertEqual(package["interface"]["runtime"], [str(private)])
-        self.assertEqual(self.artifact(self.out / "artifacts/foo/runtime/0/private.dll"), private)
+        self.assertEqual(self.package()["runtime"], [str(private)])
         private.write_bytes(b"private runtime v2")
         changed = self.generate()
         self.assertNotEqual(
             next(item["sha256"] for item in first["inputs"] if item["path"] == str(private)),
             next(item["sha256"] for item in changed["inputs"] if item["path"] == str(private)),
         )
-        self.assertEqual(self.artifact(self.out / "artifacts/foo/runtime/0/private.dll"), private)
+        self.assertEqual(self.package()["runtime"], [str(private)])
         before = self.snapshot()
         private.unlink()
         with self.assertRaisesRegex(g.BazelDependencyError, "missing file"):
             self.generate()
         self.assertEqual(self.snapshot(), before)
 
-    def test_windows_runtime_extra_filegroup_is_exact_and_keeps_import_data(self):
+    def test_windows_extra_runtime_is_separate_from_the_imported_dll(self):
         self.spec.update(platform="windows", linkage="shared")
         self.spec["library_roots"] = [str(self.provider / "lib")]
         self.spec["runtime_roots"] = [str(self.provider / "bin")]
@@ -955,18 +966,19 @@ class BazelDependencyTest(unittest.TestCase):
         package = self.generate()["packages"][0]
         self.assertEqual([item["name"] for item in package["resolved_libraries"]], ["foo"])
         self.assertEqual(package["interface"]["runtime"], [str(ogg), str(other)])
-        extra = ["artifacts/foo/runtime/0/ogg.dll", "artifacts/foo/runtime/1/other.dll"]
-        imported = "artifacts/foo/lib/0/foo.dll"
-        self.assertEqual(self.generated_rule("foo_runtime_extra")["srcs"], extra)
-        self.assertEqual(self.generated_rule("foo_runtime")["srcs"], [imported, *extra])
-        self.assertEqual(self.generated_rule("foo")["data"], [imported, *extra])
-        self.assertEqual(self.generated_rule("foo_import_0")["shared_library"], imported)
-        build = (self.out / "BUILD.bazel").read_text(encoding="utf-8")
-        self.assertNotIn('cc_import(name = "foo_import_1"', build)
-        self.assertNotIn("ogg.lib", build)
-        self.assertNotIn(str(self.provider), build)
-        self.assertEqual(self.artifact(self.out / extra[0]), ogg)
-        self.assertEqual(self.artifact(self.out / extra[1]), other)
+        self.assertEqual(self.package()["runtime"], [str(ogg), str(other)])
+        self.assertEqual(
+            self.package()["libraries"],
+            [
+                {
+                    "index": 0,
+                    "kind": "shared",
+                    "source": str(self.lib),
+                    "basename": "foo.lib",
+                    "runtime": str(codec),
+                }
+            ],
+        )
 
     def test_windows_shared_import_requires_an_explicit_dll(self):
         self.spec.update(platform="windows", linkage="shared")
@@ -980,8 +992,8 @@ class BazelDependencyTest(unittest.TestCase):
         dll.write_bytes(b"DLL fixture")
         library["runtime"] = str(dll)
         self.generate()
-        self.assertEqual(self.generated_rule("foo_import_0")["shared_library"], "artifacts/foo/lib/0/foo.dll")
-        self.assertNotIn("system_provided", self.generated_rule("foo_import_0"))
+        self.assertEqual(self.package()["libraries"][0]["runtime"], str(dll))
+        self.assertNotIn("system_provided", self.package()["libraries"][0])
         not_dll = dll.with_suffix(".bin")
         not_dll.write_bytes(b"not a DLL")
         library["runtime"] = str(not_dll)
@@ -1010,7 +1022,19 @@ class BazelDependencyTest(unittest.TestCase):
         self.lib.write_bytes(b"static")
         self.manual()
         self.generate()
-        self.assertEqual(self.generated_rule("foo_import_0")["static_library"], "artifacts/foo/lib/0/food.lib")
+        self.assertEqual(
+            self.package()["libraries"],
+            [
+                {
+                    "index": 0,
+                    "kind": "static",
+                    "source": str(self.lib),
+                    "basename": "food.lib",
+                    "runtime": None,
+                }
+            ],
+        )
+        self.assertEqual(self.resolution["manifest"]["configuration"]["config"], "Debug")
         library = self.patches["patches"][0]["add"]["libraries"][0]
         library["runtime"] = str(self.provider / "bin/foo.dll")
         with self.assertRaisesRegex(g.BazelDependencyError, "only valid for shared"):
@@ -1030,7 +1054,18 @@ class BazelDependencyTest(unittest.TestCase):
             }
         )
         self.generate()
-        self.assertEqual(self.generated_rule("foo_import_0")["shared_library"], "artifacts/foo/lib/0/libfoo.dylib")
+        self.assertEqual(
+            self.package()["libraries"],
+            [
+                {
+                    "index": 0,
+                    "kind": "shared",
+                    "source": str(self.lib),
+                    "basename": "libfoo.dylib",
+                    "runtime": None,
+                }
+            ],
+        )
 
     def test_macos_framework_metadata_flags_are_rejected(self):
         self.spec["platform"] = "macos"
@@ -1049,7 +1084,7 @@ class BazelDependencyTest(unittest.TestCase):
         self.shared()
         result = self.generate()
         self.assertEqual(result["packages"][0]["resolved_libraries"][0]["soname"], "libfoo.so.42")
-        self.assertEqual(self.generated_rule("foo_import_0")["shared_library"], "artifacts/foo/lib/0/libfoo.so.42")
+        self.assertEqual(self.package()["libraries"][0]["basename"], "libfoo.so.42")
         for soname in ("", "../evil.so", "not-a-soname"):
             self.soname = soname
             with (
@@ -1065,14 +1100,14 @@ class BazelDependencyTest(unittest.TestCase):
         self.dynamic = f"0x000 (RUNPATH) Library runpath: [{second}:{first}:{second}]"
         self.libs += " -pthread"
         manifest = self.generate_with_runtime_directories(first, second)
-        fields = self.generated_rule("foo")
+        fields = self.package()
         self.assertEqual(fields["linkopts"], ["-pthread", "-Wl,-rpath-link," + second, "-Wl,-rpath-link," + first])
-        self.assertEqual(fields["copts"], [])
-        self.assertFalse(any("/nix/store/" in value for value in fields["includes"]))
+        self.assertNotIn("copts", fields)
+        self.assertEqual(fields["includes"], [{"tree": 0, "path": "."}])
         package = manifest["packages"][0]
         self.assertEqual(package["interface"]["linkopts"], ["-pthread"])
         self.assertEqual(set(package["resolved_libraries"][0]), {"name", "kind", "file", "soname"})
-        self.assertEqual(self.generated_rule("foo_import_0")["shared_library"], "artifacts/foo/lib/0/libfoo.so.42")
+        self.assertEqual(self.package()["libraries"][0]["basename"], "libfoo.so.42")
 
     def test_nix_runtime_search_uses_runpath_before_legacy_rpath(self):
         self.shared()
@@ -1089,21 +1124,19 @@ class BazelDependencyTest(unittest.TestCase):
             with self.subTest(dynamic=dynamic):
                 self.dynamic = dynamic
                 self.generate_with_runtime_directories(first, second)
-                self.assertEqual(
-                    self.generated_rule("foo")["linkopts"], ["-Wl,-rpath-link," + path for path in expected]
-                )
+                self.assertEqual(self.package()["linkopts"], ["-Wl,-rpath-link," + path for path in expected])
 
     def test_non_nix_shared_and_nix_static_imports_do_not_gain_runtime_search_hints(self):
         self.shared()
         self.dynamic = "0x000 (RUNPATH) Library runpath: [/usr/lib]"
         self.generate()
-        self.assertEqual(self.generated_rule("foo")["linkopts"], [])
+        self.assertEqual(self.package()["linkopts"], [])
         self.spec["provider"]["name"] = "nix"
         self.spec["linkage"] = "static"
         self.lib = self.provider / "lib/libfoo.a"
         self.process.reset_mock()
         self.generate()
-        self.assertEqual(self.generated_rule("foo")["linkopts"], [])
+        self.assertEqual(self.package()["linkopts"], [])
         self.assertFalse(any(call.args[0][0] == str(self.readelf) for call in self.process.call_args_list))
 
     def test_nix_runtime_search_rejects_malformed_host_and_non_store_directories(self):
@@ -1179,64 +1212,16 @@ class BazelDependencyTest(unittest.TestCase):
         with self.assertRaisesRegex(g.BazelDependencyError, "outside allowed provider roots"):
             self.generate()
 
-    def test_output_provider_overlap_both_directions_is_rejected(self):
-        self.manual()
-        for output in (self.root, self.provider / "generated"):
-            self.out = output
-            with (
-                self.subTest(output=output),
-                self.assertRaisesRegex(g.BazelDependencyError, "output must not overlap provider roots"),
-            ):
-                self.generate()
-        self.assertTrue(self.header.is_file())
-        self.assertFalse((self.provider / "generated").exists())
-
-    def test_output_symlink_is_not_followed_or_replaced(self):
-        real = self.root / "real-output"
-        real.mkdir()
-        (real / "keep").write_bytes(b"user data")
-        self.symlink(self.out, real, directory=True)
-        with self.assertRaisesRegex(g.BazelDependencyError, "must not be a symlink"):
+    def test_resolution_never_writes_metadata_or_materializes_provider_links(self):
+        with (
+            mock.patch.object(Path, "write_text", side_effect=AssertionError("unexpected metadata write")),
+            mock.patch.object(Path, "write_bytes", side_effect=AssertionError("unexpected artifact copy")),
+            mock.patch.object(Path, "mkdir", side_effect=AssertionError("unexpected output directory")),
+            mock.patch.object(Path, "symlink_to", side_effect=AssertionError("unexpected materialization")),
+        ):
             self.generate()
-        self.assertEqual((real / "keep").read_bytes(), b"user data")
-
-    def test_output_containing_generator_or_explicit_resolver_is_rejected(self):
-        self.manual()
-        self.out.mkdir()
-        source = self.out / "generator-source.py"
-        source.write_bytes(b"# fixture\n")
-        with mock.patch.object(g, "__file__", str(source)):
-            with self.assertRaisesRegex(g.BazelDependencyError, "output must not contain input"):
-                self.generate()
-        tool = self.out / "resolver"
-        tool.write_bytes(b"fixture")
-        tool.chmod(0o755)
-        self.spec["elf"] = {"readelf": str(tool)}
-        with self.assertRaisesRegex(g.BazelDependencyError, "output must not contain input"):
-            self.generate()
-        self.assertEqual(source.read_bytes(), b"# fixture\n")
-        self.assertEqual(tool.read_bytes(), b"fixture")
-
-    def test_output_containing_resolver_symlink_location_is_rejected(self):
-        self.out.mkdir()
-        tool = self.out / "resolver-link"
-        self.symlink(tool, self.readelf)
-        self.spec["elf"] = {"readelf": str(tool)}
-        with self.assertRaisesRegex(g.BazelDependencyError, "output must not contain input"):
-            self.generate()
-        self.assertTrue(tool.is_symlink())
-
-    def test_repository_metadata_symlinks_are_not_followed(self):
-        self.out.mkdir()
-        outside = self.root / "user-data"
-        outside.write_bytes(b"user data")
-        for name in ("BUILD.bazel", "manifest.json", "repository.json"):
-            link = self.out / name
-            self.symlink(link, outside)
-            with self.subTest(name=name), self.assertRaisesRegex(g.BazelDependencyError, "must not be a symlink"):
-                self.generate()
-            self.assertEqual(outside.read_bytes(), b"user data")
-            link.unlink()
+        self.assertEqual(self.package()["headers"][0]["files"], [{"source": str(self.header), "path": "foo.h"}])
+        self.assertFalse(self.out.exists())
 
     def test_tool_schema_is_rejected_in_patch_interfaces(self):
         for field in ("add", "remove", "missing", "present"):
@@ -1246,9 +1231,9 @@ class BazelDependencyTest(unittest.TestCase):
             owner.setdefault(field, {})["tools"] = [{"name": "fixture", "file": str(self.pc)}]
             with self.subTest(field=field), self.assertRaisesRegex(g.BazelDependencyError, "unknown keys.*tools"):
                 self.generate()
-            self.assertFalse((self.out / "BUILD.bazel").exists())
+            self.assertFalse(self.out.exists())
 
-    def test_missing_artifact_does_not_render_a_new_build_plan(self):
+    def test_missing_artifact_fails_without_writing_repository_files(self):
         self.generate()
         before = self.snapshot()
         self.lib.unlink()
@@ -1271,7 +1256,7 @@ class BazelDependencyTest(unittest.TestCase):
         with mock.patch.object(g.subprocess, "run", wraps=self.real_run):
             manifest = self.generate()
         self.assertEqual(manifest["modules"]["foo"]["version"], "1.2.3")
-        self.assertEqual(self.artifact(self.out / "artifacts/foo/lib/0/libfoo.a"), self.lib)
+        self.assertEqual(self.package()["libraries"][0]["source"], str(self.lib))
 
     def test_real_shared_metadata_respects_native_missing_private_dependency_behavior(self):
         executable = self.native_pkg_config()
@@ -1311,9 +1296,6 @@ class BazelDependencyTest(unittest.TestCase):
                     self.generate()
                 self.assertIn("missing-static-only", str(failure.exception))
                 self.assertEqual(before, self.snapshot())
-                self.out = self.root / "new-output"
-                with self.assertRaisesRegex(g.BazelDependencyError, "external query failed"):
-                    self.generate()
                 self.assertFalse(self.out.exists())
             else:
                 manifest = self.generate()

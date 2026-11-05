@@ -1091,7 +1091,7 @@ jobs:
             --symlink_prefix="$bare_root/bazel-" \
             --build_event_json_file="$bare_root/release-build.bep.json" \
             --experimental_build_event_upload_strategy=local \
-            //test/lint:cache_clean
+            //test/lint:cache_clean //app/tui:aobus-tui
       - name: Test Bazel graph
         env:
           AOBUS_BAZEL_REMOTE_CACHE: ${{ steps.bazel-remote.outputs.url }}
@@ -1378,7 +1378,7 @@ jobs:
             --symlink_prefix="$bare_root/bazel-" \
             --build_event_json_file="$bare_root/release-build.bep.json" \
             --experimental_build_event_upload_strategy=local \
-            //test/lint:cache_clean
+            //test/lint:cache_clean //app/tui:aobus-tui
 
       - name: Test Bazel graph
         env:
@@ -1428,7 +1428,9 @@ jobs:
       ${{ always() && !cancelled() &&
           (needs.changes.result != 'success' || needs.changes.outputs.docs-only != 'true') }}
     runs-on: windows-2025-vs2026
-    timeout-minutes: 180
+    # Prior native receipts show progressing owner-wide lint at the three-hour
+    # cap. Keep every gate and allow the remaining lint plus Release TUI build.
+    timeout-minutes: 300
     continue-on-error: ${{ github.event_name != 'workflow_dispatch' || inputs.mode != 'bazel' }}
     env:
       # The same state paths as the check job, whose caches this job restores.
@@ -1582,7 +1584,7 @@ jobs:
             "--symlink_prefix=$bare\bazel-" `
             "--build_event_json_file=$bare\release-build.bep.json" `
             --experimental_build_event_upload_strategy=local `
-            //test/lint:cache_clean
+            //test/lint:cache_clean //app/tui:aobus-tui
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Test Bazel graph

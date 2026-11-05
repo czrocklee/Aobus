@@ -1,45 +1,15 @@
-"""Repository header plans retain each package's topology and ownership boundary."""
+"""SDK header observations retain each package's topology and ownership boundary."""
 
-import ast
 import hashlib
+import json
 import os
 import unittest
-from pathlib import Path
+from types import SimpleNamespace
 
 import test_bazel_deps as adapter_tests
 
 from ao.core import bazel_deps as g
-
-
-def rules(output):
-    result = {}
-    tree = ast.parse((output / "BUILD.bazel").read_text(encoding="utf-8"))
-    for node in tree.body:
-        if not isinstance(node, ast.Expr) or not isinstance(node.value, ast.Call):
-            continue
-        call = node.value
-        if not isinstance(call.func, ast.Name) or call.func.id not in {"filegroup", "cc_library", "cc_import"}:
-            continue
-        fields = {
-            keyword.arg: ast.literal_eval(keyword.value.args[0])[":_prepared_mode"]
-            if isinstance(keyword.value, ast.Call)
-            else ast.literal_eval(keyword.value)
-            for keyword in call.keywords
-        }
-        result[fields.pop("name")] = {"kind": call.func.id, **fields}
-    return result
-
-
-def expanded_headers(target, generated):
-    fields = generated[target]
-    entries = fields.get("hdrs", fields.get("srcs", []))
-    result = set()
-    for entry in entries:
-        if entry.startswith(":"):
-            result.update(expanded_headers(entry[1:], generated))
-        else:
-            result.add(entry)
-    return result
+from ao.core import bazel_native as native
 
 
 class BazelSharedHeadersTest(unittest.TestCase):
@@ -58,7 +28,10 @@ class BazelSharedHeadersTest(unittest.TestCase):
         change["id"] = f"complete-{name}"
         change["when"]["package"] = name
 
-    def test_equal_roots_keep_package_interfaces_and_sparse_header_namespaces_distinct(self):
+    def headers(self, name):
+        return {file["source"] for tree in self.fixture.package(name)["headers"] for file in tree["files"]}
+
+    def test_equal_roots_keep_package_interfaces_and_sparse_header_ownership_distinct(self):
         fixture = self.fixture
         archive = fixture.lib.with_name("libbar.a")
         archive.write_bytes(b"bar archive")
@@ -70,22 +43,15 @@ class BazelSharedHeadersTest(unittest.TestCase):
         )
         self.add_package("baz", [fixture.header.parent], defines=["BAZ_API=3"])
         manifest = fixture.generate()
-        generated = rules(fixture.out)
-        header_paths = [path for path, (source, _) in fixture.links.items() if source == fixture.header]
-        self.assertEqual(len(header_paths), 3)
-        self.assertFalse((fixture.out / "artifacts").exists())
-        self.assertNotEqual(generated["foo"]["hdrs"], generated["bar"]["hdrs"])
-        for package, defines in (("foo", ["FOO_API=1"]), ("bar", ["BAR_API=2"]), ("baz", ["BAZ_API=3"])):
-            self.assertEqual(generated[package]["defines"], defines)
-            self.assertEqual(generated[package]["copts"], [])
-            self.assertEqual(
-                {fixture.artifact(fixture.out / path) for path in expanded_headers(package, generated)},
-                {fixture.header},
-            )
-        self.assertNotEqual(generated["foo"]["deps"], generated["bar"]["deps"])
-        self.assertEqual(generated["baz"]["deps"], [])
+        for name, defines in (("foo", ["FOO_API=1"]), ("bar", ["BAR_API=2"]), ("baz", ["BAZ_API=3"])):
+            self.assertEqual(fixture.package(name)["defines"], defines)
+            self.assertEqual(self.headers(name), {str(fixture.header)})
+        self.assertEqual(fixture.package("foo")["libraries"][0]["source"], str(fixture.lib))
+        self.assertEqual(fixture.package("bar")["libraries"][0]["source"], str(archive))
+        self.assertEqual(fixture.package("baz")["libraries"], [])
         self.assertEqual([package["declared_headers"] for package in manifest["packages"]], [1, 1, 1])
         self.assertEqual(manifest["counts"], {"automatic": 1, "manual_fallback": 2})
+        self.assertFalse(fixture.out.exists())
 
     def test_shared_roots_preserve_each_packages_search_order(self):
         fixture = self.fixture
@@ -96,16 +62,9 @@ class BazelSharedHeadersTest(unittest.TestCase):
         fixture.write_pc()
         self.add_package("bar", [other, fixture.header.parent])
         fixture.generate()
-        generated = rules(fixture.out)
-        for package, expected in (("foo", [fixture.header.parent, other]), ("bar", [other, fixture.header.parent])):
-            self.assertEqual(
-                [fixture.artifact(fixture.out / root / "foo.h").parent for root in generated[package]["includes"]],
-                expected,
-            )
-        self.assertEqual(
-            {fixture.artifact(fixture.out / path) for path in expanded_headers("foo", generated)},
-            {fixture.artifact(fixture.out / path) for path in expanded_headers("bar", generated)},
-        )
+        for name, expected in (("foo", [fixture.header.parent, other]), ("bar", [other, fixture.header.parent])):
+            self.assertEqual([fixture.include_root(name, index) for index in range(2)], expected)
+        self.assertEqual(self.headers("foo"), self.headers("bar"))
 
     def test_distinct_roots_do_not_merge_just_because_their_bytes_match(self):
         fixture = self.fixture
@@ -115,12 +74,9 @@ class BazelSharedHeadersTest(unittest.TestCase):
         other_header.write_bytes(fixture.header.read_bytes())
         self.add_package("bar", [other])
         fixture.generate()
-        generated = rules(fixture.out)
-        self.assertNotEqual(generated["foo"]["hdrs"], generated["bar"]["hdrs"])
-        self.assertNotEqual(generated["foo"]["includes"], generated["bar"]["includes"])
-        self.assertEqual(
-            {fixture.artifact(fixture.out / path) for path in expanded_headers("bar", generated)}, {other_header}
-        )
+        self.assertNotEqual(fixture.package("foo")["headers"], fixture.package("bar")["headers"])
+        self.assertEqual(fixture.include_root("bar"), other)
+        self.assertEqual(self.headers("bar"), {str(other_header)})
 
     def test_child_only_interface_does_not_gain_another_packages_parent_headers(self):
         fixture = self.fixture
@@ -129,9 +85,16 @@ class BazelSharedHeadersTest(unittest.TestCase):
         (child / "child.h").write_bytes(b"child header")
         self.add_package("bar", [child])
         manifest = fixture.generate()
-        declared = expanded_headers("bar", rules(fixture.out))
-        self.assertEqual({Path(path).name for path in declared}, {"child.h"})
-        self.assertNotIn("foo.h", {Path(path).name for path in declared})
+        self.assertEqual(
+            fixture.package("bar")["headers"],
+            [
+                {
+                    "root": str(child),
+                    "index": 0,
+                    "files": [{"source": str(child / "child.h"), "path": "child.h"}],
+                }
+            ],
+        )
         self.assertEqual([package["declared_headers"] for package in manifest["packages"]], [2, 1])
 
     def test_nested_root_topology_and_order_preserve_sibling_relative_includes(self):
@@ -150,31 +113,28 @@ class BazelSharedHeadersTest(unittest.TestCase):
                 fixture.spec["packages"] = [{"name": "foo", "modules": ["foo"], "expected_versions": {"foo": "1.2.3"}}]
                 self.add_package("bar", directories)
                 manifest = fixture.generate()
-                generated = rules(fixture.out)
-                includes = generated["bar"]["includes"]
-                parent = fixture.out / includes[directories.index(root)]
-                nested = fixture.out / includes[directories.index(child)]
+                parent = fixture.include_root("bar", directories.index(root))
+                nested = fixture.include_root("bar", directories.index(child))
                 self.assertEqual(nested, parent / "ryml")
                 self.assertEqual(fixture.artifact(nested / "wrapper.h"), wrapper)
                 self.assertEqual(fixture.artifact(parent / "c4/dependency.h"), dependency)
+                self.assertEqual(fixture.package("bar")["headers"][0]["index"], directories.index(root))
                 self.assertEqual([package["declared_headers"] for package in manifest["packages"]], [3, 3])
-                self.assertFalse((fixture.out / "artifacts").exists())
+                self.assertFalse(fixture.out.exists())
 
     @unittest.skipIf(os.name == "nt", "Windows symlink creation is outside this fixture contract")
-    def test_canonical_alias_of_the_same_root_keeps_package_projection_narrow(self):
+    def test_canonical_alias_of_the_same_root_keeps_package_observations_narrow(self):
         fixture = self.fixture
         alias = fixture.provider / "include-alias"
         alias.symlink_to(fixture.header.parent, target_is_directory=True)
         self.add_package("bar", [alias])
         manifest = fixture.generate()
-        generated = rules(fixture.out)
-        self.assertNotEqual(generated["foo"]["hdrs"], generated["bar"]["hdrs"])
-        self.assertEqual(
-            {fixture.artifact(fixture.out / path) for path in expanded_headers("bar", generated)}, {fixture.header}
-        )
+        self.assertEqual(fixture.package("bar")["name"], "bar")
+        self.assertEqual(self.headers("bar"), {str(fixture.header)})
+        self.assertEqual(fixture.include_root("bar"), fixture.header.parent)
         self.assertEqual([package["declared_headers"] for package in manifest["packages"]], [1, 1])
 
-    def test_planning_rehashes_current_header_bytes_and_membership_without_timestamp_signals(self):
+    def test_resolution_rehashes_current_header_bytes_and_membership_without_timestamp_signals(self):
         fixture = self.fixture
         self.add_package("bar", [fixture.header.parent])
         first = fixture.generate()
@@ -193,19 +153,25 @@ class BazelSharedHeadersTest(unittest.TestCase):
         fixture.header.unlink()
         manifest = fixture.generate()
         self.assertEqual([package["declared_headers"] for package in manifest["packages"]], [1, 1])
-        self.assertNotIn(fixture.header, [source for source, _ in fixture.links.values()])
-        self.assertEqual({source for source, role in fixture.links.values() if role == "header"}, {extra})
+        self.assertEqual(self.headers("foo"), {str(extra)})
+        self.assertEqual(self.headers("bar"), {str(extra)})
 
-    def test_package_cannot_overwrite_an_internal_header_target(self):
+    def test_native_materialization_rejects_a_package_overwriting_an_internal_header_target(self):
         fixture = self.fixture
+        # Target-name ownership moved to Starlark. Exercise its real declaration
+        # guard, not an adapter-generated BUILD string or a second target inventory.
+        self.add_package("_headers_foo_0", [fixture.header.parent])
         fixture.generate()
-        label = rules(fixture.out)["foo"]["hdrs"][0]
-        self.assertTrue(label.startswith(":"))
-        self.add_package(label[1:], [fixture.header.parent])
-        with self.assertRaisesRegex(g.BazelDependencyError, "generated target name collision"):
-            fixture.generate()
+        namespace = {"fail": self.fail, "json": SimpleNamespace(encode=json.dumps)}
+        source = native.PROJECT_ROOT / "bazel/import_repository.bzl"
+        exec(compile(source.read_text(encoding="utf-8"), str(source), "exec"), namespace)
+        ctx = SimpleNamespace(path=str, symlink=lambda *args: None, file=lambda *args, **kwargs: None)
+        with self.assertRaisesRegex(AssertionError, "generated target name collision"):
+            namespace["materialize_imports"](
+                ctx, "", "release", fixture.resolution["packages"], fixture.resolution["manifest"]
+            )
 
-    def test_empty_or_out_of_root_package_cannot_produce_a_valid_plan(self):
+    def test_empty_or_out_of_root_package_cannot_produce_valid_observations(self):
         fixture = self.fixture
         self.add_package("bar", [fixture.header.parent])
         empty = fixture.provider / "empty"
@@ -221,7 +187,7 @@ class BazelSharedHeadersTest(unittest.TestCase):
         self.add_package("outside", [outside])
         with self.assertRaisesRegex(g.BazelDependencyError, "outside allowed provider roots"):
             fixture.generate()
-        self.assertFalse((fixture.out / "artifacts").exists())
+        self.assertFalse(fixture.out.exists())
 
 
 if __name__ == "__main__":

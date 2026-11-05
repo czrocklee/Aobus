@@ -4,15 +4,20 @@ Source inspection does not execute Bazel or prove action-cache behavior.
 """
 
 import ast
+import json
 import os
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from test_bazel_test_graph import bazel_rule_has_manifest, bazel_rule_target_compatible
 
+from ao.core import bazel_host_tools as host_tools
+from ao.core import bazel_native as native
 from ao.core.paths import PROJECT_ROOT
 
 
@@ -230,100 +235,157 @@ class WindowsManifestGraphTests(unittest.TestCase):
         self.assertIn("tools", collected)
 
 
-class WindowsManifestToolSourceTests(unittest.TestCase):
-    """Inspect resolver declarations without installing a process-global audit hook."""
+class WindowsManifestToolTests(unittest.TestCase):
+    """Observe SDK inputs and execute the checked-in projection with a recording ctx."""
 
     def setUp(self):
-        resolver = ast.parse((PROJECT_ROOT / "script/ao/core/bazel_resolver.py").read_text(encoding="utf-8"))
-        self.tools = next(
-            node
-            for node in ast.walk(resolver)
-            if isinstance(node, ast.If) and ast.unparse(node.test) == "args.group == 'tools'"
-        )
-        self.windows = next(
-            node
-            for node in self.tools.body
-            if isinstance(node, ast.If) and ast.unparse(node.test) == "host == 'windows'"
-        )
-        self.outputs = {
-            ast.literal_eval(target.slice): node.value
-            for node in self.tools.body
-            if isinstance(node, ast.Assign)
-            for target in node.targets
-            if isinstance(target, ast.Subscript) and ast.unparse(target.value) == "result['files']"
+        temporary = tempfile.TemporaryDirectory(prefix="aobus-manifest-tools-")
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name).resolve()
+        self.sdk = self.root / "Åsa 音乐/SDK"
+        self.mt = self.sdk / "bin/selected/x64/mt.exe"
+        self.system = self.root / "Windows"
+        self.powershell = self.system / "System32/WindowsPowerShell/v1.0/powershell.exe"
+        self.gperf = self.root / "gperf.exe"
+        self.runtime = self.root / "gperf-runtime.dll"
+        for path in (self.mt, self.powershell, self.gperf, self.runtime):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"selected SDK input")
+        self.environment = {
+            "SYSTEMROOT": str(self.system),
+            "WindowsSdkDir": str(self.sdk),
+            "WindowsSDKVersion": "selected\\",
         }
+        self.enterContext(
+            patch.object(
+                host_tools, "_native_gperf", return_value=({"version": "fixture"}, self.gperf, [self.runtime], [])
+            )
+        )
+        self.catalog = self.enterContext(
+            patch.object(
+                host_tools,
+                "_catalog_sdk",
+                return_value=(
+                    {
+                        "python": str(self.root / "python"),
+                        "genrb": str(self.root / "genrb"),
+                        "pkgdata": str(self.root / "pkgdata"),
+                    },
+                    [],
+                    [],
+                ),
+            )
+        )
+
+        def query(command, **kwargs):
+            self.assertEqual(command, [str(self.gperf), "--version"])
+            self.assertTrue(kwargs["check"])
+            return subprocess.CompletedProcess(command, 0, "GNU gperf fixture\n", "")
+
+        self.enterContext(patch.object(host_tools.subprocess, "run", side_effect=query))
+        self.files = {}
+        self.links = []
+        namespace = {"json": SimpleNamespace(encode=json.dumps)}
+        source = (PROJECT_ROOT / "bazel/host_tools_repository.bzl").read_text(encoding="utf-8")
+        exec(compile(source, "host_tools_repository.bzl", "exec"), namespace)
+        self.materialize = namespace["materialize_host_tools"]
+
+    def resolve(self, host="windows"):
+        with patch.dict(os.environ, self.environment, clear=True):
+            return host_tools.resolve_host_tools(self.root, self.root / "provider", host)
+
+    def project(self, data):
+        class BazelPath:
+            def __init__(self, source: str | Path) -> None:
+                self.path = Path(source)
+
+            @property
+            def realpath(self) -> "BazelPath":
+                return BazelPath(self.path.resolve())
+
+            def __str__(self) -> str:
+                return self.path.as_posix()
+
+        context = SimpleNamespace(
+            path=BazelPath,
+            symlink=lambda source, destination: self.links.append({"source": str(source), "destination": destination}),
+            file=lambda name, content, **_: self.files.__setitem__(name, content),
+        )
+        self.materialize(context, data)
+        namespace = {}
+        exec(self.files["host_tools_data.bzl"], namespace)
+        return namespace["HOST_TOOLS"]
 
     def test_sdk_tool_payloads_are_declared_inputs_and_both_lexical_and_resolved_paths_are_watched(self):
-        tools = next(node for node in self.windows.body if isinstance(node, ast.For))
-        self.assertEqual(ast.unparse(tools.iter), "{'mt': workspace._windows_mt(), 'powershell': powershell}.items()")
-        statements = [ast.unparse(node) for node in tools.body]
-        self.assertIn("manifest_tools[name] = tool.resolve().as_posix()", statements)
-        self.assertIn("destination = 'windows-manifest/' + name + '.exe'", statements)
-        self.assertIn("manifest_inputs.append(destination)", statements)
-        self.assertIn("result['links'].append({'source': str(tool.resolve()), 'destination': destination})", statements)
-        self.assertIn("files.update({str(tool.absolute()), str(tool.resolve())})", statements)
-        constants = [
-            node.value
-            for node in ast.walk(self.outputs["windows_manifest_tools.bzl"])
-            if isinstance(node, ast.Constant) and isinstance(node.value, str)
-        ]
-        self.assertIn("WINDOWS_MANIFEST_TOOLS = ", "".join(constants))
-        self.assertIn(
-            "json.dumps(manifest_tools, sort_keys=True, ensure_ascii=False)",
-            ast.unparse(self.outputs["windows_manifest_tools.bzl"]),
+        if os.name != "nt":
+            installed = self.mt.with_name("installed-mt.exe")
+            self.mt.rename(installed)
+            self.mt.symlink_to(installed)
+        observed = []
+        with native.capture_probes(observed.append):
+            data = self.resolve()
+        self.assertIn(self.powershell, observed)
+        for tool in (self.mt, self.powershell):
+            self.assertLessEqual({str(tool.absolute()), str(tool.resolve())}, set(data["watch_files"]))
+        manifest_tools = {"mt": self.mt.resolve().as_posix(), "powershell": self.powershell.resolve().as_posix()}
+        self.assertEqual(data["manifest_tools"], manifest_tools)
+        projected = self.project(data)
+        self.assertEqual(
+            projected["windows_manifest_inputs"], ["windows-manifest/mt.exe", "windows-manifest/powershell.exe"]
         )
-        build_constants = "".join(
-            node.value
-            for node in ast.walk(self.outputs["BUILD.bazel"])
-            if isinstance(node, ast.Constant) and isinstance(node.value, str)
-        )
-        self.assertIn('filegroup(name = "windows_manifest_tools", srcs = ', build_constants)
-        self.assertIn("json.dumps(manifest_inputs, ensure_ascii=False)", ast.unparse(self.outputs["BUILD.bazel"]))
+        for name, tool in manifest_tools.items():
+            self.assertIn({"source": tool, "destination": "windows-manifest/" + name + ".exe"}, self.links)
+        source = self.files["windows_manifest_tools.bzl"]
+        self.assertIn("Åsa", source)
+        self.assertIn("音乐", source)
+        self.assertNotRegex(source, r"(?<!\\)(?:\\\\)*\\[uU]")
+        namespace = {}
+        exec(source, namespace)
+        self.assertEqual(namespace["WINDOWS_MANIFEST_TOOLS"], manifest_tools)
+        groups = {}
+        definitions = {
+            "native": SimpleNamespace(
+                exports_files=lambda *args, **kwargs: None,
+                alias=lambda **kwargs: None,
+                filegroup=lambda **kwargs: groups.__setitem__(kwargs["name"], kwargs["srcs"]),
+                config_setting=lambda **kwargs: None,
+            ),
+            "select": lambda values, **kwargs: values,
+        }
+        exec((PROJECT_ROOT / "bazel/host_tools.bzl").read_text(encoding="utf-8"), definitions)
+        definitions["host_tools"](projected)
+        self.assertEqual(groups["windows_manifest_tools"], projected["windows_manifest_inputs"])
 
     def test_missing_or_relative_system_powershell_is_rejected_before_sdk_inputs_are_published(self):
-        self.assertEqual(ast.unparse(_assigned(self.windows, "system")), "Path(os.environ.get('SYSTEMROOT', ''))")
-        self.assertEqual(
-            ast.unparse(_assigned(self.windows, "powershell")),
-            "workspace._probe(system / 'System32/WindowsPowerShell/v1.0/powershell.exe')",
-        )
-        guard = next(node for node in self.windows.body if isinstance(node, ast.If))
-        self.assertEqual(ast.unparse(guard.test), "not system.is_absolute() or not powershell.is_file()")
-        self.assertEqual(len(guard.body), 1)
-        self.assertIsInstance(guard.body[0], ast.Raise)
-        self.assertEqual(ast.unparse(guard.body[0].exc), "ValueError('selected Windows PowerShell runtime is missing')")
-        publish = next(node for node in self.windows.body if isinstance(node, ast.For))
-        self.assertLess(guard.lineno, publish.lineno)
+        self.powershell.unlink()
+        for system in ("", "relative/system", str(self.system)):
+            self.environment["SYSTEMROOT"] = system
+            with (
+                self.subTest(system=system),
+                self.assertRaisesRegex(ValueError, "selected Windows PowerShell runtime is missing"),
+            ):
+                self.resolve()
+            self.catalog.assert_not_called()
+        self.assertEqual(self.files, {})
+        self.assertEqual(self.links, [])
 
     def test_manifest_tool_metadata_stays_distinct_from_the_complete_artifact_inventory(self):
-        self.assertEqual(ast.literal_eval(_assigned(self.tools, "manifest_tools")), {})
-        self.assertEqual(ast.literal_eval(_assigned(self.tools, "manifest_inputs")), [])
-        gperf = _assigned(self.tools, "artifacts")
-        self.assertEqual(ast.unparse(gperf), "[executable, *runtime]")
-        self.assertLess(gperf.lineno, self.windows.lineno)
-        metadata = next(node for node in ast.walk(self.outputs["manifest.json"]) if isinstance(node, ast.Dict))
-        fields = {
-            ast.literal_eval(key): ast.unparse(value) for key, value in zip(metadata.keys, metadata.values, strict=True)
-        }
-        # Guard the Windows role separation, not unrelated tool-family metadata.
-        self.assertEqual(fields["artifacts"], "result['links']")
-        self.assertEqual(fields["windows_manifest_tools"], "manifest_tools")
-        # Only the Windows conditional may fill either manifest-tool collection.
-        for statement in self.tools.body:
-            if statement is self.windows:
-                continue
-            for node in ast.walk(statement):
-                if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-                    self.assertNotIn(
-                        ast.unparse(node.func),
-                        {"manifest_tools.update", "manifest_inputs.append", "manifest_inputs.extend"},
-                    )
-                if isinstance(node, ast.Assign):
-                    self.assertFalse(
-                        any(
-                            isinstance(target, ast.Subscript) and ast.unparse(target.value) == "manifest_tools"
-                            for target in node.targets
-                        )
-                    )
+        data = self.resolve()
+        self.project(data)
+        manifest = json.loads(self.files["manifest.json"])
+        self.assertEqual(manifest["artifacts"], self.links)
+        self.assertEqual(manifest["windows_manifest_tools"], data["manifest_tools"])
+        self.assertEqual(len(self.links), 4)
+        self.assertIn({"source": self.gperf.as_posix(), "destination": "bin/gperf.exe"}, self.links)
+        self.assertIn({"source": self.runtime.as_posix(), "destination": "bin/gperf-runtime.dll"}, self.links)
+        non_windows = self.resolve("macos")
+        self.assertEqual(non_windows["manifest_tools"], {})
+        self.files.clear()
+        self.links.clear()
+        projected = self.project(non_windows)
+        self.assertEqual(projected["windows_manifest_inputs"], [])
+        self.assertEqual(json.loads(self.files["manifest.json"])["windows_manifest_tools"], {})
+        self.assertTrue(all(link["destination"].startswith("bin/") for link in self.links))
 
 
 @unittest.skipUnless(sys.platform == "win32", "Requires native Windows PowerShell and cmd.exe")

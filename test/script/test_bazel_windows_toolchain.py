@@ -8,8 +8,12 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
+from ao.core import bazel_compiler_probe as compiler_probe
+from ao.core import bazel_native as native
+from ao.core import bazel_providers as providers
 from ao.core import bazel_resolver as resolver
 from ao.core import bazel_workspace as workspace
 
@@ -19,6 +23,18 @@ class WindowsToolchainProjectionTest(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory(prefix="aobus-windows-toolchain-")
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name).resolve()
+
+        def fail(message):
+            raise AssertionError(message)
+
+        namespace = {
+            "json": SimpleNamespace(encode=json.dumps),
+            "fail": fail,
+            "type": lambda value: {dict: "dict", str: "string"}.get(type(value), type(value).__name__),
+        }
+        source = (native.PROJECT_ROOT / "bazel/toolchain_repository.bzl").read_text(encoding="utf-8")
+        exec(compile(source, "toolchain_repository.bzl", "exec"), namespace)
+        self.materialize = namespace["materialize_toolchain"]
         self.vc = self.root / "VC/Tools/MSVC/selected"
         self.sdk = self.root / "Windows Kits/10"
         self.include = [
@@ -65,22 +81,42 @@ class WindowsToolchainProjectionTest(unittest.TestCase):
         }
 
     def render(self):
+        with patch.object(native, "executable", side_effect=self.selected_tool):
+            data = compiler_probe.probe_compiler("windows", compiler_environment=self.environment)
         generated = self.root / "generated"
-        with patch.object(workspace, "_executable", side_effect=self.selected_tool):
-            links = workspace._windows_toolchain(generated, self.environment)
+        directory = generated / "toolchain"
+        directory.mkdir(parents=True, exist_ok=True)
+        links = []
+        context = SimpleNamespace(
+            path=Path,
+            symlink=lambda source, destination: links.append({"source": str(source), "destination": destination}),
+            file=lambda name, content, **_: (directory / name).write_text(content, encoding="utf-8"),
+        )
+        self.materialize(context, data)
+        self.assertEqual(set(data), {"platform", "sdk", "identity"})
+        self.assertEqual(
+            data["sdk"],
+            {
+                "target_architecture": "x64",
+                "tools": {role: path.as_posix() for role, path in self.tools.items()},
+                "builtin_include_directories": [
+                    value.replace("\\", "/") for value in self.environment["INCLUDE"].split(";") if value
+                ],
+                "environment": {name: self.environment[name] for name in ("INCLUDE", "LIB", "PATH", "TMP")},
+            },
+        )
+        self.assertEqual(json.loads((directory / "identity.json").read_text()), data["identity"])
         return generated, links, self.metadata(generated)
 
     def identity(self):
-        generated = self.root / "generated"
         environment = dict(self.environment, VCToolsVersion="selected-vc", UCRTVersion="selected-ucrt")
         with (
             patch.dict(os.environ, {"INCLUDE": "ambient", "LIB": "ambient", "WindowsSdkDir": "ambient"}, clear=True),
-            patch.object(workspace, "_host_machine", return_value="AMD64"),
-            patch.object(workspace.platform, "machine", side_effect=AssertionError("no uname/WMI query")),
-            patch.object(workspace, "_executable", side_effect=self.selected_tool),
+            patch.object(native, "host_machine", return_value="AMD64"),
+            patch.object(native.platform, "machine", side_effect=AssertionError("no uname/WMI query")),
+            patch.object(native, "executable", side_effect=self.selected_tool),
         ):
-            workspace._toolchain_identity(generated, "windows", compiler_environment=environment)
-        return generated / "toolchain/identity.json"
+            return compiler_probe.probe_compiler("windows", compiler_environment=environment)["identity"]
 
     def assert_thin_build(self, source):
         calls = [node.value for node in ast.parse(source).body]
@@ -106,7 +142,7 @@ class WindowsToolchainProjectionTest(unittest.TestCase):
         )
 
     def test_generated_build_loads_only_the_windows_macro_without_reading_policy(self):
-        with patch.object(workspace, "PROJECT_ROOT", self.root / "no-policy-templates"):
+        with patch.object(native, "PROJECT_ROOT", self.root / "no-policy-templates"):
             generated, _, _ = self.render()
         self.assert_thin_build((generated / "toolchain/BUILD.bazel").read_text(encoding="utf-8"))
 
@@ -143,7 +179,7 @@ class WindowsToolchainProjectionTest(unittest.TestCase):
         self.assertEqual(metadata["MSVC_ENVIRONMENT"]["INCLUDE"], self.environment["INCLUDE"])
         self.environment["INCLUDE"] = str(auxiliary)
         self.environment["VCToolsInstallDir"] = str(self.root / "VC")
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "INCLUDE.*exact selected"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "INCLUDE.*exact selected"):
             self.render()
 
     def test_vc_auxiliary_parent_and_nested_interfaces_are_not_builtin_roots(self):
@@ -153,7 +189,7 @@ class WindowsToolchainProjectionTest(unittest.TestCase):
             self.environment["INCLUDE"] = str(directory)
             with (
                 self.subTest(directory=directory),
-                self.assertRaisesRegex(workspace.BazelWorkspaceError, "INCLUDE.*exact selected"),
+                self.assertRaisesRegex(native.BazelWorkspaceError, "INCLUDE.*exact selected"),
             ):
                 self.render()
 
@@ -162,7 +198,7 @@ class WindowsToolchainProjectionTest(unittest.TestCase):
         self.environment["INCLUDE"] += str(include)
         self.environment["LIB"] += str(lib)
         observed = []
-        with patch.object(workspace, "_INPUT_PROBE", observed.append):
+        with native.capture_probes(observed.append):
             _, _, metadata = self.render()
         self.assertEqual(metadata["BUILTIN_INCLUDE_DIRECTORIES"][-1], include.as_posix())
         self.assertEqual(metadata["MSVC_ENVIRONMENT"]["INCLUDE"], self.environment["INCLUDE"])
@@ -177,7 +213,7 @@ class WindowsToolchainProjectionTest(unittest.TestCase):
             self.environment[name] += str(directory)
             with (
                 self.subTest(name=name),
-                self.assertRaisesRegex(workspace.BazelWorkspaceError, name + ".*exact selected"),
+                self.assertRaisesRegex(native.BazelWorkspaceError, name + ".*exact selected"),
             ):
                 self.render()
             self.environment[name] = original
@@ -190,20 +226,20 @@ class WindowsToolchainProjectionTest(unittest.TestCase):
             self.environment["NETFXSDKDir"] = str(directory)
             with (
                 self.subTest(directory=directory),
-                self.assertRaisesRegex(workspace.BazelWorkspaceError, "NETFXSDKDir.*installed version root"),
+                self.assertRaisesRegex(native.BazelWorkspaceError, "NETFXSDKDir.*installed version root"),
             ):
                 self.render()
         self.environment["NETFXSDKDir"] = str(root.parent / "missing")
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "NETFXSDKDir.*installed version root"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "NETFXSDKDir.*installed version root"):
             self.render()
         self.environment["NETFXSDKDir"] = None
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "NETFXSDKDir.*string"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "NETFXSDKDir.*string"):
             self.render()
 
     def test_netfx_metadata_cannot_admit_a_root_inside_the_checkout(self):
         self.netfx_sdk()
-        with patch.object(workspace, "PROJECT_ROOT", self.root):
-            with self.assertRaisesRegex(workspace.BazelWorkspaceError, "NETFXSDKDir.*installed version root"):
+        with patch.object(native, "PROJECT_ROOT", self.root):
+            with self.assertRaisesRegex(native.BazelWorkspaceError, "NETFXSDKDir.*installed version root"):
                 self.render()
 
     def test_netfx_only_admits_exact_selected_include_and_x64_library_interfaces(self):
@@ -226,7 +262,7 @@ class WindowsToolchainProjectionTest(unittest.TestCase):
             self.environment[name] += str(directory)
             with (
                 self.subTest(name=name, directory=directory),
-                self.assertRaisesRegex(workspace.BazelWorkspaceError, name + ".*exact selected"),
+                self.assertRaisesRegex(native.BazelWorkspaceError, name + ".*exact selected"),
             ):
                 self.render()
             self.environment[name] = original
@@ -240,14 +276,14 @@ class WindowsToolchainProjectionTest(unittest.TestCase):
         auxiliary.symlink_to(provider, target_is_directory=True)
         original = self.environment["INCLUDE"]
         self.environment["INCLUDE"] += str(auxiliary)
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "INCLUDE.*exact selected"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "INCLUDE.*exact selected"):
             self.render()
         self.environment["INCLUDE"] = original
         root, include, lib = self.netfx_sdk()
         alias = root.parent / "alias-version"
         alias.symlink_to(root, target_is_directory=True)
         self.environment["NETFXSDKDir"] = str(alias)
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "NETFXSDKDir.*installed version root"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "NETFXSDKDir.*installed version root"):
             self.render()
         self.environment["NETFXSDKDir"] = str(root)
         for name, directory in (("INCLUDE", include), ("LIB", lib)):
@@ -256,7 +292,7 @@ class WindowsToolchainProjectionTest(unittest.TestCase):
             self.environment[name] += str(directory)
             with (
                 self.subTest(name=name),
-                self.assertRaisesRegex(workspace.BazelWorkspaceError, name + ".*exact selected"),
+                self.assertRaisesRegex(native.BazelWorkspaceError, name + ".*exact selected"),
             ):
                 self.render()
             self.environment[name] = self.environment[name].removesuffix(str(directory))
@@ -273,19 +309,23 @@ class WindowsToolchainProjectionTest(unittest.TestCase):
         self.assertEqual(len(links), 4)
         self.assertIn({"source": str(self.tools["cl"]), "destination": "tools/cl.exe"}, links)
         self.assertFalse((generated / "toolchain/tools").exists())
+        build = (generated / "toolchain/BUILD.bazel").read_text(encoding="utf-8")
+        self.assertNotIn("compile_identity", build)
+        self.assertNotIn("AOBUS_BAZEL_TOOLCHAIN_ID", build)
+        self.assertNotIn("cc_library", build)
 
     def test_missing_metadata_and_each_required_environment_value_fail_closed(self):
         for value in (None, {}, {"INCLUDE": ""}):
             with (
                 self.subTest(value=value),
-                self.assertRaisesRegex(workspace.BazelWorkspaceError, "compiler_environment"),
+                self.assertRaisesRegex(native.BazelWorkspaceError, "compiler_environment"),
             ):
-                workspace._windows_toolchain(self.root / "generated", value)
+                compiler_probe.probe_compiler("windows", compiler_environment=value)
         for name in self.environment:
             with self.subTest(name=name):
                 environment = dict(self.environment, **{name: ""})
-                with self.assertRaisesRegex(workspace.BazelWorkspaceError, "nonempty"):
-                    workspace._windows_toolchain(self.root / "generated", environment)
+                with self.assertRaisesRegex(native.BazelWorkspaceError, "nonempty"):
+                    compiler_probe.probe_compiler("windows", compiler_environment=environment)
 
     def test_whole_sdk_parent_prefix_and_provider_headers_are_not_builtins(self):
         provider = self.root / "vcpkg/include"
@@ -293,7 +333,7 @@ class WindowsToolchainProjectionTest(unittest.TestCase):
         for directory in (self.sdk, self.vc, self.sdk / "Include/10.0.selected", provider, self.root):
             with self.subTest(directory=directory):
                 self.environment["INCLUDE"] = str(directory)
-                with self.assertRaisesRegex(workspace.BazelWorkspaceError, "exact selected"):
+                with self.assertRaisesRegex(native.BazelWorkspaceError, "exact selected"):
                     self.render()
 
     def test_other_sdk_version_and_nested_sdk_headers_are_not_builtin_roots(self):
@@ -302,14 +342,14 @@ class WindowsToolchainProjectionTest(unittest.TestCase):
             self.environment["INCLUDE"] = str(directory)
             with (
                 self.subTest(directory=directory),
-                self.assertRaisesRegex(workspace.BazelWorkspaceError, "exact selected"),
+                self.assertRaisesRegex(native.BazelWorkspaceError, "exact selected"),
             ):
                 self.render()
 
     def test_relative_missing_or_empty_include_interface_is_rejected(self):
         for value in ("relative/include", str(self.vc / "atlmfc/include"), ";;;"):
             self.environment["INCLUDE"] = value
-            with self.subTest(value=value), self.assertRaisesRegex(workspace.BazelWorkspaceError, "INCLUDE"):
+            with self.subTest(value=value), self.assertRaisesRegex(native.BazelWorkspaceError, "INCLUDE"):
                 self.render()
 
     def test_lib_rejects_parent_provider_other_version_architecture_and_unmodeled_directories(self):
@@ -323,14 +363,14 @@ class WindowsToolchainProjectionTest(unittest.TestCase):
             self.environment["LIB"] = str(directory)
             with (
                 self.subTest(directory=directory),
-                self.assertRaisesRegex(workspace.BazelWorkspaceError, "LIB.*exact selected"),
+                self.assertRaisesRegex(native.BazelWorkspaceError, "LIB.*exact selected"),
             ):
                 self.render()
 
     def test_lib_rejects_relative_missing_and_empty_interfaces(self):
         for value in ("relative/lib", str(self.vc / "atlmfc/lib/x64"), ";;;"):
             self.environment["LIB"] = value
-            with self.subTest(value=value), self.assertRaisesRegex(workspace.BazelWorkspaceError, "LIB"):
+            with self.subTest(value=value), self.assertRaisesRegex(native.BazelWorkspaceError, "LIB"):
                 self.render()
 
     def test_optional_atlmfc_and_selected_sdk_lib_interfaces_are_accepted(self):
@@ -351,7 +391,7 @@ class WindowsToolchainProjectionTest(unittest.TestCase):
         lib.parent.mkdir(parents=True)
         lib.symlink_to(provider, target_is_directory=True)
         self.environment["LIB"] = str(lib)
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "LIB.*exact selected"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "LIB.*exact selected"):
             self.render()
 
     @unittest.skipIf(os.name == "nt", "fixture requires POSIX symlink creation, not a native privilege grant")
@@ -362,7 +402,7 @@ class WindowsToolchainProjectionTest(unittest.TestCase):
         include.parent.mkdir()
         include.symlink_to(provider, target_is_directory=True)
         self.environment["INCLUDE"] = str(include)
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "exact selected"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "exact selected"):
             self.render()
 
     def test_selected_tools_must_be_installed_under_selected_x64_toolset(self):
@@ -374,7 +414,7 @@ class WindowsToolchainProjectionTest(unittest.TestCase):
                 self.tools[role] = source
                 with (
                     self.subTest(role=role, source=source),
-                    self.assertRaisesRegex(workspace.BazelWorkspaceError, "outside VCToolsInstallDir"),
+                    self.assertRaisesRegex(native.BazelWorkspaceError, "outside VCToolsInstallDir"),
                 ):
                     self.render()
             self.tools[role] = original
@@ -382,21 +422,21 @@ class WindowsToolchainProjectionTest(unittest.TestCase):
     def test_missing_tool_and_destination_collision_are_rejected(self):
         original = self.tools["link"]
         self.tools["link"] = self.tools["cl"]
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "duplicate.*destination"):
+        with self.assertRaisesRegex(AssertionError, "duplicate.*basename"):
             self.render()
         self.tools["link"] = original
         self.tools["ml64"].unlink()
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "outside VCToolsInstallDir"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "outside VCToolsInstallDir"):
             self.render()
 
     def test_original_tool_and_include_selection_decisions_are_watched(self):
         observed = []
-        with patch.object(workspace, "_INPUT_PROBE", observed.append):
+        with native.capture_probes(observed.append):
             self.render()
         self.assertLessEqual(set(self.include + self.lib + list(self.tools.values())), set(observed))
 
     def test_identity_retains_sdk_markers_versions_and_all_selected_tool_inputs(self):
-        identity = json.loads(self.identity().read_text())
+        identity = self.identity()
         self.assertEqual(
             {item["path"] for item in identity["files"]},
             {str(path) for path in [*self.tools.values(), self.mt, *self.markers]},
@@ -420,13 +460,13 @@ class WindowsToolchainProjectionTest(unittest.TestCase):
             path.write_bytes(b"original")
         for path in inputs:
             with self.subTest(path=path.relative_to(self.root)):
-                baseline = self.identity().read_bytes()
+                baseline = self.identity()
                 original, stat = path.read_bytes(), path.stat()
                 path.write_bytes(b"modified")
                 os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns))
-                self.assertNotEqual(self.identity().read_bytes(), baseline)
+                self.assertNotEqual(self.identity(), baseline)
                 path.write_bytes(original)
-                self.assertEqual(self.identity().read_bytes(), baseline)
+                self.assertEqual(self.identity(), baseline)
 
     def test_metadata_has_no_compilation_mode_or_compiler_policy_channel(self):
         _, _, metadata = self.render()
@@ -465,21 +505,14 @@ class WindowsToolchainProjectionTest(unittest.TestCase):
             json.dumps({"PATH": self.environment["PATH"], "TMP": "repository-owned-scratch"}),
         ]
 
-        def identity(generated, host, *, compiler_environment):
-            self.assertEqual(host, "windows")
-            self.assertEqual(compiler_environment, self.environment)
-            (generated / "toolchain/identity.json").write_text(
-                json.dumps({"files": [{"path": str(tool)} for tool in self.tools.values()]})
-            )
-
         with (
             patch.object(sys, "argv", arguments),
             patch.object(sys, "addaudithook"),
             patch.dict(os.environ, {}, clear=True),
-            patch.object(workspace, "native_platform", return_value="windows"),
-            patch.object(workspace, "_INPUT_PROBE", None),
-            patch.object(workspace, "_executable", side_effect=self.selected_tool),
-            patch.object(workspace, "_toolchain_identity", side_effect=identity) as identify,
+            patch.object(native, "native_platform", return_value="windows"),
+            native.capture_probes(None),
+            patch.object(native, "executable", side_effect=self.selected_tool),
+            patch.object(compiler_probe, "_compiler_identity", wraps=compiler_probe._compiler_identity) as identify,
         ):
             status = resolver.main()
         return status, json.loads((output / "repository.json").read_text()), identify
@@ -498,13 +531,17 @@ class WindowsToolchainProjectionTest(unittest.TestCase):
         status, result, identify = self.resolve(self.environment)
         self.assertEqual(status, 0, result.get("error"))
         identify.assert_called_once()
-        self.assert_thin_build(result["files"]["BUILD.bazel"])
-        self.assertNotIn("compile_identity", result["files"]["BUILD.bazel"])
-        self.assertNotIn("AOBUS_BAZEL_TOOLCHAIN_ID", result["files"]["BUILD.bazel"])
-        self.assertNotIn("cc_library", result["files"]["BUILD.bazel"])
-        identity = json.loads(result["files"]["identity.json"])
-        self.assertEqual({item["path"] for item in identity["files"]}, {str(tool) for tool in self.tools.values()})
-        self.assertEqual(len(result["links"]), 4)
+        identify.assert_called_with("windows", compiler_environment=self.environment)
+        self.assertEqual(result["files"], {})
+        self.assertEqual(result["links"], [])
+        data = result["toolchain"]
+        self.assertEqual(data["platform"], "windows")
+        identity = data["identity"]
+        self.assertEqual(
+            {item["path"] for item in identity["files"]},
+            {str(path) for path in [*self.tools.values(), self.mt, *self.markers]},
+        )
+        self.assertEqual(set(data), {"platform", "sdk", "identity"})
         self.assertLessEqual({str(tool) for tool in self.tools.values()}, set(result["watch_files"]))
         unrelated = self.root / "unrelated-provider"
         self.assertFalse(
@@ -514,20 +551,14 @@ class WindowsToolchainProjectionTest(unittest.TestCase):
                 for path in result[kind]
             )
         )
-        metadata = {
-            node.targets[0].id: ast.literal_eval(node.value)
-            for node in ast.parse(result["files"]["native_paths.bzl"]).body
-            if isinstance(node, ast.Assign)
-        }
+        sdk = data["sdk"]
         self.assertEqual(
-            metadata["MSVC_ENVIRONMENT"], {name: self.environment[name] for name in ("INCLUDE", "LIB", "PATH", "TMP")}
+            sdk["environment"], {name: self.environment[name] for name in ("INCLUDE", "LIB", "PATH", "TMP")}
         )
-        self.assertEqual(metadata["TOOL_INPUTS"], {role: "tools/" + role + ".exe" for role in self.tools})
-        self.assertEqual(
-            result["links"],
-            [{"source": str(tool), "destination": metadata["TOOL_INPUTS"][role]} for role, tool in self.tools.items()],
-        )
-        self.assertNotIn("repository-owned-scratch", result["files"]["native_paths.bzl"])
+        self.assertEqual(sdk["target_architecture"], "x64")
+        self.assertEqual(sdk["tools"], {role: tool.as_posix() for role, tool in self.tools.items()})
+        self.assertEqual(sdk["builtin_include_directories"], [path.as_posix() for path in self.include])
+        self.assertNotIn("repository-owned-scratch", json.dumps(sdk))
 
 
 class WindowsToolchainPreparationTest(unittest.TestCase):
@@ -546,8 +577,8 @@ class WindowsToolchainPreparationTest(unittest.TestCase):
             root = Path(temporary)
             with (
                 patch.dict(os.environ, {name.swapcase(): value for name, value in selected.items()}, clear=True),
-                patch.object(workspace, "native_platform", return_value="windows"),
-                patch.object(workspace, "vcpkg_prefix", return_value=root / "provider"),
+                patch.object(native, "native_platform", return_value="windows"),
+                patch.object(providers, "vcpkg_prefix", return_value=root / "provider"),
                 patch.object(workspace.builddir, "windows_state_root", return_value=root / "state"),
             ):
                 prepared = workspace.prepare_workspace(root / "build", "debug")
@@ -563,8 +594,8 @@ class WindowsToolchainPreparationTest(unittest.TestCase):
             root = Path(temporary)
             with (
                 patch.dict(os.environ, {}, clear=True),
-                patch.object(workspace, "native_platform", return_value="windows"),
-                patch.object(workspace, "vcpkg_prefix", return_value=root / "provider"),
+                patch.object(native, "native_platform", return_value="windows"),
+                patch.object(providers, "vcpkg_prefix", return_value=root / "provider"),
                 patch.object(workspace.builddir, "windows_state_root", return_value=root / "state"),
             ):
                 prepared = workspace.prepare_workspace(root / "build", "release")
@@ -583,8 +614,8 @@ class WindowsToolchainPreparationTest(unittest.TestCase):
             def shell(environment, *, found=str(git)):
                 with (
                     patch.dict(os.environ, environment, clear=True),
-                    patch.object(workspace, "native_platform", return_value="windows"),
-                    patch.object(workspace, "vcpkg_prefix", return_value=root / "provider"),
+                    patch.object(native, "native_platform", return_value="windows"),
+                    patch.object(providers, "vcpkg_prefix", return_value=root / "provider"),
                     patch.object(workspace.builddir, "windows_state_root", return_value=root / "state"),
                     patch.object(workspace.shutil, "which", return_value=found) as which,
                 ):
@@ -609,7 +640,7 @@ class WindowsToolchainPreparationTest(unittest.TestCase):
 
 class WindowsToolchainDefinitionTest(unittest.TestCase):
     def setUp(self):
-        self.source = (workspace.PROJECT_ROOT / "bazel/windows_toolchain.bzl").read_text()
+        self.source = (native.PROJECT_ROOT / "bazel/windows_toolchain.bzl").read_text()
         self.tree = ast.parse(self.source)
         self.macro = next(node for node in self.tree.body if isinstance(node, ast.FunctionDef))
         self.calls = {}

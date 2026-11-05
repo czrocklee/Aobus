@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+from ao.core import bazel_native as native
 from ao.core import bazel_workspace as workspace
 
 
@@ -20,14 +21,14 @@ class BazelHostTests(unittest.TestCase):
             kernel32.GetNativeSystemInfo.side_effect = get_info
             with (
                 self.subTest(architecture=architecture),
-                patch.object(workspace.os, "name", "nt"),
-                patch.object(ctypes, "WinDLL", create=True, return_value=kernel32) as load,
-                patch.object(workspace.platform, "machine", side_effect=AssertionError("no uname/WMI query")),
-                patch.object(workspace.platform, "system", side_effect=AssertionError("no OS inventory")),
-                patch.object(workspace.platform, "uname", side_effect=AssertionError("no OS inventory")),
+                patch.object(native.os, "name", "nt"),
+                patch.object(native.ctypes, "WinDLL", create=True, return_value=kernel32) as load,
+                patch.object(native.platform, "machine", side_effect=AssertionError("no uname/WMI query")),
+                patch.object(native.platform, "system", side_effect=AssertionError("no OS inventory")),
+                patch.object(native.platform, "uname", side_effect=AssertionError("no OS inventory")),
                 patch.dict(os.environ, {"PROCESSOR_ARCHITECTURE": "wrong", "PROCESSOR_ARCHITEW6432": "wrong"}),
             ):
-                self.assertEqual(workspace._host_machine(), machine)
+                self.assertEqual(native.host_machine(), machine)
             load.assert_called_once_with("kernel32")
             kernel32.GetNativeSystemInfo.assert_called_once()
             self.assertIsNone(kernel32.GetNativeSystemInfo.restype)
@@ -43,10 +44,10 @@ class BazelHostTests(unittest.TestCase):
 
         kernel32.GetNativeSystemInfo.side_effect = get_info
         with (
-            patch.object(workspace.os, "name", "nt"),
-            patch.object(ctypes, "WinDLL", create=True, return_value=kernel32),
+            patch.object(native.os, "name", "nt"),
+            patch.object(native.ctypes, "WinDLL", create=True, return_value=kernel32),
         ):
-            self.assertEqual(workspace._host_machine(), "AMD64")
+            self.assertEqual(native.host_machine(), "AMD64")
         info_type = type(kernel32.GetNativeSystemInfo.call_args.args[0]._obj)
         pointer_size = ctypes.sizeof(ctypes.c_void_p)
         expected_offsets = {
@@ -69,35 +70,35 @@ class BazelHostTests(unittest.TestCase):
 
         kernel32.GetNativeSystemInfo.side_effect = get_info
         with (
-            patch.object(workspace.os, "name", "nt"),
-            patch.object(ctypes, "WinDLL", create=True, return_value=kernel32),
-            patch.object(workspace.platform, "machine", side_effect=AssertionError("no fallback")) as machine,
-            patch.object(workspace.platform, "system", side_effect=AssertionError("no fallback")),
-            patch.object(workspace.platform, "uname", side_effect=AssertionError("no fallback")),
+            patch.object(native.os, "name", "nt"),
+            patch.object(native.ctypes, "WinDLL", create=True, return_value=kernel32),
+            patch.object(native.platform, "machine", side_effect=AssertionError("no fallback")) as machine,
+            patch.object(native.platform, "system", side_effect=AssertionError("no fallback")),
+            patch.object(native.platform, "uname", side_effect=AssertionError("no fallback")),
             patch.dict(os.environ, {"PROCESSOR_ARCHITECTURE": "AMD64", "PROCESSOR_ARCHITEW6432": "AMD64"}),
-            self.assertRaisesRegex(workspace.BazelWorkspaceError, "processor architecture: 65535"),
+            self.assertRaisesRegex(native.BazelWorkspaceError, "processor architecture: 65535"),
         ):
-            workspace._host_machine()
+            native.host_machine()
         machine.assert_not_called()
 
     def test_unavailable_windows_isa_api_fails_without_platform_fallback(self):
         with (
-            patch.object(workspace.os, "name", "nt"),
-            patch.object(ctypes, "WinDLL", create=True, side_effect=OSError("unavailable")),
-            patch.object(workspace.platform, "machine", side_effect=AssertionError("no fallback")),
+            patch.object(native.os, "name", "nt"),
+            patch.object(native.ctypes, "WinDLL", create=True, side_effect=OSError("unavailable")),
+            patch.object(native.platform, "machine", side_effect=AssertionError("no fallback")),
             self.assertRaisesRegex(OSError, "unavailable"),
         ):
-            workspace._host_machine()
+            native.host_machine()
 
     def test_posix_machine_preserves_platform_machine_without_loading_windows_api(self):
         for value in ("x86_64", "aarch64", "arm64"):
             with (
                 self.subTest(machine=value),
-                patch.object(workspace.os, "name", "posix"),
-                patch.object(workspace.platform, "machine", return_value=value) as machine,
-                patch.object(ctypes, "WinDLL", create=True, side_effect=AssertionError("not Windows")) as load,
+                patch.object(native.os, "name", "posix"),
+                patch.object(native.platform, "machine", return_value=value) as machine,
+                patch.object(native.ctypes, "WinDLL", create=True, side_effect=AssertionError("not Windows")) as load,
             ):
-                self.assertEqual(workspace._host_machine(), value)
+                self.assertEqual(native.host_machine(), value)
             machine.assert_called_once_with()
             load.assert_not_called()
 
@@ -113,11 +114,11 @@ class BazelHostTests(unittest.TestCase):
         ):
             with (
                 self.subTest(host=host, machine=machine),
-                patch.object(workspace, "native_platform", return_value=host),
-                patch.object(workspace, "_host_machine", return_value=machine),
-                patch.object(workspace.platform, "system", side_effect=AssertionError("no OS inventory")),
-                patch.object(workspace.platform, "machine", side_effect=AssertionError("use bounded ISA")),
-                patch.object(workspace.platform, "uname", side_effect=AssertionError("no OS inventory")),
+                patch.object(native, "native_platform", return_value=host),
+                patch.object(native, "host_machine", return_value=machine),
+                patch.object(native.platform, "system", side_effect=AssertionError("no OS inventory")),
+                patch.object(native.platform, "machine", side_effect=AssertionError("use bounded ISA")),
+                patch.object(native.platform, "uname", side_effect=AssertionError("no OS inventory")),
             ):
                 self.assertEqual(workspace._artifact_key(), expected)
 
@@ -127,12 +128,12 @@ class BazelHostTests(unittest.TestCase):
             with (
                 self.subTest(machine=machine),
                 patch.dict(os.environ, {}, clear=True),
-                patch.object(workspace, "native_platform", return_value="windows"),
-                patch.object(workspace, "_host_machine", return_value=machine),
+                patch.object(native, "native_platform", return_value="windows"),
+                patch.object(native, "host_machine", return_value=machine),
                 patch.object(workspace, "_managed_tool", return_value=executable),
                 patch.object(workspace.urllib.request, "urlretrieve") as download,
                 patch.object(workspace, "_tool_version") as version,
-                self.assertRaisesRegex(workspace.BazelWorkspaceError, f"no pinned Bazel artifact for {key}"),
+                self.assertRaisesRegex(native.BazelWorkspaceError, f"no pinned Bazel artifact for {key}"),
             ):
                 workspace.bazel_executable(setup=True)
             download.assert_not_called()

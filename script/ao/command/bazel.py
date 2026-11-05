@@ -8,6 +8,7 @@ import sys
 from contextlib import AbstractContextManager, nullcontext
 from urllib.parse import urlparse
 
+from ..core import bazel_native as native
 from ..core import bazel_workspace, dependency_policy
 from ..core.buildlock import build_tree_lock
 from ..core.proc import die
@@ -168,15 +169,13 @@ def validate_forwarded_arguments(arguments: list[str]) -> None:
             or name.removeprefix("no") in reserved
             or option.startswith("--@aobus_")
         ):
-            raise bazel_workspace.BazelWorkspaceError(
-                f"Bazel option is managed by ao and cannot be forwarded: {option}"
-            )
+            raise native.BazelWorkspaceError(f"Bazel option is managed by ao and cannot be forwarded: {option}")
         if name in compiler_options:
             if not separator:
                 value = arguments[index + 1] if index + 1 < len(arguments) else ""
                 skip_value = True
             if protected_definition.search(value) or protected_runtime.search(value):
-                raise bazel_workspace.BazelWorkspaceError(
+                raise native.BazelWorkspaceError(
                     f"Bazel option overrides the governed CRT/GSL configuration: {argument}"
                 )
         elif name == "test_arg" and not separator:
@@ -353,7 +352,7 @@ def _hygiene(args: argparse.Namespace) -> int:
     files = format_command.resolve_files(args)
     args._resolved_sources = files
     cpp_files, python_files = tidy.split_existing(files)
-    host = bazel_workspace.native_platform()
+    host = native.native_platform()
     clang_format = None
     if cpp_files and host == "windows":
         # A Bazel tree has no CMake lint tree; provisioning installs the same SDK.
@@ -367,7 +366,7 @@ def _hygiene(args: argparse.Namespace) -> int:
         try:
             python = pythonenv.ensure_environment(PROJECT_ROOT, state, platform_name=host)
         except RuntimeError as exc:
-            raise bazel_workspace.BazelWorkspaceError(f"Aobus native Python tooling bootstrap failed: {exc}") from exc
+            raise native.BazelWorkspaceError(f"Aobus native Python tooling bootstrap failed: {exc}") from exc
 
     def lint(files: list[str], explicit: bool) -> int:
         cpp_files, python_files = tidy.split_existing(files)
@@ -404,17 +403,13 @@ def run(args: argparse.Namespace) -> int:
         validate_forwarded_arguments(args.targets)
         headless = args.bazel_action == "test" and getattr(args, "headless", False)
         if headless:
-            if bazel_workspace.native_platform() != "linux":
-                raise bazel_workspace.BazelWorkspaceError("Bazel test --headless currently supports native Linux only")
+            if native.native_platform() != "linux":
+                raise native.BazelWorkspaceError("Bazel test --headless currently supports native Linux only")
             # Do not let an unlabelled invocation fall through to the default common suite.
             if not _has_explicit_target(args.targets):
-                raise bazel_workspace.BazelWorkspaceError(
-                    "Bazel test --headless requires an explicit target or forwarded label"
-                )
-        if args.bazel_action == "verify" and bazel_workspace.native_platform() not in {"linux", "macos", "windows"}:
-            raise bazel_workspace.BazelWorkspaceError(
-                "Bazel compile-contract verify requires native Linux, macOS or Windows"
-            )
+                raise native.BazelWorkspaceError("Bazel test --headless requires an explicit target or forwarded label")
+        if args.bazel_action == "verify" and native.native_platform() not in {"linux", "macos", "windows"}:
+            raise native.BazelWorkspaceError("Bazel compile-contract verify requires native Linux, macOS or Windows")
         tree = bazel_workspace.workspace_path(args.path, args.config)
         with build_tree_lock(tree):
             tree.mkdir(parents=True, exist_ok=True)
@@ -454,7 +449,7 @@ def run(args: argparse.Namespace) -> int:
                     remote_cache=args.remote_cache,
                 )
     except (
-        bazel_workspace.BazelWorkspaceError,
+        native.BazelWorkspaceError,
         BazelDependencyError,
         dependency_policy.DependencyPolicyError,
         OSError,

@@ -24,6 +24,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from . import bazel_lint_reports, bazel_workspace, tidyengine
+from . import bazel_native as native
 from .buildlock import build_tree_lock
 from .paths import PROJECT_ROOT, absolute_path
 
@@ -389,7 +390,7 @@ def _lint_configuration(
 ) -> dict[str, object]:
     return {
         "schema": 1,
-        "source_root": bazel_workspace._source_root(),
+        "source_root": native.source_root(),
         "check": check,
         "header_filter": header_filter,
         "clang_tidy_args": list(clang_tidy_args),
@@ -418,7 +419,7 @@ def _run_process(argv: Sequence[str], stdout: Path, stderr: Path) -> int:
         result = subprocess.run(
             list(argv),
             cwd=PROJECT_ROOT,
-            env=bazel_workspace.child_environment(),
+            env=native.child_environment(),
             stdout=out,
             stderr=err,
             check=False,
@@ -876,7 +877,7 @@ def _run(args: argparse.Namespace) -> int:
 
     tree = bazel_workspace.workspace_path(tree_path, config)
     executable = bazel_workspace.bazel_executable()
-    bazel_workspace.require_supported_source()
+    native.require_supported_source()
     with build_tree_lock(tree):
         tree.mkdir(parents=True, exist_ok=True)
         lint_configuration = tree / "configuration" / "lint.json"

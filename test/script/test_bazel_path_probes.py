@@ -9,7 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from ao.core import bazel_workspace as workspace
+from ao.core import bazel_native as native
 
 
 class ExecutablePathProbeTest(unittest.TestCase):
@@ -62,8 +62,8 @@ class ExecutablePathProbeTest(unittest.TestCase):
 
     def select(self, name=None, *, nix=False):
         self.probes = set()
-        with patch.object(workspace, "_INPUT_PROBE", lambda path: self.probes.add(str(path))):
-            return workspace._executable(self.query if name is None else name, nix=nix)
+        with native.capture_probes(lambda path: self.probes.add(str(path))):
+            return native.executable(self.query if name is None else name, nix=nix)
 
     def test_prefix_negatives_and_winner_remain_but_after_hit_changes_do_not_matter(self):
         winner = self.fixture(self.selected)
@@ -95,7 +95,7 @@ class ExecutablePathProbeTest(unittest.TestCase):
         )
 
     def test_all_misses_keep_every_negative_candidate(self):
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "unavailable"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "unavailable"):
             self.select()
         self.assertEqual(
             self.probes, self.group(self.before) | self.group(self.selected) | self.group(self.after) | self.cwd_probes
@@ -116,8 +116,8 @@ class ExecutablePathProbeTest(unittest.TestCase):
     def test_unmatched_which_spelling_keeps_all_groups_and_explicit_winner(self):
         winner = self.fixture(self.root / "unknown-layout")
         selector = Mock(return_value=str(winner))
-        # Replace only the workspace namespace, never the shared shutil function.
-        with patch.object(workspace, "shutil", SimpleNamespace(which=selector)):
+        # Replace only the native namespace, never the shared shutil function.
+        with patch.object(native, "shutil", SimpleNamespace(which=selector)):
             self.assertEqual(self.select(), str(winner))
         selector.assert_called_once_with(self.query)
         self.assertEqual(
@@ -159,7 +159,7 @@ class ExecutablePathProbeTest(unittest.TestCase):
         expected = {str(self.before / "clang++"), str(wrapper)}
         self.assertEqual(self.select("clang++"), str(wrapper))
         self.assertEqual(self.probes, expected)
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "unavailable"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "unavailable"):
             self.select("clang++", nix=True)
         self.assertEqual(self.probes, expected)
 
@@ -167,7 +167,7 @@ class ExecutablePathProbeTest(unittest.TestCase):
     def test_empty_path_does_not_select_cwd_but_empty_component_does(self):
         winner = self.fixture(self.cwd)
         os.environ["PATH"] = ""
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "unavailable"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "unavailable"):
             self.select()
 
         os.environ["PATH"] = os.pathsep + str(self.selected)
@@ -189,8 +189,8 @@ class ExecutablePathProbeTest(unittest.TestCase):
                 local_os.get_exec_path = Mock(return_value=local_os.defpath.split(os.pathsep))
                 selector = Mock(return_value=str(winner))
                 with (
-                    patch.object(workspace, "os", local_os),
-                    patch.object(workspace, "shutil", SimpleNamespace(which=selector)),
+                    patch.object(native, "os", local_os),
+                    patch.object(native, "shutil", SimpleNamespace(which=selector)),
                 ):
                     self.assertEqual(self.select(), str(winner))
                 selector.assert_called_once_with(self.query)

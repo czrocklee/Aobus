@@ -11,8 +11,10 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
+from . import bazel_dependencies as dependencies
+from . import bazel_native as native
 from . import dependency_policy
-from .bazel_workspace import BazelWorkspaceError, _probe, _windows_coff_archive_kind
+from .bazel_native import BazelWorkspaceError
 from .paths import PROJECT_ROOT
 from .winui import WINDOWS_SDK_VERSION
 
@@ -483,7 +485,7 @@ def repository_plan(tree: Path, request: dict[str, Any], environment: Mapping[st
                 tools.append(destination)
     source_labels = [add(path) for path in sdk_sources]
     tools.extend(source_labels)
-    library_kinds = [_windows_coff_archive_kind(path, path.name, request["config"]) for path in libraries]
+    library_kinds = [dependencies.coff_archive_kind(path, path.name, request["config"]) for path in libraries]
     library_labels = [{"file": add(path), "kind": kind} for path, kind in zip(libraries, library_kinds, strict=True)]
     runtime_labels = [add(path) for path in runtime]
     # Bound the native input families to the selected VC target/architecture,
@@ -496,7 +498,7 @@ def repository_plan(tree: Path, request: dict[str, Any], environment: Mapping[st
     preprocessor = vc / "bin/Hostx64/x64"
     if preprocessor.resolve() != preprocessor.absolute():
         raise BazelWorkspaceError("WinUI MIDL preprocessor must retain its selected Hostx64/x64 installation")
-    native_inputs.append(_owned(_probe(preprocessor / "cl.exe"), preprocessor))
+    native_inputs.append(_owned(native.probe(preprocessor / "cl.exe"), preprocessor))
     # cl loads its native frontends/CRT from this one host/target directory.
     # Include locale DLLs, but not other tool executables or onecore runtimes.
     for path in sorted(preprocessor.rglob("*")):
@@ -510,7 +512,7 @@ def repository_plan(tree: Path, request: dict[str, Any], environment: Mapping[st
     for directory in (vc / "include", vc / "atlmfc/include", vc.parents[2] / "Auxiliary/VS/include"):
         # Probe optional roots too: later installation must invalidate the
         # repository even when the initial header family was absent.
-        if _probe(directory).is_dir():
+        if native.probe(directory).is_dir():
             if not directory.resolve().is_relative_to(visual_studio.resolve()):
                 raise BazelWorkspaceError(f"WinUI VC include directory escapes its selected installation: {directory}")
             # VC includes extensionless standard-library headers as well.
@@ -547,7 +549,7 @@ def repository_plan(tree: Path, request: dict[str, Any], environment: Mapping[st
     )
     families.append((sdk_directory / "bin" / WINDOWS_SDK_VERSION / "x64", runtime_suffixes))
     for directory, suffixes in families:
-        if _probe(directory).is_dir():
+        if native.probe(directory).is_dir():
             native_inputs.extend(
                 _owned(path, directory)
                 for path in sorted(directory.rglob("*"))

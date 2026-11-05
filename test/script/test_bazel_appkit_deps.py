@@ -7,8 +7,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ao.core import bazel_headers
-from ao.core import bazel_workspace as workspace
+from ao.core import bazel_dependencies as dependencies
+from ao.core import bazel_headers, dependency_policy
+from ao.core import bazel_native as native
+from ao.core import bazel_providers as providers
 
 AR_ARCHIVE = b"!<arch>\n" + b"static SDK fixture; ar magic only, not a linkable SDK payload\n"
 
@@ -30,11 +32,11 @@ class AppKitBoostProcessRefreshTest(unittest.TestCase):
         self.version = "1.91.0"
         self.triplet = "x64-aobus-osx"
         self.prefix = self.root / "installed" / self.triplet
-        policy = workspace._load_policy()
+        policy = providers.load_policy()
         boost_process = next(p for p in policy["packages"]["native"] if p["name"] == "boost_process")
         policy["packages"] = {"native": [boost_process], "test": []}
         self.policy_path = self.root / "policy.json"
-        workspace._write_json(self.policy_path, policy)
+        native.write_json(self.policy_path, policy)
         self.pkgconf = self.root / "resolver/pkgconf"
         self.pkgconf.parent.mkdir(parents=True)
         self.pkgconf.write_bytes(b"fixture resolver; never executed")
@@ -118,25 +120,24 @@ class AppKitBoostProcessRefreshTest(unittest.TestCase):
         )
 
     def review(self, **fields):
-        policy = workspace._json(self.policy_path)
+        policy = native.read_json(self.policy_path)
         policy["library_fallbacks"]["boost_process"]["macos"].update(fields)
-        workspace._write_json(self.policy_path, policy)
+        native.write_json(self.policy_path, policy)
 
     def tool(self, name, **kwargs):
         self.assertEqual(name, "pkgconf")
         return str(self.pkgconf)
 
     def package(self, repository, name):
-        return next(p for p in workspace._json(repository / "manifest.json")["packages"] if p["name"] == name)
+        return next(p for p in repository["manifest"]["packages"] if p["name"] == name)
 
     def refresh(self, config, tree):
         with (
-            patch.object(workspace, "POLICY", self.policy_path),
-            patch.object(workspace, "native_platform", return_value="macos"),
-            patch.object(workspace, "_executable", side_effect=self.tool),
+            patch.object(providers, "POLICY", self.policy_path),
+            patch.object(native, "native_platform", return_value="macos"),
+            patch.object(native, "executable", side_effect=self.tool),
         ):
-            generated = workspace.refresh_dependencies(self.root / tree, config, prefix=self.prefix, group="native")
-        return generated / "native"
+            return dependencies.resolve_dependencies(self.root / tree, config, prefix=self.prefix, group="native")
 
     def foreign(self, name):
         directory = self.root / "foreign"
@@ -149,7 +150,7 @@ class AppKitBoostProcessRefreshTest(unittest.TestCase):
         for config, selected in (("release", self.prefix), ("debug", self.prefix / "debug")):
             with self.subTest(config=config):
                 repository = self.refresh(config, "ok-" + config)
-                manifest = workspace._json(repository / "manifest.json")
+                manifest = repository["manifest"]
                 self.assertEqual(manifest["modules"], {})
                 package = self.package(repository, "boost_process")
                 self.assertEqual(
@@ -185,7 +186,8 @@ class AppKitBoostProcessRefreshTest(unittest.TestCase):
                 # the complete refresh adds the coherent family ports (the
                 # common boost package selects e.g. boost-headers) that own it.
                 self.assertEqual(
-                    {link["source"] for link in workspace._json(repository / "repository.json")["links"]},
+                    {file["source"] for p in repository["packages"] for tree in p["headers"] for file in tree["files"]}
+                    | {library["source"] for p in repository["packages"] for library in p["libraries"]},
                     {str(selected / "lib" / ("lib" + name + ".a")) for name in ("boost_process", "boost_filesystem")}
                     | {
                         str(self.prefix / "include" / relative)
@@ -205,12 +207,12 @@ class AppKitBoostProcessRefreshTest(unittest.TestCase):
     def test_missing_configuration_archives_never_use_the_other_configuration(self):
         (self.prefix / "debug/lib/libboost_process.a").unlink()
         with self.assertRaisesRegex(
-            workspace.BazelWorkspaceError, "missing/ambiguous reviewed macos debug boost_process artifact"
+            native.BazelWorkspaceError, "missing/ambiguous reviewed macos debug boost_process artifact"
         ):
             self.refresh("debug", "missing-debug")
         (self.prefix / "lib/libboost_filesystem.a").unlink()
         with self.assertRaisesRegex(
-            workspace.BazelWorkspaceError, "missing/ambiguous reviewed macos release boost_filesystem artifact"
+            native.BazelWorkspaceError, "missing/ambiguous reviewed macos release boost_filesystem artifact"
         ):
             self.refresh("release", "missing-release")
 
@@ -219,7 +221,7 @@ class AppKitBoostProcessRefreshTest(unittest.TestCase):
             self.skipTest("Windows symlink privileges are outside this fixture contract")
         shutil.rmtree(self.prefix / "debug")
         (self.prefix / "debug").symlink_to(self.prefix, target_is_directory=True)
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "escapes intended configuration"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "escapes intended configuration"):
             self.refresh("debug", "debug-alias")
 
     def test_foreign_header_sources_fail_at_the_interface_and_inventory_boundaries(self):
@@ -228,7 +230,7 @@ class AppKitBoostProcessRefreshTest(unittest.TestCase):
         marker = self.prefix / "include/boost/process/v2/process.hpp"
         marker.unlink()
         marker.symlink_to(self.foreign("process.hpp"))
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "escapes/missing from the selected vcpkg prefix"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "escapes/missing from the selected vcpkg prefix"):
             self.refresh("release", "foreign-marker")
         marker.unlink()
         marker.write_text("// installed Process v2 API\n", encoding="utf-8")
@@ -240,7 +242,7 @@ class AppKitBoostProcessRefreshTest(unittest.TestCase):
 
     def test_missing_process_v2_api_headers_are_rejected(self):
         (self.prefix / "include/boost/process/v2/stdio.hpp").unlink()
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "escapes/missing from the selected vcpkg prefix"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "escapes/missing from the selected vcpkg prefix"):
             self.refresh("release", "missing-marker")
 
     def test_process_and_filesystem_ports_must_stay_version_coherent(self):
@@ -250,13 +252,13 @@ class AppKitBoostProcessRefreshTest(unittest.TestCase):
             info / f"boost-filesystem_1.90.0_{self.triplet}.list"
         )
         with self.assertRaisesRegex(
-            workspace.BazelWorkspaceError, "Boost Process ports have inconsistent upstream versions"
+            native.BazelWorkspaceError, "Boost Process ports have inconsistent upstream versions"
         ):
             self.refresh("release", "port-skew")
 
     def test_installed_header_version_must_match_the_selected_provider(self):
         (self.prefix / "include/boost/version.hpp").write_text("#define BOOST_VERSION 109000\n", encoding="utf-8")
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "header version mismatch"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "header version mismatch"):
             self.refresh("release", "header-skew")
 
     def test_a_std_filesystem_compiled_process_header_is_rejected(self):
@@ -267,16 +269,14 @@ class AppKitBoostProcessRefreshTest(unittest.TestCase):
             ),
             encoding="utf-8",
         )
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "compiled v2 Boost.Filesystem API"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "compiled v2 Boost.Filesystem API"):
             self.refresh("release", "std-fs")
 
     def test_discovered_process_metadata_is_rejected_not_consumed_as_ambient(self):
         (self.prefix / "lib/pkgconfig/boost_process.pc").write_text(
             f"Name: boost_process\nVersion: {self.version}\n", encoding="utf-8"
         )
-        with self.assertRaisesRegex(
-            workspace.BazelWorkspaceError, "unreviewed macOS Boost Process pkg-config metadata"
-        ):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "unreviewed macOS Boost Process pkg-config metadata"):
             self.refresh("release", "ambient-pc")
 
     def test_reviewed_dynamic_or_filesystem_version_macros_are_rejected(self):
@@ -303,13 +303,13 @@ class AppKitBoostProcessRefreshTest(unittest.TestCase):
         ):
             with self.subTest(defines=defines):
                 self.review(defines=defines)
-                with self.assertRaisesRegex(workspace.BazelWorkspaceError, "consumer definitions must remain static"):
+                with self.assertRaisesRegex(native.BazelWorkspaceError, "consumer definitions must remain static"):
                     self.refresh("release", "macro-" + str(len(defines)))
 
     def test_non_archive_artifacts_and_dylib_aliases_fail_static_provenance(self):
         archive = self.prefix / "lib/libboost_process.a"
         archive.write_bytes(b"shared SDK fixture; not an ar archive\n")
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "is not a static ar archive"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "is not a static ar archive"):
             self.refresh("release", "bad-magic")
         archive.write_bytes(AR_ARCHIVE)
         if os.name == "nt":
@@ -318,31 +318,31 @@ class AppKitBoostProcessRefreshTest(unittest.TestCase):
         dylib.write_bytes(b"shared SDK fixture; not an ar archive\n")
         archive.unlink()
         archive.symlink_to(dylib)
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "is not a static ar archive"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "is not a static ar archive"):
             self.refresh("release", "dylib-alias")
 
     def test_the_two_archive_closure_is_pinned_by_the_reviewed_contract(self):
         self.review(libraries=["boost_filesystem", "boost_process"])
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "reviewed two-archive static interface"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "reviewed two-archive static interface"):
             self.refresh("release", "closure")
 
     def test_an_unaccepted_release_fails_on_the_shared_contract_not_a_bazel_pin(self):
         self.install("1.93.0")
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "does not satisfy dependency-contract.json"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "does not satisfy dependency-contract.json"):
             self.refresh("release", "contract")
 
     def test_a_coherent_future_release_passes_the_unchanged_structural_interface(self):
         self.install("1.93.0")
-        read_json = workspace.dependency_policy.read_json
-        contract = read_json(workspace.dependency_policy.CONTRACT_FILE)
+        read_json = dependency_policy.read_json
+        contract = read_json(dependency_policy.CONTRACT_FILE)
         contract["dependencies"]["boost"]["policy"] = {"kind": "exact", "version": "1.93.0"}
         contract["exceptions"] = [item for item in contract["exceptions"] if item["dependency"] != "boost"]
 
         def policy_input(path):
-            return contract if path == workspace.dependency_policy.CONTRACT_FILE else read_json(path)
+            return contract if path == dependency_policy.CONTRACT_FILE else read_json(path)
 
         # Change external input only; the loader, schema and version policy stay real.
-        with patch.object(workspace.dependency_policy, "read_json", side_effect=policy_input):
+        with patch.object(dependency_policy, "read_json", side_effect=policy_input):
             repository = self.refresh("release", "future")
         package = self.package(repository, "boost_process")
         self.assertEqual(

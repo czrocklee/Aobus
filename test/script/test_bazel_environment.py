@@ -11,7 +11,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from ao.core import bazel_environment as bootstrap
-from ao.core import bazel_workspace as workspace
+from ao.core import bazel_native as native
+from ao.core import builddir
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -190,7 +191,13 @@ class EnvironmentDiscoveryTests(unittest.TestCase):
         self.assertNotIn("AOBUS_LINT_CLANG", result["environment"])
 
     def test_omitted_mapping_filters_the_prepared_child_environment(self):
-        with patch.dict(os.environ, {**self.environment, "SECRET_TOKEN": "private"}, clear=True):
+        # Pin the fixture host exactly like discover(): the omitted mapping is
+        # the subject, and an unpinned native Windows host would run real VS
+        # discovery against machine state instead of the fixture environment.
+        with (
+            patch.dict(os.environ, {**self.environment, "SECRET_TOKEN": "private"}, clear=True),
+            patch.object(bootstrap.sys, "platform", "linux"),
+        ):
             result = bootstrap.discover_environment(output=self.output)
         self.assertEqual(result["environment"]["AOBUS_NIX_DEPENDENCY_REPORT"], str(self.report))
         self.assertNotIn("SECRET_TOKEN", result["environment"])
@@ -424,22 +431,18 @@ class EnvironmentDiscoveryTests(unittest.TestCase):
 
 class NativePlatformDiscoveryTests(unittest.TestCase):
     def test_native_platform_does_not_select_portal_build_trees_or_checkout_state(self):
-        with patch.object(
-            workspace.builddir, "platform_profile", side_effect=AssertionError("portal profile selection")
-        ):
+        with patch.object(builddir, "platform_profile", side_effect=AssertionError("portal profile selection")):
             for platform, expected in (("linux", "linux"), ("darwin", "macos"), ("win32", "windows")):
-                with self.subTest(platform=platform), patch.object(workspace.sys, "platform", platform):
-                    self.assertEqual(workspace.native_platform(), expected)
+                with self.subTest(platform=platform), patch.object(native.sys, "platform", platform):
+                    self.assertEqual(native.native_platform(), expected)
 
     def test_unsupported_native_platform_fails_without_portal_profile_fallback(self):
         with (
-            patch.object(
-                workspace.builddir, "platform_profile", side_effect=AssertionError("portal profile selection")
-            ),
-            patch.object(workspace.sys, "platform", "unsupported-fixture"),
+            patch.object(builddir, "platform_profile", side_effect=AssertionError("portal profile selection")),
+            patch.object(native.sys, "platform", "unsupported-fixture"),
         ):
-            with self.assertRaisesRegex(workspace.BazelWorkspaceError, "unsupported native Bazel host"):
-                workspace.native_platform()
+            with self.assertRaisesRegex(native.BazelWorkspaceError, "unsupported native Bazel host"):
+                native.native_platform()
 
 
 if __name__ == "__main__":

@@ -12,6 +12,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from ao.core import bazel_contract, bazel_workspace
+from ao.core import bazel_native as native
 
 
 def fake_compiler(root):
@@ -126,9 +127,9 @@ class BazelContractRunnerTest(unittest.TestCase):
         self.stack = contextlib.ExitStack()
         self.addCleanup(self.stack.close)
         self.stack.enter_context(patch.object(bazel_contract, "PROJECT_ROOT", self.root))
-        self.stack.enter_context(patch.object(bazel_workspace, "native_platform", return_value="linux"))
+        self.stack.enter_context(patch.object(native, "native_platform", return_value="linux"))
         self.policy_probe = self.stack.enter_context(
-            patch.object(bazel_workspace, "linux_hardening_environment", return_value=self.policy)
+            patch.object(bazel_contract, "_expected_hardening_environment", return_value=self.policy)
         )
         self.stack.enter_context(patch.object(bazel_workspace, "DEFAULT_TEST_TARGETS", self.targets, create=True))
 
@@ -312,7 +313,7 @@ class BazelContractRunnerTest(unittest.TestCase):
         (self.root / "spa.json").unlink()
         self.compiler.unlink()
         self.policy_probe.side_effect = AssertionError("macOS must not query Nix hardening")
-        with patch.object(bazel_workspace, "native_platform", return_value="macos"):
+        with patch.object(native, "native_platform", return_value="macos"):
             self.assertEqual(self.invoke(), 0)
             passed = self.receipt()
             self.assertEqual((passed["status"], passed["exit"]), ("passed", 0))
@@ -414,7 +415,7 @@ class BazelContractRunnerTest(unittest.TestCase):
         path.write_text(json.dumps(document), encoding="utf-8")
         self.compiler.unlink()
         self.policy_probe.side_effect = AssertionError("Windows must not query Nix hardening")
-        with patch.object(bazel_workspace, "native_platform", return_value="windows"):
+        with patch.object(native, "native_platform", return_value="windows"):
             self.assertEqual(self.invoke(), 0)
             passed = self.receipt()
             self.assertEqual((passed["status"], passed["exit"]), ("passed", 0))
@@ -517,7 +518,7 @@ class BazelContractRunnerTest(unittest.TestCase):
         environment = {"LC_ALL": "C.UTF-8", "PYTHONNOUSERSITE": "true", "SELECTION_FIXTURE": "explicit"}
         with (
             patch.dict(os.environ, {"AMBIENT_SELECTION_SENTINEL": "must-not-leak"}),
-            patch.object(bazel_workspace, "child_environment", return_value=environment),
+            patch.object(native, "child_environment", return_value=environment),
         ):
             self.assertEqual(self.invoke(), 0)
         receipt = self.receipt()
@@ -613,7 +614,7 @@ class BazelContractRunnerTest(unittest.TestCase):
         for policy in ({}, None):
             with self.subTest(policy=policy):
                 if policy is None:
-                    self.policy_probe.side_effect = bazel_workspace.BazelWorkspaceError("missing policy")
+                    self.policy_probe.side_effect = native.BazelWorkspaceError("missing policy")
                 else:
                     self.policy_probe.return_value = policy
                 self.assertEqual(self.invoke(), 1)
@@ -623,11 +624,11 @@ class BazelContractRunnerTest(unittest.TestCase):
     def test_source_layout_refusal_keeps_receipt_without_spawning(self):
         message = "Windows Bazel commands require a local source checkout"
         with (
-            patch.object(bazel_workspace, "native_platform", return_value="windows"),
+            patch.object(native, "native_platform", return_value="windows"),
             patch.object(
-                bazel_workspace,
+                native,
                 "require_supported_source",
-                side_effect=bazel_workspace.BazelWorkspaceError(message),
+                side_effect=native.BazelWorkspaceError(message),
             ) as validate,
         ):
             self.assertEqual(self.invoke(), 1)
@@ -975,7 +976,7 @@ class BazelContractRunnerTest(unittest.TestCase):
         self.assertIn("no declared SPA", spa["errors"][0])
 
     def test_unsupported_host_and_invalid_configuration_do_not_spawn_or_claim_analysis(self):
-        with patch.object(bazel_workspace, "native_platform", return_value="unsupported"):
+        with patch.object(native, "native_platform", return_value="unsupported"):
             self.assertEqual(self.invoke(), 1)
         self.assertEqual(self.invoke("unsupported"), 1)
         self.assertEqual(self.invoke(jobs=0), 1)

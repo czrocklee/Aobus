@@ -17,6 +17,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from ao.core import bazel_native as native
+from ao.core import bazel_providers as providers
 from ao.core import bazel_provision as provision
 from ao.core import bazel_workspace as workspace
 from ao.core import dependency_policy, windows_llvm_sdk
@@ -26,7 +28,7 @@ DIGEST = hashlib.sha256(provision.NUGET_LOCK.read_bytes()).hexdigest()
 
 
 def _preset(name):
-    presets = json.loads((workspace.PROJECT_ROOT / "CMakePresets.json").read_text(encoding="utf-8"))
+    presets = json.loads((native.PROJECT_ROOT / "CMakePresets.json").read_text(encoding="utf-8"))
     return next(preset for preset in presets["configurePresets"] if preset["name"] == name)["cacheVariables"]
 
 
@@ -65,8 +67,7 @@ class VcpkgProvisionTest(unittest.TestCase):
         environment = {"VCPKG_ROOT": str(self.vcpkg_root), "AOBUS_VCPKG_TRIPLET": "x64-aobus-osx"}
         with (
             patch.dict(os.environ, environment),
-            patch.object(workspace, "native_platform", return_value=host),
-            patch.object(provision, "native_platform", return_value=host),
+            patch.object(native, "native_platform", return_value=host),
             patch.object(provision.proc, "run", side_effect=run),
             patch.object(provision, "restore_nuget", return_value=self.root / "nuget") as restore,
             patch.object(provision, "install_llvm_sdk", return_value=self.root / "llvm") as llvm,
@@ -76,7 +77,7 @@ class VcpkgProvisionTest(unittest.TestCase):
         return restore
 
     def overlays(self, preset):
-        source = str(workspace.PROJECT_ROOT)
+        source = str(native.PROJECT_ROOT)
         variables = _preset(preset)
         return [
             f"--overlay-{kind}={os.path.normpath(variables[name].replace('${sourceDir}', source))}"
@@ -90,7 +91,7 @@ class VcpkgProvisionTest(unittest.TestCase):
         self.assertEqual(argv[argv.index("--triplet") + 1], "x64-windows-static-md")
         self.assertIn("--host-triplet=x64-windows", argv)
         self.assertIn(f"--x-install-root={self.tree / 'vcpkg_installed'}", argv)
-        self.assertIn(f"--x-manifest-root={workspace.PROJECT_ROOT}", argv)
+        self.assertIn(f"--x-manifest-root={native.PROJECT_ROOT}", argv)
         self.assertEqual([arg for arg in argv if arg.startswith("--overlay-")], self.overlays("windows-base"))
         self.assertEqual(log, self.tree / "vcpkg-install.log")
         restore.assert_called_once_with(self.tree)
@@ -102,26 +103,26 @@ class VcpkgProvisionTest(unittest.TestCase):
         self.assertIn("--host-triplet=x64-aobus-osx", argv)
         self.assertEqual([arg for arg in argv if arg.startswith("--overlay-")], self.overlays("macos-base"))
         with (
-            patch.object(workspace, "native_platform", return_value="macos"),
+            patch.object(native, "native_platform", return_value="macos"),
             patch.dict(os.environ, {"AOBUS_VCPKG_TRIPLET": "x64-aobus-osx"}),
         ):
-            selected = workspace.vcpkg_prefix(None, self.tree)
+            selected = providers.vcpkg_prefix(None, self.tree)
         self.assertEqual(selected, (self.tree / "vcpkg_installed/x64-aobus-osx").resolve())
         restore.assert_not_called()
 
     def test_failed_install_names_its_log_and_leaves_no_provider(self):
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "vcpkg-install.log"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "vcpkg-install.log"):
             self.install("macos", ("x64-aobus-osx",), status=1)
         with (
-            patch.object(workspace, "native_platform", return_value="macos"),
+            patch.object(native, "native_platform", return_value="macos"),
             patch.dict(os.environ, {"AOBUS_VCPKG_TRIPLET": "x64-aobus-osx"}),
-            self.assertRaisesRegex(workspace.BazelWorkspaceError, "run `ao bazel provision`"),
+            self.assertRaisesRegex(native.BazelWorkspaceError, "run `ao bazel provision`"),
         ):
-            workspace.vcpkg_prefix(None, self.tree)
+            providers.vcpkg_prefix(None, self.tree)
 
     def test_linux_needs_no_vcpkg_or_tree(self):
         with (
-            patch.object(provision, "native_platform", return_value="linux"),
+            patch.object(native, "native_platform", return_value="linux"),
             patch.object(provision.proc, "run", side_effect=AssertionError("no provisioning process")),
         ):
             provision.provision(self.tree)
@@ -159,7 +160,7 @@ class NugetRestoreTest(unittest.TestCase):
 
         with (
             patch.dict(os.environ, self.environment, clear=True),
-            patch.object(provision, "native_platform", return_value="windows"),
+            patch.object(native, "native_platform", return_value="windows"),
             patch.object(provision.subprocess, "run", side_effect=self.fetch),
             patch.object(provision.proc, "run", side_effect=install),
         ):
@@ -229,7 +230,7 @@ class NugetRestoreTest(unittest.TestCase):
         self.assertEqual(marker.read_bytes(), f"{DIGEST}\n".encode())
 
     def test_partial_restore_fails_unmarked_and_is_never_selected(self):
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "exact Windows App SDK package closure"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "exact Windows App SDK package closure"):
             self.restore(restored=tuple(LOCKED)[1:])
         self.assertFalse((self.managed.parent / ".aobus-nuget-complete").exists())
         self.assertIsNone(provision.restored_nuget_packages(self.environment))
@@ -316,7 +317,7 @@ class LlvmSdkProvisionTest(unittest.TestCase):
 
     def test_checksum_mismatch_discards_the_download_and_leaves_no_sdk(self):
         self.write_manifest("0" * 64)
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "SHA-256"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "SHA-256"):
             self.install()
         self.assertEqual(list(self.download.parent.iterdir()), [])
         self.assertFalse(self.sdk.exists())
@@ -372,7 +373,7 @@ class LlvmSdkProvisionTest(unittest.TestCase):
     def test_archive_without_one_top_level_directory_installs_nothing(self):
         archive = self.archive_of({"first": self.REQUIRED, "second": ("README",)}, name="split.tar.xz")
         self.write_manifest(hashlib.sha256(archive.read_bytes()).hexdigest())
-        with self.assertRaisesRegex(workspace.BazelWorkspaceError, "one top-level directory"):
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "one top-level directory"):
             self.install(served=archive)
         self.assertEqual(list(self.sdk.parent.iterdir()), [])
 
@@ -402,8 +403,8 @@ class PreparedNugetSelectionTest(unittest.TestCase):
     def prepared_rc(self, environment):
         with (
             patch.dict(os.environ, {"AOBUS_STATE_ROOT": str(self.root / "state"), **environment}, clear=True),
-            patch.object(workspace, "native_platform", return_value="windows"),
-            patch.object(workspace, "vcpkg_prefix", return_value=self.root / "provider"),
+            patch.object(native, "native_platform", return_value="windows"),
+            patch.object(providers, "vcpkg_prefix", return_value=self.root / "provider"),
         ):
             prepared = workspace.prepare_workspace(self.root / "build", "debug")
         return (prepared / "aobus.bazelrc").read_text(encoding="utf-8")

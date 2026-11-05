@@ -5,7 +5,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from ao.core import bazel_provision, bazel_winui, bazel_workspace
+from ao.core import bazel_native as native
+from ao.core import bazel_provision, bazel_winui
 
 
 class SelectedPackages(Exception):
@@ -34,7 +35,7 @@ class ReadyWinUiCacheTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="aobus-explicit-winui-") as temporary:
             root = Path(temporary)
             with mock.patch.object(bazel_provision, "restored_nuget_packages") as ready:
-                with self.assertRaisesRegex(bazel_workspace.BazelWorkspaceError, "restored NuGet cache"):
+                with self.assertRaisesRegex(native.BazelWorkspaceError, "restored NuGet cache"):
                     bazel_winui.repository_plan(
                         root / "output", {"host": "windows"}, {"AOBUS_NUGET_PACKAGES_DIR": str(root / "missing")}
                     )

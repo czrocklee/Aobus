@@ -349,25 +349,22 @@ def discover_environment(
         with _selected_environment(selected):
             sys.path.insert(0, str(PROJECT_ROOT / "script"))
             try:
-                from ao.core import bazel_workspace as workspace
+                from ao.core import bazel_native as native
+                from ao.core import bazel_providers as providers
             finally:
                 sys.path.pop(0)
-            workspace.require_supported_source()
-            previous_probe = workspace._INPUT_PROBE
-            workspace._INPUT_PROBE = inventory.probe
-            try:
+            native.require_supported_source()
+            with native.capture_probes(inventory.probe):
                 explicit = selected.get("AOBUS_BAZEL_VCPKG_PREFIX", prepared.get("prefix"))
                 prefix = _absolute(explicit, "AOBUS_BAZEL_VCPKG_PREFIX or legacy request prefix")
                 prefix = inventory.require(prefix, directory=True).resolve(strict=True)
                 inventory.require(prefix / "include", directory=True)
                 inventory.require(prefix.parent / "vcpkg/status")
-                prefix = workspace.vcpkg_prefix(str(prefix), None)
-                if prefix.name != workspace.vcpkg_triplets(host=host)[0]:
+                prefix = providers.vcpkg_prefix(str(prefix), None)
+                if prefix.name != providers.vcpkg_triplets(host=host)[0]:
                     raise EnvironmentError("selected vcpkg prefix does not match the native target triplet")
                 if host == "macos":
-                    inventory.require(Path(workspace._executable("pkgconf")))
-            finally:
-                workspace._INPUT_PROBE = previous_probe
+                    inventory.require(Path(native.executable("pkgconf")))
     for module in tuple(sys.modules.values()):
         filename = getattr(module, "__file__", None)
         if isinstance(filename, str):

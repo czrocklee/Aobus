@@ -14,6 +14,7 @@ from ao.__main__ import make_parser
 from ao.command import bazel as bazel_command
 from ao.command import tidy as tidy_command
 from ao.core import bazel_lint, bazel_lint_reports
+from ao.core import bazel_native as native
 
 QUERY_XML = """<?xml version="1.1" encoding="UTF-8" standalone="no"?>
 <query version="2">
@@ -416,7 +417,7 @@ class LintConfigurationTest(unittest.TestCase):
     def test_fixed_configuration_has_no_scope_and_is_rewritten_only_on_content_change(self):
         with tempfile.TemporaryDirectory(prefix="ao-lint-config-") as temporary:
             path = Path(temporary) / "configuration" / "lint.json"
-            with patch.object(bazel_lint.bazel_workspace, "_source_root", return_value="/checkout"):
+            with patch.object(native, "source_root", return_value="/checkout"):
                 configuration = bazel_lint._lint_configuration("aobus-example", "^include", ["--quiet"])
             self.assertEqual(
                 configuration,
@@ -493,8 +494,8 @@ class RunOrchestrationTest(unittest.TestCase):
             patch.object(tidy_command, "PROJECT_ROOT", self.checkout),
             patch.object(bazel_lint.bazel_workspace, "workspace_path", side_effect=lambda path, config: self.tree),
             patch.object(bazel_lint.bazel_workspace, "bazel_executable", return_value=Path("bazel")),
-            patch.object(bazel_lint.bazel_workspace, "require_supported_source"),
-            patch.object(bazel_lint.bazel_workspace, "_source_root", return_value=str(self.checkout)),
+            patch.object(native, "require_supported_source"),
+            patch.object(native, "source_root", return_value=str(self.checkout)),
             patch.object(bazel_lint.bazel_workspace, "prepare_workspace", side_effect=self.fake_prepare),
             patch.object(bazel_lint.bazel_workspace, "execute", side_effect=self.fake_execute),
             patch.object(bazel_lint.bazel_lint_reports, "read_reports", side_effect=self.fake_read_reports),
