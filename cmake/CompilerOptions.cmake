@@ -28,6 +28,14 @@ endif()
 include(cmake/SharedWorkspaceCache.cmake)
 include(cmake/SharedWorkspaceCacheWindows.cmake)
 
+# Ordinary Linux Debug must not inherit the Nix wrapper's implicit fortify O2.
+# Sanitizer builds retain their existing optimization and hardening policy.
+if(LINUX AND NOT AOBUS_ENABLE_ASAN AND NOT AOBUS_ENABLE_TSAN)
+  add_compile_options($<$<CONFIG:Debug>:-O0>)
+endif()
+include(cmake/NixHardening.cmake)
+aobus_configure_nix_hardening()
+
 if(MSVC)
   # CMake has no MSVC mapping for C++26 yet; 23 selects /std:c++latest (or the
   # closest supported flag), so don't also pass an explicit /std: option.

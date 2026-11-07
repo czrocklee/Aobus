@@ -45,4 +45,4 @@ add_executable(aobus
     main.cpp
 )
 aobus_enable_windows_utf8_manifest(aobus)
-target_link_libraries(aobus PRIVATE aobus-cli-lib mimalloc)
+target_link_libraries(aobus PRIVATE aobus-cli-lib ${AOBUS_MIMALLOC_TARGET})

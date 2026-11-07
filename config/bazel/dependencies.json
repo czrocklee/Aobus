@@ -1,0 +1,125 @@
+{
+  "schema": 3,
+  "packages": {
+    "native": [
+      {"name": "icu", "modules": ["icu-uc", "icu-i18n"], "nix": "icu", "vcpkg": ["icu"]},
+      {"name": "icu_uc", "modules": ["icu-uc"], "nix": "icu", "vcpkg": ["icu"]},
+      {"name": "cli11", "modules": ["CLI11"], "nix": "cli11", "vcpkg": ["cli11"], "header": "CLI/Version.hpp"},
+      {"name": "spdlog", "modules": ["spdlog"], "nix": "spdlog", "vcpkg": ["spdlog"]},
+      {"name": "ftxui", "modules": ["ftxui"], "nix": "ftxui", "vcpkg": ["ftxui"]},
+      {"name": "mimalloc", "modules": ["mimalloc"], "nix": "mimalloc", "vcpkg": ["mimalloc"]},
+      {"name": "stb", "modules": [], "nix": "stb", "vcpkg": ["stb"], "header": "stb_image_resize2.h"},
+      {"name": "date_tz", "modules": ["date-tz"], "nix": "date", "vcpkg": ["date"], "platforms": ["macos"]},
+      {"name": "giomm", "modules": ["giomm-2.68", "glibmm-2.68", "gio-unix-2.0"], "nix": "glibmm", "nix_inputs": ["glib", "libsigcxx"], "vcpkg": [], "platforms": ["linux"]},
+      {"name": "gtkmm", "modules": ["gtkmm-4.0", "cairo-ft", "cairo-fc"], "nix": "gtkmm", "nix_inputs": ["gtk4", "glibmm", "glib", "libsigcxx", "cairo", "cairomm", "pango", "pangomm", "gdk-pixbuf", "graphene", "harfbuzz", "freetype", "fontconfig", "vulkan-headers", "vulkan-loader"], "vcpkg": [], "platforms": ["linux"]},
+      {"name": "boost_process", "modules": ["boost_process"], "nix": "boost", "vcpkg": ["boost-process", "boost-filesystem"], "platforms": ["linux", "macos", "windows"]},
+      {"name": "lmdb", "modules": ["lmdb"], "nix": "lmdb", "vcpkg": ["lmdb"]},
+      {"name": "rapidyaml", "modules": ["ryml"], "nix": "rapidyaml", "vcpkg": ["ryml", "c4core"]},
+      {"name": "boost", "modules": [], "nix": "boost", "vcpkg": ["boost-headers"], "header": "boost/version.hpp"},
+      {"name": "gsl_lite", "modules": ["gsl-lite"], "nix": "gsl-lite", "vcpkg": ["gsl-lite"], "header": "gsl-lite/gsl-lite.hpp"},
+      {"name": "fast_float", "modules": ["fast_float"], "nix": "fast-float", "vcpkg": ["fast-float"], "header": "fast_float/fast_float.h"},
+      {"name": "xxhash", "modules": ["libxxhash"], "nix": "xxhash", "vcpkg": ["xxhash"]},
+      {"name": "lexy", "modules": [], "nix": "lexy", "vcpkg": ["foonathan-lexy"], "header": "lexy/_detail/config.hpp"},
+      {"name": "flac", "modules": ["flac"], "nix": "flac", "vcpkg": ["libflac", "libogg"]},
+      {"name": "alac", "modules": ["alac"], "nix": "alac", "vcpkg": ["alac"]},
+      {"name": "fdk_aac", "modules": ["fdk-aac"], "nix": "fdk-aac", "vcpkg": ["fdk-aac"]},
+      {"name": "mpg123", "modules": ["libmpg123"], "nix": "mpg123", "vcpkg": ["mpg123"]},
+      {"name": "opus", "modules": ["opus"], "nix": "opus", "vcpkg": ["opus"]},
+      {"name": "alsa", "modules": ["alsa"], "nix": "alsa-lib", "vcpkg": [], "platforms": ["linux"]},
+      {"name": "pipewire", "modules": ["libpipewire-0.3"], "nix": "pipewire", "vcpkg": [], "platforms": ["linux"]},
+      {"name": "udev", "modules": ["libudev"], "nix": "udev", "vcpkg": [], "platforms": ["linux"]}
+    ],
+    "test": [
+      {"name": "catch2", "modules": ["catch2-with-main"], "nix": "catch2", "vcpkg": ["catch2"]},
+      {"name": "fakeit", "modules": ["fakeit"], "nix": "fakeit", "vcpkg": ["fakeit"], "header": "catch/fakeit.hpp"},
+      {"name": "xtest", "modules": ["xtst", "x11", "xi"], "nix": "libXtst", "nix_inputs": ["libX11", "libXi", "xorgproto"], "vcpkg": [], "platforms": ["linux"]}
+    ]
+  },
+  "library_fallbacks": {
+    "cli11": {
+      "windows": { "linkage": "static", "libraries": ["CLI11"], "defines": ["CLI11_COMPILE"], "linkopts": ["Shell32.lib"]},
+      "macos": { "linkage": "static", "libraries": ["CLI11"], "defines": ["CLI11_COMPILE"]}
+    },
+    "spdlog": {
+      "windows": { "linkage": "static", "libraries": ["spdlog"], "defines": ["SPDLOG_COMPILED_LIB", "SPDLOG_USE_STD_FORMAT"]},
+      "macos": { "linkage": "static", "libraries": ["spdlog"], "defines": ["SPDLOG_COMPILED_LIB", "SPDLOG_USE_STD_FORMAT"]}
+    },
+    "ftxui": {
+      "windows": { "linkage": "static", "libraries": ["ftxui-component", "ftxui-dom", "ftxui-screen"]},
+      "macos": { "linkage": "static", "libraries": ["ftxui-component", "ftxui-dom", "ftxui-screen"]}
+    },
+    "mimalloc": {
+      "windows": { "linkage": "static", "libraries": ["mimalloc"], "linkopts": ["psapi.lib", "shell32.lib", "user32.lib", "advapi32.lib", "bcrypt.lib"]},
+      "macos": { "linkage": "static", "libraries": ["mimalloc"]}
+    },
+    "date_tz": {
+      "macos": { "linkage": "static", "libraries": ["date-tz"], "defines": ["ONLY_C_LOCALE=0", "HAS_STRING_VIEW=1", "USE_OS_TZDB=1"], "linkopts": ["-pthread"]}
+    },
+    "boost_process": {
+      "macos": { "linkage": "static", "libraries": ["boost_process", "boost_filesystem"], "defines": ["BOOST_PROCESS_STATIC_LINK", "BOOST_PROCESS_NO_LIB", "BOOST_FILESYSTEM_STATIC_LINK", "BOOST_FILESYSTEM_NO_LIB"]},
+      "windows": { "linkage": "static", "libraries": ["boost_process", "boost_date_time", "boost_container", "boost_context", "boost_filesystem", "boost_atomic"], "defines": ["BOOST_PROCESS_STATIC_LINK", "BOOST_PROCESS_NO_LIB", "BOOST_DATE_TIME_NO_LIB", "BOOST_CONTAINER_NO_LIB", "BOOST_CONTEXT_NO_LIB", "BOOST_FILESYSTEM_STATIC_LINK", "BOOST_FILESYSTEM_NO_LIB", "BOOST_ATOMIC_STATIC_LINK", "BOOST_ATOMIC_NO_LIB"], "linkopts": ["Synchronization.lib", "ntdll.lib", "shell32.lib", "advapi32.lib", "user32.lib", "ws2_32.lib", "mswsock.lib", "uuid.lib"]}
+    },
+    "lmdb": {
+      "windows": {"linkage": "static", "libraries": ["lmdb"]},
+      "macos": {"linkage": "static", "libraries": ["lmdb"]}
+    },
+    "rapidyaml": {
+      "linux": {"linkage": "static", "libraries": ["ryml"]},
+      "windows": {"linkage": "static", "libraries": ["ryml", "c4core"], "defines": ["C4_CPP=17"]},
+      "macos": {"linkage": "static", "libraries": ["ryml", "c4core"], "defines": ["C4_CPP=17"]}
+    },
+    "xxhash": {
+      "windows": {"linkage": "static", "libraries": ["xxhash"]},
+      "macos": {"linkage": "static", "libraries": ["xxhash"]}
+    },
+    "alac": {
+      "windows": { "linkage": "static", "libraries": ["libalac"]},
+      "macos": { "linkage": "static", "libraries": ["libalac"]}
+    }
+  },
+  "header_fallbacks": {
+    "boost": {"windows": {"defines": ["BOOST_ALL_NO_LIB"]}},
+    "fast_float": {"windows": {"copts": ["/permissive-"]}},
+    "fakeit": {
+      "linux": {"include": "catch"},
+      "windows": { "header": "fakeit/single_header/catch/fakeit.hpp", "include": "fakeit/single_header/catch"},
+      "macos": { "header": "fakeit/single_header/catch/fakeit.hpp", "include": "fakeit/single_header/catch"}
+    }
+  },
+  "windows_audio": {
+    "flac": {"libraries": ["FLAC", "ogg"]},
+    "fdk_aac": {"libraries": ["fdk-aac"]},
+    "mpg123": {"libraries": ["mpg123"], "system_libraries": ["shlwapi"]},
+    "opus": {"libraries": ["opus"]}
+  },
+  "windows_icu": {
+    "libraries": {
+      "icu": ["icuin{debug_suffix}", "icuuc{debug_suffix}", "icudt{debug_suffix}"],
+      "icu_uc": ["icuuc{debug_suffix}", "icudt{debug_suffix}"]
+    },
+    "system_libraries": ["kernel32", "user32", "gdi32", "winspool", "shell32", "ole32", "oleaut32", "comdlg32", "advapi32"]
+  },
+  "catch2_fallback": {
+    "windows": ["manual-link/Catch2Main{debug_suffix}.lib", "Catch2{debug_suffix}.lib"],
+    "macos": ["manual-link/libCatch2Main{debug_suffix}.a", "libCatch2{debug_suffix}.a"]
+  },
+  "windows_catch2_remove": ["-pthread"],
+  "windows_spdlog_threads_remove": {
+    "linkopts": ["-pthread"],
+    "reason": "The MSVC native Threads target has no GNU -pthread option. Remove only the reviewed metadata token; std::thread uses the selected CRT."
+  },
+  "macos_mimalloc_runtime_remove": {
+    "libraries": ["pthread", "c++"],
+    "reason": "The Apple clang++ driver supplies libc++ and libSystem supplies pthread. Remove only these trailing redundant metadata libraries."
+  },
+  "macos_audio_runtime_remove": {
+    "flac": {"libraries": ["FLAC", "m", "ogg"], "implicit": ["m"]},
+    "fdk_aac": {"libraries": ["fdk-aac", "c++"], "implicit": ["c++"]},
+    "mpg123": {"libraries": ["mpg123", "m"], "implicit": ["m"]},
+    "opus": {"libraries": ["opus", "m"], "implicit": ["m"]}
+  },
+  "macos_icu_runtime_remove": {
+    "libraries": ["c++", "pthread", "m"],
+    "reason": "The selected Apple-targeting clang++ driver supplies libc++; pthread and math are provided by libSystem. Remove only these redundant trailing system libraries from the static ICU pkg-config interface."
+  }
+}

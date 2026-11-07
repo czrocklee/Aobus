@@ -321,6 +321,44 @@ aobus_macos_prepare_expected_shim() {
     export AOBUS_LIBCXX_EXPECTED_SHIM="$shim_root"
 }
 
+# Bazel consumes an existing dependency installation. It needs the native
+# compiler and pkg-config, not CMake/Ninja or a second vcpkg bootstrap.
+aobus_macos_prepare_bazel_environment() {
+    local project_root="$1"
+    local state_root llvm_root llvm_version pkgconf_root
+
+    if ! aobus_macos_load_toolchain_lock "$project_root"; then
+        return 1
+    fi
+    if [[ -n "${AOBUS_STATE_ROOT:-}" ]]; then
+        state_root="$AOBUS_STATE_ROOT"
+    elif ! state_root="$(aobus_macos_default_state_root)"; then
+        return 1
+    fi
+    if ! llvm_root="$(aobus_macos_formula_prefix "$AOBUS_HOMEBREW" "$AOBUS_MACOS_LLVM_FORMULA")"; then
+        return 1
+    fi
+    if ! pkgconf_root="$(aobus_macos_formula_prefix "$AOBUS_HOMEBREW" pkgconf)"; then
+        return 1
+    fi
+    llvm_version="$("$llvm_root/bin/clang++" -dumpversion)"
+    if [[ "${llvm_version%%.*}" != "$AOBUS_MACOS_LLVM_MAJOR" ]]; then
+        aobus_macos_error "'$AOBUS_MACOS_LLVM_FORMULA' provides Clang $llvm_version; expected major $AOBUS_MACOS_LLVM_MAJOR."
+        return 1
+    fi
+    if ! AOBUS_VCPKG_TRIPLET="$(aobus_macos_triplet "$(uname -m)")"; then
+        return 1
+    fi
+    export AOBUS_STATE_ROOT="$state_root"
+    export AOBUS_VCPKG_TRIPLET
+    export AOBUS_LLVM_ROOT="$llvm_root"
+    export CC="$llvm_root/bin/clang"
+    export CXX="$llvm_root/bin/clang++"
+    export MACOSX_DEPLOYMENT_TARGET="$AOBUS_MACOS_DEPLOYMENT_TARGET"
+    export PATH="$llvm_root/bin:$pkgconf_root/bin:$PATH"
+    aobus_macos_prepare_expected_shim "$llvm_root" "$llvm_version" "$state_root"
+}
+
 aobus_macos_prepare_build_environment() {
     local project_root="$1"
     local state_root llvm_root llvm_version cmake_root ninja_root pkgconf_root architecture

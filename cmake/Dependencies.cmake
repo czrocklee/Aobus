@@ -303,6 +303,13 @@ if(AOBUS_DEPENDENCY_USES_VCPKG)
   find_package(c4core CONFIG REQUIRED)
 endif()
 find_package(mimalloc CONFIG REQUIRED)
+# Windows keeps the dynamic CRT but links mimalloc into each product. Its
+# executable translation unit supplies the global C++ new/delete operators.
+if(WIN32)
+  set(AOBUS_MIMALLOC_TARGET mimalloc-static)
+else()
+  set(AOBUS_MIMALLOC_TARGET mimalloc)
+endif()
 find_package(gsl-lite CONFIG REQUIRED)
 find_package(lexy CONFIG QUIET)
 if(NOT TARGET foonathan::lexy)

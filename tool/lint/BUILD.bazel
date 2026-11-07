@@ -1,0 +1,62 @@
+load("//bazel/lint:lint.bzl", "lint_verification")
+load(":build.bzl", "lint_checker")
+
+package(default_visibility = ["//visibility:public"])
+
+lint_verification(
+    name = "verification",
+    tags = ["manual"],
+)
+
+# Keep the checker ownership identical to AOBUS_LINT_PLUGIN_SOURCES in CMake.
+# The Windows-only main is added by lint_checker, never compiled into a plugin.
+lint_checker(
+    srcs = [
+        "check/AstHelpers.cpp",
+        "check/AsyncCancellationGuardCheck.cpp",
+        "check/AsyncFunctionNamingCheck.cpp",
+        "check/BoolFunctionNamingCheck.cpp",
+        "check/CApiGlobalQualificationCheck.cpp",
+        "check/CalleeQualificationHelpers.cpp",
+        "check/ConcreteFinalCheck.cpp",
+        "check/ControlBlockSpacingCheck.cpp",
+        "check/ExplicitPathConversionCheck.cpp",
+        "check/IncludeConventionCheck.cpp",
+        "check/NodiscardUsageCheck.cpp",
+        "check/ForbidTrailingReturnCheck.cpp",
+        "check/ForbidRawFatalCheck.cpp",
+        "check/ForbidRawThrowCheck.cpp",
+        "check/FunctionNamingHelpers.cpp",
+        "check/HeaderFunctionDefinitionCheck.cpp",
+        "check/IdentifierNamingExtensionsCheck.cpp",
+        "check/ImplicitBoolConversionInInitCheck.cpp",
+        "check/LocalInitializationStyleCheck.cpp",
+        "check/BracedInitializationCheck.cpp",
+        "check/OptionalNamingAndUsageCheck.cpp",
+        "check/ResultNamingConventionCheck.cpp",
+        "check/RedundantNamespaceQualificationCheck.cpp",
+        "check/RedundantUsingDirectiveCheck.cpp",
+        "check/SpdxLicenseHeaderCheck.cpp",
+        "check/StdCLibraryQualificationCheck.cpp",
+        "check/ThreadingPolicyCheck.cpp",
+        "check/UnusedSuppressionStyleCheck.cpp",
+        "check/UseIfInitStatementCheck.cpp",
+        "check/LambdaParamsCheck.cpp",
+        "check/PointerNamingConventionCheck.cpp",
+        "check/RaiiHeuristics.cpp",
+        "check/ChronoNamingConventionCheck.cpp",
+        "check/MemberOrderCheck.cpp",
+        "check/UseEraseIfCheck.cpp",
+        "check/UseSizedIntegerTypesCheck.cpp",
+        "check/StrictForwardDeclarationCheck.cpp",
+        "check/UseRangesContainsCheck.cpp",
+        "check/UseRangesProjectionCheck.cpp",
+        "check/UseRangesAnyOfCheck.cpp",
+        "check/UseRangesMinMaxCheck.cpp",
+        "check/UseStartsWithCheck.cpp",
+        "check/UseCtadCheck.cpp",
+        "check/UseStdToArrayCheck.cpp",
+        "AobusLintModule.cpp",
+    ],
+    hdrs = glob(["check/*.h"]),
+)

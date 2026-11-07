@@ -362,7 +362,7 @@ class SourcePolicyScopeSmokeTest(unittest.TestCase):
             with self.subTest(parent=parent_name), tempfile.TemporaryDirectory() as temporary:
                 run_dir = Path(temporary) / parent_name / "run"
                 run_dir.mkdir(parents=True)
-                tools = linttest.WindowsFixtureTools("static-host", ())
+                tools = linttest.FixtureTools("static-host", (), windows=True)
                 with mock.patch.object(linttest.subprocess, "run", side_effect=self.native_result) as run:
                     success, _log = linttest._run_source_policy_smoke(run_dir, run_dir, plugin=None, tools=tools)
                 self.assertTrue(success)
@@ -604,7 +604,7 @@ class SourcePolicyScopeSmokeTest(unittest.TestCase):
     def test_windows_smoke_uses_both_path_profiles_and_the_prepared_static_host(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            tools = linttest.WindowsFixtureTools("native-static-host", ("--driver-mode=cl", "/EHsc"))
+            tools = linttest.FixtureTools("native-static-host", ("--driver-mode=cl", "/EHsc"), windows=True)
             with mock.patch.object(linttest.subprocess, "run", side_effect=self.native_result) as run:
                 success, _log = linttest._run_source_policy_smoke(root, root, plugin=None, tools=tools)
             self.assertTrue(success)
@@ -690,7 +690,7 @@ class SourcePolicyScopeSmokeTest(unittest.TestCase):
                         with lock:
                             active -= 1
 
-                tools = linttest.WindowsFixtureTools("static-host", ()) if windows else None
+                tools = linttest.FixtureTools("static-host", (), windows=True) if windows else None
                 with (
                     mock.patch.dict(os.environ, {phases.LOG_DIR_ENV: str(root / "phases")}),
                     mock.patch.object(linttest.tidyengine, "clang_tool", return_value="pinned-clang-tidy"),

@@ -295,6 +295,8 @@ class NativePortalTest(unittest.TestCase):
             self.assertTrue(buildenv.requires_python_tools(command))
         self.assertTrue(buildenv.requires_python_tools("docs", ["check"]))
         for command, arguments in (
+            ("bazel", ["build"]),
+            ("bazel", ["hygiene"]),
             ("build", []),
             ("check", []),
             ("deps", ["report"]),
@@ -353,31 +355,6 @@ class WindowsBatchPortalTest(unittest.TestCase):
         self.assertIn('set "aobus_state_argument=%aobus_state_argument%."', content)
         self.assertIn('set "pythonpath=%root%script"', content)
         self.assertNotIn(';%pythonpath%"', content)
-
-    def test_toolchain_commands_initialize_the_visual_studio_environment(self):
-        portal = Path(__file__).resolve().parents[2] / "ao.bat"
-        content = portal.read_text(encoding="utf-8").lower()
-
-        # ao.bat asks the portal package which commands need MSVC/vcpkg instead
-        # of keeping its own command list.
-        self.assertIn("-m ao.core.buildenv --exit-code %*", content)
-        self.assertIn('if not "%buildenv_status%"=="10" (', content)
-        self.assertIn("goto finished", content)
-        self.assertNotIn('for /f "usebackq delims="', content)
-        self.assertNotIn('if /i "%~1"=="build" set "needs_build_env=1"', content)
-        # Source order only: Python bootstrap, then buildenv, then VS only for status 10.
-        # Exit code 2 is not 10, so the batch file finishes before VSDEVCMD. This does
-        # not execute ao.bat or prove a native Windows process.
-        python_bootstrap = content.index("call :ensure_python_environment")
-        preflight = content.index("-m ao.core.buildenv --exit-code")
-        non_build_env = content.index('if not "%buildenv_status%"=="10"')
-        finished = content.index("goto finished")
-        visual_studio = content.index("call :ensure_build_environment")
-        self.assertLess(python_bootstrap, preflight)
-        self.assertLess(preflight, non_build_env)
-        self.assertLess(non_build_env, finished)
-        self.assertLess(finished, visual_studio)
-        self.assertLess(visual_studio, content.index('call "%vsdevcmd%"'))
 
     def test_visual_studio_discovery_does_not_trust_an_ambient_installation_root(self):
         helper = Path(__file__).resolve().parents[2] / "script" / "ao" / "windows-vsenv.bat"

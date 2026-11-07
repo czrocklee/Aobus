@@ -35,6 +35,8 @@ examples:
 """
 
 Register = Callable[["argparse._SubParsersAction[argparse.ArgumentParser]"], None]
+# Receives the resolved scope and whether its files were explicit; returns a status.
+LintStage = Callable[[list[str], bool], int]
 
 
 def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
@@ -93,7 +95,14 @@ def requires_build_environment(args: argparse.Namespace) -> bool:
     return buildenv.requires_source_build_env(args, format_command.resolve_files(args))
 
 
-def run_command(args: argparse.Namespace) -> int:
+def run_command(
+    args: argparse.Namespace,
+    *,
+    clang_format: str | None = None,
+    python: Path | None = None,
+    lint: tuple[str, LintStage] | None = None,
+) -> int:
+    """Run the gate; a caller may name clang-format, the Ruff interpreter and its own lint stage."""
     files = format_command.resolve_files(args)
     if not files:
         print("No files to check.")
@@ -101,7 +110,10 @@ def run_command(args: argparse.Namespace) -> int:
 
     print("=== format --check ===")
     build_dir = Path(args.path) if args.path else None
-    if format_command.run_command(_format_args(), files=files, build_dir=build_dir) != 0:
+    formatted = format_command.run_command(
+        _format_args(), files=files, build_dir=build_dir, clang_format=clang_format, python=python
+    )
+    if formatted != 0:
         print("Hygiene stopped after formatting failure; this gate is check-only.", file=sys.stderr)
         print("Run ./ao format on the same scope, review the diff, then rerun ./ao hygiene.", file=sys.stderr)
         return 1
@@ -125,8 +137,12 @@ def run_command(args: argparse.Namespace) -> int:
         print("No C++ files in scope.")
 
     print()
-    print("=== tidy ===")
-    tidy_failed = tidy.run_command(_tidy_args(args), resolved_scope=(files, bool(args.files))) != 0
+    if lint is None:
+        print("=== tidy ===")
+        tidy_failed = tidy.run_command(_tidy_args(args), resolved_scope=(files, bool(args.files))) != 0
+    else:
+        print(f"=== {lint[0]} ===")
+        tidy_failed = lint[1](files, bool(args.files)) != 0
 
     if not (test_audit_failed or name_audit_failed or tidy_failed):
         return 0

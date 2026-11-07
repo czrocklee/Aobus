@@ -1,0 +1,1 @@
+repo(features = ["aobus_warnings", "treat_warnings_as_errors"])

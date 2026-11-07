@@ -1,5 +1,7 @@
 """Tests for the native Python tooling bootstrap."""
 
+import contextlib
+import io
 import json
 import os
 import posixpath
@@ -449,6 +451,331 @@ class NativePythonEnvironmentTest(unittest.TestCase):
         self.assertEqual(actual, expected)
         build.assert_not_called()
 
+    def test_windows_bazel_result_file_selection_never_probes_or_installs_python_tools(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            result = root / "python.txt"
+            with (
+                mock.patch.object(pythonenv.subprocess, "run", side_effect=AssertionError("unexpected tool probe")),
+                mock.patch.object(pythonenv, "ensure_environment", side_effect=AssertionError("unexpected venv")),
+                mock.patch.object(
+                    pythonenv.buildenv,
+                    "windows_bootstrap_requires_python_tools",
+                    wraps=pythonenv.buildenv.windows_bootstrap_requires_python_tools,
+                ) as capability,
+            ):
+                status = pythonenv.main(
+                    [
+                        "--project-root",
+                        str(root),
+                        "--state-root",
+                        str(root / "state"),
+                        "--result-file",
+                        str(result),
+                        "--platform",
+                        "windows",
+                        "--",
+                        "bazel",
+                        "build",
+                        "--",
+                        "//lib/utility:utility",
+                    ]
+                )
+            self.assertEqual(status, 0)
+            self.assertEqual(result.read_text(encoding="utf-8").strip(), sys.executable)
+            self.assertFalse((root / "state").exists())
+            capability.assert_called_once_with(["bazel", "build", "--", "//lib/utility:utility"])
+
+    def test_windows_bazel_result_file_selection_rejects_an_unpinned_or_incomplete_python(self):
+        versions = dict(LOCKED_TOOL_VERSIONS)
+        versions["python"] = ".".join(str(part) for part in sys.version_info[:3])
+        for version, ensurepip, diagnostic in (
+            ("0.0.0", True, "requires Python 0.0.0"),
+            (versions["python"], False, "regular Python installation with ensurepip"),
+        ):
+            with self.subTest(version=version, ensurepip=ensurepip), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                result = root / "python.txt"
+                stderr = io.StringIO()
+                with (
+                    mock.patch.object(pythonenv, "tool_versions", return_value={**versions, "python": version}),
+                    mock.patch.object(
+                        pythonenv.importlib.util, "find_spec", return_value=object() if ensurepip else None
+                    ),
+                    mock.patch.object(pythonenv, "ensure_environment") as tools,
+                    contextlib.redirect_stderr(stderr),
+                ):
+                    status = pythonenv.main(
+                        [
+                            "--project-root",
+                            str(root),
+                            "--state-root",
+                            str(root / "state"),
+                            "--result-file",
+                            str(result),
+                            "--platform",
+                            "windows",
+                            "--",
+                            "bazel",
+                            "build",
+                        ]
+                    )
+                self.assertEqual(status, 1)
+                self.assertIn(diagnostic, stderr.getvalue())
+                self.assertFalse(result.exists())
+                tools.assert_not_called()
+
+    def test_windows_non_bazel_result_file_selection_keeps_full_environment_validation(self):
+        commands = (
+            [],
+            ["--"],
+            ["--", "help"],
+            ["--", "no-such-command"],
+            ["--", "build"],
+            ["--", "run", "cli"],
+            ["--", "docs", "check"],
+            ["--", "format", "--check"],
+            ["--", "hygiene"],
+            ["--", "tidy"],
+            ["--", "test", "--tooling"],
+            ["--", "check"],
+            ["--", "setup", "llvm-sdk"],
+            ["--", "doctor", "winui"],
+        )
+        for command in commands:
+            with self.subTest(command=command), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                result = root / "python.txt"
+                managed = root / "environment" / "Scripts" / "python.exe"
+                with mock.patch.object(pythonenv, "ensure_environment", return_value=managed) as ensure:
+                    status = pythonenv.main(
+                        [
+                            "--project-root",
+                            str(root),
+                            "--state-root",
+                            str(root / "state"),
+                            "--result-file",
+                            str(result),
+                            "--platform",
+                            "windows",
+                            *command,
+                        ]
+                    )
+                self.assertEqual(status, 0)
+                self.assertEqual(result.read_text(encoding="utf-8").strip(), str(managed))
+                ensure.assert_called_once_with(root, root / "state", platform_name="windows")
+
+    def test_windows_portal_launch_returns_the_child_status_unchanged(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            # Only the external launch is faked; Bazel selection, the toolchain
+            # lock and base-Python validation stay real.
+            with (
+                mock.patch.object(pythonenv, "ensure_environment", side_effect=AssertionError("unexpected venv")),
+                mock.patch.object(
+                    pythonenv.subprocess,
+                    "run",
+                    return_value=subprocess.CompletedProcess([], 23),
+                ) as launch,
+            ):
+                status = pythonenv.main(
+                    [
+                        "--project-root",
+                        str(root),
+                        "--state-root",
+                        str(root / "state"),
+                        "--launch-windows-portal",
+                        "--platform",
+                        "windows",
+                        "--",
+                        "bazel",
+                        "build",
+                        "--",
+                        "//lib/utility:utility",
+                    ]
+                )
+
+            self.assertEqual(status, 23)
+            launch.assert_called_once_with(
+                [
+                    sys.executable,
+                    "-m",
+                    "ao.core.windows_portal",
+                    "bazel",
+                    "build",
+                    "--",
+                    "//lib/utility:utility",
+                ],
+                check=False,
+            )
+            self.assertFalse((root / "state").exists())
+
+    def test_windows_portal_launch_uses_the_selected_tool_environment(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            managed = root / "environment" / "Scripts" / "python.exe"
+            # The provisioner is external I/O; command selection stays real.
+            with (
+                mock.patch.object(pythonenv, "ensure_environment", return_value=managed) as ensure,
+                mock.patch.object(
+                    pythonenv.subprocess,
+                    "run",
+                    return_value=subprocess.CompletedProcess([], 0),
+                ) as launch,
+            ):
+                status = pythonenv.main(
+                    [
+                        "--project-root",
+                        str(root),
+                        "--state-root",
+                        str(root / "state"),
+                        "--launch-windows-portal",
+                        "--platform",
+                        "windows",
+                        "--",
+                        "build",
+                        "release",
+                    ]
+                )
+
+            self.assertEqual(status, 0)
+            ensure.assert_called_once_with(root, root / "state", platform_name="windows")
+            launch.assert_called_once_with(
+                [str(managed), "-m", "ao.core.windows_portal", "build", "release"],
+                check=False,
+            )
+
+    def test_windows_portal_launch_without_arguments_starts_the_portal(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            managed = root / "environment" / "Scripts" / "python.exe"
+            with (
+                mock.patch.object(pythonenv, "ensure_environment", return_value=managed),
+                mock.patch.object(
+                    pythonenv.subprocess,
+                    "run",
+                    return_value=subprocess.CompletedProcess([], 0),
+                ) as launch,
+            ):
+                status = pythonenv.main(
+                    [
+                        "--project-root",
+                        str(root),
+                        "--state-root",
+                        str(root / "state"),
+                        "--launch-windows-portal",
+                        "--platform",
+                        "windows",
+                        "--",
+                    ]
+                )
+
+            self.assertEqual(status, 0)
+            launch.assert_called_once_with(
+                [str(managed), "-m", "ao.core.windows_portal"],
+                check=False,
+            )
+
+    def test_windows_portal_launch_reports_launch_failures_as_bootstrap_failures(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            stderr = io.StringIO()
+            with (
+                mock.patch.object(pythonenv.subprocess, "run", side_effect=OSError("cannot start portal")),
+                contextlib.redirect_stderr(stderr),
+            ):
+                status = pythonenv.main(
+                    [
+                        "--project-root",
+                        str(root),
+                        "--state-root",
+                        str(root / "state"),
+                        "--launch-windows-portal",
+                        "--platform",
+                        "windows",
+                        "--",
+                        "bazel",
+                        "test",
+                    ]
+                )
+
+            self.assertEqual(status, 1)
+            self.assertIn("cannot start portal", stderr.getvalue())
+            self.assertFalse((root / "state").exists())
+
+    def test_windows_portal_launch_rejects_a_non_windows_platform_before_selection(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            stderr = io.StringIO()
+            with (
+                mock.patch.object(pythonenv, "ensure_environment", side_effect=AssertionError("unexpected selection")),
+                mock.patch.object(
+                    pythonenv.subprocess,
+                    "run",
+                    side_effect=AssertionError("unexpected probe or launch"),
+                ),
+                contextlib.redirect_stderr(stderr),
+            ):
+                status = pythonenv.main(
+                    [
+                        "--project-root",
+                        str(root),
+                        "--state-root",
+                        str(root / "state"),
+                        "--launch-windows-portal",
+                        "--platform",
+                        "macos",
+                        "--",
+                        "build",
+                    ]
+                )
+
+            self.assertEqual(status, 1)
+            self.assertIn("windows", stderr.getvalue().lower())
+            self.assertFalse((root / "state").exists())
+
+    def test_output_selection_requires_exactly_one_destination(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            base = ["--project-root", str(root), "--state-root", str(root / "state")]
+            for arguments in (
+                base,
+                [*base, "--result-file", str(root / "python.txt"), "--launch-windows-portal"],
+            ):
+                with self.subTest(arguments=arguments), contextlib.redirect_stderr(io.StringIO()):
+                    with self.assertRaises(SystemExit) as raised:
+                        pythonenv.main(arguments)
+                    self.assertEqual(raised.exception.code, 2)
+
+            self.assertFalse((root / "state").exists())
+
+    def test_macos_result_file_keeps_the_legacy_single_line_interpreter_bytes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            result = root / "python.txt"
+            managed = root / "environment" / "bin" / "python"
+            with mock.patch.object(pythonenv, "ensure_environment", return_value=managed) as ensure:
+                status = pythonenv.main(
+                    [
+                        "--project-root",
+                        str(root),
+                        "--state-root",
+                        str(root / "state"),
+                        "--result-file",
+                        str(result),
+                        "--platform",
+                        "macos",
+                        "--",
+                        "build",
+                    ]
+                )
+
+            self.assertEqual(status, 0)
+            ensure.assert_called_once_with(root, root / "state", platform_name="macos")
+            # Path.write_text applies the host newline convention; the macOS
+            # launcher consumes exactly one interpreter line.
+            self.assertEqual(result.read_bytes(), f"{managed}{os.linesep}".encode())
+
     def test_new_environment_is_staged_then_published(self):
         versions = dict(LOCKED_TOOL_VERSIONS)
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -537,6 +864,33 @@ class NativePythonEnvironmentTest(unittest.TestCase):
                             ),
                             ready,
                         )
+
+    def test_matching_fingerprint_still_probes_python_ruff_and_mypy(self):
+        versions = dict(LOCKED_TOOL_VERSIONS)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            environment = root / "environment"
+            (environment / "Scripts").mkdir(parents=True)
+            (environment / "Scripts" / "python.exe").touch()
+            (environment / pythonenv.COMPLETE_MARKER).write_text("stamp\n", encoding="utf-8")
+            healthy = [
+                subprocess.CompletedProcess([], 0, ""),
+                subprocess.CompletedProcess([], 0, f"ruff {versions['ruff']}"),
+                subprocess.CompletedProcess([], 0, f"mypy {versions['mypy']}"),
+                subprocess.CompletedProcess([], 0, versions["markdown-it-py"]),
+                subprocess.CompletedProcess([], 0, versions["mdurl"]),
+            ]
+            for broken in (None, 0, 1, 2):
+                with self.subTest(broken=broken):
+                    responses = list(healthy)
+                    if broken is not None:
+                        responses[broken] = subprocess.CompletedProcess([], 1, "missing or corrupt tool")
+                    with mock.patch.object(pythonenv.subprocess, "run", side_effect=responses) as run:
+                        self.assertEqual(
+                            pythonenv._tools_match(environment, versions, root / "state", "stamp"),
+                            broken is None,
+                        )
+                    self.assertEqual(run.call_count, 5 if broken is None else broken + 1)
 
     def test_builder_installs_only_hash_locked_binary_packages(self):
         versions = dict(LOCKED_TOOL_VERSIONS)

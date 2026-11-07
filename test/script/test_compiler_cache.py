@@ -269,7 +269,7 @@ class CiR2ExportTest(unittest.TestCase):
             self.assertIn("contains a newline", process.stderr)
             self.assertFalse(output.exists())
 
-    def test_workflow_r2_exports_use_the_shared_helper(self):
+    def test_workflow_r2_exports_are_main_push_only_and_use_the_shared_helper(self):
         workflow = (compiler_cache.PROJECT_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
         blocks = workflow.split("- name: Activate R2 compiler cache backend")[1:]
         self.assertEqual(len(blocks), 3)
@@ -281,10 +281,17 @@ class CiR2ExportTest(unittest.TestCase):
         # No step repeats the export policy inline; secrets still bind only
         # through the step environment, never through command arguments.
         self.assertNotIn("SCCACHE_BUCKET=", workflow)
-        self.assertEqual(workflow.count("R2_ENDPOINT: ${{ secrets.R2_SCCACHE_ENDPOINT }}"), 3)
+        # Bazel's trusted manual validation reuses these credentials, covered by
+        # test_bazel_ci_cache; these assertions own compiler-cache activation.
         for block in blocks:
             step = block.split("- name:", 1)[0]
-            self.assertIn("steps.compiler-cache.outcome == 'success'", step)
+            self.assertIn("R2_ENDPOINT: ${{ secrets.R2_SCCACHE_ENDPOINT }}", step)
+            condition = " ".join(step.split("if: >-\n", 1)[1].split("shell:", 1)[0].split())
+            self.assertEqual(
+                condition,
+                "${{ steps.compiler-cache.outcome == 'success' && "
+                "github.event_name == 'push' && github.ref == 'refs/heads/main' }}",
+            )
             self.assertNotIn("continue-on-error", step)
             self.assertNotIn("secrets.", step.split("run: >-", 1)[1])
 

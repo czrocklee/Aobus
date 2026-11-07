@@ -1,0 +1,148 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("//bazel:gperf.bzl", "gperf_header")
+
+package(default_visibility = ["//visibility:public"])
+
+# Match the four CMake gperf inputs and include spellings without borrowing
+# generated headers from a CMake tree.
+gperf_header(
+    name = "atom_dispatch",
+    src = "mp4/AtomDispatch.gperf",
+    out = "generated/media/mp4/AtomDispatch.h",
+    visibility = ["//visibility:private"],
+)
+
+gperf_header(
+    name = "vorbis_comment_dispatch",
+    src = "file/detail/VorbisCommentDispatch.gperf",
+    out = "generated/media/file/detail/VorbisCommentDispatch.h",
+    visibility = ["//visibility:private"],
+)
+
+gperf_header(
+    name = "file_mp4_atom_dispatch",
+    src = "file/mp4/AtomDispatch.gperf",
+    out = "generated/media/file/mp4/AtomDispatch.h",
+    visibility = ["//visibility:private"],
+)
+
+gperf_header(
+    name = "id3v2_frame_dispatch",
+    src = "file/mpeg/id3v2/FrameDispatch.gperf",
+    out = "generated/media/file/mpeg/id3v2/FrameDispatch.h",
+    visibility = ["//visibility:private"],
+)
+
+cc_library(
+    name = "dispatch_headers",
+    hdrs = [
+        ":atom_dispatch",
+        ":vorbis_comment_dispatch",
+        ":file_mp4_atom_dispatch",
+        ":id3v2_frame_dispatch",
+    ],
+    includes = ["generated"],
+    visibility = ["//visibility:private"],
+)
+
+# Complete static CMake ao_media source set. Private headers stay in srcs;
+# neither the generated tables nor Enumerate.h are public media interfaces.
+# Only utility is a Core library dependency: no audio, library, or runtime.
+cc_library(
+    name = "media",
+    linkstatic = True,
+    srcs = [
+        "//include:media_compat_headers",
+        "detail/MediaError.h",
+        "file/detail/Content.h",
+        "file/detail/Decoder.h",
+        "file/detail/PictureBlock.h",
+        "file/detail/Reader.h",
+        "file/detail/VorbisComment.h",
+        "file/flac/File.h",
+        "file/mp4/File.h",
+        "file/mpeg/ApeTag.h",
+        "file/mpeg/File.h",
+        "file/mpeg/Frame.h",
+        "file/mpeg/FrameLayout.h",
+        "file/mpeg/id3v2/Frame.h",
+        "file/mpeg/id3v2/Layout.h",
+        "file/mpeg/id3v2/Reader.h",
+        "file/opus/File.h",
+        "file/wav/File.h",
+        "ogg/PageLayout.h",
+        "detail/MediaError.cpp",
+        "cue/Sheet.cpp",
+        "file/File.cpp",
+        "file/detail/Content.cpp",
+        "file/detail/Decoder.cpp",
+        "file/detail/PictureBlock.cpp",
+        "file/detail/VorbisComment.cpp",
+        "file/flac/File.cpp",
+        "file/mp4/File.cpp",
+        "file/mpeg/ApeTag.cpp",
+        "file/mpeg/File.cpp",
+        "file/mpeg/Frame.cpp",
+        "file/mpeg/id3v2/Frame.cpp",
+        "file/mpeg/id3v2/Layout.cpp",
+        "file/mpeg/id3v2/Reader.cpp",
+        "file/opus/File.cpp",
+        "file/wav/File.cpp",
+        "ogg/Demuxer.cpp",
+        "opus/Header.cpp",
+        "opus/Timeline.cpp",
+        "mp4/Demuxer.cpp",
+        "mp4/SampleDescription.cpp",
+        "mp4/TrackSelection.cpp",
+        "mp4/Atom.cpp",
+        "wav/Riff.cpp",
+    ],
+    # CUE sheet parsing calls the UnicodeText facade's UTF-8 validation.
+    implementation_deps = [
+        ":dispatch_headers",
+        "//lib/utility:unicode_text",
+    ],
+    deps = [
+        "//include:media_headers",
+        "//lib/utility:utility",
+        "@aobus_native_deps//:boost",
+    ],
+)
+
+# The decoder consumes these MPEG framing declarations through real sibling
+# paths, not a public media interface or a workspace-wide include directory.
+cc_library(
+    name = "mpeg_decoder_headers",
+    hdrs = [
+        "file/mpeg/ApeTag.h",
+        "file/mpeg/Frame.h",
+        "file/mpeg/FrameLayout.h",
+    ],
+    visibility = ["//lib/audio:__pkg__"],
+    deps = ["//include:media_headers"],
+)
+
+# Test-only lib/media/... spellings, including each relative-include dependency.
+# Not a public header interface or a workspace-root include directory.
+cc_library(
+    name = "test_headers",
+    testonly = True,
+    hdrs = [
+        "file/detail/Content.h",
+        "file/detail/Decoder.h",
+        "file/detail/Reader.h",
+        "file/detail/VorbisComment.h",
+        "file/mpeg/ApeTag.h",
+        "file/mpeg/Frame.h",
+        "file/mpeg/FrameLayout.h",
+        "file/mpeg/id3v2/Frame.h",
+        "file/mpeg/id3v2/Layout.h",
+        "file/mpeg/id3v2/Reader.h",
+        "file/wav/File.h",
+        "ogg/PageLayout.h",
+    ],
+    include_prefix = "lib/media",
+    strip_include_prefix = ".",
+    visibility = ["//test:__pkg__"],
+    deps = ["//include:media_headers"],
+)

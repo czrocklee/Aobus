@@ -1,0 +1,167 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:private"])
+
+# PipeWire's SPA headers require both flags on each compiling consumer;
+# source-less dependency wrappers cannot propagate cc_library copts.
+PIPEWIRE_HEADER_COPTS = select({
+    "@platforms//os:linux": ["-fno-strict-aliasing", "-fno-strict-overflow"],
+    "//conditions:default": [],
+})
+
+# Complete static CMake ao_audio implementation, including every native backend
+# for the selected host. NullBackend is an additional sink, not a replacement
+# platform provider. SDK compilation does not prove physical playback.
+cc_library(
+    name = "audio",
+    linkstatic = True,
+    srcs = glob(["**/*.h"]) + [
+        "AacDecoderSession.cpp",
+        "Backend.cpp",
+        "DecoderOutput.cpp",
+        "DecoderFactory.cpp",
+        "FlacDecoderSession.cpp",
+        "AlacDecoderSession.cpp",
+        "Mp3DecoderSession.cpp",
+        "OpusDecoderSession.cpp",
+        "SegmentDecoderSession.cpp",
+        "NodeFormat.cpp",
+        "NullBackend.cpp",
+        "OpenedModeValidation.cpp",
+        "WavDecoderSession.cpp",
+        "detail/DecoderOutputAdapter.cpp",
+        "detail/DecoderError.cpp",
+        "detail/EngineEventQueueInvariants.cpp",
+        "detail/MappedFileCursor.cpp",
+        "detail/Mp4PacketSource.cpp",
+        "detail/OggPacketSource.cpp",
+        "detail/RenderPath.cpp",
+        "detail/RenderTimeline.cpp",
+        "detail/StreamingBufferPolicy.cpp",
+        "Player.cpp",
+        "QualityAnalyzer.cpp",
+        "detail/Mpg123Runtime.cpp",
+        "detail/TrackSession.cpp",
+        "Engine.cpp",
+        "PcmConversion.cpp",
+        "PcmFrameRing.cpp",
+        "StreamingSource.cpp",
+        "detail/RouteTracker.cpp",
+        "detail/TimeConversion.cpp",
+        "backend/detail/AudioBackendRenderBuffer.cpp",
+        "backend/detail/AudioBackendDrainTail.cpp",
+        "backend/detail/BackendDeviceRegistry.cpp",
+        "backend/detail/BackendGraphRegistry.cpp",
+        "backend/detail/CallbackFence.cpp",
+    ] + select({
+        "@platforms//os:linux": [
+            "PlatformBackendProvidersLinux.cpp",
+            "backend/AlsaExclusiveBackend.cpp",
+            "backend/AlsaProvider.cpp",
+            "backend/PipeWireBackend.cpp",
+            "backend/PipeWireMonitor.cpp",
+            "backend/PipeWireProvider.cpp",
+            "backend/detail/PipeWireFormatParsing.cpp",
+            "backend/detail/PipeWireRuntime.cpp",
+            "backend/detail/PipeWireMonitorParsing.cpp",
+            "backend/detail/AlsaDeviceDiscovery.cpp",
+            "backend/detail/AlsaChannelMap.cpp",
+            "backend/detail/AlsaGraphRegistry.cpp",
+            "backend/detail/AlsaMixerSession.cpp",
+            "backend/detail/AlsaModeSelector.cpp",
+            "backend/detail/AlsaPcmError.cpp",
+            "backend/detail/AlsaPcmFormat.cpp",
+            "backend/detail/AlsaPcmVolume.cpp",
+            "backend/detail/AlsaPrewarmCache.cpp",
+        ],
+        "@platforms//os:windows": [
+            "PlatformBackendProvidersWindows.cpp",
+            "backend/WasapiProvider.cpp",
+            "backend/WasapiSharedBackend.cpp",
+            "backend/detail/WasapiGraphRegistry.cpp",
+            "backend/detail/WasapiRenderBuffer.cpp",
+            "backend/detail/WasapiStrings.cpp",
+        ],
+        "@platforms//os:macos": [
+            "PlatformBackendProvidersMacos.cpp",
+            "backend/CoreAudioBackend.cpp",
+            "backend/CoreAudioProvider.cpp",
+            "backend/detail/CoreAudioChannelLayout.cpp",
+            "backend/detail/CoreAudioControlMailbox.cpp",
+            "backend/detail/CoreAudioError.cpp",
+            "backend/detail/CoreAudioDeviceDiscovery.cpp",
+            "backend/detail/CoreAudioFormat.cpp",
+            "backend/detail/CoreAudioGraph.cpp",
+            "backend/detail/CoreAudioLatency.cpp",
+            "backend/detail/CoreAudioRenderAdmission.cpp",
+            "backend/detail/CoreAudioRenderBuffer.cpp",
+            "backend/detail/CoreAudioRunControl.cpp",
+            "backend/detail/CoreAudioUnitRun.cpp",
+            "backend/detail/CoreFoundationString.cpp",
+        ],
+    }),
+    # Match CMake's private audio include root for backend/detail/... spellings
+    # inside backend sources, without exporting that root to consumers.
+    copts = PIPEWIRE_HEADER_COPTS + select({
+        "@platforms//os:windows": ["/Ilib/audio"],
+        "//conditions:default": ["-iquotelib/audio"],
+    }),
+    implementation_deps = [
+        "//lib/media:mpeg_decoder_headers",
+        "@aobus_native_deps//:boost",
+        "@aobus_native_deps//:flac",
+        "@aobus_native_deps//:alac",
+        "@aobus_native_deps//:fdk_aac",
+        "@aobus_native_deps//:mpg123",
+        "@aobus_native_deps//:opus",
+    ] + select({
+        "@platforms//os:linux": [
+            "@aobus_native_deps//:alsa",
+            "@aobus_native_deps//:pipewire",
+            "@aobus_native_deps//:udev",
+        ],
+        "//conditions:default": [],
+    }),
+    linkopts = select({
+        "@platforms//os:windows": ["avrt.lib", "ole32.lib"],
+        "@platforms//os:macos": [
+            "-framework AudioToolbox",
+            "-framework CoreAudio",
+            "-framework CoreFoundation",
+        ],
+        "//conditions:default": [],
+    }),
+    visibility = [
+        "//app:__subpackages__",
+        "//lib:__pkg__",
+        "//test:__pkg__",
+    ],
+    deps = [
+        "//include:audio_headers",
+        "//lib/async:async",
+        "//lib/media:media",
+        "//lib/utility:utility",
+    ],
+)
+
+# Only tests may include lib/audio/... private contracts. Header globs remain
+# package-local, preserve relative includes, and do not expose a workspace root.
+cc_library(
+    name = "test_headers",
+    testonly = True,
+    hdrs = glob(["**/*.h"]),
+    include_prefix = "lib/audio",
+    strip_include_prefix = ".",
+    visibility = ["//test:__pkg__", "//app/windows-winui:__pkg__"],
+    deps = [
+        "//include:audio_headers",
+        "//lib/media:media",
+        "@aobus_native_deps//:boost",
+    ] + select({
+        "@platforms//os:linux": [
+            "@aobus_native_deps//:alsa",
+            "@aobus_native_deps//:pipewire",
+        ],
+        "//conditions:default": [],
+    }),
+)

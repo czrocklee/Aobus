@@ -7,7 +7,6 @@ are de-duplicated across translation units before being printed or written to a 
 import argparse
 import contextlib
 import ctypes
-import fnmatch
 import hashlib
 import json
 import os
@@ -34,8 +33,14 @@ from ..core.dedup import deduplicate
 from ..core.paths import PROJECT_ROOT, absolute_path
 from ..core.phases import LOG_DIR_ENV
 from ..core.proc import die
-from ..core.tidyconfig import checks_for, config_for, mode_disabled_checks
+from ..core.tidyconfig import checks_for, config_for
 from ..core.tidyengine import TidyToolchain as TidyToolchain
+from ..core.tidypolicy import RELAXED_HEADER_FOLDERS as RELAXED_HEADER_FOLDERS
+from ..core.tidypolicy import STRICT_HEADER_FOLDERS as STRICT_HEADER_FOLDERS
+from ..core.tidypolicy import WINDOWS_EXCLUDED_COMPILE_ARGUMENTS as WINDOWS_EXCLUDED_COMPILE_ARGUMENTS
+from ..core.tidypolicy import StaleNolintSuppression as StaleNolintSuppression
+from ..core.tidypolicy import classify_relative, frontend_policy
+from ..core.tidypolicy import find_stale_nolint_suppressions as find_stale_nolint_suppressions
 from . import build
 
 HELP = "Run C++ clang-tidy and Python Ruff/mypy checks"
@@ -59,16 +64,6 @@ examples:
 
 ALL_FOLDERS = ["lib", "app", "include", "script", "test", "tool"]
 WINUI_ROOT = PROJECT_ROOT / "app" / "windows-winui"
-# Clang tooling does not consume MSVC code-generation toggles. Strip deterministic
-# output and both IPO spellings; MSVC 14.51 workarounds may override /GL with /GL-.
-WINDOWS_EXCLUDED_COMPILE_ARGUMENTS = (
-    "/Zc:preprocessor",
-    "/c",
-    "/ZW:nostdlib",
-    "/GL",
-    "/GL-",
-    "/experimental:deterministic",
-)
 WINDOWS_FORCED_CMAKE_PCH_PATTERN = r'/FI(?:"[^"]*[/\\]cmake_pch\.hxx"|[^\s]*[/\\]cmake_pch\.hxx)'
 
 
@@ -121,10 +116,6 @@ def project_header_filter(folders: tuple[str, ...], *, source_roots: tuple[Path,
     roots = tidyconfig.source_roots_or_default(source_roots, project_root=absolute_path(PROJECT_ROOT))
     root = "|".join(_path_regex(path) for path in roots)
     return f"({root}){_PATH_SEPARATOR_RE}({'|'.join(folders)}){_PATH_SEPARATOR_RE}.*"
-
-
-STRICT_HEADER_FOLDERS = ("lib", "app", "include", "tool")
-RELAXED_HEADER_FOLDERS = ("test", "include")
 
 
 def exact_header_filter(headers: list[Path], *, source_roots: tuple[Path, ...] | None = None) -> str:
@@ -273,35 +264,6 @@ def build_invocations(
     return invocations
 
 
-_NOLINT_OPEN_RE = re.compile(r"\bNOLINT(?:NEXTLINE|BEGIN)?\(([^)]*)\)")
-
-
-@dataclass(frozen=True)
-class StaleNolintSuppression:
-    path: Path
-    line: int
-    check: str
-
-
-def find_stale_nolint_suppressions(buckets: dict[str, list[Path]]) -> list[StaleNolintSuppression]:
-    """Find NOLINT entries naming checks that the file's tidy mode never enables."""
-    issues: list[StaleNolintSuppression] = []
-    for mode, paths in buckets.items():
-        disabled_patterns = [token.removeprefix("-") for token in mode_disabled_checks(mode)]
-        for path in paths:
-            try:
-                lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
-            except OSError:
-                continue
-            for line_number, line in enumerate(lines, start=1):
-                for match in _NOLINT_OPEN_RE.finditer(line):
-                    checks = (check.strip() for check in match.group(1).split(","))
-                    for check in checks:
-                        if check and any(fnmatch.fnmatchcase(check, pattern) for pattern in disabled_patterns):
-                            issues.append(StaleNolintSuppression(path=path, line=line_number, check=check))
-    return issues
-
-
 class _RemovedFixFlag(argparse.Action):
     """Reject the removed tidy --fix flag during parse. Not advertised in help."""
 
@@ -343,16 +305,7 @@ def classify(path: Path, explicit: bool) -> str:
     except ValueError:
         return "STRICT"
 
-    if os.name == "nt":
-        rel = rel.lower()
-    if rel.startswith("test/lint/fixture/"):
-        # Fixture files: check when explicitly requested, skip in batch scans.
-        return "STRICT" if explicit else "IGNORE"
-    if rel.startswith("test/lint/"):
-        return "IGNORE"
-    if rel.startswith("test/"):
-        return "RELAXED"
-    return "STRICT"
+    return classify_relative(rel, explicit)
 
 
 def expected_lint_artifact_path(build_dir: Path, *, os_name: str | None = None) -> Path:
@@ -905,16 +858,24 @@ def run_command(args: argparse.Namespace, *, resolved_scope: tuple[list[str], bo
                     source_roots=source_roots,
                 )
             )
+            frontend = frontend_policy(
+                invocation.compile_command_source.as_posix(),
+                winui=requires_winui_compile_context(invocation.compile_command_source),
+                windows=toolchain.resource_dir is not None,
+            )
+            checks += frontend.check_suffix
             extra: list[str] = list(isystem)
             if toolchain.resource_dir is not None:
                 extra.extend(
                     f"--extra-arg-before={argument}"
                     for argument in tidyengine.windows_analysis_arguments(toolchain.resource_dir)
                 )
-                if requires_winui_compile_context(invocation.compile_command_source):
-                    # Generated C++/WinRT headers preserve schema spelling while
-                    # Windows resolves include paths case-insensitively.
-                    extra.append("--extra-arg-before=-Wno-nonportable-include-path")
+            else:
+                # Native -Werror would make an analysis-only compiler warning,
+                # such as one only a header main raises, a fatal error;
+                # compiler diagnostics are disabled lint policy.
+                extra.append("--extra-arg=-Wno-error")
+            extra.extend(frontend.arguments)
             if limits_diagnostics_to_selected_path(invocation):
                 extra.append(f"-line-filter={path_line_filter([invocation.selected], source_roots=source_roots)}")
             if overlay := selected_overlays.get(invocation.selected):
@@ -922,10 +883,6 @@ def run_command(args: argparse.Namespace, *, resolved_scope: tuple[list[str], bo
             if invocation.is_header and invocation.compile_command_source.suffix.lower() != ".mm":
                 extra.append("--extra-arg-before=-x")
                 extra.append("--extra-arg-before=c++-header")
-            if "linux-gtk/" in invocation.compile_command_source.as_posix():
-                # GTK framework patterns: gtkmm widget trees own children, printf-style APIs.
-                checks += ",-cppcoreguidelines-owning-memory"
-                extra.append("--extra-arg=-Wno-format-nonliteral")
             if toolchain.plugin is not None:
                 extra.append(f"-load={toolchain.plugin}")
             config = config_for(checks, source_roots=source_roots)

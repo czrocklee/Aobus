@@ -61,6 +61,45 @@ class BuildEnvTest(unittest.TestCase):
                 self.assertFalse(buildenv.requires_build_env("test", arguments))
             self.assertTrue(buildenv.requires_build_env("test", ["--all"]))
 
+    def test_windows_bootstrap_keeps_full_tool_validation_except_for_bazel(self):
+        # This is a bounded consumer exception, not another command registry.
+        for module in COMMAND_MODULES:
+            self.assertEqual(buildenv.windows_bootstrap_requires_python_tools([module.NAME]), module.NAME != "bazel")
+        for arguments in ([], ["help"], ["no-such-command"], ["--help"]):
+            self.assertTrue(buildenv.windows_bootstrap_requires_python_tools(arguments), arguments)
+        # The hygiene gate provisions Ruff and mypy itself; the portal stays on the base Python Bazel records.
+        for arguments in (
+            ["bazel", "build"],
+            ["bazel", "--help"],
+            ["bazel", "build", "--", "--help"],
+            ["bazel", "hygiene", "--all"],
+        ):
+            self.assertFalse(buildenv.windows_bootstrap_requires_python_tools(arguments), arguments)
+
+    def test_bazel_runtime_bootstrap_keeps_the_native_build_environment_policy(self):
+        self.assertFalse(buildenv.windows_bootstrap_requires_python_tools(["bazel", "build"]))
+        self.assertTrue(buildenv.requires_build_env("bazel", ["build"]))
+        self.assertFalse(buildenv.requires_build_env("bazel", ["setup"]))
+        self.assertFalse(buildenv.requires_build_env("bazel", ["build", "--help"]))
+
+    def test_windows_bootstrap_capability_selection_does_not_load_command_modules(self):
+        environment = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[2] / "script")}
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-S",
+                "-c",
+                "import sys; from ao.core.buildenv import windows_bootstrap_requires_python_tools as needs_tools; "
+                "assert not needs_tools(['bazel', 'build']); assert needs_tools(['docs', 'check']); "
+                "assert 'ao.__main__' not in sys.modules; assert 'ao.command' not in sys.modules",
+            ],
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_native_preflight_does_not_import_managed_documentation_dependencies(self):
         environment = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[2] / "script")}
         for arguments, expected in (
@@ -101,6 +140,9 @@ class BuildEnvTest(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         env = {**os.environ, "PYTHONPATH": str(root / "script"), "PYTHONDONTWRITEBYTECODE": "1"}
         for arguments in (
+            ["bazel"],
+            ["bazel", "--bogus"],
+            ["bazel", "build", "--jobs", "invalid"],
             ["test", "--bogus"],
             ["tidy", "--jobs", "invalid"],
             ["hygiene", "--folder"],
@@ -188,6 +230,18 @@ class BuildEnvTest(unittest.TestCase):
                             )
                             stack.enter_context(mock.patch.object(gitfiles, "diff_base", return_value="HEAD"))
                             activate = stack.enter_context(mock.patch.object(compiler_cache, "activate_local"))
+                            # This contract covers source scans and compiler-cache activation,
+                            # not host discovery or workspace-context management.
+                            stack.enter_context(
+                                mock.patch.object(workspace_cache, "command_uses_context", return_value=False)
+                            )
+                            stack.enter_context(
+                                mock.patch.object(
+                                    workspace_cache,
+                                    "command_context",
+                                    side_effect=lambda _args: contextlib.nullcontext(),
+                                )
+                            )
                             observed = []
 
                             def consume_scope(args, command=command, observed=observed):

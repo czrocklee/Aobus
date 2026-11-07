@@ -3,11 +3,11 @@
 
 #include "tui/SettingsEditor.h"
 
-#include "Preferences.h"
 #include "test/MessageCatalogTestSupport.h"
 #include "test/TestFixtureSupport.h"
 #include "test/tui/RenderTestSupport.h"
 #include "tui/Keymap.h"
+#include "tui/Preferences.h"
 #include "tui/TerminalTitleFormat.h"
 #include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>

@@ -1,0 +1,177 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load(":app_version.bzl", "app_version")
+
+package(default_visibility = ["//visibility:public"])
+
+# Header ownership for the Core slices. Globs stay in this package and do not
+# cover test/, app/, or unrelated subsystems. common_headers is the top-level
+# ao/ set plus MoveOnlyFunction.h; other compat headers have separate ownership.
+filegroup(
+    name = "common_headers",
+    srcs = glob(["ao/*.h"]) + ["ao/compat/MoveOnlyFunction.h"],
+)
+
+filegroup(
+    name = "utility_public_headers",
+    srcs = glob(["ao/utility/*.h"]),
+)
+
+filegroup(
+    name = "yaml_public_headers",
+    srcs = glob(["ao/yaml/*.h"]),
+)
+
+filegroup(
+    name = "lmdb_public_headers",
+    srcs = glob(["ao/lmdb/*.h"]),
+)
+
+filegroup(
+    name = "library_public_headers",
+    srcs = glob(["ao/library/**/*.h"]),
+)
+
+# CoreIds.h and AudioScalars.h include utility headers, and utility headers
+# include Error.h and Contract.h, so these filegroups share one compile interface.
+# The shared compile contract supplies mode-specific GSL behavior and binds
+# first-party actions to the watched native toolchain.
+cc_library(
+    name = "utility_headers",
+    hdrs = [
+        ":common_headers",
+        ":utility_public_headers",
+    ],
+    includes = ["."],
+    deps = ["//bazel:compile_contract"],
+)
+
+# Runtime logging owns this optional compatibility adapter; the ordinary
+# utility interface does not acquire it.
+cc_library(
+    name = "runtime_compat_headers",
+    hdrs = ["ao/compat/AtomicSharedPtr.h"],
+    includes = ["."],
+    visibility = ["//app/include:__pkg__", "//test:__pkg__"],
+    deps = [":utility_headers"],
+)
+
+app_version(name = "generated_app_version")
+
+cc_library(
+    name = "app_version_header",
+    hdrs = [":generated_app_version"],
+    includes = ["."],
+    deps = ["//bazel:compile_contract"],
+)
+
+# Public yaml headers include RapidYAML and Boost.PFR.
+cc_library(
+    name = "yaml_headers",
+    hdrs = [":yaml_public_headers"],
+    includes = ["."],
+    deps = [
+        ":utility_headers",
+        "@aobus_native_deps//:boost",
+        "@aobus_native_deps//:rapidyaml",
+    ],
+)
+
+cc_library(
+    name = "lmdb_headers",
+    hdrs = [":lmdb_public_headers"],
+    includes = ["."],
+    deps = [":utility_headers"],
+)
+
+# DictionaryStore.h includes Boost.Unordered.
+cc_library(
+    name = "library_headers",
+    hdrs = [":library_public_headers"],
+    includes = ["."],
+    deps = [
+        ":lmdb_headers",
+        ":utility_headers",
+        "@aobus_native_deps//:boost",
+    ],
+)
+
+filegroup(
+    name = "query_public_headers",
+    srcs = glob(["ao/query/**/*.h"]),
+)
+
+# Bytecode.h includes Boost.Unordered.
+cc_library(
+    name = "query_headers",
+    hdrs = [":query_public_headers"],
+    includes = ["."],
+    deps = [
+        ":library_headers",
+        "@aobus_native_deps//:boost",
+    ],
+)
+
+# Complete public ao/async interface, including detail/BoostAsioTsanPrelude.h.
+# That prelude is one always-present header; its Asio includes are compiler
+# conditionals, not a platform file select. Task.h and Runtime.h include
+# Boost.Asio.
+filegroup(
+    name = "async_public_headers",
+    srcs = glob(["ao/async/**/*.h"]),
+)
+
+cc_library(
+    name = "async_headers",
+    hdrs = [":async_public_headers"],
+    includes = ["."],
+    deps = [
+        ":utility_headers",
+        "@aobus_native_deps//:boost",
+    ],
+)
+
+filegroup(
+    name = "audio_public_headers",
+    srcs = glob(["ao/audio/**/*.h"]),
+    visibility = ["//include:__pkg__"],
+)
+
+cc_library(
+    name = "audio_headers",
+    hdrs = [":audio_public_headers"],
+    includes = ["."],
+    visibility = [
+        "//app/include:__pkg__",
+        "//app/runtime:__pkg__",
+        "//lib/audio:__pkg__",
+    ],
+    deps = [":utility_headers"],
+)
+
+filegroup(
+    name = "media_public_headers",
+    srcs = glob(["ao/media/**/*.h"]),
+)
+
+# mp4/Demuxer.cpp is the media slice's only Enumerate.h consumer. Keep it
+# source-private rather than expanding the shared utility header interface.
+filegroup(
+    name = "media_compat_headers",
+    srcs = ["ao/compat/Enumerate.h"],
+    visibility = [
+        "//app/runtime:__pkg__",
+        "//lib/media:__pkg__",
+        "//test:__pkg__",
+    ],
+)
+
+# Public FLAC and MP4 layouts include Boost.Endian.
+cc_library(
+    name = "media_headers",
+    hdrs = [":media_public_headers"],
+    includes = ["."],
+    deps = [
+        ":utility_headers",
+        "@aobus_native_deps//:boost",
+    ],
+)

@@ -1,12 +1,11 @@
 """Answers which portal commands need the native build environment.
 
-Each command module declares REQUIRES_BUILD_ENV next to its NAME; ao.bat
-and the macOS branch of ./ao query this module after their Python bootstrap
-instead of keeping their own copies of the command list. Known commands are
-parsed before that answer, so invalid options fail before scope resolution or
-native environment selection. Help flags are answered without parsing. The
-Unix launcher may still enter Nix, and ao.bat may still bootstrap Python,
-before this module runs.
+Each command module declares REQUIRES_BUILD_ENV next to its NAME. The Windows
+portal uses its parsed Namespace in-process; the macOS launcher queries this
+module after Python bootstrap. Neither keeps a separate command list. Known
+commands are parsed before scope resolution or native environment selection.
+The query API answers help flags without parsing. Platform launchers may still
+enter Nix or bootstrap Python before this module runs.
 """
 
 import argparse
@@ -20,6 +19,16 @@ from .paths import PROJECT_ROOT
 from .proc import die
 
 BUILD_ENV_REQUIRED_EXIT_CODE = 10
+
+
+def windows_bootstrap_requires_python_tools(arguments: Sequence[str]) -> bool:
+    """Keep the Windows Bazel consumer on the governed base Python runtime.
+
+    Bazel's native target graph does not consume the portal's lint/docs tools.
+    Every other invocation retains full tooling validation. The normal native
+    preflight still parses Bazel arguments before selecting its build environment.
+    """
+    return not arguments or arguments[0] != "bazel"
 
 
 def _help_requested(arguments: Sequence[str]) -> bool:

@@ -84,12 +84,75 @@ the command needs it. Help, tooling-only tests, and Python-only source scopes
 skip native setup. `ao.bat run <app> --no-build` launches an existing executable
 without preparing a build environment.
 
+The Windows bootstrap launches the selected interpreter directly; it does not
+return interpreter paths through temporary files. The selected Python process
+parses once, retains any resolved source scope, and dispatches the same invocation.
+Visual Studio's batch setup runs separately with no application arguments; its
+environment returns through a private in-memory channel. Argument forwarding does
+not use `CALL`. Parsing keeps the caller's working directory, while command
+execution uses the repository root; UNC roots retain a `pushd` mapping until the
+foreground portal exits. This does not replace build-tree or provisioning locks.
+
 `start-msbuild-env.bat <command> [args...]` is available when another tool needs
 the same Visual Studio environment. It preserves an explicit `VCPKG_ROOT` and
 otherwise selects Visual Studio's bundled vcpkg.
 
 The completion `check` builds the `aobus_guardrails` aggregate. Incremental
 `build` and `run` commands do not repeat repository-wide source scans.
+
+### Dependency linkage and existing trees
+
+The Ninja and WinUI presets select `x64-windows-static-md` for portable target
+dependencies. This links third-party archives while retaining the existing
+dynamic CRT: `/MDd` in Debug and `/MD` in Release, supplied by the native
+toolchain rather than a new global compiler flag. Windows system libraries,
+Windows App SDK/runtime and build-tool executables remain separate boundaries;
+this is not a fully static executable or a DLL-free development SDK.
+The presets explicitly select the normal `x64-windows` host triplet for vcpkg
+build tools, independently of static target-library linkage.
+
+An existing `x64-windows` installation is not the migrated SDK. Let the portal
+configure a separate tree with the updated preset and restore the static-md
+closure; do not rename old import libraries, reuse shared-package headers as
+static headers, or copy old caches into it. Bazel consumes that installed SDK
+without restoring it; see [Bazel setup](bazel.md#setup-and-commands).
+
+Static FLAC includes Ogg as a link dependency. Products, tests and probes no
+longer copy Ogg or mimalloc redirect DLLs beside their executables. CLI/TUI keep
+the existing executable C++ global `new`/`delete` forwarding operators from
+`mimalloc-new-delete.h`, now linked to static mimalloc. This does not preserve or
+claim broad CRT `malloc`/`free` or arbitrary cross-DLL allocation interception.
+Allocation ownership must still match the allocating interface.
+
+Validate a changed SDK in both Debug and Release, including product startup,
+allocation behavior, decoder workflows and the catalog build-tool closure.
+An installed archive inventory is not product acceptance, and results from the
+former dynamic SDK do not validate a static SDK. Select the affected native
+gates through [validation and review](test/validation-and-review.md).
+
+### Distribution and storage boundaries
+
+[mpg123](https://www.mpg123.de/) is licensed under LGPL-2.1. Before distributing
+Windows binaries that link it statically, choose and validate a compliance plan
+for [LGPL-2.1 section 6](https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html),
+including recipients' ability to modify the library and relink the application.
+That may require application object code or source, library source, and usable
+relink instructions, alongside the required license notices and other terms.
+The application's MIT license does not waive those obligations; dynamic linking
+alone would not establish complete compliance either. There is currently no
+Windows binary release/installer workflow in this repository. Any future one
+must resolve this distribution boundary before publishing binaries. The shared
+[binary-distribution guidance](dependency-governance.md#binary-distribution)
+covers other dependencies, including FDK-AAC source/notice requirements, and
+the actual SDK/runtime payloads and assets that a release includes.
+
+Static ICU data can be embedded separately in each executable that consumes it,
+including products and tests; it is no longer one shared ICU data DLL. Budget
+for those copies, intermediate archives, Debug symbols and Release LTCG scratch
+space when sizing build trees and hosted runners. Measure the selected tree's
+actual size and free-space headroom before release/CI capacity decisions. No
+per-executable size increase is established here, and the historical WinUI
+`LNK1180` disk-space failure does not establish ICU as its cause.
 
 ## Local state and build trees
 
@@ -278,6 +341,26 @@ All first-party Windows executables verify their UTF-8 process manifest after
 link. Narrow `argv` and audited narrow process boundaries are UTF-8, but
 filesystem paths still require the project's explicit native/UTF-8 conversion
 facades.
+
+### Bazel product target
+
+The [Bazel slice](bazel.md#winui-product) can also build and run the real
+product as `//app/windows-winui:aobus-winui`. `ao.bat bazel provision` installs
+the tree's vcpkg manifest and restores the locked NuGet closure into the managed
+cache that CMake WinUI trees share; the existing `packages.config`, dependency
+policy and Windows SDK selection remain the version authorities, and Bazel
+builds themselves neither restore nor install packages. This is
+an additional build path, not a replacement: `ao.bat check`, default GUI-probe
+orchestration, tidy and Release completion remain CMake-backed. Bazel also
+exposes explicit native probe targets and lint; neither route's development
+build acceptance supplies a signing or installer workflow. Bazel Debug and
+Release product builds have completed the real C++ compilation, archive, PE
+link, embedded UTF-8 manifest validation and executable-local staging within
+the boundaries recorded in the [Bazel slice](bazel.md#winui-product), which
+also records the observed desktop startup/exit status and its child-only
+`LOCALAPPDATA`/`APPDATA` isolation. A successful build or bounded observed
+startup through either path does not replace its interactive GUI gates or
+claim complete WinUI GUI acceptance.
 
 ### Stage offline prerequisites
 
@@ -579,8 +662,14 @@ of acceptance. Record the checks performed and remaining limits with the change.
 
 Windows format/tidy uses the official LLVM development archive pinned by
 [`script/ao/windows-llvm-sdk.json`](../../script/ao/windows-llvm-sdk.json);
-`cmake/LlvmSdk.cmake` provisions that archive. The portal reads the manifest
+`cmake/LlvmSdk.cmake` provisions that archive, and `ao.bat bazel provision`
+installs it into the same cache for Bazel lint and its [hygiene
+gate](bazel.md#hygiene-gate) without a CMake configure; ordinary `ao.bat format`
+keeps its CMake-backed SDK ensure. The portal reads the manifest
 lazily when Windows SDK code needs it, not while registering commands.
+Bazel hygiene checks for a ready LLVM SDK only when its resolved scope contains
+C++ files; Python-only and empty scopes do not require it. Managed Python tooling
+is prepared only for Python files; see the [gate's tool-selection contract](bazel.md#hygiene-gate).
 Required-file entries use portable forward-slash-separated components containing
 ASCII letters, digits, `_`, `.`, `+`, or `-`; `.` and `..` components are rejected.
 This keeps the same relative-path interpretation in CMake and Python on every host.
@@ -588,7 +677,10 @@ On first native C++ format or tidy configure, CMake
 downloads it, verifies SHA-256, and extracts it below
 `%LOCALAPPDATA%\Aobus\cache\llvm` by default. Later trees reuse the verified
 cache. Concurrent provisioning is locked, and incomplete or stale SDKs are not
-accepted.
+accepted. Bazel's ready-only validation also rejects malformed completion
+markers, including non-UTF-8 text; explicit provisioning repairs an invalid
+automatic cache under its shared lock. Access errors propagate rather than being
+treated as proof that an existing cache is corrupt.
 
 Prepare the same governed SDK explicitly before native tooling controls with
 `ao.bat setup llvm-sdk`. This initializes the required Visual Studio environment
@@ -659,11 +751,13 @@ run from new state before manually removing old files.
 ## Troubleshooting
 
 - **LLVM SDK provisioning failure**: `llvm-<version>.lock` is a coordination
-  file used by CMake's `file(LOCK ... GUARD FUNCTION)`, not an existence-based
-  stale-lock marker. If lock acquisition times out, check whether another CMake
-  process is still provisioning the SDK. Do not delete lock or cache files while
-  a writer may be active. After interruption, rerun configuration: it validates
-  the SDK and completion marker and re-extracts an invalid cache. For offline
+  file used by CMake's `file(LOCK ... GUARD FUNCTION)` and `ao.bat bazel provision`,
+  not an existence-based stale-lock marker. If lock acquisition times out, check
+  whether another CMake or provisioning process is still installing the SDK. Do not delete lock or cache files while
+  a writer may be active. After interruption, wait for the portal's installer
+  to settle before starting another writer, then rerun configuration or
+  `ao.bat bazel provision` as appropriate: it validates the SDK and completion
+  marker and re-extracts an invalid automatic cache. For offline
   provisioning, use the complete extracted SDK and `AOBUS_LLVM_SDK_ROOT`
   procedure under [offline SDK setup](#offline-sdk-setup).
 - **WinUI relinking staleness**: repeating an ordinary target build does not

@@ -366,6 +366,134 @@ class DependencyPolicyTest(unittest.TestCase):
         self.assertEqual(packages["spdlog"].version, "1.17.0#1")
         self.assertEqual(packages["spdlog"].upstream_version, "1.17.0")
 
+    def test_vcpkg_status_preserves_separate_port_revision_and_normalizes_zero(self):
+        for version, revision_field, expected in (
+            ("1.17.0", "", "1.17.0"),
+            ("1.17.0", "Port-Version: 0\n", "1.17.0"),
+            ("1.17.0", "Port-Version: 3\n", "1.17.0#3"),
+            ("1.17.0#3", "", "1.17.0#3"),
+            ("1.17.0#3", "Port-Version: 3\n", "1.17.0#3"),
+            ("1.17.0#0", "Port-Version: 0\n", "1.17.0"),
+        ):
+            with self.subTest(version=version, revision_field=revision_field):
+                packages = dependency_policy.parse_vcpkg_status(
+                    f"Package: spdlog\nVersion: {version}\n{revision_field}"
+                    "Architecture: x64-windows\nStatus: install ok installed\n"
+                )
+                self.assertEqual(packages["spdlog"].version, expected)
+                self.assertEqual(packages["spdlog"].upstream_version, "1.17.0")
+                self.assertEqual(packages["spdlog"].features, ("core",))
+
+    def test_vcpkg_status_rejects_invalid_or_conflicting_port_revisions(self):
+        cases = [("1.17.0", f"Port-Version: {value}\n") for value in ("-1", "+1", "1.5", "invalid", "", "1x")]
+        cases.extend((version, "") for version in ("1.17.0#-1", "1.17.0#", "1.17.0#1#2"))
+        cases.extend(("1.17.0#3", f"Port-Version: {value}\n") for value in ("0", "2"))
+        cases.append(("1.17.0", "Port-Version: 1\nPort-Version: 2\n"))
+        for version, revision_field in cases:
+            with self.subTest(version=version, revision_field=revision_field):
+                with self.assertRaisesRegex(dependency_policy.DependencyPolicyError, "port revision"):
+                    dependency_policy.parse_vcpkg_status(
+                        f"Package: spdlog\nVersion: {version}\n{revision_field}"
+                        "Architecture: x64-windows\nStatus: install ok installed\n"
+                    )
+
+    def test_vcpkg_status_compares_full_revision_identity_for_duplicate_core_records(self):
+        base = (
+            "Package: spdlog\nVersion: 1.17.0\nPort-Version: 3\n"
+            "Architecture: x64-windows\nStatus: install ok installed\n"
+        )
+        equal = base.replace("Version: 1.17.0\nPort-Version: 3", "Version: 1.17.0#3")
+        for records in ((base, base), (base, equal), (equal, base)):
+            with self.subTest(records=records):
+                self.assertEqual(
+                    dependency_policy.parse_vcpkg_status("\n\n".join(records))["spdlog"].version, "1.17.0#3"
+                )
+        for conflict in (base.replace("Port-Version: 3", "Port-Version: 4"), base.replace("Port-Version: 3\n", "")):
+            for records in ((base, conflict), (conflict, base)):
+                with self.subTest(records=records):
+                    with self.assertRaisesRegex(dependency_policy.DependencyPolicyError, "conflicting identities"):
+                        dependency_policy.parse_vcpkg_status("\n\n".join(records))
+
+    def test_vcpkg_status_checks_explicit_feature_revision_without_inventing_a_base(self):
+        base = "Package: icu\nVersion: 78.3\nPort-Version: 1\nArchitecture: x64-windows\nStatus: install ok installed\n"
+        for fields, matches in (
+            ("", True),
+            ("Version: 78.3\n", True),
+            ("Version: 78.3#1\n", True),
+            ("Version: 78.3\nPort-Version: 1\n", True),
+            ("Port-Version: 1\n", True),
+            ("Port-Version: 0\n", False),
+            ("Version: 78.3#2\n", False),
+            ("Version: 79.0\nPort-Version: 1\n", False),
+        ):
+            feature = f"Package: icu\nFeature: tools\n{fields}Architecture: x64-windows\nStatus: install ok installed\n"
+            self.assertEqual(dependency_policy.parse_vcpkg_status(feature), {})
+            for records in ((base, feature), (feature, base)):
+                with self.subTest(fields=fields, feature_first=records[0] == feature):
+                    if matches:
+                        package = dependency_policy.parse_vcpkg_status("\n\n".join(records))["icu"]
+                        self.assertEqual(package.version, "78.3#1")
+                        self.assertEqual(package.features, ("core", "tools"))
+                    else:
+                        with self.assertRaisesRegex(dependency_policy.DependencyPolicyError, "conflicting identities"):
+                            dependency_policy.parse_vcpkg_status("\n\n".join(records))
+
+    def test_vcpkg_status_merges_versionless_features_before_or_after_installed_base(self):
+        base = (
+            "Package: icu\nVersion: 78.3\nPort-Version: 1\nArchitecture: x64-aobus-osx\nStatus: install ok installed\n"
+        )
+        for version_field in ("", "Version: 78.3\n"):
+            feature = (
+                f"Package: icu\nFeature: tools\n{version_field}Architecture: x64-aobus-osx\n"
+                "Status: install ok installed\n"
+            )
+            for paragraphs in ((base, feature), (feature, base)):
+                with self.subTest(version_field=version_field, feature_first=paragraphs[0] == feature):
+                    packages = dependency_policy.parse_vcpkg_status("\n\n".join(paragraphs))
+                    self.assertEqual(packages["icu"].version, "78.3#1")
+                    self.assertEqual(packages["icu"].upstream_version, "78.3")
+                    self.assertEqual(packages["icu"].triplet, "x64-aobus-osx")
+                    self.assertEqual(packages["icu"].features, ("core", "tools"))
+
+    def test_vcpkg_status_does_not_invent_base_identity_for_orphan_features(self):
+        feature = "Package: icu\nFeature: tools\nArchitecture: x64-windows\nStatus: install ok installed\n"
+        cases = (
+            feature,
+            feature + "Version: 78.3\n",
+            "Package: icu\nArchitecture: x64-windows\nStatus: install ok installed\n\n" + feature,
+            "Package: icu\nVersion: 78.3\nArchitecture: x64-windows\nStatus: deinstall ok not-installed\n\n" + feature,
+        )
+        for text in cases:
+            with self.subTest(text=text):
+                self.assertEqual(dependency_policy.parse_vcpkg_status(text), {})
+
+    def test_vcpkg_status_ignores_removed_and_malformed_feature_records(self):
+        base = "Package: icu\nVersion: 78.3\nArchitecture: x64-windows\nStatus: install ok installed\n"
+        ignored = (
+            "Package: icu\nFeature: tools\nArchitecture: x64-windows\nStatus: deinstall ok not-installed\n",
+            "Package: icu\nFeature: tools\nArchitecture: x64-windows\n",
+            "Package: icu\nFeature: tools\nStatus: install ok installed\n",
+            "Feature: tools\nArchitecture: x64-windows\nStatus: install ok installed\n",
+            "Package: icu\nFeature: tools\nVersion: 99.0\nArchitecture: arm64-windows\n"
+            "Status: deinstall ok not-installed\n",
+        )
+        packages = dependency_policy.parse_vcpkg_status("\n\n".join((base, *ignored)))
+        self.assertEqual(packages["icu"].features, ("core",))
+
+    def test_vcpkg_status_rejects_conflicting_base_and_feature_identities_in_either_order(self):
+        base = "Package: icu\nVersion: 78.3\nArchitecture: x64-windows\nStatus: install ok installed\n"
+        conflicts = (
+            "Package: icu\nVersion: 79.0\nArchitecture: x64-windows\nStatus: install ok installed\n",
+            "Package: icu\nVersion: 78.3\nArchitecture: arm64-windows\nStatus: install ok installed\n",
+            "Package: icu\nFeature: tools\nVersion: 79.0\nArchitecture: x64-windows\nStatus: install ok installed\n",
+            "Package: icu\nFeature: tools\nArchitecture: arm64-windows\nStatus: install ok installed\n",
+        )
+        for conflict in conflicts:
+            for paragraphs in ((base, conflict), (conflict, base)):
+                with self.subTest(paragraphs=paragraphs):
+                    with self.assertRaisesRegex(dependency_policy.DependencyPolicyError, "conflicting identities"):
+                        dependency_policy.parse_vcpkg_status("\n\n".join(paragraphs))
+
     def _write_nix_resolution(self, root, platform, revision):
         pin_file = dependency_policy.NIXPKGS_PIN_FILES[platform]
         (root / pin_file).write_text(json.dumps({"rev": revision}), encoding="utf-8")
@@ -450,6 +578,87 @@ class DependencyPolicyTest(unittest.TestCase):
             self._write_vcpkg_status(status_file, versions)
             with self.assertRaisesRegex(dependency_policy.DependencyPolicyError, "family is mixed"):
                 dependency_policy._verify_vcpkg_resolution(self.contract, report, build_dir, platform="windows")
+
+    def test_vcpkg_resolution_keeps_target_ports_separate_from_host_identities(self):
+        for platform, triplet in (("windows", "x64-windows-static-md"), ("macos", "arm64-aobus-osx")):
+            with self.subTest(platform=platform), tempfile.TemporaryDirectory() as temp_dir:
+                build_dir = Path(temp_dir)
+                installed = build_dir / "vcpkg_installed"
+                status_file = installed / "vcpkg/status"
+                status_file.parent.mkdir(parents=True)
+                versions = self._governed_port_versions()
+                versions["boost-regex"] = "1.91.0"
+                self._write_vcpkg_status(status_file, versions, triplet=triplet)
+                target = status_file.read_text(encoding="utf-8")
+                target += f"\n\nPackage: icu\nFeature: tools\nArchitecture: {triplet}\nStatus: install ok installed\n"
+                host = (
+                    "Package: icu\nVersion: 1.0\nArchitecture: x64-windows\nStatus: install ok installed\n\n"
+                    "Package: icu\nFeature: tools\nArchitecture: x64-windows\nStatus: install ok installed\n\n"
+                    "Package: boost-regex\nVersion: 1.0\nArchitecture: x64-windows\nStatus: install ok installed\n"
+                )
+                report = {"host": {"vcpkgInstalledDir": str(installed), "vcpkgTriplet": triplet}}
+                for records in ((host, target), (target, host)):
+                    status_file.write_text("\n\n".join(records).replace("\n", "\r\n"), encoding="utf-8", newline="")
+                    resolved = dependency_policy._verify_vcpkg_resolution(
+                        self.contract, report, build_dir, platform=platform
+                    )
+                    self.assertEqual(resolved["icu"]["icu"]["triplet"], triplet)
+                    self.assertEqual(resolved["icu"]["icu"]["upstreamVersion"], versions["icu"])
+                    self.assertEqual(resolved["icu"]["icu"]["features"], ["core", "tools"])
+                    self.assertEqual(resolved["boost"]["boost-regex"]["version"], "1.91.0")
+
+    def test_vcpkg_resolution_never_substitutes_a_host_port_for_a_missing_target(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_dir = Path(temp_dir)
+            installed = build_dir / "vcpkg_installed"
+            status_file = installed / "vcpkg/status"
+            status_file.parent.mkdir(parents=True)
+            versions = self._governed_port_versions()
+            icu_version = versions.pop("icu")
+            triplet = "x64-windows-static-md"
+            self._write_vcpkg_status(status_file, versions, triplet=triplet)
+            with status_file.open("a", encoding="utf-8") as stream:
+                stream.write(
+                    f"\n\nPackage: icu\nVersion: {icu_version}\nArchitecture: x64-windows\n"
+                    "Status: install ok installed\n"
+                )
+            report = {"host": {"vcpkgInstalledDir": str(installed), "vcpkgTriplet": triplet}}
+            with self.assertRaisesRegex(dependency_policy.DependencyPolicyError, "missing governed port 'icu'"):
+                dependency_policy._verify_vcpkg_resolution(self.contract, report, build_dir, platform="windows")
+
+    def test_vcpkg_resolution_still_rejects_conflicting_target_identities(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_dir = Path(temp_dir)
+            installed = build_dir / "vcpkg_installed"
+            status_file = installed / "vcpkg/status"
+            status_file.parent.mkdir(parents=True)
+            triplet = "x64-windows-static-md"
+            self._write_vcpkg_status(status_file, self._governed_port_versions(), triplet=triplet)
+            with status_file.open("a", encoding="utf-8") as stream:
+                stream.write(f"\n\nPackage: icu\nVersion: 1.0\nArchitecture: {triplet}\nStatus: install ok installed\n")
+            report = {"host": {"vcpkgInstalledDir": str(installed), "vcpkgTriplet": triplet}}
+            with self.assertRaisesRegex(dependency_policy.DependencyPolicyError, "conflicting identities"):
+                dependency_policy._verify_vcpkg_resolution(self.contract, report, build_dir, platform="windows")
+
+    def test_vcpkg_resolution_retains_port_revision_without_changing_upstream_policy(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_dir = Path(temp_dir)
+            installed = build_dir / "vcpkg_installed"
+            status_file = installed / "vcpkg/status"
+            status_file.parent.mkdir(parents=True)
+            versions = self._governed_port_versions()
+            self._write_vcpkg_status(status_file, versions)
+            status_file.write_text(
+                status_file.read_text().replace(
+                    f"Package: spdlog\nVersion: {versions['spdlog']}\n",
+                    f"Package: spdlog\nVersion: {versions['spdlog']}\nPort-Version: 3\n",
+                ),
+                encoding="utf-8",
+            )
+            report = {"host": {"vcpkgInstalledDir": str(installed), "vcpkgTriplet": "x64-windows"}}
+            resolved = dependency_policy._verify_vcpkg_resolution(self.contract, report, build_dir, platform="windows")
+            self.assertEqual(resolved["spdlog"]["spdlog"]["version"], versions["spdlog"] + "#3")
+            self.assertEqual(resolved["spdlog"]["spdlog"]["upstreamVersion"], versions["spdlog"])
 
     def test_macos_vcpkg_resolution_uses_the_macos_policy_and_triplet(self):
         with tempfile.TemporaryDirectory() as temp_dir:

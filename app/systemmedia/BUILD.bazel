@@ -1,0 +1,46 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:private"])
+
+cc_library(
+    name = "test_headers",
+    testonly = True,
+    hdrs = [
+        "linux/MprisArtUrlSession.h",
+        "linux/MprisBusSession.h",
+        "linux/MprisPlaybackEndpoint.h",
+    ],
+    include_prefix = "systemmedia",
+    strip_include_prefix = ".",
+    target_compatible_with = ["@platforms//os:linux"],
+    visibility = ["//test:__pkg__"],
+    deps = [":linux"],
+)
+
+cc_library(
+    name = "linux",
+    srcs = [
+        "linux/MprisArtUrlCache.cpp",
+        "linux/MprisArtUrlSession.cpp",
+        "linux/MprisArtUrlSession.h",
+        "linux/MprisBridge.cpp",
+        "linux/MprisBusSession.cpp",
+        "linux/MprisBusSession.h",
+        "linux/MprisPlaybackEndpoint.cpp",
+        "linux/MprisPlaybackEndpoint.h",
+    ],
+    linkstatic = True,
+    implementation_deps = ["//lib:ao"],
+    target_compatible_with = ["@platforms//os:linux"],
+    visibility = [
+        "//app/linux-gtk:__pkg__",
+        "//app/tui:__pkg__",
+        "//test:__pkg__",
+    ],
+    deps = [
+        "//app/include:systemmedia_headers",
+        "//app/runtime:runtime",
+        "//app/uimodel:uimodel",
+        "@aobus_native_deps//:giomm",
+    ],
+)

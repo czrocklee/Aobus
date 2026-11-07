@@ -17,100 +17,10 @@ from . import builddir, phases, tidyconfig, tidyengine
 from .jobs import default_workers
 from .paths import PROJECT_ROOT
 from .proc import die
+from .tidydiagnostics import has_fatal_compiler_error, parse_diagnostic_header
 
 FIXTURE_DIR = PROJECT_ROOT / "test" / "lint" / "fixture"
 DIAGNOSTIC_RE = re.compile(r"^(.+):(\d+):(\d+): warning: (.*) \[(.*)\]$")
-# LLVM diagnostic headers start their line: a location, a clang driver
-# banner, or a bare severity, then the severity and its message. The console
-# renderer also echoes source and fix-it lines behind an "<indent>N | " gutter,
-# and a header's message can quote other headers -- both may contain arbitrary
-# text -- so classification skips gutter lines and reads the header that
-# STARTS each line, at any severity. The parse is staged to bound message
-# reinterpretation to the known header forms: a bare severity at the start
-# (followed by ':' or a space, as in the MSVC "warning C4996:" code form)
-# stops the parse, a driver banner is read before any location, and of the
-# two location grammars the header whose severity starts earliest wins, so
-# a message quoting the other location form cannot win. A line whose driver
-# banner is followed by a non-severity still falls back to a location read.
-_LLVM_GUTTER_RE = re.compile(r"^\s*(?:\d+\s*)?\|")
-# A bare severity starting the line: a clang console/driver header such as
-# "error: invalid argument" or "fatal error: 'Missing.h' file not found". A
-# severity word followed by filename continuation characters (a word
-# character, '-', '.', '/', or a path separator) starts a location header's
-# filename instead, such as "warning.cpp:1:2:".
-_BARE_SEVERITY_RE = re.compile(r"^\s*(?P<severity>fatal error|error|warning|note|remark)(?![\w./\\-])")
-# A clang driver banner followed by its severity, read before any location.
-_DRIVER_BANNER_SEVERITY_RE = re.compile(
-    r"^cla[n]g(?:\+\+|-cl|-tidy)?(?:\.exe)?:\s*(?P<severity>fatal error|error|warning|note|remark)(?![\w-])"
-)
-# The two location grammars, each followed by its severity. Each grammar can
-# match a location quoted later in a message, so the caller reads the header
-# whose severity starts earliest.
-_CLANG_LOCATION_SEVERITY_RE = re.compile(
-    r"^.+?:\d+:\d+:\s*(?P<severity>fatal error|error|warning|note|remark)(?![\w-])"
-)
-_MSVC_LOCATION_SEVERITY_RE = re.compile(
-    r"^.+?\(\d+(?:,\d+)?\):\s*(?P<severity>fatal error|error|warning|note|remark)(?![\w-])"
-)
-
-
-@dataclass(frozen=True)
-class DiagnosticHeader:
-    """The first diagnostic header starting one line of captured tool output."""
-
-    severity: str
-    text: str
-
-    @property
-    def is_error(self) -> bool:
-        """Errors and fatal errors abort the checked translation unit."""
-        return self.severity in ("error", "fatal error")
-
-
-def parse_diagnostic_header(line: str) -> DiagnosticHeader | None:
-    """Return the first diagnostic header that starts *line*, or None.
-
-    Echoed source and fix-it lines (an ``<indent>N |`` gutter) and message text
-    quoting other headers never classify: only a header that starts the line is
-    read, at any severity, so a warning whose message quotes ``fake.cpp:1:2:
-    error:`` stays a warning and an error whose message quotes ``fake.cpp:1:2:
-    warning:`` stays an error.
-    """
-    if _LLVM_GUTTER_RE.match(line):
-        return None
-    match = _BARE_SEVERITY_RE.match(line)
-    if match is None:
-        match = _DRIVER_BANNER_SEVERITY_RE.match(line)
-    if match is None:
-        located = [
-            candidate
-            for candidate in (
-                _CLANG_LOCATION_SEVERITY_RE.match(line),
-                _MSVC_LOCATION_SEVERITY_RE.match(line),
-            )
-            if candidate is not None
-        ]
-        match = min(located, key=lambda candidate: candidate.start("severity")) if located else None
-    if match is None:
-        return None
-    return DiagnosticHeader(severity=match.group("severity"), text=line)
-
-
-def has_fatal_compiler_error(output: str, *, tag: str | None = None) -> bool:
-    """Return whether captured output carries a real error-severity header.
-
-    With *tag*, the error header's line must also carry that marker, anchoring
-    bracketed check names to a genuine header instead of a whole-output
-    substring that an echoed comment could satisfy.
-    """
-    return any(
-        (header := parse_diagnostic_header(line)) is not None
-        and header.is_error
-        and (tag is None or tag in header.text)
-        for line in output.splitlines()
-    )
-
-
 POSITIVE_RE = re.compile(r"//\s*POSITIVE(?::\s*([a-zA-Z0-9_-]+))?")
 NEGATIVE_RE = re.compile(r"//\s*NEGATIVE(?::\s*([a-zA-Z0-9_-]+))?")
 LOCAL_INCLUDE_RE = re.compile(r'^\s*#\s*(?:include|import)\s*"([^"]+)"', re.MULTILINE)
@@ -139,9 +49,10 @@ class Reporter:
             with self._log.open("a", encoding="utf-8") as sink:
                 sink.write(f"{message}\n")
 
-    def write_file(self, path: Path) -> None:
+    def write_file(self, path: Path, *, echo: bool = True) -> None:
         text = path.read_text(encoding="utf-8", errors="replace")
-        print(text, end="" if text.endswith("\n") else "\n")
+        if echo:
+            print(text, end="" if text.endswith("\n") else "\n")
         if self._log is not None:
             with self._log.open("a", encoding="utf-8") as sink:
                 sink.write(text)
@@ -292,12 +203,16 @@ def verify_diagnostics(
 
 
 @dataclass(frozen=True)
-class WindowsFixtureTools:
+class FixtureTools:
+    """Caller-verified native host with an independent fixture compiler profile."""
+
     tidy: str
     flags: tuple[str, ...]
+    windows: bool
+    plugin: Path | None = None
 
 
-def _windows_fixture_tools(build_dir: Path, toolchain: tidyengine.TidyToolchain) -> WindowsFixtureTools:
+def _windows_fixture_tools(build_dir: Path, toolchain: tidyengine.TidyToolchain) -> FixtureTools:
     """Use only the caller-verified tidy host and the initialized VS standard includes.
 
     The toolchain context is prepared and verified once by the portal preflight;
@@ -321,8 +236,9 @@ def _windows_fixture_tools(build_dir: Path, toolchain: tidyengine.TidyToolchain)
     includes = [value for value in os.environ.get("INCLUDE", "").split(";") if value.strip()]
     if not includes:
         raise die("Windows lint fixtures require the INCLUDE directories from the Visual Studio x64 environment.")
-    return WindowsFixtureTools(
+    return FixtureTools(
         tidy=toolchain.clang_tidy,
+        windows=True,
         flags=(
             "--driver-mode=cl",
             "/nologo",
@@ -360,19 +276,24 @@ def _direct_tidy_command(
     ]
 
 
-def _tidy_command(
-    fixture: Fixture, build_dir: Path, *extra: str, tools: WindowsFixtureTools | None = None
-) -> list[str]:
+def _tidy_command(fixture: Fixture, build_dir: Path, *extra: str, tools: FixtureTools | None = None) -> list[str]:
     if tools is not None:
         # A fixed compilation command avoids borrowing a product TU's forced
         # PCH, defines, or GCC flags. The portal runs explicit fixtures as
         # STRICT, so the direct host must apply the same effective check policy.
         config = tidyconfig.config_for(tidyconfig.checks_for("STRICT", fixture.check))
+        # FixedCompilationDatabase appends the input after these flags. A .h
+        # defaults to C unless -x precedes it; --extra-arg appends too late.
+        flags = tools.flags
+        if not tools.windows:
+            language = "objective-c++" if fixture.path.suffix == ".mm" else "c++"
+            flags = (*flags, "-x", language)
         return _direct_tidy_command(
             tools.tidy,
             str(fixture.path),
             config,
-            flags=tools.flags,
+            flags=flags,
+            plugin=tools.plugin,
             tidy_args=tuple(argument.removeprefix("--tidy-arg=") for argument in extra),
         )
     return [
@@ -489,7 +410,7 @@ def _diagnostic_errors(
 
 
 def _run_diagnostic(
-    fixture: Fixture, build_dir: Path, run_dir: Path, *, tools: WindowsFixtureTools | None = None
+    fixture: Fixture, build_dir: Path, run_dir: Path, *, tools: FixtureTools | None = None
 ) -> tuple[bool, Path]:
     case_dir = Path(tempfile.mkdtemp(prefix=f"{fixture.path.name}.diag.", dir=run_dir))
     log = case_dir / "run.log"
@@ -501,7 +422,7 @@ def _run_diagnostic(
             *_fixture_tidy_args(
                 fixture.path.parent,
                 "objective-c++" if fixture.path.suffix == ".mm" else "c++",
-                windows=tools is not None,
+                windows=tools.windows if tools is not None else False,
             ),
             tools=tools,
         ),
@@ -613,10 +534,13 @@ def _run_source_policy_smoke(
     run_dir: Path,
     *,
     plugin: Path | None,
-    tools: WindowsFixtureTools | None = None,
+    tools: FixtureTools | None = None,
     jobs: int = 1,
 ) -> tuple[bool, Path]:
-    if tools is None and plugin is None:
+    windows = tools.windows if tools is not None else False
+    if tools is not None:
+        plugin = tools.plugin
+    if not windows and plugin is None:
         raise ValueError("source-policy smoke requires the verified native plugin")
     if jobs < 1:
         raise ValueError("source-policy smoke requires at least one worker")
@@ -640,14 +564,18 @@ def _run_source_policy_smoke(
         flags: tuple[str, ...] = ("-std=c++26",)
     else:
         host = tools.tidy
-        flags = (*tools.flags, "/clang:-std=c++26", "/clang:-fdiagnostics-format=clang")
+        flags = (
+            (*tools.flags, "/clang:-std=c++26", "/clang:-fdiagnostics-format=clang")
+            if windows
+            else (*tools.flags, "-std=c++26")
+        )
     # Freeze all case/profile inputs before any worker starts. Distinct filenames
     # preserve each tested directory layout without sharing mutable marker bytes.
-    for forward_slashes in (False, True) if tools is not None else (False,):
+    for forward_slashes in (False, True) if windows else (False,):
         spelling = "forward" if forward_slashes else "native"
         profile_dir = case_dir / spelling
         cases: list[tuple[str, Path, str, bool, bool, bool]] = []
-        for name, path, roots, expected in _source_policy_cases(profile_dir, windows=tools is not None):
+        for name, path, roots, expected in _source_policy_cases(profile_dir, windows=windows):
             option_roots = (
                 tuple(_source_policy_ascii_case_variant(root) for root in roots) if forward_slashes else roots
             )
@@ -671,7 +599,7 @@ def _run_source_policy_smoke(
             sources: dict[Path, str] = {}
             input_paths: tuple[Path, ...] = (path,)
             diagnostic_args: tuple[str, ...] = ()
-            separator = "\\" if tools is not None and not forward_slashes else "/"
+            separator = "\\" if windows and not forward_slashes else "/"
             if name == "same-file-system":
                 body = "\n".join(source.splitlines()[1:]) + "\n"
                 system = body.replace("Probe", "SystemProbe").replace("POSITIVE", "NEGATIVE")
@@ -732,7 +660,7 @@ def _run_source_policy_smoke(
                 input_names[-1],
                 config,
                 flags=flags,
-                plugin=plugin if tools is None else None,
+                plugin=plugin,
                 tidy_args=(*diagnostic_args, *input_names[:-1]),
             )
             tasks.append(
@@ -814,7 +742,7 @@ _COMPILER_ERROR_SMOKE_CASES = (
 
 
 def _run_compiler_error_smoke(
-    build_dir: Path, run_dir: Path, *, tools: WindowsFixtureTools | None = None
+    build_dir: Path, run_dir: Path, *, tools: FixtureTools | None = None
 ) -> tuple[bool, Path]:
     case_dir = Path(tempfile.mkdtemp(prefix="compiler-errors.", dir=run_dir))
     log = case_dir / "run.log"
@@ -827,7 +755,12 @@ def _run_compiler_error_smoke(
         path.write_text(source, encoding="utf-8")
         fixture = Fixture(path, "aobus-modernize-braced-initialization")
         result = subprocess.run(
-            _tidy_command(fixture, build_dir, *_fixture_tidy_args(case_dir, windows=tools is not None), tools=tools),
+            _tidy_command(
+                fixture,
+                build_dir,
+                *_fixture_tidy_args(case_dir, windows=tools.windows if tools is not None else False),
+                tools=tools,
+            ),
             cwd=PROJECT_ROOT,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -852,6 +785,8 @@ def _report_results(
     fixtures: list[Fixture],
     results: Iterable[tuple[bool, Path]],
     reporter: Reporter,
+    *,
+    log_success: bool = False,
 ) -> bool:
     """Report fixtures in submission order, without waiting for the whole stage.
 
@@ -867,6 +802,8 @@ def _report_results(
         passed = passed and success
         if not success:
             reporter.write_file(log)
+        elif log_success:
+            reporter.write_file(log, echo=False)
     reporter.write(f"{label}: {'passed' if passed else 'failed'}")
     return passed
 
@@ -877,19 +814,26 @@ def run(
     log: Path | None = None,
     jobs: int | None = None,
     toolchain: tidyengine.TidyToolchain | None = None,
+    tools: FixtureTools | None = None,
+    work: Path | None = None,
 ) -> int:
-    """Run the lint fixture integration suite.
+    """Run the same fixture assertions through the portal or a verified direct host.
 
-    *toolchain* is the caller-verified tidy context prepared by the portal's
-    toolchain preflight; it is required before the Windows diagnostic stage and
-    ignored elsewhere, where the portal route supplies the fixture runs.
-    Expectation errors are reported for every discovered fixture before that
-    setup and before diagnostic workers start.
+    Without *tools*, the legacy CMake route requires a compile database and
+    portal-verified Windows *toolchain*. With *tools*, no CMake inputs or nested
+    portal invocation are needed. *work* is a caller-owned output directory;
+    per-stage artifacts remain unique and are kept even on success. Without it
+    the legacy temporary-workspace cleanup applies.
+    Every discovered fixture's grammar is checked before native work, including
+    Objective-C++ headers and fixtures deferred on Windows.
     """
-    windows = builddir.platform_profile().name == "windows"
+    direct = tools is not None
+    windows = tools.windows if tools is not None else builddir.platform_profile().name == "windows"
     reporter = Reporter(log)
     fixtures = discover_fixtures()
     if not fixtures:
+        if direct:
+            raise ValueError(f"no declared lint fixtures found in {FIXTURE_DIR}")
         reporter.write(f"ERROR: no lint fixtures found in {FIXTURE_DIR}")
         return 1
     # Current marker grammar on the discovered list, including context headers
@@ -911,20 +855,24 @@ def run(
         if not fixtures:
             reporter.write("ERROR: no compatible lint fixtures selected")
             return 1
-        if toolchain is None:
-            raise die("the Windows lint suite requires the toolchain verified by the tidy portal preflight.")
-        tools = _windows_fixture_tools(build_dir, toolchain)
-    else:
-        tools = None
-    plugin = build_dir / "tool" / "lint" / "libAobusLintPlugin.so"
-    compile_db = build_dir / "compile_commands.json"
-    if not compile_db.is_file():
-        reporter.write(f"ERROR: compile_commands.json not found in {build_dir}")
-        return 1
-    if not windows and not plugin.is_file():
-        reporter.write(f"ERROR: AobusLintPlugin not found at {plugin}")
-        return 1
-    run_dir = Path(tempfile.mkdtemp(prefix="aobus-lint-integration-"))
+        if tools is None:
+            if toolchain is None:
+                raise die("the Windows lint suite requires the toolchain verified by the tidy portal preflight.")
+            tools = _windows_fixture_tools(build_dir, toolchain)
+    plugin = tools.plugin if tools is not None else build_dir / "tool" / "lint" / "libAobusLintPlugin.so"
+    if not direct:
+        compile_db = build_dir / "compile_commands.json"
+        if not compile_db.is_file():
+            reporter.write(f"ERROR: compile_commands.json not found in {build_dir}")
+            return 1
+        if not windows and (plugin is None or not plugin.is_file()):
+            reporter.write(f"ERROR: AobusLintPlugin not found at {plugin}")
+            return 1
+    if work is not None:
+        work.mkdir(parents=True, exist_ok=True)
+    # A declared action output already owns the suite directory. Avoid another
+    # long prefix before the source-policy layouts on native Windows.
+    run_dir = work if work is not None else Path(tempfile.mkdtemp(prefix="aobus-lint-integration-"))
     failed = True
     try:
         reporter.write(f"=== Diagnostic Verification ({len(fixtures)} fixtures) ===")
@@ -939,6 +887,7 @@ def run(
                     fixtures,
                     pool.map(lambda fixture: _run_diagnostic(fixture, build_dir, run_dir, tools=tools), fixtures),
                     reporter,
+                    log_success=direct,
                 )
             phase.status = 0 if diagnostics_passed else 1
 
@@ -954,6 +903,8 @@ def run(
         reporter.write(f"  [{'PASS' if source_policy_passed else 'FAIL'}] root-relative production policy")
         if not source_policy_passed:
             reporter.write_file(source_policy_log)
+        elif direct:
+            reporter.write_file(source_policy_log, echo=False)
 
         reporter.write("=== Compiler Error Detection Smoke ===")
         with phases.measure("lint-compiler-errors", tree="tidy", count=len(_COMPILER_ERROR_SMOKE_CASES)) as phase:
@@ -962,6 +913,8 @@ def run(
         reporter.write(f"  [{'PASS' if compiler_errors_passed else 'FAIL'}] fatal compiler diagnostics")
         if not compiler_errors_passed:
             reporter.write_file(compiler_errors_log)
+        elif direct:
+            reporter.write_file(compiler_errors_log, echo=False)
 
         failed = not (diagnostics_passed and source_policy_passed and compiler_errors_passed)
         reporter.write(
@@ -971,5 +924,5 @@ def run(
             reporter.write(f"Failure artifacts preserved at {run_dir}")
         return int(failed)
     finally:
-        if not failed:
+        if not failed and work is None:
             shutil.rmtree(run_dir, ignore_errors=True)

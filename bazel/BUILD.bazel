@@ -1,0 +1,38 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+config_setting(
+    name = "optimized_contracts",
+    values = {"compilation_mode": "opt"},
+)
+
+# Runtime contract behavior follows the actual compilation mode. Standalone
+# probes share this interface without importing the Core utility header tree.
+cc_library(
+    name = "compile_contract",
+    defines = ["gsl_CONFIG_CONTRACT_CHECKING_ON"] + select({
+        ":optimized_contracts": ["gsl_CONFIG_CONTRACT_VIOLATION_TERMINATES"],
+        "//conditions:default": ["gsl_CONFIG_CONTRACT_VIOLATION_ASSERTS"],
+    }),
+)
+
+exports_files([
+    "apple_support_llvm.patch",
+    "catalog.bzl",
+    "compile_context.bzl",
+    "compiler_policy.bzl",
+    "dependencies.bzl",
+    "gperf.bzl",
+    "host_tools.bzl",
+    "host_tools_repository.bzl",
+    "import_repository.bzl",
+    "imports.bzl",
+    "linux_toolchain.bzl",
+    "macos_cc_config.bzl",
+    "toolchain_repository.bzl",
+    "verify_windows_utf8_manifest.ps1",
+    "windows_utf8_manifest.bzl",
+    "winui_repository.bzl",
+    "winui_sdk.bzl",
+])

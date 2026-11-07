@@ -6,6 +6,7 @@ each module declares the same name. Reading these identities loads no commands.
 """
 
 COMMAND_MODULE_NAMES = (
+    "bazel",
     "build",
     "check",
     "test",

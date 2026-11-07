@@ -77,18 +77,22 @@ def requires_build_environment(args: argparse.Namespace) -> bool:
     return buildenv.requires_source_build_env(args, resolve_files(args))
 
 
-def run_clang_format(files: list[str], *, check: bool, build_dir: Path | None = None) -> int:
+def run_clang_format(
+    files: list[str], *, check: bool, build_dir: Path | None = None, clang_format: str | None = None
+) -> int:
+    """Run clang-format; an explicit executable replaces the Windows lint-tree SDK selection."""
     if not files:
         return 0
 
     mode = ["--dry-run", "-Werror"] if check else ["-i"]
     action = "Checking" if check else "Formatting"
     print(f"{action} {len(files)} file(s) with clang-format...")
-    clang_format = "clang-format"
-    if builddir.platform_profile().name == "windows":
-        tidy_build_dir = build_dir if build_dir is not None else builddir.tidy_dir()
-        tidyengine.ensure_windows_llvm_sdk(tidy_build_dir)
-        clang_format = tidyengine.clang_tool(tidy_build_dir, "clang-format")
+    if clang_format is None:
+        clang_format = "clang-format"
+        if builddir.platform_profile().name == "windows":
+            tidy_build_dir = build_dir if build_dir is not None else builddir.tidy_dir()
+            tidyengine.ensure_windows_llvm_sdk(tidy_build_dir)
+            clang_format = tidyengine.clang_tool(tidy_build_dir, "clang-format")
 
     status = 0
     for start in range(0, len(files), CHUNK):
@@ -105,7 +109,7 @@ def run_clang_format(files: list[str], *, check: bool, build_dir: Path | None = 
     return 0
 
 
-def run_ruff_format(files: list[str], *, check: bool) -> int:
+def run_ruff_format(files: list[str], *, check: bool, python: Path | None = None) -> int:
     if not files:
         return 0
 
@@ -113,13 +117,20 @@ def run_ruff_format(files: list[str], *, check: bool) -> int:
     action = "Checking" if check else "Formatting"
     print(f"{action} {len(files)} file(s) with ruff format...")
     try:
-        result = subprocess.run(pythoncheck.ruff_command("format", *mode, *files), cwd=PROJECT_ROOT)
+        result = subprocess.run(pythoncheck.ruff_command("format", *mode, *files, python=python), cwd=PROJECT_ROOT)
     except FileNotFoundError as exc:
-        raise die(f"Python environment is unavailable: {sys.executable}") from exc
+        raise die(f"Python environment is unavailable: {python or sys.executable}") from exc
     return 1 if result.returncode != 0 else 0
 
 
-def run_command(args: argparse.Namespace, *, files: list[str] | None = None, build_dir: Path | None = None) -> int:
+def run_command(
+    args: argparse.Namespace,
+    *,
+    files: list[str] | None = None,
+    build_dir: Path | None = None,
+    clang_format: str | None = None,
+    python: Path | None = None,
+) -> int:
     if files is None:
         files = resolve_files(args)
     cpp_files = [name for name in files if name.endswith(gitfiles.CPP_SUFFIXES) and _file_exists(name)]
@@ -129,9 +140,9 @@ def run_command(args: argparse.Namespace, *, files: list[str] | None = None, bui
         return 0
 
     status = 0
-    if run_clang_format(cpp_files, check=args.check, build_dir=build_dir) != 0:
+    if run_clang_format(cpp_files, check=args.check, build_dir=build_dir, clang_format=clang_format) != 0:
         status = 1
-    if run_ruff_format(python_files, check=args.check) != 0:
+    if run_ruff_format(python_files, check=args.check, python=python) != 0:
         status = 1
 
     if status != 0 and args.check:

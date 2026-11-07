@@ -8,6 +8,16 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      mode:
+        description: Validation route (bazel skips the CMake project jobs)
+        type: choice
+        options: [full, bazel]
+        default: full
+      r2:
+        description: Use existing writer credentials for trusted isolated R2 validation
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -25,6 +35,11 @@ jobs:
       base: ${{ steps.scope.outputs.sha }}
       docs-only: ${{ steps.scope.outputs.docs-only }}
     steps:
+      - name: Validate manual selection
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.r2 && inputs.mode != 'bazel' }}
+        run: |
+          echo '::error::R2 validation requires mode=bazel and an explicitly trusted checkout.' >&2
+          exit 1
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -56,9 +71,11 @@ jobs:
     needs: changes
     if: >-
       ${{ always() && !cancelled() &&
+          (github.event_name != 'workflow_dispatch' || inputs.mode != 'bazel') &&
           (needs.changes.result != 'success' || needs.changes.outputs.docs-only != 'true') }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    # This job retains both Bazel gates and the full CMake completion route.
+    timeout-minutes: 180
     env:
       SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
       AOBUS_PHASE_LOG_DIR: /tmp/aobus-phases-${{ github.run_id }}-${{ github.run_attempt }}
@@ -115,7 +132,9 @@ jobs:
       # secrets context is not allowed in steps.if, so the guard runs in
       # the helper's step body.
       - name: Activate R2 compiler cache backend
-        if: ${{ steps.compiler-cache.outcome == 'success' }}
+        if: >-
+          ${{ steps.compiler-cache.outcome == 'success' &&
+              github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         shell: bash
         env:
           R2_ENDPOINT: ${{ secrets.R2_SCCACHE_ENDPOINT }}
@@ -133,6 +152,154 @@ jobs:
 
       - name: Show initial disk usage
         run: df -h
+
+      # Persist only content-addressed disk actions, never workspace/server,
+      # repository, provider or Nix state. This is native SDK execution, not RBE.
+      # The versioned pin-contract prefix selects candidates, not ABI compatibility:
+      # source paths, compiler arguments and inputs remain Bazel action keys.
+      # PRs may restore main's cache under GitHub's branch isolation; untrusted
+      # job writes must never be promoted into the trusted main pool.
+      - name: Restore Bazel disk cache
+        id: bazel-cache
+        continue-on-error: true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ${{ runner.temp }}/aobus-state/cache/bazel
+          key: >-
+            bazel-disk-v1-trusted-main-${{ runner.os }}-${{ runner.arch }}-${{
+              hashFiles('.bazelversion', 'script/ao/bazel-toolchain.json', 'nixpkgs.json', 'shell.nix', 'MODULE.bazel')
+            }}-${{ github.sha }}
+          restore-keys: >-
+            bazel-disk-v1-trusted-main-${{ runner.os }}-${{ runner.arch }}-${{
+              hashFiles('.bazelversion', 'script/ao/bazel-toolchain.json', 'nixpkgs.json', 'shell.nix', 'MODULE.bazel')
+            }}-
+
+      # Timestamp the restored archive contents: created after the restore and
+      # outside the persisted cache, the marker lets the trim step tell restored
+      # entries apart from this run's writes.
+      - name: Mark restored Bazel disk cache
+        id: bazel-cache-marker
+        continue-on-error: true
+        shell: bash
+        env:
+          AOBUS_BAZEL_CACHE_MARKER: ${{ runner.temp }}/aobus-bazel-cache-restored.marker
+        run: touch "$AOBUS_BAZEL_CACHE_MARKER"
+
+      # Reuse the existing bucket/writer only on trusted main pushes. Routine
+      # PRs get no R2 binding; YAML conditions are not backend authorization
+      # against a malicious workflow edit with access to repository secrets.
+      - name: Start Bazel remote cache
+        id: bazel-remote
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.AOBUS_BAZEL_R2_CACHE_AUTHORIZED == 'true' }}
+        continue-on-error: true
+        shell: bash
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_SCCACHE_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_SCCACHE_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SCCACHE_SECRET_ACCESS_KEY }}
+        run: >-
+          python3 script/ao/core/bazel_remote_cache.py start
+          --state "$RUNNER_TEMP/aobus-bazel-remote"
+          --github-output "$GITHUB_OUTPUT"
+          --runner-os "$RUNNER_OS"
+          --runner-arch "$RUNNER_ARCH"
+          --trusted-writer "${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}"
+
+      # Keep the opt-in Bazel graph exercised without replacing the complete
+      # native CMake/check gate below. Explicit state roots also cover runs where
+      # compiler-cache activation is unavailable; CMake retains its state policy.
+      - name: Check Bazel portable slice
+        id: bazel-test
+        continue-on-error: true
+        env:
+          AOBUS_STATE_ROOT: ${{ runner.temp }}/aobus-state
+          AOBUS_BAZEL_REMOTE_CACHE: ${{ steps.bazel-remote.outputs.url }}
+        run: ./ao bazel test --path "$RUNNER_TEMP/aobus-bazel-debug" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL"
+
+      - name: Verify Bazel compile contracts
+        id: bazel-verify
+        continue-on-error: true
+        env:
+          AOBUS_STATE_ROOT: ${{ runner.temp }}/aobus-state
+        run: |
+          ./ao bazel verify --path "$RUNNER_TEMP/aobus-bazel-debug" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL"
+          ./ao bazel verify --config release --path "$RUNNER_TEMP/aobus-bazel-release" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL"
+
+      # Representative lint integration over the shared state root: the lint
+      # fixture test, one checked source, and the cache-clean release target.
+      # Optional for the job; the mandatory aggregation below still runs.
+      - name: Check Bazel lint reports and fixtures
+        id: bazel-lint
+        continue-on-error: true
+        env:
+          AOBUS_STATE_ROOT: ${{ runner.temp }}/aobus-state
+          AOBUS_BAZEL_REMOTE_CACHE: ${{ steps.bazel-remote.outputs.url }}
+        run: |
+          ./ao bazel test --path "$RUNNER_TEMP/aobus-bazel-debug" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL" -- //test:lint_test
+          ./ao bazel lint --path "$RUNNER_TEMP/aobus-bazel-debug" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL" --check aobus-modernize-use-starts-with lib/utility/Base64.cpp
+          ./ao bazel lint --config release --path "$RUNNER_TEMP/aobus-bazel-release" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL" --target //test/lint:cache_clean --check aobus-modernize-use-starts-with
+
+      # The CMake-free commit gate over the scope of the hygiene step below.
+      # Optional: it is not part of the Bazel aggregation or the cache save.
+      - name: Check Bazel hygiene gate
+        id: bazel-hygiene
+        continue-on-error: true
+        env:
+          AOBUS_STATE_ROOT: ${{ runner.temp }}/aobus-state
+          AOBUS_BAZEL_REMOTE_CACHE: ${{ steps.bazel-remote.outputs.url }}
+          BASE_SHA: ${{ needs.changes.outputs.base }}
+        run: ./ao bazel hygiene --commit "$BASE_SHA" --path "$RUNNER_TEMP/aobus-bazel-debug" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL"
+
+      # bazel-remote abandons queued uploads when it stops, so drain them first.
+      - name: Stop Bazel remote cache
+        if: ${{ always() && steps.bazel-remote.outcome == 'success' }}
+        continue-on-error: true
+        shell: bash
+        run: python3 script/ao/core/bazel_remote_cache.py stop --state "$RUNNER_TEMP/aobus-bazel-remote"
+
+      # Native Bazel idle GC does not necessarily run before the save step, so
+      # drop restored entries this run never touched: only files newer than the
+      # restore marker belong to this run's cache image. A missing marker or a
+      # failed prune fails this step, and the save below requires its success,
+      # so an unpruned archive is never published. The prune stays optional for
+      # the job; the mandatory test, verify, lint, CMake, and hygiene gates below
+      # run regardless of its outcome. Exact cache hits skip it entirely.
+      - name: Trim restored Bazel disk cache
+        id: bazel-cache-trim
+        if: ${{ steps.bazel-cache-marker.outcome == 'success' && steps.bazel-cache.outcome == 'success' && steps.bazel-cache.outputs.cache-hit != 'true' }}
+        continue-on-error: true
+        shell: bash
+        env:
+          AOBUS_BAZEL_CACHE_DIR: ${{ runner.temp }}/aobus-state/cache/bazel
+          AOBUS_BAZEL_CACHE_MARKER: ${{ runner.temp }}/aobus-bazel-cache-restored.marker
+        run: |
+          if [[ ! -f "$AOBUS_BAZEL_CACHE_MARKER" ]]; then
+            echo "::error::Bazel cache restore marker '$AOBUS_BAZEL_CACHE_MARKER' is missing; not saving." >&2
+            exit 1
+          fi
+          if [[ ! -d "$AOBUS_BAZEL_CACHE_DIR" ]]; then
+            echo 'Bazel cache directory is absent; nothing to trim.'
+            exit 0
+          fi
+          before="$(find "$AOBUS_BAZEL_CACHE_DIR" -type f | wc -l)"
+          find "$AOBUS_BAZEL_CACHE_DIR" -type f ! -newer "$AOBUS_BAZEL_CACHE_MARKER" -delete
+          after="$(find "$AOBUS_BAZEL_CACHE_DIR" -type f | wc -l)"
+          echo "Trimmed $((before - after)) restored file(s) untouched since restore; kept $after file(s)."
+          du -sh "$AOBUS_BAZEL_CACHE_DIR"
+          df -h "$AOBUS_BAZEL_CACHE_DIR"
+
+      - name: Save Bazel disk cache
+        if: >-
+          ${{ success() && github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+              steps.bazel-test.outcome == 'success' && steps.bazel-verify.outcome == 'success' &&
+              steps.bazel-lint.outcome == 'success' &&
+              steps.bazel-cache.outcome == 'success' && steps.bazel-cache.outputs.cache-hit != 'true' &&
+              steps.bazel-cache-trim.outcome == 'success' }}
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ${{ runner.temp }}/aobus-state/cache/bazel
+          key: ${{ steps.bazel-cache.outputs.cache-primary-key }}
 
       # Enter the shell the way ./ao does, so the inner ./ao check reuses it
       # through AO_NIX_SHELL_FINGERPRINT instead of nesting a second nix-shell.
@@ -199,6 +366,21 @@ jobs:
           BASE_SHA: ${{ needs.changes.outputs.base }}
         run: ./ao hygiene --commit "$BASE_SHA" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL"
 
+      # Retain independent native results after a Bazel failure, without making
+      # either Bazel gate optional or masking an earlier native failure.
+      - name: Require successful Bazel checks
+        if: ${{ !cancelled() }}
+        shell: bash
+        env:
+          BAZEL_TEST_OUTCOME: ${{ steps.bazel-test.outcome }}
+          BAZEL_VERIFY_OUTCOME: ${{ steps.bazel-verify.outcome }}
+          BAZEL_LINT_OUTCOME: ${{ steps.bazel-lint.outcome }}
+        run: |
+          if [[ "$BAZEL_TEST_OUTCOME" != success || "$BAZEL_VERIFY_OUTCOME" != success || "$BAZEL_LINT_OUTCOME" != success ]]; then
+            echo "::error::Bazel outcomes: test=$BAZEL_TEST_OUTCOME, verify=$BAZEL_VERIFY_OUTCOME, lint=$BAZEL_LINT_OUTCOME" >&2
+            exit 1
+          fi
+
       - name: Show compiler cache statistics
         if: >-
           ${{ !cancelled() && steps.compiler-cache.outcome == 'success' &&
@@ -225,6 +407,7 @@ jobs:
     needs: changes
     if: >-
       ${{ always() && !cancelled() &&
+          (github.event_name != 'workflow_dispatch' || inputs.mode != 'bazel') &&
           (needs.changes.result != 'success' || needs.changes.outputs.docs-only != 'true') }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 240
@@ -356,7 +539,9 @@ jobs:
       # secrets context is not allowed in steps.if, so the guard runs in
       # the helper's step body.
       - name: Activate R2 compiler cache backend
-        if: ${{ steps.compiler-cache.outcome == 'success' }}
+        if: >-
+          ${{ steps.compiler-cache.outcome == 'success' &&
+              github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         shell: bash
         env:
           R2_ENDPOINT: ${{ secrets.R2_SCCACHE_ENDPOINT }}
@@ -502,6 +687,7 @@ jobs:
     needs: changes
     if: >-
       ${{ always() && !cancelled() &&
+          (github.event_name != 'workflow_dispatch' || inputs.mode != 'bazel') &&
           (needs.changes.result != 'success' || needs.changes.outputs.docs-only != 'true') }}
     runs-on: windows-2025-vs2026
     timeout-minutes: 180
@@ -569,7 +755,9 @@ jobs:
       # secrets context is not allowed in steps.if, so the guard runs in
       # the helper's step body.
       - name: Activate R2 compiler cache backend
-        if: ${{ steps.compiler-cache.outcome == 'success' }}
+        if: >-
+          ${{ steps.compiler-cache.outcome == 'success' &&
+              github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         shell: pwsh
         env:
           R2_ENDPOINT: ${{ secrets.R2_SCCACHE_ENDPOINT }}
@@ -807,3 +995,664 @@ jobs:
         if: ${{ always() }}
         shell: pwsh
         run: Get-PSDrive -PSProvider FileSystem | Format-Table -AutoSize
+
+  # Manual mode=bazel has no Aobus CMake configure/build job. Package builds
+  # may still use CMake internally. Native jobs are strict in that manual mode;
+  # the regular PR matrix retains the existing CMake completion gates.
+  linux_bazel:
+    name: Linux / Bazel
+    needs: changes
+    if: >-
+      ${{ always() && !cancelled() && github.event_name == 'workflow_dispatch' && inputs.mode == 'bazel' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Require successful scope and documentation validation
+        if: ${{ needs.changes.result != 'success' }}
+        run: exit 1
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Use every runner core
+        shell: bash
+        run: >-
+          python3 script/ao/core/jobs.py export-ci
+          --github-env "$GITHUB_ENV"
+      - name: Install Nix
+        uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b  # v31.11.3
+        with:
+          enable_kvm: false
+      - name: Select runner-local state
+        shell: bash
+        run: echo "AOBUS_STATE_ROOT=$RUNNER_TEMP/aobus-state" >> "$GITHUB_ENV"
+      - name: Provision Bazel tree
+        run: ./ao bazel setup
+      # Only the pinned executable path leaves the nix child; no SDK variables
+      # from the shell environment propagate into the job.
+      - name: Resolve pinned Bazel executable
+        id: bazel-executable
+        shell: bash
+        run: >-
+          nix-shell --run 'bazel="$(command -v bazel)"; test -n "$bazel";
+          printf "executable=%s\n" "$bazel" >> "$GITHUB_OUTPUT"'
+      - name: Start Bazel remote cache
+        id: bazel-remote
+        if: ${{ inputs.r2 }}
+        shell: bash
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_SCCACHE_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_SCCACHE_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SCCACHE_SECRET_ACCESS_KEY }}
+        run: >-
+          python3 script/ao/core/bazel_remote_cache.py start
+          --state "$RUNNER_TEMP/aobus-bazel-remote"
+          --github-output "$GITHUB_OUTPUT"
+          --runner-os "$RUNNER_OS" --runner-arch "$RUNNER_ARCH"
+          --trusted-writer true
+          --key-prefix "bazel-ci-validation/$GITHUB_RUN_ID/$GITHUB_RUN_ATTEMPT/linux"
+      - name: Require requested R2 cache
+        if: ${{ inputs.r2 }}
+        env:
+          CACHE_URL: ${{ steps.bazel-remote.outputs.url }}
+        run: test -n "$CACHE_URL"
+      - name: Build Bazel products
+        env:
+          AOBUS_BAZEL_REMOTE_CACHE: ${{ steps.bazel-remote.outputs.url }}
+        run: >-
+          ./ao bazel build --path "$RUNNER_TEMP/aobus-bazel-debug" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL" --
+          //app/cli:aobus //app/tui:aobus-tui //app/linux-gtk:aobus-gtk //test:backend_test
+      # Direct-entry acceptance for the documented bare development slice: the
+      # pinned executable itself, a fresh guest-local output root separate from
+      # the portal tree, the managed disk cache and local-only BEP evidence.
+      - name: Test direct Bazel entry
+        shell: bash
+        env:
+          AOBUS_BAZEL_EXECUTABLE: ${{ steps.bazel-executable.outputs.executable }}
+        run: |
+          set -euo pipefail
+          unset AOBUS_BAZEL_CONFIGURATION AOBUS_BAZEL_PYTHON AOBUS_NIX_DEPENDENCY_REPORT \
+            AO_NIX_PORTAL_PYTHON AOBUS_BAZEL_REMOTE_CACHE
+          bare_root="$RUNNER_TEMP/aobus-bare"
+          mkdir -p "$bare_root" "$AOBUS_STATE_ROOT/cache/bazel"
+          "$AOBUS_BAZEL_EXECUTABLE" --output_base="$bare_root/state/output" \
+            run --jobs="$CMAKE_BUILD_PARALLEL_LEVEL" --lockfile_mode=off \
+            --disk_cache="$AOBUS_STATE_ROOT/cache/bazel" \
+            --symlink_prefix="$bare_root/bazel-" \
+            --build_event_json_file="$bare_root/debug-run.bep.json" \
+            --experimental_build_event_upload_strategy=local \
+            //app/tui:aobus-tui -- --help
+          "$AOBUS_BAZEL_EXECUTABLE" --output_base="$bare_root/state/output" \
+            build --config=release --jobs="$CMAKE_BUILD_PARALLEL_LEVEL" --lockfile_mode=off \
+            --disk_cache="$AOBUS_STATE_ROOT/cache/bazel" \
+            --symlink_prefix="$bare_root/bazel-" \
+            --build_event_json_file="$bare_root/release-build.bep.json" \
+            --experimental_build_event_upload_strategy=local \
+            //test/lint:cache_clean //app/tui:aobus-tui
+      - name: Test Bazel graph
+        env:
+          AOBUS_BAZEL_REMOTE_CACHE: ${{ steps.bazel-remote.outputs.url }}
+        run: ./ao bazel test --path "$RUNNER_TEMP/aobus-bazel-debug" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL"
+      - name: Test headless GTK
+        env:
+          AOBUS_BAZEL_REMOTE_CACHE: ${{ steps.bazel-remote.outputs.url }}
+        run: ./ao bazel test --headless --path "$RUNNER_TEMP/aobus-bazel-debug" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL" -- //test:gtk_test
+      - name: Verify Bazel compile contracts
+        run: ./ao bazel verify --path "$RUNNER_TEMP/aobus-bazel-debug" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL"
+      - name: Test Bazel lint fixtures
+        env:
+          AOBUS_BAZEL_REMOTE_CACHE: ${{ steps.bazel-remote.outputs.url }}
+        run: ./ao bazel test --path "$RUNNER_TEMP/aobus-bazel-debug" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL" -- //test:lint_test
+      - name: Check Bazel hygiene gate
+        env:
+          AOBUS_BAZEL_REMOTE_CACHE: ${{ steps.bazel-remote.outputs.url }}
+          BASE_SHA: ${{ needs.changes.outputs.base }}
+        run: ./ao bazel hygiene --commit "$BASE_SHA" --path "$RUNNER_TEMP/aobus-bazel-debug" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL"
+      - name: Test portal tooling
+        run: ./ao test --tooling
+      - name: Stop Bazel remote cache
+        if: ${{ always() && steps.bazel-remote.outcome == 'success' }}
+        shell: bash
+        run: >-
+          python3 script/ao/core/bazel_remote_cache.py stop --state "$RUNNER_TEMP/aobus-bazel-remote"
+          --report "$RUNNER_TEMP/bazel-r2-stop.json"
+      - name: Preserve Bazel evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: bazel-linux-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/aobus-bazel-debug/build.log
+            ${{ runner.temp }}/aobus-bazel-debug/lint/run-*/run.receipt.json
+            ${{ runner.temp }}/aobus-bazel-debug/lint/run-*/*.bep.json
+            ${{ runner.temp }}/aobus-bare/*.bep.json
+            ${{ runner.temp }}/bazel-r2-stop.json
+          if-no-files-found: warn
+
+  r2_bazel:
+    name: Bazel / R2 producer-consumer proof
+    needs: changes
+    if: >-
+      ${{ always() && !cancelled() && github.event_name == 'workflow_dispatch' && inputs.mode == 'bazel' && inputs.r2 }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Require successful scope and documentation validation
+        if: ${{ needs.changes.result != 'success' }}
+        run: exit 1
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Use every runner core
+        shell: bash
+        run: >-
+          python3 script/ao/core/jobs.py export-ci
+          --github-env "$GITHUB_ENV"
+      - name: Install Nix
+        uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b  # v31.11.3
+        with:
+          enable_kvm: false
+      # No Actions cache restore: separate client/proxy state proves backend use.
+      # This explicit manual run trusts its selected checkout. Prefix isolation
+      # is not backend authorization against malicious workflow modifications.
+      - name: Verify R2 producer and fresh consumer
+        shell: bash
+        env:
+          PYTHONPATH: script
+          R2_ENDPOINT: ${{ secrets.R2_SCCACHE_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_SCCACHE_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SCCACHE_SECRET_ACCESS_KEY }}
+        run: >-
+          nix-shell --run 'python3 -B -m ao.core.bazel_cache_probe
+          --path "$RUNNER_TEMP/aobus-r2-proof" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL"
+          --key-prefix "bazel-ci-validation/$GITHUB_RUN_ID/$GITHUB_RUN_ATTEMPT/proof"'
+      - name: Preserve R2 proof
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: bazel-r2-proof-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/aobus-r2-proof/receipt.json
+            ${{ runner.temp }}/aobus-r2-proof/*/receipt.json
+            ${{ runner.temp }}/aobus-r2-proof/*/build.bep.json
+            ${{ runner.temp }}/aobus-r2-proof/*/spawns.json
+            ${{ runner.temp }}/aobus-r2-proof/*/proxy.receipt.json
+            ${{ runner.temp }}/aobus-r2-proof/*/build.log
+            ${{ runner.temp }}/aobus-r2-proof/*/build/build.log
+          if-no-files-found: warn
+
+  macos_bazel:
+    name: macOS ${{ matrix.label }} / Bazel
+    needs: changes
+    if: >-
+      ${{ always() && !cancelled() &&
+          (needs.changes.result != 'success' || needs.changes.outputs.docs-only != 'true') }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 180
+    continue-on-error: ${{ github.event_name != 'workflow_dispatch' || inputs.mode != 'bazel' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Intel
+            runner: macos-15-intel
+            cache_arch: x64
+          - label: ARM64
+            runner: macos-15
+            cache_arch: arm64
+    env:
+      AOBUS_CHECKOUT_ID: github-actions-macos-${{ matrix.cache_arch }}
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+
+    steps:
+      - name: Require successful scope and documentation validation
+        if: ${{ needs.changes.result != 'success' }}
+        run: exit 1
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Use every runner core
+        shell: bash
+        run: >-
+          python3 script/ao/core/jobs.py export-ci
+          --github-env "$GITHUB_ENV"
+
+      - name: Configure local state
+        shell: bash
+        run: |
+          state_root="$RUNNER_TEMP/aobus-state"
+          mkdir -p "$state_root"
+          printf 'AOBUS_STATE_ROOT=%s\n' "$state_root" >> "$GITHUB_ENV"
+
+      # vcpkg port builds need the CMake, Ninja and autotools formulas; Aobus
+      # itself is not configured with CMake.
+      - name: Install host toolchain
+        shell: bash
+        run: |
+          brew install \
+            llvm@22 \
+            cmake \
+            ninja \
+            pkgconf \
+            python@3.14 \
+            autoconf \
+            autoconf-archive \
+            automake \
+            libtool
+
+      - name: Capture macOS toolchain identity
+        id: macos-toolchain
+        shell: bash
+        run: |
+          {
+            printf 'llvm=%s\n' "$("$(brew --prefix llvm@22)/bin/clang++" -dumpversion)"
+            printf 'sdk=%s\n' "$(xcrun --sdk macosx --show-sdk-version)"
+            printf 'image=%s\n' "${ImageVersion:-unknown}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Restore managed macOS tools
+        continue-on-error: true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            ${{ runner.temp }}/aobus-state/tools/vcpkg
+            ${{ runner.temp }}/aobus-state/tools/libcxx-expected-shim
+          key: >-
+            macos-state-v1-${{ runner.arch }}-${{ steps.macos-toolchain.outputs.llvm }}-${{
+              hashFiles('script/ao/macos-toolchain.json')
+            }}
+
+      - name: Resolve vcpkg binary cache key
+        id: vcpkg-key
+        shell: bash
+        env:
+          ARCH: ${{ runner.arch }}
+          LLVM: ${{ steps.macos-toolchain.outputs.llvm }}
+          SDK: ${{ steps.macos-toolchain.outputs.sdk }}
+          IMAGE: ${{ steps.macos-toolchain.outputs.image }}
+          MANIFEST: ${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-triplets/**') }}
+        run: |
+          base="vcpkg-files-v2-macos-$ARCH-$LLVM-$SDK-$MANIFEST-"
+          {
+            printf 'base=%s\n' "$base"
+            printf 'prefix=%s\n' "$base$IMAGE-"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Restore vcpkg binary cache
+        continue-on-error: true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ${{ runner.temp }}/aobus-state/cache/vcpkg/binaries
+          key: ${{ steps.vcpkg-key.outputs.prefix }}
+          restore-keys: |
+            ${{ steps.vcpkg-key.outputs.base }}
+            vcpkg-files-v2-macos-${{ runner.arch }}-
+
+      - name: Test Bazel remote-cache lifecycle
+        shell: bash
+        env:
+          PYTHONPATH: script
+        run: >-
+          "$(brew --prefix python@3.14)/bin/python3.14" -B -m unittest discover
+          -s test/script -p test_bazel_remote_cache.py
+
+      - name: Provision Bazel tree
+        run: |
+          ./ao bazel setup
+          ./ao bazel provision --path "$RUNNER_TEMP/aobus-bazel-debug"
+
+      # Manual R2 validation explicitly trusts the selected checkout. Its
+      # isolated prefix is not a backend permission boundary for the writer.
+      - name: Start Bazel remote cache
+        id: bazel-remote
+        if: >-
+          ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'bazel' && inputs.r2) ||
+              (github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.AOBUS_BAZEL_R2_CACHE_AUTHORIZED == 'true') }}
+        continue-on-error: ${{ github.event_name != 'workflow_dispatch' || inputs.mode != 'bazel' }}
+        shell: bash
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_SCCACHE_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_SCCACHE_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SCCACHE_SECRET_ACCESS_KEY }}
+          CACHE_PREFIX: ${{ github.event_name == 'workflow_dispatch' && format('bazel-ci-validation/{0}/{1}/macos-{2}', github.run_id, github.run_attempt, matrix.cache_arch) || 'bazel-v1' }}
+        run: >-
+          python3 script/ao/core/bazel_remote_cache.py start
+          --state "$RUNNER_TEMP/aobus-bazel-remote"
+          --github-output "$GITHUB_OUTPUT"
+          --runner-os "$RUNNER_OS"
+          --runner-arch "$RUNNER_ARCH"
+          --trusted-writer true --key-prefix "$CACHE_PREFIX"
+
+      - name: Require requested R2 cache
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'bazel' && inputs.r2 }}
+        env:
+          CACHE_URL: ${{ steps.bazel-remote.outputs.url }}
+        run: test -n "$CACHE_URL"
+
+      - name: Build Bazel products
+        env:
+          AOBUS_BAZEL_REMOTE_CACHE: ${{ steps.bazel-remote.outputs.url }}
+        run: >-
+          ./ao bazel build --path "$RUNNER_TEMP/aobus-bazel-debug" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL" --
+          //app/cli:aobus //app/tui:aobus-tui //app/macos-appkit:aobus-appkit
+
+      # Direct-entry acceptance for the documented bare development slice: the
+      # managed executable, the matrix-architecture triplet from the existing
+      # launcher source, a fresh guest-local output root separate from the
+      # portal tree, the managed disk cache and local-only BEP evidence.
+      - name: Test direct Bazel entry
+        shell: bash
+        run: |
+          set -euo pipefail
+          unset AOBUS_BAZEL_CONFIGURATION AOBUS_BAZEL_PYTHON AOBUS_NIX_DEPENDENCY_REPORT \
+            AO_NIX_PORTAL_PYTHON AOBUS_BAZEL_REMOTE_CACHE
+          source script/ao/macos-vcpkg-bootstrap.sh
+          vcpkg_triplet="$(aobus_macos_triplet "$(uname -m)")"
+          export AOBUS_BAZEL_VCPKG_PREFIX="$RUNNER_TEMP/aobus-bazel-debug/vcpkg_installed/$vcpkg_triplet"
+          read -r bazel_version < .bazelversion
+          bazel_executable="$AOBUS_STATE_ROOT/tools/bazel/$bazel_version/bazel"
+          if [[ ! -x "$bazel_executable" ]]; then
+            echo "::error::Managed Bazel is missing: $bazel_executable" >&2
+            exit 1
+          fi
+          bare_root="$RUNNER_TEMP/aobus-bare"
+          mkdir -p "$bare_root" "$AOBUS_STATE_ROOT/cache/bazel"
+          "$bazel_executable" --output_base="$bare_root/state/output" \
+            run --jobs="$CMAKE_BUILD_PARALLEL_LEVEL" --lockfile_mode=off \
+            --disk_cache="$AOBUS_STATE_ROOT/cache/bazel" \
+            --symlink_prefix="$bare_root/bazel-" \
+            --build_event_json_file="$bare_root/debug-run.bep.json" \
+            --experimental_build_event_upload_strategy=local \
+            //app/tui:aobus-tui -- --help
+          "$bazel_executable" --output_base="$bare_root/state/output" \
+            build --config=release --jobs="$CMAKE_BUILD_PARALLEL_LEVEL" --lockfile_mode=off \
+            --disk_cache="$AOBUS_STATE_ROOT/cache/bazel" \
+            --symlink_prefix="$bare_root/bazel-" \
+            --build_event_json_file="$bare_root/release-build.bep.json" \
+            --experimental_build_event_upload_strategy=local \
+            //test/lint:cache_clean //app/tui:aobus-tui
+
+      - name: Test Bazel graph
+        env:
+          AOBUS_BAZEL_REMOTE_CACHE: ${{ steps.bazel-remote.outputs.url }}
+        run: ./ao bazel test --path "$RUNNER_TEMP/aobus-bazel-debug" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL"
+
+      - name: Verify Bazel compile contracts
+        run: ./ao bazel verify --path "$RUNNER_TEMP/aobus-bazel-debug" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL"
+
+      - name: Test Bazel lint fixtures
+        env:
+          AOBUS_BAZEL_REMOTE_CACHE: ${{ steps.bazel-remote.outputs.url }}
+        run: ./ao bazel test --path "$RUNNER_TEMP/aobus-bazel-debug" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL" -- //test:lint_test
+
+      - name: Check Bazel hygiene gate
+        env:
+          AOBUS_BAZEL_REMOTE_CACHE: ${{ steps.bazel-remote.outputs.url }}
+          BASE_SHA: ${{ needs.changes.outputs.base }}
+        run: ./ao bazel hygiene --commit "$BASE_SHA" --path "$RUNNER_TEMP/aobus-bazel-debug" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL"
+
+      # A requested manual cache must also finish its drain successfully.
+      - name: Stop Bazel remote cache
+        if: ${{ always() && steps.bazel-remote.outcome == 'success' }}
+        continue-on-error: ${{ github.event_name != 'workflow_dispatch' || inputs.mode != 'bazel' }}
+        shell: bash
+        run: >-
+          python3 script/ao/core/bazel_remote_cache.py stop --state "$RUNNER_TEMP/aobus-bazel-remote"
+          --report "$RUNNER_TEMP/bazel-r2-stop.json"
+
+      - name: Preserve Bazel evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: bazel-macos-${{ matrix.cache_arch }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/aobus-bazel-debug/build.log
+            ${{ runner.temp }}/aobus-bazel-debug/lint/run-*/run.receipt.json
+            ${{ runner.temp }}/aobus-bazel-debug/lint/run-*/*.bep.json
+            ${{ runner.temp }}/aobus-bare/*.bep.json
+            ${{ runner.temp }}/bazel-r2-stop.json
+          if-no-files-found: warn
+
+  windows_bazel:
+    name: Windows / Bazel
+    needs: changes
+    if: >-
+      ${{ always() && !cancelled() &&
+          (needs.changes.result != 'success' || needs.changes.outputs.docs-only != 'true') }}
+    runs-on: windows-2025-vs2026
+    # Prior native receipts show progressing owner-wide lint at the three-hour
+    # cap. Keep every gate and allow the remaining lint plus Release TUI build.
+    timeout-minutes: 300
+    continue-on-error: ${{ github.event_name != 'workflow_dispatch' || inputs.mode != 'bazel' }}
+    env:
+      # The same state paths as the check job, whose caches this job restores.
+      AOBUS_STATE_ROOT: C:\aobus-state
+      AOBUS_CHECKOUT_ID: github-actions-windows-x64
+      VCPKG_BINARY_SOURCES: clear;files,C:/aobus-state/cache/vcpkg-binary,read
+
+    steps:
+      - name: Require successful scope and documentation validation
+        if: ${{ needs.changes.result != 'success' }}
+        shell: pwsh
+        run: exit 1
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Use every runner core
+        shell: pwsh
+        run: >-
+          python script/ao/core/jobs.py export-ci
+          --github-env "$env:GITHUB_ENV"
+
+      - name: Capture Windows image version
+        id: windows-image
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:ImageVersion)) {
+            throw 'GitHub-hosted Windows runner did not expose ImageVersion.'
+          }
+          "version=$env:ImageVersion" >> $env:GITHUB_OUTPUT
+
+      - name: Restore vcpkg binary cache
+        continue-on-error: true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: C:\aobus-state\cache\vcpkg-binary
+          key: >-
+            vcpkg-files-v3-windows-${{ runner.arch }}-${{ steps.windows-image.outputs.version }}-${{
+              hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-triplets/**')
+            }}-
+          restore-keys: |
+            vcpkg-files-v3-windows-${{ runner.arch }}-${{ steps.windows-image.outputs.version }}-
+            vcpkg-files-v3-windows-${{ runner.arch }}-
+
+      - name: Restore managed Windows tools
+        continue-on-error: true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            C:\aobus-state\tools
+            C:\aobus-state\n
+            C:\aobus-state\cache\pip
+            C:\aobus-state\cache\windows-app-sdk
+          key: >-
+            windows-state-v2-${{ runner.arch }}-${{
+              hashFiles(
+                'script/ao/toolchain.json',
+                'script/ao/windows-requirements.txt',
+                'script/ao/docs-requirements.txt',
+                'dependency-contract.json',
+                'app/windows-winui/packages.config',
+                'app/windows-winui/NuGet.Config'
+              )
+            }}
+
+      - name: Restore Windows LLVM SDK
+        continue-on-error: true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: C:\aobus-state\cache\llvm\toolchains
+          key: >-
+            windows-llvm-v1-${{ runner.arch }}-${{ hashFiles('cmake/LlvmSdk.cmake', 'script/ao/windows-llvm-sdk.json') }}
+
+      - name: Check Windows build prerequisites
+        shell: pwsh
+        run: .\ao.bat doctor winui --build-only
+
+      - name: Set up Windows App Runtime
+        shell: pwsh
+        timeout-minutes: 10
+        run: .\ao.bat setup winui-runtime
+
+      - name: Provision Bazel tree
+        shell: pwsh
+        run: |
+          .\ao.bat bazel setup
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          .\ao.bat bazel provision --path D:\aobus-bazel-debug
+
+      - name: Test portal tooling
+        shell: pwsh
+        run: .\ao.bat test --tooling --path D:\aobus-bazel-tooling
+
+      - name: Build Bazel products
+        shell: pwsh
+        run: >-
+          .\ao.bat bazel build --path D:\aobus-bazel-debug --jobs $env:CMAKE_BUILD_PARALLEL_LEVEL --
+          //app/cli:aobus //app/tui:aobus-tui //app/windows-winui:aobus-winui
+
+      # Direct-entry acceptance for the documented bare development slice: the
+      # managed executable, the source-locked target triplet, the Git for
+      # Windows bash, a fresh guest-local output root separate from the portal
+      # tree, the managed disk cache and local-only BEP evidence.
+      - name: Test direct Bazel entry
+        shell: pwsh
+        run: |
+          foreach ($name in @(
+            'AOBUS_BAZEL_CONFIGURATION', 'AOBUS_BAZEL_PYTHON', 'AOBUS_NIX_DEPENDENCY_REPORT',
+            'AO_NIX_PORTAL_PYTHON', 'AOBUS_BAZEL_REMOTE_CACHE'
+          )) {
+            Remove-Item "Env:$name" -ErrorAction SilentlyContinue
+          }
+          $bare = 'D:\aobus-bare'
+          New-Item -ItemType Directory -Force -Path "$bare\_tmp" | Out-Null
+          $contract = Get-Content script/ao/toolchain.json -Raw | ConvertFrom-Json
+          $python = Join-Path $env:AOBUS_STATE_ROOT "tools\python\$($contract.python)\python.exe"
+          if (-not (Test-Path $python)) { throw "Governed Python is missing: $python" }
+          $tripletOutput = & $python -I -S -B -X utf8 -X "pycache_prefix=$bare\_tmp\pycache" -c 'import sys; sys.path.insert(0, "script"); from ao.core.bazel_providers import vcpkg_triplets; print(vcpkg_triplets(host="windows")[0])'
+          $tripletExit = $LASTEXITCODE
+          if ($tripletExit -ne 0) { exit $tripletExit }
+          $triplet = ($tripletOutput -join '').Trim()
+          if ([string]::IsNullOrWhiteSpace($triplet)) { throw 'Native target triplet was not reported.' }
+          $env:AOBUS_BAZEL_VCPKG_PREFIX = "D:\aobus-bazel-debug\vcpkg_installed\$triplet"
+          # Initialize the client once; upstream MSVC and SDK admission must see
+          # the same explicit selection, not independent current/latest probes.
+          $selectionScript = @'
+          import json, os, sys
+          sys.path.insert(0, "script")
+          from ao.core.bazel_environment import windows_compiler_selection
+          from ao.core.windows_portal import prepare_build_environment
+          prepare_build_environment()
+          names = (
+              "INCLUDE", "LIB", "PATH", "VSINSTALLDIR", "VCToolsInstallDir",
+              "WindowsSdkDir", "WindowsSDKVersion", "VCToolsVersion", "UCRTVersion", "NETFXSDKDir",
+          )
+          selected = {name: os.environ[name] for name in names if name in os.environ}
+          selected.update(windows_compiler_selection(os.environ))
+          print(json.dumps(selected))
+          '@
+          $selectionOutput = & $python -I -S -B -X utf8 -X "pycache_prefix=$bare\_tmp\pycache" -c $selectionScript
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $selection = ($selectionOutput -join '') | ConvertFrom-Json
+          foreach ($property in $selection.PSObject.Properties) {
+            Set-Item -LiteralPath "Env:$($property.Name)" -Value $property.Value
+          }
+          $git = (Get-Command git -ErrorAction Stop).Source
+          $bash = $null
+          $parent = $git
+          foreach ($i in 1..3) {
+            $parent = Split-Path $parent -ErrorAction Stop
+            $probe = Join-Path $parent 'usr\bin\bash.exe'
+            if (Test-Path $probe) { $bash = $probe; break }
+          }
+          if (-not $bash) { throw "Git for Windows usr\bin\bash.exe was not found beside git: $git" }
+          $env:BAZEL_SH = $bash
+          $version = (Get-Content .bazelversion -Raw).Trim()
+          $bazel = Join-Path $env:AOBUS_STATE_ROOT "tools\bazel\$version\bazel.exe"
+          if (-not (Test-Path $bazel)) { throw "Managed Bazel is missing: $bazel" }
+          New-Item -ItemType Directory -Force -Path (Join-Path $env:AOBUS_STATE_ROOT 'cache\bazel') | Out-Null
+          & $bazel "--output_base=$bare\state\output" run `
+            "--jobs=$env:CMAKE_BUILD_PARALLEL_LEVEL" --lockfile_mode=off `
+            "--disk_cache=$env:AOBUS_STATE_ROOT\cache\bazel" `
+            "--symlink_prefix=$bare\bazel-" `
+            "--build_event_json_file=$bare\debug-run.bep.json" `
+            --experimental_build_event_upload_strategy=local `
+            //app/tui:aobus-tui -- --help
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $bazel "--output_base=$bare\state\output" build `
+            --config=release "--jobs=$env:CMAKE_BUILD_PARALLEL_LEVEL" --lockfile_mode=off `
+            "--disk_cache=$env:AOBUS_STATE_ROOT\cache\bazel" `
+            "--symlink_prefix=$bare\bazel-" `
+            "--build_event_json_file=$bare\release-build.bep.json" `
+            --experimental_build_event_upload_strategy=local `
+            //test/lint:cache_clean //app/tui:aobus-tui
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Test Bazel graph
+        shell: pwsh
+        run: .\ao.bat bazel test --path D:\aobus-bazel-debug --jobs $env:CMAKE_BUILD_PARALLEL_LEVEL
+
+      - name: Verify Bazel compile contracts
+        shell: pwsh
+        run: .\ao.bat bazel verify --path D:\aobus-bazel-debug --jobs $env:CMAKE_BUILD_PARALLEL_LEVEL
+
+      - name: Test Bazel lint fixtures
+        shell: pwsh
+        run: .\ao.bat bazel test --path D:\aobus-bazel-debug --jobs $env:CMAKE_BUILD_PARALLEL_LEVEL -- //test:lint_test
+
+      - name: Check Bazel hygiene gate
+        shell: pwsh
+        env:
+          BASE_SHA: ${{ needs.changes.outputs.base }}
+        run: .\ao.bat bazel hygiene --commit $env:BASE_SHA --path D:\aobus-bazel-debug --jobs $env:CMAKE_BUILD_PARALLEL_LEVEL
+
+      - name: Preserve Bazel evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: bazel-windows-${{ github.run_attempt }}
+          path: |
+            D:\aobus-bazel-debug\build.log
+            D:\aobus-bazel-debug\lint\run-*\run.receipt.json
+            D:\aobus-bazel-debug\lint\run-*\*.bep.json
+          if-no-files-found: warn
+
+      # The bare-entry BEP files live outside the portal trees. A separate
+      # upload keeps every artifact root below the drive root; joining them
+      # into one upload would resolve its LCA against the checkout.
+      - name: Preserve direct Bazel evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: bazel-windows-direct-${{ github.run_attempt }}
+          path: D:\aobus-bare\*.bep.json
+          if-no-files-found: warn
+
+      - name: Preserve portal tooling evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: bazel-windows-tooling-${{ github.run_attempt }}
+          path: D:\aobus-bazel-tooling\build.log
+          if-no-files-found: warn

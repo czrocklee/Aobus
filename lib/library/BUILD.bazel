@@ -1,0 +1,85 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# CMake ao_library sources. Private headers, including test seams such as
+# PhysicalStoreAccess.h, stay in this target and are not re-exported.
+cc_library(
+    name = "library",
+    linkstatic = True,
+    srcs = glob(["**/*.h"]) + [
+        "MetadataStore.cpp",
+        "MetadataState.cpp",
+        "OpenValidationMetrics.cpp",
+        "MusicLibrary.cpp",
+        "WritableMusicLibrary.cpp",
+        "WriterSessionLease.cpp",
+        "ReadTransaction.cpp",
+        "WriteTransaction.cpp",
+        "LibraryWrite.cpp",
+        "TrackWriter.cpp",
+        "ListWriter.cpp",
+        "ResourceLayout.cpp",
+        "ResourceStore.cpp",
+        "DictionaryStore.cpp",
+        "TextAdmission.cpp",
+        "RecordingDate.cpp",
+        "Credits.cpp",
+        "CreditAdmission.cpp",
+        "detail/LibraryError.cpp",
+        "FileManifestStore.cpp",
+        "FileManifestValidation.cpp",
+        "LibraryUri.cpp",
+        "FileManifestView.cpp",
+        "FileManifestBuilder.cpp",
+        "FileManifestLayout.cpp",
+        "FileTimeConversion.cpp",
+        "TrackBuilder.cpp",
+        "TrackColdReader.cpp",
+        "TrackRecordValidation.cpp",
+        "TrackStore.cpp",
+        "TrackView.cpp",
+        "TrackWrite.cpp",
+        "ListView.cpp",
+        "ListStore.cpp",
+        "ListBuilder.cpp",
+        "ListRecordValidation.cpp",
+        "AudioIdentity.cpp",
+    ] + select({
+        "@platforms//os:windows": ["LockFileWindows.cpp"],
+        "//conditions:default": ["LockFilePosix.cpp"],
+    }),
+    implementation_deps = [
+        "//lib/lmdb:private_headers",
+        "//lib/utility:unicode_text",
+    ],
+    deps = [
+        "//include:library_headers",
+        "//lib/lmdb:lmdb",
+        "//lib/utility:utility",
+    ],
+)
+
+# Test-only include spelling lib/library/..., not a workspace-root include.
+# PhysicalStoreAccess.h quotes WriteTransactionAccess.h; both are in this set.
+cc_library(
+    name = "test_headers",
+    testonly = True,
+    hdrs = [
+        "FileClockConversion.h",
+        "FileManifestValidation.h",
+        "LibraryUriValidation.h",
+        "ListRecordValidation.h",
+        "LockFile.h",
+        "OpenValidationMetrics.h",
+        "PhysicalStoreAccess.h",
+        "TrackRecordValidation.h",
+        "TrackWrite.h",
+        "WriteTransactionAccess.h",
+        "detail/LibraryError.h",
+    ],
+    include_prefix = "lib/library",
+    strip_include_prefix = ".",
+    visibility = ["//test:__pkg__"],
+    deps = ["//include:library_headers"],
+)

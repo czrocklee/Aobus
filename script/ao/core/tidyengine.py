@@ -22,60 +22,27 @@ from functools import cache
 from pathlib import Path
 from typing import Literal
 
-from . import builddir, buildlock, cmakecache, compiler_cache, gitfiles, phases, workspace_cache
+from . import builddir, buildlock, cmakecache, compiler_cache, gitfiles, phases, windows_llvm_sdk, workspace_cache
 from .dedup import DIAGNOSTIC_RE
 from .jobs import build_workers, default_workers
 from .paths import PROJECT_ROOT, absolute_path
 from .proc import die
+from .tidydiagnostics import log_has_compile_command_error as log_has_compile_command_error
+from .tidypolicy import windows_analysis_arguments as windows_analysis_arguments
 
 # The pinned Windows LLVM SDK identity lives in one manifest shared with
-# cmake/LlvmSdk.cmake; the archive name, URL, and the Clang resource major are
-# derived from the pinned version.
-LLVM_SDK_MANIFEST = PROJECT_ROOT / "script" / "ao" / "windows-llvm-sdk.json"
-LLVM_SDK_COMPLETION_MARKER = ".aobus-llvm-sdk-complete"
+# cmake/LlvmSdk.cmake; windows_llvm_sdk owns its Python reader.
+LLVM_SDK_MANIFEST = windows_llvm_sdk.MANIFEST
+LLVM_SDK_COMPLETION_MARKER = windows_llvm_sdk.MARKER
 
 
 @cache
-def windows_llvm_sdk_manifest() -> tuple[str, str, tuple[str, ...]]:
-    """Return (version, archiveSha256, requiredFiles) from the shared manifest.
-
-    The required file list gains the Clang resource include derived from the
-    pinned version's major, mirroring the CMake module's evaluation.
-    """
+def windows_llvm_sdk_manifest() -> windows_llvm_sdk.Manifest:
+    """Return the shared manifest, including the Clang resource include of its major."""
     try:
-        manifest = json.loads(LLVM_SDK_MANIFEST.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError) as error:
-        raise die(f"cannot read the Windows LLVM SDK manifest {LLVM_SDK_MANIFEST}: {error}") from None
-    except json.JSONDecodeError as error:
-        raise die(f"the Windows LLVM SDK manifest {LLVM_SDK_MANIFEST} is not valid JSON: {error}") from None
-    version = manifest.get("version") if isinstance(manifest, dict) else None
-    archive_sha256 = manifest.get("archiveSha256") if isinstance(manifest, dict) else None
-    required_files = manifest.get("requiredFiles") if isinstance(manifest, dict) else None
-    if (
-        not isinstance(version, str)
-        or re.fullmatch(r"[0-9]+[.][0-9]+[.][0-9]+", version) is None
-        or not isinstance(archive_sha256, str)
-        or re.fullmatch(r"[0-9a-f]{64}", archive_sha256) is None
-        or not isinstance(required_files, list)
-        or not required_files
-        or any(
-            not isinstance(entry, str)
-            or re.fullmatch(r"[A-Za-z0-9_.+-]+(/[A-Za-z0-9_.+-]+)*", entry) is None
-            or any(part in (".", "..") for part in entry.split("/"))
-            for entry in required_files
-        )
-    ):
-        raise die(
-            f"the Windows LLVM SDK manifest {LLVM_SDK_MANIFEST} needs a '<major>.<minor>.<patch>' "
-            "'version', a 64-digit lowercase-hex 'archiveSha256', and a non-empty "
-            "'requiredFiles' array of portable relative SDK paths "
-            "(slash-separated letters, digits, '_', '.', '+', '-'; no '.' or '..' components)"
-        )
-    return (
-        version,
-        archive_sha256,
-        (*required_files, f"lib/clang/{version.split('.', 1)[0]}/include/stddef.h"),
-    )
+        return windows_llvm_sdk.read_manifest(LLVM_SDK_MANIFEST)
+    except windows_llvm_sdk.WindowsLlvmSdkError as error:
+        raise die(str(error)) from None
 
 
 def default_jobs() -> int:
@@ -282,7 +249,7 @@ def ensure_windows_llvm_sdk(build_dir: Path) -> None:
     """Configure the pinned SDK tree when a native Windows tool is not ready."""
     if builddir.platform_profile().name != "windows":
         return
-    pinned_version, pinned_sha256, required_files = windows_llvm_sdk_manifest()
+    manifest = windows_llvm_sdk_manifest()
     snapshot = _cmake_cache(build_dir)
     root_value = snapshot.get("AOBUS_LLVM_SDK_RESOLVED_ROOT")
     version_value = snapshot.get("AOBUS_LLVM_SDK_RESOLVED_VERSION")
@@ -290,15 +257,14 @@ def ensure_windows_llvm_sdk(build_dir: Path) -> None:
     root = Path(root_value) if root_value else None
     if root is not None and not root.is_absolute():
         root = absolute_path(build_dir / root)
-    if version_value == pinned_version and root is not None:
-        complete = all((root / relative).is_file() for relative in required_files)
+    if version_value == manifest.version and root is not None:
+        complete = all((root / relative).is_file() for relative in manifest.required_files)
         if complete and preprovisioned_root:
             return
         if complete:
             marker = root / LLVM_SDK_COMPLETION_MARKER
-            expected_marker = f"version={pinned_version}\nsha256={pinned_sha256}\n"
             try:
-                if marker.read_text(encoding="utf-8") == expected_marker:
+                if marker.read_text(encoding="utf-8") == windows_llvm_sdk.marker_text(manifest):
                     return
             except (OSError, UnicodeDecodeError):
                 pass
@@ -363,21 +329,6 @@ class TidyToolchain:
     resource_dir: Path | None
     expected_llvm_version: str | None = None
     sdk_root: Path | None = None
-
-
-def windows_analysis_arguments(resource_dir: Path, *, driver_mode: bool = False) -> tuple[str, ...]:
-    """Return the Windows analysis arguments shared by tidy and lint fixtures.
-
-    The VS 18 STL lets Clang classify three-byte records as SIMD-find
-    candidates, but its vectorized helper supports only 1/2/4/8-byte elements.
-    clang-tidy does not link or execute the TU, so disabling that optional STL
-    implementation path preserves the analyzed API. Tidy passes the arguments
-    as extra-args-before; ``driver_mode`` returns the same two arguments with
-    the clang-cl ``/clang:`` and ``/D`` spellings the fixture runner needs.
-    """
-    if driver_mode:
-        return (f"/clang:-resource-dir={resource_dir}", "/D_USE_STD_VECTOR_ALGORITHMS=0")
-    return (f"-resource-dir={resource_dir}", "-D_USE_STD_VECTOR_ALGORITHMS=0")
 
 
 _TRANSLATION_UNIT_SUFFIXES = frozenset((".c", ".cc", ".cpp", ".cxx", ".mm"))
@@ -525,10 +476,24 @@ def _component_directory(path: Path, root: Path) -> tuple[str, ...] | None:
         parent = absolute_path(path).relative_to(absolute_path(root)).parent.parts
     except ValueError:
         return None
-    if len(parent) >= 2 and parent[:2] == ("include", "ao"):
+    return component_parts(parent)
+
+
+def component_parts(parent: tuple[str, ...]) -> tuple[str, ...] | None:
+    """Map a repository-relative directory to the component it implements.
+
+    The Bazel lint aspect mirrors this rule in Starlark; a tooling test keeps
+    the two in step over every tracked header and source.
+    """
+    if parent[:2] == ("include", "ao"):
         return ("lib", *parent[2:])
-    if len(parent) >= 3 and parent[:3] == ("app", "include", "ao"):
+    if parent[:4] == ("app", "include", "ao", "rt"):
+        return ("app", "runtime", *parent[4:])
+    if parent[:3] == ("app", "include", "ao"):
         return ("app", *parent[3:])
+    if len(parent) >= 5 and parent[0] == "app" and parent[2:4] == ("include", "ao"):
+        # A frontend's own public tree, such as app/windows-winui/include/ao/winui.
+        return ("app", parent[1], *parent[5:])
     if parent and parent[0] in {"app", "lib", "test", "tool"}:
         return parent
     return None
@@ -1139,21 +1104,6 @@ def write_merged_compile_database(
     database = destination / "compile_commands.json"
     database.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
     return destination
-
-
-_COMPILE_COMMAND_ERROR_RE = re.compile(
-    r"(compile command not found|error while trying to load a compilation database|"
-    r"could not auto-detect compilation database)",
-    re.IGNORECASE,
-)
-
-
-def log_has_compile_command_error(log: Path) -> bool:
-    """Detect clang-tidy database failures even when the tool exits successfully."""
-    try:
-        return bool(_COMPILE_COMMAND_ERROR_RE.search(log.read_text(encoding="utf-8", errors="replace")))
-    except OSError:
-        return False
 
 
 def _run_tail(argv: list[str], what: str, tail: int = 5) -> None:

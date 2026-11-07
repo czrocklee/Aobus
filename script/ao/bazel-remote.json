@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "version": "2.6.4",
+  "artifacts": {
+    "linux-x86_64": {
+      "url": "https://github.com/buchgr/bazel-remote/releases/download/v2.6.4/bazel-remote-2.6.4-linux-amd64",
+      "sha256": "6a6b64666c2238ec6b49b7b29f5e41e4149de09417a0028897c9bffe40376876"
+    },
+    "darwin-x86_64": {
+      "url": "https://github.com/buchgr/bazel-remote/releases/download/v2.6.4/bazel-remote-2.6.4-darwin-amd64",
+      "sha256": "e67468c004d0bd727371e9aed39b529518f483d635fc62bddbe468d4e125d80f"
+    },
+    "darwin-arm64": {
+      "url": "https://github.com/buchgr/bazel-remote/releases/download/v2.6.4/bazel-remote-2.6.4-darwin-arm64",
+      "sha256": "ebde44a9dd6fd645b1ee36b6bf5fe141c3e5aa193ae59f031b50cc390cd1a0a2"
+    }
+  }
+}

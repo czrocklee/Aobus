@@ -317,31 +317,72 @@ def effective_policy(
 
 def parse_vcpkg_status(text: str) -> dict[str, VcpkgPackage]:
     identities: dict[str, tuple[str, str]] = {}
-    features_by_name: dict[str, set[str]] = {}
+    pending_features: list[tuple[str, str, str, str | None, int | None]] = []
+
+    def port_revision(value: str, name: str) -> int:
+        if not re.fullmatch(r"[0-9]+", value):
+            raise DependencyPolicyError(f"invalid vcpkg port revision for {name}: {value!r}")
+        return int(value)
+
     for paragraph in re.split(r"\r?\n\r?\n", text.strip()):
         if not paragraph.strip():
             continue
         fields: dict[str, str] = {}
+        revision_fields = []
         for line in paragraph.splitlines():
             if ": " in line:
                 key, value = line.split(": ", maxsplit=1)
                 fields[key] = value
+                if key == "Port-Version":
+                    revision_fields.append(value)
+            elif line == "Port-Version:":
+                revision_fields.append("")
         name = fields.get("Package")
         version = fields.get("Version")
         triplet = fields.get("Architecture")
-        if not name or not version or not triplet:
+        if not name or not triplet:
             continue
         # vcpkg keeps paragraphs for removed packages (e.g. "deinstall ok
         # not-installed"); only currently installed state is evidence.
         status = fields.get("Status", "")
         if status.split()[-1:] != ["installed"]:
             continue
-        identity = (version, triplet)
+        feature = fields.get("Feature", "core")
+        if feature == "core" and not version:
+            continue
+        if len(revision_fields) > 1:
+            raise DependencyPolicyError(f"duplicate vcpkg port revision for {name}")
+        revision = port_revision(revision_fields[0], name) if revision_fields else None
+        if version and "#" in version:
+            version, _, embedded = version.partition("#")
+            embedded_revision = port_revision(embedded, name)
+            if not version or (revision is not None and revision != embedded_revision):
+                raise DependencyPolicyError(f"vcpkg status contains conflicting port revisions for {name}")
+            revision = embedded_revision
+        if feature != "core":
+            # Feature records never supply a base identity. A bare legacy Version
+            # checks upstream only; an explicit revision checks that component too.
+            pending_features.append((name, triplet, feature, version or None, revision))
+            continue
+        if not version:
+            continue
+        identity = (f"{version}#{revision}" if revision else version, triplet)
         if name in identities and identities[name] != identity:
             raise DependencyPolicyError(f"vcpkg status contains conflicting identities for {name}")
         identities[name] = identity
-        feature = fields.get("Feature", "core")
-        features_by_name.setdefault(name, set()).add(feature)
+    features_by_name = {name: {"core"} for name in identities}
+    for name, triplet, feature, version, revision in pending_features:
+        if name not in identities:
+            continue
+        base_version, base_triplet = identities[name]
+        upstream, _, base_revision = base_version.partition("#")
+        if (
+            triplet != base_triplet
+            or (version is not None and version != upstream)
+            or (revision is not None and revision != (int(base_revision) if base_revision else 0))
+        ):
+            raise DependencyPolicyError(f"vcpkg status contains conflicting identities for {name}")
+        features_by_name[name].add(feature)
     return {
         name: VcpkgPackage(
             version=identity[0],
@@ -533,11 +574,19 @@ def _verify_vcpkg_resolution(
         else build_dir / "vcpkg_installed"
     )
     status_file = installed / "vcpkg" / "status"
+    expected_triplet = _string(host.get("vcpkgTriplet"), "report.host.vcpkgTriplet")
     try:
-        packages = parse_vcpkg_status(status_file.read_text(encoding="utf-8"))
+        status = status_file.read_text(encoding="utf-8")
     except OSError as exc:
         raise DependencyPolicyError(f"cannot read vcpkg package status {status_file}: {exc}") from exc
-    expected_triplet = _string(host.get("vcpkgTriplet"), "report.host.vcpkgTriplet")
+    # Host tools can install the same port under a different triplet. Verify
+    # only the report's target, without merging those separate identities.
+    selected = "\n\n".join(
+        paragraph
+        for paragraph in re.split(r"\r?\n\r?\n", status)
+        if f"Architecture: {expected_triplet}" in paragraph.splitlines()
+    )
+    packages = parse_vcpkg_status(selected)
     result: dict[str, object] = {}
     for name, raw_definition in _mapping(contract["dependencies"], "dependencies").items():
         definition = _mapping(raw_definition, f"dependencies.{name}")
@@ -655,6 +704,39 @@ def _packages_config(path: Path) -> dict[str, str]:
     return packages
 
 
+def verify_nuget_package(package_root: Path, package_id: str, locked_version: str) -> Path:
+    """Verify one restored archive's identity against its existing NuGet lock entry."""
+    directory = package_root / f"{package_id}.{locked_version}"
+    archives = tuple(directory.glob("*.nupkg"))
+    if len(archives) != 1:
+        raise DependencyPolicyError(f"restored NuGet package {package_id} lacks one package archive in {directory}")
+    try:
+        with zipfile.ZipFile(archives[0]) as archive:
+            nuspec_names = [entry for entry in archive.namelist() if entry.lower().endswith(".nuspec")]
+            if len(nuspec_names) != 1:
+                raise DependencyPolicyError(f"NuGet package {archives[0]} lacks one nuspec")
+            nuspec = ET.fromstring(archive.read(nuspec_names[0]))
+    except (OSError, zipfile.BadZipFile, ET.ParseError) as exc:
+        raise DependencyPolicyError(f"cannot inspect restored NuGet package {archives[0]}: {exc}") from exc
+    metadata = next((node for node in nuspec.iter() if node.tag.endswith("metadata")), None)
+    metadata_children = () if metadata is None else metadata
+    identity = {
+        child.tag.rsplit("}", maxsplit=1)[-1]: child.text
+        for child in metadata_children
+        if child.tag.endswith(("id", "version"))
+    }
+    identity_version = identity.get("version")
+    try:
+        version_matches = isinstance(identity_version, str) and _normalized_nuget_version(
+            identity_version
+        ) == _normalized_nuget_version(locked_version)
+    except DependencyPolicyError:
+        version_matches = False
+    if str(identity.get("id") or "").casefold() != package_id.casefold() or not version_matches:
+        raise DependencyPolicyError(f"restored NuGet identity does not match {package_id} {locked_version}")
+    return archives[0]
+
+
 def _verify_nuget_resolution(
     contract: dict[str, Any],
     report: dict[str, Any],
@@ -702,38 +784,11 @@ def _verify_nuget_resolution(
             raise DependencyPolicyError(
                 f"NuGet lock resolves {package_id} {locked_version}; {name} requires {policy.requested}"
             )
-        directory = package_root / f"{package_id}.{locked_version}"
-        archives = tuple(directory.glob("*.nupkg"))
-        if len(archives) != 1:
-            raise DependencyPolicyError(f"restored NuGet package {package_id} lacks one package archive in {directory}")
-        try:
-            with zipfile.ZipFile(archives[0]) as archive:
-                nuspec_names = [entry for entry in archive.namelist() if entry.lower().endswith(".nuspec")]
-                if len(nuspec_names) != 1:
-                    raise DependencyPolicyError(f"NuGet package {archives[0]} lacks one nuspec")
-                nuspec = ET.fromstring(archive.read(nuspec_names[0]))
-        except (OSError, zipfile.BadZipFile, ET.ParseError) as exc:
-            raise DependencyPolicyError(f"cannot inspect restored NuGet package {archives[0]}: {exc}") from exc
-        metadata = next((node for node in nuspec.iter() if node.tag.endswith("metadata")), None)
-        metadata_children = () if metadata is None else metadata
-        identity = {
-            child.tag.rsplit("}", maxsplit=1)[-1]: child.text
-            for child in metadata_children
-            if child.tag.endswith(("id", "version"))
-        }
-        identity_version = identity.get("version")
-        try:
-            version_matches = isinstance(identity_version, str) and _normalized_nuget_version(
-                identity_version
-            ) == _normalized_nuget_version(locked_version)
-        except DependencyPolicyError:
-            version_matches = False
-        if str(identity.get("id") or "").casefold() != package_id.casefold() or not version_matches:
-            raise DependencyPolicyError(f"restored NuGet identity does not match {package_id} {locked_version}")
+        archive = verify_nuget_package(package_root, package_id, locked_version)
         resolved[name] = {
             "package": package_id,
             "version": locked_version,
-            "archive": str(archives[0]),
+            "archive": str(archive),
         }
     return resolved
 

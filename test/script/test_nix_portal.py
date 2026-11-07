@@ -12,7 +12,13 @@ import unittest
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-SHELL_INPUTS = ("shell.nix", "nixpkgs.json", "script/ao/toolchain.json", "script/ao/compiler-cache.json")
+SHELL_INPUTS = (
+    "shell.nix",
+    "nixpkgs.json",
+    "script/ao/toolchain.json",
+    "script/ao/compiler-cache.json",
+    "script/ao/bazel-toolchain.json",
+)
 # Flags and search paths that nix-shell setup hooks extend for each target role rather than replace.
 INHERITED_SEARCH_STATE = (
     "NIX_CFLAGS_COMPILE",

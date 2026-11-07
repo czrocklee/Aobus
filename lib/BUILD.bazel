@@ -1,0 +1,16 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+# The existing CMake ao umbrella, used by real application composition roots.
+cc_library(
+    name = "ao",
+    visibility = ["//app:__subpackages__", "//test:__pkg__"],
+    deps = [
+        "//lib/async:async",
+        "//lib/audio:audio",
+        "//lib/library:library",
+        "//lib/lmdb:lmdb",
+        "//lib/media:media",
+        "//lib/query:query",
+        "//lib/utility:utility",
+    ],
+)

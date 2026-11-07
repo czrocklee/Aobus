@@ -1,0 +1,13 @@
+# Checked-in encoded fixtures only; generation scripts are not test runfiles.
+filegroup(
+    name = "audio_fixtures",
+    testonly = True,
+    srcs = glob([
+        "**/*.wav",
+        "**/*.flac",
+        "**/*.m4a",
+        "**/*.mp3",
+        "**/*.opus",
+    ]),
+    visibility = ["//test:__pkg__"],
+)

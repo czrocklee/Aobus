@@ -4,6 +4,9 @@ Aobus is a C++26 music application with GTK4, TUI, CLI, WinUI, and an incrementa
 AppKit frontend over shared Core and application runtime libraries. Work from the repository root through `./ao`; on Windows use
 `ao.bat`. The portal owns CMake, tools, dependencies, and build-tree selection.
 `./ao help` and `./ao <command> --help` describe the available native commands.
+Direct `bazel` commands from the checkout root are the one documented exception,
+for the [Bazel development slice](doc/development/bazel.md#direct-bazel-without-the-portal)
+only; they do not replace `./ao` completion checks, defaults or daily lint.
 
 ## Project constraints
 
@@ -33,6 +36,7 @@ sections relevant to the change; reuse material already read in this session.
 | Concurrency contracts | `doc/development/test/concurrency-and-sanitizer.md` |
 | Native macOS work | `doc/development/macos.md` before using the native environment |
 | Native Windows work | `doc/development/windows.md` before using the native environment |
+| Native Bazel development slice | `doc/development/bazel.md` |
 
 Linux dependencies come from the pinned `nix-shell`; use it for manual compiler
 or dependency inspection. Native macOS and Windows use the shared vcpkg

@@ -15,7 +15,7 @@ import venv
 from collections.abc import Iterator
 from pathlib import Path
 
-from . import builddir
+from . import builddir, buildenv
 
 PACKAGE_ROOT = Path(__file__).parent.parent
 TOOLCHAIN_FILE = PACKAGE_ROOT / "toolchain.json"
@@ -376,7 +376,9 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument("--project-root", type=Path, required=True)
     parser.add_argument("--state-root", type=Path, required=True)
-    parser.add_argument("--result-file", type=Path, required=True)
+    output = parser.add_mutually_exclusive_group(required=True)
+    output.add_argument("--result-file", type=Path)
+    output.add_argument("--launch-windows-portal", action="store_true")
     parser.add_argument("--platform", choices=("macos", "windows"))
     return parser
 
@@ -391,12 +393,34 @@ def _native_platform_name(platform_name: str | None = None) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = _parser().parse_args(argv)
+    arguments = sys.argv[1:] if argv is None else argv
+    command = None
+    # The portal owns this tail, including its own '--' and help flags.
+    if "--" in arguments:
+        separator = arguments.index("--")
+        command = arguments[separator + 1 :]
+        arguments = arguments[:separator]
+    args = _parser().parse_args(arguments)
     try:
         platform_name = args.platform or _native_platform_name()
-        python = ensure_environment(args.project_root, args.state_root, platform_name=platform_name)
-        args.result_file.parent.mkdir(parents=True, exist_ok=True)
-        args.result_file.write_text(f"{python}\n", encoding="utf-8")
+        if args.launch_windows_portal and platform_name != "windows":
+            raise RuntimeError("direct portal launch is only available on Windows")
+        if (
+            platform_name == "windows"
+            and command is not None
+            and not buildenv.windows_bootstrap_requires_python_tools(command)
+        ):
+            # The governed base installation is already the portal runtime.
+            # Do not provision or inspect unrelated lint/documentation wheels.
+            validate_base_python(tool_versions())
+            python = Path(sys.executable)
+        else:
+            python = ensure_environment(args.project_root, args.state_root, platform_name=platform_name)
+        if args.result_file is not None:
+            args.result_file.parent.mkdir(parents=True, exist_ok=True)
+            args.result_file.write_text(f"{python}\n", encoding="utf-8")
+            return 0
+        return subprocess.run([str(python), "-m", "ao.core.windows_portal", *(command or [])], check=False).returncode
     except (OSError, RuntimeError, subprocess.CalledProcessError) as exc:
         print(f"Aobus native Python tooling bootstrap failed: {exc}", file=sys.stderr)
         return 1

@@ -37,7 +37,12 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
         aobus_macos_prepare_python_tools "$ROOT" || exit $?
     fi
     if [[ "$NEEDS_BUILD_ENV" == "1" ]]; then
-        aobus_macos_prepare_build_environment "$ROOT" || exit $?
+        # Provisioning runs vcpkg, which needs the pinned vcpkg and port build tools.
+        if [[ "${1:-}" == "bazel" && "${2:-}" != "provision" ]]; then
+            aobus_macos_prepare_bazel_environment "$ROOT" || exit $?
+        else
+            aobus_macos_prepare_build_environment "$ROOT" || exit $?
+        fi
     fi
     "$AOBUS_PYTHON" -m ao "$@"
     exit $?
@@ -47,7 +52,7 @@ fi
 aobus_nix_shell_fingerprint() {
     local input
     {
-        for input in shell.nix nixpkgs.json script/ao/toolchain.json script/ao/compiler-cache.json; do
+        for input in shell.nix nixpkgs.json script/ao/toolchain.json script/ao/compiler-cache.json script/ao/bazel-toolchain.json; do
             sha256sum "$ROOT/$input" | cut -c1-64
         done
         if [[ "${AOBUS_NIX_UNSTRIPPED_GTK:-}" == "1" ]]; then

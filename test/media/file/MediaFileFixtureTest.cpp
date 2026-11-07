@@ -3,6 +3,7 @@
 
 #include "runtime/library/MediaTrack.h"
 #include "test/TestFixtureSupport.h"
+#include "test/audio/AudioFixtureDirectory.h"
 #include "test/library/MusicLibraryTestSupport.h"
 #include "test/library/WritableLibraryTestSupport.h"
 #include <ao/CoreIds.h>
@@ -38,7 +39,7 @@ namespace ao::media::file::test
 {
   namespace
   {
-    fs::path const kTestDataDir = fs::path{AUDIO_TEST_DATA_DIR};
+    fs::path const kTestDataDir = audio::test::audioFixtureDirectory();
 
     rt::MediaTrack loadTrack(fs::path const& path)
     {

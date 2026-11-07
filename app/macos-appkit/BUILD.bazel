@@ -1,0 +1,192 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("@rules_cc//cc:objc_library.bzl", "objc_library")
+load(":bundle.bzl", "aobus_appkit_bundle")
+
+package(default_visibility = ["//visibility:private"])
+
+# The complete macOS AppKit implementation over the shared desktop launch,
+# UIModel, runtime, catalog, and audio owners, with the CMake framework set.
+# Standard mixed-source ownership mirrors CMake's ao_appkit OBJECT library;
+# alwayslink retains every implementation unit in the product.
+objc_library(
+    name = "appkit",
+    alwayslink = True,
+    srcs = [
+        "ActivityExpirationTimer.mm",
+        "ActivityPopover.mm",
+        "AppKitText.mm",
+        "ArtworkView.mm",
+        "DesktopApplication.mm",
+        "DesktopCommandSurface.mm",
+        "DesktopControls.mm",
+        "DesktopShell.mm",
+        "EntryCompletionAdapter.mm",
+        "LibraryBrowser.mm",
+        "LibraryEditor.mm",
+        "LibraryEditorModel.cpp",
+        "LibrarySession.cpp",
+        "MainRunLoopExecutor.cpp",
+        "MediaPlayerAdapter.mm",
+        "PlaybackBar.mm",
+        "SoulButton.mm",
+        "TrackCreditsEditor.mm",
+        "TrackInspector.mm",
+    ],
+    hdrs = [
+        "ActivityExpirationTimer.h",
+        "ActivityPopover.h",
+        "AppKitText.h",
+        "ArtworkView.h",
+        "DesktopApplication.h",
+        "DesktopApplicationInternal.h",
+        "DesktopControls.h",
+        "DesktopWindowGeometry.h",
+        "EntryCompletionAdapter.h",
+        "LibraryBrowser.h",
+        "LibraryEditor.h",
+        "LibraryEditorModel.h",
+        "LibrarySession.h",
+        "MainRunLoopExecutor.h",
+        "MediaPlayerAdapter.h",
+        "NativeCallback.h",
+        "PlaybackBar.h",
+        "PlaybackSeekTarget.h",
+        "SoulButton.h",
+        "TrackCreditsEditor.h",
+        "TrackInspector.h",
+    ],
+    includes = ["."],
+    deps = [
+        "//app/desktop:desktop_launch",
+        "//app/i18n:completion",
+        "//app/i18n:i18n",
+        "//app/i18n:ordering",
+        "//app/include:i18n_headers",
+        "//app/include:runtime_headers",
+        "//app/include:uimodel_headers",
+        "//app/runtime:runtime",
+        "//app/uimodel:uimodel",
+        "//include:async_headers",
+        "//include:library_headers",
+        "//include:query_headers",
+        "//include:utility_headers",
+        "//lib/audio:audio",
+    ],
+    target_compatible_with = ["@platforms//os:macos"],
+    # The frameworks stay on the implementation owner, following CMake's
+    # target_link_libraries on ao_appkit. The standard rule selects ARC;
+    # the toolchain supplies the C++ language mode.
+    linkopts = [
+        "-framework",
+        "AppKit",
+        "-framework",
+        "CoreFoundation",
+        "-framework",
+        "MediaPlayer",
+        "-framework",
+        "QuartzCore",
+    ],
+)
+
+# The bundle entry unit stays out of the product library, mirroring CMake's
+# separate aobus-appkit bundle executable over the shared production objects.
+objc_library(
+    name = "main",
+    alwayslink = True,
+    srcs = ["DesktopMain.mm"],
+    hdrs = [],
+    includes = ["."],
+    deps = [":appkit"],
+    target_compatible_with = ["@platforms//os:macos"],
+)
+
+cc_binary(
+    name = "aobus-appkit-bin",
+    deps = [
+        ":appkit",
+        ":main",
+    ],
+    linkstatic = True,
+    target_compatible_with = ["@platforms//os:macos"],
+)
+
+# Declared bundle product: the Aobus.app tree plus a launcher that execs the
+# real Contents/MacOS binary without adding application arguments.
+aobus_appkit_bundle(
+    name = "aobus-appkit",
+    exe = ":aobus-appkit-bin",
+    icon = "//asset:brand/Aobus.icns",
+    inventory = "//app/i18n:catalog/package.lst",
+    license = "//asset:brand/LICENSE.txt",
+    macos_toolchain = "//:script/ao/macos-toolchain.json",
+    plist = "DesktopInfo.plist.in",
+    target_compatible_with = ["@platforms//os:macos"],
+    visibility = ["//visibility:public"],
+)
+
+# Manual AppKit smoke harness. It compiles the existing CMake scenario units
+# against the production AppKit library and the existing test support owners;
+# it is built by the ordinary graph but remains an opt-in GUI run. The bundle
+# changes only its tree/executable names and plist identifier/display name,
+# while the shared plist, icon, license, catalog, version and minimum OS stay
+# authoritative.
+objc_library(
+    name = "appkit_smoke",
+    alwayslink = True,
+    # test/macos-appkit has no package boundary of its own; //test exports
+    # these existing CMake scenario units to this consumer.
+    srcs = [
+        "//test:macos-appkit/AppKitSmokeMain.mm",
+        "//test:macos-appkit/AppKitScenarioSupport.mm",
+        "//test:macos-appkit/AppKitDesktopScenario.mm",
+        "//test:macos-appkit/AppKitDesktopScenarioHelpers.mm",
+        "//test:macos-appkit/AppKitAuthoringScenario.mm",
+        "//test:macos-appkit/AppKitActivityExpirationScenario.mm",
+        "//test:macos-appkit/AppKitArtworkScenario.mm",
+        "//test:macos-appkit/AppKitMediaScenario.mm",
+        "//test:macos-appkit/AppKitPresentationScenario.mm",
+        "//test:macos-appkit/AppKitPlaybackScenario.mm",
+        "//test:macos-appkit/AppKitSoulScenario.mm",
+    ],
+    hdrs = [],
+    deps = [
+        ":appkit",
+        # The test package owns the scenario headers and their local include root.
+        "//test:appkit_smoke_headers",
+        "//test:coreaudio_test_support",
+        # Reuse the existing media fixture owner; the smoke main keeps
+        # Catch2Main unextracted while the WAV/TestId3v2 objects are pulled.
+        "//test:media_test_support",
+    ],
+    includes = ["."],
+    target_compatible_with = ["@platforms//os:macos"],
+    testonly = True,
+)
+
+cc_binary(
+    name = "ao_appkit_smoke_bin",
+    deps = [
+        ":appkit",
+        ":appkit_smoke",
+    ],
+    linkstatic = True,
+    target_compatible_with = ["@platforms//os:macos"],
+    testonly = True,
+)
+
+aobus_appkit_bundle(
+    name = "ao_appkit_smoke",
+    exe = ":ao_appkit_smoke_bin",
+    icon = "//asset:brand/Aobus.icns",
+    inventory = "//app/i18n:catalog/package.lst",
+    license = "//asset:brand/LICENSE.txt",
+    macos_toolchain = "//:script/ao/macos-toolchain.json",
+    plist = "DesktopInfo.plist.in",
+    tree_name = "ao_appkit_smoke.app",
+    executable_name = "ao_appkit_smoke",
+    bundle_identifier = "org.aobus.desktop.smoke",
+    display_name = "Aobus Native Tests",
+    target_compatible_with = ["@platforms//os:macos"],
+    testonly = True,
+    visibility = ["//visibility:public"],
+)

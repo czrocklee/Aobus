@@ -78,7 +78,8 @@
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
         "VCPKG_OVERLAY_PORTS": "${sourceDir}/cmake/vcpkg-ports",
-        "VCPKG_TARGET_TRIPLET": "x64-windows"
+        "VCPKG_HOST_TRIPLET": "x64-windows",
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static-md"
       }
     },
     {
@@ -116,7 +117,8 @@
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
         "CMAKE_MSVC_DEBUG_INFORMATION_FORMAT": "$<$<CONFIG:Debug,RelWithDebInfo>:Embedded>",
         "VCPKG_OVERLAY_PORTS": "${sourceDir}/cmake/vcpkg-ports",
-        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "VCPKG_HOST_TRIPLET": "x64-windows",
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static-md",
         "VCPKG_MANIFEST_NO_DEFAULT_FEATURES": "ON",
         "AOBUS_BUILD_CLI": "OFF",
         "AOBUS_BUILD_GTK": "OFF",

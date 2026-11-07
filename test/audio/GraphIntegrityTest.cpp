@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "lib/audio/NullBackend.h"
+#include "test/audio/AudioFixtureDirectory.h"
 #include <ao/audio/AudioRouteFormatState.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
@@ -71,7 +72,7 @@ namespace ao::audio::test
 
   TEST_CASE("Engine - graph integrity")
   {
-    auto const testFile = std::filesystem::path{AUDIO_TEST_DATA_DIR} / "basic_metadata.flac";
+    auto const testFile = audioFixtureDirectory() / "basic_metadata.flac";
 
     INFO("Required audio fixture: " << testFile);
     REQUIRE(std::filesystem::is_regular_file(testFile));
