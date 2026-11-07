@@ -702,6 +702,7 @@ class LaunchConfigurationTest(unittest.TestCase):
                     "WINDOWSSDKVERSION": "10.0.26100.0",
                     "VCTOOLSVERSION": "14.51.36231",
                     "VCTOOLSINSTALLDIR": str(root / "vc"),
+                    "VSINSTALLDIR": "C:/selected-vs/",
                     "TEMP": "volatile-nix-shell-temporary-directory",
                     "TMP": "another-volatile-temporary-directory",
                     "UNRELATED_CLIENT_VALUE": "must-not-be-forwarded",

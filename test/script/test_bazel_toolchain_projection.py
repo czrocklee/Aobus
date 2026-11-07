@@ -313,44 +313,6 @@ class ToolchainMaterializationTest(unittest.TestCase):
                     "tools/xcrun": "/selected/bin/xcrun",
                 },
             ),
-            (
-                "windows",
-                "windows_toolchain.bzl",
-                "windows_toolchain",
-                {
-                    "target_architecture": "x64",
-                    "tools": {
-                        "cl": "C:/selected/cl.exe",
-                        "link": "C:/selected/link.exe",
-                        "lib": "C:/selected/lib.exe",
-                        "ml64": "C:/selected/ml64.exe",
-                    },
-                    "builtin_include_directories": ["C:/selected/include"],
-                    "environment": {"TMP": 'C:\\Åsa\\音乐\\"quoted"'},
-                },
-                {
-                    "TOOLS": {
-                        "cl": "C:/selected/cl.exe",
-                        "link": "C:/selected/link.exe",
-                        "lib": "C:/selected/lib.exe",
-                        "ml64": "C:/selected/ml64.exe",
-                    },
-                    "TOOL_INPUTS": {
-                        "cl": "tools/cl.exe",
-                        "link": "tools/link.exe",
-                        "lib": "tools/lib.exe",
-                        "ml64": "tools/ml64.exe",
-                    },
-                    "BUILTIN_INCLUDE_DIRECTORIES": ["C:/selected/include"],
-                    "MSVC_ENVIRONMENT": {"TMP": 'C:\\Åsa\\音乐\\"quoted"'},
-                },
-                {
-                    "tools/cl.exe": "C:/selected/cl.exe",
-                    "tools/link.exe": "C:/selected/link.exe",
-                    "tools/lib.exe": "C:/selected/lib.exe",
-                    "tools/ml64.exe": "C:/selected/ml64.exe",
-                },
-            ),
         ]
         for platform, module, macro, sdk, paths, links in cases:
             with self.subTest(platform=platform):
@@ -416,7 +378,6 @@ class ToolchainMaterializationTest(unittest.TestCase):
         for platform, sdk in (
             ("linux", {"machine": "arm64"}),
             ("macos", {"machine": "aarch64"}),
-            ("windows", {"target_architecture": "arm64"}),
         ):
             with self.subTest(platform=platform), self.assertRaisesRegex(_StarlarkFailure, "unsupported.*CPU"):
                 self.materialize(self.context, self.data(platform, sdk))
@@ -426,20 +387,7 @@ class ToolchainMaterializationTest(unittest.TestCase):
     def test_required_roles_and_colliding_basenames_fail_at_the_repository_seam(self):
         cases = [
             ("linux", dict(self.linux_sdk(), tools={"clang++": "/selected/clang++"})),
-            ("windows", {"target_architecture": "x64", "tools": {"cl": "C:/selected/cl.exe"}}),
             ("linux", dict(self.linux_sdk(), tools=dict(self.linux_sdk()["tools"], ar="/other/clang"))),
-            (
-                "windows",
-                {
-                    "target_architecture": "x64",
-                    "tools": {
-                        "cl": "C:/selected/CL.EXE",
-                        "link": "C:/other/cl.exe",
-                        "lib": "C:/lib.exe",
-                        "ml64": "C:/ml64.exe",
-                    },
-                },
-            ),
             ("macos", dict(self.macos_sdk(), tools={"clang": "/selected/clang"})),
             (
                 "macos",
@@ -458,6 +406,17 @@ class ToolchainMaterializationTest(unittest.TestCase):
     def test_unknown_platform_fails_before_writing_files_or_linking_tools(self):
         with self.assertRaisesRegex(_StarlarkFailure, "unsupported.*platform: haiku"):
             self.materialize(self.context, self.data("haiku", {}))
+        self.assertEqual(self.context.files, {})
+        self.assertEqual(self.context.links, {})
+
+    def test_windows_projection_is_retired_at_the_repository_seam(self):
+        # The official rules_cc auto-config owns the Windows toolchain; the
+        # repository materializer no longer accepts a Windows projection.
+        with self.assertRaisesRegex(_StarlarkFailure, "unsupported.*platform: windows"):
+            self.materialize(
+                self.context,
+                self.data("windows", {"target_architecture": "x64", "tools": {"cl": "C:/selected/cl.exe"}}),
+            )
         self.assertEqual(self.context.files, {})
         self.assertEqual(self.context.links, {})
 

@@ -6,6 +6,15 @@ three-platform acceptance. Current usage and contracts belong in the
 [Bazel development guide](bazel.md#direct-bazel-without-the-portal) and
 [dependency governance](dependency-governance.md).
 
+**Superseded on 2026-11-07 for the Windows compiler configuration.** The local
+Windows MSVC toolchain definition, compiler probe, SDK identity ledger and
+materialization recorded throughout this handoff have been removed; Windows
+resolution now uses the pinned rules_cc default MSVC auto-configuration. See
+[Windows compiler configuration](bazel.md#windows-compiler-configuration) for
+the current contract. The dated sections below keep their recorded meaning:
+their native Windows receipts describe the retired local adapter, and this
+note claims no new validation of the auto-configuration.
+
 ## Resume from this checkpoint
 
 - Branch: `feat/bazel-development`.

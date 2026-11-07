@@ -402,7 +402,17 @@ class PreparedNugetSelectionTest(unittest.TestCase):
 
     def prepared_rc(self, environment):
         with (
-            patch.dict(os.environ, {"AOBUS_STATE_ROOT": str(self.root / "state"), **environment}, clear=True),
+            patch.dict(
+                os.environ,
+                {
+                    "AOBUS_STATE_ROOT": str(self.root / "state"),
+                    "VSINSTALLDIR": "C:/selected-vs/",
+                    "VCToolsVersion": "14.selected",
+                    "WindowsSDKVersion": "10.selected/",
+                    **environment,
+                },
+                clear=True,
+            ),
             patch.object(native, "native_platform", return_value="windows"),
             patch.object(providers, "vcpkg_prefix", return_value=self.root / "provider"),
         ):

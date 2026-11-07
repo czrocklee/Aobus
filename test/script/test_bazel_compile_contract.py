@@ -43,7 +43,11 @@ class BazelCompilePolicyTest(unittest.TestCase):
         for line in lines:
             if line.startswith("build"):
                 self.assertNotRegex(line, r"--(?:copt|cxxopt|conlyopt|linkopt|per_file_copt)=")
-        self.assertFalse(any("--features=external_include_paths" in line for line in lines))
+            if line.startswith("#") or not line.strip():
+                continue
+            if "external_include_paths" in line:
+                # Only the official Windows auto-config scope enables the feature.
+                self.assertTrue(line.startswith("build:windows"), line)
 
     def test_warning_selection_belongs_to_the_repository_not_source_path_filters(self):
         tree = ast.parse((PROJECT_ROOT / "REPO.bazel").read_text(encoding="utf-8"))
@@ -54,12 +58,27 @@ class BazelCompilePolicyTest(unittest.TestCase):
         self.assertEqual(ast.unparse(declaration.func), "repo")
         self.assertEqual(
             {field.arg: ast.literal_eval(field.value) for field in declaration.keywords},
-            {"features": ["aobus_warnings"]},
+            # The owned feature keeps the Unix warning set; the standard feature
+            # supplies /WX on Windows inside the same repository scope.
+            {"features": ["aobus_warnings", "treat_warnings_as_errors"]},
         )
         lines = (PROJECT_ROOT / ".bazelrc").read_text(encoding="utf-8").splitlines()
-        self.assertFalse(any("--per_file_copt" in line for line in lines))
-        self.assertFalse(any("--features=aobus_warnings" in line for line in lines))
-        self.assertFalse(any("--host_features=" in line or "dynamic_link_msvcrt" in line for line in lines))
+        active = [line for line in lines if line.strip() and not line.startswith("#")]
+        self.assertFalse(any("--per_file_copt" in line for line in active))
+        # Warning promotion is repository scope, never a command-line default.
+        self.assertFalse(any("--features=aobus_warnings" in line for line in active))
+        self.assertFalse(any("--features=treat_warnings_as_errors" in line for line in active))
+        self.assertFalse(any("dynamic_link_msvcrt" in line for line in active))
+        # Unix behavior stays unchanged: the standard feature is disabled for
+        # both the target and the host configuration on the governed Unix hosts.
+        for config in ("linux", "macos"):
+            self.assertIn(f"build:{config} --features=-treat_warnings_as_errors", active)
+            self.assertIn(f"build:{config} --host_features=-treat_warnings_as_errors", active)
+        # The only enabling host-feature selection is the Windows include
+        # classification; Unix hosts only disable the standard feature above.
+        for line in active:
+            if line.startswith("build:windows") and "--host_features=" in line:
+                self.assertEqual(line, "build:windows --host_features=external_include_paths")
 
     def test_ignored_prefixes_never_hide_tracked_files(self):
         lines = (PROJECT_ROOT / ".bazelignore").read_text(encoding="utf-8").splitlines()
@@ -81,7 +100,15 @@ class BazelCompilePolicyTest(unittest.TestCase):
         lines = (PROJECT_ROOT / ".bazelrc").read_text(encoding="utf-8").splitlines()
         unset = {line.removeprefix("common --repo_env==") for line in lines if line.startswith("common --repo_env==")}
         self.assertTrue(
-            {"CPLUS_INCLUDE_PATH", "C_INCLUDE_PATH", "CPATH", "LIBRARY_PATH", "BAZEL_CXXOPTS", "BAZEL_LINKOPTS"}
+            {
+                "CPLUS_INCLUDE_PATH",
+                "C_INCLUDE_PATH",
+                "CPATH",
+                "LIBRARY_PATH",
+                "BAZEL_CONLYOPTS",
+                "BAZEL_CXXOPTS",
+                "BAZEL_LINKOPTS",
+            }
             <= unset
         )
         for base in ("NIX_CFLAGS_COMPILE", "NIX_CFLAGS_LINK", "NIX_LDFLAGS"):
@@ -141,67 +168,26 @@ class BazelCompilePolicyTest(unittest.TestCase):
             },
         )
 
-    def test_windows_language_and_sdk_defaults_belong_to_the_toolchain(self):
-        tree = ast.parse((PROJECT_ROOT / "bazel/windows_toolchain.bzl").read_text(encoding="utf-8"))
-        macro = next(
-            node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "windows_toolchain"
-        )
-        configuration = next(
-            node.value
-            for node in macro.body
-            if isinstance(node, ast.Expr)
-            and isinstance(node.value, ast.Call)
-            and ast.unparse(node.value.func) == "cc_toolchain_config"
-        )
-        fields = {keyword.arg: keyword.value for keyword in configuration.keywords}
+    def test_manual_lint_fixture_targets_opt_out_of_both_warning_names(self):
+        tree = ast.parse((PROJECT_ROOT / "test/lint/BUILD.bazel").read_text(encoding="utf-8"))
+        libraries = {}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "cc_library":
+                fields = {keyword.arg: keyword.value for keyword in node.keywords}
+                libraries[ast.literal_eval(fields["name"])] = fields
         self.assertEqual(
-            ast.literal_eval(fields["cxx_flags"]),
-            [
-                "/std:c++latest",
-                "/external:W0",
-                "/utf-8",
-                "/permissive-",
-                "/Zc:__cplusplus",
-                "/Zc:preprocessor",
-                "/DWIN32_LEAN_AND_MEAN",
-                "/DUNICODE",
-                "/D_UNICODE",
-                "/DWINVER=0x0A00",
-            ],
+            set(libraries),
+            {"cache_warning", "cache_clean", "cache_error", "header_replay", "werror_replay"},
         )
-        # NOMINMAX and _CRT_SECURE_NO_WARNINGS remain pinned rules_cc defaults.
-        self.assertEqual(ast.literal_eval(fields["win32_winnt_flag"]), "/D_WIN32_WINNT=0x0A00")
-
-    def test_windows_external_headers_are_toolchain_defaults_independent_of_repository_warnings(self):
-        tree = ast.parse((PROJECT_ROOT / "bazel/windows_toolchain.bzl").read_text(encoding="utf-8"))
-        macro = next(
-            node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "windows_toolchain"
-        )
-        declarations = {}
-        for statement in macro.body:
-            if isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Call):
-                fields = {keyword.arg: keyword.value for keyword in statement.value.keywords}
-                if "name" in fields:
-                    declarations[ast.literal_eval(fields["name"])] = (ast.unparse(statement.value.func), fields)
-        for name, expected in (
-            ("msvc_external_include_paths", {"feature_name": "external_include_paths"}),
-            (
-                "aobus_external_headers",
-                {"feature_name": "aobus_external_headers", "implies": [":msvc_external_include_paths"]},
-            ),
-        ):
-            kind, fields = declarations[name]
-            self.assertEqual(kind, "cc_feature")
-            self.assertEqual({key: ast.literal_eval(value) for key, value in fields.items() if key != "name"}, expected)
-        _, configuration = declarations["msvc_config"]
-        self.assertEqual(ast.literal_eval(configuration["extra_enabled_features"]), [":aobus_external_headers"])
-        self.assertEqual(ast.literal_eval(configuration["extra_known_features"]), [":aobus_warnings"])
-        # Only the wrapper is registered: the implication reference must not
-        # duplicate the legacy feature or copy its concrete flag configuration.
-        _, warnings = declarations["aobus_warnings"]
-        self.assertNotIn("implies", warnings)
-        self.assertNotIn("enabled", warnings)
-        self.assertNotIn("external_feature.bzl", ast.unparse(tree))
+        # The deliberately warning-bearing fixture contexts opt out of both the
+        # owned and the standard warning-promotion feature; the werror replay
+        # keeps promotion so an analysis-only warning exercises the report gate.
+        for name in ("cache_warning", "cache_clean", "cache_error", "header_replay"):
+            self.assertEqual(
+                ast.literal_eval(libraries[name]["features"]),
+                ["-aobus_warnings", "-treat_warnings_as_errors"],
+            )
+        self.assertNotIn("features", libraries["werror_replay"])
 
     # macOS public-macro, tool-map and bootstrap wiring is exercised in
     # test_bazel_macos_composition. The semantic command-line checks below stay

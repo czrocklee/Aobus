@@ -413,6 +413,16 @@ def _paths(paths: list[Path]) -> list[str]:
     return [str(path.absolute()) for path in paths]
 
 
+def _windows_mt() -> Path:
+    # One-consumer helper: the selected Windows SDK manifest tool, never a compiler view.
+    sdk = Path(os.environ.get("WindowsSdkDir", ""))
+    version = os.environ.get("WindowsSDKVersion", "").rstrip("\\").rstrip("/")
+    tool = sdk / "bin" / version / "x64/mt.exe"
+    if not sdk.is_absolute() or not version or not tool.is_file():
+        raise native.BazelWorkspaceError(f"selected Windows SDK manifest tool is missing: {tool}")
+    return tool
+
+
 def resolve_host_tools(tree: Path, prefix: Path | None, host: str, *, source: object = None) -> dict[str, Any]:
     """Return native SDK facts and read inventory, never BUILD or .bzl programs.
 
@@ -441,13 +451,11 @@ def resolve_host_tools(tree: Path, prefix: Path | None, host: str, *, source: ob
         "test_tools": {},
     }
     if host == "windows":
-        from . import bazel_compiler_probe
-
         system = Path(os.environ.get("SYSTEMROOT", ""))
         powershell = native.probe(system / "System32/WindowsPowerShell/v1.0/powershell.exe")
         if not system.is_absolute() or not powershell.is_file():
             raise ValueError("selected Windows PowerShell runtime is missing")
-        for name, tool in {"mt": bazel_compiler_probe.windows_mt(), "powershell": powershell}.items():
+        for name, tool in {"mt": _windows_mt(), "powershell": powershell}.items():
             result["manifest_tools"][name] = tool.resolve().as_posix()
             files.update({tool.absolute(), tool.resolve()})
     tools, artifacts, sdk_evidence = _catalog_sdk(tree, prefix, host, watch_directories=directories)

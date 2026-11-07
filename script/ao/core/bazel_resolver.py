@@ -146,9 +146,7 @@ def main() -> int:
             else:
                 from ao.core import bazel_compiler_probe
 
-                compiler = bazel_compiler_probe.probe_compiler(
-                    host, compiler_environment=request.get("compiler_environment")
-                )
+                compiler = bazel_compiler_probe.probe_compiler(host)
                 files.update(item["path"] for item in compiler["identity"]["files"])
                 result["toolchain"] = compiler
     except Exception as exc:

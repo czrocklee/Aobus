@@ -21,6 +21,13 @@ class BazelServerPolicyTest(unittest.TestCase):
 
     def prepare(self, tree, config="debug", host="linux", environment=None):
         environment = {"AOBUS_STATE_ROOT": str(self.root / "state")} if environment is None else environment
+        if host == "windows":
+            environment = {
+                "VSINSTALLDIR": "C:/selected-vs/",
+                "VCToolsVersion": "14.selected",
+                "WindowsSDKVersion": "10.selected/",
+                **environment,
+            }
         with (
             patch.dict(os.environ, environment, clear=True),
             patch.object(native, "native_platform", return_value=host),

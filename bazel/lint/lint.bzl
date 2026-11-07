@@ -19,7 +19,7 @@ _COMPILE_MNEMONICS = ["CppCompile", "ObjcCompile"]
 
 # Only profiles whose producer inputs are known here are admitted. The portal
 # does not forward arbitrary feature/copt overrides through its lint interface.
-_SUPPORTED_FEATURES = ["aobus_warnings", "static_link_msvcrt", "dynamic_link_msvcrt", "default_compile_flags"]
+_SUPPORTED_FEATURES = ["aobus_warnings", "treat_warnings_as_errors", "external_include_paths", "static_link_msvcrt", "dynamic_link_msvcrt", "default_compile_flags"]
 
 def native_environment(ctx, action = None, language = "c++", portal = False):
     """Use the pinned producer's feature inputs and native environment precedence.

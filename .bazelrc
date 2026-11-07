@@ -2,8 +2,8 @@
 common --enable_bzlmod
 common --repo_contents_cache=
 
-# Only the governed native toolchains may satisfy C++ resolution. The Apple
-# defaults are registered independently of rules_cc's generic native defaults.
+# Unix uses the governed native toolchains. The Windows profile below enables
+# rules_cc's standard MSVC discovery; Apple defaults stay disabled separately.
 common --repo_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1
 common --repo_env=BAZEL_NO_APPLE_CPP_TOOLCHAIN=1
 # The composed Apple toolchain does not admit automatic developer-tree scans.
@@ -23,6 +23,7 @@ common --repo_env==CXXFLAGS
 common --repo_env==CPPFLAGS
 common --repo_env==LDFLAGS
 common --repo_env==BAZEL_COPTS
+common --repo_env==BAZEL_CONLYOPTS
 common --repo_env==BAZEL_CXXOPTS
 common --repo_env==BAZEL_LINKOPTS
 common --repo_env==BAZEL_LINKLIBS
@@ -54,13 +55,31 @@ build --compilation_mode=dbg
 build:debug --compilation_mode=dbg
 build:release --compilation_mode=opt
 
-# REPO.bazel selects the owned-target warning feature. Compiler switches,
-# language/ABI defaults and hardening are defined by the selected toolchain.
+# REPO.bazel selects owned-target warning promotion. Unix keeps its existing
+# Clang policy rather than enabling the upstream MSVC warning feature.
 build:linux --extra_toolchains=@aobus_toolchain//:registered_nix_clang
+build:linux --features=-treat_warnings_as_errors
+build:linux --host_features=-treat_warnings_as_errors
 build:macos --extra_toolchains=@aobus_toolchain//:registered_llvm22
+build:macos --features=-treat_warnings_as_errors
+build:macos --host_features=-treat_warnings_as_errors
 # Platform flags project the governed target and exec deployment settings.
 build:macos --platforms=@aobus_toolchain//:platform
-build:windows --extra_toolchains=@aobus_toolchain//:registered_msvc
+
+# rules_cc owns MSVC discovery, CRT, response files and debug/link defaults.
+# Its toolchain-wide option inlets also cover optimized execution tools.
+# A literal colon inside BAZEL_CXXOPTS is %-escaped; colons separate options.
+build:windows --repo_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=0
+build:windows --repo_env=USE_CLANG_CL=0
+build:windows --repo_env==CL
+build:windows --repo_env==_CL_
+build:windows --repo_env==LINK
+build:windows --repo_env==_LINK_
+build:windows --repo_env=BAZEL_COPTS=/W4
+build:windows --repo_env=BAZEL_CXXOPTS=/std%:c++latest:/external%:W0:/utf-8:/permissive-:/Zc%:__cplusplus:/Zc%:preprocessor:/DWIN32_LEAN_AND_MEAN:/DUNICODE:/D_UNICODE:/DWINVER=0x0A00
+build:windows --repo_env=BAZEL_WIN32_WINNT=/D_WIN32_WINNT=0x0A00
+build:windows --features=external_include_paths
+build:windows --host_features=external_include_paths
 
 # Native executable resource validation is cached and owned by Bazel.
 build:windows --aspects=//bazel:windows_utf8_manifest.bzl%windows_utf8_manifest_aspect

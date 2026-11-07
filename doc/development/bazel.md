@@ -74,7 +74,8 @@ its [`hygiene`](#hygiene-gate) gate.
 `lint` is a scope/report action, not a label-forwarding build action; it does
 not accept forwarded Bazel arguments. Bazel coverage is unsupported; use the
 existing CMake-backed [`./ao coverage` workflow](test/coverage-workflow.md) on Linux.
-`deps` fetches the four governed repositories and may reevaluate them; use
+`deps` fetches the governed repositories — omitting the Unix compiler
+repository on Windows — and may reevaluate them; use
 ordinary build/test invocations to assess warm repository reuse.
 Common options include `--config debug|release`, `--path`, `--vcpkg-prefix`,
 `--jobs` (default 2), and `--remote-cache`; availability depends on the action.
@@ -138,6 +139,16 @@ including its host tools and both Debug and Release artifacts. An invalid
 explicit prefix fails; there is no fallback. Export it or pass it through a
 standard local Bazel `--repo_env` configuration; the repository tracks no
 absolute-path configuration.
+
+On Windows, bare commands resolve C++ through rules_cc's official default MSVC
+auto-configuration ([Windows compiler
+configuration](#windows-compiler-configuration)). Supply the same
+process-scoped selected Visual Studio/SDK environment the portal captures
+(`VSINSTALLDIR`, `VCToolsVersion`, `WindowsSDKVersion`), or select exact
+installations with the standard `BAZEL_VC`, `BAZEL_VC_FULL_VERSION` and
+`BAZEL_WINSDK_FULL_VERSION` selectors; the repository rc carries the project
+profile inlets. Upstream warns and falls back for an invalid `BAZEL_VC`; no
+failure-instead-of-fallback behavior is promised.
 
 Changing the host installation selection — Visual Studio, Xcode or SDK
 selection — may require `bazel fetch --force --configure` before repository
@@ -474,8 +485,8 @@ base Python and captures the Visual Studio environment through the existing
 batch. Native macOS/Windows discovery never installs SDKs, ports, Python or
 runtimes. The Python discovery helper itself only validates ready inputs;
 an invalid explicit selection fails without fallback. Every projection repository
-— dependencies, tools, toolchain and the lazy lint SDK/policy — consumes that
-shared `environment.json` and its recorded interpreter instead of
+— dependencies, tools, the Unix compiler toolchain and the lazy lint SDK/policy —
+consumes that shared `environment.json` and its recorded interpreter instead of
 per-invocation portal state.
 
 The portal is a launcher, not an outer dependency freshness engine.
@@ -493,10 +504,11 @@ input contract:
   adapter and header-ownership owner.
 - [Host tools](../../script/ao/core/bazel_host_tools.py) observe selected
   executables and their declared ICU/Python/runtime inputs.
-- [Compiler probes](../../script/ao/core/bazel_compiler_probe.py) admit exact
-  installed tool/include interfaces, raw host/Nix metadata and the existing
-  aggregate SDK identity. They do not return Bazel labels, CPU constraints,
-  projection destinations or per-mode action environments.
+- [Unix compiler probes](../../script/ao/core/bazel_compiler_probe.py) admit
+  exact installed Linux/macOS tool/include interfaces, raw host/Nix metadata and
+  the existing aggregate SDK identity. They do not return Bazel labels, CPU
+  constraints, projection destinations or per-mode action environments. The
+  Windows manifest-tool helper is owned by host tools below.
 - [WinUI SDK admission](../../script/ao/core/bazel_winui.py) validates the installed
   NuGet/MSBuild interface, native tool closure and COFF roles; it reports provider
   membership and files, not Bazel destinations or declarations.
@@ -511,8 +523,10 @@ programs for the resolver to reread. The
 [host-tool projection](../../bazel/host_tools_repository.bzl),
 [compiler projection](../../bazel/toolchain_repository.bzl) and
 [WinUI projection](../../bazel/winui_repository.bzl) materialize selected artifacts,
-data-only values and fixed BUILD entrypoints. The compiler projection owns tool
-labels, collision checks and native-machine-to-Bazel CPU constraints. Checked-in
+data-only values and fixed BUILD entrypoints. The Unix compiler projection owns
+tool labels, collision checks and native-machine-to-Bazel CPU constraints;
+Windows has no local compiler projection (see
+[Windows compiler configuration](#windows-compiler-configuration)). Checked-in
 [import declarations](../../bazel/imports.bzl),
 [host-tool declarations](../../bazel/host_tools.bzl),
 [WinUI declarations](../../bazel/winui_sdk.bzl) and compiler macros own the graph.
@@ -572,7 +586,9 @@ The governed repositories provide:
   compiler and test daemon, and Windows manifest tools; catalog compiler ICU
   imports cover Debug/Release
   independently of the target provider mode;
-- `@aobus_toolchain`: compiler identity and the selected Nix, macOS LLVM or MSVC SDK;
+- `@aobus_toolchain`: the governed Unix compiler identity and the selected Nix or
+  macOS LLVM SDK; Windows omits this repository and uses rules_cc's default MSVC
+  auto-configuration;
 - `@aobus_winui_sdk`: the installed WinUI NuGet SDK's headers, bootstrap sources,
   import libraries, runtime payload and generation tools, projected lazily from
   the restored NuGet cache for the [WinUI product](#winui-product) and its shared projection.
@@ -650,32 +666,44 @@ their own transitive semantics.
 
 ## Compiler policy ownership
 
-Toolchains own compiler parameters, not rc files, Python mode branches or launch
-JSON. The [repository rc](../../.bazelrc) selects modes/toolchains, clears ambient
-repository/action channels, enables strict action environments and requires
-Windows manifest validation; it contains no raw compiler/linker parameters.
+The governed Unix toolchains own their compiler parameters, not rc files,
+Python mode branches or launch JSON. The [repository rc](../../.bazelrc) selects
+modes/toolchains, clears ambient repository/action channels, enables strict
+action environments and requires Windows manifest validation; it contains no
+raw Unix compiler/linker parameters, and supplies the Windows project profile
+only through the upstream auto-configuration inlets of
+[Windows compiler configuration](#windows-compiler-configuration).
 Launch/server/cache configuration belongs to the launcher.
 Repository clearing is separate from action clearing: `--repo_env==CPLUS_INCLUDE_PATH`
 unsets the variable, rather than assigning an empty path entry.
 
 The rc sets the upstream repository guards
 `BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1` and `BAZEL_NO_APPLE_CPP_TOOLCHAIN=1` through
-`common --repo_env`, disabling both generic and Apple default C++ toolchains.
-With the current [module graph](../../MODULE.bazel), resolution must use a
-registered governed native toolchain; no compatible governed toolchain means
-failure, not ambient fallback. `APPLE_SUPPORT_LAYERING_CHECK_BETA=0` additionally
+`common --repo_env`, disabling both generic and Apple default C++ toolchains for
+the governed Linux/macOS registrations. With the current
+[module graph](../../MODULE.bazel), Unix resolution must use a registered
+governed native toolchain; no compatible governed toolchain means failure, not
+ambient fallback. The rc's Windows configuration overrides the generic guard
+with `0`, so rules_cc's official default MSVC auto-configuration registers
+there instead ([Windows compiler
+configuration](#windows-compiler-configuration)). `APPLE_SUPPORT_LAYERING_CHECK_BETA=0` additionally
 disables upstream's automatic developer-tree module-map scan, which is not an
 admitted SDK input producer. These guards do not replace repository/action
 environment clearing or control warning-feature selection.
 
-[REPO.bazel](../../REPO.bazel) requests `aobus_warnings` for standard rules_cc
-compiling targets in the main repository. Ownership follows the compiling target,
-not the source filename, suffix, generator or macro origin. Generated C++ and
-external sources compiled by a main-repository target receive it; external
-compiling targets, including rules_cc runfiles, do not inherit it.
+[REPO.bazel](../../REPO.bazel) requests `aobus_warnings` and the standard
+`treat_warnings_as_errors` feature for standard rules_cc compiling targets in
+the main repository. The Unix platform configurations disable the standard
+feature for both target and host consumers, preserving the existing
+`aobus_warnings`-owned Unix warning policy; on Windows only the standard
+feature supplies `/WX`, for main-repository compiling targets only, and
+fixture targets disable both feature names. Ownership follows the compiling
+target, not the source filename, suffix, generator or macro origin. Generated
+C++ and external sources compiled by a main-repository target receive them;
+external compiling targets, including rules_cc runfiles, do not inherit them.
 Features do not propagate through `CcInfo` or `compile_contract`. No wrapper,
-macro, target registry or repeated per-target feature attribute is needed;
-custom compile rules must honor feature selection themselves.
+macro, target registry, source regex or repeated per-target feature attribute
+is needed; custom compile rules must honor feature selection themselves.
 
 Native Bazel feature merging applies:
 
@@ -685,10 +713,12 @@ Native Bazel feature merging applies:
 - Global `--features=-aobus_warnings` disables even local requests; global
   `--features=aobus_warnings` can enable external targets too.
 
-Main-repository Starlark definitions are instantiated by a thin host-selected
-BUILD in `@aobus_toolchain`, retaining external target names and caller-relative
-tool inputs. Compiler policy edits follow Bazel load/analysis edges rather than
-rerunning native provider discovery. Python returns compiler facts and identity;
+Unix main-repository Starlark definitions are instantiated by a thin
+host-selected BUILD in `@aobus_toolchain`, retaining external target names and
+caller-relative tool inputs; Windows has no local compiler projection.
+Compiler policy edits follow Bazel load/analysis edges rather than
+rerunning native provider discovery. Python returns Unix compiler facts and
+identity;
 the checked-in repository projection creates tool links, data and the fixed call,
 not copies of policy templates. Unselected hosts are not eagerly
 loaded through separate main BUILD packages.
@@ -697,15 +727,14 @@ loaded through separate main BUILD packages.
 user copts in the [Linux toolchain](../../bazel/linux_toolchain.bzl),
 which adds Linux diagnostics, and the
 [macOS upstream composition](../../bazel/macos_cc_config.bzl).
-The Windows bridge appends warnings after user flags: opt out with the feature,
-not `/WX-` precedence. The default-policy checker requires the full warning
+Windows warnings come from the upstream inlets and standard features of the
+[auto-configuration](#windows-compiler-configuration), not a local bridge.
+The default-policy checker requires the full warning
 contract; intentional opt-outs are not expected to pass it.
 
 External-header classification, language/ABI defaults and hardening are
-independent of warnings. The Windows toolchain default-enables the pinned
-`external_include_paths` feature through a data-free implication, for both target
-and exec consumers, including external targets. The legacy bridge registers only
-the enabled wrapper, not a duplicate of the upstream header-path feature.
+independent of warnings. The Windows configuration enables the standard
+`external_include_paths` feature for both target and host consumers.
 Linux/macOS default-enable their corresponding feature. MSVC represents Bazel's
 quote include contexts with `/I`: checks recognize exact declared per-action
 contexts, including private dependencies, separately from provider `/external:I`
@@ -714,9 +743,10 @@ interfaces, not arbitrary prefix exemptions.
 The headerless [`//bazel:compile_contract`](../../bazel/BUILD.bazel) always enables
 GSL checking for utility headers and pure probe support. Actual `compilation_mode`
 selects `TERMINATES` for `opt`, `ASSERTS` for `dbg`/`fastbuild`, independently of
-the prepared provider. Selected compiler/runtime/SDK/shim identity is recorded in
-`identity.json` and declared directly through toolchain tool/policy inputs;
-it does not rely on a consumer macro or library dependency.
+the prepared provider. The selected Unix compiler/runtime/SDK/shim identity is
+recorded in `identity.json` and declared directly through toolchain tool/policy
+inputs; it does not rely on a consumer macro or library dependency. Windows
+records no local compiler identity ledger.
 
 Consumer BUILD owners retain SPA flags, library link requirements and system
 frameworks. Windows manifest linker options/inputs in
@@ -819,41 +849,61 @@ Empty ambient include/link channels remain cleared by the rc and launcher.
 
 ## Windows compiler configuration
 
-The [Windows definition](../../bazel/windows_toolchain.bzl) narrowly reuses
-pinned rules_cc's private `windows_cc_toolchain_config.bzl` and documented
-`extra_known_features` migration bridge for disabled `/W4`/`/WX` warnings and
-`extra_enabled_features` for the independent external-header policy.
-Revisit this private dependency when upgrading rules_cc. The default module
-extension has no public native MSVC policy-injection hook; adopting the modern
-public API would require owning the full action configuration. No private
-provider-field or visibility bypass is used.
+Windows resolves C++ through the pinned rules_cc's official default MSVC
+auto-configuration. There is no local Windows compiler definition, probe, SDK
+identity ledger or materialization; the governed Linux and macOS toolchains
+retain theirs. The [repository rc](../../.bazelrc) overrides the generic
+`BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1` guard with `0` in its Windows
+configuration so rules_cc registers the default MSVC toolchain, and it no
+longer registers `@aobus_toolchain//:registered_msvc`.
 
-The legacy toolchain keeps upstream response files, archive/link behavior, PDBs,
-runtime copying and CRT features. C++ language, UTF-8 and ABI defaults are local;
-upstream supplies `NOMINMAX` and `_CRT_SECURE_NO_WARNINGS`. Effective standard is
-`/std:c++latest`, after upstream `/std:c++17`, retaining the known D9025 override
-diagnostic. Native dynamic CRT defaults are `/MDd` in `dbg`, `/MD` in `opt`;
-redundant target/host rc selections are unnecessary. Actual compilation mode
-selects these for each consumer. The catalog compiler is a real compiled
-execution tool: its execution transition must use optimized imports and `/MD`,
-independently of a Debug target's `/MDd`. Target-only evidence cannot establish
-that host-tool contract.
+Project compiler policy reaches the auto-configuration only through its
+documented repository-environment inlets: `BAZEL_COPTS=/W4`, the complete
+current language/ABI defaults (effective standard, UTF-8, permissiveness, `Zc`
+conformance, Unicode/lean-and-mean and WinVer definitions, `/external:W0`)
+through `BAZEL_CXXOPTS` — colon-separated with upstream's `%` escaping for
+flag-internal colons such as `/Zc:__cplusplus` — and
+`BAZEL_WIN32_WINNT=/D_WIN32_WINNT=0x0A00` as the complete flag, not a bare
+version token. Effective standard selection remains `/std:c++latest` after
+the upstream `/std:c++17` default, retaining the known D9025 override
+diagnostic; upstream supplies `NOMINMAX` and `_CRT_SECURE_NO_WARNINGS`.
+Native dynamic CRT defaults stay upstream: `/MDd` in `dbg`, `/MD` in `opt`.
+Actual compilation mode selects these for each consumer. The catalog compiler
+is a real compiled execution tool: its execution transition must use optimized
+imports and `/MD`, independently of a Debug target's `/MDd`. Target-only
+evidence cannot establish that host-tool contract.
 
-Windows `request.json` captures original `INCLUDE`, `LIB`, `PATH`, `TMP`, VC/SDK
-versions/roots and optional `NETFXSDKDir` before resolver scratch TMP replacement.
-The [compiler SDK probe](../../script/ao/core/bazel_compiler_probe.py) validates exact
-selected VC/SDK interfaces, versioned SDK directories and x64 libraries, never a
-whole SDK root or provider-header exemption. Checked auxiliary VS includes and
-selected NETFX `include/um` and `lib/um/x64` follow the same narrow validation.
-Existing Visual Studio bootstrap/SDK installation remain authoritative; JSON
-and Python supply no compiler flags/mode branches or new MSVC pin/discovery manager.
+Warning policy stays feature-owned, not global: REPO.bazel requests the
+standard `treat_warnings_as_errors` beside `aobus_warnings`, the Unix platform
+configurations disable the standard feature for both target and host
+consumers, and on Windows only the standard feature supplies `/WX`, for
+main-repository compiling targets only; fixture targets disable both feature
+names. There is no source-regex exemption and no global `/WX`. The global
+`/W4` inlet can surface nonfatal warnings from external sources compiled for
+those targets; external headers keep their `/external:W0` classification. The
+standard `external_include_paths` feature is enabled for both target and host
+consumers. The [compile-contract checker](#compile-contract-verification)
+still requires effective `/W4`/`/WX` for first-party contexts; intentional
+opt-outs are not expected to pass it.
 
-`cl.exe`, `link.exe`, `lib.exe` and `ml64.exe` execute at their installed paths to
-preserve DLL layout; Bazel-owned links declare executable bytes. Identity and
-native-path metadata are declared through legacy toolchain file groups, not the
-bridge's `cc_args.data`. Provider/input guards and mutable-input watches remain.
-Required unused Unix tool roles point to missing placeholders and fail if used;
-these do not advertise Unix tools, assembly or module support.
+The portal derives the exact selection from the active captured Visual Studio
+environment: `BAZEL_VC` from `VSINSTALLDIR` plus `VC`, `BAZEL_VC_FULL_VERSION`
+from `VCToolsVersion` and `BAZEL_WINSDK_FULL_VERSION` from `WindowsSDKVersion`.
+Missing captured metadata, or an explicit caller selector conflicting with
+that environment, fails preparation; it does not guess or silently reselect.
+Existing Visual Studio bootstrap/SDK installation remain authoritative. Bare
+Windows callers supply the same existing process-scoped selected VS/SDK
+environment and may use the same standard selectors; upstream warns and falls
+back for an invalid `BAZEL_VC`, and the project does not promise a failure
+instead of that fallback.
+
+The existing `compiler_environment` request capture (original `INCLUDE`,
+`LIB`, `PATH`, `TMP` and VC/SDK selectors) stays for WinUI and dependency
+admission; it is not a compiler-policy channel, and no whole-SDK byte ledger
+or hermetic SDK claim is made. The Windows `mt.exe` manifest-tool helper is
+owned by governed host-tools discovery; manifest tools and validation
+contracts are unchanged. `./ao bazel deps` omits the Unix compiler repository
+on Windows and fetches the remaining SDK repositories.
 
 ## Compile-contract verification
 
@@ -1023,8 +1073,9 @@ than being reconstructed from path strings.
 
 `Action.env` alone is not the compile environment. The capture combines native
 feature and action environments in producer precedence order. Its pinned
-feature admission accepts `aobus_warnings`, `static_link_msvcrt`,
-`dynamic_link_msvcrt` and `default_compile_flags`; unsupported requested or
+feature admission accepts `aobus_warnings`, `treat_warnings_as_errors`,
+`external_include_paths`, `static_link_msvcrt`, `dynamic_link_msvcrt` and
+`default_compile_flags` for the actual report context; unsupported requested or
 disabled features fail rather than receiving an approximate replay. Linux
 clang-tidy does not execute the compiler wrapper from its database, so the
 launcher projects the governed Nix wrapper's ordered before/original/after
@@ -1040,7 +1091,8 @@ include-validation gate or promise detection of every newly undeclared include.
 Report actions may have a conservative input superset; their keys are not the
 native object action keys. They share the governed provider/SDK trust boundary,
 not a lint-only VFS, filesystem snapshot or RBE contract. Strengthening mutable
-provider identity belongs to the shared toolchain, not a second lint policy.
+provider identity belongs to the shared Unix toolchain and the Windows
+auto-configuration inputs, not a second lint policy.
 
 One cacheable verification action checks the host version and complete
 fixture-derived `aobus-*` registry; reports consume that result. The helper's
@@ -1232,9 +1284,11 @@ libc++ and compiler-resource trees, SDK headers and link stubs, and the driver's
 explicit LTO plugin. Link actions select that linker rather than relying on the
 `/usr/bin/ld` dispatcher; compiler
 and link actions disable implicit Clang configuration files. On Windows the
-validated original compiler environment selects the host tool/runtime directory
-and exact `INCLUDE`/`LIB` trees for identity, not resolver scratch or ambient
-include paths. Directory membership changes also invalidate resolution.
+explicit auto-configuration selection ([Windows compiler
+configuration](#windows-compiler-configuration)) owns compiler admission; the
+captured `compiler_environment` request still serves WinUI and dependency
+admission, and no whole-SDK byte ledger is required. Directory membership
+changes also invalidate resolution.
 Shell-backed rules need `BAZEL_SH`; the Windows portal selects the
 `usr/bin/bash.exe` that Git for Windows installs beside `git`, unless the caller
 sets `BAZEL_SH`. Bare Windows callers must make Git Bash discoverable by Bazel
@@ -1403,6 +1457,9 @@ Debug/Release on Linux, macOS and Windows, not subsequent policy changes. Rerun
 affected native gates after changes; Windows static-md validation must cover the
 selected SDK's builds, product startup, decoder workflows, allocator integration
 and catalog pipeline, not merely archive inventory or former dynamic-SDK receipts.
+The Windows auto-configuration migration supersedes prior Windows compiler-action
+receipts; no fresh native validation of it is claimed until the affected gates
+rerun.
 Older macOS receipts predate repaired mode flags and do not by themselves prove
 optimized Release or debug information. No physical playback, complete GUI,
 ARM64, shipping/release, RBE or cold-build performance acceptance is implied.

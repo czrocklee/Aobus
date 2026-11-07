@@ -13,7 +13,7 @@ import subprocess
 import sys
 import tempfile
 import urllib.request
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 from . import bazel_native as native
@@ -154,6 +154,7 @@ def prepare_workspace(
     # os.environ is case-insensitive on Windows, but dict(os.environ) is not:
     # enumeration uppercases SDK/toolset names such as WindowsSdkDir.
     lookup = {key.casefold() if host == "windows" else key: value for key, value in environment.items()}
+    compiler_selection: dict[str, str] = {}
     if host == "windows":
         # Capture the original selected environment before the repository rule
         # replaces resolver scratch TMP. The watched request is the only channel.
@@ -172,6 +173,28 @@ def prepare_workspace(
                 "NETFXSDKDir",
             )
         }
+        if any(
+            not lookup.get(key, "").strip().rstrip("\\/")
+            for key in ("vsinstalldir", "vctoolsversion", "windowssdkversion")
+        ):
+            raise native.BazelWorkspaceError(
+                "Windows Bazel auto-configuration requires selected VSINSTALLDIR, VCToolsVersion and WindowsSDKVersion"
+            )
+        compiler_selection = {
+            "BAZEL_VC": (PureWindowsPath(lookup["vsinstalldir"]) / "VC").as_posix(),
+            "BAZEL_VC_FULL_VERSION": lookup["vctoolsversion"].rstrip("\\/"),
+            "BAZEL_WINSDK_FULL_VERSION": lookup["windowssdkversion"].rstrip("\\/"),
+        }
+        for name, value in compiler_selection.items():
+            explicit = lookup.get(name.casefold())
+            if (
+                explicit
+                and explicit.replace("\\", "/").rstrip("/").casefold()
+                != value.replace("\\", "/").rstrip("/").casefold()
+            ):
+                raise native.BazelWorkspaceError(
+                    f"Explicit {name} disagrees with the selected Visual Studio environment"
+                )
     native.write_json(prepared / "request.json", request)
     selected = {
         "AOBUS_BAZEL_CONFIGURATION": (prepared / "request.json").as_posix(),
@@ -223,6 +246,7 @@ def prepare_workspace(
         key = name.casefold() if host == "windows" else name
         if key in lookup:
             selected[name] = lookup[key]
+    selected.update(compiler_selection)
     # Bazel's Windows shell toolchain needs a bash, which the checkout's Git
     # for Windows provides unless the caller selects another one.
     if host == "windows" and "BAZEL_SH" not in selected and (bash := _git_bash()):
@@ -294,10 +318,10 @@ def execute(
     if action not in {"query", "deps"}:
         argv.append(f"--jobs={jobs}")
     if action == "deps":
-        argv.extend(
-            f"--repo=@{name}"
-            for name in ("aobus_native_deps", "aobus_test_deps", "aobus_native_tools", "aobus_toolchain")
-        )
+        repositories = ["aobus_native_deps", "aobus_test_deps", "aobus_native_tools"]
+        if native.native_platform() != "windows":
+            repositories.append("aobus_toolchain")
+        argv.extend(f"--repo=@{name}" for name in repositories)
     if remote_cache:
         argv.append(f"--remote_cache={remote_cache}")
     default_targets = list(DEFAULT_TEST_TARGETS)

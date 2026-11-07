@@ -181,22 +181,7 @@ class ToolchainConstructionPolicyTest(unittest.TestCase):
                 },
             }
         else:
-            sdk = {
-                "target_architecture": "x64",
-                "tools": {
-                    "cl": "C:/Selected VS/bin/Hostx64/x64/CL.exe",
-                    "link": "C:/Selected VS/bin/Hostx64/x64/link.exe",
-                    "lib": "C:/Selected VS/bin/Hostx64/x64/lib.exe",
-                    "ml64": "C:/Selected VS/bin/Hostx64/x64/ml64.exe",
-                },
-                "builtin_include_directories": ["C:/Selected VS/include"],
-                "environment": {
-                    "INCLUDE": "C:\\Selected VS\\include",
-                    "LIB": "C:\\Selected VS\\lib\\x64",
-                    "PATH": "C:\\Selected VS\\bin\\Hostx64\\x64",
-                    "TMP": 'C:\\Åsa\\音乐\\"quoted"',
-                },
-            }
+            raise ValueError("unsupported fixture platform: " + platform)
         return {
             "platform": platform,
             "sdk": sdk,
@@ -319,21 +304,6 @@ class ToolchainConstructionPolicyTest(unittest.TestCase):
         )
         self.assertEqual(context.links["tools/clang++"], data["sdk"]["tools"]["clang++"])
 
-    def test_windows_keeps_installed_execution_paths_separate_from_sparse_tool_inputs(self):
-        data = self.data("windows")
-        context = self.project(data)
-        inputs = {"cl": "tools/CL.exe", "link": "tools/link.exe", "lib": "tools/lib.exe", "ml64": "tools/ml64.exe"}
-        self.assertEqual(
-            self.forwarded(context, "windows_toolchain.bzl", "windows_toolchain"),
-            {
-                "tools": data["sdk"]["tools"],
-                "tool_inputs": inputs,
-                "builtin_include_directories": ["C:/Selected VS/include"],
-                "msvc_environment": data["sdk"]["environment"],
-            },
-        )
-        self.assertEqual(context.links, {inputs[role]: source for role, source in data["sdk"]["tools"].items()})
-
     def assert_rejected_without_output(self, data, message):
         context = _RepositoryContext()
         with self.assertRaisesRegex(_StarlarkFailure, message):
@@ -350,8 +320,6 @@ class ToolchainConstructionPolicyTest(unittest.TestCase):
             ("linux", "machine", None),
             ("macos", "machine", "aarch64"),
             ("macos", "machine", ""),
-            ("windows", "target_architecture", "arm64"),
-            ("windows", "target_architecture", "X64"),
         ):
             with self.subTest(platform=platform, invalid=invalid):
                 data = self.data(platform)
@@ -377,10 +345,9 @@ class ToolchainConstructionPolicyTest(unittest.TestCase):
                 data["sdk"]["tools"]["clang"] = "/selected/bin/" + basename
                 self.assert_rejected_without_output(data, "invalid.*tool basename")
 
-    def test_duplicate_basenames_fail_closed_with_windows_ascii_case_insensitivity(self):
+    def test_duplicate_tool_basenames_fail_closed_on_every_host(self):
         for platform, role, source in (
             ("linux", "ar", "/another/bin/clang"),
-            ("windows", "lib", "C:/Another/bin/cl.exe"),
             ("macos", "ld", "/another/bin/clang"),
         ):
             with self.subTest(platform=platform):
@@ -396,7 +363,7 @@ class ToolchainConstructionPolicyTest(unittest.TestCase):
         self.assertIn("tools/clang", context.links)
 
     def test_missing_or_unexpected_tool_roles_fail_before_partial_projection(self):
-        for platform, role in (("linux", "clang"), ("windows", "cl"), ("macos", "dsymutil")):
+        for platform, role in (("linux", "clang"), ("macos", "dsymutil")):
             with self.subTest(platform=platform):
                 data = self.data(platform)
                 del data["sdk"]["tools"][role]

@@ -369,6 +369,25 @@ class WindowsManifestToolTests(unittest.TestCase):
         self.assertEqual(self.files, {})
         self.assertEqual(self.links, [])
 
+    def test_manifest_tool_requires_the_selected_sdk_without_searching_path(self):
+        self.mt.unlink()
+        for sdk, version in (
+            ("", "selected"),
+            ("relative/sdk", "selected"),
+            (str(self.sdk), ""),
+            (str(self.sdk), "selected"),
+        ):
+            self.environment.update(WindowsSdkDir=sdk, WindowsSDKVersion=version)
+            with (
+                self.subTest(sdk=sdk, version=version),
+                patch.object(host_tools.native, "executable", side_effect=AssertionError("no ambient mt.exe")),
+                self.assertRaisesRegex(native.BazelWorkspaceError, "selected Windows SDK manifest tool is missing"),
+            ):
+                self.resolve()
+            self.catalog.assert_not_called()
+        self.assertEqual(self.files, {})
+        self.assertEqual(self.links, [])
+
     def test_manifest_tool_metadata_stays_distinct_from_the_complete_artifact_inventory(self):
         data = self.resolve()
         self.project(data)

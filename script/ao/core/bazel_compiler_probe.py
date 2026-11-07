@@ -7,7 +7,6 @@ import os
 import platform
 import re
 import subprocess
-from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -15,20 +14,18 @@ from . import bazel_native as native
 from . import bazel_providers as providers
 
 
-def probe_compiler(host: str, *, compiler_environment: Mapping[str, str] | None = None) -> dict[str, Any]:
+def probe_compiler(host: str) -> dict[str, Any]:
     """Return admitted installed SDK observations and the existing input identity."""
     if host == "linux":
         sdk = _linux_sdk()
     elif host == "macos":
         sdk = _macos_sdk()
-    elif host == "windows":
-        sdk = _windows_sdk(compiler_environment)
     else:
         raise native.BazelWorkspaceError(f"unsupported native toolchain platform: {host}")
     return {
         "platform": host,
         "sdk": sdk,
-        "identity": _compiler_identity(host, compiler_environment=compiler_environment),
+        "identity": _compiler_identity(host),
     }
 
 
@@ -147,102 +144,6 @@ def _macos_sdk() -> dict[str, Any]:
     }
 
 
-def _windows_sdk(compiler_environment: object) -> dict[str, Any]:
-    """Observe the selected local MSVC SDK, not a relocatable compiler installation."""
-    required = {"INCLUDE", "LIB", "PATH", "TMP", "VCToolsInstallDir", "WindowsSdkDir", "WindowsSDKVersion"}
-    if not isinstance(compiler_environment, dict) or any(
-        not isinstance(compiler_environment.get(name), str) or not compiler_environment[name].strip()
-        for name in required
-    ):
-        raise native.BazelWorkspaceError(
-            "Windows compiler_environment requires nonempty INCLUDE, LIB, PATH, TMP and SDK metadata"
-        )
-    environment = compiler_environment
-    vc = Path(environment["VCToolsInstallDir"])
-    sdk = Path(environment["WindowsSdkDir"])
-    version = environment["WindowsSDKVersion"].rstrip("\\/")
-    if (
-        not vc.is_absolute()
-        or not sdk.is_absolute()
-        or not version
-        or Path(version).name != version
-        or version in {".", ".."}
-        or not native.probe(vc).is_dir()
-        or not native.probe(sdk).is_dir()
-    ):
-        raise native.BazelWorkspaceError("selected Windows VC/SDK roots or SDK version are invalid")
-    if not Path(environment["TMP"]).is_absolute() or not native.probe(Path(environment["TMP"])).is_dir():
-        raise native.BazelWorkspaceError("selected Windows compiler TMP is not an existing absolute directory")
-    # Exact SDK interfaces only: neither a parent prefix nor a provider header
-    # directory may become a compiler built-in and bypass Bazel's header checks.
-    include_roots = [vc / "include", vc / "atlmfc/include"]
-    include_roots.extend(sdk / "Include" / version / part for part in ("ucrt", "shared", "um", "winrt", "cppwinrt"))
-    if [parent.name.casefold() for parent in vc.parents[:3]] == ["msvc", "tools", "vc"]:
-        include_roots.append(vc.parents[2] / "Auxiliary/VS/include")
-    lib_roots = [vc / "lib/x64", vc / "atlmfc/lib/x64"]
-    lib_roots.extend(sdk / "Lib" / version / part / "x64" for part in ("ucrt", "um"))
-    # Optional selected NETFX SDK metadata is authority for two exact interfaces,
-    # never a version inferred from arbitrary INCLUDE/LIB entries or a new pin.
-    netfx_value = environment.get("NETFXSDKDir", "")
-    if not isinstance(netfx_value, str):
-        raise native.BazelWorkspaceError("selected NETFXSDKDir metadata must be a string")
-    if netfx_value:
-        netfx = Path(netfx_value)
-        if (
-            not netfx.is_absolute()
-            or netfx.parent != sdk.parent / "NETFXSDK"
-            or not native.probe(netfx).is_dir()
-            or netfx.resolve() != netfx.absolute()
-            or netfx.is_relative_to(native.PROJECT_ROOT)
-        ):
-            raise native.BazelWorkspaceError(
-                "selected NETFXSDKDir must be an installed version root under WindowsSdkDir.parent/NETFXSDK"
-            )
-        include_roots.append(netfx / "include/um")
-        lib_roots.append(netfx / "lib/um/x64")
-    includes = []
-    for name, allowed in (("INCLUDE", include_roots), ("LIB", lib_roots)):
-        directories = [Path(value) for value in environment[name].split(";") if value]
-        if not directories:
-            raise native.BazelWorkspaceError(f"selected Windows {name} has no SDK directories")
-        for directory in directories:
-            if (
-                not directory.is_absolute()
-                or not native.probe(directory).is_dir()
-                or directory not in allowed
-                or directory.resolve() != directory.absolute()
-            ):
-                raise native.BazelWorkspaceError(
-                    f"Windows {name} is not an exact selected VC/SDK directory: {directory}"
-                )
-        if name == "INCLUDE":
-            includes = directories
-    tools: dict[str, str] = {}
-    tool_directory = vc / "bin/Hostx64/x64"
-    if tool_directory.resolve() != tool_directory.absolute():
-        raise native.BazelWorkspaceError("selected MSVC tool directory must retain its installed SDK location")
-    for role in ("cl", "link", "lib", "ml64"):
-        # Use the existing PATH selection/probes, then reject tools from another
-        # installation. Execute installed tools; projected bytes are inputs only.
-        source = Path(native.executable(role + ".exe", path=environment["PATH"]))
-        if (
-            not source.is_absolute()
-            or source.parent != tool_directory
-            or source.resolve() != source.absolute()
-            or not native.probe(source).is_file()
-        ):
-            raise native.BazelWorkspaceError(
-                f"selected {role}.exe is outside VCToolsInstallDir bin/Hostx64/x64: {source}"
-            )
-        tools[role] = source.as_posix()
-    return {
-        "target_architecture": tool_directory.name,
-        "tools": tools,
-        "builtin_include_directories": [directory.as_posix() for directory in includes],
-        "environment": {name: environment[name] for name in ("INCLUDE", "LIB", "PATH", "TMP")},
-    }
-
-
 def _macos_tool(name: str, xcrun: Path) -> Path:
     selected = subprocess.run([str(xcrun), "--find", name], capture_output=True, text=True, check=True).stdout.strip()
     path = Path(selected)
@@ -251,17 +152,7 @@ def _macos_tool(name: str, xcrun: Path) -> Path:
     return path.resolve(strict=True)
 
 
-def windows_mt(environment: Mapping[str, str] | None = None) -> Path:
-    environment = os.environ if environment is None else environment
-    sdk = Path(environment.get("WindowsSdkDir", ""))
-    version = environment.get("WindowsSDKVersion", "").rstrip("\\").rstrip("/")
-    tool = sdk / "bin" / version / "x64/mt.exe"
-    if not sdk.is_absolute() or not version or not tool.is_file():
-        raise native.BazelWorkspaceError(f"selected Windows SDK manifest tool is missing: {tool}")
-    return tool
-
-
-def _compiler_identity(host: str, *, compiler_environment: Mapping[str, str] | None = None) -> dict[str, Any]:
+def _compiler_identity(host: str) -> dict[str, Any]:
     files: set[Path] = set()
     context: dict[str, str] = {"platform": host, "machine": native.host_machine()}
 
@@ -324,29 +215,6 @@ def _compiler_identity(host: str, *, compiler_environment: Mapping[str, str] | N
         context["deployment"] = native.read_json(native.PROJECT_ROOT / "script/ao/macos-toolchain.json")[
             "deploymentTarget"
         ]
-    elif host == "windows":
-        environment = os.environ if compiler_environment is None else compiler_environment
-        files.add(windows_mt(environment))
-        tool_directories = set()
-        for name in ("cl.exe", "link.exe", "lib.exe", "ml64.exe"):
-            path = Path(native.executable(name, path=environment["PATH"]))
-            files.add(path)
-            tool_directories.add(path.parent)
-        for directory in tool_directories:
-            tree(directory)
-        for name in ("INCLUDE", "LIB"):
-            for value in environment[name].split(";"):
-                if value:
-                    tree(Path(value))
-        for name in ("VCToolsVersion", "WindowsSDKVersion", "UCRTVersion"):
-            context[name] = environment.get(name, "")
-        sdk_root = Path(environment.get("WindowsSdkDir", ""))
-        version = context["WindowsSDKVersion"].rstrip("\\").rstrip("/")
-        for relative in ("um/Windows.h", "ucrt/corecrt.h"):
-            marker = sdk_root / "Include" / version / relative
-            if not marker.is_file():
-                raise native.BazelWorkspaceError(f"Windows SDK identity is missing: {marker}")
-            files.add(marker)
     else:
         wrapper = nix_cc_wrapper()
         tools = wrapper.get("tools", {})

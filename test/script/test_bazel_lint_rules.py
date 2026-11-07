@@ -477,7 +477,7 @@ class LintRuntimeEnvironmentTest(unittest.TestCase):
         )
         original = {"SYSTEMROOT": "C:/Windows", "USERPROFILE": "C:/Users/not-selected"}
         ctx = SimpleNamespace(
-            features=[],
+            features=["aobus_warnings", "treat_warnings_as_errors", "external_include_paths"],
             disabled_features=[],
             configuration=SimpleNamespace(default_shell_env=original),
         )
@@ -490,6 +490,9 @@ class LintRuntimeEnvironmentTest(unittest.TestCase):
         self.assertEqual(environment["SYSTEMROOT"], original["SYSTEMROOT"])
         self.assertEqual(environment["PYTHONDONTWRITEBYTECODE"], "1")
         self.assertEqual(original["USERPROFILE"], "C:/Users/not-selected")
+        ctx.features = ["external_include_paths"]
+        ctx.disabled_features = ["aobus_warnings", "treat_warnings_as_errors"]
+        self.assertEqual(functions["native_environment"](ctx, portal=True), environment)
 
 
 class FixtureResultLauncherTest(unittest.TestCase):
