@@ -511,12 +511,12 @@ class BazelTestGraphOwnershipTest(unittest.TestCase):
         expected = {source for source in cmake_target_sources(cmake, "ao_appkit_smoke") if source.endswith(".mm")}
         actual = {
             source
-            for source in bazel_rule_sources("app/macos-appkit", "appkit_objc_library", "appkit_smoke")
+            for source in bazel_rule_sources("app/macos-appkit", "objc_library", "appkit_smoke")
             if source.endswith(".mm")
         }
         self.assertTrue(expected)
         self.assertEqual(actual, expected)
-        fields = bazel_rule_fields("app/macos-appkit", "appkit_objc_library", "appkit_smoke")
+        fields = bazel_rule_fields("app/macos-appkit", "objc_library", "appkit_smoke")
         self.assertEqual(bazel_rule_target_compatible(fields), {"@platforms//os:macos"})
 
 

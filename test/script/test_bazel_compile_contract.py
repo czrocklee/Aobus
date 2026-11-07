@@ -96,6 +96,7 @@ class BazelCompilePolicyTest(unittest.TestCase):
             {
                 "common --repo_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1",
                 "common --repo_env=BAZEL_NO_APPLE_CPP_TOOLCHAIN=1",
+                "common --repo_env=APPLE_SUPPORT_LAYERING_CHECK_BETA=0",
             },
         )
         self.assertFalse(any("--experimental_strict_repo_env" in line for line in lines if not line.startswith("#")))
@@ -202,94 +203,9 @@ class BazelCompilePolicyTest(unittest.TestCase):
         self.assertNotIn("enabled", warnings)
         self.assertNotIn("external_feature.bzl", ast.unparse(tree))
 
-    def test_custom_macos_modes_and_external_includes_have_real_compile_flag_sets(self):
-        tree = ast.parse((PROJECT_ROOT / "bazel/macos_cc_config.bzl").read_text(encoding="utf-8"))
-        features = {}
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "feature":
-                fields = {keyword.arg: keyword.value for keyword in node.keywords}
-                features[ast.literal_eval(fields["name"])] = fields
-        for name, expected in {"dbg": ["-O0", "-g"], "opt": ["-O2", "-DNDEBUG"], "fastbuild": ["-O0", "-g0"]}.items():
-            with self.subTest(mode=name):
-                fields = features[name]
-                self.assertNotIn("enabled", fields)
-                flagset = fields["flag_sets"].elts[0]
-                self.assertEqual(ast.unparse(next(k.value for k in flagset.keywords if k.arg == "actions")), "_COMPILE")
-                flags = [
-                    k.value
-                    for node in ast.walk(flagset)
-                    if isinstance(node, ast.Call)
-                    for k in node.keywords
-                    if k.arg == "flags"
-                ]
-                self.assertEqual([ast.literal_eval(flag) for flag in flags], [expected])
-        compile_feature = features["aobus_compile"]
-        self.assertTrue(ast.literal_eval(compile_feature["enabled"]))
-        compile_flags = [
-            keyword.value
-            for node in ast.walk(compile_feature["flag_sets"])
-            if isinstance(node, ast.Call)
-            for keyword in node.keywords
-            if keyword.arg == "flags"
-        ]
-        self.assertEqual(len(compile_flags), 1)
-        self.assertIn("-std=c++26", [flag.value for flag in compile_flags[0].elts if isinstance(flag, ast.Constant)])
-        warning_feature = features["aobus_warnings"]
-        self.assertNotIn("enabled", warning_feature)
-        warning_sets = warning_feature["flag_sets"]
-        self.assertTrue(
-            any(isinstance(node, ast.Name) and node.id == "UNIX_WARNINGS" for node in ast.walk(warning_sets))
-        )
-        self.assertTrue(ast.literal_eval(features["external_include_paths"]["enabled"]))
-        external = features["external_include_paths"]["flag_sets"]
-        calls = [node for node in ast.walk(external) if isinstance(node, ast.Call)]
-        fields = {keyword.arg: keyword.value for node in calls for keyword in node.keywords}
-        self.assertEqual(ast.unparse(fields["actions"]), "_COMPILE")
-        self.assertEqual(ast.literal_eval(fields["flags"]), ["-isystem", "%{external_include_paths}"])
-        self.assertEqual(ast.literal_eval(fields["iterate_over"]), "external_include_paths")
-        self.assertEqual(ast.literal_eval(fields["expand_if_available"]), "external_include_paths")
-
-    def test_objcxx_action_keeps_mode_warning_header_and_define_channels_with_arc_only_on_objcxx(self):
-        tree = ast.parse((PROJECT_ROOT / "bazel/macos_cc_config.bzl").read_text(encoding="utf-8"))
-        assignments = {
-            node.targets[0].id: node.value
-            for node in tree.body
-            if isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name)
-        }
-        action = ast.literal_eval(assignments["_OBJCXX_COMPILE"])
-        self.assertEqual(action, "objc++-compile")
-        self.assertIn("_OBJCXX_COMPILE", [ast.unparse(item) for item in assignments["_COMPILE"].elts])
-        configurations = [
-            node for node in ast.walk(tree) if isinstance(node, ast.Call) and ast.unparse(node.func) == "action_config"
-        ]
-        self.assertEqual(len(configurations), 1)
-        options = {keyword.arg: keyword.value for keyword in configurations[0].keywords}
-        self.assertEqual(ast.unparse(options["action_name"]), "_OBJCXX_COMPILE")
-        self.assertTrue(ast.literal_eval(options["enabled"]))
-        tool = options["tools"].elts[0]
-        self.assertEqual(ast.unparse(tool.keywords[0].value), "ctx.attr.llvm + '/bin/clang++'")
-        feature = next(
-            node
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Call)
-            and ast.unparse(node.func) == "feature"
-            and any(
-                keyword.arg == "name" and ast.literal_eval(keyword.value) == "aobus_objcxx_compile"
-                for keyword in node.keywords
-            )
-        )
-        flag_sets = next(keyword.value for keyword in feature.keywords if keyword.arg == "flag_sets")
-        self.assertEqual(ast.unparse(flag_sets.elts[0].keywords[0].value), "[_OBJCXX_COMPILE]")
-        groups = [
-            {keyword.arg: keyword.value for keyword in node.keywords}
-            for node in ast.walk(flag_sets)
-            if isinstance(node, ast.Call) and ast.unparse(node.func) == "flag_group"
-        ]
-        self.assertEqual(ast.literal_eval(groups[0]["flags"]), ["-fobjc-arc"])
-        self.assertEqual(
-            {ast.literal_eval(group["iterate_over"]) for group in groups if "iterate_over" in group},
-            {"preprocessor_defines", "user_compile_flags"},
-        )
+    # macOS public-macro, tool-map and bootstrap wiring is exercised in
+    # test_bazel_macos_composition. The semantic command-line checks below stay
+    # independent of the platform implementation and its upstream feature graph.
 
 
 class BazelAqueryContractTest(unittest.TestCase):

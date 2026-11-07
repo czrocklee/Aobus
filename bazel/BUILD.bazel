@@ -18,6 +18,7 @@ cc_library(
 )
 
 exports_files([
+    "apple_support_llvm.patch",
     "catalog.bzl",
     "compile_context.bzl",
     "compiler_policy.bzl",

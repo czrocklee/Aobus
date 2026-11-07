@@ -100,22 +100,50 @@ def _macos_sdk() -> dict[str, Any]:
     shim = Path(os.environ.get("AOBUS_LIBCXX_EXPECTED_SHIM", ""))
     if not llvm.is_absolute() or not (llvm / "bin/clang++").is_file() or not shim.is_absolute():
         raise native.BazelWorkspaceError("native LLVM/shim is missing; invoke through ./ao on macOS")
-    sdk = subprocess.run(["xcrun", "--show-sdk-path"], capture_output=True, text=True, check=True).stdout.strip()
+    xcrun = Path(native.executable("xcrun", path="/usr/bin"))
+    sdk = subprocess.run([str(xcrun), "--show-sdk-path"], capture_output=True, text=True, check=True).stdout.strip()
     if not Path(sdk).is_dir():
         raise native.BazelWorkspaceError(f"macOS SDK is missing: {sdk}")
+    developer_dir = Path(os.environ.get("DEVELOPER_DIR", ""))
+    if not developer_dir.is_absolute() or not native.probe(developer_dir).is_dir():
+        raise native.BazelWorkspaceError("selected macOS developer directory is missing")
     machine = platform.machine()
     if machine.lower() not in {"x86_64", "arm64"}:
         raise native.BazelWorkspaceError(f"unsupported macOS CPU: {machine}")
-    linker = _macos_linker()
+    linker = _macos_tool("ld", xcrun)
+    tools = {
+        "clang": llvm / "bin/clang",
+        "clang++": llvm / "bin/clang++",
+        "ar": llvm / "bin/llvm-libtool-darwin",
+        "strip": llvm / "bin/llvm-strip",
+        "ld": linker,
+        "dsymutil": _macos_tool("dsymutil", xcrun),
+        "apple_strip": _macos_tool("strip", xcrun),
+        "xcrun": xcrun,
+    }
+    for tool in tools.values():
+        if not native.probe(tool).is_file() or not os.access(tool, os.X_OK):
+            raise native.BazelWorkspaceError(f"selected macOS compiler tool is missing or not executable: {tool}")
+    llvm_version = subprocess.run(
+        [str(llvm / "bin/clang++"), "--no-default-config", "-dumpversion"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    if not re.fullmatch(r"\d+\.\d+\.\d+", llvm_version):
+        raise native.BazelWorkspaceError(f"selected Clang reported an invalid version: {llvm_version}")
     deployment = native.read_json(native.PROJECT_ROOT / "script/ao/macos-toolchain.json")["deploymentTarget"]
     return {
         "machine": machine,
         "llvm": str(llvm),
         "llvm_real": str(llvm.resolve()),
+        "llvm_version": llvm_version,
         "sdk": str(Path(sdk).resolve()),
         "shim": str(shim),
         "linker": str(linker),
+        "developer_dir": str(developer_dir),
         "deployment": deployment,
+        "tools": {role: str(tool) for role, tool in tools.items()},
     }
 
 
@@ -215,11 +243,11 @@ def _windows_sdk(compiler_environment: object) -> dict[str, Any]:
     }
 
 
-def _macos_linker() -> Path:
-    selected = subprocess.run(["xcrun", "--find", "ld"], capture_output=True, text=True, check=True).stdout.strip()
+def _macos_tool(name: str, xcrun: Path) -> Path:
+    selected = subprocess.run([str(xcrun), "--find", name], capture_output=True, text=True, check=True).stdout.strip()
     path = Path(selected)
     if not path.is_absolute() or not native.probe(path).is_file():
-        raise native.BazelWorkspaceError(f"selected macOS linker is missing: {selected}")
+        raise native.BazelWorkspaceError(f"selected macOS {name} is missing: {selected}")
     return path.resolve(strict=True)
 
 
@@ -244,17 +272,20 @@ def _compiler_identity(host: str, *, compiler_environment: Mapping[str, str] | N
 
     if host == "macos":
         llvm = Path(os.environ["AOBUS_LLVM_ROOT"])
-        executables = [llvm / "bin" / name for name in ("clang", "clang++", "llvm-ar", "llvm-libtool-darwin")]
+        executables = [
+            llvm / "bin" / name for name in ("clang", "clang++", "llvm-ar", "llvm-libtool-darwin", "llvm-strip")
+        ]
         for path in executables:
             if not path.is_file():
                 raise native.BazelWorkspaceError(f"native toolchain input is missing: {path}")
             files.add(path)
-        linker = _macos_linker()
-        files.add(linker)
+        xcrun = Path(native.executable("xcrun", path="/usr/bin"))
+        files.add(xcrun)
+        files.update(_macos_tool(name, xcrun) for name in ("ld", "dsymutil", "strip"))
         # Bind the SDK selected by the same xcrun installation as the explicit
-        # linker. SDK/version markers alone miss in-place header/stub changes.
+        # linker and wrapper postprocessors, including their executable bytes.
         selected = subprocess.run(
-            ["xcrun", "--show-sdk-path"], capture_output=True, text=True, check=True
+            [str(xcrun), "--show-sdk-path"], capture_output=True, text=True, check=True
         ).stdout.strip()
         sdk = Path(selected).resolve(strict=True)
         settings = [sdk / name for name in ("SDKSettings.json", "SDKSettings.plist")]

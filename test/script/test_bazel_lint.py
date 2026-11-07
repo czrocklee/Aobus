@@ -83,7 +83,7 @@ QUERY_XML = """<?xml version="1.1" encoding="UTF-8" standalone="no"?>
       <label value="//test:winui/ThemeTest.cpp"/>
     </list>
   </rule>
-  <rule class="appkit_objc_library" name="//app/macos-appkit:appkit">
+  <rule class="objc_library" name="//app/macos-appkit:appkit">
     <list name="srcs">
       <label value="//app/macos-appkit:Foo.mm"/>
     </list>

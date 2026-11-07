@@ -240,10 +240,11 @@ The shared desktop-launch owner supports Linux and macOS; macOS Boost.Process
 and Boost.Filesystem use static artifacts from the existing vcpkg SDK, without a
 new installer.
 
-The package-local [Objective-C++ rule](../../app/macos-appkit/objc.bzl) uses public
-`cc_common` APIs and the governed Homebrew toolchain. That toolchain owns ARC,
-mode flags, warnings and external-header policy alongside the SDK and deployment
-target; no default Apple/Xcode toolchain or new compiler pin is introduced.
+The standard rules_cc `objc_library` owns the mixed C++/Objective-C++
+implementation, separate entry unit and smoke sources. Its ARC feature selection
+uses the [governed Homebrew toolchain](#macos-toolchain-composition), which retains
+mode, warning and SDK policy; no default Apple/Xcode compiler is introduced.
+`alwayslink` preserves the complete CMake object-library membership.
 The local [bundle rule](../../app/macos-appkit/bundle.bzl) declares the original
 Info.plist template, icon, brand license, catalog inventory and minimum-OS
 metadata as inputs. Its native Python action retains the catalog SDK's declared
@@ -650,7 +651,9 @@ The rc sets the upstream repository guards
 `common --repo_env`, disabling both generic and Apple default C++ toolchains.
 With the current [module graph](../../MODULE.bazel), resolution must use a
 registered governed native toolchain; no compatible governed toolchain means
-failure, not ambient fallback. These guards do not replace repository/action
+failure, not ambient fallback. `APPLE_SUPPORT_LAYERING_CHECK_BETA=0` additionally
+disables upstream's automatic developer-tree module-map scan, which is not an
+admitted SDK input producer. These guards do not replace repository/action
 environment clearing or control warning-feature selection.
 
 [REPO.bazel](../../REPO.bazel) requests `aobus_warnings` for standard rules_cc
@@ -681,7 +684,7 @@ loaded through separate main BUILD packages.
 [Shared Unix warning values](../../bazel/compiler_policy.bzl) precede ordinary
 user copts in the [Linux toolchain](../../bazel/linux_toolchain.bzl),
 which adds Linux diagnostics, and the
-[macOS classic configuration](../../bazel/macos_cc_config.bzl).
+[macOS upstream composition](../../bazel/macos_cc_config.bzl).
 The Windows bridge appends warnings after user flags: opt out with the feature,
 not `/WX-` precedence. The default-policy checker requires the full warning
 contract; intentional opt-outs are not expected to pass it.
@@ -753,6 +756,54 @@ hardening channels. Sanitizer profiles retain their existing CMake policy.
 The portal exposes only Debug/Release, with imported providers prepared and
 guarded for `dbg` or `opt`; the mode table does not establish whole-provider
 `fastbuild` acceptance.
+
+## macOS toolchain composition
+
+The [module graph](../../MODULE.bazel) fetches the pinned `apple_support`
+implementation from BCR. The [local composition](../../bazel/macos_cc_config.bzl)
+loads its public `cc_toolchain` macro rather than copying Apple action/argument
+implementations. Existing Homebrew LLVM, SDK admission, deployment and expected-header
+shim remain authoritative; this is not registration of an automatically selected
+Apple Clang toolchain. The existing `registered_llvm22` label and default-toolchain
+rejection guards are unchanged.
+
+The [small external patch](../../bazel/apple_support_llvm.patch) has two purposes:
+select an explicit installed LLVM compiler while preserving its full child
+`argv[0]`, and let the caller replace automatic platform include/environment
+arguments. The wrapper rejects a present `TOOLCHAINS` selector rather than
+falling back, and retains upstream response-file, path-placeholder, dSYM and strip
+protocols. The platform-input seam keeps only the admitted include roots; upstream's
+whole `/Applications` and `/Library` allowlists and automatic SDK selection do not
+become Aobus policy. Retire the patch when the upstream public API supports both
+installed-compiler selection and caller-owned platform inputs.
+
+The public `apple_genrule` compiles the external wrapper source with the selected
+LLVM in C++17 mode, without a local bootstrap rule or a dependency on the C++
+toolchain it constructs. Its explicit command preserves the admitted developer,
+SDK and linker selection. Original compiler/tool bytes and live aggregate SDK
+identity are declared inputs, not compiler source arguments. The wrapper is not
+compiled during repository fetch.
+The repository also projects the selected Apple linker and wrapper postprocessors;
+`xcrun`, `dsymutil` and Apple `strip` join the native identity inventory. Ordinary
+archives and explicit strip actions retain the selected LLVM tools. These are
+host-installed interfaces, not a hermetic SDK or remote-execution guarantee.
+
+The generated native platform projects the admitted deployment value into Bazel's
+standard `macos_minimum_os` and `host_macos_minimum_os` options. The repository rc
+selects this platform for portal and bare entry; Bazel's execution transition
+carries the host minimum into compiled execution tools. Upstream derives the
+compiler target from that configuration, without a second local `-target`.
+A no-fallback configuration check rejects effective target/host minima that do
+not match the admitted SDK metadata.
+
+Upstream owns ordinary modes, ARC argument selection, archive/link expansion,
+external-header handling and debug-artifact mechanics. Standard `objc_library`
+supplies the ARC variable; the toolchain does not force ARC on arbitrary custom
+consumers. Local policy retains C++26, libc++, the expected-header shim and explicit
+SDK/linker arguments. Upstream baseline diagnostics remain; the owned Unix warning
+feature follows upstream defaults before user copts and is gated by the compiling
+repository. Disabling `aobus_warnings` does not disable upstream diagnostics.
+Empty ambient include/link channels remain cleared by the rc and launcher.
 
 ## Windows compiler configuration
 

@@ -225,6 +225,29 @@ class ToolchainMaterializationTest(unittest.TestCase):
             "nix_cc_wrapper": {"suffixSalt": "selected", "hardeningEnable": ["fortify", "relro"]},
         }
 
+    def macos_sdk(self):
+        return {
+            "machine": "arm64",
+            "llvm": "/selected/llvm",
+            "llvm_real": "/installed/llvm",
+            "llvm_version": "22.1.8",
+            "sdk": "/selected/sdk",
+            "shim": "/Åsa/expected",
+            "linker": "/developer/bin/ld",
+            "developer_dir": "/Åsa/Developer",
+            "deployment": "fixture-deployment",
+            "tools": {
+                "clang": "/selected/llvm/bin/clang",
+                "clang++": "/selected/llvm/bin/dispatch/../clang++",
+                "ar": "/selected/llvm/bin/llvm-libtool-darwin",
+                "strip": "/selected/llvm/bin/llvm-strip",
+                "ld": "/developer/bin/ld",
+                "dsymutil": "/developer/bin/dsymutil",
+                "apple_strip": "/developer/bin/strip",
+                "xcrun": "/selected/bin/xcrun",
+            },
+        }
+
     def test_generated_builds_forward_observations_to_existing_toolchain_macros(self):
         cases = [
             (
@@ -256,26 +279,39 @@ class ToolchainMaterializationTest(unittest.TestCase):
                 "macos",
                 "macos_cc_config.bzl",
                 "macos_toolchain",
-                {
-                    "machine": "arm64",
-                    "llvm": "/selected/llvm",
-                    "llvm_real": "/installed/llvm",
-                    "sdk": "/selected/sdk",
-                    "shim": "/Åsa/expected",
-                    "linker": "/developer/bin/ld",
-                    "deployment": "fixture-deployment",
-                },
+                self.macos_sdk(),
                 {
                     "LLVM": "/selected/llvm",
                     "LLVM_REAL": "/installed/llvm",
+                    "LLVM_VERSION": "22.1.8",
                     "SDK": "/selected/sdk",
                     "SHIM": "/Åsa/expected",
                     "LINKER": "/developer/bin/ld",
+                    "DEVELOPER_DIR": "/Åsa/Developer",
                     "DEPLOYMENT": "fixture-deployment",
+                    "TOOLS": {
+                        "clang": "tools/clang",
+                        "clang++": "tools/clang++",
+                        "ar": "tools/llvm-libtool-darwin",
+                        "strip": "tools/llvm-strip",
+                        "ld": "tools/ld",
+                        "dsymutil": "tools/dsymutil",
+                        "apple_strip": "tools/strip",
+                        "xcrun": "tools/xcrun",
+                    },
                     "CPU": "arm64",
                     "CONSTRAINT_CPU": "aarch64",
                 },
-                {},
+                {
+                    "tools/clang": "/selected/llvm/bin/clang",
+                    "tools/clang++": "/selected/llvm/bin/dispatch/../clang++",
+                    "tools/llvm-libtool-darwin": "/selected/llvm/bin/llvm-libtool-darwin",
+                    "tools/llvm-strip": "/selected/llvm/bin/llvm-strip",
+                    "tools/ld": "/developer/bin/ld",
+                    "tools/dsymutil": "/developer/bin/dsymutil",
+                    "tools/strip": "/developer/bin/strip",
+                    "tools/xcrun": "/selected/bin/xcrun",
+                },
             ),
             (
                 "windows",
@@ -368,18 +404,7 @@ class ToolchainMaterializationTest(unittest.TestCase):
             ("macos", "X86_64", {"CPU": "x86_64", "CONSTRAINT_CPU": "x86_64"}),
         ):
             with self.subTest(platform=platform, machine=machine):
-                sdk = (
-                    self.linux_sdk()
-                    if platform == "linux"
-                    else {
-                        "llvm": "/selected/llvm",
-                        "llvm_real": "/installed/llvm",
-                        "sdk": "/selected/sdk",
-                        "shim": "/selected/shim",
-                        "linker": "/developer/ld",
-                        "deployment": "fixture",
-                    }
-                )
+                sdk = self.linux_sdk() if platform == "linux" else self.macos_sdk()
                 sdk["machine"] = machine
                 context = _RepositoryContext()
                 self.materialize(context, self.data(platform, sdk))
@@ -399,25 +424,31 @@ class ToolchainMaterializationTest(unittest.TestCase):
             self.assertEqual(self.context.links, {})
 
     def test_required_roles_and_colliding_basenames_fail_at_the_repository_seam(self):
-        for platform, tools in (
-            ("linux", {"clang++": "/selected/clang++"}),
-            ("windows", {"cl": "C:/selected/cl.exe"}),
-            ("linux", dict(self.linux_sdk()["tools"], ar="/other/clang")),
+        cases = [
+            ("linux", dict(self.linux_sdk(), tools={"clang++": "/selected/clang++"})),
+            ("windows", {"target_architecture": "x64", "tools": {"cl": "C:/selected/cl.exe"}}),
+            ("linux", dict(self.linux_sdk(), tools=dict(self.linux_sdk()["tools"], ar="/other/clang"))),
             (
                 "windows",
-                {"cl": "C:/selected/CL.EXE", "link": "C:/other/cl.exe", "lib": "C:/lib.exe", "ml64": "C:/ml64.exe"},
-            ),
-        ):
-            sdk = (
-                dict(self.linux_sdk(), tools=tools)
-                if platform == "linux"
-                else {
+                {
                     "target_architecture": "x64",
-                    "tools": tools,
-                }
-            )
+                    "tools": {
+                        "cl": "C:/selected/CL.EXE",
+                        "link": "C:/other/cl.exe",
+                        "lib": "C:/lib.exe",
+                        "ml64": "C:/ml64.exe",
+                    },
+                },
+            ),
+            ("macos", dict(self.macos_sdk(), tools={"clang": "/selected/clang"})),
+            (
+                "macos",
+                dict(self.macos_sdk(), tools=dict(self.macos_sdk()["tools"], ld="/other/bin/clang")),
+            ),
+        ]
+        for platform, sdk in cases:
             with (
-                self.subTest(platform=platform, tools=tools),
+                self.subTest(platform=platform, tools=sdk.get("tools")),
                 self.assertRaisesRegex(_StarlarkFailure, "compiler tool (roles|basename)"),
             ):
                 self.materialize(self.context, self.data(platform, sdk))

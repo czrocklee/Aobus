@@ -247,10 +247,11 @@ the shipping application opens and scans `--library`, and an unisolated launch
 can use its normal saved state. These are existing shipping arguments, not smoke
 scenario controls.
 
-The package-local Objective-C++ rule uses public `cc_common` APIs with the
-existing governed Homebrew compiler and SDK. ARC, mode flags, warnings and
-external-header policy belong to that toolchain, not a default Apple/Xcode
-Bazel toolchain or a new compiler pin. The bundle action declares the original
+Standard rules_cc `objc_library` targets compile the mixed C++/Objective-C++
+implementation and the separate entry and smoke units with the existing governed
+Homebrew compiler and SDK. The standard rule selects ARC; mode, warning, SDK and
+external-header policy stay with the [composed toolchain](bazel.md#macos-toolchain-composition),
+not a default Apple/Xcode compiler or a new compiler pin. The bundle action declares the original
 Info.plist template, icon, brand license, catalog inventory and minimum-OS
 metadata; Python retains the existing catalog SDK's host-absolute interpreter
 boundary. Shared desktop launch uses the existing static vcpkg Boost.Process

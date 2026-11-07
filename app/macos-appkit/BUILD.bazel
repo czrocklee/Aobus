@@ -1,55 +1,16 @@
-load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("@rules_cc//cc:objc_library.bzl", "objc_library")
 load(":bundle.bzl", "aobus_appkit_bundle")
-load(":objc.bzl", "appkit_objc_library")
 
 package(default_visibility = ["//visibility:private"])
 
-# CMake's ao_appkit OBJECT library keeps its plain C++ units and its ObjC
-# units in one owner. The Bazel graph mirrors that membership with two
-# alwayslink archives so no implementation is lost to static-archive dead
-# stripping: the ObjC rule owns the .mm units with their class registration,
-# and this ordinary library owns the three existing C++ units.
-# LibrarySession.cpp includes the two adapter headers owned by the ObjC side,
-# so this library compiles them too.
-cc_library(
-    name = "appkit_cpp",
-    alwayslink = True,
-    srcs = [
-        "LibraryEditorModel.cpp",
-        "LibrarySession.cpp",
-        "MainRunLoopExecutor.cpp",
-    ],
-    hdrs = [
-        "LibraryEditorModel.h",
-        "LibrarySession.h",
-        "MainRunLoopExecutor.h",
-        "MediaPlayerAdapter.h",
-        "PlaybackSeekTarget.h",
-    ],
-    includes = ["."],
-    linkstatic = True,
-    target_compatible_with = ["@platforms//os:macos"],
-    deps = [
-        "//app/i18n:completion",
-        "//app/i18n:i18n",
-        "//app/i18n:ordering",
-        "//app/include:i18n_headers",
-        "//app/include:runtime_headers",
-        "//app/include:uimodel_headers",
-        "//app/runtime:runtime",
-        "//app/uimodel:uimodel",
-        "//include:async_headers",
-        "//include:library_headers",
-        "//include:query_headers",
-        "//include:utility_headers",
-        "//lib/audio:audio",
-    ],
-)
-
 # The complete macOS AppKit implementation over the shared desktop launch,
 # UIModel, runtime, catalog, and audio owners, with the CMake framework set.
-appkit_objc_library(
+# Standard mixed-source ownership mirrors CMake's ao_appkit OBJECT library;
+# alwayslink retains every implementation unit in the product.
+objc_library(
     name = "appkit",
+    alwayslink = True,
     srcs = [
         "ActivityExpirationTimer.mm",
         "ActivityPopover.mm",
@@ -62,6 +23,9 @@ appkit_objc_library(
         "EntryCompletionAdapter.mm",
         "LibraryBrowser.mm",
         "LibraryEditor.mm",
+        "LibraryEditorModel.cpp",
+        "LibrarySession.cpp",
+        "MainRunLoopExecutor.cpp",
         "MediaPlayerAdapter.mm",
         "PlaybackBar.mm",
         "SoulButton.mm",
@@ -80,26 +44,38 @@ appkit_objc_library(
         "EntryCompletionAdapter.h",
         "LibraryBrowser.h",
         "LibraryEditor.h",
+        "LibraryEditorModel.h",
+        "LibrarySession.h",
+        "MainRunLoopExecutor.h",
+        "MediaPlayerAdapter.h",
         "NativeCallback.h",
         "PlaybackBar.h",
+        "PlaybackSeekTarget.h",
         "SoulButton.h",
         "TrackCreditsEditor.h",
         "TrackInspector.h",
     ],
+    includes = ["."],
     deps = [
-        ":appkit_cpp",
         "//app/desktop:desktop_launch",
         "//app/i18n:completion",
         "//app/i18n:i18n",
         "//app/i18n:ordering",
+        "//app/include:i18n_headers",
+        "//app/include:runtime_headers",
+        "//app/include:uimodel_headers",
         "//app/runtime:runtime",
         "//app/uimodel:uimodel",
+        "//include:async_headers",
+        "//include:library_headers",
+        "//include:query_headers",
+        "//include:utility_headers",
         "//lib/audio:audio",
     ],
     target_compatible_with = ["@platforms//os:macos"],
     # The frameworks stay on the implementation owner, following CMake's
-    # target_link_libraries on ao_appkit; ARC and the ObjC++ language mode
-    # come from the macOS toolchain, not from target flags.
+    # target_link_libraries on ao_appkit. The standard rule selects ARC;
+    # the toolchain supplies the C++ language mode.
     linkopts = [
         "-framework",
         "AppKit",
@@ -114,10 +90,12 @@ appkit_objc_library(
 
 # The bundle entry unit stays out of the product library, mirroring CMake's
 # separate aobus-appkit bundle executable over the shared production objects.
-appkit_objc_library(
+objc_library(
     name = "main",
+    alwayslink = True,
     srcs = ["DesktopMain.mm"],
     hdrs = [],
+    includes = ["."],
     deps = [":appkit"],
     target_compatible_with = ["@platforms//os:macos"],
 )
@@ -152,8 +130,9 @@ aobus_appkit_bundle(
 # changes only its tree/executable names and plist identifier/display name,
 # while the shared plist, icon, license, catalog, version and minimum OS stay
 # authoritative.
-appkit_objc_library(
+objc_library(
     name = "appkit_smoke",
+    alwayslink = True,
     # test/macos-appkit has no package boundary of its own; //test exports
     # these existing CMake scenario units to this consumer.
     srcs = [
@@ -179,6 +158,7 @@ appkit_objc_library(
         # Catch2Main unextracted while the WAV/TestId3v2 objects are pulled.
         "//test:media_test_support",
     ],
+    includes = ["."],
     target_compatible_with = ["@platforms//os:macos"],
     testonly = True,
 )

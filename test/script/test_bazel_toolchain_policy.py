@@ -163,10 +163,22 @@ class ToolchainConstructionPolicyTest(unittest.TestCase):
                 "machine": "ARM64",
                 "llvm": "/opt/llvm",
                 "llvm_real": "/installed/llvm",
+                "llvm_version": "22.1.8",
                 "sdk": "/Developer/Selected.sdk",
                 "shim": "/Åsa/expected",
                 "linker": "/Developer/bin/ld",
+                "developer_dir": "/Åsa/Developer",
                 "deployment": "fixture-deployment",
+                "tools": {
+                    "clang": "/opt/llvm/bin/clang",
+                    "clang++": "/opt/llvm/bin/dispatch/../clang++",
+                    "ar": "/opt/llvm/bin/llvm-libtool-darwin",
+                    "strip": "/opt/llvm/bin/llvm-strip",
+                    "ld": "/Developer/bin/ld",
+                    "dsymutil": "/Developer/bin/dsymutil",
+                    "apple_strip": "/Developer/bin/strip",
+                    "xcrun": "/usr/bin/xcrun",
+                },
             }
         else:
             sdk = {
@@ -264,22 +276,48 @@ class ToolchainConstructionPolicyTest(unittest.TestCase):
                 if cpu is not None:
                     self.assertEqual(metadata["CPU"], cpu)
 
-    def test_macos_forwards_the_selected_sdk_without_reprojecting_or_canonicalizing_it(self):
-        context = self.project(self.data("macos"))
-        self.assertEqual(context.links, {})
+    def test_macos_forwards_selected_sdk_and_projects_lexical_tool_basenames(self):
+        data = self.data("macos")
+        context = self.project(data)
+        self.assertEqual(
+            context.links,
+            {
+                "tools/clang": "/opt/llvm/bin/clang",
+                "tools/clang++": "/opt/llvm/bin/dispatch/../clang++",
+                "tools/llvm-libtool-darwin": "/opt/llvm/bin/llvm-libtool-darwin",
+                "tools/llvm-strip": "/opt/llvm/bin/llvm-strip",
+                "tools/ld": "/Developer/bin/ld",
+                "tools/dsymutil": "/Developer/bin/dsymutil",
+                "tools/strip": "/Developer/bin/strip",
+                "tools/xcrun": "/usr/bin/xcrun",
+            },
+        )
         self.assertEqual(
             self.forwarded(context, "macos_cc_config.bzl", "macos_toolchain"),
             {
                 "llvm": "/opt/llvm",
                 "llvm_real": "/installed/llvm",
+                "llvm_version": "22.1.8",
                 "sdk": "/Developer/Selected.sdk",
                 "shim": "/Åsa/expected",
                 "linker": "/Developer/bin/ld",
+                "developer_dir": "/Åsa/Developer",
                 "deployment": "fixture-deployment",
+                "tools": {
+                    "clang": "tools/clang",
+                    "clang++": "tools/clang++",
+                    "ar": "tools/llvm-libtool-darwin",
+                    "strip": "tools/llvm-strip",
+                    "ld": "tools/ld",
+                    "dsymutil": "tools/dsymutil",
+                    "apple_strip": "tools/strip",
+                    "xcrun": "tools/xcrun",
+                },
                 "cpu": "arm64",
                 "constraint_cpu": "aarch64",
             },
         )
+        self.assertEqual(context.links["tools/clang++"], data["sdk"]["tools"]["clang++"])
 
     def test_windows_keeps_installed_execution_paths_separate_from_sparse_tool_inputs(self):
         data = self.data("windows")
@@ -343,6 +381,7 @@ class ToolchainConstructionPolicyTest(unittest.TestCase):
         for platform, role, source in (
             ("linux", "ar", "/another/bin/clang"),
             ("windows", "lib", "C:/Another/bin/cl.exe"),
+            ("macos", "ld", "/another/bin/clang"),
         ):
             with self.subTest(platform=platform):
                 data = self.data(platform)
@@ -357,7 +396,7 @@ class ToolchainConstructionPolicyTest(unittest.TestCase):
         self.assertIn("tools/clang", context.links)
 
     def test_missing_or_unexpected_tool_roles_fail_before_partial_projection(self):
-        for platform, role in (("linux", "clang"), ("windows", "cl")):
+        for platform, role in (("linux", "clang"), ("windows", "cl"), ("macos", "dsymutil")):
             with self.subTest(platform=platform):
                 data = self.data(platform)
                 del data["sdk"]["tools"][role]

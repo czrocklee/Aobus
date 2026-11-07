@@ -14,19 +14,22 @@ linux_toolchain(
 """
 
 _MACOS_BUILD = """load("@aobus//bazel:macos_cc_config.bzl", "macos_toolchain")
-load(":native_paths.bzl", "CONSTRAINT_CPU", "CPU", "DEPLOYMENT", "LINKER", "LLVM", "LLVM_REAL", "SDK", "SHIM")
+load(":native_paths.bzl", "CONSTRAINT_CPU", "CPU", "DEPLOYMENT", "DEVELOPER_DIR", "LINKER", "LLVM", "LLVM_REAL", "LLVM_VERSION", "SDK", "SHIM", "TOOLS")
 
 package(default_visibility = ["//visibility:public"])
 
 macos_toolchain(
     llvm = LLVM,
     llvm_real = LLVM_REAL,
+    llvm_version = LLVM_VERSION,
     sdk = SDK,
     shim = SHIM,
     linker = LINKER,
+    developer_dir = DEVELOPER_DIR,
     deployment = DEPLOYMENT,
     cpu = CPU,
     constraint_cpu = CONSTRAINT_CPU,
+    tools = TOOLS,
 )
 """
 
@@ -96,15 +99,19 @@ def materialize_toolchain(ctx, data):
         if type(machine) != "string" or machine.lower() not in ["x86_64", "arm64"]:
             fail("unsupported macOS CPU: %s" % machine)
         cpu = machine.lower()
+        tools, sources = _project_tools(sdk["tools"], ["clang", "clang++", "ar", "strip", "ld", "dsymutil", "apple_strip", "xcrun"], platform)
         paths = {
             "LLVM": sdk["llvm"],
             "LLVM_REAL": sdk["llvm_real"],
+            "LLVM_VERSION": sdk["llvm_version"],
             "SDK": sdk["sdk"],
             "SHIM": sdk["shim"],
             "LINKER": sdk["linker"],
+            "DEVELOPER_DIR": sdk["developer_dir"],
             "DEPLOYMENT": sdk["deployment"],
             "CPU": cpu,
             "CONSTRAINT_CPU": "x86_64" if cpu == "x86_64" else "aarch64",
+            "TOOLS": tools,
         }
         build = _MACOS_BUILD
     else:

@@ -14,6 +14,7 @@ from pathlib import Path
 from test_bazel_gtk import string_literals
 from test_bazel_uimodel import fields_for
 
+from ao.core import bazel_lint
 from ao.core.paths import PROJECT_ROOT
 
 APPKIT_PACKAGE = PROJECT_ROOT / "app/macos-appkit"
@@ -79,39 +80,43 @@ def exports_fields(path):
 
 
 class BazelAppkitGraphTest(unittest.TestCase):
-    def test_objc_and_cpp_libraries_own_the_complete_cmake_object_membership(self):
+    def test_appkit_owns_the_complete_cmake_object_membership(self):
         units, entry = cmake_appkit_units()
-        appkit = fields_for("app/macos-appkit", "appkit_objc_library", "appkit")
-        appkit_cpp = fields_for("app/macos-appkit", "cc_library", "appkit_cpp")
-        main = fields_for("app/macos-appkit", "appkit_objc_library", "main")
-        objc = {name for name in units if name.endswith(".mm")}
-        cpp = {name for name in units if name.endswith(".cpp")}
-        headers = {name for name in units if name.endswith(".h")}
-        # Every CMake unit lands in its real owner; the bundle entry stays out
-        # of the product library, exactly like the separate CMake executable.
-        self.assertEqual(set(string_literals(appkit.get("srcs"))), objc)
-        self.assertEqual(set(string_literals(appkit_cpp.get("srcs"))), cpp)
+        appkit = fields_for("app/macos-appkit", "objc_library", "appkit")
+        main = fields_for("app/macos-appkit", "objc_library", "main")
+        sources = set(string_literals(appkit.get("srcs")))
+        # Every CMake unit lands in the single product owner, mirroring
+        # CMake's one OBJECT library; the bundle entry stays out of it,
+        # exactly like the separate CMake executable.
+        self.assertEqual(sources, {name for name in units if name.endswith((".mm", ".cpp"))})
         self.assertEqual(set(string_literals(main.get("srcs"))), {entry})
-        self.assertNotIn(entry, objc)
-        # CMake registers headers only loosely; the two libraries must cover
-        # every CMake-listed header, and the plain C++ units must declare the
-        # adapter headers they actually include even where CMake lists none.
-        declared_headers = set(string_literals(appkit.get("hdrs"))) | set(string_literals(appkit_cpp.get("hdrs")))
-        self.assertLessEqual(headers, declared_headers)
+        self.assertNotIn(entry, sources)
+        # CMake registers headers only loosely; the owner must cover every
+        # CMake-listed header plus the adapter headers its C++ units include
+        # even where CMake lists none.
+        declared_headers = set(string_literals(appkit.get("hdrs")))
+        self.assertLessEqual({name for name in units if name.endswith(".h")}, declared_headers)
         for header in ("MediaPlayerAdapter.h", "PlaybackSeekTarget.h"):
-            self.assertIn(header, string_literals(appkit_cpp.get("hdrs")))
+            self.assertIn(header, declared_headers)
 
     def test_appkit_links_the_cmake_closure_and_frameworks(self):
-        appkit = fields_for("app/macos-appkit", "appkit_objc_library", "appkit")
+        appkit = fields_for("app/macos-appkit", "objc_library", "appkit")
         deps = set(string_literals(appkit["deps"]))
+        # The merged owner keeps every consumer of the former ObjC/C++ split.
         for label in (
-            ":appkit_cpp",
             "//app/desktop:desktop_launch",
             "//app/i18n:completion",
             "//app/i18n:i18n",
             "//app/i18n:ordering",
+            "//app/include:i18n_headers",
+            "//app/include:runtime_headers",
+            "//app/include:uimodel_headers",
             "//app/runtime:runtime",
             "//app/uimodel:uimodel",
+            "//include:async_headers",
+            "//include:library_headers",
+            "//include:query_headers",
+            "//include:utility_headers",
             "//lib/audio:audio",
         ):
             self.assertIn(label, deps)
@@ -131,8 +136,10 @@ class BazelAppkitGraphTest(unittest.TestCase):
         self.assertCountEqual(linkopts[1::2], frameworks)
 
     def test_bundle_binary_links_main_and_appkit_without_extra_sources(self):
-        main = fields_for("app/macos-appkit", "appkit_objc_library", "main")
+        main = fields_for("app/macos-appkit", "objc_library", "main")
         self.assertEqual(set(string_literals(main["deps"])), {":appkit"})
+        # The entry objects stay in the product link, like the former rule.
+        self.assertIs(ast.literal_eval(main["alwayslink"]), True)
         binary = fields_for("app/macos-appkit", "cc_binary", "aobus-appkit-bin")
         self.assertEqual(string_literals(binary.get("srcs")), [])
         self.assertIs(ast.literal_eval(binary["linkstatic"]), True)
@@ -140,7 +147,7 @@ class BazelAppkitGraphTest(unittest.TestCase):
 
     def test_appkit_smoke_reuses_cmake_scenario_units_and_owns_its_own_binary(self):
         cmake_mm = {name for name in cmake_appkit_smoke_units() if name.endswith(".mm")}
-        smoke = fields_for("app/macos-appkit", "appkit_objc_library", "appkit_smoke")
+        smoke = fields_for("app/macos-appkit", "objc_library", "appkit_smoke")
         smoke_srcs = string_literals(smoke["srcs"])
         self.assertEqual(
             {source_path(label).removeprefix("test/") for label in smoke_srcs if label.endswith(".mm")},
@@ -148,7 +155,7 @@ class BazelAppkitGraphTest(unittest.TestCase):
         )
         self.assertIn("//test:macos-appkit/AppKitSmokeMain.mm", smoke_srcs)
         self.assertNotIn("//test:media/wav/TestWav.cpp", smoke_srcs)
-        appkit = fields_for("app/macos-appkit", "appkit_objc_library", "appkit")
+        appkit = fields_for("app/macos-appkit", "objc_library", "appkit")
         self.assertNotIn("//test:macos-appkit/AppKitSmokeMain.mm", string_literals(appkit["srcs"]))
         deps = set(string_literals(smoke["deps"]))
         for label in (
@@ -159,6 +166,7 @@ class BazelAppkitGraphTest(unittest.TestCase):
         ):
             self.assertIn(label, deps)
         self.assertIs(ast.literal_eval(smoke["testonly"]), True)
+        self.assertIs(ast.literal_eval(smoke["alwayslink"]), True)
         self.assertEqual(ast.literal_eval(smoke["target_compatible_with"]), ["@platforms//os:macos"])
 
         binary = fields_for("app/macos-appkit", "cc_binary", "ao_appkit_smoke_bin")
@@ -191,10 +199,9 @@ class BazelAppkitGraphTest(unittest.TestCase):
 
     def test_product_targets_stay_macos_only(self):
         for kind, name in (
-            ("appkit_objc_library", "appkit"),
-            ("appkit_objc_library", "main"),
-            ("appkit_objc_library", "appkit_smoke"),
-            ("cc_library", "appkit_cpp"),
+            ("objc_library", "appkit"),
+            ("objc_library", "main"),
+            ("objc_library", "appkit_smoke"),
             ("cc_binary", "aobus-appkit-bin"),
             ("cc_binary", "ao_appkit_smoke_bin"),
             ("aobus_appkit_bundle", "aobus-appkit"),
@@ -204,13 +211,20 @@ class BazelAppkitGraphTest(unittest.TestCase):
                 fields = fields_for("app/macos-appkit", kind, name)
                 self.assertEqual(ast.literal_eval(fields["target_compatible_with"]), ["@platforms//os:macos"])
 
-    def test_appkit_cpp_keeps_whole_cmake_object_membership_alive(self):
-        fields = fields_for("app/macos-appkit", "cc_library", "appkit_cpp")
+    def test_appkit_keeps_whole_cmake_object_membership_alive(self):
+        fields = fields_for("app/macos-appkit", "objc_library", "appkit")
         # CMake owns these units through an OBJECT library; an ordinary archive
         # needs alwayslink so static-archive dead stripping cannot drop them.
         self.assertIs(ast.literal_eval(fields["alwayslink"]), True)
-        self.assertIs(ast.literal_eval(fields["linkstatic"]), True)
         self.assertEqual(ast.literal_eval(fields["includes"]), ["."])
+
+    def test_standard_objc_library_owners_remain_lint_compile_owners(self):
+        # The standard rule replaced the package-local consumer; the lint
+        # owner filter must admit the actual BUILD kinds so no AppKit
+        # translation unit loses its owner, and the removed local kind
+        # must not linger as an admitted owner.
+        self.assertIn("objc_library", bazel_lint._COMPILE_OWNER_KINDS)
+        self.assertNotIn("appkit_objc_library", bazel_lint._COMPILE_OWNER_KINDS)
 
     def test_bundle_rule_declares_every_authoritative_input(self):
         bundle = fields_for("app/macos-appkit", "aobus_appkit_bundle", "aobus-appkit")

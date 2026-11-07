@@ -1,209 +1,175 @@
-"""Native Homebrew LLVM configuration; the portal supplies SDK/shim identity."""
+"""Compose upstream Apple rules with the admitted native LLVM SDK."""
 
-load("@rules_cc//cc:cc_toolchain_config_lib.bzl", "action_config", "feature", "flag_group", "flag_set", "tool", "tool_path")
-load("@rules_cc//cc/common:cc_common.bzl", "cc_common")
-load("@rules_cc//cc/toolchains:cc_toolchain.bzl", "cc_toolchain")
-load("@rules_cc//cc/toolchains:cc_toolchain_config_info.bzl", "CcToolchainConfigInfo")
+load("@apple_support//rules:apple_genrule.bzl", "apple_genrule")
+load("@apple_support//toolchain:cc_toolchain.bzl", apple_cc_toolchain = "cc_toolchain")
+load("@rules_cc//cc/toolchains:args.bzl", "cc_args")
+load("@rules_cc//cc/toolchains:feature.bzl", "cc_feature")
+load("@rules_cc//cc/toolchains:feature_set.bzl", "cc_feature_set")
+load("@rules_cc//cc/toolchains:tool.bzl", "cc_tool")
+load("@rules_cc//cc/toolchains:tool_map.bzl", "cc_tool_map")
 load(":compiler_policy.bzl", "UNIX_WARNINGS")
 
-_OBJCXX_COMPILE = "objc++-compile"
-_COMPILE = ["c++-compile", "c++-header-parsing", _OBJCXX_COMPILE]
-_LINK = ["c++-link-executable", "c++-link-dynamic-library", "c++-link-nodeps-dynamic-library"]
+_COMPILE = [
+    "@rules_cc//cc/toolchains/actions:cpp_compile",
+    "@rules_cc//cc/toolchains/actions:cpp_header_parsing",
+    "@rules_cc//cc/toolchains/actions:objcpp_compile",
+]
+_LINK = [
+    "@rules_cc//cc/toolchains/actions:cpp_link_executable",
+    "@rules_cc//cc/toolchains/actions:cpp_link_dynamic_library",
+    "@rules_cc//cc/toolchains/actions:cpp_link_nodeps_dynamic_library",
+    "@rules_cc//cc/toolchains/actions:objc_executable",
+]
 
-def _impl(ctx):
-    return cc_common.create_cc_toolchain_config_info(
-        ctx = ctx,
-        toolchain_identifier = "aobus-homebrew-llvm22",
-        host_system_name = "local",
-        target_system_name = ctx.attr.cpu + "-apple-macosx",
-        target_cpu = "darwin_" + ctx.attr.cpu,
-        target_libc = "macosx",
-        compiler = "clang",
-        abi_version = "local",
-        abi_libc_version = "local",
-        cxx_builtin_include_directories = [ctx.attr.llvm, ctx.attr.llvm_real, ctx.attr.sdk, ctx.attr.shim],
-        tool_paths = [
-            tool_path(name = "gcc", path = ctx.attr.llvm + "/bin/clang++"),
-            tool_path(name = "ld", path = ctx.attr.llvm + "/bin/clang++"),
-            tool_path(name = "cpp", path = ctx.attr.llvm + "/bin/clang++"),
-            tool_path(name = "ar", path = ctx.attr.llvm + "/bin/llvm-libtool-darwin"),
-            tool_path(name = "nm", path = ctx.attr.llvm + "/bin/llvm-nm"),
-            tool_path(name = "objdump", path = ctx.attr.llvm + "/bin/llvm-objdump"),
-            tool_path(name = "strip", path = ctx.attr.llvm + "/bin/llvm-strip"),
-            tool_path(name = "gcov", path = "/usr/bin/false"),
-        ],
-        # Objective-C++ stays on the same governed Homebrew compiler and SDK.
-        # No Apple auto-configuration or second Xcode toolchain is selected.
-        action_configs = [action_config(
-            action_name = _OBJCXX_COMPILE,
-            enabled = True,
-            tools = [tool(path = ctx.attr.llvm + "/bin/clang++")],
-        )],
-        features = [
-            feature(name = "supports_pic", enabled = True),
-            # Selected by repository defaults, not enabled for external targets.
-            # Legacy user_compile_flags are appended after supplied features,
-            # preserving ordinary copts precedence over these warning defaults.
-            feature(
-                name = "aobus_warnings",
-                flag_sets = [flag_set(
-                    actions = _COMPILE,
-                    flag_groups = [flag_group(flags = UNIX_WARNINGS)],
-                )],
-            ),
-            # Compilation-mode features are requested by rules_cc, not inferred
-            # from the dbg/opt output-directory names of a custom toolchain.
-            feature(
-                name = "dbg",
-                flag_sets = [flag_set(
-                    actions = _COMPILE,
-                    flag_groups = [flag_group(flags = ["-O0", "-g"])],
-                )],
-            ),
-            feature(
-                name = "opt",
-                flag_sets = [flag_set(
-                    actions = _COMPILE,
-                    flag_groups = [flag_group(flags = ["-O2", "-DNDEBUG"])],
-                )],
-            ),
-            feature(
-                name = "fastbuild",
-                flag_sets = [flag_set(
-                    actions = _COMPILE,
-                    flag_groups = [flag_group(flags = ["-O0", "-g0"])],
-                )],
-            ),
-            feature(
-                name = "external_include_paths",
-                enabled = True,
-                flag_sets = [flag_set(
-                    actions = _COMPILE,
-                    flag_groups = [flag_group(
-                        flags = ["-isystem", "%{external_include_paths}"],
-                        iterate_over = "external_include_paths",
-                        expand_if_available = "external_include_paths",
-                    )],
-                )],
-            ),
-            feature(
-                name = "aobus_compile",
-                enabled = True,
-                flag_sets = [flag_set(
-                    actions = _COMPILE,
-                    flag_groups = [flag_group(flags = [
-                        "--no-default-config",
-                        "-std=c++26",
-                        "-stdlib=libc++",
-                        "-isysroot",
-                        ctx.attr.sdk,
-                        "-mmacosx-version-min=" + ctx.attr.deployment,
-                        "-isystem",
-                        ctx.attr.shim,
-                    ])],
-                )],
-            ),
-            # Legacy dependency-file, include-path and compiler input/output
-            # features already cover Objective-C++; legacy defines and user
-            # flags do not. Preserve those channels explicitly for this action.
-            feature(
-                name = "aobus_objcxx_compile",
-                enabled = True,
-                flag_sets = [flag_set(
-                    actions = [_OBJCXX_COMPILE],
-                    flag_groups = [
-                        flag_group(flags = ["-fobjc-arc"]),
-                        flag_group(
-                            iterate_over = "preprocessor_defines",
-                            flags = ["-D%{preprocessor_defines}"],
-                        ),
-                        flag_group(
-                            iterate_over = "user_compile_flags",
-                            flags = ["%{user_compile_flags}"],
-                        ),
-                    ],
-                )],
-            ),
-            feature(
-                name = "aobus_link",
-                enabled = True,
-                flag_sets = [flag_set(
-                    actions = _LINK,
-                    flag_groups = [flag_group(flags = [
-                        "--no-default-config",
-                        "--ld-path=" + ctx.attr.linker,
-                        "-stdlib=libc++",
-                        "-isysroot",
-                        ctx.attr.sdk,
-                        "-mmacosx-version-min=" + ctx.attr.deployment,
-                    ])],
-                )],
-            ),
-        ],
-    )
+def _shell_argument(value):
+    # Preserve data through Bazel make-variable expansion and the POSIX shell.
+    return "'" + value.replace("$", "$$").replace("'", "'\"'\"'") + "'"
 
-macos_cc_config = rule(
-    implementation = _impl,
-    attrs = {
-        "llvm": attr.string(mandatory = True),
-        "llvm_real": attr.string(mandatory = True),
-        "sdk": attr.string(mandatory = True),
-        "shim": attr.string(mandatory = True),
-        "linker": attr.string(mandatory = True),
-        "deployment": attr.string(mandatory = True),
-        "cpu": attr.string(mandatory = True),
-    },
-    provides = [CcToolchainConfigInfo],
-)
-
-def macos_toolchain(llvm, llvm_real, sdk, shim, linker, deployment, cpu, constraint_cpu):
-    """Declare the native graph in the generated repository using selected metadata."""
+def macos_toolchain(llvm, llvm_real, llvm_version, sdk, shim, linker, developer_dir, deployment, cpu, constraint_cpu, tools):
+    """Keep native facts and project policy local; delegate Apple mechanics."""
     native.exports_files([
         "native_paths.bzl",
         "identity.json",
-    ])
-
-    macos_cc_config(
-        name = "config",
-        llvm = llvm,
-        llvm_real = llvm_real,
-        sdk = sdk,
-        shim = shim,
-        linker = linker,
-        deployment = deployment,
-        cpu = cpu,
-    )
-
+    ] + tools.values())
     native.filegroup(
         name = "identity",
-        srcs = ["identity.json"],
+        srcs = ["identity.json", "native_paths.bzl"],
+    )
+    constraints = ["@platforms//os:macos", "@platforms//cpu:" + constraint_cpu]
+    native.platform(
+        name = "platform",
+        constraint_values = constraints,
+        flags = ["--macos_minimum_os=" + deployment, "--host_macos_minimum_os=" + deployment],
+    )
+    native.config_setting(
+        name = "admitted_deployment",
+        values = {"macos_minimum_os": deployment, "host_macos_minimum_os": deployment},
     )
 
-    cc_toolchain(
+    # Bootstrap upstream source without resolving the C++ toolchain being built.
+    # Metadata and installed tools remain inputs, not compiler source arguments.
+    apple_genrule(
+        name = "compiler_entry",
+        srcs = ["@apple_support//crosstool:wrapped_clang.cc", ":identity"],
+        tools = tools.values(),
+        outs = ["entry/wrapped_clang", "entry/wrapped_clang_pp"],
+        cmd = " ".join([
+            "env",
+            "DEVELOPER_DIR=" + _shell_argument(developer_dir),
+            "SDKROOT=" + _shell_argument(sdk),
+            _shell_argument(llvm + "/bin/clang++"),
+            "--no-default-config -std=c++17 -stdlib=libc++ -O2",
+            "-target " + _shell_argument(cpu + "-apple-macosx" + deployment),
+            "-isysroot " + _shell_argument(sdk),
+            _shell_argument("--ld-path=" + linker),
+            "'$(execpath @apple_support//crosstool:wrapped_clang.cc)'",
+            "-o '$(execpath :entry/wrapped_clang)'",
+            "&& ln -s wrapped_clang '$(execpath :entry/wrapped_clang_pp)'",
+        ]),
+        exec_compatible_with = ["@platforms//os:macos"],
+    )
+    for name, source in [("clang", "entry/wrapped_clang"), ("clang++", "entry/wrapped_clang_pp")]:
+        cc_tool(
+            name = name,
+            src = source,
+            # Compiler entry can invoke installed LLVM, Apple ld, dsymutil and
+            # strip. Projected bytes and the live SDK ledger bind that closure.
+            data = [":identity"] + tools.values(),
+            env = {"APPLE_SUPPORT_LLVM_ROOT": llvm},
+        )
+    cc_tool(name = "libtool", src = tools["ar"], data = [":identity"])
+    cc_tool(name = "strip", src = tools["strip"], data = [":identity"])
+    cc_tool_map(
+        name = "tools",
+        tools = {
+            "@rules_cc//cc/toolchains/actions:assembly_actions": ":clang",
+            "@rules_cc//cc/toolchains/actions:c_compile_actions": ":clang",
+            "@rules_cc//cc/toolchains/actions:cc_flags_make_variable": ":clang++",
+            "@rules_cc//cc/toolchains/actions:cpp_compile": ":clang++",
+            "@rules_cc//cc/toolchains/actions:cpp_header_parsing": ":clang++",
+            "@rules_cc//cc/toolchains/actions:linkstamp_compile": ":clang++",
+            "@rules_cc//cc/toolchains/actions:objcpp_compile": ":clang++",
+            "@rules_cc//cc/toolchains/actions:objc_compile": ":clang",
+            "@rules_cc//cc/toolchains/actions:cpp_link_executable": ":clang++",
+            "@rules_cc//cc/toolchains/actions:cpp_link_dynamic_library": ":clang++",
+            "@rules_cc//cc/toolchains/actions:cpp_link_nodeps_dynamic_library": ":clang++",
+            "@rules_cc//cc/toolchains/actions:objc_executable": ":clang++",
+            "@rules_cc//cc/toolchains/actions:ar_actions": ":libtool",
+            "@rules_cc//cc/toolchains/actions:strip": ":strip",
+        },
+    )
+
+    cc_feature(name = "aobus_warnings", feature_name = "aobus_warnings")
+    cc_args(
+        name = "warning_policy",
+        actions = _COMPILE,
+        args = UNIX_WARNINGS,
+        requires_any_of = [":aobus_warnings"],
+    )
+    cc_feature_set(name = "known_policy", all_of = [":aobus_warnings"])
+    # Replace automatic SDK environment and broad include exemptions together.
+    # This unconditional input also binds identity for every selected action.
+    cc_args(
+        name = "native_inputs",
+        actions = ["@rules_cc//cc/toolchains/actions:all_actions"],
+        allowlist_absolute_include_directories = [llvm, llvm_real, sdk, shim],
+        env = {
+            "DEVELOPER_DIR": developer_dir,
+            "SDKROOT": sdk,
+            "ZERO_AR_DATE": "1",
+        },
+        data = select(
+            {":admitted_deployment": [":identity"]},
+            no_match_error = "Select @aobus_toolchain//:platform with admitted macOS target/exec deployment " + deployment,
+        ),
+    )
+    cc_args(
+        name = "cpp_policy",
+        actions = _COMPILE + ["@rules_cc//cc/toolchains/actions:linkstamp_compile"],
+        args = ["-std=c++26", "-stdlib=libc++", "-isystem", shim],
+    )
+    cc_args(
+        name = "selected_linker",
+        actions = _LINK,
+        args = ["--ld-path=" + linker, "-stdlib=libc++", "-isysroot", sdk],
+        data = [":identity"],
+    )
+    cc_args(
+        name = "sysroot_args",
+        actions = ["@rules_cc//cc/toolchains/actions:compile_actions"],
+        args = ["-isysroot", sdk],
+        data = [":identity"],
+    )
+    cc_feature(name = "sysroot", feature_name = "sysroot", args = [":sysroot_args"])
+    cc_feature(
+        name = "native_policy",
+        feature_name = "aobus_native_policy",
+        # The upstream macro inserts extra enabled features after its defaults
+        # and before user copts. Gate only warnings on the repository request.
+        args = [":warning_policy", ":cpp_policy", ":selected_linker"],
+    )
+    cc_feature_set(
+        name = "enabled_policy",
+        all_of = [":native_policy", "@apple_support//toolchain:external_include_paths"],
+    )
+
+    apple_cc_toolchain(
         name = "llvm22",
-        all_files = ":identity",
-        ar_files = ":identity",
-        as_files = ":identity",
-        compiler_files = ":identity",
-        dwp_files = ":identity",
-        linker_files = ":identity",
-        objcopy_files = ":identity",
-        strip_files = ":identity",
-        supports_param_files = 0,
-        toolchain_config = ":config",
-        toolchain_identifier = "aobus-homebrew-llvm22",
+        target = cpu + "-apple-macosx" + deployment,
+        module_map = "@apple_support//crosstool:module.modulemap",
+        sysroot_feature = ":sysroot",
+        supports_header_parsing = True,
+        tool_map = ":tools",
+        flags_from_env = False,
+        llvm_version = llvm_version,
+        platform_args = ":native_inputs",
+        extra_enabled_features = ":enabled_policy",
+        extra_known_features = ":known_policy",
     )
-
     native.toolchain(
         name = "registered_llvm22",
-        exec_compatible_with = [
-            "@platforms//os:macos",
-            "@platforms//cpu:" + constraint_cpu,
-        ],
-        target_compatible_with = [
-            "@platforms//os:macos",
-            "@platforms//cpu:" + constraint_cpu,
-        ],
+        exec_compatible_with = constraints,
+        target_compatible_with = constraints,
         toolchain = ":llvm22",
         toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
     )

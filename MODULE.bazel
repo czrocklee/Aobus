@@ -3,8 +3,17 @@ module(
     version = "0.1.0",
 )
 
-bazel_dep(name = "rules_cc", version = "0.2.17")
+bazel_dep(name = "rules_cc", version = "0.2.27")
 bazel_dep(name = "platforms", version = "1.0.0")
+bazel_dep(name = "apple_support", version = "2.11.0")
+
+# Reuse upstream code with a selected-LLVM entry and an admitted SDK input seam.
+# Retire this delta when the public API supports both without a local patch.
+single_version_override(
+    module_name = "apple_support",
+    patches = ["//bazel:apple_support_llvm.patch"],
+    patch_strip = 1,
+)
 
 dependencies = use_extension("//bazel:dependencies.bzl", "dependencies")
 use_repo(dependencies, "aobus_environment", "aobus_native_deps", "aobus_native_tools", "aobus_test_deps", "aobus_toolchain", "aobus_winui_sdk")
