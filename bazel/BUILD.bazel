@@ -34,4 +34,6 @@ exports_files([
     "verify_windows_utf8_manifest.ps1",
     "windows_toolchain.bzl",
     "windows_utf8_manifest.bzl",
+    "winui_repository.bzl",
+    "winui_sdk.bzl",
 ])

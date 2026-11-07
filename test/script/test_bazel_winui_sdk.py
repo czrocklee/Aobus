@@ -11,12 +11,15 @@ runtime is asserted structurally from its locked provider. Projection stays
 selective: queried include subtrees, package build metadata, the selected
 generation tool roots, and the Full-CLR MSBuild host, selected VC targets, and
 SDK metadata/MIDL families, never the whole installation.
+
+The admitted native facts are pipelined through the actual checked-in Starlark
+materialization and BUILD loader: repository_ctx is faked at its I/O boundary
+and rule declarations are captured, so the tests observe the real projection
+mechanism instead of a Python-rendered copy of it.
 """
 
-import ast
 import json
 import os
-import re
 import tempfile
 import unittest
 import xml.etree.ElementTree as ET
@@ -27,6 +30,82 @@ from unittest import mock
 
 from ao.core import bazel_native as native
 from ao.core import bazel_provision, bazel_winui, dependency_policy
+
+_BAZEL = Path(__file__).resolve().parents[2] / "bazel"
+
+
+class _StarlarkFailure(Exception):
+    """Sentinel for the checked-in Starlark helpers' fail() calls."""
+
+
+def _materialize_winui(facts, subpackage="debug"):
+    """Run the checked-in Starlark projection with repository I/O faked.
+
+    The generated BUILD is executed under a load bridge so the actual
+    winui_sdk_imports macro declares the public roles; artifact links and rule
+    declarations are captured, never written to disk. The returned observer
+    (files, links, rules, exports, targets) is owned by these tests; production
+    carries only the admitted facts across this boundary.
+    """
+    links = {}
+    files = {}
+    rules = {}
+    exports = []
+
+    def fail(message):
+        raise _StarlarkFailure(message)
+
+    def symlink(target, destination):
+        if destination in links:
+            raise AssertionError("duplicate artifact link: " + destination)
+        links[destination] = str(target)
+
+    def write(name, content, *, executable=False):
+        if executable:
+            raise AssertionError("WinUI projection must not write executable programs")
+        files[name] = content
+
+    context = SimpleNamespace(path=lambda source: source, symlink=symlink, file=write)
+    namespace = {"json": SimpleNamespace(encode=json.dumps), "fail": fail}
+    source = (_BAZEL / "winui_repository.bzl").read_text(encoding="utf-8")
+    exec(compile(source, "winui_repository.bzl", "exec"), namespace)
+    targets = namespace["materialize_winui"](context, subpackage, facts)
+
+    def rule(kind):
+        def declare(**kwargs):
+            if kwargs["name"] in rules:
+                raise AssertionError("duplicate generated rule: " + kwargs["name"])
+            rules[kwargs["name"]] = (kind, kwargs)
+
+        return declare
+
+    prefix = subpackage + "/"
+    loader = {
+        "fail": fail,
+        "package": lambda **kwargs: None,
+        "native": SimpleNamespace(exports_files=exports.extend, filegroup=rule("filegroup")),
+    }
+
+    def load(label, *symbols):
+        if label == "@rules_cc//cc:defs.bzl":
+            loader["cc_import"] = rule("cc_import")
+            loader["cc_library"] = rule("cc_library")
+            return
+        if label == "@aobus//bazel:winui_sdk.bzl":
+            loaded = (_BAZEL / "winui_sdk.bzl").read_text(encoding="utf-8")
+        elif label == ":sdk_data.bzl":
+            loaded = files[prefix + "sdk_data.bzl"]
+        else:
+            raise AssertionError("unexpected BUILD dependency: " + label)
+        exec(compile(loaded, label, "exec"), loader)
+        for symbol in symbols:
+            if symbol not in loader:
+                raise AssertionError("missing loaded symbol: " + symbol)
+
+    loader["load"] = load
+    exec(compile(files[prefix + "BUILD.bazel"], "BUILD.bazel", "exec"), loader)
+    return {"files": files, "links": links, "rules": rules, "exports": exports, "targets": targets}
+
 
 SDK = bazel_winui.WINDOWS_SDK_VERSION
 VC_VERSION = "14.44.35207"
@@ -174,21 +253,108 @@ class LazyNonWindowsStubTest(unittest.TestCase):
         ):
             with tempfile.TemporaryDirectory(prefix="aobus-winui-stub-") as temporary:
                 tree = Path(temporary) / "tree"
-                linux = bazel_winui.repository_plan(tree, {"host": "linux"}, {})
-                macos = bazel_winui.repository_plan(tree, {"host": "macos"}, {})
+                self.assertIsNone(bazel_winui.resolve_sdk(tree, {"host": "linux"}, {}))
+                self.assertIsNone(bazel_winui.resolve_sdk(tree, {"host": "macos"}, {}))
                 self.assertFalse(tree.exists())
-        for plan in (linux, macos):
-            self.assertEqual(plan["links"], [])
-            self.assertLessEqual({"BUILD.bazel", "sdk.json", "sdk-diagnostics.json"}, set(plan["files"]))
-            # The stub stays empty loadable metadata with its export roles
-            # declared; its exact BUILD serialization is not a contract here.
-            self.assertEqual(json.loads(plan["files"]["sdk.json"]), {})
-            self.assertEqual(json.loads(plan["files"]["sdk-diagnostics.json"]), {})
-            build = plan["files"]["BUILD.bazel"]
-            self.assertEqual(set(re.findall(r'name = "(\w+)"', build)), {"headers", "bootstrap", "runtime", "tools"})
-            self.assertIn("exports_files", build)
-            self.assertIn('"sdk.json"', build)
-            self.assertIn('"sdk-diagnostics.json"', build)
+
+    def test_stub_materializes_empty_loadable_interfaces_and_metadata(self):
+        result = _materialize_winui(None)
+        self.assertEqual(result["links"], {})
+        self.assertEqual(json.loads(result["files"]["debug/sdk.json"]), {})
+        self.assertEqual(json.loads(result["files"]["debug/sdk-diagnostics.json"]), {})
+        # The stub keeps its export roles declared and its interfaces empty.
+        self.assertEqual(result["exports"], ["sdk.json", "sdk-diagnostics.json"])
+        self.assertEqual(
+            {name: kind for name, (kind, _) in result["rules"].items()},
+            {"headers": "cc_library", "bootstrap": "cc_library", "runtime": "filegroup", "tools": "filegroup"},
+        )
+        _, headers = result["rules"]["headers"]
+        self.assertEqual((headers["hdrs"], headers["includes"], headers["defines"]), ([], [], []))
+        _, bootstrap = result["rules"]["bootstrap"]
+        self.assertEqual((bootstrap["srcs"], bootstrap["deps"], bootstrap["linkopts"]), ([], [], []))
+        self.assertIs(bootstrap["alwayslink"], False)
+        for role in ("runtime", "tools"):
+            self.assertEqual(result["rules"][role][1]["srcs"], [])
+
+    def test_release_subpackage_prefixes_artifacts_without_changing_interfaces(self):
+        result = _materialize_winui(None, subpackage="release")
+        self.assertEqual(
+            set(result["files"]),
+            {"release/BUILD.bazel", "release/sdk.json", "release/sdk-diagnostics.json", "release/sdk_data.bzl"},
+        )
+        self.assertEqual(result["links"], {})
+        self.assertEqual(json.loads(result["files"]["release/sdk.json"]), {})
+        # The public roles and declarations stay identical; only the artifact
+        # locations move under the configured subpackage.
+        self.assertEqual(
+            result["targets"], ["bootstrap", "headers", "runtime", "sdk-diagnostics.json", "sdk.json", "tools"]
+        )
+        self.assertEqual(result["exports"], ["sdk.json", "sdk-diagnostics.json"])
+        self.assertEqual(
+            {name: kind for name, (kind, _) in result["rules"].items()},
+            {"headers": "cc_library", "bootstrap": "cc_library", "runtime": "filegroup", "tools": "filegroup"},
+        )
+
+
+class WinuiStarlarkProjectionTest(unittest.TestCase):
+    """Fail-closed record validation in the checked-in Starlark materialization."""
+
+    @staticmethod
+    def facts(files=(), includes=()):
+        """Minimal admitted-facts shape; only the probed records vary."""
+        return {
+            "sdk_files": list(files),
+            "includes": list(includes),
+            "defines": [],
+            "headers": [],
+            "sources": [],
+            "libraries": [],
+            "system_libraries": [],
+            "runtime": [],
+            "tools": [],
+            "native_inputs": [],
+            "execution": {},
+            "diagnostics": {},
+        }
+
+    def test_projection_fails_closed_on_unsupported_subpackages(self):
+        for subpackage in ("", "profile", "fastbuild", "Debug"):
+            with (
+                self.subTest(subpackage=subpackage),
+                self.assertRaisesRegex(_StarlarkFailure, "unsupported WinUI SDK subpackage: " + subpackage),
+            ):
+                _materialize_winui(self.facts(), subpackage=subpackage)
+
+    def test_root_sdk_projection_fails_before_artifact_writes(self):
+        context = SimpleNamespace(file=mock.Mock(), symlink=mock.Mock())
+        namespace = {"fail": self.fail}
+        source = (_BAZEL / "winui_repository.bzl").read_text(encoding="utf-8")
+        exec(compile(source, "winui_repository.bzl", "exec"), namespace)
+        with self.assertRaisesRegex(AssertionError, "unsupported WinUI SDK subpackage:"):
+            namespace["materialize_winui"](context, "", self.facts())
+        context.file.assert_not_called()
+        context.symlink.assert_not_called()
+
+    def test_projection_fails_closed_on_unsafe_provider_records_and_collisions(self):
+        record = {"source": "/provider/Pkg/a.h", "package": "Pkg", "path": "a.h"}
+        for name, probed, message in (
+            ("provider traversal", self.facts(files=[dict(record, package="../Escape")]), "provider name"),
+            ("provider separator", self.facts(files=[dict(record, package="Pkg/Evil")]), "provider name"),
+            ("path traversal", self.facts(files=[dict(record, path="../escape.h")]), "provider-relative path"),
+            ("absolute path", self.facts(files=[dict(record, path="/abs/a.h")]), "provider-relative path"),
+            (
+                "destination collision",
+                self.facts(files=[record, {"source": "/provider/Other/a.h", "package": "Pkg", "path": "a.h"}]),
+                "projection collision",
+            ),
+            (
+                "include traversal",
+                self.facts(includes=[{"package": "Pkg", "path": "../escape"}]),
+                "provider-relative path",
+            ),
+        ):
+            with self.subTest(name=name), self.assertRaisesRegex(_StarlarkFailure, message):
+                _materialize_winui(probed)
 
 
 class LockedPackagesTest(unittest.TestCase):
@@ -413,11 +579,10 @@ class ProjectionBoundaryTest(unittest.TestCase):
             rogue = _touch(root / "Rogue.3/include/a.h")
             with self.assertRaisesRegex(bazel_winui.BazelWorkspaceError, "points outside its locked NuGet providers"):
                 bazel_winui._provider_path(rogue, packages)
-            self.assertEqual(bazel_winui._projected(owned, packages), "sdk/Pkg/include/a.h")
 
 
-class WindowsRepositoryPlanTest(unittest.TestCase):
-    """repository_plan on a fake Windows host with a discriminating MSBuild."""
+class WindowsProjectionTest(unittest.TestCase):
+    """Admission on a fake Windows host, piped through the checked-in Starlark projection."""
 
     def setUp(self):
         temporary = tempfile.TemporaryDirectory(prefix="aobus-winui-repository-")
@@ -614,7 +779,10 @@ class WindowsRepositoryPlanTest(unittest.TestCase):
         }
 
     def plan(self):
-        return bazel_winui.repository_plan(self.tree, self.request, self.environment)
+        """Pipeline the native admission through the real checked-in Starlark projection."""
+        return _materialize_winui(
+            bazel_winui.resolve_sdk(self.tree, self.request, self.environment), subpackage=self.request["config"]
+        )
 
     def query_output(self):
         return "MSBuild preamble\n" + json.dumps(self.payload) + "\n"
@@ -624,36 +792,18 @@ class WindowsRepositoryPlanTest(unittest.TestCase):
         flag = next(argument for argument in command if argument.startswith(prefix))
         return set(flag[len(prefix) :].split(","))
 
-    @staticmethod
-    def _build_rules(build):
-        """Parse generated Starlark rules into per-rule field semantics."""
-
-        def evaluate(node):
-            if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
-                return evaluate(node.left) + evaluate(node.right)
-            return ast.literal_eval(node)
-
-        rules = {}
-        for statement in ast.parse(build).body:
-            if not isinstance(statement, ast.Expr) or not isinstance(statement.value, ast.Call):
-                continue
-            call = statement.value
-            if not isinstance(call.func, ast.Name):
-                continue
-            fields = {keyword.arg: evaluate(keyword.value) for keyword in call.keywords}
-            rules[fields.get("name", call.func.id)] = (call.func.id, fields, [evaluate(arg) for arg in call.args])
-        return rules
-
     def _destination_of(self, result, source):
-        """The single repository destination one projected source reaches."""
-        sources = {link["destination"]: link["source"] for link in result["links"]}
-        return next(destination for destination, origin in sources.items() if origin == str(source))
+        """Return a package-local rule path after checking the real repository destination."""
+        destination = next(destination for destination, origin in result["links"].items() if origin == str(source))
+        prefix = self.request["config"] + "/"
+        self.assertTrue(destination.startswith(prefix), destination)
+        return destination[len(prefix) :]
 
     def _cc_imports(self, result):
         """Map each projected library label to its cc_import rule (name, fields)."""
         imports = {}
-        for name, (function, fields, _) in self._build_rules(result["files"]["BUILD.bazel"]).items():
-            if function == "cc_import":
+        for name, (kind, fields) in result["rules"].items():
+            if kind == "cc_import":
                 imports[fields.get("static_library", fields.get("interface_library"))] = (name, fields)
         return imports
 
@@ -720,9 +870,8 @@ class WindowsRepositoryPlanTest(unittest.TestCase):
 
     def test_headers_rule_preserves_queried_roots_defines_and_header_classification(self):
         result = self.plan()
-        rules = self._build_rules(result["files"]["BUILD.bazel"])
-        function, fields, _ = rules["headers"]
-        self.assertEqual(function, "cc_library")
+        kind, fields = result["rules"]["headers"]
+        self.assertEqual(kind, "cc_library")
         # Queried include roots stay compiler search paths, and mode macros
         # stay toolchain-owned while the SDK's own defines survive.
         self.assertEqual(fields["includes"], [f"sdk/{APPSDK_ID}/include", f"sdk/{CPPWINRT_ID}/include"])
@@ -732,14 +881,14 @@ class WindowsRepositoryPlanTest(unittest.TestCase):
         self.assertIn(f"sdk/{APPSDK_ID}/include/winappsdk.h", fields["hdrs"])
         self.assertIn(f"sdk/{CPPWINRT_ID}/include/winrt/winrt.h", fields["hdrs"])
         self.assertNotIn(f"sdk/{APPSDK_ID}/include/winappsdk.idl", fields["hdrs"])
-        self.assertIn(f"sdk/{APPSDK_ID}/include/winappsdk.idl", rules["tools"][1]["srcs"])
-        # The generated file never leaks absolute host paths.
-        self.assertNotIn(str(self.tmp), result["files"]["BUILD.bazel"])
+        self.assertIn(f"sdk/{APPSDK_ID}/include/winappsdk.idl", result["rules"]["tools"][1]["srcs"])
+        # The projected declarative surface never leaks absolute host paths.
+        self.assertNotIn(str(self.tmp), result["files"]["debug/sdk_data.bzl"])
 
     def test_bootstrap_links_its_initializer_and_queried_libraries_by_coff_role(self):
         result = self.plan()
-        function, fields, _ = self._build_rules(result["files"]["BUILD.bazel"])["bootstrap"]
-        self.assertEqual(function, "cc_library")
+        kind, fields = result["rules"]["bootstrap"]
+        self.assertEqual(kind, "cc_library")
         # The declared SDK autoinitializer stays the always-linked source and
         # the queried system libraries stay raw linker options.
         self.assertEqual(fields["srcs"], [self._destination_of(result, self.initializer)])
@@ -765,9 +914,9 @@ class WindowsRepositoryPlanTest(unittest.TestCase):
         never = _touch(self.package_a / "runtimes/win-x64/Skipped.dll")
         self.payload["Items"]["Content"].append({"FullPath": str(never), "CopyToOutputDirectory": "Never"})
         result = self.plan()
-        rules = self._build_rules(result["files"]["BUILD.bazel"])
-        self.assertEqual(rules["runtime"][0], "filegroup")
-        runtime = set(rules["runtime"][1]["srcs"])
+        kind, fields = result["rules"]["runtime"]
+        self.assertEqual(kind, "filegroup")
+        runtime = set(fields["srcs"])
         copied = (
             self.winmd,
             self.runtime_dll,
@@ -777,8 +926,7 @@ class WindowsRepositoryPlanTest(unittest.TestCase):
         )
         for source in copied:
             self.assertIn(self._destination_of(result, source), runtime)
-        sources = {link["destination"]: link["source"] for link in result["links"]}
-        self.assertNotIn(str(never), sources.values())
+        self.assertNotIn(str(never), result["links"].values())
         self.assertNotIn(f"sdk/{APPSDK_ID}/runtimes/win-x64/Skipped.dll", runtime)
 
     def test_projection_stays_sparse_around_the_selected_families(self):
@@ -802,7 +950,7 @@ class WindowsRepositoryPlanTest(unittest.TestCase):
         ]
         tool_bytes = _touch(self.package_b / "bin/x64/included.dll")  # selected tool-root bytes
         result = self.plan()
-        sources = {link["destination"]: link["source"] for link in result["links"]}
+        sources = result["links"]
         # One selected witness per family: the queried generation tools and
         # their directory bytes, the queried libraries and runtime payloads,
         # the Full-CLR MSBuild host with its locale payloads, the selected VC
@@ -837,15 +985,15 @@ class WindowsRepositoryPlanTest(unittest.TestCase):
         # The restored package archives themselves stay unprojected.
         for name, version in LOCKED:
             self.assertNotIn(str(self.packages_root / f"{name}.{version}" / f"{name}.nupkg"), sources.values())
-        for link in result["links"]:
-            self.assertFalse(Path(link["destination"]).is_absolute())
-            self.assertNotIn("..", link["destination"])
-            self.assertTrue(Path(link["source"]).is_absolute())
-            self.assertTrue(Path(link["source"]).is_file())
+        for destination, source in result["links"].items():
+            self.assertFalse(Path(destination).is_absolute())
+            self.assertNotIn("..", destination)
+            self.assertTrue(Path(source).is_absolute())
+            self.assertTrue(Path(source).is_file())
         # The selected tool witnesses reach the generation tool interface.
-        rules = self._build_rules(result["files"]["BUILD.bazel"])
-        self.assertEqual(rules["tools"][0], "filegroup")
-        tools = set(rules["tools"][1]["srcs"])
+        kind, fields = result["rules"]["tools"]
+        self.assertEqual(kind, "filegroup")
+        tools = set(fields["srcs"])
         for source in (
             self.xaml_compiler,
             self.cppwinrt_exe,
@@ -863,13 +1011,13 @@ class WindowsRepositoryPlanTest(unittest.TestCase):
         with native.capture_probes(observed.append):
             before = self.plan()
         self.assertLessEqual(set(optional), set(observed))
-        before_sources = {link["source"] for link in before["links"]}
+        before_sources = set(before["links"].values())
         for directory in optional:
             source = _touch(directory / "installed-later.h")
             self.assertNotIn(str(source), before_sources)
             after = self.plan()
             destination = self._destination_of(after, source)
-            self.assertIn(destination, self._build_rules(after["files"]["BUILD.bazel"])["tools"][1]["srcs"])
+            self.assertIn(destination, after["rules"]["tools"][1]["srcs"])
 
     @unittest.skipIf(os.name == "nt", "No Windows symlink privilege is required or requested")
     def test_vc_include_family_cannot_escape_the_selected_visual_studio(self):
@@ -914,10 +1062,17 @@ class WindowsRepositoryPlanTest(unittest.TestCase):
 
     def test_metadata_receipts_report_selection_isolation_and_guard(self):
         result = self.plan()
-        self.assertLessEqual({"BUILD.bazel", "sdk.json", "sdk-diagnostics.json"}, set(result["files"]))
-        for name in ("sdk.json", "sdk-diagnostics.json"):
-            self.assertIn(f'"{name}"', result["files"]["BUILD.bazel"])
-        metadata = json.loads(result["files"]["sdk.json"])
+        self.assertLessEqual(
+            {"debug/BUILD.bazel", "debug/sdk.json", "debug/sdk-diagnostics.json", "debug/sdk_data.bzl"},
+            set(result["files"]),
+        )
+        # The fixed BUILD loader wires the real macro to the projected data; the
+        # exported metadata names are declared by the macro, not the loader text.
+        build = result["files"]["debug/BUILD.bazel"]
+        self.assertIn('load("@aobus//bazel:winui_sdk.bzl", "winui_sdk_imports")', build)
+        self.assertIn('load(":sdk_data.bzl", "SDK")', build)
+        self.assertEqual(result["exports"], ["sdk.json", "sdk-diagnostics.json"])
+        metadata = json.loads(result["files"]["debug/sdk.json"])
         # The generator consumes this selected native toolchain and proof.
         self.assertEqual(metadata["msbuild"], str(self.msbuild))
         self.assertEqual(metadata["platform_toolset"], TOOLSET)
@@ -931,20 +1086,58 @@ class WindowsRepositoryPlanTest(unittest.TestCase):
         for excluded in ("TEMP", "TMP", "AOBUS_NUGET_PACKAGES_DIR", "AOBUS_SECRET_TOKEN"):
             self.assertNotIn(excluded, reported)
 
-    def test_diagnostic_only_query_change_leaves_execution_metadata_build_and_links_unchanged(self):
+    def test_admitted_facts_carry_no_bazel_program_or_destination_protocol(self):
+        # The native boundary returns admitted observations only: absolute
+        # source identities and provider-relative paths. The Bazel program,
+        # artifact links, and destination or alias naming belong entirely to
+        # the checked-in Starlark materialization.
+        facts = bazel_winui.resolve_sdk(self.tree, self.request, self.environment)
+        self.assertEqual(
+            set(facts),
+            {
+                "sdk_files",
+                "includes",
+                "defines",
+                "headers",
+                "sources",
+                "libraries",
+                "system_libraries",
+                "runtime",
+                "tools",
+                "native_inputs",
+                "execution",
+                "diagnostics",
+            },
+        )
+        for record in facts["sdk_files"]:
+            self.assertEqual(set(record), {"source", "package", "path"})
+            self.assertTrue(Path(record["source"]).is_absolute())
+        for record in facts["includes"]:
+            self.assertEqual(set(record), {"package", "path"})
+        for record in facts["libraries"]:
+            self.assertEqual(set(record), {"file", "kind"})
+        for family in ("headers", "sources", "runtime", "tools", "native_inputs"):
+            for source in facts[family]:
+                self.assertTrue(Path(source).is_absolute(), family)
+        serialized = json.dumps(facts)
+        for forbidden in ("BUILD.bazel", "sdk_data", "native-tools", "destination", '"links"', "alias"):
+            self.assertNotIn(forbidden, serialized)
+
+    def test_diagnostic_only_query_change_leaves_execution_metadata_projection_and_links_unchanged(self):
         before = self.plan()
-        before_diagnostics = json.loads(before["files"]["sdk-diagnostics.json"])
+        before_diagnostics = json.loads(before["files"]["debug/sdk-diagnostics.json"])
         self.assertEqual(before_diagnostics["properties"]["VCToolsInstallDir"], str(self.vc))
         # The query echoes this selected VC install, but the projection consumes
         # the compiler environment. A cosmetic trailing separator is diagnostic
         # only and must not reach the Bazel action input or generated interface.
         self.payload["Properties"]["VCToolsInstallDir"] = str(self.vc) + os.sep
         after = self.plan()
-        self.assertEqual(after["files"]["sdk.json"], before["files"]["sdk.json"])
-        self.assertEqual(after["files"]["BUILD.bazel"], before["files"]["BUILD.bazel"])
+        self.assertEqual(after["files"]["debug/sdk.json"], before["files"]["debug/sdk.json"])
+        self.assertEqual(after["files"]["debug/sdk_data.bzl"], before["files"]["debug/sdk_data.bzl"])
+        self.assertEqual(after["rules"], before["rules"])
         self.assertEqual(after["links"], before["links"])
-        self.assertNotEqual(after["files"]["sdk-diagnostics.json"], before["files"]["sdk-diagnostics.json"])
-        diagnostics = json.loads(after["files"]["sdk-diagnostics.json"])
+        self.assertNotEqual(after["files"]["debug/sdk-diagnostics.json"], before["files"]["debug/sdk-diagnostics.json"])
+        diagnostics = json.loads(after["files"]["debug/sdk-diagnostics.json"])
         self.assertEqual(diagnostics["properties"]["VCToolsInstallDir"], str(self.vc) + os.sep)
 
     def test_host_architecture_and_shell_runtime_inputs_survive_the_query_boundary(self):
@@ -963,13 +1156,13 @@ class WindowsRepositoryPlanTest(unittest.TestCase):
             }
         )
         result = self.plan()
-        reported = json.loads(result["files"]["sdk.json"])["environment"]
+        reported = json.loads(result["files"]["debug/sdk.json"])["environment"]
         for key in ("PROCESSOR_ARCHITECTURE", "PROCESSOR_ARCHITEW6432", "WINDIR", "COMSPEC"):
             self.assertEqual(reported[key], self.environment[key])
         self.assertNotIn("CL", reported)
         # An absent optional alias is never fabricated in the receipt.
         del self.environment["PROCESSOR_ARCHITEW6432"]
-        reported = json.loads(self.plan()["files"]["sdk.json"])["environment"]
+        reported = json.loads(self.plan()["files"]["debug/sdk.json"])["environment"]
         self.assertNotIn("PROCESSOR_ARCHITEW6432", reported)
         self.assertNotIn("CL", reported)
 
@@ -999,7 +1192,7 @@ class WindowsRepositoryPlanTest(unittest.TestCase):
                     bazel_winui.BazelWorkspaceError, "requires a restored NuGet cache: run `ao.bat bazel provision`"
                 ),
             ):
-                bazel_winui.repository_plan(self.tree, self.request, environment)
+                bazel_winui.resolve_sdk(self.tree, self.request, environment)
             self.assertFalse(self.tree.exists())
 
     def test_failed_query_records_output_and_fails_closed(self):
@@ -1105,19 +1298,19 @@ class WindowsRepositoryPlanTest(unittest.TestCase):
         exemplar = self.payload["Items"]["ClCompile"][0]
         exemplar["AdditionalIncludeDirectories"] += ";" + str(absent)
         result = self.plan()
-        diagnostics = json.loads(result["files"]["sdk-diagnostics.json"])
+        diagnostics = json.loads(result["files"]["debug/sdk-diagnostics.json"])
         self.assertIn(str(absent), diagnostics["includes"])
-        rules = self._build_rules(result["files"]["BUILD.bazel"])
-        self.assertIn(f"sdk/{APPSDK_ID}/include/winml/runtime", rules["headers"][1]["includes"])
-        sources = {link["destination"]: link["source"] for link in result["links"]}
-        self.assertFalse(any(destination.startswith(f"sdk/{APPSDK_ID}/include/winml/") for destination in sources))
+        self.assertIn(f"sdk/{APPSDK_ID}/include/winml/runtime", result["rules"]["headers"][1]["includes"])
+        sources = result["links"]
+        self.assertFalse(
+            any(destination.startswith(f"debug/sdk/{APPSDK_ID}/include/winml/") for destination in sources)
+        )
         header = _touch(absent / "WinmlFixture.h")
         result = self.plan()
-        sources = {link["destination"]: link["source"] for link in result["links"]}
-        self.assertEqual(sources[f"sdk/{APPSDK_ID}/include/winml/runtime/WinmlFixture.h"], str(header))
-        rules = self._build_rules(result["files"]["BUILD.bazel"])
-        self.assertIn(f"sdk/{APPSDK_ID}/include/winml/runtime/WinmlFixture.h", rules["headers"][1]["hdrs"])
-        self.assertIn(f"sdk/{APPSDK_ID}/include/winml/runtime/WinmlFixture.h", rules["tools"][1]["srcs"])
+        sources = result["links"]
+        self.assertEqual(sources[f"debug/sdk/{APPSDK_ID}/include/winml/runtime/WinmlFixture.h"], str(header))
+        self.assertIn(f"sdk/{APPSDK_ID}/include/winml/runtime/WinmlFixture.h", result["rules"]["headers"][1]["hdrs"])
+        self.assertIn(f"sdk/{APPSDK_ID}/include/winml/runtime/WinmlFixture.h", result["rules"]["tools"][1]["srcs"])
 
     def test_absent_include_roots_must_stay_inside_the_locked_providers(self):
         # An absent include root still resolves lexically; missing directories

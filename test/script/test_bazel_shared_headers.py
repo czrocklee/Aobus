@@ -168,7 +168,7 @@ class BazelSharedHeadersTest(unittest.TestCase):
         ctx = SimpleNamespace(path=str, symlink=lambda *args: None, file=lambda *args, **kwargs: None)
         with self.assertRaisesRegex(AssertionError, "generated target name collision"):
             namespace["materialize_imports"](
-                ctx, "", "release", fixture.resolution["packages"], fixture.resolution["manifest"]
+                ctx, "release", "release", fixture.resolution["packages"], fixture.resolution["manifest"]
             )
 
     def test_empty_or_out_of_root_package_cannot_produce_valid_observations(self):

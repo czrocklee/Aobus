@@ -486,7 +486,6 @@ class WindowsToolchainProjectionTest(unittest.TestCase):
                 {
                     "schema": 1,
                     "host": "windows",
-                    "config": "debug",
                     "prefix": str(prefix),
                     "compiler_environment": compiler_environment,
                 }
@@ -532,8 +531,8 @@ class WindowsToolchainProjectionTest(unittest.TestCase):
         self.assertEqual(status, 0, result.get("error"))
         identify.assert_called_once()
         identify.assert_called_with("windows", compiler_environment=self.environment)
-        self.assertEqual(result["files"], {})
-        self.assertEqual(result["links"], [])
+        self.assertNotIn("files", result)
+        self.assertNotIn("links", result)
         data = result["toolchain"]
         self.assertEqual(data["platform"], "windows")
         identity = data["identity"]

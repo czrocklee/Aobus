@@ -1,8 +1,9 @@
-"""Ready-only lint SDK selection and its generated Bazel consumer interfaces.
+"""Ready-only lint SDK selection and its projected Bazel consumer interfaces.
 
 Tool queries are the external I/O seam. Tiny native metadata and archive files
-exercise real selection, validation and generation; these are not linker or ABI
-acceptance tests and do not reconstruct the complete native SDK graph.
+exercise real selection, validation and the checked-in Starlark projection;
+these are not linker or ABI acceptance tests and do not reconstruct the complete
+native SDK graph.
 """
 
 import ast
@@ -13,7 +14,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from ao.core import bazel_lint_sdk as sdk
@@ -33,8 +35,102 @@ def _calls(source, name):
     ]
 
 
-def _fields(call):
-    return {entry.arg: ast.literal_eval(entry.value) for entry in call.keywords}
+def _starlark(path, names, functions):
+    """Execute selected declarations of a checked-in Starlark file."""
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    declarations = [
+        node
+        for node in tree.body
+        if (isinstance(node, ast.FunctionDef) and node.name in names)
+        or (
+            isinstance(node, ast.Assign)
+            and any(isinstance(target, ast.Name) and target.id in names for target in node.targets)
+        )
+    ]
+    scope = dict(functions)
+    exec(compile(ast.fix_missing_locations(ast.Module(body=declarations, type_ignores=[])), str(path), "exec"), scope)
+    return scope
+
+
+def _fail(message):
+    raise AssertionError(message)
+
+
+class _RepositoryPath(str):
+    def get_child(self, name):
+        return _RepositoryPath(self.rstrip("/\\") + "/" + name)
+
+
+class _Repository:
+    """Repository_ctx double that records the projected repository layout."""
+
+    def __init__(self):
+        self.symlinks = {}
+        self.files = {}
+
+    def path(self, value):
+        return _RepositoryPath(value)
+
+    def symlink(self, source, destination):
+        assert destination not in self.symlinks, destination
+        self.symlinks[destination] = str(source)
+
+    def file(self, path, content, executable=False):
+        self.files[path] = content
+
+
+class _Projection:
+    """The checked-in Starlark projection applied to admitted native facts."""
+
+    def __init__(self, facts):
+        root = Path(__file__).resolve().parents[2]
+        repository = _Repository()
+        rule = _starlark(
+            root / "bazel/lint/sdk.bzl",
+            {"_SDK_BUILD", "_basename", "_project_sdk"},
+            {
+                # Starlark's json.encode emits compact UTF-8 JSON, like the rule.
+                "json": SimpleNamespace(
+                    encode=lambda value: json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+                )
+            },
+        )
+        rule["_project_sdk"](repository, facts["host"], facts)
+        self.symlinks = repository.symlinks
+        self.files = repository.files
+        self.metadata = json.loads(self.files["metadata.json"])
+        self.data = ast.literal_eval(ast.parse(self.files["sdk_data.bzl"]).body[0].value)
+        self.flags = {
+            node.targets[0].id: ast.literal_eval(node.value) for node in ast.parse(self.files["flags.bzl"]).body
+        }
+        self.calls = []
+        self.exports = []
+        self.globs = []
+        imports = _starlark(
+            root / "bazel/lint/imports.bzl",
+            {"lint_sdk_imports"},
+            {
+                "cc_import": lambda **fields: self.calls.append(("cc_import", fields)),
+                "cc_library": lambda **fields: self.calls.append(("cc_library", fields)),
+                "native": SimpleNamespace(
+                    exports_files=lambda names: self.exports.extend(names),
+                    glob=self._glob,
+                    filegroup=lambda **fields: self.calls.append(("filegroup", fields)),
+                ),
+                "fail": _fail,
+            },
+        )
+        imports["lint_sdk_imports"](self.data)
+
+    def _glob(self, patterns):
+        self.globs.append(patterns)
+        if patterns == ["include/**"]:
+            return ["include/0/llvm/Config/llvm-config.h"]
+        assert patterns == ["resource/**"], patterns
+        return ["resource/include/stddef.h"]
+
+    def named(self, rule):
+        return [fields for name, fields in self.calls if name == rule]
 
 
 class WindowsReadySdkTest(unittest.TestCase):
@@ -91,7 +187,7 @@ ClangTidyMain.cpp.obj:
                 root / "bin/llvm-nm.exe",
             )
 
-    def test_required_module_anchors_generate_normal_archives_without_whole_linking(self):
+    def test_required_module_anchors_project_normal_archives_without_whole_linking(self):
         root = self.module_sdk()
         modules, _ = self.main_requirements(root)
         self.assertCountEqual(
@@ -116,19 +212,46 @@ ClangTidyMain.cpp.obj:
             copts=[],
             linkopts=["advapi32.lib"],
         )
-        plan = sdk.repository_plan(projection)
-        imports = {
-            Path(fields["static_library"]).name: fields
-            for call in _calls(plan["files"]["BUILD.bazel"], "cc_import")
-            if (fields := _fields(call))
-        }
-        self.assertIn("clangTidyReadabilityModule.lib", imports)
-        self.assertIn("clangTidyModernizeModule.lib", imports)
-        self.assertTrue(all("alwayslink" not in fields for fields in imports.values()))
-        metadata = json.loads(plan["files"]["metadata.json"])
-        self.assertEqual(metadata["sdk_root"], root.as_posix())
-        self.assertEqual(metadata["platform"], "windows")
-        self.assertEqual(metadata["host_kind"], "standalone")
+        projected = _Projection(sdk._projection_facts(projection))
+        self.assertEqual(
+            projected.symlinks,
+            {
+                "include/0": (root / "include").as_posix(),
+                "bin/clang-tidy.exe": (root / "bin/clang-tidy.exe").as_posix(),
+                "bin/clang-cl.exe": (root / "bin/clang-cl.exe").as_posix(),
+                "resource/include": (root / "lib/clang/31/include").as_posix(),
+                "lib/0/clangTidyMain.lib": (root / "lib/clangTidyMain.lib").as_posix(),
+                "lib/1/clangTidyModernizeModule.lib": (root / "lib/clangTidyModernizeModule.lib").as_posix(),
+                "lib/2/clangTidyReadabilityModule.lib": (root / "lib/clangTidyReadabilityModule.lib").as_posix(),
+                "lib/3/LLVMSupport.lib": (root / "lib/LLVMSupport.lib").as_posix(),
+            },
+        )
+        imports = projected.named("cc_import")
+        self.assertEqual(
+            [(fields["name"], fields["static_library"]) for fields in imports],
+            [
+                ("library_0", "lib/0/clangTidyMain.lib"),
+                ("library_1", "lib/1/clangTidyModernizeModule.lib"),
+                ("library_2", "lib/2/clangTidyReadabilityModule.lib"),
+                ("library_3", "lib/3/LLVMSupport.lib"),
+            ],
+        )
+        self.assertTrue(all("alwayslink" not in fields for _, fields in projected.calls))
+        (library,) = projected.named("cc_library")
+        self.assertEqual(library["name"], "sdk")
+        self.assertEqual(library["includes"], ["include/0"])
+        self.assertEqual(library["deps"], [":library_0", ":library_1", ":library_2", ":library_3"])
+        self.assertEqual(library["linkopts"], ["advapi32.lib"])
+        clang_tidy, tools = projected.named("filegroup")
+        self.assertEqual(clang_tidy["srcs"], ["bin/clang-tidy.exe"])
+        self.assertEqual(
+            tools["srcs"],
+            [":clang_tidy", "metadata.json", "resource/include/stddef.h", "bin/clang-cl.exe"],
+        )
+        self.assertEqual(projected.metadata["sdk_root"], root.as_posix())
+        self.assertEqual(projected.metadata["platform"], "windows")
+        self.assertEqual(projected.metadata["host_kind"], "standalone")
+        self.assertEqual(projected.flags, {"LINT_SDK_HOST": "windows", "LINT_SDK_COPTS": []})
 
     def test_missing_required_module_archive_is_not_silently_omitted(self):
         root = self.module_sdk()
@@ -338,10 +461,10 @@ class PosixSdkProjectionTest(unittest.TestCase):
                 host, self.environment, self.root / "unused-windows.json", self.root / "unused-macos.json"
             )
 
-    def test_split_native_outputs_supply_real_tidy_clang_and_llvm_link_inputs(self):
+    def test_split_native_outputs_project_real_tidy_clang_and_llvm_link_inputs(self):
         projection = self.discover()
-        plan = sdk.repository_plan(projection)
-        metadata = json.loads(plan["files"]["metadata.json"])
+        projected = _Projection(sdk._projection_facts(projection))
+        metadata = projected.metadata
         self.assertEqual(metadata["schema"], 1)
         self.assertEqual(metadata["platform"], "linux")
         self.assertEqual(metadata["sdk_root"], self.llvm_dev.as_posix())
@@ -357,19 +480,87 @@ class PosixSdkProjectionTest(unittest.TestCase):
         self.assertIn("-frtti", projection.copts)
         self.assertIn("-DNDEBUG", projection.copts)
         self.assertNotIn("-std=c++17", projection.copts)
-        build = plan["files"]["BUILD.bazel"]
-        imports = [_fields(call) for call in _calls(build, "cc_import")]
-        self.assertEqual(sum("static_library" in call for call in imports), 3)
-        self.assertEqual(sum("shared_library" in call for call in imports), 2)
-        self.assertTrue(all(not call.get("alwayslink") for call in imports))
-        self.assertNotIn(str(self.root), build)
-        self.assertIn('"-lpthread"', build)
-        declared = {item["destination"]: Path(item["source"]) for item in plan["links"]}
-        for call in imports:
-            self.assertIn(call.get("static_library", call.get("shared_library")), declared)
-        self.assertIn(self.tidy, declared.values())
-        self.assertIn(self.clang_cpp, declared.values())
+        imports = projected.named("cc_import")
+        self.assertEqual(
+            [fields.get("static_library", fields.get("shared_library")) for fields in imports],
+            [
+                "lib/0/libclangTidyReadabilityModule.a",
+                "lib/1/libclangTidyUtils.a",
+                "lib/2/libclangTidy.a",
+                "lib/3/libclang-cpp.so.31.2",
+                "lib/4/libLLVM.so.31.2",
+            ],
+        )
+        self.assertTrue(all("alwayslink" not in fields for _, fields in projected.calls))
+        (library,) = projected.named("cc_library")
+        self.assertEqual(library["name"], "sdk")
+        self.assertEqual(library["hdrs"], ["include/0/llvm/Config/llvm-config.h"])
+        self.assertEqual(library["includes"], ["include/0", "include/1"])
+        self.assertEqual(library["deps"], [":library_0", ":library_1", ":library_2", ":library_3", ":library_4"])
+        self.assertEqual(library["linkopts"], ["-lpthread"])
+        # Graph data stays repository-relative; metadata keeps the native paths.
+        for name in ("sdk_data.bzl", "BUILD.bazel"):
+            self.assertNotIn(str(self.root), projected.files[name])
+        self.assertEqual(projected.symlinks["bin/clang-tidy"], self.tidy.as_posix())
+        self.assertEqual(projected.symlinks["bin/clang++"], self.clangxx.as_posix())
+        self.assertEqual(projected.symlinks["lib/3/libclang-cpp.so.31.2"], self.clang_cpp.as_posix())
+        self.assertEqual(
+            projected.data["runtime"],
+            ["runtime/0/libclang-cpp.so.31.2", "runtime/1/libLLVM.so.31.2"],
+        )
+        for fields in imports:
+            self.assertIn(fields.get("static_library", fields.get("shared_library")), projected.symlinks)
         self.assertIn(self.llvm_header, projection.watch_files)
+        # The macro owns the exports and the package-local globs.
+        self.assertEqual(projected.exports, ["metadata.json", "flags.bzl"])
+        self.assertEqual(projected.globs, [["include/**"], ["resource/**"]])
+        build = projected.files["BUILD.bazel"]
+        self.assertIn('load("@aobus//bazel/lint:imports.bzl", "lint_sdk_imports")', build)
+        self.assertIn('load(":sdk_data.bzl", "SDK")', build)
+        # The loader passes only SDK data; the macro owns the graph policy.
+        (call,) = _calls(build, "lint_sdk_imports")
+        self.assertEqual(call.args[0].id, "SDK")
+        self.assertEqual(call.keywords, [])
+
+    def test_the_cli_payload_carries_flat_admitted_facts_only(self):
+        projection = self.discover()
+        facts = sdk._projection_facts(projection)
+        # No materialized links/files plan protocol rides along with the facts.
+        self.assertNotIn("links", facts)
+        self.assertNotIn("files", facts)
+        self.assertEqual(facts["host"], "linux")
+        self.assertEqual(facts["clang_tidy"], self.tidy.as_posix())
+        self.assertEqual(facts["libraries"], [path.as_posix() for path in projection.libraries])
+
+    def test_native_names_with_spaces_and_non_ascii_keep_their_identity(self):
+        projection = self.discover()
+        exotic = _write(self.root / "LLVM SDK ünïcode/lib/libclang-cpp.so.31 2")
+        # A literal backslash is a legal POSIX file name. Keep the case purely
+        # lexical: a real fixture would create a directory on NT instead.
+        backslash = PurePosixPath(self.root.as_posix() + "/store/lib/libOdd\\Name.so")
+        projection.libraries = [exotic, backslash]
+        projection.runtime = [exotic]
+        projected = _Projection(sdk._projection_facts(projection))
+        self.assertEqual(
+            projected.symlinks,
+            {
+                "include/0": (self.llvm_dev / "include").as_posix(),
+                "include/1": (self.clang_dev / "include").as_posix(),
+                "bin/clang-tidy": self.tidy.as_posix(),
+                "bin/clang++": self.clangxx.as_posix(),
+                "resource/include": (self.resource_dir / "include").as_posix(),
+                "lib/0/libclang-cpp.so.31 2": exotic.as_posix(),
+                "lib/1/libOdd\\Name.so": backslash.as_posix(),
+                "runtime/0/libclang-cpp.so.31 2": exotic.as_posix(),
+            },
+        )
+        self.assertEqual(
+            projected.data["libraries"],
+            ["lib/0/libclang-cpp.so.31 2", "lib/1/libOdd\\Name.so"],
+        )
+        self.assertEqual(projected.metadata["libraries"], [exotic.as_posix(), backslash.as_posix()])
+        imports = projected.named("cc_import")
+        self.assertEqual([fields["shared_library"] for fields in imports], projected.data["libraries"])
 
     def test_explicit_clang_roots_override_ambient_split_output_candidates(self):
         self.environment["AOBUS_LINT_CLANG_ROOTS"] = json.dumps([str(self.clang_dev), str(self.clang_lib)])
@@ -435,6 +626,19 @@ class CheckerOwnershipTest(unittest.TestCase):
 
 
 class RepositoryHelperTest(unittest.TestCase):
+    def test_the_lint_package_exports_the_graph_declaration_loaded_by_the_repository(self):
+        root = Path(__file__).resolve().parents[2]
+        build = ast.parse((root / "bazel/lint/BUILD.bazel").read_text(encoding="utf-8"))
+        exported = [
+            element.value
+            for call in ast.walk(build)
+            if isinstance(call, ast.Call) and isinstance(call.func, ast.Name) and call.func.id == "exports_files"
+            for element in call.args[0].elts
+        ]
+        # The generated repository loads the declaration from "@aobus//bazel/lint".
+        self.assertIn("imports.bzl", exported)
+        self.assertTrue((root / "bazel/lint/imports.bzl").is_file())
+
     def test_repository_rule_watches_the_helper_import_closure(self):
         root = Path(__file__).resolve().parents[2]
         rule = (root / "bazel/lint/sdk.bzl").read_text(encoding="utf-8")

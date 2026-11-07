@@ -344,6 +344,7 @@ class MaterializeImportsTest(_StarlarkHarness):
     def test_projection_fails_closed_on_unsupported_configuration_or_subpackage(self):
         for subpackage, config, message in (
             ("debug", "fastbuild", "unsupported SDK configuration: fastbuild"),
+            ("", "debug", "unsupported SDK subpackage:"),
             ("profile", "debug", "unsupported SDK subpackage: profile"),
         ):
             with self.subTest(config=config, subpackage=subpackage):
@@ -352,6 +353,7 @@ class MaterializeImportsTest(_StarlarkHarness):
                 with self.assertRaisesRegex(_StarlarkFailure, message):
                     self.materialize_imports(self.context(), subpackage, config, [], self.manifest())
                 self.assertEqual(self.files, {})
+                self.assertEqual(self.links, {})
 
     def test_projection_fails_closed_on_traversal_absolute_and_colliding_paths(self):
         headers = [self.tree(0, "/provider/include", "a.h")]

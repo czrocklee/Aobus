@@ -706,7 +706,7 @@ class CatalogToolsRepositoryTest(unittest.TestCase):
             root.mkdir(parents=True)
             (root / "CMakeLists.txt").write_text("project(aobus VERSION 4.5.6)\n")
             request = root / "request.json"
-            native.write_json(request, {"schema": 1, "host": "linux", "config": "debug"})
+            native.write_json(request, {"schema": 1, "host": "linux"})
             executable = root / "provider/bin/gperf"
             executable.parent.mkdir(parents=True)
             executable.write_bytes(b"SDK fixture")
@@ -801,14 +801,14 @@ class CatalogToolsRepositoryTest(unittest.TestCase):
             self.assertEqual({call.args[1] for call in refresh.call_args_list}, {"debug", "release"})
             plan = native.read_json(output / "repository.json")
             for config in ("debug", "release"):
-                admitted = plan["imports"]["catalog-" + config]
-                self.assertEqual(admitted["config"], config)
+                admitted = plan["imports"][config]
+                self.assertNotIn("config", admitted)
                 self.assertEqual(
                     admitted["packages"][0]["headers"][0]["files"], [{"source": str(sdk), "path": sdk.name}]
                 )
                 self.assertEqual(admitted["manifest"]["configuration"]["config"], config.title())
-            self.assertEqual(plan["links"], [])
-            self.assertEqual(plan["files"], {})
+            self.assertNotIn("links", plan)
+            self.assertNotIn("files", plan)
             self.assertIn(str(root / "debug-status"), plan["watch_files"])
             self.assertIn(str(root / "release-pc"), plan["watch_directories"])
             facts = plan["host_tools"]

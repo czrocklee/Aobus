@@ -299,9 +299,12 @@ subpackages, and checked-in Starlark aliases select each consumer's compilation
 mode. Target and execution configurations are separate; execution tools can use
 optimized interfaces beside Debug targets. The root rc
 now defaults bare commands to `dbg`; `--config=release` selects `opt`, and explicit
-`fastbuild` fails closed. Portal preparation is mode-neutral, while old
-single-mode requests remain supported. WinUI stays lazy and may discover an
-existing governed ready NuGet cache when no explicit root was selected.
+`fastbuild` fails closed. Portal preparation is mode-neutral. This checkpoint
+retained a direct-resolver single-mode compatibility branch; the shared
+environment did not forward that selector. The subsequent cleanup removes the
+unused branch; current [repository requests](bazel.md#architecture) are
+mode-neutral and Starlark owns all SDK package placement. WinUI stays lazy and may
+discover an existing governed ready NuGet cache when no explicit root was selected.
 
 Two review findings were fixed: Windows request/interpreter selectors are
 case-insensitive, and all environment-helper launch paths use isolated Python

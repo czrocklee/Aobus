@@ -62,7 +62,7 @@ def _basename(value):
     return _relative_path(value.replace("\\", "/").split("/")[-1])
 
 def _project_file(ctx, subpackage, path, source, role, projected, windows):
-    destination = (subpackage + "/" if subpackage else "") + path
+    destination = subpackage + "/" + path
     key = destination.lower() if windows else destination
     identity = source.replace("\\", "/").lower() if windows else source
     previous = projected.get(key)
@@ -85,7 +85,7 @@ def materialize_imports(ctx, subpackage, config, packages, manifest):
     """
     if config not in ["debug", "release"]:
         fail("unsupported SDK configuration: %s" % config)
-    if subpackage not in ["", "debug", "release", "catalog-debug", "catalog-release"]:
+    if subpackage not in ["debug", "release", "catalog-debug", "catalog-release"]:
         fail("unsupported SDK subpackage: %s" % subpackage)
     windows = manifest["configuration"]["platform"] == "windows"
     projected = {}
@@ -146,7 +146,7 @@ def materialize_imports(ctx, subpackage, config, packages, manifest):
             "runtime_extra": runtime_extra,
         })
     targets = import_targets(result)
-    prefix = subpackage + "/" if subpackage else ""
+    prefix = subpackage + "/"
     ctx.file(prefix + "sdk_data.bzl", "CONFIG = %s\nPACKAGES = %s\n" % (repr(config), repr(result)), executable = False)
     ctx.file(prefix + "manifest.json", json.encode(dict(manifest, targets = targets)) + "\n", executable = False)
     ctx.file(prefix + "BUILD.bazel", _IMPORT_BUILD, executable = False)

@@ -1857,7 +1857,7 @@ class BazelWorkspaceTests(unittest.TestCase):
 
     def resolve_gperf(self, executable, runtime, evidence):
         request = self.root / "request.json"
-        self.write_json(request, {"schema": 1, "host": "linux", "config": "debug"})
+        self.write_json(request, {"schema": 1, "host": "linux"})
         output = self.root / "repository/_resolution"
         fixtures = self.root / "tool-inputs"
         for name in (
@@ -1980,14 +1980,14 @@ class BazelWorkspaceTests(unittest.TestCase):
         self.assertEqual(facts["gperf"]["runtime"], [str(runtime)])
         self.assertEqual(facts["gperf"]["evidence"], [str(report)])
         self.assertEqual(facts["gperf"]["identity"], {"version": "3.3"})
-        self.assertEqual(plan["links"], [])
-        self.assertEqual(plan["files"], {})
+        self.assertNotIn("links", plan)
+        self.assertNotIn("files", plan)
         self.assertLessEqual({str(executable), str(runtime), str(report)}, set(plan["watch_files"]))
         self.assertIn(str(executable.parent), plan["watch_directories"])
         fixtures = self.root / "tool-inputs"
         for config in ("debug", "release"):
-            admitted = plan["imports"]["catalog-" + config]
-            self.assertEqual(admitted["config"], config)
+            admitted = plan["imports"][config]
+            self.assertNotIn("config", admitted)
             self.assertEqual(admitted["packages"][0]["libraries"][0]["source"], str(fixtures / config / "libicuuc.a"))
             self.assertIn(str(fixtures / config / "status"), plan["watch_files"])
             self.assertIn(str(fixtures / config / "pkgconfig"), plan["watch_directories"])
@@ -2017,8 +2017,8 @@ class BazelWorkspaceTests(unittest.TestCase):
         self.assertEqual(status, 0, plan.get("error"))
         self.assertEqual(plan["host_tools"]["gperf"]["executable"], str(executable))
         self.assertEqual(plan["host_tools"]["gperf"]["runtime"], [])
-        self.assertEqual(plan["links"], [])
-        self.assertEqual(plan["files"], {})
+        self.assertNotIn("links", plan)
+        self.assertNotIn("files", plan)
         self.assertNotIn(str(runtime), plan["watch_files"])
 
     @unittest.skipIf(os.name == "nt", "POSIX executable fixture; native Windows tools need native validation")

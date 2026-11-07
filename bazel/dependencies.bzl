@@ -4,6 +4,7 @@ load("//bazel:environment.bzl", "ENVIRONMENT_ATTRIBUTE", "environment_repository
 load("//bazel:import_repository.bzl", "materialize_aliases", "materialize_imports")
 load("//bazel:host_tools_repository.bzl", "materialize_host_tools")
 load("//bazel:toolchain_repository.bzl", "materialize_toolchain")
+load("//bazel:winui_repository.bzl", "materialize_winui")
 
 def _watch_path(ctx, path):
     value = str(path)
@@ -81,36 +82,34 @@ def _governed_repository_impl(ctx):
             ctx.watch(directory)
     if result.return_code or "error" in resolved:
         fail("Governed dependency resolution failed: %s\n%s\n%s" % (resolved.get("error", result.stdout), resolved.get("traceback", ""), result.stderr))
-    for item in resolved["links"]:
-        destination = item["destination"]
-        if destination.startswith("/") or ".." in destination.split("/"):
-            fail("Invalid artifact destination: %s" % destination)
-        # Native symlinks on POSIX; Bazel owns Windows file-copy fallback and
-        # watches its sources. No privilege grant or whole-provider junction.
-        ctx.symlink(ctx.path(item["source"]), destination)
-    for name, content in resolved["files"].items():
-        ctx.file(name, content, executable = False)
     interfaces = {}
-    for subpackage, projection in resolved.get("imports", {}).items():
-        interfaces[subpackage] = materialize_imports(
-            ctx,
-            subpackage,
-            projection["config"],
-            projection["packages"],
-            projection["manifest"],
-        )
+    if ctx.attr.group in ["native", "test", "tools"]:
+        imports = resolved.get("imports", {})
+        if sorted(imports.keys()) != ["debug", "release"]:
+            fail("Dependency imports require Debug and Release observations")
+        for config, projection in imports.items():
+            subpackage = "catalog-" + config if ctx.attr.group == "tools" else config
+            interfaces[subpackage] = materialize_imports(
+                ctx,
+                subpackage,
+                config,
+                projection["packages"],
+                projection["manifest"],
+            )
+    if ctx.attr.group == "winui":
+        observed = resolved.get("winui", {})
+        if sorted(observed.keys()) != ["debug", "release"]:
+            fail("WinUI SDK requires Debug and Release observations")
+        for config, facts in observed.items():
+            interfaces[config] = materialize_winui(ctx, config, facts)
     if "host_tools" in resolved:
         materialize_host_tools(ctx, resolved["host_tools"])
     if "toolchain" in resolved:
         materialize_toolchain(ctx, resolved["toolchain"])
-    if ctx.attr.group in ["native", "test"] and "" not in interfaces:
-        if sorted(interfaces.keys()) != ["debug", "release"]:
-            fail("Configured SDK imports require Debug and Release interfaces")
+    if ctx.attr.group in ["native", "test", "winui"]:
         if interfaces["debug"] != interfaces["release"]:
             fail("Debug and Release SDKs expose different consumer interfaces")
         materialize_aliases(ctx, interfaces["debug"])
-    elif "aliases" in resolved:
-        materialize_aliases(ctx, resolved["aliases"])
 
 _governed_repository = repository_rule(
     implementation = _governed_repository_impl,

@@ -513,84 +513,30 @@ def discover_sdk(
     )
 
 
-def repository_plan(sdk: LintSdkProjection) -> dict[str, Any]:
-    """Emit real Bazel Files and a bounded CcInfo, not absolute archive flags."""
-    links: dict[str, Path] = {}
-    include_names = []
-    for index, include in enumerate(sdk.includes):
-        destination = f"include/{index}"
-        links[destination] = include
-        include_names.append(destination)
-    links["bin/clang-tidy" + (".exe" if sdk.host == "windows" else "")] = sdk.clang_tidy
-    compiler_file = "bin/clang-cl.exe" if sdk.host == "windows" else "bin/clang++"
-    links[compiler_file] = sdk.clang
-    links["resource/include"] = sdk.resource_dir / "include"
-    imports, dependencies = [], []
-    for index, library in enumerate(sdk.libraries):
-        destination = f"lib/{index}/{library.name}"
-        links[destination] = library
-        name = f"library_{index}"
-        role = "static_library" if library.suffix in (".a", ".lib") else "shared_library"
-        imports.append(f'cc_import(name = "{name}", {role} = {json.dumps(destination)})')
-        dependencies.append(":" + name)
-    runtime_names = []
-    for index, library in enumerate(sdk.runtime):
-        destination = f"runtime/{index}/{library.name}"
-        links[destination] = library
-        runtime_names.append(destination)
-    metadata = {
-        "schema": 1,
-        "platform": sdk.host,
+def _projection_facts(sdk: LintSdkProjection) -> dict[str, Any]:
+    """Serialize only admitted native facts; the repository rule owns the graph.
+
+    Standalone paths use pathlib's portable posix wire form: POSIX names keep
+    literal backslashes, Windows canonicalizes to forward separators. Embedded
+    SDK argument arrays stay verbatim.
+    """
+    return {
+        "host": sdk.host,
         "version": sdk.version,
         "sdk_root": sdk.sdk_root.as_posix(),
         "clang": sdk.clang.as_posix(),
+        "clang_tidy": sdk.clang_tidy.as_posix(),
         "resource_dir": sdk.resource_dir.as_posix(),
-        "host_kind": "standalone" if sdk.host == "windows" else "plugin",
+        "includes": [path.as_posix() for path in sdk.includes],
+        "libraries": [path.as_posix() for path in sdk.libraries],
+        "runtime": [path.as_posix() for path in sdk.runtime],
+        "copts": sdk.copts,
+        "linkopts": sdk.linkopts,
         "system_arguments": sdk.system_arguments,
         "analysis_arguments": sdk.analysis_arguments,
         "fixture_arguments": sdk.fixture_arguments,
-        "includes": [path.as_posix() for path in sdk.includes],
-        "libraries": [path.as_posix() for path in sdk.libraries],
-        "copts": sdk.copts,
-        "linkopts": sdk.linkopts,
-    }
-    host_file = "bin/clang-tidy" + (".exe" if sdk.host == "windows" else "")
-    build = (
-        "\n".join(
-            [
-                'load("@rules_cc//cc:cc_import.bzl", "cc_import")',
-                'load("@rules_cc//cc:cc_library.bzl", "cc_library")',
-                'package(default_visibility = ["//visibility:public"])',
-                'exports_files(["metadata.json", "flags.bzl"])',
-                *imports,
-                'cc_library(name = "sdk", hdrs = glob(["include/**"]), includes = '
-                + json.dumps(include_names)
-                + ", deps = "
-                + json.dumps(dependencies)
-                + ", linkopts = "
-                + json.dumps(sdk.linkopts, ensure_ascii=False)
-                + ")",
-                'filegroup(name = "clang_tidy", srcs = ' + json.dumps([host_file]) + ")",
-                'filegroup(name = "tools", srcs = [":clang_tidy", "metadata.json"] + glob(["resource/**"]) + '
-                + json.dumps([compiler_file, *runtime_names])
-                + ")",
-            ]
-        )
-        + "\n"
-    )
-    return {
-        "links": [{"source": str(source), "destination": destination} for destination, source in links.items()],
-        "files": {
-            "BUILD.bazel": build,
-            "metadata.json": json.dumps(metadata, indent=2, ensure_ascii=False) + "\n",
-            "flags.bzl": "LINT_SDK_HOST = "
-            + json.dumps(sdk.host)
-            + "\nLINT_SDK_COPTS = "
-            + json.dumps(sdk.copts, ensure_ascii=False)
-            + "\n",
-        },
-        "watch_files": [str(path) for path in sdk.watch_files],
-        "watch_directories": [str(path) for path in sdk.watch_directories],
+        "watch_files": [path.as_posix() for path in sdk.watch_files],
+        "watch_directories": [path.as_posix() for path in sdk.watch_directories],
     }
 
 
@@ -608,8 +554,8 @@ def main() -> int:
             not isinstance(key, str) or not isinstance(value, str) for key, value in environment.items()
         ):
             raise LintSdkError("Expected explicit native environment strings")
-        plan = repository_plan(discover_sdk(args.host, environment, args.windows_manifest, args.macos_contract))
-        args.output.write_text(json.dumps(plan, ensure_ascii=False) + "\n", encoding="utf-8")
+        facts = _projection_facts(discover_sdk(args.host, environment, args.windows_manifest, args.macos_contract))
+        args.output.write_text(json.dumps(facts, ensure_ascii=False) + "\n", encoding="utf-8")
         return 0
     except (LintSdkError, OSError, ValueError) as error:
         print(f"Cannot import existing lint LLVM SDK: {error}", file=sys.stderr)

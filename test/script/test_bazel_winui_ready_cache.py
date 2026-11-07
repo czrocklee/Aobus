@@ -27,7 +27,7 @@ class ReadyWinUiCacheTest(unittest.TestCase):
                 # Observe admission into the existing SDK verifier, not a fake
                 # complete Windows provider or native MSBuild acceptance.
                 with self.assertRaises(SelectedPackages):
-                    bazel_winui.repository_plan(root / "output", {"host": "windows"}, environment)
+                    bazel_winui.resolve_sdk(root / "output", {"host": "windows"}, environment)
                 ready.assert_called_once_with(environment)
                 selected.assert_called_once_with(packages)
 
@@ -36,7 +36,7 @@ class ReadyWinUiCacheTest(unittest.TestCase):
             root = Path(temporary)
             with mock.patch.object(bazel_provision, "restored_nuget_packages") as ready:
                 with self.assertRaisesRegex(native.BazelWorkspaceError, "restored NuGet cache"):
-                    bazel_winui.repository_plan(
+                    bazel_winui.resolve_sdk(
                         root / "output", {"host": "windows"}, {"AOBUS_NUGET_PACKAGES_DIR": str(root / "missing")}
                     )
                 ready.assert_not_called()
@@ -45,5 +45,5 @@ class ReadyWinUiCacheTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="aobus-no-winui-") as temporary:
             with mock.patch.object(bazel_provision, "restored_nuget_packages") as ready:
                 for host in ("linux", "macos"):
-                    bazel_winui.repository_plan(Path(temporary) / host, {"host": host}, {})
+                    self.assertIsNone(bazel_winui.resolve_sdk(Path(temporary) / host, {"host": host}, {}))
                 ready.assert_not_called()

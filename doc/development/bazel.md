@@ -497,24 +497,36 @@ input contract:
   installed tool/include interfaces, raw host/Nix metadata and the existing
   aggregate SDK identity. They do not return Bazel labels, CPU constraints,
   projection destinations or per-mode action environments.
+- [WinUI SDK admission](../../script/ao/core/bazel_winui.py) validates the installed
+  NuGet/MSBuild interface, native tool closure and COFF roles; it reports provider
+  membership and files, not Bazel destinations or declarations.
+- [Lint SDK admission](../../script/ao/core/bazel_lint_sdk.py) validates the ready
+  LLVM tools, archive closure and ABI interface, independently of product SDK imports.
 - The [launcher](../../script/ao/core/bazel_workspace.py) owns managed Bazel,
   launch/output/cache selection, argument forwarding, terminal inheritance and logs.
 
-Library, host-tool and compiler probes return data directly, without temporary
-BUILD/native-path programs for the resolver to reread. The
+Native observers return data directly, without temporary BUILD/native-path
+programs for the resolver to reread. The
 [library projection](../../bazel/import_repository.bzl),
-[host-tool projection](../../bazel/host_tools_repository.bzl) and
-[compiler projection](../../bazel/toolchain_repository.bzl) materialize sparse
-artifacts, data-only values and fixed BUILD entrypoints. The compiler projection
-owns tool labels, collision checks and native-machine-to-Bazel CPU constraints. Checked-in
+[host-tool projection](../../bazel/host_tools_repository.bzl),
+[compiler projection](../../bazel/toolchain_repository.bzl) and
+[WinUI projection](../../bazel/winui_repository.bzl) materialize selected artifacts,
+data-only values and fixed BUILD entrypoints. The compiler projection owns tool
+labels, collision checks and native-machine-to-Bazel CPU constraints. Checked-in
 [import declarations](../../bazel/imports.bzl),
-[host-tool declarations](../../bazel/host_tools.bzl) and existing compiler
-macros own the graph. Declaration-only edits do not load back into native
-provider discovery. WinUI's configured root aliases share the import selection;
-its independent, lazy [platform SDK projection](../../script/ao/core/bazel_winui.py)
-retains its existing generation path.
+[host-tool declarations](../../bazel/host_tools.bzl),
+[WinUI declarations](../../bazel/winui_sdk.bzl) and compiler macros own the graph.
+Declaration-only edits do not load back into native provider discovery.
+Repository requests are mode-neutral: the resolver reports Debug and Release
+observations keyed by configuration, not by Bazel package paths. Starlark owns
+native/test subpackages, the catalog SDK's package layout and root mode aliases;
+it requires both configurations before materialization. Fixed single-mode root
+SDK repositories are not supported. Per-variant native queries still receive
+their own Debug or Release configuration.
+WinUI remains independent and lazy, using the same Starlark mode selection.
+The resolver returns no generated-file, destination-link or alias program.
 
-Python never installs/builds dependencies. Bazel owns materialization,
+Native discovery never installs/builds dependencies. Bazel owns materialization,
 watched-input invalidation and repository failure handling; the launcher does
 not stage and compare whole Python-owned artifact trees.
 
@@ -1100,9 +1112,12 @@ product sanitizer instrumentation from compilation and linking. Windows builds
 the linked `AobusClangTidy` host optimized with `/MT`, independently of product
 `/MDd` or `/MD`. Plugin/host ABI and sanitizer compatibility must be preserved;
 macOS SDK C include ordering stays driver-owned. Registry objects and required upstream modules must survive linking. The
-[SDK projection](../../script/ao/core/bazel_lint_sdk.py) derives the Windows
+[SDK admission](../../script/ao/core/bazel_lint_sdk.py) derives the Windows
 initializer closure from selected archive references rather than linking all
-LLVM. Required system libraries, including DIA when enabled by the SDK, remain
+LLVM. The [repository projection](../../bazel/lint/sdk.bzl) and checked-in
+[import declarations](../../bazel/lint/imports.bzl) own SDK file destinations,
+metadata/flag exports and the `cc_import`/`CcInfo` graph; Python returns native
+file and ABI observations, not BUILD source. Required system libraries, including DIA when enabled by the SDK, remain
 part of that closure; a required library must exist. XML omission is allowed
 only when the selected archives have no corresponding references.
 

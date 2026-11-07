@@ -168,79 +168,10 @@ def _provider_path(
     raise BazelWorkspaceError(f"WinUI SDK interface points outside its locked NuGet providers: {path}")
 
 
-def _projected(path: Path, packages: list[tuple[str, str, Path]], *, allow_missing: bool = False) -> str:
-    name, relative = _provider_path(path, packages, allow_missing=allow_missing)
-    return (Path("sdk") / name / relative).as_posix()
-
-
-def _render_repository(
-    defines: list[str],
-    includes: list[str],
-    headers: list[str],
-    sources: list[str],
-    libraries: list[dict[str, str]],
-    systems: list[str],
-    runtime: list[str],
-    tools: list[str],
-) -> str:
-    def quote(value: object) -> str:
-        return json.dumps(value, ensure_ascii=False)
-
-    return (
-        'load("@rules_cc//cc:defs.bzl", "cc_import", "cc_library")\n'
-        'package(default_visibility = ["//visibility:public"])\n'
-        'exports_files(["sdk.json", "sdk-diagnostics.json"])\n'
-        + 'cc_library(name = "headers", hdrs = '
-        + quote(headers)
-        + ", includes = "
-        + quote(includes)
-        + ", defines = "
-        + quote(defines)
-        + ")\n"
-        + "\n".join(
-            'cc_import(name = "library_'
-            + str(index)
-            + '", '
-            + ("interface_library" if library["kind"] == "interface" else "static_library")
-            + " = "
-            + quote(library["file"])
-            + (", system_provided = True" if library["kind"] == "interface" else "")
-            + ")"
-            for index, library in enumerate(libraries)
-        )
-        + '\ncc_library(name = "bootstrap", srcs = '
-        + quote(sources)
-        + ', alwayslink = True, deps = [":headers"] + '
-        + quote([":library_" + str(index) for index in range(len(libraries))])
-        + ", linkopts = "
-        + quote(systems)
-        + ")\n"
-        + 'filegroup(name = "runtime", srcs = '
-        + quote(runtime)
-        + ")\n"
-        + 'filegroup(name = "tools", srcs = '
-        + quote(tools)
-        + ")\n"
-    )
-
-
-def repository_plan(tree: Path, request: dict[str, Any], environment: Mapping[str, str]) -> dict[str, Any]:
-    """Return a watched repository plan; Windows SDK evaluation is lazy and local."""
+def resolve_sdk(tree: Path, request: dict[str, Any], environment: Mapping[str, str]) -> dict[str, Any] | None:
+    """Admit native SDK observations; no Bazel program or destination names."""
     if request["host"] != "windows":
-        return {
-            "links": [],
-            "files": {
-                "BUILD.bazel": (
-                    'load("@rules_cc//cc:defs.bzl", "cc_library")\n'
-                    'package(default_visibility = ["//visibility:public"])\n'
-                    'cc_library(name = "headers")\ncc_library(name = "bootstrap")\n'
-                    'filegroup(name = "runtime")\nfilegroup(name = "tools")\n'
-                    'exports_files(["sdk.json", "sdk-diagnostics.json"])\n'
-                ),
-                "sdk.json": "{}\n",
-                "sdk-diagnostics.json": "{}\n",
-            },
-        }
+        return None
     lookup = {key.upper(): value for key, value in environment.items()}
     selected = lookup.get("AOBUS_NUGET_PACKAGES_DIR", "")
     if not selected:
@@ -419,14 +350,13 @@ def repository_plan(tree: Path, request: dict[str, Any], environment: Mapping[st
     runtime = list(dict.fromkeys(runtime))
     if len({path.name.casefold() for path in runtime}) != len(runtime):
         raise BazelWorkspaceError("WinUI SDK runtime copy destinations are ambiguous")
-    projected: dict[str, Path] = {}
+    files: dict[str, dict[str, str]] = {}
 
     def add(path: Path) -> str:
-        destination = _projected(path, packages)
-        previous = projected.setdefault(destination, path.resolve(strict=True))
-        if previous != path.resolve(strict=True):
-            raise BazelWorkspaceError(f"WinUI SDK projection collision: {destination}")
-        return destination
+        source = str(path.resolve(strict=True))
+        package, relative = _provider_path(path, packages)
+        files[source] = {"source": source, "package": package, "path": relative.as_posix()}
+        return source
 
     if properties.get("MSBuildRuntimeType") != "Full":
         raise BazelWorkspaceError("WinUI generation requires its observed native Full-CLR MSBuild task host")
@@ -483,11 +413,11 @@ def repository_plan(tree: Path, request: dict[str, Any], environment: Mapping[st
                 if header and suffix != ".idl":
                     headers.append(destination)
                 tools.append(destination)
-    source_labels = [add(path) for path in sdk_sources]
-    tools.extend(source_labels)
+    source_files = [add(path) for path in sdk_sources]
+    tools.extend(source_files)
     library_kinds = [dependencies.coff_archive_kind(path, path.name, request["config"]) for path in libraries]
-    library_labels = [{"file": add(path), "kind": kind} for path, kind in zip(libraries, library_kinds, strict=True)]
-    runtime_labels = [add(path) for path in runtime]
+    library_files = [{"file": add(path), "kind": kind} for path, kind in zip(libraries, library_kinds, strict=True)]
+    runtime_files = [add(path) for path in runtime]
     # Bound the native input families to the selected VC target/architecture,
     # MIDL's VC preprocessor/runtime/includes, MSBuild host runtime and SDK
     # metadata/includes. Do not mirror all of
@@ -564,11 +494,6 @@ def repository_plan(tree: Path, request: dict[str, Any], environment: Mapping[st
                 for dependency in sorted(path.parent.iterdir())
                 if dependency.is_file() and dependency.suffix.lower() in runtime_suffixes
             )
-    links = [{"source": str(path), "destination": destination} for destination, path in sorted(projected.items())]
-    for index, path in enumerate(dict.fromkeys(native_inputs)):
-        destination = f"native-tools/{index}/{path.name}"
-        links.append({"source": str(path.resolve(strict=True)), "destination": destination})
-        tools.append(destination)
     execution = {
         "props": [str(path) for path in props],
         "targets": [str(path) for path in targets],
@@ -590,20 +515,21 @@ def repository_plan(tree: Path, request: dict[str, Any], environment: Mapping[st
         "runtime": [str(path) for path in runtime],
         "properties": query["Properties"],
     }
+    include_roots = []
+    for path in includes:
+        package_name, relative = _provider_path(path, packages, allow_missing=True)
+        include_roots.append({"package": package_name, "path": relative.as_posix()})
     return {
-        "links": links,
-        "files": {
-            "sdk.json": json.dumps(execution, indent=2, ensure_ascii=False) + "\n",
-            "sdk-diagnostics.json": json.dumps(diagnostics, indent=2, ensure_ascii=False) + "\n",
-            "BUILD.bazel": _render_repository(
-                definitions,
-                [_projected(path, packages, allow_missing=True) for path in includes],
-                headers,
-                source_labels,
-                library_labels,
-                systems,
-                runtime_labels,
-                tools,
-            ),
-        },
+        "sdk_files": list(files.values()),
+        "includes": include_roots,
+        "defines": definitions,
+        "headers": headers,
+        "sources": source_files,
+        "libraries": library_files,
+        "system_libraries": systems,
+        "runtime": runtime_files,
+        "tools": tools,
+        "native_inputs": [str(path.resolve(strict=True)) for path in dict.fromkeys(native_inputs)],
+        "execution": execution,
+        "diagnostics": diagnostics,
     }

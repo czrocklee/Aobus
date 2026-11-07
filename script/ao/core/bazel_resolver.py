@@ -2,7 +2,7 @@
 
 This process owns dispatch and read inventories, not a portal workspace or Bazel
 program generation. Checked-in Starlark projects library, tool and compiler facts.
-The independent WinUI SDK owner retains its existing lazy native projection.
+The independent WinUI SDK owner retains its existing lazy native admission.
 """
 
 from __future__ import annotations
@@ -74,7 +74,7 @@ def main() -> int:
                 files.add(path)
 
     sys.addaudithook(audit)
-    result: dict[str, Any] = {"files": {}, "links": [], "imports": {}, "watch_files": [], "watch_directories": []}
+    result: dict[str, Any] = {"imports": {}, "watch_files": [], "watch_directories": []}
     status = 0
     try:
         # Isolated Python deliberately does not add the checkout to sys.path.
@@ -86,9 +86,9 @@ def main() -> int:
             request = json.loads(args.request.read_text(encoding="utf-8"))
             if request.get("schema") != 1 or request["host"] != native.native_platform():
                 raise ValueError("prepared configuration does not match the native host")
-            host, config = request["host"], request.get("config")
-            if config not in {None, "debug", "release"}:
-                raise ValueError("unsupported provider configuration")
+            host = request["host"]
+            if "config" in request:
+                raise ValueError("repository request must be mode-neutral")
             prefix = Path(request["prefix"]) if request.get("prefix") else None
             if prefix is not None and args.group in {"native", "test", "tools"}:
                 # Include absence/ambiguity decisions, not just successful opens.
@@ -110,40 +110,30 @@ def main() -> int:
             tree = output / "resolution"
             tree.mkdir(exist_ok=True)
 
-            def imports(selected: str, group: str, subpackage: str) -> None:
+            def imports(config: str, group: str) -> None:
                 projection = dependencies.resolve_dependencies(
-                    tree / (subpackage or selected), selected, prefix=str(prefix) if prefix else None, group=group
+                    tree / config, config, prefix=str(prefix) if prefix else None, group=group
                 )
                 files.update(projection["watch_files"])
                 directories.update(projection["watch_directories"])
-                result["imports"][subpackage] = {
-                    "config": selected,
+                result["imports"][config] = {
                     "packages": projection["packages"],
                     "manifest": projection["manifest"],
                 }
 
             if args.group in {"native", "test"}:
-                for selected in (config,) if config else ("debug", "release"):
-                    imports(selected, args.group, "" if config else selected)
+                for config in ("debug", "release"):
+                    imports(config, args.group)
             elif args.group == "winui":
-                from ao.core.bazel_winui import repository_plan
+                from ao.core.bazel_winui import resolve_sdk
 
-                if config:
-                    projection = repository_plan(tree / "winui", request, environment)
-                    result["links"] = projection["links"]
-                    result["files"] = projection["files"]
-                else:
-                    for selected in ("debug", "release"):
-                        plan = repository_plan(
-                            tree / ("winui-" + selected), {**request, "config": selected}, environment
-                        )
-                        result["files"].update(
-                            {selected + "/" + name: content for name, content in plan["files"].items()}
-                        )
-                        result["links"].extend(
-                            {**link, "destination": selected + "/" + link["destination"]} for link in plan["links"]
-                        )
-                    result["aliases"] = ["headers", "bootstrap", "runtime", "tools", "sdk.json", "sdk-diagnostics.json"]
+                result["winui"] = {}
+                for config in ("debug", "release"):
+                    result["winui"][config] = resolve_sdk(
+                        tree / ("winui-" + config),
+                        {**request, "config": config},
+                        environment,
+                    )
             elif args.group == "tools":
                 from ao.core import bazel_host_tools
 
@@ -151,8 +141,8 @@ def main() -> int:
                 files.update(tools.pop("watch_files"))
                 directories.update(tools.pop("watch_directories"))
                 result["host_tools"] = tools
-                for selected in ("debug", "release"):
-                    imports(selected, "catalog", "catalog-" + selected)
+                for config in ("debug", "release"):
+                    imports(config, "catalog")
             else:
                 from ao.core import bazel_compiler_probe
 

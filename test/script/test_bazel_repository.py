@@ -2,6 +2,7 @@
 
 import ast
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -14,6 +15,7 @@ from ao.core import bazel_dependencies as dependencies
 from ao.core import bazel_deps as deps
 from ao.core import bazel_native as native
 from ao.core import bazel_providers as providers
+from ao.core import bazel_resolver
 from ao.core import bazel_workspace as workspace
 from ao.core.bazel_resolver import _audit_executable, _external_input
 
@@ -257,10 +259,22 @@ class RepositoryRuleTest(unittest.TestCase):
         self.root = Path(temporary.name)
         self.watches = set()
         self.directory_reads = set()
-        self.inventory = {"watch_files": [], "watch_directories": [], "links": [], "files": {}}
+        # Minimal valid tools observation: both-config imports keyed only by
+        # configuration, exactly as the resolver publishes them.
+        self.inventory = {
+            "watch_files": [],
+            "watch_directories": [],
+            "imports": {
+                "debug": {"packages": [], "manifest": {"configuration": "debug"}},
+                "release": {"packages": [], "manifest": {"configuration": "release"}},
+            },
+        }
         self.invocations = []
         self.materialized_imports = []
+        self.materialized_winui = []
         self.materialized_aliases = []
+        self.materialized_host_tools = []
+        self.materialized_toolchain = []
         self.public_interfaces = {"debug": ["fixture"], "release": ["fixture"]}
 
         def attribute(**kwargs):
@@ -323,10 +337,26 @@ class RepositoryRuleTest(unittest.TestCase):
             self.namespace.update(materialize_imports=materialize_imports, materialize_aliases=materialize_aliases)
             self.assertEqual(set(names), {"materialize_imports", "materialize_aliases"})
             return
+        if label == "//bazel:winui_repository.bzl":
+            self.assertEqual(names, ("materialize_winui",))
+
+            def materialize_winui(ctx, subpackage, facts):
+                self.assertIs(ctx, self.ctx)
+                self.materialized_winui.append((subpackage, facts))
+                return self.public_interfaces[subpackage]
+
+            self.namespace["materialize_winui"] = materialize_winui
+            return
         if label in {"//bazel:host_tools_repository.bzl", "//bazel:toolchain_repository.bzl"}:
             name = "materialize_host_tools" if "host_tools" in label else "materialize_toolchain"
             self.assertEqual(names, (name,))
-            self.namespace[name] = lambda *args: self.fail("unexpected SDK materialization")
+            records = self.materialized_host_tools if "host_tools" in label else self.materialized_toolchain
+
+            def materialize_sdk(ctx, facts):
+                self.assertIs(ctx, self.ctx)
+                records.append(facts)
+
+            self.namespace[name] = materialize_sdk
             return
         self.assertEqual(label, "//bazel:environment.bzl")
 
@@ -442,58 +472,220 @@ class RepositoryRuleTest(unittest.TestCase):
         self.assertFalse({str(path) for path in core.glob("*.py")} & self.watches)
         self.assertNotIn(str(core), self.directory_reads)
 
-    def test_selected_configuration_forwards_observations_without_requesting_mode_aliases(self):
-        self.ctx.attr.group = "native"
-        packages = [
-            {
-                "name": "fixture",
-                "headers": [],
-                "includes": [],
-                "libraries": [],
-                "runtime": [],
-                "defines": ["SELECTED_DEBUG"],
-                "linkopts": [],
-            }
-        ]
-        manifest = {"configuration": {"config": "Debug"}, "materialization": "repository"}
-        self.inventory["imports"] = {"": {"config": "debug", "packages": packages, "manifest": manifest}}
-        self.namespace["_governed_repository_impl"](self.ctx)
-        self.assertEqual(self.materialized_imports, [("", "debug", packages, manifest)])
-        self.assertEqual(self.materialized_aliases, [])
-
     def test_matching_configuration_interfaces_are_delegated_to_native_mode_aliases(self):
         self.ctx.attr.group = "native"
-        self.inventory["imports"] = {
-            config: {"config": config, "packages": [], "manifest": {"selected": config}}
-            for config in ("debug", "release")
+        self.inventory = {
+            "watch_files": [],
+            "watch_directories": [],
+            "imports": {
+                config: {"packages": [], "manifest": {"configuration": config}} for config in ("debug", "release")
+            },
         }
         self.namespace["_governed_repository_impl"](self.ctx)
         self.assertEqual(
             self.materialized_imports,
             [
-                ("debug", "debug", [], {"selected": "debug"}),
-                ("release", "release", [], {"selected": "release"}),
+                ("debug", "debug", [], {"configuration": "debug"}),
+                ("release", "release", [], {"configuration": "release"}),
             ],
         )
         self.assertEqual(self.materialized_aliases, [["fixture"]])
+        self.assertEqual(self.materialized_winui, [])
+        self.assertEqual(self.materialized_host_tools, [])
+        self.assertEqual(self.materialized_toolchain, [])
 
-    def test_missing_or_incompatible_configuration_interfaces_fail_before_alias_materialization(self):
-        self.ctx.attr.group = "native"
-        self.inventory["imports"] = {"debug": {"config": "debug", "packages": [], "manifest": {}}}
-        with self.assertRaisesRegex(AssertionError, "require Debug and Release"):
-            self.namespace["_governed_repository_impl"](self.ctx)
-        self.inventory["imports"]["release"] = {"config": "release", "packages": [], "manifest": {}}
-        self.public_interfaces["release"] = ["different_consumer"]
-        with self.assertRaisesRegex(AssertionError, "different consumer interfaces"):
-            self.namespace["_governed_repository_impl"](self.ctx)
-        self.assertEqual(self.materialized_aliases, [])
-
-    def test_winui_consumer_aliases_are_delegated_without_python_build_serialization(self):
-        self.ctx.attr.group = "winui"
-        self.inventory["aliases"] = ["fixture_sdk"]
-        self.namespace["_governed_repository_impl"](self.ctx)
-        self.assertEqual(self.materialized_aliases, [["fixture_sdk"]])
+    def test_incomplete_extra_or_root_layout_import_observations_fail_before_materialization(self):
+        complete = {
+            "debug": {"packages": [], "manifest": {"configuration": "debug"}},
+            "release": {"packages": [], "manifest": {"configuration": "release"}},
+        }
+        for group in ("native", "test", "tools"):
+            for name, imports in (
+                ("empty", {}),
+                ("incomplete", {"debug": complete["debug"]}),
+                ("extra", {**complete, "profile": complete["debug"]}),
+                ("root-layout", {"": complete["debug"]}),
+            ):
+                with self.subTest(group=group, observation=name):
+                    self.ctx.attr.group = group
+                    self.inventory = {"watch_files": [], "watch_directories": [], "imports": imports}
+                    with self.assertRaisesRegex(AssertionError, "require Debug and Release"):
+                        self.namespace["_governed_repository_impl"](self.ctx)
         self.assertEqual(self.materialized_imports, [])
+        self.assertEqual(self.materialized_aliases, [])
+        self.assertEqual(self.materialized_winui, [])
+
+    def test_incompatible_debug_release_interfaces_fail_before_alias_materialization(self):
+        self.public_interfaces["release"] = ["different_consumer"]
+        for group in ("native", "winui"):
+            with self.subTest(group=group):
+                self.ctx.attr.group = group
+                observation = (
+                    {"winui": {"debug": {}, "release": {}}}
+                    if group == "winui"
+                    else {
+                        "imports": {
+                            "debug": {"packages": [], "manifest": {}},
+                            "release": {"packages": [], "manifest": {}},
+                        }
+                    }
+                )
+                self.inventory = {"watch_files": [], "watch_directories": [], **observation}
+                self.materialized_imports.clear()
+                self.materialized_winui.clear()
+                self.materialized_aliases.clear()
+                with self.assertRaisesRegex(AssertionError, "different consumer interfaces"):
+                    self.namespace["_governed_repository_impl"](self.ctx)
+                self.assertEqual(self.materialized_aliases, [])
+
+    def test_tools_catalog_imports_cover_both_configurations_without_root_aliases(self):
+        # setUp publishes the tools group request with a complete observation.
+        self.inventory["host_tools"] = {"python": "python"}
+        self.namespace["_governed_repository_impl"](self.ctx)
+        self.assertEqual(
+            self.materialized_imports,
+            [
+                ("catalog-debug", "debug", [], {"configuration": "debug"}),
+                ("catalog-release", "release", [], {"configuration": "release"}),
+            ],
+        )
+        self.assertEqual(self.materialized_aliases, [])
+        self.assertEqual(self.materialized_host_tools, [{"python": "python"}])
+        self.assertEqual(self.materialized_winui, [])
+        self.assertEqual(self.materialized_toolchain, [])
+
+    def test_winui_observations_are_projected_before_matching_root_aliases(self):
+        self.ctx.attr.group = "winui"
+        self.inventory = {
+            "watch_files": [],
+            "watch_directories": [],
+            "winui": {"debug": {"sdk": "first"}, "release": {"sdk": "second"}},
+        }
+        self.namespace["_governed_repository_impl"](self.ctx)
+        self.assertEqual(self.materialized_winui, [("debug", {"sdk": "first"}), ("release", {"sdk": "second"})])
+        self.assertEqual(self.materialized_aliases, [["fixture"]])
+        self.assertEqual(self.materialized_imports, [])
+        self.assertEqual(self.materialized_host_tools, [])
+        self.assertEqual(self.materialized_toolchain, [])
+
+    def test_winui_absent_sdk_facts_still_project_both_configurations(self):
+        self.ctx.attr.group = "winui"
+        self.inventory = {"watch_files": [], "watch_directories": [], "winui": {"debug": None, "release": None}}
+        self.namespace["_governed_repository_impl"](self.ctx)
+        self.assertEqual(self.materialized_winui, [("debug", None), ("release", None)])
+        self.assertEqual(self.materialized_aliases, [["fixture"]])
+        self.assertEqual(self.materialized_imports, [])
+
+    def test_winui_observations_require_exact_debug_and_release_keys(self):
+        self.ctx.attr.group = "winui"
+        for name, observation in (
+            ("empty", {}),
+            ("incomplete", {"debug": None}),
+            ("extra", {"debug": None, "release": None, "profile": None}),
+            ("root-layout", {"": None, "debug": None, "release": None}),
+        ):
+            with self.subTest(observation=name):
+                self.inventory = {"watch_files": [], "watch_directories": [], "winui": observation}
+                with self.assertRaisesRegex(AssertionError, "WinUI SDK"):
+                    self.namespace["_governed_repository_impl"](self.ctx)
+        self.assertEqual(self.materialized_winui, [])
+        self.assertEqual(self.materialized_aliases, [])
+        self.assertEqual(self.materialized_imports, [])
+
+    def test_toolchain_dispatch_materializes_only_the_compiler_observation(self):
+        self.ctx.attr.group = "toolchain"
+        self.inventory = {
+            "watch_files": [],
+            "watch_directories": [],
+            "toolchain": {"identity": {"compiler": "fixture"}},
+        }
+        self.namespace["_governed_repository_impl"](self.ctx)
+        self.assertEqual(self.materialized_toolchain, [{"identity": {"compiler": "fixture"}}])
+        self.assertEqual(self.materialized_imports, [])
+        self.assertEqual(self.materialized_winui, [])
+        self.assertEqual(self.materialized_aliases, [])
+        self.assertEqual(self.materialized_host_tools, [])
+
+
+class ResolverRequestTest(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(prefix="aobus-resolver-request-")
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name).resolve()
+
+    def resolve(self, request, group):
+        """Run the real resolver entry point with the dependency boundary faked."""
+        (self.root / "request.json").write_text(json.dumps(request), encoding="utf-8")
+        output = self.root / "resolution"
+        argv = [
+            "resolver",
+            "--request",
+            str(self.root / "request.json"),
+            "--group",
+            group,
+            "--output",
+            str(output),
+            "--environment-json",
+            "{}",
+        ]
+        calls = []
+
+        def projection(tree, config, prefix=None, group=None):
+            calls.append((config, prefix, group))
+            return {
+                "packages": [{"name": "fixture"}],
+                "manifest": {"configuration": config},
+                "watch_files": [],
+                "watch_directories": [],
+            }
+
+        with (
+            patch.object(sys, "argv", argv),
+            patch.dict(os.environ, {}, clear=True),
+            patch.object(sys, "addaudithook"),
+            patch.object(native, "native_platform", return_value="linux"),
+            patch.object(dependencies, "resolve_dependencies", side_effect=projection),
+        ):
+            status = bazel_resolver.main()
+        report = json.loads((output / "repository.json").read_text(encoding="utf-8"))
+        return status, report, calls
+
+    def test_native_and_test_groups_resolve_both_configurations_and_key_imports_by_configuration(self):
+        for group in ("native", "test"):
+            with self.subTest(group=group):
+                status, report, calls = self.resolve({"schema": 1, "host": "linux"}, group)
+                self.assertEqual(status, 0)
+                self.assertEqual(calls, [("debug", None, group), ("release", None, group)])
+                self.assertEqual(list(report["imports"]), ["debug", "release"])
+                for config in ("debug", "release"):
+                    self.assertEqual(set(report["imports"][config]), {"packages", "manifest"})
+                    self.assertEqual(report["imports"][config]["manifest"], {"configuration": config})
+                self.assertNotIn("winui", report)
+                self.assertNotIn("error", report)
+                # The resolver's own source stays an explicit repository input.
+                self.assertIn(str(Path(bazel_resolver.__file__).resolve()), report["watch_files"])
+
+    def test_top_level_request_config_is_rejected_mode_neutrally(self):
+        errors = set()
+        for config in ("debug", "release", "fastbuild"):
+            with self.subTest(config=config):
+                status, report, calls = self.resolve({"schema": 1, "host": "linux", "config": config}, "native")
+                self.assertEqual(status, 1)
+                self.assertEqual(report["imports"], {})
+                self.assertEqual(calls, [])
+                self.assertRegex(report["error"], "mode-neutral")
+                errors.add(report["error"])
+        self.assertEqual(len(errors), 1)
+
+    def test_winui_group_observes_absent_sdk_facts_without_dependency_resolution(self):
+        status, report, calls = self.resolve({"schema": 1, "host": "linux"}, "winui")
+        self.assertEqual(status, 0)
+        self.assertEqual(report["winui"], {"debug": None, "release": None})
+        self.assertEqual(report["imports"], {})
+        self.assertEqual(calls, [])
+        self.assertNotIn("host_tools", report)
+        self.assertNotIn("toolchain", report)
+        self.assertNotIn("error", report)
 
 
 class LaunchConfigurationTest(unittest.TestCase):

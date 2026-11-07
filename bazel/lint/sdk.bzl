@@ -26,6 +26,86 @@ _ENVIRONMENT = [
     "VSINSTALLDIR",
 ]
 
+_SDK_BUILD = """load("@aobus//bazel/lint:imports.bzl", "lint_sdk_imports")
+load(":sdk_data.bzl", "SDK")
+
+package(default_visibility = ["//visibility:public"])
+
+lint_sdk_imports(SDK)
+"""
+
+def _basename(path):
+    # Facts arrive in the portable posix wire form; a POSIX name may contain a
+    # literal backslash, which is not a separator here.
+    return path.split("/")[-1]
+
+def _project_sdk(ctx, host, facts):
+    """Materialize admitted native files and write the repository's graph data.
+
+    Native admission stays in the helper. This projection owns the repository
+    layout, target names and consumer interfaces, not the SDK selection.
+    """
+    windows = host == "windows"
+    includes = []
+    for index, source in enumerate(facts["includes"]):
+        destination = "include/%d" % index
+        ctx.symlink(ctx.path(source), destination)
+        includes.append(destination)
+    tidy = "bin/clang-tidy" + (".exe" if windows else "")
+    ctx.symlink(ctx.path(facts["clang_tidy"]), tidy)
+    compiler = "bin/clang-cl.exe" if windows else "bin/clang++"
+    ctx.symlink(ctx.path(facts["clang"]), compiler)
+    ctx.symlink(ctx.path(facts["resource_dir"]).get_child("include"), "resource/include")
+    libraries = []
+    for index, source in enumerate(facts["libraries"]):
+        destination = "lib/%d/%s" % (index, _basename(source))
+        ctx.symlink(ctx.path(source), destination)
+        libraries.append(destination)
+    runtime = []
+    for index, source in enumerate(facts["runtime"]):
+        destination = "runtime/%d/%s" % (index, _basename(source))
+        ctx.symlink(ctx.path(source), destination)
+        runtime.append(destination)
+    ctx.file(
+        "sdk_data.bzl",
+        "SDK = %s\n" % repr({
+            "host": host,
+            "clang_tidy": tidy,
+            "clang": compiler,
+            "includes": includes,
+            "libraries": libraries,
+            "runtime": runtime,
+            "linkopts": facts["linkopts"],
+        }),
+        executable = False,
+    )
+    ctx.file(
+        "metadata.json",
+        json.encode({
+            "schema": 1,
+            "platform": host,
+            "version": facts["version"],
+            "sdk_root": facts["sdk_root"],
+            "clang": facts["clang"],
+            "resource_dir": facts["resource_dir"],
+            "host_kind": "standalone" if windows else "plugin",
+            "system_arguments": facts["system_arguments"],
+            "analysis_arguments": facts["analysis_arguments"],
+            "fixture_arguments": facts["fixture_arguments"],
+            "includes": facts["includes"],
+            "libraries": facts["libraries"],
+            "copts": facts["copts"],
+            "linkopts": facts["linkopts"],
+        }) + "\n",
+        executable = False,
+    )
+    ctx.file(
+        "flags.bzl",
+        "LINT_SDK_HOST = %s\nLINT_SDK_COPTS = %s\n" % (repr(host), repr(facts["copts"])),
+        executable = False,
+    )
+    ctx.file("BUILD.bazel", _SDK_BUILD, executable = False)
+
 def _lint_sdk_impl(ctx):
     selected, prepared = repository_environment(ctx)
     python = selected["python"]
@@ -78,19 +158,16 @@ def _lint_sdk_impl(ctx):
     )
     if result.return_code:
         fail("Cannot import ready lint SDK (no provisioning attempted):\n%s\n%s" % (result.stdout, result.stderr))
-    plan = json.decode(ctx.read("_projection.json"))
-    for path in plan["watch_files"]:
+    facts = json.decode(ctx.read("_projection.json"))
+    for path in facts["watch_files"]:
         ctx.watch(ctx.path(path))
-    for path in plan["watch_directories"]:
+    for path in facts["watch_directories"]:
         directory = ctx.path(path)
         if directory.exists and directory.is_dir:
             directory.readdir(watch = "yes")
         else:
             ctx.watch(directory)
-    for item in plan["links"]:
-        ctx.symlink(ctx.path(item["source"]), item["destination"])
-    for path, content in plan["files"].items():
-        ctx.file(path, content, executable = False)
+    _project_sdk(ctx, host, facts)
 
 lint_sdk_repository = repository_rule(
     implementation = _lint_sdk_impl,
