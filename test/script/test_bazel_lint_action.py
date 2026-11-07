@@ -37,7 +37,14 @@ class LintActionTest(unittest.TestCase):
             "header_filter": None,
             "clang_tidy_args": [],
         }
-        self.policy = {**self.configuration, "expected_checks": ["aobus-example"]}
+        # The published action policy carries no absolute checkout root.
+        self.policy = {
+            "schema": 1,
+            "check": None,
+            "header_filter": None,
+            "clang_tidy_args": [],
+            "expected_checks": ["aobus-example"],
+        }
         self.sdk = {
             "schema": 1,
             "version": "22.1.8",
@@ -357,7 +364,105 @@ class LintActionTest(unittest.TestCase):
         self.assertIn("aobus-modernize-use-starts-with", rendered["expected_checks"])
         self.assertNotIn("selected", rendered)
         self.assertEqual(rendered["clang_tidy_args"], [])
-        self.assertEqual(rendered["source_root"], str(PROJECT_ROOT))
+        self.assertNotIn("source_root", rendered)
+
+    def test_published_policy_is_stable_across_checkouts_and_changes_only_with_semantic_fields(self):
+        rendered = []
+        for name in ("checkout-a", "checkout-b"):
+            checkout = self.root / name
+            fixture = checkout / "test/lint/fixture/aobus-example"
+            fixture.mkdir(parents=True)
+            (fixture / "Bad.cpp").write_text("// fixture\n", encoding="utf-8")
+            Path("configuration.json").write_text(
+                json.dumps({**self.configuration, "source_root": str(checkout)}), encoding="utf-8"
+            )
+            self.assertEqual(
+                action.main(["prepare", "--configuration", "configuration.json", "--output", "rendered.json"]), 0
+            )
+            rendered.append(Path("rendered.json").read_bytes())
+        self.assertEqual(rendered[0], rendered[1])
+        policy = json.loads(rendered[0])
+        self.assertNotIn("source_root", policy)
+        self.assertEqual(policy["expected_checks"], ["aobus-example"])
+        for field, value in (
+            ("check", "aobus-example"),
+            ("header_filter", "project-filter"),
+            ("clang_tidy_args", ["--quiet"]),
+        ):
+            with self.subTest(field=field):
+                Path("configuration.json").write_text(
+                    json.dumps({**self.configuration, "source_root": str(self.root / "checkout-a"), field: value}),
+                    encoding="utf-8",
+                )
+                self.assertEqual(
+                    action.main(["prepare", "--configuration", "configuration.json", "--output", "changed.json"]), 0
+                )
+                changed = json.loads(Path("changed.json").read_text(encoding="utf-8"))
+                self.assertEqual(changed[field], value)
+                self.assertNotEqual(Path("changed.json").read_bytes(), rendered[0])
+
+    def test_rootless_policy_verifies_and_maps_runtime_roots_through_the_declared_helper(self):
+        # The published policy carries no absolute root, so the verification and
+        # analysis actions stay checkout-stable. Runtime roots come from the
+        # working directory plus the declared helper's lexical invocation alias
+        # and resolved physical checkout, never from a possibly generated
+        # identity source.
+        generated = "bazel-out/k8-dbg/bin/lib/sample/Generated.cpp"
+        Path(generated).parent.mkdir(parents=True, exist_ok=True)
+        Path(generated).write_text("// generated input\n", encoding="utf-8")
+        self.context["mode"] = "RELAXED"
+        self.context["source"] = self.context["main"] = generated
+        self.context["argv"][-1] = generated
+        self.verified()
+        self.assertEqual(self.run_phase("analyze"), 0)
+        config = next(arg for arg in self.calls[-1] if arg.startswith("-config="))
+        self.assertIn(self.root.as_posix(), config)
+        self.assertIn(PROJECT_ROOT.as_posix(), config)
+        # Each root beyond the working directory is a checkout the declared
+        # helper really occupies: the invocation alias and its physical target.
+        roots = action._runtime_roots()
+        self.assertEqual(roots[0], Path.cwd())
+        self.assertIn(PROJECT_ROOT, roots)
+        for root in roots[1:]:
+            self.assertIs(root.joinpath(*action._HELPER_LOCATION).is_file(), True)
+        materialized = self.root / "other-checkout" / Path(*action._HELPER_LOCATION)
+        materialized.parent.mkdir(parents=True)
+        materialized.write_text("// materialized helper\n", encoding="utf-8")
+        with patch.object(action, "__file__", str(materialized)):
+            self.assertEqual(action._runtime_roots(), (Path.cwd(), self.root / "other-checkout"))
+        with patch.object(action, "__file__", str(self.root / "elsewhere/bazel_lint_action.py")):
+            with self.assertRaisesRegex(ValueError, "declared checkout path"):
+                action._runtime_roots()
+
+    @unittest.skipIf(os.name == "nt", "a distinct alias needs a POSIX symlink spelling")
+    def test_runtime_roots_keep_a_distinct_lexical_alias_of_the_physical_checkout(self):
+        # A mapped checkout spelling and its physical target are both
+        # legitimate header spellings; the alias stays runtime-only, never an
+        # action input, and the working directory stays a separate root.
+        physical = self.root / "physical-checkout"
+        helper = physical.joinpath(*action._HELPER_LOCATION)
+        helper.parent.mkdir(parents=True)
+        helper.write_text("// physical helper\n", encoding="utf-8")
+        alias = self.root / "mapped-checkout"
+        alias.symlink_to(physical)
+        with patch.object(action, "__file__", str(alias.joinpath(*action._HELPER_LOCATION))):
+            self.assertEqual(action._runtime_roots(), (Path.cwd(), alias, physical))
+            expression = action._header_filter(
+                action.Identity(
+                    "@@//lib/sample:sample",
+                    "bazel-out/k8-dbg/bin",
+                    "lib/sample/Sample.cpp",
+                    "lib/sample/Sample.cpp",
+                    ("bazel-out/k8-dbg/bin/lib/sample/_objs/sample/Sample.o",),
+                    "STRICT",
+                    "linux",
+                ),
+                self.policy,
+                action._runtime_roots(),
+                {},
+            )
+        for spelling in (alias.as_posix() + "/app/runtime/A.h", physical.as_posix() + "/app/runtime/A.h"):
+            self.assertIsNotNone(re.search(expression, spelling), spelling)
 
     def test_diagnostic_only_validation_precedes_preparation_and_analysis_io(self):
         for argument in (

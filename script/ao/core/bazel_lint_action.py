@@ -35,7 +35,8 @@ def _arguments(value: object, name: str) -> list[str]:
     return value
 
 
-def validate_configuration(data: dict[str, Any]) -> dict[str, Any]:
+def _stable_policy_fields(data: dict[str, Any]) -> dict[str, Any]:
+    """Validate the checkout-independent fields the published policy carries."""
     args = _arguments(data.get("clang_tidy_args"), "clang_tidy_args")
     tidyconfig.validate_diagnostic_arguments(args)
     # Raw options may only adjust diagnostic presentation. Native compiler
@@ -51,18 +52,18 @@ def validate_configuration(data: dict[str, Any]) -> dict[str, Any]:
     for argument in args:
         if argument not in supported:
             raise ValueError(f"unsupported Bazel clang-tidy diagnostic argument: {argument}")
-    root = data.get("source_root")
-    if not isinstance(root, str) or not Path(root).is_absolute() or not Path(root).is_dir():
-        raise ValueError("source_root must be an existing absolute checkout")
     for name in ("check", "header_filter"):
         if data.get(name) is not None and (not isinstance(data[name], str) or not data[name] or "\x00" in data[name]):
             raise ValueError(f"{name} must be null or a nonempty string")
-    return {
-        "source_root": root,
-        "check": data.get("check"),
-        "header_filter": data.get("header_filter"),
-        "clang_tidy_args": args,
-    }
+    return {"check": data.get("check"), "header_filter": data.get("header_filter"), "clang_tidy_args": args}
+
+
+def validate_configuration(data: dict[str, Any]) -> dict[str, Any]:
+    stable = _stable_policy_fields(data)
+    root = data.get("source_root")
+    if not isinstance(root, str) or not Path(root).is_absolute() or not Path(root).is_dir():
+        raise ValueError("source_root must be an existing absolute checkout")
+    return {"source_root": root, **stable}
 
 
 def prepare(args: argparse.Namespace) -> int:
@@ -72,13 +73,16 @@ def prepare(args: argparse.Namespace) -> int:
 
     configuration = validate_configuration(load_json(args.configuration))
     expected = sorted(expected_aobus_checks(Path(configuration["source_root"]) / "test/lint/fixture"))
-    _json(args.output, {"schema": 1, **configuration, "expected_checks": expected})
+    # The published policy is checkout-stable: the absolute root stays a
+    # repository-time input for fixture discovery and never reaches actions.
+    _json(args.output, {"schema": 1, **_stable_policy_fields(configuration), "expected_checks": expected})
     return 0
 
 
 def _policy(path: Path) -> dict[str, Any]:
+    """Validate the stable published policy without requiring a producer directory."""
     data = load_json(path)
-    validate_configuration(data)
+    _stable_policy_fields(data)
     expected = _arguments(data.get("expected_checks"), "expected checks")
     if (
         not expected
@@ -337,6 +341,28 @@ def _traced_wrapper_arguments(argv: list[str], trace: str) -> list[str]:
     return [argv[0], *sections[0], *argv[1:], *sections[2]]
 
 
+_HELPER_LOCATION = ("script", "ao", "core", "bazel_lint_action.py")
+
+
+def _runtime_roots() -> tuple[Path, ...]:
+    """Map analysis spellings onto the execution root and the physical checkout.
+
+    The declared helper input is materialized at its checkout-relative path
+    below the action's working directory. Its lexical spelling keeps the
+    invocation alias (a mapped drive, for example), while resolving it crosses
+    Bazel's execroot or sandbox links into the physical checkout; the verified
+    suffix keeps each parent a checkout root. A possibly generated identity
+    source cannot supply this mapping.
+    """
+    helper = Path(__file__)
+    roots = [Path.cwd()]
+    for spelling in (helper.absolute(), helper.resolve()):
+        if spelling.parts[-len(_HELPER_LOCATION) :] != _HELPER_LOCATION:
+            raise ValueError(f"lint action helper is not at its declared checkout path: {spelling}")
+        roots.append(spelling.parents[len(_HELPER_LOCATION) - 1])
+    return tuple(dict.fromkeys(roots))
+
+
 _SEPARATOR = r"[/\\]"
 
 
@@ -506,7 +532,7 @@ def analyze(args: argparse.Namespace) -> int:
     native_argv = _arguments(context.get("argv"), "native argv")
     argv = _compile_arguments(identity, native_argv)
     windows = identity.platform == "windows"
-    roots = tuple(dict.fromkeys((Path.cwd(), Path(policy["source_root"]))))
+    roots = _runtime_roots()
     frontend = tidypolicy.frontend_policy(
         identity.source, winui=tidypolicy.winui_compile_context(identity.source), windows=windows
     )
