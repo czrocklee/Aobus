@@ -167,7 +167,9 @@ class BazelAnalysisOutputTests(unittest.TestCase):
             diagnostic = b"native analysis diagnostic\n"
             for action in ("query", "cquery", "aquery"):
                 for status in (0, 7):
-                    output, diagnostics = io.StringIO(), io.StringIO()
+                    buffer, diagnostics = io.BytesIO(), io.StringIO()
+                    output = io.TextIOWrapper(buffer, encoding="utf-8")
+                    self.addCleanup(output.close)
                     args = make_parser().parse_args(
                         ["bazel", action, "--path", str(tree), "--", "//...", "--output=jsonproto"]
                     )
@@ -185,8 +187,8 @@ class BazelAnalysisOutputTests(unittest.TestCase):
                         patch("sys.stderr", diagnostics),
                     ):
                         self.assertEqual(bazel.run(args), status)
-                    self.assertEqual(output.getvalue(), payload.decode("utf-8"))
-                    self.assertEqual(json.loads(output.getvalue()), {"results": [{"label": "//test:query_test"}]})
+                    self.assertEqual(buffer.getvalue(), payload)
+                    self.assertEqual(json.loads(buffer.getvalue()), {"results": [{"label": "//test:query_test"}]})
                     self.assertEqual(diagnostics.getvalue().count(diagnostic.decode("utf-8")), int(status != 0))
                     self.assertNotIn(payload.decode("utf-8"), diagnostics.getvalue())
                     self.assertIn("Prepared Bazel configuration:", diagnostics.getvalue())

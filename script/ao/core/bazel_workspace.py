@@ -343,7 +343,8 @@ def execute(
     if analysis:
         result = subprocess.run(argv, cwd=native.PROJECT_ROOT, env=native.child_environment(), capture_output=True)
         log.write_bytes(result.stdout + result.stderr)
-        sys.stdout.write(result.stdout.decode("utf-8", errors="replace"))
+        sys.stdout.buffer.write(result.stdout)
+        sys.stdout.buffer.flush()
         if result.returncode:
             sys.stderr.write(result.stderr.decode("utf-8", errors="replace"))
     else:

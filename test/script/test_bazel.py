@@ -2344,7 +2344,9 @@ class BazelWorkspaceTests(unittest.TestCase):
     def test_execute_analysis_prints_only_bazel_stdout_and_logs_diagnostics(self):
         prepared = self.root / "configuration"
         for action in ("query", "cquery", "aquery"):
-            output, diagnostics = io.StringIO(), io.StringIO()
+            buffer, diagnostics = io.BytesIO(), io.StringIO()
+            output = io.TextIOWrapper(buffer, encoding="utf-8")
+            self.addCleanup(output.close)
             arguments = ["deps(//test:media_test)", "--output=jsonproto"]
             with (
                 self.subTest(action=action),
@@ -2362,9 +2364,53 @@ class BazelWorkspaceTests(unittest.TestCase):
             self.assertEqual(argv[:3], ["bazel", f"--bazelrc={prepared / 'aobus.bazelrc'}", action])
             self.assertEqual(argv[-2:], arguments)
             self.assertEqual(any(value.startswith("--jobs=") for value in argv), action != "query")
-            self.assertEqual(output.getvalue(), '{"results": []}\n')
+            self.assertEqual(buffer.getvalue(), b'{"results": []}\n')
             self.assertIn(f"Bazel {action}", diagnostics.getvalue())
             self.assertEqual((self.root / "build.log").read_bytes(), b'{"results": []}\nanalysis diagnostic\n')
+
+    def test_execute_analysis_preserves_real_child_binary_output_and_status(self):
+        launch = subprocess.run
+        payload = b"\x08\x96\x01\x00\xff\r\nno final newline"
+        diagnostic = b"child diagnostic\n"
+        for action in ("query", "cquery", "aquery"):
+            for status in (0, 9):
+                buffer, diagnostics = io.BytesIO(), io.StringIO()
+                output = io.TextIOWrapper(buffer, encoding="utf-8")
+                self.addCleanup(output.close)
+
+                def child(argv, status=status, **kwargs):
+                    return launch(
+                        [
+                            sys.executable,
+                            "-I",
+                            "-S",
+                            "-B",
+                            "-c",
+                            f"import sys; sys.stdout.buffer.write({payload!r}); "
+                            f"sys.stderr.buffer.write({diagnostic!r}); sys.exit({status})",
+                        ],
+                        **kwargs,
+                    )
+
+                with (
+                    self.subTest(action=action, status=status),
+                    patch.object(native, "PROJECT_ROOT", self.root),
+                    patch.object(workspace.subprocess, "run", side_effect=child),
+                    patch("sys.stdout", output),
+                    patch("sys.stderr", diagnostics),
+                ):
+                    actual = workspace.execute(
+                        Path("bazel"),
+                        self.root,
+                        self.root / "configuration",
+                        action,
+                        "debug",
+                        ["//...", "--output=proto"],
+                    )
+                self.assertEqual(actual, status)
+                self.assertEqual(buffer.getvalue(), payload)
+                self.assertEqual((self.root / "build.log").read_bytes(), payload + diagnostic)
+                self.assertEqual("child diagnostic" in diagnostics.getvalue(), bool(status))
 
     def test_execute_query_and_run_require_an_explicit_expression_or_target_before_launch(self):
         for action in ("query", "cquery", "aquery", "run"):
