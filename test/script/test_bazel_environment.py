@@ -46,6 +46,9 @@ class EnvironmentDiscoveryTests(unittest.TestCase):
         self.host = "linux"
         self.addCleanup(patch.stopall)
         patch.object(bootstrap, "PROJECT_ROOT", self.source).start()
+        # Admit the same local fixture even when tooling runs from a checkout
+        # that production Windows Bazel cannot build (for example, SMB).
+        patch.object(native, "PROJECT_ROOT", self.source).start()
         patch.object(bootstrap, "_NIX_STORE", self.store).start()
         patch.object(bootstrap.sys, "executable", str(self.python)).start()
         patch.object(bootstrap.sys, "version_info", tuple(map(int, self.policy["python"].split(".")))).start()
@@ -119,43 +122,56 @@ class EnvironmentDiscoveryTests(unittest.TestCase):
     def windows(self):
         self.host = "windows"
         self.prefix = self.native_prefix("x64-windows-static-md")
-        self.vc = self.root / "VS/VC/Tools/MSVC/selected"
+        self.vc = self.root / "VS/VC/Tools/MSVC/14.44.35207"
         self.sdk = self.root / "Windows Kits/10"
         self.compiler = {
-            "INCLUDE": str(self.vc / "include"),
-            "LIB": str(self.vc / "lib/x64"),
+            "INCLUDE": ";".join(
+                str(path)
+                for path in (
+                    self.vc / "include",
+                    self.sdk / "Include/10.0.26100.0/um",
+                    self.sdk / "Include/10.0.26100.0/ucrt",
+                )
+            ),
+            "LIB": ";".join(
+                str(path)
+                for path in (
+                    self.vc / "lib/x64",
+                    self.sdk / "Lib/10.0.26100.0/um/x64",
+                    self.sdk / "Lib/10.0.26100.0/ucrt/x64",
+                )
+            ),
             "PATH": str(self.vc / "bin/Hostx64/x64"),
             "TMP": str(self.root / "legacy-tmp"),
             "VCToolsInstallDir": str(self.vc),
             "WindowsSdkDir": str(self.sdk),
-            "WindowsSDKVersion": "10.0.selected\\",
-            "VCToolsVersion": "selected",
+            "WindowsSDKVersion": "10.0.26100.0\\",
+            "VCToolsVersion": "14.44.35207",
+            "UCRTVersion": "10.0.26100.0",
         }
-        for directory in (self.compiler["INCLUDE"], self.compiler["LIB"], self.compiler["TMP"]):
-            Path(directory).mkdir(parents=True)
-        for role in ("cl", "link", "lib", "ml64"):
-            self.file(f"VS/VC/Tools/MSVC/selected/bin/Hostx64/x64/{role}.exe")
+        for directory in (*self.compiler["INCLUDE"].split(";"), *self.compiler["LIB"].split(";"), self.compiler["TMP"]):
+            Path(directory).mkdir(parents=True, exist_ok=True)
+        for role in ("cl", "link", "lib", "ml64", "dumpbin"):
+            self.file(f"VS/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/{role}.exe")
+        self.file("VS/VC/Auxiliary/Build/vcvarsall.bat")
         for relative in (
-            "bin/10.0.selected/x64/mt.exe",
-            "Include/10.0.selected/um/Windows.h",
-            "Include/10.0.selected/ucrt/corecrt.h",
+            "bin/10.0.26100.0/x64/mt.exe",
+            "Include/10.0.26100.0/um/Windows.h",
+            "Include/10.0.26100.0/ucrt/corecrt.h",
         ):
             self.file("Windows Kits/10/" + relative)
-        (self.sdk / "Lib").mkdir()
         self.command = self.file("Windows/System32/cmd.exe")
-        self.environment.update({"COMSPEC": str(self.command), "SYSTEMROOT": str(self.root / "Windows")})
-
-    def windows_query(self, command, **kwargs):
-        self.assertEqual(command, 'cmd.exe /d /v:off /s /c ""%_AOBUS_ENV_SCRIPT%""')
-        self.assertEqual(kwargs["executable"], str(self.command))
-        self.assertEqual(kwargs["env"]["_AOBUS_ENV_PYTHON"], str(self.python))
-        self.assertNotIn("SECRET_TOKEN", kwargs["env"])
-        capture = {
-            **kwargs["env"],
-            **{k.lower(): v for k, v in self.compiler.items()},
-            "SECRET_TOKEN": "private-capture",
-        }
-        return subprocess.CompletedProcess(command, 0, json.dumps(capture).encode(), b"private-stderr")
+        self.environment.update(
+            {
+                **self.compiler,
+                "COMSPEC": str(self.command),
+                "SYSTEMROOT": str(self.root / "Windows"),
+                "VSINSTALLDIR": str(self.root / "VS"),
+                "BAZEL_VC": str(self.root / "VS/VC"),
+                "BAZEL_VC_FULL_VERSION": "14.44.35207",
+                "BAZEL_WINSDK_FULL_VERSION": "10.0.26100.0",
+            }
+        )
 
     def test_linux_is_mode_neutral_and_preserves_lazy_sdk_selectors_without_credentials(self):
         self.environment.update(
@@ -279,28 +295,118 @@ class EnvironmentDiscoveryTests(unittest.TestCase):
         self.assertFalse(selected.exists())
         self.assertEqual(len(self.queries), 1)
 
-    def test_windows_captures_case_insensitively_and_keeps_ordinary_scratch_repository_owned(self):
+    def test_windows_bare_preserves_original_tuple_case_insensitively_without_reselection(self):
         self.windows()
         self.environment["SECRET_TOKEN"] = "private-input"
+        self.environment = {key.swapcase(): value for key, value in self.environment.items()}
         previous = dict(os.environ)
-        with patch.object(bootstrap.subprocess, "run", side_effect=self.windows_query):
+        with patch.object(bootstrap.subprocess, "run", side_effect=AssertionError("unexpected VS selection")):
             result = self.discover()
         self.assertEqual(dict(os.environ), previous)
         self.assertEqual(result["compiler_environment"]["TMP"], str(self.output.parent / "_tmp"))
         self.assertEqual(result["compiler_environment"]["VCToolsInstallDir"], str(self.vc))
+        self.assertEqual(result["environment"]["BAZEL_VC"], str(self.root / "VS/VC"))
+        self.assertEqual(result["environment"]["BAZEL_VC_FULL_VERSION"], "14.44.35207")
+        self.assertEqual(result["environment"]["BAZEL_WINSDK_FULL_VERSION"], "10.0.26100.0")
         self.assertNotIn("SECRET_TOKEN", result["environment"])
-        self.assertIn(str(self.source / "script/ao/windows-build-env.bat"), result["watch_files"])
+        self.assertIn(str(self.root / "VS/VC/Auxiliary/Build/vcvarsall.bat"), result["watch_files"])
         self.assertIn(str(self.vc.parent), result["watch_directories"])
 
-    def test_legacy_windows_compiler_environment_is_preserved_without_reselection(self):
+    def test_windows_bare_requires_the_complete_original_client_tuple_before_any_discovery(self):
         self.windows()
+        selectors = ("BAZEL_VC", "BAZEL_VC_FULL_VERSION", "BAZEL_WINSDK_FULL_VERSION")
+        for removed in (selectors, selectors[:2], selectors[1:], *((name,) for name in selectors)):
+            with self.subTest(removed=removed):
+                environment = {key: value for key, value in self.environment.items() if key not in removed}
+                with (
+                    patch.object(bootstrap.subprocess, "run", side_effect=AssertionError("unexpected native command")),
+                    patch.object(bootstrap, "_compiler_environment", side_effect=AssertionError("late admission")),
+                    self.assertRaisesRegex(bootstrap.EnvironmentError, "complete original-client selector tuple"),
+                ):
+                    self.discover(environment=environment)
+
+    def test_windows_bare_rejects_empty_or_blank_original_selectors_before_admission(self):
+        self.windows()
+        for name, value in (("BAZEL_VC", ""), ("BAZEL_VC_FULL_VERSION", " "), ("BAZEL_WINSDK_FULL_VERSION", "")):
+            with (
+                self.subTest(selector=name),
+                patch.object(bootstrap, "_compiler_environment", side_effect=AssertionError("late admission")),
+                self.assertRaisesRegex(bootstrap.EnvironmentError, "complete original-client selector tuple"),
+            ):
+                self.discover(environment={**self.environment, name: value})
+
+    def test_windows_bare_rejects_each_selector_conflict_without_native_reselection(self):
+        self.windows()
+        for key, value in (
+            ("BAZEL_VC", str(self.root / "Other/VC")),
+            ("BAZEL_VC_FULL_VERSION", "14.43.34808"),
+            ("BAZEL_WINSDK_FULL_VERSION", "10.0.22621.0"),
+        ):
+            with (
+                self.subTest(selector=key),
+                patch.object(bootstrap.subprocess, "run", side_effect=AssertionError("unexpected native command")),
+                self.assertRaisesRegex(bootstrap.EnvironmentError, key + " disagrees"),
+            ):
+                self.discover(environment={**self.environment, key: value})
+
+    def test_windows_bare_requires_initialized_metadata_not_only_selector_exports(self):
+        self.windows()
+        for name in ("VSINSTALLDIR", "VCToolsVersion", "WindowsSDKVersion", "INCLUDE", "LIB", "VCToolsInstallDir"):
+            with self.subTest(metadata=name), self.assertRaisesRegex(bootstrap.EnvironmentError, name):
+                self.discover(environment={key: value for key, value in self.environment.items() if key != name})
+
+    def test_windows_bare_rejects_wrong_path_compiler_and_inconsistent_admission_metadata(self):
+        self.windows()
+        wrong = self.file("other/bin/cl.exe")
+        x86 = self.vc / "lib/x86"
+        x86.mkdir()
+        (self.root / "Other/VC").mkdir(parents=True)
+        for changes, message in (
+            ({"PATH": str(wrong.parent) + ";" + self.compiler["PATH"]}, "PATH must select"),
+            ({"PATH": str(wrong.parent)}, "PATH must select"),
+            ({"PATH": str(self.root / "no-cl")}, "PATH has no initialized x64"),
+            ({"PATH": ".;" + self.compiler["PATH"]}, "PATH entry"),
+            ({"VCToolsInstallDir": str(self.vc.parent)}, "VCToolsVersion disagrees"),
+            ({"LIB": self.compiler["LIB"].replace(str(self.vc / "lib/x64"), str(x86))}, "LIB must include"),
+            ({"INCLUDE": str(wrong.parent)}, "INCLUDE must include"),
+            (
+                {"VSINSTALLDIR": str(self.root / "Other"), "BAZEL_VC": str(self.root / "Other/VC")},
+                "VCToolsInstallDir disagrees",
+            ),
+            ({"UCRTVersion": "10.0.22621.0"}, "UCRTVersion disagrees"),
+            ({"VSINSTALLDIR": str(self.root / "Other")}, "BAZEL_VC disagrees"),
+        ):
+            with self.subTest(changes=changes), self.assertRaisesRegex(bootstrap.EnvironmentError, message):
+                self.discover(environment={**self.environment, **changes})
+
+    def test_windows_bare_rejects_a_missing_selected_entrypoint_instead_of_upstream_fallback(self):
+        self.windows()
+        (self.root / "VS/VC/Auxiliary/Build/vcvarsall.bat").unlink()
+        with self.assertRaisesRegex(bootstrap.EnvironmentError, "vcvarsall.bat"):
+            self.discover()
+
+    def test_portal_windows_compiler_environment_needs_no_helper_tuple_or_reselection(self):
+        self.windows()
+        environment = {"AOBUS_BAZEL_VCPKG_PREFIX": str(self.prefix)}
         with patch.object(bootstrap.subprocess, "run", side_effect=AssertionError("unexpected native command")):
             result = self.discover(
-                request=self.request(compiler_environment={**self.compiler, "SECRET_TOKEN": "private"})
+                request=self.request(compiler_environment={**self.compiler, "SECRET_TOKEN": "private"}),
+                environment=environment,
             )
         self.assertEqual(result["compiler_environment"], self.compiler)
         self.assertEqual(result["environment"]["WindowsSdkDir"], str(self.sdk))
         self.assertNotEqual(result["environment"]["TMP"], self.compiler["TMP"])
+
+    def test_portal_windows_compiler_environment_retains_matching_tuple_and_rejects_conflicts(self):
+        self.windows()
+        request = self.request(compiler_environment={key.swapcase(): value for key, value in self.compiler.items()})
+        result = self.discover(request=request)
+        self.assertEqual(result["compiler_environment"], self.compiler)
+        self.assertEqual(result["environment"]["BAZEL_WINSDK_FULL_VERSION"], "10.0.26100.0")
+        with self.assertRaisesRegex(bootstrap.EnvironmentError, "BAZEL_WINSDK_FULL_VERSION disagrees"):
+            self.discover(
+                request=request, environment={**self.environment, "BAZEL_WINSDK_FULL_VERSION": "10.0.22621.0"}
+            )
 
     def test_bad_explicit_prefix_never_falls_back_to_valid_legacy_prefix(self):
         self.windows()
@@ -343,32 +449,22 @@ class EnvironmentDiscoveryTests(unittest.TestCase):
             with self.assertRaises(PermissionError):
                 self.discover()
 
-    def test_cli_publishes_only_after_success_and_never_echoes_native_capture(self):
+    def test_cli_publishes_only_after_success_and_redacts_conflicting_selector_values(self):
         self.windows()
         self.output.parent.mkdir(parents=True)
-        platform = patch.object(bootstrap.sys, "platform", "win32")
-        with platform, patch.object(bootstrap.subprocess, "run", side_effect=self.windows_query):
+        with patch.object(bootstrap.sys, "platform", "win32"):
             self.assertEqual(
                 bootstrap.main(["--output", str(self.output), "--environment-json", json.dumps(self.environment)]), 0
             )
         self.assertEqual(json.loads(self.output.read_text(encoding="utf-8"))["host"], "windows")
-        for returncode, capture in ((0, b"SECRET_TOKEN=private-capture"), (1, b"private-capture")):
-            stderr = io.StringIO()
-            with (
-                patch.object(bootstrap.sys, "platform", "win32"),
-                contextlib.redirect_stderr(stderr),
-                patch.object(
-                    bootstrap.subprocess,
-                    "run",
-                    return_value=subprocess.CompletedProcess("cmd.exe", returncode, capture, b"private-stderr"),
-                ),
-            ):
-                status = bootstrap.main(
-                    ["--output", str(self.output), "--environment-json", json.dumps(self.environment)]
-                )
-            self.assertEqual(status, 1)
-            self.assertFalse(self.output.exists())
-            self.assertNotIn("private", stderr.getvalue())
+        self.environment["BAZEL_WINSDK_FULL_VERSION"] = "private-invalid-selector"
+        stderr = io.StringIO()
+        with patch.object(bootstrap.sys, "platform", "win32"), contextlib.redirect_stderr(stderr):
+            status = bootstrap.main(["--output", str(self.output), "--environment-json", json.dumps(self.environment)])
+        self.assertEqual(status, 1)
+        self.assertFalse(self.output.exists())
+        self.assertIn("BAZEL_WINSDK_FULL_VERSION", stderr.getvalue())
+        self.assertNotIn("private", stderr.getvalue())
 
     def test_interruption_removes_stale_success_and_never_publishes(self):
         self.windows()
@@ -378,7 +474,7 @@ class EnvironmentDiscoveryTests(unittest.TestCase):
         with (
             patch.object(bootstrap.sys, "platform", "win32"),
             contextlib.redirect_stderr(stderr),
-            patch.object(bootstrap.subprocess, "run", side_effect=KeyboardInterrupt),
+            patch.object(bootstrap, "_compiler_environment", side_effect=KeyboardInterrupt),
         ):
             status = bootstrap.main(["--output", str(self.output), "--environment-json", json.dumps(self.environment)])
         self.assertEqual(status, 130)
@@ -403,10 +499,10 @@ class EnvironmentDiscoveryTests(unittest.TestCase):
             self.assertIn(str(path), result["watch_files"])
 
     def test_native_timeout_is_redacted_and_does_not_publish_success(self):
-        self.windows()
+        self.macos()
         stderr = io.StringIO()
         with (
-            patch.object(bootstrap.sys, "platform", "win32"),
+            patch.object(bootstrap.sys, "platform", "darwin"),
             contextlib.redirect_stderr(stderr),
             patch.object(
                 bootstrap.subprocess,
@@ -427,6 +523,63 @@ class EnvironmentDiscoveryTests(unittest.TestCase):
         self.assertEqual(status, 1)
         self.assertNotIn("private-secret", stderr.getvalue())
         self.assertFalse(self.output.exists())
+
+
+class WindowsCompilerSelectionTests(unittest.TestCase):
+    def setUp(self):
+        self.environment = {
+            "VSINSTALLDIR": "C:\\Program Files\\Visual Studio\\2022\\BuildTools\\",
+            "VCToolsVersion": "14.44.35207",
+            "WindowsSDKVersion": "10.0.26100.0\\",
+        }
+
+    def test_initialized_environment_derives_the_same_concrete_tuple_for_portal_and_bare_clients(self):
+        self.assertEqual(
+            bootstrap.windows_compiler_selection(self.environment),
+            {
+                "BAZEL_VC": "C:/Program Files/Visual Studio/2022/BuildTools/VC",
+                "BAZEL_VC_FULL_VERSION": "14.44.35207",
+                "BAZEL_WINSDK_FULL_VERSION": "10.0.26100.0",
+            },
+        )
+        self.assertNotIn("BAZEL_VC", self.environment, "the caller must export selectors before starting Bazel")
+
+    def test_windows_names_and_explicit_vc_paths_compare_case_insensitively(self):
+        environment = {key.swapcase(): value for key, value in self.environment.items()}
+        environment.update(
+            {
+                "bazel_vc": "c:/PROGRAM FILES/visual studio/2022/buildtools/VC/",
+                "bazel_vc_full_version": "14.44.35207",
+                "bazel_winsdk_full_version": "10.0.26100.0",
+            }
+        )
+        self.assertEqual(
+            bootstrap.windows_compiler_selection(environment), bootstrap.windows_compiler_selection(self.environment)
+        )
+
+    def test_each_explicit_selector_conflict_fails_instead_of_overwriting_it(self):
+        for name, value in (
+            ("BAZEL_VC", "C:/Other/VC"),
+            ("BAZEL_VC_FULL_VERSION", "14.43.34808"),
+            ("BAZEL_WINSDK_FULL_VERSION", "10.0.22621.0"),
+            ("BAZEL_VC_FULL_VERSION", "14.44.35207\\"),
+            ("BAZEL_WINSDK_FULL_VERSION", "10.0.26100.0\\"),
+            ("BAZEL_WINSDK_FULL_VERSION", ""),
+        ):
+            with self.subTest(name=name, value=value), self.assertRaisesRegex(bootstrap.EnvironmentError, name):
+                bootstrap.windows_compiler_selection({**self.environment, name.lower(): value})
+
+    def test_missing_or_nonconcrete_initialized_metadata_fails_before_tuple_derivation(self):
+        for name, value in (
+            ("VSINSTALLDIR", ""),
+            ("VSINSTALLDIR", "relative"),
+            ("VCToolsVersion", "14.44"),
+            ("VCToolsVersion", "../14.44.35207"),
+            ("WindowsSDKVersion", "10.0"),
+            ("WindowsSDKVersion", "10.0.26100.0\\other"),
+        ):
+            with self.subTest(name=name, value=value), self.assertRaisesRegex(bootstrap.EnvironmentError, name):
+                bootstrap.windows_compiler_selection({**self.environment, name: value})
 
 
 class NativePlatformDiscoveryTests(unittest.TestCase):

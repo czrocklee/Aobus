@@ -200,7 +200,7 @@
   "moduleExtensions": {
     "//bazel:dependencies.bzl%dependencies": {
       "general": {
-        "bzlTransitiveDigest": "zdsnOV4mYdJB7MOzL8ectFxvtgz5Ca5jrQPeBO+ZJ/Q=",
+        "bzlTransitiveDigest": "wY0RFtkTHVuraZZu0kNAqH+GI0zB3Dqbhz0V/ijrv/A=",
         "usagesDigest": "xq8tDLFxkt99+Cam7irGlY+r5AqIF1Jz2wKQMKyaC90=",
         "recordedInputs": [
           "REPO_MAPPING:,aobus_environment +dependencies+aobus_environment"
@@ -245,7 +245,7 @@
     },
     "//bazel/lint:policy.bzl%lint_policy": {
       "general": {
-        "bzlTransitiveDigest": "uQyQib3FFcWaMNgaABI/Y+wUgyemOjYzOzE7kf3oX1c=",
+        "bzlTransitiveDigest": "WRBl3sXpFW09TAp6wO7ecpOoVQPQBjOGgldUnGmOBXg=",
         "usagesDigest": "RvowExNtaGUaK4UBSm0aLtioKISo5vgPyeT4Dxpg7io=",
         "recordedInputs": [
           "REPO_MAPPING:,aobus_environment +dependencies+aobus_environment"
@@ -264,7 +264,7 @@
     },
     "//bazel/lint:sdk.bzl%lint_sdk": {
       "general": {
-        "bzlTransitiveDigest": "usiqLpoxHrgxLxSQFj3ExMRdfVLnBPboIWzeKxKoAFc=",
+        "bzlTransitiveDigest": "J4LUxsBTbviL9NSlBRyWUJQeNLXFBzpTPp//XPm9nNk=",
         "usagesDigest": "4Oi/yYx1qHfRWvvXoW6P8bD3uLQefL1QbxMhi0ezvLM=",
         "recordedInputs": [
           "REPO_MAPPING:,aobus_environment +dependencies+aobus_environment"

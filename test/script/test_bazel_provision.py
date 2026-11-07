@@ -407,8 +407,8 @@ class PreparedNugetSelectionTest(unittest.TestCase):
                 {
                     "AOBUS_STATE_ROOT": str(self.root / "state"),
                     "VSINSTALLDIR": "C:/selected-vs/",
-                    "VCToolsVersion": "14.selected",
-                    "WindowsSDKVersion": "10.selected/",
+                    "VCToolsVersion": "14.44.35207",
+                    "WindowsSDKVersion": "10.0.26100.0/",
                     **environment,
                 },
                 clear=True,

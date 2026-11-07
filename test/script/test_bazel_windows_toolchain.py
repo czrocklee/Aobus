@@ -135,15 +135,19 @@ class WindowsToolchainPreparationTest(unittest.TestCase):
         self.root = Path(temporary.name)
         self.build = self.root / "build"
         self.selected = {
-            "INCLUDE": "C:\\VS\\VC\\Tools\\MSVC\\selected\\include;C:\\SDK\\Include\\10.0.selected\\um;",
-            "LIB": "C:\\VS\\VC\\Tools\\MSVC\\selected\\lib\\x64;C:\\SDK\\Lib\\10.0.selected\\um\\x64;",
-            "PATH": "C:\\VS\\VC\\Tools\\MSVC\\selected\\bin\\Hostx64\\x64;C:\\Windows\\System32",
+            "INCLUDE": (
+                "C:\\VS\\2022\\Community\\VC\\Tools\\MSVC\\14.44.35207\\include;C:\\SDK\\Include\\10.0.26100.0\\um;"
+            ),
+            "LIB": (
+                "C:\\VS\\2022\\Community\\VC\\Tools\\MSVC\\14.44.35207\\lib\\x64;C:\\SDK\\Lib\\10.0.26100.0\\um\\x64;"
+            ),
+            "PATH": "C:\\VS\\2022\\Community\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64;C:\\Windows\\System32",
             "TMP": "C:\\Users\\fixture\\AppData\\Local\\Temp",
-            "VCToolsInstallDir": "C:\\VS\\VC\\Tools\\MSVC\\selected\\",
+            "VCToolsInstallDir": "C:\\VS\\2022\\Community\\VC\\Tools\\MSVC\\14.44.35207\\",
             "WindowsSdkDir": "C:\\SDK\\",
-            "WindowsSDKVersion": "10.0.selected\\",
-            "VCToolsVersion": "14.44-selected",
-            "UCRTVersion": "10.0.selected.0",
+            "WindowsSDKVersion": "10.0.26100.0\\",
+            "VCToolsVersion": "14.44.35207",
+            "UCRTVersion": "10.0.26100.0",
             "NETFXSDKDir": "C:\\Windows Kits\\NETFXSDK\\selected-netfx\\",
             "VSINSTALLDIR": "C:\\VS\\2022\\Community\\",
         }
@@ -187,7 +191,7 @@ class WindowsToolchainPreparationTest(unittest.TestCase):
         repo_env = self.repo_env(prepared)
         self.assertEqual(repo_env["BAZEL_VC"], (PureWindowsPath(self.selected["VSINSTALLDIR"]) / "VC").as_posix())
         self.assertEqual(repo_env["BAZEL_VC_FULL_VERSION"], self.selected["VCToolsVersion"])
-        self.assertEqual(repo_env["BAZEL_WINSDK_FULL_VERSION"], "10.0.selected")
+        self.assertEqual(repo_env["BAZEL_WINSDK_FULL_VERSION"], "10.0.26100.0")
         # The dependency and WinUI admission keeps the original separator-bearing
         # spelling; only the upstream selector is normalized.
         request = json.loads((prepared / "request.json").read_text(encoding="utf-8"))
@@ -232,7 +236,7 @@ class WindowsToolchainPreparationTest(unittest.TestCase):
         repo_env = self.repo_env(self.prepare(dict(self.selected, **equivalent)))
         self.assertEqual(repo_env["BAZEL_VC"], (PureWindowsPath(self.selected["VSINSTALLDIR"]) / "VC").as_posix())
         self.assertEqual(repo_env["BAZEL_VC_FULL_VERSION"], self.selected["VCToolsVersion"])
-        self.assertEqual(repo_env["BAZEL_WINSDK_FULL_VERSION"], "10.0.selected")
+        self.assertEqual(repo_env["BAZEL_WINSDK_FULL_VERSION"], "10.0.26100.0")
 
     def test_prepare_selects_git_for_windows_bash_unless_the_caller_names_a_shell(self):
         git = self.root / "Git/cmd/git.exe"

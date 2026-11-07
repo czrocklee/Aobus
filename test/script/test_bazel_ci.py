@@ -1,9 +1,15 @@
 """Standalone native CI selection and explicit R2 proof boundaries."""
 
+import ast
+import importlib
 import ntpath
 import re
+import subprocess
+import sys
+import textwrap
 import unittest
 
+from ao.core.bazel_providers import vcpkg_triplets
 from ao.core.paths import PROJECT_ROOT
 
 WORKFLOW = PROJECT_ROOT / ".github/workflows/ci.yml"
@@ -161,6 +167,43 @@ class StandaloneBazelCiTest(unittest.TestCase):
         self.assertNotIn("aobus-state", direct_evidence)
         self.assertNotIn("build.log", direct_evidence)
         self.assertNotIn("spawns.json", direct_evidence)
+
+    def test_windows_direct_entry_executes_the_embedded_triplet_query(self):
+        direct = step(job("windows_bazel"), "Test direct Bazel entry")
+        match = re.search(r"\$tripletOutput = [^\n]+ -c '([^']+)'", direct)
+        if match is None:
+            self.fail("Windows direct entry must contain its isolated triplet query")
+        script = match.group(1)
+        result = subprocess.run(
+            [sys.executable, "-I", "-S", "-B", "-X", "utf8", "-c", script],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), vcpkg_triplets(host="windows")[0])
+        self.assertEqual(result.stderr, "")
+
+    def test_windows_direct_entry_imports_client_setup_and_shares_the_compiler_tuple(self):
+        direct = step(job("windows_bazel"), "Test direct Bazel entry")
+        match = re.search(r"\$selectionScript = @'\n(.*?)\n\s*'@", direct, re.DOTALL)
+        if match is None:
+            self.fail("Windows direct entry must initialize its client compiler selection")
+        script = textwrap.dedent(match.group(1))
+        for node in ast.walk(ast.parse(script)):
+            if isinstance(node, ast.ImportFrom):
+                if node.module is None or node.level:
+                    self.fail("Client setup imports must name absolute modules")
+                module = importlib.import_module(node.module)
+                for name in node.names:
+                    self.assertTrue(hasattr(module, name.name), f"{node.module}.{name.name}")
+        self.assertIn("prepare_build_environment()", script)
+        self.assertIn("windows_compiler_selection(os.environ)", script)
+        self.assertNotIn("prepare_workspace", script)
+        self.assertIn("$selection.PSObject.Properties", direct)
+        self.assertIn('Set-Item -LiteralPath "Env:$($property.Name)"', direct)
+        self.assertLess(direct.index("$selectionScript"), direct.index("& $bazel"))
 
     def test_windows_tooling_fails_before_expensive_product_work(self):
         windows = job("windows_bazel")

@@ -13,12 +13,12 @@ import subprocess
 import sys
 import tempfile
 import urllib.request
-from pathlib import Path, PureWindowsPath
+from pathlib import Path
 from typing import Any
 
+from . import bazel_environment, builddir
 from . import bazel_native as native
 from . import bazel_providers as providers
-from . import builddir
 
 TOOLCHAIN = native.PROJECT_ROOT / "script/ao/bazel-toolchain.json"
 # The root BUILD owns the default suite aggregate; subsystem suites stay explicit conveniences.
@@ -173,28 +173,10 @@ def prepare_workspace(
                 "NETFXSDKDir",
             )
         }
-        if any(
-            not lookup.get(key, "").strip().rstrip("\\/")
-            for key in ("vsinstalldir", "vctoolsversion", "windowssdkversion")
-        ):
-            raise native.BazelWorkspaceError(
-                "Windows Bazel auto-configuration requires selected VSINSTALLDIR, VCToolsVersion and WindowsSDKVersion"
-            )
-        compiler_selection = {
-            "BAZEL_VC": (PureWindowsPath(lookup["vsinstalldir"]) / "VC").as_posix(),
-            "BAZEL_VC_FULL_VERSION": lookup["vctoolsversion"].rstrip("\\/"),
-            "BAZEL_WINSDK_FULL_VERSION": lookup["windowssdkversion"].rstrip("\\/"),
-        }
-        for name, value in compiler_selection.items():
-            explicit = lookup.get(name.casefold())
-            if (
-                explicit
-                and explicit.replace("\\", "/").rstrip("/").casefold()
-                != value.replace("\\", "/").rstrip("/").casefold()
-            ):
-                raise native.BazelWorkspaceError(
-                    f"Explicit {name} disagrees with the selected Visual Studio environment"
-                )
+        try:
+            compiler_selection = bazel_environment.windows_compiler_selection(environment)
+        except bazel_environment.EnvironmentError as error:
+            raise native.BazelWorkspaceError(str(error)) from error
     native.write_json(prepared / "request.json", request)
     selected = {
         "AOBUS_BAZEL_CONFIGURATION": (prepared / "request.json").as_posix(),

@@ -1550,12 +1550,34 @@ jobs:
           $contract = Get-Content script/ao/toolchain.json -Raw | ConvertFrom-Json
           $python = Join-Path $env:AOBUS_STATE_ROOT "tools\python\$($contract.python)\python.exe"
           if (-not (Test-Path $python)) { throw "Governed Python is missing: $python" }
-          $tripletOutput = & $python -I -S -B -X utf8 -X "pycache_prefix=$bare\_tmp\pycache" -c 'import sys; sys.path.insert(0, "script"); from ao.core.bazel_workspace import vcpkg_triplets; print(vcpkg_triplets(host="windows")[0])'
+          $tripletOutput = & $python -I -S -B -X utf8 -X "pycache_prefix=$bare\_tmp\pycache" -c 'import sys; sys.path.insert(0, "script"); from ao.core.bazel_providers import vcpkg_triplets; print(vcpkg_triplets(host="windows")[0])'
           $tripletExit = $LASTEXITCODE
           if ($tripletExit -ne 0) { exit $tripletExit }
           $triplet = ($tripletOutput -join '').Trim()
           if ([string]::IsNullOrWhiteSpace($triplet)) { throw 'Native target triplet was not reported.' }
           $env:AOBUS_BAZEL_VCPKG_PREFIX = "D:\aobus-bazel-debug\vcpkg_installed\$triplet"
+          # Initialize the client once; upstream MSVC and SDK admission must see
+          # the same explicit selection, not independent current/latest probes.
+          $selectionScript = @'
+          import json, os, sys
+          sys.path.insert(0, "script")
+          from ao.core.bazel_environment import windows_compiler_selection
+          from ao.core.windows_portal import prepare_build_environment
+          prepare_build_environment()
+          names = (
+              "INCLUDE", "LIB", "PATH", "VSINSTALLDIR", "VCToolsInstallDir",
+              "WindowsSdkDir", "WindowsSDKVersion", "VCToolsVersion", "UCRTVersion", "NETFXSDKDir",
+          )
+          selected = {name: os.environ[name] for name in names if name in os.environ}
+          selected.update(windows_compiler_selection(os.environ))
+          print(json.dumps(selected))
+          '@
+          $selectionOutput = & $python -I -S -B -X utf8 -X "pycache_prefix=$bare\_tmp\pycache" -c $selectionScript
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $selection = ($selectionOutput -join '') | ConvertFrom-Json
+          foreach ($property in $selection.PSObject.Properties) {
+            Set-Item -LiteralPath "Env:$($property.Name)" -Value $property.Value
+          }
           $git = (Get-Command git -ErrorAction Stop).Source
           $bash = $null
           $parent = $git

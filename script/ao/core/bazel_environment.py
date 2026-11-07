@@ -16,7 +16,7 @@ import stat
 import subprocess
 import sys
 from collections.abc import Iterator, Mapping
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -62,6 +62,7 @@ ENVIRONMENT_KEYS = (
     "BAZEL_SH",
     "BAZEL_VC",
     "BAZEL_VC_FULL_VERSION",
+    "BAZEL_WINSDK_FULL_VERSION",
     "VSINSTALLDIR",
     "VCToolsInstallDir",
     "WindowsSdkDir",
@@ -186,42 +187,60 @@ def _selected_environment(environment: Mapping[str, str]) -> Iterator[None]:
 def _query(argv: list[str], environment: Mapping[str, str]) -> str:
     result = subprocess.run(argv, env=dict(environment), capture_output=True, text=True, check=False, timeout=60)
     if result.returncode:
-        # Tool output, including a failed VS capture, is never a diagnostic channel.
+        # Native tool output is never a diagnostic channel.
         raise EnvironmentError(f"native discovery failed: {Path(argv[0]).name}; check the selected SDK outside Bazel")
     return result.stdout.strip()
 
 
-def _windows_environment(environment: dict[str, str], inventory: _Inventory) -> dict[str, str]:
-    script = inventory.require(PROJECT_ROOT / "script/ao/windows-build-env.bat")
-    inventory.require(PROJECT_ROOT / "script/ao/windows-vsenv.bat")
-    command = environment.get("COMSPEC")
-    if not command:
-        command = str(_absolute(environment.get("SYSTEMROOT"), "SYSTEMROOT") / "System32/cmd.exe")
-    inventory.require(_absolute(command, "COMSPEC"))
-    program_files = environment.get("ProgramFiles(x86)")
-    if program_files:
-        inventory.probe(Path(program_files) / "Microsoft Visual Studio/Installer/vswhere.exe")
-    selected = dict(environment, _AOBUS_ENV_SCRIPT=str(script), _AOBUS_ENV_PYTHON=sys.executable)
-    result = subprocess.run(
-        'cmd.exe /d /v:off /s /c ""%_AOBUS_ENV_SCRIPT%""',
-        executable=command,
-        env=selected,
-        capture_output=True,
-        check=False,
-        timeout=120,
-    )
-    if result.returncode:
-        raise EnvironmentError("Visual Studio setup failed; prepare the x64 C++ workload and Windows SDK outside Bazel")
-    try:
-        captured = _mapping(json.loads(result.stdout))
-    except (ValueError, UnicodeError, EnvironmentError):
-        raise EnvironmentError("Visual Studio setup did not return a valid string environment") from None
-    return _filter(captured, _INPUT_KEYS, "windows")
+def windows_compiler_selection(environment: Mapping[str, str]) -> dict[str, str]:
+    """Pin rules_cc to an initialized VS environment, rejecting explicit conflicts.
+
+    Bare clients must export the returned selectors before starting Bazel. A
+    repository helper's child environment cannot select rules_cc's repository.
+    """
+    lookup = {key.casefold(): value for key, value in environment.items()}
+    for name in ("VSINSTALLDIR", "VCToolsVersion", "WindowsSDKVersion"):
+        if not lookup.get(name.casefold(), "").strip().rstrip("\\/"):
+            raise EnvironmentError(
+                f"Windows Bazel requires initialized {name}; prepare the selected x64 VS environment"
+            )
+    visual_studio = lookup["vsinstalldir"]
+    if not (PureWindowsPath(visual_studio).is_absolute() or Path(visual_studio).is_absolute()):
+        raise EnvironmentError("VSINSTALLDIR must select an absolute native path")
+    vc_version = lookup["vctoolsversion"].rstrip("\\/")
+    sdk_version = lookup["windowssdkversion"].rstrip("\\/")
+    if not re.fullmatch(r"\d+\.\d+\.\d+", vc_version):
+        raise EnvironmentError("VCToolsVersion must name one full MSVC version")
+    if not re.fullmatch(r"\d+\.\d+\.\d+\.\d+", sdk_version):
+        raise EnvironmentError("WindowsSDKVersion must name one full Windows SDK version")
+    selection = {
+        "BAZEL_VC": (PureWindowsPath(visual_studio) / "VC").as_posix(),
+        "BAZEL_VC_FULL_VERSION": vc_version,
+        "BAZEL_WINSDK_FULL_VERSION": sdk_version,
+    }
+    for name, value in selection.items():
+        explicit = lookup.get(name.casefold())
+        if explicit is not None and (
+            PureWindowsPath(explicit) != PureWindowsPath(value) if name == "BAZEL_VC" else explicit != value
+        ):
+            raise EnvironmentError(f"Explicit {name} disagrees with the selected Visual Studio environment")
+    return selection
+
+
+def _windows_compiler_selection(environment: dict[str, str], compiler: dict[str, str], inventory: _Inventory) -> None:
+    selection = windows_compiler_selection({**environment, **compiler})
+    vc_root = inventory.require(_absolute(selection["BAZEL_VC"], "BAZEL_VC"), directory=True)
+    expected = vc_root / "Tools/MSVC" / selection["BAZEL_VC_FULL_VERSION"]
+    if Path(compiler["VCToolsInstallDir"]).resolve() != expected.resolve():
+        raise EnvironmentError("VCToolsInstallDir disagrees with BAZEL_VC/BAZEL_VC_FULL_VERSION")
+    # Require the modern, exact-version upstream entrypoint rather than allowing
+    # rules_cc to ignore selectors or fall back to another installed VC tree.
+    inventory.require(vc_root / "Auxiliary/Build/vcvarsall.bat")
 
 
 def _compiler_environment(value: object, inventory: _Inventory) -> dict[str, str]:
     selected = _filter(_mapping(value), _COMPILER_KEYS, "windows")
-    for key in _COMPILER_KEYS[:7]:
+    for key in _COMPILER_KEYS[:8]:
         if not selected.get(key, "").strip():
             raise EnvironmentError(f"Windows compiler_environment requires {key}")
     for key in ("VCToolsInstallDir", "WindowsSdkDir", "TMP"):
@@ -230,11 +249,37 @@ def _compiler_environment(value: object, inventory: _Inventory) -> dict[str, str
     if not version or version in {".", ".."} or re.search(r"[\\/]", version):
         raise EnvironmentError("WindowsSDKVersion must name one selected SDK version")
     vc, sdk = Path(selected["VCToolsInstallDir"]), Path(selected["WindowsSdkDir"])
-    for key in ("INCLUDE", "LIB"):
-        for entry in selected[key].split(";"):
-            if entry:
-                inventory.require(_absolute(entry, key), directory=True)
-    for role in ("cl", "link", "lib", "ml64"):
+    if vc.name != selected["VCToolsVersion"].rstrip("\\/"):
+        raise EnvironmentError("VCToolsVersion disagrees with VCToolsInstallDir")
+    ucrt_version = selected.get("UCRTVersion", "").rstrip("\\/")
+    if ucrt_version and ucrt_version != version:
+        raise EnvironmentError("UCRTVersion disagrees with WindowsSDKVersion")
+    for key, required in (
+        ("INCLUDE", (vc / "include", sdk / "Include" / version / "um", sdk / "Include" / version / "ucrt")),
+        ("LIB", (vc / "lib/x64", sdk / "Lib" / version / "um/x64", sdk / "Lib" / version / "ucrt/x64")),
+    ):
+        directories = {
+            inventory.require(_absolute(entry, key), directory=True).resolve()
+            for entry in selected[key].split(";")
+            if entry
+        }
+        if any(path.resolve() not in directories for path in required):
+            raise EnvironmentError(
+                f"Windows compiler {key} must include the selected x64 MSVC and Windows SDK directories"
+            )
+    compiler = vc / "bin/Hostx64/x64/cl.exe"
+    for entry in selected["PATH"].split(";"):
+        directory = _absolute(entry.strip('"'), "Windows compiler PATH entry")
+        candidate = directory / "cl.exe"
+        if inventory.optional_file(candidate):
+            if candidate.resolve() != compiler.resolve():
+                raise EnvironmentError(
+                    "Windows compiler PATH must select VCToolsInstallDir/bin/Hostx64/x64/cl.exe first"
+                )
+            break
+    else:
+        raise EnvironmentError("Windows compiler PATH has no initialized x64 cl.exe")
+    for role in ("cl", "link", "lib", "ml64", "dumpbin"):
         inventory.require(vc / "bin/Hostx64/x64" / (role + ".exe"))
     inventory.require(sdk / "bin" / version / "x64/mt.exe")
     inventory.require(sdk / "Include" / version / "um/Windows.h")
@@ -329,13 +374,28 @@ def discover_environment(
         if report.get("schemaVersion") != 1 or report.get("nixpkgsRevision") != pin["rev"]:
             raise EnvironmentError("Nix dependency report does not match nixpkgs.json")
     elif host == "windows":
-        if "compiler_environment" in prepared:
+        # The original client tuple, not a child capture/derived export, selects
+        # upstream rules_cc. Portal requests already pin it in their launch rc.
+        selectors = ("BAZEL_VC", "BAZEL_VC_FULL_VERSION", "BAZEL_WINSDK_FULL_VERSION")
+        portal = "compiler_environment" in prepared
+        validate_selection = not portal or any(name in selected for name in selectors)
+        if validate_selection:
+            if any(not selected.get(name, "").strip() for name in selectors):
+                raise EnvironmentError(
+                    "Windows bare Bazel requires the complete original-client selector tuple: " + ", ".join(selectors)
+                )
+            # Reject absent or contradictory initialized metadata before probing
+            # SDKs. Never initialize latest/current cl in a separate CMD child.
+            windows_compiler_selection(
+                selected if not portal else {**selected, **_mapping(prepared["compiler_environment"])}
+            )
+        if portal:
             compiler = _compiler_environment(prepared["compiler_environment"], inventory)
         else:
-            selected["TMP"] = selected["TEMP"] = str(scratch)
-            selected = _windows_environment(selected, inventory)
             selected["TMP"] = str(scratch)
             compiler = _compiler_environment(selected, inventory)
+        if validate_selection:
+            _windows_compiler_selection(selected, compiler, inventory)
         selected.update({key: value for key, value in compiler.items() if key in ENVIRONMENT_KEYS})
     else:
         _macos_environment(selected, inventory)

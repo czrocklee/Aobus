@@ -60,6 +60,7 @@ class EnvironmentRuleTest(unittest.TestCase):
         self.executions = []
         self.events = []
         self.environ = {}
+        self.environment_reads = set()
         self.which = None
         self.metadata = {}
         self.execute_code = 0
@@ -104,7 +105,7 @@ class EnvironmentRuleTest(unittest.TestCase):
         return SimpleNamespace(
             os=SimpleNamespace(name=os_name, environ=self.environ),
             attr=SimpleNamespace(helper="bazel_environment.py", root="CMakeLists.txt"),
-            getenv=self.environ.get,
+            getenv=self.getenv,
             which=lambda name: self.which if name == "nix-shell" else None,
             path=lambda value: _RepoPath(self.root / str(value), self.directory_reads),
             watch=lambda path: self.watches.add(str(path)),
@@ -113,6 +114,10 @@ class EnvironmentRuleTest(unittest.TestCase):
             execute=self.execute,
             read=lambda path: (self.root / str(path)).read_text(encoding="utf-8"),
         )
+
+    def getenv(self, name):
+        self.environment_reads.add(name)
+        return self.environ.get(name)
 
     def file(self, name, content, *, executable=False):
         self.assertFalse(executable)
@@ -263,6 +268,9 @@ class EnvironmentRuleTest(unittest.TestCase):
             "ProgramW6432": "C:/Program Files",
             "WindowsSdkDir": "C:/windows-kits/sdk",
             "VCToolsInstallDir": "C:/vc/tools/msvc",
+            "bazel_vc": "C:/selected/VC",
+            "bazel_vc_full_version": "14.44.35207",
+            "bazel_winsdk_full_version": "10.0.26100.0",
             "AOBUS_STATE_ROOT": str(state),
             "UNRELATED_CLIENT_VALUE": "closed",
             "TMP": "volatile-client-temp",
@@ -296,6 +304,11 @@ class EnvironmentRuleTest(unittest.TestCase):
         self.assertEqual(environment["PROGRAMW6432"], "C:/Program Files")
         self.assertEqual(environment["WINDOWSSDKDIR"], "C:/windows-kits/sdk")
         self.assertEqual(environment["VCTOOLSINSTALLDIR"], "C:/vc/tools/msvc")
+        self.assertEqual(environment["BAZEL_VC"], "C:/selected/VC")
+        self.assertEqual(environment["BAZEL_VC_FULL_VERSION"], "14.44.35207")
+        self.assertEqual(environment["BAZEL_WINSDK_FULL_VERSION"], "10.0.26100.0")
+        for name in ("bazel_vc", "bazel_vc_full_version", "bazel_winsdk_full_version"):
+            self.assertIn(name, self.environment_reads, "selectors must invalidate the repository through ctx.getenv")
         self.assertIsNone(environment["UNRELATED_CLIENT_VALUE"])
         self.assertEqual(environment["TMP"], str(self.root / "_tmp"))
         self.assertIn(str(python), self.watches)
