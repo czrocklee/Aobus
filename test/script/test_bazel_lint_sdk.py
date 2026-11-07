@@ -645,11 +645,12 @@ class RepositoryHelperTest(unittest.TestCase):
         block = re.search(r'"modules": attr\.label_list\(\s*default = \[(.*?)\]', rule, re.DOTALL)
         self.assertIsNotNone(block)
         declared = set(re.findall(r'Label\("//:(script/ao/[^"]+\.py)"\)', block[1]))
-        # Import the helper as a script exactly as the repository rule starts it.
+        # The repository rule passes an absolute helper path. Keep that shape
+        # even at a UNC share root, where relative Path.absolute() is unreliable.
         probe = (
             "import pathlib, runpy, sys\n"
-            "runpy.run_path('script/ao/core/bazel_lint_sdk.py', run_name='sdk_probe')\n"
-            "root = pathlib.Path('script').absolute()\n"
+            f"root = pathlib.Path({str(root / 'script')!r})\n"
+            "runpy.run_path(str(root / 'ao/core/bazel_lint_sdk.py'), run_name='sdk_probe')\n"
             "for module in list(sys.modules.values()):\n"
             "    path = pathlib.Path(getattr(module, '__file__', None) or '/')\n"
             "    if path.is_relative_to(root):\n"

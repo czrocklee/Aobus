@@ -628,6 +628,20 @@ class WindowsProjectionTest(unittest.TestCase):
         self.stdout = None
         self.stderr = "fixture diagnostics"
         self._payload()
+        self.payload["Properties"]["MSBuildProjectFullPath"] = str(self.tree / "AobusSdk.vcxproj")
+        self.payload["Items"]["AobusEvaluatedImport"] = [
+            {"Identity": str(path)} for path in [*self.props, *self.targets, self.xaml_targets, self.evaluated_props]
+        ]
+        self.payload["Items"]["AobusEvaluatorInput"] = [
+            {"Identity": str(path)}
+            for path in (
+                self.msbuild.parent / "Microsoft.Build.dll",
+                self.msbuild.parent / "Microsoft.Build.Tasks.Core.dll",
+                self.msbuild_config,
+                self.redirected_dependency,
+                self.loaded_dependency,
+            )
+        ]
         self.enterContext(mock.patch.object(bazel_winui.subprocess, "run", side_effect=self.query))
 
     def _restore_packages(self):
@@ -684,9 +698,19 @@ class WindowsProjectionTest(unittest.TestCase):
         self.vc = self.visual_studio / "VC/Tools/MSVC" / VC_VERSION
         self.msbuild = _touch(self.visual_studio / "MSBuild/Current/Bin/amd64/MSBuild.exe")
         host = self.msbuild.parent
-        _touch(host / "MSBuild.exe.config")
+        self.msbuild_config = _touch(host / "MSBuild.exe.config", "selected native binding policy")
         _touch(host / "Microsoft.Build.dll")
+        _touch(host / "Microsoft.Build.Tasks.Core.dll")
+        self.redirected_dependency = _touch(host / "System.Collections.Immutable.dll", "selected redirected assembly")
+        # Loaded framework dependencies need admission too, even outside the
+        # selected MSBuild directory's pre-existing broad runtime family.
+        self.loaded_dependency = _touch(self.tmp / "framework/System.Core.dll", "loaded framework assembly")
+        self.task_compiler = _touch(host.parent / "Roslyn/csc.exe")
+        self.task_compiler_config = _touch(host.parent / "Roslyn/csc.exe.config")
         self.xaml_targets = _touch(host / "Microsoft.Xaml.targets")
+        # Outside every broad selected family and absent from MSBuildAllProjects:
+        # only the native evaluator's actual import inventory can admit this.
+        self.evaluated_props = _touch(self.visual_studio / "MSBuild/Current/Microsoft.Common.props", "<Project />")
         _touch(host / "en/Microsoft.Build.resources.dll")  # a satellite locale payload
         self.vc_targets = self.visual_studio / "MSBuild/Microsoft/VC/v180"
         _touch(self.vc_targets / "Microsoft.Cpp.props")
@@ -765,8 +789,8 @@ class WindowsProjectionTest(unittest.TestCase):
                 "MSBuildRuntimeType": "Full",
                 "VCTargetsPath": str(self.vc_targets),
                 "CppWinRTPath": '"' + str(self.cppwinrt_exe.parent) + '"',
-                # The native closure stays incomplete; declared entries outside
-                # the selected installation must never be projected.
+                # Deliberately incomplete conventionally maintained property:
+                # Microsoft.Common.props is a real evaluated import but absent.
                 "MSBuildAllProjects": ";".join(
                     [
                         str(self.tree / "AobusSdk.vcxproj"),
@@ -831,12 +855,14 @@ class WindowsProjectionTest(unittest.TestCase):
                 "MSBuildRuntimeType",
                 "VCTargetsPath",
                 "CppWinRTPath",
-                "MSBuildAllProjects",
+                "MSBuildProjectFullPath",
             },
             self._query_set(command, "/getProperty:"),
         )
+        self.assertNotIn("MSBuildAllProjects", self._query_set(command, "/getProperty:"))
+        self.assertFalse(any(argument.lower().startswith("/p:") for argument in command))
         self.assertLessEqual(
-            {"ClCompile", "Link", "Content", "ReferenceCopyLocalPaths"},
+            {"ClCompile", "Link", "Content", "ReferenceCopyLocalPaths", "AobusEvaluatedImport", "AobusEvaluatorInput"},
             self._query_set(command, "/getItem:"),
         )
         self.assertEqual(kwargs["cwd"], self.tree)
@@ -850,6 +876,7 @@ class WindowsProjectionTest(unittest.TestCase):
         self.assertEqual(environment["TEMP"], str(self.tree / "tmp"))
         self.assertEqual(environment["TMP"], str(self.tree / "tmp"))
         self.assertEqual(environment["MSBUILDDISABLENODEREUSE"], "1")
+        self.assertEqual(environment["MSBUILD_EXE_PATH"], str(self.msbuild))
         self.assertNotIn("AOBUS_NUGET_PACKAGES_DIR", environment)
         self.assertNotIn("AOBUS_SECRET_TOKEN", environment)
         # Observed Windows host architecture and shell runtime inputs pass
@@ -975,6 +1002,7 @@ class WindowsProjectionTest(unittest.TestCase):
             self.ucrt_header,
             self.vc_targets / "Microsoft.Cpp.props",
             self.xaml_targets,
+            self.evaluated_props,
             self.windows_sdk / "References" / SDK / "Windows.Foundation.winmd",
             self.windows_sdk / "Include" / SDK / "um/Windows.h",
             self.windows_sdk / "bin" / SDK / "x64/midl.exe",
@@ -1004,6 +1032,127 @@ class WindowsProjectionTest(unittest.TestCase):
             self.standard_header,
         ):
             self.assertIn(self._destination_of(result, source), tools)
+
+    def test_actual_imports_absent_from_msbuildallprojects_are_observed_action_tools_in_both_modes(self):
+        listed_only = _touch(self.visual_studio / "MSBuild/unused/ListedOnly.props", "<Project />")
+        condition_false = _touch(self.visual_studio / "MSBuild/unused/ConditionFalse.props", "<Project />")
+        self.payload["Properties"]["MSBuildAllProjects"] += ";" + str(listed_only)
+        for config in ("debug", "release"):
+            with self.subTest(config=config):
+                self.request["config"] = config
+                observed = []
+                with native.capture_probes(observed.append):
+                    result = self.plan()
+                self.assertIn(self.evaluated_props, observed)
+                self.assertIn(self.tree / "AobusSdk.vcxproj", observed)
+                destination = self._destination_of(result, self.evaluated_props)
+                self.assertIn(destination, result["rules"]["tools"][1]["srcs"])
+                self.assertNotIn(str(listed_only), result["links"].values())
+                self.assertNotIn(str(condition_false), result["links"].values())
+                diagnostics = json.loads(result["files"][config + "/sdk-diagnostics.json"])
+                evidence = diagnostics["import_evaluation"]
+                self.assertEqual(evidence["global_properties"], {})
+                self.assertEqual(evidence["project"]["path"], str(self.tree / "AobusSdk.vcxproj"))
+                imported = {record["path"]: record["sha256"] for record in evidence["imports"]}
+                self.assertEqual(imported[str(self.evaluated_props)], native.sha256(self.evaluated_props))
+                self.assertNotIn(str(self.tree / "AobusSdk.vcxproj"), imported)
+                self.assertIn("not all missing/wildcard", evidence["observation_boundary"])
+
+    def test_mutating_an_actual_import_changes_evidence_without_changing_the_query_payload(self):
+        for config in ("debug", "release"):
+            with self.subTest(config=config):
+                self.request["config"] = config
+                self.evaluated_props.write_text("<Project /><!-- before -->", encoding="utf-8")
+                before = self.plan()
+                self.evaluated_props.write_text("<Project /><!-- after -->", encoding="utf-8")
+                after = self.plan()
+                self.assertNotEqual(
+                    before["files"][config + "/sdk-diagnostics.json"],
+                    after["files"][config + "/sdk-diagnostics.json"],
+                )
+                evidence = json.loads(after["files"][config + "/sdk-diagnostics.json"])["import_evaluation"]
+                record = next(record for record in evidence["imports"] if record["path"] == str(self.evaluated_props))
+                self.assertEqual(record["sha256"], native.sha256(self.evaluated_props))
+                # The stable tool path carries the changed bytes to Bazel's
+                # action digest, and its explicit probe invalidates repository
+                # observations even when the SDK query result is identical.
+                destination = self._destination_of(after, self.evaluated_props)
+                self.assertIn(destination, after["rules"]["tools"][1]["srcs"])
+                self.assertEqual(before["links"], after["links"])
+
+    def test_import_evaluator_failures_record_native_query_output_in_both_modes(self):
+        for config in ("debug", "release"):
+            with self.subTest(config=config):
+                self.request["config"] = config
+                self.exit_code, self.stdout, self.stderr = 7, "evaluation failed", "bad import"
+                with self.assertRaisesRegex(bazel_winui.BazelWorkspaceError, r"interface query failed \(7\)"):
+                    self.plan()
+                self.assertEqual((self.tree / "query.stdout").read_text(encoding="utf-8"), "evaluation failed")
+                self.assertEqual((self.tree / "query.stderr").read_text(encoding="utf-8"), "bad import")
+
+    def test_import_evaluator_requires_exact_project_and_selected_assemblies_and_config(self):
+        original = self.payload["Items"]["AobusEvaluatorInput"]
+        for name, values in (
+            ("AobusEvaluatedImport", []),
+            ("AobusEvaluatedImport", [str(self.tree / "AobusSdk.vcxproj")]),
+            ("AobusEvaluatedImport", ["relative.props"]),
+            ("AobusEvaluatedImport", [str(self.evaluated_props.parent / "Missing.props")]),
+            ("AobusEvaluatorInput", []),
+            ("AobusEvaluatorInput", [str(self.xaml_compiler)]),
+            (
+                "AobusEvaluatorInput",
+                [record["Identity"] for record in original if record["Identity"] != str(self.msbuild_config)],
+            ),
+        ):
+            with self.subTest(name=name, values=values):
+                previous = self.payload["Items"][name]
+                self.payload["Items"][name] = [{"Identity": value} for value in values]
+                try:
+                    with self.assertRaisesRegex(bazel_winui.BazelWorkspaceError, "invalid evidence"):
+                        self.plan()
+                finally:
+                    self.payload["Items"][name] = previous
+        self.payload["Properties"]["MSBuildProjectFullPath"] = str(self.tree / "Other.vcxproj")
+        with self.assertRaisesRegex(bazel_winui.BazelWorkspaceError, "invalid evidence"):
+            self.plan()
+
+    def test_selected_host_binding_config_and_loaded_dependency_are_observed_action_tools(self):
+        observed = []
+        with native.capture_probes(observed.append):
+            before = self.plan()
+        for source in (
+            self.msbuild_config,
+            self.redirected_dependency,
+            self.loaded_dependency,
+            self.task_compiler,
+            self.task_compiler_config,
+        ):
+            self.assertIn(self._destination_of(before, source), before["rules"]["tools"][1]["srcs"])
+        self.assertIn(self.msbuild_config, observed)
+        self.assertIn(self.loaded_dependency, observed)
+        diagnostics = json.loads(before["files"]["debug/sdk-diagnostics.json"])
+        evaluator = {record["path"]: record["sha256"] for record in diagnostics["import_evaluation"]["evaluator"]}
+        self.assertEqual(evaluator[str(self.msbuild_config)], native.sha256(self.msbuild_config))
+        self.assertEqual(evaluator[str(self.loaded_dependency)], native.sha256(self.loaded_dependency))
+        self.msbuild_config.write_text("changed selected binding redirects", encoding="utf-8")
+        after = self.plan()
+        self.assertNotEqual(before["files"]["debug/sdk-diagnostics.json"], after["files"]["debug/sdk-diagnostics.json"])
+        diagnostics = json.loads(after["files"]["debug/sdk-diagnostics.json"])
+        evaluator = {record["path"]: record["sha256"] for record in diagnostics["import_evaluation"]["evaluator"]}
+        self.assertEqual(evaluator[str(self.msbuild_config)], native.sha256(self.msbuild_config))
+
+    def test_import_candidates_observe_missing_preferred_props_before_fallback(self):
+        self.plan()
+        missing_native = self.package_b / "build/native/Microsoft.Windows.CppWinRT.props"
+        observed = []
+        with native.capture_probes(observed.append):
+            before = bazel_winui._imports([(CPPWINRT_ID, CPPWINRT_VERSION, self.package_b)], "props")
+        self.assertIn(missing_native, observed)
+        self.assertEqual(before, [self.props[1]])
+        _touch(missing_native, "<Project />")
+        self.assertEqual(
+            bazel_winui._imports([(CPPWINRT_ID, CPPWINRT_VERSION, self.package_b)], "props"), [missing_native]
+        )
 
     def test_optional_vc_include_roots_are_observed_before_later_installation(self):
         optional = (self.vc / "atlmfc/include", self.visual_studio / "VC/Auxiliary/VS/include")
@@ -1041,17 +1190,28 @@ class WindowsProjectionTest(unittest.TestCase):
         # The query explicitly selects the installed VC tools version instead
         # of inheriting an ambient default.
         self.assertIn(f"<VCToolsVersion>{VC_VERSION}</VCToolsVersion>", text)
-        # No product target: the only task in any target is the no-product
-        # guard's Error, raised before every compile/link pass. The import
-        # sequence itself is owned by ImportOrderTest.
+        # The sole query task re-evaluates imports under the real MSBuild host,
+        # plus the no-product guard's Error before every compile/link pass. The
+        # import sequence itself is owned by ImportOrderTest.
         namespace = "{http://schemas.microsoft.com/developer/msbuild/2003}"
         document = ET.fromstring(text)
         targets = list(document.iter(namespace + "Target"))
         self.assertEqual(
             [task.tag.rsplit("}", 1)[-1] for target in targets for task in target],
-            ["Error"],
+            ["AobusEvaluateSdkImports", "Error"],
         )
-        guard = next(target for target in targets if len(list(target)) == 1)
+        evaluator = document.find(namespace + "UsingTask")
+        self.assertEqual(evaluator.attrib["TaskFactory"], "RoslynCodeTaskFactory")
+        self.assertEqual(evaluator.attrib["AssemblyFile"], "$(MSBuildToolsPath)\\Microsoft.Build.Tasks.Core.dll")
+        references = evaluator.findall(namespace + "Task/" + namespace + "Reference")
+        self.assertEqual(
+            {reference.attrib["Include"] for reference in references},
+            {"$(MSBuildToolsPath)\\Microsoft.Build.dll", "System.Xml"},
+        )
+        code = evaluator.find(namespace + "Task/" + namespace + "Code").text
+        self.assertIn("new Project(ProjectPath, new Dictionary<string, string>(), null, collection)", code)
+        self.assertIn("import.ImportedProject.FullPath", code)
+        guard = next(target for target in targets if target.attrib["Name"] == "AobusNoProductBuild")
         self.assertIn("must not generate or compile product code", guard.find(namespace + "Error").attrib["Text"])
         for product_pass in ("ClCompile", "Link"):
             self.assertIn(product_pass, guard.attrib["BeforeTargets"])

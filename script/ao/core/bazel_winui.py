@@ -78,7 +78,7 @@ def _imports(packages: list[tuple[str, str, Path]], extension: str) -> list[Path
     sequence = packages if extension == "props" else list(reversed(packages))
     for name, _, root in sequence:
         candidates = (root / "build/native" / f"{name}.{extension}", root / "build" / f"{name}.{extension}")
-        selected = next((path for path in candidates if path.is_file()), None)
+        selected = next((path for path in candidates if native.probe(path).is_file()), None)
         if selected is not None:
             result.append(_owned(selected, root))
     return result
@@ -115,12 +115,59 @@ def _interface_project(
     ET.SubElement(items, "ClCompile", Include="__aobus_sdk_interface.cpp")
     ET.SubElement(items, "Link", Include="metadata-only")
     builder.finish(project, [str(path) for path in targets])
-    ET.SubElement(
+    evaluator = ET.SubElement(
+        project,
+        "UsingTask",
+        TaskName="AobusEvaluateSdkImports",
+        TaskFactory="RoslynCodeTaskFactory",
+        AssemblyFile="$(MSBuildToolsPath)\\Microsoft.Build.Tasks.Core.dll",
+    )
+    parameters = ET.SubElement(evaluator, "ParameterGroup")
+    ET.SubElement(parameters, "ProjectPath", ParameterType="System.String", Required="true")
+    ET.SubElement(parameters, "GeneratedTaskDirectory", ParameterType="System.String", Required="true")
+    for name in ("ImportedProjects", "EvaluatorInputs"):
+        ET.SubElement(parameters, name, ParameterType="Microsoft.Build.Framework.ITaskItem[]", Output="true")
+    task = ET.SubElement(evaluator, "Task")
+    ET.SubElement(task, "Reference", Include="$(MSBuildToolsPath)\\Microsoft.Build.dll")
+    ET.SubElement(task, "Reference", Include="System.Xml")
+    for namespace in ("System", "System.IO", "System.Linq", "System.Collections.Generic", "Microsoft.Build.Evaluation"):
+        ET.SubElement(task, "Using", Namespace=namespace)
+    ET.SubElement(task, "Code", Type="Fragment", Language="cs").text = """
+// The executable query has no /p arguments. Re-evaluate only: no targets,
+// InitialTargets, restore or provisioning in this independent collection.
+using (var collection = new ProjectCollection())
+{
+    var evaluated = new Project(ProjectPath, new Dictionary<string, string>(), null, collection);
+    ImportedProjects = evaluated.Imports
+        .Select(import => new Microsoft.Build.Utilities.TaskItem(import.ImportedProject.FullPath)).ToArray();
+    collection.UnloadAllProjects();
+}
+// Inline-task compiler outputs under our private TEMP are derived from this
+// inventoried project, not external dependencies (and may already be deleted).
+var generated = Path.GetFullPath(GeneratedTaskDirectory)
+    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+EvaluatorInputs = AppDomain.CurrentDomain.GetAssemblies().Where(assembly => !assembly.IsDynamic)
+    .Select(assembly => assembly.Location)
+    .Where(path => !String.IsNullOrEmpty(path)
+        && !Path.GetFullPath(path).StartsWith(generated, StringComparison.OrdinalIgnoreCase))
+    .Concat(new[] { Environment.GetEnvironmentVariable("MSBUILD_EXE_PATH") + ".config" })
+    .Distinct(StringComparer.OrdinalIgnoreCase)
+    .Select(path => new Microsoft.Build.Utilities.TaskItem(path)).ToArray();
+"""
+    interface = ET.SubElement(
         project,
         "Target",
         Name="AobusSdkInterface",
         DependsOnTargets="WindowsAppRuntimeAutoInitializer;GenerateBootstrapCpp;WindowsMLAutoInitializer",
     )
+    invocation = ET.SubElement(
+        interface,
+        "AobusEvaluateSdkImports",
+        ProjectPath="$(MSBuildProjectFullPath)",
+        GeneratedTaskDirectory="$(TEMP)",
+    )
+    ET.SubElement(invocation, "Output", TaskParameter="ImportedProjects", ItemName="AobusEvaluatedImport")
+    ET.SubElement(invocation, "Output", TaskParameter="EvaluatorInputs", ItemName="AobusEvaluatorInput")
     guard = ET.SubElement(
         project,
         "Target",
@@ -166,6 +213,53 @@ def _provider_path(
         if resolved.is_relative_to(root):
             return name, resolved.relative_to(root)
     raise BazelWorkspaceError(f"WinUI SDK interface points outside its locked NuGet providers: {path}")
+
+
+def _evaluated_imports(project: Path, msbuild: Path, query: dict[str, Any]) -> tuple[list[Path], dict[str, Any]]:
+    """Admit the inline evaluator's facts from the selected MSBuild.exe host."""
+    native.probe(project)
+    try:
+        if query["Properties"].get("MSBuildProjectFullPath") != str(project):
+            raise ValueError("wrong evaluated project")
+        imports: list[Path] = []
+        dependencies: list[Path] = []
+        for name, paths in (("AobusEvaluatedImport", imports), ("AobusEvaluatorInput", dependencies)):
+            records = query["Items"].get(name)
+            if not isinstance(records, list) or not records:
+                raise ValueError("missing evaluated import/host inventory")
+            for record in records:
+                value = record.get("Identity") if isinstance(record, dict) else None
+                if not isinstance(value, str) or not Path(value).is_absolute():
+                    raise ValueError("invalid evaluated input path")
+                # No sparse family/architecture filter on actual imports or
+                # loaded dependencies, including selected binding redirects.
+                path = native.probe(Path(value)).resolve(strict=True)
+                if not path.is_file() or (name == "AobusEvaluatedImport" and path == project):
+                    raise ValueError("invalid imported project/host file")
+                paths.append(path)
+        required = [msbuild.with_name(msbuild.name + ".config")]
+        required.extend(msbuild.parent / name for name in ("Microsoft.Build.dll", "Microsoft.Build.Tasks.Core.dll"))
+        if not set(required).issubset(dependencies):
+            raise ValueError("selected MSBuild assemblies/config were not inventoried")
+    except (ValueError, OSError, RuntimeError) as exc:
+        raise BazelWorkspaceError(f"WinUI evaluated imports query returned invalid evidence: {exc}") from exc
+    sources = [Path(__file__).resolve(), Path(__file__).resolve().parents[3] / "app/windows-winui/msbuild_project.py"]
+    inputs = list(dict.fromkeys([project, *sources, *dependencies, *imports]))
+    evidence = {
+        "project": native.evidence([project])[0],
+        "sources": native.evidence(sources),
+        "global_properties": {},
+        "imports": native.evidence(list(dict.fromkeys(imports))),
+        "evaluator": native.evidence(list(dict.fromkeys(dependencies))),
+        # Project.Imports reports successful, condition-true imports, not every
+        # Exists/property-function read or empty wildcard search. Directory
+        # observations below and existing provider traversals supplement it;
+        # they do not establish a hermetic installation or syscall inventory.
+        "observation_boundary": (
+            "resolved imports and observed provider directories; not all missing/wildcard or evaluation-time reads"
+        ),
+    }
+    return inputs, evidence
 
 
 def resolve_sdk(tree: Path, request: dict[str, Any], environment: Mapping[str, str]) -> dict[str, Any] | None:
@@ -231,7 +325,15 @@ def resolve_sdk(tree: Path, request: dict[str, Any], environment: Mapping[str, s
             if key in lookup
         }
     )
-    env.update({"TEMP": str(tree / "tmp"), "TMP": str(tree / "tmp"), "MSBUILDDISABLENODEREUSE": "1"})
+    env.update(
+        {
+            "TEMP": str(tree / "tmp"),
+            "TMP": str(tree / "tmp"),
+            "MSBUILDDISABLENODEREUSE": "1",
+            # The inline evaluator uses this executable's actual binding policy.
+            "MSBUILD_EXE_PATH": str(msbuild),
+        }
+    )
     result = subprocess.run(
         [
             str(msbuild),
@@ -242,8 +344,8 @@ def resolve_sdk(tree: Path, request: dict[str, Any], environment: Mapping[str, s
             "/m:1",
             "/nr:false",
             "/t:AobusSdkInterface",
-            "/getProperty:VCToolsInstallDir,WindowsSdkDir,WindowsTargetPlatformVersion,MakePriExeFullPath,XamlCompilerExePath,_WindowsAppSDKFoundationPlatform,WindowsAppSdkBootstrapInitialize,WindowsAppSDKMLVerifyTransitiveDependencies,MSBuildRuntimeType,VCTargetsPath,CppWinRTPath,MSBuildAllProjects",
-            "/getItem:ClCompile,Link,Content,ReferenceCopyLocalPaths",
+            "/getProperty:VCToolsInstallDir,WindowsSdkDir,WindowsTargetPlatformVersion,MakePriExeFullPath,XamlCompilerExePath,_WindowsAppSDKFoundationPlatform,WindowsAppSdkBootstrapInitialize,WindowsAppSDKMLVerifyTransitiveDependencies,MSBuildRuntimeType,VCTargetsPath,CppWinRTPath,MSBuildProjectFullPath",
+            "/getItem:ClCompile,Link,Content,ReferenceCopyLocalPaths,AobusEvaluatedImport,AobusEvaluatorInput",
         ],
         cwd=tree,
         env=env,
@@ -260,6 +362,7 @@ def resolve_sdk(tree: Path, request: dict[str, Any], environment: Mapping[str, s
             f"WinUI installed SDK interface query failed ({result.returncode}): {result.stdout}\n{result.stderr}"
         )
     query = _json_output(result.stdout)
+    evaluated_inputs, import_evidence = _evaluated_imports(project, msbuild, query)
     properties = query["Properties"]
     if properties.get("WindowsAppSDKMLVerifyTransitiveDependencies") != "true":
         raise BazelWorkspaceError("WinUI SDK must run its own locked transitive-dependency check before projection")
@@ -423,7 +526,7 @@ def resolve_sdk(tree: Path, request: dict[str, Any], environment: Mapping[str, s
     # metadata/includes. Do not mirror all of
     # MSBuild/Microsoft, C++ projections, other tool hosts, or every SDK payload.
     # The original installation remains executable, not a relocated toolchain.
-    native_inputs = [msbuild]
+    native_inputs = [msbuild, *evaluated_inputs]
     vc = Path(compiler["VCToolsInstallDir"])
     preprocessor = vc / "bin/Hostx64/x64"
     if preprocessor.resolve() != preprocessor.absolute():
@@ -458,6 +561,12 @@ def resolve_sdk(tree: Path, request: dict[str, Any], environment: Mapping[str, s
             and (len(relative.parts) == 1 or re.fullmatch(r"[A-Za-z]{2}(?:-[A-Za-z0-9]+)?", relative.parts[0]))
         ):
             native_inputs.append(_owned(path, msbuild.parent))
+    # RoslynCodeTaskFactory compiles only our inline evaluator, not product
+    # code. Inventory the selected installation's compiler families, including
+    # response files and configs, without selecting another compiler ourselves.
+    for directory in (msbuild.parent / "Roslyn", msbuild.parent.parent / "Roslyn"):
+        if native.probe(directory).is_dir():
+            native_inputs.extend(_owned(path, directory) for path in sorted(directory.rglob("*")) if path.is_file())
     for path in sorted(vc_targets.rglob("*")):
         if not path.is_file():
             continue
@@ -485,13 +594,15 @@ def resolve_sdk(tree: Path, request: dict[str, Any], environment: Mapping[str, s
                 for path in sorted(directory.rglob("*"))
                 if path.is_file() and path.suffix.lower() in suffixes
             )
-    for value in _list(properties.get("MSBuildAllProjects", "")):
-        path = Path(value)
-        if path.is_absolute() and path.is_file() and path.resolve().is_relative_to(visual_studio.resolve()):
-            native_inputs.append(_owned(path, visual_studio))
+    for record in import_evidence["imports"]:
+        path = Path(record["path"])
+        # Observe imported-directory membership (including wildcard additions
+        # in these established directories) and adjacent installed task hosts.
+        siblings = sorted(path.parent.iterdir())
+        if path.is_relative_to(visual_studio.resolve()):
             native_inputs.extend(
                 _owned(dependency, visual_studio)
-                for dependency in sorted(path.parent.iterdir())
+                for dependency in siblings
                 if dependency.is_file() and dependency.suffix.lower() in runtime_suffixes
             )
     execution = {
@@ -514,6 +625,7 @@ def resolve_sdk(tree: Path, request: dict[str, Any], environment: Mapping[str, s
         "system_libraries": systems,
         "runtime": [str(path) for path in runtime],
         "properties": query["Properties"],
+        "import_evaluation": import_evidence,
     }
     include_roots = []
     for path in includes:

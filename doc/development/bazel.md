@@ -93,8 +93,9 @@ Pass ordinary Bazel arguments after `--`:
 When omitting labels, use `--option=value` for value-taking forwarded options
 so the launcher can retain its bounded defaults without a second Bazel parser.
 Query actions require explicit expressions; `run` requires a target.
-Query/cquery/aquery stdout contains only the result; preparation, progress and
-build-lock waits go to stderr. Analysis failure stderr is emitted once, not
+Query/cquery/aquery stdout preserves the result bytes, including binary
+`--output=proto`; preparation, progress and build-lock waits go to stderr.
+Analysis failure stderr is emitted once, not
 replayed from the combined `<tree>/build.log`. `run` inherits the caller's standard
 input, output and error, preserving terminal detection for interactive frontends;
 it does not overwrite an existing build log.
@@ -142,13 +143,24 @@ absolute-path configuration.
 
 On Windows, bare commands resolve C++ through rules_cc's official default MSVC
 auto-configuration ([Windows compiler
-configuration](#windows-compiler-configuration)). Supply the same
-process-scoped selected Visual Studio/SDK environment the portal captures
-(`VSINSTALLDIR`, `VCToolsVersion`, `WindowsSDKVersion`), or select exact
-installations with the standard `BAZEL_VC`, `BAZEL_VC_FULL_VERSION` and
-`BAZEL_WINSDK_FULL_VERSION` selectors; the repository rc carries the project
-profile inlets. Upstream warns and falls back for an invalid `BAZEL_VC`; no
-failure-instead-of-fallback behavior is promised.
+configuration](#windows-compiler-configuration)). Initialize the selected x64
+Visual Studio environment before starting Bazel, then supply all three standard
+selectors: `BAZEL_VC`, `BAZEL_VC_FULL_VERSION` and `BAZEL_WINSDK_FULL_VERSION`.
+They must match the initialized VS installation, toolset, SDK and compiler paths.
+For example, in an already initialized x64 developer PowerShell:
+
+```powershell
+$env:BAZEL_VC = Join-Path $env:VSINSTALLDIR 'VC'
+$env:BAZEL_VC_FULL_VERSION = $env:VCToolsVersion.TrimEnd('\', '/')
+$env:BAZEL_WINSDK_FULL_VERSION = $env:WindowsSDKVersion.TrimEnd('\', '/')
+```
+
+Bare SDK admission rejects missing, partial or conflicting selections instead of
+independently choosing the current compiler or latest VS. This deliberately
+narrows the former automatic-discovery contract: an initialized developer shell
+alone, or selectors without its matching compiler environment, is insufficient.
+Upstream auto-configuration still owns compilation; exports made inside a
+repository-rule child cannot select another repository's toolchain.
 
 Changing the host installation selection — Visual Studio, Xcode or SDK
 selection — may require `bazel fetch --force --configure` before repository
@@ -309,8 +321,18 @@ The query and action projects share the
 each caller retains its own properties, targets and forbidden operations. Private
 projects suppress Common user/machine wildcard imports, project extensions,
 Directory.Build customization and forced C++ imports; declared installed VC SDK
-imports remain enabled. Query and action commands disable automatic MSBuild
-response files. The helper is a watched repository source and a declared
+imports remain enabled. A bounded inline task in the selected MSBuild executable
+records actual evaluated imports through its object model, not the incomplete
+`MSBuildAllProjects` property. This uses the executable's own assembly-binding
+configuration rather than a parallel CLR host. Imported files are observed and
+declared as action tool inputs; the probe project, source, binding configuration
+and loaded dependencies retain identity evidence. The nested import evaluation
+runs no targets; the existing interface query still runs its SDK initializers
+and dependency-presence checks. Directory observations supplement successful
+imports, but do not establish every missing candidate, empty wildcard or
+evaluation-time file read.
+Query and action commands disable automatic MSBuild response files.
+The helper is a watched repository source and a declared
 codegen/PRI input; final executable staging does not load it. Generation tools
 also declare the selected VC preprocessor/runtime, VC headers (including
 extensionless headers) and SDK UCRT/MIDL inputs, independently of C++ toolchain
@@ -892,10 +914,11 @@ from `VCToolsVersion` and `BAZEL_WINSDK_FULL_VERSION` from `WindowsSDKVersion`.
 Missing captured metadata, or an explicit caller selector conflicting with
 that environment, fails preparation; it does not guess or silently reselect.
 Existing Visual Studio bootstrap/SDK installation remain authoritative. Bare
-Windows callers supply the same existing process-scoped selected VS/SDK
-environment and may use the same standard selectors; upstream warns and falls
-back for an invalid `BAZEL_VC`, and the project does not promise a failure
-instead of that fallback.
+Windows callers must supply the complete standard selector tuple and a matching
+initialized x64 compiler environment, as shown in
+[direct entry](#direct-bazel-without-the-portal). SDK admission checks the original
+client selection before relying on upstream auto-configuration; it does not
+attempt to influence that independent repository by exporting child variables.
 
 The existing `compiler_environment` request capture (original `INCLUDE`,
 `LIB`, `PATH`, `TMP` and VC/SDK selectors) stays for WinUI and dependency
@@ -1095,9 +1118,14 @@ provider identity belongs to the shared Unix toolchain and the Windows
 auto-configuration inputs, not a second lint policy.
 
 One cacheable verification action checks the host version and complete
-fixture-derived `aobus-*` registry; reports consume that result. The helper's
-declared import closure is tested, so unrelated portal edits need not invalidate
-analysis. Temporary compilation databases are action-local. Logs normalize
+fixture-derived `aobus-*` registry; reports consume that result. Absolute checkout
+roots remain repository-time discovery inputs, not published policy fields.
+Actions derive their execution-root and physical-checkout aliases from the
+already-declared helper source, preserving source-scope checks without binding
+policy identity to the producer's directory. This removes one cache-key path
+dependency, not the governed host SDK boundary or all cross-machine differences.
+The helper's declared import closure is tested, so unrelated portal edits need
+not invalidate analysis. Temporary compilation databases are action-local. Logs normalize
 execution-root paths and map virtual headers to their declared checkout origin;
 generated/external locations retain the producing execution root.
 
