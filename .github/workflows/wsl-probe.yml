@@ -101,10 +101,10 @@ jobs:
           }
           function Start-Proxy {
             param([string]$Http = '127.0.0.1:9090', [string]$Grpc = '127.0.0.1:9092')
-            Dx ("mkdir -p /opt/br/data && : > /var/log/br.log && " +
-                "setsid /opt/br/bazel-remote --dir /opt/br/data --max_size 1 " +
+            Dx 'mkdir -p /opt/br/data; : > /var/log/br.log' | Out-Null
+            Dx ("setsid /opt/br/bazel-remote --dir /opt/br/data --max_size 1 " +
                 "--http_address $Http --grpc_address $Grpc " +
-                "> /var/log/br.log 2>&1 < /dev/null &") | Out-Null
+                "> /var/log/br.log 2>&1 < /dev/null & sleep 1; echo started-pid=$(pidof bazel-remote)") | Out-Null
           }
           function Test-Loopback {
             param([string]$Addr = '127.0.0.1')
@@ -224,10 +224,10 @@ jobs:
           Invoke-Probe '4b-proxy-start' {
             Dx ("mkdir -p /opt/br/data && wget -q -O /opt/br/bazel-remote $env:BR_URL && " +
                 "echo '$env:BR_SHA256  /opt/br/bazel-remote' | sha256sum -c - && chmod +x /opt/br/bazel-remote")
-            Dx '/opt/br/bazel-remote --help 2>&1 | grep -E -- "--(http_address|grpc_address|dir|max_size) " | head -4'
+            Dx '/opt/br/bazel-remote --help 2>&1 | grep -c -e http_address -e grpc_address -e max_size' -AllowFail
             Start-Proxy
             if (-not (Wait-Proxy '127.0.0.1' 20)) {
-              Dx 'cat /var/log/br.log; pidof bazel-remote' -AllowFail
+              Dx 'ls -l /opt/br /var/log; cat /var/log/br.log; ps' -AllowFail
               throw 'proxy did not answer on 127.0.0.1:9090 from Windows within 20s'
             }
             Dx 'tail -5 /var/log/br.log; echo pid=$(pidof bazel-remote)'
