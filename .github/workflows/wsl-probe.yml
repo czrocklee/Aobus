@@ -1,0 +1,436 @@
+name: WSL bazel-remote probe
+
+# Throwaway experiment: can the GitHub-hosted Windows runner run the Linux
+# bazel-remote binary inside WSL and reach it from Windows on 127.0.0.1?
+# Uses no secrets and no R2 access. Do not merge.
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/wsl-probe.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wsl-probe-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  probe:
+    name: WSL probe / ${{ matrix.runner }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - windows-2025-vs2026
+    env:
+      ALPINE_URL: https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/x86_64/alpine-minirootfs-3.24.4-x86_64.tar.gz
+      ALPINE_SHA256: cdaa38cb8de3537967ee5b6c9b6cd00cc962da2b018e6eea48696bb274923012
+      BR_URL: https://github.com/buchgr/bazel-remote/releases/download/v2.6.4/bazel-remote-2.6.4-linux-amd64
+      BR_SHA256: 6a6b64666c2238ec6b49b7b29f5e41e4149de09417a0028897c9bffe40376876
+      BAZELISK_URL: https://github.com/bazelbuild/bazelisk/releases/download/v1.30.0/bazelisk-windows-amd64.exe
+      BAZELISK_SHA256: 5d14a31e9d8a363c48ba1900dbd56764d730835232eb0d113cce255856ffe3ef
+    steps:
+      - name: Write probe helpers
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP 'probe'
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          $lib = @'
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $false
+          $P = Join-Path $env:RUNNER_TEMP 'probe'
+          $Distro = 'probe'
+          $Results = Join-Path $P 'results.jsonl'
+
+          # wsl.exe management commands emit UTF-16; strip the NULs we get when
+          # PowerShell decodes them as an 8-bit code page.
+          function Run-Wsl {
+            param([string[]]$A, [switch]$AllowFail)
+            $out = & wsl.exe @A 2>&1 | Out-String
+            $code = $LASTEXITCODE
+            $out = ($out -replace "`0", '' -replace "`r", '').Trim()
+            Write-Host "> wsl $($A -join ' ')   (exit $code)"
+            if ($out) { Write-Host $out }
+            if ($code -ne 0 -and -not $AllowFail) { throw "wsl exit $code : $($A -join ' ')" }
+            return $out
+          }
+          function Dx {
+            param([string]$Cmd, [switch]$AllowFail)
+            Run-Wsl -A @('-d', $Distro, '--exec', 'sh', '-c', $Cmd) -AllowFail:$AllowFail
+          }
+          function Invoke-Probe {
+            param([string]$Id, [scriptblock]$Body)
+            $sw = [Diagnostics.Stopwatch]::StartNew()
+            $status = 'PASS'; $detail = ''
+            try { $detail = (& $Body | Out-String).Trim() }
+            catch { $status = 'FAIL'; $detail = "EXCEPTION: $($_.Exception.Message)" }
+            $sw.Stop()
+            $secs = [math]::Round($sw.Elapsed.TotalSeconds, 1)
+            Write-Host "RESULT $Id $status ${secs}s :: $detail"
+            $rec = [ordered]@{ id = $Id; status = $status; secs = $secs; detail = $detail }
+            ($rec | ConvertTo-Json -Compress) | Add-Content -Path $Results -Encoding utf8
+            if ($status -eq 'FAIL') { exit 1 }
+          }
+          function Test-Port {
+            param([string]$Addr, [int]$Port, [int]$TimeoutMs = 3000)
+            $c = New-Object Net.Sockets.TcpClient
+            try {
+              $t = $c.ConnectAsync($Addr, $Port)
+              return ($t.Wait($TimeoutMs) -and $c.Connected)
+            } catch { return $false } finally { $c.Dispose() }
+          }
+          function Get-ProxyStatus {
+            param([string]$Addr = '127.0.0.1')
+            (Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 "http://${Addr}:9090/status").StatusCode
+          }
+          function Wait-Proxy {
+            param([string]$Addr = '127.0.0.1', [int]$Seconds = 20)
+            $end = (Get-Date).AddSeconds($Seconds)
+            while ((Get-Date) -lt $end) {
+              try { if ((Get-ProxyStatus $Addr) -eq 200) { return $true } } catch {}
+              Start-Sleep -Milliseconds 500
+            }
+            return $false
+          }
+          function Start-Proxy {
+            param([string]$Http = '127.0.0.1:9090', [string]$Grpc = '127.0.0.1:9092')
+            Dx ("mkdir -p /opt/br/data && : > /var/log/br.log && " +
+                "setsid /opt/br/bazel-remote --dir /opt/br/data --max_size 1 " +
+                "--http_address $Http --grpc_address $Grpc " +
+                "> /var/log/br.log 2>&1 < /dev/null &") | Out-Null
+          }
+          function Test-Loopback {
+            param([string]$Addr = '127.0.0.1')
+            $r = @()
+            $code = Get-ProxyStatus $Addr
+            $r += "GET /status -> $code"
+            $bytes = [Text.Encoding]::UTF8.GetBytes("wsl-probe-blob-$([guid]::NewGuid())")
+            $sha = ([BitConverter]::ToString([Security.Cryptography.SHA256]::HashData($bytes)) -replace '-', '').ToLower()
+            $put = Invoke-WebRequest -UseBasicParsing -Method Put -Body $bytes -TimeoutSec 10 "http://${Addr}:9090/cas/$sha"
+            $r += "PUT /cas/$($sha.Substring(0,12))... -> $($put.StatusCode)"
+            $get = Invoke-WebRequest -UseBasicParsing -TimeoutSec 10 "http://${Addr}:9090/cas/$sha"
+            $got = [byte[]]$get.Content
+            if ($got -is [string]) { $got = [Text.Encoding]::UTF8.GetBytes($get.Content) }
+            if (-not [Linq.Enumerable]::SequenceEqual([byte[]]$bytes, [byte[]]$got)) { throw 'CAS round-trip mismatch' }
+            $r += 'GET /cas round-trip equal'
+            if (-not (Test-Port $Addr 9092)) { throw "TCP ${Addr}:9092 not reachable" }
+            $r += "TCP ${Addr}:9092 connect ok"
+            $r -join '; '
+          }
+          '@
+          Set-Content -Path (Join-Path $dir 'lib.ps1') -Value $lib -Encoding utf8
+
+      - name: 1 Environment facts
+        id: env
+        continue-on-error: true
+        timeout-minutes: 3
+        run: |
+          . "$env:RUNNER_TEMP\probe\lib.ps1"
+          Invoke-Probe '1-env' {
+            $o = @()
+            $o += "session id: $([Diagnostics.Process]::GetCurrentProcess().SessionId); user: $(whoami)"
+            $o += "os: $((Get-CimInstance Win32_OperatingSystem).Caption) build $((Get-CimInstance Win32_OperatingSystem).BuildNumber)"
+            $cs = Get-CimInstance Win32_ComputerSystem
+            $o += "computer: $($cs.Manufacturer) / $($cs.Model); hypervisorPresent=$($cs.HypervisorPresent)"
+            $o += "cpu virt fw enabled: $((Get-CimInstance Win32_Processor | Select-Object -First 1).VirtualizationFirmwareEnabled)"
+            foreach ($f in 'Microsoft-Windows-Subsystem-Linux', 'VirtualMachinePlatform', 'Microsoft-Hyper-V-All') {
+              try { $o += "feature ${f}: $((Get-WindowsOptionalFeature -Online -FeatureName $f).State)" }
+              catch { $o += "feature ${f}: query failed: $($_.Exception.Message)" }
+            }
+            $o += (systeminfo | Select-String -Pattern 'Hyper-V|Virtualization|hypervisor|VM Monitor|Second Level|Data Execution' | ForEach-Object { $_.Line.Trim() })
+            Get-Command wsl.exe -ErrorAction SilentlyContinue | ForEach-Object { $o += "wsl.exe at $($_.Source)" }
+            foreach ($a in @('--version'), @('--status'), @('-l', '-v')) {
+              $o += "wsl $($a -join ' '): " + ((Run-Wsl -A $a -AllowFail) -replace "`n", ' | ')
+            }
+            $o
+          }
+
+      - name: 2 Import Alpine distro
+        id: import
+        continue-on-error: true
+        timeout-minutes: 8
+        run: |
+          . "$env:RUNNER_TEMP\probe\lib.ps1"
+          Invoke-Probe '2-import' {
+            $tgz = Join-Path $env:RUNNER_TEMP 'alpine.tar.gz'
+            Invoke-WebRequest -UseBasicParsing -Uri $env:ALPINE_URL -OutFile $tgz
+            $h = (Get-FileHash $tgz -Algorithm SHA256).Hash.ToLower()
+            if ($h -ne $env:ALPINE_SHA256) { throw "alpine sha mismatch: $h" }
+            Write-Host "alpine sha256 ok: $h"
+            $ver = $null
+            foreach ($v in 2, 1) {
+              Run-Wsl -A @('--unregister', $Distro) -AllowFail | Out-Null
+              $dest = "C:\wsl\$Distro"
+              Remove-Item -Recurse -Force $dest -ErrorAction SilentlyContinue
+              New-Item -ItemType Directory -Force $dest | Out-Null
+              $imp = Run-Wsl -A @('--import', $Distro, $dest, $tgz, '--version', "$v") -AllowFail
+              $chk = Run-Wsl -A @('-d', $Distro, '--exec', 'uname', '-r') -AllowFail
+              if ($chk -match '\d+\.\d+') { $ver = $v; break }
+              Write-Host "WSL version $v failed: import=[$imp] exec=[$chk]"
+            }
+            if (-not $ver) {
+              # last resort: maybe the wsl stub needs its package installed
+              Run-Wsl -A @('--install', '--no-distribution') -AllowFail | Out-Null
+              throw 'neither WSL2 nor WSL1 import+exec worked'
+            }
+            Set-Content (Join-Path $P 'wslver.txt') $ver
+            "WSL version $ver import + first exec ok"
+          }
+
+      - name: 3 Basic exec, CA bundle, DNS and HTTPS
+        id: exec
+        continue-on-error: true
+        timeout-minutes: 3
+        run: |
+          . "$env:RUNNER_TEMP\probe\lib.ps1"
+          Invoke-Probe '3-exec' {
+            $o = @()
+            $o += Dx 'uname -a'
+            $o += Dx 'ls -l /etc/ssl/certs/ca-certificates.crt'
+            $o += Dx 'cat /etc/os-release | head -2'
+            $o += Dx 'wget -q -O /dev/null https://www.cloudflare.com/ && echo https-ok'
+            $o += Dx 'nslookup github.com 2>&1 | tail -3' -AllowFail
+            $o
+          }
+
+      - name: 4a WSLENV passthrough
+        id: wslenv
+        continue-on-error: true
+        timeout-minutes: 2
+        run: |
+          . "$env:RUNNER_TEMP\probe\lib.ps1"
+          Invoke-Probe '4a-wslenv' {
+            $env:PROBE_DUMMY = 'dummy-credential-123'
+            $env:WSLENV = 'PROBE_DUMMY'
+            $v = Dx 'echo "val=$PROBE_DUMMY"'
+            $env:WSLENV = ''
+            if ($v -notmatch 'val=dummy-credential-123') { throw "WSLENV not visible: [$v]" }
+            $v
+          }
+
+      - name: 4b Start bazel-remote in distro
+        id: start
+        continue-on-error: true
+        timeout-minutes: 4
+        run: |
+          . "$env:RUNNER_TEMP\probe\lib.ps1"
+          Invoke-Probe '4b-proxy-start' {
+            Dx ("mkdir -p /opt/br/data && wget -q -O /opt/br/bazel-remote $env:BR_URL && " +
+                "echo '$env:BR_SHA256  /opt/br/bazel-remote' | sha256sum -c - && chmod +x /opt/br/bazel-remote")
+            Dx '/opt/br/bazel-remote --help 2>&1 | grep -E -- "--(http_address|grpc_address|dir|max_size) " | head -4'
+            Start-Proxy
+            if (-not (Wait-Proxy '127.0.0.1' 20)) {
+              Dx 'cat /var/log/br.log; pidof bazel-remote' -AllowFail
+              throw 'proxy did not answer on 127.0.0.1:9090 from Windows within 20s'
+            }
+            Dx 'tail -5 /var/log/br.log; echo pid=$(pidof bazel-remote)'
+          }
+
+      - name: 5 Windows to WSL loopback
+        id: loop
+        continue-on-error: true
+        timeout-minutes: 3
+        run: |
+          . "$env:RUNNER_TEMP\probe\lib.ps1"
+          Invoke-Probe '5-loopback' {
+            try { Test-Loopback '127.0.0.1' }
+            catch {
+              Write-Host "127.0.0.1 failed: $($_.Exception.Message); trying 0.0.0.0 bind and distro IP"
+              Dx 'kill $(pidof bazel-remote)' -AllowFail | Out-Null
+              Start-Sleep 2
+              Start-Proxy '0.0.0.0:9090' '0.0.0.0:9092'
+              Start-Sleep 3
+              $ip = (Dx "ip -4 -o addr show eth0 | sed -E 's/.*inet ([0-9.]+).*/\1/'" -AllowFail).Trim()
+              Write-Host "distro ip: $ip"
+              $res = @()
+              foreach ($a in '127.0.0.1', $ip) {
+                try { $res += "$a OK: $(Test-Loopback $a)" } catch { $res += "$a FAIL: $($_.Exception.Message)" }
+              }
+              throw ("127.0.0.1 bind failed; 0.0.0.0 bind results: " + ($res -join ' | '))
+            }
+          }
+
+      - name: 6a Proxy survives into a later step
+        id: survive
+        continue-on-error: true
+        timeout-minutes: 2
+        run: |
+          . "$env:RUNNER_TEMP\probe\lib.ps1"
+          Invoke-Probe '6a-next-step' {
+            if (-not (Wait-Proxy '127.0.0.1' 5)) { throw 'proxy no longer answers in a later step' }
+            "status 200 in later step"
+          }
+
+      - name: 6b Idle 120s with no wsl.exe interaction
+        id: idle
+        continue-on-error: true
+        timeout-minutes: 4
+        run: |
+          . "$env:RUNNER_TEMP\probe\lib.ps1"
+          Invoke-Probe '6b-idle120' {
+            Start-Sleep -Seconds 120
+            if (-not (Wait-Proxy '127.0.0.1' 5)) {
+              Set-Content (Join-Path $P 'idle-failed') '1'
+              throw 'proxy died / unreachable after 120s idle (keep-alive needed)'
+            }
+            'proxy still answers after 120s without wsl.exe interaction'
+          }
+
+      - name: 6c Keep-alive variant A (long-lived wsl.exe parent)
+        id: variantA
+        if: ${{ always() }}
+        continue-on-error: true
+        timeout-minutes: 5
+        run: |
+          . "$env:RUNNER_TEMP\probe\lib.ps1"
+          if (-not (Test-Path (Join-Path $P 'idle-failed'))) { Write-Host 'idle ok; variant A not needed'; exit 0 }
+          Invoke-Probe '6c-keepalive-A' {
+            Run-Wsl -A @('--terminate', $Distro) -AllowFail | Out-Null
+            $kp = Start-Process wsl.exe -ArgumentList @('-d', $Distro, '--exec', 'sleep', '86400') -WindowStyle Hidden -PassThru
+            Set-Content (Join-Path $P 'keepalive.pid') $kp.Id
+            Start-Sleep 3
+            Start-Proxy
+            if (-not (Wait-Proxy '127.0.0.1' 20)) { throw 'proxy did not restart' }
+            Start-Sleep -Seconds 120
+            if (-not (Wait-Proxy '127.0.0.1' 5)) { throw 'proxy still dies with long-lived wsl.exe parent' }
+            Set-Content (Join-Path $P 'survival-variant') 'A: Start-Process wsl.exe --exec sleep 86400'
+            'variant A works: long-lived wsl.exe parent keeps proxy alive for 120s'
+          }
+
+      - name: 6d Keep-alive variant B (.wslconfig vmIdleTimeout=-1)
+        id: variantB
+        if: ${{ always() }}
+        continue-on-error: true
+        timeout-minutes: 5
+        run: |
+          . "$env:RUNNER_TEMP\probe\lib.ps1"
+          if (-not (Test-Path (Join-Path $P 'idle-failed')) -or (Test-Path (Join-Path $P 'survival-variant'))) { Write-Host 'variant B not needed'; exit 0 }
+          Invoke-Probe '6d-keepalive-B' {
+            $kp = Get-Content (Join-Path $P 'keepalive.pid') -ErrorAction SilentlyContinue
+            if ($kp) { Stop-Process -Id $kp -Force -ErrorAction SilentlyContinue }
+            Set-Content "$env:USERPROFILE\.wslconfig" "[wsl2]`nvmIdleTimeout=-1`n"
+            Run-Wsl -A @('--shutdown') -AllowFail | Out-Null
+            Start-Sleep 3
+            Start-Proxy
+            if (-not (Wait-Proxy '127.0.0.1' 20)) { throw 'proxy did not restart' }
+            Start-Sleep -Seconds 120
+            if (-not (Wait-Proxy '127.0.0.1' 5)) { throw 'proxy still dies with vmIdleTimeout=-1' }
+            Set-Content (Join-Path $P 'survival-variant') 'B: .wslconfig vmIdleTimeout=-1'
+            'variant B works'
+          }
+
+      - name: 8 Optional Bazel remote cache hit
+        id: bazel
+        if: ${{ always() }}
+        continue-on-error: true
+        timeout-minutes: 8
+        run: |
+          . "$env:RUNNER_TEMP\probe\lib.ps1"
+          Invoke-Probe '8-bazel-cache' {
+            if (-not (Wait-Proxy '127.0.0.1' 5)) {
+              # proxy may have died; restart so the cache test is meaningful
+              Start-Proxy
+              if (-not (Wait-Proxy '127.0.0.1' 20)) { throw 'proxy not available for bazel test' }
+            }
+            $b = Join-Path $env:RUNNER_TEMP 'bazelisk.exe'
+            Invoke-WebRequest -UseBasicParsing -Uri $env:BAZELISK_URL -OutFile $b
+            $h = (Get-FileHash $b -Algorithm SHA256).Hash.ToLower()
+            if ($h -ne $env:BAZELISK_SHA256) { throw "bazelisk sha mismatch: $h" }
+            $ws = Join-Path $env:RUNNER_TEMP 'bzlws'
+            New-Item -ItemType Directory -Force $ws | Out-Null
+            Set-Content "$ws\MODULE.bazel" "module(name = 'probe')`n"
+            Set-Content "$ws\BUILD.bazel" "genrule(name = 'g', outs = ['g.txt'], cmd_bat = 'echo hello> `$@', cmd = 'echo hello > `$@')`n"
+            $env:USE_BAZEL_VERSION = '9.2.0'
+            Push-Location $ws
+            try {
+              $flags = @('--remote_cache=grpc://127.0.0.1:9092', '--noremote_upload_local_results=false', '--remote_timeout=30s')
+              $out1 = & $b build //:g @flags 2>&1 | Out-String
+              Write-Host $out1
+              & $b clean 2>&1 | Out-Null
+              $out2 = & $b build //:g @flags 2>&1 | Out-String
+              Write-Host $out2
+              if ($out2 -notmatch 'remote cache hit') { throw 'no remote cache hit on second build' }
+              ($out2 -split "`n" | Select-String 'remote cache hit|process' | ForEach-Object { $_.Line.Trim() }) -join '; '
+            } finally { Pop-Location }
+          }
+
+      - name: 7 Controlled stop
+        id: stop
+        if: ${{ always() }}
+        continue-on-error: true
+        timeout-minutes: 3
+        run: |
+          . "$env:RUNNER_TEMP\probe\lib.ps1"
+          Invoke-Probe '7-stop' {
+            $pid1 = (Dx 'pidof bazel-remote').Trim()
+            if (-not $pid1) { throw 'no bazel-remote process to stop' }
+            Run-Wsl -A @('-d', $Distro, '--exec', 'kill', '-TERM', $pid1) | Out-Null
+            $gone = $false
+            for ($i = 0; $i -lt 20; $i++) {
+              Start-Sleep -Milliseconds 500
+              $p = Run-Wsl -A @('-d', $Distro, '--exec', 'pidof', 'bazel-remote') -AllowFail
+              if (-not $p) { $gone = $true; break }
+            }
+            if (-not $gone) { throw "pid $pid1 still alive 10s after SIGTERM" }
+            $log = Dx 'tail -3 /var/log/br.log' -AllowFail
+            if (Test-Port '127.0.0.1' 9090 1500) { throw 'port 9090 still open after stop' }
+            if (Test-Port '127.0.0.1' 9092 1500) { throw 'port 9092 still open after stop' }
+            "pid $pid1 exited after SIGTERM; ports 9090/9092 closed; log tail: $log"
+          }
+
+      - name: 7b Cleanup (terminate and unregister)
+        id: cleanup
+        if: ${{ always() }}
+        continue-on-error: true
+        timeout-minutes: 3
+        run: |
+          . "$env:RUNNER_TEMP\probe\lib.ps1"
+          Invoke-Probe '7b-cleanup' {
+            $kp = Get-Content (Join-Path $P 'keepalive.pid') -ErrorAction SilentlyContinue
+            if ($kp) { Stop-Process -Id $kp -Force -ErrorAction SilentlyContinue }
+            Run-Wsl -A @('--terminate', $Distro) | Out-Null
+            Run-Wsl -A @('--unregister', $Distro) | Out-Null
+            $l = Run-Wsl -A @('-l', '-q') -AllowFail
+            if ($l -match "(?m)^$Distro$") { throw 'distro still registered' }
+            "terminated and unregistered; remaining: [$l]"
+          }
+
+      - name: Summary
+        if: ${{ always() }}
+        run: |
+          $P = Join-Path $env:RUNNER_TEMP 'probe'
+          $recs = @{}
+          Get-Content (Join-Path $P 'results.jsonl') -ErrorAction SilentlyContinue | ForEach-Object {
+            $r = $_ | ConvertFrom-Json; $recs[$r.id] = $r
+          }
+          $ver = Get-Content (Join-Path $P 'wslver.txt') -ErrorAction SilentlyContinue
+          $variant = Get-Content (Join-Path $P 'survival-variant') -ErrorAction SilentlyContinue
+          $required = '2-import', '3-exec', '4a-wslenv', '4b-proxy-start', '5-loopback', '6a-next-step', '7-stop'
+          $all = '1-env', '2-import', '3-exec', '4a-wslenv', '4b-proxy-start', '5-loopback', '6a-next-step', '6b-idle120', '6c-keepalive-A', '6d-keepalive-B', '8-bazel-cache', '7-stop', '7b-cleanup'
+          $lines = @("| Item | Result | Seconds | Detail |", "|---|---|---|---|")
+          $fail = $false
+          foreach ($id in $all) {
+            $r = $recs[$id]
+            if ($r) { $st = $r.status; $s = $r.secs; $d = ($r.detail -replace '\|', '/' -replace "\r?\n", ' ; ') }
+            else { $st = 'NOT RUN'; $s = ''; $d = '' }
+            if ($d.Length -gt 400) { $d = $d.Substring(0, 400) + '...' }
+            if ($id -in $required -and $st -ne 'PASS') { $fail = $true }
+            $lines += "| $id | $st | $s | $d |"
+          }
+          $idleOk = $recs['6b-idle120'] -and $recs['6b-idle120'].status -eq 'PASS'
+          $eff = if ($idleOk) { 'PASS (no keep-alive needed)' } elseif ($variant) { "PASS with workaround: $variant" } else { 'FAIL' }
+          if ($eff -eq 'FAIL') { $fail = $true }
+          $lines += ''
+          $lines += "WSL version that worked: $ver"
+          $lines += "Cross-step survival (effective): $eff"
+          $lines += "Overall: $(if ($fail) { 'FAIL' } else { 'PASS' })"
+          $lines | ForEach-Object { Write-Host $_ }
+          $lines | Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8
+          if ($fail) { exit 1 }
