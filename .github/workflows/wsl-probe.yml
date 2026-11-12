@@ -427,10 +427,11 @@ jobs:
               $d = "/opt/br/tls-$($c.n)"
               Dx ("mkdir -p $d; $($c.env) setsid /opt/br/bazel-remote --dir $d --max_size 1 " +
                   "--http_address 127.0.0.1:$($c.port) --grpc_address none " +
-                  "--http_proxy.url https://www.cloudflare.com/ > $d.log 2>&1 < /dev/null & echo `$! > $d.pid") | Out-Null
+                  "--http_proxy.url https://www.cloudflare.com/ > $d.log 2>&1 < /dev/null & echo `$! > $d.pid; sleep 1") | Out-Null
               Start-Sleep 2
               try { $null = Invoke-WebRequest -UseBasicParsing -TimeoutSec 15 "http://127.0.0.1:$($c.port)/cas/$hash" } catch { }
               Start-Sleep 1
+              Dx "tail -5 $d.log" -AllowFail | Out-Null
               $log = Dx "grep -i -e 'HTTP DOWNLOAD' -e x509 -e certificate -e tls $d.log | head -3" -AllowFail
               Dx "kill `$(cat $d.pid)" -AllowFail | Out-Null
               $res += "$($c.n): $log"
