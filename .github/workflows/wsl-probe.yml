@@ -104,7 +104,7 @@ jobs:
             Dx 'mkdir -p /opt/br/data; : > /var/log/br.log' | Out-Null
             Dx ("setsid /opt/br/bazel-remote --dir /opt/br/data --max_size 1 " +
                 "--http_address $Http --grpc_address $Grpc " +
-                "> /var/log/br.log 2>&1 < /dev/null & sleep 1; echo started-pid=$(pidof bazel-remote)") | Out-Null
+                '> /var/log/br.log 2>&1 < /dev/null & sleep 1; echo started-pid=$(pidof bazel-remote)') | Out-Null
           }
           function Test-Loopback {
             param([string]$Addr = '127.0.0.1')
