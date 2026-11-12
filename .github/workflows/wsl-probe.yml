@@ -22,17 +22,27 @@ defaults:
 
 jobs:
   probe:
-    name: WSL probe / ${{ matrix.runner }}
+    name: WSL probe / ${{ matrix.runner }} / ${{ matrix.flavor }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        runner:
-          - windows-2025-vs2026
+        include:
+          - runner: windows-2025-vs2026
+            flavor: alpine
+            distro_url: https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/x86_64/alpine-minirootfs-3.24.4-x86_64.tar.gz
+            distro_sha256: cdaa38cb8de3537967ee5b6c9b6cd00cc962da2b018e6eea48696bb274923012
+            prep: apk add --no-cache gcompat
+          - runner: windows-2025-vs2026
+            flavor: ubuntu
+            distro_url: https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.5-base-amd64.tar.gz
+            distro_sha256: e77b6f10c2590cef872b33ee9f635a0e3fd1f57fb074c0e52b5c7f56147a0c86
+            prep: apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends ca-certificates wget
     env:
-      ALPINE_URL: https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/x86_64/alpine-minirootfs-3.24.4-x86_64.tar.gz
-      ALPINE_SHA256: cdaa38cb8de3537967ee5b6c9b6cd00cc962da2b018e6eea48696bb274923012
+      DISTRO_URL: ${{ matrix.distro_url }}
+      DISTRO_SHA256: ${{ matrix.distro_sha256 }}
+      DISTRO_PREP: ${{ matrix.prep }}
       BR_URL: https://github.com/buchgr/bazel-remote/releases/download/v2.6.4/bazel-remote-2.6.4-linux-amd64
       BR_SHA256: 6a6b64666c2238ec6b49b7b29f5e41e4149de09417a0028897c9bffe40376876
       BAZELISK_URL: https://github.com/bazelbuild/bazelisk/releases/download/v1.30.0/bazelisk-windows-amd64.exe
@@ -152,18 +162,18 @@ jobs:
             $o
           }
 
-      - name: 2 Import Alpine distro
+      - name: 2 Import distro
         id: import
         continue-on-error: true
         timeout-minutes: 8
         run: |
           . "$env:RUNNER_TEMP\probe\lib.ps1"
           Invoke-Probe '2-import' {
-            $tgz = Join-Path $env:RUNNER_TEMP 'alpine.tar.gz'
-            Invoke-WebRequest -UseBasicParsing -Uri $env:ALPINE_URL -OutFile $tgz
+            $tgz = Join-Path $env:RUNNER_TEMP 'distro.tar.gz'
+            Invoke-WebRequest -UseBasicParsing -Uri $env:DISTRO_URL -OutFile $tgz
             $h = (Get-FileHash $tgz -Algorithm SHA256).Hash.ToLower()
-            if ($h -ne $env:ALPINE_SHA256) { throw "alpine sha mismatch: $h" }
-            Write-Host "alpine sha256 ok: $h"
+            if ($h -ne $env:DISTRO_SHA256) { throw "distro sha mismatch: $h" }
+            Write-Host "distro sha256 ok: $h"
             $ver = $null
             foreach ($v in 2, 1) {
               Run-Wsl -A @('--unregister', $Distro) -AllowFail | Out-Null
@@ -184,6 +194,17 @@ jobs:
             "WSL version $ver import + first exec ok"
           }
 
+      - name: 2b Prepare distro (glibc compat, CA bundle, wget)
+        id: prep
+        continue-on-error: true
+        timeout-minutes: 5
+        run: |
+          . "$env:RUNNER_TEMP\probe\lib.ps1"
+          Invoke-Probe '2b-prep' {
+            Dx $env:DISTRO_PREP
+            'prepared'
+          }
+
       - name: 3 Basic exec, CA bundle, DNS and HTTPS
         id: exec
         continue-on-error: true
@@ -196,7 +217,7 @@ jobs:
             $o += Dx 'ls -l /etc/ssl/certs/ca-certificates.crt'
             $o += Dx 'cat /etc/os-release | head -2'
             $o += Dx 'wget -q -O /dev/null https://www.cloudflare.com/ && echo https-ok'
-            $o += Dx 'nslookup github.com 2>&1 | tail -3' -AllowFail
+            $o += Dx 'getent hosts github.com' -AllowFail
             $o
           }
 
@@ -247,7 +268,7 @@ jobs:
               Start-Sleep 2
               Start-Proxy '0.0.0.0:9090' '0.0.0.0:9092'
               Start-Sleep 3
-              $ip = (Dx "ip -4 -o addr show eth0 | sed -E 's/.*inet ([0-9.]+).*/\1/'" -AllowFail).Trim()
+              $ip = (Dx "hostname -I | cut -d' ' -f1" -AllowFail).Trim()
               Write-Host "distro ip: $ip"
               $res = @()
               foreach ($a in '127.0.0.1', $ip) {
@@ -412,8 +433,8 @@ jobs:
           }
           $ver = Get-Content (Join-Path $P 'wslver.txt') -ErrorAction SilentlyContinue
           $variant = Get-Content (Join-Path $P 'survival-variant') -ErrorAction SilentlyContinue
-          $required = '2-import', '3-exec', '4a-wslenv', '4b-proxy-start', '5-loopback', '6a-next-step', '7-stop'
-          $all = '1-env', '2-import', '3-exec', '4a-wslenv', '4b-proxy-start', '5-loopback', '6a-next-step', '6b-idle120', '6c-keepalive-A', '6d-keepalive-B', '8-bazel-cache', '7-stop', '7b-cleanup'
+          $required = '2-import', '2b-prep', '3-exec', '4a-wslenv', '4b-proxy-start', '5-loopback', '6a-next-step', '7-stop'
+          $all = '1-env', '2-import', '2b-prep', '3-exec', '4a-wslenv', '4b-proxy-start', '5-loopback', '6a-next-step', '6b-idle120', '6c-keepalive-A', '6d-keepalive-B', '8-bazel-cache', '7-stop', '7b-cleanup'
           $lines = @("| Item | Result | Seconds | Detail |", "|---|---|---|---|")
           $fail = $false
           foreach ($id in $all) {
