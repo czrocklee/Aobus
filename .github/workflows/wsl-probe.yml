@@ -334,6 +334,8 @@ jobs:
             $sum
           }
           Invoke-Probe 'A6-stop' { Stop-Proxy }
+          # The last native call (kill -0 polling) leaves a nonzero exit code; failures already exit 1.
+          exit 0
 
       - name: B Consumer phase (fresh distro, no uploads)
         id: phaseB
@@ -368,6 +370,8 @@ jobs:
             $sum
           }
           Invoke-Probe 'B6-stop' { Stop-Proxy }
+          # The last native call (kill -0 polling) leaves a nonzero exit code; failures already exit 1.
+          exit 0
 
       - name: Cleanup
         id: cleanup
