@@ -1,8 +1,10 @@
 name: WSL bazel-remote probe
 
 # Throwaway experiment: can the GitHub-hosted Windows runner run the Linux
-# bazel-remote binary inside WSL and reach it from Windows on 127.0.0.1?
-# Uses no secrets and no R2 access. Do not merge.
+# bazel-remote binary inside WSL against the real R2 bucket? Phase A produces a
+# canary into an isolated run-scoped prefix, phase B consumes it from a freshly
+# imported distro. This repository is public: every log line is public, so all
+# output that can touch R2 values goes through Redact. Do not merge.
 
 on:
   pull_request:
@@ -22,37 +24,18 @@ defaults:
 
 jobs:
   probe:
-    name: WSL probe / ${{ matrix.runner }} / ${{ matrix.flavor }}
-    runs-on: ${{ matrix.runner }}
+    name: WSL probe / windows-2025-vs2026 / ubuntu-pinned
+    runs-on: windows-2025-vs2026
     timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: windows-2025-vs2026
-            flavor: alpine
-            distro_url: https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/x86_64/alpine-minirootfs-3.24.4-x86_64.tar.gz
-            distro_sha256: cdaa38cb8de3537967ee5b6c9b6cd00cc962da2b018e6eea48696bb274923012
-            prep: apk add --no-cache gcompat
-          - runner: windows-2025-vs2026
-            flavor: ubuntu
-            distro_url: https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.5-base-amd64.tar.gz
-            distro_sha256: e77b6f10c2590cef872b33ee9f635a0e3fd1f57fb074c0e52b5c7f56147a0c86
-            prep: apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends ca-certificates wget
-          - runner: windows-2025-vs2026
-            flavor: ubuntu-pinned
-            distro_url: https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.5-base-amd64.tar.gz
-            distro_sha256: e77b6f10c2590cef872b33ee9f635a0e3fd1f57fb074c0e52b5c7f56147a0c86
-            prep: ''
     env:
-      DISTRO_URL: ${{ matrix.distro_url }}
-      DISTRO_SHA256: ${{ matrix.distro_sha256 }}
-      DISTRO_PREP: ${{ matrix.prep }}
-      FLAVOR: ${{ matrix.flavor }}
+      DISTRO_URL: https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.5-base-amd64.tar.gz
+      DISTRO_SHA256: e77b6f10c2590cef872b33ee9f635a0e3fd1f57fb074c0e52b5c7f56147a0c86
       BR_URL: https://github.com/buchgr/bazel-remote/releases/download/v2.6.4/bazel-remote-2.6.4-linux-amd64
       BR_SHA256: 6a6b64666c2238ec6b49b7b29f5e41e4149de09417a0028897c9bffe40376876
       BAZELISK_URL: https://github.com/bazelbuild/bazelisk/releases/download/v1.30.0/bazelisk-windows-amd64.exe
       BAZELISK_SHA256: 5d14a31e9d8a363c48ba1900dbd56764d730835232eb0d113cce255856ffe3ef
+      KEY_PREFIX: bazel-ci-validation/${{ github.run_id }}/${{ github.run_attempt }}/windows-wsl-probe
+      CANARY_ID: ${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: Write probe helpers
         run: |
@@ -64,29 +47,58 @@ jobs:
           $P = Join-Path $env:RUNNER_TEMP 'probe'
           $Distro = 'probe'
           $Results = Join-Path $P 'results.jsonl'
+          $global:Redactions = @()
 
-          # wsl.exe management commands emit UTF-16; strip the NULs we get when
-          # PowerShell decodes them as an 8-bit code page.
+          # Register every R2-derived value as a mask before any other output,
+          # then remember them for Redact. Messages stay generic on purpose:
+          # parser exceptions can quote the input.
+          function Initialize-Redaction {
+            $vals = @($env:R2_ENDPOINT, $env:R2_ACCESS_KEY_ID, $env:R2_SECRET_ACCESS_KEY)
+            foreach ($v in $vals) { if ($v -and $v.Length -ge 3) { Write-Host "::add-mask::$v" } }
+            $hostName = ''
+            try {
+              $e = $env:R2_ENDPOINT.Trim()
+              if ($e -notmatch '://') { $e = "https://$e" }
+              $u = [uri]$e
+              if ($u.Scheme -ne 'https' -or -not $u.Host -or $u.UserInfo -or $u.AbsolutePath.Trim('/') -or $u.Query -or $u.Fragment) { throw 'shape' }
+              $hostName = $u.Authority
+            } catch { throw 'R2 endpoint secret does not have the expected https origin shape' }
+            $label = $hostName.Split('.')[0]
+            $derived = @($hostName, $label, $env:R2_ENDPOINT.Trim())
+            foreach ($v in $derived) { if ($v -and $v.Length -ge 3) { Write-Host "::add-mask::$v" } }
+            $global:Redactions = @($vals + $derived | Where-Object { $_ -and $_.Length -ge 3 } | Sort-Object -Property Length -Descending -Unique)
+          }
+          function Redact {
+            param([string]$Text)
+            if ($null -eq $Text) { return '' }
+            foreach ($v in $global:Redactions) { $Text = $Text.Replace($v, '<redacted>') }
+            return $Text
+          }
+
+          # wsl.exe management commands emit UTF-16; strip NULs. Output and the
+          # echoed command line are redacted; -Quiet suppresses the output echo.
           function Run-Wsl {
-            param([string[]]$A, [switch]$AllowFail)
+            param([string[]]$A, [switch]$AllowFail, [switch]$Quiet)
             $out = & wsl.exe @A 2>&1 | Out-String
             $code = $LASTEXITCODE
             $out = ($out -replace "`0", '' -replace "`r", '').Trim()
-            Write-Host "> wsl $($A -join ' ')   (exit $code)"
-            if ($out) { Write-Host $out }
-            if ($code -ne 0 -and -not $AllowFail) { throw "wsl exit $code : $($A -join ' ')" }
+            if (-not $Quiet) {
+              Write-Host (Redact "> wsl $($A -join ' ')   (exit $code)")
+              if ($out) { Write-Host (Redact $out) }
+            }
+            if ($code -ne 0 -and -not $AllowFail) { throw (Redact "wsl exit $code : $($A -join ' ')") }
             return $out
           }
           function Dx {
-            param([string]$Cmd, [switch]$AllowFail)
-            Run-Wsl -A @('-d', $Distro, '--exec', 'sh', '-c', $Cmd) -AllowFail:$AllowFail
+            param([string]$Cmd, [switch]$AllowFail, [switch]$Quiet)
+            Run-Wsl -A @('-d', $Distro, '--exec', 'sh', '-c', $Cmd) -AllowFail:$AllowFail -Quiet:$Quiet
           }
           function Invoke-Probe {
             param([string]$Id, [scriptblock]$Body)
             $sw = [Diagnostics.Stopwatch]::StartNew()
             $status = 'PASS'; $detail = ''
-            try { $detail = (& $Body | Out-String).Trim() }
-            catch { $status = 'FAIL'; $detail = "EXCEPTION: $($_.Exception.Message)" }
+            try { $detail = Redact ((& $Body | Out-String).Trim()) }
+            catch { $status = 'FAIL'; $detail = 'EXCEPTION: ' + (Redact $_.Exception.Message) }
             $sw.Stop()
             $secs = [math]::Round($sw.Elapsed.TotalSeconds, 1)
             Write-Host "RESULT $Id $status ${secs}s :: $detail"
@@ -102,44 +114,143 @@ jobs:
               return ($t.Wait($TimeoutMs) -and $c.Connected)
             } catch { return $false } finally { $c.Dispose() }
           }
-          function Get-ProxyStatus {
-            param([string]$Addr = '127.0.0.1')
-            (Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 "http://${Addr}:9090/status").StatusCode
-          }
           function Wait-Proxy {
-            param([string]$Addr = '127.0.0.1', [int]$Seconds = 20)
+            param([int]$Seconds = 30)
             $end = (Get-Date).AddSeconds($Seconds)
             while ((Get-Date) -lt $end) {
-              try { if ((Get-ProxyStatus $Addr) -eq 200) { return $true } } catch {}
+              try { if ((Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 'http://127.0.0.1:9090/status').StatusCode -eq 200) { return $true } } catch {}
               Start-Sleep -Milliseconds 500
             }
             return $false
           }
-          function Start-Proxy {
-            param([string]$Http = '127.0.0.1:9090', [string]$Grpc = '127.0.0.1:9092')
-            Dx 'mkdir -p /opt/br/data; : > /var/log/br.log' | Out-Null
-            Dx ('if [ -f /opt/br/ca-bundle.crt ]; then export SSL_CERT_FILE=/opt/br/ca-bundle.crt; fi; ' +
-                "setsid /opt/br/bazel-remote --dir /opt/br/data --max_size 1 " +
-                "--http_address $Http --grpc_address $Grpc " +
-                '> /var/log/br.log 2>&1 < /dev/null & echo $! > /run/br.pid; sleep 1; echo started-pid=$(cat /run/br.pid)') | Out-Null
+
+          function Import-Distro {
+            $tgz = Join-Path $env:RUNNER_TEMP 'distro.tar.gz'
+            if (-not (Test-Path $tgz)) { Invoke-WebRequest -UseBasicParsing -Uri $env:DISTRO_URL -OutFile $tgz }
+            $h = (Get-FileHash $tgz -Algorithm SHA256).Hash.ToLower()
+            if ($h -ne $env:DISTRO_SHA256) { throw "distro sha mismatch: $h" }
+            Run-Wsl -A @('--unregister', $Distro) -AllowFail -Quiet | Out-Null
+            $dest = "C:\wsl\$Distro"
+            Remove-Item -Recurse -Force $dest -ErrorAction SilentlyContinue
+            New-Item -ItemType Directory -Force $dest | Out-Null
+            Run-Wsl -A @('--import', $Distro, $dest, $tgz, '--version', '2') | Out-Null
+            $k = Run-Wsl -A @('-d', $Distro, '--exec', 'uname', '-r')
+            "WSL2 import ok; kernel $k; /opt/br present: $(Dx 'test -e /opt/br && echo yes || echo no' -Quiet)"
           }
-          function Test-Loopback {
-            param([string]$Addr = '127.0.0.1')
-            $r = @()
-            $code = Get-ProxyStatus $Addr
-            $r += "GET /status -> $code"
-            $bytes = [Text.Encoding]::UTF8.GetBytes("wsl-probe-blob-$([guid]::NewGuid())")
-            $sha = ([BitConverter]::ToString([Security.Cryptography.SHA256]::HashData($bytes)) -replace '-', '').ToLower()
-            $put = Invoke-WebRequest -UseBasicParsing -Method Put -Body $bytes -TimeoutSec 10 "http://${Addr}:9090/cas/$sha"
-            $r += "PUT /cas/$($sha.Substring(0,12))... -> $($put.StatusCode)"
-            $get = Invoke-WebRequest -UseBasicParsing -TimeoutSec 10 "http://${Addr}:9090/cas/$sha"
-            $got = [byte[]]$get.Content
-            if ($got -is [string]) { $got = [Text.Encoding]::UTF8.GetBytes($get.Content) }
-            if (-not [Linq.Enumerable]::SequenceEqual([byte[]]$bytes, [byte[]]$got)) { throw 'CAS round-trip mismatch' }
-            $r += 'GET /cas round-trip equal'
-            if (-not (Test-Port $Addr 9092)) { throw "TCP ${Addr}:9092 not reachable" }
-            $r += "TCP ${Addr}:9092 connect ok"
-            $r -join '; '
+          # Windows-side download + verify, then copy into the distro filesystem.
+          function Install-Binary {
+            $bin = Join-Path $env:RUNNER_TEMP 'bazel-remote-linux'
+            if (-not (Test-Path $bin)) { Invoke-WebRequest -UseBasicParsing -Uri $env:BR_URL -OutFile $bin }
+            $h = (Get-FileHash $bin -Algorithm SHA256).Hash.ToLower()
+            if ($h -ne $env:BR_SHA256) { throw "bazel-remote sha mismatch: $h" }
+            $ca = @('C:\Program Files\Git\usr\ssl\certs\ca-bundle.crt', 'C:\Program Files\Git\mingw64\etc\ssl\certs\ca-bundle.crt') | Where-Object { Test-Path $_ } | Select-Object -First 1
+            if (-not $ca) { throw 'no Git for Windows ca-bundle.crt found' }
+            $wbin = (Run-Wsl -A @('-d', $Distro, '--exec', 'wslpath', '-a', ($bin -replace '\\', '/')) -Quiet).Trim()
+            $wca = (Run-Wsl -A @('-d', $Distro, '--exec', 'wslpath', '-a', ($ca -replace '\\', '/')) -Quiet).Trim()
+            Dx "mkdir -p /opt/br/data && cp '$wbin' /opt/br/bazel-remote && cp '$wca' /opt/br/ca-bundle.crt && chmod +x /opt/br/bazel-remote" -Quiet | Out-Null
+            Dx "echo '$env:BR_SHA256  /opt/br/bazel-remote' | sha256sum -c -" | Out-Null
+            "binary verified on both sides; CA bundle $ca"
+          }
+          # Credentials travel only through WSLENV; the distro shell derives the
+          # endpoint host, so the command text names variables, never values.
+          function Start-R2Proxy {
+            param([int]$Uploaders)
+            Dx 'mkdir -p /opt/br/data; : > /var/log/br.log' -Quiet | Out-Null
+            # Plain assignments never field-split; `export A=$B` can in dash, and
+            # its error text would quote a fragment that no mask matches.
+            $cmd = 'export SSL_CERT_FILE=/opt/br/ca-bundle.crt; ' +
+              'h=${R2_ENDPOINT#https://}; BAZEL_REMOTE_S3_ENDPOINT=${h%%/*}; export BAZEL_REMOTE_S3_ENDPOINT; unset h; ' +
+              'BAZEL_REMOTE_S3_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID; BAZEL_REMOTE_S3_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY; ' +
+              'export BAZEL_REMOTE_S3_ACCESS_KEY_ID BAZEL_REMOTE_S3_SECRET_ACCESS_KEY; ' +
+              'unset R2_ENDPOINT R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY; ' +
+              "setsid /opt/br/bazel-remote --dir /opt/br/data --max_size 1 --grpc_address 127.0.0.1:9092 --http_address 127.0.0.1:9090 " +
+              "--s3.bucket aobus-sccache --s3.prefix $env:KEY_PREFIX --s3.auth_method access_key --s3.region auto " +
+              "--num_uploaders $Uploaders --access_log_level all " +
+              '> /var/log/br.log 2>&1 < /dev/null & echo $! > /run/br.pid; sleep 1'
+            $env:WSLENV = 'R2_ENDPOINT:R2_ACCESS_KEY_ID:R2_SECRET_ACCESS_KEY'
+            # Quiet: shell diagnostics from this one call are never echoed. The
+            # values leave this process afterwards so Bazel never inherits them.
+            try { Dx $cmd -Quiet | Out-Null } finally {
+              $env:WSLENV = ''
+              Remove-Item Env:R2_ENDPOINT, Env:R2_ACCESS_KEY_ID, Env:R2_SECRET_ACCESS_KEY -ErrorAction SilentlyContinue
+            }
+            if (-not (Wait-Proxy 30)) {
+              Write-Host (Get-LogLines '(?i)error|fail|denied|forbidden|x509|tls|dial|lookup' 10)
+              throw 'proxy did not become ready on 127.0.0.1:9090'
+            }
+          }
+          function Read-ProxyLog {
+            ((& wsl.exe -d $Distro --exec cat /var/log/br.log 2>&1) | Out-String) -replace "`0", ''
+          }
+          # Filtered, redacted excerpt of the raw log; the raw log is never printed.
+          function Get-LogLines {
+            param([string]$Pattern, [int]$Max)
+            $lines = (Read-ProxyLog) -split "`r?`n" | Where-Object { $_ -match $Pattern } | Select-Object -First $Max
+            Redact ($lines -join "`n")
+          }
+          function Get-Activity {
+            param([string]$Log)
+            $pe = [regex]::Escape($env:KEY_PREFIX)
+            $q = @{}; $u = @{}; $fail = 0; $dl = 0; $miss = 0; $upOk = 0
+            foreach ($raw in ($Log -split "`n")) {
+              $line = $raw.TrimEnd("`r")
+              $k = $null
+              if ($line -match ' GRPC BYTESTREAM WRITE COMPLETED: (?:\S*/)?uploads/[^/]+/(?:blobs|compressed-blobs/zstd)/([0-9a-f]{64})/\d+(?:/\S*)?$') {
+                $k = "CAS $($Matches[1])"; $q[$k] = 1 + [int]$q[$k]
+              } elseif ($line -match ' GRPC (AC|CAS) PUT ([0-9a-f]{64}) OK$') {
+                $k = "$($Matches[1]) $($Matches[2])"; $q[$k] = 1 + [int]$q[$k]
+              } elseif ($line -match " S3 (UPLOAD|DOWNLOAD) aobus-sccache $pe/(ac|cas\.v2)/[0-9a-f]{2}/([0-9a-f]{64}) (.*)$") {
+                $op = $Matches[1]; $kind = if ($Matches[2] -eq 'ac') { 'AC' } else { 'CAS' }; $hash = $Matches[3]; $st = $Matches[4]
+                if ($op -eq 'UPLOAD') {
+                  $k = "$kind $hash"; $u[$k] = 1 + [int]$u[$k]
+                  if ($st -ne 'OK') { $fail++ } else { $upOk++ }
+                } else {
+                  if ($st -eq 'OK') { $dl++ } elseif ($st -eq 'NOT FOUND') { $miss++ }
+                }
+              }
+            }
+            $queued = 0; $completed = 0
+            foreach ($key in $q.Keys) { $queued += $q[$key]; $completed += [math]::Min($q[$key], [int]$u[$key]) }
+            [pscustomobject]@{ Queued = $queued; Completed = $completed; UploadOk = $upOk; Failures = $fail; Downloaded = $dl; Misses = $miss }
+          }
+          function Stop-Proxy {
+            $p = (Dx 'cat /run/br.pid' -Quiet).Trim()
+            Run-Wsl -A @('-d', $Distro, '--exec', 'kill', '-TERM', $p) | Out-Null
+            $gone = $false
+            for ($i = 0; $i -lt 60; $i++) {
+              Start-Sleep -Milliseconds 500
+              Run-Wsl -A @('-d', $Distro, '--exec', 'kill', '-0', $p) -AllowFail -Quiet | Out-Null
+              if ($LASTEXITCODE -ne 0) { $gone = $true; break }
+            }
+            if (-not $gone) { throw "pid $p still alive 30s after SIGTERM" }
+            $closed = $false
+            for ($i = 0; $i -lt 20; $i++) {
+              if (-not (Test-Port '127.0.0.1' 9090 1000) -and -not (Test-Port '127.0.0.1' 9092 1000)) { $closed = $true; break }
+              Start-Sleep 1
+            }
+            if (-not $closed) { throw 'ports 9090/9092 still open after stop' }
+            "pid $p exited after SIGTERM; ports 9090/9092 closed"
+          }
+          function Invoke-Bazel {
+            param([string]$Base)
+            $b = Join-Path $env:RUNNER_TEMP 'bazelisk.exe'
+            $env:USE_BAZEL_VERSION = '9.2.0'
+            Push-Location (Join-Path $env:RUNNER_TEMP 'bzlws')
+            try {
+              $flags = @('--remote_cache=grpc://127.0.0.1:9092', '--remote_upload_local_results=true', '--remote_timeout=60s')
+              $out = Redact ((& $b "--output_base=$Base" build //:g @flags 2>&1 | Out-String))
+              foreach ($l in ($out -split "`r?`n")) {
+                if ($l -match '^(INFO: (\d+ process|Build completed)|ERROR|FAILED|WARNING: .*(remote|cache))') { Write-Host $l }
+              }
+              & $b "--output_base=$Base" shutdown 2>&1 | Out-Null
+              return $out
+            } finally { Pop-Location }
+          }
+          function Assert-R2Env {
+            $missing = @('R2_ENDPOINT', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY') | Where-Object { [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($_)) }
+            if ($missing) { throw "R2 secret(s) empty or unavailable (fork PR?): $($missing -join ', ')" }
+            Initialize-Redaction
+            if ($env:KEY_PREFIX -notmatch '^bazel-ci-validation/\d+/\d+/windows-wsl-probe$') { throw 'unexpected key prefix' }
           }
           '@
           Set-Content -Path (Join-Path $dir 'lib.ps1') -Value $lib -Encoding utf8
@@ -153,242 +264,20 @@ jobs:
           Invoke-Probe '1-env' {
             $o = @()
             $o += "session id: $([Diagnostics.Process]::GetCurrentProcess().SessionId); user: $(whoami)"
-            $o += "os: $((Get-CimInstance Win32_OperatingSystem).Caption) build $((Get-CimInstance Win32_OperatingSystem).BuildNumber)"
-            $cs = Get-CimInstance Win32_ComputerSystem
-            $o += "computer: $($cs.Manufacturer) / $($cs.Model); hypervisorPresent=$($cs.HypervisorPresent)"
-            $o += "cpu virt fw enabled: $((Get-CimInstance Win32_Processor | Select-Object -First 1).VirtualizationFirmwareEnabled)"
-            foreach ($f in 'Microsoft-Windows-Subsystem-Linux', 'VirtualMachinePlatform', 'Microsoft-Hyper-V-All') {
-              try { $o += "feature ${f}: $((Get-WindowsOptionalFeature -Online -FeatureName $f).State)" }
-              catch { $o += "feature ${f}: query failed: $($_.Exception.Message)" }
-            }
-            $o += (systeminfo | Select-String -Pattern 'Hyper-V|Virtualization|hypervisor|VM Monitor|Second Level|Data Execution' | ForEach-Object { $_.Line.Trim() })
-            Get-Command wsl.exe -ErrorAction SilentlyContinue | ForEach-Object { $o += "wsl.exe at $($_.Source)" }
-            foreach ($a in @('--version'), @('--status'), @('-l', '-v')) {
-              $o += "wsl $($a -join ' '): " + ((Run-Wsl -A $a -AllowFail) -replace "`n", ' | ')
+            $o += "os build $((Get-CimInstance Win32_OperatingSystem).BuildNumber)"
+            foreach ($a in @('--version'), @('--status')) {
+              $o += "wsl $($a -join ' '): " + ((Run-Wsl -A $a -AllowFail -Quiet) -replace "`n", ' | ')
             }
             $o
           }
 
-      - name: 2 Import distro
-        id: import
-        continue-on-error: true
-        timeout-minutes: 8
-        run: |
-          . "$env:RUNNER_TEMP\probe\lib.ps1"
-          Invoke-Probe '2-import' {
-            $tgz = Join-Path $env:RUNNER_TEMP 'distro.tar.gz'
-            Invoke-WebRequest -UseBasicParsing -Uri $env:DISTRO_URL -OutFile $tgz
-            $h = (Get-FileHash $tgz -Algorithm SHA256).Hash.ToLower()
-            if ($h -ne $env:DISTRO_SHA256) { throw "distro sha mismatch: $h" }
-            Write-Host "distro sha256 ok: $h"
-            $sizeMb = [math]::Round((Get-Item $tgz).Length / 1MB, 2)
-            $ver = $null
-            foreach ($v in 2, 1) {
-              Run-Wsl -A @('--unregister', $Distro) -AllowFail | Out-Null
-              $dest = "C:\wsl\$Distro"
-              Remove-Item -Recurse -Force $dest -ErrorAction SilentlyContinue
-              New-Item -ItemType Directory -Force $dest | Out-Null
-              $imp = Run-Wsl -A @('--import', $Distro, $dest, $tgz, '--version', "$v") -AllowFail
-              $chk = Run-Wsl -A @('-d', $Distro, '--exec', 'uname', '-r') -AllowFail
-              if ($chk -match '\d+\.\d+') { $ver = $v; break }
-              Write-Host "WSL version $v failed: import=[$imp] exec=[$chk]"
-            }
-            if (-not $ver) {
-              # last resort: maybe the wsl stub needs its package installed
-              Run-Wsl -A @('--install', '--no-distribution') -AllowFail | Out-Null
-              throw 'neither WSL2 nor WSL1 import+exec worked'
-            }
-            Set-Content (Join-Path $P 'wslver.txt') $ver
-            "WSL version $ver import + first exec ok; rootfs download $sizeMb MiB"
-          }
-
-      - name: 2b Prepare distro (glibc compat, CA bundle, wget)
+      - name: 2 Prepare Bazel workspace (no secrets)
         id: prep
         continue-on-error: true
         timeout-minutes: 5
         run: |
           . "$env:RUNNER_TEMP\probe\lib.ps1"
-          Invoke-Probe '2b-prep' {
-            if ($env:DISTRO_PREP) { Dx $env:DISTRO_PREP; 'prepared' } else { 'no in-distro package installation (pinned flavor)' }
-          }
-
-      - name: 3 Basic exec, CA bundle, DNS and HTTPS
-        id: exec
-        continue-on-error: true
-        timeout-minutes: 3
-        run: |
-          . "$env:RUNNER_TEMP\probe\lib.ps1"
-          Invoke-Probe '3-exec' {
-            $o = @()
-            $o += Dx 'uname -a'
-            $soft = $env:FLAVOR -eq 'ubuntu-pinned'
-            $o += Dx 'ls -l /etc/ssl/certs/ca-certificates.crt || echo no-ca-bundle' -AllowFail:$soft
-            $o += Dx 'cat /etc/os-release | head -2'
-            $o += Dx 'wget -q -O /dev/null https://www.cloudflare.com/ && echo https-ok || echo no-wget-or-https-failed' -AllowFail:$soft
-            $o += Dx 'getent hosts github.com' -AllowFail
-            $o
-          }
-
-      - name: 4a WSLENV passthrough
-        id: wslenv
-        continue-on-error: true
-        timeout-minutes: 2
-        run: |
-          . "$env:RUNNER_TEMP\probe\lib.ps1"
-          Invoke-Probe '4a-wslenv' {
-            $env:PROBE_DUMMY = 'dummy-credential-123'
-            $env:WSLENV = 'PROBE_DUMMY'
-            $v = Dx 'echo "val=$PROBE_DUMMY"'
-            $env:WSLENV = ''
-            if ($v -notmatch 'val=dummy-credential-123') { throw "WSLENV not visible: [$v]" }
-            $v
-          }
-
-      - name: 4b Start bazel-remote in distro
-        id: start
-        continue-on-error: true
-        timeout-minutes: 4
-        run: |
-          . "$env:RUNNER_TEMP\probe\lib.ps1"
-          Invoke-Probe '4b-proxy-start' {
-            if ($env:FLAVOR -eq 'ubuntu-pinned') {
-              # Windows-side download + verify, then copy into the distro's own filesystem.
-              $bin = Join-Path $env:RUNNER_TEMP 'bazel-remote-linux'
-              Invoke-WebRequest -UseBasicParsing -Uri $env:BR_URL -OutFile $bin
-              $h = (Get-FileHash $bin -Algorithm SHA256).Hash.ToLower()
-              if ($h -ne $env:BR_SHA256) { throw "bazel-remote sha mismatch: $h" }
-              $cands = @('C:\Program Files\Git\mingw64\etc\ssl\certs\ca-bundle.crt', 'C:\Program Files\Git\usr\ssl\certs\ca-bundle.crt', 'C:\Program Files\Git\mingw64\ssl\certs\ca-bundle.crt')
-              $ca = $cands | Where-Object { Test-Path $_ } | Select-Object -First 1
-              Write-Host "CA bundle candidates found: $(($cands | Where-Object { Test-Path $_ }) -join ', ')"
-              if (-not $ca) { throw 'no Git for Windows ca-bundle.crt found' }
-              $wbin = (Run-Wsl -A @('-d', $Distro, '--exec', 'wslpath', '-a', ($bin -replace '\\', '/'))).Trim()
-              $wca = (Run-Wsl -A @('-d', $Distro, '--exec', 'wslpath', '-a', ($ca -replace '\\', '/'))).Trim()
-              Dx "mkdir -p /opt/br/data && cp '$wbin' /opt/br/bazel-remote && cp '$wca' /opt/br/ca-bundle.crt && chmod +x /opt/br/bazel-remote"
-              Dx "echo '$env:BR_SHA256  /opt/br/bazel-remote' | sha256sum -c -"
-              Dx 'ls -l /opt/br; grep -c BEGIN /opt/br/ca-bundle.crt'
-              Write-Host "CA bundle source: $ca"
-            } else {
-              Dx ("mkdir -p /opt/br/data && wget -q -O /opt/br/bazel-remote $env:BR_URL && " +
-                  "echo '$env:BR_SHA256  /opt/br/bazel-remote' | sha256sum -c - && chmod +x /opt/br/bazel-remote")
-            }
-            Dx '/opt/br/bazel-remote --help 2>&1 | grep -c -e http_address -e grpc_address -e max_size' -AllowFail
-            $sw = [Diagnostics.Stopwatch]::StartNew()
-            Start-Proxy
-            if (-not (Wait-Proxy '127.0.0.1' 20)) {
-              Dx 'ls -l /opt/br /var/log; cat /var/log/br.log; ps' -AllowFail
-              $sw.Stop()
-              throw 'proxy did not answer on 127.0.0.1:9090 from Windows within 20s'
-            }
-            $sw.Stop(); Dx 'tail -5 /var/log/br.log; echo pid=$(cat /run/br.pid)'
-            "proxy ready $([math]::Round($sw.Elapsed.TotalSeconds, 1))s after start"
-          }
-
-      - name: 5 Windows to WSL loopback
-        id: loop
-        continue-on-error: true
-        timeout-minutes: 3
-        run: |
-          . "$env:RUNNER_TEMP\probe\lib.ps1"
-          Invoke-Probe '5-loopback' {
-            try { Test-Loopback '127.0.0.1' }
-            catch {
-              Write-Host "127.0.0.1 failed: $($_.Exception.Message); trying 0.0.0.0 bind and distro IP"
-              Dx 'kill $(cat /run/br.pid)' -AllowFail | Out-Null
-              Start-Sleep 2
-              Start-Proxy '0.0.0.0:9090' '0.0.0.0:9092'
-              Start-Sleep 3
-              $ip = (Dx "hostname -I | cut -d' ' -f1" -AllowFail).Trim()
-              Write-Host "distro ip: $ip"
-              $res = @()
-              foreach ($a in '127.0.0.1', $ip) {
-                try { $res += "$a OK: $(Test-Loopback $a)" } catch { $res += "$a FAIL: $($_.Exception.Message)" }
-              }
-              throw ("127.0.0.1 bind failed; 0.0.0.0 bind results: " + ($res -join ' | '))
-            }
-          }
-
-      - name: 6a Proxy survives into a later step
-        id: survive
-        continue-on-error: true
-        timeout-minutes: 2
-        run: |
-          . "$env:RUNNER_TEMP\probe\lib.ps1"
-          Invoke-Probe '6a-next-step' {
-            if (-not (Wait-Proxy '127.0.0.1' 5)) { throw 'proxy no longer answers in a later step' }
-            "status 200 in later step"
-          }
-
-      - name: 6b Idle 120s with no wsl.exe interaction
-        id: idle
-        continue-on-error: true
-        timeout-minutes: 4
-        run: |
-          . "$env:RUNNER_TEMP\probe\lib.ps1"
-          Invoke-Probe '6b-idle120' {
-            Start-Sleep -Seconds 120
-            if (-not (Wait-Proxy '127.0.0.1' 5)) {
-              Set-Content (Join-Path $P 'idle-failed') '1'
-              throw 'proxy died / unreachable after 120s idle (keep-alive needed)'
-            }
-            'proxy still answers after 120s without wsl.exe interaction'
-          }
-
-      - name: 6c Keep-alive variant A (long-lived wsl.exe parent)
-        id: variantA
-        if: ${{ always() }}
-        continue-on-error: true
-        timeout-minutes: 5
-        run: |
-          . "$env:RUNNER_TEMP\probe\lib.ps1"
-          if (-not (Test-Path (Join-Path $P 'idle-failed'))) { Write-Host 'idle ok; variant A not needed'; exit 0 }
-          Invoke-Probe '6c-keepalive-A' {
-            Run-Wsl -A @('--terminate', $Distro) -AllowFail | Out-Null
-            $kp = Start-Process wsl.exe -ArgumentList @('-d', $Distro, '--exec', 'sleep', '86400') -WindowStyle Hidden -PassThru
-            Set-Content (Join-Path $P 'keepalive.pid') $kp.Id
-            Start-Sleep 3
-            Start-Proxy
-            if (-not (Wait-Proxy '127.0.0.1' 20)) { throw 'proxy did not restart' }
-            Start-Sleep -Seconds 120
-            if (-not (Wait-Proxy '127.0.0.1' 5)) { throw 'proxy still dies with long-lived wsl.exe parent' }
-            Set-Content (Join-Path $P 'survival-variant') 'A: Start-Process wsl.exe --exec sleep 86400'
-            'variant A works: long-lived wsl.exe parent keeps proxy alive for 120s'
-          }
-
-      - name: 6d Keep-alive variant B (.wslconfig vmIdleTimeout=-1)
-        id: variantB
-        if: ${{ always() }}
-        continue-on-error: true
-        timeout-minutes: 5
-        run: |
-          . "$env:RUNNER_TEMP\probe\lib.ps1"
-          if (-not (Test-Path (Join-Path $P 'idle-failed')) -or (Test-Path (Join-Path $P 'survival-variant'))) { Write-Host 'variant B not needed'; exit 0 }
-          Invoke-Probe '6d-keepalive-B' {
-            $kp = Get-Content (Join-Path $P 'keepalive.pid') -ErrorAction SilentlyContinue
-            if ($kp) { Stop-Process -Id $kp -Force -ErrorAction SilentlyContinue }
-            Set-Content "$env:USERPROFILE\.wslconfig" "[wsl2]`nvmIdleTimeout=-1`n"
-            Run-Wsl -A @('--shutdown') -AllowFail | Out-Null
-            Start-Sleep 3
-            Start-Proxy
-            if (-not (Wait-Proxy '127.0.0.1' 20)) { throw 'proxy did not restart' }
-            Start-Sleep -Seconds 120
-            if (-not (Wait-Proxy '127.0.0.1' 5)) { throw 'proxy still dies with vmIdleTimeout=-1' }
-            Set-Content (Join-Path $P 'survival-variant') 'B: .wslconfig vmIdleTimeout=-1'
-            'variant B works'
-          }
-
-      - name: 8 Optional Bazel remote cache hit
-        id: bazel
-        if: ${{ always() }}
-        continue-on-error: true
-        timeout-minutes: 8
-        run: |
-          . "$env:RUNNER_TEMP\probe\lib.ps1"
-          Invoke-Probe '8-bazel-cache' {
-            if (-not (Wait-Proxy '127.0.0.1' 5)) {
-              # proxy may have died; restart so the cache test is meaningful
-              Start-Proxy
-              if (-not (Wait-Proxy '127.0.0.1' 20)) { throw 'proxy not available for bazel test' }
-            }
+          Invoke-Probe '2-prep-bazel' {
             $b = Join-Path $env:RUNNER_TEMP 'bazelisk.exe'
             Invoke-WebRequest -UseBasicParsing -Uri $env:BAZELISK_URL -OutFile $b
             $h = (Get-FileHash $b -Algorithm SHA256).Hash.ToLower()
@@ -396,90 +285,103 @@ jobs:
             $ws = Join-Path $env:RUNNER_TEMP 'bzlws'
             New-Item -ItemType Directory -Force $ws | Out-Null
             Set-Content "$ws\MODULE.bazel" "module(name = 'probe')`n"
-            Set-Content "$ws\BUILD.bazel" "genrule(name = 'g', outs = ['g.txt'], cmd_bat = 'echo hello> `$@', cmd = 'echo hello > `$@')`n"
-            $env:USE_BAZEL_VERSION = '9.2.0'
-            Push-Location $ws
-            try {
-              $flags = @('--remote_cache=grpc://127.0.0.1:9092', '--remote_upload_local_results=true', '--remote_timeout=30s')
-              $out1 = & $b build //:g @flags 2>&1 | Out-String
-              Write-Host $out1
-              & $b clean 2>&1 | Out-Null
-              $out2 = & $b build //:g @flags 2>&1 | Out-String
-              Write-Host $out2
-              if ($out2 -notmatch 'remote cache hit') { throw 'no remote cache hit on second build' }
-              ($out2 -split "`n" | Select-String 'remote cache hit|process' | ForEach-Object { $_.Line.Trim() }) -join '; '
-            } finally { Pop-Location }
+            # The command text embeds the run id, so the action key is unique to this run.
+            Set-Content "$ws\BUILD.bazel" "genrule(name = 'g', outs = ['g.txt'], cmd_bat = 'echo canary-$env:CANARY_ID> `$@', cmd = 'echo canary-$env:CANARY_ID > `$@')`n"
+            "bazelisk verified; canary id $env:CANARY_ID"
           }
 
-      - name: 4c TLS verification with injected CA bundle
-        id: tls
-        if: ${{ always() }}
+      - name: A Producer phase (uploads enabled)
+        id: phaseA
         continue-on-error: true
-        timeout-minutes: 3
+        timeout-minutes: 8
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_SCCACHE_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_SCCACHE_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SCCACHE_SECRET_ACCESS_KEY }}
         run: |
           . "$env:RUNNER_TEMP\probe\lib.ps1"
-          Invoke-Probe '4c-tls' {
-            # A second, throwaway bazel-remote with an https upstream: a cache miss
-            # makes it issue an HTTPS GET, so its log shows TLS success or failure.
-            $hash = '2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881'
-            $res = @()
-            foreach ($c in @(@{ n = 'with-bundle'; port = 9190; env = 'SSL_CERT_FILE=/opt/br/ca-bundle.crt' }, @{ n = 'control-no-bundle'; port = 9191; env = 'SSL_CERT_FILE=/nonexistent' })) {
-              $d = "/opt/br/tls-$($c.n)"
-              Dx ("mkdir -p $d; $($c.env) setsid /opt/br/bazel-remote --dir $d --max_size 1 " +
-                  "--http_address 127.0.0.1:$($c.port) --grpc_address none " +
-                  "--http_proxy.url https://www.cloudflare.com/ > $d.log 2>&1 < /dev/null & echo `$! > $d.pid; sleep 1") | Out-Null
-              Start-Sleep 2
-              try { $null = Invoke-WebRequest -UseBasicParsing -TimeoutSec 15 "http://127.0.0.1:$($c.port)/cas/$hash" } catch { }
-              Start-Sleep 1
-              Dx "tail -5 $d.log" -AllowFail | Out-Null
-              $log = Dx "grep -i -e 'HTTP DOWNLOAD' -e x509 -e certificate -e tls $d.log | head -3" -AllowFail
-              Dx "kill `$(cat $d.pid)" -AllowFail | Out-Null
-              $res += "$($c.n): $log"
-            }
-            $out = $res -join ' || '
-            if ($res[0] -notmatch 'HTTP DOWNLOAD 4\d\d https://') { throw "TLS with injected bundle not shown working: $out" }
-            $out
+          # Masks are registered by the first probe body, before any other output.
+          Invoke-Probe 'A0-secrets' { Assert-R2Env; 'all three secrets present; endpoint shape ok; key prefix ok' }
+          Invoke-Probe 'A1-import' { Import-Distro }
+          Invoke-Probe 'A2-binary' { Install-Binary }
+          Invoke-Probe 'A3-proxy-start' {
+            $sw = [Diagnostics.Stopwatch]::StartNew()
+            Start-R2Proxy -Uploaders 100
+            "proxy ready $([math]::Round($sw.Elapsed.TotalSeconds, 1))s after start (R2 backend, 100 uploaders)"
           }
+          Invoke-Probe 'A4-canary-build' {
+            Remove-Item -Recurse -Force 'C:\ob-a' -ErrorAction SilentlyContinue
+            $out = Invoke-Bazel 'C:\ob-a'
+            if ($out -match 'remote cache hit') { throw 'producer build unexpectedly hit the remote cache; canary is not unique' }
+            if ($out -notmatch 'Build completed successfully') { throw 'producer build did not complete' }
+            'producer build completed, no remote cache hit (canary unique to this run)'
+          }
+          Invoke-Probe 'A5-drain' {
+            $sw = [Diagnostics.Stopwatch]::StartNew()
+            $act = $null
+            while ($sw.Elapsed.TotalSeconds -lt 120) {
+              $act = Get-Activity (Read-ProxyLog)
+              if ($act.Queued -gt 0 -and $act.Completed -ge $act.Queued) { break }
+              Start-Sleep -Seconds 2
+            }
+            $secs = [math]::Round($sw.Elapsed.TotalSeconds, 1)
+            $act = Get-Activity (Read-ProxyLog)
+            Write-Host (Get-LogLines ' S3 UPLOAD ' 6)
+            $sum = "queued=$($act.Queued) completed=$($act.Completed) s3_upload_ok=$($act.UploadOk) s3_upload_failures=$($act.Failures) drain=${secs}s"
+            if ($act.Failures -ne 0) { throw "upload failures: $sum" }
+            if ($act.UploadOk -lt 1) { throw "no successful S3 uploads: $sum" }
+            if ($act.Completed -lt $act.Queued) { throw "drain incomplete: $sum" }
+            $sum
+          }
+          Invoke-Probe 'A6-stop' { Stop-Proxy }
 
-      - name: 7 Controlled stop
-        id: stop
-        if: ${{ always() }}
+      - name: B Consumer phase (fresh distro, no uploads)
+        id: phaseB
+        if: ${{ always() && steps.phaseA.outcome == 'success' }}
         continue-on-error: true
-        timeout-minutes: 3
+        timeout-minutes: 8
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_SCCACHE_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_SCCACHE_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SCCACHE_SECRET_ACCESS_KEY }}
         run: |
           . "$env:RUNNER_TEMP\probe\lib.ps1"
-          Invoke-Probe '7-stop' {
-            $pid1 = (Dx 'cat /run/br.pid').Trim()
-            if (-not $pid1) { throw 'no bazel-remote process to stop' }
-            Run-Wsl -A @('-d', $Distro, '--exec', 'kill', '-TERM', $pid1) | Out-Null
-            $gone = $false
-            for ($i = 0; $i -lt 20; $i++) {
-              Start-Sleep -Milliseconds 500
-              $p = Run-Wsl -A @('-d', $Distro, '--exec', 'kill', '-0', $pid1) -AllowFail
-              if ($LASTEXITCODE -ne 0) { $gone = $true; break }
-            }
-            if (-not $gone) { throw "pid $pid1 still alive 10s after SIGTERM" }
-            $log = Dx 'tail -3 /var/log/br.log' -AllowFail
-            if (Test-Port '127.0.0.1' 9090 1500) { throw 'port 9090 still open after stop' }
-            if (Test-Port '127.0.0.1' 9092 1500) { throw 'port 9092 still open after stop' }
-            "pid $pid1 exited after SIGTERM; ports 9090/9092 closed; log tail: $log"
+          Invoke-Probe 'B0-secrets' { Assert-R2Env; 'all three secrets present; endpoint shape ok; key prefix ok' }
+          Invoke-Probe 'B1-reimport' { Import-Distro }
+          Invoke-Probe 'B2-binary' { Install-Binary }
+          Invoke-Probe 'B3-proxy-start' {
+            $sw = [Diagnostics.Stopwatch]::StartNew()
+            Start-R2Proxy -Uploaders 0
+            "proxy ready $([math]::Round($sw.Elapsed.TotalSeconds, 1))s after start (R2 backend, 0 uploaders)"
           }
+          Invoke-Probe 'B4-consumer-build' {
+            Remove-Item -Recurse -Force 'C:\ob-b' -ErrorAction SilentlyContinue
+            $out = Invoke-Bazel 'C:\ob-b'
+            if ($out -notmatch '[1-9]\d* remote cache hit') { throw 'consumer build had no remote cache hit' }
+            ($out -split "`r?`n" | Select-String 'remote cache hit' | ForEach-Object { $_.Line.Trim() }) -join '; '
+          }
+          Invoke-Probe 'B5-downloads' {
+            $act = Get-Activity (Read-ProxyLog)
+            Write-Host (Get-LogLines ' S3 DOWNLOAD ' 6)
+            $sum = "s3_download_ok=$($act.Downloaded) s3_download_not_found=$($act.Misses) s3_upload_ok=$($act.UploadOk)"
+            if ($act.Downloaded -lt 1) { throw "no successful S3 downloads: $sum" }
+            $sum
+          }
+          Invoke-Probe 'B6-stop' { Stop-Proxy }
 
-      - name: 7b Cleanup (terminate and unregister)
+      - name: Cleanup
         id: cleanup
         if: ${{ always() }}
         continue-on-error: true
         timeout-minutes: 3
         run: |
           . "$env:RUNNER_TEMP\probe\lib.ps1"
-          Invoke-Probe '7b-cleanup' {
-            $kp = Get-Content (Join-Path $P 'keepalive.pid') -ErrorAction SilentlyContinue
-            if ($kp) { Stop-Process -Id $kp -Force -ErrorAction SilentlyContinue }
-            Run-Wsl -A @('--terminate', $Distro) | Out-Null
-            Run-Wsl -A @('--unregister', $Distro) | Out-Null
-            $l = Run-Wsl -A @('-l', '-q') -AllowFail
+          Invoke-Probe 'C-cleanup' {
+            Run-Wsl -A @('--terminate', $Distro) -AllowFail -Quiet | Out-Null
+            Run-Wsl -A @('--unregister', $Distro) -AllowFail -Quiet | Out-Null
+            $l = Run-Wsl -A @('-l', '-q') -AllowFail -Quiet
             if ($l -match "(?m)^$Distro$") { throw 'distro still registered' }
-            "terminated and unregistered; remaining: [$l]"
+            'terminated and unregistered'
           }
 
       - name: Summary
@@ -490,11 +392,10 @@ jobs:
           Get-Content (Join-Path $P 'results.jsonl') -ErrorAction SilentlyContinue | ForEach-Object {
             $r = $_ | ConvertFrom-Json; $recs[$r.id] = $r
           }
-          $ver = Get-Content (Join-Path $P 'wslver.txt') -ErrorAction SilentlyContinue
-          $variant = Get-Content (Join-Path $P 'survival-variant') -ErrorAction SilentlyContinue
-          $required = '2-import', '2b-prep', '3-exec', '4a-wslenv', '4b-proxy-start', '5-loopback', '6a-next-step', '7-stop'
-          $all = '1-env', '2-import', '2b-prep', '3-exec', '4a-wslenv', '4b-proxy-start', '5-loopback', '6a-next-step', '6b-idle120', '6c-keepalive-A', '6d-keepalive-B', '8-bazel-cache', '4c-tls', '7-stop', '7b-cleanup'
-          $lines = @("| Item | Result | Seconds | Detail |", "|---|---|---|---|")
+          $required = 'A0-secrets', 'A1-import', 'A2-binary', 'A3-proxy-start', 'A4-canary-build', 'A5-drain', 'A6-stop',
+                      'B0-secrets', 'B1-reimport', 'B2-binary', 'B3-proxy-start', 'B4-consumer-build', 'B5-downloads', 'B6-stop'
+          $all = @('1-env', '2-prep-bazel') + $required + @('C-cleanup')
+          $lines = @('| Item | Result | Seconds | Detail |', '|---|---|---|---|')
           $fail = $false
           foreach ($id in $all) {
             $r = $recs[$id]
@@ -504,12 +405,16 @@ jobs:
             if ($id -in $required -and $st -ne 'PASS') { $fail = $true }
             $lines += "| $id | $st | $s | $d |"
           }
-          $idleOk = $recs['6b-idle120'] -and $recs['6b-idle120'].status -eq 'PASS'
-          $eff = if ($idleOk) { 'PASS (no keep-alive needed)' } elseif ($variant) { "PASS with workaround: $variant" } else { 'FAIL' }
-          if ($eff -eq 'FAIL') { $fail = $true }
+          function St($id) { if ($recs[$id]) { $recs[$id].status } else { 'NOT RUN' } }
+          function Sum($p) { [math]::Round((($recs.Keys | Where-Object { $_ -like "$p*" } | ForEach-Object { $recs[$_].secs } | Measure-Object -Sum).Sum), 1) }
           $lines += ''
-          $lines += "WSL version that worked: $ver"
-          $lines += "Cross-step survival (effective): $eff"
+          $lines += "Secrets present: $(St 'A0-secrets')"
+          $lines += "Credentials reached the process via WSLENV (inferred from authenticated S3 upload OK): $(St 'A5-drain')"
+          $lines += "TLS to R2 with the injected CA bundle (inferred, distro has no system CAs): $(St 'A5-drain')"
+          $lines += "Upload count/failures and drain seconds: see A5-drain row"
+          $lines += "Consumer remote cache hit: $(St 'B4-consumer-build'); S3 downloads: $(St 'B5-downloads')"
+          $lines += "Stop and ports closed: producer $(St 'A6-stop'), consumer $(St 'B6-stop')"
+          $lines += "Phase wall times: producer $(Sum 'A')s, consumer $(Sum 'B')s"
           $lines += "Overall: $(if ($fail) { 'FAIL' } else { 'PASS' })"
           $lines | ForEach-Object { Write-Host $_ }
           $lines | Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8
