@@ -39,10 +39,16 @@ jobs:
             distro_url: https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.5-base-amd64.tar.gz
             distro_sha256: e77b6f10c2590cef872b33ee9f635a0e3fd1f57fb074c0e52b5c7f56147a0c86
             prep: apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends ca-certificates wget
+          - runner: windows-2025-vs2026
+            flavor: ubuntu-pinned
+            distro_url: https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.5-base-amd64.tar.gz
+            distro_sha256: e77b6f10c2590cef872b33ee9f635a0e3fd1f57fb074c0e52b5c7f56147a0c86
+            prep: ''
     env:
       DISTRO_URL: ${{ matrix.distro_url }}
       DISTRO_SHA256: ${{ matrix.distro_sha256 }}
       DISTRO_PREP: ${{ matrix.prep }}
+      FLAVOR: ${{ matrix.flavor }}
       BR_URL: https://github.com/buchgr/bazel-remote/releases/download/v2.6.4/bazel-remote-2.6.4-linux-amd64
       BR_SHA256: 6a6b64666c2238ec6b49b7b29f5e41e4149de09417a0028897c9bffe40376876
       BAZELISK_URL: https://github.com/bazelbuild/bazelisk/releases/download/v1.30.0/bazelisk-windows-amd64.exe
@@ -112,9 +118,10 @@ jobs:
           function Start-Proxy {
             param([string]$Http = '127.0.0.1:9090', [string]$Grpc = '127.0.0.1:9092')
             Dx 'mkdir -p /opt/br/data; : > /var/log/br.log' | Out-Null
-            Dx ("setsid /opt/br/bazel-remote --dir /opt/br/data --max_size 1 " +
+            Dx ('if [ -f /opt/br/ca-bundle.crt ]; then export SSL_CERT_FILE=/opt/br/ca-bundle.crt; fi; ' +
+                "setsid /opt/br/bazel-remote --dir /opt/br/data --max_size 1 " +
                 "--http_address $Http --grpc_address $Grpc " +
-                '> /var/log/br.log 2>&1 < /dev/null & sleep 1; echo started-pid=$(pidof bazel-remote)') | Out-Null
+                '> /var/log/br.log 2>&1 < /dev/null & echo $! > /run/br.pid; sleep 1; echo started-pid=$(cat /run/br.pid)') | Out-Null
           }
           function Test-Loopback {
             param([string]$Addr = '127.0.0.1')
@@ -174,6 +181,7 @@ jobs:
             $h = (Get-FileHash $tgz -Algorithm SHA256).Hash.ToLower()
             if ($h -ne $env:DISTRO_SHA256) { throw "distro sha mismatch: $h" }
             Write-Host "distro sha256 ok: $h"
+            $sizeMb = [math]::Round((Get-Item $tgz).Length / 1MB, 2)
             $ver = $null
             foreach ($v in 2, 1) {
               Run-Wsl -A @('--unregister', $Distro) -AllowFail | Out-Null
@@ -191,7 +199,7 @@ jobs:
               throw 'neither WSL2 nor WSL1 import+exec worked'
             }
             Set-Content (Join-Path $P 'wslver.txt') $ver
-            "WSL version $ver import + first exec ok"
+            "WSL version $ver import + first exec ok; rootfs download $sizeMb MiB"
           }
 
       - name: 2b Prepare distro (glibc compat, CA bundle, wget)
@@ -201,8 +209,7 @@ jobs:
         run: |
           . "$env:RUNNER_TEMP\probe\lib.ps1"
           Invoke-Probe '2b-prep' {
-            Dx $env:DISTRO_PREP
-            'prepared'
+            if ($env:DISTRO_PREP) { Dx $env:DISTRO_PREP; 'prepared' } else { 'no in-distro package installation (pinned flavor)' }
           }
 
       - name: 3 Basic exec, CA bundle, DNS and HTTPS
@@ -214,9 +221,10 @@ jobs:
           Invoke-Probe '3-exec' {
             $o = @()
             $o += Dx 'uname -a'
-            $o += Dx 'ls -l /etc/ssl/certs/ca-certificates.crt'
+            $soft = $env:FLAVOR -eq 'ubuntu-pinned'
+            $o += Dx 'ls -l /etc/ssl/certs/ca-certificates.crt || echo no-ca-bundle' -AllowFail:$soft
             $o += Dx 'cat /etc/os-release | head -2'
-            $o += Dx 'wget -q -O /dev/null https://www.cloudflare.com/ && echo https-ok'
+            $o += Dx 'wget -q -O /dev/null https://www.cloudflare.com/ && echo https-ok || echo no-wget-or-https-failed' -AllowFail:$soft
             $o += Dx 'getent hosts github.com' -AllowFail
             $o
           }
@@ -243,15 +251,36 @@ jobs:
         run: |
           . "$env:RUNNER_TEMP\probe\lib.ps1"
           Invoke-Probe '4b-proxy-start' {
-            Dx ("mkdir -p /opt/br/data && wget -q -O /opt/br/bazel-remote $env:BR_URL && " +
-                "echo '$env:BR_SHA256  /opt/br/bazel-remote' | sha256sum -c - && chmod +x /opt/br/bazel-remote")
+            if ($env:FLAVOR -eq 'ubuntu-pinned') {
+              # Windows-side download + verify, then copy into the distro's own filesystem.
+              $bin = Join-Path $env:RUNNER_TEMP 'bazel-remote-linux'
+              Invoke-WebRequest -UseBasicParsing -Uri $env:BR_URL -OutFile $bin
+              $h = (Get-FileHash $bin -Algorithm SHA256).Hash.ToLower()
+              if ($h -ne $env:BR_SHA256) { throw "bazel-remote sha mismatch: $h" }
+              $cands = @('C:\Program Files\Git\mingw64\etc\ssl\certs\ca-bundle.crt', 'C:\Program Files\Git\usr\ssl\certs\ca-bundle.crt', 'C:\Program Files\Git\mingw64\ssl\certs\ca-bundle.crt')
+              $ca = $cands | Where-Object { Test-Path $_ } | Select-Object -First 1
+              Write-Host "CA bundle candidates found: $(($cands | Where-Object { Test-Path $_ }) -join ', ')"
+              if (-not $ca) { throw 'no Git for Windows ca-bundle.crt found' }
+              $wbin = (Run-Wsl -A @('-d', $Distro, '--exec', 'wslpath', '-a', ($bin -replace '\\', '/'))).Trim()
+              $wca = (Run-Wsl -A @('-d', $Distro, '--exec', 'wslpath', '-a', ($ca -replace '\\', '/'))).Trim()
+              Dx "mkdir -p /opt/br/data && cp '$wbin' /opt/br/bazel-remote && cp '$wca' /opt/br/ca-bundle.crt && chmod +x /opt/br/bazel-remote"
+              Dx "echo '$env:BR_SHA256  /opt/br/bazel-remote' | sha256sum -c -"
+              Dx 'ls -l /opt/br; grep -c BEGIN /opt/br/ca-bundle.crt'
+              Write-Host "CA bundle source: $ca"
+            } else {
+              Dx ("mkdir -p /opt/br/data && wget -q -O /opt/br/bazel-remote $env:BR_URL && " +
+                  "echo '$env:BR_SHA256  /opt/br/bazel-remote' | sha256sum -c - && chmod +x /opt/br/bazel-remote")
+            }
             Dx '/opt/br/bazel-remote --help 2>&1 | grep -c -e http_address -e grpc_address -e max_size' -AllowFail
+            $sw = [Diagnostics.Stopwatch]::StartNew()
             Start-Proxy
             if (-not (Wait-Proxy '127.0.0.1' 20)) {
               Dx 'ls -l /opt/br /var/log; cat /var/log/br.log; ps' -AllowFail
+              $sw.Stop()
               throw 'proxy did not answer on 127.0.0.1:9090 from Windows within 20s'
             }
-            Dx 'tail -5 /var/log/br.log; echo pid=$(pidof bazel-remote)'
+            $sw.Stop(); Dx 'tail -5 /var/log/br.log; echo pid=$(cat /run/br.pid)'
+            "proxy ready $([math]::Round($sw.Elapsed.TotalSeconds, 1))s after start"
           }
 
       - name: 5 Windows to WSL loopback
@@ -264,7 +293,7 @@ jobs:
             try { Test-Loopback '127.0.0.1' }
             catch {
               Write-Host "127.0.0.1 failed: $($_.Exception.Message); trying 0.0.0.0 bind and distro IP"
-              Dx 'kill $(pidof bazel-remote)' -AllowFail | Out-Null
+              Dx 'kill $(cat /run/br.pid)' -AllowFail | Out-Null
               Start-Sleep 2
               Start-Proxy '0.0.0.0:9090' '0.0.0.0:9092'
               Start-Sleep 3
@@ -371,7 +400,7 @@ jobs:
             $env:USE_BAZEL_VERSION = '9.2.0'
             Push-Location $ws
             try {
-              $flags = @('--remote_cache=grpc://127.0.0.1:9092', '--noremote_upload_local_results=false', '--remote_timeout=30s')
+              $flags = @('--remote_cache=grpc://127.0.0.1:9092', '--remote_upload_local_results=true', '--remote_timeout=30s')
               $out1 = & $b build //:g @flags 2>&1 | Out-String
               Write-Host $out1
               & $b clean 2>&1 | Out-Null
@@ -382,6 +411,35 @@ jobs:
             } finally { Pop-Location }
           }
 
+      - name: 4c TLS verification with injected CA bundle
+        id: tls
+        if: ${{ always() }}
+        continue-on-error: true
+        timeout-minutes: 3
+        run: |
+          . "$env:RUNNER_TEMP\probe\lib.ps1"
+          Invoke-Probe '4c-tls' {
+            # A second, throwaway bazel-remote with an https upstream: a cache miss
+            # makes it issue an HTTPS GET, so its log shows TLS success or failure.
+            $hash = '2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881'
+            $res = @()
+            foreach ($c in @(@{ n = 'with-bundle'; port = 9190; env = 'SSL_CERT_FILE=/opt/br/ca-bundle.crt' }, @{ n = 'control-no-bundle'; port = 9191; env = 'SSL_CERT_FILE=/nonexistent' })) {
+              $d = "/opt/br/tls-$($c.n)"
+              Dx ("mkdir -p $d; $($c.env) setsid /opt/br/bazel-remote --dir $d --max_size 1 " +
+                  "--http_address 127.0.0.1:$($c.port) --grpc_address none " +
+                  "--http_proxy.url https://www.cloudflare.com/ > $d.log 2>&1 < /dev/null & echo `$! > $d.pid") | Out-Null
+              Start-Sleep 2
+              try { $null = Invoke-WebRequest -UseBasicParsing -TimeoutSec 15 "http://127.0.0.1:$($c.port)/cas/$hash" } catch { }
+              Start-Sleep 1
+              $log = Dx "grep -i -e 'HTTP DOWNLOAD' -e x509 -e certificate -e tls $d.log | head -3" -AllowFail
+              Dx "kill `$(cat $d.pid)" -AllowFail | Out-Null
+              $res += "$($c.n): $log"
+            }
+            $out = $res -join ' || '
+            if ($res[0] -notmatch 'HTTP DOWNLOAD 4\d\d https://') { throw "TLS with injected bundle not shown working: $out" }
+            $out
+          }
+
       - name: 7 Controlled stop
         id: stop
         if: ${{ always() }}
@@ -390,14 +448,14 @@ jobs:
         run: |
           . "$env:RUNNER_TEMP\probe\lib.ps1"
           Invoke-Probe '7-stop' {
-            $pid1 = (Dx 'pidof bazel-remote').Trim()
+            $pid1 = (Dx 'cat /run/br.pid').Trim()
             if (-not $pid1) { throw 'no bazel-remote process to stop' }
             Run-Wsl -A @('-d', $Distro, '--exec', 'kill', '-TERM', $pid1) | Out-Null
             $gone = $false
             for ($i = 0; $i -lt 20; $i++) {
               Start-Sleep -Milliseconds 500
-              $p = Run-Wsl -A @('-d', $Distro, '--exec', 'pidof', 'bazel-remote') -AllowFail
-              if (-not $p) { $gone = $true; break }
+              $p = Run-Wsl -A @('-d', $Distro, '--exec', 'kill', '-0', $pid1) -AllowFail
+              if ($LASTEXITCODE -ne 0) { $gone = $true; break }
             }
             if (-not $gone) { throw "pid $pid1 still alive 10s after SIGTERM" }
             $log = Dx 'tail -3 /var/log/br.log' -AllowFail
@@ -434,7 +492,7 @@ jobs:
           $ver = Get-Content (Join-Path $P 'wslver.txt') -ErrorAction SilentlyContinue
           $variant = Get-Content (Join-Path $P 'survival-variant') -ErrorAction SilentlyContinue
           $required = '2-import', '2b-prep', '3-exec', '4a-wslenv', '4b-proxy-start', '5-loopback', '6a-next-step', '7-stop'
-          $all = '1-env', '2-import', '2b-prep', '3-exec', '4a-wslenv', '4b-proxy-start', '5-loopback', '6a-next-step', '6b-idle120', '6c-keepalive-A', '6d-keepalive-B', '8-bazel-cache', '7-stop', '7b-cleanup'
+          $all = '1-env', '2-import', '2b-prep', '3-exec', '4a-wslenv', '4b-proxy-start', '5-loopback', '6a-next-step', '6b-idle120', '6c-keepalive-A', '6d-keepalive-B', '8-bazel-cache', '4c-tls', '7-stop', '7b-cleanup'
           $lines = @("| Item | Result | Seconds | Detail |", "|---|---|---|---|")
           $fail = $false
           foreach ($id in $all) {
