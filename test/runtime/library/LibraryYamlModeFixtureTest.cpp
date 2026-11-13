@@ -65,9 +65,9 @@ namespace ao::rt::test
     // version the exporter currently writes.
     constexpr std::uint32_t kFixtureVersion = 1;
 
-    std::filesystem::path fixtureRoot()
+    std::filesystem::path fixtureFile(std::string_view const relativePath)
     {
-      return std::filesystem::path{LIBRARY_TEST_DATA_DIR};
+      return ao::test::testInputPath(std::string{"test/data/library/"} + std::string{relativePath});
     }
 
     ImportReport restore(MusicLibrary& library, std::filesystem::path const& path)
@@ -268,7 +268,7 @@ namespace ao::rt::test
       {
         auto const temp = ao::test::TempDir{};
         auto library = library::test::makeTestMusicLibrary(temp.path(), temp.path());
-        auto const yamlPath = fixtureRoot() / fixture.file;
+        auto const yamlPath = fixtureFile(fixture.file);
 
         // The music root holds none of the audio files the document names, so
         // a delta document overlays empty media metadata.
@@ -285,13 +285,13 @@ namespace ao::rt::test
   {
     auto const temp = ao::test::TempDir{};
     auto library = library::test::makeTestMusicLibrary(temp.path(), temp.path());
-    restore(library, fixtureRoot() / "v1-metadata.yaml");
+    restore(library, fixtureFile("v1-metadata.yaml"));
 
-    CHECK(restore(library, fixtureRoot() / "v1-list-only.yaml") == ImportReport{.payloadVersion = kFixtureVersion,
-                                                                                .payloadMode = ExportMode::ListOnly,
-                                                                                .targetScope = ImportTargetScope::Lists,
-                                                                                .listsCreated = 3,
-                                                                                .listsDeleted = 3});
+    CHECK(restore(library, fixtureFile("v1-list-only.yaml")) == ImportReport{.payloadVersion = kFixtureVersion,
+                                                                             .payloadMode = ExportMode::ListOnly,
+                                                                             .targetScope = ImportTargetScope::Lists,
+                                                                             .listsCreated = 3,
+                                                                             .listsDeleted = 3});
 
     auto const carrier = std::string{"Live/The Carrier Band/Live at the Hall.flac"};
     CHECK(listShapes(library) ==
@@ -312,7 +312,7 @@ namespace ao::rt::test
     REQUIRE(std::filesystem::create_directory(libraryRoot));
     auto library = library::test::makeTestMusicLibrary(libraryRoot, libraryRoot);
 
-    CHECK(restore(library, fixtureRoot() / "v1-scalars.yaml") ==
+    CHECK(restore(library, fixtureFile("v1-scalars.yaml")) ==
           ImportReport{.payloadVersion = kFixtureVersion, .tracksCreated = 2, .listsCreated = 1});
 
     checkScalarMeanings(library, "restored from v1-scalars.yaml");

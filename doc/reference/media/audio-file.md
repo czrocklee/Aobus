@@ -232,7 +232,7 @@ The [file-reading compatibility contract](../../system/media/file-reading.md#per
 ## Test authority
 
 - Format tests under [`test/media/file/`](../../../test/media/file) lock exact fields, covers, codecs, payloads, errors, and lifetime behavior.
-- [`MediaFileFixtureTest.cpp`](../../../test/media/file/MediaFileFixtureTest.cpp) locks real fixtures.
+- [`MediaFileFixtureTest.cpp`](../../../test/runtime/library/MediaFileFixtureTest.cpp) locks real fixtures as application policy: it lives with the runtime library tests and runs in the `application` suite, not the Core suite.
 - [`Mp4FileTest.cpp`](../../../test/media/file/Mp4FileTest.cpp) locks declared text type/version admission for scalar and credit text, omission of unsupported text forms, and preservation of declared UTF-8 bytes for library admission.
 - [`ScanPlanTest.cpp`](../../../test/runtime/library/ScanPlanTest.cpp) locks recognition.
 - [`AudioIdentityTest.cpp`](../../../test/library/AudioIdentityTest.cpp) locks payload hashing.

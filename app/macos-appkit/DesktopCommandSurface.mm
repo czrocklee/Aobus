@@ -103,10 +103,11 @@ namespace
   [file addItem:NSMenuItem.separatorItem];
   addStandardItem(file, [self text:MessageId::AppKitCloseWindow], @selector(performClose:), @"w");
   auto* const edit = addMenu([self text:MessageId::AppKitMenuEdit]);
-  addStandardItem(edit, [self text:MessageId::AppKitUndo], @selector(undo:), @"z");
+  // These dynamic responder-chain actions have no visible method declaration.
+  addStandardItem(edit, [self text:MessageId::AppKitUndo], ::NSSelectorFromString(@"undo:"), @"z");
   addStandardItem(edit,
                   [self text:MessageId::AppKitRedo],
-                  @selector(redo:),
+                  ::NSSelectorFromString(@"redo:"),
                   @"z",
                   NSEventModifierFlagCommand | NSEventModifierFlagShift);
   [edit addItem:NSMenuItem.separatorItem];

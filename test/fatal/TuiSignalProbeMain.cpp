@@ -14,6 +14,7 @@ int main(int argc, char* argv[])
 {
   if (argc == 3 && std::string_view{argv[1]} == "--aobus-probe-child")
   {
+    ao::test::reportProbeChildStarted();
     ao::test::suppressProbeChildCrashDump();
     return ao::tui::test::runTuiSignalProbeScenario(argv[2]);
   }

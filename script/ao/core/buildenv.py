@@ -1,12 +1,11 @@
 """Answers which portal commands need the native build environment.
 
-Each command module declares REQUIRES_BUILD_ENV next to its NAME; ao.bat
-and the macOS branch of ./ao query this module after their Python bootstrap
-instead of keeping their own copies of the command list. Known commands are
-parsed before that answer, so invalid options fail before scope resolution or
-native environment selection. Help flags are answered without parsing. The
-Unix launcher may still enter Nix, and ao.bat may still bootstrap Python,
-before this module runs.
+Each command module declares REQUIRES_BUILD_ENV next to its NAME. The Windows
+portal uses its parsed Namespace in-process; the macOS launcher queries this
+module after Python bootstrap. Neither keeps a separate command list. Known
+commands are parsed before scope resolution or native environment selection.
+The query API answers help flags without parsing. Platform launchers may still
+enter Nix or bootstrap Python before this module runs.
 """
 
 import argparse
@@ -20,6 +19,18 @@ from .paths import PROJECT_ROOT
 from .proc import die
 
 BUILD_ENV_REQUIRED_EXIT_CODE = 10
+
+
+def windows_bootstrap_requires_python_tools(arguments: Sequence[str]) -> bool:
+    """Select tooling from the parsed command, not its first argv spelling.
+
+    Flat native commands and explicit Bazel commands use the same governed
+    base runtime. Only actual Python lint/docs/tooling consumers need wheels.
+    Invalid arguments fail before environment selection.
+    """
+    if not arguments or arguments[0] == "help" or _help_requested(arguments):
+        return False
+    return requires_parsed_python_tools(parse_command_arguments(arguments[0], arguments[1:]))
 
 
 def _help_requested(arguments: Sequence[str]) -> bool:
@@ -106,9 +117,32 @@ def requires_python_tools(command: str, arguments: Sequence[str] = ()) -> bool:
         return False
     for module in COMMAND_MODULES:
         if module.NAME == command:
-            required = bool(getattr(module, "REQUIRES_PYTHON_TOOLS", False))
-            parse_command_arguments(command, arguments)
-            return required
+            return requires_parsed_python_tools(parse_command_arguments(command, arguments))
+    return False
+
+
+def requires_parsed_python_tools(args: argparse.Namespace) -> bool:
+    """Evaluate the owning command's static or option-dependent tooling intent."""
+    from ..command import COMMAND_MODULES
+
+    for module in COMMAND_MODULES:
+        if module.NAME == args.command:
+            policy = getattr(module, "REQUIRES_PYTHON_TOOLS", False)
+            return bool(policy(args) if callable(policy) else policy)
+    return False
+
+
+def requires_provider_tools(command: str, arguments: Sequence[str] = ()) -> bool:
+    """Port-build tools are needed only by explicit dependency provisioning."""
+    from ..command import COMMAND_MODULES
+
+    if _help_requested(arguments):
+        return False
+    for module in COMMAND_MODULES:
+        if module.NAME == command:
+            args = parse_command_arguments(command, arguments)
+            policy = getattr(module, "REQUIRES_PROVIDER_TOOLS", False)
+            return bool(policy(args) if callable(policy) else policy)
     return False
 
 
@@ -118,14 +152,16 @@ def main(argv: list[str] | None = None) -> int:
     if exit_code:
         arguments = arguments[1:]
     python_tools = bool(arguments and arguments[0] == "--python-tools")
-    command_index = 1 if python_tools else 0
+    provider_tools = bool(arguments and arguments[0] == "--provider-tools")
+    command_index = 1 if python_tools or provider_tools else 0
     command = arguments[command_index] if len(arguments) > command_index else ""
     command_arguments = arguments[command_index + 1 :]
-    required = (
-        requires_python_tools(command, command_arguments)
-        if python_tools
-        else requires_build_env(command, command_arguments)
-    )
+    if python_tools:
+        required = requires_python_tools(command, command_arguments)
+    elif provider_tools:
+        required = requires_provider_tools(command, command_arguments)
+    else:
+        required = requires_build_env(command, command_arguments)
     if exit_code:
         return BUILD_ENV_REQUIRED_EXIT_CODE if required else 0
     print("1" if required else "0")

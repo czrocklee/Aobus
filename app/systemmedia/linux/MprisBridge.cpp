@@ -27,6 +27,7 @@
 #include <glibmm/ustring.h>
 #include <glibmm/variant.h>
 #include <glibmm/variantdbusstring.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include <chrono>
@@ -40,7 +41,6 @@
 #include <optional>
 #include <string>
 #include <string_view>
-#include <sys/stat.h>
 #include <system_error>
 #include <tuple>
 #include <utility>

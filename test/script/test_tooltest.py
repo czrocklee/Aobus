@@ -12,7 +12,7 @@ from ao.core import doccheck, tooltest
 
 
 class ToolTestRunnerTest(unittest.TestCase):
-    def _run(self, completed, *, static_status=0, log=None, modules=("test_example",)):
+    def _run(self, completed, *, static_status=0, log=None, jobs=None, modules=("test_example",)):
         outcomes = completed if isinstance(completed, dict) else {module: completed for module in modules}
 
         def run_module(command, **_kwargs):
@@ -25,7 +25,7 @@ class ToolTestRunnerTest(unittest.TestCase):
         ):
             output = io.StringIO()
             with contextlib.redirect_stdout(output):
-                status = tooltest.run(log=log)
+                status = tooltest.run(log=log, jobs=jobs)
         static.assert_called_once_with([], log=log)
         return status, output.getvalue()
 
@@ -128,13 +128,40 @@ class ToolTestRunnerTest(unittest.TestCase):
             search_path = call.kwargs["env"]["PYTHONPATH"].split(os.pathsep)
             self.assertEqual(search_path[:2], [str(tooltest.PROJECT_ROOT / "script"), str(tooltest.TEST_DIR)])
 
+    def test_modules_receive_the_canonical_temporary_root_behind_an_alias(self):
+        completed = tooltest.subprocess.CompletedProcess([], 0, stdout="Ran 1 test in 0.001s\n\nOK\n")
+        with tempfile.TemporaryDirectory() as directory:
+            real = Path(directory).resolve() / "real"
+            real.mkdir()
+            alias = Path(directory) / "alias"
+            try:
+                alias.symlink_to(real, target_is_directory=True)
+            except OSError:
+                self.skipTest("the host cannot create a directory symlink")
+            aliased = dict.fromkeys(("TMPDIR", "TEMP", "TMP"), str(alias))
+            with (
+                mock.patch.dict(os.environ, aliased),
+                mock.patch.object(tooltest.tempfile, "gettempdir", return_value=str(alias)),
+                mock.patch.object(tooltest.pythoncheck, "run_paths", return_value=0),
+                mock.patch.object(tooltest, "test_modules", return_value=["test_alpha"]),
+                mock.patch.object(tooltest.subprocess, "run", return_value=completed) as run,
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                self.assertEqual(tooltest.run(), 0)
+
+        environment = run.call_args.kwargs["env"]
+        self.assertEqual({name: environment[name] for name in aliased}, dict.fromkeys(aliased, str(real)))
+
     def test_worker_pool_shares_the_baseline_capped_by_the_module_count(self):
         completed = tooltest.subprocess.CompletedProcess([], 0, stdout="Ran 1 test in 0.001s\n\nOK\n")
-        for baseline, modules, expected in (
-            (6, ["test_alpha", "test_beta", "test_gamma"], 3),
-            (2, ["test_alpha"], 1),
+        for baseline, jobs, modules, expected in (
+            (6, None, ["test_alpha", "test_beta", "test_gamma"], 3),
+            (2, None, ["test_alpha"], 1),
+            # An explicit override beats the larger baseline; enough modules
+            # keep the request from being capped by the module count.
+            (6, 2, ["test_alpha", "test_beta", "test_gamma"], 2),
         ):
-            with self.subTest(baseline=baseline, modules=modules):
+            with self.subTest(baseline=baseline, jobs=jobs, modules=modules):
                 with (
                     mock.patch.object(tooltest.pythoncheck, "run_paths", return_value=0),
                     mock.patch.object(tooltest, "test_modules", return_value=modules),
@@ -147,28 +174,8 @@ class ToolTestRunnerTest(unittest.TestCase):
                     # _run_modules' collection directly with per-module results.
                     pool = executor.return_value.__enter__.return_value
                     pool.map.return_value = [completed] * len(modules)
-                    self.assertEqual(tooltest.run(), 0)
+                    self.assertEqual(tooltest.run(jobs=jobs), 0)
                 executor.assert_called_once_with(max_workers=expected)
-
-    def test_host_shared_workspace_activation_is_not_inherited_by_unit_tests(self):
-        completed = tooltest.subprocess.CompletedProcess([], 0, stdout="Ran 1 test in 0.001s\n\nOK\n")
-        inherited = {
-            tooltest.compiler_cache.SHARED_WORKSPACES_EFFECTIVE: "1",
-            tooltest.compiler_cache.SHARED_WORKSPACES_CCACHE: "/cache/ccache",
-            tooltest.compiler_cache.SHARED_WORKSPACES_NAMESPACE_PREFIX: "personal",
-        }
-        with (
-            mock.patch.dict(os.environ, inherited, clear=False),
-            mock.patch.object(tooltest.pythoncheck, "run_paths", return_value=0),
-            mock.patch.object(tooltest, "test_modules", return_value=["test_example"]),
-            mock.patch.object(tooltest.subprocess, "run", return_value=completed) as run,
-            contextlib.redirect_stdout(io.StringIO()),
-        ):
-            self.assertEqual(tooltest.run(), 0)
-
-        child_environment = run.call_args.kwargs["env"]
-        for key in inherited:
-            self.assertNotIn(key, child_environment)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,9 @@
 # Contribute to Aobus
 
-Work from the repository root through `./ao` on Linux/macOS or `ao.bat` on Windows.
+Work from the repository root. Use pinned native `bazel build`, `bazel test`,
+and `bazel run` for ordinary development; start tests with `bazel test //:tests`.
+Use `./ao check` (`ao.bat check` on Windows) for complete local and CI validation,
+including hygiene; `ao hygiene` also remains a scoped check-only entry.
 Start with [build and setup](doc/development/build.md); read the [macOS](doc/development/macos.md) or [Windows](doc/development/windows.md) guide before native work.
 
 ## Make a change
@@ -22,10 +25,6 @@ The [pull request template](.github/pull_request_template.md) prompts for them w
 Keep a proposal only when unresolved design choices benefit from written comparison, and retain a separate decision only when its reasons are worth revisiting.
 
 ## Optional local setup
-
-`./ao setup compiler-cache` enables the shared compiler cache for the host user; builds also work without it.
-Use `--shared-workspaces` only after reading the [cache setup and migration guide](doc/development/compiler-cache.md).
-Existing `CCACHE_DIR` and `CCACHE_MAXSIZE` environment overrides take precedence.
 
 `./ao setup git-hooks` explicitly installs the repository's commit hooks (`ao.bat setup git-hooks` on Windows).
 It replaces the repository's `core.hooksPath` with `script/git-hook`; linked worktrees share that configuration and resolve the relative path from their own checkout.

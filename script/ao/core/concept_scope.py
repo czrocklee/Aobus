@@ -1,6 +1,7 @@
 """Frozen concept-report scope: roots, exclusions, overload treatment, and hop chains.
 
-The report measures public declarations from one configured debug build. This
+The report measures public declarations and fresh native-compiler include
+observations from one configured Debug or Release Bazel cohort. This
 module is the denominator contract: changing a field here is a measurement
 change, not a silent implementation detail.
 """
@@ -12,7 +13,7 @@ from pathlib import Path
 
 from .paths import PROJECT_ROOT
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 REPORT_NAME = "concept-report.json"
 
 CORE_ROOTS: tuple[str, ...] = ("include/ao",)
@@ -152,9 +153,19 @@ def scope_manifest() -> dict[str, object]:
             "of the header parsed as a translation unit, including the header itself, "
             "with total bytes of those files"
         ),
-        "rebuildFanOut": (
-            "translation units recorded by ninja -t deps that list the header as a "
-            "dependency; median and 95th percentile across the area"
+        "compilerIncludeFanOut": (
+            "distinct first-party target-role configured native compile actions whose fresh "
+            "same-compiler dependency/preprocessor pass reports the header; median and 95th "
+            "percentile across the area; not last-build execution, declared/mandatory Bazel "
+            "inputs, or actual rebuild triggers"
+        ),
+        "compilerIncludeObservation": (
+            "requested configured DefaultInfo output-to-input action reachability; execution "
+            "actions inventoried separately; declared aquery environment plus explicitly "
+            "recorded pinned Bazel 9.2 Windows local TMP/TEMP and missing SYSTEMROOT/SYSTEMDRIVE "
+            "completion from this invocation's captured client, never arbitrary ambient or "
+            "server inheritance; not a sandbox/remote protocol claim; native formats may include "
+            "forced, guard-skipped, and resolved include-probe dependencies"
         ),
         "constructionHops": (
             "frozen frontend leaf chains; each step is one crossed API boundary; "

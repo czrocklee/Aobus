@@ -1,0 +1,101 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+cc_library(
+    name = "runtime_headers",
+    hdrs = glob(["ao/rt/**/*.h"]),
+    includes = ["."],
+    visibility = [
+        "//app:__subpackages__",
+        "//test:__pkg__",
+    ],
+    deps = [
+        "//include:async_headers",
+        "//include:audio_headers",
+        "//include:library_headers",
+        "//include:query_headers",
+        "//include:runtime_compat_headers",
+        "//include:yaml_headers",
+        "@aobus_native_deps//:boost",
+        "@aobus_native_deps//:spdlog",
+    ],
+)
+
+# The catalog compiler needs only typed messages, not runtime services or their
+# target-configuration native imports in its execution configuration.
+cc_library(
+    name = "catalog_headers",
+    hdrs = [
+        "ao/i18n/MessageCatalog.h",
+        "ao/i18n/MessageInventory.def",
+    ],
+    includes = ["."],
+    visibility = [
+        "//app:__subpackages__",
+        "//test:__pkg__",
+        "//tool/catalog:__pkg__",
+    ],
+    deps = ["//include:utility_headers"],
+)
+
+cc_library(
+    name = "i18n_headers",
+    hdrs = glob(
+        ["ao/i18n/*.h"],
+        exclude = ["ao/i18n/MessageCatalog.h"],
+    ),
+    includes = ["."],
+    visibility = [
+        "//app:__subpackages__",
+        "//test:__pkg__",
+    ],
+    deps = [
+        ":catalog_headers",
+        ":runtime_headers",
+    ],
+)
+
+cc_library(
+    name = "uimodel_headers",
+    hdrs = glob(["ao/uimodel/**/*.h"]),
+    includes = ["."],
+    visibility = [
+        "//app:__subpackages__",
+        "//test:__pkg__",
+    ],
+    deps = [
+        ":i18n_headers",
+        ":runtime_headers",
+    ],
+)
+
+cc_library(
+    name = "desktop_headers",
+    hdrs = glob(["ao/desktop/*.h"]),
+    includes = ["."],
+    visibility = [
+        "//app/desktop:__pkg__",
+        "//app/linux-gtk:__pkg__",
+        "//app/macos-appkit:__pkg__",
+        "//app/windows-winui:__pkg__",
+        "//test:__pkg__",
+    ],
+    deps = ["//include:utility_headers"],
+)
+
+cc_library(
+    name = "systemmedia_headers",
+    hdrs = glob(["ao/systemmedia/linux/*.h"]),
+    includes = ["."],
+    target_compatible_with = ["@platforms//os:linux"],
+    visibility = [
+        "//app/systemmedia:__pkg__",
+        "//test:__pkg__",
+    ],
+    deps = [
+        ":runtime_headers",
+        ":uimodel_headers",
+    ] + select({
+        "@platforms//os:linux": ["@aobus_native_deps//:giomm"],
+        "//conditions:default": [],
+    }),
+)

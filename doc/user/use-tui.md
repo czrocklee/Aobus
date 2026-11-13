@@ -115,10 +115,11 @@ Use `--system-media=off` when the session must not create the MPRIS adapter, its
 aobus-tui --library /music --system-media=off
 ```
 
-When launching through the repository portal, put the runtime option after `--`:
+When launching through native Bazel from a prepared source checkout, put
+runtime options after `--`:
 
 ```bash
-./ao run tui -- --library /music --system-media=off
+bazel run //app/tui:aobus-tui -- --library /music --system-media=off
 ```
 
 The default `auto` mode is best effort. It remains inert when the binary lacks Linux system-media support or no usable session bus exists; Aobus does not autolaunch or reconnect to a bus. The option is accepted on Windows and macOS, but those TUI builds currently provide no native system-media integration. An external Quit request follows the normal safe-exit path described below.

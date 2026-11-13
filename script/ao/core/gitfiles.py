@@ -14,10 +14,48 @@ CPP_HEADER_SUFFIXES = (".h", ".hpp")
 CPP_INCLUDE_FRAGMENT_SUFFIXES = (*CPP_HEADER_SUFFIXES, ".def")
 CPP_SUFFIXES = (*CPP_TRANSLATION_UNIT_SUFFIXES, *CPP_INCLUDE_FRAGMENT_SUFFIXES)
 PYTHON_SUFFIXES = (".py",)
-SOURCE_SUFFIXES = (*CPP_SUFFIXES, *PYTHON_SUFFIXES)
+BAZEL_SUFFIXES = (".bzl", ".bazel")
+SOURCE_SUFFIXES = (*CPP_SUFFIXES, *PYTHON_SUFFIXES, *BAZEL_SUFFIXES)
 
 # Lint checker fixtures contain deliberate violations; batch scans must never pick them up.
 LINT_INTEGRATION_DIR = "test/lint"
+WORKFLOW_DIR = ".github/workflows"
+
+
+def is_bazel_file(name: str) -> bool:
+    """Return whether a path names a Buildifier-supported source file."""
+    return name.endswith(BAZEL_SUFFIXES) or Path(name).name in ("BUILD", "WORKSPACE")
+
+
+def is_bazel_rc_file(name: str) -> bool:
+    """The root rc contains a generated MSVC policy view, not Starlark."""
+    return Path(os.path.abspath(PROJECT_ROOT / name)) == PROJECT_ROOT / ".bazelrc"
+
+
+def is_workflow_file(name: str) -> bool:
+    """GitHub Actions loads YAML files directly inside .github/workflows only."""
+    path = Path(os.path.abspath(PROJECT_ROOT / name))
+    try:
+        relative = path.relative_to(PROJECT_ROOT)
+    except ValueError:
+        return False
+    return relative.parent == Path(WORKFLOW_DIR) and relative.suffix in (".yml", ".yaml")
+
+
+def root_bazel_files() -> list[str]:
+    """Bazel sources and the generated root rc view, without recursive scans."""
+    return sorted(
+        path.name
+        for path in PROJECT_ROOT.iterdir()
+        if (is_bazel_file(path.name) or is_bazel_rc_file(path.name)) and path.is_file()
+    )
+
+
+def _matches_source(name: str, suffixes: tuple[str, ...]) -> bool:
+    # Named Bazel files and workflows belong to whole-source hygiene only.
+    return name.endswith(suffixes) or (
+        suffixes == SOURCE_SUFFIXES and (is_bazel_file(name) or is_bazel_rc_file(name) or is_workflow_file(name))
+    )
 
 
 def _path_is_on_smb_mount(path: Path, mount_output: str) -> bool:
@@ -154,14 +192,10 @@ def _git_worktree_files() -> list[str]:
     records = iter(_git_lines("status", "--porcelain=v1", "-z", "--untracked-files=all", null_terminated=True))
     names = []
     for record in records:
-        if len(record) < 4 or record[2] != " " or any(code not in " MTADRCU?!" for code in record[:2]):
-            raise die(f"malformed git status record: {record!r}")
-        name = record[3:]
         if "R" in record[:2] or "C" in record[:2]:
             # Porcelain -z puts the destination first, then the source path.
-            if next(records, None) is None:
-                raise die(f"malformed git status rename/copy record: {record!r}")
-        names.append(name)
+            next(records)
+        names.append(record[3:])
     return names
 
 
@@ -171,21 +205,23 @@ def changed_files(commit: str | None = None, *, suffixes: tuple[str, ...] = CPP_
     names: set[str] = set()
     names.update(_git_lines("diff", "--name-only", "-z", f"{base}..HEAD", null_terminated=True))
     names.update(_git_worktree_files())
-    return sorted(name for name in names if name.endswith(suffixes))
+    return sorted(name for name in names if _matches_source(name, suffixes))
 
 
 def find_sources(folders: list[str], *, suffixes: tuple[str, ...] = CPP_SUFFIXES) -> list[str]:
-    """All sources under the given repo-relative folders, excluding lint integration files."""
+    """Find scoped sources, retaining Bazel graphs but excluding native/Python lint fixtures."""
     found: set[str] = set()
     for folder in folders:
         base = PROJECT_ROOT / folder
         if not base.exists():
             continue
         for path in base.rglob("*"):
-            if path.suffix not in suffixes or not path.is_file():
+            if not path.is_file():
                 continue
             rel = path.relative_to(PROJECT_ROOT).as_posix()
-            if rel.startswith(f"{LINT_INTEGRATION_DIR}/"):
+            if not _matches_source(rel, suffixes):
+                continue
+            if rel.startswith(f"{LINT_INTEGRATION_DIR}/") and not is_bazel_file(rel):
                 continue
             found.add(rel)
     return sorted(found)

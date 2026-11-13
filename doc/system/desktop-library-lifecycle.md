@@ -18,7 +18,7 @@ subsystem owners linked below.
 
 ## Code boundary
 
-The shared pure rules and detached-launch mechanism form `ao_desktop_launch`, an
+The shared pure rules and detached-launch mechanism form the desktop-launch library, an
 application target under the [system architecture](overview.md)
 and [interactive session lifecycle architecture](session-lifecycle.md).
 Its public surface is under `app/include/ao/desktop/` and its implementation is
@@ -277,11 +277,11 @@ dispatcher phase admission, native application exit, and XAML diagnostics.
   protects AppKit's retained close/reopen behavior, dirty-editor switch block,
   persisted-root observation before the accepted switch, and successor reentry
   through the production lifecycle and launcher invocation, with a test-only
-  bridge assigning actual successor-process ownership to the portal supervisor.
-- AppKit portal tests in [`test_cli.py`](../../test/script/test_cli.py) protect
+  bridge assigning actual successor-process ownership to the native smoke
+  bundle's supervisor in [`appkitprocess.py`](../../script/ao/core/appkitprocess.py).
+- [`test_appkitprocess.py`](../../test/script/test_appkitprocess.py) protects
   isolated fixture admission, bounded parent collection, and invocation-bound
-  parent and successor completion markers.
-- [`test_appkitprocess.py`](../../test/script/test_appkitprocess.py) uses real
+  parent and successor completion markers. It uses real
   processes to reject nonzero successor exits, hangs after a valid marker, and
   successful exits without a marker. It also checks that a failed parent cannot
   leave its supervised successor running.

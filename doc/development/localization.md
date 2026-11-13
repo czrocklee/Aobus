@@ -108,7 +108,7 @@ Changes to the runtime or fallback model need proportionate design review and up
 1. Choose the canonical ICU resource name and public BCP 47 tag.
 2. Add `app/i18n/catalog/<icu-locale>.txt` with the matching top-level ICU table and reviewed translations for the intended surface.
 3. Add `<icu-locale>.res` to [`package.lst`](../../app/i18n/catalog/package.lst). Keep `root` and generated `qps_Ploc` in their special roles.
-4. Let CMake derive the `.txt` input, compiled resource, selectable tag, and WinUI qualifier; do not add parallel manual locale lists.
+4. Let the catalog build derive the `.txt` input, compiled resource, selectable tag, and WinUI qualifier; do not add parallel manual locale lists.
 5. Add focused catalog cases for canonical admission, representative direct translation, intentional English fallback, and selectable metadata.
 6. Add the locale to the native [`WinUiLocalizationProbe.cpp`](../../test/helper/WinUiLocalizationProbe.cpp) parity coverage, including regional/script fallback when applicable.
 7. Update the [ICU and MRT compatibility matrix](../system/presentation/localization.md#icu-and-mrt-compatibility-matrix) when the supported policy changes.
@@ -120,17 +120,18 @@ Do not duplicate script-qualified resources as regional assets unless the locale
 ## Validation
 
 Follow [test validation and review](test/validation-and-review.md); choose the route by behavior, not by file extension alone.
-Run commands from the repository root through `./ao`, or through `ao.bat` on native Windows.
+Run from the repository root with pinned native Bazel for ordinary build/test/run;
+project checks use `./ao`, or `ao.bat` on Windows.
 
 ### Existing-locale message changes
 
 For catalog-only wording in a maintained locale:
 
 1. build each affected frontend so generated ICU and native resources are current;
-2. run the ordinary core suite, which owns the catalog cases:
+2. run the catalog test executable:
 
    ```bash
-   ./ao test --core
+   bazel test //test:i18n_test
    ```
 
 3. run message-specific UIModel or adapter tests for the changed semantic owner;
@@ -138,13 +139,15 @@ For catalog-only wording in a maintained locale:
 5. inspect native Windows UI when WinUI consumes the changed message.
 
 Unchanged projection rules do not independently require the full Windows locale-parity gate, but displayed WinUI text still needs native inspection.
-If documentation changed, also run `./ao docs check`.
+If documentation changed and full `ao check` is not needed, run `./ao docs check`
+separately; full `check` already includes it.
 
 ### New messages, locales, signatures, or projections
 
 Build every consuming frontend and run the catalog suite plus focused semantic and adapter tests.
 A new locale, changed locale selection, changed argument signature, or changed WinUI projection requires native Windows parity evidence from the WinUI localization probe in addition to the applicable implementation gate.
-Run the full native `check` and scoped `hygiene` when C++ code, headers, build configuration, or tests change, as required by the validation matrix.
+Run full native `check`, including scoped hygiene, when C++ code, headers,
+build configuration, or tests change, as required by the validation matrix.
 
 ### Visual review
 

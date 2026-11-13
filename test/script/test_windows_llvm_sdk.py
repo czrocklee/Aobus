@@ -1,9 +1,10 @@
-"""Shared Windows SDK manifest contracts, without downloading an SDK."""
+"""Shared Windows SDK manifest, cache and marker contracts, without downloading an SDK."""
 
 import contextlib
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -12,9 +13,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from cmake_support import cmake_executable
-
-from ao.core import builddir, tidyengine
+from ao.command import format as format_command
+from ao.core import builddir, tidyengine, windows_llvm_sdk, winui
 from ao.core.paths import PROJECT_ROOT
 
 
@@ -23,9 +23,6 @@ class WindowsLlvmSdkManifestTest(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory(prefix="aobus SDK manifest ")
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name).resolve()
-        module = self.root / "cmake/LlvmSdk.cmake"
-        module.parent.mkdir()
-        shutil.copyfile(PROJECT_ROOT / "cmake/LlvmSdk.cmake", module)
         self.manifest = self.root / "script/ao/windows-llvm-sdk.json"
         self.manifest.parent.mkdir(parents=True)
         self.base = json.loads((PROJECT_ROOT / "script/ao/windows-llvm-sdk.json").read_text(encoding="utf-8"))
@@ -33,133 +30,6 @@ class WindowsLlvmSdkManifestTest(unittest.TestCase):
         self.enterContext(mock.patch.object(tidyengine, "LLVM_SDK_MANIFEST", self.manifest))
         tidyengine.windows_llvm_sdk_manifest.cache_clear()
         self.addCleanup(tidyengine.windows_llvm_sdk_manifest.cache_clear)
-
-    def cmake(self, body=""):
-        script = self.root / "probe.cmake"
-        script.write_text(f'include("{(self.root / "cmake/LlvmSdk.cmake").as_posix()}")\n' + body, encoding="utf-8")
-        return subprocess.run(
-            [cmake_executable(), "-P", str(script)],
-            cwd=self.root,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            check=False,
-        )
-
-    def test_both_readers_evaluate_identity_and_derived_files(self):
-        result = self.cmake(
-            'string(REPLACE "\\n" "\\\\n" _marker "${_AOBUS_LLVM_SDK_COMPLETION_CONTENT}")\n'
-            'file(WRITE "identity.txt" "version=${AOBUS_LLVM_SDK_VERSION}\\n"\n'
-            '"sha256=${AOBUS_LLVM_SDK_SHA256}\\narchive=${AOBUS_LLVM_SDK_ARCHIVE}\\n"\n'
-            '"url=${AOBUS_LLVM_SDK_URL}\\nrequired=${_AOBUS_LLVM_SDK_REQUIRED_FILES}\\nmarker=${_marker}\\n")\n'
-        )
-        self.assertEqual(result.returncode, 0, result.stderr)
-        evaluated = dict(line.split("=", 1) for line in (self.root / "identity.txt").read_text().splitlines())
-        version, sha256, required = tidyengine.windows_llvm_sdk_manifest()
-        self.assertEqual((version, sha256), (self.base["version"], self.base["archiveSha256"]))
-        self.assertEqual(evaluated["version"], version)
-        self.assertEqual(evaluated["sha256"], sha256)
-        self.assertEqual(evaluated["archive"], f"clang+llvm-{version}-x86_64-pc-windows-msvc.tar.xz")
-        self.assertEqual(
-            evaluated["url"],
-            f"https://github.com/llvm/llvm-project/releases/download/llvmorg-{version}"
-            f"/clang%2Bllvm-{version}-x86_64-pc-windows-msvc.tar.xz",
-        )
-        expected = (*self.base["requiredFiles"], f"lib/clang/{version.split('.', 1)[0]}/include/stddef.h")
-        self.assertEqual(required, expected)
-        self.assertEqual(tuple(evaluated["required"].split(";")), expected)
-        self.assertEqual(evaluated["marker"].replace("\\n", "\n"), f"version={version}\nsha256={sha256}\n")
-
-    def test_readers_agree_on_manifest_shape_and_portable_path_contract(self):
-        invalid = [
-            [],
-            *({key: value for key, value in self.base.items() if key != missing} for missing in self.base),
-            *({**self.base, "version": value} for value in (5, True, "22", "22.1.x", "22.1.8\x00x")),
-            *(
-                {**self.base, "archiveSha256": value}
-                for value in (5, True, "short", "g" * 64, "A" * 64, "a" * 31 + "\x00" + "b" * 32)
-            ),
-            *({**self.base, "requiredFiles": value} for value in ([], "bin/tool.exe", {"0": "bin/tool.exe"})),
-            *(
-                {**self.base, "requiredFiles": [value]}
-                for value in (
-                    5,
-                    True,
-                    False,
-                    None,
-                    {},
-                    "",
-                    "/root/file",
-                    "C:/file",
-                    "C:file",
-                    "\\\\server\\file",
-                    "bin\\tool.exe",
-                    "../file",
-                    "bin/../file",
-                    "./file",
-                    "bin/./file",
-                    "a;b",
-                    "a//b",
-                    "bin/",
-                    "a\nb",
-                    "a\x00b",
-                )
-            ),
-        ]
-        valid = [self.base, {**self.base, "requiredFiles": ["OFF", "0", "FALSE", "x-NOTFOUND", "a..b/tool+name.h"]}]
-        for accepted, payloads in ((False, invalid), (True, valid)):
-            for payload in payloads:
-                with self.subTest(accepted=accepted, payload=payload):
-                    self.manifest.write_text(json.dumps(payload), encoding="utf-8")
-                    tidyengine.windows_llvm_sdk_manifest.cache_clear()
-                    if accepted:
-                        _, _, required = tidyengine.windows_llvm_sdk_manifest()
-                    else:
-                        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
-                            tidyengine.windows_llvm_sdk_manifest()
-                    result = self.cmake('file(WRITE "required.txt" "${_AOBUS_LLVM_SDK_REQUIRED_FILES}")\n')
-                    self.assertEqual(result.returncode == 0, accepted, result.stderr)
-                    if accepted:
-                        self.assertEqual(tuple((self.root / "required.txt").read_text().split(";")), required)
-
-    def test_missing_members_keep_field_specific_cmake_diagnostics(self):
-        for missing in self.base:
-            with self.subTest(missing=missing):
-                self.manifest.write_text(json.dumps({key: value for key, value in self.base.items() if key != missing}))
-                result = self.cmake()
-                self.assertNotEqual(result.returncode, 0)
-                self.assertIn(missing, result.stderr)
-                self.assertIn("not found", result.stderr)
-
-    def test_unreadable_or_malformed_manifest_fails_at_sdk_use(self):
-        for content in (None, b"{ not json", b"\xff"):
-            with self.subTest(content=content):
-                if content is None:
-                    self.manifest.unlink()
-                else:
-                    self.manifest.write_bytes(content)
-                tidyengine.windows_llvm_sdk_manifest.cache_clear()
-                with contextlib.redirect_stderr(io.StringIO()) as stderr, self.assertRaises(SystemExit):
-                    tidyengine.windows_llvm_sdk_manifest()
-                self.assertIn("Windows LLVM SDK manifest", stderr.getvalue())
-                self.assertNotEqual(self.cmake().returncode, 0)
-
-    def test_manifest_is_cached_as_an_immutable_snapshot(self):
-        first = tidyengine.windows_llvm_sdk_manifest()
-        self.manifest.unlink()
-        self.assertIs(tidyengine.windows_llvm_sdk_manifest(), first)
-        self.assertIsInstance(first, tuple)
-        self.assertIsInstance(first[2], tuple)
-
-    def test_non_windows_sdk_ensure_does_not_read_the_manifest(self):
-        self.manifest.unlink()
-        for profile in (builddir.LINUX_PROFILE, builddir.MACOS_PROFILE):
-            with (
-                self.subTest(profile=profile.name),
-                mock.patch.object(builddir, "platform_profile", return_value=profile),
-            ):
-                tidyengine.ensure_windows_llvm_sdk(self.root / "unused-build")
 
     def test_help_startup_does_not_depend_on_a_windows_manifest(self):
         # Use a fresh dispatch process: importing a module already loaded by this
@@ -184,30 +54,124 @@ class WindowsLlvmSdkManifestTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("usage:", result.stdout)
 
-    def test_cmake_sdk_completeness_and_marker_validation(self):
-        result = self.cmake(
-            "foreach(_required IN LISTS _AOBUS_LLVM_SDK_REQUIRED_FILES)\n"
-            '  file(WRITE "${CMAKE_CURRENT_LIST_DIR}/sdk/${_required}" "")\n'
-            "endforeach()\n"
-            '_aobus_validate_llvm_sdk("${CMAKE_CURRENT_LIST_DIR}/sdk" FALSE _valid _reason)\n'
-            'file(WRITE "validation.txt" "complete=${_valid};${_reason}\\n")\n'
-            '_aobus_validate_llvm_sdk("${CMAKE_CURRENT_LIST_DIR}/sdk" TRUE _valid _reason)\n'
-            'file(APPEND "validation.txt" "marker_missing=${_valid};${_reason}\\n")\n'
-            'file(WRITE "sdk/${_AOBUS_LLVM_SDK_COMPLETION_MARKER}" "${_AOBUS_LLVM_SDK_COMPLETION_CONTENT}")\n'
-            '_aobus_validate_llvm_sdk("${CMAKE_CURRENT_LIST_DIR}/sdk" TRUE _valid _reason)\n'
-            'file(APPEND "validation.txt" "marker_complete=${_valid};${_reason}\\n")\n'
-            'file(WRITE "sdk/${_AOBUS_LLVM_SDK_COMPLETION_MARKER}" "incomplete\\n")\n'
-            '_aobus_validate_llvm_sdk("${CMAKE_CURRENT_LIST_DIR}/sdk" TRUE _valid _reason)\n'
-            'file(APPEND "validation.txt" "marker_stale=${_valid};${_reason}\\n")\n'
-            "list(GET _AOBUS_LLVM_SDK_REQUIRED_FILES 0 _first)\n"
-            'file(REMOVE "sdk/${_first}")\n'
-            '_aobus_validate_llvm_sdk("${CMAKE_CURRENT_LIST_DIR}/sdk" FALSE _valid _reason)\n'
-            'file(APPEND "validation.txt" "file_missing=${_valid};${_reason}\\n")\n'
+
+class WindowsFormatReadySdkTest(unittest.TestCase):
+    def test_cpp_format_uses_only_the_ready_pinned_sdk_without_visual_studio(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = windows_llvm_sdk.Manifest("31.2.3", "b" * 64, ("bin/clang-format.exe",))
+            with (
+                mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
+                mock.patch.object(windows_llvm_sdk, "read_manifest", return_value=manifest),
+                mock.patch.object(windows_llvm_sdk, "ready_root", return_value=(root, False)) as ready,
+                mock.patch.object(winui, "visual_studio_installation", side_effect=AssertionError("unexpected VS")),
+                mock.patch.object(
+                    format_command.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)
+                ) as run,
+            ):
+                self.assertEqual(format_command.run_clang_format(["lib/Foo.cpp"], check=True), 0)
+            ready.assert_called_once_with(os.environ, manifest)
+            run.assert_called_once_with(
+                [str(root / "bin/clang-format.exe"), "--dry-run", "-Werror", "lib/Foo.cpp"], cwd=PROJECT_ROOT
+            )
+
+    def test_missing_ready_sdk_fails_without_launching_a_setup_or_formatter_process(self):
+        with (
+            mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
+            mock.patch.object(windows_llvm_sdk, "read_manifest", return_value=object()),
+            mock.patch.object(
+                windows_llvm_sdk, "ready_root", side_effect=windows_llvm_sdk.WindowsLlvmSdkError("absent")
+            ),
+            mock.patch.object(winui, "visual_studio_installation", side_effect=AssertionError("unexpected VS")),
+            mock.patch.object(format_command.subprocess, "run") as run,
+            contextlib.redirect_stderr(io.StringIO()) as stderr,
+            self.assertRaises(SystemExit),
+        ):
+            format_command.run_clang_format(["lib/Foo.cpp"], check=False)
+        run.assert_not_called()
+        self.assertIn("run ao setup llvm-sdk explicitly", stderr.getvalue())
+
+
+class ReadySdkRootTest(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(prefix="aobus-ready-sdk-")
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name).resolve()
+        self.manifest = windows_llvm_sdk.Manifest(
+            "31.2.3", "b" * 64, ("bin/clang-cl.exe", "lib/clangTidyMain.lib", "lib/clang/31/include/stddef.h")
         )
-        self.assertEqual(result.returncode, 0, result.stderr)
-        results = dict(line.split("=", 1) for line in (self.root / "validation.txt").read_text().splitlines())
-        self.assertEqual(results["complete"], "TRUE;")
-        self.assertEqual(results["marker_complete"], "TRUE;")
-        self.assertTrue(results["marker_missing"].startswith("FALSE;missing completion marker"))
-        self.assertTrue(results["marker_stale"].startswith("FALSE;completion marker does not match"))
-        self.assertTrue(results["file_missing"].startswith("FALSE;missing"))
+
+    def ready(self, root, *, marker=True):
+        for relative in self.manifest.required_files:
+            (root / relative).parent.mkdir(parents=True, exist_ok=True)
+            (root / relative).write_text("fixture\n", encoding="utf-8")
+        if marker:
+            marker = "version=31.2.3\nsha256=" + "b" * 64 + "\n"
+            (root / windows_llvm_sdk.MARKER).write_text(marker, encoding="utf-8", newline="\n")
+        return root
+
+    def test_default_cache_uses_governed_precedence_and_shared_completion_identity(self):
+        for variable, prefix in (
+            ("AOBUS_LLVM_SDK_CACHE_ROOT", ""),
+            ("AOBUS_STATE_ROOT", "cache/llvm"),
+            ("LOCALAPPDATA", "Aobus/cache/llvm"),
+        ):
+            with self.subTest(variable=variable):
+                base = self.root / variable
+                selected = self.ready(base / prefix / "toolchains/llvm-31.2.3-x86_64-windows-msvc")
+                environment = {"LOCALAPPDATA": str(self.root / "not-selected"), variable: str(base)}
+                self.assertEqual(windows_llvm_sdk.cache_root(environment, self.manifest), selected)
+                self.assertEqual(windows_llvm_sdk.ready_root(environment, self.manifest), (selected, True))
+                stale = "version=31.2.2\nsha256=" + "b" * 64 + "\n"
+                (selected / windows_llvm_sdk.MARKER).write_text(stale, encoding="utf-8")
+                with self.assertRaisesRegex(windows_llvm_sdk.WindowsLlvmSdkError, "completion marker"):
+                    windows_llvm_sdk.ready_root(environment, self.manifest)
+
+    def test_cached_marker_accepts_windows_newlines_without_rewriting_its_identity(self):
+        base = self.root / "cached"
+        root = self.ready(base / "toolchains/llvm-31.2.3-x86_64-windows-msvc")
+        marker = root / windows_llvm_sdk.MARKER
+        content = ("version=31.2.3\r\nsha256=" + "b" * 64 + "\r\n").encode("utf-8")
+        marker.write_bytes(content)
+        environment = {"AOBUS_LLVM_SDK_CACHE_ROOT": str(base)}
+        self.assertEqual(windows_llvm_sdk.ready_root(environment, self.manifest), (root, True))
+        self.assertEqual(marker.read_bytes(), content)
+        marker.write_bytes(content.replace(b"sha256=b", b"sha256=c"))
+        with self.assertRaisesRegex(windows_llvm_sdk.WindowsLlvmSdkError, "completion marker"):
+            windows_llvm_sdk.ready_root(environment, self.manifest)
+
+    def test_cached_extraction_without_its_marker_is_not_ready(self):
+        base = self.root / "unmarked"
+        root = self.ready(base / "toolchains/llvm-31.2.3-x86_64-windows-msvc", marker=False)
+        with self.assertRaisesRegex(windows_llvm_sdk.WindowsLlvmSdkError, re.escape(windows_llvm_sdk.MARKER)):
+            windows_llvm_sdk.ready_root({"AOBUS_LLVM_SDK_CACHE_ROOT": str(base)}, self.manifest)
+        self.assertFalse((root / windows_llvm_sdk.MARKER).exists())
+
+    def test_preprovisioned_sdk_needs_files_but_not_an_automatic_cache_marker(self):
+        root = self.ready(self.root / "preprovisioned", marker=False)
+        environment = {"AOBUS_LLVM_SDK_ROOT": str(root), "AOBUS_LLVM_SDK_CACHE_ROOT": str(self.root / "missing")}
+        self.assertEqual(windows_llvm_sdk.ready_root(environment, self.manifest), (root, False))
+        (root / "lib/clang/31/include/stddef.h").unlink()
+        with self.assertRaisesRegex(windows_llvm_sdk.WindowsLlvmSdkError, "stddef.h"):
+            windows_llvm_sdk.ready_root(environment, self.manifest)
+        self.assertFalse((self.root / "missing").exists())
+
+    def test_a_missing_cache_marker_is_typed_with_its_exact_negative(self):
+        base = self.root / "unmarked-cache"
+        root = self.ready(base / "toolchains/llvm-31.2.3-x86_64-windows-msvc", marker=False)
+        with self.assertRaises(windows_llvm_sdk.WindowsLlvmSdkSelectedFileMissing) as caught:
+            windows_llvm_sdk.ready_root({"AOBUS_LLVM_SDK_CACHE_ROOT": str(base)}, self.manifest)
+        self.assertEqual(caught.exception.path, root / windows_llvm_sdk.MARKER)
+        self.assertIn(windows_llvm_sdk.MARKER, str(caught.exception))
+
+    def test_relative_or_unselected_roots_are_rejected_without_creating_files(self):
+        for environment, message in (
+            ({}, "No ready Windows LLVM SDK selected"),
+            ({"AOBUS_LLVM_SDK_ROOT": "relative/sdk"}, "AOBUS_LLVM_SDK_ROOT must select an absolute"),
+            ({"AOBUS_LLVM_SDK_CACHE_ROOT": "relative/cache"}, "LLVM SDK cache root must select an absolute"),
+            ({"AOBUS_LLVM_SDK_CACHE_ROOT": str(self.root / "missing")}, "Windows LLVM SDK file is missing"),
+        ):
+            with self.subTest(environment=environment):
+                with self.assertRaisesRegex(windows_llvm_sdk.WindowsLlvmSdkError, message):
+                    windows_llvm_sdk.ready_root(environment, self.manifest)
+        self.assertEqual(list(self.root.iterdir()), [])

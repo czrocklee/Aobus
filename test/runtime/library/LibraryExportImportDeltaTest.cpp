@@ -5,6 +5,7 @@
 #include "runtime/library/LibraryYamlImporter.h"
 #include "test/FilesystemTestSupport.h"
 #include "test/TestFixtureSupport.h"
+#include "test/audio/AudioFixtureDirectory.h"
 #include "test/library/MusicLibraryTestSupport.h"
 #include "test/library/TrackTestSupport.h"
 #include "test/library/WritableLibraryTestSupport.h"
@@ -192,9 +193,9 @@ namespace ao::rt::test
                                                                          .channels = Channels{},
                                                                          .bitDepth = BitDepth{}});
 
-    std::filesystem::copy_file(std::filesystem::path{AUDIO_TEST_DATA_DIR} / "with_cover.flac",
-                               std::filesystem::path{temp.path()} / "cover.flac");
-    std::filesystem::copy_file(std::filesystem::path{AUDIO_TEST_DATA_DIR} / "with_cover.flac",
+    std::filesystem::copy_file(
+      audio::test::audioFixtureDirectory() / "with_cover.flac", std::filesystem::path{temp.path()} / "cover.flac");
+    std::filesystem::copy_file(audio::test::audioFixtureDirectory() / "with_cover.flac",
                                std::filesystem::path{temp.path()} / "cover-removed.flac");
 
     auto const yamlPath = std::filesystem::path{temp.path()} / "delta.yaml";

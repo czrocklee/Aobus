@@ -1,0 +1,157 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+load("//bazel:windows_utf8_manifest.bzl", "WINDOWS_UTF8_LINKER_INPUTS", "WINDOWS_UTF8_LINKOPTS")
+
+package(default_visibility = ["//visibility:private"])
+
+# The stb implementations and their configuration belong to this one source.
+cc_library(
+    name = "cover_art",
+    srcs = [
+        "CoverArt.cpp",
+        "CoverArt.h",
+    ],
+    implementation_deps = [
+        "//lib/utility",
+        "@aobus_native_deps//:ftxui",
+        "@aobus_native_deps//:stb",
+    ],
+    linkstatic = True,
+    local_defines = ["STBI_MAX_DIMENSIONS=::ao::tui::kMaximumCoverArtDimension"] + select({
+        # The SIMD implementation deliberately rebases pointers before buffers.
+        "//bazel:asan": ["STBIR_NO_SIMD"],
+        "//conditions:default": [],
+    }),
+)
+
+cc_library(
+    name = "tui",
+    srcs = [
+        "AnchoredOverlay.cpp",
+        "Command.cpp",
+        "CommandCompletion.cpp",
+        "CommandCompletionState.cpp",
+        "CommandPalettePanel.cpp",
+        "CompletionPopup.cpp",
+        "CoverArtLoader.cpp",
+        "EventController.cpp",
+        "Executor.cpp",
+        "ExitController.cpp",
+        "FrameTimer.cpp",
+        "GoToMenu.cpp",
+        "HitRegions.cpp",
+        "Keymap.cpp",
+        "LayoutStateStore.cpp",
+        "LibraryChooser.cpp",
+        "LibraryController.cpp",
+        "LibraryNavigation.cpp",
+        "LibraryScanController.cpp",
+        "ListAuthoringController.cpp",
+        "ListNavigationModel.cpp",
+        "ListOrderController.cpp",
+        "ListSearch.cpp",
+        "MouseBindings.cpp",
+        "NavigationEvents.cpp",
+        "NavigationPanel.cpp",
+        "NotificationCenterPanel.cpp",
+        "OutputDeviceController.cpp",
+        "OutputDevicePanel.cpp",
+        "PanelResize.cpp",
+        "PanelResizeEvents.cpp",
+        "PlaybackPanel.cpp",
+        "PlaybackStatusFormatter.cpp",
+        "Preferences.cpp",
+        "PresentationPanel.cpp",
+        "QualityPanel.cpp",
+        "Render.cpp",
+        "SelectableList.cpp",
+        "SelectionNavigation.cpp",
+        "SettingsEditor.cpp",
+        "SettingsEditorTitle.cpp",
+        "ShellInteractionModel.cpp",
+        "ShellText.cpp",
+        "SmartListEditor.cpp",
+        "SoulButton.cpp",
+        "StatusBar.cpp",
+        "Style.cpp",
+        "TerminalTitle.cpp",
+        "TerminalTitleFormat.cpp",
+        "TerminalTrackColumnLayout.cpp",
+        "TextCell.cpp",
+        "TextField.cpp",
+        "TextFieldModel.cpp",
+        "TrackCreditsEditor.cpp",
+        "TrackDetailLines.cpp",
+        "TrackEditController.cpp",
+        "TrackListEntry.cpp",
+        "TrackMetadataEditor.cpp",
+        "TrackPresentationNavigation.cpp",
+        "TrackPropertiesEditor.cpp",
+        "TrackPropertiesEditorTagPopover.cpp",
+        "TrackSection.cpp",
+        "TrackTable.cpp",
+        "TrackTagEditor.cpp",
+    ] + select({
+        "@platforms//os:windows": [
+            "SignalExitWatcherWindows.cpp",
+            "TerminalCellMetricsWindows.cpp",
+        ],
+        "//conditions:default": [
+            "SignalExitWatcherPosix.cpp",
+            "TerminalCellMetricsPosix.cpp",
+        ],
+    }),
+    # Relative sibling includes and public tui/ includes share one header tree.
+    hdrs = glob(
+        ["*.h"],
+        exclude = ["App.h"],
+    ),
+    implementation_deps = [
+        "//app/i18n",
+        "//lib/utility:unicode_text",
+    ],
+    include_prefix = "tui",
+    linkstatic = True,
+    strip_include_prefix = ".",
+    visibility = ["//test:__pkg__"],
+    deps = [
+        ":cover_art",
+        "//app/include:i18n_headers",
+        "//app/runtime",
+        "//app/uimodel",
+        "@aobus_native_deps//:ftxui",
+    ],
+)
+
+cc_binary(
+    name = "aobus-tui",
+    srcs = [
+        "App.cpp",
+        "App.h",
+        "Main.cpp",
+    ],
+    additional_linker_inputs = WINDOWS_UTF8_LINKER_INPUTS,
+    linkopts = WINDOWS_UTF8_LINKOPTS,
+    linkstatic = True,
+    local_defines = select({
+        "//bazel:linux_system_media_enabled": ["AOBUS_HAS_SYSTEM_MEDIA=1"],
+        "//conditions:default": [],
+    }),
+    visibility = ["//visibility:public"],
+    # Keep allocator initialization first, including after dependency-list sorting.
+    deps = ["@aobus_native_deps//:mimalloc"] + [
+        ":tui",
+        "//app/i18n",
+        "//app/i18n:completion",
+        "//app/i18n:ordering",
+        "//app/runtime",
+        "//app/uimodel",
+        "//include:app_version_header",
+        "//lib:ao",
+        "//lib/audio",
+        "@aobus_native_deps//:cli11",
+        "@aobus_native_deps//:ftxui",
+    ] + select({
+        "//bazel:linux_system_media_enabled": ["//app/systemmedia:linux"],
+        "//conditions:default": [],
+    }),
+)

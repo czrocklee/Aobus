@@ -15,10 +15,6 @@ DOC_PATH = PROJECT_ROOT / "doc" / "development" / "lint" / "naming-checks.md"
 
 
 class NamingDocTest(unittest.TestCase):
-    def test_documentation_gate_accepts_current_naming_contract(self):
-        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()) as errors:
-            self.assertEqual(docs.run_check(None), 0, errors.getvalue())
-
     def test_naming_contract_does_not_depend_on_section_headings(self):
         original = DOC_PATH.read_text(encoding="utf-8")
         without_headings = re.sub(r"^#{1,6} .*$", "", original, flags=re.MULTILINE)

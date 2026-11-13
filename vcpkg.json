@@ -2,7 +2,8 @@
   "name": "aobus",
   "version-string": "0.1.0",
   "default-features": [
-    "tests"
+    "tests",
+    "frontends"
   ],
   "dependencies": [
     "alac",
@@ -18,7 +19,6 @@
     "boost-pfr",
     "boost-process",
     "boost-unordered",
-    "cli11",
     {
       "name": "date",
       "platform": "osx",
@@ -27,7 +27,6 @@
     "c4core",
     "fdk-aac",
     "fast-float",
-    "ftxui",
     "foonathan-lexy",
     "gsl-lite",
     {
@@ -60,10 +59,35 @@
       ],
       "$reason": "Disabling the default fmt feature makes the port build spdlog with SPDLOG_USE_STD_FORMAT, matching the Linux build."
     },
-    "stb",
     "xxhash"
   ],
+  "overrides": [
+    {
+      "name": "cli11",
+      "version": "2.7.2"
+    },
+    {
+      "name": "catch2",
+      "version": "3.16.1"
+    },
+    {
+      "name": "python3",
+      "version": "3.14.10"
+    },
+    {
+      "name": "mpdecimal",
+      "version": "4.0.1"
+    }
+  ],
   "features": {
+    "frontends": {
+      "description": "Dependencies needed by the CLI and terminal frontends.",
+      "dependencies": [
+        "cli11",
+        "ftxui",
+        "stb"
+      ]
+    },
     "tests": {
       "description": "Dependencies needed to build Aobus unit tests.",
       "dependencies": [

@@ -177,7 +177,7 @@ The source-private [`TrackFieldGridOperationProbe`](../../../../app/linux-gtk/la
 It includes built-in and custom metadata submissions, but not the nested Credits editor or shared Undo controller.
 After observing admission, a transition to empty with the owner still alive and no cancellation witnesses terminal frontend completion.
 An empty queue, a durable commit, or an empty scope after cancellation does not establish that boundary.
-The probe retains nothing and schedules no work; its CMake boundary rejects production consumers outside the field-grid implementation and declaration.
+The probe retains nothing and schedules no work; its build-graph boundary rejects production consumers outside the field-grid implementation and declaration.
 
 ## Test map
 

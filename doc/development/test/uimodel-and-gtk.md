@@ -160,22 +160,37 @@ The native mouse tests do not establish Wayland, touch, or grab-transfer behavio
 
 ### Process isolation and diagnostics
 
-The portal gives every GTK test process, including each shard, a private Xvfb
-and a private session bus without service activation, so tests never touch the
-desktop session or compete for MPRIS names. It marks them with
+Managed `ao check` gives GTK a private Xvfb and a private session bus without
+service activation, so tests never touch the desktop session or compete for
+MPRIS names. Direct explicit GTK targets need caller-prepared owned services;
+separately sharded processes need separate displays and buses. It marks them with
 `AOBUS_OWNED_GTK_DISPLAY` and `AOBUS_OWNED_GTK_BUS` and keeps both daemons alive
 until the process exits.
 
 - Native-input tests skip unless the display marker is present. Never set it for
   an inherited desktop display.
 - The GTK test main disables any session bus that does not match the bus marker,
-  including for IDE and CTest launches. Tests that use the bus call
+  including for IDE and direct test-binary launches. Tests that use the bus call
   `requireOwnedGtkSessionBus()` first and skip otherwise. They must not tear down
   that bus while GTK's process-global clients still hold its connection.
-- GLib warnings and criticals are fatal. Fix the diagnostic's owner rather than
-  filtering logs; a fatal teardown diagnostic fails the run even after Catch2
-  reports success.
+- GLib warnings and criticals are fatal, except for the temporary dependency
+  exception below. A fatal teardown diagnostic fails the run even after Catch2
+  reports success; do not add general warning filters.
 - Tests that construct application windows call `ensureRegisteredGtkApplication()`.
+
+The test process temporarily allows GTK 4.24.0's duplicate frame-submission
+warning, matched by exact structured log level, Gdk domain and message in
+[`GtkTestMain.cpp`](../../../test/linux-gtk/GtkTestMain.cpp). It requires the
+portal-owned local X11 display and matching owned bus with the Cairo renderer;
+other versions and contexts retain fatal behavior. The writer prints both an
+explicit exception notice and the original warning without clearing the fatal
+mask. All other warnings, criticals, errors and sanitizer reports remain fatal.
+This is a known upstream dependency exception, not a lifecycle fix, a skipped
+case or a custom GTK build: popup and toplevel surfaces share a frame clock and
+can resubmit before after-paint fills the completeness metadata. See
+[the submission-accounting introduction](https://gitlab.gnome.org/GNOME/gtk/-/merge_requests/10035).
+Remove the exception and its dedicated probes once the pinned SDK passes the
+standalone popup/no-popup controls without it, then the GTK and ASan gates.
 
 The GApplication replacement probe and its instance children borrow the
 portal-owned bus after the same admission check. Direct unowned launches are
@@ -187,8 +202,10 @@ invocations isolated even while an earlier owner remains alive on the shared bus
 This protects name isolation, not orphaned-process cleanup; the owner's existing
 stdin EOF/HUP shutdown path remains in place.
 
-Rerun native-input or bus-dependent cases through `./ao test --gtk`; printed shard
-commands deliberately disable both endpoints.
+Rerun native-input or bus-dependent cases through `ao check`, which recreates
+owned endpoints. A focused `bazel test //test:gtk_test --test_filter=...` is
+caller-owned and requires the same private service and headless profile
+prerequisites; never reuse retired addresses or mark personal endpoints owned.
 
 ## Show and present
 

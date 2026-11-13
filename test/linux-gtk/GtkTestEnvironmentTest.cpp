@@ -6,6 +6,7 @@
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <gtk/gtk.h>
 
 #include <chrono>
 #include <string>
@@ -50,5 +51,75 @@ namespace ao::gtk::test
     REQUIRE_FALSE(result.timedOut);
     CHECK(result.hasFatalTermination());
     CHECK(result.standardError.contains("GTK direct-entry warning probe"));
+  }
+
+  TEST_CASE("GtkTestEnvironment - exact frame-submission warning survives only on runtime GTK 4.24.0")
+  {
+    auto const executable = ao::test::currentProbeExecutablePath();
+    REQUIRE_FALSE(executable.empty());
+    auto const runtimeGtk4240 =
+      ::gtk_get_major_version() == 4 && ::gtk_get_minor_version() == 24 && ::gtk_get_micro_version() == 0;
+
+    for (auto const* const scenario : {"frame-warning", "frame-warning-sized"})
+    {
+      INFO(scenario);
+      auto const result = ao::test::runProbeProcess(executable, scenario, std::chrono::seconds{10});
+      INFO(result.standardOutput);
+      INFO(result.standardError);
+
+      // Other linked GTK versions must still abort this warning. Do not skip the retirement guard.
+      if (runtimeGtk4240)
+      {
+        REQUIRE(result.hasSuccessfulExit());
+        CHECK(result.standardOutput == std::string{scenario} + ": survived=yes\n");
+        CHECK(result.standardError.contains("gdk_frame_timings_submitted() called on submitted frame."));
+        CHECK(result.standardError.contains("temporary GTK 4.24.0 X11/Cairo frame-submission exception"));
+      }
+      else
+      {
+        REQUIRE(result.started);
+        REQUIRE_FALSE(result.timedOut);
+        CHECK(result.hasFatalTermination());
+        CHECK(result.signaled);
+        CHECK(result.standardError.contains("GTK frame-warning probe: emitting"));
+        CHECK(result.standardError.contains("gdk_frame_timings_submitted() called on submitted frame."));
+        CHECK_FALSE(result.standardOutput.contains("survived"));
+        CHECK_FALSE(result.standardError.contains("temporary GTK 4.24.0 X11/Cairo frame-submission exception"));
+      }
+    }
+  }
+
+  TEST_CASE("GtkTestEnvironment - nonmatching frame-warning probes remain fatal")
+  {
+    auto const executable = ao::test::currentProbeExecutablePath();
+    REQUIRE_FALSE(executable.empty());
+
+    for (auto const* const scenario : {"frame-warning-other-message",
+                                       "frame-warning-other-domain",
+                                       "frame-warning-critical",
+                                       "frame-warning-error",
+                                       "frame-warning-explicit-fatal",
+                                       "frame-warning-trailing-byte",
+                                       "frame-warning-legacy",
+                                       "frame-warning-unowned-display",
+                                       "frame-warning-unowned-bus",
+                                       "frame-warning-no-display",
+                                       "frame-warning-wayland",
+                                       "frame-warning-renderer",
+                                       "frame-warning-duplicate-domain",
+                                       "frame-warning-missing-domain"})
+    {
+      INFO(scenario);
+      auto const result = ao::test::runProbeProcess(executable, scenario, std::chrono::seconds{10});
+      INFO(result.standardOutput);
+      INFO(result.standardError);
+      REQUIRE(result.started);
+      REQUIRE_FALSE(result.timedOut);
+      CHECK(result.hasFatalTermination());
+      CHECK(result.signaled);
+      CHECK(result.standardError.contains("GTK frame-warning probe: emitting"));
+      CHECK_FALSE(result.standardOutput.contains("survived"));
+      CHECK_FALSE(result.standardError.contains("temporary GTK 4.24.0 X11/Cairo frame-submission exception"));
+    }
   }
 } // namespace ao::gtk::test

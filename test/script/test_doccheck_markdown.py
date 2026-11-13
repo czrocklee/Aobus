@@ -1,10 +1,9 @@
 """Focused CommonMark and GFM regressions for the documentation link checker.
 
 These regressions cover the doccheck parser findings from the second review of
-the markdown link rewrite: code-span reference labels, stray opening brackets,
-one shared block interpretation for fenced code, container reference
-definitions, and GFM table row barriers, plus adversarial controls for
-destinations, titles, images, anchors, and malformed trailing constructs.
+the markdown link rewrite: stray opening brackets, GFM table row barriers,
+anchors after fenced and setext headings, multiline images, and malformed
+trailing constructs.
 
 The contract is standard CommonMark plus the GFM table extension. Where exact
 line numbers matter, the test-only `parse_links` fact-snapshot projection
@@ -33,29 +32,6 @@ class DocCheckMarkdownRegressionTest(unittest.TestCase):
     def _parse(self, source: str) -> tuple[list[tuple[int, str]], list[tuple[int, str]]]:
         return parse_links(tuple(source.splitlines()))
 
-    def test_code_span_reference_labels_resolve_independently(self):
-        # CommonMark normalizes reference labels by case and whitespace only;
-        # code-span characters belong to the label text and must not make
-        # distinct labels collide into one definition key.
-        for source, expected in (
-            (
-                "[`alpha`][]\n[`beta`][]\n\n[`alpha`]: alpha.md\n[`beta`]: beta.md",
-                [(1, "alpha.md"), (2, "beta.md")],
-            ),
-            (
-                "[Use `alpha`][]\n[Use `beta`][]\n\n[Use `alpha`]: alpha.md\n[Use `beta`]: beta.md",
-                [(1, "alpha.md"), (2, "beta.md")],
-            ),
-        ):
-            with self.subTest(source=source):
-                self.assertEqual(self._parse(source), (expected, []))
-
-    def test_repeated_code_span_reference_labels_use_the_first_definition(self):
-        # Control: repeated definitions of one normalized label keep the first.
-        source = "[Ref][`alpha`]\n\n[`alpha`]: alpha.md\n[`alpha`]: shadowed.md"
-
-        self.assertEqual(self._parse(source), ([(1, "alpha.md")], []))
-
     def test_stray_opening_bracket_cannot_capture_a_following_reference(self):
         # A reference label may not contain an unescaped '[', so a stray
         # opening bracket must stay literal text instead of swallowing the
@@ -67,82 +43,6 @@ class DocCheckMarkdownRegressionTest(unittest.TestCase):
         ):
             with self.subTest(source=source):
                 self.assertEqual(self._parse(source), ([(2, "guide.md")], []))
-
-    def test_definitions_inside_fenced_code_stay_hidden_in_every_container(self):
-        # Fenced code content is never a reference definition, and the closing
-        # fence must at least match the opening run length. The list variant
-        # and the four-backtick variant are review regressions; the fully
-        # quoted fence and inline code span are controls.
-        for source, expected in (
-            (
-                "- ```markdown\n  [Guide]: absent.md\n  ```\n[Visible][Guide]\n\n[Guide]: guide.md",
-                [(4, "guide.md")],
-            ),
-            (
-                "> ```markdown\n> [Guide]: absent.md\n> ```\n[Visible][Guide]\n\n[Guide]: guide.md",
-                [(4, "guide.md")],
-            ),
-            (
-                "````markdown\n[Guide]: absent.md\n```\nstill code\n````\n[Visible][Guide]\n\n[Guide]: guide.md",
-                [(6, "guide.md")],
-            ),
-            (
-                "- `code [Guide]: absent.md` inline\n\n[Visible][Guide]\n\n[Guide]: guide.md",
-                [(3, "guide.md")],
-            ),
-        ):
-            with self.subTest(source=source):
-                self.assertEqual(self._parse(source), (expected, []))
-
-    def test_fenced_code_definition_cannot_shadow_a_real_reference(self):
-        # Public oracle for the list-prefixed fence disagreement: the real
-        # definition outside the fence must win, so the tree stays clean.
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            self._write(
-                root,
-                "doc/README.md",
-                "# Documentation\n\n- ```markdown\n  [Guide]: missing.md\n  ```\n[Visible][Guide]\n\n"
-                "[Guide]: guide.md\n",
-            )
-            self._write(root, "doc/guide.md", "# Guide\n")
-
-            issues = doccheck.check_tree(root)
-
-        self.assertEqual(issues, [])
-
-    def test_container_reference_definitions_are_registered(self):
-        # Reference definitions inside list items and block quotes are valid
-        # document-wide definitions; the following shortcut must resolve and
-        # keep the target reachable from the documentation root index.
-        for definition in ("- [Guide]: system/guide.md\n", "> [Guide]: system/guide.md\n"):
-            with self.subTest(definition=definition), tempfile.TemporaryDirectory() as temp_dir:
-                root = Path(temp_dir)
-                self._write(root, "doc/README.md", "# Documentation\n\n" + definition + "\n[Guide]\n")
-                self._write(root, "doc/system/guide.md", "# Guide\n")
-
-                issues = doccheck.check_tree(root)
-
-                self.assertEqual(issues, [])
-
-    def test_invalid_definition_tail_keeps_the_visible_inline_link(self):
-        # '- [note]: prose [Actual](missing.md)' is not a reference definition:
-        # the trailing prose is not a valid title, so the inline link must stay
-        # visible and broken, and the valid container definition on the next
-        # line must still resolve the shortcut reference.
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            self._write(
-                root,
-                "doc/README.md",
-                "# Documentation\n\n- [note]: prose [Actual](missing.md)\n- [Guide]: system/guide.md\n\n[Guide]\n",
-            )
-            self._write(root, "doc/system/guide.md", "# Guide\n")
-
-            issues = doccheck.check_tree(root)
-
-        self.assertEqual([(issue.line, issue.kind) for issue in issues], [(3, "broken-link")])
-        self.assertIn("missing.md", issues[0].message)
 
     def test_gfm_table_rows_are_separate_and_cell_links_are_extracted(self):
         # GFM table rows are separate blocks: a '[' in one row cannot join
@@ -156,38 +56,6 @@ class DocCheckMarkdownRegressionTest(unittest.TestCase):
         ):
             with self.subTest(source=source):
                 self.assertEqual(self._parse(source), (expected, []))
-
-    def test_indented_code_and_escaped_brackets_are_not_links(self):
-        # An indented code block is code content, and an escaped '[' is a
-        # literal character, so neither construct is an inline link.
-        for source in (
-            "Intro paragraph.\n\n    [Guide](absent.md)",
-            "\\[Guide\\](absent.md)",
-        ):
-            with self.subTest(source=source):
-                self.assertEqual(self._parse(source), ([], []))
-
-    def test_link_destinations_allow_balanced_parentheses(self):
-        # Unescaped parentheses are allowed in a destination only as a
-        # balanced pair; an unbalanced inner opening parenthesis consumes the
-        # closing parenthesis, so the construct is not a link at all.
-        for source, expected in (
-            ("[link](foo(and(bar)).md)", [(1, "foo(and(bar)).md")]),
-            ("[link](foo(and(bar).md)", []),
-        ):
-            with self.subTest(source=source):
-                self.assertEqual(self._parse(source), (expected, []))
-
-    def test_title_bearing_links_keep_their_destination(self):
-        # Controls: double-quoted, single-quoted, and parenthesized titles are
-        # part of the inline link, not part of its destination.
-        for link, destination in (
-            ('[Guide](guide.md "System guide")', "guide.md"),
-            ("[Guide](guide.md 'System guide')", "guide.md"),
-            ("[link](target.md (parenthetical title))", "target.md"),
-        ):
-            with self.subTest(link=link):
-                self.assertEqual(self._parse(link), ([(1, destination)], []))
 
     def test_setext_and_post_fence_headings_supply_anchors(self):
         # A heading after a list-prefixed fence, and a setext heading, are

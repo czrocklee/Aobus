@@ -1,0 +1,38 @@
+package(default_visibility = ["//visibility:private"])
+
+# The GResource bundle XML in app/linux-gtk stays the authoritative inventory;
+# these filegroups overapproximate the brand and no-cover artwork it references
+# so the host resource compiler can read every declared input from the execroot.
+filegroup(
+    name = "gresource_files",
+    srcs = glob([
+        "brand/*.svg",
+        "brand/*.txt",
+        "ui/no-cover/*.svg",
+    ]),
+    visibility = ["//app/linux-gtk:__pkg__"],
+)
+
+# Native WinUI packages these authored assets under its existing SDK resource
+# aliases; layout YAML remains owned by the frontend package.
+filegroup(
+    name = "winui_assets",
+    srcs = [
+        "brand/LICENSE.txt",
+        "brand/SoulMark.svg",
+        "ui/no-cover/equalizer.svg",
+        "ui/no-cover/note.svg",
+        "ui/no-cover/vinyl.svg",
+    ],
+    visibility = ["//app/windows-winui:__pkg__"],
+)
+
+# The AppKit bundle consumes exactly these two declared brand files; no other
+# asset rides along into the macOS product graph.
+exports_files(
+    [
+        "brand/Aobus.icns",
+        "brand/LICENSE.txt",
+    ],
+    visibility = ["//app/macos-appkit:__pkg__"],
+)

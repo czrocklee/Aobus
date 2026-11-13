@@ -26,6 +26,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
+#include <filesystem>
 #include <functional>
 #include <future>
 #include <memory>
@@ -1235,5 +1236,31 @@ namespace ao::systemmedia::test
     CHECK_FALSE(rescueResumeFailed.load());
     CHECK(retirementElapsed >= std::chrono::milliseconds{200});
     CHECK(retirementElapsed < std::chrono::seconds{2});
+  }
+
+  TEST_CASE("PrivateBus - force-killed daemon cleanup removes the owned socket directory")
+  {
+    auto socketPath = std::filesystem::path{};
+    {
+      auto bus = PrivateBus{};
+      // The daemon publishes its concrete bound socket as a unix:path transport,
+      // not the tmpdir form the configuration declares.
+      auto const& address = bus.address();
+      auto const prefix = std::string_view{"unix:path="};
+      REQUIRE(address.starts_with(prefix));
+      auto const pathText = std::string_view{address}.substr(prefix.size());
+      auto const transportEnd = pathText.find(',');
+      socketPath = transportEnd == std::string_view::npos ? std::filesystem::path{pathText}
+                                                          : std::filesystem::path{pathText.substr(0, transportEnd)};
+      REQUIRE(std::filesystem::exists(socketPath));
+      // The socket lives in the fixture-owned directory, never the shared /tmp root.
+      REQUIRE(socketPath.parent_path() != std::filesystem::path{"/tmp"});
+      bus.stall();
+    }
+
+    // Cleanup resumes, force-exits, and reaps the stalled child, which cannot
+    // unlink its socket; removing the owned directory is what retires it.
+    CHECK_FALSE(std::filesystem::exists(socketPath));
+    CHECK_FALSE(std::filesystem::exists(socketPath.parent_path()));
   }
 } // namespace ao::systemmedia::test

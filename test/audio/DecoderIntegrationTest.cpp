@@ -7,6 +7,7 @@
 #include "lib/audio/Mp3DecoderSession.h"
 #include "lib/audio/OpusDecoderSession.h"
 #include "test/TestFixtureSupport.h"
+#include "test/audio/AudioFixtureDirectory.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
 #include <ao/audio/DecodedStreamInfo.h>
@@ -43,7 +44,7 @@ namespace ao::audio::test
      */
     std::filesystem::path requireAudioFixture(char const* fileName)
     {
-      auto const path = std::filesystem::path{AUDIO_TEST_DATA_DIR} / fileName;
+      auto const path = audioFixtureDirectory() / fileName;
 
       INFO("Required audio fixture: " << path);
       REQUIRE(std::filesystem::is_regular_file(path));

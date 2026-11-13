@@ -376,7 +376,8 @@ namespace ao::audio::backend::test
                                            {
                                              firstCalls.fetch_add(1U, std::memory_order_relaxed);
 
-                                             if (observeAfterReset.load(std::memory_order_acquire))
+                                             // Reset queues another refresh; notify only the first delivery.
+                                             if (observeAfterReset.exchange(false, std::memory_order_acq_rel))
                                              {
                                                firstDeliveredAfterReset.release();
                                              }
@@ -413,7 +414,8 @@ namespace ao::audio::backend::test
     auto callbackEntered = std::binary_semaphore{0};
     auto releaseCallback = std::binary_semaphore{0};
     auto shutdownStarted = std::binary_semaphore{0};
-    auto shutdownWait = std::binary_semaphore{0};
+    // Allow the external wait plus monitor and worker teardown notifications.
+    auto shutdownWait = std::counting_semaphore<3>{0};
     auto firstReturned = std::binary_semaphore{0};
     auto secondReturned = std::binary_semaphore{0};
     hooksPtr->onShutdownStarted = [&] { shutdownStarted.release(); };
@@ -462,7 +464,8 @@ namespace ao::audio::backend::test
     auto hooksPtr = makeMonitorHooks();
     auto callbackShutdownReturned = std::binary_semaphore{0};
     auto releaseCallback = std::binary_semaphore{0};
-    auto shutdownWait = std::binary_semaphore{0};
+    // Allow the external wait plus monitor and worker teardown notifications.
+    auto shutdownWait = std::counting_semaphore<3>{0};
     auto externalReturned = std::binary_semaphore{0};
     auto monitorExited = std::binary_semaphore{0};
     hooksPtr->onShutdownWait = [&] { shutdownWait.release(); };

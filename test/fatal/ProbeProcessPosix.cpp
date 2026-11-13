@@ -10,28 +10,40 @@
 
 #include <signal.h> // NOLINT(modernize-deprecated-headers) -- POSIX process control owns kill and SIGKILL.
 #include <spawn.h>
+#include <stdlib.h> // NOLINT(modernize-deprecated-headers) -- POSIX unsetenv requires this header.
+#include <sys/poll.h>
 #ifdef __linux__
 #include <linux/prctl.h>
 #include <sys/prctl.h>
 #endif
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include <algorithm>
 #include <array>
 #include <cerrno>
+#include <charconv>
 #include <chrono>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <limits>
 #include <string>
-#include <sys/wait.h>
+#include <string_view>
 #include <system_error>
 #include <thread>
+#include <vector>
 
 namespace ao::test
 {
   namespace
   {
+    // The child writes one byte to this inherited descriptor once its own code
+    // runs; see runProbeProcess() for why launch time is not scenario time.
+    constexpr auto kProbeStartDescriptorVariable = "AOBUS_PROBE_START_FD";
+    constexpr auto kProbeStartupTimeout = std::chrono::seconds{120};
+
     // Darwin only declares `environ` for the main executable, so a library
     // translation unit has to go through _NSGetEnviron() instead.
     char** currentEnvironment() noexcept
@@ -56,8 +68,10 @@ namespace ao::test
     class [[nodiscard]] PipeFileDescriptorCleanup final
     {
     public:
-      PipeFileDescriptorCleanup(std::array<int, 2>& standardOutputPipe, std::array<int, 2>& standardErrorPipe) noexcept
-        : _standardOutputPipe{standardOutputPipe}, _standardErrorPipe{standardErrorPipe}
+      PipeFileDescriptorCleanup(std::array<int, 2>& standardOutputPipe,
+                                std::array<int, 2>& standardErrorPipe,
+                                std::array<int, 2>& startPipe) noexcept
+        : _standardOutputPipe{standardOutputPipe}, _standardErrorPipe{standardErrorPipe}, _startPipe{startPipe}
       {
       }
 
@@ -67,6 +81,8 @@ namespace ao::test
         closeFileDescriptor(_standardOutputPipe[1]);
         closeFileDescriptor(_standardErrorPipe[0]);
         closeFileDescriptor(_standardErrorPipe[1]);
+        closeFileDescriptor(_startPipe[0]);
+        closeFileDescriptor(_startPipe[1]);
       }
 
       PipeFileDescriptorCleanup(PipeFileDescriptorCleanup const&) = delete;
@@ -77,7 +93,53 @@ namespace ao::test
     private:
       std::array<int, 2>& _standardOutputPipe;
       std::array<int, 2>& _standardErrorPipe;
+      std::array<int, 2>& _startPipe;
     };
+
+    // The parent environment plus the start descriptor, replacing an inherited one.
+    std::vector<std::string> probeChildEnvironment(std::int32_t startDescriptor)
+    {
+      auto const prefix = std::string{kProbeStartDescriptorVariable} + "=";
+      auto entries = std::vector<std::string>{};
+
+      for (auto* const* entry = currentEnvironment(); entry != nullptr && *entry != nullptr; ++entry)
+      {
+        if (!std::string_view{*entry}.starts_with(prefix))
+        {
+          entries.emplace_back(*entry);
+        }
+      }
+
+      entries.push_back(prefix + std::to_string(startDescriptor));
+      return entries;
+    }
+
+    // False only when the startup limit passes before the child starts. Its
+    // start byte, its exit (the write end closes) or an unobservable pipe all
+    // end the wait; the scenario deadline still bounds the child afterwards.
+    bool tryWaitForChildStart(std::int32_t descriptor, std::chrono::steady_clock::time_point deadline) noexcept
+    {
+      for (;;)
+      {
+        auto const remaining =
+          std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now()).count();
+
+        if (remaining <= 0)
+        {
+          return false;
+        }
+
+        auto startState = ::pollfd{.fd = descriptor, .events = POLLIN, .revents = 0};
+        auto const waitMilliseconds =
+          static_cast<std::int32_t>(std::min<decltype(remaining)>(remaining, std::numeric_limits<std::int32_t>::max()));
+        auto const readyCount = ::poll(&startState, 1, waitMilliseconds);
+
+        if (readyCount > 0 || (readyCount < 0 && errno != EINTR))
+        {
+          return true;
+        }
+      }
+    }
 
     void captureOutput(int descriptor, std::string& output)
     {
@@ -204,7 +266,8 @@ namespace ao::test
     auto result = ProbeProcessResult{};
     auto standardOutputPipe = std::array<int, 2>{-1, -1};
     auto standardErrorPipe = std::array<int, 2>{-1, -1};
-    auto pipeCleanup = PipeFileDescriptorCleanup{standardOutputPipe, standardErrorPipe};
+    auto startPipe = std::array<int, 2>{-1, -1};
+    auto pipeCleanup = PipeFileDescriptorCleanup{standardOutputPipe, standardErrorPipe, startPipe};
 
     if (::pipe(standardOutputPipe.data()) != 0)
     {
@@ -218,6 +281,12 @@ namespace ao::test
       closeFileDescriptor(standardOutputPipe[0]);
       closeFileDescriptor(standardOutputPipe[1]);
       result.launchError = std::strerror(pipeError);
+      return result;
+    }
+
+    if (::pipe(startPipe.data()) != 0)
+    {
+      result.launchError = std::strerror(errno);
       return result;
     }
 
@@ -259,6 +328,11 @@ namespace ao::test
       actionStatus = ::posix_spawn_file_actions_addclose(&actions, standardErrorPipe[1]);
     }
 
+    if (actionStatus == 0)
+    {
+      actionStatus = ::posix_spawn_file_actions_addclose(&actions, startPipe[0]);
+    }
+
     if (actionStatus != 0)
     {
       if (initializationStatus == 0)
@@ -278,12 +352,23 @@ namespace ao::test
     auto probeOption = std::string{"--aobus-probe-child"};
     auto scenario = std::string{scenarioName};
     auto arguments = std::array<char*, 4>{executable.data(), probeOption.data(), scenario.data(), nullptr};
+    auto environmentEntries = probeChildEnvironment(startPipe[1]);
+    auto environment = std::vector<char*>{};
+    environment.reserve(environmentEntries.size() + 1);
+
+    for (auto& entry : environmentEntries)
+    {
+      environment.push_back(entry.data());
+    }
+
+    environment.push_back(nullptr);
     pid_t processId = 0;
     auto const spawnStatus =
-      ::posix_spawn(&processId, executable.c_str(), &actions, nullptr, arguments.data(), currentEnvironment());
+      ::posix_spawn(&processId, executable.c_str(), &actions, nullptr, arguments.data(), environment.data());
     [[maybe_unused]] auto const destroyResult = ::posix_spawn_file_actions_destroy(&actions);
     closeFileDescriptor(standardOutputPipe[1]);
     closeFileDescriptor(standardErrorPipe[1]);
+    closeFileDescriptor(startPipe[1]);
 
     if (spawnStatus != 0)
     {
@@ -305,7 +390,10 @@ namespace ao::test
                                           { captureOutput(descriptor, result.standardOutput); }};
       standardErrorReader =
         std::jthread{[descriptor = standardErrorPipe[0], &result] { captureOutput(descriptor, result.standardError); }};
-      auto const deadline = std::chrono::steady_clock::now() + timeout;
+      auto const started = tryWaitForChildStart(startPipe[0], std::chrono::steady_clock::now() + kProbeStartupTimeout);
+      closeFileDescriptor(startPipe[0]);
+      // A child that never started is past its deadline at once.
+      auto const deadline = std::chrono::steady_clock::now() + (started ? timeout : std::chrono::milliseconds{0});
 
       for (;;)
       {
@@ -363,6 +451,37 @@ namespace ao::test
     }
 
     return result;
+  }
+
+  void reportProbeChildStarted() noexcept
+  {
+    auto const* const value = std::getenv(kProbeStartDescriptorVariable);
+
+    if (value == nullptr)
+    {
+      return;
+    }
+
+    auto const text = std::string_view{value};
+    std::int32_t descriptor = -1;
+    auto const [end, error] = std::from_chars(text.data(), text.data() + text.size(), descriptor);
+    auto const parsed = error == std::errc{} && end == text.data() + text.size() && descriptor >= 0;
+    // Grandchildren must not inherit a descriptor number that no longer refers to this pipe.
+    // NOLINTNEXTLINE(misc-include-cleaner) -- Darwin's stdlib.h forwards unsetenv through private _stdlib.h.
+    [[maybe_unused]] auto const unsetResult = ::unsetenv(kProbeStartDescriptorVariable);
+
+    if (!parsed)
+    {
+      return;
+    }
+
+    char const startByte = 1;
+
+    while (::write(descriptor, &startByte, 1) < 0 && errno == EINTR)
+    {
+    }
+
+    closeFileDescriptor(descriptor);
   }
 
   void suppressProbeChildCrashDump() noexcept

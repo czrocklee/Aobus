@@ -36,9 +36,8 @@
 
 #ifdef __APPLE__
 #include <strings.h> // NOLINT(misc-include-cleaner) -- public Darwin header for strcasecmp.
-#include <unistd.h>
-
 #include <sys/unistd.h>
+#include <unistd.h>
 #endif
 
 namespace ao::tui

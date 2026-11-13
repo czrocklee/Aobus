@@ -1,0 +1,19 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("//bazel:windows_utf8_manifest.bzl", "WINDOWS_UTF8_LINKER_INPUTS", "WINDOWS_UTF8_LINKOPTS")
+
+exports_files(["build_catalog.py"])
+
+cc_binary(
+    name = "ao_catalog_compiler",
+    srcs = ["CatalogCompiler.cpp"],
+    additional_linker_inputs = WINDOWS_UTF8_LINKER_INPUTS,
+    linkopts = WINDOWS_UTF8_LINKOPTS,
+    linkstatic = True,
+    visibility = ["//app/i18n:__pkg__"],
+    deps = [
+        "//app/i18n:catalog_compiler_pattern",
+        "//app/include:catalog_headers",
+        "//include:utility_headers",
+        "//lib/utility:path",
+    ],
+)

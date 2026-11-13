@@ -1,160 +1,159 @@
-"""Portal contracts for independently selectable native AppKit component scenarios."""
+"""Disposable fixtures and native dispatch for opt-in AppKit smoke scenarios."""
 
-import argparse
 import contextlib
 import io
 import os
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
-from ao.__main__ import make_parser, parse_arguments
-from ao.command import build as build_command
-from ao.command import test as test_command
-from ao.core import builddir
-
-_COMPONENT_SCENARIOS = ("credits-controls", "credits-previews", "quality-presentation")
+from ao.core import appkitprocess
 
 
-def _parse(arguments: list[str]) -> argparse.Namespace:
-    return parse_arguments(make_parser(), arguments)
-
-
-class AppKitComponentScenarioTest(unittest.TestCase):
-    def test_macos_parser_accepts_each_exact_component_scenario_name(self):
-        with mock.patch.object(builddir, "platform_profile", return_value=builddir.MACOS_PROFILE):
-            for scenario in _COMPONENT_SCENARIOS:
-                with self.subTest(scenario=scenario):
-                    args = _parse(["test", "--appkit", "--scenario", scenario])
-                    self.assertEqual(args.suite, "appkit")
-                    self.assertEqual(args.scenario, scenario)
-
-    def test_macos_parser_rejects_unknown_or_inexact_component_scenario_names(self):
-        with mock.patch.object(builddir, "platform_profile", return_value=builddir.MACOS_PROFILE):
-            for scenario in (
-                "unknown",
-                "credits",
-                "credits-control",
-                "credits-preview",
-                "CREDITS-CONTROLS",
-                "quality",
-                "quality-presentations",
-                "QUALITY-PRESENTATION",
-            ):
-                with self.subTest(scenario=scenario):
-                    with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
-                        _parse(["test", "--appkit", "--scenario", scenario])
-                    self.assertEqual(error.exception.code, 2)
-
-    def test_non_macos_profiles_do_not_offer_appkit_or_component_scenarios(self):
-        for profile in (builddir.LINUX_PROFILE, builddir.WINDOWS_PROFILE):
-            with self.subTest(profile=profile.name):
-                with mock.patch.object(builddir, "platform_profile", return_value=profile):
-                    self.assertNotIn("appkit", test_command.selectable_suites())
-                    for scenario in _COMPONENT_SCENARIOS:
-                        for selection in (["--appkit"], ["--suite", "appkit"]):
-                            with self.subTest(scenario=scenario, selection=selection):
-                                with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
-                                    _parse(["test", *selection, "--scenario", scenario])
-                                self.assertEqual(error.exception.code, 2)
-
-    def test_component_dispatch_preserves_selected_tree_fixtures_and_asan_option(self):
+class AppKitScenarioTest(unittest.TestCase):
+    def test_component_dispatch_preserves_fixtures_inherited_runtime_and_exit_status(self):
         with tempfile.TemporaryDirectory() as directory:
-            build_dir = Path(directory)
-            library = build_dir / "music"
-            state_root = build_dir / "state"
-            with (
-                mock.patch.object(builddir, "platform_profile", return_value=builddir.MACOS_PROFILE),
-                mock.patch.object(build_command, "validate_build_tree", return_value="clang"),
-                mock.patch.object(
-                    test_command.compiler_cache, "read_cmake_cache", return_value={"AOBUS_BUILD_TESTS": "ON"}
-                ),
-                mock.patch.object(test_command, "run") as build_process,
-            ):
-                for scenario in _COMPONENT_SCENARIOS:
-                    for asan in (False, True):
-                        with self.subTest(scenario=scenario, asan=asan):
-                            arguments = [
-                                "test",
-                                "--appkit",
-                                "--scenario",
-                                scenario,
-                                "--library",
-                                str(library),
-                                "--state-root",
-                                str(state_root),
-                                "--no-build",
-                                "--path",
-                                str(build_dir),
-                            ]
-                            if asan:
-                                arguments.append("--asan")
-                            args = _parse(arguments)
-                            with mock.patch.object(test_command, "run_appkit_smoke", return_value=7) as run_smoke:
-                                self.assertEqual(test_command.run_command(args), 7)
-                            run_smoke.assert_called_once_with(
-                                build_dir,
-                                scenario=scenario,
-                                library=library.resolve(),
-                                state_root=state_root.resolve(),
-                                asan=asan,
-                                tsan=False,
-                            )
-                build_process.assert_not_called()
-
-    def test_components_use_existing_parent_runner_with_120_second_timeout_and_no_desktop_markers(self):
-        with tempfile.TemporaryDirectory() as directory:
-            build_dir = Path(directory) / "build"
-            binary = build_dir / "test" / "ao_appkit_smoke.app" / "Contents" / "MacOS" / "ao_appkit_smoke"
-            binary.parent.mkdir(parents=True)
-            binary.touch()
-            library = Path(directory) / "music"
-            state_root = Path(directory) / "state"
+            root = Path(directory)
+            binary = root / "smoke.app/Contents/MacOS/smoke"
+            library, state_root = root / "music", root / "state"
             run_id = "0123456789abcdef0123456789abcdef"
-            inherited = {"INHERITED": "yes", test_command.APPKIT_RUN_ID_ENV: "old"}
-            environment = {test_command.APPKIT_RUN_ID_ENV: run_id}
+            inherited = {"UBSAN_OPTIONS": "halt_on_error=1", appkitprocess.RUN_ID_ENV: "old"}
             with (
-                mock.patch.object(builddir, "platform_profile", return_value=builddir.MACOS_PROFILE),
                 mock.patch.dict(os.environ, inherited, clear=True),
-                mock.patch.object(test_command.uuid, "uuid4", return_value=mock.Mock(hex=run_id)),
-                mock.patch.object(test_command.appkitprocess, "run_desktop") as desktop,
-                mock.patch.object(test_command, "_require_appkit_marker") as marker,
+                mock.patch.object(appkitprocess.uuid, "uuid4", return_value=mock.Mock(hex=run_id)),
+                mock.patch.object(appkitprocess, "run_desktop") as desktop,
+                mock.patch.object(appkitprocess, "_require_marker") as marker,
             ):
-                for scenario in _COMPONENT_SCENARIOS:
-                    for status in (0, 7):
-                        with self.subTest(scenario=scenario, status=status):
-                            parent = mock.Mock()
-                            parent.wait.return_value = status
-                            command = [
-                                str(binary),
-                                "--scenario",
-                                scenario,
-                                "--library",
-                                str(library.resolve()),
-                                "--state-root",
-                                str(state_root.resolve()),
-                            ]
-                            with (
-                                mock.patch.object(test_command.subprocess, "Popen", return_value=parent) as popen,
-                                mock.patch.object(
-                                    test_command, "_run_appkit_parent", wraps=test_command._run_appkit_parent
-                                ) as run_parent,
-                                contextlib.redirect_stdout(io.StringIO()),
-                            ):
-                                self.assertEqual(
-                                    test_command.run_appkit_smoke(
-                                        build_dir, scenario=scenario, library=library, state_root=state_root, asan=False
-                                    ),
-                                    status,
-                                )
-                            run_parent.assert_called_once_with(command, environment)
-                            popen.assert_called_once_with(
-                                command, cwd=test_command.PROJECT_ROOT, env=inherited | environment
+                for status in (0, 7):
+                    with self.subTest(status=status):
+                        parent = mock.Mock()
+                        parent.wait.return_value = status
+                        command = [
+                            str(binary.resolve()),
+                            "--scenario",
+                            "credits-controls",
+                            "--library",
+                            str(library.resolve()),
+                            "--state-root",
+                            str(state_root.resolve()),
+                        ]
+                        with mock.patch.object(appkitprocess.subprocess, "Popen", return_value=parent) as popen:
+                            self.assertEqual(
+                                appkitprocess.main(
+                                    [
+                                        str(binary),
+                                        "--scenario",
+                                        "credits-controls",
+                                        "--library",
+                                        str(library),
+                                        "--state-root",
+                                        str(state_root),
+                                    ]
+                                ),
+                                status,
                             )
-                            # Pin the controller deadline, not merely the current constant's value.
-                            parent.wait.assert_called_once_with(timeout=120.0)
-                            parent.terminate.assert_not_called()
-                            parent.kill.assert_not_called()
+                        popen.assert_called_once_with(command, env=inherited | {appkitprocess.RUN_ID_ENV: run_id})
+                        parent.wait.assert_called_once_with(timeout=120.0)
+                        parent.terminate.assert_not_called()
+                        parent.kill.assert_not_called()
                 desktop.assert_not_called()
                 marker.assert_not_called()
+
+    def test_component_interrupt_reaps_parent_without_waiting_for_desktop_markers(self):
+        parent = mock.Mock()
+        parent.wait.side_effect = [KeyboardInterrupt, KeyboardInterrupt, -9]
+        with (
+            mock.patch.object(appkitprocess.subprocess, "Popen", return_value=parent),
+            self.assertRaises(KeyboardInterrupt),
+        ):
+            appkitprocess._run_parent(["configured-smoke", "--scenario", "credits-controls"], {})
+        parent.kill.assert_called_once_with()
+        self.assertEqual(parent.wait.call_args_list, [mock.call(timeout=120.0), mock.call(), mock.call()])
+
+    def test_component_timeout_forces_a_stalled_parent_to_exit(self):
+        parent = mock.Mock()
+        parent.poll.return_value = None
+        parent.wait.side_effect = [subprocess.TimeoutExpired("smoke", 120), subprocess.TimeoutExpired("smoke", 5), -9]
+        with (
+            mock.patch.object(appkitprocess.subprocess, "Popen", return_value=parent),
+            contextlib.redirect_stderr(io.StringIO()),
+        ):
+            self.assertEqual(appkitprocess._run_parent(["configured-smoke"], {}), 1)
+        parent.terminate.assert_called_once_with()
+        parent.kill.assert_called_once_with()
+        self.assertEqual(parent.wait.call_args_list, [mock.call(timeout=120.0), mock.call(timeout=5.0), mock.call()])
+
+    def test_rejects_nonempty_invalid_or_nested_fixtures_before_starting_parent(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            nonempty_state, nonempty_library = root / "nonempty-state", root / "nonempty-library"
+            nonempty_state.mkdir()
+            (nonempty_state / "desktop.plist").touch()
+            nonempty_library.mkdir()
+            (nonempty_library / "user-track.wav").touch()
+            library_file, state_file = root / "library-file", root / "state-file"
+            library_file.touch()
+            state_file.touch()
+            cases = (
+                (nonempty_state, root / "music"),
+                (state_file, root / "music-file-state"),
+                (root / "state-a", nonempty_library),
+                (root / "state-b", library_file),
+                (root / "same", root / "same"),
+                (root / "state", root / "state/music"),
+                (root / "music/state", root / "music"),
+            )
+            with mock.patch.object(appkitprocess.subprocess, "Popen") as popen:
+                for state_root, library in cases:
+                    with self.subTest(state_root=state_root, library=library):
+                        with contextlib.redirect_stderr(io.StringIO()):
+                            self.assertEqual(
+                                appkitprocess.main(
+                                    [str(root / "smoke"), "--library", str(library), "--state-root", str(state_root)]
+                                ),
+                                1,
+                            )
+            popen.assert_not_called()
+
+    def test_desktop_requires_matching_markers_after_successful_process_exits(self):
+        for wrong_marker in ("desktop-pass.txt", "successor-pass.txt", "missing", None):
+            with self.subTest(wrong_marker=wrong_marker), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                state_root = root / "state"
+                run_id = "0123456789abcdef0123456789abcdef"
+
+                def completed_processes(
+                    *args, state_root=state_root, run_id=run_id, wrong_marker=wrong_marker, **kwargs
+                ):
+                    self.assertEqual(kwargs["environment"][appkitprocess.RUN_ID_ENV], run_id)
+                    state_root.mkdir()
+                    for marker in ("desktop-pass.txt", "successor-pass.txt"):
+                        if wrong_marker == "missing" and marker == "successor-pass.txt":
+                            continue
+                        value = "another-invocation\n" if marker == wrong_marker else f"{run_id}\n"
+                        (state_root / marker).write_text(value, encoding="utf-8")
+                    return 0
+
+                with (
+                    mock.patch.object(appkitprocess.uuid, "uuid4", return_value=mock.Mock(hex=run_id)),
+                    mock.patch.object(appkitprocess, "run_desktop", side_effect=completed_processes),
+                    contextlib.redirect_stderr(io.StringIO()),
+                ):
+                    self.assertEqual(
+                        appkitprocess.main(
+                            [
+                                str(root / "smoke"),
+                                "--library",
+                                str(root / "music"),
+                                "--state-root",
+                                str(state_root),
+                            ]
+                        ),
+                        0 if wrong_marker is None else 1,
+                    )
+
+
+if __name__ == "__main__":
+    unittest.main()

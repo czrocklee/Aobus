@@ -1,118 +1,96 @@
-"""The explicit loaded WinUI naming gate never silently joins headless suites."""
+"""The native WinUI naming gate stays explicit and requires a loaded desktop."""
 
-import argparse
-import tempfile
+import re
+import sys
 import unittest
-from contextlib import contextmanager
 from pathlib import Path
-from types import SimpleNamespace
 from unittest import mock
 
-from ao.command import test
-from ao.core import builddir
+from ao.core import winui
+
+WORKFLOW = Path(__file__).parents[2] / ".github/workflows/ci.yml"
 
 
-class WinUiSuiteTest(unittest.TestCase):
-    def setUp(self):
-        self.enterContext(mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE))
-        self.enterContext(mock.patch.object(test.winui, "require_runtime"))
-        self.enterContext(mock.patch.object(test.winui, "require_interactive_session", return_value=1))
+def _windows_step(name: str) -> str:
+    windows = WORKFLOW.read_text(encoding="utf-8").split("  windows:\n", 1)[1]
+    return windows.split(f"      - name: {name}\n", 1)[1].split("      - name:", 1)[0]
 
-    @staticmethod
-    def options(path, **overrides):
-        values = dict(
-            suite="winui",
-            path=str(path),
-            no_build=True,
-            filter="",
-            list=False,
-            repeat=1,
-            clang=False,
-            asan=False,
-            tsan=False,
-        )
-        values.update(overrides)
-        return argparse.Namespace(**values)
 
-    @staticmethod
-    def probe(tree):
-        path = tree / "app/windows-winui/automation-probe/Debug/ao_winui_automation_probe.exe"
-        path.parent.mkdir(parents=True)
-        path.touch()
-        return path
-
-    def test_is_explicit_windows_only_not_an_all_suite(self):
-        self.assertIn("winui", test.selectable_suites())
-        self.assertNotIn("winui", test.suites_for("all"))
-        self.assertFalse(test.requires_build_environment(self.options(Path("unused"))))
-        self.assertTrue(test.requires_build_environment(self.options(Path("unused"), no_build=False)))
-        with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
-            self.assertNotIn("winui", test.selectable_suites())
-            with self.assertRaises(SystemExit):
-                test.suites_for("winui")
-
-    def test_no_build_uses_exact_winui_tree_and_propagates_phase_status(self):
-        with tempfile.TemporaryDirectory() as directory:
-            tree = Path(directory)
-            probe = self.probe(tree)
-            measured = []
-
-            @contextmanager
-            def measure(kind, **fields):
-                record = SimpleNamespace(status=0)
-                measured.append((kind, fields, record))
-                yield record
-
-            with (
-                mock.patch.object(test.phases, "measure", side_effect=measure),
-                mock.patch.object(test, "run", return_value=7) as run,
-                mock.patch.object(test.build, "do_build") as build,
-            ):
-                self.assertEqual(test.run_command(self.options(tree)), 7)
-            build.assert_not_called()
-            run.assert_called_once_with([str(probe)], cwd=probe.parent, log=tree / "build.log", append=True)
-            self.assertEqual(measured[0][:2], ("suite", {"tree": "winui", "count": 1, "suite": "winui"}))
-            self.assertEqual(measured[0][2].status, 7)
-
-    def test_build_uses_portal_winui_validation_target_and_returned_tree(self):
-        self.assertEqual(test.SUITES["winui"].target, test.build.WINUI_CHECK_TARGET)
-        with tempfile.TemporaryDirectory() as directory:
-            tree = Path(directory)
-            self.probe(tree)
-            with (
-                mock.patch.object(test.build, "do_build", return_value=SimpleNamespace(build_dir=tree)) as build,
-                mock.patch.object(test, "run", return_value=0),
-            ):
-                self.assertEqual(test.run_command(self.options(tree, no_build=False)), 0)
-            self.assertEqual(build.call_args.kwargs, {"targets": [test.build.WINUI_CHECK_TARGET]})
-            self.assertEqual(build.call_args.args[0].flavor, "debug")
-            self.assertFalse(build.call_args.args[0].clean)
-
-    def test_missing_probe_and_desktop_admission_fail_closed(self):
-        with tempfile.TemporaryDirectory() as directory:
-            with mock.patch.object(test, "run") as run:
-                with self.assertRaises(SystemExit):
-                    test.run_command(self.options(Path(directory)))
-                with mock.patch.object(
-                    test.winui, "require_interactive_session", side_effect=RuntimeError("session 0")
-                ):
-                    with self.assertRaises(SystemExit):
-                        test.run_command(self.options(Path(directory)))
-            run.assert_not_called()
-
-    def test_rejects_catch2_and_other_build_modes(self):
-        for options in ({"filter": "[winui]"}, {"list": True}, {"repeat": 2}, {"clang": True}, {"asan": True}):
-            with self.subTest(options=options), self.assertRaises(SystemExit):
-                test._run_winui_audit(self.options(Path("unused"), **options))
-
-    def test_ci_requires_the_desktop_gate_without_ignoring_failure(self):
-        workflow = (Path(__file__).parents[2] / ".github/workflows/ci.yml").read_text()
-        windows = workflow.split("  windows:\n", 1)[1]
-        build = windows.index("      - name: Build and test\n")
-        audit = windows.index("      - name: WinUI naming gate\n")
-        hygiene = windows.index("      - name: Run hygiene\n")
-        self.assertLess(build, audit)
-        self.assertLess(audit, hygiene)
-        block = windows[audit:].split("\n      - name:", 1)[0]
-        self.assertIn(r".\ao.bat test --winui --no-build", block)
+class WinUiNamingGateTest(unittest.TestCase):
+    def test_ci_requires_the_native_desktop_gate_without_ignoring_failure(self):
+        windows = WORKFLOW.read_text(encoding="utf-8").split("  windows:\n", 1)[1]
+        positions = [
+            windows.index(f"      - name: {name}\n")
+            for name in (
+                "Set up Windows App Runtime",
+                "Check Bazel completion",
+                "Test direct Bazel entry",
+                "WinUI naming gate",
+                "Stop Bazel remote cache",
+            )
+        ]
+        self.assertEqual(positions, sorted(positions))
+        block = _windows_step("WinUI naming gate")
         self.assertNotIn("continue-on-error", block)
+        self.assertNotIn("\n        if:", block)
+        self.assertIn(r"tools\python\$($contract.python)\python.exe", block)
+        self.assertIn("$python -I -S -B -X utf8 -c", block)
+        self.assertNotIn(r".\ao.bat", block)
+        self.assertIn("$version = (Get-Content .bazelversion -Raw).Trim()", block)
+        self.assertIn(r"tools\bazel\$version\bazel.exe", block)
+        self.assertIn("if (-not (Test-Path $bazel)) { throw", block)
+        self.assertIn('& $bazel "--output_base=$bare\\state\\output" run', block)
+        self.assertIn("//app/windows-winui:ao_winui_automation_probe", block)
+        self.assertIn(r"--build_event_json_file=$bare\winui-naming.bep.json", block)
+        self.assertEqual(block.count("if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }"), 2)
+        self.assertLess(block.index("winui.require_interactive_session()"), block.index("& $bazel"))
+
+    def test_desktop_gate_reuses_the_admitted_direct_native_environment_and_evidence_root(self):
+        direct = _windows_step("Test direct Bazel entry")
+        audit = _windows_step("WinUI naming gate")
+        self.assertNotIn("continue-on-error", direct)
+        self.assertNotIn("\n        if:", direct)
+        self.assertIn("prepare_build_environment()", direct)
+        self.assertIn("selected.update(windows_compiler_selection(os.environ))", direct)
+        self.assertIn("foreach ($property in $selection.PSObject.Properties)", direct)
+        self.assertIn('"$($property.Name)=$($property.Value)" >> $env:GITHUB_ENV', direct)
+        self.assertIn('"AOBUS_BAZEL_VCPKG_PREFIX=$env:AOBUS_BAZEL_VCPKG_PREFIX" >> $env:GITHUB_ENV', direct)
+        self.assertIn('"BAZEL_SH=$env:BAZEL_SH" >> $env:GITHUB_ENV', direct)
+        self.assertIn(r'$env:AOBUS_BAZEL_VCPKG_PREFIX = "D:\aobus-bazel-fastbuild\vcpkg_installed\$triplet"', direct)
+        self.assertIn('vcpkg_triplets(host="windows")', direct)
+        # The inherited native selection must not be replaced with portal or
+        # remote-cache bindings before the desktop launch.
+        for step in (direct, audit):
+            self.assertIn("$bare = 'D:\\aobus-bare'", step)
+        self.assertNotIn("AOBUS_BAZEL_REMOTE_CACHE:", audit)
+        evidence = _windows_step("Preserve direct Bazel evidence")
+        self.assertIn(r"path: D:\aobus-bare\*.bep.json", evidence)
+        self.assertIn("if: ${{ always() }}", evidence)
+
+    def test_ci_desktop_admission_keeps_runtime_and_console_failures_fatal(self):
+        block = _windows_step("WinUI naming gate")
+        match = re.search(r"-c '([^']+)'", block)
+        self.assertIsNotNone(match, "The desktop gate must admit its runtime and console before launch")
+        script = compile(match.group(1), "<CI desktop admission>", "exec")
+        calls = []
+        with (
+            mock.patch.object(sys, "path", list(sys.path)),
+            mock.patch.object(winui, "require_runtime", side_effect=lambda: calls.append("runtime")),
+            mock.patch.object(winui, "require_interactive_session", side_effect=lambda: calls.append("console")),
+        ):
+            exec(script, {})
+        self.assertEqual(calls, ["runtime", "console"])
+        for missing in ("require_runtime", "require_interactive_session"):
+            with (
+                self.subTest(missing=missing),
+                mock.patch.object(sys, "path", list(sys.path)),
+                mock.patch.object(winui, "require_runtime"),
+                mock.patch.object(winui, "require_interactive_session"),
+            ):
+                with mock.patch.object(winui, missing, side_effect=RuntimeError("admission failed")):
+                    with self.assertRaisesRegex(RuntimeError, "admission failed"):
+                        exec(script, {})
+
+
+if __name__ == "__main__":
+    unittest.main()

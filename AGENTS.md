@@ -1,16 +1,25 @@
 # Aobus Agent Guide
 
 Aobus is a C++26 music application with GTK4, TUI, CLI, WinUI, and an incremental
-AppKit frontend over shared Core and application runtime libraries. Work from the repository root through `./ao`; on Windows use
-`ao.bat`. The portal owns CMake, tools, dependencies, and build-tree selection.
-`./ao help` and `./ao <command> --help` describe the available native commands.
+AppKit frontend over shared Core and application runtime libraries. Work from
+the repository root. Use the pinned native `bazel build`, `bazel test`, and
+`bazel run` for ordinary development; `bazel test //:tests` is the default test
+selection. Follow [native Bazel setup](doc/development/bazel.md#direct-bazel-without-the-portal),
+including explicit SDK provisioning and Windows Visual Studio selectors.
+Use `./ao` (`ao.bat` on Windows) for project-specific commands: `check` is the
+complete local and CI validation gate and includes the same check-only
+implementation exposed by scoped `hygiene`. Setup, dependency provisioning,
+compile-contract verification, coverage, performance, lint, analysis, formatting,
+documentation and source audits remain project commands. `./ao help` and
+`./ao <command> --help` describe them; there are no `ao build`, `ao test`,
+`ao run`, or `ao bazel` commands. Native Bazel success does not replace `ao check`.
 
 ## Project constraints
 
 - Use English for code comments, commit messages, and documentation.
 - Put throwaway artifacts in `/tmp`, outside the repository.
-- Preserve build trees when diagnosing failures; build/check output is in the
-  selected build tree's `build.log`.
+- Preserve build trees when diagnosing failures; managed check output is in the
+  selected tree's `build.log`, with per-attempt receipts and phase logs.
 - Keep abstractions tied to current consumers and an independent contract.
   Keep one-consumer helpers local; do not add speculative registries or policies.
 - Follow the [formatting and validation order](doc/development/test/validation-and-review.md#formatting-before-validation)
@@ -33,6 +42,7 @@ sections relevant to the change; reuse material already read in this session.
 | Concurrency contracts | `doc/development/test/concurrency-and-sanitizer.md` |
 | Native macOS work | `doc/development/macos.md` before using the native environment |
 | Native Windows work | `doc/development/windows.md` before using the native environment |
+| Native Bazel build system, profiles, and gates | `doc/development/bazel.md` |
 
 Linux dependencies come from the pinned `nix-shell`; use it for manual compiler
 or dependency inspection. Native macOS and Windows use the shared vcpkg
@@ -41,7 +51,7 @@ manifest and their documented bootstrap paths.
 ## Completion and authorization
 
 Use `doc/development/test/validation-and-review.md` to select validation for the
-changed behavior. It owns check/hygiene scope, lint boundaries, and result reuse.
+changed behavior. It owns completion and scoped hygiene, lint boundaries, and result reuse.
 Run local checks, fix failures caused by the authorized change, and rerun affected
 checks without asking for approval at each step. Continue through the requested
 implementation and validation; report any remaining failure or unvalidated boundary.

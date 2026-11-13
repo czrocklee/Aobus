@@ -11,7 +11,6 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from ao.command import test as test_command
 from ao.core import appkitprocess
 
 
@@ -21,8 +20,7 @@ class AppKitProcessTests(unittest.TestCase):
         for mode in ("success", "nonzero", "hang", "missing-marker", "parent-fails", "no-successor"):
             with self.subTest(mode=mode), tempfile.TemporaryDirectory(prefix="appkit process ") as directory:
                 root = Path(directory)
-                build = root / "build"
-                binary = build / "test" / "ao_appkit_smoke.app" / "Contents" / "MacOS" / "ao_appkit_smoke"
+                binary = root / "smoke.app/Contents/MacOS/custom-smoke"
                 binary.parent.mkdir(parents=True)
                 binary.write_text(
                     f"#!{sys.executable}\n"
@@ -70,24 +68,24 @@ class AppKitProcessTests(unittest.TestCase):
                 errors = io.StringIO()
                 with mock.patch.dict(os.environ, {"APPKIT_PROCESS_TEST_MODE": mode}):
                     with mock.patch.object(appkitprocess.subprocess, "Popen", side_effect=launch):
-                        with mock.patch.object(test_command, "APPKIT_PARENT_TIMEOUT_SECONDS", 10.0):
-                            with mock.patch.object(test_command, "APPKIT_SUCCESSOR_TIMEOUT_SECONDS", 2.0):
-                                with mock.patch.object(test_command, "APPKIT_PARENT_TERMINATE_SECONDS", 0.1):
+                        with mock.patch.object(appkitprocess, "PARENT_TIMEOUT_SECONDS", 10.0):
+                            with mock.patch.object(appkitprocess, "SUCCESSOR_TIMEOUT_SECONDS", 2.0):
+                                with mock.patch.object(appkitprocess, "TERMINATE_TIMEOUT_SECONDS", 0.1):
                                     with (
                                         contextlib.redirect_stdout(io.StringIO()),
                                         contextlib.redirect_stderr(errors),
                                     ):
                                         if mode == "missing-marker":
-                                            with self.assertRaises(SystemExit):
-                                                test_command.run_appkit_smoke(
-                                                    build,
+                                            with self.assertRaises(FileNotFoundError):
+                                                appkitprocess.run_smoke(
+                                                    binary,
                                                     scenario="desktop",
                                                     library=root / "music",
                                                     state_root=root / "state",
                                                 )
                                         else:
-                                            status = test_command.run_appkit_smoke(
-                                                build,
+                                            status = appkitprocess.run_smoke(
+                                                binary,
                                                 scenario="desktop",
                                                 library=root / "music",
                                                 state_root=root / "state",
@@ -114,6 +112,48 @@ class AppKitProcessTests(unittest.TestCase):
                     self.assertEqual(process.poll(), process.returncode)
                 if mode in ("hang", "parent-fails"):
                     self.assertNotEqual(started[1].returncode, 0)
+
+    def test_standalone_supervisor_forwards_native_arguments_and_nonzero_exit(self):
+        with tempfile.TemporaryDirectory(prefix="appkit native launcher ") as directory:
+            root = Path(directory)
+            binary = root / "native-smoke"
+            binary.write_text(
+                f"#!{sys.executable}\n"
+                + textwrap.dedent(
+                    """\
+                    import os
+                    import sys
+                    from pathlib import Path
+
+                    library, state = Path(sys.argv[4]), Path(sys.argv[6])
+                    assert sys.argv[1:3] == ["--scenario", "authoring"]
+                    assert library.is_absolute() and state.is_absolute()
+                    assert os.environ["UBSAN_OPTIONS"] == "halt_on_error=1"
+                    assert os.environ["AOBUS_APPKIT_TEST_RUN_ID"] != "old"
+                    sys.exit(7)
+                    """
+                ),
+                encoding="utf-8",
+            )
+            binary.chmod(0o700)
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    appkitprocess.__file__,
+                    str(binary),
+                    "--scenario",
+                    "authoring",
+                    "--library",
+                    str(root / "music"),
+                    "--state-root",
+                    str(root / "state"),
+                ],
+                env={**os.environ, "UBSAN_OPTIONS": "halt_on_error=1", "AOBUS_APPKIT_TEST_RUN_ID": "old"},
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            self.assertEqual(result.returncode, 7, result.stdout + result.stderr)
 
     def test_accepts_detached_launch_request_after_successful_parent_exit(self):
         parent = mock.Mock()

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "test/TestFixtureSupport.h"
+
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
@@ -47,7 +49,7 @@ namespace ao::winui::layout::test
 
   TEST_CASE("ShellCommandWiring - builder source installs owning commands and anchored selector")
   {
-    auto const builder = readSource(std::filesystem::path{AOBUS_WINDOWS_WINUI_DIR} / "layout/ShellBuilder.cpp");
+    auto const builder = readSource(ao::test::testInputPath("app/windows-winui/layout/ShellBuilder.cpp"));
     auto const constructor =
       compactSource(std::string{between(builder, "ShellBuilder::ShellBuilder(", "ShellBuilder::~ShellBuilder(")});
     auto const registration = compactSource(
@@ -67,7 +69,7 @@ namespace ao::winui::layout::test
 
   TEST_CASE("ShellCommandWiring - window source supplies frame commands and weak anchored selector")
   {
-    auto const window = readSource(std::filesystem::path{AOBUS_WINDOWS_WINUI_DIR} / "MainWindow.xaml.cpp");
+    auto const window = readSource(ao::test::testInputPath("app/windows-winui/MainWindow.xaml.cpp"));
     auto const create =
       compactSource(std::string{between(window, "MainWindow::createShellBuilder()", "MainWindow::shutdown()")});
     auto const config = between(create,

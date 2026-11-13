@@ -82,27 +82,28 @@ Where applicable, cover:
 
 When a policy does not apply, make that absence evident in the owner contract; for example, an unversioned frontend preference schema has no artificial version test.
 
-Repository configuration rejects restoration of `ConfigTraits.h`; CMake guardrails reject application managed-state selection of the one-way `Reflect.h` formatter, application schemas declared under `namespace ao::yaml`, and application/logging dependencies in the Core YAML helper boundary.
+Repository configuration rejects restoration of `ConfigTraits.h`; the shared guardrails reject application managed-state selection of the one-way `Reflect.h` formatter, application schemas declared under `namespace ao::yaml`, and application/logging dependencies in the Core YAML helper boundary.
 The guardrails deliberately do not ban Boost.PFR or reflection throughout application code; review searches and schema tests protect the narrower rule that unannotated reflection cannot define a managed-state schema.
 Keep the guardrail source scopes aligned when adding a new application subtree.
 
 ## Validation
 
 Run focused owner tests while developing, then complete the C++ validation gate from the root.
-Run the documentation check because a managed-state change must update its current contract or exact format reference:
+A managed-state change must update its current contract or exact format
+reference. Complete `check` includes live documentation validation and scoped
+hygiene:
 
 ```bash
 ./ao check
-./ao hygiene
-./ao docs check
 ```
 
+Standalone `ao docs check` and `ao hygiene` remain available for focused work.
 `hygiene` is check-only; it does not authorize a standalone lint campaign or unrelated cleanup.
 Do not run formatting or lint-fix commands merely as part of this workflow; follow the repository's explicit formatting and linting policy.
 Useful review searches are:
 
 ```bash
-rg -n "ConfigTraits|loadExact|ao/yaml/Reflect|boost/pfr/core|namespace ao::yaml" app test CMakeLists.txt
+rg -n "ConfigTraits|loadExact|ao/yaml/Reflect|boost/pfr/core|namespace ao::yaml" app test BUILD.bazel
 rg -n "ConfigTraits|loadExact|reflection-based|ordinary deserialize|exact deserialize" doc --glob '!doc/plan/**'
 ```
 

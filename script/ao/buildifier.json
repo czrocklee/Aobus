@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "version": "10.2.0",
+  "artifacts": {
+    "windows-x86_64": {
+      "url": "https://github.com/bazel-contrib/buildtools/releases/download/v10.2.0/buildifier-windows-amd64.exe",
+      "sha256": "ae9b0632ff4bc56607b9c8512716b7fd63371387136005d25e94ec668f89361d"
+    },
+    "darwin-x86_64": {
+      "url": "https://github.com/bazel-contrib/buildtools/releases/download/v10.2.0/buildifier-darwin-amd64",
+      "sha256": "9e78881e91266e3567ed6d590f6c19bb5cd8cfa7aa80c7e1b6e479264d1051b8"
+    },
+    "darwin-arm64": {
+      "url": "https://github.com/bazel-contrib/buildtools/releases/download/v10.2.0/buildifier-darwin-arm64",
+      "sha256": "d9c9c3a2826d1d8f592a9d463e62aed7f4dcacc5ab48e8de6be53c420b34b971"
+    }
+  }
+}

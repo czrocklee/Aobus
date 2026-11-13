@@ -38,16 +38,22 @@ The [documentation home](doc/README.md) connects these reading paths.
 
 ## Build and run
 
-Aobus uses CMake with pinned Nix dependencies on Linux and the shared governed vcpkg manifest on macOS and Windows.
-On Linux, the portal selects the development environment automatically:
+Aobus builds with Bazel, using pinned Nix dependencies on Linux and the shared governed vcpkg
+manifest on macOS and Windows. Use the pinned native Bazel executable. On Linux,
+repository setup enters the pinned Nix environment automatically:
 
 ```bash
-./ao build
-./ao run tui
+bazel build //app/tui:aobus-tui
+bazel run //app/tui:aobus-tui
+bazel test //:tests
+./ao check
 ```
 
 See [build and setup](doc/development/build.md) for build trees and tooling, or the native [macOS](doc/development/macos.md) and [Windows](doc/development/windows.md) guides for prerequisites.
-Use `ao.bat` on Windows. The [native AppKit desktop](doc/development/macos.md#native-desktop-development-slice) is available through `./ao run appkit` and remains under development.
+Native macOS and Windows require explicit SDK provisioning before Bazel commands.
+Use `ao.bat` for project-specific commands on Windows. `ao check` is the complete
+local and CI validation gate, including scoped hygiene. The [native AppKit desktop](doc/development/macos.md#native-desktop-development-slice)
+is available as `//app/macos-appkit:aobus-appkit` and remains under development.
 
 For testing, start with the [testing guide](doc/development/test.md); [validation and review](doc/development/test/validation-and-review.md) selects the required checks for a change.
 
