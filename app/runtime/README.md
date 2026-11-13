@@ -1,6 +1,6 @@
 # Application runtime
 
-`ao_app_runtime` composes Core mechanisms into frontend-neutral application behavior.
+`//app/runtime:runtime` composes Core mechanisms into frontend-neutral application behavior.
 GTK, TUI, WinUI, AppKit, and CLI consume this layer directly or through UIModel; toolkit objects and rendering policy belong outside it.
 
 ## Work in this layer
@@ -15,9 +15,9 @@ Use [application-layer review](../../doc/development/application-layer-review.md
 
 ## Headers and consumers
 
-Repository consumers link `ao_app_runtime`, whose public include directory is `app/include/` and whose API lives under `ao/rt/`.
+Repository consumers depend on `//app/runtime:runtime`, whose public include directory is `app/include/` and whose API lives under `ao/rt/`.
 Implementation-private headers remain under `app/`; focused tests may include those through their private test include path.
 These are application interfaces, not an installed or independently versioned Core SDK.
 Core headers remain under `include/ao/`; application dependencies must not leak back into Core.
 
-[`CMakeLists.txt`](CMakeLists.txt) owns sources and target visibility; the [architecture audit](../cmake/ArchitectureAudit.cmake) checks layer boundaries across sources and tests.
+[`BUILD.bazel`](BUILD.bazel) owns sources and target visibility; the shared [architecture audit](../../script/ao/core/guardrails.py) checks layer boundaries across sources and tests.

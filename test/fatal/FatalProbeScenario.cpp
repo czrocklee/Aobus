@@ -3,7 +3,6 @@
 
 #include "test/fatal/FatalProbeScenario.h"
 
-#include "app/runtime/playback/PreparedNextContract.h"
 #include <ao/Contract.h>
 
 #include <cstdint>
@@ -88,11 +87,6 @@ namespace ao::test
     {
       std::int32_t evaluationCount = 0;
       AO_EXPECTS(++evaluationCount == 2, "evaluation count {}", evaluationCount);
-    }
-
-    if (scenario == "duplicate-prepared-next")
-    {
-      rt::detail::expectPreparedNextSlotAvailable(true);
     }
 
     if (scenario == "ensures")

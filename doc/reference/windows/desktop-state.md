@@ -12,7 +12,7 @@ The theme document is strict and unversioned.
 
 ## Code boundary
 
-The [system architecture](../../system/overview.md), [application shell architecture](../../system/shell/README.md), and [Windows desktop shell specification](../../system/frontend/windows.md) define ownership and behavior. The Windows-only `aobus-winui-lib` owns both schemas; the WinUI composition root owns their platform location and application.
+The [system architecture](../../system/overview.md), [application shell architecture](../../system/shell/README.md), and [Windows desktop shell specification](../../system/frontend/windows.md) define ownership and behavior. The Windows-only WinUI library owns both schemas; the WinUI composition root owns their platform location and application.
 
 ## Surface
 

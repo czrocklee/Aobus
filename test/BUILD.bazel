@@ -1,0 +1,1661 @@
+load("@aobus_native_tools//:test_tools.bzl", "TEST_TOOLS")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+load("//bazel:windows_utf8_manifest.bzl", "WINDOWS_UTF8_LINKER_INPUTS", "WINDOWS_UTF8_LINKOPTS", "windows_utf8_manifest_checks")
+load(":input_files.bzl", "test_input_manifest")
+
+package(default_visibility = ["//visibility:public"])
+
+# Independent native entry points are compiled by their frontend owners.
+exports_files(
+    glob(["macos-appkit/*.mm"]),
+    visibility = ["//app/macos-appkit:__pkg__"],
+)
+
+exports_files(
+    [
+        "helper/WinUiLocalizationProbe.cpp",
+        "helper/WinUiTrackItemProbe.cpp",
+    ] + glob([
+        "winui/probe/*.cpp",
+        "winui/probe/*.h",
+    ]),
+    visibility = ["//app/windows-winui:__pkg__"],
+)
+
+# Keep lint SDK loading lazy for the ordinary product test aggregate.
+test_suite(
+    name = "lint_test",
+    tags = ["manual"],
+    tests = ["//test/lint:lint_test"],
+)
+
+filegroup(
+    name = "library_fixtures",
+    srcs = glob([
+        "data/library/**/*.yaml",
+        "data/library/**/data.mdb",
+    ]),
+)
+
+test_input_manifest(
+    name = "winui_test_inputs",
+    testonly = True,
+    srcs = ["//app/windows-winui:native_test_inputs"],
+    output_name = "winui_test_inputs.txt",
+)
+
+cc_library(
+    name = "appkit_smoke_headers",
+    testonly = True,
+    hdrs = glob(["macos-appkit/*.h"]),
+    includes = ["macos-appkit"],
+    visibility = ["//app/macos-appkit:__pkg__"],
+)
+
+STORAGE_TEST_DEPS = [
+    "//lib/library:library",
+    "//lib/library:test_headers",
+    "//lib/lmdb:lmdb",
+    "//lib/lmdb:test_headers",
+    "//lib/utility:utility",
+    "@aobus_native_deps//:boost",
+    "@aobus_native_deps//:lmdb",
+    "@aobus_test_deps//:catch2",
+]
+
+config_setting(
+    name = "gtk_x86_64_cpu",
+    constraint_values = ["@platforms//cpu:x86_64"],
+)
+
+GTK_HEADER_COPTS = select({
+    ":gtk_x86_64_cpu": [
+        "-mfpmath=sse",
+        "-msse",
+        "-msse2",
+    ],
+    "//conditions:default": [],
+})
+
+# Match CMake's ao_test_options warning exception; this is not a dependency ABI contract.
+TEST_WARNING_COPTS = select({
+    "@platforms//os:windows": [],
+    "//conditions:default": ["-Wno-array-bounds"],
+})
+
+# //lib/audio:test_headers exposes PipeWire's SPA headers transitively on Linux.
+# Every compiling consumer, including playback fixtures, needs these local flags.
+AUDIO_TEST_COPTS = TEST_WARNING_COPTS + select({
+    "@platforms//os:linux": [
+        "-fno-strict-aliasing",
+        "-fno-strict-overflow",
+    ],
+    "//conditions:default": [],
+})
+
+# The same aspect also validates each executable during ordinary build/test/run.
+# Traversing test data includes both same-package probe executables.
+windows_utf8_manifest_checks(
+    name = "windows_utf8_manifest_checks",
+    testonly = True,
+    binaries = [
+        ":utility_test",
+        ":runtime_test",
+        ":i18n_test",
+        ":desktop_test",
+        ":winui_test",
+        ":backend_test",
+        ":ao_perf_baseline",
+        ":ao_tui_bench",
+        ":ao_library_probe",
+        ":ao_audio_fatal_probe",
+        ":ao_tui_signal_probe",
+        ":ao_fatal_probe",
+        ":ao_detached_process_probe",
+        ":library_test",
+        ":query_test",
+        ":async_test",
+        ":media_test",
+        ":media_fixture_test",
+        ":audio_test",
+        ":audio_platform_test",
+        ":uimodel_test",
+        ":cli_test",
+        ":tui_test",
+    ],
+    target_compatible_with = ["@platforms//os:windows"],
+)
+
+# Unix ASan profiles also select UBSan; MSVC provides AddressSanitizer only.
+config_setting(
+    name = "linux_asan",
+    constraint_values = ["@platforms//os:linux"],
+    flag_values = {"//bazel:asan_enabled": "true"},
+)
+
+config_setting(
+    name = "macos_asan",
+    constraint_values = ["@platforms//os:macos"],
+    flag_values = {"//bazel:asan_enabled": "true"},
+)
+
+# core/SanitizerProfileTest.cpp compares the selected profile with the
+# compiler's own instrumentation facts. Separate selects keep a combined
+# profile request for the admission aspect to reject.
+SANITIZER_PROFILE_DEFINES = select({
+    "//bazel:asan": ["AOBUS_EXPECT_ADDRESS_SANITIZER"],
+    "//conditions:default": [],
+}) + select({
+    ":linux_asan": ["AOBUS_EXPECT_UNDEFINED_BEHAVIOR_SANITIZER"],
+    ":macos_asan": ["AOBUS_EXPECT_UNDEFINED_BEHAVIOR_SANITIZER"],
+    "//conditions:default": [],
+}) + select({
+    "//bazel:tsan": ["AOBUS_EXPECT_THREAD_SANITIZER"],
+    "//conditions:default": [],
+})
+
+# Shared foundations, compatibility and fixture behavior use the real utility
+# implementation and the Core-only entry shared with CMake. Application/tooling
+# reports stay with the runtime test.
+cc_test(
+    name = "utility_test",
+    srcs = glob([
+        "utility/*Test.cpp",
+        "compat/*Test.cpp",
+        "core/*Test.cpp",
+    ]) + [
+        "CoreTestMain.cpp",
+        "//include:media_compat_headers",
+    ],
+    additional_linker_inputs = WINDOWS_UTF8_LINKER_INPUTS,
+    copts = TEST_WARNING_COPTS,
+    data = [":ao_fatal_probe"],
+    linkopts = WINDOWS_UTF8_LINKOPTS,
+    local_defines = SANITIZER_PROFILE_DEFINES,
+    deps = [
+        ":common_test_support",
+        ":fatal_probe_support",
+        "//include:runtime_compat_headers",
+        "//include:yaml_headers",
+        "//lib/utility",
+        "//lib/utility:test_headers",
+        "//lib/utility:unicode_text",
+        "@aobus_native_deps//:icu_uc",
+        "@aobus_test_deps//:catch2",
+    ],
+)
+
+# Common filesystem fixtures used by storage and media cases. Preserve the
+# existing test/... includes and Windows access-control dependency without
+# pulling library fixtures or fatal-probe objects into the pure media test.
+# Under Bazel it also owns the AOBUS_BAZEL_TEST_RUNFILES adapter: the guarded
+# region in TestFixtureSupport.cpp is empty in the CMake build, which never
+# links the rules_cc runfiles SDK.
+cc_library(
+    name = "common_test_support",
+    testonly = True,
+    srcs = [
+        "FilesystemTestSupport.cpp",
+        "TestFixtureSupport.cpp",
+    ] + select({
+        "@platforms//os:windows": ["FilesystemTestSupportWindows.cpp"],
+        "//conditions:default": ["FilesystemTestSupportPosix.cpp"],
+    }),
+    hdrs = [
+        "FilesystemTestSupport.h",
+        "TestFixtureSupport.h",
+    ],
+    include_prefix = "test",
+    linkopts = select({
+        "@platforms//os:windows": ["Advapi32.lib"],
+        "//conditions:default": [],
+    }),
+    linkstatic = True,
+    local_defines = ["AOBUS_BAZEL_TEST_RUNFILES"],
+    strip_include_prefix = ".",
+    deps = [
+        "//lib/utility",
+        "@aobus_test_deps//:catch2",
+        "@rules_cc//cc/runfiles",
+    ],
+)
+
+# Catch-independent process transport and protocol data. Scenario bodies stay
+# with their owning executables, so this common archive acquires no runtime graph.
+cc_library(
+    name = "fatal_probe_support",
+    testonly = True,
+    srcs = [
+        "fatal/AudioFatalProbeProtocol.cpp",
+        "fatal/FatalProbeProtocol.cpp",
+        "fatal/LibraryProbeProtocol.cpp",
+        "fatal/RuntimeFatalProbeProtocol.cpp",
+    ] + select({
+        "@platforms//os:windows": ["fatal/ProbeProcessWindows.cpp"],
+        "//conditions:default": ["fatal/ProbeProcessPosix.cpp"],
+    }),
+    hdrs = glob(["fatal/*.h"]),
+    include_prefix = "test",
+    linkstatic = True,
+    strip_include_prefix = ".",
+    visibility = ["//test:__pkg__"],
+    deps = ["//bazel:compile_contract"],
+)
+
+# Storage fixtures and library-probe support retain their original public
+# visibility and transitive common fixture inputs.
+cc_library(
+    name = "library_test_support",
+    testonly = True,
+    srcs = [
+        "library/LibraryBinaryTestSupport.cpp",
+        "library/LibraryStoreTestSupport.cpp",
+        "library/MusicLibraryTestSupport.cpp",
+        "library/TrackBuilderTestSupport.cpp",
+        "library/TrackStoreTestSupport.cpp",
+        "library/TrackTestSupport.cpp",
+        "library/TrackViewTestSupport.cpp",
+        "library/WritableLibraryTestSupport.cpp",
+        "lmdb/LmdbProbeScratch.cpp",
+        "lmdb/LmdbTestSupport.cpp",
+    ],
+    hdrs = [
+        "library/LibraryBinaryTestSupport.h",
+        "library/LibraryStoreTestSupport.h",
+        "library/MusicLibraryTestSupport.h",
+        "library/TrackBuilderTestSupport.h",
+        "library/TrackStoreTestSupport.h",
+        "library/TrackTestSupport.h",
+        "library/TrackViewTestSupport.h",
+        "library/WritableLibraryTestSupport.h",
+        "lmdb/LmdbProbeScratch.h",
+        "lmdb/LmdbTestSupport.h",
+    ],
+    include_prefix = "test",
+    linkstatic = True,
+    strip_include_prefix = ".",
+    deps = STORAGE_TEST_DEPS + [
+        ":common_test_support",
+        ":fatal_probe_support",
+    ],
+)
+
+# siblingProbeExecutablePath("ao_library_probe") replaces the test filename, so
+# this binary must be built in the same package. It has its own main; Catch2's
+# main stays on library_test; application fatal self-reentry is not an input.
+cc_binary(
+    name = "ao_library_probe",
+    testonly = True,
+    srcs = [
+        "fatal/LibraryProbeMain.cpp",
+        "fatal/LibraryProbeScenario.cpp",
+        "fatal/LibraryProbeScenario.h",
+    ],
+    additional_linker_inputs = WINDOWS_UTF8_LINKER_INPUTS,
+    linkopts = WINDOWS_UTF8_LINKOPTS,
+    deps = STORAGE_TEST_DEPS + [":library_test_support"],
+)
+
+# CMake ao_core_test library and lmdb cases, plus the Darwin-only LMDB scratch
+# case. Catch2-with-main supplies main. data builds the probe so the same-package
+# output sits beside this test binary.
+cc_test(
+    name = "library_test",
+    srcs = [
+        "library/AudioIdentityTest.cpp",
+        "library/CarrierAdmissionRegressionTest.cpp",
+        "library/CarrierTrackTest.cpp",
+        "library/CreditsTest.cpp",
+        "library/DictionaryStoreTest.cpp",
+        "library/FileManifestBuilderTest.cpp",
+        "library/FileManifestStoreTest.cpp",
+        "library/FileManifestViewTest.cpp",
+        "library/FileTimeConversionTest.cpp",
+        "library/IdSpaceTest.cpp",
+        "library/LibraryErrorTest.cpp",
+        "library/LibraryProbeTest.cpp",
+        "library/LibraryUriTest.cpp",
+        "library/ListBuilderTest.cpp",
+        "library/ListLayoutTest.cpp",
+        "library/ListStoreTest.cpp",
+        "library/ListViewTest.cpp",
+        "library/ListWriterTest.cpp",
+        "library/MetadataStoreTest.cpp",
+        "library/MusicLibraryTest.cpp",
+        "library/RecordingDateTest.cpp",
+        "library/ResourceLayoutTest.cpp",
+        "library/ResourceStoreTest.cpp",
+        "library/TrackBuilderCoverArtTest.cpp",
+        "library/TrackBuilderOverflowTest.cpp",
+        "library/TrackBuilderSerializationTest.cpp",
+        "library/TrackBuilderTagTest.cpp",
+        "library/TrackBuilderTest.cpp",
+        "library/TrackLayoutTest.cpp",
+        "library/TrackPerformanceTest.cpp",
+        "library/TrackPerformanceValidationTest.cpp",
+        "library/TrackStoreIntegrityTest.cpp",
+        "library/TrackStoreRawLayoutTest.cpp",
+        "library/TrackStoreTest.cpp",
+        "library/TrackViewCustomMetadataTest.cpp",
+        "library/TrackViewTagTest.cpp",
+        "library/TrackViewTest.cpp",
+        "library/TrackViewValidationTest.cpp",
+        "library/TrackWriteTest.cpp",
+        "library/TrackWriterTest.cpp",
+        "library/WriteTransactionTest.cpp",
+        "lmdb/DatabaseByteKeyTest.cpp",
+        "lmdb/DatabaseMaxKeyTest.cpp",
+        "lmdb/DatabaseReaderTest.cpp",
+        "lmdb/DatabaseTest.cpp",
+        "lmdb/DatabaseWriterLifetimeTest.cpp",
+        "lmdb/DatabaseWriterTest.cpp",
+        "lmdb/EnvironmentFileGrowthTest.cpp",
+        "lmdb/EnvironmentTest.cpp",
+        "lmdb/LmdbTestSupportTest.cpp",
+        "lmdb/MapCapacityPolicyTest.cpp",
+        "lmdb/ReadOnlyDatabaseLifetimeTest.cpp",
+        "lmdb/ReadOnlyDatabaseTest.cpp",
+        "lmdb/ResultErrorTest.cpp",
+        "lmdb/TransactionTest.cpp",
+    ] + select({
+        "@platforms//os:macos": ["macos/lmdb/LmdbProbeScratchTest.cpp"],
+        "//conditions:default": [],
+    }),
+    additional_linker_inputs = WINDOWS_UTF8_LINKER_INPUTS,
+    data = [":ao_library_probe"],
+    linkopts = WINDOWS_UTF8_LINKOPTS,
+    deps = STORAGE_TEST_DEPS + [":library_test_support"],
+)
+
+# Only cc_library owns virtual include prefixes; executable rules do not.
+cc_library(
+    name = "query_test_headers",
+    testonly = True,
+    hdrs = [
+        "query/ExecutionPlanTestSupport.h",
+        "query/PlanEvaluatorTestSupport.h",
+    ],
+    include_prefix = "test",
+    strip_include_prefix = ".",
+    visibility = ["//test:__pkg__"],
+    deps = STORAGE_TEST_DEPS + [
+        ":library_test_support",
+        "//lib/query",
+    ],
+)
+
+# CMake ao_core_test query cases and their two support translation units.
+# Catch2-with-main supplies main; the header target preserves test/query/ includes.
+cc_test(
+    name = "query_test",
+    srcs = [
+        "query/CompletionBaselineTest.cpp",
+        "query/CompletionLogicalOperatorTest.cpp",
+        "query/CompletionOperatorTest.cpp",
+        "query/CompletionTokenizerTest.cpp",
+        "query/CompletionValueTest.cpp",
+        "query/CompletionVariableTest.cpp",
+        "query/CreditPredicateTest.cpp",
+        "query/ExecutionPlanAccessProfileTest.cpp",
+        "query/ExecutionPlanCompileTest.cpp",
+        "query/ExecutionPlanContractTest.cpp",
+        "query/ExecutionPlanDictionaryTest.cpp",
+        "query/ExecutionPlanFieldCatalogTest.cpp",
+        "query/ExecutionPlanMembershipTest.cpp",
+        "query/ExecutionPlanStringExpressionTest.cpp",
+        "query/ExecutionPlanTagBloomTest.cpp",
+        "query/ExecutionPlanTestSupport.cpp",
+        "query/ExecutionPlanUnitLiteralTest.cpp",
+        "query/ExpressionTest.cpp",
+        "query/FormatExpressionTest.cpp",
+        "query/ParserTest.cpp",
+        "query/PlanEvaluatorCollectionTest.cpp",
+        "query/PlanEvaluatorComparisonTest.cpp",
+        "query/PlanEvaluatorDictionaryTest.cpp",
+        "query/PlanEvaluatorExecutionTest.cpp",
+        "query/PlanEvaluatorLogicalTest.cpp",
+        "query/PlanEvaluatorMediaPropertyTest.cpp",
+        "query/PlanEvaluatorStringTest.cpp",
+        "query/PlanEvaluatorTagTest.cpp",
+        "query/PlanEvaluatorTestSupport.cpp",
+        "query/PredicateOperandContextTest.cpp",
+        "query/PredicateTest.cpp",
+        "query/QueryErrorTest.cpp",
+        "query/RecordingDatePredicateTest.cpp",
+        "query/SerializerTest.cpp",
+    ],
+    additional_linker_inputs = WINDOWS_UTF8_LINKER_INPUTS,
+    linkopts = WINDOWS_UTF8_LINKOPTS,
+    deps = STORAGE_TEST_DEPS + [
+        ":library_test_support",
+        ":query_test_headers",
+        "//lib/query",
+        "//lib/query:test_headers",
+    ],
+)
+
+# Narrow fixtures for the Core async cases. Not the runtime support library:
+# no application runtime, library fixtures, or fatal-probe objects. include_prefix
+# preserves "test/runtime/..." includes; rules_cc rejects an includes entry that
+# resolves to the workspace root. timeBeginPeriod is the CMake winmm contract.
+cc_library(
+    name = "async_test_support",
+    testonly = True,
+    srcs = [
+        "runtime/AsyncTestSupport.cpp",
+        "runtime/ExecutorTestSupport.cpp",
+    ],
+    hdrs = [
+        "runtime/AsyncTestSupport.h",
+        "runtime/ExecutorTestSupport.h",
+    ],
+    include_prefix = "test",
+    linkopts = select({
+        "@platforms//os:windows": ["winmm.lib"],
+        "//conditions:default": [],
+    }),
+    linkstatic = True,
+    strip_include_prefix = ".",
+    visibility = ["//test:__pkg__"],
+    deps = [
+        "//lib/async",
+        "@aobus_native_deps//:boost",
+        "@aobus_test_deps//:catch2",
+    ],
+)
+
+# CMake ao_core_test async cases only. Catch2-with-main supplies main;
+# the application fatal probe is not an input.
+cc_test(
+    name = "async_test",
+    srcs = [
+        "async/AsyncParallelTest.cpp",
+        "async/AsyncRuntimeTest.cpp",
+        "async/ExecutorTestSupportTest.cpp",
+        "async/LifetimeScopeTest.cpp",
+        "async/LoopExecutorTest.cpp",
+        "async/RequestCoalescerTest.cpp",
+        "async/SignalTest.cpp",
+    ],
+    additional_linker_inputs = WINDOWS_UTF8_LINKER_INPUTS,
+    linkopts = WINDOWS_UTF8_LINKOPTS,
+    deps = [
+        ":async_test_support",
+        "//lib/async",
+        "@aobus_native_deps//:boost",
+        "@aobus_native_deps//:gsl_lite",
+        "@aobus_test_deps//:catch2",
+    ],
+)
+
+# Shared UIModel cases have one executable; fixtures retain their layer owners.
+cc_test(
+    name = "uimodel_test",
+    srcs = glob(["uimodel/**/*Test.cpp"]),
+    additional_linker_inputs = WINDOWS_UTF8_LINKER_INPUTS,
+    copts = AUDIO_TEST_COPTS,
+    data = [
+        "//:doc/reference/shell/component-vocabulary.md",
+        "//test/data/audio:audio_fixtures",
+    ],
+    # date::current_zone() uses the OS zone on macOS; the independent C-library
+    # expectation must use that same input rather than the test runner's zone.
+    env = select({
+        "@platforms//os:macos": {"TZ": ":/etc/localtime"},
+        "//conditions:default": {},
+    }),
+    linkopts = WINDOWS_UTF8_LINKOPTS,
+    deps = [
+        ":audio_fixture_support",
+        ":common_test_support",
+        ":message_catalog_test_support",
+        ":runtime_test_support",
+        ":uimodel_test_support",
+        "//app/i18n:completion",
+        "//app/i18n:ordering",
+        "//app/runtime:test_headers",
+        "//app/uimodel",
+        "//app/uimodel:test_headers",
+        "//lib/audio",
+        "//lib/audio:test_headers",
+        "//lib/query",
+        "//lib/utility:unicode_text",
+        "@aobus_test_deps//:catch2",
+    ],
+)
+
+# One owner for encoded fixture paths/assertions, shared by media and audio.
+# No ao_audio dependency: standard runfiles also supports manifest-only Windows.
+cc_library(
+    name = "audio_fixture_support",
+    testonly = True,
+    srcs = ["audio/AudioFixtureSupport.cpp"],
+    hdrs = [
+        "audio/AudioFixtureDirectory.h",
+        "audio/AudioFixtureSupport.h",
+    ],
+    include_prefix = "test",
+    linkstatic = True,
+    local_defines = ["AOBUS_BAZEL_AUDIO_FIXTURES"],
+    strip_include_prefix = ".",
+    visibility = ["//test:__pkg__"],
+    deps = [
+        ":common_test_support",
+        "//lib/utility",
+        "@aobus_test_deps//:catch2",
+    ],
+)
+
+# Container builders are shared with the unchanged codec case sources.
+cc_library(
+    name = "media_test_support",
+    testonly = True,
+    srcs = [
+        "media/file/TestFile.cpp",
+        "media/file/id3v2/TestId3v2.cpp",
+        "media/mp4/TestAtoms.cpp",
+        "media/ogg/TestOgg.cpp",
+        "media/wav/TestWav.cpp",
+    ],
+    hdrs = [
+        "media/file/TestFile.h",
+        "media/file/id3v2/TestId3v2.h",
+        "media/mp4/TestAtoms.h",
+        "media/ogg/TestOgg.h",
+        "media/wav/TestWav.h",
+    ],
+    include_prefix = "test",
+    linkstatic = True,
+    strip_include_prefix = ".",
+    visibility = [
+        "//app/macos-appkit:__pkg__",
+        "//test:__pkg__",
+    ],
+    deps = [
+        ":audio_fixture_support",
+        "//lib/media",
+        "//lib/media:test_headers",
+        "@aobus_native_deps//:boost",
+        "@aobus_test_deps//:catch2",
+    ],
+)
+
+# CMake ao_core_test media-only cases. Catch2-with-main supplies main; neither
+# ApplicationTestMain nor the mixed application-runtime fatal probe is an input.
+cc_test(
+    name = "media_test",
+    srcs = [
+        "media/CueSheetTest.cpp",
+        "media/ExactExtentTest.cpp",
+        "media/VorbisCommentTest.cpp",
+        "media/file/ApeTagTest.cpp",
+        "media/file/ContentCreditTest.cpp",
+        "media/file/ContentTextTest.cpp",
+        "media/file/DecoderTest.cpp",
+        "media/file/FileTest.cpp",
+        "media/file/FlacFileTest.cpp",
+        "media/file/Mp4FileTest.cpp",
+        "media/file/MpegFileTest.cpp",
+        "media/file/MpegFileTrailingTagTest.cpp",
+        "media/file/MpegFrameTest.cpp",
+        "media/file/OpusFileTest.cpp",
+        "media/file/VorbisCreditTest.cpp",
+        "media/file/WavCreditContentTest.cpp",
+        "media/file/WavFileTest.cpp",
+        "media/file/id3v2/CreditReaderTest.cpp",
+        "media/file/id3v2/ReaderTest.cpp",
+        "media/mp4/AtomTest.cpp",
+        "media/mp4/DemuxerAlacLayoutTest.cpp",
+        "media/mp4/DemuxerTest.cpp",
+        "media/mp4/SampleDescriptionTest.cpp",
+        "media/ogg/DemuxerTest.cpp",
+        "media/opus/HeaderTest.cpp",
+        "media/opus/TimelineTest.cpp",
+        "media/wav/RiffChannelMaskTest.cpp",
+        "media/wav/RiffTest.cpp",
+    ],
+    additional_linker_inputs = WINDOWS_UTF8_LINKER_INPUTS,
+    data = ["//test/data/audio:audio_fixtures"],
+    linkopts = WINDOWS_UTF8_LINKOPTS,
+    deps = [
+        ":common_test_support",
+        ":media_test_support",
+        "//lib/library",
+        "//lib/media",
+        "//lib/media:test_headers",
+        "//lib/utility",
+        "@aobus_native_deps//:boost",
+        "@aobus_test_deps//:catch2",
+    ],
+)
+
+# Audio support keeps the Catch-independent engine fakes separate from fixture
+# assertions. The minimal self-reentering fatal child links only this subset.
+cc_library(
+    name = "audio_engine_test_support",
+    testonly = True,
+    srcs = [
+        "audio/EngineTestSupport.cpp",
+        "audio/FakeCapturingBackend.cpp",
+        "audio/ScriptedDecoderSession.cpp",
+    ],
+    hdrs = [
+        "audio/EngineTestSupport.h",
+        "audio/FakeCapturingBackend.h",
+        "audio/ScriptedDecoderSession.h",
+    ],
+    copts = AUDIO_TEST_COPTS,
+    include_prefix = "test",
+    linkstatic = True,
+    strip_include_prefix = ".",
+    visibility = ["//test:__pkg__"],
+    deps = [
+        "//lib/audio",
+        "//lib/audio:test_headers",
+        "@aobus_native_deps//:boost",
+    ],
+)
+
+cc_library(
+    name = "audio_test_support",
+    testonly = True,
+    srcs = [
+        "audio/AlacFrameTestSupport.cpp",
+        "audio/BackendTestSupport.cpp",
+        "audio/DecoderTestSupport.cpp",
+        "audio/EngineFailureTestSupport.cpp",
+        "audio/FlacFrameTestSupport.cpp",
+    ],
+    hdrs = [
+        "audio/AlacFrameTestSupport.h",
+        "audio/BackendTestSupport.h",
+        "audio/DecoderTestSupport.h",
+        "audio/EngineFailureTestSupport.h",
+        "audio/FlacFrameTestSupport.h",
+    ],
+    copts = AUDIO_TEST_COPTS,
+    include_prefix = "test",
+    linkstatic = True,
+    strip_include_prefix = ".",
+    visibility = ["//test:__pkg__"],
+    deps = [
+        ":audio_engine_test_support",
+        ":audio_fixture_support",
+        ":common_test_support",
+        ":media_test_support",
+        "//lib/audio",
+        "//lib/audio:test_headers",
+        "@aobus_native_deps//:boost",
+        "@aobus_test_deps//:catch2",
+        "@aobus_test_deps//:fakeit",
+    ],
+)
+
+# The macOS scenario object contains both device-free and live reentry paths.
+# Merely linking this helper performs no enumeration or native open. Ordinary
+# cases select only device-free scenarios; the executable is data, not a test.
+cc_library(
+    name = "coreaudio_test_support",
+    testonly = True,
+    srcs = select({
+        "@platforms//os:macos": ["audio/backend/CoreAudioTestSupport.cpp"],
+        "//conditions:default": [],
+    }),
+    hdrs = ["audio/backend/CoreAudioTestSupport.h"],
+    copts = AUDIO_TEST_COPTS,
+    include_prefix = "test",
+    linkstatic = True,
+    strip_include_prefix = ".",
+    visibility = [
+        "//app/macos-appkit:__pkg__",
+        "//test:__pkg__",
+    ],
+    deps = [
+        "//lib/audio",
+        "//lib/audio:test_headers",
+    ],
+)
+
+# siblingProbeExecutablePath requires the original name beside the test binary.
+# No CoreTestMain, application runtime, Catch2 main, or live-output test entry.
+cc_binary(
+    name = "ao_audio_fatal_probe",
+    testonly = True,
+    srcs = [
+        "fatal/AudioFatalProbeMain.cpp",
+        "fatal/AudioFatalProbeScenario.cpp",
+    ] + select({
+        "@platforms//os:macos": ["fatal/AudioFatalProbeScenarioMacos.cpp"],
+        "//conditions:default": [],
+    }),
+    additional_linker_inputs = WINDOWS_UTF8_LINKER_INPUTS,
+    copts = AUDIO_TEST_COPTS,
+    linkopts = WINDOWS_UTF8_LINKOPTS,
+    visibility = ["//test:__pkg__"],
+    deps = [
+        ":audio_engine_test_support",
+        ":fatal_probe_support",
+        "//lib/audio",
+        "//lib/audio:test_headers",
+        "@aobus_native_deps//:boost",
+    ] + select({
+        "@platforms//os:macos": [":coreaudio_test_support"],
+        "//conditions:default": [],
+    }),
+)
+
+# All 78 common CMake Core audio case files, unchanged. Real codecs use declared
+# fixtures; Engine/Player use controlled backends. Platform-provider enumeration
+# smoke behavior is retained, but this binary does not run live backend cases.
+# Native provider construction is in this closure; cached results do not
+# establish the current host state. This is Bazel policy, not a Catch case tag.
+cc_test(
+    name = "audio_test",
+    srcs = [
+        "audio/AacDecoderChannelLayoutTest.cpp",
+        "audio/AacDecoderMalformedMp4Test.cpp",
+        "audio/AacDecoderSessionTest.cpp",
+        "audio/AlacChannelMetadataTest.cpp",
+        "audio/AlacDecoderChannelLayoutTest.cpp",
+        "audio/AlacDecoderMalformedMp4Test.cpp",
+        "audio/AlacDecoderSessionTest.cpp",
+        "audio/AudioTimeTest.cpp",
+        "audio/ChannelLayoutEvidenceTest.cpp",
+        "audio/ChannelQualityTest.cpp",
+        "audio/DecoderErrorTest.cpp",
+        "audio/DecoderFactoryTest.cpp",
+        "audio/DecoderIntegrationTest.cpp",
+        "audio/DecoderOutputTest.cpp",
+        "audio/EngineAlacChannelLayoutTest.cpp",
+        "audio/EngineBackendFailureTest.cpp",
+        "audio/EngineBackendSwapTest.cpp",
+        "audio/EngineCallbackTest.cpp",
+        "audio/EngineChannelLayoutTest.cpp",
+        "audio/EngineConcurrencyTest.cpp",
+        "audio/EngineControlErrorTest.cpp",
+        "audio/EngineDrainTest.cpp",
+        "audio/EngineEndpointPrecisionTest.cpp",
+        "audio/EngineErrorTest.cpp",
+        "audio/EngineFatalProbeTest.cpp",
+        "audio/EngineFlacChannelLayoutTest.cpp",
+        "audio/EngineFlacTransitionTest.cpp",
+        "audio/EngineGaplessTest.cpp",
+        "audio/EnginePropertyTest.cpp",
+        "audio/EngineRtSignalRingTest.cpp",
+        "audio/EngineSeekErrorTest.cpp",
+        "audio/EngineStereoIdentityTest.cpp",
+        "audio/EngineStereoReuseTest.cpp",
+        "audio/EngineTest.cpp",
+        "audio/EngineTransportTest.cpp",
+        "audio/EngineWavChannelLayoutTest.cpp",
+        "audio/FlacCommentCompatibilityTest.cpp",
+        "audio/FlacDecoderChannelLayoutTest.cpp",
+        "audio/FlacDecoderFormatStabilityTest.cpp",
+        "audio/FlacDecoderMalformedTest.cpp",
+        "audio/FlacDecoderSessionTest.cpp",
+        "audio/FlacMetadataInitializationTest.cpp",
+        "audio/FlacWavMaskCompatibilityTest.cpp",
+        "audio/FormatTest.cpp",
+        "audio/GraphIntegrityTest.cpp",
+        "audio/Mp3DecoderChannelLayoutTest.cpp",
+        "audio/Mp3DecoderMalformedTest.cpp",
+        "audio/Mp3DecoderSessionTest.cpp",
+        "audio/Mp3DecoderTrailingTagTest.cpp",
+        "audio/NullBackendTest.cpp",
+        "audio/OpenedModeValidationTest.cpp",
+        "audio/OpusDecoderChannelLayoutTest.cpp",
+        "audio/OpusDecoderMalformedTest.cpp",
+        "audio/OpusDecoderSessionTest.cpp",
+        "audio/PcmConversionTest.cpp",
+        "audio/PcmFrameRingTest.cpp",
+        "audio/PlatformBackendProvidersTest.cpp",
+        "audio/PlayerGraphObservationTest.cpp",
+        "audio/PlayerTest.cpp",
+        "audio/QualityAnalyzerTest.cpp",
+        "audio/SegmentDecoderSessionTest.cpp",
+        "audio/StreamingPrerollTest.cpp",
+        "audio/StreamingRenderAlignmentTest.cpp",
+        "audio/StreamingSourceTest.cpp",
+        "audio/WavDecoderChannelLayoutTest.cpp",
+        "audio/WavDecoderSessionTest.cpp",
+        "audio/backend/detail/AudioBackendDrainTailTest.cpp",
+        "audio/backend/detail/AudioBackendRenderBufferTest.cpp",
+        "audio/backend/detail/AudioBackendRenderProgressTest.cpp",
+        "audio/backend/detail/BackendDeviceRegistryTest.cpp",
+        "audio/backend/detail/BackendGraphRegistryTest.cpp",
+        "audio/backend/detail/CallbackFenceTest.cpp",
+        "audio/detail/DecoderOutputAdapterTest.cpp",
+        "audio/detail/MappedFileCursorTest.cpp",
+        "audio/detail/Mp4PacketSourceTest.cpp",
+        "audio/detail/StreamingBufferPolicyTest.cpp",
+        "audio/detail/TimeConversionTest.cpp",
+        "audio/detail/TrackSessionTest.cpp",
+    ],
+    additional_linker_inputs = WINDOWS_UTF8_LINKER_INPUTS,
+    copts = AUDIO_TEST_COPTS,
+    data = [
+        ":ao_audio_fatal_probe",
+        "//test/data/audio:audio_fixtures",
+    ],
+    linkopts = WINDOWS_UTF8_LINKOPTS,
+    tags = ["external"],
+    deps = [
+        ":async_test_support",
+        ":audio_test_support",
+        ":fatal_probe_support",
+        "//lib/audio",
+        "//lib/audio:test_headers",
+        "//lib/media:test_headers",
+        "@aobus_native_deps//:boost",
+        "@aobus_native_deps//:fdk_aac",
+        "@aobus_native_deps//:gsl_lite",
+        "@aobus_test_deps//:catch2",
+        "@aobus_test_deps//:fakeit",
+    ],
+)
+
+cc_library(
+    name = "audio_platform_test_support",
+    testonly = True,
+    srcs = select({
+        "@platforms//os:linux": ["audio/backend/AlsaMixerTestSupport.cpp"],
+        "@platforms//os:windows": ["audio/backend/WasapiFormatTestSupport.cpp"],
+        "//conditions:default": [],
+    }),
+    hdrs = select({
+        "@platforms//os:linux": ["audio/backend/AlsaMixerTestSupport.h"],
+        "@platforms//os:windows": ["audio/backend/WasapiFormatTestSupport.h"],
+        "//conditions:default": [],
+    }),
+    copts = AUDIO_TEST_COPTS,
+    include_prefix = "test",
+    linkstatic = True,
+    strip_include_prefix = ".",
+    visibility = ["//test:__pkg__"],
+    deps = [
+        ":audio_test_support",
+        "//lib/audio",
+        "//lib/audio:test_headers",
+    ] + select({
+        "@platforms//os:linux": [
+            "@aobus_native_deps//:alsa",
+            "@aobus_native_deps//:pipewire",
+        ],
+        "@platforms//os:macos": [":coreaudio_test_support"],
+        "//conditions:default": [],
+    }),
+)
+
+# Complete host-specific Core SDK/detail/discovery cases. Live endpoint and
+# link-interposition coverage retains the separate backend executable below.
+cc_test(
+    name = "audio_platform_test",
+    srcs = select({
+        "@platforms//os:linux": [
+            "audio/backend/AacAlsaChannelLayoutTest.cpp",
+            "audio/backend/AlsaBackendReuseTest.cpp",
+            "audio/backend/AlsaEnginePropertyTest.cpp",
+            "audio/backend/AlsaExclusiveBackendTest.cpp",
+            "audio/backend/AlsaProviderTest.cpp",
+            "audio/backend/FlacAlsaPipeWireRouteTest.cpp",
+            "audio/backend/OpusAlsaChannelLayoutTest.cpp",
+            "audio/backend/PipeWireBackendTest.cpp",
+            "audio/backend/PipeWireMonitorTest.cpp",
+            "audio/backend/detail/AlsaChannelMapTest.cpp",
+            "audio/backend/detail/AlsaGraphRegistryTest.cpp",
+            "audio/backend/detail/AlsaLegacyChannelMapTest.cpp",
+            "audio/backend/detail/AlsaMixerSessionTest.cpp",
+            "audio/backend/detail/AlsaModeSelectorTest.cpp",
+            "audio/backend/detail/AlsaPcmErrorTest.cpp",
+            "audio/backend/detail/AlsaPcmFormatTest.cpp",
+            "audio/backend/detail/AlsaPcmVolumeTest.cpp",
+            "audio/backend/detail/AlsaPrewarmCacheTest.cpp",
+            "audio/backend/detail/PipeWireFormatParsingTest.cpp",
+            "audio/backend/detail/PipeWireMonitorParsingTest.cpp",
+        ],
+        "@platforms//os:macos": [
+            "audio/backend/CoreAudioBackendFatalProbeTest.cpp",
+            "audio/backend/CoreAudioBackendTest.cpp",
+            "audio/backend/CoreAudioProviderTest.cpp",
+            "audio/backend/CoreAudioTestOutputTest.cpp",
+            "audio/backend/detail/CoreAudioChannelLayoutTest.cpp",
+            "audio/backend/detail/CoreAudioControlMailboxTest.cpp",
+            "audio/backend/detail/CoreAudioDeviceDiscoveryTest.cpp",
+            "audio/backend/detail/CoreAudioErrorTest.cpp",
+            "audio/backend/detail/CoreAudioFormatTest.cpp",
+            "audio/backend/detail/CoreAudioGraphTest.cpp",
+            "audio/backend/detail/CoreAudioLatencyTest.cpp",
+            "audio/backend/detail/CoreAudioRenderAdmissionTest.cpp",
+            "audio/backend/detail/CoreAudioRenderBufferTest.cpp",
+            "audio/backend/detail/CoreAudioRunControlTest.cpp",
+            "audio/backend/detail/CoreAudioUnitRunTest.cpp",
+            "audio/backend/detail/CoreFoundationStringTest.cpp",
+        ],
+        "@platforms//os:windows": [
+            "audio/backend/WasapiBackendReuseTest.cpp",
+            "audio/backend/WasapiProviderTest.cpp",
+            "audio/backend/WasapiSharedBackendTest.cpp",
+            "audio/backend/detail/WasapiGraphRegistryTest.cpp",
+            "audio/backend/detail/WasapiMixFormatTest.cpp",
+            "audio/backend/detail/WasapiStringsTest.cpp",
+        ],
+    }),
+    additional_linker_inputs = WINDOWS_UTF8_LINKER_INPUTS,
+    copts = AUDIO_TEST_COPTS,
+    data = [
+        ":ao_audio_fatal_probe",
+        "//test/data/audio:audio_fixtures",
+    ] + select({
+        "@platforms//os:macos": [":ao_coreaudio_output_probe"],
+        "//conditions:default": [],
+    }),
+    linkopts = WINDOWS_UTF8_LINKOPTS,
+    tags = ["external"],
+    deps = [
+        ":audio_platform_test_support",
+        ":audio_test_support",
+        ":fatal_probe_support",
+        "//lib/audio",
+        "//lib/audio:test_headers",
+        "@aobus_native_deps//:boost",
+        "@aobus_native_deps//:gsl_lite",
+        "@aobus_test_deps//:catch2",
+        "@aobus_test_deps//:fakeit",
+    ] + select({
+        "@platforms//os:linux": [
+            "@aobus_native_deps//:alsa",
+            "@aobus_native_deps//:pipewire",
+        ],
+        "@platforms//os:macos": [":coreaudio_test_support"],
+        "//conditions:default": [],
+    }),
+)
+
+# Library/runtime integration cases stay distinct from pure encoded-media tests.
+# Use the actual runtime implementation, not a separately compiled test adapter.
+cc_test(
+    name = "media_fixture_test",
+    srcs = [
+        "runtime/library/MediaFileFixtureTest.cpp",
+    ],
+    additional_linker_inputs = WINDOWS_UTF8_LINKER_INPUTS,
+    data = ["//test/data/audio:audio_fixtures"],
+    linkopts = WINDOWS_UTF8_LINKOPTS,
+    deps = STORAGE_TEST_DEPS + [
+        ":common_test_support",
+        ":library_test_support",
+        ":media_test_support",
+        "//app/runtime:test_headers",
+        "//lib/media",
+        "//lib/media:test_headers",
+    ],
+)
+
+cc_library(
+    name = "cli_test_support",
+    testonly = True,
+    srcs = ["cli/CliTestSupport.cpp"],
+    hdrs = ["cli/CliTestSupport.h"],
+    include_prefix = "test",
+    strip_include_prefix = ".",
+    deps = [
+        ":audio_fixture_support",
+        ":library_test_support",
+        "//app/cli",
+        "@aobus_test_deps//:catch2",
+    ],
+)
+
+cc_test(
+    name = "cli_test",
+    srcs = [
+        "cli/CliRuntimeTest.cpp",
+        "cli/CliSmokeTest.cpp",
+        "cli/CommandErrorTest.cpp",
+        "cli/CueRelinkCommandTest.cpp",
+        "cli/InitCommandTest.cpp",
+        "cli/LibCommandTest.cpp",
+        "cli/ListCommandTest.cpp",
+        "cli/ListDestructiveCommandTest.cpp",
+        "cli/OutputTest.cpp",
+        "cli/QueryHelpTest.cpp",
+        "cli/RunTest.cpp",
+        "cli/ScanCommandTest.cpp",
+        "cli/TagCommandTest.cpp",
+        "cli/TrackCommandTest.cpp",
+        "cli/TrackLiteralMetadataCommandTest.cpp",
+        "cli/TrackPerformanceMetadataCommandTest.cpp",
+    ],
+    additional_linker_inputs = WINDOWS_UTF8_LINKER_INPUTS,
+    data = [
+        "//app/cli:aobus",
+        "//test/data/audio:audio_fixtures",
+    ],
+    linkopts = WINDOWS_UTF8_LINKOPTS,
+    deps = [
+        ":cli_test_support",
+        "//app/runtime:test_headers",
+        "//include:app_version_header",
+        "@aobus_test_deps//:catch2",
+    ],
+)
+
+cc_library(
+    name = "message_catalog_test_support",
+    testonly = True,
+    srcs = ["MessageCatalogTestSupport.cpp"],
+    hdrs = ["MessageCatalogTestSupport.h"],
+    include_prefix = "test",
+    strip_include_prefix = ".",
+    deps = [
+        "//app/i18n",
+        "@aobus_test_deps//:catch2",
+    ],
+)
+
+# One shared runtime fixture owner for runtime, UIModel and frontends; async
+# objects remain singly owned by the lower-layer support above.
+cc_library(
+    name = "runtime_test_support",
+    testonly = True,
+    srcs = [
+        "runtime/AppRuntimeTestSupport.cpp",
+        "runtime/CueYamlTestSupport.cpp",
+        "runtime/PlaybackSuccessionBaseTestSupport.cpp",
+        "runtime/PlaybackSuccessionSeekTestSupport.cpp",
+        "runtime/PlaybackSuccessionTransportTestSupport.cpp",
+        "runtime/PlaybackTestSupport.cpp",
+        "runtime/PlaybackTransportTestSupport.cpp",
+        "runtime/PlaybackUiTestSupport.cpp",
+        "runtime/RuntimeLibraryTestSupport.cpp",
+        "runtime/ViewServiceTestSupport.cpp",
+        "runtime/WorkspaceTestSupport.cpp",
+        "runtime/completion/CompletionTestSupport.cpp",
+        "runtime/library/ScanApplyTestSupport.cpp",
+        "runtime/projection/TrackListProjectionTestSupport.cpp",
+        "runtime/source/ListOrderSourceTestSupport.cpp",
+        "runtime/source/SmartListEvaluatorTestSupport.cpp",
+        "runtime/source/TrackSourceTestSupport.cpp",
+    ],
+    hdrs = glob(
+        ["runtime/**/*.h"],
+        exclude = [
+            "runtime/AsyncTestSupport.h",
+            "runtime/ExecutorTestSupport.h",
+        ],
+    ),
+    copts = AUDIO_TEST_COPTS,
+    include_prefix = "test",
+    strip_include_prefix = ".",
+    deps = [
+        ":async_test_support",
+        ":audio_engine_test_support",
+        ":audio_fixture_support",
+        ":audio_test_support",
+        ":common_test_support",
+        ":library_test_support",
+        "//app/runtime",
+        "//app/runtime:test_headers",
+        "//lib/audio:test_headers",
+        "@aobus_test_deps//:catch2",
+        "@aobus_test_deps//:fakeit",
+    ],
+)
+
+cc_library(
+    name = "tui_test_support",
+    testonly = True,
+    srcs = [
+        "tui/CoverArtTestSupport.cpp",
+        "tui/EventControllerTestSupport.cpp",
+        "tui/KeymapTestSupport.cpp",
+        "tui/RenderTestSupport.cpp",
+        "tui/TrackPropertiesEditorTestSupport.cpp",
+    ],
+    hdrs = [
+        "tui/CoverArtTestSupport.h",
+        "tui/EventControllerTestSupport.h",
+        "tui/KeymapTestSupport.h",
+        "tui/RenderTestSupport.h",
+        "tui/TrackPropertiesEditorTestSupport.h",
+    ],
+    copts = AUDIO_TEST_COPTS,
+    include_prefix = "test",
+    strip_include_prefix = ".",
+    deps = [
+        ":message_catalog_test_support",
+        ":runtime_test_support",
+        "//app/tui",
+        "@aobus_test_deps//:fakeit",
+    ],
+)
+
+cc_binary(
+    name = "ao_tui_signal_probe",
+    testonly = True,
+    srcs = [
+        "fatal/TuiSignalProbeMain.cpp",
+        "fatal/TuiSignalProbeScenario.cpp",
+        "fatal/TuiSignalProbeScenario.h",
+    ],
+    additional_linker_inputs = WINDOWS_UTF8_LINKER_INPUTS,
+    linkopts = WINDOWS_UTF8_LINKOPTS,
+    deps = [
+        ":fatal_probe_support",
+        "//app/tui",
+    ],
+)
+
+cc_test(
+    name = "tui_test",
+    srcs = [
+        "tui/AnchoredOverlayTest.cpp",
+        "tui/CommandCompletionStateTest.cpp",
+        "tui/CommandCompletionTest.cpp",
+        "tui/CommandTest.cpp",
+        "tui/CoverArtLoaderTest.cpp",
+        "tui/CoverArtTest.cpp",
+        "tui/DetailFieldLayoutTest.cpp",
+        "tui/DetailSectionsTest.cpp",
+        "tui/EditorMouseTest.cpp",
+        "tui/EventControllerTest.cpp",
+        "tui/ExecutorTest.cpp",
+        "tui/ExitControllerTest.cpp",
+        "tui/FrameTimerTest.cpp",
+        "tui/GoToMenuTest.cpp",
+        "tui/HitRegionsTest.cpp",
+        "tui/KeymapTest.cpp",
+        "tui/LayoutStateStoreTest.cpp",
+        "tui/LibraryControllerTest.cpp",
+        "tui/LibraryCreditsCacheTest.cpp",
+        "tui/LibraryNavigationTest.cpp",
+        "tui/LibraryScanControllerTest.cpp",
+        "tui/ListAuthoringControllerTest.cpp",
+        "tui/ListNavigationModelTest.cpp",
+        "tui/ListOrderControllerTest.cpp",
+        "tui/ListSearchTest.cpp",
+        "tui/MouseBindingsTest.cpp",
+        "tui/NavigationPanelTest.cpp",
+        "tui/OutputDeviceControllerTest.cpp",
+        "tui/OutputDevicePanelTest.cpp",
+        "tui/PanelDividerTest.cpp",
+        "tui/PanelResizeTest.cpp",
+        "tui/PinnedNavigationTest.cpp",
+        "tui/PlaybackHoverTest.cpp",
+        "tui/PlaybackModeTest.cpp",
+        "tui/PlaybackNavigationTest.cpp",
+        "tui/PlaybackPanelTest.cpp",
+        "tui/PlaybackStatusFormatterTest.cpp",
+        "tui/PreferencesTest.cpp",
+        "tui/QualityPanelTest.cpp",
+        "tui/RenderTest.cpp",
+        "tui/SelectionNavigationTest.cpp",
+        "tui/SettingsEditorTest.cpp",
+        "tui/ShellInteractionModelTest.cpp",
+        "tui/SignalExitWatcherTest.cpp",
+        "tui/SmartListEditorTest.cpp",
+        "tui/SoulButtonTest.cpp",
+        "tui/TerminalTitleTest.cpp",
+        "tui/TerminalTrackColumnLayoutTest.cpp",
+        "tui/TextCellTest.cpp",
+        "tui/TextFieldModelTest.cpp",
+        "tui/TrackCreditsEditorTest.cpp",
+        "tui/TrackDetailLinesTest.cpp",
+        "tui/TrackEditControllerTest.cpp",
+        "tui/TrackListEntryTest.cpp",
+        "tui/TrackPresentationNavigationTest.cpp",
+        "tui/TrackPropertiesEditorCompletionTest.cpp",
+        "tui/TrackPropertiesEditorTagsTest.cpp",
+        "tui/TrackPropertiesEditorTest.cpp",
+        "tui/TrackSectionTest.cpp",
+        "tui/TrackTableTest.cpp",
+        "tui/TrackTagPopoverTest.cpp",
+        "tui/TuiSignalProbeTest.cpp",
+        "tui/WorkspaceUsabilityTest.cpp",
+    ],
+    additional_linker_inputs = WINDOWS_UTF8_LINKER_INPUTS,
+    copts = AUDIO_TEST_COPTS,
+    data = [
+        ":ao_tui_signal_probe",
+        "//app/tui:aobus-tui",
+        "//test/data/audio:audio_fixtures",
+    ],
+    linkopts = WINDOWS_UTF8_LINKOPTS,
+    deps = [
+        ":fatal_probe_support",
+        ":tui_test_support",
+        "//app/i18n:ordering",
+        "//lib/utility:unicode_text",
+        "@aobus_test_deps//:catch2",
+    ],
+)
+
+# One Linux system-media boundary includes adapter contracts and the real TUI
+# PTY/private-bus consumer; not separate executables for migration milestones.
+cc_test(
+    name = "systemmedia_test",
+    srcs = glob(["systemmedia/linux/*Test.cpp"]) + [
+        "systemmedia/linux/MprisTestSupport.cpp",
+        "systemmedia/linux/MprisTestSupport.h",
+    ],
+    copts = AUDIO_TEST_COPTS,
+    data = [
+        "//app/tui:aobus-tui",
+        "//test/data/audio:audio_fixtures",
+        "@aobus_native_tools//:dbus_daemon",
+    ],
+    env = {"AOBUS_TEST_DBUS_DAEMON": TEST_TOOLS.get("dbus_daemon", "")},
+    local_defines = ["AOBUS_BAZEL_TUI_EXECUTABLE"],
+    tags = ["external"],
+    target_compatible_with = select({
+        "//bazel:linux_system_media_enabled": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [
+        ":audio_fixture_support",
+        ":common_test_support",
+        ":runtime_test_support",
+        "//app/runtime:test_headers",
+        "//app/systemmedia:test_headers",
+        "//app/uimodel",
+        "@aobus_test_deps//:catch2",
+        "@aobus_test_deps//:fakeit",
+    ] + select({
+        "@platforms//os:linux": ["@aobus_native_deps//:giomm"],
+        "//conditions:default": [],
+    }),
+)
+
+cc_library(
+    name = "performance_report_support",
+    testonly = True,
+    srcs = ["perf/report/PerformanceReport.cpp"],
+    hdrs = glob(["perf/report/*.h"]),
+    include_prefix = "test",
+    strip_include_prefix = ".",
+    visibility = ["//test:__pkg__"],
+    deps = [
+        "//lib/utility",
+        "@aobus_native_deps//:icu_uc",
+    ],
+)
+
+cc_binary(
+    name = "ao_fatal_probe",
+    testonly = True,
+    srcs = [
+        "fatal/FatalProbeMain.cpp",
+        "fatal/FatalProbeScenario.cpp",
+    ],
+    additional_linker_inputs = WINDOWS_UTF8_LINKER_INPUTS,
+    linkopts = WINDOWS_UTF8_LINKOPTS,
+    deps = [
+        ":fatal_probe_support",
+        "//lib/utility",
+    ],
+)
+
+cc_binary(
+    name = "ao_coreaudio_output_probe",
+    testonly = True,
+    srcs = ["helper/CoreAudioOutputProbeMain.cpp"],
+    target_compatible_with = ["@platforms//os:macos"],
+    deps = [
+        ":coreaudio_test_support",
+        ":fatal_probe_support",
+    ],
+)
+
+cc_binary(
+    name = "ao_detached_process_probe",
+    testonly = True,
+    srcs = ["helper/DetachedProcessProbeWindows.cpp"],
+    additional_linker_inputs = WINDOWS_UTF8_LINKER_INPUTS,
+    linkopts = WINDOWS_UTF8_LINKOPTS + ["shell32.lib"],
+    target_compatible_with = ["@platforms//os:windows"],
+    deps = ["//bazel:compile_contract"],
+)
+
+# Shared application-runtime contracts retain ApplicationTestMain's fatal self-reentry.
+cc_test(
+    name = "runtime_test",
+    srcs = glob(
+        ["runtime/**/*Test.cpp"],
+        exclude = [
+            "runtime/library/MediaFileFixtureTest.cpp",
+            "runtime/PlaybackSessionAlsaMuteTest.cpp",
+        ],
+    ) + [
+        "ApplicationTestMain.cpp",
+        "fatal/RuntimeFatalProbeScenario.cpp",
+        "perf/report/PerformanceReportTest.cpp",
+    ] + select({
+        "@platforms//os:linux": ["runtime/PlaybackSessionAlsaMuteTest.cpp"],
+        "//conditions:default": [],
+    }),
+    additional_linker_inputs = WINDOWS_UTF8_LINKER_INPUTS,
+    copts = AUDIO_TEST_COPTS,
+    data = [
+        ":library_fixtures",
+        "//test/data/audio:audio_fixtures",
+    ],
+    linkopts = WINDOWS_UTF8_LINKOPTS,
+    deps = STORAGE_TEST_DEPS + [
+        ":audio_platform_test_support",
+        ":fatal_probe_support",
+        ":message_catalog_test_support",
+        ":performance_report_support",
+        ":runtime_test_support",
+        "//app/i18n:completion",
+        "//app/i18n:ordering",
+        "//app/runtime:prepared_next_contract",
+        "//app/runtime:test_headers",
+        "//app/uimodel",
+        "//lib/audio:test_headers",
+        "//lib/query:test_headers",
+        "@aobus_test_deps//:fakeit",
+    ] + select({
+        "@platforms//os:linux": ["@aobus_native_deps//:alsa"],
+        "@platforms//os:windows": ["//app/windows-winui:model"],
+        "//conditions:default": [],
+    }),
+)
+
+cc_library(
+    name = "uimodel_test_support",
+    testonly = True,
+    srcs = [
+        "uimodel/library/track/TrackAuthoringTestSupport.cpp",
+        "uimodel/status/activity/ActivityStatusFeedProjectionTestSupport.cpp",
+    ],
+    hdrs = glob(["uimodel/**/*.h"]),
+    copts = AUDIO_TEST_COPTS,
+    include_prefix = "test",
+    strip_include_prefix = ".",
+    deps = [
+        ":message_catalog_test_support",
+        ":runtime_test_support",
+        "//app/i18n",
+        "//app/uimodel:test_headers",
+        "@aobus_test_deps//:fakeit",
+    ],
+)
+
+cc_test(
+    name = "i18n_test",
+    srcs = glob(["i18n/*Test.cpp"]),
+    additional_linker_inputs = WINDOWS_UTF8_LINKER_INPUTS,
+    copts = TEST_WARNING_COPTS,
+    linkopts = WINDOWS_UTF8_LINKOPTS,
+    deps = [
+        ":message_catalog_test_support",
+        "//app/i18n:catalog_pattern",
+        "//app/i18n:completion",
+        "//app/i18n:ordering",
+        "//app/i18n:test_headers",
+        "//lib/utility",
+        "//lib/utility:unicode_text",
+        "@aobus_native_deps//:icu",
+        "@aobus_test_deps//:catch2",
+    ],
+)
+
+cc_test(
+    name = "desktop_test",
+    srcs = glob(["desktop/*Test.cpp"]),
+    additional_linker_inputs = WINDOWS_UTF8_LINKER_INPUTS,
+    copts = TEST_WARNING_COPTS,
+    data = select({
+        "@platforms//os:windows": [":ao_detached_process_probe"],
+        "//conditions:default": [],
+    }),
+    linkopts = WINDOWS_UTF8_LINKOPTS,
+    deps = [
+        ":common_test_support",
+        "//app/desktop:desktop_launch",
+        "@aobus_test_deps//:catch2",
+    ],
+)
+
+# Portable Windows-frontend policy and native WinRT contracts share the same
+# frontend test owner; the native cases exist only in the Windows configuration.
+cc_test(
+    name = "winui_test",
+    srcs = glob(
+        ["winui/**/*Test.cpp"],
+        exclude = [
+            "winui/FrameResourceTest.cpp",
+            "winui/StringResourceTest.cpp",
+            "winui/WinUiErrorBoundaryTest.cpp",
+        ],
+    ) + select({
+        "@platforms//os:windows": [
+            "windows/platform/MemoryRandomAccessStreamTest.cpp",
+            "winui/FrameResourceTest.cpp",
+            "winui/StringResourceTest.cpp",
+            "winui/WinUiErrorBoundaryTest.cpp",
+        ],
+        "//conditions:default": [],
+    }),
+    additional_linker_inputs = WINDOWS_UTF8_LINKER_INPUTS,
+    copts = AUDIO_TEST_COPTS,
+    data = ["//app/windows-winui:model_test_inputs"] + select({
+        "@platforms//os:windows": [":winui_test_inputs"],
+        "//conditions:default": [],
+    }),
+    linkopts = WINDOWS_UTF8_LINKOPTS,
+    local_defines = ["'AOBUS_BAZEL_TEST_INPUTS=\"test/winui_test_inputs.txt\"'"],
+    deps = [
+        ":message_catalog_test_support",
+        ":runtime_test_support",
+        ":uimodel_test_support",
+        "//app/i18n:catalog_pattern",
+        "//app/windows-winui:model",
+        "//lib/utility:unicode_text",
+        "@aobus_native_deps//:rapidyaml",
+        "@aobus_test_deps//:catch2",
+        "@aobus_test_deps//:fakeit",
+    ] + select({
+        "@platforms//os:windows": [
+            "//app/windows:windows_platform",
+            "//app/windows-winui:error_boundary",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+cc_library(
+    name = "gtk_session_bus_test_support",
+    testonly = True,
+    srcs = ["linux-gtk/GtkSessionBusTestSupport.cpp"],
+    hdrs = ["linux-gtk/GtkSessionBusTestSupport.h"],
+    include_prefix = "test",
+    strip_include_prefix = ".",
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = ["//bazel:compile_contract"],
+)
+
+cc_library(
+    name = "gtk_test_support",
+    testonly = True,
+    srcs = glob(
+        ["linux-gtk/**/*TestSupport.cpp"],
+        exclude = ["linux-gtk/GtkSessionBusTestSupport.cpp"],
+    ) + [
+        "linux-gtk/layout/components/ContainerTestHelpers.cpp",
+        "linux-gtk/layout/state/FakeLayoutComponentStateStore.cpp",
+    ],
+    hdrs = glob(
+        ["linux-gtk/**/*.h"],
+        exclude = ["linux-gtk/GtkSessionBusTestSupport.h"],
+    ),
+    copts = AUDIO_TEST_COPTS + GTK_HEADER_COPTS,
+    include_prefix = "test",
+    strip_include_prefix = ".",
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        ":gtk_session_bus_test_support",
+        ":message_catalog_test_support",
+        ":runtime_test_support",
+        "//app/i18n:ordering",
+        "//app/linux-gtk:test_headers",
+        "@aobus_test_deps//:catch2",
+        "@aobus_test_deps//:fakeit",
+        "@aobus_test_deps//:xtest",
+    ],
+)
+
+cc_binary(
+    name = "ao_gapplication_probe",
+    testonly = True,
+    srcs = ["linux-gtk/platform/GApplicationReplacementProbeMain.cpp"],
+    copts = TEST_WARNING_COPTS + GTK_HEADER_COPTS,
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        ":fatal_probe_support",
+        ":gtk_session_bus_test_support",
+        "@aobus_native_deps//:gtkmm",
+    ],
+)
+
+# Explicit selection requires an owned Xvfb display and private session bus.
+# The original main owns self-reentry and fatal-warning environment tests.
+cc_test(
+    name = "gtk_test",
+    srcs = glob(["linux-gtk/**/*Test.cpp"]) + ["linux-gtk/GtkTestMain.cpp"],
+    copts = AUDIO_TEST_COPTS + GTK_HEADER_COPTS,
+    data = [
+        ":ao_gapplication_probe",
+        "//test/data/audio:audio_fixtures",
+        "@aobus_native_tools//:dbus_daemon",
+    ],
+    env = {"AOBUS_TEST_DBUS_DAEMON": TEST_TOOLS.get("dbus_daemon", "")},
+    linkopts = ["-Wl,-u,aobus_get_resource"],
+    local_defines = ["AOBUS_HAS_SYSTEM_MEDIA=1"],
+    tags = [
+        "external",
+        "local",
+        "manual",
+    ],
+    target_compatible_with = select({
+        "//bazel:linux_gtk_enabled": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [
+        ":fatal_probe_support",
+        ":gtk_test_support",
+        "//app/systemmedia:test_headers",
+        "@aobus_native_deps//:giomm",
+        "@aobus_native_deps//:gtkmm",
+        "@aobus_test_deps//:catch2",
+        "@aobus_test_deps//:fakeit",
+        "@aobus_test_deps//:xtest",
+    ],
+)
+
+# Native services, real endpoints and executable-local link interposition have
+# one opt-in platform boundary, separate from the Core SDK/detail contracts.
+cc_test(
+    name = "backend_test",
+    srcs = select({
+        "@platforms//os:linux": [
+            "audio/backend/AlsaChannelObservationTest.cpp",
+            "audio/backend/PipeWireBackendAdmissionTest.cpp",
+            "audio/backend/PipeWireChannelObservationTest.cpp",
+            "audio/backend/PipeWireProviderDaemonTest.cpp",
+        ],
+        "@platforms//os:macos": [
+            "audio/backend/CoreAudioBackendNativeFatalProbeTest.cpp",
+            "audio/backend/CoreAudioBackendNativeTest.cpp",
+            "audio/backend/CoreAudioBackendRunStateTest.cpp",
+            "audio/backend/CoreAudioChannelObservationTest.cpp",
+            "audio/backend/CoreAudioProviderHardwareTest.cpp",
+            "audio/backend/detail/CoreAudioDeviceDiscoveryNativeTest.cpp",
+        ],
+        "@platforms//os:windows": [
+            "audio/backend/WasapiChannelObservationTest.cpp",
+            "audio/backend/WasapiProviderHardwareTest.cpp",
+        ],
+    }),
+    additional_linker_inputs = WINDOWS_UTF8_LINKER_INPUTS,
+    # Every current Windows case is a hidden hardware observation, so an
+    # unattended run selects none. Other hosts keep Catch2's empty-run failure.
+    args = select({
+        "@platforms//os:windows": ["--allow-running-no-tests"],
+        "//conditions:default": [],
+    }),
+    copts = AUDIO_TEST_COPTS,
+    data = [
+        ":ao_audio_fatal_probe",
+        "//test/data/audio:audio_fixtures",
+    ],
+    linkopts = WINDOWS_UTF8_LINKOPTS + select({
+        "@platforms//os:linux": [
+            "-Wl,--wrap=pw_stream_add_listener",
+            "-Wl,--wrap=pw_stream_connect",
+            "-Wl,--wrap=pw_stream_set_active",
+            "-Wl,--wrap=pw_stream_dequeue_buffer",
+            "-Wl,--wrap=pw_stream_queue_buffer",
+        ],
+        "//conditions:default": [],
+    }),
+    tags = [
+        "external",
+        "local",
+        "manual",
+    ],
+    deps = [
+        ":audio_test_support",
+        ":fatal_probe_support",
+        "@aobus_test_deps//:catch2",
+    ] + select({
+        "@platforms//os:linux": [
+            "@aobus_native_deps//:alsa",
+            "@aobus_native_deps//:pipewire",
+        ],
+        "@platforms//os:macos": [":coreaudio_test_support"],
+        "//conditions:default": [],
+    }),
+)
+
+# Independent allocator/sampler mains remain explicit optimized workloads, not
+# ordinary tests, and are never selected by the default suite.
+cc_binary(
+    name = "ao_perf_baseline",
+    testonly = True,
+    srcs = glob([
+        "perf/baseline/*.cpp",
+        "perf/baseline/*.h",
+    ]) + ["//include:media_compat_headers"],
+    additional_linker_inputs = WINDOWS_UTF8_LINKER_INPUTS,
+    copts = AUDIO_TEST_COPTS,
+    linkopts = WINDOWS_UTF8_LINKOPTS,
+    tags = ["manual"],
+    deps = [
+        ":performance_report_support",
+        ":runtime_test_support",
+        ":uimodel_test_support",
+        "//app/i18n:completion",
+        "//app/i18n:ordering",
+        "//app/uimodel",
+        "//lib/utility:unicode_text",
+        "@aobus_native_deps//:icu_uc",
+        "@aobus_test_deps//:catch2",
+        "@aobus_test_deps//:fakeit",
+    ],
+)
+
+cc_binary(
+    name = "ao_tui_bench",
+    testonly = True,
+    srcs = ["tui/TrackTableBenchmark.cpp"],
+    additional_linker_inputs = WINDOWS_UTF8_LINKER_INPUTS,
+    copts = AUDIO_TEST_COPTS,
+    linkopts = WINDOWS_UTF8_LINKOPTS,
+    tags = ["manual"],
+    deps = [
+        ":tui_test_support",
+        "@aobus_native_deps//:mimalloc",
+        "@aobus_test_deps//:catch2",
+    ],
+)

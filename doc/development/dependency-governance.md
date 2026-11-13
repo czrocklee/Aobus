@@ -5,7 +5,8 @@ id: development.dependency-governance
 
 This page explains how to identify the authoritative dependency input, inspect a
 resolved dependency, and decide whether a pin belongs in the shared contract.
-Use the [dependency upgrade workflow](dependency-upgrade.md) to change pins.
+It also identifies binary-distribution checks that version acceptance does not
+replace. Use the [dependency upgrade workflow](dependency-upgrade.md) to change pins.
 
 ## Policy goal
 
@@ -31,19 +32,39 @@ Use the owner for the question being asked:
 
 | Question | Owner |
 |---|---|
-| Accepted cross-platform C++/Windows SDK versions, required targets, capabilities, and temporary exceptions | `dependency-contract.json` |
+| Accepted cross-platform C++/Windows SDK versions, capabilities, and temporary exceptions | `dependency-contract.json` |
 | Linux package-set revision and source hash | `nixpkgs.json` |
 | vcpkg registry snapshots | `vcpkg-configuration.json` |
 | vcpkg ports, features, and exact overrides | `vcpkg.json` |
 | macOS compiler, deployment target, and vcpkg tool archive | `script/ao/macos-toolchain.json` |
 | Windows tidy LLVM SDK version, archive SHA-256, and required files | `script/ao/windows-llvm-sdk.json` |
+| CI Bazel remote-cache proxy version and artifact SHA-256, and its Windows WSL host rootfs SHA-256 | `script/ao/bazel-remote.json` |
+| Bazel version | `script/ao/bazel-toolchain.json`, `.bazelversion` |
+| Buildifier formatter/linter version and native artifact SHA-256 | `script/ao/buildifier.json` |
 | WinUI NuGet closure and trusted source | `app/windows-winui/packages.config`, `app/windows-winui/NuGet.Config` |
 | Python, Ruff, mypy, and documentation-parser policy | `script/ao/toolchain.json` |
 | Accepted Python tooling and documentation-parser artifacts | `script/ao/docs-requirements.txt`, `script/ao/windows-requirements.txt`, `script/ao/macos-requirements.txt` |
-| Configured native resolution | `<build>/aobus-dependencies.json`, verified by `./ao deps report` or `./ao deps verify` |
+| Installed native and test SDK manifests and hash inputs | verified by `./ao deps report` or `./ao deps verify` |
 
 Do not copy a current version from this guide. Read the owning file or a verified
 build report.
+The [Bazel build system](bazel.md) projects governed providers into
+disposable imports and adds no independent version authority.
+Its repository-time bootstrap enters the pinned Nix shell on Linux, allowing
+Nix to realize missing pinned outputs. Native macOS and Windows discovery
+instead validates ready, explicitly selected SDKs; repository fetch does not
+install their producers, ports, Python or SDKs. Its `config/bazel/dependencies.json` holds only
+structural import contracts — static header and archive interface fallbacks,
+exact library spellings and closure order, metadata-token preconditions, ABI
+defines, and native repair entries — with no per-package accepted-version
+entries. A version is accepted here, in the shared contract and resolver inputs; at
+preparation time the observed provider is matched against its installed
+headers, pkg-config metadata and tools, so an upgrade this policy accepts
+passes the unchanged structural checks without a Bazel-side version edit.
+Centralization alone is not a reason to promote more dependencies into the
+shared contract. See [imported
+interfaces](bazel.md#imported-interfaces-and-compilation) for the structural
+checks applied to observed provider identity.
 
 ## Locating an existing dependency
 
@@ -51,11 +72,12 @@ Start with the checkout, target platform, configuration, and the build tree that
 actually consumed the dependency. A native VM may own the provider even when
 the source is mounted from another host.
 
-1. Inspect the build's `CMakeCache.txt`, `aobus-dependencies.json`, and
-   `build.log`. `./ao deps report` verifies and reports an already configured
-   tree; it does not configure one or search the host.
-2. Identify the resolver in the table above and inspect the relevant
-   `CMakeLists.txt` or `cmake/` module for the package or imported target.
+1. Inspect the selected tree's provisioned SDK, the dependency report, and
+   `build.log`. `./ao deps report` verifies and reports the actual installed
+   native and test SDK manifests and their hash inputs; it does not install
+   anything or search the host.
+2. Identify the resolver in the table above and inspect the relevant resolver
+   input or Bazel import declaration for the package or imported interface.
 3. Ask that resolver for paths in the target environment. Linux inspection runs
    inside the pinned Nix shell. macOS and Windows C++ libraries normally come
    from the selected vcpkg installation and triplet. WinUI uses the governed
@@ -80,12 +102,10 @@ diagnosis, for example when:
 - persisted or user-visible semantics depend on one implementation or data set.
 
 A matching upstream version is not proof of build, ABI, or behavioral identity.
-CMake also checks declared imported targets and capabilities. Native reports
+The Bazel structural import checks verify declared imported interfaces and
+capabilities against the observed provider. Native reports
 retain resolver evidence such as Nix output identities or vcpkg registry,
 triplet, features, tool version, and `version#port-version`.
-
-Conditionally disabled dependencies are `not-applicable`; they are not reported
-as verified or missing.
 
 ## Native resolution rules
 
@@ -94,8 +114,11 @@ as verified or missing.
 `shell.nix` imports the exact revision and hash in `nixpkgs.json` and rejects
 ambient `NIX_PATH`, channel, or `PATH` packages as substitutes. Project
 derivations remain governed by their own source hashes and the shared contract.
-Nix evaluation also checks applicable Python, Ruff, mypy, and compiler-cache
-pins.
+Nix evaluation also checks applicable Python, Ruff, mypy, and Buildifier
+pins. One package set supplies both the native dependencies and these tools,
+so the native pin and the exact tool contracts are coupled: a package-set
+change that moves a tool version must update the corresponding contract in
+the same change, and a tool upgrade needs a package set that supplies it.
 
 ### macOS and Windows vcpkg
 
@@ -108,6 +131,15 @@ A package family that must remain coherent, such as split Boost ports, uses a
 package-scoped registry rather than one top-level port override. An override
 ignores other version constraints and therefore needs a reason and removal
 condition in the upgrade review.
+
+The default registry keeps its accepted `baseline` as the resolution floor
+and may pin an immutable `reference` commit that supplies the official
+version database. Exact manifest overrides then select specific official
+recipes from that database — for example CLI11, Catch2, or the Windows host
+`python3` build tool — without moving the baseline floor for every other
+port. The host `python3` port is dependency-build tooling; it is not the
+portal Python, which comes from the governed NuGet closure at the exact
+`script/ao/toolchain.json` version.
 
 Repository overlay ports are exceptional and temporary.
 
@@ -140,7 +172,8 @@ were rejected for explicit reasons:
 `stb_image_resize2.h` exposes no version macro. Remove the overlay when the
 selected official vcpkg port installs a header whose leading version banner is
 v2.18 or newer and whose source contains the upstream edge-region fix. Removal
-also means deleting the preset overlay settings and pin-consistency tests, then
+also means deleting the overlay settings in the vcpkg configuration and the
+pin-consistency tests, then
 passing the focused cover-art loader under macOS ASan/UBSan, the Windows native
 TUI tests, and both platforms' full checks with the official port. Do not let
 the overlay become an untracked fork or intentionally change unrelated stb
@@ -175,10 +208,27 @@ come from the hashed requirements locks, not ambient tools. See the
 [Windows](windows.md#prerequisites) and [macOS](macos.md#host-setup) guides for
 setup and local-state requirements.
 
+Buildifier is governed separately by `script/ao/buildifier.json`: an exact
+version and hash-pinned official macOS/Windows artifacts. Linux selects the
+matching package from pinned Nixpkgs through `AO_NIX_BUILDIFIER`, not `PATH`.
+Native hosts cache it under their Aobus state root's `tools/buildifier/` and
+validate both SHA-256 and version on every use; an existing damaged entry fails
+rather than falling back or silently repairing it. `./ao setup buildifier`
+(`ao.bat setup buildifier`) explicitly prepares only that tool. Format and lint
+also prepare a missing native tool when their scope contains Bazel files; no
+C++ SDK is required for a Bazel-only scope. See [Starlark hygiene](linting.md#bazelstarlark-hygiene).
+
 The native requirements files are artifact locks with hashes, not alternative
 policy files. Ruff's target version and mypy's `python_version` in
 `pyproject.toml` describe supported language syntax; they need not equal the
 managed interpreter's patch release.
+
+A `py3-none-any` wheel is still a hash-locked wheel accepted by pip's
+`--only-binary` selection, not a source distribution or a compiled-native
+claim. Selecting one explicitly — for example when a platform lacks a
+compiled CPython wheel for the contracted mypy release — keeps the lock
+hash-verified but does not establish native-compiled performance; verify the
+selected wheel at runtime on that platform.
 
 The documentation parser follows the same split: `script/ao/toolchain.json`
 pins the exact markdown-it-py and mdurl versions, and
@@ -195,11 +245,12 @@ environment instead of reusing a stale one.
 The normal enforcement path is:
 
 1. the native bootstrap validates its applicable tool contract;
-2. CMake reads `dependency-contract.json`, rejects expired exceptions, discovers
-   active packages, and checks versions, targets, and capabilities;
-3. CMake writes `aobus-dependencies.json` with contract and resolver identity;
-4. `./ao deps verify` checks that report against current source inputs; and
-5. `./ao check` verifies dependencies after building and before test suites.
+2. the Bazel repository rules admit the installed providers against
+   `dependency-contract.json`, rejecting expired exceptions and checking
+   versions, interfaces, and capabilities;
+3. `./ao deps verify` checks the installed native and test SDK manifests and
+   hash inputs against current source inputs; and
+4. `./ao check` gates configured dependency admission as part of completion.
 
 Reports are build artifacts, not source files. Preserve before/after reports as
 CI or review evidence for dependency changes; summarize governed changes rather
@@ -223,6 +274,32 @@ Atomicity means the default branch remains in one verifiable state. A normal
 governed update changes policy and every affected resolver path together; a
 security-first update may use the bounded exception mechanism. It does not mean
 unrelated tool updates or formatting changes belong in the same change.
+
+## Binary distribution
+
+A development executable or application bundle is not automatically a complete
+release package. Check the actual incorporated libraries, copied runtime files
+and assets, not every dependency used by build tools. Include the project's
+[MIT notice](../../LICENSE), applicable third-party notices and the
+[brand notice](../../asset/brand/LICENSE.txt) when its assets are bundled; verify
+redistribution terms for the selected SDK/runtime payloads.
+
+The native macOS triplet links mpg123 statically; the reviewed Windows SDK
+links it dynamically. The existing
+[LGPL distribution boundary](windows.md#distribution-and-storage-boundaries)
+also applies to macOS binaries: choose and validate a compliance route before
+publishing. A successful build or public application source alone does not
+establish usable library modification/relinking materials.
+
+FDK-AAC has separate obligations. Its [NOTICE](https://gitlab.freedesktop.org/wtaymans/fdk-aac-stripped/-/raw/9896ddc0d08bb3f764f01d5e372bec1c068ad8f5/NOTICE)
+requires the complete license text with binary distributions and free
+availability of the complete codec source and modifications to recipients;
+it grants no patent license. The manifest does not request the vcpkg port's
+`he-aac` feature; the current registry's default uses a stripped fork, whereas
+Linux selects upstream FDK-AAC through `shell.nix`. Verify the actual installed
+source, patches and features rather than inferring either universal HE-AAC
+support or patent clearance. Preserve those inputs for the selected release and
+qualify unresolved licensing or patent questions before distribution.
 
 ## Non-goals
 

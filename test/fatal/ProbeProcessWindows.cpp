@@ -332,6 +332,11 @@ namespace ao::test
     return result;
   }
 
+  void reportProbeChildStarted() noexcept
+  {
+    // Windows measures the probe timeout from process creation.
+  }
+
   void suppressProbeChildCrashDump() noexcept
   {
     // The fatal backend already clears _CALL_REPORTFAULT before abort().

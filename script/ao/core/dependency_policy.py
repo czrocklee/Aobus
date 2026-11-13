@@ -1,4 +1,4 @@
-"""Dependency-contract validation and native resolution reporting."""
+"""Dependency-contract validation and installed vcpkg/NuGet identity parsing."""
 
 from __future__ import annotations
 
@@ -15,16 +15,10 @@ from typing import Any
 from .paths import PROJECT_ROOT
 
 CONTRACT_FILE = PROJECT_ROOT / "dependency-contract.json"
-BUILD_REPORT_NAME = "aobus-dependencies.json"
-SUPPORTED_SCHEMA = 2
-SUPPORTED_NIX_REPORT_SCHEMA = 1
 SUPPORTED_PLATFORMS = frozenset({"linux", "macos", "windows"})
 # Native resolver ownership. Linux retains the pinned Nix package set; macOS
 # and Windows share the governed vcpkg manifest and registry snapshots.
-NIX_PLATFORMS = frozenset({"linux"})
 VCPKG_PLATFORMS = frozenset({"macos", "windows"})
-NIXPKGS_PIN_FILES = {"linux": "nixpkgs.json"}
-SUPPORTED_BUILD_CONDITIONS = frozenset({"AOBUS_BUILD_TUI", "AOBUS_BUILD_WINUI"})
 _VERSION_RE = re.compile(r"^[0-9]+(?:\.[0-9]+)*$")
 
 
@@ -104,20 +98,6 @@ def _dependency_platforms(definition: dict[str, Any], context: str) -> list[str]
     return platforms
 
 
-def _dependency_condition(definition: dict[str, Any], context: str) -> str | None:
-    consumer_name = "cmake" if "cmake" in definition else "msbuild"
-    consumer = _mapping(definition.get(consumer_name), f"{context}.{consumer_name}")
-    condition = consumer.get("requiredWhen")
-    if condition is None:
-        return None
-    condition_name = _string(condition, f"{context}.{consumer_name}.requiredWhen")
-    if condition_name not in SUPPORTED_BUILD_CONDITIONS:
-        raise DependencyPolicyError(
-            f"{context}.{consumer_name}.requiredWhen names unsupported option {condition_name!r}"
-        )
-    return condition_name
-
-
 def _version_tuple(value: str) -> tuple[int, ...]:
     if not _VERSION_RE.fullmatch(value):
         raise DependencyPolicyError(f"unsupported governed version {value!r}; expected dotted numeric components")
@@ -154,10 +134,6 @@ def read_json(path: Path) -> dict[str, Any]:
 
 
 def validate_contract(contract: dict[str, Any], *, today: date | None = None) -> dict[str, Any]:
-    if contract.get("schemaVersion") != SUPPORTED_SCHEMA:
-        raise DependencyPolicyError(
-            f"unsupported dependency contract schema {contract.get('schemaVersion')!r}; expected {SUPPORTED_SCHEMA}"
-        )
     if contract.get("leadResolver") != "nix":
         raise DependencyPolicyError("dependency contract leadResolver must be 'nix'")
 
@@ -217,24 +193,18 @@ def validate_contract(contract: dict[str, Any], *, today: date | None = None) ->
             vcpkg = _mapping(dependency["vcpkg"], f"dependencies.{name}.vcpkg")
             _string(vcpkg.get("strategy"), f"dependencies.{name}.vcpkg.strategy")
             _string_list(vcpkg.get("ports"), f"dependencies.{name}.vcpkg.ports")
-            cmake = _mapping(dependency.get("cmake"), f"dependencies.{name}.cmake")
-            _string(cmake.get("package"), f"dependencies.{name}.cmake.package")
-            _string_list(cmake.get("targets"), f"dependencies.{name}.cmake.targets")
         if has_nuget:
             if policy.get("kind") != "exact":
                 raise DependencyPolicyError(f"dependencies.{name} NuGet policy must be exact")
             nuget = _mapping(dependency["nuget"], f"dependencies.{name}.nuget")
             _string(nuget.get("package"), f"dependencies.{name}.nuget.package")
             _string(nuget.get("lock"), f"dependencies.{name}.nuget.lock")
-            _mapping(dependency.get("msbuild"), f"dependencies.{name}.msbuild")
 
-        _dependency_condition(dependency, f"dependencies.{name}")
         if "capabilities" in dependency:
             _string_list(dependency["capabilities"], f"dependencies.{name}.capabilities")
 
     exceptions = _list(contract.get("exceptions"), "exceptions")
     seen_ids: set[str] = set()
-    seen_targets: set[tuple[str, str]] = set()
     current_date = _utc_today() if today is None else today
     for index, raw_exception in enumerate(exceptions):
         context = f"exceptions[{index}]"
@@ -244,8 +214,6 @@ def validate_contract(contract: dict[str, Any], *, today: date | None = None) ->
             raise DependencyPolicyError(f"duplicate dependency exception ID {exception_id!r}")
         seen_ids.add(exception_id)
         exception_dependency = _string(exception.get("dependency"), f"{context}.dependency")
-        if exception_dependency not in dependencies:
-            raise DependencyPolicyError(f"{context} refers to unknown dependency {exception_dependency!r}")
         platform = _string(exception.get("platform"), f"{context}.platform")
         if platform not in SUPPORTED_PLATFORMS:
             raise DependencyPolicyError(f"{context}.platform must be one of {sorted(SUPPORTED_PLATFORMS)}")
@@ -254,10 +222,6 @@ def validate_contract(contract: dict[str, Any], *, today: date | None = None) ->
             raise DependencyPolicyError(
                 f"{context}.platform {platform!r} is not supported by dependency {exception_dependency!r}"
             )
-        target = (exception_dependency, platform)
-        if target in seen_targets:
-            raise DependencyPolicyError(f"multiple active exceptions target {exception_dependency!r} on {platform!r}")
-        seen_targets.add(target)
         _version_tuple(_string(exception.get("allowedVersion"), f"{context}.allowedVersion"))
         for field in ("reason", "owner", "issue", "exitCondition"):
             _string(exception.get(field), f"{context}.{field}")
@@ -317,31 +281,67 @@ def effective_policy(
 
 def parse_vcpkg_status(text: str) -> dict[str, VcpkgPackage]:
     identities: dict[str, tuple[str, str]] = {}
-    features_by_name: dict[str, set[str]] = {}
+    pending_features: list[tuple[str, str, str, str | None, int | None]] = []
+
+    def port_revision(value: str, name: str) -> int:
+        if not re.fullmatch(r"[0-9]+", value):
+            raise DependencyPolicyError(f"invalid vcpkg port revision for {name}: {value!r}")
+        return int(value)
+
     for paragraph in re.split(r"\r?\n\r?\n", text.strip()):
         if not paragraph.strip():
             continue
         fields: dict[str, str] = {}
+        revision_fields = []
         for line in paragraph.splitlines():
             if ": " in line:
                 key, value = line.split(": ", maxsplit=1)
                 fields[key] = value
+                if key == "Port-Version":
+                    revision_fields.append(value)
+            elif line == "Port-Version:":
+                revision_fields.append("")
         name = fields.get("Package")
         version = fields.get("Version")
         triplet = fields.get("Architecture")
-        if not name or not version or not triplet:
+        if not name or not triplet:
             continue
         # vcpkg keeps paragraphs for removed packages (e.g. "deinstall ok
         # not-installed"); only currently installed state is evidence.
         status = fields.get("Status", "")
         if status.split()[-1:] != ["installed"]:
             continue
-        identity = (version, triplet)
+        feature = fields.get("Feature", "core")
+        if feature == "core" and not version:
+            continue
+        revision = port_revision(revision_fields[0], name) if revision_fields else None
+        if version and "#" in version:
+            version, _, embedded = version.partition("#")
+            revision = port_revision(embedded, name)
+        if feature != "core":
+            # Feature records never supply a base identity. A bare legacy Version
+            # checks upstream only; an explicit revision checks that component too.
+            pending_features.append((name, triplet, feature, version or None, revision))
+            continue
+        if not version:
+            continue
+        identity = (f"{version}#{revision}" if revision else version, triplet)
         if name in identities and identities[name] != identity:
             raise DependencyPolicyError(f"vcpkg status contains conflicting identities for {name}")
         identities[name] = identity
-        feature = fields.get("Feature", "core")
-        features_by_name.setdefault(name, set()).add(feature)
+    features_by_name = {name: {"core"} for name in identities}
+    for name, triplet, feature, version, revision in pending_features:
+        if name not in identities:
+            continue
+        base_version, base_triplet = identities[name]
+        upstream, _, base_revision = base_version.partition("#")
+        if (
+            triplet != base_triplet
+            or (version is not None and version != upstream)
+            or (revision is not None and revision != (int(base_revision) if base_revision else 0))
+        ):
+            raise DependencyPolicyError(f"vcpkg status contains conflicting identities for {name}")
+        features_by_name[name].add(feature)
     return {
         name: VcpkgPackage(
             version=identity[0],
@@ -350,292 +350,6 @@ def parse_vcpkg_status(text: str) -> dict[str, VcpkgPackage]:
         )
         for name, identity in identities.items()
     }
-
-
-def _sha256(path: Path) -> str:
-    try:
-        return hashlib.sha256(path.read_bytes()).hexdigest()
-    except OSError as exc:
-        raise DependencyPolicyError(f"cannot hash dependency input {path}: {exc}") from exc
-
-
-def _single_nuget_lock(contract: dict[str, Any]) -> Path | None:
-    lock_paths = {
-        Path(
-            _string(
-                _mapping(_mapping(definition, f"dependencies.{name}")["nuget"], f"dependencies.{name}.nuget")["lock"],
-                f"dependencies.{name}.nuget.lock",
-            )
-        )
-        for name, definition in _mapping(contract["dependencies"], "dependencies").items()
-        if "nuget" in _mapping(definition, f"dependencies.{name}")
-    }
-    if len(lock_paths) > 1:
-        raise DependencyPolicyError("governed NuGet dependencies must share one lock file")
-    return next(iter(lock_paths), None)
-
-
-def _verify_true_map(actual: object, expected_names: list[str], context: str) -> None:
-    values = _mapping(actual, context)
-    for name in expected_names:
-        if values.get(name) is not True:
-            raise DependencyPolicyError(f"{context}.{name} was not verified")
-
-
-def verify_build_report(
-    contract: dict[str, Any],
-    report: dict[str, Any],
-    *,
-    contract_path: Path = CONTRACT_FILE,
-    project_root: Path = PROJECT_ROOT,
-    today: date | None = None,
-) -> None:
-    validate_contract(contract, today=today)
-    if report.get("schemaVersion") != SUPPORTED_SCHEMA:
-        raise DependencyPolicyError(f"unsupported dependency report schema {report.get('schemaVersion')!r}")
-    report_contract = _mapping(report.get("contract"), "report.contract")
-    if report_contract.get("schemaVersion") != contract["schemaVersion"]:
-        raise DependencyPolicyError("dependency report contract schema does not match the current contract")
-    expected_hash = contract_sha256(contract_path)
-    if report_contract.get("sha256") != expected_hash:
-        raise DependencyPolicyError(
-            "dependency report is stale: its contract hash does not match dependency-contract.json; rebuild first"
-        )
-    host = _mapping(report.get("host"), "report.host")
-    platform = _string(host.get("platform"), "report.host.platform")
-    if platform not in SUPPORTED_PLATFORMS:
-        raise DependencyPolicyError(f"report has unsupported host platform {platform!r}")
-    for filename, field in (
-        ("vcpkg-configuration.json", "vcpkgConfigurationSha256"),
-        ("vcpkg.json", "vcpkgManifestSha256"),
-    ):
-        expected = _sha256(project_root / filename)
-        if host.get(field) != expected:
-            raise DependencyPolicyError(f"dependency report is stale: {filename} changed; rebuild first")
-    nuget_lock = _single_nuget_lock(contract)
-    if nuget_lock is not None:
-        if host.get("nugetLockSha256") != _sha256(project_root / nuget_lock):
-            raise DependencyPolicyError(f"dependency report is stale: {nuget_lock} changed; rebuild first")
-        nuget_config = nuget_lock.with_name("NuGet.Config")
-        if host.get("nugetConfigSha256") != _sha256(project_root / nuget_config):
-            raise DependencyPolicyError(f"dependency report is stale: {nuget_config} changed; rebuild first")
-
-    dependencies = _mapping(contract["dependencies"], "dependencies")
-    reported = _mapping(report.get("dependencies"), "report.dependencies")
-    for name, raw_definition in dependencies.items():
-        definition = _mapping(raw_definition, f"dependencies.{name}")
-        platforms = _dependency_platforms(definition, f"dependencies.{name}")
-        if name not in reported:
-            raise DependencyPolicyError(f"dependency report is missing governed dependency {name!r}")
-        entry = _mapping(reported[name], f"report.dependencies.{name}")
-        condition = _dependency_condition(definition, f"dependencies.{name}")
-        status = entry.get("status")
-        if status == "not-applicable":
-            if platform not in platforms:
-                continue
-            if condition is None:
-                raise DependencyPolicyError(f"unconditional governed dependency {name!r} is not applicable")
-            condition_report = _mapping(entry.get("condition"), f"report.dependencies.{name}.condition")
-            if condition_report != {"name": condition, "value": False}:
-                raise DependencyPolicyError(f"dependency {name!r} lacks proof that {condition} was disabled")
-            continue
-        if status != "verified":
-            raise DependencyPolicyError(f"governed dependency {name!r} has invalid report status {status!r}")
-        if condition is not None:
-            condition_report = _mapping(entry.get("condition"), f"report.dependencies.{name}.condition")
-            if condition_report != {"name": condition, "value": True}:
-                raise DependencyPolicyError(f"dependency {name!r} lacks proof that {condition} was enabled")
-        policy = effective_policy(contract, name, platform, today=today)
-        if entry.get("requestedVersion") != policy.requested:
-            raise DependencyPolicyError(
-                f"{name}: report requested {entry.get('requestedVersion')!r}, policy requires {policy.requested!r}"
-            )
-        resolved = _string(entry.get("resolvedVersion"), f"report.dependencies.{name}.resolvedVersion")
-        if not policy.accepts(resolved):
-            raise DependencyPolicyError(
-                f"{name}: expected {policy.requested}, resolved {resolved} on {platform}; "
-                "see doc/development/dependency-upgrade.md"
-            )
-        if entry.get("exceptionId") != policy.exception_id:
-            raise DependencyPolicyError(f"{name}: report exception does not match the effective platform policy")
-        if "cmake" in definition:
-            cmake = _mapping(definition["cmake"], f"dependencies.{name}.cmake")
-            _verify_true_map(entry.get("targets"), _string_list(cmake["targets"], "cmake.targets"), f"{name}.targets")
-        else:
-            package = _string(
-                _mapping(definition["nuget"], f"dependencies.{name}.nuget").get("package"),
-                f"dependencies.{name}.nuget.package",
-            )
-            _verify_true_map(entry.get("packages"), [package], f"{name}.packages")
-        capabilities = definition.get("capabilities", [])
-        if capabilities:
-            _verify_true_map(
-                entry.get("capabilities"),
-                _string_list(capabilities, f"dependencies.{name}.capabilities"),
-                f"{name}.capabilities",
-            )
-
-
-def load_build_report(build_dir: Path) -> dict[str, Any]:
-    path = build_dir / BUILD_REPORT_NAME
-    if not path.is_file():
-        raise DependencyPolicyError(f"dependency report not found at {path}; run ./ao build (or ao.bat build) first")
-    return read_json(path)
-
-
-def _verify_nix_resolution(
-    contract: dict[str, Any],
-    report: dict[str, Any],
-    project_root: Path,
-    *,
-    platform: str,
-    today: date | None = None,
-) -> dict[str, Any]:
-    host = _mapping(report["host"], "report.host")
-    path_value = _string(host.get("nixReportPath"), "report.host.nixReportPath")
-    nix_report = read_json(Path(path_value))
-    if nix_report.get("schemaVersion") != SUPPORTED_NIX_REPORT_SCHEMA:
-        raise DependencyPolicyError("unsupported Nix dependency report schema")
-    pin_file = NIXPKGS_PIN_FILES[platform]
-    nixpkgs = read_json(project_root / pin_file)
-    if nix_report.get("nixpkgsRevision") != nixpkgs.get("rev"):
-        raise DependencyPolicyError(f"Nix dependency report does not come from the {pin_file} revision")
-    resolved = _mapping(nix_report.get("dependencies"), "Nix report dependencies")
-    for name, raw_definition in _mapping(contract["dependencies"], "dependencies").items():
-        definition = _mapping(raw_definition, f"dependencies.{name}")
-        if platform not in _dependency_platforms(definition, f"dependencies.{name}"):
-            continue
-        package = _mapping(resolved.get(name), f"Nix report dependency {name}")
-        policy = effective_policy(contract, name, platform, today=today)
-        version = _string(package.get("version"), f"Nix report dependency {name}.version")
-        if not policy.accepts(version):
-            raise DependencyPolicyError(f"Nix resolved {name} {version}; contract requires {policy.requested}")
-        _string(package.get("storePath"), f"Nix report dependency {name}.storePath")
-    return nix_report
-
-
-def _verify_vcpkg_resolution(
-    contract: dict[str, Any],
-    report: dict[str, Any],
-    build_dir: Path,
-    project_root: Path = PROJECT_ROOT,
-    *,
-    platform: str,
-    today: date | None = None,
-) -> dict[str, object]:
-    if platform not in VCPKG_PLATFORMS:
-        raise DependencyPolicyError(f"vcpkg is not the native resolver for {platform!r}")
-    host = _mapping(report["host"], "report.host")
-    installed_value = host.get("vcpkgInstalledDir")
-    installed = (
-        Path(_string(installed_value, "report.host.vcpkgInstalledDir"))
-        if installed_value
-        else build_dir / "vcpkg_installed"
-    )
-    status_file = installed / "vcpkg" / "status"
-    try:
-        packages = parse_vcpkg_status(status_file.read_text(encoding="utf-8"))
-    except OSError as exc:
-        raise DependencyPolicyError(f"cannot read vcpkg package status {status_file}: {exc}") from exc
-    expected_triplet = _string(host.get("vcpkgTriplet"), "report.host.vcpkgTriplet")
-    result: dict[str, object] = {}
-    for name, raw_definition in _mapping(contract["dependencies"], "dependencies").items():
-        definition = _mapping(raw_definition, f"dependencies.{name}")
-        if "vcpkg" not in definition or platform not in _dependency_platforms(definition, f"dependencies.{name}"):
-            continue
-        policy = effective_policy(contract, name, platform, today=today)
-        ports = _string_list(_mapping(definition["vcpkg"], f"dependencies.{name}.vcpkg")["ports"], "vcpkg.ports")
-        port_results: dict[str, object] = {}
-        for port in ports:
-            if port not in packages:
-                raise DependencyPolicyError(f"vcpkg status is missing governed port {port!r} for {name}")
-            package = packages[port]
-            if package.triplet != expected_triplet:
-                raise DependencyPolicyError(
-                    f"vcpkg port {port} uses triplet {package.triplet}, expected {expected_triplet}"
-                )
-            if not policy.accepts(package.upstream_version):
-                raise DependencyPolicyError(
-                    f"vcpkg resolved {port} {package.version}; {name} requires {policy.requested}"
-                )
-            port_results[port] = {
-                "version": package.version,
-                "upstreamVersion": package.upstream_version,
-                "features": list(package.features),
-                "triplet": package.triplet,
-            }
-        result[name] = port_results
-
-    boost_policy = effective_policy(contract, "boost", platform, today=today)
-    boost_family: dict[str, object] = {}
-    for port, package in packages.items():
-        if not port.startswith("boost-") or port == "boost-vcpkg-helpers":
-            continue
-        if package.triplet != expected_triplet:
-            raise DependencyPolicyError(
-                f"vcpkg Boost family port {port} uses triplet {package.triplet}, expected {expected_triplet}"
-            )
-        if not boost_policy.accepts(package.upstream_version):
-            raise DependencyPolicyError(
-                f"vcpkg Boost family is mixed: {port} is {package.version}, contract requires {boost_policy.requested}"
-            )
-        boost_family[port] = {
-            "version": package.version,
-            "upstreamVersion": package.upstream_version,
-            "features": list(package.features),
-            "triplet": package.triplet,
-        }
-    result["boost"] = boost_family
-
-    recipe_helpers: dict[str, object] = {}
-    for helper in ("vcpkg-boost", "boost-vcpkg-helpers"):
-        if helper in packages:
-            package = packages[helper]
-            recipe_helpers[helper] = {
-                "version": package.version,
-                "features": list(package.features),
-                "triplet": package.triplet,
-            }
-    result["recipeHelpers"] = recipe_helpers
-
-    manifest = read_json(project_root / "vcpkg.json")
-    direct_ports: set[str] = set()
-    for raw_dependency in _list(manifest.get("dependencies"), "vcpkg manifest dependencies"):
-        if isinstance(raw_dependency, str):
-            direct_ports.add(raw_dependency)
-        else:
-            direct_ports.add(_string(_mapping(raw_dependency, "vcpkg dependency").get("name"), "vcpkg dependency.name"))
-    for raw_feature in _mapping(manifest.get("features", {}), "vcpkg manifest features").values():
-        feature = _mapping(raw_feature, "vcpkg feature")
-        for raw_dependency in _list(feature.get("dependencies", []), "vcpkg feature dependencies"):
-            if isinstance(raw_dependency, str):
-                direct_ports.add(raw_dependency)
-            else:
-                direct_ports.add(
-                    _string(_mapping(raw_dependency, "vcpkg dependency").get("name"), "vcpkg dependency.name")
-                )
-    governed_ports = {
-        port
-        for raw_definition in _mapping(contract["dependencies"], "dependencies").values()
-        if "vcpkg" in _mapping(raw_definition, "dependency")
-        and platform in _dependency_platforms(_mapping(raw_definition, "dependency"), "dependency")
-        for port in _string_list(
-            _mapping(_mapping(raw_definition, "dependency")["vcpkg"], "dependency.vcpkg")["ports"],
-            "dependency.vcpkg.ports",
-        )
-    }
-    monitor_only: dict[str, object] = {}
-    for port in sorted(direct_ports - governed_ports):
-        if port not in packages:
-            continue
-        package = packages[port]
-        monitor_only[port] = {
-            "version": package.version,
-            "features": list(package.features),
-            "triplet": package.triplet,
-        }
-    result["monitorOnly"] = monitor_only
-    return result
 
 
 def _packages_config(path: Path) -> dict[str, str]:
@@ -655,142 +369,34 @@ def _packages_config(path: Path) -> dict[str, str]:
     return packages
 
 
-def _verify_nuget_resolution(
-    contract: dict[str, Any],
-    report: dict[str, Any],
-    project_root: Path = PROJECT_ROOT,
-    *,
-    today: date | None = None,
-) -> dict[str, object]:
-    host = _mapping(report["host"], "report.host")
-    definitions = _mapping(contract["dependencies"], "dependencies")
-    reported = _mapping(report["dependencies"], "report.dependencies")
-    active = any(
-        "nuget" in _mapping(definition, f"dependencies.{name}")
-        and _mapping(reported.get(name), f"report.dependencies.{name}").get("status") == "verified"
-        for name, definition in definitions.items()
-    )
-    package_root_value = host.get("nugetPackagesDir")
-    if not package_root_value:
-        if active:
-            raise DependencyPolicyError("verified NuGet dependencies require report.host.nugetPackagesDir")
-        return {}
-    package_root = Path(_string(package_root_value, "report.host.nugetPackagesDir"))
-    nuget_lock = _single_nuget_lock(contract)
-    if nuget_lock is None:
-        return {}
-    lock_path = project_root / nuget_lock
-    locked = _packages_config(lock_path)
-    resolved: dict[str, object] = {}
-    for name, raw_definition in definitions.items():
-        definition = _mapping(raw_definition, f"dependencies.{name}")
-        if "nuget" not in definition:
-            continue
-        report_entry = _mapping(reported[name], f"dependencies.{name}")
-        if report_entry.get("status") != "verified":
-            continue
-        nuget = _mapping(definition["nuget"], f"dependencies.{name}.nuget")
-        package_id = _string(nuget["package"], f"dependencies.{name}.nuget.package")
-        policy = effective_policy(contract, name, "windows", today=today)
-        locked_version = next(
-            (version for locked_id, version in locked.items() if locked_id.casefold() == package_id.casefold()),
-            None,
-        )
-        if locked_version is None:
-            raise DependencyPolicyError(f"NuGet lock is missing governed package {package_id}")
-        if not policy.accepts(locked_version):
-            raise DependencyPolicyError(
-                f"NuGet lock resolves {package_id} {locked_version}; {name} requires {policy.requested}"
-            )
-        directory = package_root / f"{package_id}.{locked_version}"
-        archives = tuple(directory.glob("*.nupkg"))
-        if len(archives) != 1:
-            raise DependencyPolicyError(f"restored NuGet package {package_id} lacks one package archive in {directory}")
-        try:
-            with zipfile.ZipFile(archives[0]) as archive:
-                nuspec_names = [entry for entry in archive.namelist() if entry.lower().endswith(".nuspec")]
-                if len(nuspec_names) != 1:
-                    raise DependencyPolicyError(f"NuGet package {archives[0]} lacks one nuspec")
-                nuspec = ET.fromstring(archive.read(nuspec_names[0]))
-        except (OSError, zipfile.BadZipFile, ET.ParseError) as exc:
-            raise DependencyPolicyError(f"cannot inspect restored NuGet package {archives[0]}: {exc}") from exc
-        metadata = next((node for node in nuspec.iter() if node.tag.endswith("metadata")), None)
-        metadata_children = () if metadata is None else metadata
-        identity = {
-            child.tag.rsplit("}", maxsplit=1)[-1]: child.text
-            for child in metadata_children
-            if child.tag.endswith(("id", "version"))
-        }
-        identity_version = identity.get("version")
-        try:
-            version_matches = isinstance(identity_version, str) and _normalized_nuget_version(
-                identity_version
-            ) == _normalized_nuget_version(locked_version)
-        except DependencyPolicyError:
-            version_matches = False
-        if str(identity.get("id") or "").casefold() != package_id.casefold() or not version_matches:
-            raise DependencyPolicyError(f"restored NuGet identity does not match {package_id} {locked_version}")
-        resolved[name] = {
-            "package": package_id,
-            "version": locked_version,
-            "archive": str(archives[0]),
-        }
-    return resolved
-
-
-def verified_report(
-    build_dir: Path,
-    *,
-    contract_path: Path = CONTRACT_FILE,
-    project_root: Path = PROJECT_ROOT,
-    today: date | None = None,
-) -> dict[str, Any]:
-    contract = load_contract(contract_path, today=today)
-    report = load_build_report(build_dir)
-    verify_build_report(
-        contract,
-        report,
-        contract_path=contract_path,
-        project_root=project_root,
-        today=today,
-    )
-    platform = _string(_mapping(report["host"], "report.host")["platform"], "report.host.platform")
-    enriched = dict(report)
-    if platform in NIX_PLATFORMS:
-        enriched["nativeResolution"] = {
-            "kind": "nix",
-            "report": _verify_nix_resolution(contract, report, project_root, platform=platform, today=today),
-        }
-    elif platform in VCPKG_PLATFORMS:
-        host = _mapping(report["host"], "report.host")
-        nuget = _verify_nuget_resolution(contract, report, project_root, today=today) if platform == "windows" else {}
-        enriched["nativeResolution"] = {
-            "kind": "vcpkg+nuget" if nuget else "vcpkg",
-            "configuration": read_json(project_root / "vcpkg-configuration.json"),
-            "packages": _verify_vcpkg_resolution(
-                contract,
-                report,
-                build_dir,
-                project_root,
-                platform=platform,
-                today=today,
-            ),
-            "nuget": nuget,
-            "triplet": host.get("vcpkgTriplet"),
-            "vcpkgVersion": host.get("vcpkgVersion"),
-        }
-    else:
-        raise DependencyPolicyError(f"unsupported dependency platform {platform!r}")
-    return enriched
-
-
-def format_summary(report: dict[str, Any]) -> str:
-    host = _mapping(report["host"], "report.host")
-    lines = [f"Aobus dependencies ({host['platform']})", "DEPENDENCY  STATUS          REQUESTED  RESOLVED"]
-    for name, raw_entry in sorted(_mapping(report["dependencies"], "report.dependencies").items()):
-        entry = _mapping(raw_entry, f"report.dependencies.{name}")
-        resolved = entry.get("resolvedVersion") or "-"
-        lines.append(f"{name:<11} {entry.get('status')!s:<15} {entry.get('requestedVersion')!s:<10} {resolved}")
-    native = _mapping(report.get("nativeResolution"), "report.nativeResolution")
-    lines.append(f"Resolver: {native.get('kind')}")
-    return "\n".join(lines)
+def verify_nuget_package(package_root: Path, package_id: str, locked_version: str) -> Path:
+    """Verify one restored archive's identity against its existing NuGet lock entry."""
+    directory = package_root / f"{package_id}.{locked_version}"
+    archives = tuple(directory.glob("*.nupkg"))
+    if len(archives) != 1:
+        raise DependencyPolicyError(f"restored NuGet package {package_id} lacks one package archive in {directory}")
+    try:
+        with zipfile.ZipFile(archives[0]) as archive:
+            nuspec_names = [entry for entry in archive.namelist() if entry.lower().endswith(".nuspec")]
+            if len(nuspec_names) != 1:
+                raise DependencyPolicyError(f"NuGet package {archives[0]} lacks one nuspec")
+            nuspec = ET.fromstring(archive.read(nuspec_names[0]))
+    except (OSError, zipfile.BadZipFile, ET.ParseError) as exc:
+        raise DependencyPolicyError(f"cannot inspect restored NuGet package {archives[0]}: {exc}") from exc
+    metadata = next((node for node in nuspec.iter() if node.tag.endswith("metadata")), None)
+    metadata_children = () if metadata is None else metadata
+    identity = {
+        child.tag.rsplit("}", maxsplit=1)[-1]: child.text
+        for child in metadata_children
+        if child.tag.endswith(("id", "version"))
+    }
+    identity_version = identity.get("version")
+    try:
+        version_matches = isinstance(identity_version, str) and _normalized_nuget_version(
+            identity_version
+        ) == _normalized_nuget_version(locked_version)
+    except DependencyPolicyError:
+        version_matches = False
+    if str(identity.get("id") or "").casefold() != package_id.casefold() or not version_matches:
+        raise DependencyPolicyError(f"restored NuGet identity does not match {package_id} {locked_version}")
+    return archives[0]

@@ -3,6 +3,7 @@
 
 #include <ao/winui/layout/ShellDocument.h>
 
+#include "test/TestFixtureSupport.h"
 #include <ao/Error.h>
 #include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -18,7 +19,6 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
-#include <filesystem>
 #include <format>
 #include <fstream>
 #include <functional>
@@ -38,7 +38,8 @@ namespace ao::winui::test
   {
     std::string readShippedDocument(ShellPreset const preset)
     {
-      auto const path = std::filesystem::path{AOBUS_WINDOWS_LAYOUT_DIR} / shellPresetResource(preset);
+      auto const path =
+        ao::test::testInputPath(std::string{"app/windows-winui/layout/"} + std::string{shellPresetResource(preset)});
       auto stream = std::ifstream{path, std::ios::binary};
       REQUIRE(stream.is_open());
       return std::string{std::istreambuf_iterator<char>{stream}, std::istreambuf_iterator<char>{}};
@@ -47,7 +48,8 @@ namespace ao::winui::test
     /// The frame source that registers actions and composes the shells' menus.
     std::string readShellBuilderSource()
     {
-      auto stream = std::ifstream{std::filesystem::path{AOBUS_WINDOWS_SHELL_BUILDER_SOURCE}, std::ios::binary};
+      auto stream =
+        std::ifstream{ao::test::testInputPath("app/windows-winui/layout/ShellBuilder.cpp"), std::ios::binary};
       REQUIRE(stream.is_open());
       return std::string{std::istreambuf_iterator<char>{stream}, std::istreambuf_iterator<char>{}};
     }
@@ -224,32 +226,25 @@ namespace ao::winui::test
     }
   } // namespace
 
-  TEST_CASE("shellPresetResource - project declarations pair both preset files with shell paths")
+  TEST_CASE("shellPresetResource - both shipped presets are named, located, and available as inputs")
   {
-    // Source-level CMake/reader-name pairing only. MSBuild deployment and the
-    // executable's files must still be checked on native Windows.
-    auto stream = std::ifstream{std::filesystem::path{AOBUS_WINDOWS_WINUI_CMAKE}, std::ios::binary};
-    REQUIRE(stream.is_open());
-    auto const project = std::string{std::istreambuf_iterator<char>{stream}, std::istreambuf_iterator<char>{}};
-
-    // MSBuild spells the packaged path with escaped backslashes; the shared
-    // constant spells it with forward ones.
-    auto folder = std::string{kShellPresetFolder};
-    auto const separator = folder.find('/');
-    REQUIRE(separator != std::string::npos);
-    folder.replace(separator, 1, "\\\\");
-
+    // Reader contract only: literal preset identifiers, resource names, and
+    // the packaged folder the reader joins them to. The Bazel BUILD
+    // declaration and native resource staging own the deployment contract.
     CHECK(shellPresetId(ShellPreset::Modern) == "windows.modern");
     CHECK(shellPresetId(ShellPreset::Classic) == "windows.classic");
     CHECK(shellPresetResource(ShellPreset::Modern) == "windows_modern_layout.yaml");
     CHECK(shellPresetResource(ShellPreset::Classic) == "windows_classic_layout.yaml");
+    CHECK(kShellPresetFolder == "Assets/Layout");
 
     for (auto const preset : {ShellPreset::Modern, ShellPreset::Classic})
     {
       auto const resource = shellPresetResource(preset);
       INFO("preset " << resource);
-      CHECK(project.contains(std::format("layout/{}", resource)));
-      CHECK(project.contains(std::format("Link={}\\\\{}\"", folder, resource)));
+      // Each named resource is an actual shipped input, not a declaration
+      // elsewhere; the prepareShellPresetDocument cases below parse it.
+      auto const document = readShippedDocument(preset);
+      CHECK(!document.empty());
     }
   }
 

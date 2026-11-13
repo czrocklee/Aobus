@@ -1,0 +1,117 @@
+# ./ao bazel owns environment, launch configuration and external output selection.
+common --enable_bzlmod
+common --repo_contents_cache=
+
+# Unix uses the governed native toolchains. The Windows profile below enables
+# rules_cc's standard MSVC discovery; Apple defaults stay disabled separately.
+common --repo_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1
+common --repo_env=BAZEL_NO_APPLE_CPP_TOOLCHAIN=1
+# The composed Apple toolchain does not admit automatic developer-tree scans.
+common --repo_env=APPLE_SUPPORT_LAYERING_CHECK_BETA=0
+
+# Keep repository channels separate from the selected native SDK metadata.
+# Bazel 9.2's double equals unsets a variable; NAME= leaves an empty path entry.
+# The resolver still receives its explicit SDK and Windows INCLUDE/LIB ABI.
+common --repo_env==CPLUS_INCLUDE_PATH
+common --repo_env==C_INCLUDE_PATH
+common --repo_env==OBJC_INCLUDE_PATH
+common --repo_env==CPATH
+common --repo_env==LIBRARY_PATH
+common --repo_env==LD_LIBRARY_PATH
+common --repo_env==CFLAGS
+common --repo_env==CXXFLAGS
+common --repo_env==CPPFLAGS
+common --repo_env==LDFLAGS
+common --repo_env==BAZEL_COPTS
+common --repo_env==BAZEL_CONLYOPTS
+common --repo_env==BAZEL_CXXOPTS
+common --repo_env==BAZEL_LINKOPTS
+common --repo_env==BAZEL_LINKLIBS
+common --repo_env==NIX_CFLAGS_COMPILE
+common --repo_env==NIX_CFLAGS_COMPILE_FOR_TARGET
+common --repo_env==NIX_CFLAGS_COMPILE_FOR_BUILD
+common --repo_env==NIX_CFLAGS_LINK
+common --repo_env==NIX_CFLAGS_LINK_FOR_TARGET
+common --repo_env==NIX_CFLAGS_LINK_FOR_BUILD
+common --repo_env==NIX_LDFLAGS
+common --repo_env==NIX_LDFLAGS_FOR_TARGET
+common --repo_env==NIX_LDFLAGS_FOR_BUILD
+
+build --enable_platform_specific_config
+build --incompatible_strict_action_env
+build --action_env=NIX_CFLAGS_COMPILE=
+build --action_env=NIX_CFLAGS_COMPILE_FOR_TARGET=
+build --action_env=NIX_LDFLAGS=
+build --action_env=NIX_LDFLAGS_FOR_TARGET=
+build --action_env=CPLUS_INCLUDE_PATH=
+build --action_env=C_INCLUDE_PATH=
+build --action_env=CPATH=
+build --action_env=LIBRARY_PATH=
+build --action_env=LD_LIBRARY_PATH=
+
+# Bare commands default to Debug; providers follow each consumer's actual mode.
+# fastbuild has no accepted native SDK mapping and is rejected by imports.
+build --compilation_mode=dbg
+build:debug --compilation_mode=dbg
+
+# Release and sampling are governed native profiles: opt mode, their lazily
+# generated profile platform in the environment repository, an explicit request
+# marker and fail-closed admission. Unix IPO/sampling are opt-in toolchain
+# features appended here (ordinary appendable --features, never platform.flags,
+# which would replace repeatable flags); execution configurations disable them.
+# Windows Release IPO comes from the release platform's target flags instead.
+build:release --compilation_mode=opt
+build:release --//bazel:release_ipo_enabled=true
+build:release --platforms=@aobus_environment//:release_platform
+build:release --features=aobus_release_ipo
+build:release --host_features=-aobus_release_ipo
+build:release --aspects=//bazel:build_profiles.bzl%profile_admission
+build:profile --compilation_mode=opt
+build:profile --//bazel:sampling_enabled=true
+build:profile --platforms=@aobus_environment//:profile_platform
+build:profile --features=aobus_sampling
+build:profile --host_features=-aobus_sampling
+build:profile --aspects=//bazel:build_profiles.bzl%profile_admission
+
+# Sanitizers are named profiles, not additional Bazel compilation modes.
+# Target platform flags do not instrument normal execution-tool configurations.
+build:asan --//bazel:asan_enabled=true
+build:asan --platforms=//bazel:asan_platform
+build:asan --aspects=//bazel:sanitizers.bzl%sanitizer_admission
+build:tsan --//bazel:tsan_enabled=true
+build:tsan --platforms=//bazel:tsan_platform
+build:tsan --aspects=//bazel:sanitizers.bzl%sanitizer_admission
+
+# REPO.bazel selects owned-target warning promotion. Unix keeps its existing
+# Clang policy rather than enabling the upstream MSVC warning feature.
+build:linux --extra_toolchains=@aobus_toolchain//:registered_nix_clang
+build:linux --features=-treat_warnings_as_errors
+build:linux --host_features=-treat_warnings_as_errors
+build:macos --extra_toolchains=@aobus_toolchain//:registered_llvm22
+build:macos --features=-treat_warnings_as_errors
+build:macos --host_features=-treat_warnings_as_errors
+# The normally selected target platform is the environment repository's
+# debug platform; it projects the same governed deployment settings. The
+# release/profile named selections above override it for their own builds.
+build:macos --platforms=@aobus_environment//:debug_platform
+
+# rules_cc owns MSVC discovery, CRT, response files and debug/link defaults.
+# Its toolchain-wide option inlets also cover optimized execution tools.
+# A literal colon inside BAZEL_CXXOPTS is %-escaped; colons separate options.
+build:windows --repo_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=0
+build:windows --repo_env=USE_CLANG_CL=0
+build:windows --repo_env==CL
+build:windows --repo_env==_CL_
+build:windows --repo_env==LINK
+build:windows --repo_env==_LINK_
+build:windows --repo_env=BAZEL_COPTS=/W4
+build:windows --repo_env=BAZEL_CXXOPTS=/std%:c++latest:/external%:W0:/utf-8:/permissive-:/Zc%:__cplusplus:/Zc%:preprocessor:/DWIN32_LEAN_AND_MEAN:/DUNICODE:/D_UNICODE:/DWINVER=0x0A00
+build:windows --repo_env=BAZEL_WIN32_WINNT=/D_WIN32_WINNT=0x0A00
+build:windows --features=external_include_paths
+build:windows --host_features=external_include_paths
+
+# Native executable resource validation is cached and owned by Bazel.
+build:windows --aspects=//bazel:windows_utf8_manifest.bzl%windows_utf8_manifest_aspect
+build:windows --run_validations
+
+test --test_output=errors

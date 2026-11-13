@@ -2,8 +2,16 @@
 
 Aobus is a C++26 music application with GTK4, TUI, CLI, WinUI, and an incremental
 AppKit frontend over shared Core and application runtime libraries. Work from the repository root through `./ao`; on Windows use
-`ao.bat`. The portal owns CMake, tools, dependencies, and build-tree selection.
+`ao.bat`. The portal owns Bazel, tools, dependencies, and build-tree selection.
 `./ao help` and `./ao <command> --help` describe the available native commands.
+The `build`, `test`, `check`, `run`, `tidy`, `hygiene`, and `coverage`
+commands are Bazel-backed and are the sole portal entrypoints; there is no
+`ao bazel` command tree. Explicit pinned-executable setup, SDK provisioning,
+and compile-contract analysis use `ao setup bazel`, `ao deps provision`, and
+`ao verify`. Direct `bazel` commands from the
+checkout root are the one documented exception, for
+[direct Bazel without the portal](doc/development/bazel.md#direct-bazel-without-the-portal)
+only; they do not replace `./ao` completion checks, defaults or daily lint.
 
 ## Project constraints
 
@@ -33,6 +41,7 @@ sections relevant to the change; reuse material already read in this session.
 | Concurrency contracts | `doc/development/test/concurrency-and-sanitizer.md` |
 | Native macOS work | `doc/development/macos.md` before using the native environment |
 | Native Windows work | `doc/development/windows.md` before using the native environment |
+| Native Bazel build system, profiles, and gates | `doc/development/bazel.md` |
 
 Linux dependencies come from the pinned `nix-shell`; use it for manual compiler
 or dependency inspection. Native macOS and Windows use the shared vcpkg

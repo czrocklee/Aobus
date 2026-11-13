@@ -1,0 +1,42 @@
+module(
+    name = "aobus",
+    version = "0.1.0",
+)
+
+bazel_dep(name = "rules_cc", version = "0.2.27")
+bazel_dep(name = "platforms", version = "1.0.0")
+bazel_dep(name = "apple_support", version = "2.11.0")
+
+# Reuse upstream code with a selected-LLVM entry and an admitted SDK input seam.
+# Retire this delta when the public API supports both without a local patch.
+single_version_override(
+    module_name = "apple_support",
+    patch_strip = 1,
+    patches = ["//bazel:apple_support_llvm.patch"],
+)
+
+# Local coverage delta: rules_cc drops the private implementation dependencies'
+# virtual-to-original header mappings from the main compilation context, so
+# coverage cannot remap virtual includes of implementation-only dependencies.
+# Retire this override when upstream rules_cc propagates the mappings itself.
+single_version_override(
+    module_name = "rules_cc",
+    patch_strip = 1,
+    patches = ["//bazel:rules_cc_coverage_private_headers.patch"],
+)
+
+# Reuse Bazel's pinned, precompiled coverage payload without constructing an
+# empty Java binary and its unrelated compiler bootstrap on native Linux.
+coverage_tools = use_extension("@bazel_tools//tools/test:extensions.bzl", "remote_coverage_tools_extension")
+use_repo(coverage_tools, "remote_coverage_tools")
+
+dependencies = use_extension("//bazel:dependencies.bzl", "dependencies")
+use_repo(dependencies, "aobus_environment", "aobus_native_deps", "aobus_native_tools", "aobus_test_deps", "aobus_toolchain", "aobus_winui_sdk")
+
+# Loading lint packages imports the existing native LLVM/Clang SDK; bounded
+# product targets do not load that dependency.
+lint_sdk = use_extension("//bazel/lint:sdk.bzl", "lint_sdk")
+use_repo(lint_sdk, "aobus_lint_sdk")
+
+lint_policy = use_extension("//bazel/lint:policy.bzl", "lint_policy")
+use_repo(lint_policy, "aobus_lint_policy")

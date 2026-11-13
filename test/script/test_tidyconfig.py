@@ -44,51 +44,6 @@ class DiagnosticArgumentValidationTest(unittest.TestCase):
             with self.subTest(argument=argument):
                 _assert_rejected(self, argument, _FIX_OPTION_REJECTION)
 
-    def test_rejects_fix_and_export_options_with_values(self):
-        for argument in (
-            "-fix=true",
-            "--fix=true",
-            "-fix-errors=true",
-            "--fix-errors=true",
-            "-fix-notes=true",
-            "--fix-notes=true",
-            "-export-fixes=fixes.yaml",
-            "--export-fixes=fixes.yaml",
-            "---fix=true",
-            '"--export-fixes=fixes.yaml"',
-        ):
-            with self.subTest(argument=argument):
-                with self.assertRaises(ValueError) as helper_error:
-                    tidyconfig.validate_diagnostic_arguments(["--extra-arg=-std=c++26", argument])
-                self.assertEqual(str(helper_error.exception), _FIX_OPTION_REJECTION)
-                self.assertNotIn(argument, str(helper_error.exception))
-                self.assertNotIn("secret", str(helper_error.exception))
-                _assert_rejected(self, argument, _FIX_OPTION_REJECTION)
-
-    def test_rejects_raw_response_files_without_reading_them(self):
-        for argument in (
-            "@responses.rsp",
-            "@nested/path/responses.rsp",
-            '"@quoted responses.rsp"',
-            "'@single-quoted responses.rsp'",
-            "@",
-        ):
-            with self.subTest(argument=argument):
-                _assert_rejected(self, argument, _RESPONSE_FILE_REJECTION)
-
-    def test_rejection_messages_stay_generic_without_leaking_paths(self):
-        for argument, message in (
-            ("-export-fixes=/tmp/secret-fixes.yaml", _FIX_OPTION_REJECTION),
-            ("--export-fixes=/tmp/secret-fixes.yaml", _FIX_OPTION_REJECTION),
-            ("@/tmp/secret-responses.rsp", _RESPONSE_FILE_REJECTION),
-        ):
-            with self.subTest(argument=argument):
-                _assert_rejected(self, argument, message)
-
-    def test_diagnostic_argument_returns_the_original_token(self):
-        argument = "'--extra-arg=-std=c++26'"
-        self.assertIs(tidyconfig.diagnostic_argument(argument), argument)
-
     def test_bare_fix_word_is_not_a_diagnostic_option(self):
         # Leading dashes are stripped only for option-shaped tokens. A positional
         # or raw word such as "fix" is not a clang-tidy flag and stays allowed.

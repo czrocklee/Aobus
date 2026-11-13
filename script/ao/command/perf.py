@@ -5,15 +5,17 @@ import json
 import os
 from pathlib import Path
 
-from ..core import builddir, gitfiles
+from ..core import bazel_workflows, gitfiles
+from ..core.bazel_native import BazelWorkspaceError
 from ..core.paths import PROJECT_ROOT
 from ..core.proc import capture, die, run
-from . import build
 
 HELP = "Build and run the standalone performance review workload"
 NAME = "perf"
 REQUIRES_BUILD_ENV = True
+REQUIRES_PYTHON_TOOLS = False
 
+TARGET_LABEL = "//test:ao_perf_baseline"
 TARGET = "ao_perf_baseline"
 DEFAULT_FILTER = "PerformanceReview - ordering and completion-alias workloads"
 DEFAULT_SAMPLES = 20
@@ -37,7 +39,7 @@ def _non_negative_integer(value: str) -> int:
 
 def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
     parser = subparsers.add_parser(NAME, help=HELP, description=HELP)
-    build.add_build_arguments(parser, default_flavor="release")
+    bazel_workflows.add_arguments(parser, default_flavor="release")
     parser.add_argument(
         "--no-build", action="store_true", help="run the existing benchmark executable with unverified source revision"
     )
@@ -99,7 +101,13 @@ def _revision() -> str:
     return revision
 
 
+def _require_fresh_report(path: Path) -> None:
+    if path.is_symlink() or not path.is_file() or path.stat().st_size == 0:
+        raise die(f"performance workload did not produce a nonempty regular report at '{path}'")
+
+
 def _print_report(path: Path) -> None:
+    _require_fresh_report(path)
     try:
         report = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
@@ -170,37 +178,18 @@ def _print_report(path: Path) -> None:
 
 
 def _validate_baseline_report(path: Path) -> None:
+    _require_fresh_report(path)
     try:
         report = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise die(f"could not read baseline report '{path}': {exc}") from exc
     if not isinstance(report, dict) or report.get("schema") != "aobus-performance-baseline/v1":
         raise die(f"baseline report '{path}' has an unsupported schema")
-    records = report.get("records")
-    if not isinstance(records, list) or not records:
-        raise die(f"baseline report '{path}' has no records")
-    for record in records:
-        if not isinstance(record, dict) or not isinstance(record.get("benchmark"), str) or not record["benchmark"]:
-            raise die(f"baseline report '{path}' has an invalid benchmark")
-        metrics = record.get("metrics")
-        if not isinstance(metrics, list) or not metrics:
-            raise die(f"baseline report '{path}' has no metrics for '{record['benchmark']}'")
-        for metric in metrics:
-            if (
-                not isinstance(metric, dict)
-                or any(not isinstance(metric.get(key), str) or not metric[key] for key in ("name", "unit"))
-                or type(metric.get("value")) is not int
-            ):
-                raise die(f"baseline report '{path}' has an invalid metric")
 
 
 def _prepare_outputs(output: Path, baseline: Path | None) -> None:
     paths = [output] if baseline is None else [output, baseline]
-    # Inspect all destinations before deleting either artifact. Symlinks and
-    # special files are not report destinations; hard-link aliases collide too.
-    for path in paths:
-        if path.is_symlink() or (path.exists() and not path.is_file()):
-            raise die(f"performance report destination is not a regular file: {path}")
+    # Reject a colliding pair before deleting either artifact.
     if baseline is not None and (
         output.resolve() == baseline.resolve() or (output.exists() and baseline.exists() and output.samefile(baseline))
     ):
@@ -211,58 +200,70 @@ def _prepare_outputs(output: Path, baseline: Path | None) -> None:
         path.unlink(missing_ok=True)
 
 
+def _record_build_provenance(path: Path, environment: dict[str, str], provenance: dict[str, object]) -> None:
+    _require_fresh_report(path)
+    try:
+        report = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise die(f"could not read performance report '{path}': {error}") from error
+    if not isinstance(report, dict) or report.get("schema") != REPORT_SCHEMA:
+        raise die(f"performance report '{path}' has an unsupported schema")
+    metadata = report.get("metadata")
+    if not isinstance(metadata, dict):
+        raise die(f"performance report '{path}' is missing metadata")
+    for field, variable in (
+        ("revision", "AOBUS_PERF_REVISION"),
+        ("compiler", "AOBUS_PERF_COMPILER"),
+        ("platform", "AOBUS_PERF_PLATFORM"),
+        ("build_mode", "AOBUS_PERF_BUILD_MODE"),
+    ):
+        if metadata.get(field) != environment[variable]:
+            raise die(f"performance report '{path}' disagrees with launched artifact metadata '{field}'")
+    metadata["bazel"] = provenance
+    path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+
+
 def run_command(args: argparse.Namespace) -> int:
     if args.library_root is not None and not args.library_root.is_dir():
         raise die(f"Library root is not a directory: {args.library_root}")
-
-    profile = build.validate_build_options(args)
-    result = None
-    if not args.no_build:
-        result = build.do_build(args, [TARGET])
-
-    build_dir = (
-        result.build_dir
-        if result is not None
-        else Path(args.path)
-        if args.path
-        else builddir.build_dir(args.flavor, clang=args.clang, asan=args.asan, tsan=args.tsan)
-    )
-    executable = builddir.executable(build_dir / "test" / TARGET)
-    if not executable.exists():
-        raise die(f"Performance executable not found at {executable}. Run './ao perf' without --no-build first.")
-
-    compiler = (
-        result.compiler
-        if result is not None
-        else build.validate_build_tree(
+    try:
+        config, host = bazel_workflows.validate_request(args)
+        with bazel_workflows.prepare_artifacts(
             args,
-            build_dir,
-            expected_build_type={"debug": "Debug", "release": "Release", "profile": "RelWithDebInfo"}[args.flavor],
-        )
-    )
-    output = (args.output if args.output is not None else build_dir / "performance-review.json").absolute()
-    baseline_request = os.environ.get("AOBUS_PERF_BASELINE_JSON", "")
-    baseline = Path(baseline_request).absolute() if baseline_request else None
-    _prepare_outputs(output, baseline)
-    environment = {
-        "AOBUS_PERF_REPORT_JSON": str(output),
-        "AOBUS_PERF_BASELINE_JSON": str(baseline) if baseline is not None else "",
-        "AOBUS_PERF_SAMPLES": str(args.samples),
-        "AOBUS_PERF_WARMUPS": str(args.warmups),
-        "AOBUS_PERF_REVISION": "unverified" if args.no_build else _revision(),
-        "AOBUS_PERF_COMPILER": compiler,
-        "AOBUS_PERF_BUILD_MODE": args.flavor,
-        "AOBUS_PERF_PLATFORM": profile.name,
-    }
-    if args.library_root is not None:
-        environment["AOBUS_PERF_LIBRARY_ROOT"] = str(args.library_root)
-        environment["AOBUS_PERF_LIBRARY_LOCALE"] = args.library_locale
-    if run([str(executable), args.filter], env=environment) != 0:
-        raise die("performance review workload failed")
-    if not output.is_file():
-        raise die(f"performance review workload did not produce '{output}'")
-
-    if baseline is not None:
-        _validate_baseline_report(baseline)
-    _print_report(output)
-    return 0
+            [TARGET_LABEL],
+            no_build=args.no_build,
+            compiler_identity=True,
+        ) as artifacts:
+            (artifact,) = artifacts
+            output = (args.output if args.output is not None else artifact.tree / "performance-review.json").absolute()
+            baseline_request = os.environ.get("AOBUS_PERF_BASELINE_JSON", "")
+            baseline = Path(baseline_request).absolute() if baseline_request else None
+            # Source attribution follows this invocation's build, never a fresh
+            # checkout revision attached to an old --no-build executable.
+            revision = "unverified" if args.no_build else _revision()
+            _prepare_outputs(output, baseline)
+            environment = {
+                **artifact.environment(),
+                "AOBUS_PERF_REPORT_JSON": str(output),
+                "AOBUS_PERF_BASELINE_JSON": str(baseline) if baseline is not None else "",
+                "AOBUS_PERF_SAMPLES": str(args.samples),
+                "AOBUS_PERF_WARMUPS": str(args.warmups),
+                "AOBUS_PERF_REVISION": revision,
+                "AOBUS_PERF_COMPILER": artifact.compiler_identity,
+                "AOBUS_PERF_BUILD_MODE": config,
+                "AOBUS_PERF_PLATFORM": host,
+                # Explicit empty values prevent an unrelated inherited library
+                # request from silently changing this benchmark's dataset.
+                "AOBUS_PERF_LIBRARY_ROOT": str(args.library_root) if args.library_root is not None else "",
+                "AOBUS_PERF_LIBRARY_LOCALE": args.library_locale if args.library_root is not None else "",
+            }
+            if run([str(artifact.executable), args.filter], env=environment) != 0:
+                raise die("performance review workload failed")
+            if baseline is not None:
+                _validate_baseline_report(baseline)
+            provenance = artifact.provenance() | {"source_attribution": "unverified" if args.no_build else "built"}
+            _record_build_provenance(output, environment, provenance)
+            _print_report(output)
+            return 0
+    except BazelWorkspaceError as error:
+        raise die(str(error)) from error

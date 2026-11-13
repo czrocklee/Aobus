@@ -1,193 +1,209 @@
-"""Real CMake fixtures for the audit root guard contract shared by the leaf scripts."""
+"""Root admission and content contracts of the frontend audit kinds.
 
-import shutil
-import subprocess
+The policy oracle is the shared Python backend (ao.core.guardrails); these
+cases prove each frontend kind's root admission and that an accepted root is
+actually scanned for its published violation classes.
+"""
+
 import tempfile
 import unittest
 from pathlib import Path
 
-from ao.core.paths import PROJECT_ROOT
-
-ROOT_SCRIPTS = {
-    "AssertGtkLeafCapabilities.cmake": "reaches a high-authority dependency",
-    "AssertWinUiLeafCapabilities.cmake": "reaches a high-authority dependency",
-    "AssertWinUiEventRevokers.cmake": "holds a raw event_token",
-    "AssertWinUiStateSubscriptions.cmake": "restores the old 'onShellStateChanged' push contract",
-}
-# One content violation per script proves an accepted root is actually scanned.
-ROOT_VIOLATIONS = {
-    "AssertGtkLeafCapabilities.cmake": ("app/Leaf.h", "AppRuntime* reach;\n"),
-    "AssertWinUiLeafCapabilities.cmake": ("app/Leaf.h", "AppRuntime* reach;\n"),
-    "AssertWinUiEventRevokers.cmake": ("app/Leaf.h", "winrt::event_token token;\n"),
-    "AssertWinUiStateSubscriptions.cmake": ("app/Leaf.h", "onShellStateChanged();\n"),
-}
-FRONTEND_VIOLATION = ("field/Schema.h", "Gtk::Widget* widget;\n", "speaks a frontend's vocabulary")
+from ao.core import guardrails
 
 
-def normalized(output):
-    return " ".join(output.replace("\\", "/").split())
+class FrontendContentTest(unittest.TestCase):
+    """One real content violation per rule proves an accepted root is scanned."""
 
-
-class AuditRootGuardTest(unittest.TestCase):
-    def run_root_script(self, cwd, script, root=None):
-        cmake = shutil.which("cmake")
-        if cmake is None:
-            self.skipTest("cmake is not on PATH")
-        arguments = [cmake]
-        if root is not None:
-            arguments.append(f"-DROOT={root}")
-        arguments += ["-P", str(PROJECT_ROOT / "cmake" / script)]
-        return subprocess.run(arguments, capture_output=True, text=True, check=False, cwd=cwd)
-
-    def test_existing_empty_roots_are_valid(self):
-        for script in ROOT_SCRIPTS:
-            with self.subTest(script=script), tempfile.TemporaryDirectory(prefix="aobus audit roots ") as temporary:
-                root = Path(temporary).resolve()
-                empty = root / "empty"
-                empty.mkdir()
-                result = self.run_root_script(root, script, empty)
-                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-
-    def test_falsey_named_roots_are_accepted_and_scanned(self):
-        for script in ROOT_SCRIPTS:
-            with self.subTest(script=script), tempfile.TemporaryDirectory(prefix="aobus audit roots ") as temporary:
-                root = Path(temporary).resolve()
-                for dirname in ("OFF", "0", "ROOT-NOTFOUND"):
-                    with self.subTest(script=script, dirname=dirname):
-                        directory = root / dirname
-                        relative, source = ROOT_VIOLATIONS[script]
-                        path = directory / relative
-                        path.parent.mkdir(parents=True, exist_ok=True)
-                        path.write_text(source, encoding="utf-8")
-                        # A relative root resolves against the script's working directory.
-                        result = self.run_root_script(root, script, dirname)
-                        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
-                        self.assertIn(ROOT_SCRIPTS[script], normalized(result.stderr))
-                absolute = (root / f"{script.split('.')[0]}-NOTFOUND").resolve()
-                relative, source = ROOT_VIOLATIONS[script]
-                path = absolute / relative
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(source, encoding="utf-8")
-                result = self.run_root_script(root, script, absolute)
-                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
-                self.assertIn(ROOT_SCRIPTS[script], normalized(result.stderr))
-
-    def test_every_root_must_be_a_directory(self):
-        for script in ROOT_SCRIPTS:
-            with self.subTest(script=script), tempfile.TemporaryDirectory(prefix="aobus audit roots ") as temporary:
-                root = Path(temporary).resolve()
-                regular_file = root / "regular file"
-                regular_file.write_text("not a directory", encoding="utf-8")
-                for path in (root / "missing directory", regular_file):
-                    with self.subTest(script=script, path=path):
-                        result = self.run_root_script(root, script, path)
-                        self.assertNotEqual(result.returncode, 0)
-                        self.assertIn("is not a directory", result.stderr)
-                        self.assertIn(path.as_posix(), normalized(result.stderr))
-
-    def test_every_root_must_be_specified_and_nonempty(self):
-        for script in ROOT_SCRIPTS:
-            for omitted in (False, True):
-                with self.subTest(script=script, omitted=omitted), tempfile.TemporaryDirectory() as temporary:
-                    root = Path(temporary)
-                    result = self.run_root_script(root, script, None if omitted else "")
-                    self.assertNotEqual(result.returncode, 0)
-                    self.assertIn("ROOT not specified", result.stderr)
-
-    def test_valid_roots_still_enforce_their_rules(self):
-        for script, (relative, source) in ROOT_VIOLATIONS.items():
-            with self.subTest(script=script), tempfile.TemporaryDirectory(prefix="aobus audit roots ") as temporary:
-                root = Path(temporary).resolve()
-                path = root / relative
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(source, encoding="utf-8")
-                result = self.run_root_script(root, script, root)
-                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
-                self.assertIn(ROOT_SCRIPTS[script], normalized(result.stderr))
-
-
-class FrontendNeutralityRootGuardTest(unittest.TestCase):
     def setUp(self):
-        temporary = tempfile.TemporaryDirectory(prefix="aobus neutrality roots ")
+        temporary = tempfile.TemporaryDirectory(prefix="aobus frontend audit ")
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name).resolve()
-        self.roots = {name: self.root / name for name in ("PUBLIC_ROOT", "SOURCE_ROOT", "TEST_ROOT")}
-        for root in self.roots.values():
-            root.mkdir()
 
-    def run_audit(self, roots):
-        cmake = shutil.which("cmake")
-        if cmake is None:
-            self.skipTest("cmake is not on PATH")
-        return subprocess.run(
-            [
-                cmake,
-                *(f"-D{name}={path}" for name, path in roots.items()),
-                "-P",
-                str(PROJECT_ROOT / "cmake/AssertUimodelFrontendNeutrality.cmake"),
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-            cwd=self.root,
-        )
-
-    def test_existing_empty_roots_are_valid(self):
-        result = self.run_audit(self.roots)
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-
-    def test_falsey_named_roots_are_accepted_and_scanned(self):
-        for name in self.roots:
-            for dirname in ("OFF", "0", "ROOT-NOTFOUND"):
-                with self.subTest(root=name, dirname=dirname):
-                    directory = self.root / dirname
-                    relative, source, message = FRONTEND_VIOLATION
-                    path = directory / relative
-                    path.parent.mkdir(parents=True, exist_ok=True)
-                    path.write_text(source, encoding="utf-8")
-                    result = self.run_audit({**self.roots, name: Path(dirname)})
-                    self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
-                    self.assertIn(message, normalized(result.stderr))
-
-            absolute_root = (self.root / f"{name}-NOTFOUND").resolve()
-            absolute_root.mkdir(exist_ok=True)
-            relative, source, message = FRONTEND_VIOLATION
-            path = absolute_root / relative
+    def put(self, files):
+        for relative, source in files.items():
+            path = self.root / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(source, encoding="utf-8")
-            result = self.run_audit({**self.roots, name: absolute_root})
-            self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
-            self.assertIn(message, normalized(result.stderr))
 
-    def test_every_root_must_be_a_directory(self):
-        regular_file = self.root / "regular file"
-        regular_file.write_text("not a directory", encoding="utf-8")
-        for name in self.roots:
-            for path in (self.root / "missing directory", regular_file):
-                with self.subTest(root=name, path=path):
-                    result = self.run_audit({**self.roots, name: path})
-                    self.assertNotEqual(result.returncode, 0)
-                    self.assertIn("is not a directory", result.stderr)
-                    self.assertIn(path.as_posix(), normalized(result.stderr))
+    def assert_finding(self, kind, files, path_fragment, message):
+        self.put(files)
+        result = guardrails.audit_frontend(kind, self.root)
+        self.assertFalse(result.ok, (kind, result.errors))
+        self.assertIn(path_fragment, result.errors[0].path)
+        self.assertIn(message, result.errors[0].detail)
 
-    def test_every_root_must_be_specified_and_nonempty(self):
-        for name in self.roots:
-            for omitted in (False, True):
-                with self.subTest(root=name, omitted=omitted):
-                    roots = {key: path for key, path in self.roots.items() if key != name}
-                    if not omitted:
-                        roots[name] = ""
-                    result = self.run_audit(roots)
-                    self.assertNotEqual(result.returncode, 0)
-                    self.assertIn(f"{name} not specified", result.stderr)
+    def test_leaf_kinds_reject_a_high_authority_reach(self):
+        for kind in ("gtk-leaf", "winui-leaf"):
+            with self.subTest(kind=kind):
+                self.assert_finding(
+                    kind,
+                    {"app/Leaf.h": "AppRuntime* reach;\n"},
+                    "app/Leaf.h",
+                    "reaches a high-authority dependency",
+                )
 
-    def test_valid_roots_still_enforce_frontend_neutrality(self):
-        path = self.roots["SOURCE_ROOT"] / FRONTEND_VIOLATION[0]
-        path.parent.mkdir()
-        path.write_text(FRONTEND_VIOLATION[1], encoding="utf-8")
-        result = self.run_audit(self.roots)
-        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn(FRONTEND_VIOLATION[2], normalized(result.stderr))
+    def test_gtk_leaf_scans_the_whole_frontend(self):
+        rejected = {
+            "layout/component/track/Leaf.cpp": "void build(ao::rt::AppRuntime& runtime);\n",
+            "track/TrackPageHost.h": "void host(ao::rt::AppRuntime& runtime);\n",
+            # Code sharing a line with the terminator that ends a doc comment is code.
+            "track/Leaf.h": "/**\n * doc\n */ void bind(ao::rt::AppRuntime& runtime);\n",
+            # A registrations-shaped filename outside the named roots is not exempt.
+            "track/TrackToolbarRegistrations.cpp": "void registerAll(ao::rt::AppRuntime& runtime);\n",
+        }
+        for relative in rejected:
+            with self.subTest(relative=relative):
+                self.put({relative: rejected[relative]})
+                result = guardrails.audit_frontend("gtk-leaf", self.root)
+                self.assertFalse(result.ok, result.errors)
+                self.assertIn(relative, result.errors[0].path)
+                (self.root / relative).unlink()
+
+        self.put(
+            {
+                "app/MainWindow.cpp": "void compose(ao::rt::AppRuntime& runtime);\n",
+                # Prose naming the rule is not a reach for the type it names.
+                "track/Documented.h": (
+                    "/**\n"
+                    " * Documented takes exact capabilities rather than the whole AppRuntime.\n"
+                    " */\n"
+                    "class Documented;\n"
+                    "/* AppRuntime stays at the composition root. */\n"
+                    "void configure(ao::rt::ViewService& views); /* not the AppRuntime */\n"
+                    # A block comment need not mark its continuation lines.
+                    "/*\nAppRuntime is composed by the window.\n*/\n"
+                ),
+                "layout/runtime/LayoutRuntime.h": "class LayoutRuntime;\n",
+                "layout/component/track/TrackRegistrations.cpp": "void registerAll(ao::rt::AppRuntime& runtime);\n",
+                "list/ListNavigationController.cpp": "void build(ao::rt::AppRuntime& runtime);\n",
+                "track/TrackPageHost.h": "void host(ao::rt::PlaybackService& playback);\n",
+                "layout/component/track/Leaf.cpp": "void build(ao::rt::PlaybackService& playback);\n",
+            }
+        )
+        result = guardrails.audit_frontend("gtk-leaf", self.root)
+        self.assertTrue(result.ok, result.errors)
+
+    def test_winui_leaf_scans_the_whole_frontend(self):
+        rejected = {
+            "playback/TransportButton.cpp": "void build(ao::winui::LibrarySession& session);\n",
+            "platform/MediaBridge.h": "void bind(ao::rt::AppRuntime& runtime);\n",
+            "platform/Leaf.h": "/**\n * doc\n */ void bind(ao::winui::LibrarySession& session);\n",
+        }
+        for relative in rejected:
+            with self.subTest(relative=relative):
+                self.put({relative: rejected[relative]})
+                result = guardrails.audit_frontend("winui-leaf", self.root)
+                self.assertFalse(result.ok, result.errors)
+                self.assertIn(relative, result.errors[0].path)
+                (self.root / relative).unlink()
+
+        # track/ holds a named root, so its other files must still be governed.
+        self.put(
+            {
+                "track/MainWindowTrack.cpp": "void compose(ao::rt::AppRuntime& runtime);\n",
+                "track/TrackListController.cpp": "void drive(ao::rt::AppRuntime& runtime);\n",
+            }
+        )
+        result = guardrails.audit_frontend("winui-leaf", self.root)
+        self.assertFalse(result.ok, result.errors)
+        self.assertIn("track/TrackListController.cpp", result.errors[0].path)
+        self.assertNotIn("track/MainWindowTrack.cpp", {finding.path for finding in result.errors})
+
+        for relative in ("track/MainWindowTrack.cpp", "track/TrackListController.cpp"):
+            (self.root / relative).unlink()
+        self.put(
+            {
+                "MainWindow.xaml.cpp": "void compose(ao::rt::AppRuntime& runtime);\n",
+                # Prose naming the rule is not a reach for the types it names.
+                "platform/Documented.h": (
+                    "/**\n"
+                    " * Documented is built by the LibrarySession from AppRuntime services.\n"
+                    " */\n"
+                    "class Documented;\n"
+                    # A block comment need not mark its continuation lines.
+                    "/*\nLibrarySession composes this from AppRuntime.\n*/\n"
+                ),
+                "app/LibrarySession.h": "class LibrarySession;\n",
+                "layout/ShellBuilder.cpp": "void build(ao::rt::AppRuntime& runtime);\n",
+                "shell/MainWindowShell.cpp": "void compose(ao::winui::LibrarySession& session);\n",
+                "platform/MediaBridge.h": "void bind(ao::rt::PlaybackService& playback);\n",
+                "playback/TransportButton.cpp": "void build(ao::rt::PlaybackService& playback);\n",
+            }
+        )
+        self.assertTrue(guardrails.audit_frontend("winui-leaf", self.root).ok)
+
+    def test_winui_events_rejects_unrevoked_owner_registrations(self):
+        rejected = {
+            "playback/Transport.cpp": "  _button.Click({this, &Transport::onClicked});\n",
+            "wrapped/Transport.cpp": (
+                "  _button.Click(\n    {this, &Transport::onClicked});\n"
+                "  _panel.SizeChanged(\n    [this](auto&&, auto&&) { relayout(); });\n"
+            ),
+            # A comment between the call and its argument does not hide the argument.
+            "interleaved/Transport.cpp": (
+                "  _panel.SizeChanged(\n"
+                "    /* the panel outlives this owner */\n"
+                "    [this](auto&&, auto&&) { relayout(); });\n"
+            ),
+            # A compound capture list reaches the owner exactly as [this] does.
+            "compound/Transport.cpp": "  _panel.SizeChanged([=, this](auto&&, auto&&) { relayout(); });\n",
+        }
+        for relative in rejected:
+            with self.subTest(relative=relative):
+                self.put({relative: rejected[relative]})
+                result = guardrails.audit_frontend("winui-events", self.root)
+                self.assertFalse(result.ok, result.errors)
+                self.assertIn("without auto_revoke", result.errors[0].detail)
+                (self.root / relative).unlink()
+
+        self.put(
+            {
+                "playback/Transport.cpp": (
+                    "  _clickRevoker = _button.Click(winrt::auto_revoke, {this, &Transport::onClicked});\n"
+                    "  _sizeRevoker = _panel.SizeChanged(\n"
+                    "    winrt::auto_revoke,\n"
+                    "    [this](auto&&, auto&&) { relayout(); });\n"
+                    "  _timer.Tick([weak = get_weak()](auto&&, auto&&) { poll(); });\n"
+                    "  // _button.Click({this, &Transport::onClicked}) would not revoke.\n"
+                    "  /* _panel.SizeChanged(\n"
+                    "     [this](auto&&, auto&&) { relayout(); }) would not revoke either. */\n"
+                ),
+                "playback/SelfRegistering.cpp": (
+                    "  Loaded(\n    [this](auto&&, auto&&) { onLoaded(); });\n"
+                    "  SizeChanged([this](auto&&, auto&&) { updateGeometry(); });\n"
+                ),
+            }
+        )
+        self.assertTrue(guardrails.audit_frontend("winui-events", self.root).ok)
+
+    def test_winui_events_rejects_hand_managed_tokens_and_unsupported_weak_references(self):
+        self.put({"playback/Transport.cpp": "  winrt::event_token _clickToken{};\n"})
+        result = guardrails.audit_frontend("winui-events", self.root)
+        self.assertFalse(result.ok, result.errors)
+        self.assertIn("raw event_token", result.errors[0].detail)
+
+        # Code sharing a line with the terminator that ends a doc comment is code.
+        self.put({"playback/Transport.h": "/**\n * doc\n */ winrt::event_token _clickToken{};\n"})
+        result = guardrails.audit_frontend("winui-events", self.root)
+        self.assertFalse(result.ok, result.errors)
+        self.assertIn("raw event_token", result.errors[0].detail)
+
+        self.put({"app/Shell.cpp": "  _changed = AppWindow().Changed(winrt::auto_revoke, handler);\n"})
+        result = guardrails.audit_frontend("winui-events", self.root)
+        self.assertFalse(result.ok, result.errors)
+        self.assertIn("does not support weak references", result.errors[0].detail)
+
+    def test_winui_state_rejects_the_legacy_push_contract_and_raw_fan_out(self):
+        for source, fragment in (
+            ("onShellStateChanged();\n", "onShellStateChanged"),
+            ("ctx.observers.push_back(observer);\n", "raw component fan-out"),
+        ):
+            with self.subTest(fragment=fragment):
+                self.put({"app/Leaf.h": source})
+                result = guardrails.audit_frontend("winui-state", self.root)
+                self.assertFalse(result.ok, result.errors)
+                self.assertIn(fragment, result.errors[0].detail)
 
 
 if __name__ == "__main__":

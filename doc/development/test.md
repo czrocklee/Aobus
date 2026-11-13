@@ -16,6 +16,7 @@ samples), see the focused documents under `doc/development/test/`.
 
 | Document | Scope |
 |---|---|
+| [`test/scope.md`](test/scope.md) | Whether a test, runtime check, or gate step should exist, and when to remove one |
 | [`test/layer-selection.md`](test/layer-selection.md) | Layer boundaries and contract/assertion-layer choices |
 | [`test/naming-and-assertion.md`](test/naming-and-assertion.md) | Test names, tags, structure, and assertion quality |
 | [`test/fixture-and-helper.md`](test/fixture-and-helper.md) | Fixtures, helpers, FakeIt, test data, and filesystem setup |
@@ -26,6 +27,12 @@ samples), see the focused documents under `doc/development/test/`.
 | [`test/validation-and-review.md`](test/validation-and-review.md) | New files, reviewing existing tests, validation, smells, and review checklist |
 | [`test/test-suite.md`](test/test-suite.md) | `./ao test` suite organization |
 | [`test/performance.md`](test/performance.md) | Standalone optimized performance sampling and report evidence |
+
+## What deserves a test
+
+Add a test or check only when nothing would already fail if the behavior broke.
+[Deciding what to test and check](test/scope.md) owns the admission rule, the
+trust boundary for pinned tools, runtime checks, gate steps, and removal.
 
 ## Layer selection
 
@@ -42,6 +49,30 @@ adapter behavior.
 
 For detailed layer selection guidance with boundary-case tables, see
 `doc/development/test/layer-selection.md`.
+
+## Bazel support tests
+
+[Deciding what to test and check](test/scope.md#what-to-test-and-what-not)
+selects which Bazel support behavior deserves a Python test. Test it with the
+smallest representative fixtures that distinguish correct behavior from a
+plausible defect.
+
+Do not maintain a second dependency, source, or target inventory in expected
+values, or reconstruct the complete build graph.
+A source/target assertion needs an independently required ownership or consumer
+boundary; the current BUILD syntax or list order is not itself a contract.
+Literal expected values are appropriate for transformations and required consumer
+outputs. Compare exact generated text only when its spelling is an externally
+consumed format contract.
+
+Keep production selection and validation logic real; fake external I/O at its
+boundary. A subprocess fake must discriminate the executable, query, and module
+relevant to the tested contract rather than return a valid answer for any command.
+Use a small number of real integration probes to establish that Bazel consumes the
+generated interfaces. Actual build, compiler, linker, and runtime acceptance belongs
+to the affected native build/test gates, not Python assertions about dummy artifacts.
+This boundary does not exclude C++ business tests from `./ao test` or weaken
+required [completion validation](test/validation-and-review.md).
 
 ## Naming and tags
 

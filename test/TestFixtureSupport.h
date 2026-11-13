@@ -78,6 +78,13 @@ namespace ao::test
 
   std::string readFile(std::filesystem::path const& path);
 
+  // Defined only for Bazel tests; the caller validates the returned file path.
+  // Throws std::runtime_error if initialization fails or TEST_WORKSPACE is empty.
+  std::string resolveBazelTestRunfile(std::string_view relativePath);
+
+  // Resolves an exact checked-in input file relative to the workspace root.
+  std::filesystem::path testInputPath(std::string_view workspaceRelativePath);
+
   template<typename TState>
   struct RenderLog final
   {

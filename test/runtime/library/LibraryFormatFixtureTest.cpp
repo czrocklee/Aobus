@@ -75,9 +75,9 @@ namespace ao::rt::test
     constexpr auto kNextListId = ListId{7};
     constexpr auto kWrittenTag = std::string_view{"written-after-copy"};
 
-    std::filesystem::path fixtureRoot()
+    std::filesystem::path fixtureFile(std::string_view const relativePath)
     {
-      return std::filesystem::path{LIBRARY_TEST_DATA_DIR};
+      return ao::test::testInputPath(std::string{"test/data/library/"} + std::string{relativePath});
     }
 
     struct FixtureLayout final
@@ -159,7 +159,7 @@ namespace ao::rt::test
 
   TEST_CASE("Library format fixtures - a library from each platform reads back and accepts a write")
   {
-    auto const expectedYaml = ao::test::readFile(fixtureRoot() / "v1.yaml");
+    auto const expectedYaml = ao::test::readFile(fixtureFile("v1.yaml"));
     REQUIRE_FALSE(expectedYaml.empty());
 
     for (auto const& fixture : kFixtures)
@@ -172,7 +172,8 @@ namespace ao::rt::test
         // A copy, because opening creates lock files beside the database and the
         // test writes the database; the committed fixture must stay as its
         // platform made it.
-        REQUIRE(std::filesystem::copy_file(fixtureRoot() / fixture.directory / "data.mdb", databasePath / "data.mdb"));
+        REQUIRE(std::filesystem::copy_file(
+          fixtureFile(std::string{fixture.directory} + "/data.mdb"), databasePath / "data.mdb"));
 
         // The page size is the creating host's, and these shapes are what the
         // fixtures carry across it: Track and manifest trees with a branch level,
@@ -238,7 +239,7 @@ namespace ao::rt::test
 
   TEST_CASE("Library format fixtures - the version 1 document restores into an empty library and exports unchanged")
   {
-    auto const yamlPath = fixtureRoot() / "v1.yaml";
+    auto const yamlPath = fixtureFile("v1.yaml");
     auto const temp = ao::test::TempDir{};
     auto const databasePath = temp.path() / "library";
     REQUIRE(std::filesystem::create_directory(databasePath));

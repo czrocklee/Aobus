@@ -1,6 +1,0 @@
-#pragma once
-
-namespace ao
-{
-  inline constexpr auto kAppVersion = "@PROJECT_VERSION@";
-}

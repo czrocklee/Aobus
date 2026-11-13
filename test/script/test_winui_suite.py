@@ -1,15 +1,20 @@
 """The explicit loaded WinUI naming gate never silently joins headless suites."""
 
 import argparse
+import re
+import sys
 import tempfile
 import unittest
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+from workflow_support import executable_artifact
+
 from ao.command import test
 from ao.core import builddir
+from ao.core.bazel_native import BazelWorkspaceError
 
 
 class WinUiSuiteTest(unittest.TestCase):
@@ -34,17 +39,10 @@ class WinUiSuiteTest(unittest.TestCase):
         values.update(overrides)
         return argparse.Namespace(**values)
 
-    @staticmethod
-    def probe(tree):
-        path = tree / "app/windows-winui/automation-probe/Debug/ao_winui_automation_probe.exe"
-        path.parent.mkdir(parents=True)
-        path.touch()
-        return path
-
     def test_is_explicit_windows_only_not_an_all_suite(self):
         self.assertIn("winui", test.selectable_suites())
         self.assertNotIn("winui", test.suites_for("all"))
-        self.assertFalse(test.requires_build_environment(self.options(Path("unused"))))
+        self.assertTrue(test.requires_build_environment(self.options(Path("unused"))))
         self.assertTrue(test.requires_build_environment(self.options(Path("unused"), no_build=False)))
         with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
             self.assertNotIn("winui", test.selectable_suites())
@@ -54,7 +52,8 @@ class WinUiSuiteTest(unittest.TestCase):
     def test_no_build_uses_exact_winui_tree_and_propagates_phase_status(self):
         with tempfile.TemporaryDirectory() as directory:
             tree = Path(directory)
-            probe = self.probe(tree)
+            artifact = executable_artifact(tree, target=test.SUITES["winui"].target)
+            probe = artifact.executable
             measured = []
 
             @contextmanager
@@ -66,31 +65,44 @@ class WinUiSuiteTest(unittest.TestCase):
             with (
                 mock.patch.object(test.phases, "measure", side_effect=measure),
                 mock.patch.object(test, "run", return_value=7) as run,
-                mock.patch.object(test.build, "do_build") as build,
+                mock.patch.object(
+                    test.bazel_workflows, "prepare_artifacts", return_value=nullcontext((artifact,))
+                ) as prepare,
             ):
                 self.assertEqual(test.run_command(self.options(tree)), 7)
-            build.assert_not_called()
-            run.assert_called_once_with([str(probe)], cwd=probe.parent, log=tree / "build.log", append=True)
+            self.assertTrue(prepare.call_args.kwargs["no_build"])
+            run.assert_called_once_with(
+                [str(probe)],
+                cwd=probe.parent,
+                env=artifact.environment(),
+                log=tree / "build.log",
+                append=True,
+            )
             self.assertEqual(measured[0][:2], ("suite", {"tree": "winui", "count": 1, "suite": "winui"}))
             self.assertEqual(measured[0][2].status, 7)
 
-    def test_build_uses_portal_winui_validation_target_and_returned_tree(self):
-        self.assertEqual(test.SUITES["winui"].target, test.build.WINUI_CHECK_TARGET)
+    def test_build_resolves_the_automation_probe_not_the_product_executable(self):
         with tempfile.TemporaryDirectory() as directory:
             tree = Path(directory)
-            self.probe(tree)
+            artifact = executable_artifact(tree, target=test.SUITES["winui"].target)
+            args = self.options(tree, no_build=False)
             with (
-                mock.patch.object(test.build, "do_build", return_value=SimpleNamespace(build_dir=tree)) as build,
+                mock.patch.object(
+                    test.bazel_workflows, "prepare_artifacts", return_value=nullcontext((artifact,))
+                ) as prepare,
                 mock.patch.object(test, "run", return_value=0),
             ):
-                self.assertEqual(test.run_command(self.options(tree, no_build=False)), 0)
-            self.assertEqual(build.call_args.kwargs, {"targets": [test.build.WINUI_CHECK_TARGET]})
-            self.assertEqual(build.call_args.args[0].flavor, "debug")
-            self.assertFalse(build.call_args.args[0].clean)
+                self.assertEqual(test.run_command(args), 0)
+            prepare.assert_called_once_with(args, [test.SUITES["winui"].target], no_build=False)
 
     def test_missing_probe_and_desktop_admission_fail_closed(self):
         with tempfile.TemporaryDirectory() as directory:
-            with mock.patch.object(test, "run") as run:
+            with (
+                mock.patch.object(test, "run") as run,
+                mock.patch.object(
+                    test.bazel_workflows, "prepare_artifacts", side_effect=BazelWorkspaceError("missing probe")
+                ),
+            ):
                 with self.assertRaises(SystemExit):
                     test.run_command(self.options(Path(directory)))
                 with mock.patch.object(
@@ -100,19 +112,45 @@ class WinUiSuiteTest(unittest.TestCase):
                         test.run_command(self.options(Path(directory)))
             run.assert_not_called()
 
-    def test_rejects_catch2_and_other_build_modes(self):
-        for options in ({"filter": "[winui]"}, {"list": True}, {"repeat": 2}, {"clang": True}, {"asan": True}):
-            with self.subTest(options=options), self.assertRaises(SystemExit):
-                test._run_winui_audit(self.options(Path("unused"), **options))
-
     def test_ci_requires_the_desktop_gate_without_ignoring_failure(self):
         workflow = (Path(__file__).parents[2] / ".github/workflows/ci.yml").read_text()
         windows = workflow.split("  windows:\n", 1)[1]
-        build = windows.index("      - name: Build and test\n")
+        build = windows.index("      - name: Check Bazel completion\n")
         audit = windows.index("      - name: WinUI naming gate\n")
         hygiene = windows.index("      - name: Run hygiene\n")
         self.assertLess(build, audit)
         self.assertLess(audit, hygiene)
         block = windows[audit:].split("\n      - name:", 1)[0]
-        self.assertIn(r".\ao.bat test --winui --no-build", block)
         self.assertNotIn("continue-on-error", block)
+        self.assertNotIn("\n        if:", block)
+        self.assertIn(r"tools\python\$($contract.python)\python.exe", block)
+        self.assertIn("$python -I -S -B -X utf8 -c", block)
+        # The probe launches through the flat run command's label positional; the
+        # retired raw-forwarding route must not reappear. Option order around
+        # the label is incidental and stays unpinned.
+        self.assertNotIn(r".\ao.bat bazel", block)
+        self.assertIn(r".\ao.bat run", block)
+        self.assertIn("//app/windows-winui:ao_winui_automation_probe", block)
+        self.assertEqual(block.count("if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }"), 2)
+        self.assertLess(block.index("winui.require_interactive_session()"), block.index(r".\ao.bat run"))
+        self.assertNotIn("test --winui", block)
+
+    def test_ci_desktop_admission_keeps_runtime_and_console_failures_fatal(self):
+        workflow = (Path(__file__).parents[2] / ".github/workflows/ci.yml").read_text()
+        block = workflow.split("      - name: WinUI naming gate\n", 1)[1].split("      - name:", 1)[0]
+        match = re.search(r"-c '([^']+)'", block)
+        self.assertIsNotNone(match, "The desktop gate must admit its runtime and console before launch")
+        script = compile(match.group(1), "<CI desktop admission>", "exec")
+        calls = []
+        with (
+            mock.patch.object(sys, "path", list(sys.path)),
+            mock.patch.object(test.winui, "require_runtime", side_effect=lambda: calls.append("runtime")),
+            mock.patch.object(test.winui, "require_interactive_session", side_effect=lambda: calls.append("console")),
+        ):
+            exec(script, {})
+        self.assertEqual(calls, ["runtime", "console"])
+        for missing in ("require_runtime", "require_interactive_session"):
+            with self.subTest(missing=missing), mock.patch.object(sys, "path", list(sys.path)):
+                with mock.patch.object(test.winui, missing, side_effect=RuntimeError("admission failed")):
+                    with self.assertRaisesRegex(RuntimeError, "admission failed"):
+                        exec(script, {})

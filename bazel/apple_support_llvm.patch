@@ -1,0 +1,64 @@
+diff --git a/crosstool/wrapped_clang.cc b/crosstool/wrapped_clang.cc
+--- a/crosstool/wrapped_clang.cc
++++ b/crosstool/wrapped_clang.cc
+@@ -96,11 +96,13 @@
+ // Converts an array of string arguments to char *arguments.
+-// The first arg is reduced to its basename as per execve conventions.
++// Keep the compiler's complete argv[0] for installed LLVM resource lookup.
++// Apple xcrun postprocessors retain their existing basename convention.
+ // Note that the lifetime of the char* arguments in the returned array
+ // are controlled by the lifetime of the strings in args.
+ std::vector<const char*> ConvertToCArgs(const std::vector<std::string>& args) {
+   std::vector<const char*> c_args;
+-  c_args.push_back(Basename(args[0].c_str()));
++  c_args.push_back(args[0] == "/usr/bin/xcrun" ? Basename(args[0].c_str())
++                                             : args[0].c_str());
+   for (int i = 1; i < args.size(); i++) {
+     c_args.push_back(args[i].c_str());
+   }
+   c_args.push_back(nullptr);
+@@ -441,3 +443,9 @@
+   if (toolchain_id != nullptr) {
+-    toolchain_path = GetToolchainPath(toolchain_id);
++    std::cerr << "Error: TOOLCHAINS must be unset for the selected LLVM compiler.\n";
++    return 1;
++  }
++  const std::string llvm_root = GetMandatoryEnvVar("APPLE_SUPPORT_LLVM_ROOT");
++  if (llvm_root.empty() || llvm_root[0] != '/') {
++    std::cerr << "Error: APPLE_SUPPORT_LLVM_ROOT must be an absolute directory.\n";
++    return 1;
+   }
+@@ -456,2 +464,3 @@
+-  std::vector<std::string> invocation_args = {"/usr/bin/xcrun", tool_name};
++  std::vector<std::string> invocation_args = {
++      llvm_root + "/bin/" + tool_name, "--no-default-config"};
+   std::vector<std::string> processed_args = {};
+diff --git a/toolchain/cc_toolchain.bzl b/toolchain/cc_toolchain.bzl
+--- a/toolchain/cc_toolchain.bzl
++++ b/toolchain/cc_toolchain.bzl
+@@ -19,6 +19,7 @@
+         extra_enabled_features = None,
+         extra_known_features = None,
+         extra_include_directories = None,
++        platform_args = None,
+         dynamic_runtime_lib = None,
+         static_runtime_lib = None):
+     """Defines a C/C++ toolchain with Apple defaults on Apple platforms.
+@@ -52,6 +53,8 @@
+         extra_enabled_features: A `cc_feature_set` of extra features to enable.
+         extra_known_features: A `cc_feature_set` of extra features to make known.
+         extra_include_directories: A `cc_args` of extra include directories.
++        platform_args: Optional `cc_args` or `cc_args_list` replacing automatic
++            include roots and environment for an explicitly admitted native SDK.
+         dynamic_runtime_lib: Passed through to `cc_toolchain`. The dynamic
+             library to link when `static_link_cpp_runtimes` is enabled.
+         static_runtime_lib: Passed through to `cc_toolchain`.
+@@ -67,7 +70,7 @@
+     extra_include_directories = [extra_include_directories] if extra_include_directories else []
+     _cc_toolchain(
+         name = name,
+-        args = [
++        args = [platform_args] + extra_include_directories if platform_args else [
+             Label("@apple_support_toolchain_env//:include_directories_from_xcode"),
+             Label("//toolchain:extra_include_directories"),
+         ] + extra_include_directories + select({

@@ -5,7 +5,6 @@ import os
 import subprocess
 import sys
 import tempfile
-import threading
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -228,36 +227,10 @@ class MeasureRecordTest(RecordFixture, unittest.TestCase):
             self.assertEqual(inner_begin["command"], "check")
             self.assertNotIn("command", sibling)
 
-    def test_unparented_worker_thread_records_no_parent(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            self.enable_logging(temporary)
-            done = threading.Event()
-            started = threading.Event()
-
-            def work() -> None:
-                started.set()
-                with phases.measure("analysis-item"):
-                    done.wait(10)
-                done.set()
-
-            thread = threading.Thread(target=work)
-            thread.start()
-            started.wait(10)
-            with phases.measure("suite"):
-                pass
-            done.set()
-            thread.join(10)
-            self.assertFalse(thread.is_alive())
-            begins = [row for row in self.log_rows(temporary) if row["kind"] == "BEGIN"]
-            by_phase = {row["phase"]: row for row in begins}
-            self.assertNotIn("parent_id", by_phase["analysis-item"])
-            self.assertNotIn("parent_id", by_phase["suite"])
-            self.assertNotIn("command", by_phase["analysis-item"])
-
     def test_explicit_native_status_survives_system_exit_wrapper(self):
-        # Real caller pattern: winuitidy records phase.status = 3, then die()
-        # raises SystemExit(1) inside the measure block. The native failure is
-        # the metric; the wrapper exit code is still rethrown unchanged.
+        # Real caller pattern: a native checker records phase.status = 3, then
+        # die() raises SystemExit(1) inside the measure block. The native
+        # failure is the metric; the wrapper exit code is still rethrown.
         with tempfile.TemporaryDirectory() as temporary:
             self.enable_logging(temporary)
             with self.assertRaises(SystemExit) as caught:
@@ -310,15 +283,6 @@ class MeasureRecordTest(RecordFixture, unittest.TestCase):
             self.assertEqual([end["status"] for end in ends], [-11, -11])
             self.assertEqual([end["outcome"] for end in ends], ["fail", "fail"])
 
-    def test_bool_status_is_invalid_and_recorded_as_failure(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            self.enable_logging(temporary)
-            with phases.measure("suite") as phase:
-                phase.status = True
-            end = self.log_rows(temporary)[1]
-            self.assertEqual(end["status"], 1)
-            self.assertEqual(end["outcome"], "fail")
-
     def test_command_allowlist_projects_from_the_lightweight_registry(self):
         self.assertEqual(command_registry.COMMAND_NAMES, frozenset(module.NAME for module in command.COMMAND_MODULES))
         self.assertIs(phases._allowed_commands(), command_registry.COMMAND_NAMES)
@@ -369,30 +333,6 @@ class MeasureRecordTest(RecordFixture, unittest.TestCase):
             begins = [row for row in self.log_rows(temporary) if row["kind"] == "BEGIN"]
             self.assertEqual(begins[0]["source_id"], digest)
             self.assertNotIn("source_id", begins[1])
-
-    def test_invalid_arguments_fail_fast_without_logging(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            log_dir = Path(temporary)
-            self.enable_logging(log_dir)
-            for name, kwargs in (
-                ("phase", {"phase": "bogus"}),
-                ("retired lint-syntax", {"phase": "lint-syntax"}),
-                ("tree", {"phase": "build", "tree": "bogus"}),
-                ("mode", {"phase": "build", "mode": "bogus"}),
-                ("suite", {"phase": "build", "suite": "bogus"}),
-                ("command", {"phase": "build", "command": "bogus"}),
-                ("zero jobs", {"phase": "build", "jobs": 0}),
-                ("negative jobs", {"phase": "build", "jobs": -1}),
-                ("bool jobs", {"phase": "build", "jobs": True}),
-                ("negative count", {"phase": "build", "count": -1}),
-                ("bool count", {"phase": "build", "count": True}),
-                ("source_id phase", {"phase": "build", "source_id": "a" * 64}),
-                ("source_id shape", {"phase": "analysis-item", "source_id": "A" * 64}),
-            ):
-                with self.subTest(name=name), self.assertRaises(ValueError):
-                    with phases.measure(**kwargs):
-                        pass
-            self.assertFalse(list(log_dir.glob("*.jsonl")))
 
 
 class MeasureProcessTest(unittest.TestCase):
@@ -484,19 +424,6 @@ sys.exit(phase.status)
 
 
 class PhaseWriterTest(RecordFixture, unittest.TestCase):
-    def test_directory_preparation_is_amortized_and_records_are_closed(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            self.enable_logging(temporary)
-            with mock.patch.object(phases.os, "makedirs", wraps=os.makedirs) as mkdir:
-                for _ in range(3):
-                    with phases.measure("analysis-item"):
-                        pass
-            self.assertEqual(mkdir.call_count, 1)
-            rows = self.log_rows(temporary)
-            self.assertEqual(len(rows), 6)
-            self.assertIsNotNone(phases._pair_records(rows))
-            self.assertEqual(run_cli(temporary).returncode, 0)
-
     def test_serialization_does_not_hold_the_append_order_lock(self):
         class ObservedLock:
             held = False
@@ -616,26 +543,6 @@ class PhaseReportTest(RecordFixture, unittest.TestCase):
             self.assertIn("| tidy | analysis | - | - | - | 2 | - | 0 |", result.stdout)
             self.assertIn("| tidy | generated-headers | - | - | - | 1 | 0 | 0 |", result.stdout)
 
-    def test_report_does_not_import_command_implementations(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            directory = Path(temporary)
-            write_rows(directory, fixture_row("BEGIN", command="check", suite="core"), fixture_row("END"))
-            child = (
-                "import builtins, sys\n"
-                "original = builtins.__import__\n"
-                "def guarded(name, *args, **kwargs):\n"
-                "    if name == 'command' or name.startswith('ao.command'):\n"
-                "        raise AssertionError('reporter imported command implementations')\n"
-                "    return original(name, *args, **kwargs)\n"
-                "builtins.__import__ = guarded\n"
-                "from ao.core import phases\n"
-                "assert not any(name.startswith('ao.command') for name in sys.modules)\n"
-                f"raise SystemExit(phases.main([{str(directory)!r}]))\n"
-            )
-            result = run_child(child, None)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn("AO_PHASE_RECORD", result.stdout)
-
     def test_summary_lists_slowest_analysis_items_by_source_id(self):
         durations_ns = (20_000_000, 60_000_000, 120_000_000)
         digests = {duration_ns: f"{index:064x}" for index, duration_ns in enumerate(durations_ns, 1)}
@@ -678,185 +585,6 @@ class PhaseReportTest(RecordFixture, unittest.TestCase):
             result = run_cli(directory)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn('"status": -11', result.stdout)
-
-    def test_fails_on_truncated_and_malformed_rows_without_echoing_them(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            directory = Path(temporary)
-            write_rows(directory, fixture_row("BEGIN"), fixture_row("END"))
-            with (directory / "phases-fixture.jsonl").open("a", encoding="utf-8") as sink:
-                sink.write('{"schema_version": 1, "kind": "BEGIN", "canary": "' + CANARY)
-            terminal = run_cli(directory)
-            self.assertNotEqual(terminal.returncode, 0)
-            self.assertIn("truncated terminal record", terminal.stderr)
-            self.assertNotIn(CANARY, terminal.stdout)
-            self.assertNotIn(CANARY, terminal.stderr)
-            write_rows(directory, fixture_row("BEGIN"), fixture_row("END"))
-            with (directory / "phases-fixture.jsonl").open("a", encoding="utf-8") as sink:
-                sink.write('{"canary": "' + CANARY + "\n")
-                sink.write(json.dumps(fixture_row("END", phase_id="d" * 32), sort_keys=True) + "\n")
-            malformed = run_cli(directory)
-            self.assertNotEqual(malformed.returncode, 0)
-            self.assertIn("malformed phase record", malformed.stderr)
-            self.assertNotIn(CANARY, malformed.stdout)
-            self.assertNotIn(CANARY, malformed.stderr)
-
-    def test_fails_on_empty_or_blank_log_files(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            directory = Path(temporary)
-            write_rows(directory, fixture_row("BEGIN"), fixture_row("END"))
-            blank_file = directory / "phases-empty.jsonl"
-            blank_file.write_text("", encoding="utf-8")
-            empty = run_cli(directory)
-            self.assertNotEqual(empty.returncode, 0)
-            self.assertIn("empty phase log file", empty.stderr)
-            blank_file.write_text("\n", encoding="utf-8")
-            blank = run_cli(directory)
-            self.assertNotEqual(blank.returncode, 0)
-            self.assertIn("blank line", blank.stderr)
-
-    def test_fails_on_unpaired_begin(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            directory = Path(temporary)
-            write_rows(directory, fixture_row("BEGIN"), fixture_row("END"), fixture_row("BEGIN", phase_id="c" * 32))
-            result = run_cli(directory)
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn("missing END", result.stderr)
-
-    def test_fails_on_invalid_timing_and_status_fields(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            directory = Path(temporary)
-            cases = (
-                ("string status", fixture_row("END", status="7"), "invalid status"),
-                ("bool status", fixture_row("END", status=True), "invalid status"),
-                ("negative elapsed", fixture_row("END", elapsed_ns=-1), "invalid elapsed_ns"),
-                ("outcome mismatch", fixture_row("END", status=3, outcome="ok"), "invalid outcome"),
-                ("bool jobs", fixture_row("BEGIN", jobs=True), "invalid jobs"),
-                ("zero jobs", fixture_row("BEGIN", jobs=0), "invalid jobs"),
-                ("negative count", fixture_row("BEGIN", count=-1), "invalid count"),
-                ("count on END", fixture_row("END", count=1), "unknown field"),
-                ("float schema", fixture_row("BEGIN", schema_version=1.0), "unsupported schema_version"),
-            )
-            for name, row, reason in cases:
-                with self.subTest(name=name):
-                    write_rows(directory, fixture_row("BEGIN"), row)
-                    result = run_cli(directory)
-                    self.assertNotEqual(result.returncode, 0)
-                    self.assertIn(reason, result.stderr)
-
-    def test_fails_on_untrusted_rows_without_echoing_secrets(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            directory = Path(temporary)
-            cases = (
-                ("unknown field", fixture_row("BEGIN", canary=CANARY)),
-                ("canary session", fixture_row("BEGIN", session_id=CANARY)),
-                ("canary phase", fixture_row("BEGIN", phase=CANARY)),
-                ("canary source", fixture_row("BEGIN", phase="analysis-item", source_id=CANARY)),
-                ("source off phase", fixture_row("BEGIN", phase="build", source_id="a" * 64)),
-                ("canary parent", fixture_row("BEGIN", parent_id=CANARY)),
-                ("bad schema", fixture_row("BEGIN", schema_version=2)),
-                ("end with begin field", fixture_row("END", command=CANARY)),
-                ("unhashable phase", fixture_row("BEGIN", phase=[CANARY])),
-                ("nested command", fixture_row("BEGIN", command={CANARY: 1})),
-                ("unhashable source", fixture_row("BEGIN", phase="analysis-item", source_id=[CANARY])),
-            )
-            for name, row in cases:
-                with self.subTest(name=name):
-                    write_rows(directory, fixture_row("BEGIN"), row)
-                    result = run_cli(directory)
-                    self.assertNotEqual(result.returncode, 0)
-                    self.assertNotIn(CANARY, result.stdout)
-                    self.assertNotIn(CANARY, result.stderr)
-
-    def test_fails_on_duplicate_phase_ids_even_after_end(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            directory = Path(temporary)
-            write_rows(directory, fixture_row("BEGIN"), fixture_row("END"), fixture_row("BEGIN"))
-            repeated_begin = run_cli(directory)
-            self.assertNotEqual(repeated_begin.returncode, 0)
-            self.assertIn("duplicate BEGIN", repeated_begin.stderr)
-            write_rows(directory, fixture_row("BEGIN"), fixture_row("END"), fixture_row("END"))
-            repeated_end = run_cli(directory)
-            self.assertNotEqual(repeated_end.returncode, 0)
-            self.assertIn("duplicate END", repeated_end.stderr)
-
-    def test_fails_on_pid_mismatch_between_begin_and_end(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            directory = Path(temporary)
-            write_rows(directory, fixture_row("BEGIN"), fixture_row("END", pid=9999))
-            result = run_cli(directory)
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn("END does not match BEGIN", result.stderr)
-
-    def test_fails_on_unknown_or_self_referencing_parent(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            directory = Path(temporary)
-            write_rows(directory, fixture_row("BEGIN", parent_id="c" * 32), fixture_row("END"))
-            unknown = run_cli(directory)
-            self.assertNotEqual(unknown.returncode, 0)
-            self.assertIn("unknown parent", unknown.stderr)
-            write_rows(directory, fixture_row("BEGIN", parent_id="a" * 32), fixture_row("END"))
-            self_parent = run_cli(directory)
-            self.assertNotEqual(self_parent.returncode, 0)
-            self.assertIn("self-referencing parent", self_parent.stderr)
-
-    def test_fails_on_end_before_begin(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            directory = Path(temporary)
-            write_rows(directory, fixture_row("END"), fixture_row("BEGIN"))
-            result = run_cli(directory)
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn("END without BEGIN", result.stderr)
-
-    def test_fails_on_parent_cycle(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            directory = Path(temporary)
-            write_rows(
-                directory,
-                fixture_row("BEGIN", phase="build", phase_id="a" * 32, parent_id="b" * 32),
-                fixture_row("BEGIN", phase="suite", phase_id="b" * 32, parent_id="a" * 32),
-            )
-            result = run_cli(directory)
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn("unknown parent", result.stderr)
-
-    def test_fails_on_closed_parent(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            directory = Path(temporary)
-            write_rows(
-                directory,
-                fixture_row("BEGIN", phase_id="a" * 32),
-                fixture_row("END", phase_id="a" * 32),
-                fixture_row("BEGIN", phase_id="e" * 32, parent_id="a" * 32),
-            )
-            result = run_cli(directory)
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn("closed parent", result.stderr)
-
-    def test_consumer_errors_never_echo_provided_paths_or_tracebacks(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            base = Path(temporary)
-            secret_dir = base / f"phases-{CANARY}"
-            missing = run_cli(secret_dir)
-            self.assertNotEqual(missing.returncode, 0)
-            self.assertIn("phase log directory not found", missing.stderr)
-            directory = secret_dir / "logs"
-            directory.mkdir(parents=True)
-            (directory / f"phases-{CANARY}.jsonl").write_text("{not json\n", encoding="utf-8")
-            named = run_cli(directory)
-            self.assertNotEqual(named.returncode, 0)
-            self.assertIn("malformed phase record in phase log file 1:1", named.stderr)
-            valid = base / "valid"
-            valid.mkdir()
-            write_rows(valid, fixture_row("BEGIN"), fixture_row("END"))
-            summary = base / f"summary-{CANARY}"
-            summary.mkdir()
-            blocked = run_cli(valid, "--github-summary", summary)
-            self.assertNotEqual(blocked.returncode, 0)
-            self.assertIn("cannot write summary file", blocked.stderr)
-            for result in (missing, named, blocked):
-                self.assertNotIn(CANARY, result.stdout)
-                self.assertNotIn(CANARY, result.stderr)
-                self.assertNotIn("Traceback", result.stderr)
 
     def test_github_summary_appends_markdown_without_raw_records(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -200,7 +200,7 @@ There is no direct frontend observation. Runtime library workflows translate rea
 - [`DemuxerTest.cpp`](../../../test/media/ogg/DemuxerTest.cpp) protects Ogg page scanning, packet reassembly, stream selection, and incomplete endings.
 - Format tests under [`test/media/file/`](../../../test/media/file) protect mappings, properties, covers, payloads, caches, and malformed input.
 - [`MpegFileTrailingTagTest.cpp`](../../../test/media/file/MpegFileTrailingTagTest.cpp) pins suffix-aware frame-chain selection, retagging of truncated inputs, APE/terminal-byte boundaries, and the deliberate byte-only ambiguity limits.
-- [`MediaFileFixtureTest.cpp`](../../../test/media/file/MediaFileFixtureTest.cpp) protects real encoded fixtures across all supported formats.
+- [`MediaFileFixtureTest.cpp`](../../../test/runtime/library/MediaFileFixtureTest.cpp) protects real encoded fixtures across all supported formats.
 - [`MediaTrackTest.cpp`](../../../test/runtime/library/MediaTrackTest.cpp) protects the runtime retention contract.
 
 ## Related documents

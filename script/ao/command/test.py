@@ -1,11 +1,11 @@
 """ao test — incrementally build and run registered development test suites."""
 
 import argparse
-import copy
 import os
 import random
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -13,25 +13,24 @@ import uuid
 import xml.etree.ElementTree as ElementTree
 from collections.abc import Generator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import IO
+from typing import IO, Any
 from urllib.parse import quote
 
 from ..core import (
     appkitprocess,
+    bazel_workflows,
     builddir,
-    buildlock,
-    compiler_cache,
     jobs,
-    linttest,
     phases,
     proc,
     tooltest,
     winui,
-    workspace_cache,
 )
+from ..core.bazel_native import BazelWorkspaceError
+from ..core.bazel_workflows import ExecutableArtifact
 from ..core.paths import PROJECT_ROOT
 from ..core.proc import die, run
 
@@ -39,12 +38,19 @@ from ..core.proc import die, run
 # explicit re-export preserves the public ``ao.command.test`` API and identity.
 from ..core.test_suites import SUITES as SUITES
 from ..core.test_suites import SuiteSpec as SuiteSpec
-from . import build, tidy
 
 HELP = "Build incrementally and run C++ and tooling test suites with optional Catch2 filters"
 NAME = "test"
 # True when ao.bat must initialize the MSVC/vcpkg build environment first.
 REQUIRES_BUILD_ENV = True
+
+
+def requires_python_tools(args: argparse.Namespace) -> bool:
+    """Tooling is SDK-free but uses the managed Python test dependencies."""
+    return "tooling" in suites_for(args.suite, tsan=getattr(args, "tsan", False))
+
+
+REQUIRES_PYTHON_TOOLS = requires_python_tools
 
 # Preserve these public command constants while sharing the CI export policy.
 SHARD_ENV = jobs.SHARD_ENV
@@ -52,12 +58,12 @@ SHARD_CAP = jobs.SHARD_CAP
 
 
 def requires_build_environment(args: argparse.Namespace) -> bool:
-    """Return whether this invocation can build before running tests."""
-    suites = suites_for(args.suite, tsan=args.tsan)
-    if builddir.platform_profile().name == "windows" and "lint" in suites and not args.filter and not args.list:
-        # Even --no-build diagnostics need the exact VS INCLUDE environment.
-        return True
-    return not args.no_build and any(SUITES[suite].kind != "tooling" for suite in suites)
+    """Native --no-build still needs positive configured SDK admission."""
+    suites = suites_for(args.suite, tsan=getattr(args, "tsan", False))
+    suites = tuple(name for name in suites if not args.filter or SUITES[name].kind == "catch2")
+    if args.list and all(SUITES[name].kind in ("tooling", "lint") for name in suites):
+        return False
+    return any(SUITES[suite].kind != "tooling" for suite in suites)
 
 
 EPILOG = """\
@@ -101,10 +107,6 @@ APPKIT_PARENT_TIMEOUT_SECONDS = 120.0
 APPKIT_PARENT_TERMINATE_SECONDS = 5.0
 APPKIT_RUN_ID_ENV = "AOBUS_APPKIT_TEST_RUN_ID"
 
-SUITE_TARGETS = {
-    name: [spec.target] for name, spec in SUITES.items() if spec.kind == "catch2" and spec.target is not None
-}
-
 
 def selectable_suites() -> tuple[str, ...]:
     """Return individually selectable suites for the active native profile."""
@@ -147,33 +149,25 @@ def suites_for(selection: str, *, tsan: bool = False) -> tuple[str, ...]:
     return suites
 
 
-def configured_suites_for(selection: str, build_dir: Path, *, tsan: bool = False) -> tuple[str, ...]:
-    """Plan selected suites against the configured targets, not old executables."""
+def configured_suites_for(
+    selection: str, build_dir: Path, *, tsan: bool = False, args: argparse.Namespace | None = None
+) -> tuple[str, ...]:
+    """Apply explicit graph features; configured queries admit the actual targets.
+
+    The path parameter remains for runtime callers, but old tree caches and
+    leftover executables are not configuration authorities.
+    """
     suites = suites_for(selection, tsan=tsan)
-    windows_lint = builddir.platform_profile().name == "windows" and "lint" in suites
-    if suites == ("tooling",) or (windows_lint and suites == ("lint",)):
-        return suites
-
-    cache = compiler_cache.read_cmake_cache(build_dir / "CMakeCache.txt")
-    if not build.cmake_option_enabled(cache, "AOBUS_BUILD_TESTS", build_dir):
-        raise die(f"Test targets are not enabled in {build_dir} (AOBUS_BUILD_TESTS=ON is required).")
-
-    options = {
-        "gtk": "AOBUS_BUILD_GTK",
-        "tui": "AOBUS_BUILD_TUI",
-        "cli": "AOBUS_BUILD_CLI",
-        "systemmedia": "AOBUS_BUILD_SYSTEM_MEDIA",
-        **({} if windows_lint else {"lint": "AOBUS_BUILD_LINT_PLUGIN"}),
-    }
+    options = args if args is not None else argparse.Namespace()
+    bazel_workflows.feature_options(options)
     disabled = tuple(
-        name for name in suites if name in options and not build.cmake_option_enabled(cache, options[name], build_dir)
+        suite
+        for suite, option in (("gtk", "gtk"), ("systemmedia", "system_media"))
+        if getattr(options, option, None) in (False, "off", "false") and suite in suites
     )
-    if selection in SUITES and disabled:
-        option = options[disabled[0]]
-        raise die(
-            f"suite '{disabled[0]}' is disabled in {build_dir} ({option}={cache[option]}). Reconfigure the tree first."
-        )
-    return tuple(name for name in suites if name not in disabled)
+    if selection in disabled:
+        raise die(f"suite '{selection}' is disabled by the requested Bazel graph features in {build_dir}.")
+    return tuple(suite for suite in suites if suite not in disabled)
 
 
 def _start_xvfb() -> "subprocess.Popen[str]":
@@ -212,7 +206,7 @@ def _gtk_daemon_ready(server: "subprocess.Popen[str]", label: str, *, timeout: f
     with ThreadPoolExecutor(max_workers=1) as reader:
         try:
             ready = reader.submit(server.stdout.readline)
-            line = ready.result(timeout=timeout)
+            line: str = ready.result(timeout=timeout)
         except BaseException as exc:
             # Interruption must also retire the writer before close/join can
             # wait for the buffered reader's lock. Preserve non-timeout errors.
@@ -243,7 +237,29 @@ def _gtk_display_environment(display: str) -> dict[str, str]:
 
 
 @contextmanager
-def virtual_gtk_displays(count: int = 1) -> Generator[list[dict[str, str]], None, None]:
+def _private_bus_directory(ipc_root: Path | None) -> Generator[Path, None, None]:
+    if ipc_root is None:
+        # Linux Unix socket names cannot accommodate an arbitrarily deep TMPDIR
+        # (notably nested nix-shell directories). Keep only this private IPC root
+        # short; do not change the caller's temporary-file or build environment.
+        with tempfile.TemporaryDirectory(
+            prefix="aobus-gtk-bus-", dir="/tmp" if sys.platform == "linux" else None
+        ) as directory:
+            yield Path(directory)
+        return
+    from ..core.bazel_test_services import recreate_private_root
+
+    recreate_private_root(ipc_root)
+    try:
+        yield ipc_root
+    finally:
+        shutil.rmtree(ipc_root, ignore_errors=True)
+
+
+@contextmanager
+def virtual_gtk_displays(
+    count: int = 1, *, ipc_root: Path | None = None
+) -> Generator[list[dict[str, str]], None, None]:
     """Own one Xvfb and private session bus per GTK test process.
 
     Sharing one display across shards is unreliable: popovers can still be
@@ -251,14 +267,12 @@ def virtual_gtk_displays(count: int = 1) -> Generator[list[dict[str, str]], None
     also makes independent MPRIS tests compete for one canonical name. The
     portal owns both daemons beyond the test process, including GTK's retained
     process-global bus clients, and never exposes the caller's desktop bus.
+
+    A stable `ipc_root` gives each bus a fixed socket and a guid-free address,
+    so a Bazel caller's hashed test environment repeats across attempts.
     """
     servers: list[subprocess.Popen[str]] = []
-    # Linux Unix socket names cannot accommodate an arbitrarily deep TMPDIR
-    # (notably nested nix-shell directories). Keep only this private IPC root
-    # short; do not change the caller's temporary-file or build environment.
-    with tempfile.TemporaryDirectory(
-        prefix="aobus-gtk-bus-", dir="/tmp" if sys.platform == "linux" else None
-    ) as directory:
+    with _private_bus_directory(ipc_root) as directory:
         try:
             # Partial startup must still retire every already-started daemon.
             for _ in range(count):
@@ -271,23 +285,36 @@ def virtual_gtk_displays(count: int = 1) -> Generator[list[dict[str, str]], None
                     raise die(f"Xvfb failed to start. Output: {display_number}")
                 displays.append(f":{display_number}")
 
-            config = Path(directory) / "session.conf"
-            # No service directories: tests must not activate host desktop
-            # services or their mounts on this isolated bus.
-            config.write_text(
-                "<busconfig><type>session</type>"
-                f"<listen>unix:tmpdir={quote(Path(directory).as_posix(), safe='/')}</listen>"
-                '<policy context="default"><allow send_destination="*"/>'
-                '<allow receive_sender="*"/><allow own="*"/></policy></busconfig>',
-                encoding="utf-8",
-            )
+            def session_config(index: int) -> tuple[Path, str | None]:
+                if ipc_root is None:
+                    listen, address = f"unix:tmpdir={quote(directory.as_posix(), safe='/')}", None
+                else:
+                    address = f"unix:path={quote((directory / f'bus-{index}').as_posix(), safe='/')}"
+                    listen = address
+                config = directory / f"session-{index}.conf"
+                # No service directories: tests must not activate host desktop
+                # services or their mounts on this isolated bus.
+                config.write_text(
+                    f"<busconfig><type>session</type><listen>{listen}</listen>"
+                    '<policy context="default"><allow send_destination="*"/>'
+                    '<allow receive_sender="*"/><allow own="*"/></policy></busconfig>',
+                    encoding="utf-8",
+                )
+                return config, address
+
             environments = []
-            for display in displays:
+            for index, display in enumerate(displays):
+                config, fixed_address = session_config(index)
                 bus = _start_gtk_bus(config)
                 servers.append(bus)
                 address = _gtk_daemon_ready(bus, "GTK private D-Bus")
                 if not address.startswith("unix:"):
                     raise die(f"GTK private D-Bus failed to start. Output: {address}")
+                if fixed_address is not None:
+                    if address.split(",guid=", 1)[0] != fixed_address:
+                        raise die(f"GTK private D-Bus listened elsewhere: {address}")
+                    # Clients need no guid; dbus-daemon draws a new one per start.
+                    address = fixed_address
                 environments.append(
                     _gtk_display_environment(display)
                     | {"DBUS_SESSION_BUS_ADDRESS": address, "AOBUS_OWNED_GTK_BUS": address}
@@ -349,18 +376,8 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
         const="concurrency",
         help="run non-hidden [concurrency] tests across every native Catch2 suite",
     )
-    parser.add_argument(
-        "-p",
-        "--path",
-        metavar="<dir>",
-        help="override the test build directory (the dedicated WinUI tree with --winui)",
-    )
-    parser.add_argument("--clang", action="store_true", help="test the clang build tree")
-    sanitizers = parser.add_mutually_exclusive_group()
-    sanitizers.add_argument(
-        "--asan", action="store_true", help="test the AddressSanitizer build tree (plus UBSan where available)"
-    )
-    sanitizers.add_argument("--tsan", action="store_true", help="test the TSan build tree")
+    # --gtk is the retained suite shortcut, not a graph-feature value.
+    bazel_workflows.add_arguments(parser, flavor=False, gtk_option="--gtk-feature")
     parser.add_argument("-l", "--list", action="store_true", help="list matching tests instead of running them")
     parser.add_argument("-n", "--no-build", action="store_true", help="skip the incremental build")
     parser.add_argument(
@@ -577,8 +594,14 @@ def _run_sharded(
         finally:
             # Also reached when a later Popen fails: the shards already started
             # must be collected before this function can report anything.
+            interrupted: KeyboardInterrupt | None = None
             for shard in running:
-                shard.process.wait()
+                while True:
+                    try:
+                        shard.process.wait()
+                        break
+                    except KeyboardInterrupt as error:
+                        interrupted = error
             # Closed from `sinks` rather than `running`, because the sink of a
             # failed Popen never reached `running`. Windows cannot remove a
             # directory holding an open handle, so leaving one open would fail
@@ -586,6 +609,8 @@ def _run_sharded(
             # exception with an unrelated WinError 32.
             for opened in sinks:
                 opened.close()
+            if interrupted is not None and sys.exception() is None:
+                raise interrupted
 
         status = next((shard.process.returncode for shard in running if shard.process.returncode != 0), 0)
 
@@ -799,22 +824,69 @@ def _resolve_appkit_fixtures(library: Path, state_root: Path) -> tuple[Path, Pat
 def _run_appkit_parent(command: list[str], environment: dict[str, str]) -> int:
     parent = subprocess.Popen(command, cwd=PROJECT_ROOT, env={**os.environ, **environment})
     try:
-        return parent.wait(timeout=APPKIT_PARENT_TIMEOUT_SECONDS)
-    except subprocess.TimeoutExpired:
-        print(
-            f"Error: AppKit smoke parent exceeded the {APPKIT_PARENT_TIMEOUT_SECONDS:g}-second controller timeout.",
-            file=sys.stderr,
-        )
         try:
-            parent.terminate()
+            return parent.wait(timeout=APPKIT_PARENT_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired:
+            print(
+                f"Error: AppKit smoke parent exceeded the {APPKIT_PARENT_TIMEOUT_SECONDS:g}-second controller timeout.",
+                file=sys.stderr,
+            )
+            try:
+                parent.terminate()
+            except ProcessLookupError:
+                pass
+            try:
+                parent.wait(timeout=APPKIT_PARENT_TERMINATE_SECONDS)
+            except subprocess.TimeoutExpired:
+                parent.kill()
+                parent.wait()
+            return 1
+    except BaseException:
+        try:
+            parent.kill()
         except ProcessLookupError:
             pass
-        try:
-            parent.wait(timeout=APPKIT_PARENT_TERMINATE_SECONDS)
-        except subprocess.TimeoutExpired:
-            parent.kill()
-            parent.wait()
-        return 1
+        while True:
+            try:
+                parent.wait()
+                break
+            except KeyboardInterrupt:
+                continue
+        raise
+
+
+def _existing_artifact_arguments(build_dir: Path, *, asan: bool = False, tsan: bool = False) -> argparse.Namespace:
+    return argparse.Namespace(
+        config="tsan" if tsan else "asan" if asan else "debug",
+        path=str(build_dir),
+        jobs=jobs.default_workers(),
+        vcpkg_prefix=None,
+        remote_cache=None,
+        gtk=None,
+        system_media=None,
+    )
+
+
+@contextmanager
+def _suite_artifacts(
+    args: argparse.Namespace, suites: tuple[str, ...], *, no_build: bool
+) -> Generator[dict[str, tuple[ExecutableArtifact, ...]], None, None]:
+    native_suites = tuple(name for name in suites if SUITES[name].kind not in ("tooling", "lint"))
+    if not native_suites:
+        yield {}
+        return
+    labels = tuple(target for name in native_suites if (target := SUITES[name].target) is not None)
+    if len(labels) != len(native_suites):
+        raise ValueError("native suites must declare a Bazel target")
+    with bazel_workflows.prepare_artifacts(args, labels, no_build=no_build, expand_tests=True) as artifacts:
+        grouped = {
+            name: tuple(artifact for artifact in artifacts if SUITES[name].target in artifact.requested_by)
+            for name in native_suites
+        }
+        missing = [name for name, members in grouped.items() if not members]
+        if missing:
+            raise die(f"no compatible configured test executable for suite '{missing[0]}'.")
+        yield grouped
 
 
 def run_appkit_smoke(
@@ -825,12 +897,24 @@ def run_appkit_smoke(
     state_root: Path,
     asan: bool = False,
     tsan: bool = False,
+    artifact: ExecutableArtifact | None = None,
 ) -> int:
     library, state_root = _resolve_appkit_fixtures(library, state_root)
-    binary = build_dir / "test" / "ao_appkit_smoke.app" / "Contents" / "MacOS" / "ao_appkit_smoke"
-    if not binary.is_file():
-        raise die(f"AppKit smoke executable not found at {binary}. Build first, e.g. with ./ao build.")
-
+    if artifact is None:
+        args = _existing_artifact_arguments(build_dir, asan=asan, tsan=tsan)
+        target = SUITES["appkit"].target
+        assert target is not None
+        with bazel_workflows.prepare_artifacts(args, [target], no_build=True) as artifacts:
+            return run_appkit_smoke(
+                build_dir,
+                scenario=scenario,
+                library=library,
+                state_root=state_root,
+                asan=asan,
+                tsan=tsan,
+                artifact=artifacts[0],
+            )
+    binary = artifact.executable
     command = [
         str(binary),
         "--scenario",
@@ -846,7 +930,7 @@ def run_appkit_smoke(
     print("=====================================")
     sanitizer_env = _sanitizer_env("appkit", build_dir, asan=asan, tsan=tsan)
     run_id = uuid.uuid4().hex
-    environment = {**sanitizer_env, APPKIT_RUN_ID_ENV: run_id}
+    environment = {**sanitizer_env, **artifact.environment(), APPKIT_RUN_ID_ENV: run_id}
     if scenario != "desktop":
         return _run_appkit_parent(command, environment)
     status = appkitprocess.run_desktop(
@@ -876,16 +960,73 @@ def run_catch2_suite(
     log: Path | None = None,
     shards: int = 1,
     report_matches: bool = False,
+    artifacts: tuple[ExecutableArtifact, ...] | None = None,
+) -> SuiteOutcome:
+    spec = SUITES[name]
+    if artifacts is None:
+        args = _existing_artifact_arguments(build_dir, asan=asan, tsan=tsan)
+        with _suite_artifacts(args, (name,), no_build=True) as grouped:
+            return run_catch2_suite(
+                name,
+                build_dir,
+                test_filter=test_filter,
+                list_only=list_only,
+                allow_no_tests=allow_no_tests,
+                asan=asan,
+                tsan=tsan,
+                log=log,
+                shards=shards,
+                report_matches=report_matches,
+                artifacts=grouped[name],
+            )
+    if not artifacts:
+        raise die(f"no configured executable for {name} tests.")
+    matched = 0
+    counted = report_matches or len(artifacts) > 1 or (shards > 1 and not list_only)
+    for artifact in artifacts:
+        outcome = _run_catch2_artifact(
+            name,
+            build_dir,
+            artifact=artifact,
+            test_filter=test_filter,
+            list_only=list_only,
+            allow_no_tests=allow_no_tests or len(artifacts) > 1,
+            asan=asan,
+            tsan=tsan,
+            log=log,
+            shards=shards,
+            report_matches=counted,
+        )
+        if outcome.status:
+            return outcome
+        if counted:
+            if outcome.matched is None:
+                return SuiteOutcome(1)
+            matched += outcome.matched
+    if counted and not allow_no_tests and matched == 0:
+        raise die(f"no {spec.label} tests matched the supplied filter or default selection.")
+    return SuiteOutcome(0, matched if counted else None)
+
+
+def _run_catch2_artifact(
+    name: str,
+    build_dir: Path,
+    *,
+    artifact: ExecutableArtifact,
+    test_filter: str,
+    list_only: bool,
+    allow_no_tests: bool,
+    asan: bool,
+    tsan: bool,
+    log: Path | None,
+    shards: int,
+    report_matches: bool,
 ) -> SuiteOutcome:
     spec = SUITES[name]
     if spec.kind != "catch2" or spec.target is None:
         raise ValueError(f"{name} is not a Catch2 suite")
 
-    binary = builddir.executable(build_dir / "test" / spec.target)
-    if not binary.is_file():
-        raise die(f"{name} test binary not found at {binary}. Build first, e.g. with ./ao build.")
-
-    command = [str(binary)]
+    command = [str(artifact.executable)]
     if list_only:
         command += ["--list-tests", "--verbosity", "high"]
     if allow_no_tests:
@@ -899,7 +1040,7 @@ def run_catch2_suite(
     print(f"CMD: {' '.join(command)}" + (f" (in {shards} shards)" if sharded else ""))
     print("=====================================")
 
-    sanitizer_env = _sanitizer_env(name, build_dir, asan=asan, tsan=tsan)
+    sanitizer_env = {**_sanitizer_env(name, build_dir, asan=asan, tsan=tsan), **artifact.environment()}
 
     def execute(environments: list[dict[str, str]]) -> SuiteOutcome:
         if sharded:
@@ -936,11 +1077,28 @@ def run_catch2_suite(
             status = status or 1
         return SuiteOutcome(status, matched)
 
-    if name == "gtk" and not list_only:
-        with virtual_gtk_displays(shards if sharded else 1) as displays:
-            return execute([{**sanitizer_env, **display} for display in displays])
+    # The C++ runfiles reader and every fatal-child reentry inherit the real
+    # declared data context. Each native invocation gets disposable scratch.
+    with tempfile.TemporaryDirectory(prefix="aobus-native-test-") as directory:
+        sanitizer_env["TEST_TMPDIR"] = directory
+        if name in ("gtk", "backend") and not list_only and builddir.platform_profile().name == "linux":
+            with ExitStack() as services:
+                displays = services.enter_context(virtual_gtk_displays(shards if sharded else 1))
+                if name == "backend":
+                    from ..core.bazel_test_services import private_pipewire
 
-    return execute([sanitizer_env] * (shards if sharded else 1))
+                    # One policy-only service context per backend process; no
+                    # personal desktop bus or hardware-monitor admission.
+                    contexts = [
+                        services.enter_context(
+                            private_pipewire(artifact.tree / "runtime-services" / uuid.uuid4().hex, display)
+                        )
+                        for display in displays
+                    ]
+                else:
+                    contexts = displays
+                return execute([{**sanitizer_env, **context} for context in contexts])
+        return execute([sanitizer_env] * (shards if sharded else 1))
 
 
 def run_non_catch2_suite(
@@ -952,6 +1110,8 @@ def run_non_catch2_suite(
     no_build: bool = False,
     lint_build_dir: Path | None = None,
     lint_build_dir_explicit: bool = False,
+    artifacts: tuple[ExecutableArtifact, ...] | None = None,
+    lint_action: bazel_workflows.LintFixtureAction | None = None,
 ) -> int:
     spec = SUITES[name]
     print("=====================================")
@@ -966,19 +1126,12 @@ def run_non_catch2_suite(
         return tooltest.run(log=log)
 
     if spec.kind == "lint":
-        if builddir.platform_profile().name == "windows":
-            build_dir = lint_build_dir if lint_build_dir is not None else builddir.windows_lint_build_dir(build_dir)
-            # Reuse the tidy portal's preset, incremental build, version check,
-            # and complete-registry verification, not a second host bootstrap.
-            # A user-selected tree keeps its configuration: only a derived lint
-            # host refreshes the tidy preset, the same policy `ao tidy -p` uses.
-            toolchain = tidy.prepare_toolchain(
-                build_dir,
-                no_build=no_build,
-                reconfigure_preset=not no_build and not lint_build_dir_explicit,
-            )
-            return linttest.run(build_dir, log=log, toolchain=toolchain)
-        return linttest.run(build_dir, log=log)
+        if lint_action is None:
+            selected_tree = lint_build_dir if lint_build_dir is not None else build_dir
+            args = _existing_artifact_arguments(selected_tree)
+            with bazel_workflows.prepare_lint_fixtures(args, no_build=no_build) as selected:
+                return selected.run(log=log)
+        return lint_action.run(log=log)
 
     raise ValueError(f"unknown suite kind: {spec.kind}")
 
@@ -1013,8 +1166,31 @@ def run_suites(
     no_build: bool = False,
     lint_build_dir: Path | None = None,
     lint_build_dir_explicit: bool = False,
+    artifacts: Mapping[str, tuple[ExecutableArtifact, ...]] | None = None,
+    lint_action: bazel_workflows.LintFixtureAction | None = None,
 ) -> int:
     suites = _catch2_suites_for_filter(suites, test_filter)
+    if "lint" in suites and not list_only and lint_action is None:
+        selected_tree = lint_build_dir if lint_build_dir is not None else build_dir
+        args = _existing_artifact_arguments(selected_tree, asan=asan, tsan=tsan)
+        with bazel_workflows.prepare_lint_fixtures(args, no_build=no_build) as selected:
+            return run_suites(
+                suites,
+                build_dir,
+                test_filter=test_filter,
+                list_only=list_only,
+                allow_no_tests=allow_no_tests,
+                repeat=repeat,
+                asan=asan,
+                tsan=tsan,
+                concurrency=concurrency,
+                log=log,
+                no_build=no_build,
+                lint_build_dir=lint_build_dir,
+                lint_build_dir_explicit=lint_build_dir_explicit,
+                artifacts=artifacts,
+                lint_action=selected,
+            )
     shards = suite_shards(list_only=list_only, repeat=repeat, tsan=tsan, concurrency=concurrency)
     iterations = 1 if list_only else repeat
     for iteration in range(iterations):
@@ -1043,6 +1219,7 @@ def run_suites(
                         log=log,
                         shards=shards,
                         report_matches=bool(test_filter),
+                        artifacts=artifacts.get(name) if artifacts is not None else None,
                     )
                     phase.status = outcome.status
                 if outcome.status != 0:
@@ -1052,14 +1229,8 @@ def run_suites(
                         return 1
                     matched_tests += outcome.matched
             else:
-                # no_build and the lint host context matter only to the Windows
-                # lint runner; every other suite ignores them.
-                #
-                # Summary consumer disclaimer: the lint suite record encloses
-                # its Windows checker-build/checker-verify children and the
-                # lint-diagnostics/lint-source-policy/lint-compiler-errors children, so a summary
-                # must not add a suite record and its children to one total. The tooling
-                # suite owns no native tree, so it records none.
+                # Lint executes new assertions against the admitted producer;
+                # tooling owns no native tree or artifact preparation.
                 with phases.measure(
                     "suite",
                     tree="tidy" if spec.kind == "lint" else None,
@@ -1074,6 +1245,8 @@ def run_suites(
                         no_build=no_build,
                         lint_build_dir=lint_build_dir,
                         lint_build_dir_explicit=lint_build_dir_explicit,
+                        artifacts=artifacts.get(name) if artifacts is not None else None,
+                        lint_action=lint_action,
                     )
                     phase.status = status
                 if status != 0:
@@ -1116,122 +1289,91 @@ def _run_winui_audit(args: argparse.Namespace) -> int:
     except RuntimeError as error:
         raise die(str(error)) from error
 
-    build_dir = Path(args.path) if args.path else builddir.winui_build_dir()
-    if not args.no_build:
-        build_args = copy.copy(args)
-        build_args.flavor = "debug"
-        build_args.clean = False
-        build_args.verbose = False
-        build_args.gtk = None
-        build_args.system_media = None
-        build_dir = build.do_build(build_args, targets=[build.WINUI_CHECK_TARGET]).build_dir
-    executable = build_dir / "app" / "windows-winui" / "automation-probe" / "Debug" / "ao_winui_automation_probe.exe"
-    if not executable.is_file():
-        raise die(
-            f"WinUI naming probe does not exist: {executable}. "
-            f"Run ao.bat build --target {build.WINUI_CHECK_TARGET} first."
-        )
-    with phases.measure("suite", tree="winui", count=1, suite="winui") as phase:
-        phase.status = run([str(executable)], cwd=executable.parent, log=build_dir / "build.log", append=True)
-    return phase.status
+    target = SUITES["winui"].target
+    assert target is not None
+    with bazel_workflows.prepare_artifacts(args, [target], no_build=args.no_build) as artifacts:
+        (artifact,) = artifacts
+        with phases.measure("suite", tree="winui", count=1, suite="winui") as phase:
+            phase.status = run(
+                [str(artifact.executable)],
+                cwd=artifact.executable.parent,
+                env=artifact.environment(),
+                log=artifact.tree / "build.log",
+                append=True,
+            )
+        return phase.status
 
 
 def run_command(args: argparse.Namespace) -> int:
-    build.validate_build_options(args)
-    appkit_options = _appkit_options(args)
-    build_dir = (
-        Path(args.path) if args.path else builddir.build_dir("debug", clang=args.clang, asan=args.asan, tsan=args.tsan)
-    )
+    try:
+        return _run_command(args)
+    except BazelWorkspaceError as error:
+        raise die(str(error)) from error
 
+
+def _run_command(args: argparse.Namespace) -> int:
+    appkit_options = _appkit_options(args)
     if args.suite == "concurrency" and args.filter:
         raise die("--concurrency supplies [concurrency]~[.]; do not also pass a positional filter.")
-
-    suites = suites_for(args.suite, tsan=args.tsan)
-    if args.suite == "winui":
-        return _run_winui_audit(args)
-    # An explicit Catch2 tag also selects hidden cases. The automatic gate must
-    # not turn a hardware/manual probe into unattended coverage when it is tagged.
+    # Explicit tags can admit hidden cases; the automatic concurrency group
+    # must never promote a manual/hardware probe to unattended execution.
     test_filter = "[concurrency]~[.]" if args.suite == "concurrency" else args.filter
-    suites = _catch2_suites_for_filter(suites, test_filter)
-
-    windows = builddir.platform_profile().name == "windows"
-    standalone_windows_lint = windows and suites == ("lint",)
-    if standalone_windows_lint:
-        if args.path:
-            # An existing user-selected tree keeps its configured preset. Its
-            # SDK capability may fail, but it is never reset to the tidy preset.
-            build_dir = Path(args.path)
-        else:
-            # BUILD_DIR overrides the primary product tree; the standalone lint
-            # host derives its checker sibling exactly like the grouped route.
-            build_dir = builddir.windows_lint_build_dir(builddir.build_dir("debug"))
-    if any(SUITES[suite].kind != "tooling" for suite in suites) and not standalone_windows_lint:
-        if not build_dir.is_dir():
-            portal = "ao.bat" if builddir.platform_profile().name == "windows" else "./ao"
-            raise die(f"build directory {build_dir} does not exist. Run {portal} build first to configure the project.")
-        build.validate_build_tree(args, build_dir)
-        configured = configured_suites_for(args.suite, build_dir, tsan=args.tsan)
-        suites = tuple(suite for suite in suites if suite in configured)
-
-    if not args.no_build:
-        targets = [
-            target
-            for suite in suites
-            if not (windows and suite == "lint") and (target := SUITES[suite].target) is not None
-        ]
-        if targets:
-            print("=====================================")
-            print(f"Building {', '.join(targets)} in {build_dir}...")
-            print("=====================================")
-            cmake_build_dir = workspace_cache.compiler_build_dir(build_dir)
-            worker_count = build.parallel_build_jobs()
-            build_cmd = [
-                "cmake",
-                "--build",
-                str(cmake_build_dir),
-                "--parallel",
-                str(worker_count),
-                "--target",
-                *targets,
-            ]
-            with buildlock.build_tree_lock(build_dir):
-                sanitizer = "sanitizer builds" if args.asan or args.tsan else None
-                build.sync_compiler_cache(build_dir, unsupported_reason=sanitizer)
-                # The standalone target build is portal work this command owns;
-                # measure it in place rather than replacing the incremental
-                # invocation with do_build. The actual native exit code is
-                # assigned before the failure handling so a failed build keeps
-                # its code in its own record even though die normalizes the
-                # command exit to 1.
-                with phases.measure("build", tree="native", jobs=worker_count) as phase:
-                    phase.status = run(build_cmd, cwd=cmake_build_dir if cmake_build_dir != build_dir else PROJECT_ROOT)
-                if phase.status != 0:
-                    raise die("test build failed.")
-
-    if appkit_options is not None:
-        scenario, library, state_root = appkit_options
-        return run_appkit_smoke(
-            build_dir,
-            scenario=scenario,
-            library=library,
-            state_root=state_root,
-            asan=args.asan,
-            tsan=args.tsan,
-        )
-
-    options = {
+    suites = _catch2_suites_for_filter(suites_for(args.suite, tsan=args.tsan), test_filter)
+    options: dict[str, Any] = {
         "test_filter": test_filter,
         "list_only": args.list,
         "repeat": args.repeat,
         "asan": args.asan,
         "tsan": args.tsan,
+        "no_build": args.no_build,
+        "concurrency": args.suite == "concurrency",
+        "allow_no_tests": args.suite == "concurrency",
     }
-    if windows and "lint" in suites:
-        options["no_build"] = args.no_build
-        if standalone_windows_lint:
-            options["lint_build_dir"] = build_dir
-            options["lint_build_dir_explicit"] = args.path is not None
-    if args.suite == "concurrency":
-        options["allow_no_tests"] = True
-        options["concurrency"] = True
-    return run_suites(suites, build_dir, **options)
+    # Tooling and listing non-native suite names need neither a native SDK nor a
+    # Bazel executable/tree. Keep this branch ahead of all native preparation.
+    if suites == ("tooling",) or (args.list and all(SUITES[name].kind in ("tooling", "lint") for name in suites)):
+        return run_suites(suites, Path(args.path or "."), **options)
+    config, _host = bazel_workflows.validate_request(args)
+    from ..core.bazel_workspace import workspace_path
+
+    build_dir = workspace_path(args.path, config)
+    configured = configured_suites_for(args.suite, build_dir, tsan=args.tsan, args=args)
+    suites = tuple(name for name in suites if name in configured)
+    if not suites:
+        raise die("no test suites remain after requested graph feature selection.")
+    if args.suite == "winui":
+        return _run_winui_audit(args)
+    if appkit_options is not None:
+        scenario, library, state_root = appkit_options
+        target = SUITES["appkit"].target
+        assert target is not None
+        with bazel_workflows.prepare_artifacts(args, [target], no_build=args.no_build) as appkit_artifacts:
+            (artifact,) = appkit_artifacts
+            return run_appkit_smoke(
+                build_dir,
+                scenario=scenario,
+                library=library,
+                state_root=state_root,
+                asan=config == "asan",
+                tsan=config == "tsan",
+                artifact=artifact,
+            )
+    options["asan"], options["tsan"] = config == "asan", config == "tsan"
+    prepared_suites = tuple(name for name in suites if not args.list or SUITES[name].kind == "catch2")
+    with ExitStack() as prepared:
+        artifacts: Mapping[str, tuple[ExecutableArtifact, ...]] = prepared.enter_context(
+            _suite_artifacts(args, prepared_suites, no_build=args.no_build)
+        )
+        lint_action = (
+            prepared.enter_context(bazel_workflows.prepare_lint_fixtures(args, no_build=args.no_build))
+            if "lint" in suites and not args.list
+            else None
+        )
+        return run_suites(
+            suites,
+            build_dir,
+            artifacts=artifacts,
+            lint_action=lint_action,
+            log=build_dir / "build.log",
+            **options,
+        )

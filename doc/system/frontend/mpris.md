@@ -136,9 +136,9 @@ TUI `--system-media=off` avoids this transport entirely.
 
 ## Build and runtime selection
 
-Linux enables `AOBUS_BUILD_SYSTEM_MEDIA` by default.
-When disabled, CMake does not construct `ao_system_media_linux`, GTK and TUI do not link it, and their system-media adapter code is absent.
-The portal matrix can select the Linux GTK and system-media features independently with `./ao build --gtk on|off --system-media on|off`; [build development](../../development/build.md) defines which other portal commands share those configure options.
+Linux enables system media by default.
+When the Linux graph setting is off, the build does not construct `ao_system_media_linux`, GTK and TUI do not link it, and their system-media adapter code is absent.
+The portal matrix can select the Linux GTK and system-media features independently with `./ao build --gtk on|off --system-media on|off`; [build development](../../development/build.md) defines which other portal commands share those graph settings.
 
 The TUI accepts `--system-media=auto|off` on every platform.
 `auto` is best-effort and has no effect when the binary lacks Linux system-media support or no usable session bus exists.
@@ -159,7 +159,7 @@ Cover-art resource behavior also follows the [cover-art delivery specification](
 - [`MprisArtUrlSession.h`](../../../app/systemmedia/linux/MprisArtUrlSession.h) owns current-resource correlation and callback invalidation before cancellation.
 - [`MprisArtUrlCache.cpp`](../../../app/systemmedia/linux/MprisArtUrlCache.cpp) owns content-addressed file-URL artifacts.
 - [`MainWindow.cpp`](../../../app/linux-gtk/app/MainWindow.cpp) composes the GTK identity and host callbacks; TUI [`App.cpp`](../../../app/tui/App.cpp) composes its unique identity, runtime option, and normal exit path.
-- [`app/systemmedia/CMakeLists.txt`](../../../app/systemmedia/CMakeLists.txt) defines `ao_system_media_linux`.
+- [`app/systemmedia/BUILD.bazel`](../../../app/systemmedia/BUILD.bazel) defines `ao_system_media_linux`.
 
 ## Test map
 

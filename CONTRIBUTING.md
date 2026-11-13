@@ -23,10 +23,6 @@ Keep a proposal only when unresolved design choices benefit from written compari
 
 ## Optional local setup
 
-`./ao setup compiler-cache` enables the shared compiler cache for the host user; builds also work without it.
-Use `--shared-workspaces` only after reading the [cache setup and migration guide](doc/development/compiler-cache.md).
-Existing `CCACHE_DIR` and `CCACHE_MAXSIZE` environment overrides take precedence.
-
 `./ao setup git-hooks` explicitly installs the repository's commit hooks (`ao.bat setup git-hooks` on Windows).
 It replaces the repository's `core.hooksPath` with `script/git-hook`; linked worktrees share that configuration and resolve the relative path from their own checkout.
 The Git environment must provide Python 3. Hook installation is optional local setup, not a server-side enforcement boundary; ordinary portal commands do not change hook configuration.

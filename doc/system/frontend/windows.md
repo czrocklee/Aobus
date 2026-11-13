@@ -12,7 +12,7 @@ It does not redefine the [shared desktop library lifecycle](../desktop-library-l
 
 ## Code boundary
 
-The [system architecture](../overview.md) defines the runtime-to-UIModel-to-frontend dependency direction. The [application shell architecture](../shell/README.md) owns shell composition. Cross-desktop root, startup, protocol, and detached-launch rules live in `ao_desktop_launch`; shared presentation policy lives under `app/include/ao/uimodel/`. Windows-only lifecycle effects, policy, XAML, controls, and adapters live in the Windows-only `aobus-winui-lib` under `app/windows-winui/`, while `aobus-winui` is the thin final-link and deployed-resource target.
+The [system architecture](../overview.md) defines the runtime-to-UIModel-to-frontend dependency direction. The [application shell architecture](../shell/README.md) owns shell composition. Cross-desktop root, startup, protocol, and detached-launch rules live in the shared desktop-launch library; shared presentation policy lives under `app/include/ao/uimodel/`. Windows-only lifecycle effects, policy, XAML, controls, and adapters live in the Windows-only WinUI library under `app/windows-winui/`, while `aobus-winui` is the thin final-link and deployed-resource target.
 
 ## Terminology
 
@@ -270,10 +270,10 @@ UIModel supplies style, monogram, and deterministic monogram foreground-color va
 
 ## Implementation map
 
-- [`app/windows-winui/CMakeLists.txt`](../../../app/windows-winui/CMakeLists.txt) owns the `aobus-winui-lib` static-library and thin `aobus-winui` executable boundary.
+- [`app/windows-winui/BUILD.bazel`](../../../app/windows-winui/BUILD.bazel) owns the WinUI static library and thin `aobus-winui` executable boundary.
 - [`App`](../../../app/windows-winui/App.xaml.h) owns the dispatcher, queued restart state, and [`LibraryWindowSession`](../../../app/windows-winui/app/LibraryWindowSession.h).
 - [`LibraryWindowSession`](../../../app/windows-winui/app/LibraryWindowSession.cpp) owns one immutable window/session relationship and window-before-session release; [`LibrarySession`](../../../app/windows-winui/app/LibrarySession.h) owns one nested runtime graph, playback restore/admission, transactional selected-root commit, and the [active-session scan workflow](windows-library-workflows.md#scan). [`CallbackAdmissionGate`](../../../app/windows-winui/include/ao/winui/CallbackAdmissionGate.h) names dispatcher-confined owner/workflow generation admission without claiming owner lifetime.
-- [`ao_desktop_launch`](../../../app/desktop) owns common root, startup, protocol,
+- The [desktop-launch library](../../../app/desktop) owns common root, startup, protocol,
   and detached-launch rules. [`ProcessLauncher`](../../../app/windows-winui/platform/ProcessLauncher.cpp)
   owns real Win32 argument extraction and exact-executable discovery before
   delegating process creation.
@@ -329,9 +329,9 @@ UIModel supplies style, monogram, and deterministic monogram foreground-color va
   shell policy carrying no WinRT dependency - settings compatibility,
   output-preference resolution, root-commit sequencing, the startup warnings'
   status line, the component schema, and the keyboard-accelerator plan -
-  compiles into `ao_core_test` on every
+  compiles into the core test binary on every
   host, as do the shared desktop rule tests.
-- Native Debug and Release `winui` builds protect `aobus-winui-lib`, generated C++/WinRT, XAML, process launch, PRI resources, WASAPI, picker, and SMTC integration.
+- Native Debug and Release `winui` builds protect the WinUI library, generated C++/WinRT, XAML, process launch, PRI resources, WASAPI, picker, and SMTC integration.
 
 ## Related documents
 

@@ -38,13 +38,13 @@ repository. None of them is a design choice.
 | 1 | `ao::compat::MoveOnlyFunction` | `include/ao/compat/MoveOnlyFunction.h` | libc++ defines `__cpp_lib_move_only_function` |
 | 2 | `ao::compat::views::enumerate` | `include/ao/compat/Enumerate.h` | libc++ defines `__cpp_lib_ranges_enumerate` |
 | 3 | `ao::compat::AtomicSharedPtr` | `include/ao/compat/AtomicSharedPtr.h` | libc++ defines `__cpp_lib_atomic_shared_ptr` |
-| 4 | libc++ `expected` shim | `script/ao/macos-vcpkg-bootstrap.sh`, `cmake/CompilerOptions.cmake` | libc++ constrains `expected`'s equality operators without self-reference |
-| 5 | `-Wno-c2y-extensions` | `cmake/CompilerOptions.cmake` | fakeit stops expanding `__COUNTER__`, or Clang stops reporting it |
+| 4 | libc++ `expected` shim | `script/ao/macos-vcpkg-bootstrap.sh`, Bazel macOS toolchain composition | libc++ constrains `expected`'s equality operators without self-reference |
+| 5 | `-Wno-c2y-extensions` | governed Unix warning policy (`bazel/compiler_policy.bzl`) | fakeit stops expanding `__COUNTER__`, or Clang stops reporting it |
 | 6 | `StringMaker<file_time_type>` | `test/FilesystemTestSupport.h` | Catch2 can stringify `__int128`, or Darwin stops using it for the file clock |
-| 7 | c4core `C4_CPP=17` header mode | `cmake/Dependencies.cmake` | c4core accepts C++26 consumers under Darwin Clang without invalid likelihood attributes |
-| 8 | Objective-C++26 compiler flag mapping | root `CMakeLists.txt` | CMake supplies Clang's Objective-C++26 standard flags |
+| 7 | c4core `C4_CPP=17` header mode | Bazel imported-interface declarations | c4core accepts C++26 consumers under Darwin Clang without invalid likelihood attributes |
+| 8 | Objective-C++26 compiler flag mapping | Bazel macOS toolchain composition | the composed toolchain supplies Clang's Objective-C++26 standard flags |
 | 9 | `__cpp_lib_chrono` clock-conversion branches | `lib/library/FileClockConversion.h`, `test/FilesystemTestSupport.h` | libc++ defines `__cpp_lib_chrono` as at least `201907L` |
-| 10 | `date` time-zone database | `vcpkg.json`, `cmake/Dependencies.cmake`, `app/uimodel/field/TrackFieldFormatter.cpp` | libc++ defines `__cpp_lib_chrono` as at least `201907L` with its time-zone database enabled |
+| 10 | `date` time-zone database | `vcpkg.json`, Bazel imported-interface declarations, `app/uimodel/field/TrackFieldFormatter.cpp` | libc++ defines `__cpp_lib_chrono` as at least `201907L` with its time-zone database enabled |
 
 ### 1-3: standard-library seams
 
@@ -76,7 +76,7 @@ properties matter when removing them:
 
 Removal is mechanical: migrate call sites back to the standard spelling, delete
 the header and its test, and drop the test registration from
-`test/CMakeLists.txt`. Use `rg` to enumerate current call sites rather than
+`test/BUILD.bazel`. Use `rg` to enumerate current call sites rather than
 preserving a count here that will drift as the codebase changes.
 
 ### 4: libc++ `expected` shim
@@ -106,8 +106,8 @@ constraint is checked before the conversion is rejected. There is no way to
 avoid it from the call site.
 
 The macOS portal builds a copy of `__expected/expected.h` with the five C++26
-gates disabled, and `cmake/CompilerOptions.cmake` puts that directory ahead of
-the real one with `-isystem`. Two mechanics are easy to get wrong:
+gates disabled, and the Bazel macOS toolchain composition puts that directory
+ahead of the real one with `-isystem`. Two mechanics are easy to get wrong:
 
 - **Only a command-line `-isystem` works.** The real libc++ directory is built
   into the compiler driver rather than passed as an argument. Environment-only
@@ -116,14 +116,11 @@ the real one with `-isystem`. Two mechanics are easy to get wrong:
 - **Only that one header may be copied.** libc++'s own `<cstdint>` reaches the
   SDK through `#include_next`, and a duplicate include tree on the search path
   captures that hop, leaving `intmax_t` unresolved.
-- **The SDK C include directory must remain driver-owned.** `LLVMSupport`
-  transitively links CMake's `ZLIB::ZLIB` target. On Xcode installations,
-  FindZLIB can export `MacOSX.sdk/usr/include` through that target using a
-  symlink spelling that CMake does not recognize as one of Clang's implicit
-  directories. The lint target filters that redundant entry because making it
-  an explicit `-isystem` path places it ahead of libc++'s C wrappers; headers
+- **The SDK C include directory must remain driver-owned.** Making the SDK's
+  `usr/include` an explicit `-isystem` path places it ahead of libc++'s C
+  wrappers; headers
   such as `<cstdlib>` then reach the SDK before libc++ can establish its wrapper
-  contract. Clang still discovers the same SDK directory through its sysroot,
+  contract. Clang discovers the same SDK directory through its sysroot,
   after libc++, which is the required order.
 
 The portal transform asserts that exactly five gates are present and fails the
@@ -137,8 +134,8 @@ compile against today, so macOS behaves exactly like the other platforms rather
 than a third way.
 
 To retire it: delete the transform and export from
-`script/ao/macos-vcpkg-bootstrap.sh`, delete the `if(APPLE)` block from
-`cmake/CompilerOptions.cmake`, and confirm the core test suite still builds on
+`script/ao/macos-vcpkg-bootstrap.sh`, remove the shim directory from the
+Bazel macOS toolchain composition, and confirm the core test suite still builds on
 macOS. A minimal check is a `std::vector<std::expected<T, E>>` that reallocates,
 compiled with `-std=gnu++26`.
 
@@ -164,25 +161,27 @@ likelihood attributes for `C4_LIKELY` and `C4_UNLIKELY`. rapidyaml uses those
 macros in expression positions where Darwin Clang 22 rejects the resulting
 attribute placement.
 
-`PkgRapidYaml` therefore defines `C4_CPP=17` for Darwin Clang consumers while
+The imported-interface declarations therefore define `C4_CPP=17` for Darwin
+Clang consumers while
 leaving Aobus itself in C++26 mode. The pre-existing MSVC compatibility mode is
 retained separately. Linux Clang is deliberately outside the Darwin condition,
 so this workaround cannot silently change its dependency headers.
 
-To retire it: remove the Darwin condition from `cmake/Dependencies.cmake`,
+To retire it: remove the Darwin condition from the Bazel imported-interface
+declarations,
 build the affected rapidyaml consumers with the current Homebrew Clang in
 C++26 mode, and run the complete macOS gate. A dependency upgrade is not enough
 evidence unless those consumers compile without the definition.
 
 ### 8: Objective-C++26 compiler flag mapping
 
-Some CMake versions accept `OBJCXX_STANDARD=26` without defining the matching
-Clang flags. The root build configuration supplies the standard and extension
-flags only when that mapping is absent. `DesktopApplication.mm` also asserts the
+The composed macOS toolchain supplies the Objective-C++26 standard and
+extension flags explicitly for AppKit actions. `DesktopApplication.mm` also
+asserts the
 active language version so the bridge cannot silently fall back to C++23.
 
-To retire it: remove the conditional mapping from the root `CMakeLists.txt`,
-configure a clean native build with the supported CMake version, and build the
+To retire it: remove the explicit flag mapping from the Bazel macOS toolchain
+composition and build the
 AppKit target in Debug and Release. The source language assertion must continue
 to pass.
 
@@ -221,7 +220,7 @@ tests derive their expected text from the C library's `localtime_r` rather than
 from `date`, so the substitute is checked against the operating system.
 
 To retire it: remove the alias and the conditional include, the `date` entry from
-`vcpkg.json`, the `PkgDateTz` target, and its link from `app/uimodel`, then run
+`vcpkg.json`, its imported interface, and its link from `app/uimodel`, then run
 the full macOS check.
 
 ## Permanent platform differences

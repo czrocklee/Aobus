@@ -3,6 +3,7 @@
 
 #include "test/FilesystemTestSupport.h"
 #include "test/TestFixtureSupport.h"
+#include "test/audio/AudioFixtureDirectory.h"
 #include "test/library/MusicLibraryTestSupport.h"
 #include "test/runtime/ExecutorTestSupport.h"
 #include "test/runtime/RuntimeLibraryTestSupport.h"
@@ -43,7 +44,7 @@ namespace ao::rt::test
   {
     std::filesystem::path copyFixtureAudio(MusicLibraryFixture const& libraryFixture, std::filesystem::path const& name)
     {
-      auto const source = std::filesystem::path{AUDIO_TEST_DATA_DIR} / "empty.flac";
+      auto const source = audio::test::audioFixtureDirectory() / "empty.flac";
 
       INFO("Required audio fixture: " << source);
       REQUIRE(std::filesystem::is_regular_file(source));

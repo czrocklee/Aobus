@@ -10,6 +10,11 @@ The [documentation home](../README.md) is the reading entrance; this page is onl
 - `reference/` provides independently useful lookup material: languages, commands, protocols, formats, compatibility rules, and semantic tables.
 - `decision/` preserves consequential choices and their historical reasons, not current behavior.
 
+Keep project docs machine-independent: platform requirements, portal defaults
+and public interfaces belong here. Put actual hosts, accounts, paths, source
+transfers and login/power recipes in home skills or operator guidance.
+Use generic examples; do not link personal home-directory files.
+
 Extend an existing page when it answers the same reader question.
 Split only for independent lookup, readers, or evolution of a substantial contract; neither crossing code layers nor mixing explanation and specification requires separate files.
 A short contract can remain a short file. Related complex contracts need not become one manual.

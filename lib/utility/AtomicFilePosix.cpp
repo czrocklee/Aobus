@@ -7,6 +7,7 @@
 #include <ao/utility/Path.h>
 
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include <cerrno>
@@ -17,7 +18,6 @@
 #include <format>
 #include <string>
 #include <string_view>
-#include <sys/stat.h>
 #include <system_error>
 #include <tuple>
 #include <utility>

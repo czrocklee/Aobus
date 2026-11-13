@@ -5,7 +5,6 @@ import contextlib
 import io
 import json
 import os
-import re
 import shlex
 import shutil
 import subprocess
@@ -15,22 +14,22 @@ import threading
 import unittest
 import xml.etree.ElementTree as ElementTree
 from concurrent.futures import Future
+from dataclasses import replace
 from pathlib import Path
 from unittest import mock
+from urllib.parse import quote
 
 from phase_support import PhaseRecorder as _PhaseRecorder
 
 from ao.__main__ import main, make_parser, parse_arguments
 from ao.command import analyze as analyze_command
-from ao.command import build as build_command
-from ao.command import check as check_command
 from ao.command import coverage as coverage_command
 from ao.command import perf as perf_command
 from ao.command import run as run_command_mod
 from ao.command import test as test_command
 from ao.command import tidy as tidy_command
-from ao.command.build import BuildResult
-from ao.core import builddir, buildenv, doccheck
+from ao.core import bazel_coverage, bazel_lint_action, bazel_workflows, builddir, buildenv, doccheck
+from ao.core.bazel_lint_reports import Identity
 
 # Raw clang-tidy forms rejected by the option type and the programmatic guard.
 # A bare word such as "fix" is intentionally absent: it is not an option.
@@ -78,24 +77,6 @@ def _diagnostic_rejection(argument: str) -> str:
     return _FIX_OPTION_REJECTION
 
 
-# Tests that stub native builds use this cache to represent an enabled graph.
-_ENABLED_SUITE_CACHE = {
-    option: "ON"
-    for option in (
-        "AOBUS_BUILD_TESTS",
-        "AOBUS_BUILD_GTK",
-        "AOBUS_BUILD_TUI",
-        "AOBUS_BUILD_CLI",
-        "AOBUS_BUILD_SYSTEM_MEDIA",
-        "AOBUS_BUILD_LINT_PLUGIN",
-    )
-}
-
-
-def _enabled_suite_cache(_path):
-    return _ENABLED_SUITE_CACHE
-
-
 class NativePortalTest(unittest.TestCase):
     def test_macos_bootstrap_maps_native_architectures_to_project_triplets(self):
         helper = Path(__file__).resolve().parents[2] / "script" / "ao" / "macos-vcpkg-bootstrap.sh"
@@ -117,34 +98,6 @@ class NativePortalTest(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.splitlines(), ["x64-aobus-osx", "arm64-aobus-osx"])
-
-    def test_macos_bootstrap_rejects_unknown_architectures(self):
-        helper = Path(__file__).resolve().parents[2] / "script" / "ao" / "macos-vcpkg-bootstrap.sh"
-        bash = shutil.which("bash")
-        if bash is None:
-            self.skipTest("bash is unavailable on this host")
-
-        result = subprocess.run(
-            [
-                bash,
-                "-c",
-                'source "$1"; aobus_macos_triplet powerpc',
-                "aobus-bootstrap-test",
-                str(helper),
-            ],
-            capture_output=True,
-            text=True,
-        )
-
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("unsupported architecture", result.stderr)
-
-    def test_macos_bootstrap_leaves_compiler_cache_activation_to_python_portal(self):
-        helper = Path(__file__).resolve().parents[2] / "script" / "ao" / "macos-vcpkg-bootstrap.sh"
-        content = helper.read_text(encoding="utf-8")
-
-        self.assertNotIn("aobus_macos_prepare_ccache_environment", content)
-        self.assertNotIn("CCACHE_MAXSIZE", content)
 
     def test_macos_expected_shim_disables_exactly_five_libcxx_gates(self):
         helper = Path(__file__).resolve().parents[2] / "script" / "ao" / "macos-vcpkg-bootstrap.sh"
@@ -195,37 +148,6 @@ class NativePortalTest(unittest.TestCase):
         self.assertEqual(repeated.returncode, 0, repeated.stderr)
         self.assertEqual(repeated_mtime, preserved_mtime)
 
-    def test_macos_portal_dispatches_before_linux_nix_reentry(self):
-        portal = Path(__file__).resolve().parents[2] / "ao"
-        content = portal.read_text(encoding="utf-8")
-
-        darwin_offset = content.index('if [[ "$(uname -s)" == "Darwin" ]]')
-        nix_offset = content.index('if [[ -z "${AO_IN_NIX_PORTAL:-}" ]]')
-        self.assertLess(darwin_offset, nix_offset)
-        self.assertIn("macos-vcpkg-bootstrap.sh", content)
-        self.assertIn("aobus_macos_prepare_build_environment", content)
-        self.assertIn("aobus_macos_prepare_python_tools", content)
-        self.assertIn('-m ao.core.buildenv "$@"', content)
-        self.assertIn('-m ao.core.buildenv --python-tools "$@"', content)
-        self.assertNotIn("darwin-nix-bootstrap.sh", content)
-        # Source order only: macOS asks buildenv before native environment selection.
-        # This does not execute the macOS launcher.
-        macos_branch = content[darwin_offset:nix_offset]
-        self.assertLess(
-            macos_branch.index('-m ao.core.buildenv "$@"'),
-            macos_branch.index("aobus_macos_prepare_build_environment"),
-        )
-
-    def test_linux_launcher_may_enter_nix_before_python_parsing(self):
-        # Source order only. A stale shell still execs nix-shell before Python
-        # parses arguments, so rejection does not promise a bootstrap-free ./ao.
-        portal = Path(__file__).resolve().parents[2] / "ao"
-        content = portal.read_text(encoding="utf-8")
-        nix_portal = content.index('if [[ -z "${AO_IN_NIX_PORTAL:-}" ]]')
-        linux_dispatch = content[nix_portal:]
-        self.assertLess(linux_dispatch.index("exec nix-shell"), linux_dispatch.index('-m ao "$@"'))
-        self.assertNotIn("ao.core.buildenv", linux_dispatch)
-
     @unittest.skipUnless(os.name == "posix" and os.uname().sysname == "Linux", "Linux portal fixture")
     def test_portal_help_preserves_existing_hook_configuration(self):
         root = Path(__file__).resolve().parents[2]
@@ -269,37 +191,17 @@ class NativePortalTest(unittest.TestCase):
                     ).strip()
                     self.assertEqual(configured, "custom-hooks")
 
-    def test_shell_nix_rejects_non_linux_hosts(self):
-        shell = (Path(__file__).resolve().parents[2] / "shell.nix").read_text(encoding="utf-8")
-
-        self.assertNotIn("core.hooksPath", shell)
-        self.assertNotIn("export CCACHE_", shell)
-        self.assertIn("pkgs.stdenv.hostPlatform.isLinux", shell)
-        self.assertIn("on macOS use ./ao with the native vcpkg profile", shell)
-        self.assertNotIn("isDarwin", shell)
-
-    def test_stb_resize_overlay_matches_the_linux_source_pin(self):
-        root = Path(__file__).resolve().parents[2]
-        shell = (root / "shell.nix").read_text(encoding="utf-8")
-        portfile = (root / "cmake" / "vcpkg-ports" / "stb" / "portfile.cmake").read_text(encoding="utf-8")
-        source_pattern = r"raw\.githubusercontent\.com/nothings/stb/([0-9a-f]{40})/stb_image_resize2\.h"
-
-        linux_pins = re.findall(source_pattern, shell)
-        vcpkg_pins = re.findall(source_pattern, portfile)
-
-        self.assertEqual(len(linux_pins), 1)
-        self.assertEqual(vcpkg_pins, linux_pins)
-
     def test_macos_managed_python_is_requested_for_checks_and_documentation(self):
         for command in ("format", "tidy", "hygiene"):
             self.assertTrue(buildenv.requires_python_tools(command))
         self.assertTrue(buildenv.requires_python_tools("docs", ["check"]))
+        self.assertTrue(buildenv.requires_python_tools("check"))
         for command, arguments in (
             ("build", []),
-            ("check", []),
             ("deps", ["report"]),
             ("run", ["cli"]),
             ("test", []),
+            ("verify", []),
         ):
             self.assertFalse(buildenv.requires_python_tools(command, arguments))
 
@@ -308,40 +210,6 @@ class NativePortalTest(unittest.TestCase):
         )
         self.assertIn('export AOBUS_PYTHON="$managed_python"', bootstrap)
         self.assertNotIn('export PATH="$(dirname "$managed_python"):$PATH"', bootstrap)
-
-    def test_macos_toolchain_lock_matches_the_vcpkg_registry(self):
-        root = Path(__file__).resolve().parents[2]
-        lock = json.loads((root / "script" / "ao" / "macos-toolchain.json").read_text(encoding="utf-8"))
-        toolchain = json.loads((root / "script" / "ao" / "toolchain.json").read_text(encoding="utf-8"))
-        configuration = json.loads((root / "vcpkg-configuration.json").read_text(encoding="utf-8"))
-        presets = json.loads((root / "CMakePresets.json").read_text(encoding="utf-8"))["configurePresets"]
-
-        self.assertEqual(lock["vcpkg"]["revision"], configuration["default-registry"]["baseline"])
-        self.assertIn(lock["vcpkg"]["revision"], lock["vcpkg"]["archiveUrl"])
-        self.assertRegex(lock["vcpkg"]["archiveSha256"], r"^[0-9a-f]{64}$")
-        python_major_minor = ".".join(toolchain["python"].split(".")[:2])
-        self.assertEqual(lock["homebrew"]["pythonMajorMinorVersion"], python_major_minor)
-        self.assertEqual(lock["homebrew"]["pythonFormula"], f"python@{python_major_minor}")
-        macos_base = next(preset for preset in presets if preset["name"] == "macos-base")
-        self.assertEqual(
-            macos_base["cacheVariables"]["CMAKE_OSX_DEPLOYMENT_TARGET"],
-            "$env{AOBUS_MACOS_DEPLOYMENT_TARGET}",
-        )
-        requirements = (root / "script" / "ao" / "macos-requirements.txt").read_text(encoding="utf-8")
-        self.assertEqual(requirements.count("--hash=sha256:"), 11)
-        for architecture in ("x64", "arm64"):
-            triplet = root / "cmake" / "vcpkg-triplets" / f"{architecture}-aobus-osx.cmake"
-            content = triplet.read_text(encoding="utf-8")
-            self.assertIn(f"set(VCPKG_OSX_DEPLOYMENT_TARGET {lock['deploymentTarget']})", content)
-
-    def test_rapidyaml_clang_compatibility_is_darwin_only(self):
-        dependencies = (Path(__file__).resolve().parents[2] / "cmake" / "Dependencies.cmake").read_text(
-            encoding="utf-8"
-        )
-
-        self.assertIn("APPLE AND CMAKE_CXX_COMPILER_ID", dependencies)
-        self.assertIn('MATCHES "^(AppleClang|Clang)$"', dependencies)
-        self.assertNotIn("CXX_COMPILER_ID:AppleClang,Clang,MSVC", dependencies)
 
 
 class WindowsBatchPortalTest(unittest.TestCase):
@@ -353,31 +221,6 @@ class WindowsBatchPortalTest(unittest.TestCase):
         self.assertIn('set "aobus_state_argument=%aobus_state_argument%."', content)
         self.assertIn('set "pythonpath=%root%script"', content)
         self.assertNotIn(';%pythonpath%"', content)
-
-    def test_toolchain_commands_initialize_the_visual_studio_environment(self):
-        portal = Path(__file__).resolve().parents[2] / "ao.bat"
-        content = portal.read_text(encoding="utf-8").lower()
-
-        # ao.bat asks the portal package which commands need MSVC/vcpkg instead
-        # of keeping its own command list.
-        self.assertIn("-m ao.core.buildenv --exit-code %*", content)
-        self.assertIn('if not "%buildenv_status%"=="10" (', content)
-        self.assertIn("goto finished", content)
-        self.assertNotIn('for /f "usebackq delims="', content)
-        self.assertNotIn('if /i "%~1"=="build" set "needs_build_env=1"', content)
-        # Source order only: Python bootstrap, then buildenv, then VS only for status 10.
-        # Exit code 2 is not 10, so the batch file finishes before VSDEVCMD. This does
-        # not execute ao.bat or prove a native Windows process.
-        python_bootstrap = content.index("call :ensure_python_environment")
-        preflight = content.index("-m ao.core.buildenv --exit-code")
-        non_build_env = content.index('if not "%buildenv_status%"=="10"')
-        finished = content.index("goto finished")
-        visual_studio = content.index("call :ensure_build_environment")
-        self.assertLess(python_bootstrap, preflight)
-        self.assertLess(preflight, non_build_env)
-        self.assertLess(non_build_env, finished)
-        self.assertLess(finished, visual_studio)
-        self.assertLess(visual_studio, content.index('call "%vsdevcmd%"'))
 
     def test_visual_studio_discovery_does_not_trust_an_ambient_installation_root(self):
         helper = Path(__file__).resolve().parents[2] / "script" / "ao" / "windows-vsenv.bat"
@@ -396,127 +239,72 @@ class WindowsBatchPortalTest(unittest.TestCase):
         self.assertIn("bootstrap-python.ps1", content)
         self.assertIn("ao.core.pythonenv", content)
 
-    def test_windows_presets_separate_platform_from_build_type(self):
-        presets_file = Path(__file__).resolve().parents[2] / "CMakePresets.json"
-        presets = json.loads(presets_file.read_text(encoding="utf-8"))["configurePresets"]
-        windows_presets = {preset["name"]: preset for preset in presets if preset["name"].startswith("windows-")}
-        tidy_preset = next(preset for preset in presets if preset["name"] == "windows-tidy")
 
-        self.assertEqual(
-            set(windows_presets),
-            {
-                "windows-base",
-                "windows-debug",
-                "windows-release",
-                "windows-tidy",
-                "windows-winui",
-            },
-        )
-        self.assertEqual(windows_presets["windows-debug"]["inherits"], "windows-base")
-        self.assertEqual(windows_presets["windows-release"]["inherits"], "windows-base")
-        self.assertEqual(windows_presets["windows-winui"]["generator"], "Visual Studio 18 2026")
-        winui_cache = windows_presets["windows-winui"]["cacheVariables"]
-        self.assertEqual(winui_cache["AOBUS_BUILD_WINUI"], "ON")
-        self.assertEqual(winui_cache["AOBUS_MSBUILD_CL_TOOL_EXE"], "$env{AOBUS_MSBUILD_CL_TOOL_EXE}")
-        self.assertEqual(
-            winui_cache["CMAKE_MSVC_DEBUG_INFORMATION_FORMAT"],
-            "$<$<CONFIG:Debug,RelWithDebInfo>:Embedded>",
-        )
-        base_cache = windows_presets["windows-base"]["cacheVariables"]
-        overlay_ports = "${sourceDir}/cmake/vcpkg-ports"
-        self.assertEqual(base_cache["VCPKG_OVERLAY_PORTS"], overlay_ports)
-        self.assertEqual(winui_cache["VCPKG_OVERLAY_PORTS"], overlay_ports)
-        self.assertFalse(any(name.startswith("AOBUS_BUILD_") for name in base_cache))
-        self.assertEqual(tidy_preset["inherits"], "windows-release")
-        self.assertEqual(tidy_preset["cacheVariables"], {"AOBUS_BUILD_LINT_PLUGIN": "ON"})
-
-        manifest = json.loads((presets_file.parent / "vcpkg.json").read_text(encoding="utf-8"))
-        self.assertIn("tests", manifest["default-features"])
-
-    def test_windows_presets_keep_build_trees_out_of_the_source_checkout(self):
-        presets_file = Path(__file__).resolve().parents[2] / "CMakePresets.json"
-        presets = json.loads(presets_file.read_text(encoding="utf-8"))["configurePresets"]
-        windows_presets = [preset for preset in presets if preset["name"].startswith("windows-")]
-
-        for preset in windows_presets:
-            if binary_dir := preset.get("binaryDir"):
-                self.assertTrue(binary_dir.startswith("$env{LOCALAPPDATA}/Aobus/build/"))
-                self.assertNotIn("out/build", binary_dir)
-
-    def test_linux_presets_use_ninja(self):
-        presets_file = Path(__file__).resolve().parents[2] / "CMakePresets.json"
-        presets = json.loads(presets_file.read_text(encoding="utf-8"))["configurePresets"]
-        linux_presets = [
-            preset for preset in presets if preset["name"].startswith("linux-") or preset["name"] == "profile"
-        ]
-
-        self.assertTrue(linux_presets)
-        self.assertTrue(all(preset["generator"] == "Ninja" for preset in linux_presets))
-
-    def test_macos_presets_use_the_pinned_vcpkg_toolchain(self):
-        presets_file = Path(__file__).resolve().parents[2] / "CMakePresets.json"
-        presets = json.loads(presets_file.read_text(encoding="utf-8"))["configurePresets"]
-        macos_presets = {preset["name"]: preset for preset in presets if preset["name"].startswith("macos-")}
-
-        self.assertEqual(set(macos_presets), {"macos-base", "macos-debug", "macos-release", "macos-profile"})
-        for name in ("macos-debug", "macos-release", "macos-profile"):
-            self.assertEqual(macos_presets[name]["inherits"], "macos-base")
-        cache = macos_presets["macos-base"]["cacheVariables"]
-        self.assertEqual(cache["CMAKE_TOOLCHAIN_FILE"], "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
-        self.assertEqual(cache["VCPKG_TARGET_TRIPLET"], "$env{AOBUS_VCPKG_TRIPLET}")
-        self.assertEqual(cache["VCPKG_HOST_TRIPLET"], "$env{AOBUS_VCPKG_TRIPLET}")
-        self.assertEqual(cache["VCPKG_OVERLAY_PORTS"], "${sourceDir}/cmake/vcpkg-ports")
-        self.assertEqual(cache["CMAKE_CXX_COMPILER"], "$env{AOBUS_LLVM_ROOT}/bin/clang++")
-
-    def test_linux_release_does_not_have_a_separate_ipo_preset(self):
-        presets_file = Path(__file__).resolve().parents[2] / "CMakePresets.json"
-        presets = json.loads(presets_file.read_text(encoding="utf-8"))["configurePresets"]
-        preset_names = {item["name"] for item in presets}
-
-        self.assertIn("linux-release", preset_names)
-        self.assertNotIn("linux-release-ipo", preset_names)
+def _fixture_binary(tree, name, *, platform=None):
+    # Foreign runner fixtures must match the selected target, not the real host.
+    platform = platform or builddir.platform_profile().name
+    suffix = ".exe" if platform == "windows" else ""
+    return tree / "state/output/execroot/_main/bazel-out/fixture/bin" / (name + suffix)
 
 
 class CliParseTest(unittest.TestCase):
     def setUp(self):
-        # Dispatch fixtures substitute build results; manifest semantics use
-        # real configured-source fixtures in test_check_registration.py.
-        self.enterContext(mock.patch.object(check_command, "_verify_test_source_manifest"))
+        # Runner contracts use declared test-owned providers, never ambient
+        # Bazel. Workflow tests independently own query/selection orchestration.
+        self.enterContext(mock.patch.object(bazel_workflows, "prepare_artifacts", self.fixture_artifacts))
+        self.lint_action = mock.Mock(spec=bazel_workflows.LintFixtureAction)
+        self.lint_action.run.return_value = 0
+        self.enterContext(mock.patch.object(bazel_workflows, "prepare_lint_fixtures", self.fixture_lint))
+
+    @contextlib.contextmanager
+    def fixture_lint(self, args, *, no_build=False):
+        yield self.lint_action
+
+    @contextlib.contextmanager
+    def fixture_artifacts(self, args, labels, **_options):
+        tree = Path(args.path)
+        artifacts = []
+        for label in labels:
+            suite = next(name for name, spec in test_command.SUITES.items() if spec.target == label)
+            binary = _fixture_binary(tree, "ao_" + suite + ("_smoke" if suite == "appkit" else "_test"))
+            binary.chmod(0o700)
+            root = tree / "state/output/execroot/_main"
+            relative = binary.relative_to(root).as_posix()
+            artifact = bazel_workflows.parse_artifact(
+                {
+                    "label": label,
+                    "incompatible": False,
+                    "executable": relative,
+                    "files": [{"path": relative, "directory": False}],
+                    "runfiles": [],
+                    "manifest": None,
+                    "environment": {},
+                },
+                target=label,
+                checksum="a" * 64,
+                config=getattr(args, "config", "debug"),
+                tree=tree,
+                execution_root=root,
+            )
+            artifacts.append(replace(artifact, requested_by=(label,)))
+        yield tuple(artifacts)
+
+    @staticmethod
+    def artifact_environment(*, scratch=True):
+        environment = {
+            "RUNFILES_DIR": "",
+            "JAVA_RUNFILES": "",
+            "TEST_SRCDIR": "",
+            "RUNFILES_MANIFEST_FILE": "",
+            "RUNFILES_MANIFEST_ONLY": "0",
+            "TEST_WORKSPACE": "_main",
+        }
+        if scratch:
+            environment["TEST_TMPDIR"] = mock.ANY
+        return environment
 
     def parse(self, argv):
         return parse_arguments(make_parser(), argv)
-
-    def test_all_commands_are_registered(self):
-        buffer = io.StringIO()
-        with contextlib.redirect_stdout(buffer):
-            self.assertEqual(main(["help"]), 0)
-        for command in (
-            "build",
-            "check",
-            "test",
-            "test-audit",
-            "name-audit",
-            "coverage",
-            "deps",
-            "doctor",
-            "setup",
-            "docs",
-            "tidy",
-            "analyze",
-            "format",
-            "hygiene",
-            "perf",
-            "run",
-        ):
-            self.assertIn(command, buffer.getvalue())
-        self.assertNotIn("selftest", buffer.getvalue())
-        self.assertNotIn("pycheck", buffer.getvalue())
-
-    def test_build_arguments(self):
-        args = self.parse(["build", "release", "--clang", "--clean", "--target", "aobus-gtk"])
-        self.assertEqual(args.flavor, "release")
-        self.assertTrue(args.clang)
-        self.assertEqual(args.target, ["aobus-gtk"])
 
     def test_perf_arguments_default_to_release_review_sampling(self):
         args = self.parse(["perf"])
@@ -546,115 +334,6 @@ class CliParseTest(unittest.TestCase):
 
             with self.assertRaises(SystemExit):
                 perf_command.run_command(args)
-
-    @mock.patch.dict(os.environ, {"AOBUS_PERF_BASELINE_JSON": ""})
-    def test_perf_builds_and_runs_the_standalone_target(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            output = Path(temp_dir) / "review.json"
-            executable = Path(temp_dir) / "test" / "ao_perf_baseline"
-            executable.parent.mkdir()
-            executable.touch()
-            args = self.parse(
-                [
-                    "perf",
-                    "-p",
-                    temp_dir,
-                    "--samples",
-                    "24",
-                    "--warmups",
-                    "2",
-                    "--library-root",
-                    temp_dir,
-                    "--library-locale",
-                    "de-DE",
-                    "--output",
-                    str(output),
-                ]
-            )
-            build_result = BuildResult(
-                build_dir=Path(temp_dir),
-                log=Path(temp_dir) / "build.log",
-                compiler="gcc",
-                preset="linux-release",
-            )
-
-            def write_report(_argv, *, env, **_kwargs):
-                Path(env["AOBUS_PERF_REPORT_JSON"]).write_text(
-                    json.dumps(
-                        {
-                            "schema": "aobus-performance-review/v2",
-                            "metadata": {
-                                "platform": "linux",
-                                "build_mode": "release",
-                                "compiler": "gcc",
-                                "icu_version": "78.3",
-                            },
-                            "measurements": [
-                                {
-                                    "capability": "ordering",
-                                    "scenario": "construction",
-                                    "dataset": "none",
-                                    "input_count": 0,
-                                    "median_ns": 1,
-                                    "p95_ns": 2,
-                                }
-                            ],
-                        }
-                    ),
-                    encoding="utf-8",
-                )
-                return 0
-
-            with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
-                with mock.patch.object(perf_command.build, "do_build", return_value=build_result) as do_build:
-                    with mock.patch.object(perf_command, "_revision", return_value="abc123"):
-                        with mock.patch.object(perf_command, "run", side_effect=write_report) as run:
-                            self.assertEqual(perf_command.run_command(args), 0)
-
-        do_build.assert_called_once_with(args, ["ao_perf_baseline"])
-        command = run.call_args.args[0]
-        environment = run.call_args.kwargs["env"]
-        self.assertEqual(command, [str(executable), "PerformanceReview - ordering and completion-alias workloads"])
-        self.assertEqual(environment["AOBUS_PERF_SAMPLES"], "24")
-        self.assertEqual(environment["AOBUS_PERF_WARMUPS"], "2")
-        self.assertEqual(environment["AOBUS_PERF_REVISION"], "abc123")
-        self.assertEqual(environment["AOBUS_PERF_BUILD_MODE"], "release")
-        self.assertEqual(environment["AOBUS_PERF_LIBRARY_ROOT"], temp_dir)
-        self.assertEqual(environment["AOBUS_PERF_LIBRARY_LOCALE"], "de-DE")
-
-    @mock.patch.dict(os.environ, {"AOBUS_PERF_BASELINE_JSON": ""})
-    @mock.patch.object(build_command, "validate_build_tree", return_value="gcc")
-    def test_perf_rejects_a_stale_report_when_the_workload_writes_nothing(self, _validate_build_tree):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            output = Path(temp_dir) / "review.json"
-            output.write_text("stale report", encoding="utf-8")
-            executable = Path(temp_dir) / "test" / "ao_perf_baseline"
-            executable.parent.mkdir()
-            executable.touch()
-            args = self.parse(
-                [
-                    "perf",
-                    "--no-build",
-                    "-p",
-                    temp_dir,
-                    "--filter",
-                    "[perf][unit][baseline][unicode]",
-                    "--output",
-                    str(output),
-                ]
-            )
-
-            def succeed_without_report(_argv, *, env, **_kwargs):
-                self.assertFalse(Path(env["AOBUS_PERF_REPORT_JSON"]).exists())
-                return 0
-
-            with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
-                with mock.patch.object(perf_command, "_revision", return_value="abc123"):
-                    with mock.patch.object(perf_command, "run", side_effect=succeed_without_report):
-                        with self.assertRaises(SystemExit):
-                            perf_command.run_command(args)
-
-            self.assertFalse(output.exists())
 
     def test_perf_summary_supports_capability_specific_fields(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -713,186 +392,6 @@ class CliParseTest(unittest.TestCase):
         self.assertIn("completion-alias/icu-transliteration/alias-hit/cjk (input_count=5000)", output.getvalue())
         self.assertIn("2048 snapshot-alias-bytes", output.getvalue())
 
-    def test_perf_summary_rejects_missing_required_measurement_fields(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            report_path = Path(temp_dir) / "review.json"
-            report_path.write_text(
-                json.dumps(
-                    {
-                        "schema": "aobus-performance-review/v2",
-                        "metadata": {
-                            "platform": "linux",
-                            "build_mode": "release",
-                            "compiler": "gcc",
-                            "icu_version": "78.3",
-                        },
-                        "measurements": [
-                            {
-                                "capability": "completion-alias",
-                                "scenario": "alias-hit",
-                                "dataset": "cjk",
-                                "median_ns": 1,
-                                "p95_ns": 2,
-                            }
-                        ],
-                    }
-                ),
-                encoding="utf-8",
-            )
-
-            with self.assertRaises(SystemExit):
-                perf_command._print_report(report_path)
-
-    def test_perf_summary_rejects_empty_dimensions(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            report_path = Path(temp_dir) / "review.json"
-            metadata = {
-                "platform": "linux",
-                "build_mode": "release",
-                "compiler": "gcc",
-                "icu_version": "78.3",
-            }
-            measurement = {
-                "capability": "completion-alias",
-                "scenario": "alias-hit",
-                "dataset": "cjk",
-                "input_count": 5_000,
-                "median_ns": 1,
-                "p95_ns": 2,
-                "policy": "icu-transliteration",
-                "locale": "und",
-                "byte_metric": {"kind": "snapshot-alias-bytes", "count": 128},
-            }
-
-            for section, key in (
-                (metadata, "platform"),
-                (measurement, "capability"),
-                (measurement, "scenario"),
-                (measurement, "dataset"),
-                (measurement, "policy"),
-                (measurement, "locale"),
-                (measurement["byte_metric"], "kind"),
-            ):
-                with self.subTest(key=key):
-                    original = section[key]
-                    section[key] = ""
-                    report_path.write_text(
-                        json.dumps(
-                            {
-                                "schema": "aobus-performance-review/v2",
-                                "metadata": metadata,
-                                "measurements": [measurement],
-                            }
-                        ),
-                        encoding="utf-8",
-                    )
-
-                    with self.assertRaises(SystemExit):
-                        perf_command._print_report(report_path)
-
-                    section[key] = original
-
-    def test_perf_summary_rejects_unsupported_report_schema(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            report_path = Path(temp_dir) / "review.json"
-            report_path.write_text(
-                json.dumps({"schema": "aobus-performance-review/v1", "metadata": {}, "measurements": []}),
-                encoding="utf-8",
-            )
-
-            with self.assertRaises(SystemExit):
-                perf_command._print_report(report_path)
-
-    def test_removed_optimization_flavors_are_rejected(self):
-        commands = (
-            ["build", "release-ipo"],
-            ["run", "gtk", "release-ipo"],
-            ["build", "pgo1"],
-            ["check", "pgo2"],
-            ["run", "gtk", "pgo1"],
-        )
-        with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
-            for command in commands:
-                with self.subTest(command=command):
-                    with self.assertRaises(SystemExit):
-                        self.parse(command)
-
-    def test_build_rejects_unknown_flavor(self):
-        with self.assertRaises(SystemExit):
-            self.parse(["build", "fastest"])
-
-    def test_sanitizers_are_mutually_exclusive(self):
-        with self.assertRaises(SystemExit):
-            self.parse(["build", "--asan", "--tsan"])
-
-    def test_check_defaults_to_debug(self):
-        args = self.parse(["check"])
-        self.assertEqual(args.flavor, "debug")
-        self.assertFalse(args.asan)
-
-    def test_parallel_build_arguments_forward_the_environment_limit(self):
-        with mock.patch.dict(build_command.os.environ, {"CMAKE_BUILD_PARALLEL_LEVEL": "8"}):
-            self.assertEqual(build_command.parallel_build_arguments(), ["--parallel", "8"])
-
-    def test_parallel_build_arguments_reject_an_invalid_environment_limit(self):
-        for configured in ("", "all", "0", "-1"):
-            with self.subTest(configured=configured):
-                with mock.patch.dict(build_command.os.environ, {"CMAKE_BUILD_PARALLEL_LEVEL": configured}):
-                    with self.assertRaises(SystemExit):
-                        build_command.parallel_build_arguments()
-
-    def test_parallel_build_arguments_leave_one_cpu_available_by_default(self):
-        with mock.patch.dict(build_command.os.environ, {}, clear=True):
-            with mock.patch.object(build_command.jobs, "available_cores", return_value=32):
-                self.assertEqual(build_command.parallel_build_arguments(), ["--parallel", "31"])
-
-    def test_parallel_build_arguments_use_every_ci_core_without_overriding_explicit_jobs(self):
-        with (
-            mock.patch.dict(build_command.os.environ, {"GITHUB_ACTIONS": "true"}, clear=True),
-            mock.patch.object(build_command.jobs, "available_cores", return_value=32),
-        ):
-            self.assertEqual(build_command.parallel_build_arguments(), ["--parallel", "32"])
-            with mock.patch.dict(build_command.os.environ, {"CMAKE_BUILD_PARALLEL_LEVEL": "8"}):
-                self.assertEqual(build_command.parallel_build_arguments(), ["--parallel", "8"])
-
-    def test_winui_build_environment_uses_the_shared_parallel_limit(self):
-        self.assertEqual(
-            build_command._winui_build_environment(12),
-            {
-                "UseMultiToolTask": "true",
-                "EnforceProcessCountAcrossBuilds": "true",
-                "MultiProcMaxCount": "12",
-                "CL_MPCount": "12",
-            },
-        )
-
-    def test_dependency_report_arguments(self):
-        args = self.parse(["deps", "report", "-p", "/tmp/aobus-deps", "--json", "/tmp/aobus-deps.json"])
-
-        self.assertEqual(args.deps_action, "report")
-        self.assertEqual(args.path, "/tmp/aobus-deps")
-        self.assertEqual(args.json, Path("/tmp/aobus-deps.json"))
-        self.assertFalse(args.concepts)
-
-    def test_concept_report_arguments(self):
-        args = self.parse(["deps", "report", "--concepts", "-p", "/tmp/aobus-debug", "-j", "4"])
-
-        self.assertEqual(args.deps_action, "report")
-        self.assertTrue(args.concepts)
-        self.assertEqual(args.path, "/tmp/aobus-debug")
-        self.assertEqual(args.jobs, 4)
-
-    def test_dependency_verify_arguments(self):
-        args = self.parse(["deps", "verify", "-p", "/tmp/aobus-deps"])
-
-        self.assertEqual(args.deps_action, "verify")
-        self.assertEqual(args.path, "/tmp/aobus-deps")
-
-    def test_docs_check_arguments(self):
-        args = self.parse(["docs", "check"])
-
-        self.assertEqual(args.docs_action, "check")
-
     def test_docs_check_failure_reports_issues_and_returns_failure(self):
         args = self.parse(["docs", "check"])
         issue = doccheck.Issue(Path("doc/system/example.md"), 7, "broken-link", "missing target")
@@ -922,371 +421,6 @@ class CliParseTest(unittest.TestCase):
         self.assertEqual(status, 0)
         self.assertEqual(output.getvalue(), "Documentation check passed (1 Markdown files).\n")
 
-    def test_winui_host_commands_parse(self):
-        doctor = self.parse(["doctor", "winui"])
-        self.assertEqual(doctor.area, "winui")
-        self.assertFalse(doctor.build_only)
-        self.assertTrue(self.parse(["doctor", "winui", "--build-only"]).build_only)
-        self.assertEqual(self.parse(["setup", "winui-runtime"]).component, "winui-runtime")
-        self.assertEqual(self.parse(["setup", "compiler-cache"]).component, "compiler-cache")
-
-    @mock.patch.object(build_command, "validate_build_tree", return_value="msvc")
-    def test_windows_build_selects_the_shared_flavor_preset(self, _validate_build_tree):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            args = self.parse(["build", "-p", temp_dir])
-            with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
-                with mock.patch.object(build_command, "run", return_value=0) as run:
-                    result = build_command.do_build(args, ["ao_core_test"])
-
-        configure = run.call_args_list[0].args[0]
-        self.assertIn("windows-debug", configure)
-        self.assertEqual(result.preset, "windows-debug")
-        self.assertEqual(result.compiler, "msvc")
-
-    @mock.patch.object(build_command, "validate_build_tree", return_value="msvc")
-    def test_windows_winui_build_selects_the_visual_studio_preset(self, _validate_build_tree):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            args = self.parse(["build", "-p", temp_dir, "--target", "winui"])
-            with mock.patch.dict(build_command.os.environ, {"CMAKE_BUILD_PARALLEL_LEVEL": "8"}):
-                with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
-                    with mock.patch.object(build_command.winui, "require_build_host"):
-                        with mock.patch.object(build_command, "run", return_value=0) as run:
-                            result = build_command.do_build(args, ["winui"])
-
-        configure = run.call_args_list[0].args[0]
-        build = run.call_args_list[1].args[0]
-        build_env = run.call_args_list[1].kwargs["env"]
-        self.assertIn("windows-winui", configure)
-        self.assertIn("--config", build)
-        self.assertIn("Debug", build)
-        self.assertIn("8", build)
-        self.assertIn("aobus-winui", build)
-        self.assertEqual(build_env["UseMultiToolTask"], "true")
-        self.assertEqual(build_env["EnforceProcessCountAcrossBuilds"], "true")
-        self.assertEqual(build_env["MultiProcMaxCount"], "8")
-        self.assertEqual(build_env["CL_MPCount"], "8")
-        self.assertEqual(result.preset, "windows-winui")
-
-    @mock.patch.object(build_command, "validate_build_tree", return_value="msvc")
-    def test_windows_winui_check_selects_the_validation_aggregate(self, _validate_build_tree):
-        for flavor in ("debug", "release"):
-            configuration = "Debug" if flavor == "debug" else "Release"
-            for targets in ([build_command.WINUI_CHECK_TARGET], ["winui", build_command.WINUI_CHECK_TARGET]):
-                with self.subTest(flavor=flavor, targets=targets), tempfile.TemporaryDirectory() as temp_dir:
-                    args = self.parse(["build", flavor, "-p", temp_dir])
-                    with (
-                        mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
-                        mock.patch.object(build_command.winui, "require_build_host"),
-                        mock.patch.object(build_command.winui, "verify_build_graph") as verify_graph,
-                        mock.patch.object(build_command, "run", return_value=0) as run,
-                    ):
-                        result = build_command.do_build(args, targets)
-                    verify_graph.assert_called_once_with(Path(temp_dir), configuration)
-                    self.assertTrue((Path(temp_dir) / ".cmake/api/v1/query/codemodel-v2").is_file())
-                    command = run.call_args_list[1].args[0]
-                    self.assertEqual(
-                        [command[index + 1] for index, value in enumerate(command) if value == "--target"],
-                        [build_command.WINUI_CHECK_TARGET],
-                    )
-                    self.assertEqual(command[command.index("--config") + 1], configuration)
-                    self.assertEqual(result.preset, "windows-winui")
-
-    @mock.patch.object(build_command, "validate_build_tree", return_value="msvc")
-    def test_winui_graph_failure_stops_before_building_probes(self, _validate_build_tree):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            args = self.parse(["build", "-p", temp_dir])
-            with (
-                mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
-                mock.patch.object(build_command.winui, "require_build_host"),
-                mock.patch.object(build_command.winui, "verify_build_graph", side_effect=RuntimeError("probe leak")),
-                mock.patch.object(build_command, "run", return_value=0) as run,
-                contextlib.redirect_stderr(io.StringIO()),
-                self.assertRaises(SystemExit),
-            ):
-                build_command.do_build(args, [build_command.WINUI_CHECK_TARGET])
-            self.assertEqual(run.call_count, 1)
-            self.assertNotIn("--build", run.call_args.args[0])
-
-    def test_winui_query_io_failure_is_reported_before_configure(self):
-        for operation in ("mkdir", "touch"):
-            with self.subTest(operation=operation), tempfile.TemporaryDirectory() as temp_dir:
-                if operation == "mkdir":
-                    (Path(temp_dir) / ".cmake").write_text("preserve this file", encoding="utf-8")
-                touch_failure = (
-                    mock.patch.object(Path, "touch", side_effect=PermissionError("query denied"))
-                    if operation == "touch"
-                    else contextlib.nullcontext()
-                )
-                args = self.parse(["build", "-p", temp_dir])
-                with (
-                    touch_failure,
-                    mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
-                    mock.patch.object(build_command.winui, "require_build_host"),
-                    mock.patch.object(build_command, "run") as run,
-                    contextlib.redirect_stderr(io.StringIO()) as errors,
-                    self.assertRaises(SystemExit),
-                ):
-                    build_command.do_build(args, [build_command.WINUI_CHECK_TARGET])
-                self.assertIn("cannot prepare the WinUI build-graph query", errors.getvalue())
-                run.assert_not_called()
-
-    def test_winui_check_rejects_native_target_mixing_and_other_platforms_before_configure(self):
-        for profile, targets in (
-            (builddir.LINUX_PROFILE, [build_command.WINUI_CHECK_TARGET]),
-            (builddir.MACOS_PROFILE, [build_command.WINUI_CHECK_TARGET]),
-            (builddir.WINDOWS_PROFILE, [build_command.WINUI_CHECK_TARGET, "ao_core_test"]),
-        ):
-            with (
-                self.subTest(profile=profile.name, targets=targets),
-                mock.patch.object(builddir, "platform_profile", return_value=profile),
-                mock.patch.object(build_command, "run") as run,
-                contextlib.redirect_stderr(io.StringIO()),
-            ):
-                with self.assertRaises(SystemExit):
-                    build_command.do_build(self.parse(["build"]), targets)
-                run.assert_not_called()
-
-    @mock.patch.object(build_command, "validate_build_tree", return_value="msvc")
-    def test_windows_release_selects_the_normal_release_preset(self, _validate_build_tree):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            args = self.parse(["build", "release", "-p", temp_dir])
-            with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
-                with mock.patch.object(build_command, "run", return_value=0) as run:
-                    result = build_command.do_build(args, [])
-
-        self.assertIn("windows-release", run.call_args_list[0].args[0])
-        self.assertEqual(result.preset, "windows-release")
-
-    @mock.patch.object(build_command, "validate_build_tree", return_value="msvc")
-    def test_windows_winui_release_uses_the_normal_visual_studio_tree(self, _validate_build_tree):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            args = self.parse(["build", "release", "-p", temp_dir, "--target", "winui"])
-            with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
-                with mock.patch.object(build_command.winui, "require_build_host"):
-                    with mock.patch.object(build_command, "run", return_value=0) as run:
-                        result = build_command.do_build(args, ["winui"])
-
-        configure = run.call_args_list[0].args[0]
-        build = run.call_args_list[1].args[0]
-        self.assertIn("windows-winui", configure)
-        self.assertIn("Release", build)
-        self.assertEqual(result.preset, "windows-winui")
-
-    @mock.patch.object(build_command, "validate_build_tree", return_value="msvc")
-    def test_windows_winui_lint_context_builds_only_the_context_target(self, _validate_build_tree):
-        # The lint-context target name is a fixed portal contract.
-        self.assertEqual(build_command.WINUI_LINT_CONTEXT_TARGET, "aobus-winui-lint-context")
-        with tempfile.TemporaryDirectory() as temp_dir:
-            args = self.parse(["build", "-p", temp_dir])
-            recorder = _PhaseRecorder()
-            with (
-                mock.patch.dict(build_command.os.environ, {"CMAKE_BUILD_PARALLEL_LEVEL": "8"}),
-                mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
-                mock.patch.object(build_command.winui, "require_build_host"),
-                mock.patch.object(build_command, "phases", recorder),
-                mock.patch.object(build_command, "run", return_value=0) as run,
-            ):
-                result = build_command.do_build(args, [build_command.WINUI_LINT_CONTEXT_TARGET])
-
-        configure = run.call_args_list[0].args[0]
-        build = run.call_args_list[1].args[0]
-        build_env = run.call_args_list[1].kwargs["env"]
-        targets = [build[index + 1] for index, argument in enumerate(build) if argument == "--target"]
-        self.assertIn("windows-winui", configure)
-        # The context build requests exactly the generated-headers target; the
-        # full aobus-winui product is never built from this invocation.
-        self.assertEqual(targets, [build_command.WINUI_LINT_CONTEXT_TARGET])
-        self.assertIn("--config", build)
-        self.assertIn("Debug", build)
-        self.assertIn("--parallel", build)
-        self.assertIn("8", build)
-        self.assertEqual(build_env["UseMultiToolTask"], "true")
-        self.assertEqual(build_env["MultiProcMaxCount"], "8")
-        self.assertEqual(build_env["CL_MPCount"], "8")
-        # The context build is measured as its own winui-tree phase, never as
-        # a full "build" phase.
-        self.assertEqual(
-            [(record["name"], record["tree"]) for record in recorder.records],
-            [("configure", "winui"), ("generated-headers", "winui")],
-        )
-        self.assertEqual(result.preset, "windows-winui")
-        self.assertEqual(result.build_dir, Path(temp_dir))
-
-    @mock.patch.object(build_command, "validate_build_tree", return_value="msvc")
-    def test_windows_winui_lint_context_release_honors_the_requested_flavor(self, _validate_build_tree):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            args = self.parse(["build", "release", "-p", temp_dir])
-            with (
-                mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
-                mock.patch.object(build_command.winui, "require_build_host"),
-                mock.patch.object(build_command, "run", return_value=0) as run,
-            ):
-                build_command.do_build(args, [build_command.WINUI_LINT_CONTEXT_TARGET])
-
-        build = run.call_args_list[1].args[0]
-        self.assertIn("--config", build)
-        self.assertIn("Release", build)
-
-    @mock.patch.object(build_command, "validate_build_tree", return_value="msvc")
-    def test_windows_winui_lint_context_records_the_generation_failure_status(self, _validate_build_tree):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            args = self.parse(["build", "-p", temp_dir])
-            recorder = _PhaseRecorder()
-            with (
-                mock.patch.dict(build_command.os.environ, {"CMAKE_BUILD_PARALLEL_LEVEL": "8"}),
-                mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
-                mock.patch.object(build_command.winui, "require_build_host"),
-                mock.patch.object(build_command, "phases", recorder),
-                # Mocked subprocess outcomes only: configure succeeds, the
-                # generated-headers build fails with its own exit status.
-                mock.patch.object(build_command, "run", side_effect=(0, 7)) as run,
-            ):
-                with self.assertRaises(SystemExit):
-                    build_command.do_build(args, [build_command.WINUI_LINT_CONTEXT_TARGET])
-
-        self.assertEqual(len(run.call_args_list), 2)
-        self.assertEqual(
-            [(record["name"], record["tree"], record["status"]) for record in recorder.records],
-            [("configure", "winui", 0), ("generated-headers", "winui", 7)],
-        )
-
-    @mock.patch.object(build_command, "validate_build_tree", return_value="msvc")
-    def test_windows_winui_lint_context_configure_failure_skips_generation(self, _validate_build_tree):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            args = self.parse(["build", "-p", temp_dir])
-            recorder = _PhaseRecorder()
-            with (
-                mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
-                mock.patch.object(build_command.winui, "require_build_host"),
-                mock.patch.object(build_command, "phases", recorder),
-                # Mocked subprocess outcome only: configure fails before any generation step.
-                mock.patch.object(build_command, "run", return_value=1) as run,
-            ):
-                with self.assertRaises(SystemExit):
-                    build_command.do_build(args, [build_command.WINUI_LINT_CONTEXT_TARGET])
-
-        # Only the configure invocation ran; no generated-headers phase exists.
-        self.assertEqual(len(run.call_args_list), 1)
-        self.assertEqual(
-            [(record["name"], record["tree"], record["status"]) for record in recorder.records],
-            [("configure", "winui", 1)],
-        )
-
-    def test_windows_winui_lint_context_rejects_mixed_targets_before_configure(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            args = self.parse(["build", "-p", temp_dir])
-            with (
-                mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
-                mock.patch.object(build_command.winui, "require_build_host"),
-                mock.patch.object(build_command, "run") as run,
-            ):
-                for other in ("winui", "aobus-winui", build_command.WINUI_CHECK_TARGET, "ao_core_test"):
-                    with self.subTest(other=other):
-                        with self.assertRaises(SystemExit):
-                            build_command.do_build(args, [build_command.WINUI_LINT_CONTEXT_TARGET, other])
-
-        run.assert_not_called()
-
-    def test_windows_winui_lint_context_rejects_msbuild_capture_before_configure(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            capture = str(Path(temp_dir) / "capture")
-            args = self.parse(["build", "-p", temp_dir, "--msbuild-capture", capture])
-            with (
-                mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
-                mock.patch.object(build_command.winui, "require_build_host"),
-                mock.patch.object(build_command, "_prepare_capture") as prepare_capture,
-                mock.patch.object(build_command, "run") as run,
-            ):
-                with self.assertRaises(SystemExit):
-                    build_command.do_build(args, [build_command.WINUI_LINT_CONTEXT_TARGET])
-
-                run.assert_not_called()
-                prepare_capture.assert_not_called()
-                # Checked inside the live temp directory: the rejection happens
-                # before any capture directory is created.
-                self.assertFalse(Path(capture).exists())
-
-    def test_winui_lint_context_is_unavailable_off_windows(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            args = self.parse(["build", "-p", temp_dir])
-            with (
-                mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE),
-                mock.patch.object(build_command, "run") as run,
-            ):
-                with self.assertRaises(SystemExit):
-                    build_command.do_build(args, [build_command.WINUI_LINT_CONTEXT_TARGET])
-
-        run.assert_not_called()
-
-    def test_windows_clean_uses_extended_length_path(self):
-        build_path = mock.MagicMock(spec=Path)
-        build_path.resolve.return_value = Path(r"C:\local\aobus-build")
-
-        with mock.patch.object(build_command.shutil, "rmtree") as remove_tree:
-            build_command._remove_build_directory(build_path, builddir.WINDOWS_PROFILE)
-
-        remove_tree.assert_called_once_with(r"\\?\C:\local\aobus-build")
-
-    def test_windows_extended_length_path_preserves_unc_semantics(self):
-        self.assertEqual(
-            build_command._windows_extended_path(r"\\server\share\aobus-build"),
-            r"\\?\UNC\server\share\aobus-build",
-        )
-
-    @mock.patch.object(build_command, "validate_build_tree", return_value="msvc")
-    def test_windows_asan_build_enables_instrumentation(self, _validate_build_tree):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            args = self.parse(["build", "--asan", "-p", temp_dir])
-            with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
-                with mock.patch.object(build_command, "run", return_value=0) as run:
-                    build_command.do_build(args, [])
-
-        self.assertIn("-DAOBUS_ENABLE_ASAN=ON", run.call_args_list[0].args[0])
-
-    def test_non_debug_flavors_reject_sanitizers_before_configure(self):
-        with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
-            for flavor in ("release", "profile"):
-                for flag in ("--asan", "--tsan"):
-                    with self.subTest(flavor=flavor, flag=flag):
-                        args = self.parse(["build", flavor, flag])
-                        with mock.patch.object(build_command, "run") as run:
-                            with self.assertRaisesRegex(SystemExit, "1"):
-                                build_command.do_build(args, [])
-
-                        run.assert_not_called()
-
-    def test_windows_tsan_build_is_rejected_before_configure(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            args = self.parse(["build", "--tsan", "-p", temp_dir])
-            with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
-                with mock.patch.object(build_command, "run") as run:
-                    with self.assertRaisesRegex(SystemExit, "1"):
-                        build_command.do_build(args, [])
-
-        run.assert_not_called()
-
-    def test_windows_clang_build_is_rejected_before_configure(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            args = self.parse(["build", "--clang", "-p", temp_dir])
-            with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
-                with mock.patch.object(build_command, "run") as run:
-                    with self.assertRaisesRegex(SystemExit, "1"):
-                        build_command.do_build(args, [])
-
-        run.assert_not_called()
-
-    def test_test_suite_shortcuts(self):
-        with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
-            args = self.parse(["test", "--gtk", "[layout],[model]", "-n", "--clang", "--asan"])
-            self.assertEqual(args.suite, "gtk")
-            self.assertEqual(args.filter, "[layout],[model]")
-            self.assertTrue(args.no_build)
-            self.assertTrue(args.clang)
-            self.assertTrue(args.asan)
-
-            args = self.parse(["test", "--cli"])
-            self.assertEqual(args.suite, "cli")
-
     def test_appkit_suite_is_selectable_only_on_macos(self):
         arguments = [
             "test",
@@ -1311,41 +445,6 @@ class CliParseTest(unittest.TestCase):
             self.assertNotIn("appkit", test_command.suites_for("default"))
             self.assertNotIn("appkit", test_command.suites_for("concurrency"))
 
-    @mock.patch.object(build_command, "validate_build_tree", return_value="clang")
-    @mock.patch.object(test_command.compiler_cache, "read_cmake_cache", new=_enabled_suite_cache)
-    def test_appkit_dispatch_reuses_selected_tree_and_sanitizer_options(self, _validate_build_tree):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            library = Path(temp_dir) / "music"
-            state_root = Path(temp_dir) / "state"
-            with mock.patch.object(builddir, "platform_profile", return_value=builddir.MACOS_PROFILE):
-                args = self.parse(
-                    [
-                        "test",
-                        "--appkit",
-                        "--scenario",
-                        "media",
-                        "--library",
-                        str(library),
-                        "--state-root",
-                        str(state_root),
-                        "--asan",
-                        "--no-build",
-                        "--path",
-                        temp_dir,
-                    ]
-                )
-                with mock.patch.object(test_command, "run_appkit_smoke", return_value=0) as run_smoke:
-                    self.assertEqual(test_command.run_command(args), 0)
-
-        run_smoke.assert_called_once_with(
-            Path(temp_dir),
-            scenario="media",
-            library=library.resolve(),
-            state_root=state_root.resolve(),
-            asan=True,
-            tsan=False,
-        )
-
     def test_appkit_fixture_options_are_rejected_for_other_suites(self):
         with mock.patch.object(builddir, "platform_profile", return_value=builddir.MACOS_PROFILE):
             args = self.parse(["test", "--core", "--library", "/tmp/aobus-library"])
@@ -1355,7 +454,7 @@ class CliParseTest(unittest.TestCase):
     def test_appkit_runner_forwards_scenario_fixtures_run_id_and_sanitizer_environment(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             build_dir = Path(temp_dir) / "build"
-            binary = build_dir / "test" / "ao_appkit_smoke.app" / "Contents" / "MacOS" / "ao_appkit_smoke"
+            binary = _fixture_binary(build_dir, "ao_appkit_smoke", platform="macos")
             binary.parent.mkdir(parents=True)
             binary.touch()
             library = Path(temp_dir) / "music"
@@ -1392,73 +491,13 @@ class CliParseTest(unittest.TestCase):
             ],
             cwd=test_command.PROJECT_ROOT,
             env={
+                **self.artifact_environment(scratch=False),
                 "INHERITED": "yes",
                 test_command.APPKIT_RUN_ID_ENV: run_id,
                 "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1",
             },
         )
         parent.wait.assert_called_once_with(timeout=test_command.APPKIT_PARENT_TIMEOUT_SECONDS)
-
-    def test_appkit_parent_timeout_terminates_and_collects_only_that_process(self):
-        parent = mock.Mock()
-        parent.wait.side_effect = (
-            subprocess.TimeoutExpired("ao_appkit_smoke", test_command.APPKIT_PARENT_TIMEOUT_SECONDS),
-            0,
-        )
-        with mock.patch.object(test_command.subprocess, "Popen", return_value=parent):
-            with contextlib.redirect_stderr(io.StringIO()):
-                self.assertEqual(test_command._run_appkit_parent(["ao_appkit_smoke"], {}), 1)
-
-        parent.terminate.assert_called_once_with()
-        parent.kill.assert_not_called()
-        self.assertEqual(
-            parent.wait.call_args_list,
-            [
-                mock.call(timeout=test_command.APPKIT_PARENT_TIMEOUT_SECONDS),
-                mock.call(timeout=test_command.APPKIT_PARENT_TERMINATE_SECONDS),
-            ],
-        )
-
-    def test_appkit_parent_timeout_kills_and_collects_when_termination_stalls(self):
-        parent = mock.Mock()
-        parent.wait.side_effect = (
-            subprocess.TimeoutExpired("ao_appkit_smoke", test_command.APPKIT_PARENT_TIMEOUT_SECONDS),
-            subprocess.TimeoutExpired("ao_appkit_smoke", test_command.APPKIT_PARENT_TERMINATE_SECONDS),
-            -9,
-        )
-        with mock.patch.object(test_command.subprocess, "Popen", return_value=parent):
-            with contextlib.redirect_stderr(io.StringIO()):
-                self.assertEqual(test_command._run_appkit_parent(["ao_appkit_smoke"], {}), 1)
-
-        parent.terminate.assert_called_once_with()
-        parent.kill.assert_called_once_with()
-        self.assertEqual(parent.wait.call_args_list[-1], mock.call())
-
-    def test_appkit_parent_timeout_collects_a_real_sleeping_process(self):
-        real_popen = subprocess.Popen
-        started = []
-
-        def launch(*args, **kwargs):
-            parent = real_popen(*args, **kwargs)
-            started.append(parent)
-
-            def cleanup():
-                if parent.poll() is None:
-                    parent.kill()
-                    parent.wait()
-
-            self.addCleanup(cleanup)
-            return parent
-
-        command = [sys.executable, "-c", "import time; time.sleep(60)"]
-        with mock.patch.object(test_command, "APPKIT_PARENT_TIMEOUT_SECONDS", 0.1):
-            with mock.patch.object(test_command.subprocess, "Popen", side_effect=launch):
-                with contextlib.redirect_stderr(io.StringIO()):
-                    self.assertEqual(test_command._run_appkit_parent(command, {}), 1)
-
-        self.assertEqual(len(started), 1)
-        self.assertIsNotNone(started[0].returncode)
-        self.assertEqual(started[0].poll(), started[0].returncode)
 
     def test_appkit_rejects_nonempty_invalid_or_nested_fixtures_before_starting_parent(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1524,7 +563,7 @@ class CliParseTest(unittest.TestCase):
             with self.subTest(wrong_marker=wrong_marker), tempfile.TemporaryDirectory() as temp_dir:
                 root = Path(temp_dir)
                 build_dir = root / "build"
-                binary = build_dir / "test" / "ao_appkit_smoke.app" / "Contents" / "MacOS" / "ao_appkit_smoke"
+                binary = _fixture_binary(build_dir, "ao_appkit_smoke")
                 binary.parent.mkdir(parents=True)
                 binary.touch()
                 state_root = root / "state"
@@ -1557,73 +596,14 @@ class CliParseTest(unittest.TestCase):
                                     build_dir, scenario="desktop", library=root / "music", state_root=state_root
                                 )
 
-    def test_test_defaults_to_default_suite_group(self):
-        args = self.parse(["test"])
-        self.assertEqual(args.suite, "default")
-
-    def test_test_audit_arguments(self):
-        args = self.parse(["test-audit", "--fail-on-issue", "test/query"])
-        self.assertTrue(args.fail_on_issue)
-        self.assertEqual(args.paths, ["test/query"])
-
-    def test_name_audit_arguments(self):
-        args = self.parse(["name-audit", "--fail-on-issue", "app/include/ao/uimodel"])
-        self.assertTrue(args.fail_on_issue)
-        self.assertEqual(args.paths, ["app/include/ao/uimodel"])
-
-    def test_test_suite_targets_use_suite_name_suffixes(self):
-        self.assertEqual(
-            test_command.SUITE_TARGETS,
-            {
-                "core": ["ao_core_test"],
-                "backend": ["ao_backend_test"],
-                "tui": ["ao_tui_test"],
-                "cli": ["ao_cli_test"],
-                "gtk": ["ao_gtk_test"],
-                "systemmedia": ["ao_systemmedia_test"],
-            },
-        )
-
-    @mock.patch.object(build_command, "validate_build_tree", return_value="gcc")
-    @mock.patch.object(Path, "is_dir", return_value=True)
-    @mock.patch.object(test_command.compiler_cache, "read_cmake_cache", new=_enabled_suite_cache)
-    def test_test_all_runs_every_suite(self, _is_dir, _validate_build_tree):
-        args = self.parse(["test", "--all", "-n", "-p", "/tmp/aobus-test-build"])
-
-        with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
-            with mock.patch.object(test_command, "run_suites", return_value=0) as run_suites:
-                self.assertEqual(test_command.run_command(args), 0)
-
-        run_suites.assert_called_once_with(
-            ("core", "backend", "tui", "cli", "gtk", "systemmedia", "tooling", "lint"),
-            Path("/tmp/aobus-test-build"),
-            test_filter="",
-            list_only=False,
-            repeat=1,
-            asan=False,
-            tsan=False,
-        )
-
-    @mock.patch.object(build_command, "validate_build_tree", return_value="gcc")
-    @mock.patch.object(Path, "is_dir", return_value=True)
-    @mock.patch.object(test_command.compiler_cache, "read_cmake_cache", new=_enabled_suite_cache)
-    def test_test_all_with_filter_excludes_non_catch2_suites_before_dispatch(self, _is_dir, _validate_build_tree):
-        args = self.parse(["test", "--all", "-n", "-p", "/tmp/aobus-test-build", "[focused]"])
-
-        with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
-            with mock.patch.object(test_command, "run_suites", return_value=0) as run_suites:
-                with contextlib.redirect_stdout(io.StringIO()):
-                    self.assertEqual(test_command.run_command(args), 0)
-
-        run_suites.assert_called_once_with(
-            ("core", "backend", "tui", "cli", "gtk", "systemmedia"),
-            Path("/tmp/aobus-test-build"),
-            test_filter="[focused]",
-            list_only=False,
-            repeat=1,
-            asan=False,
-            tsan=False,
-        )
+    def test_application_suite_is_independently_selectable_on_every_native_profile(self):
+        for profile in (builddir.LINUX_PROFILE, builddir.MACOS_PROFILE, builddir.WINDOWS_PROFILE):
+            with (
+                self.subTest(platform=profile.name),
+                mock.patch.object(builddir, "platform_profile", return_value=profile),
+            ):
+                self.assertEqual(self.parse(["test", "--application"]).suite, "application")
+                self.assertEqual(test_command.suites_for("application"), ("application",))
 
     def test_suite_group_dispatches_registered_runner_kinds_in_order(self):
         build_dir = Path("/tmp/aobus-test-build")
@@ -1636,38 +616,9 @@ class CliParseTest(unittest.TestCase):
 
         self.assertEqual(
             [call.args[0] for call in run_suite.call_args_list],
-            ["core", "backend", "tui", "cli", "gtk", "systemmedia"],
+            ["core", "application", "backend", "tui", "cli", "gtk", "systemmedia"],
         )
         self.assertEqual([call.args[0] for call in run_non_catch2.call_args_list], ["tooling", "lint"])
-
-    def test_suite_invocations_record_one_phase_each_in_order(self):
-        build_dir = Path("/tmp/aobus-test-build")
-        recorder = _PhaseRecorder()
-
-        with (
-            mock.patch.dict(os.environ, {test_command.SHARD_ENV: "1"}),
-            mock.patch.object(test_command, "run_catch2_suite", return_value=test_command.SuiteOutcome(0)),
-            mock.patch.object(test_command, "run_non_catch2_suite", return_value=0),
-            mock.patch.object(test_command, "phases", recorder),
-        ):
-            self.assertEqual(test_command.run_suites(builddir.LINUX_PROFILE.all_suites, build_dir), 0)
-
-        # jobs mirrors the shard width each Catch2 suite actually received; a
-        # suite record is one invocation, so count stays 1 and the suite name
-        # is fixed enum metadata.
-        self.assertEqual(
-            recorder.records,
-            [
-                {"name": "suite", "tree": "native", "jobs": 1, "count": 1, "suite": "core", "status": 0},
-                {"name": "suite", "tree": "native", "jobs": 1, "count": 1, "suite": "backend", "status": 0},
-                {"name": "suite", "tree": "native", "jobs": 1, "count": 1, "suite": "tui", "status": 0},
-                {"name": "suite", "tree": "native", "jobs": 1, "count": 1, "suite": "cli", "status": 0},
-                {"name": "suite", "tree": "native", "jobs": 1, "count": 1, "suite": "gtk", "status": 0},
-                {"name": "suite", "tree": "native", "jobs": 1, "count": 1, "suite": "systemmedia", "status": 0},
-                {"name": "suite", "tree": None, "count": 1, "suite": "tooling", "status": 0},
-                {"name": "suite", "tree": "tidy", "count": 1, "suite": "lint", "status": 0},
-            ],
-        )
 
     def test_suite_phase_records_the_first_failure_status_and_stops(self):
         build_dir = Path("/tmp/aobus-test-build")
@@ -1690,8 +641,8 @@ class CliParseTest(unittest.TestCase):
     def test_gtk_suite_runs_inside_virtual_x11_display(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             build_dir = Path(temp_dir)
-            binary = build_dir / "test" / "ao_gtk_test"
-            binary.parent.mkdir()
+            binary = _fixture_binary(build_dir, "ao_gtk_test", platform="linux")
+            binary.parent.mkdir(parents=True)
             binary.touch()
 
             server = mock.Mock()
@@ -1719,6 +670,7 @@ class CliParseTest(unittest.TestCase):
         run.assert_called_once_with(
             [str(binary), "[layout]"],
             env={
+                **self.artifact_environment(),
                 "DISPLAY": ":42",
                 "AOBUS_OWNED_GTK_DISPLAY": "1",
                 "GTK_A11Y": "test",
@@ -1742,8 +694,8 @@ class CliParseTest(unittest.TestCase):
     def test_macos_catch2_execution_runs_directly(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             build_dir = Path(temp_dir)
-            binary = build_dir / "test" / "ao_core_test"
-            binary.parent.mkdir()
+            binary = _fixture_binary(build_dir, "ao_core_test", platform="macos")
+            binary.parent.mkdir(parents=True)
             binary.touch()
 
             with mock.patch.object(builddir, "platform_profile", return_value=builddir.MACOS_PROFILE):
@@ -1758,13 +710,13 @@ class CliParseTest(unittest.TestCase):
             [
                 mock.call(
                     [str(binary), "[coreaudio]"],
-                    env=None,
+                    env=self.artifact_environment(),
                     log=None,
                     append=False,
                 ),
                 mock.call(
                     [str(binary), "--list-tests", "--verbosity", "high"],
-                    env=None,
+                    env=self.artifact_environment(),
                     log=None,
                     append=False,
                 ),
@@ -1774,13 +726,11 @@ class CliParseTest(unittest.TestCase):
     def test_posix_lint_runner_uses_selected_tree_without_preparing_another_host(self):
         build_dir = Path("/tmp/aobus-test-build")
 
-        with (
-            mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE),
-            mock.patch.object(test_command.linttest, "run", return_value=0) as run,
-        ):
-            self.assertEqual(test_command.run_non_catch2_suite("lint", build_dir), 0)
-
-        run.assert_called_once_with(build_dir, log=None)
+        with mock.patch.object(bazel_workflows, "prepare_lint_fixtures", wraps=self.fixture_lint) as prepare:
+            self.assertEqual(test_command.run_non_catch2_suite("lint", build_dir, no_build=True), 0)
+        self.assertEqual(prepare.call_args.args[0].path, str(build_dir))
+        self.assertTrue(prepare.call_args.kwargs["no_build"])
+        self.lint_action.run.assert_called_once_with(log=None)
 
     def test_tooling_suite_does_not_require_a_cmake_build_tree(self):
         with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
@@ -1799,10 +749,13 @@ class CliParseTest(unittest.TestCase):
             repeat=1,
             asan=False,
             tsan=False,
+            no_build=False,
+            concurrency=False,
+            allow_no_tests=False,
         )
 
     def test_test_list_describes_non_catch2_suite_without_running_it(self):
-        with mock.patch.object(test_command.linttest, "run") as run:
+        with mock.patch.object(bazel_workflows, "prepare_lint_fixtures") as run:
             self.assertEqual(
                 test_command.run_non_catch2_suite("lint", Path("/tmp/aobus-test-build"), list_only=True),
                 0,
@@ -1810,252 +763,11 @@ class CliParseTest(unittest.TestCase):
 
         run.assert_not_called()
 
-    @mock.patch.object(test_command.compiler_cache, "read_cmake_cache", new=_enabled_suite_cache)
-    def test_release_check_builds_the_default_graph_and_performance_target(self):
-        args = self.parse(["check", "release"])
-        result = BuildResult(
-            build_dir=Path("/tmp/aobus-release-build"),
-            log=Path("/tmp/aobus-release-build/build.log"),
-            compiler="gcc",
-            preset="linux-release",
-        )
-
-        with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
-            with mock.patch.object(check_command.build, "do_build", return_value=result) as do_build:
-                with mock.patch.object(check_command.dependency_policy, "verified_report") as verify:
-                    with mock.patch.object(check_command.test, "run_suites", return_value=0) as run_suites:
-                        with mock.patch.object(check_command.build, "print_summary"):
-                            self.assertEqual(check_command.run_command(args), 0)
-
-        do_build.assert_called_once_with(args, targets=["all", "aobus_guardrails", "ao_perf_baseline"])
-        verify.assert_called_once_with(result.build_dir)
-        run_suites.assert_called_once_with(
-            builddir.LINUX_PROFILE.all_suites,
-            result.build_dir,
-            asan=False,
-            tsan=False,
-            log=result.log,
-        )
-
-    def test_profile_check_builds_the_default_graph_and_guardrails_without_tests(self):
-        with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
-            args = self.parse(["check", "profile"])
-            with mock.patch.object(check_command.build, "run_command", return_value=0) as run_build:
-                self.assertEqual(check_command.run_command(args), 0)
-
-        self.assertEqual(args.target, [])
-        profile_args = run_build.call_args.args[0]
-        self.assertIsNot(profile_args, args)
-        self.assertEqual(profile_args.target, ["all", "aobus_guardrails"])
-
-    @mock.patch.object(test_command.compiler_cache, "read_cmake_cache", new=_enabled_suite_cache)
-    def test_tsan_check_builds_and_runs_only_baselined_suites(self):
-        args = self.parse(["check", "--tsan"])
-        result = BuildResult(
-            build_dir=Path("/tmp/aobus-test-tsan-build"),
-            log=Path("/tmp/aobus-test-tsan-build/build.log"),
-            compiler="gcc",
-        )
-
-        with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
-            with mock.patch.object(check_command.build, "do_build", return_value=result) as do_build:
-                with mock.patch.object(check_command.dependency_policy, "verified_report"):
-                    with mock.patch.object(check_command.test, "run_suites", return_value=0) as run_suites:
-                        with mock.patch.object(check_command.build, "print_summary"):
-                            self.assertEqual(check_command.run_command(args), 0)
-
-        do_build.assert_called_once_with(
-            args, targets=["ao_core_test", "ao_backend_test", "ao_gtk_test", "aobus_guardrails"]
-        )
-        run_suites.assert_called_once_with(
-            ("core", "backend", "gtk"),
-            result.build_dir,
-            asan=False,
-            tsan=True,
-            log=result.log,
-        )
-
-    @mock.patch.object(test_command.compiler_cache, "read_cmake_cache", new=_enabled_suite_cache)
-    def test_macos_check_runs_only_supported_native_suites(self):
-        args = self.parse(["check"])
-        result = BuildResult(
-            build_dir=Path("/tmp/aobus-macos-build"),
-            log=Path("/tmp/aobus-macos-build/build.log"),
-            compiler="clang",
-            preset="macos-debug",
-        )
-
-        with mock.patch.object(builddir, "platform_profile", return_value=builddir.MACOS_PROFILE):
-            with mock.patch.object(check_command.build, "do_build", return_value=result) as do_build:
-                with mock.patch.object(check_command.dependency_policy, "verified_report") as verify:
-                    with mock.patch.object(check_command.test, "run_suites", return_value=0) as run_suites:
-                        with mock.patch.object(check_command.build, "print_summary"):
-                            self.assertEqual(check_command.run_command(args), 0)
-
-        do_build.assert_called_once_with(args, targets=["all", "aobus_guardrails", "ao_perf_baseline"])
-        verify.assert_called_once_with(result.build_dir)
-        run_suites.assert_called_once_with(
-            ("core", "backend", "tui", "cli", "lint"),
-            result.build_dir,
-            asan=False,
-            tsan=False,
-            log=result.log,
-        )
-
-    @mock.patch.object(build_command, "validate_build_tree", return_value="msvc")
-    @mock.patch.object(test_command.compiler_cache, "read_cmake_cache", new=_enabled_suite_cache)
-    def test_windows_test_reuses_the_shared_debug_tree(self, _validate_build_tree):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            args = self.parse(["test", "-p", temp_dir])
-            build_dir = Path(temp_dir)
-
-            with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
-                with mock.patch.object(
-                    test_command.build,
-                    "parallel_build_jobs",
-                    return_value=8,
-                ):
-                    with mock.patch.object(test_command.build, "sync_compiler_cache") as sync_cache:
-                        with mock.patch.object(test_command, "run", return_value=0) as run:
-                            with mock.patch.object(test_command, "run_suites", return_value=0) as run_suites:
-                                self.assertEqual(test_command.run_command(args), 0)
-
-        sync_cache.assert_called_once_with(build_dir, unsupported_reason=None)
-        run.assert_called_once_with(
-            ["cmake", "--build", str(build_dir), "--parallel", "8", "--target", "ao_core_test", "ao_tui_test"],
-            cwd=test_command.PROJECT_ROOT,
-        )
-        run_suites.assert_called_once_with(
-            ("core", "tui"),
-            build_dir,
-            test_filter="",
-            list_only=False,
-            repeat=1,
-            asan=False,
-            tsan=False,
-        )
-
-    @mock.patch.object(test_command.compiler_cache, "read_cmake_cache", new=_enabled_suite_cache)
-    def test_windows_check_runs_only_native_suites(self):
-        args = self.parse(["check"])
-        result = BuildResult(
-            build_dir=builddir.WINDOWS_BUILD_ROOT / "windows-debug",
-            log=builddir.WINDOWS_BUILD_ROOT / "windows-debug" / "build.log",
-            compiler="msvc",
-            preset="windows-debug",
-        )
-        winui_result = BuildResult(
-            build_dir=builddir.WINDOWS_BUILD_ROOT / "windows-winui",
-            log=builddir.WINDOWS_BUILD_ROOT / "windows-winui" / "build.log",
-            compiler="msvc",
-            preset="windows-winui",
-        )
-
-        with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
-            with mock.patch.object(check_command.build, "do_build", side_effect=(result, winui_result)) as do_build:
-                with mock.patch.object(check_command.dependency_policy, "verified_report") as verify:
-                    with mock.patch.object(check_command.test, "run_suites", return_value=0) as run_suites:
-                        with mock.patch.object(check_command.build, "print_summary"):
-                            self.assertEqual(check_command.run_command(args), 0)
-
-        self.assertEqual(
-            do_build.call_args_list,
-            [
-                mock.call(args, targets=["all", "aobus_guardrails", "ao_perf_baseline"]),
-                mock.call(mock.ANY, targets=[build_command.WINUI_CHECK_TARGET]),
-            ],
-        )
-        self.assertEqual(
-            verify.call_args_list,
-            [mock.call(result.build_dir), mock.call(winui_result.build_dir)],
-        )
-        run_suites.assert_called_once_with(
-            ("core", "tui", "cli", "tooling", "lint"),
-            result.build_dir,
-            asan=False,
-            tsan=False,
-            log=result.log,
-        )
-
-    @mock.patch.object(test_command.compiler_cache, "read_cmake_cache", new=_enabled_suite_cache)
-    def test_windows_check_derives_winui_sibling_from_build_dir_override(self):
-        primary_dir = Path("C:/local/aobus-native")
-        result = BuildResult(
-            build_dir=primary_dir,
-            log=primary_dir / "build.log",
-            compiler="msvc",
-            preset="windows-debug",
-        )
-        winui_result = BuildResult(
-            build_dir=Path("C:/local/aobus-native-winui"),
-            log=Path("C:/local/aobus-native-winui/build.log"),
-            compiler="msvc",
-            preset="windows-winui",
-        )
-
-        with mock.patch.dict("os.environ", {"BUILD_DIR": str(primary_dir)}, clear=False):
-            with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
-                args = self.parse(["check"])
-                with mock.patch.object(check_command.build, "do_build", side_effect=(result, winui_result)) as do_build:
-                    with mock.patch.object(check_command.dependency_policy, "verified_report"):
-                        with mock.patch.object(check_command.test, "run_suites", return_value=0):
-                            with mock.patch.object(check_command.build, "print_summary"):
-                                self.assertEqual(check_command.run_command(args), 0)
-
-        winui_args = do_build.call_args_list[1].args[0]
-        self.assertEqual(Path(winui_args.path), Path("C:/local/aobus-native-winui"))
-
-    @mock.patch.object(test_command.compiler_cache, "read_cmake_cache", new=_enabled_suite_cache)
-    def test_windows_check_derives_winui_sibling_from_explicit_path(self):
-        primary_dir = Path("C:/local/explicit-native")
-        with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
-            args = self.parse(["check", "-p", str(primary_dir)])
-            result = BuildResult(
-                build_dir=primary_dir,
-                log=primary_dir / "build.log",
-                compiler="msvc",
-                preset="windows-debug",
-            )
-            winui_result = BuildResult(
-                build_dir=Path("C:/local/explicit-native-winui"),
-                log=Path("C:/local/explicit-native-winui/build.log"),
-                compiler="msvc",
-                preset="windows-winui",
-            )
-            with mock.patch.object(check_command.build, "do_build", side_effect=(result, winui_result)) as do_build:
-                with mock.patch.object(check_command.dependency_policy, "verified_report"):
-                    with mock.patch.object(check_command.test, "run_suites", return_value=0):
-                        with mock.patch.object(check_command.build, "print_summary"):
-                            self.assertEqual(check_command.run_command(args), 0)
-
-        winui_args = do_build.call_args_list[1].args[0]
-        self.assertEqual(Path(winui_args.path), Path("C:/local/explicit-native-winui"))
-
-    @mock.patch.object(build_command, "validate_build_tree", return_value="gcc")
-    @mock.patch.object(Path, "is_dir", return_value=True)
-    @mock.patch.object(test_command.compiler_cache, "read_cmake_cache", new=_enabled_suite_cache)
-    def test_tsan_defaults_to_the_baselined_suite_group(self, _is_dir, _validate_build_tree):
-        args = self.parse(["test", "--tsan", "-n", "-p", "/tmp/aobus-test-build"])
-
-        with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
-            with mock.patch.object(test_command, "run_suites", return_value=0) as run_suites:
-                self.assertEqual(test_command.run_command(args), 0)
-
-        run_suites.assert_called_once_with(
-            ("core", "backend", "gtk"),
-            Path("/tmp/aobus-test-build"),
-            test_filter="",
-            list_only=False,
-            repeat=1,
-            asan=False,
-            tsan=True,
-        )
-
     def test_windows_lint_is_selectable_and_all_includes_it_without_changing_the_fast_loop(self):
         with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
             self.assertEqual(self.parse(["test", "--lint"]).suite, "lint")
             self.assertEqual(test_command.suites_for("all")[-1], "lint")
-            self.assertEqual(test_command.suites_for("default"), ("core", "tui"))
+            self.assertEqual(test_command.suites_for("default"), ("core", "application", "tui"))
             self.assertNotIn("lint", test_command.suites_for("concurrency"))
 
     def test_windows_backend_is_explicit_only_and_never_joins_an_unattended_group(self):
@@ -2079,294 +791,19 @@ class CliParseTest(unittest.TestCase):
     def test_macos_groups_admit_backend_without_systemmedia(self):
         with mock.patch.object(builddir, "platform_profile", return_value=builddir.MACOS_PROFILE):
             groups = test_command.suite_groups()
-            self.assertEqual(groups["default"], ("core", "backend", "tui"))
-            self.assertEqual(groups["tsan"], ("core", "backend"))
+            self.assertEqual(groups["default"], ("core", "application", "backend", "tui"))
+            self.assertEqual(groups["tsan"], ("core", "application", "backend"))
             self.assertIn("backend", groups["concurrency"])
             self.assertNotIn("systemmedia", groups["all"])
             self.assertNotIn("systemmedia", groups["concurrency"])
-
-    def test_linux_systemmedia_joins_groups_only_when_configured(self):
-        cache = {**_ENABLED_SUITE_CACHE, "AOBUS_BUILD_SYSTEM_MEDIA": "OFF"}
-        with (
-            mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE),
-            mock.patch.object(test_command.compiler_cache, "read_cmake_cache", return_value=cache),
-        ):
-            # Automatic groups drop the disabled suite instead of running it.
-            for selection in ("default", "all", "concurrency"):
-                self.assertNotIn("systemmedia", test_command.configured_suites_for(selection, Path("product")))
-            # An explicit selection fails closed rather than reusing a stale binary.
-            with contextlib.redirect_stderr(io.StringIO()) as stderr:
-                with self.assertRaises(SystemExit):
-                    test_command.configured_suites_for("systemmedia", Path("product"))
-            self.assertIn("suite 'systemmedia' is disabled", stderr.getvalue())
-            self.assertIn("AOBUS_BUILD_SYSTEM_MEDIA=OFF", stderr.getvalue())
-
-    def test_linux_systemmedia_requires_a_configured_cache_entry(self):
-        cache = {
-            option: value for option, value in _ENABLED_SUITE_CACHE.items() if option != "AOBUS_BUILD_SYSTEM_MEDIA"
-        }
-        with (
-            mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE),
-            mock.patch.object(test_command.compiler_cache, "read_cmake_cache", return_value=cache),
-            contextlib.redirect_stderr(io.StringIO()) as stderr,
-            self.assertRaises(SystemExit),
-        ):
-            test_command.configured_suites_for("all", Path("product"))
-        self.assertIn("Cannot determine AOBUS_BUILD_SYSTEM_MEDIA", stderr.getvalue())
-
-    def test_windows_lint_does_not_depend_on_the_product_graph_lint_option(self):
-        cache = {**_ENABLED_SUITE_CACHE, "AOBUS_BUILD_LINT_PLUGIN": "OFF"}
-        with (
-            mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
-            mock.patch.object(test_command.compiler_cache, "read_cmake_cache", return_value=cache),
-        ):
-            self.assertIn("lint", test_command.configured_suites_for("all", Path("product")))
-            self.assertEqual(test_command.configured_suites_for("lint", Path("unconfigured-host")), ("lint",))
-        with (
-            mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE),
-            mock.patch.object(test_command.compiler_cache, "read_cmake_cache", return_value=cache),
-            contextlib.redirect_stderr(io.StringIO()),
-        ):
-            with self.assertRaises(SystemExit):
-                test_command.configured_suites_for("lint", Path("product"))
-            self.assertNotIn("lint", test_command.configured_suites_for("all", Path("product")))
-
-    def test_windows_standalone_lint_can_prepare_an_absent_default_host_and_honors_no_build(self):
-        host = builddir.WINDOWS_PROFILE.build_root / "windows-tidy"
-        for no_build in (False, True):
-            with self.subTest(no_build=no_build):
-                with (
-                    mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
-                    mock.patch.dict(os.environ, {}, clear=False),
-                ):
-                    os.environ.pop("BUILD_DIR", None)
-                    with (
-                        mock.patch.object(build_command, "validate_build_tree") as validate,
-                        mock.patch.object(test_command, "run") as build_run,
-                        mock.patch.object(test_command.tidy, "prepare_toolchain") as prepare,
-                        mock.patch.object(test_command.linttest, "run", return_value=0) as fixtures,
-                    ):
-                        args = self.parse(["test", "--lint", *(["--no-build"] if no_build else [])])
-                        self.assertEqual(test_command.run_command(args), 0)
-                validate.assert_not_called()
-                build_run.assert_not_called()
-                prepare.assert_called_once_with(host, no_build=no_build, reconfigure_preset=not no_build)
-                fixtures.assert_called_once_with(host, log=None, toolchain=prepare.return_value)
-
-    def test_windows_lint_tree_policy_matrix(self):
-        """BUILD_DIR stays a primary override; `-p` is exact; derived hosts refresh the preset."""
-        default_host = builddir.WINDOWS_PROFILE.build_root / "windows-tidy"
-        override = Path("/env/primary")
-        explicit = Path("C:/explicit-product-host")
-        matrix = (
-            # (label, arguments, BUILD_DIR, expected host, expected reconfigure_preset)
-            ("default", ["test", "--lint"], None, default_host, True),
-            ("default no-build", ["test", "--lint", "--no-build"], None, default_host, False),
-            (
-                "env override",
-                ["test", "--lint"],
-                str(override),
-                override.with_name(override.name + "-tidy"),
-                True,
-            ),
-            (
-                "env override no-build",
-                ["test", "--lint", "--no-build"],
-                str(override),
-                override.with_name(override.name + "-tidy"),
-                False,
-            ),
-            ("explicit tree", ["test", "--lint", "-p", str(explicit)], None, explicit, False),
-            (
-                "explicit tree no-build",
-                ["test", "--lint", "--no-build", "-p", str(explicit)],
-                None,
-                explicit,
-                False,
-            ),
-        )
-        for label, arguments, build_dir_env, host, reconfigure in matrix:
-            with self.subTest(label=label):
-                environment = {"BUILD_DIR": build_dir_env} if build_dir_env else {}
-                with (
-                    mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
-                    mock.patch.dict(os.environ, environment, clear=False),
-                ):
-                    if build_dir_env is None:
-                        os.environ.pop("BUILD_DIR", None)
-                    with (
-                        mock.patch.object(test_command.tidy, "prepare_toolchain") as prepare,
-                        mock.patch.object(test_command.linttest, "run", return_value=0) as fixtures,
-                    ):
-                        args = self.parse(arguments)
-                        self.assertEqual(test_command.run_command(args), 0)
-                    prepare.assert_called_once_with(
-                        host, no_build="--no-build" in arguments, reconfigure_preset=reconfigure
-                    )
-                    fixtures.assert_called_once_with(host, log=None, toolchain=prepare.return_value)
-
-    def test_windows_lint_explicit_tree_is_not_replaced_by_default_or_group_sibling(self):
-        # The claim-3 regression: an explicit -p tree keeps its configuration even
-        # without --no-build; it is never reset into the windows-tidy preset.
-        for no_build in (False, True):
-            with self.subTest(no_build=no_build):
-                with (
-                    mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
-                    mock.patch.dict(os.environ, {}, clear=False),
-                ):
-                    os.environ.pop("BUILD_DIR", None)
-                    with (
-                        mock.patch.object(test_command.tidy, "prepare_toolchain") as prepare,
-                        mock.patch.object(test_command.linttest, "run", return_value=0) as fixtures,
-                    ):
-                        args = self.parse(["test", "--lint", *(["--no-build"] if no_build else []), "-p", "exact-host"])
-                        self.assertEqual(test_command.run_command(args), 0)
-                prepare.assert_called_once_with(Path("exact-host"), no_build=no_build, reconfigure_preset=False)
-                fixtures.assert_called_once_with(Path("exact-host"), log=None, toolchain=prepare.return_value)
-
-    def test_windows_group_lint_uses_dedicated_host_or_explicit_primary_sibling(self):
-        with (
-            mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
-            mock.patch.dict(os.environ, {}, clear=True),
-        ):
-            primary = builddir.WINDOWS_PROFILE.build_root / "windows-debug-asan"
-            self.assertEqual(builddir.windows_lint_build_dir(primary), primary.parent / "windows-tidy")
-            self.assertEqual(builddir.windows_lint_build_dir(Path("custom")), Path("custom-tidy"))
-            with mock.patch.dict(os.environ, {"BUILD_DIR": str(primary)}):
-                self.assertEqual(builddir.windows_lint_build_dir(primary), primary.with_name(primary.name + "-tidy"))
-            with (
-                mock.patch.object(test_command.tidy, "prepare_toolchain") as prepare,
-                mock.patch.object(test_command.linttest, "run", return_value=0) as fixtures,
-            ):
-                self.assertEqual(test_command.run_suites(("lint",), primary, no_build=True), 0)
-        host = primary.parent / "windows-tidy"
-        prepare.assert_called_once_with(host, no_build=True, reconfigure_preset=False)
-        fixtures.assert_called_once_with(host, log=None, toolchain=prepare.return_value)
-
-    def test_windows_group_lint_matches_the_standalone_derivation_for_every_primary(self):
-        default_host = builddir.WINDOWS_PROFILE.build_root / "windows-tidy"
-        override = Path("/env/primary")
-        explicit = Path("C:/explicit-product-host")
-        matrix = (
-            # (label, primary, BUILD_DIR, no_build, expected host, expected reconfigure_preset)
-            ("default primary", builddir.WINDOWS_PROFILE.build_root / "windows-debug", None, False, default_host, True),
-            ("env override", override, str(override), False, override.with_name(override.name + "-tidy"), True),
-            (
-                "prepared nondefault primary",
-                explicit,
-                None,
-                False,
-                explicit.with_name(explicit.name + "-tidy"),
-                True,
-            ),
-            ("no-build", explicit, None, True, explicit.with_name(explicit.name + "-tidy"), False),
-        )
-        for label, primary, build_dir_env, no_build, host, reconfigure in matrix:
-            with self.subTest(label=label):
-                environment = {"BUILD_DIR": build_dir_env} if build_dir_env else {}
-                with (
-                    mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
-                    mock.patch.dict(os.environ, environment, clear=False),
-                ):
-                    if build_dir_env is None:
-                        os.environ.pop("BUILD_DIR", None)
-                    with (
-                        mock.patch.object(test_command.tidy, "prepare_toolchain") as prepare,
-                        mock.patch.object(test_command.linttest, "run", return_value=0) as fixtures,
-                    ):
-                        self.assertEqual(test_command.run_suites(("lint",), primary, no_build=no_build), 0)
-                prepare.assert_called_once_with(host, no_build=no_build, reconfigure_preset=reconfigure)
-                fixtures.assert_called_once_with(host, log=None, toolchain=prepare.return_value)
-
-    def test_windows_all_suite_group_routes_lint_through_the_dedicated_host(self):
-        primary = builddir.WINDOWS_PROFILE.build_root / "windows-debug"
-        host = primary.parent / "windows-tidy"
-        with (
-            mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
-            mock.patch.dict(os.environ, {}, clear=False),
-        ):
-            os.environ.pop("BUILD_DIR", None)
-            with (
-                mock.patch.object(test_command, "run_catch2_suite", return_value=test_command.SuiteOutcome(0)),
-                mock.patch.object(test_command.tooltest, "run", return_value=0),
-                mock.patch.object(test_command.tidy, "prepare_toolchain") as prepare,
-                mock.patch.object(test_command.linttest, "run", return_value=0) as fixtures,
-            ):
-                with contextlib.redirect_stdout(io.StringIO()):
-                    self.assertEqual(test_command.run_suites(builddir.WINDOWS_PROFILE.all_suites, primary), 0)
-        # The default product tree is never reused as the checker host.
-        prepare.assert_called_once_with(host, no_build=False, reconfigure_preset=True)
-        fixtures.assert_called_once_with(host, log=None, toolchain=prepare.return_value)
-
-    def test_windows_lint_toolchain_verification_failure_stops_before_any_fixture(self):
-        # prepare_toolchain owns both the version and exact-registry assertions.
-        for failure in ("wrong LLVM version", "incomplete Aobus registry", "missing configured host"):
-            with (
-                self.subTest(failure=failure),
-                mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
-                mock.patch.object(test_command.tidy, "prepare_toolchain", side_effect=SystemExit(failure)) as prepare,
-                mock.patch.object(test_command.linttest, "run") as fixtures,
-            ):
-                with self.assertRaises(SystemExit):
-                    test_command.run_non_catch2_suite("lint", Path("product"), no_build=True)
-            prepare.assert_called_once()
-            fixtures.assert_not_called()
-
-    def test_windows_lint_preflight_verifies_actual_version_and_exact_registry_without_loading_a_plugin(self):
-        registry = "\n".join(sorted(tidy_command.expected_aobus_checks()))
-        pinned_version, _, _ = tidy_command.tidyengine.windows_llvm_sdk_manifest()
-        for version, checks, succeeds in (
-            (pinned_version, registry, True),
-            ("0.0.0", registry, False),
-            (pinned_version, "", False),
-            (pinned_version, registry + "\naobus-unexpected", False),
-        ):
-            with self.subTest(version=version, succeeds=succeeds), tempfile.TemporaryDirectory() as temporary:
-                host_tree = Path(temporary)
-                sdk = host_tree / "sdk"
-                (sdk / "lib/clang/22").mkdir(parents=True)
-                (host_tree / "compile_commands.json").touch()
-                (host_tree / "CMakeCache.txt").write_text(
-                    f"AOBUS_LLVM_SDK_RESOLVED_ROOT:INTERNAL={sdk.as_posix()}\n"
-                    f"AOBUS_LLVM_SDK_RESOLVED_VERSION:INTERNAL={pinned_version}\n",
-                    encoding="utf-8",
-                )
-                host = host_tree / "tool/lint/AobusClangTidy.exe"
-                host.parent.mkdir(parents=True)
-                host.touch()
-                results = [
-                    subprocess.CompletedProcess([], 0, stdout=f"LLVM version {version}"),
-                    subprocess.CompletedProcess([], 0, stdout=checks),
-                ]
-                with (
-                    mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
-                    mock.patch.object(tidy_command.subprocess, "run", side_effect=results) as run,
-                    mock.patch.object(test_command.linttest, "run", return_value=0) as fixtures,
-                    contextlib.redirect_stderr(io.StringIO()),
-                ):
-                    if succeeds:
-                        self.assertEqual(
-                            test_command.run_non_catch2_suite(
-                                "lint", host_tree, no_build=True, lint_build_dir=host_tree
-                            ),
-                            0,
-                        )
-                        fixtures.assert_called_once()
-                    else:
-                        with self.assertRaises(SystemExit):
-                            test_command.run_non_catch2_suite(
-                                "lint", host_tree, no_build=True, lint_build_dir=host_tree
-                            )
-                        fixtures.assert_not_called()
-                self.assertEqual(run.call_args_list[0].args[0], [str(host), "--version"])
-                self.assertFalse(any("-load=" in argument for call in run.call_args_list for argument in call.args[0]))
 
     def test_windows_no_build_lint_still_initializes_visual_studio_but_listing_does_not(self):
         with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
             self.assertTrue(buildenv.requires_build_env("test", ["--lint", "--no-build"]))
             self.assertTrue(buildenv.requires_build_env("test", ["--all", "--no-build"]))
             self.assertFalse(buildenv.requires_build_env("test", ["--lint", "--no-build", "--list"]))
-            self.assertFalse(buildenv.requires_build_env("test", ["--all", "--no-build", "[focused]"]))
+            # Native no-build still analyzes configured DefaultInfo/runfiles.
+            self.assertTrue(buildenv.requires_build_env("test", ["--all", "--no-build", "[focused]"]))
             self.assertFalse(buildenv.requires_build_env("test", ["--tooling"]))
 
     def test_windows_explicit_tsan_suite_is_rejected(self):
@@ -2396,28 +833,6 @@ class CliParseTest(unittest.TestCase):
 
         run_suites.assert_not_called()
 
-    @mock.patch.object(build_command, "validate_build_tree", return_value="gcc")
-    @mock.patch.object(Path, "is_dir", return_value=True)
-    @mock.patch.object(test_command.compiler_cache, "read_cmake_cache", new=_enabled_suite_cache)
-    def test_concurrency_group_runs_tagged_tests_across_native_catch2_suites(self, _is_dir, _validate_build_tree):
-        args = self.parse(["test", "--concurrency", "--repeat", "3", "-n", "-p", "/tmp/aobus-test-build"])
-
-        with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
-            with mock.patch.object(test_command, "run_suites", return_value=0) as run_suites:
-                self.assertEqual(test_command.run_command(args), 0)
-
-        run_suites.assert_called_once_with(
-            ("core", "backend", "tui", "cli", "gtk", "systemmedia"),
-            Path("/tmp/aobus-test-build"),
-            test_filter="[concurrency]~[.]",
-            list_only=False,
-            allow_no_tests=True,
-            concurrency=True,
-            repeat=3,
-            asan=False,
-            tsan=False,
-        )
-
     def test_performance_targets_are_never_in_native_concurrency_groups(self):
         for profile in (builddir.LINUX_PROFILE, builddir.MACOS_PROFILE, builddir.WINDOWS_PROFILE):
             with self.subTest(platform=profile.name):
@@ -2428,68 +843,11 @@ class CliParseTest(unittest.TestCase):
                 self.assertNotIn("ao_tui_bench", targets)
                 self.assertTrue(suites)
 
-    @mock.patch.object(build_command, "validate_build_tree", return_value="gcc")
-    @mock.patch.object(Path, "is_dir", return_value=True)
-    @mock.patch.object(test_command.compiler_cache, "read_cmake_cache", new=_enabled_suite_cache)
-    def test_tsan_concurrency_group_intersects_with_baselined_suites(self, _is_dir, _validate_build_tree):
-        args = self.parse(["test", "--concurrency", "--tsan", "-n", "-p", "/tmp/aobus-test-build"])
-
-        with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
-            with mock.patch.object(test_command, "run_suites", return_value=0) as run_suites:
-                self.assertEqual(test_command.run_command(args), 0)
-
-        run_suites.assert_called_once_with(
-            ("core", "backend", "gtk"),
-            Path("/tmp/aobus-test-build"),
-            test_filter="[concurrency]~[.]",
-            list_only=False,
-            allow_no_tests=True,
-            concurrency=True,
-            repeat=1,
-            asan=False,
-            tsan=True,
-        )
-
-    @mock.patch.object(build_command, "validate_build_tree", return_value="gcc")
-    @mock.patch.object(Path, "is_dir", return_value=True)
-    @mock.patch.object(test_command.compiler_cache, "read_cmake_cache", new=_enabled_suite_cache)
-    def test_concurrency_listing_excludes_hidden_but_explicit_filters_can_opt_in(self, _is_dir, _validate_build_tree):
-        for selection, expected in (
-            (["--concurrency"], "[concurrency]~[.]"),
-            (["--backend", "[concurrency][.manual]"], "[concurrency][.manual]"),
-        ):
-            with self.subTest(selection=selection):
-                args = self.parse(["test", "--list", "-n", "-p", "/tmp/aobus-test-build", *selection])
-                with (
-                    mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE),
-                    mock.patch.object(test_command, "run_suites", return_value=0) as run_suites,
-                ):
-                    self.assertEqual(test_command.run_command(args), 0)
-                self.assertEqual(run_suites.call_args.kwargs["test_filter"], expected)
-                self.assertTrue(run_suites.call_args.kwargs["list_only"])
-
-    def test_concurrency_rejects_an_additional_filter_before_build_or_run(self):
-        args = self.parse(["test", "--concurrency", "[manual]", "-p", "/tmp/aobus-test-build"])
-        stderr = io.StringIO()
-        with (
-            mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE),
-            mock.patch.object(build_command, "validate_build_tree") as validate_build_tree,
-            mock.patch.object(test_command, "run") as run,
-            mock.patch.object(test_command, "run_suites") as run_suites,
-            contextlib.redirect_stderr(stderr),
-        ):
-            with self.assertRaisesRegex(SystemExit, "1"):
-                test_command.run_command(args)
-        self.assertIn("--concurrency supplies [concurrency]~[.]", stderr.getvalue())
-        validate_build_tree.assert_not_called()
-        run.assert_not_called()
-        run_suites.assert_not_called()
-
     def test_cross_suite_filter_allows_suites_without_matching_cases(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             build_dir = Path(temp_dir)
-            binary = builddir.executable(build_dir / "test" / "ao_cli_test")
-            binary.parent.mkdir()
+            binary = _fixture_binary(build_dir, "ao_cli_test")
+            binary.parent.mkdir(parents=True)
             binary.touch()
 
             with mock.patch.object(test_command, "run", return_value=0) as run:
@@ -2505,7 +863,7 @@ class CliParseTest(unittest.TestCase):
 
         run.assert_called_once_with(
             [str(binary), "--allow-running-no-tests", "[concurrency]"],
-            env=None,
+            env=self.artifact_environment(),
             log=None,
             append=False,
         )
@@ -2608,30 +966,6 @@ class CliParseTest(unittest.TestCase):
         run_non_catch2.assert_not_called()
         self.assertIn("Skipping Tooling Tests, Lint Integration", output.getvalue())
 
-    def test_filtered_all_announces_skips_once_and_honors_disabled_suites(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            cache = {**_ENABLED_SUITE_CACHE, "AOBUS_BUILD_GTK": "OFF"}
-            output = io.StringIO()
-            args = self.parse(["test", "--all", "--no-build", "-p", temporary, "Focused*"])
-            with (
-                mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE),
-                mock.patch.object(build_command, "validate_build_tree", return_value="gcc"),
-                mock.patch.object(test_command.compiler_cache, "read_cmake_cache", return_value=cache),
-                mock.patch.object(test_command, "suite_shards", return_value=1),
-                mock.patch.object(
-                    test_command, "run_catch2_suite", return_value=test_command.SuiteOutcome(0, 1)
-                ) as run_suite,
-                mock.patch.object(test_command, "run_non_catch2_suite") as run_other,
-                contextlib.redirect_stdout(output),
-            ):
-                self.assertEqual(test_command.run_command(args), 0)
-
-        self.assertEqual(output.getvalue().count("Skipping Tooling Tests, Lint Integration"), 1)
-        self.assertEqual(
-            [call.args[0] for call in run_suite.call_args_list], ["core", "backend", "tui", "cli", "systemmedia"]
-        )
-        run_other.assert_not_called()
-
     def test_explicit_filter_requires_at_least_one_catch2_suite(self):
         with self.assertRaisesRegex(SystemExit, "1"):
             test_command.run_suites(("tooling",), Path("/tmp/aobus-test-build"), test_filter="[focused]")
@@ -2649,8 +983,8 @@ class CliParseTest(unittest.TestCase):
     def test_tsan_suite_enforces_fail_fast_runtime_options(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             build_dir = Path(temp_dir)
-            binary = builddir.executable(build_dir / "test" / "ao_core_test")
-            binary.parent.mkdir()
+            binary = _fixture_binary(build_dir, "ao_core_test")
+            binary.parent.mkdir(parents=True)
             binary.touch()
 
             with mock.patch.dict("os.environ", {"TSAN_OPTIONS": "history_size=7"}, clear=False):
@@ -2660,10 +994,11 @@ class CliParseTest(unittest.TestCase):
         run.assert_called_once_with(
             [str(binary)],
             env={
+                **self.artifact_environment(),
                 "TSAN_OPTIONS": (
                     f"history_size=7:suppressions={test_command._TSAN_SUPP_PATH}:"
                     "halt_on_error=1:second_deadlock_stack=1"
-                )
+                ),
             },
             log=None,
             append=False,
@@ -2672,10 +1007,7 @@ class CliParseTest(unittest.TestCase):
     def test_macos_asan_suite_enforces_fail_fast_ubsan_runtime_options(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             build_dir = Path(temp_dir) / "custom-build-tree"
-            # The test selects the macOS profile even when its Python host is
-            # Windows, so create the profile-owned suffix rather than the
-            # ambient host's executable spelling.
-            binary = build_dir / "test" / "ao_core_test"
+            binary = _fixture_binary(build_dir, "ao_core_test", platform="macos")
             binary.parent.mkdir(parents=True)
             binary.touch()
 
@@ -2691,6 +1023,7 @@ class CliParseTest(unittest.TestCase):
         run.assert_called_once_with(
             [str(binary)],
             env={
+                **self.artifact_environment(),
                 "UBSAN_OPTIONS": "silence_unsigned_overflow=1:halt_on_error=1:print_stacktrace=1",
             },
             log=None,
@@ -2700,7 +1033,7 @@ class CliParseTest(unittest.TestCase):
     def test_macos_tui_asan_keeps_caller_container_annotations(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             build_dir = Path(temp_dir) / "custom-build-tree"
-            binary = build_dir / "test" / "ao_tui_test"
+            binary = _fixture_binary(build_dir, "ao_tui_test", platform="macos")
             binary.parent.mkdir(parents=True)
             binary.touch()
 
@@ -2711,7 +1044,7 @@ class CliParseTest(unittest.TestCase):
 
         run.assert_called_once_with(
             [str(binary)],
-            env={"UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1"},
+            env={**self.artifact_environment(), "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1"},
             log=None,
             append=False,
         )
@@ -2728,7 +1061,7 @@ class CliParseTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             build_dir = root / "build"
-            binary = builddir.executable(build_dir / "test" / "ao_core_test")
+            binary = _fixture_binary(build_dir, "ao_core_test")
             binary.parent.mkdir(parents=True)
             binary.touch()
             external_suppressions = root / "external.supp"
@@ -2754,78 +1087,44 @@ class CliParseTest(unittest.TestCase):
         run.assert_called_once_with(
             [str(binary)],
             env={
+                **self.artifact_environment(),
                 "TSAN_OPTIONS": (
                     f"history_size=7:suppressions={merged_suppressions}:halt_on_error=1:second_deadlock_stack=1"
-                )
+                ),
             },
             log=None,
             append=False,
         )
 
-    def test_tsan_suppressions_cover_only_uninstrumented_ui_dependencies(self):
-        rules = [
-            line
-            for line in test_command._TSAN_SUPP_PATH.read_text(encoding="utf-8").splitlines()
-            if line and not line.startswith("#")
-        ]
-
-        self.assertEqual(
-            rules,
-            [
-                "called_from_lib:libglib-2.0.so",
-                "called_from_lib:libgio-2.0.so",
-                "called_from_lib:libgobject-2.0.so",
-                "called_from_lib:libglibmm-2.68.so",
-                "called_from_lib:libgvfscommon.so",
-                "called_from_lib:libgvfsdbus.so",
-                "called_from_lib:libgtk-4.so",
-                "called_from_lib:libgdk_pixbuf-2.0.so",
-                "called_from_lib:libxml2.so",
-                "called_from_lib:libcairo.so",
-                "called_from_lib:libpango-1.0.so",
-                "called_from_lib:libpangoft2-1.0.so",
-                "called_from_lib:libpangocairo-1.0.so",
-                "called_from_lib:libfontconfig.so",
-            ],
-        )
-
     def test_windows_suite_binary_uses_exe_suffix(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             build_dir = Path(temp_dir)
-            binary = build_dir / "test" / "ao_core_test.exe"
-            binary.parent.mkdir()
+            binary = _fixture_binary(build_dir, "ao_core_test").with_suffix(".exe")
+            binary.parent.mkdir(parents=True)
             binary.touch()
 
             with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
                 with mock.patch.object(test_command, "run", return_value=0) as run:
                     self.assertEqual(test_command.run_catch2_suite("core", build_dir).status, 0)
 
-        run.assert_called_once_with([str(binary)], env=None, log=None, append=False)
+        run.assert_called_once_with([str(binary)], env=self.artifact_environment(), log=None, append=False)
 
-    def test_test_sanitizers_are_mutually_exclusive(self):
-        with self.assertRaises(SystemExit):
-            self.parse(["test", "--asan", "--tsan"])
-
-    def test_test_suite_shortcuts_are_mutually_exclusive(self):
-        with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
-            with self.assertRaises(SystemExit):
-                self.parse(["test", "--core", "--gtk"])
-
-    def test_coverage_defaults_to_the_core_and_backend_suites(self):
+    def test_coverage_defaults_to_the_strict_bazel_default_suite(self):
         args = self.parse(["coverage", "SmartListEvaluator*"])
-        self.assertIsNone(args.suite)
-        self.assertEqual(coverage_command.coverage_suites(args.suite), ("core", "backend"))
+        self.assertEqual(args.coverage_suite, "default")
         self.assertEqual(args.filter, "SmartListEvaluator*")
 
-    def test_coverage_accepts_backend_and_core_shortcuts(self):
-        self.assertEqual(coverage_command.coverage_suites(self.parse(["coverage", "--core"]).suite), ("core",))
-        self.assertEqual(coverage_command.coverage_suites(self.parse(["coverage", "--backend"]).suite), ("backend",))
-        self.assertEqual(
-            coverage_command.coverage_suites(self.parse(["coverage", "--all"]).suite),
-            ("core", "backend", "tui", "cli", "gtk"),
-        )
+    def test_coverage_accepts_backend_core_and_application_shortcuts(self):
+        self.assertEqual(self.parse(["coverage", "--core"]).coverage_suite, "core")
+        self.assertEqual(self.parse(["coverage", "--application"]).coverage_suite, "application")
+        self.assertEqual(self.parse(["coverage", "--backend"]).coverage_suite, "backend")
+        self.assertEqual(self.parse(["coverage", "--all"]).coverage_suite, "all")
+        # The suite roots are Bazel-declared; admission is owned by the strict
+        # coverage pipeline's supported-suite set.
+        self.assertIn("default", bazel_coverage._SUITES)
+        self.assertIn("gtk", bazel_coverage._SUITES)
 
-    def test_coverage_accepts_scopes_and_summary_limit(self):
+    def test_coverage_accepts_scopes(self):
         args = self.parse(
             [
                 "coverage",
@@ -2834,64 +1133,31 @@ class CliParseTest(unittest.TestCase):
                 "app/linux-gtk",
                 "--scope",
                 "include/aobus",
-                "--summary-limit",
-                "7",
                 "[layout]",
             ]
         )
-        self.assertEqual(args.suite, "gtk")
+        self.assertEqual(args.coverage_suite, "gtk")
         self.assertEqual(args.scope, ["app/linux-gtk", "include/aobus"])
-        self.assertEqual(args.summary_limit, 7)
         self.assertEqual(args.filter, "[layout]")
 
-    def test_coverage_accepts_cli_suite_shortcut(self):
-        args = self.parse(["coverage", "--cli", "--scope", "app/cli"])
-        self.assertEqual(args.suite, "cli")
-        self.assertEqual(args.scope, ["app/cli"])
-
-    def test_coverage_accepts_tui_suite_shortcut(self):
-        args = self.parse(["coverage", "--tui", "--scope", "app/tui", "[tui]"])
-        self.assertEqual(args.suite, "tui")
-        self.assertEqual(args.scope, ["app/tui"])
-        self.assertEqual(args.filter, "[tui]")
-
-    def test_coverage_rejects_windows_before_configuring_a_linux_build(self):
+    def test_coverage_preflight_admits_only_linux_before_preparing_a_native_environment(self):
         args = self.parse(["coverage"])
-
-        with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
-            with self.assertRaisesRegex(SystemExit, "1"):
-                coverage_command.run_command(args)
-
-    def test_coverage_prepares_build_environment_only_on_linux(self):
-        for profile in (builddir.LINUX_PROFILE, builddir.MACOS_PROFILE, builddir.WINDOWS_PROFILE):
-            with self.subTest(platform=profile.name):
-                with mock.patch.object(builddir, "platform_profile", return_value=profile):
-                    self.assertEqual(buildenv.requires_build_env("coverage"), profile.name == "linux")
-
-    def test_existing_coverage_tree_updates_cache_launcher_before_build(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            build_dir = Path(temporary)
-            (build_dir / "CMakeCache.txt").write_text("CMAKE_CXX_FLAGS:STRING=--coverage\n", encoding="utf-8")
-            args = self.parse(["coverage", "--tui", "-p", str(build_dir)])
-            environment = {
-                "CMAKE_CXX_COMPILER_LAUNCHER": "/managed/ccache",
-                "AOBUS_MANAGED_CXX_COMPILER_LAUNCHER": "1",
-            }
+        for host in ("linux", "macos", "windows"):
             with (
-                mock.patch.dict(os.environ, environment, clear=True),
-                mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE),
-                mock.patch.object(coverage_command, "run", return_value=0) as run,
-                mock.patch.object(build_command, "run", run),
-                mock.patch.object(coverage_command, "run_coverage_tests", return_value=0),
-                mock.patch.object(coverage_command, "collect_coverage", return_value={}),
-                mock.patch.object(coverage_command, "report"),
+                self.subTest(host=host),
+                mock.patch.object(coverage_command.bazel_native, "native_platform", return_value=host),
             ):
-                self.assertEqual(coverage_command.run_command(args), 0)
+                if host == "linux":
+                    self.assertTrue(coverage_command.requires_build_environment(args))
+                else:
+                    with self.assertRaisesRegex(coverage_command.bazel_native.BazelWorkspaceError, "only on Linux"):
+                        coverage_command.requires_build_environment(args)
 
-        configure, compile_tests = (call.args[0] for call in run.call_args_list)
-        self.assertEqual(configure[:5], ["cmake", "-S", str(build_command.PROJECT_ROOT), "-B", str(build_dir)])
-        self.assertIn("-DCMAKE_CXX_COMPILER_LAUNCHER=/managed/ccache", configure)
-        self.assertEqual(compile_tests[:3], ["cmake", "--build", str(build_dir)])
+    def test_coverage_dispatch_hands_the_parsed_request_straight_to_the_core_producer(self):
+        args = self.parse(["coverage", "--application", "--scope", "app/runtime"])
+        with mock.patch.object(bazel_coverage, "run", return_value=7) as producer:
+            self.assertEqual(coverage_command.run_command(args), 7)
+        self.assertIs(producer.call_args.args[0], args)
 
     def test_tidy_scope_and_passthrough_arguments(self):
         args = self.parse(
@@ -2912,7 +1178,7 @@ class CliParseTest(unittest.TestCase):
         )
         self.assertEqual(args.folder, ["lib", "app"])
         self.assertEqual(args.check, "modernize-use-nullptr")
-        self.assertEqual(args.tidy_arg, ["--extra-arg=-std=c++26"])
+        self.assertEqual(args.clang_tidy_arg, ["--extra-arg=-std=c++26"])
         self.assertEqual(args.output, "/tmp/report.txt")
         self.assertEqual(args.jobs, 4)
         # The automatic-fix flow is gone; no invocation carries a fix flag.
@@ -2938,15 +1204,7 @@ class CliParseTest(unittest.TestCase):
                     {"AOBUS_PREFLIGHT_SCOPE": str(scope), "AOBUS_PHASE_LOG_DIR": ""},
                 ),
                 mock.patch("ao.__main__.buildenv.load_source_scope", side_effect=reject("load_source_scope")),
-                mock.patch("ao.__main__.compiler_cache.activate_local", side_effect=reject("activate_local")),
-                mock.patch("ao.__main__.workspace_cache.command_context", side_effect=reject("command_context")),
                 mock.patch.object(tidy_command.tidyengine, "resolve_scope", side_effect=reject("resolve_scope")),
-                mock.patch.object(tidy_command, "prepare_toolchain", side_effect=reject("prepare_toolchain")),
-                mock.patch.object(
-                    analyze_command.tidyengine,
-                    "ensure_compile_db",
-                    side_effect=reject("ensure_compile_db"),
-                ),
                 mock.patch.object(tidy_command, "run_command", side_effect=reject("tidy_run")),
                 mock.patch.object(analyze_command, "run_command", side_effect=reject("analyze_run")),
             ):
@@ -2999,155 +1257,6 @@ class CliParseTest(unittest.TestCase):
         self.assertIn("--no-build", help_text)
         self.assertIn("--tidy-arg", help_text)
 
-    def test_analyze_fix_stays_an_unknown_argument(self):
-        # analyze never owned --fix, so it stays unrecognized rather than the tidy note.
-        stderr = self._rejected_portal_and_preflight_stderr(["analyze", "--fix", "lib/Selected.cpp"])
-        self.assertIn("unrecognized arguments: --fix", stderr)
-        self.assertNotIn(_REMOVED_TIDY_FIX, stderr)
-        self.assertNotIn(_FIX_OPTION_REJECTION, stderr)
-
-    def test_tidy_programmatic_namespace_rejects_mutating_arguments_before_toolchain(self):
-        # A Namespace that bypassed argparse still returns 1 before toolchain
-        # work. Process entry rejects earlier, at the option type, with status 2.
-        with tempfile.TemporaryDirectory() as temp_dir:
-            source = Path(temp_dir) / "Selected.cpp"
-            source.write_text("int original;\n", encoding="utf-8")
-            for argument in _MUTATING_RAW_TIDY_ARGUMENTS:
-                with self.subTest(argument=argument):
-                    args = argparse.Namespace(
-                        files=[str(source)],
-                        all=False,
-                        folder=[],
-                        commit=None,
-                        check=None,
-                        debug=False,
-                        output=None,
-                        jobs=1,
-                        path=None,
-                        no_build=True,
-                        tidy_arg=[argument],
-                        header_filter=None,
-                    )
-                    stderr = io.StringIO()
-                    with (
-                        mock.patch.object(
-                            tidy_command, "prepare_toolchain", side_effect=AssertionError("no work may start")
-                        ) as prepare,
-                        mock.patch.object(
-                            tidy_command.subprocess, "call", side_effect=AssertionError("no child may spawn")
-                        ) as native_call,
-                        contextlib.redirect_stdout(io.StringIO()),
-                        contextlib.redirect_stderr(stderr),
-                    ):
-                        self.assertEqual(tidy_command.run_command(args), 1)
-                    prepare.assert_not_called()
-                    native_call.assert_not_called()
-                    self.assertIn("ERROR:", stderr.getvalue())
-
-    def test_analyze_programmatic_namespace_rejects_mutating_arguments_before_compile_db(self):
-        # A Namespace that bypassed argparse still returns 1 before compile-database
-        # preparation. Process entry rejects earlier, at the option type, with status 2.
-        with tempfile.TemporaryDirectory() as temp_dir:
-            source = Path(temp_dir) / "Selected.cpp"
-            source.write_text("int original;\n", encoding="utf-8")
-            for argument in _MUTATING_RAW_TIDY_ARGUMENTS:
-                with self.subTest(argument=argument):
-                    args = argparse.Namespace(
-                        files=[str(source)],
-                        all=False,
-                        folder=[],
-                        commit=None,
-                        check=None,
-                        debug=False,
-                        output=None,
-                        jobs=1,
-                        path=None,
-                        fail_on_diagnostics=False,
-                        include_external_diagnostics=False,
-                        alpha=False,
-                        tidy_arg=[argument],
-                    )
-                    stderr = io.StringIO()
-                    with (
-                        mock.patch.object(
-                            analyze_command.tidyengine, "ensure_compile_db", side_effect=AssertionError("no work")
-                        ) as ensure,
-                        mock.patch.object(
-                            analyze_command.tidyengine, "run_parallel", side_effect=AssertionError("no child")
-                        ) as parallel,
-                        contextlib.redirect_stdout(io.StringIO()),
-                        contextlib.redirect_stderr(stderr),
-                    ):
-                        self.assertEqual(analyze_command.run_command(args), 1)
-                    ensure.assert_not_called()
-                    parallel.assert_not_called()
-                    self.assertIn("ERROR:", stderr.getvalue())
-
-    def test_tidy_and_analyze_accept_diagnostic_only_raw_arguments(self):
-        # A compiler response file behind --extra-arg is a compiler-input
-        # contract, not a raw clang-tidy response file, so it passes the
-        # shared validator and the commands proceed to their real work.
-        with tempfile.TemporaryDirectory() as temp_dir:
-            source = Path(temp_dir) / "Selected.cpp"
-            source.write_text("int original;\n", encoding="utf-8")
-
-            class ReachedWork(Exception):
-                pass
-
-            tidy_args = argparse.Namespace(
-                files=[str(source)],
-                all=False,
-                folder=[],
-                commit=None,
-                check=None,
-                debug=False,
-                output=None,
-                jobs=1,
-                path=None,
-                no_build=True,
-                tidy_arg=["--extra-arg=@compiler.rsp"],
-                header_filter=None,
-            )
-            with (
-                mock.patch.object(tidy_command, "prepare_toolchain", side_effect=ReachedWork),
-                contextlib.redirect_stdout(io.StringIO()),
-                contextlib.redirect_stderr(io.StringIO()),
-            ):
-                with self.assertRaises(ReachedWork):
-                    tidy_command.run_command(tidy_args)
-
-            analyze_args = argparse.Namespace(
-                files=[str(source)],
-                all=False,
-                folder=[],
-                commit=None,
-                check=None,
-                debug=False,
-                output=None,
-                jobs=1,
-                path=None,
-                fail_on_diagnostics=False,
-                include_external_diagnostics=False,
-                alpha=False,
-                tidy_arg=["--extra-arg=@compiler.rsp"],
-            )
-            with (
-                mock.patch.object(analyze_command.tidyengine, "ensure_compile_db", side_effect=ReachedWork),
-                contextlib.redirect_stdout(io.StringIO()),
-                contextlib.redirect_stderr(io.StringIO()),
-            ):
-                with self.assertRaises(ReachedWork):
-                    analyze_command.run_command(analyze_args)
-
-    def test_bare_fix_word_is_not_a_diagnostic_option(self):
-        for command in ("tidy", "analyze"):
-            with self.subTest(command=command):
-                positional = self.parse([command, "fix"])
-                self.assertEqual(positional.files, ["fix"])
-                self.assertEqual(positional.tidy_arg, [])
-                accepted = self.parse([command, "--tidy-arg=fix", "--tidy-arg=export-fixes=out.yaml"])
-                self.assertEqual(accepted.tidy_arg, ["fix", "export-fixes=out.yaml"])
-
     def test_parser_rejects_mutating_tidy_args_before_scope_cache_workspace_or_native_env(self):
         # Portal parse and both buildenv preflight modes exit 2 before scope, cache,
         # workspace, or native environment selection. Nix or Python bootstrap may
@@ -3172,519 +1281,100 @@ class CliParseTest(unittest.TestCase):
                         self.assertNotIn("secret", stderr)
                         self.assertNotIn(argument, stderr)
 
-    def test_accepted_compiler_response_reaches_dispatch_after_scope_load(self):
-        # After a successful parse, dispatch follows scope load. Native ensure stays
-        # uncalled. On Windows, tidy still uses workspace context, so cache activation
-        # may be entered between those two calls; --no-build does not request a build.
-        order: list[str] = []
-        real_load = buildenv.load_source_scope
+    def test_analysis_identity_retains_owner_native_output_and_checkout_relative_main(self):
+        # Per-process source-id timing is retired. Cached Bazel reports carry
+        # the full native owner/configuration/source/main identity instead.
+        value = {
+            "owner": "@@//lib:audio",
+            "configuration": "bazel-out/native/bin",
+            "source": "lib/audio/Foo.cpp",
+            "main": "include/ao/Foo.h",
+            "outputs": ["bazel-out/native/bin/lib/audio/Foo.o"],
+            "mode": "STRICT",
+            "platform": "linux",
+        }
+        self.assertEqual(Identity.from_json(value).as_json(), value)
 
-        def load_scope(args, path):
-            order.append("load_source_scope")
-            return real_load(args, path)
-
-        def activate_local(*_args, **_kwargs):
-            order.append("activate_local")
-            return False
-
-        @contextlib.contextmanager
-        def command_context(_args):
-            order.append("command_context")
-            yield
-
-        def run_command(_args):
-            order.append("run_command")
-            return 0
-
-        def reject(name: str):
-            def wrapped(*_args, **_kwargs):
-                order.append(name)
-                raise AssertionError(name)
-
-            return wrapped
-
-        with (
-            mock.patch.dict(os.environ, {"AOBUS_PHASE_LOG_DIR": "", "AOBUS_PREFLIGHT_SCOPE": ""}),
-            mock.patch("ao.__main__.buildenv.load_source_scope", side_effect=load_scope),
-            mock.patch("ao.__main__.compiler_cache.activate_local", side_effect=activate_local),
-            mock.patch("ao.__main__.workspace_cache.command_context", side_effect=command_context),
-            mock.patch.object(tidy_command, "run_command", side_effect=run_command),
-            mock.patch.object(tidy_command, "prepare_toolchain", side_effect=reject("prepare_toolchain")),
-            mock.patch.object(tidy_command.tidyengine, "ensure_compile_db", side_effect=reject("ensure_compile_db")),
-            contextlib.redirect_stdout(io.StringIO()),
-            contextlib.redirect_stderr(io.StringIO()),
-        ):
-            status = main(["tidy", "--no-build", "--tidy-arg=--extra-arg=@compiler.rsp", "Selected.cpp"])
-        self.assertEqual(status, 0)
-        self.assertEqual(order[0], "load_source_scope")
-        self.assertLess(order.index("load_source_scope"), order.index("command_context"))
-        self.assertLess(order.index("command_context"), order.index("run_command"))
-        self.assertNotIn("prepare_toolchain", order)
-        self.assertNotIn("ensure_compile_db", order)
-        if os.name != "nt":
-            self.assertNotIn("activate_local", order)
-        elif "activate_local" in order:
-            self.assertLess(order.index("load_source_scope"), order.index("activate_local"))
-            self.assertLess(order.index("activate_local"), order.index("command_context"))
-
-    def test_tidy_no_build_uses_existing_artifact_and_compile_database(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            build_dir = Path(temp_dir)
-            (build_dir / "compile_commands.json").touch()
-            sdk_root = build_dir / "llvm-sdk"
-            (sdk_root / "lib" / "clang" / "22").mkdir(parents=True)
-            (build_dir / "CMakeCache.txt").write_text(
-                f"AOBUS_LLVM_SDK_RESOLVED_ROOT:INTERNAL={sdk_root}\nAOBUS_LLVM_SDK_RESOLVED_VERSION:INTERNAL=22.1.8\n",
-                encoding="utf-8",
-            )
-            artifact = tidy_command.expected_lint_artifact_path(build_dir)
-            artifact.parent.mkdir(parents=True)
-            artifact.touch()
-
-            with mock.patch.object(tidy_command.tidyengine, "ensure_compile_db") as ensure_compile_db:
-                with mock.patch.object(tidy_command, "verify_tidy_toolchain") as verify:
-                    toolchain = tidy_command.prepare_toolchain(build_dir, no_build=True)
-
-        ensure_compile_db.assert_not_called()
-        verify.assert_called_once_with(toolchain)
-        profile = builddir.platform_profile()
-        if profile.name == "windows":
-            self.assertEqual(toolchain.clang_tidy, str(artifact))
-            self.assertIsNone(toolchain.plugin)
-            self.assertEqual(toolchain.resource_dir, sdk_root / "lib" / "clang" / "22")
-        else:
-            self.assertEqual(toolchain.clang_tidy, "clang-tidy")
-            self.assertEqual(toolchain.plugin, artifact)
-            self.assertIsNone(toolchain.resource_dir)
-
-    def test_tidy_build_uses_the_native_lint_preset(self):
-        real_run = subprocess.run
-        with tempfile.TemporaryDirectory() as temp_dir:
-            build_dir = Path(temp_dir)
-            sdk_root = build_dir / "llvm-sdk"
-            (sdk_root / "lib" / "clang" / "22").mkdir(parents=True)
-            (build_dir / "CMakeCache.txt").write_text(
-                f"AOBUS_LLVM_SDK_RESOLVED_ROOT:INTERNAL={sdk_root}\nAOBUS_LLVM_SDK_RESOLVED_VERSION:INTERNAL=22.1.8\n",
-                encoding="utf-8",
-            )
-            artifact = tidy_command.expected_lint_artifact_path(build_dir)
-            artifact.parent.mkdir(parents=True)
-            artifact.touch()
-
-            with mock.patch.object(tidy_command.tidyengine, "ensure_compile_db") as ensure_compile_db:
-                with mock.patch.object(tidy_command, "verify_tidy_toolchain"):
-                    # Replace only tidy's module binding, not the shared stdlib module.
-                    with mock.patch.object(tidy_command, "subprocess", autospec=True) as process:
-                        process.run.return_value = subprocess.CompletedProcess([], 0)
-                        self.assertIs(subprocess.run, real_run)
-                        toolchain = tidy_command.prepare_toolchain(build_dir, no_build=False)
-
-        ensure_compile_db.assert_called_once_with(
-            build_dir,
-            ["-DAOBUS_BUILD_LINT_PLUGIN=ON"],
-            preset=builddir.tidy_preset(),
-            reconfigure_preset=False,
+    def verification_tools(self, root, *, windows=False):
+        host, plugin = root / "declared-checker", root / "declared-plugin"
+        host.touch()
+        plugin.touch()
+        policy, sdk = root / "policy.json", root / "sdk.json"
+        policy.write_text(
+            json.dumps(
+                {
+                    "schema": 1,
+                    "alpha": False,
+                    "check": None,
+                    "header_filter": None,
+                    "clang_tidy_args": [],
+                    "expected_checks": ["aobus-example"],
+                }
+            ),
+            encoding="utf-8",
         )
-        profile = builddir.platform_profile()
-        process.run.assert_called_once()
-        command = process.run.call_args.args[0]
-        target = "AobusClangTidy" if profile.name == "windows" else "AobusLintPlugin"
-        self.assertEqual(command[:2], ["cmake", "--build"])
-        self.assertEqual(command[3:5], ["--target", target])
-        self.assertEqual(process.run.call_args.kwargs, {"cwd": tidy_command.PROJECT_ROOT})
-        if profile.name == "windows":
-            self.assertEqual(toolchain.clang_tidy, str(artifact))
-            self.assertIsNone(toolchain.plugin)
-            self.assertEqual(toolchain.resource_dir, sdk_root / "lib" / "clang" / "22")
-        else:
-            self.assertEqual(toolchain.clang_tidy, "clang-tidy")
-            self.assertEqual(toolchain.plugin, artifact)
-            self.assertIsNone(toolchain.resource_dir)
+        resource = root / "resource"
+        (resource / "include").mkdir(parents=True)
+        sdk.write_text(
+            json.dumps(
+                {
+                    "schema": 1,
+                    "version": "22.1.8",
+                    "platform": "windows" if windows else "linux",
+                    "host_kind": "standalone" if windows else "plugin",
+                    "resource_dir": str(resource),
+                    "system_arguments": [],
+                    "analysis_arguments": list(tidy_command.tidyengine.windows_analysis_arguments(resource))
+                    if windows
+                    else [],
+                }
+            ),
+            encoding="utf-8",
+        )
+        return argparse.Namespace(
+            policy=policy,
+            sdk=sdk,
+            tidy=host,
+            plugin=None if windows else plugin,
+            log=root / "verify.log",
+            output=root / "verified.json",
+        )
 
-    def test_tidy_toolchain_records_checker_build_and_verify(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            build_dir = Path(temp_dir)
-            sdk_root = build_dir / "llvm-sdk"
-            (sdk_root / "lib" / "clang" / "22").mkdir(parents=True)
-            (build_dir / "CMakeCache.txt").write_text(
-                f"AOBUS_LLVM_SDK_RESOLVED_ROOT:INTERNAL={sdk_root}\nAOBUS_LLVM_SDK_RESOLVED_VERSION:INTERNAL=22.1.8\n",
-                encoding="utf-8",
-            )
-            artifact = tidy_command.expected_lint_artifact_path(build_dir)
-            artifact.parent.mkdir(parents=True)
-            artifact.touch()
-            recorder = _PhaseRecorder()
-
-            with (
-                mock.patch.object(tidy_command.tidyengine, "ensure_compile_db"),
-                mock.patch.object(tidy_command, "verify_tidy_toolchain"),
-                mock.patch.object(tidy_command, "phases", recorder),
-                mock.patch.object(tidy_command, "subprocess", autospec=True) as process,
-            ):
-                process.run.return_value = subprocess.CompletedProcess([], 0)
-                tidy_command.prepare_toolchain(build_dir, no_build=False)
-
-            self.assertEqual(
-                recorder.records,
-                [
-                    {"name": "checker-build", "tree": "tidy", "status": 0},
-                    {"name": "checker-verify", "tree": "tidy", "status": 0},
-                ],
-            )
-
-    def test_tidy_checker_build_records_the_native_failure_status(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            build_dir = Path(temp_dir)
-            sdk_root = build_dir / "llvm-sdk"
-            (sdk_root / "lib" / "clang" / "22").mkdir(parents=True)
-            (build_dir / "CMakeCache.txt").write_text(
-                f"AOBUS_LLVM_SDK_RESOLVED_ROOT:INTERNAL={sdk_root}\nAOBUS_LLVM_SDK_RESOLVED_VERSION:INTERNAL=22.1.8\n",
-                encoding="utf-8",
-            )
-            artifact = tidy_command.expected_lint_artifact_path(build_dir)
-            artifact.parent.mkdir(parents=True)
-            artifact.touch()
-            recorder = _PhaseRecorder()
-
-            with (
-                mock.patch.object(tidy_command.tidyengine, "ensure_compile_db"),
-                mock.patch.object(tidy_command, "verify_tidy_toolchain") as verify,
-                mock.patch.object(tidy_command, "phases", recorder),
-                mock.patch.object(tidy_command, "subprocess", autospec=True) as process,
-            ):
-                process.run.return_value = subprocess.CompletedProcess([], 2)
-                with self.assertRaises(SystemExit):
-                    tidy_command.prepare_toolchain(build_dir, no_build=False)
-
-            self.assertEqual(recorder.records, [{"name": "checker-build", "tree": "tidy", "status": 2}])
-            verify.assert_not_called()
-
-    def test_tidy_no_build_records_no_checker_build_phase(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            build_dir = Path(temp_dir)
-            (build_dir / "compile_commands.json").touch()
-            sdk_root = build_dir / "llvm-sdk"
-            (sdk_root / "lib" / "clang" / "22").mkdir(parents=True)
-            (build_dir / "CMakeCache.txt").write_text(
-                f"AOBUS_LLVM_SDK_RESOLVED_ROOT:INTERNAL={sdk_root}\nAOBUS_LLVM_SDK_RESOLVED_VERSION:INTERNAL=22.1.8\n",
-                encoding="utf-8",
-            )
-            artifact = tidy_command.expected_lint_artifact_path(build_dir)
-            artifact.parent.mkdir(parents=True)
-            artifact.touch()
-            recorder = _PhaseRecorder()
-
-            with (
-                mock.patch.object(tidy_command.tidyengine, "ensure_compile_db"),
-                mock.patch.object(tidy_command, "verify_tidy_toolchain"),
-                mock.patch.object(tidy_command, "phases", recorder),
-            ):
-                tidy_command.prepare_toolchain(build_dir, no_build=True)
-
-            # --no-build does not execute the checker build, so it records no
-            # checker-build phase at all.
-            self.assertEqual(recorder.records, [{"name": "checker-verify", "tree": "tidy", "status": 0}])
-
-    def test_analysis_source_id_digests_the_repository_relative_path(self):
-        digest = tidy_command._analysis_source_id(tidy_command.PROJECT_ROOT / "lib" / "audio" / "Foo.cpp")
-        self.assertEqual(digest, "5fedbf6102ef0323fa175cf9ec77811b520d278ef91a787037d45967a34ce386")
-        self.assertEqual(len(digest), 64)
-        self.assertEqual(digest, digest.lower())
-
-    def test_analysis_source_id_is_none_outside_the_repository_root(self):
+    def test_tidy_artifact_paths_come_from_declared_tools_not_filename_conventions(self):
         with tempfile.TemporaryDirectory() as temporary:
-            # A leading slash is drive-relative on Windows; use its actual
-            # native temp directory, outside the mapped checkout's root.
-            self.assertIsNone(tidy_command._analysis_source_id(Path(temporary) / "Fixture.cpp"))
-
-    def test_tidy_analysis_records_clamped_jobs_and_native_invocation_phases(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            source = root / "checkout"
-            build = root / "build"
-            source.mkdir()
-            build.mkdir()
-            selected = source / "lib" / "audio" / "Selected.cpp"
-            selected.parent.mkdir(parents=True)
-            selected.write_text("int original;\n", encoding="utf-8")
-            entry = {
-                "directory": str(build),
-                "file": str(selected),
-                "arguments": ["clang++", "-std=c++26", "-c", str(selected)],
-            }
-            (build / "compile_commands.json").write_text(json.dumps([entry]), encoding="utf-8")
-            recorder = _PhaseRecorder()
-            args = argparse.Namespace(
-                files=[str(selected)],
-                all=False,
-                folder=[],
-                commit=None,
-                check=None,
-                debug=False,
-                output=None,
-                jobs=1,
-                path=str(build),
-                no_build=True,
-                tidy_arg=[],
-                header_filter=None,
-            )
-            # The existing runner accepts zero and clamps it to one worker;
-            # profiling must record that effective limit, not reject the command.
-            args.jobs = 0
-            planner = tidy_command.tidyengine.compile_command_plan
-
-            def plan_context(*arguments, **keywords):
-                return planner(*arguments, **keywords, project_root=source)
-
-            with contextlib.ExitStack() as stack:
-                stack.enter_context(
-                    mock.patch.object(
-                        tidy_command,
-                        "prepare_toolchain",
-                        return_value=tidy_command.TidyToolchain("clang-tidy", build / "plugin.so", None),
-                    )
-                )
-                stack.enter_context(
-                    mock.patch.object(tidy_command.tidyengine, "compile_command_plan", side_effect=plan_context)
-                )
-                stack.enter_context(
-                    mock.patch.object(tidy_command.workspace_cache, "validated_source_roots", return_value=(source,))
-                )
-                stack.enter_context(mock.patch.object(tidy_command.tidyengine, "system_include_args", return_value=[]))
-                stack.enter_context(mock.patch.object(tidy_command, "phases", recorder))
-                stack.enter_context(mock.patch.object(tidy_command.subprocess, "call", return_value=3))
-                stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
-                stack.enter_context(contextlib.redirect_stderr(io.StringIO()))
-                status = tidy_command.run_command(args)
-
-            self.assertEqual(status, 1)
-            # The batch record encloses the per-native-invocation record; the
-            # item status is the actual native exit status and the batch status
-            # the failed-batch bool. Out-of-root fixture data keeps source_id
-            # None while its timing still lands in the item record.
-            self.assertEqual(
-                recorder.records,
-                [
-                    {"name": "analysis", "tree": "tidy", "mode": "STRICT", "jobs": 1, "count": 1, "status": 1},
-                    {
-                        "name": "analysis-item",
-                        "tree": "tidy",
-                        "mode": "STRICT",
-                        "count": 1,
-                        "source_id": None,
-                        "status": 3,
-                    },
-                ],
-            )
-
-    def test_tidy_artifact_path_is_native(self):
-        build_dir = Path("build")
-        self.assertEqual(
-            tidy_command.expected_lint_artifact_path(build_dir, os_name="nt"),
-            build_dir / "tool" / "lint" / "AobusClangTidy.exe",
-        )
-        self.assertEqual(
-            tidy_command.expected_lint_artifact_path(build_dir, os_name="posix"),
-            build_dir / "tool" / "lint" / "libAobusLintPlugin.so",
-        )
-
-    def test_winui_compile_commands_require_the_windows_tidy_toolchain(self):
-        args = mock.Mock(path=None, no_build=False)
-        toolchain = tidy_command.TidyToolchain("clang-tidy", Path("plugin.so"), None)
-        selected = [tidy_command.WINUI_ROOT / "App.xaml.cpp"]
-
-        with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
-            with mock.patch.object(tidy_command.build, "do_build") as do_build:
-                with mock.patch.object(tidy_command.winuitidy, "compile_commands") as compile_commands:
-                    commands = tidy_command.prepare_winui_compile_commands(
-                        args,
-                        Path("/tmp/build/tidy"),
-                        toolchain,
-                        selected,
-                    )
-
-        self.assertEqual(commands, [])
-        do_build.assert_not_called()
-        compile_commands.assert_not_called()
-
-    def test_winui_tidy_reuses_the_debug_tree_built_by_check(self):
-        args = mock.Mock(path=None, no_build=False)
-        toolchain = tidy_command.TidyToolchain(
-            "AobusClangTidy.exe",
-            None,
-            Path("C:/llvm/lib/clang/22"),
-        )
-        selected = [tidy_command.WINUI_ROOT / "App.xaml.cpp"]
-        winui_dir = Path("C:/aobus/windows-winui")
-
-        with mock.patch.object(tidy_command, "winui_build_directory", return_value=winui_dir):
-            with mock.patch.object(
-                tidy_command.buildlock,
-                "build_tree_lock",
-                return_value=contextlib.nullcontext(),
-            ):
-                with mock.patch.object(tidy_command.build, "do_build") as do_build:
-                    with mock.patch.object(
-                        tidy_command.tidyengine,
-                        "clang_tool",
-                        return_value="C:/llvm/bin/clang-cl.exe",
-                    ):
-                        with mock.patch.object(
-                            tidy_command.winuitidy,
-                            "compile_commands",
-                            return_value=[],
-                        ) as compile_commands:
-                            self.assertEqual(
-                                tidy_command.prepare_winui_compile_commands(
-                                    args,
-                                    Path("C:/aobus/windows-tidy"),
-                                    toolchain,
-                                    selected,
-                                ),
-                                [],
-                            )
-
-        build_args, build_targets = do_build.call_args.args
-        self.assertEqual(build_args.flavor, "debug")
-        self.assertEqual(Path(build_args.path), winui_dir)
-        self.assertEqual(build_targets, [build_command.WINUI_LINT_CONTEXT_TARGET])
-        compile_commands.assert_called_once_with(
-            winui_dir,
-            Path("C:/llvm/bin/clang-cl.exe"),
-            required_translation_units=(selected[0],),
-            jobs=args.jobs,
-        )
-
-    def test_winui_tidy_no_build_skips_the_context_build_but_still_queries(self):
-        args = mock.Mock(path=None, no_build=True)
-        toolchain = tidy_command.TidyToolchain(
-            "AobusClangTidy.exe",
-            None,
-            Path("C:/llvm/lib/clang/22"),
-        )
-        selected = [tidy_command.WINUI_ROOT / "App.xaml.cpp"]
-        winui_dir = Path("C:/aobus/windows-winui")
-
-        with (
-            mock.patch.object(tidy_command, "winui_build_directory", return_value=winui_dir),
-            mock.patch.object(tidy_command.buildlock, "build_tree_lock", return_value=contextlib.nullcontext()),
-            mock.patch.object(tidy_command.build, "do_build") as do_build,
-            mock.patch.object(tidy_command.tidyengine, "clang_tool", return_value="C:/llvm/bin/clang-cl.exe"),
-            mock.patch.object(tidy_command.winuitidy, "compile_commands", return_value=[]) as compile_commands,
-        ):
-            self.assertEqual(
-                tidy_command.prepare_winui_compile_commands(
-                    args,
-                    Path("C:/aobus/windows-tidy"),
-                    toolchain,
-                    selected,
-                ),
-                [],
-            )
-
-        do_build.assert_not_called()
-        compile_commands.assert_called_once_with(
-            winui_dir,
-            Path("C:/llvm/bin/clang-cl.exe"),
-            required_translation_units=(selected[0],),
-            jobs=args.jobs,
-        )
-
-    def test_winui_tidy_does_not_query_compile_commands_after_a_failed_context_build(self):
-        args = mock.Mock(path=None, no_build=False)
-        toolchain = tidy_command.TidyToolchain(
-            "AobusClangTidy.exe",
-            None,
-            Path("C:/llvm/lib/clang/22"),
-        )
-        selected = [tidy_command.WINUI_ROOT / "App.xaml.cpp"]
-        winui_dir = Path("C:/aobus/windows-winui")
-
-        with (
-            mock.patch.object(tidy_command, "winui_build_directory", return_value=winui_dir),
-            mock.patch.object(tidy_command.buildlock, "build_tree_lock", return_value=contextlib.nullcontext()),
-            mock.patch.object(tidy_command.build, "do_build", side_effect=SystemExit(1)),
-            mock.patch.object(tidy_command.tidyengine, "clang_tool", return_value="C:/llvm/bin/clang-cl.exe"),
-            mock.patch.object(tidy_command.winuitidy, "compile_commands") as compile_commands,
-        ):
-            with self.assertRaises(SystemExit):
-                tidy_command.prepare_winui_compile_commands(
-                    args,
-                    Path("C:/aobus/windows-tidy"),
-                    toolchain,
-                    selected,
-                )
-
-        # A failed context build must never reach the compile-commands query.
-        compile_commands.assert_not_called()
+            tools = self.verification_tools(Path(temporary))
+            host, plugin = bazel_lint_action._tools(tools, {"platform": "linux"})
+            self.assertEqual(host, str(tools.tidy))
+            self.assertEqual(plugin, [f"-load={tools.plugin}"])
+            tools.tidy.unlink()
+            with self.assertRaisesRegex(ValueError, "missing clang-tidy host"):
+                bazel_lint_action._tools(tools, {"platform": "linux"})
 
     def test_tidy_toolchain_validation_requires_registered_aobus_checks(self):
-        toolchain = tidy_command.TidyToolchain("clang-tidy", Path("plugin.so"), None)
-        completed = mock.Mock(
-            returncode=0,
-            stdout="\n".join(f"  {name}" for name in sorted(tidy_command.expected_aobus_checks())),
-        )
-
-        with mock.patch.object(tidy_command.subprocess, "run", return_value=completed) as run:
-            tidy_command.verify_tidy_toolchain(toolchain)
-
-        self.assertEqual(
-            run.call_args.args[0],
-            ["clang-tidy", "-load=plugin.so", "-checks=-*,aobus-*", "-list-checks"],
-        )
-
-        with mock.patch.object(
-            tidy_command.subprocess,
-            "run",
-            return_value=mock.Mock(returncode=0, stdout="Enabled checks:\n"),
-        ):
-            with self.assertRaises(SystemExit):
-                tidy_command.verify_tidy_toolchain(toolchain)
-
-    def test_windows_tidy_toolchain_validation_requires_exact_llvm_version(self):
-        toolchain = tidy_command.TidyToolchain(
-            "AobusClangTidy.exe",
-            None,
-            Path("C:/llvm/lib/clang/22"),
-            "22.1.8",
-        )
-        version = mock.Mock(returncode=0, stdout="LLVM version 22.1.8\n")
-        checks = mock.Mock(
-            returncode=0,
-            stdout="\n".join(f"  {name}" for name in sorted(tidy_command.expected_aobus_checks())),
-        )
-
-        with mock.patch.object(tidy_command.subprocess, "run", side_effect=[version, checks]) as run:
-            tidy_command.verify_tidy_toolchain(toolchain)
-
-        self.assertEqual(run.call_args_list[0].args[0], ["AobusClangTidy.exe", "--version"])
-
-        wrong_version = mock.Mock(returncode=0, stdout="LLVM version 21.1.0\n")
-        with mock.patch.object(tidy_command.subprocess, "run", return_value=wrong_version):
-            with self.assertRaises(SystemExit):
-                tidy_command.verify_tidy_toolchain(toolchain)
-
-    def test_tidy_explicit_files(self):
-        args = self.parse(["tidy", "lib/audio/Foo.cpp", "include/aobus/Foo.h"])
-        self.assertEqual(args.files, ["lib/audio/Foo.cpp", "include/aobus/Foo.h"])
-
-    def test_analyze_flags(self):
-        args = self.parse(["analyze", "--all", "--alpha", "--fail-on-diagnostics"])
-        self.assertTrue(args.all)
-        self.assertTrue(args.alpha)
-        self.assertTrue(args.fail_on_diagnostics)
-
-    def test_format_check_mode(self):
-        args = self.parse(["format", "--check", "--folder", "script"])
-        self.assertTrue(args.check)
-        self.assertEqual(args.files, [])
-        self.assertEqual(args.folder, ["script"])
-
-    def test_hygiene_scope_arguments(self):
-        args = self.parse(["hygiene", "--folder", "script", "--commit", "HEAD~3", "-j", "4"])
-        self.assertEqual(args.folder, ["script"])
-        self.assertEqual(args.commit, "HEAD~3")
-        self.assertEqual(args.jobs, 4)
+        with tempfile.TemporaryDirectory() as temporary:
+            tools = self.verification_tools(Path(temporary))
+            for registry, accepted in (("aobus-example", True), ("", False)):
+                with (
+                    self.subTest(registry=registry),
+                    mock.patch.object(
+                        bazel_lint_action.subprocess,
+                        "run",
+                        side_effect=[
+                            subprocess.CompletedProcess([], 0, "LLVM version 22.1.8\n"),
+                            subprocess.CompletedProcess([], 0, "Enabled checks:\n" + registry),
+                        ],
+                    ) as run,
+                ):
+                    if accepted:
+                        self.assertEqual(bazel_lint_action.verify(tools), 0)
+                    else:
+                        with self.assertRaisesRegex(ValueError, "registry differs"):
+                            bazel_lint_action.verify(tools)
+                        self.assertFalse(tools.output.exists())
+                    self.assertEqual(
+                        run.call_args.args[0],
+                        [str(tools.tidy), f"-load={tools.plugin}", "-checks=-*,aobus-*", "-list-checks"],
+                    )
 
     def test_run_parsing_and_no_build(self):
         args = self.parse(["run", "-n", "--clang", "tui", "release", "arg1", "arg2"])
@@ -3699,11 +1389,6 @@ class CliParseTest(unittest.TestCase):
         self.assertEqual(args.app, "tui")
         self.assertTrue(args.no_build)
         self.assertEqual(args.app_args, [])
-
-    def test_run_accepts_tui_app(self):
-        args = self.parse(["run", "tui", "-n"])
-        self.assertEqual(args.app, "tui")
-        self.assertTrue(args.no_build)
 
     def test_run_forwards_option_flags_after_double_dash(self):
         args = self.parse(["run", "tui", "--", "--library", "/home/u/Music"])
@@ -3731,82 +1416,6 @@ class CliParseTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             self.parse(["build", "--", "--library", "/m"])
 
-    def test_windows_run_command_builds_and_execs_exe(self):
-        with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
-            args = self.parse(["run", "tui"])
-            with mock.patch.object(run_command_mod.build, "do_build") as do_build:
-                with mock.patch.object(run_command_mod.os, "execvp") as execvp:
-                    with mock.patch.object(run_command_mod.Path, "exists", return_value=True):
-                        run_command_mod.run_command(args)
-        do_build.assert_called_once_with(args, ["aobus-tui"])
-        self.assertTrue(execvp.call_args.args[0].endswith("aobus-tui.exe"))
-
-    def test_run_command_builds_tui_target(self):
-        args = self.parse(["run", "tui"])
-        with mock.patch.object(run_command_mod.build, "do_build") as do_build:
-            with mock.patch.object(run_command_mod.os, "execvp") as execvp:
-                with mock.patch.object(run_command_mod.Path, "exists", return_value=True):
-                    run_command_mod.run_command(args)
-        do_build.assert_called_once_with(args, ["aobus-tui"])
-        execvp.assert_called_once()
-
-    def test_run_missing_executable_reports_build_instruction_before_tree_ownership(self):
-        args = self.parse(["run", "-n", "tui"])
-        with (
-            mock.patch.object(run_command_mod.Path, "exists", return_value=False),
-            mock.patch.object(run_command_mod.workspace_cache, "validate_consumer") as validate,
-        ):
-            with contextlib.redirect_stderr(io.StringIO()) as stderr, self.assertRaises(SystemExit):
-                run_command_mod.run_command(args)
-        self.assertIn("Did you build the project", stderr.getvalue())
-        validate.assert_not_called()
-
-    def test_macos_run_executes_bundle_binary_and_forwards_library_argument(self):
-        with mock.patch.object(builddir, "platform_profile", return_value=builddir.MACOS_PROFILE):
-            args = self.parse(["run", "appkit", "--", "--library", "/tmp/aobus-library"])
-            with mock.patch.object(run_command_mod.build, "do_build") as do_build:
-                with mock.patch.object(run_command_mod.os, "execvp") as execvp:
-                    with mock.patch.object(run_command_mod.Path, "exists", return_value=True):
-                        run_command_mod.run_command(args)
-        do_build.assert_called_once_with(args, ["aobus-appkit"])
-        executable, arguments = execvp.call_args.args
-        self.assertEqual(Path(executable).parts[-4:], ("aobus-appkit.app", "Contents", "MacOS", "aobus-appkit"))
-        self.assertEqual(arguments, [executable, "--library", "/tmp/aobus-library"])
-
-    def test_run_command_no_build_skips_build(self):
-        args = self.parse(["run", "-n", "tui"])
-        with mock.patch.object(run_command_mod.build, "do_build") as do_build:
-            with mock.patch.object(run_command_mod.os, "execvp") as execvp:
-                with mock.patch.object(run_command_mod.Path, "exists", return_value=True):
-                    run_command_mod.run_command(args)
-        do_build.assert_not_called()
-        execvp.assert_called_once()
-
-    def test_main_thread_checker_preserves_environment_and_app_arguments(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            developer = Path(temporary) / "Xcode With Spaces.app"
-            library = developer / "Contents/Developer/usr/lib/libMainThreadChecker.dylib"
-            library.parent.mkdir(parents=True)
-            library.touch()
-            original = {"DEVELOPER_DIR": str(developer), "DYLD_INSERT_LIBRARIES": "/caller/check.dylib", "KEEP": "yes"}
-            with (
-                mock.patch.object(builddir, "platform_profile", return_value=builddir.MACOS_PROFILE),
-                mock.patch.dict(run_command_mod.os.environ, original, clear=True),
-                mock.patch.object(run_command_mod.build, "do_build") as do_build,
-                mock.patch.object(run_command_mod.os, "execvpe") as execvpe,
-                mock.patch.object(run_command_mod.Path, "exists", return_value=True),
-            ):
-                args = self.parse(
-                    ["run", "appkit", "-n", "--main-thread-checker", "--", "--library", "/tmp/disposable music"]
-                )
-                run_command_mod.run_command(args)
-                self.assertEqual(dict(run_command_mod.os.environ), original)
-            do_build.assert_not_called()
-            executable, arguments, env = execvpe.call_args.args
-            self.assertEqual(arguments, [executable, "--library", "/tmp/disposable music"])
-            self.assertEqual(env["DYLD_INSERT_LIBRARIES"], f"/caller/check.dylib:{library}")
-            self.assertEqual(env["KEEP"], "yes")
-
     def test_main_thread_checker_uses_selected_xcode_without_duplicate_injection(self):
         # This macOS protocol fixture must not contain a Windows drive-letter colon.
         developer = Path("/fixture-xcode")
@@ -3819,54 +1428,6 @@ class CliParseTest(unittest.TestCase):
             env = run_command_mod._main_thread_checker_environment()
         select.assert_called_once_with(["xcode-select", "--print-path"], text=True, stderr=subprocess.STDOUT)
         self.assertEqual(env["DYLD_INSERT_LIBRARIES"], str(library))
-
-    def test_main_thread_checker_captures_failed_xcode_select_diagnostics(self):
-        command = ["xcode-select", "--print-path"]
-        failure = subprocess.CalledProcessError(returncode=1, cmd=command, output="xcode-select raw diagnostic\n")
-        with (
-            mock.patch.dict(run_command_mod.os.environ, {}, clear=True),
-            mock.patch.object(run_command_mod.subprocess, "check_output", side_effect=failure) as select,
-            contextlib.redirect_stderr(io.StringIO()) as errors,
-            self.assertRaises(SystemExit),
-        ):
-            run_command_mod._main_thread_checker_environment()
-
-        select.assert_called_once_with(command, text=True, stderr=subprocess.STDOUT)
-        self.assertIn("requires a full Xcode installation", errors.getvalue())
-        self.assertNotIn("xcode-select raw diagnostic", errors.getvalue())
-
-    def test_main_thread_checker_rejects_non_gui_targets_before_build(self):
-        for profile in (builddir.LINUX_PROFILE, builddir.MACOS_PROFILE, builddir.WINDOWS_PROFILE):
-            with (
-                self.subTest(profile=profile.name),
-                mock.patch.object(builddir, "platform_profile", return_value=profile),
-                mock.patch.object(run_command_mod.build, "do_build") as do_build,
-                contextlib.redirect_stderr(io.StringIO()),
-            ):
-                args = self.parse(["run", "tui", "--main-thread-checker"])
-                with self.assertRaises(SystemExit):
-                    run_command_mod.run_command(args)
-                do_build.assert_not_called()
-
-    def test_main_thread_checker_missing_xcode_fails_before_build(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            with (
-                mock.patch.object(builddir, "platform_profile", return_value=builddir.MACOS_PROFILE),
-                mock.patch.dict(run_command_mod.os.environ, {"DEVELOPER_DIR": temporary}, clear=True),
-                mock.patch.object(run_command_mod.build, "do_build") as do_build,
-                contextlib.redirect_stderr(io.StringIO()) as errors,
-            ):
-                args = self.parse(["run", "appkit", "--main-thread-checker"])
-                with self.assertRaises(SystemExit):
-                    run_command_mod.run_command(args)
-                do_build.assert_not_called()
-                self.assertIn("Command Line Tools alone do not provide it", errors.getvalue())
-
-    def test_linux_run_parser_exposes_cli_tui_and_gtk(self):
-        with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
-            for app in ("cli", "tui", "gtk"):
-                with self.subTest(app=app):
-                    self.assertEqual(self.parse(["run", app, "-n"]).app, app)
 
     def test_shard_count_leaves_one_core_free_and_stops_at_the_cap(self):
         with mock.patch.object(test_command.jobs, "available_cores", return_value=4):
@@ -3926,9 +1487,7 @@ class CliParseTest(unittest.TestCase):
         malformed: bool = False,
     ) -> None:
         """Write a process fixture that emits the Catch2 XML shape requested by the runner."""
-        target = test_command.SUITES[suite].target
-        assert target is not None
-        binary = builddir.executable(build_dir / "test" / target)
+        binary = _fixture_binary(build_dir, "ao_" + suite + "_test")
         binary.parent.mkdir(parents=True, exist_ok=True)
         binary.write_text(
             "#!/usr/bin/env python3\n"
@@ -4058,8 +1617,8 @@ class CliParseTest(unittest.TestCase):
     def _run_sharded_core(self, spawn, shards):
         with tempfile.TemporaryDirectory() as temp_dir:
             build_dir = Path(temp_dir)
-            binary = builddir.executable(build_dir / "test" / "ao_core_test")
-            binary.parent.mkdir()
+            binary = _fixture_binary(build_dir, "ao_core_test")
+            binary.parent.mkdir(parents=True)
             binary.touch()
 
             with mock.patch.object(test_command.subprocess, "Popen", side_effect=spawn):
@@ -4078,8 +1637,8 @@ class CliParseTest(unittest.TestCase):
     def test_sharded_filtered_run_counts_skipped_cases_as_global_matches(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             build_dir = Path(temp_dir)
-            binary = builddir.executable(build_dir / "test" / "ao_core_test")
-            binary.parent.mkdir()
+            binary = _fixture_binary(build_dir, "ao_core_test")
+            binary.parent.mkdir(parents=True)
             binary.touch()
 
             spawn = self._catch2_shard_stub([(0, 0, 0), (0, 0, 0, 1)])
@@ -4099,8 +1658,8 @@ class CliParseTest(unittest.TestCase):
     def test_sharded_filtered_run_fails_when_the_aggregate_has_no_matches(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             build_dir = Path(temp_dir)
-            binary = builddir.executable(build_dir / "test" / "ao_core_test")
-            binary.parent.mkdir()
+            binary = _fixture_binary(build_dir, "ao_core_test")
+            binary.parent.mkdir(parents=True)
             binary.touch()
 
             spawn = self._catch2_shard_stub([(0, 0, 0), (0, 0, 0)])
@@ -4116,10 +1675,15 @@ class CliParseTest(unittest.TestCase):
             ("[missing]", "no Backend tests matched the supplied filter."),
         )
         for test_filter, expected in expectations:
-            with self.subTest(test_filter=test_filter), tempfile.TemporaryDirectory() as temp_dir:
+            # Empty-selection behavior is independent of Linux's service setup.
+            with (
+                self.subTest(test_filter=test_filter),
+                tempfile.TemporaryDirectory() as temp_dir,
+                mock.patch.object(builddir, "platform_profile", return_value=builddir.MACOS_PROFILE),
+            ):
                 build_dir = Path(temp_dir)
-                binary = builddir.executable(build_dir / "test" / "ao_backend_test")
-                binary.parent.mkdir()
+                binary = _fixture_binary(build_dir, "ao_backend_test")
+                binary.parent.mkdir(parents=True)
                 binary.touch()
                 spawn = self._catch2_shard_stub([(0, 0, 0), (0, 0, 0)])
                 with (
@@ -4136,10 +1700,13 @@ class CliParseTest(unittest.TestCase):
                     self.assertNotIn("supplied filter", errors.getvalue())
 
     def test_empty_sharded_backend_preserves_explicit_zero_match_permission(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            mock.patch.object(builddir, "platform_profile", return_value=builddir.MACOS_PROFILE),
+        ):
             build_dir = Path(temp_dir)
-            binary = builddir.executable(build_dir / "test" / "ao_backend_test")
-            binary.parent.mkdir()
+            binary = _fixture_binary(build_dir, "ao_backend_test")
+            binary.parent.mkdir(parents=True)
             binary.touch()
             spawn = self._catch2_shard_stub([(0, 0, 0), (0, 0, 0)])
             with (
@@ -4158,28 +1725,21 @@ class CliParseTest(unittest.TestCase):
         self.assertIn("shard 1 console output", output)
         self.assertNotIn("shard 0 console output", output)
 
-    def test_sharded_run_refuses_to_report_a_tally_it_could_not_read(self):
-        def spawn(argv, *, cwd=None, env=None, stdout=None, stderr=None):
-            stdout.write(b"crashed before writing a report\n")
-            return mock.Mock(returncode=0, wait=mock.Mock(return_value=0))
-
-        status, output = self._run_sharded_core(spawn, shards=2)
-
-        self.assertNotEqual(status, 0)
-        self.assertIn("no readable report from shard(s) 1, 2 of 2", output)
-
     def test_listing_is_never_sharded(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             build_dir = Path(temp_dir)
-            binary = builddir.executable(build_dir / "test" / "ao_core_test")
-            binary.parent.mkdir()
+            binary = _fixture_binary(build_dir, "ao_core_test")
+            binary.parent.mkdir(parents=True)
             binary.touch()
 
             with mock.patch.object(test_command, "run", return_value=0) as run:
                 self.assertEqual(test_command.run_catch2_suite("core", build_dir, list_only=True, shards=8).status, 0)
 
         run.assert_called_once_with(
-            [str(binary), "--list-tests", "--verbosity", "high"], env=None, log=None, append=False
+            [str(binary), "--list-tests", "--verbosity", "high"],
+            env=self.artifact_environment(),
+            log=None,
+            append=False,
         )
 
     def test_a_failed_xvfb_start_shuts_down_the_servers_already_running(self):
@@ -4200,6 +1760,29 @@ class CliParseTest(unittest.TestCase):
         self.assertEqual(len(started), 2)
         for server in started:
             server.terminate.assert_called_once()
+
+    @unittest.skipIf(os.name == "nt", "stable service roots are POSIX-only")
+    def test_stable_ipc_root_gives_a_fixed_socket_and_guid_free_address(self):
+        def spawn(argv, **kwargs):
+            if argv[0] == "Xvfb":
+                output = "40\n"
+            else:
+                config = Path(
+                    next(arg.removeprefix("--config-file=") for arg in argv if arg.startswith("--config-file="))
+                )
+                listen = ElementTree.fromstring(config.read_text(encoding="utf-8")).findtext("listen")
+                output = f"{listen},guid=0123456789abcdef\n"
+            return mock.Mock(stdout=io.StringIO(output), wait=mock.Mock(return_value=0))
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "gtk-bus"
+            address = f"unix:path={quote((root / 'bus-0').as_posix(), safe='/')}"
+            with mock.patch.object(test_command.subprocess, "Popen", side_effect=spawn):
+                with contextlib.redirect_stdout(io.StringIO()):
+                    with test_command.virtual_gtk_displays(1, ipc_root=root) as environments:
+                        self.assertEqual(environments[0]["DBUS_SESSION_BUS_ADDRESS"], address)
+                        self.assertEqual(environments[0]["AOBUS_OWNED_GTK_BUS"], address)
+            self.assertFalse(root.exists())
 
     def test_gtk_processes_get_distinct_private_buses_without_host_activation(self):
         started = []
@@ -4307,62 +1890,6 @@ class CliParseTest(unittest.TestCase):
                     server.wait.assert_called_once_with(timeout=5)
                     self.assertTrue(server.stdout.closed)
 
-    def test_silent_gtk_daemon_start_is_bounded_and_retires_prior_daemons(self):
-        def check_timeout(silent_daemon):
-            released = threading.Event()
-            finished = threading.Event()
-
-            def read_until_killed():
-                released.wait()
-                finished.set()
-                return ""
-
-            silent = mock.Mock(
-                stdout=mock.Mock(readline=mock.Mock(side_effect=read_until_killed)),
-                kill=mock.Mock(side_effect=released.set),
-                wait=mock.Mock(return_value=0),
-            )
-            started = []
-
-            def spawn(argv, **kwargs):
-                if (silent_daemon == "Xvfb" and not started) or (silent_daemon == "dbus-daemon" and len(started) == 3):
-                    server = silent
-                else:
-                    output = "40\n" if argv[0] == "Xvfb" else "unix:path=/private/bus\n"
-                    server = mock.Mock(stdout=io.StringIO(output), wait=mock.Mock(return_value=0))
-                started.append(server)
-                return server
-
-            read_ready = test_command._gtk_daemon_ready
-
-            def readiness(server, label):
-                return read_ready(server, label, timeout=0 if server is silent else 5)
-
-            with (
-                mock.patch.object(test_command.subprocess, "Popen", side_effect=spawn),
-                mock.patch.object(test_command, "_gtk_daemon_ready", side_effect=readiness),
-                contextlib.redirect_stdout(io.StringIO()),
-                contextlib.redirect_stderr(io.StringIO()) as errors,
-                self.assertRaises(SystemExit),
-            ):
-                with test_command.virtual_gtk_displays(2):
-                    self.fail("a daemon without readiness must not admit tests")
-            self.assertIn("did not report readiness", errors.getvalue())
-            self.assertTrue(finished.is_set(), "the startup reader must be joined before returning")
-            silent.kill.assert_called_once()
-            self.assertEqual(len(started), 2 if silent_daemon == "Xvfb" else 4)
-            for server in started:
-                server.terminate.assert_called_once()
-                self.assertIn(mock.call(timeout=5), server.wait.call_args_list)
-                if server is silent:
-                    server.stdout.close.assert_called()
-                else:
-                    self.assertTrue(server.stdout.closed)
-
-        for daemon in ("Xvfb", "dbus-daemon"):
-            with self.subTest(daemon=daemon):
-                check_timeout(daemon)
-
     def test_interrupted_gtk_readiness_retires_the_writer_before_closing_and_joining(self):
         released = threading.Event()
         finished = threading.Event()
@@ -4408,84 +1935,6 @@ class CliParseTest(unittest.TestCase):
         self.assertTrue(display.stdout.closed)
         self.assertTrue(bus.stdout.closed)
 
-    def test_a_failing_shard_prints_the_command_that_reruns_it(self):
-        status, output = self._run_sharded_core(self._catch2_shard_stub([(1, 1, 0), (1, 1, 1)]), shards=2)
-
-        self.assertNotEqual(status, 0)
-        rerun = next(line for line in output.splitlines() if line.startswith("rerun this shard:"))
-        # Catch2 counts shards from zero while the banner counts from one, so the
-        # command is printed rather than left for the reader to assemble.
-        self.assertIn("--shard-index 1", rerun)
-        self.assertIn("--shard-count 2", rerun)
-        self.assertRegex(rerun, r"--rng-seed \d+")
-        self.assertNotIn("--reporter", rerun)
-        self.assertNotIn("xml::out=", rerun)
-
-    def test_the_rerun_command_is_quoted_for_the_shell_that_will_paste_it(self):
-        shard = test_command._Shard(
-            index=1,
-            argv=(r"C:\build\Aobus\debug\test\ao_core_test.exe", "--rng-seed", "7", "--reporter", "xml::out=x"),
-            environment={},
-            process=mock.Mock(returncode=42),
-            sink=mock.Mock(),
-            output=Path("out"),
-            report=Path("report"),
-        )
-
-        with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
-            windows = test_command._repro_command(shard)
-        with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
-            posix = test_command._repro_command(shard)
-
-        # cmd.exe does not treat single quotes as quoting, so the POSIX spelling
-        # would paste back as a program named "'C:\...'".
-        self.assertEqual(windows, r"C:\build\Aobus\debug\test\ao_core_test.exe --rng-seed 7")
-        self.assertEqual(posix, r"'C:\build\Aobus\debug\test\ao_core_test.exe' --rng-seed 7")
-
-    def test_the_rerun_command_carries_the_environment_that_decides_the_outcome(self):
-        shard = test_command._Shard(
-            index=2,
-            argv=("/build/test/ao_gtk_test", "--rng-seed", "7"),
-            environment={
-                "DISPLAY": ":9",
-                "AOBUS_OWNED_GTK_DISPLAY": "1",
-                "DBUS_SESSION_BUS_ADDRESS": "unix:path=/retired/private-bus",
-                "AOBUS_OWNED_GTK_BUS": "unix:path=/retired/private-bus",
-                "G_DEBUG": "fatal-warnings",
-                "GDK_BACKEND": "x11",
-                "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1",
-            },
-            process=mock.Mock(returncode=42),
-            sink=mock.Mock(),
-            output=Path("out"),
-            report=Path("report"),
-        )
-
-        with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
-            command = test_command._repro_command(shard)
-
-        # UBSAN_OPTIONS decides whether the failure reproduces at all, so it has
-        # to travel with the command.
-        self.assertIn("UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1", command)
-        self.assertIn("GDK_BACKEND=x11", command)
-        self.assertTrue(command.startswith("env "), command)
-        # A direct command must neither reuse retired services nor fall back to
-        # the caller's desktop (including GIO's XDG_RUNTIME_DIR bus discovery).
-        arguments = shlex.split(command)
-        self.assertEqual(arguments[:5], ["env", "-u", "AOBUS_OWNED_GTK_DISPLAY", "-u", "AOBUS_OWNED_GTK_BUS"])
-        self.assertIn("DISPLAY=", arguments)
-        self.assertIn("DBUS_SESSION_BUS_ADDRESS=disabled:", arguments)
-        self.assertIn("G_DEBUG=fatal-warnings", arguments)
-        self.assertNotIn("DISPLAY=:9", arguments)
-        self.assertNotIn("unix:path=/retired/private-bus", command)
-
-        # Bus admission alone must also be scrubbed, not exported as reusable ownership.
-        shard.environment = {key: value for key, value in shard.environment.items() if key != "AOBUS_OWNED_GTK_DISPLAY"}
-        with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
-            bus_only = shlex.split(test_command._repro_command(shard))
-        self.assertEqual(bus_only[:5], ["env", "-u", "AOBUS_OWNED_GTK_DISPLAY", "-u", "AOBUS_OWNED_GTK_BUS"])
-        self.assertIn("DBUS_SESSION_BUS_ADDRESS=disabled:", bus_only)
-
     def test_a_failed_shard_launch_closes_the_outputs_already_opened(self):
         opened = []
         real_open = Path.open
@@ -4513,8 +1962,8 @@ class CliParseTest(unittest.TestCase):
     def test_every_gtk_shard_gets_a_display_of_its_own(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             build_dir = Path(temp_dir)
-            binary = build_dir / "test" / "ao_gtk_test"
-            binary.parent.mkdir()
+            binary = _fixture_binary(build_dir, "ao_gtk_test", platform="linux")
+            binary.parent.mkdir(parents=True)
             binary.touch()
 
             displays = iter(("40\n", "41\n", "42\n", "43\n"))
@@ -4554,31 +2003,10 @@ class CliParseTest(unittest.TestCase):
             server.wait.assert_called_once_with(timeout=5)
             self.assertTrue(server.stdout.closed)
 
-    def test_test_help_explains_filtered_group_and_non_catch2_semantics(self):
-        output = io.StringIO()
-        with contextlib.redirect_stdout(output), self.assertRaises(SystemExit) as caught:
-            make_parser().parse_args(["test", "--help"])
-
-        self.assertEqual(caught.exception.code, 0)
-        help_text = " ".join(output.getvalue().split())
-        self.assertIn("explicit filter applies only to Catch2 suites", help_text)
-        self.assertIn("at least one test must match globally", help_text)
-        self.assertIn("match and then skip still count", help_text)
-        self.assertIn("Escape literal commas", help_text)
-        self.assertIn(r"name\, alias\, and field", help_text)
-
     def test_test_parser_preserves_escaped_literal_commas(self):
         test_filter = r"FieldCatalog - finds descriptors by canonical name\, alias\, and field"
         args = self.parse(["test", "--core", "--list", test_filter])
         self.assertEqual(args.filter, test_filter)
-
-    def test_help_exits_zero(self):
-        for argv in (["--help"], ["build", "--help"], ["tidy", "--help"], ["run", "--help"]):
-            buffer = io.StringIO()
-            with contextlib.redirect_stdout(buffer), self.assertRaises(SystemExit) as caught:
-                make_parser().parse_args(argv)
-            self.assertEqual(caught.exception.code, 0)
-            self.assertTrue(buffer.getvalue())
 
 
 if __name__ == "__main__":

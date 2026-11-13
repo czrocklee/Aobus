@@ -8,6 +8,11 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      r2:
+        description: Use existing writer credentials for trusted isolated R2 validation
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -58,23 +63,21 @@ jobs:
       ${{ always() && !cancelled() &&
           (needs.changes.result != 'success' || needs.changes.outputs.docs-only != 'true') }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 180
     env:
-      SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
-      AOBUS_PHASE_LOG_DIR: /tmp/aobus-phases-${{ github.run_id }}-${{ github.run_attempt }}
+      PYTHONDONTWRITEBYTECODE: "1"
 
     steps:
       - name: Require successful scope and documentation validation
         if: ${{ needs.changes.result != 'success' }}
         run: exit 1
+
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      # Every runner core builds, tidies, and shards tests; jobs.py owns the
-      # strict core detection and the shard cap (ao.command.test.SHARD_CAP).
       - name: Use every runner core
         shell: bash
         run: >-
@@ -86,135 +89,260 @@ jobs:
         with:
           enable_kvm: false
 
-      - name: Read compiler cache contract
-        id: compiler-cache-contract
-        run: python3 script/ao/core/compiler_cache.py ci-contract >> "$GITHUB_OUTPUT"
+      - name: Select runner-local state
+        shell: bash
+        run: echo "AOBUS_STATE_ROOT=$RUNNER_TEMP/aobus-state" >> "$GITHUB_ENV"
 
-      - name: Set up compiler cache
-        id: sccache
-        continue-on-error: true
-        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba  # v0.0.11
-        with:
-          version: ${{ steps.compiler-cache-contract.outputs.version }}
+      - name: Provision Bazel tree
+        run: ./ao setup bazel
 
-      - name: Enable compiler cache
-        id: compiler-cache
-        if: ${{ steps.sccache.outcome == 'success' }}
-        continue-on-error: true
+      # Only the pinned executable path leaves the Nix child; no SDK variables
+      # from the shell environment propagate into the job.
+      - name: Resolve pinned Bazel executable
+        id: bazel-executable
         shell: bash
         run: >-
-          python3 script/ao/core/compiler_cache.py activate-ci
-          --github-env "$GITHUB_ENV"
-          --state-root "$RUNNER_TEMP/aobus-state"
-          --platform Linux
+          nix-shell --run 'bazel="$(command -v bazel)"; test -n "$bazel";
+          printf "executable=%s\n" "$bazel" >> "$GITHUB_OUTPUT"'
 
-      # Export the R2 backend only when credentials exist: sccache selects
-      # the S3 backend whenever SCCACHE_BUCKET is set and does not fall back
-      # to the disk cache when credentials are empty, so secretless runs
-      # (fork PRs, Dependabot) must not see SCCACHE_BUCKET at all. The
-      # secrets context is not allowed in steps.if, so the guard runs in
-      # the helper's step body.
-      - name: Activate R2 compiler cache backend
-        if: ${{ steps.compiler-cache.outcome == 'success' }}
+      - name: Show initial disk usage
+        run: df -h
+
+      # Persist only content-addressed disk actions, never workspace/server,
+      # repository, provider or Nix state. The pin-contract prefix selects
+      # candidates; Bazel action keys still decide reuse. PRs may restore main's
+      # cache but must never promote writes into the trusted main archive pool.
+      - name: Restore Bazel disk cache
+        id: bazel-cache
+        continue-on-error: true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ${{ runner.temp }}/aobus-state/cache/bazel
+          key: >-
+            bazel-disk-v1-trusted-main-${{ runner.os }}-${{ runner.arch }}-${{
+              hashFiles('.bazelversion', 'script/ao/bazel-toolchain.json', 'nixpkgs.json', 'shell.nix', 'MODULE.bazel')
+            }}-${{ github.sha }}
+          restore-keys: >-
+            bazel-disk-v1-trusted-main-${{ runner.os }}-${{ runner.arch }}-${{
+              hashFiles('.bazelversion', 'script/ao/bazel-toolchain.json', 'nixpkgs.json', 'shell.nix', 'MODULE.bazel')
+            }}-
+
+      # Mark restored entries after restore, outside the archived directory.
+      - name: Mark restored Bazel disk cache
+        id: bazel-cache-marker
+        continue-on-error: true
+        shell: bash
+        env:
+          AOBUS_BAZEL_CACHE_MARKER: ${{ runner.temp }}/aobus-bazel-cache-restored.marker
+        run: touch "$AOBUS_BAZEL_CACHE_MARKER"
+
+      # Automatic writers require main push plus rollout authorization. Manual
+      # R2 validation explicitly trusts its checkout and uses an isolated prefix.
+      # PRs get no R2 binding; these conditions are not backend authorization.
+      - name: Start Bazel remote cache
+        id: bazel-remote
+        if: >-
+          ${{ (github.event_name == 'workflow_dispatch' && inputs.r2) ||
+              (github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.AOBUS_BAZEL_R2_CACHE_AUTHORIZED == 'true') }}
+        continue-on-error: ${{ github.event_name != 'workflow_dispatch' || !inputs.r2 }}
         shell: bash
         env:
           R2_ENDPOINT: ${{ secrets.R2_SCCACHE_ENDPOINT }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_SCCACHE_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SCCACHE_SECRET_ACCESS_KEY }}
+          CACHE_PREFIX: ${{ github.event_name == 'workflow_dispatch' && format('bazel-ci-validation/{0}/{1}/linux', github.run_id, github.run_attempt) || 'bazel-v1' }}
         run: >-
-          python3 script/ao/core/compiler_cache.py activate-r2
-          --github-env "$GITHUB_ENV"
-          --key-prefix linux-v1
+          python3 script/ao/core/bazel_remote_cache.py start
+          --state "$RUNNER_TEMP/aobus-bazel-remote"
+          --github-output "$GITHUB_OUTPUT"
+          --runner-os "$RUNNER_OS"
+          --runner-arch "$RUNNER_ARCH"
+          --trusted-writer true --key-prefix "$CACHE_PREFIX"
 
-      - name: Reset compiler cache statistics
-        if: ${{ steps.compiler-cache.outcome == 'success' }}
+      - name: Require requested R2 cache
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.r2 }}
+        env:
+          CACHE_URL: ${{ steps.bazel-remote.outputs.url }}
+        run: test -n "$CACHE_URL"
+
+      - name: Test portal tooling
+        run: ./ao test --tooling
+
+      # Instrumentation smoke is an independent correctness outcome: failure
+      # must not prevent completion, Release or lint from retaining their evidence.
+      # Sanitizer analysis checks Debug contracts; utility builds compile and
+      # link the profile canary. Neither replaces sanitizer runtime validation.
+      - name: Check Bazel instrumentation smoke
+        id: bazel-instrumentation
         continue-on-error: true
-        run: '"$SCCACHE_PATH" --zero-stats'
-
-      - name: Show initial disk usage
-        run: df -h
-
-      # Enter the shell the way ./ao does, so the inner ./ao check reuses it
-      # through AO_NIX_SHELL_FINGERPRINT instead of nesting a second nix-shell.
-      - name: Build and test with private PipeWire
-        id: build
+        shell: bash
+        env:
+          AOBUS_STATE_ROOT: ${{ runner.temp }}/aobus-state
         run: |
-          NIX_BUILD_SHELL="$(nix-build shell.nix -A portalShell --no-out-link)/bin/bash"
-          export NIX_BUILD_SHELL
-          nix-shell --run 'bash -euo pipefail' <<'BASH'
-          runtime=$(mktemp -d)
-          trap 'rm -rf "$runtime"' EXIT
-          export XDG_RUNTIME_DIR="$runtime"
-          export PIPEWIRE_RUNTIME_DIR="$runtime"
-          export PIPEWIRE_REMOTE=pipewire-0
-          export AOBUS_REQUIRE_PIPEWIRE=1
-          # Do not activate host desktop services or their FUSE mounts on this test bus.
-          cat > "$runtime/dbus.conf" <<DBUS
-          <busconfig>
-            <type>session</type>
-            <listen>unix:tmpdir=$runtime</listen>
-            <policy context="default">
-              <allow send_destination="*"/>
-              <allow receive_sender="*"/>
-              <allow own="*"/>
-            </policy>
-          </busconfig>
-          DBUS
-          dbus-run-session --config-file="$runtime/dbus.conf" -- bash -euo pipefail <<'SESSION'
-          runtime=$XDG_RUNTIME_DIR
-          XDG_CONFIG_HOME="$runtime/config" pipewire > "$runtime/pipewire.log" 2>&1 &
-          daemon=$!
-          # Policy only: the fixture owns its null sinks, never host hardware.
-          XDG_STATE_HOME="$runtime/state" XDG_CONFIG_HOME="$runtime/config" \
-            wireplumber --profile=policy > "$runtime/wireplumber.log" 2>&1 &
-          policy=$!
-          cleanup() {
-            status=$?
-            kill "$policy" "$daemon" 2>/dev/null || true
-            wait "$policy" "$daemon" 2>/dev/null || true
-            if (( status != 0 )); then
-              cat "$runtime/pipewire.log" "$runtime/wireplumber.log"
-            fi
-          }
-          trap cleanup EXIT
-          ready=0
-          for attempt in {1..50}; do
-            if ! kill -0 "$daemon" "$policy" 2>/dev/null; then break; fi
-            if timeout 2 pw-cli ls Metadata 2>/dev/null | grep 'metadata.name = "default"' >/dev/null; then
-              ready=1
-              break
-            fi
-            sleep 0.1
-          done
-          if (( ready == 0 )); then
-            echo 'Private PipeWire daemon and policy did not become ready.' >&2
-            exit 1
-          fi
-          ./ao check
-          SESSION
-          BASH
+          set -euo pipefail
+          ./ao verify --config asan --path "$RUNNER_TEMP/aobus-bazel-asan-analysis" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL"
+          ./ao build --asan --target //test:utility_test --path "$RUNNER_TEMP/aobus-bazel-asan-analysis" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL" --event-log "$RUNNER_TEMP/aobus-bazel-asan-analysis/canary-build.bep.json"
+          ./ao verify --config tsan --path "$RUNNER_TEMP/aobus-bazel-tsan-analysis" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL"
+          ./ao build --tsan --target //test:utility_test --path "$RUNNER_TEMP/aobus-bazel-tsan-analysis" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL" --event-log "$RUNNER_TEMP/aobus-bazel-tsan-analysis/canary-build.bep.json"
+          ./ao coverage --analysis-only --path "$RUNNER_TEMP/aobus-bazel-coverage-analysis" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL"
+
+      # Preserve independent correctness outcomes for the final mandatory gate.
+      # Completion owns Debug products, tests, fixtures and compile contracts;
+      # Release keeps its existing analysis-only contract scope. Required native
+      # admission stays fresh; --fresh disables Bazel test-result cache reuse.
+      - name: Check Bazel completion
+        id: bazel-check
+        continue-on-error: true
+        env:
+          AOBUS_STATE_ROOT: ${{ runner.temp }}/aobus-state
+          AOBUS_BAZEL_REMOTE_CACHE: ${{ steps.bazel-remote.outputs.url }}
+        run: ./ao check --fresh --path "$RUNNER_TEMP/aobus-bazel-debug" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL"
+
+      - name: Verify Bazel Release compile contracts
+        id: bazel-verify-release
+        continue-on-error: true
+        env:
+          AOBUS_STATE_ROOT: ${{ runner.temp }}/aobus-state
+        run: ./ao verify --config release --path "$RUNNER_TEMP/aobus-bazel-release" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL"
+
+      # These production reports are independent of the lint fixture suite
+      # inside completion. The unpaired header also
+      # exercises report-build consumer rc transport.
+      - name: Check Bazel production lint
+        id: bazel-lint
+        continue-on-error: true
+        env:
+          AOBUS_STATE_ROOT: ${{ runner.temp }}/aobus-state
+          AOBUS_BAZEL_REMOTE_CACHE: ${{ steps.bazel-remote.outputs.url }}
+        run: |
+          ./ao tidy --path "$RUNNER_TEMP/aobus-bazel-debug" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL" --check aobus-modernize-use-starts-with lib/utility/Base64.cpp
+          ./ao tidy --path "$RUNNER_TEMP/aobus-bazel-debug" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL" --check aobus-modernize-use-starts-with include/ao/utility/StrongType.h
+          ./ao tidy --config release --path "$RUNNER_TEMP/aobus-bazel-release" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL" --target //test/lint:cache_clean --check aobus-modernize-use-starts-with
+
+      # The bare-entry body remains independent of the portal and remote cache.
+      # It runs only after successful completion, in its own output base.
+      - name: Test direct Bazel entry
+        if: ${{ steps.bazel-check.outcome == 'success' }}
+        shell: bash
+        env:
+          AOBUS_BAZEL_EXECUTABLE: ${{ steps.bazel-executable.outputs.executable }}
+        run: |
+          set -euo pipefail
+          unset AOBUS_BAZEL_CONFIGURATION AOBUS_BAZEL_PYTHON AOBUS_NIX_DEPENDENCY_REPORT \
+            AO_NIX_PORTAL_PYTHON AOBUS_BAZEL_REMOTE_CACHE
+          bare_root="$RUNNER_TEMP/aobus-bare"
+          mkdir -p "$bare_root" "$AOBUS_STATE_ROOT/cache/bazel"
+          "$AOBUS_BAZEL_EXECUTABLE" --output_base="$bare_root/state/output" \
+            run --jobs="$CMAKE_BUILD_PARALLEL_LEVEL" --lockfile_mode=off \
+            --disk_cache="$AOBUS_STATE_ROOT/cache/bazel" \
+            --symlink_prefix="$bare_root/bazel-" \
+            --build_event_json_file="$bare_root/debug-run.bep.json" \
+            --experimental_build_event_upload_strategy=local \
+            //app/tui:aobus-tui -- --help
+          "$AOBUS_BAZEL_EXECUTABLE" --output_base="$bare_root/state/output" \
+            build --config=release --jobs="$CMAKE_BUILD_PARALLEL_LEVEL" --lockfile_mode=off \
+            --disk_cache="$AOBUS_STATE_ROOT/cache/bazel" \
+            --symlink_prefix="$bare_root/bazel-" \
+            --build_event_json_file="$bare_root/release-build.bep.json" \
+            --experimental_build_event_upload_strategy=local \
+            //test/lint:cache_clean //app/tui:aobus-tui
 
       - name: Run hygiene
         env:
+          AOBUS_STATE_ROOT: ${{ runner.temp }}/aobus-state
+          AOBUS_BAZEL_REMOTE_CACHE: ${{ steps.bazel-remote.outputs.url }}
           BASE_SHA: ${{ needs.changes.outputs.base }}
-        run: ./ao hygiene --commit "$BASE_SHA" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL"
+        run: ./ao hygiene --commit "$BASE_SHA" --path "$RUNNER_TEMP/aobus-bazel-debug" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL"
 
-      - name: Show compiler cache statistics
-        if: >-
-          ${{ !cancelled() && steps.compiler-cache.outcome == 'success' &&
-              steps.build.outcome != 'skipped' }}
-        continue-on-error: true
-        run: '"$SCCACHE_PATH" --show-stats'
+      # Drain acknowledged uploads before stopping the owned proxy. A requested
+      # manual cache must also finish its drain successfully.
+      - name: Stop Bazel remote cache
+        if: ${{ always() && steps.bazel-remote.outcome == 'success' }}
+        continue-on-error: ${{ github.event_name != 'workflow_dispatch' || !inputs.r2 }}
+        shell: bash
+        run: >-
+          python3 script/ao/core/bazel_remote_cache.py stop --state "$RUNNER_TEMP/aobus-bazel-remote"
+          --report "$RUNNER_TEMP/bazel-r2-stop.json"
 
-      - name: Summarize native phases
-        if: ${{ always() && steps.build.outcome != 'skipped' }}
+      # Keep only entries newer than the post-restore marker. Missing markers
+      # and failed trims block promotion, without making cache transport a gate.
+      # Exact archive hits need neither trimming nor saving.
+      - name: Trim restored Bazel disk cache
+        id: bazel-cache-trim
+        if: ${{ steps.bazel-cache-marker.outcome == 'success' && steps.bazel-cache.outcome == 'success' && steps.bazel-cache.outputs.cache-hit != 'true' }}
         continue-on-error: true
+        shell: bash
         env:
-          PYTHONPATH: script
+          AOBUS_BAZEL_CACHE_DIR: ${{ runner.temp }}/aobus-state/cache/bazel
+          AOBUS_BAZEL_CACHE_MARKER: ${{ runner.temp }}/aobus-bazel-cache-restored.marker
         run: |
-          NIX_BUILD_SHELL="$(nix-build shell.nix -A portalShell --no-out-link)/bin/bash"
-          export NIX_BUILD_SHELL
-          nix-shell --run '"$AO_NIX_PORTAL_PYTHON" -m ao.core.phases "$AOBUS_PHASE_LOG_DIR" --github-summary "$GITHUB_STEP_SUMMARY"'
+          if [[ ! -f "$AOBUS_BAZEL_CACHE_MARKER" ]]; then
+            echo "::error::Bazel cache restore marker '$AOBUS_BAZEL_CACHE_MARKER' is missing; not saving." >&2
+            exit 1
+          fi
+          if [[ ! -d "$AOBUS_BAZEL_CACHE_DIR" ]]; then
+            echo 'Bazel cache directory is absent; nothing to trim.'
+            exit 0
+          fi
+          before="$(find "$AOBUS_BAZEL_CACHE_DIR" -type f | wc -l)"
+          find "$AOBUS_BAZEL_CACHE_DIR" -type f ! -newer "$AOBUS_BAZEL_CACHE_MARKER" -delete
+          after="$(find "$AOBUS_BAZEL_CACHE_DIR" -type f | wc -l)"
+          echo "Trimmed $((before - after)) restored file(s) untouched since restore; kept $after file(s)."
+          du -sh "$AOBUS_BAZEL_CACHE_DIR"
+          df -h "$AOBUS_BAZEL_CACHE_DIR"
+
+      - name: Save Bazel disk cache
+        if: >-
+          ${{ success() && github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+              steps.bazel-check.outcome == 'success' && steps.bazel-verify-release.outcome == 'success' &&
+              steps.bazel-lint.outcome == 'success' && steps.bazel-instrumentation.outcome == 'success' &&
+              steps.bazel-cache.outcome == 'success' && steps.bazel-cache.outputs.cache-hit != 'true' &&
+              steps.bazel-cache-trim.outcome == 'success' }}
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ${{ runner.temp }}/aobus-state/cache/bazel
+          key: ${{ steps.bazel-cache.outputs.cache-primary-key }}
+
+      - name: Require successful Bazel checks
+        if: ${{ !cancelled() }}
+        shell: bash
+        env:
+          BAZEL_CHECK_OUTCOME: ${{ steps.bazel-check.outcome }}
+          BAZEL_VERIFY_RELEASE_OUTCOME: ${{ steps.bazel-verify-release.outcome }}
+          BAZEL_LINT_OUTCOME: ${{ steps.bazel-lint.outcome }}
+          BAZEL_INSTRUMENTATION_OUTCOME: ${{ steps.bazel-instrumentation.outcome }}
+        run: |
+          if [[ "$BAZEL_CHECK_OUTCOME" != success || "$BAZEL_VERIFY_RELEASE_OUTCOME" != success || "$BAZEL_LINT_OUTCOME" != success || "$BAZEL_INSTRUMENTATION_OUTCOME" != success ]]; then
+            echo "::error::Bazel outcomes: check=$BAZEL_CHECK_OUTCOME, verify-release=$BAZEL_VERIFY_RELEASE_OUTCOME, lint=$BAZEL_LINT_OUTCOME, instrumentation=$BAZEL_INSTRUMENTATION_OUTCOME" >&2
+            exit 1
+          fi
+
+      - name: Preserve Bazel completion evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: bazel-linux-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/aobus-bazel-debug/build.log
+            ${{ runner.temp }}/aobus-bazel-debug/checks/debug/check-*
+            ${{ runner.temp }}/aobus-bazel-debug/contracts/debug/verify-*
+            ${{ runner.temp }}/aobus-bazel-release/contracts/release/verify-*
+            ${{ runner.temp }}/aobus-bazel-asan-analysis/build.log
+            ${{ runner.temp }}/aobus-bazel-asan-analysis/canary-build.bep.json
+            ${{ runner.temp }}/aobus-bazel-asan-analysis/contracts/debug/verify-*
+            ${{ runner.temp }}/aobus-bazel-tsan-analysis/build.log
+            ${{ runner.temp }}/aobus-bazel-tsan-analysis/canary-build.bep.json
+            ${{ runner.temp }}/aobus-bazel-tsan-analysis/contracts/debug/verify-*
+            ${{ runner.temp }}/aobus-bazel-coverage-analysis/build.log
+            ${{ runner.temp }}/aobus-bazel-coverage-analysis/coverage/run-*
+            ${{ runner.temp }}/aobus-bazel-debug/lint/run-*/run.receipt.json
+            ${{ runner.temp }}/aobus-bazel-debug/lint/run-*/*.bep.json
+            ${{ runner.temp }}/aobus-bazel-release/lint/run-*/run.receipt.json
+            ${{ runner.temp }}/aobus-bazel-release/lint/run-*/*.bep.json
+            ${{ runner.temp }}/aobus-bare/*.bep.json
+            ${{ runner.temp }}/bazel-r2-stop.json
+          if-no-files-found: warn
 
       - name: Show final disk usage
         if: ${{ always() }}
@@ -243,22 +371,18 @@ jobs:
     env:
       AOBUS_CHECKOUT_ID: github-actions-macos-${{ matrix.cache_arch }}
       HOMEBREW_NO_AUTO_UPDATE: "1"
-      SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
-      AOBUS_PHASE_LOG_DIR: /tmp/aobus-phases-${{ github.run_id }}-${{ github.run_attempt }}
 
     steps:
       - name: Require successful scope and documentation validation
         if: ${{ needs.changes.result != 'success' }}
         run: exit 1
+
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      # Every runner core builds, tidies, and shards tests on both matrix
-      # architectures; jobs.py owns the strict core detection and the shard cap
-      # (ao.command.test.SHARD_CAP).
       - name: Use every runner core
         shell: bash
         run: >-
@@ -272,6 +396,8 @@ jobs:
           mkdir -p "$state_root"
           printf 'AOBUS_STATE_ROOT=%s\n' "$state_root" >> "$GITHUB_ENV"
 
+      # vcpkg port builds still need CMake, Ninja and autotools; Aobus itself
+      # is not configured or compiled with CMake in this workflow.
       - name: Install host toolchain
         shell: bash
         run: |
@@ -326,47 +452,6 @@ jobs:
             "$sdk_version" \
             "${ImageVersion:-unknown}"
 
-      - name: Read compiler cache contract
-        id: compiler-cache-contract
-        shell: bash
-        run: python3 script/ao/core/compiler_cache.py ci-contract >> "$GITHUB_OUTPUT"
-
-      - name: Set up compiler cache provider
-        id: sccache
-        continue-on-error: true
-        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba  # v0.0.11
-        with:
-          version: ${{ steps.compiler-cache-contract.outputs.version }}
-
-      - name: Enable compiler cache
-        id: compiler-cache
-        if: ${{ steps.sccache.outcome == 'success' }}
-        continue-on-error: true
-        shell: bash
-        run: >-
-          python3 script/ao/core/compiler_cache.py activate-ci
-          --github-env "$GITHUB_ENV"
-          --state-root "$AOBUS_STATE_ROOT"
-          --platform Darwin
-
-      # Export the R2 backend only when credentials exist: sccache selects
-      # the S3 backend whenever SCCACHE_BUCKET is set and does not fall back
-      # to the disk cache when credentials are empty, so secretless runs
-      # (fork PRs, Dependabot) must not see SCCACHE_BUCKET at all. The
-      # secrets context is not allowed in steps.if, so the guard runs in
-      # the helper's step body.
-      - name: Activate R2 compiler cache backend
-        if: ${{ steps.compiler-cache.outcome == 'success' }}
-        shell: bash
-        env:
-          R2_ENDPOINT: ${{ secrets.R2_SCCACHE_ENDPOINT }}
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_SCCACHE_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SCCACHE_SECRET_ACCESS_KEY }}
-        run: >-
-          python3 script/ao/core/compiler_cache.py activate-r2
-          --github-env "$GITHUB_ENV"
-          --key-prefix "macos-${{ matrix.cache_arch }}-v1"
-
       - name: Restore managed macOS tools
         id: macos-state
         continue-on-error: true
@@ -375,15 +460,12 @@ jobs:
           path: |
             ${{ runner.temp }}/aobus-state/tools/vcpkg
             ${{ runner.temp }}/aobus-state/tools/libcxx-expected-shim
+            ${{ runner.temp }}/aobus-state/tools/buildifier
           key: >-
             macos-state-v1-${{ runner.arch }}-${{ steps.macos-toolchain.outputs.llvm }}-${{
-              hashFiles('script/ao/macos-toolchain.json')
+              hashFiles('script/ao/macos-toolchain.json', 'script/ao/buildifier.json')
             }}
 
-      # Saved keys end with a fingerprint of the archived package ABIs, so the
-      # primary key is a prefix and never reports an exact hit. The runner
-      # image comes last so alternating images keep separate lineages while
-      # still seeding each other; v1 entries seed the first content-keyed save.
       - name: Resolve vcpkg binary cache key
         id: vcpkg-key
         shell: bash
@@ -415,17 +497,15 @@ jobs:
       - name: Show initial disk usage
         run: df -h
 
-      # Resolve the native dependency graph before the full gate so a later
-      # compile or test failure does not discard a cold vcpkg cache fill.
+      # Fill and seal native dependency archives before product validation so
+      # later failures do not discard a cold vcpkg cache fill.
       - name: Prepare vcpkg binary cache
         id: vcpkg-prepare
         timeout-minutes: 120
-        run: ./ao build --target ao_utility
+        run: |
+          ./ao setup bazel
+          ./ao deps provision --path "$RUNNER_TEMP/aobus-bazel-debug"
 
-      # Drop archives the prepared tree did not install and key the rest by
-      # content: a restored directory with stale ABIs must still be replaced.
-      # See script/ao/core/vcpkg_binary_cache.py. The build root mirrors
-      # builddir.linux_build_root(); a failed seal only skips the save.
       - name: Seal vcpkg binary cache
         id: vcpkg-cache-ready
         if: ${{ !cancelled() && steps.vcpkg-prepare.outcome != 'skipped' }}
@@ -434,9 +514,13 @@ jobs:
         run: >-
           python3 script/ao/core/vcpkg_binary_cache.py seal
           --cache-dir "$AOBUS_STATE_ROOT/cache/vcpkg/binaries"
-          --build-root "${AOBUS_BUILD_ROOT:-/tmp/build}/${GITHUB_WORKSPACE##*/}"
+          --build-root "$RUNNER_TEMP/aobus-bazel-debug"
           --key-prefix "${{ steps.vcpkg-key.outputs.prefix }}"
           --github-output "$GITHUB_OUTPUT"
+
+      - name: Set up Buildifier
+        shell: bash
+        run: ./ao setup buildifier
 
       - name: Save managed macOS tools
         if: >-
@@ -449,6 +533,7 @@ jobs:
           path: |
             ${{ runner.temp }}/aobus-state/tools/vcpkg
             ${{ runner.temp }}/aobus-state/tools/libcxx-expected-shim
+            ${{ runner.temp }}/aobus-state/tools/buildifier
           key: ${{ steps.macos-state.outputs.cache-primary-key }}
 
       - name: Save vcpkg binary cache
@@ -462,36 +547,114 @@ jobs:
           path: ${{ runner.temp }}/aobus-state/cache/vcpkg/binaries
           key: ${{ steps.vcpkg-cache-ready.outputs.key }}
 
-      - name: Reset compiler cache statistics
-        if: ${{ steps.compiler-cache.outcome == 'success' }}
-        continue-on-error: true
-        run: '"$SCCACHE_PATH" --zero-stats'
+      - name: Test Bazel remote-cache lifecycle
+        shell: bash
+        env:
+          PYTHONPATH: script
+        run: >-
+          "$(brew --prefix python@3.14)/bin/python3.14" -B -m unittest discover
+          -s test/script -p test_bazel_remote_cache.py
 
-      - name: Build and test
+      # Manual R2 validation trusts the selected checkout. Prefix isolation
+      # is not a backend permission boundary for the writer.
+      - name: Start Bazel remote cache
+        id: bazel-remote
+        if: >-
+          ${{ (github.event_name == 'workflow_dispatch' && inputs.r2) ||
+              (github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.AOBUS_BAZEL_R2_CACHE_AUTHORIZED == 'true') }}
+        continue-on-error: ${{ github.event_name != 'workflow_dispatch' || !inputs.r2 }}
+        shell: bash
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_SCCACHE_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_SCCACHE_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SCCACHE_SECRET_ACCESS_KEY }}
+          CACHE_PREFIX: ${{ github.event_name == 'workflow_dispatch' && format('bazel-ci-validation/{0}/{1}/macos-{2}', github.run_id, github.run_attempt, matrix.cache_arch) || 'bazel-v1' }}
+        run: >-
+          python3 script/ao/core/bazel_remote_cache.py start
+          --state "$RUNNER_TEMP/aobus-bazel-remote"
+          --github-output "$GITHUB_OUTPUT"
+          --runner-os "$RUNNER_OS"
+          --runner-arch "$RUNNER_ARCH"
+          --trusted-writer true --key-prefix "$CACHE_PREFIX"
+
+      - name: Require requested R2 cache
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.r2 }}
+        env:
+          CACHE_URL: ${{ steps.bazel-remote.outputs.url }}
+        run: test -n "$CACHE_URL"
+
+      # Required native admission stays fresh; --fresh disables Bazel
+      # test-result cache reuse.
+      - name: Check Bazel completion
         id: build
-        run: ./ao check
+        env:
+          AOBUS_BAZEL_REMOTE_CACHE: ${{ steps.bazel-remote.outputs.url }}
+        run: ./ao check --fresh --path "$RUNNER_TEMP/aobus-bazel-debug" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL"
+
+      # Retain the native bootstrap, triplet and pinned bare executable route;
+      # Debug completion does not prove direct Release SDK/catalog linking.
+      # The Release build links the AppKit bundle itself: analysis-only verify
+      # cannot replace continuous product linker acceptance.
+      - name: Test direct Bazel entry
+        shell: bash
+        run: |
+          set -euo pipefail
+          unset AOBUS_BAZEL_CONFIGURATION AOBUS_BAZEL_PYTHON AOBUS_NIX_DEPENDENCY_REPORT \
+            AO_NIX_PORTAL_PYTHON AOBUS_BAZEL_REMOTE_CACHE
+          source script/ao/macos-vcpkg-bootstrap.sh
+          vcpkg_triplet="$(aobus_macos_triplet "$(uname -m)")"
+          export AOBUS_BAZEL_VCPKG_PREFIX="$RUNNER_TEMP/aobus-bazel-debug/vcpkg_installed/$vcpkg_triplet"
+          read -r bazel_version < .bazelversion
+          bazel_executable="$AOBUS_STATE_ROOT/tools/bazel/$bazel_version/bazel"
+          if [[ ! -x "$bazel_executable" ]]; then
+            echo "::error::Managed Bazel is missing: $bazel_executable" >&2
+            exit 1
+          fi
+          bare_root="$RUNNER_TEMP/aobus-bare"
+          mkdir -p "$bare_root" "$AOBUS_STATE_ROOT/cache/bazel"
+          "$bazel_executable" --output_base="$bare_root/state/output" \
+            run --jobs="$CMAKE_BUILD_PARALLEL_LEVEL" --lockfile_mode=off \
+            --disk_cache="$AOBUS_STATE_ROOT/cache/bazel" \
+            --symlink_prefix="$bare_root/bazel-" \
+            --build_event_json_file="$bare_root/debug-run.bep.json" \
+            --experimental_build_event_upload_strategy=local \
+            //app/tui:aobus-tui -- --help
+          "$bazel_executable" --output_base="$bare_root/state/output" \
+            build --config=release --jobs="$CMAKE_BUILD_PARALLEL_LEVEL" --lockfile_mode=off \
+            --disk_cache="$AOBUS_STATE_ROOT/cache/bazel" \
+            --symlink_prefix="$bare_root/bazel-" \
+            --build_event_json_file="$bare_root/release-build.bep.json" \
+            --experimental_build_event_upload_strategy=local \
+            //test/lint:cache_clean //app/tui:aobus-tui //app/macos-appkit:aobus-appkit
 
       - name: Run hygiene
         env:
+          AOBUS_BAZEL_REMOTE_CACHE: ${{ steps.bazel-remote.outputs.url }}
           BASE_SHA: ${{ needs.changes.outputs.base }}
-        run: ./ao hygiene --commit "$BASE_SHA" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL"
+        run: ./ao hygiene --commit "$BASE_SHA" --path "$RUNNER_TEMP/aobus-bazel-debug" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL"
 
-      - name: Show compiler cache statistics
-        if: >-
-          ${{ !cancelled() && steps.compiler-cache.outcome == 'success' &&
-              steps.build.outcome != 'skipped' }}
-        continue-on-error: true
-        run: '"$SCCACHE_PATH" --show-stats'
+      - name: Stop Bazel remote cache
+        if: ${{ always() && steps.bazel-remote.outcome == 'success' }}
+        continue-on-error: ${{ github.event_name != 'workflow_dispatch' || !inputs.r2 }}
+        shell: bash
+        run: >-
+          python3 script/ao/core/bazel_remote_cache.py stop --state "$RUNNER_TEMP/aobus-bazel-remote"
+          --report "$RUNNER_TEMP/bazel-r2-stop.json"
 
-      - name: Summarize native phases
-        if: ${{ always() && steps.build.outcome != 'skipped' }}
-        continue-on-error: true
-        env:
-          PYTHONPATH: script
-        run: |
-          source script/ao/macos-vcpkg-bootstrap.sh
-          aobus_macos_prepare_python "$PWD"
-          "$AOBUS_PYTHON" -m ao.core.phases "$AOBUS_PHASE_LOG_DIR" --github-summary "$GITHUB_STEP_SUMMARY"
+      - name: Preserve Bazel evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: bazel-macos-${{ matrix.cache_arch }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/aobus-bazel-debug/build.log
+            ${{ runner.temp }}/aobus-bazel-debug/checks/debug/check-*
+            ${{ runner.temp }}/aobus-bazel-debug/contracts/debug/verify-*
+            ${{ runner.temp }}/aobus-bazel-debug/lint/run-*/run.receipt.json
+            ${{ runner.temp }}/aobus-bazel-debug/lint/run-*/*.bep.json
+            ${{ runner.temp }}/aobus-bare/*.bep.json
+            ${{ runner.temp }}/bazel-r2-stop.json
+          if-no-files-found: warn
 
       - name: Show final disk usage
         if: ${{ always() }}
@@ -504,18 +667,16 @@ jobs:
       ${{ always() && !cancelled() &&
           (needs.changes.result != 'success' || needs.changes.outputs.docs-only != 'true') }}
     runs-on: windows-2025-vs2026
-    timeout-minutes: 180
+    timeout-minutes: 300
     env:
       # Keep portal-owned paths stable across GitHub's fresh Windows VMs so
       # restored tools contain the same absolute paths used when created.
       AOBUS_STATE_ROOT: C:\aobus-state
-      # Native, WinUI and tidy outputs exceed the system drive's free space.
+      # Bazel product and tooling outputs exceed the system drive's free space.
       # Keep disposable build trees on the runner's roomy local data drive;
       # restored tools and reusable caches retain their existing paths.
       AOBUS_BUILD_ROOT: D:\aobus-build
       AOBUS_CHECKOUT_ID: github-actions-windows-x64
-      SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
-      AOBUS_PHASE_LOG_DIR: C:\aobus-state\phase-records\${{ github.run_id }}-${{ github.run_attempt }}
       # vcpkg 2026 removed x-gha. Keep its ABI-addressed archives in a local
       # files backend and let actions/cache move that directory between VMs.
       VCPKG_BINARY_SOURCES: clear;files,C:/aobus-state/cache/vcpkg-binary,readwrite
@@ -525,60 +686,18 @@ jobs:
         if: ${{ needs.changes.result != 'success' }}
         shell: pwsh
         run: exit 1
+
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      # Every runner core builds, tidies, and shards tests; jobs.py owns the
-      # strict core detection and the shard cap (ao.command.test.SHARD_CAP).
       - name: Use every runner core
         shell: pwsh
         run: >-
           python script/ao/core/jobs.py export-ci
           --github-env "$env:GITHUB_ENV"
-
-      - name: Read compiler cache contract
-        id: compiler-cache-contract
-        shell: pwsh
-        run: python script/ao/core/compiler_cache.py ci-contract >> $env:GITHUB_OUTPUT
-
-      - name: Set up compiler cache provider
-        id: sccache
-        continue-on-error: true
-        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba  # v0.0.11
-        with:
-          version: ${{ steps.compiler-cache-contract.outputs.version }}
-
-      - name: Enable compiler cache
-        id: compiler-cache
-        if: ${{ steps.sccache.outcome == 'success' }}
-        continue-on-error: true
-        shell: pwsh
-        run: >-
-          python script/ao/core/compiler_cache.py activate-ci
-          --github-env $env:GITHUB_ENV
-          --state-root "$env:RUNNER_TEMP\aobus-state"
-          --platform Windows
-
-      # Export the R2 backend only when credentials exist: sccache selects
-      # the S3 backend whenever SCCACHE_BUCKET is set and does not fall back
-      # to the disk cache when credentials are empty, so secretless runs
-      # (fork PRs, Dependabot) must not see SCCACHE_BUCKET at all. The
-      # secrets context is not allowed in steps.if, so the guard runs in
-      # the helper's step body.
-      - name: Activate R2 compiler cache backend
-        if: ${{ steps.compiler-cache.outcome == 'success' }}
-        shell: pwsh
-        env:
-          R2_ENDPOINT: ${{ secrets.R2_SCCACHE_ENDPOINT }}
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_SCCACHE_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SCCACHE_SECRET_ACCESS_KEY }}
-        run: >-
-          python script/ao/core/compiler_cache.py activate-r2
-          --github-env "$env:GITHUB_ENV"
-          --key-prefix windows-v1
 
       - name: Capture Windows image version
         id: windows-image
@@ -589,12 +708,8 @@ jobs:
           }
           "version=$env:ImageVersion" >> $env:GITHUB_OUTPUT
 
-      # MSVC comes from the runner image: prefer its package ABIs even when
-      # the manifest changes (for example, a macOS-only dependency). Saved v3
-      # keys put the image before the manifest so same-image restores work
-      # across manifests. Same-manifest/image v2 and same-image v1 entries
-      # seed the migration before other images; v2's ordering cannot select
-      # one image across manifests, so the first v3 population may still miss.
+      # Prefer the runner image's package ABIs before manifest-only changes;
+      # retain the ordered same-image and legacy archive fallbacks.
       - name: Resolve vcpkg binary cache key
         id: vcpkg-key
         shell: bash
@@ -639,6 +754,7 @@ jobs:
             windows-state-v2-${{ runner.arch }}-${{
               hashFiles(
                 'script/ao/toolchain.json',
+                'script/ao/buildifier.json',
                 'script/ao/windows-requirements.txt',
                 'script/ao/docs-requirements.txt',
                 'dependency-contract.json',
@@ -647,9 +763,6 @@ jobs:
               )
             }}
 
-      # Cache the verified extracted SDK separately from fast-changing Python,
-      # NuGet, and runtime tools. The official archive expands to about 4 GiB;
-      # caching only its stable toolchain tree avoids a 2.5-minute xz extraction.
       - name: Restore Windows LLVM SDK
         id: windows-llvm
         continue-on-error: true
@@ -657,7 +770,7 @@ jobs:
         with:
           path: C:\aobus-state\cache\llvm\toolchains
           key: >-
-            windows-llvm-v1-${{ runner.arch }}-${{ hashFiles('cmake/LlvmSdk.cmake', 'script/ao/windows-llvm-sdk.json') }}
+            windows-llvm-v1-${{ runner.arch }}-${{ hashFiles('script/ao/core/windows_llvm_sdk.py', 'script/ao/windows-llvm-sdk.json') }}
 
       - name: Check Windows build prerequisites
         id: windows-prerequisites
@@ -673,15 +786,19 @@ jobs:
         shell: pwsh
         run: Get-PSDrive -PSProvider FileSystem | Format-Table -AutoSize
 
-      # Populate and persist vcpkg's ABI-addressed packages before the full
-      # gate. A later compile or test failure must not discard a cold restore.
+      # Provision installs dependencies before NuGet and the pinned LLVM SDK.
+      # Seal even after a failed provision so an installed dependency cache fill
+      # survives later SDK failure; only admitted content can be saved.
       - name: Prepare vcpkg binary cache
         id: vcpkg-prepare
         shell: pwsh
         timeout-minutes: 60
-        run: .\ao.bat build --target ao_utility
+        run: |
+          .\ao.bat setup bazel
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          .\ao.bat deps provision --path D:\aobus-bazel-debug
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      # The later WinUI tree installs a subset of these package ABIs.
       - name: Seal vcpkg binary cache
         id: vcpkg-cache-ready
         if: ${{ !cancelled() && steps.vcpkg-prepare.outcome != 'skipped' }}
@@ -690,7 +807,7 @@ jobs:
         run: >-
           python script/ao/core/vcpkg_binary_cache.py seal
           --cache-dir "$env:AOBUS_STATE_ROOT\cache\vcpkg-binary"
-          --build-root "$env:AOBUS_BUILD_ROOT"
+          --build-root D:\aobus-bazel-debug
           --key-prefix "${{ steps.vcpkg-key.outputs.prefix }}"
           --github-output $env:GITHUB_OUTPUT
 
@@ -705,40 +822,169 @@ jobs:
           path: C:\aobus-state\cache\vcpkg-binary
           key: ${{ steps.vcpkg-cache-ready.outputs.key }}
 
-      # Tooling tests need real LLVM diagnostic delivery. Seal the dependency
-      # cache above before cold SDK provisioning can fail. The explicit setup
-      # route configures the SDK through the governed provider without a
-      # checker build.
+      # Tooling needs real LLVM diagnostics; explicitly admit the existing
+      # pinned SDK before tooling and expensive product completion.
       - name: Provision the pinned Windows LLVM SDK
         shell: pwsh
-        run: .\ao.bat setup llvm-sdk
+        run: |
+          .\ao.bat setup llvm-sdk
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Reset build compiler cache statistics
-        if: ${{ steps.compiler-cache.outcome == 'success' }}
-        continue-on-error: true
+      - name: Set up Buildifier
         shell: pwsh
-        run: '& $env:SCCACHE_PATH --zero-stats'
+        run: |
+          .\ao.bat setup buildifier
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Build and test
+      - name: Test portal tooling
+        shell: pwsh
+        run: |
+          .\ao.bat test --tooling --path D:\aobus-bazel-tooling
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      # bazel-remote has no Windows build: the helper hosts the pinned Linux
+      # binary in a throwaway WSL2 distribution. Manual R2 validation trusts
+      # the selected checkout; prefix isolation is not a backend boundary.
+      - name: Start Bazel remote cache
+        id: bazel-remote
+        if: >-
+          ${{ (github.event_name == 'workflow_dispatch' && inputs.r2) ||
+              (github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.AOBUS_BAZEL_R2_CACHE_AUTHORIZED == 'true') }}
+        continue-on-error: ${{ github.event_name != 'workflow_dispatch' || !inputs.r2 }}
+        shell: bash
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_SCCACHE_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_SCCACHE_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SCCACHE_SECRET_ACCESS_KEY }}
+          CACHE_PREFIX: ${{ github.event_name == 'workflow_dispatch' && format('bazel-ci-validation/{0}/{1}/windows', github.run_id, github.run_attempt) || 'bazel-v1' }}
+        run: >-
+          python script/ao/core/bazel_remote_cache.py start
+          --state "$RUNNER_TEMP/aobus-bazel-remote"
+          --github-output "$GITHUB_OUTPUT"
+          --runner-os "$RUNNER_OS"
+          --runner-arch "$RUNNER_ARCH"
+          --trusted-writer true --key-prefix "$CACHE_PREFIX"
+
+      - name: Require requested R2 cache
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.r2 }}
+        shell: bash
+        env:
+          CACHE_URL: ${{ steps.bazel-remote.outputs.url }}
+        run: test -n "$CACHE_URL"
+
+      # Required native admission stays fresh; --fresh disables Bazel
+      # test-result cache reuse.
+      - name: Check Bazel completion
         id: build
         shell: pwsh
-        run: .\ao.bat check
+        env:
+          AOBUS_BAZEL_REMOTE_CACHE: ${{ steps.bazel-remote.outputs.url }}
+        run: |
+          .\ao.bat check --fresh --path D:\aobus-bazel-debug --jobs $env:CMAKE_BUILD_PARALLEL_LEVEL
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      # Retain the pinned native bare route and explicit initialized compiler/
+      # SDK tuple, outside the portal output base and without remote binding.
+      - name: Test direct Bazel entry
+        shell: pwsh
+        run: |
+          foreach ($name in @(
+            'AOBUS_BAZEL_CONFIGURATION', 'AOBUS_BAZEL_PYTHON', 'AOBUS_NIX_DEPENDENCY_REPORT',
+            'AO_NIX_PORTAL_PYTHON', 'AOBUS_BAZEL_REMOTE_CACHE'
+          )) {
+            Remove-Item "Env:$name" -ErrorAction SilentlyContinue
+          }
+          $bare = 'D:\aobus-bare'
+          New-Item -ItemType Directory -Force -Path "$bare\_tmp" | Out-Null
+          $contract = Get-Content script/ao/toolchain.json -Raw | ConvertFrom-Json
+          $python = Join-Path $env:AOBUS_STATE_ROOT "tools\python\$($contract.python)\python.exe"
+          if (-not (Test-Path $python)) { throw "Governed Python is missing: $python" }
+          $tripletOutput = & $python -I -S -B -X utf8 -X "pycache_prefix=$bare\_tmp\pycache" -c 'import sys; sys.path.insert(0, "script"); from ao.core.bazel_providers import vcpkg_triplets; print(vcpkg_triplets(host="windows")[0])'
+          $tripletExit = $LASTEXITCODE
+          if ($tripletExit -ne 0) { exit $tripletExit }
+          $triplet = ($tripletOutput -join '').Trim()
+          if ([string]::IsNullOrWhiteSpace($triplet)) { throw 'Native target triplet was not reported.' }
+          $env:AOBUS_BAZEL_VCPKG_PREFIX = "D:\aobus-bazel-debug\vcpkg_installed\$triplet"
+          # Initialize the client once; upstream MSVC and SDK admission must see
+          # the same explicit selection, not independent current/latest probes.
+          $selectionScript = @'
+          import json, os, sys
+          sys.path.insert(0, "script")
+          from ao.core.bazel_environment import windows_compiler_selection
+          from ao.core.windows_portal import prepare_build_environment
+          prepare_build_environment()
+          names = (
+              "INCLUDE", "LIB", "PATH", "VSINSTALLDIR", "VCToolsInstallDir",
+              "WindowsSdkDir", "WindowsSDKVersion", "VCToolsVersion", "UCRTVersion", "NETFXSDKDir",
+          )
+          selected = {name: os.environ[name] for name in names if name in os.environ}
+          selected.update(windows_compiler_selection(os.environ))
+          print(json.dumps(selected))
+          '@
+          $selectionOutput = & $python -I -S -B -X utf8 -X "pycache_prefix=$bare\_tmp\pycache" -c $selectionScript
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $selection = ($selectionOutput -join '') | ConvertFrom-Json
+          foreach ($property in $selection.PSObject.Properties) {
+            Set-Item -LiteralPath "Env:$($property.Name)" -Value $property.Value
+          }
+          $git = (Get-Command git -ErrorAction Stop).Source
+          $bash = $null
+          $parent = $git
+          foreach ($i in 1..3) {
+            $parent = Split-Path $parent -ErrorAction Stop
+            $probe = Join-Path $parent 'usr\bin\bash.exe'
+            if (Test-Path $probe) { $bash = $probe; break }
+          }
+          if (-not $bash) { throw "Git for Windows usr\bin\bash.exe was not found beside git: $git" }
+          $env:BAZEL_SH = $bash
+          $version = (Get-Content .bazelversion -Raw).Trim()
+          $bazel = Join-Path $env:AOBUS_STATE_ROOT "tools\bazel\$version\bazel.exe"
+          if (-not (Test-Path $bazel)) { throw "Managed Bazel is missing: $bazel" }
+          New-Item -ItemType Directory -Force -Path (Join-Path $env:AOBUS_STATE_ROOT 'cache\bazel') | Out-Null
+          & $bazel "--output_base=$bare\state\output" run `
+            "--jobs=$env:CMAKE_BUILD_PARALLEL_LEVEL" --lockfile_mode=off `
+            "--disk_cache=$env:AOBUS_STATE_ROOT\cache\bazel" `
+            "--symlink_prefix=$bare\bazel-" `
+            "--build_event_json_file=$bare\debug-run.bep.json" `
+            --experimental_build_event_upload_strategy=local `
+            //app/tui:aobus-tui -- --help
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $bazel "--output_base=$bare\state\output" build `
+            --config=release "--jobs=$env:CMAKE_BUILD_PARALLEL_LEVEL" --lockfile_mode=off `
+            "--disk_cache=$env:AOBUS_STATE_ROOT\cache\bazel" `
+            "--symlink_prefix=$bare\bazel-" `
+            "--build_event_json_file=$bare\release-build.bep.json" `
+            --experimental_build_event_upload_strategy=local `
+            //test/lint:cache_clean //app/tui:aobus-tui
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: WinUI naming gate
         shell: pwsh
-        run: .\ao.bat test --winui --no-build
-
-      - name: Show build compiler cache statistics
-        if: ${{ !cancelled() && steps.compiler-cache.outcome == 'success' && steps.build.outcome != 'skipped' }}
-        continue-on-error: true
-        shell: pwsh
-        run: '& $env:SCCACHE_PATH --show-stats'
+        run: |
+          $contract = Get-Content script/ao/toolchain.json -Raw | ConvertFrom-Json
+          $python = Join-Path $env:AOBUS_STATE_ROOT "tools\python\$($contract.python)\python.exe"
+          if (-not (Test-Path $python)) { throw "Governed Python is missing: $python" }
+          & $python -I -S -B -X utf8 -c 'import sys; sys.path.insert(0, "script"); from ao.core import winui; winui.require_runtime(); winui.require_interactive_session()'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          .\ao.bat run //app/windows-winui:ao_winui_automation_probe --path D:\aobus-bazel-debug --jobs $env:CMAKE_BUILD_PARALLEL_LEVEL
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Run hygiene
         shell: pwsh
         env:
+          AOBUS_BAZEL_REMOTE_CACHE: ${{ steps.bazel-remote.outputs.url }}
           BASE_SHA: ${{ needs.changes.outputs.base }}
-        run: .\ao.bat hygiene --commit $env:BASE_SHA --jobs $env:CMAKE_BUILD_PARALLEL_LEVEL
+        run: |
+          .\ao.bat hygiene --commit $env:BASE_SHA --path D:\aobus-bazel-debug --jobs $env:CMAKE_BUILD_PARALLEL_LEVEL
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Stop Bazel remote cache
+        if: ${{ always() && steps.bazel-remote.outcome != 'skipped' }}
+        continue-on-error: ${{ github.event_name != 'workflow_dispatch' || !inputs.r2 }}
+        shell: bash
+        run: >-
+          python script/ao/core/bazel_remote_cache.py stop --state "$RUNNER_TEMP/aobus-bazel-remote"
+          --report "$RUNNER_TEMP/bazel-r2-stop.json"
 
       - name: Inspect Windows LLVM SDK
         id: windows-llvm-ready
@@ -770,12 +1016,6 @@ jobs:
           path: C:\aobus-state\cache\llvm\toolchains
           key: ${{ steps.windows-llvm.outputs.cache-primary-key }}
 
-      - name: Show final compiler cache statistics
-        if: ${{ !cancelled() && steps.compiler-cache.outcome == 'success' }}
-        continue-on-error: true
-        shell: pwsh
-        run: '& $env:SCCACHE_PATH --show-stats'
-
       - name: Save managed Windows tools
         if: >-
           ${{ !cancelled() && steps.windows-prerequisites.outcome == 'success' &&
@@ -791,17 +1031,47 @@ jobs:
             C:\aobus-state\cache\windows-app-sdk
           key: ${{ steps.windows-state.outputs.cache-primary-key }}
 
-      - name: Summarize native phases
-        if: ${{ always() && steps.build.outcome != 'skipped' }}
+      - name: Preserve Bazel evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: bazel-windows-${{ github.run_attempt }}
+          path: |
+            D:\aobus-bazel-debug\build.log
+            D:\aobus-bazel-debug\checks\debug\check-*
+            D:\aobus-bazel-debug\contracts\debug\verify-*
+            D:\aobus-bazel-debug\lint\run-*\run.receipt.json
+            D:\aobus-bazel-debug\lint\run-*\*.bep.json
+          if-no-files-found: warn
+
+      # Keep each Windows artifact below one drive-root child: merging these
+      # roots would make upload-artifact resolve its LCA against the checkout.
+      - name: Preserve direct Bazel evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: bazel-windows-direct-${{ github.run_attempt }}
+          path: D:\aobus-bare\*.bep.json
+          if-no-files-found: warn
+
+      # The receipt lives under the runner's temporary root, a different
+      # drive-root child than the build trees above.
+      - name: Preserve R2 stop receipt
+        if: ${{ always() && steps.bazel-remote.outcome == 'success' }}
         continue-on-error: true
-        shell: pwsh
-        env:
-          PYTHONPATH: script
-        run: |
-          $contract = Get-Content script/ao/toolchain.json -Raw | ConvertFrom-Json
-          $python = Join-Path $env:AOBUS_STATE_ROOT "tools\python\$($contract.python)\python.exe"
-          if ($env:AOBUS_PYTHON) { $python = $env:AOBUS_PYTHON }
-          & $python -m ao.core.phases $env:AOBUS_PHASE_LOG_DIR --github-summary $env:GITHUB_STEP_SUMMARY
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: bazel-windows-r2-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/bazel-r2-stop.json
+          if-no-files-found: warn
+
+      - name: Preserve portal tooling evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: bazel-windows-tooling-${{ github.run_attempt }}
+          path: D:\aobus-bazel-tooling\build.log
+          if-no-files-found: warn
 
       - name: Show final disk usage
         if: ${{ always() }}

@@ -1,0 +1,71 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+load("//bazel:windows_utf8_manifest.bzl", "WINDOWS_UTF8_LINKER_INPUTS", "WINDOWS_UTF8_LINKOPTS")
+load(":link_closure.bzl", "link_closure_guard")
+
+package(default_visibility = ["//visibility:private"])
+
+cc_library(
+    name = "cli",
+    srcs = [
+        "CliRuntime.cpp",
+        "CommandError.cpp",
+        "DumpOutput.cpp",
+        "InitCommand.cpp",
+        "LibCommand.cpp",
+        "ListCommand.cpp",
+        "Output.cpp",
+        "QueryHelp.cpp",
+        "Run.cpp",
+        "ScanCommand.cpp",
+        "ScanOutput.cpp",
+        "TagCommand.cpp",
+        "TrackCommand.cpp",
+        "TrackSelection.cpp",
+    ],
+    hdrs = [
+        "BooleanFlag.h",
+        "CliRuntime.h",
+        "CommandError.h",
+        "CommandRegistrations.h",
+        "DryRunFlag.h",
+        "DumpOutput.h",
+        "ListCommand.h",
+        "Output.h",
+        "QueryHelp.h",
+        "Run.h",
+        "ScanCommand.h",
+        "ScanOutput.h",
+        "TrackSelection.h",
+    ],
+    implementation_deps = ["//include:app_version_header"],
+    includes = ["."],
+    linkstatic = True,
+    visibility = ["//test:__pkg__"],
+    deps = [
+        "//app/runtime",
+        "//lib:ao",
+        "@aobus_native_deps//:boost",
+        "@aobus_native_deps//:cli11",
+    ],
+)
+
+cc_binary(
+    name = "aobus",
+    srcs = ["main.cpp"],
+    additional_linker_inputs = WINDOWS_UTF8_LINKER_INPUTS,
+    linkopts = WINDOWS_UTF8_LINKOPTS,
+    linkstatic = True,
+    visibility = ["//visibility:public"],
+    # Keep allocator initialization first, including after dependency-list sorting.
+    deps = ["@aobus_native_deps//:mimalloc"] + [":cli"],
+)
+
+# The CLI stays outside interactive localization. A transitive edge links as
+# surely as a direct include, so the configured closure is checked at analysis.
+link_closure_guard(
+    name = "link_closure",
+    binary = ":aobus",
+    forbidden = ["@aobus_native_deps//:icu"],
+    forbidden_packages = ["app/i18n"],
+    visibility = ["//:__pkg__"],
+)

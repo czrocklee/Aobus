@@ -1,0 +1,84 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# The transaction implementation is an existing source-private test seam.
+cc_library(
+    name = "test_headers",
+    testonly = True,
+    hdrs = ["AtomicFileTransaction.h"],
+    include_prefix = "lib/utility",
+    strip_include_prefix = ".",
+    visibility = ["//test:__pkg__"],
+    deps = [":utility"],
+)
+
+# Preserve the CMake facade: ICU's headers are an implementation dependency.
+cc_library(
+    name = "unicode_text",
+    srcs = ["UnicodeText.cpp"],
+    implementation_deps = ["@aobus_native_deps//:icu_uc"],
+    linkstatic = True,
+    deps = ["//include:utility_headers"],
+)
+
+# The catalog compiler needs Path.cpp without the full utility runtime closure.
+cc_library(
+    name = "path",
+    srcs = ["Path.cpp"],
+    linkstatic = True,
+    deps = ["//include:utility_headers"],
+)
+
+# Path has a separate real catalog-tool consumer; all other utility sources
+# belong to this ordinary implementation.
+cc_library(
+    name = "utility",
+    srcs = glob(["*.h"]) + [
+        "AudioCodecText.cpp",
+        "Base64.cpp",
+        "ByteView.cpp",
+        "CallbackStackScope.cpp",
+        "Fatal.cpp",
+        "FromChars.cpp",
+        "Hash128.cpp",
+        "MappedFile.cpp",
+        "Reflect.cpp",
+        "RymlAdapter.cpp",
+        "ScopedRegistration.cpp",
+        "Serialization.cpp",
+        "Sha256.cpp",
+        "String.cpp",
+        "ThreadName.cpp",
+        "Uuid.cpp",
+        "Xxh3.cpp",
+    ] + select({
+        "@platforms//os:windows": [
+            "AtomicFileWindows.cpp",
+            "FileAllocationWindows.cpp",
+            "PlatformDirectoriesWindows.cpp",
+        ],
+        "//conditions:default": [
+            "AtomicFilePosix.cpp",
+            "FileAllocationPosix.cpp",
+            "PlatformDirectoriesPosix.cpp",
+        ],
+    }),
+    implementation_deps = [
+        "@aobus_native_deps//:fast_float",
+        "@aobus_native_deps//:xxhash",
+    ],
+    linkopts = select({
+        "@platforms//os:windows": ["Advapi32.lib"],
+        "//conditions:default": [],
+    }),
+    linkstatic = True,
+    deps = [
+        ":path",
+        "//include:utility_headers",
+        "//include:yaml_headers",
+        "@aobus_native_deps//:boost",
+        "@aobus_native_deps//:gsl_lite",
+        "@aobus_native_deps//:rapidyaml",
+    ],
+)

@@ -1,1398 +1,206 @@
-"""Tests for the cross-platform clang-tidy execution plumbing."""
+"""Tests for the CMake-free tidy scope, platform and SDK descriptors.
 
+Bazel owns compile commands and header inputs; this module only describes
+scope selection, native platform ownership, verified SDK tool selection and
+public/private component mapping. No compile database, Ninja or CMake cache
+appears here.
+"""
+
+import argparse
 import contextlib
 import io
-import json
-import os
-import shlex
-import subprocess
-import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
-from phase_support import PhaseRecorder as _PhaseRecorder
-
-from ao.command import format as format_command
-from ao.command import tidy as tidy_command
-from ao.core import gitfiles, jobs, tidyengine
-from ao.core.paths import absolute_path
+from ao.core import tidyengine
 
 
-class ClangToolDiscoveryTest(unittest.TestCase):
-    def test_cmake_sdk_cache_defaults_to_local_windows_state(self):
-        module = (tidyengine.PROJECT_ROOT / "cmake" / "LlvmSdk.cmake").read_text(encoding="utf-8")
+class ScopeResolutionTest(unittest.TestCase):
+    def arguments(self, **overrides):
+        arguments = argparse.Namespace(
+            files=[], all=False, folder=[], commit=None, check=None, debug=False, output=None, jobs=1, path=None
+        )
+        for key, value in overrides.items():
+            setattr(arguments, key, value)
+        return arguments
 
-        self.assertIn("AOBUS_LLVM_SDK_CACHE_ROOT", module)
-        self.assertIn("$ENV{AOBUS_STATE_ROOT}/cache/llvm", module)
-        self.assertIn("$ENV{LOCALAPPDATA}/Aobus/cache/llvm", module)
-        self.assertIn("${_aobus_llvm_sdk_cache_root}/toolchains/", module)
-        self.assertIn("${_aobus_llvm_sdk_cache_root}/downloads/", module)
-        self.assertNotIn("${CMAKE_SOURCE_DIR}/out/toolchains/", module)
+    def test_explicit_files_are_the_scope(self):
+        files, explicit = tidyengine.resolve_scope(self.arguments(files=["lib/A.cpp", "lib/B.cpp"]), [], "Checking")
+        self.assertEqual(files, ["lib/A.cpp", "lib/B.cpp"])
+        self.assertTrue(explicit)
 
-    def test_windows_clang_tidy_is_the_aobus_executable(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            build_dir = Path(temp_dir)
-            tool = build_dir / "tool" / "lint" / "AobusClangTidy.exe"
-            tool.parent.mkdir(parents=True)
-            tool.touch()
+    def test_prepared_scope_is_consumed_without_rescanning(self):
+        arguments = self.arguments(_resolved_sources=["lib/Prepared.cpp"])
+        with mock.patch.object(tidyengine.gitfiles, "changed_files", side_effect=AssertionError("rescanned")):
+            files, explicit = tidyengine.resolve_scope(arguments, [], "Checking")
+        self.assertEqual(files, ["lib/Prepared.cpp"])
+        self.assertFalse(explicit)
 
-            self.assertEqual(tidyengine.clang_tool(build_dir, "clang-tidy", os_name="nt"), str(tool))
-
-    def test_linux_tool_uses_the_pinned_environment_path(self):
-        self.assertEqual(tidyengine.clang_tool(Path("/tmp/build"), "clang-tidy", os_name="posix"), "clang-tidy")
-
-    def test_windows_sdk_tool_comes_from_the_configured_root(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            build_dir = root / "build"
-            sdk = root / "llvm sdk"
-            tool = sdk / "bin" / "clang-format.exe"
-            tool.parent.mkdir(parents=True)
-            tool.touch()
-            build_dir.mkdir()
-            (build_dir / "CMakeCache.txt").write_text(
-                f"AOBUS_LLVM_SDK_RESOLVED_ROOT:INTERNAL={sdk}\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                tidyengine.clang_tool(build_dir, "clang-format", os_name="nt"),
-                str(tool),
-            )
-
-    def test_windows_sdk_tool_does_not_fall_back_to_path(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            build_dir = Path(temp_dir)
-            (build_dir / "CMakeCache.txt").write_text(
-                "AOBUS_LLVM_SDK_RESOLVED_ROOT:INTERNAL=C:/missing/llvm\n",
-                encoding="utf-8",
-            )
-
-            with self.assertRaises(SystemExit):
-                tidyengine.clang_tool(build_dir, "clang-format", os_name="nt")
-
-    def test_windows_sdk_version_rejects_a_stale_configure(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            build_dir = Path(temp_dir)
-            (build_dir / "CMakeCache.txt").write_text(
-                "AOBUS_LLVM_SDK_RESOLVED_VERSION:INTERNAL=21.1.0\n",
-                encoding="utf-8",
-            )
-
-            with self.assertRaises(SystemExit):
-                tidyengine.llvm_sdk_version(build_dir, os_name="nt")
-
-    def test_expected_shim_precedes_discovered_system_includes(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            expected_shim = root / "expected-shim"
-            # Keep the compiler probe's POSIX spelling independent of the
-            # Python host running this cross-platform portal test.
-            libcxx = "/nix/store/libcxx/include/c++/v1"
-            expected_shim.mkdir()
-            compiler_probe = subprocess.CompletedProcess(
-                args=["clang++"],
-                returncode=0,
-                stderr=f"search starts here:\n {libcxx}\nEnd of search list.\n",
-            )
-            platform_profile = mock.Mock()
-            platform_profile.name = "macos"
-
-            with (
-                mock.patch.object(tidyengine.builddir, "platform_profile", return_value=platform_profile),
-                mock.patch.object(tidyengine.subprocess, "run", return_value=compiler_probe),
-                mock.patch.object(Path, "is_dir", return_value=True),
-                mock.patch.dict(os.environ, {"AOBUS_LIBCXX_EXPECTED_SHIM": str(expected_shim)}),
-            ):
-                args = tidyengine.system_include_args()
-
-            self.assertEqual(
-                args,
-                [
-                    f"--extra-arg-before=-isystem{expected_shim}",
-                    f"--extra-arg-before=-isystem{libcxx}",
-                ],
-            )
-
-    def test_windows_automatic_sdk_with_invalid_marker_is_reconfigured(self):
-        version, _, required_files = tidyengine.windows_llvm_sdk_manifest()
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            build_dir = root / "build"
-            sdk = root / "sdk"
-            build_dir.mkdir()
-            for relative in required_files:
-                required = sdk / relative
-                required.parent.mkdir(parents=True, exist_ok=True)
-                required.touch()
-            (build_dir / "CMakeCache.txt").write_text(
-                "\n".join(
-                    [
-                        f"AOBUS_LLVM_SDK_RESOLVED_ROOT:INTERNAL={sdk}",
-                        f"AOBUS_LLVM_SDK_RESOLVED_VERSION:INTERNAL={version}",
-                        "AOBUS_LLVM_SDK_ROOT:PATH=",
-                    ]
-                ),
-                encoding="utf-8",
-            )
-
-            for marker in (b"incomplete\n", b"\xff"):
-                (sdk / tidyengine.LLVM_SDK_COMPLETION_MARKER).write_bytes(marker)
-                with (
-                    self.subTest(marker=marker),
-                    mock.patch.object(
-                        tidyengine.builddir, "platform_profile", return_value=tidyengine.builddir.WINDOWS_PROFILE
-                    ),
-                    mock.patch.object(tidyengine, "ensure_compile_db") as ensure,
-                ):
-                    tidyengine.ensure_windows_llvm_sdk(build_dir)
-
-                ensure.assert_called_once_with(
-                    build_dir,
-                    ["-DAOBUS_BUILD_LINT_PLUGIN=ON"],
-                    preset="windows-tidy",
-                    reconfigure_preset=True,
-                )
-
-    def test_windows_automatic_sdk_with_valid_marker_is_reused_from_one_cache_snapshot(self):
-        version, sha256, required_files = tidyengine.windows_llvm_sdk_manifest()
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            build_dir = root / "build"
-            sdk = root / "sdk"
-            build_dir.mkdir()
-            for relative in required_files:
-                required = sdk / relative
-                required.parent.mkdir(parents=True, exist_ok=True)
-                required.touch()
-            marker = f"version={version}\nsha256={sha256}\n"
-            (sdk / tidyengine.LLVM_SDK_COMPLETION_MARKER).write_text(marker, encoding="utf-8")
-            (build_dir / "CMakeCache.txt").write_text(
-                "\n".join(
-                    [
-                        "AOBUS_LLVM_SDK_RESOLVED_ROOT:INTERNAL=stale",
-                        "AOBUS_LLVM_SDK_RESOLVED_VERSION:INTERNAL=0.0.0",
-                        f"AOBUS_LLVM_SDK_RESOLVED_ROOT:INTERNAL= {sdk} ",
-                        f"AOBUS_LLVM_SDK_RESOLVED_VERSION:INTERNAL= {version} ",
-                        "AOBUS_LLVM_SDK_ROOT:PATH=",
-                    ]
-                ),
-                encoding="utf-8",
-            )
-
-            with mock.patch.object(
-                tidyengine.builddir,
-                "platform_profile",
-                return_value=tidyengine.builddir.WINDOWS_PROFILE,
-            ):
-                with (
-                    mock.patch.object(tidyengine, "ensure_compile_db") as ensure,
-                    mock.patch.object(
-                        tidyengine.cmakecache, "read_entries", wraps=tidyengine.cmakecache.read_entries
-                    ) as read,
-                ):
-                    tidyengine.ensure_windows_llvm_sdk(build_dir)
-
-            ensure.assert_not_called()
-            read.assert_called_once_with(build_dir / "CMakeCache.txt")
-
-    def test_windows_clang_tidy_supports_a_multi_config_output_directory(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            build_dir = Path(temp_dir)
-            tool = build_dir / "tool" / "lint" / "Release" / "AobusClangTidy.exe"
-            tool.parent.mkdir(parents=True)
-            tool.touch()
-
-            self.assertEqual(tidyengine.clang_tool(build_dir, "clang-tidy", os_name="nt"), str(tool))
-
-
-class CompileDatabaseProvisioningTest(unittest.TestCase):
-    def setUp(self):
-        self.enterContext(mock.patch.dict(os.environ))
-        for key in (
-            "CMAKE_C_COMPILER_LAUNCHER",
-            "CMAKE_CXX_COMPILER_LAUNCHER",
-            "AOBUS_MANAGED_C_COMPILER_LAUNCHER",
-            "AOBUS_MANAGED_CXX_COMPILER_LAUNCHER",
+    def test_all_uses_the_project_folders(self):
+        with (
+            mock.patch.object(tidyengine.gitfiles, "find_sources", return_value=["lib/A.cpp"]) as find,
+            contextlib.redirect_stderr(io.StringIO()),
         ):
-            os.environ.pop(key, None)
+            files, explicit = tidyengine.resolve_scope(self.arguments(all=True), ["lib", "app"], "Checking")
+        self.assertEqual(files, ["lib/A.cpp"])
+        self.assertFalse(explicit)
+        find.assert_called_once_with(["lib", "app"], suffixes=tidyengine.gitfiles.CPP_SUFFIXES)
 
-    def test_existing_database_is_reconfigured_with_requested_preset(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            build_dir = Path(temp_dir)
-            (build_dir / "compile_commands.json").write_text("[]", encoding="utf-8")
-
-            with mock.patch.object(tidyengine, "_run_tail") as run_tail:
-                tidyengine.ensure_compile_db(
-                    build_dir,
-                    ["-DAOBUS_BUILD_LINT_PLUGIN=ON"],
-                    preset="windows-tidy",
-                    reconfigure_preset=True,
-                )
-
-            self.assertEqual(
-                run_tail.call_args_list[0].args,
-                (
-                    [
-                        "cmake",
-                        "-S",
-                        str(tidyengine.PROJECT_ROOT),
-                        "--preset",
-                        "windows-tidy",
-                        "-B",
-                        str(build_dir),
-                        "-U",
-                        "AOBUS_BUILD_*",
-                        "-DAOBUS_BUILD_LINT_PLUGIN=ON",
-                    ],
-                    "configure",
-                ),
-            )
-            self.assertEqual(
-                run_tail.call_args_list[1].args[0][3:6],
-                ["--target", "aobus_generated_headers", "--parallel"],
-            )
-
-    def test_existing_database_is_reused_when_no_preset_refresh_is_requested(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            build_dir = Path(temp_dir)
-            (build_dir / "compile_commands.json").write_text("[]", encoding="utf-8")
-
-            with mock.patch.object(tidyengine, "_run_tail") as run_tail:
-                tidyengine.ensure_compile_db(build_dir, preset="windows-tidy")
-
-            run_tail.assert_not_called()
-
-    def test_existing_database_refreshes_when_managed_launcher_changes(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            build_dir = Path(temporary)
-            (build_dir / "compile_commands.json").write_text("[]", encoding="utf-8")
-            (build_dir / "CMakeCache.txt").write_text("", encoding="utf-8")
-            output = io.StringIO()
-            environment = {
-                "CMAKE_CXX_COMPILER_LAUNCHER": "/managed/ccache",
-                "AOBUS_MANAGED_CXX_COMPILER_LAUNCHER": "1",
-            }
-            with (
-                mock.patch.dict(os.environ, environment),
-                mock.patch.object(tidyengine, "_run_tail") as run_tail,
-                contextlib.redirect_stdout(output),
-            ):
-                tidyengine.ensure_compile_db(build_dir, preset="windows-tidy")
-
-            configure = run_tail.call_args_list[0].args[0]
-            self.assertIn("-DCMAKE_CXX_COMPILER_LAUNCHER=/managed/ccache", configure)
-            self.assertEqual(run_tail.call_args_list[0].args[1], "configure")
-            self.assertIn("Updating compiler-cache launchers", output.getvalue())
-            self.assertNotIn("compile_commands.json missing", output.getvalue())
-            # An existing compile database does not prove generated headers
-            # exist; preserve their incremental readiness check after configure.
-            self.assertEqual(run_tail.call_count, 2)
-            self.assertEqual(
-                run_tail.call_args_list[1].args,
-                (
-                    [
-                        "cmake",
-                        "--build",
-                        str(build_dir),
-                        "--target",
-                        "aobus_generated_headers",
-                        "--parallel",
-                        str(jobs.build_workers()),
-                    ],
-                    "header generation build",
-                ),
-            )
-
-    def test_new_database_builds_only_the_generated_header_target(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            build_dir = Path(temp_dir)
-
-            def run_tail(_command, what):
-                if what == "configure":
-                    (build_dir / "compile_commands.json").write_text("[]", encoding="utf-8")
-
-            with (
-                mock.patch.object(tidyengine, "build_workers", return_value=3) as workers,
-                mock.patch.object(tidyengine, "_run_tail", side_effect=run_tail) as run,
-            ):
-                tidyengine.ensure_compile_db(build_dir, preset="windows-tidy")
-            workers.assert_called_once_with()
-
-            self.assertEqual(
-                run.call_args_list[1].args,
-                (
-                    [
-                        "cmake",
-                        "--build",
-                        str(build_dir),
-                        "--target",
-                        "aobus_generated_headers",
-                        "--parallel",
-                        "3",
-                    ],
-                    "header generation build",
-                ),
-            )
-
-    def test_generated_headers_parallel_follows_the_build_override(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            build_dir = Path(temp_dir)
-            (build_dir / "compile_commands.json").write_text("[]", encoding="utf-8")
-
-            with (
-                mock.patch.dict(os.environ, {jobs.BUILD_PARALLEL_ENV: "3"}),
-                mock.patch.object(tidyengine, "_run_tail") as run_tail,
-            ):
-                tidyengine.ensure_compile_db(build_dir, preset="windows-tidy", reconfigure_preset=True)
-            self.assertEqual(run_tail.call_args_list[1].args[0][-2:], ["--parallel", "3"])
-
-            # A broken override fails through die() instead of a raw traceback.
-            errors = io.StringIO()
-            with (
-                mock.patch.dict(os.environ, {jobs.BUILD_PARALLEL_ENV: "none"}),
-                mock.patch.object(tidyengine, "_run_tail") as run_tail,
-                contextlib.redirect_stderr(errors),
-                self.assertRaises(SystemExit),
-            ):
-                tidyengine.ensure_compile_db(build_dir, preset="windows-tidy", reconfigure_preset=True)
-            self.assertEqual([call.args[1] for call in run_tail.call_args_list], ["configure"])
-            self.assertIn("Error: CMAKE_BUILD_PARALLEL_LEVEL must be a positive integer.", errors.getvalue())
-
-
-class CompileDatabasePhaseInstrumentationTest(unittest.TestCase):
-    def test_configure_and_generated_headers_are_recorded_in_order(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            build_dir = Path(temp_dir)
-            recorder = _PhaseRecorder()
-
-            def run_tail(_command, what):
-                if what == "configure":
-                    (build_dir / "compile_commands.json").write_text("[]", encoding="utf-8")
-
-            with (
-                mock.patch.object(tidyengine, "_run_tail", side_effect=run_tail),
-                mock.patch.object(tidyengine, "phases", recorder),
-                contextlib.redirect_stdout(io.StringIO()),
-            ):
-                tidyengine.ensure_compile_db(build_dir, preset="windows-tidy")
-
-            self.assertEqual(
-                recorder.records,
-                [
-                    {"name": "configure", "tree": "tidy", "status": 0},
-                    {"name": "generated-headers", "tree": "tidy", "status": 0},
-                ],
-            )
-
-    def test_configure_failure_reraises_without_a_generated_headers_record(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            build_dir = Path(temp_dir)
-            recorder = _PhaseRecorder()
-
-            def fail(_command, what):
-                raise tidyengine.die(f"{what} failed")
-
-            with (
-                mock.patch.object(tidyengine, "_run_tail", side_effect=fail),
-                mock.patch.object(tidyengine, "phases", recorder),
-                contextlib.redirect_stdout(io.StringIO()),
-            ):
-                with self.assertRaises(SystemExit):
-                    tidyengine.ensure_compile_db(build_dir, preset="windows-tidy")
-
-            # The configure record stays, and the generated-headers phase is
-            # never entered after the failure propagates.
-            self.assertEqual(recorder.records, [{"name": "configure", "tree": "tidy", "status": 0}])
-
-
-class CompileCommandCoverageTest(unittest.TestCase):
-    def test_objcxx_uses_its_exact_native_compile_command(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir) / "repo"
-            build_dir = Path(temp_dir) / "build"
-            source = root / "app" / "macos-appkit" / "DesktopApplication.mm"
-            source.parent.mkdir(parents=True)
-            source.touch()
-            build_dir.mkdir()
-            (build_dir / "compile_commands.json").write_text(
-                json.dumps([{"directory": str(build_dir), "file": str(source), "command": f"clang++ -c {source}"}]),
-                encoding="utf-8",
-            )
-            with mock.patch.object(
-                tidyengine.builddir, "platform_profile", return_value=tidyengine.builddir.MACOS_PROFILE
-            ):
-                plan = tidyengine.compile_command_plan(build_dir, [source], project_root=root)
-            self.assertEqual(
-                [(target.selected, target.translation_unit) for target in plan.targets], [(source, source)]
-            )
-            self.assertEqual(list(plan.deferred), [])
-
-    def test_every_tracked_source_is_in_hygiene_scope_and_cpp_has_a_native_owner(self):
-        profiles = (
-            tidyengine.builddir.LINUX_PROFILE,
-            tidyengine.builddir.MACOS_PROFILE,
-            tidyengine.builddir.WINDOWS_PROFILE,
-        )
-        tracked_sources = [
-            relative for relative in gitfiles._git_lines("ls-files") if relative.endswith(gitfiles.SOURCE_SUFFIXES)
-        ]
-        format_prefixes = tuple(f"{folder}/" for folder in format_command.FORMAT_TOP_DIRS)
-        tidy_prefixes = tuple(f"{folder}/" for folder in tidy_command.ALL_FOLDERS)
-        outside_format_scope = [relative for relative in tracked_sources if not relative.startswith(format_prefixes)]
-        outside_tidy_scope = [relative for relative in tracked_sources if not relative.startswith(tidy_prefixes)]
-        uncovered: list[str] = []
-
-        for relative in tracked_sources:
-            if not relative.endswith(gitfiles.CPP_SUFFIXES) or relative.startswith(f"{gitfiles.LINT_INTEGRATION_DIR}/"):
-                continue
-            path = tidyengine.PROJECT_ROOT / relative
-            compatible = False
-            for profile in profiles:
-                with mock.patch.object(tidyengine.builddir, "platform_profile", return_value=profile):
-                    if not tidyengine._is_platform_incompatible(path, tidyengine.PROJECT_ROOT):
-                        compatible = True
-                        break
-            if not compatible:
-                uncovered.append(relative)
-
-        self.assertEqual(outside_format_scope, [])
-        self.assertEqual(outside_tidy_scope, [])
-        self.assertEqual(uncovered, [])
-
-    def test_explicit_header_companion_must_have_an_exact_command(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir) / "repo"
-            build_dir = Path(temp_dir) / "build"
-            header = root / "app" / "windows-winui" / "HeaderOnly.h"
-            companion = root / "app" / "windows-winui" / "App.cpp"
-            header.parent.mkdir(parents=True)
-            header.touch()
-            companion.touch()
-            build_dir.mkdir()
-            (build_dir / "compile_commands.json").write_text("[]\n", encoding="utf-8")
-
-            with self.assertRaises(SystemExit):
-                tidyengine.compile_command_plan(
-                    build_dir,
-                    [header],
-                    project_root=root,
-                    explicit_header_companions={header: companion},
-                )
-
-    def test_explicit_header_companion_covers_header_only_file(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir) / "repo"
-            build_dir = Path(temp_dir) / "build"
-            header = root / "app" / "windows-winui" / "HeaderOnly.h"
-            companion = root / "app" / "windows-winui" / "App.cpp"
-            header.parent.mkdir(parents=True)
-            header.touch()
-            companion.touch()
-            build_dir.mkdir()
-            (build_dir / "compile_commands.json").write_text(
-                json.dumps([{"directory": str(build_dir), "file": str(companion), "command": f"clang-cl {companion}"}]),
-                encoding="utf-8",
-            )
-
-            plan = tidyengine.compile_command_plan(
-                build_dir,
-                [header],
-                project_root=root,
-                explicit_header_companions={header: companion},
-            )
-
-            self.assertEqual(
-                [(target.selected, target.translation_unit) for target in plan.targets],
-                [(header, companion)],
-            )
-            self.assertEqual(list(plan.deferred), [])
-
-    def test_sources_require_exact_commands_and_headers_require_safe_companions(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir) / "repo"
-            build_dir = Path(temp_dir) / "build"
-            native = root / "lib" / "audio" / "Native.cpp"
-            native_header = root / "include" / "ao" / "audio" / "Native.h"
-            shared_header = root / "include" / "ao" / "audio" / "Shared.h"
-            foreign = root / "lib" / "audio" / "Foreign.cpp"
-            foreign_header = root / "include" / "ao" / "audio" / "Foreign.h"
-            for path in (native, native_header, shared_header, foreign, foreign_header):
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.touch()
-            native.write_text("#include <ao/Native.h>\n#include <ao/Shared.h>\n", encoding="utf-8")
-            build_dir.mkdir()
-            (build_dir / "compile_commands.json").write_text(
-                json.dumps([{"directory": str(build_dir), "file": str(native), "command": "clang++ -c Native.cpp"}]),
-                encoding="utf-8",
-            )
-
-            plan = tidyengine.compile_command_plan(
-                build_dir,
-                [native, native_header, shared_header, foreign, foreign_header],
-                project_root=root,
-            )
-
-            self.assertEqual(list(plan.deferred), [shared_header, foreign, foreign_header])
-            self.assertEqual(
-                [(target.selected, target.translation_unit) for target in plan.targets],
-                [(native, native), (native_header, native)],
-            )
-
-    def test_header_only_file_not_reachable_from_native_code_is_uncovered(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir) / "repo"
-            build_dir = Path(temp_dir) / "build"
-            native = root / "lib" / "Native.cpp"
-            unused = root / "include" / "ao" / "Unused.h"
-            native.parent.mkdir(parents=True)
-            unused.parent.mkdir(parents=True)
-            native.touch()
-            unused.touch()
-            build_dir.mkdir()
-            (build_dir / "compile_commands.json").write_text(
-                json.dumps([{"directory": str(build_dir), "file": str(native), "command": "clang++ -c Native.cpp"}]),
-                encoding="utf-8",
-            )
-
-            plan = tidyengine.compile_command_plan(build_dir, [unused], project_root=root)
-
-            self.assertEqual(list(plan.deferred), [unused])
-
-    def test_test_header_without_safe_companion_is_deferred(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir) / "repo"
-            build_dir = Path(temp_dir) / "build"
-            native = root / "test" / "utility" / "AtomicFileTest.cpp"
-            header = root / "test" / "media" / "TestSupport.h"
-            for path in (native, header):
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.touch()
-            build_dir.mkdir()
-            (build_dir / "compile_commands.json").write_text(
-                json.dumps([{"directory": str(build_dir), "file": str(native), "command": f"clang++ -c {native}"}]),
-                encoding="utf-8",
-            )
-
-            with mock.patch.object(
-                tidyengine.builddir,
-                "platform_profile",
-                return_value=tidyengine.builddir.LINUX_PROFILE,
-            ):
-                plan = tidyengine.compile_command_plan(build_dir, [header], project_root=root)
-
-            self.assertEqual(list(plan.deferred), [header])
-            self.assertEqual(list(plan.targets), [])
-            self.assertFalse(plan.deferral_details[0].is_platform_incompatible)
-
-    def test_flattened_test_roots_retain_their_native_fallback_owner(self):
-        root = Path("/repo")
-        owned = (
-            ("windows", "test/windows/platform/MemoryRandomAccessStreamTest.cpp"),
-            ("windows", "test/winui/layout/LayoutDialectTest.cpp"),
-            ("windows", "test/winui/probe/WinUiAutomationProbe.cpp"),
-            ("linux", "test/linux-gtk/common/UiWorkflowTest.cpp"),
-            ("linux", "test/linux-gtk/platform/GApplicationReplacementProbeMain.cpp"),
-            ("linux", "test/systemmedia/linux/MprisBridgeTest.cpp"),
-            ("linux", "test/systemmedia/linux/MprisTestSupport.h"),
-            ("macos", "test/macos/lmdb/LmdbProbeScratchTest.cpp"),
-            ("macos", "test/macos-appkit/AppKitSmokeMain.mm"),
-        )
-        shared = (
-            "test/audio/DecoderTest.cpp",
-            "test/systemmedia/shared/MediaControllerTest.cpp",
-            "test/systemmedia/linux-other/MprisBridgeTest.cpp",
-            "test/linux-gtk-other/ApplicationTest.cpp",
-            "test/macos-appkit-other/ScenarioMain.mm",
-            "test/windows-other/platform/MemoryStreamTest.cpp",
-        )
-        for profile in (
-            tidyengine.builddir.LINUX_PROFILE,
-            tidyengine.builddir.MACOS_PROFILE,
-            tidyengine.builddir.WINDOWS_PROFILE,
+    def test_folder_uses_the_selected_directories(self):
+        with (
+            mock.patch.object(tidyengine.gitfiles, "find_sources", return_value=["app/A.cpp"]) as find,
+            contextlib.redirect_stderr(io.StringIO()),
         ):
-            with mock.patch.object(tidyengine.builddir, "platform_profile", return_value=profile):
-                for owner, relative in owned:
-                    with self.subTest(profile=profile.name, source=relative):
-                        self.assertEqual(
-                            tidyengine._is_platform_incompatible(root / relative, root), profile.name != owner
-                        )
-                for relative in shared:
-                    with self.subTest(profile=profile.name, source=relative):
-                        self.assertFalse(tidyengine._is_platform_incompatible(root / relative, root))
+            files, explicit = tidyengine.resolve_scope(self.arguments(folder=["app/runtime"]), ["lib"], "Checking")
+        self.assertEqual(files, ["app/A.cpp"])
+        self.assertFalse(explicit)
+        find.assert_called_once_with(["app/runtime"], suffixes=tidyengine.gitfiles.CPP_SUFFIXES)
+
+    def test_without_selection_the_changed_files_are_the_scope(self):
+        with (
+            mock.patch.object(tidyengine.gitfiles, "diff_base", return_value="HEAD~1") as base,
+            mock.patch.object(tidyengine.gitfiles, "changed_files", return_value=["lib/Changed.cpp"]) as changed,
+            contextlib.redirect_stderr(io.StringIO()),
+        ):
+            files, explicit = tidyengine.resolve_scope(self.arguments(commit="HEAD~1"), [], "Checking")
+        self.assertEqual(files, ["lib/Changed.cpp"])
+        self.assertFalse(explicit)
+        base.assert_called_once_with("HEAD~1")
+        changed.assert_called_once_with("HEAD~1", suffixes=tidyengine.gitfiles.CPP_SUFFIXES)
+
+
+class ClangToolTest(unittest.TestCase):
+    def test_non_windows_hosts_keep_the_plain_tool_name_without_reading_the_manifest(self):
+        for profile in (tidyengine.builddir.LINUX_PROFILE, tidyengine.builddir.MACOS_PROFILE):
+            with (
+                self.subTest(profile=profile.name),
+                mock.patch.object(tidyengine.builddir, "platform_profile", return_value=profile),
+                mock.patch.object(tidyengine, "windows_llvm_sdk_manifest", side_effect=AssertionError("manifest read")),
+            ):
+                self.assertEqual(tidyengine.clang_tool(Path("/build"), "clang-tidy"), "clang-tidy")
+
+    def test_windows_clang_tidy_requires_the_verified_bazel_lint_context(self):
+        with (
+            mock.patch.object(
+                tidyengine.builddir, "platform_profile", return_value=tidyengine.builddir.WINDOWS_PROFILE
+            ),
+            mock.patch.object(tidyengine, "windows_llvm_sdk_manifest", side_effect=AssertionError("no SDK probing")),
+        ):
+            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                tidyengine.clang_tool(Path("/build"), "clang-tidy")
+
+    def test_windows_format_tool_comes_from_the_ready_sdk_root(self):
+        manifest = mock.Mock()
+        root = Path("C:/state/llvm/toolchains/llvm-31.2.3-x86_64-windows-msvc")
+        with (
+            mock.patch.object(
+                tidyengine.builddir, "platform_profile", return_value=tidyengine.builddir.WINDOWS_PROFILE
+            ),
+            mock.patch.object(tidyengine, "windows_llvm_sdk_manifest", return_value=manifest),
+            mock.patch.object(tidyengine.windows_llvm_sdk, "ready_root", return_value=(root, True)) as ready,
+            mock.patch.object(Path, "is_file", return_value=True),
+        ):
+            tool = tidyengine.clang_tool(Path("/build"), "clang-format")
+        self.assertEqual(tool, str(root / "bin" / "clang-format.exe"))
+        ready.assert_called_once_with(tidyengine.os.environ, manifest)
+
+
+class PlatformIncompatibilityTest(unittest.TestCase):
+    ROOT = Path("/repo")
+
+    def incompatible(self, profile, path):
+        with mock.patch.object(tidyengine.builddir, "platform_profile", return_value=profile):
+            return tidyengine._is_platform_incompatible(path, self.ROOT)
 
     def test_winui_sources_are_incompatible_with_the_linux_native_graph(self):
-        root = Path("/repo")
-        paths = (
-            root / "test" / "winui" / "ThemeTest.cpp",
-            root / "test" / "winui" / "layout" / "LayoutDialectTest.cpp",
-        )
-
-        with mock.patch.object(
-            tidyengine.builddir,
-            "platform_profile",
-            return_value=tidyengine.builddir.LINUX_PROFILE,
+        for relative in (
+            "test/winui/ThemeTest.cpp",
+            "test/winui/layout/LayoutDialectTest.cpp",
+            "app/windows-winui/MainWindow.xaml.cpp",
+            "app/windows/Platform.cpp",
         ):
-            for path in paths:
-                with self.subTest(path=path):
-                    self.assertTrue(tidyengine._is_platform_incompatible(path, root))
+            with self.subTest(relative=relative):
+                self.assertTrue(self.incompatible(tidyengine.builddir.LINUX_PROFILE, self.ROOT / relative))
 
-    def test_system_locale_linux_source_matches_its_cmake_and_native_compile_ownership(self):
-        relative = Path("app/i18n/SystemLocaleLinux.cpp")
-        cmake = (tidyengine.PROJECT_ROOT / relative.parent / "CMakeLists.txt").read_text(encoding="utf-8")
-        self.assertIn(f"else()\n  target_sources(ao_app_i18n PRIVATE {relative.name})\nendif()", cmake)
-        self.assertTrue((tidyengine.PROJECT_ROOT / relative).is_file())
-
-        cases = (
-            (tidyengine.builddir.LINUX_PROFILE, "SystemLocaleLinux.cpp", None),
-            (tidyengine.builddir.MACOS_PROFILE, "SystemLocaleMacos.cpp", "platform-incompatible"),
-            (tidyengine.builddir.WINDOWS_PROFILE, "SystemLocaleWindows.cpp", "platform-incompatible"),
-            (tidyengine.builddir.LINUX_PROFILE, None, "native-coverage"),
-        )
-        for profile, native_name, expected_kind in cases:
-            with (
-                self.subTest(profile=profile.name, native_name=native_name),
-                tempfile.TemporaryDirectory() as temp_dir,
-            ):
-                root = Path(temp_dir) / "repo"
-                build_dir = Path(temp_dir) / "build"
-                source = root / relative
-                source.parent.mkdir(parents=True)
-                source.touch()
-                build_dir.mkdir()
-                entries = []
-                if native_name is not None:
-                    native = source.with_name(native_name)
-                    native.touch()
-                    entries.append(
-                        {"directory": str(build_dir), "file": str(native), "arguments": ["clang++", "-c", str(native)]}
-                    )
-                (build_dir / "compile_commands.json").write_text(json.dumps(entries), encoding="utf-8")
-
-                with mock.patch.object(tidyengine.builddir, "platform_profile", return_value=profile):
-                    self.assertEqual(tidyengine._is_platform_incompatible(source, root), profile.name != "linux")
-                    plan = tidyengine.compile_command_plan(build_dir, [source], project_root=root)
-
-                if expected_kind is None:
-                    self.assertEqual(list(plan.targets), [tidyengine.CompileCommandTarget(source, source)])
-                    self.assertEqual(list(plan.deferred), [])
-                    self.assertEqual(list(plan.deferral_details), [])
-                else:
-                    self.assertEqual(list(plan.targets), [])
-                    self.assertEqual(list(plan.deferred), [source])
-                    self.assertEqual([detail.kind for detail in plan.deferral_details], [expected_kind])
-                    self.assertEqual([detail.selected for detail in plan.deferral_details], [source])
-
-    def test_shared_posix_source_requires_its_exact_native_command_on_macos(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir) / "repo"
-            build_dir = Path(temp_dir) / "build"
-            source = root / "lib" / "utility" / "AtomicFilePosix.cpp"
-            source.parent.mkdir(parents=True)
-            source.touch()
-            build_dir.mkdir()
-            database = build_dir / "compile_commands.json"
-            database.write_text(
-                json.dumps(
-                    [{"directory": str(build_dir), "file": str(source), "arguments": ["clang++", "-c", str(source)]}]
-                ),
-                encoding="utf-8",
-            )
-
-            with mock.patch.object(
-                tidyengine.builddir, "platform_profile", return_value=tidyengine.builddir.MACOS_PROFILE
-            ):
-                self.assertFalse(tidyengine._is_platform_incompatible(source, root))
-                plan = tidyengine.compile_command_plan(build_dir, [source], project_root=root)
-                self.assertEqual(list(plan.targets), [tidyengine.CompileCommandTarget(source, source)])
-                self.assertEqual(list(plan.deferred), [])
-
-                database.write_text("[]\n", encoding="utf-8")
-                uncovered = tidyengine.compile_command_plan(build_dir, [source], project_root=root)
-
-            self.assertEqual(list(uncovered.targets), [])
-            self.assertEqual(list(uncovered.deferred), [source])
-            self.assertEqual(
-                list(uncovered.deferral_details),
-                [
-                    tidyengine.CompileCommandDeferral(
-                        source, "the source file has no exact compile command", "native-coverage"
-                    )
-                ],
-            )
-
-    def test_posix_suffix_impl_is_incompatible_with_the_windows_native_graph(self):
-        root = Path("/repo")
-        with mock.patch.object(
-            tidyengine.builddir,
-            "platform_profile",
-            return_value=tidyengine.builddir.WINDOWS_PROFILE,
+    def test_linux_sources_stay_compatible_with_the_linux_native_graph(self):
+        for relative in (
+            "app/linux-gtk/MainWindow.cpp",
+            "app/systemmedia/linux/MprisBusSession.cpp",
+            "test/linux-gtk/GtkTest.cpp",
+            "test/systemmedia/linux/TuiMprisProcessTest.cpp",
+            "lib/utility/Path.cpp",
         ):
-            self.assertTrue(
-                tidyengine._is_platform_incompatible(root / "lib" / "utility" / "AtomicFilePosix.cpp", root)
-            )
+            with self.subTest(relative=relative):
+                self.assertFalse(self.incompatible(tidyengine.builddir.LINUX_PROFILE, self.ROOT / relative))
 
-    def test_linux_gtk_integration_sources_are_incompatible_with_the_windows_native_graph(self):
-        root = Path("/repo")
-        source = root / "test" / "linux-gtk" / "platform" / "GApplicationReplacementProbeMain.cpp"
-
-        with mock.patch.object(
-            tidyengine.builddir,
-            "platform_profile",
-            return_value=tidyengine.builddir.WINDOWS_PROFILE,
+    def test_posix_and_linux_sources_are_incompatible_with_the_windows_native_graph(self):
+        for relative in (
+            "app/linux-gtk/MainWindow.cpp",
+            "app/systemmedia/linux/MprisBusSession.cpp",
+            "lib/audio/backend/PipewireBackend.cpp",
+            "lib/utility/AtomicFilePosix.cpp",
         ):
-            self.assertTrue(tidyengine._is_platform_incompatible(source, root))
+            with self.subTest(relative=relative):
+                self.assertTrue(self.incompatible(tidyengine.builddir.WINDOWS_PROFILE, self.ROOT / relative))
 
-    def test_macos_test_sources_are_incompatible_with_other_native_graphs(self):
-        root = Path("/repo")
-        sources = (
-            root / "test" / "macos-appkit" / "AppKitSmokeMain.mm",
-            root / "test" / "macos" / "lmdb" / "LmdbProbeScratchTest.cpp",
-        )
+    def test_windows_sources_stay_compatible_with_the_windows_native_graph(self):
+        for relative in (
+            "app/windows-winui/MainWindow.xaml.cpp",
+            "test/winui/ThemeTest.cpp",
+            "lib/utility/AtomicFileWindows.cpp",
+            "lib/audio/backend/WasapiProvider.cpp",
+        ):
+            with self.subTest(relative=relative):
+                self.assertFalse(self.incompatible(tidyengine.builddir.WINDOWS_PROFILE, self.ROOT / relative))
 
-        for profile in (tidyengine.builddir.LINUX_PROFILE, tidyengine.builddir.WINDOWS_PROFILE):
-            with self.subTest(profile=profile.name):
-                with mock.patch.object(tidyengine.builddir, "platform_profile", return_value=profile):
-                    for source in sources:
-                        with self.subTest(source=source):
-                            self.assertTrue(tidyengine._is_platform_incompatible(source, root))
-
-    def test_macos_backend_source_is_incompatible_with_every_other_native_graph(self):
-        root = Path("/repo")
-        sources = (
-            root / "app" / "macos-appkit" / "DesktopApplication.mm",
-            root / "app" / "macos-appkit" / "MainRunLoopExecutor.h",
-            root / "lib" / "audio" / "PlatformBackendProvidersMacos.cpp",
-            root / "lib" / "audio" / "backend" / "CoreAudioBackend.cpp",
-            root / "lib" / "audio" / "backend" / "detail" / "CoreFoundationString.cpp",
-            root / "test" / "audio" / "backend" / "CoreAudioProviderTest.cpp",
-        )
-
-        for profile in (tidyengine.builddir.LINUX_PROFILE, tidyengine.builddir.WINDOWS_PROFILE):
-            with self.subTest(profile=profile.name):
-                with mock.patch.object(
-                    tidyengine.builddir,
-                    "platform_profile",
-                    return_value=profile,
-                ):
-                    for source in sources:
-                        with self.subTest(source=source):
-                            self.assertTrue(tidyengine._is_platform_incompatible(source, root))
+    def test_macos_ownership_is_exclusive_to_the_macos_native_graph(self):
+        for relative in (
+            "app/macos-appkit/AppKitAdapter.mm",
+            "test/macos/CoreAudioOutputTest.cpp",
+            "test/macos-appkit/AppKitSmokeMain.mm",
+            "lib/audio/backend/CoreAudioProvider.cpp",
+        ):
+            with self.subTest(relative=relative):
+                self.assertFalse(self.incompatible(tidyengine.builddir.MACOS_PROFILE, self.ROOT / relative))
+                self.assertTrue(self.incompatible(tidyengine.builddir.LINUX_PROFILE, self.ROOT / relative))
+                self.assertTrue(self.incompatible(tidyengine.builddir.WINDOWS_PROFILE, self.ROOT / relative))
 
     def test_foreign_frontends_are_incompatible_with_the_macos_native_graph(self):
-        root = Path("/repo")
-        paths = (
-            root / "lib" / "audio" / "PlatformBackendProvidersWindows.cpp",
-            root / "lib" / "audio" / "PlatformBackendProvidersLinux.cpp",
-            root / "lib" / "audio" / "backend" / "detail" / "PipeWireRuntime.cpp",
-            root / "app" / "linux-gtk" / "Application.cpp",
-            root / "app" / "windows" / "Main.cpp",
-            root / "test" / "winui" / "ThemeTest.cpp",
-            root / "tool" / "lint" / "AobusClangTidyMain.cpp",
+        for relative in ("app/linux-gtk/MainWindow.cpp", "app/windows-winui/MainWindow.xaml.cpp"):
+            with self.subTest(relative=relative):
+                self.assertTrue(self.incompatible(tidyengine.builddir.MACOS_PROFILE, self.ROOT / relative))
+
+    def test_shared_posix_sources_stay_compatible_with_the_macos_native_graph(self):
+        for relative in ("lib/utility/AtomicFilePosix.cpp", "lib/utility/FileAllocationPosix.cpp"):
+            with self.subTest(relative=relative):
+                self.assertFalse(self.incompatible(tidyengine.builddir.MACOS_PROFILE, self.ROOT / relative))
+                self.assertTrue(self.incompatible(tidyengine.builddir.WINDOWS_PROFILE, self.ROOT / relative))
+
+    def test_paths_outside_the_root_are_not_classified(self):
+        self.assertFalse(self.incompatible(tidyengine.builddir.LINUX_PROFILE, Path("/elsewhere/ThemeTest.cpp")))
+
+
+class ComponentMappingTest(unittest.TestCase):
+    def test_public_include_roots_map_to_their_implementation_components(self):
+        cases = (
+            (("include", "ao", "utility", "Path.h"), ("lib", "utility", "Path.h")),
+            (("include", "ao", "library", "MusicLibrary.h"), ("lib", "library", "MusicLibrary.h")),
+            (("app", "include", "ao", "rt", "Signal.h"), ("app", "runtime", "Signal.h")),
+            (("app", "include", "ao", "uimodel", "Field.h"), ("app", "uimodel", "Field.h")),
+            (("app", "linux-gtk", "include", "ao", "gtk", "Leaf.h"), ("app", "linux-gtk", "Leaf.h")),
         )
+        for parent, expected in cases:
+            with self.subTest(parent=parent):
+                self.assertEqual(tidyengine.component_parts(parent), expected)
 
-        with mock.patch.object(
-            tidyengine.builddir,
-            "platform_profile",
-            return_value=tidyengine.builddir.MACOS_PROFILE,
-        ):
-            for path in paths:
-                with self.subTest(path=path):
-                    self.assertTrue(tidyengine._is_platform_incompatible(path, root))
-
-    def test_posix_and_shared_sources_stay_compatible_with_the_macos_native_graph(self):
-        root = Path("/repo")
-        paths = (
-            root / "lib" / "utility" / "AtomicFilePosix.cpp",
-            root / "app" / "tui" / "SignalExitWatcherPosix.cpp",
-            root / "lib" / "audio" / "Player.cpp",
-            root / "test" / "core" / "EnumerateTest.cpp",
-        )
-
-        with mock.patch.object(
-            tidyengine.builddir,
-            "platform_profile",
-            return_value=tidyengine.builddir.MACOS_PROFILE,
-        ):
-            for path in paths:
-                with self.subTest(path=path):
-                    self.assertFalse(tidyengine._is_platform_incompatible(path, root))
-
-    def test_explicit_lint_fixture_can_borrow_native_flags(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir) / "repo"
-            build_dir = Path(temp_dir) / "build"
-            native = root / "tool" / "lint" / "Check.cpp"
-            fixture = root / "test" / "lint" / "fixture" / "check" / "case.cpp"
-            for path in (native, fixture):
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.touch()
-            build_dir.mkdir()
-            (build_dir / "compile_commands.json").write_text(
-                json.dumps([{"directory": str(build_dir), "file": str(native), "command": f"clang++ -c {native}"}]),
-                encoding="utf-8",
-            )
-
-            plan = tidyengine.compile_command_plan(build_dir, [fixture], project_root=root)
-
-            self.assertEqual(list(plan.deferred), [])
-            self.assertEqual(
-                [(target.selected, target.translation_unit) for target in plan.targets],
-                [(absolute_path(fixture), absolute_path(native))],
-            )
-
-    def test_conditional_include_does_not_claim_header_coverage(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir) / "repo"
-            build_dir = Path(temp_dir) / "build"
-            native = root / "app" / "tui" / "PlatformConditional.cpp"
-            header = root / "include" / "ao" / "audio" / "WasapiProvider.h"
-            for path in (native, header):
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.touch()
-            native.write_text(
-                "#ifdef _WIN32\n#include <ao/audio/WasapiProvider.h>\n#endif\n",
-                encoding="utf-8",
-            )
-            build_dir.mkdir()
-            (build_dir / "compile_commands.json").write_text(
-                json.dumps([{"directory": str(build_dir), "file": str(native), "command": "cl /c Native.cpp"}]),
-                encoding="utf-8",
-            )
-
-            with mock.patch.object(
-                tidyengine.builddir,
-                "platform_profile",
-                return_value=tidyengine.builddir.LINUX_PROFILE,
-            ):
-                plan = tidyengine.compile_command_plan(build_dir, [header], project_root=root)
-
-            self.assertEqual(list(plan.deferred), [header])
-            self.assertEqual(list(plan.targets), [])
-            self.assertTrue(plan.deferral_details[0].is_platform_incompatible)
-
-    def test_platform_suffix_implementation_covers_header_in_same_component(self):
-        for native_name in ("AtomicFileWindows.cpp", "AtomicFileMacos.cpp", "AtomicFileMacos.mm"):
-            with self.subTest(native_name=native_name), tempfile.TemporaryDirectory() as temp_dir:
-                root = Path(temp_dir) / "repo"
-                build_dir = Path(temp_dir) / "build"
-                header = root / "include" / "ao" / "utility" / "AtomicFile.h"
-                native = root / "lib" / "utility" / native_name
-                for path in (header, native):
-                    path.parent.mkdir(parents=True, exist_ok=True)
-                    path.touch()
-                build_dir.mkdir()
-                (build_dir / "compile_commands.json").write_text(
-                    json.dumps([{"directory": str(build_dir), "file": str(native), "command": f"cl /c {native}"}]),
-                    encoding="utf-8",
-                )
-
-                plan = tidyengine.compile_command_plan(build_dir, [header], project_root=root)
-
-                self.assertEqual(list(plan.deferred), [])
-                self.assertEqual(
-                    [(target.selected, target.translation_unit) for target in plan.targets],
-                    [(header, native)],
-                )
-
-    def test_same_stem_translation_unit_in_another_component_does_not_cover_header(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir) / "repo"
-            build_dir = Path(temp_dir) / "build"
-            native = root / "app" / "windows" / "App.cpp"
-            foreign = root / "app" / "linux" / "App.cpp"
-            foreign_header = root / "app" / "linux" / "App.h"
-            for path in (native, foreign, foreign_header):
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.touch()
-            build_dir.mkdir()
-            (build_dir / "compile_commands.json").write_text(
-                json.dumps([{"directory": str(build_dir), "file": str(native), "command": "clang++ -c App.cpp"}]),
-                encoding="utf-8",
-            )
-
-            plan = tidyengine.compile_command_plan(build_dir, [foreign_header], project_root=root)
-
-            self.assertEqual(list(plan.deferred), [foreign_header])
-
-    def test_matching_trailing_directories_across_platform_roots_do_not_cover_header(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir) / "repo"
-            build_dir = Path(temp_dir) / "build"
-            native = root / "app" / "uimodel" / "layout" / "document" / "LayoutDocument.cpp"
-            linux_header = root / "app" / "linux-gtk" / "layout" / "document" / "LayoutDocument.h"
-            for path in (native, linux_header):
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.touch()
-            build_dir.mkdir()
-            (build_dir / "compile_commands.json").write_text(
-                json.dumps([{"directory": str(build_dir), "file": str(native), "command": "cl /c LayoutDocument.cpp"}]),
-                encoding="utf-8",
-            )
-
-            plan = tidyengine.compile_command_plan(build_dir, [linux_header], project_root=root)
-
-            self.assertEqual(list(plan.deferred), [linux_header])
-            self.assertEqual(list(plan.targets), [])
-
-
-class FilteredCompileDatabaseTest(unittest.TestCase):
-    def test_removes_only_exact_driver_arguments_from_both_database_forms(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            build_dir = root / "build"
-            destination = root / "filtered"
-            first = root / "First.cpp"
-            second = root / "Second.cpp"
-            first.touch()
-            second.touch()
-            build_dir.mkdir()
-            (build_dir / "compile_commands.json").write_text(
-                json.dumps(
-                    [
-                        {
-                            "directory": str(root),
-                            "file": str(first),
-                            "arguments": ["cl.exe", "/ZC:PREPROCESSOR", "/GL", "/c", str(first)],
-                        },
-                        {
-                            "directory": str(root),
-                            "file": str(second),
-                            "command": f"cl.exe /Zc:preprocessor /Zc:preprocessor- /GL /GL- /c {second}",
-                        },
-                    ]
-                ),
-                encoding="utf-8",
-            )
-
-            database_dir = tidyengine.write_filtered_compile_database(
-                build_dir,
-                destination,
-                ("/Zc:preprocessor", "/GL"),
-            )
-
-            self.assertEqual(database_dir, destination)
-            entries = json.loads((destination / "compile_commands.json").read_text(encoding="utf-8"))
-            self.assertEqual(entries[0]["arguments"], ["cl.exe", "/c", str(first)])
-            self.assertNotIn(" /Zc:preprocessor ", entries[1]["command"])
-            self.assertIn("/Zc:preprocessor-", entries[1]["command"])
-            self.assertNotIn(" /GL ", entries[1]["command"])
-            self.assertIn("/GL-", entries[1]["command"])
-
-    def test_merge_filters_and_prefers_authoritative_translation_units(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            build_dir = root / "build"
-            destination = root / "merged"
-            first = root / "First.cpp"
-            second = root / "Second.cpp"
-            first.touch()
-            second.touch()
-            build_dir.mkdir()
-            (build_dir / "compile_commands.json").write_text(
-                json.dumps([{"directory": str(root), "file": str(first), "command": f"cl /c {first}"}]),
-                encoding="utf-8",
-            )
-            extra = [{"directory": str(root), "file": str(second), "command": f"clang-cl /c {second}"}]
-
-            tidyengine.write_merged_compile_database(build_dir, destination, ("/c",), extra)
-
-            entries = json.loads((destination / "compile_commands.json").read_text(encoding="utf-8"))
-            self.assertEqual([Path(entry["file"]) for entry in entries], [first, second])
-            self.assertTrue(all(" /c " not in entry["command"] for entry in entries))
-
-            override = [{"directory": str(root), "file": str(first), "command": f"clang-cl {first}"}]
-            tidyengine.write_merged_compile_database(build_dir, destination, (), override)
-            entries = json.loads((destination / "compile_commands.json").read_text(encoding="utf-8"))
-            self.assertEqual([Path(entry["file"]) for entry in entries], [first])
-            self.assertEqual(entries[0]["command"], f"clang-cl {first}")
-
-            with self.assertRaises(SystemExit):
-                tidyengine.write_merged_compile_database(
-                    build_dir,
-                    destination,
-                    (),
-                    [
-                        {"directory": str(root), "file": str(first), "command": f"clang-cl {first}"},
-                        {"directory": str(root), "file": str(first), "command": f"clang-cl --different {first}"},
-                    ],
-                )
-
-
-class HeaderCompileDatabaseTest(unittest.TestCase):
-    def test_objc_header_language_precedes_quoted_input_and_keeps_native_flags(self):
-        for representation in ("arguments", "command"):
-            with self.subTest(representation=representation), tempfile.TemporaryDirectory() as temp_dir:
-                root = Path(temp_dir) / "native source"
-                root.mkdir()
-                source = root / "Soul.mm"
-                header = root / "Soul.h"
-                source.touch()
-                header.touch()
-                arguments = [
-                    "clang++",
-                    "-x",
-                    "objective-c++",
-                    "-fobjc-arc",
-                    "-isysroot",
-                    "/native sdk",
-                    "-c",
-                    str(source),
-                ]
-                entry = {"directory": str(root), "file": str(source)}
-                entry[representation] = arguments if representation == "arguments" else shlex.join(arguments)
-                (root / "compile_commands.json").write_text(json.dumps([entry]), encoding="utf-8")
-                destination = tidyengine.write_header_compile_database(
-                    root, [tidyengine.CompileCommandTarget(header, source)], root / "synthetic"
-                )
-                rewritten = json.loads((destination / "compile_commands.json").read_text(encoding="utf-8"))[0]
-                actual = rewritten["arguments"] if representation == "arguments" else shlex.split(rewritten["command"])
-                self.assertEqual(actual, [*arguments[:-1], "-x", "objective-c++-header", str(header)])
-
-    def test_forced_cmake_pch_is_removed_by_pattern(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            build_dir = root / "build"
-            source = root / "Player.cpp"
-            header = root / "Player.h"
-            source.touch()
-            header.touch()
-            build_dir.mkdir()
-            pch = root / "generated" / "cmake_pch.hxx"
-            preamble = root / "tidy files" / "tidy-preamble.h"
-            command = f'clang-cl /FI"{pch}" /FIrequired.h "{source}"'
-            (build_dir / "compile_commands.json").write_text(
-                json.dumps([{"directory": str(root), "file": str(source), "command": command}]),
-                encoding="utf-8",
-            )
-
-            tidyengine.write_header_compile_database(
-                build_dir,
-                [tidyengine.CompileCommandTarget(header, source)],
-                root / "synthetic",
-                excluded_argument_patterns=(r'/FI(?:"[^"]*[/\\]cmake_pch\.hxx"|[^\s]*[/\\]cmake_pch\.hxx)',),
-                additional_arguments=(f"/FI{preamble}",),
-                command_line_style="windows",
-            )
-
-            entries = json.loads((root / "synthetic" / "compile_commands.json").read_text(encoding="utf-8"))
-            self.assertNotIn("cmake_pch.hxx", entries[0]["command"])
-            self.assertIn("/FIrequired.h", entries[0]["command"])
-            self.assertIn(subprocess.list2cmdline((f"/FI{preamble}",)), entries[0]["command"])
-
-    def test_additional_argument_list_keeps_space_containing_token_unquoted(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            build_dir = root / "build"
-            source = root / "Player.cpp"
-            header = root / "Player.h"
-            preamble = root / "tidy files" / "tidy-preamble.h"
-            source.touch()
-            header.touch()
-            build_dir.mkdir()
-            (build_dir / "compile_commands.json").write_text(
-                json.dumps(
-                    [
-                        {
-                            "directory": str(root),
-                            "file": str(source),
-                            "arguments": ["clang-cl", "/c", str(source)],
-                        }
-                    ]
-                ),
-                encoding="utf-8",
-            )
-            forced_include = f"/FI{preamble}"
-
-            tidyengine.write_header_compile_database(
-                build_dir,
-                [tidyengine.CompileCommandTarget(header, source)],
-                root / "synthetic",
-                additional_arguments=(forced_include,),
-                command_line_style="windows",
-            )
-
-            entries = json.loads((root / "synthetic" / "compile_commands.json").read_text(encoding="utf-8"))
-            self.assertEqual(entries[0]["arguments"][-1], forced_include)
-            self.assertNotIn('"', entries[0]["arguments"][-1])
-
-    def test_arguments_command_is_copied_with_header_as_exact_input(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            build_dir = root / "build"
-            destination = root / "synthetic"
-            source = root / "repo" / "lib" / "audio" / "Player.cpp"
-            header = root / "repo" / "include" / "ao" / "audio" / "Player.h"
-            source.parent.mkdir(parents=True)
-            header.parent.mkdir(parents=True)
-            source.touch()
-            header.touch()
-            build_dir.mkdir()
-            (build_dir / "compile_commands.json").write_text(
-                json.dumps(
-                    [
-                        {
-                            "directory": str(build_dir),
-                            "file": str(source),
-                            "arguments": ["clang++", "/TP", "-DFEATURE=1", "-c", str(source)],
-                            "output": "Player.obj",
-                        }
-                    ]
-                ),
-                encoding="utf-8",
-            )
-            target = tidyengine.CompileCommandTarget(header, source)
-
-            database_dir = tidyengine.write_header_compile_database(
-                build_dir,
-                [target],
-                destination,
-                excluded_arguments=("/TP",),
-            )
-
-            self.assertEqual(database_dir, destination)
-            entries = json.loads((destination / "compile_commands.json").read_text(encoding="utf-8"))
-            self.assertEqual(len(entries), 1)
-            self.assertEqual(entries[0]["file"], absolute_path(header).as_posix())
-            self.assertEqual(
-                entries[0]["arguments"],
-                ["clang++", "-DFEATURE=1", "-c", str(absolute_path(header))],
-            )
-            self.assertNotIn("output", entries[0])
-
-    def test_string_command_is_copied_with_quoted_header_as_exact_input(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir) / "repo with spaces"
-            build_dir = Path(temp_dir) / "build"
-            destination = Path(temp_dir) / "synthetic"
-            source = root / "lib" / "audio" / "Player.cpp"
-            header = root / "include" / "ao" / "audio" / "Player.h"
-            source.parent.mkdir(parents=True)
-            header.parent.mkdir(parents=True)
-            source.touch()
-            header.touch()
-            build_dir.mkdir()
-            command = f'clang++ /TP -DFEATURE=1 -c "{source}" -o Player.obj'
-            (build_dir / "compile_commands.json").write_text(
-                json.dumps([{"directory": str(build_dir), "file": str(source), "command": command}]),
-                encoding="utf-8",
-            )
-
-            tidyengine.write_header_compile_database(
-                build_dir,
-                [tidyengine.CompileCommandTarget(header, source)],
-                destination,
-                excluded_arguments=("/TP",),
-            )
-
-            entries = json.loads((destination / "compile_commands.json").read_text(encoding="utf-8"))
-            rewritten = entries[0]["command"]
-            self.assertIn("-DFEATURE=1", rewritten)
-            self.assertNotIn("/TP", rewritten)
-            self.assertIn(f'"{absolute_path(header)}"', rewritten)
-            self.assertNotIn(str(source), rewritten)
-            self.assertEqual(entries[0]["file"], absolute_path(header).as_posix())
-
-    def test_string_command_accepts_input_relative_to_command_directory(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            build_dir = root / "build"
-            source = root / "repo" / "lib" / "Player.cpp"
-            header = root / "repo" / "include" / "ao" / "Player.h"
-            source.parent.mkdir(parents=True)
-            header.parent.mkdir(parents=True)
-            source.touch()
-            header.touch()
-            build_dir.mkdir()
-            relative_source = Path(os.path.relpath(source, build_dir))
-            (build_dir / "compile_commands.json").write_text(
-                json.dumps(
-                    [
-                        {
-                            "directory": str(build_dir),
-                            "file": str(source),
-                            "command": f'clang++ -c "{relative_source}"',
-                        }
-                    ]
-                ),
-                encoding="utf-8",
-            )
-
-            tidyengine.write_header_compile_database(
-                build_dir,
-                [tidyengine.CompileCommandTarget(header, source)],
-                root / "synthetic",
-            )
-
-            entries = json.loads((root / "synthetic" / "compile_commands.json").read_text(encoding="utf-8"))
-            self.assertIn(f'"{absolute_path(header)}"', entries[0]["command"])
-
-    def test_unquoted_relative_input_quotes_a_replacement_path_with_spaces(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir) / "repo with spaces"
-            build_dir = Path(temp_dir) / "build"
-            source = root / "lib" / "Player.cpp"
-            header = root / "include" / "ao" / "Player.h"
-            source.parent.mkdir(parents=True)
-            header.parent.mkdir(parents=True)
-            source.touch()
-            header.touch()
-            build_dir.mkdir()
-            (build_dir / "compile_commands.json").write_text(
-                json.dumps(
-                    [
-                        {
-                            "directory": str(root),
-                            "file": str(source),
-                            "command": "clang++ -c lib/Player.cpp",
-                        }
-                    ]
-                ),
-                encoding="utf-8",
-            )
-
-            tidyengine.write_header_compile_database(
-                build_dir,
-                [tidyengine.CompileCommandTarget(header, source)],
-                Path(temp_dir) / "synthetic",
-            )
-
-            entries = json.loads((Path(temp_dir) / "synthetic" / "compile_commands.json").read_text(encoding="utf-8"))
-            self.assertIn(str(absolute_path(header)), shlex.split(entries[0]["command"]))
-
-    def test_string_command_accepts_absolute_input_when_source_and_build_are_on_different_volumes(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            build_dir = root / "build"
-            source = root / "repo" / "lib" / "Player.cpp"
-            header = root / "repo" / "include" / "ao" / "Player.h"
-            source.parent.mkdir(parents=True)
-            header.parent.mkdir(parents=True)
-            source.touch()
-            header.touch()
-            build_dir.mkdir()
-            (build_dir / "compile_commands.json").write_text(
-                json.dumps(
-                    [
-                        {
-                            "directory": "C:/local/aobus-build",
-                            "file": str(source),
-                            "command": f'clang++ -c "{source}"',
-                        }
-                    ]
-                ),
-                encoding="utf-8",
-            )
-
-            with mock.patch.object(tidyengine.os.path, "relpath", side_effect=ValueError("different drives")):
-                tidyengine.write_header_compile_database(
-                    build_dir,
-                    [tidyengine.CompileCommandTarget(header, source)],
-                    root / "synthetic",
-                )
-
-            entries = json.loads((root / "synthetic" / "compile_commands.json").read_text(encoding="utf-8"))
-            self.assertIn(f'"{absolute_path(header)}"', entries[0]["command"])
-            self.assertNotIn(str(source), entries[0]["command"])
-
-    def test_missing_source_token_fails_closed_for_argument_list(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            build_dir = root / "build"
-            source = root / "repo" / "lib" / "audio" / "Player.cpp"
-            header = root / "repo" / "include" / "ao" / "audio" / "Player.h"
-            source.parent.mkdir(parents=True)
-            header.parent.mkdir(parents=True)
-            source.touch()
-            header.touch()
-            build_dir.mkdir()
-            (build_dir / "compile_commands.json").write_text(
-                json.dumps(
-                    [
-                        {
-                            "directory": str(build_dir),
-                            "file": str(source),
-                            "arguments": ["clang++", "-c", "Different.cpp"],
-                        }
-                    ]
-                ),
-                encoding="utf-8",
-            )
-
-            with self.assertRaises(SystemExit):
-                tidyengine.write_header_compile_database(
-                    build_dir,
-                    [tidyengine.CompileCommandTarget(header, source)],
-                    root / "synthetic",
-                )
-
-    def test_missing_source_token_fails_closed_for_string_command(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            build_dir = root / "build"
-            source = root / "repo" / "lib" / "audio" / "Player.cpp"
-            header = root / "repo" / "include" / "ao" / "audio" / "Player.h"
-            source.parent.mkdir(parents=True)
-            header.parent.mkdir(parents=True)
-            source.touch()
-            header.touch()
-            build_dir.mkdir()
-            (build_dir / "compile_commands.json").write_text(
-                json.dumps(
-                    [
-                        {
-                            "directory": str(build_dir),
-                            "file": str(source),
-                            "command": "clang++ -c Different.cpp",
-                        }
-                    ]
-                ),
-                encoding="utf-8",
-            )
-
-            with self.assertRaises(SystemExit):
-                tidyengine.write_header_compile_database(
-                    build_dir,
-                    [tidyengine.CompileCommandTarget(header, source)],
-                    root / "synthetic",
-                )
-
-
-class DefaultJobsTest(unittest.TestCase):
-    def test_default_jobs_follow_the_shared_worker_baseline(self):
-        with mock.patch.object(tidyengine, "default_workers", return_value=9):
-            self.assertEqual(tidyengine.default_jobs(), 9)
-
-
-class RunnerPortabilityTest(unittest.TestCase):
-    def test_windows_absolute_file_name_does_not_leak_into_log_name(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            logs: list[Path] = []
-
-            def runner(_: str, log: Path) -> int:
-                logs.append(log)
-                log.touch()
-                return 0
-
-            result = tidyengine.run_parallel(
-                [r"C:\repo\lib\Wasapi.cpp"],
-                1,
-                Path(temp_dir),
-                runner,
-            )
-
-            self.assertFalse(result.failed)
-            self.assertEqual(logs[0].name, "000000.log")
-
-    def test_compile_command_error_is_detected_in_successful_tool_output(self):
-        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", delete=False) as stream:
-            stream.write("Skipping C:/repo/Missing.cpp. Compile command not found.\n")
-            log = Path(stream.name)
-        try:
-            self.assertTrue(tidyengine.log_has_compile_command_error(log))
-        finally:
-            log.unlink()
+    def test_implementation_roots_map_to_themselves_and_others_are_rejected(self):
+        for parent in (("lib", "utility"), ("app", "runtime"), ("test", "core"), ("tool", "lint")):
+            with self.subTest(parent=parent):
+                self.assertEqual(tidyengine.component_parts(parent), parent)
+        for parent in ((), ("script", "ao"), ("doc", "development"), ("include", "thirdparty", "x.h")):
+            with self.subTest(parent=parent):
+                self.assertIsNone(tidyengine.component_parts(parent))
 
 
 if __name__ == "__main__":

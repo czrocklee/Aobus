@@ -29,7 +29,7 @@ namespace ao::rt::test
       return ao::test::runProbeProcess(executablePath, argument, kTimeout);
     }
 
-    void requireFatalScenario(std::string_view scenario)
+    ao::test::ProbeProcessResult requireFatalScenario(std::string_view scenario)
     {
       INFO("probe: " << scenario);
       auto const expectations = runtimeFatalProbeExpectations();
@@ -63,6 +63,8 @@ namespace ao::rt::test
       {
         CHECK(result.standardError.contains(expectation.secondMarker));
       }
+
+      return result;
     }
 
     void requireCleanScenario(std::string_view scenario)
@@ -80,12 +82,18 @@ namespace ao::rt::test
     // Each registered scenario runs from its own case below, so a new registry
     // entry needs a matching case and an updated count here.
 #ifdef _WIN32
-    constexpr std::size_t kFatalScenarioCount = 40;
+    constexpr std::size_t kFatalScenarioCount = 41;
 #else
-    constexpr std::size_t kFatalScenarioCount = 38;
+    constexpr std::size_t kFatalScenarioCount = 39;
 #endif
     CHECK(runtimeFatalProbeExpectations().size() == kFatalScenarioCount);
     CHECK(runtimeCleanProbeScenarios().size() == 2);
+  }
+
+  TEST_CASE("Runtime fatal roots - preparing a replacement requires clearing the prepared-next request")
+  {
+    auto const result = requireFatalScenario("duplicate-prepared-next");
+    CHECK_FALSE(result.standardError.contains("PreparedNextContract"));
   }
 
   TEST_CASE("Runtime fatal roots - YAML export rejects a missing cover resource")

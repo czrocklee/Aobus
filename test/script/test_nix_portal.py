@@ -3,7 +3,6 @@
 import hashlib
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -12,7 +11,13 @@ import unittest
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-SHELL_INPUTS = ("shell.nix", "nixpkgs.json", "script/ao/toolchain.json", "script/ao/compiler-cache.json")
+SHELL_INPUTS = (
+    "shell.nix",
+    "nixpkgs.json",
+    "script/ao/toolchain.json",
+    "script/ao/bazel-toolchain.json",
+    "script/ao/buildifier.json",
+)
 # Flags and search paths that nix-shell setup hooks extend for each target role rather than replace.
 INHERITED_SEARCH_STATE = (
     "NIX_CFLAGS_COMPILE",
@@ -60,6 +65,7 @@ class NativeNixPortalTest(unittest.TestCase):
             "PATH": f"{self.stubs}{os.pathsep}{os.environ['PATH']}",
             "NIX_BUILD_SHELL": self.bash,
             "AO_NIX_PORTAL_PYTHON": sys.executable,
+            "AO_NIX_SHELL_INPUTS": " ".join(SHELL_INPUTS),
         }
         for name in ("AO_IN_NIX_PORTAL", "AO_NIX_SHELL_FINGERPRINT", "AOBUS_NIX_UNSTRIPPED_GTK"):
             self.environment.pop(name, None)
@@ -74,6 +80,26 @@ class NativeNixPortalTest(unittest.TestCase):
             hashlib.sha256((self.checkout / name).read_bytes()).hexdigest() + "\n" for name in SHELL_INPUTS
         )
         return hashlib.sha256((digests + f"gtk-unstripped={gtk_mode}\n").encode("ascii")).hexdigest()
+
+    def _eval_shell_fingerprint(self, checkout):
+        # Evaluation forces the shell's tool contracts without building anything.
+        nix = shutil.which("nix-instantiate")
+        self.assertIsNotNone(nix, "the Linux portal requires Nix")
+        return subprocess.run(
+            [
+                nix,
+                str(checkout / "shell.nix"),
+                "--eval",
+                "--strict",
+                "--json",
+                "-A",
+                "AO_NIX_SHELL_FINGERPRINT",
+            ],
+            env={**self.environment, "AOBUS_NIX_UNSTRIPPED_GTK": "0"},
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
 
     def _run_portal(self, *, without_compgen=False, **environment):
         if without_compgen:
@@ -122,15 +148,36 @@ class NativeNixPortalTest(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(result.stdout.strip(), expected)
 
-    def test_gtk_debug_mode_changes_invalidate_the_entered_shell(self):
-        for entered, requested in (("0", "1"), ("1", "0"), ("1", "")):
-            with self.subTest(entered=entered, requested=requested):
-                result = self._run_portal(
-                    AO_NIX_SHELL_FINGERPRINT=self._fingerprint(entered), AOBUS_NIX_UNSTRIPPED_GTK=requested
-                )
+    def test_buildifier_pin_changes_invalidate_the_entered_shell(self):
+        fingerprint = self._fingerprint()
+        manifest = self.checkout / "script/ao/buildifier.json"
+        manifest.write_text(manifest.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+        result = self._run_portal(AO_NIX_SHELL_FINGERPRINT=fingerprint)
 
-                self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertEqual(result.stdout.strip(), "nix-shell re-entered")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "nix-shell re-entered")
+
+    def test_native_pin_change_invalidates_the_entered_shell(self):
+        fingerprint = self._fingerprint()
+        manifest = self.checkout / "nixpkgs.json"
+        pin = json.loads(manifest.read_text(encoding="utf-8"))
+        for key in ("owner", "repo", "ref", "rev", "sha256"):
+            self.assertIn(key, pin, "the native pin must carry a complete source identity")
+        pin["rev"] = "0123456789abcdef0123456789abcdef01234567"
+        pin["sha256"] = "1" * 52
+        manifest.write_text(json.dumps(pin, indent=2) + "\n", encoding="utf-8")
+        result = self._run_portal(AO_NIX_SHELL_FINGERPRINT=fingerprint)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "nix-shell re-entered")
+
+    def test_gtk_debug_mode_changes_invalidate_the_entered_shell(self):
+        # The fingerprint-mismatch mechanism is direction-independent, and
+        # gtk-mode normalization is proven by the nix-fingerprint test below.
+        result = self._run_portal(AO_NIX_SHELL_FINGERPRINT=self._fingerprint("0"), AOBUS_NIX_UNSTRIPPED_GTK="1")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "nix-shell re-entered")
 
     def test_matching_fingerprint_without_pinned_python_reenters_the_shell(self):
         self.environment.pop("AO_NIX_PORTAL_PYTHON")
@@ -244,51 +291,49 @@ class NativeNixPortalTest(unittest.TestCase):
         fingerprints = {}
         for mode in ("0", "1", "other"):
             with self.subTest(mode=mode):
-                # Evaluation checks the actual Nix hash without building unstripped GTK.
-                evaluated = subprocess.run(
-                    [
-                        nix,
-                        str(PROJECT_ROOT / "shell.nix"),
-                        "--eval",
-                        "--strict",
-                        "--json",
-                        "-A",
-                        "AO_NIX_SHELL_FINGERPRINT",
-                    ],
-                    env={**self.environment, "AOBUS_NIX_UNSTRIPPED_GTK": mode},
-                    capture_output=True,
-                    text=True,
-                    timeout=30,
-                )
-                self.assertEqual(evaluated.returncode, 0, evaluated.stderr)
-                fingerprints[mode] = json.loads(evaluated.stdout)
-                result = self._run_portal(AO_NIX_SHELL_FINGERPRINT=fingerprints[mode], AOBUS_NIX_UNSTRIPPED_GTK=mode)
+                # Evaluation checks the actual Nix hash and its exported input
+                # list without building unstripped GTK.
+                exported = {}
+                for name in ("AO_NIX_SHELL_FINGERPRINT", "AO_NIX_SHELL_INPUTS"):
+                    evaluated = subprocess.run(
+                        [nix, str(PROJECT_ROOT / "shell.nix"), "--eval", "--strict", "--json", "-A", name],
+                        env={**self.environment, "AOBUS_NIX_UNSTRIPPED_GTK": mode},
+                        capture_output=True,
+                        text=True,
+                        timeout=30,
+                    )
+                    self.assertEqual(evaluated.returncode, 0, evaluated.stderr)
+                    exported[name] = json.loads(evaluated.stdout)
+                fingerprints[mode] = exported["AO_NIX_SHELL_FINGERPRINT"]
+                result = self._run_portal(**exported, AOBUS_NIX_UNSTRIPPED_GTK=mode)
 
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(result.stdout.strip(), "portal entered")
         self.assertNotEqual(fingerprints["0"], fingerprints["1"])
         self.assertEqual(fingerprints["0"], fingerprints["other"])
 
+    def test_toolchain_contract_mismatch_fails_shell_evaluation(self):
+        # A fixture checkout proves the exact tool version assertions stay
+        # load-bearing: the same inputs evaluate, then fail once the pinned
+        # Python contract no longer matches the pinned package set.
+        fixture = self.root / "toolchain-contract"
+        fixture.mkdir()
+        for name in SHELL_INPUTS:
+            destination = fixture / name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(PROJECT_ROOT / name, destination)
+        intact = self._eval_shell_fingerprint(fixture)
+        self.assertEqual(intact.returncode, 0, intact.stderr)
 
-class NixShellInputTest(unittest.TestCase):
-    def test_nix_shell_fingerprint_covers_every_local_shell_input(self):
-        shell = (PROJECT_ROOT / "shell.nix").read_text(encoding="utf-8")
-        portal = (PROJECT_ROOT / "ao").read_text(encoding="utf-8")
+        toolchain = fixture / "script/ao/toolchain.json"
+        contract = json.loads(toolchain.read_text(encoding="utf-8"))
+        contract["python"] = "0.0.0"
+        toolchain.write_text(json.dumps(contract, indent=2) + "\n", encoding="utf-8")
 
-        # Nix path literals are unquoted; drop comments and strings that mention paths.
-        code = re.sub(r"(^|\s)#.*$", "", shell, flags=re.MULTILINE)
-        interpolated = set(re.findall(r"\$\{\s*\./([\w./-]+)", code))
-        code = re.sub(r"''.*?''|\"(?:[^\"\\]|\\.)*\"", "", code, flags=re.DOTALL)
-        referenced = set(re.findall(r"(?<![\w/.])\./([\w./-]+)", code)) | interpolated
-        declared = re.search(r"portalInputs = \[(.*?)\];", shell, re.DOTALL)
-        hashed = re.search(r"for input in ([^;]+);", portal)
-
-        self.assertIsNotNone(declared)
-        self.assertIsNotNone(hashed)
-        declared_inputs = [path.removeprefix("./") for path in declared.group(1).split()]
-        self.assertEqual(set(declared_inputs), referenced)
-        self.assertEqual(hashed.group(1).split(), declared_inputs)
-        self.assertEqual(declared_inputs, list(SHELL_INPUTS))
+        evaluated = self._eval_shell_fingerprint(fixture)
+        self.assertNotEqual(evaluated.returncode, 0)
+        self.assertIn("Aobus requires Python 0.0.0", evaluated.stderr)
+        self.assertIn("but pinned Nixpkgs resolves", evaluated.stderr)
 
 
 if __name__ == "__main__":

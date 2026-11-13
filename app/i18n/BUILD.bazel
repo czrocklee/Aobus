@@ -1,0 +1,183 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("//bazel:catalog.bzl", "catalog")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "test_headers",
+    testonly = True,
+    hdrs = [
+        "IcuTextOrderingDetail.h",
+        "SystemLocale.h",
+    ],
+    include_prefix = "app/i18n",
+    strip_include_prefix = ".",
+    visibility = ["//test:__pkg__"],
+    deps = [
+        ":i18n",
+        ":ordering",
+        "@aobus_native_deps//:icu",
+    ],
+)
+
+# Only the ICU import differs between the product and native compiler closures.
+cc_library(
+    name = "catalog_pattern",
+    srcs = ["CatalogPattern.cpp"],
+    hdrs = [
+        "CatalogPattern.h",
+        "MessageIds.h",
+        "WinUiResourceProjection.h",
+    ],
+    implementation_deps = ["@aobus_native_deps//:icu"],
+    include_prefix = "i18n",
+    linkstatic = True,
+    deps = [
+        "//app/include:catalog_headers",
+        "//include:utility_headers",
+    ],
+)
+
+cc_library(
+    name = "catalog_compiler_pattern",
+    srcs = ["CatalogPattern.cpp"],
+    hdrs = [
+        "CatalogPattern.h",
+        "MessageIds.h",
+        "WinUiResourceProjection.h",
+    ],
+    implementation_deps = ["@aobus_native_tools//:catalog_icu"],
+    include_prefix = "i18n",
+    linkstatic = True,
+    visibility = ["//tool/catalog:__pkg__"],
+    deps = [
+        "//app/include:catalog_headers",
+        "//include:utility_headers",
+    ],
+)
+
+catalog(
+    name = "catalog_codegen",
+    srcs = glob(["catalog/*.txt"]),
+    inventory = "catalog/package.lst",
+    locale_template = "CatalogLocaleTags.h.in",
+)
+
+filegroup(
+    name = "catalog_cpp",
+    srcs = [":catalog_codegen"],
+    output_group = "cpp",
+    visibility = ["//visibility:private"],
+)
+
+filegroup(
+    name = "catalog_tags",
+    srcs = [":catalog_codegen"],
+    output_group = "header",
+    visibility = ["//visibility:private"],
+)
+
+filegroup(
+    name = "catalog_dat",
+    srcs = [":catalog_codegen"],
+    output_group = "dat",
+)
+
+filegroup(
+    name = "catalog_intermediates",
+    srcs = [":catalog_codegen"],
+    output_group = "intermediates",
+)
+
+# The generated source deliberately preserves EmbedBinary.cmake's exact include.
+cc_library(
+    name = "embedded_catalog_header",
+    hdrs = ["EmbeddedCatalogData.h"],
+    include_prefix = "app/i18n",
+    visibility = ["//visibility:private"],
+    deps = ["//include:utility_headers"],
+)
+
+cc_library(
+    name = "catalog_data",
+    srcs = [":catalog_cpp"],
+    linkstatic = True,
+    visibility = ["//visibility:private"],
+    deps = [":embedded_catalog_header"],
+)
+
+# Expose only the generated basename, and only to this owner package.
+cc_library(
+    name = "catalog_locale_tags",
+    hdrs = [":catalog_tags"],
+    strip_include_prefix = "catalog_codegen",
+    visibility = ["//visibility:private"],
+    deps = ["//include:utility_headers"],
+)
+
+cc_library(
+    name = "i18n",
+    srcs = [
+        "MessageCatalog.cpp",
+        "SystemLocale.h",
+    ] + select({
+        "@platforms//os:windows": ["SystemLocaleWindows.cpp"],
+        "@platforms//os:macos": ["SystemLocaleMacos.cpp"],
+        "//conditions:default": ["SystemLocaleLinux.cpp"],
+    }),
+    implementation_deps = [
+        ":catalog_data",
+        ":catalog_locale_tags",
+        ":catalog_pattern",
+        "//lib/utility",
+        "//lib/utility:unicode_text",
+        "@aobus_native_deps//:icu",
+    ],
+    linkopts = select({
+        "@platforms//os:macos": ["-framework CoreFoundation"],
+        "//conditions:default": [],
+    }),
+    linkstatic = True,
+    deps = [
+        "//app/include:i18n_headers",
+        "//include:utility_headers",
+    ],
+)
+
+cc_library(
+    name = "ordering",
+    srcs = [
+        "IcuTextOrdering.cpp",
+        "IcuTextOrderingDetail.h",
+    ],
+    implementation_deps = [
+        "//lib/utility:unicode_text",
+        "@aobus_native_deps//:icu",
+    ],
+    linkstatic = True,
+    deps = [
+        "//app/include:i18n_headers",
+        "//include:utility_headers",
+    ],
+)
+
+cc_library(
+    name = "completion",
+    srcs = ["IcuCompletionAliases.cpp"],
+    implementation_deps = [
+        "//lib/utility:unicode_text",
+        "@aobus_native_deps//:icu",
+    ],
+    linkstatic = True,
+    deps = [
+        "//app/include:i18n_headers",
+        "//include:utility_headers",
+    ],
+)
+
+# The AppKit bundle derives its declared localizations from the same sole
+# authored locale inventory; only that file is exported, and only to that owner.
+exports_files(
+    ["catalog/package.lst"],
+    visibility = ["//app/macos-appkit:__pkg__"],
+)

@@ -8,6 +8,7 @@
 #include "runtime/library/LibraryWriteLane.h"
 #include "runtime/library/LibraryYamlExporter.h"
 #include "runtime/playback/PlaybackTransport.h"
+#include "runtime/playback/PreparedNextContract.h"
 #include "test/runtime/library/LibraryChangesTestAccess.h"
 #include "test/runtime/source/TrackSourceTestSupport.h"
 #include <ao/Contract.h>
@@ -1356,6 +1357,11 @@ namespace ao::rt::test
   std::int32_t runRuntimeFatalProbeScenario(std::string_view const scenario)
   {
     auto const [name, scratchName] = splitScenario(scenario);
+
+    if (name == "duplicate-prepared-next")
+    {
+      detail::expectPreparedNextSlotAvailable(true);
+    }
 
     if (name == "yaml-export-missing-cover-resource")
     {

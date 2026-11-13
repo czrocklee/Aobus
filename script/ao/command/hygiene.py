@@ -13,9 +13,10 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from ..core import buildenv, gitfiles, testaudit, tidyengine
+from ..core import bazel_native, bazel_workflows, buildenv, gitfiles, testaudit, tidyengine
+from ..core.proc import die
 from . import format as format_command
-from . import name_audit, test_audit, tidy
+from . import name_audit, test_audit
 
 HELP = "Run the commit gate: format --check, naming audits, then tidy (check-only, never edits files)"
 NAME = "hygiene"
@@ -35,6 +36,8 @@ examples:
 """
 
 Register = Callable[["argparse._SubParsersAction[argparse.ArgumentParser]"], None]
+# Receives the resolved scope and whether its files were explicit; returns a status.
+LintStage = Callable[[list[str], bool], int]
 
 
 def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
@@ -47,8 +50,11 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
         "--folder", action="append", default=[], metavar="<dir>", help="all files under <dir> (repeatable)"
     )
     parser.add_argument("--commit", metavar="<rev>", help="changed files since <rev> + working tree + untracked")
-    parser.add_argument("-p", "--path", metavar="<dir>", help="build directory with compile_commands.json")
+    parser.add_argument("-p", "--path", metavar="<dir>", help="external Bazel analysis tree (honors BUILD_DIR)")
+    parser.add_argument("--config", choices=("debug", "release"), default="debug")
+    parser.add_argument("--vcpkg-prefix", help="existing governed native SDK prefix")
     parser.add_argument("-j", "--jobs", type=int, default=tidyengine.default_jobs(), help="parallel jobs")
+    bazel_workflows.add_remote_cache_argument(parser, "opt in to a trusted native action cache")
     parser.set_defaults(func=run_command)
 
 
@@ -58,8 +64,6 @@ def _subcommand_defaults(register_command: Register, name: str, **overrides: obj
     register_command(parser.add_subparsers())
     namespace = parser.parse_args([name])
     for key, value in overrides.items():
-        if not hasattr(namespace, key):
-            raise AttributeError(f"{name} parser has no argument {key!r}")
         setattr(namespace, key, value)
     return namespace
 
@@ -69,15 +73,6 @@ def _format_args() -> argparse.Namespace:
         format_command.register,
         "format",
         check=True,
-    )
-
-
-def _tidy_args(args: argparse.Namespace) -> argparse.Namespace:
-    return _subcommand_defaults(
-        tidy.register,
-        "tidy",
-        jobs=args.jobs,
-        path=args.path,
     )
 
 
@@ -93,7 +88,49 @@ def requires_build_environment(args: argparse.Namespace) -> bool:
     return buildenv.requires_source_build_env(args, format_command.resolve_files(args))
 
 
-def run_command(args: argparse.Namespace) -> int:
+def _run_native(args: argparse.Namespace) -> int:
+    """Select ready native tools and share one source scope across every stage."""
+    import os
+
+    from ..core import builddir, pythonenv, windows_llvm_sdk
+    from ..core.paths import PROJECT_ROOT
+    from . import tidy
+
+    files = format_command.resolve_files(args)
+    args._resolved_sources = files
+    cpp_files, python_files = tidy.split_existing(files)
+    host = bazel_native.native_platform()
+    clang_format = None
+    if cpp_files and host == "windows":
+        manifest = windows_llvm_sdk.read_manifest(windows_llvm_sdk.MANIFEST)
+        clang_format = str(windows_llvm_sdk.ready_root(os.environ, manifest)[0] / "bin/clang-format.exe")
+    python = None
+    if python_files and host != "linux":
+        state = builddir.state_root(system="Windows" if host == "windows" else "Darwin")
+        try:
+            python = pythonenv.ensure_environment(PROJECT_ROOT, state, platform_name=host)
+        except RuntimeError as exc:
+            raise bazel_native.BazelWorkspaceError(f"Aobus native Python tooling bootstrap failed: {exc}") from exc
+
+    def lint(files: list[str], explicit: bool) -> int:
+        return tidy.run_lint_stages(args, files, explicit, python=python)
+
+    return run_command(args, clang_format=clang_format, python=python, lint=("bazel lint", lint))
+
+
+def run_command(
+    args: argparse.Namespace,
+    *,
+    clang_format: str | None = None,
+    python: Path | None = None,
+    lint: tuple[str, LintStage] | None = None,
+) -> int:
+    """Run the gate; native setup supplies the verified tools and lint callback."""
+    if lint is None:
+        try:
+            return _run_native(args)
+        except (bazel_native.BazelWorkspaceError, OSError, ValueError) as error:
+            raise die(str(error)) from error
     files = format_command.resolve_files(args)
     if not files:
         print("No files to check.")
@@ -101,7 +138,10 @@ def run_command(args: argparse.Namespace) -> int:
 
     print("=== format --check ===")
     build_dir = Path(args.path) if args.path else None
-    if format_command.run_command(_format_args(), files=files, build_dir=build_dir) != 0:
+    formatted = format_command.run_command(
+        _format_args(), files=files, build_dir=build_dir, clang_format=clang_format, python=python
+    )
+    if formatted != 0:
         print("Hygiene stopped after formatting failure; this gate is check-only.", file=sys.stderr)
         print("Run ./ao format on the same scope, review the diff, then rerun ./ao hygiene.", file=sys.stderr)
         return 1
@@ -125,8 +165,8 @@ def run_command(args: argparse.Namespace) -> int:
         print("No C++ files in scope.")
 
     print()
-    print("=== tidy ===")
-    tidy_failed = tidy.run_command(_tidy_args(args), resolved_scope=(files, bool(args.files))) != 0
+    print(f"=== {lint[0]} ===")
+    tidy_failed = lint[1](files, bool(args.files)) != 0
 
     if not (test_audit_failed or name_audit_failed or tidy_failed):
         return 0

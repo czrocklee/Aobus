@@ -15,17 +15,18 @@ class SuiteSpec:
     target: str | None = None
 
 
-WINUI_CHECK_TARGET = "aobus-winui-check"
+WINUI_CHECK_TARGET = "//app/windows-winui:ao_winui_automation_probe"
 
 SUITES = {
-    "appkit": SuiteSpec("AppKit Smoke", "appkit", "ao_appkit_smoke"),
+    "appkit": SuiteSpec("AppKit Smoke", "appkit", "//app/macos-appkit:ao_appkit_smoke"),
     "winui": SuiteSpec("WinUI Naming Audit", "winui", WINUI_CHECK_TARGET),
-    "core": SuiteSpec("Core", "catch2", "ao_core_test"),
-    "backend": SuiteSpec("Backend", "catch2", "ao_backend_test"),
-    "tui": SuiteSpec("TUI", "catch2", "ao_tui_test"),
-    "cli": SuiteSpec("CLI", "catch2", "ao_cli_test"),
-    "gtk": SuiteSpec("GTK", "catch2", "ao_gtk_test"),
-    "systemmedia": SuiteSpec("System Media", "catch2", "ao_systemmedia_test"),
+    "core": SuiteSpec("Core", "catch2", "//:core_tests"),
+    "application": SuiteSpec("Application", "catch2", "//:application_tests"),
+    "backend": SuiteSpec("Backend", "catch2", "//test:backend_test"),
+    "tui": SuiteSpec("TUI", "catch2", "//test:tui_test"),
+    "cli": SuiteSpec("CLI", "catch2", "//test:cli_test"),
+    "gtk": SuiteSpec("GTK", "catch2", "//test:gtk_test"),
+    "systemmedia": SuiteSpec("System Media", "catch2", "//test:systemmedia_test"),
     "tooling": SuiteSpec("Tooling Tests", "tooling"),
-    "lint": SuiteSpec("Lint Integration", "lint", "AobusLintPlugin"),
+    "lint": SuiteSpec("Lint Integration", "lint", "//test/lint:lint_test"),
 }

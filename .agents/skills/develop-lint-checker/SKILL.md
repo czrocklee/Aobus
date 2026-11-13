@@ -9,8 +9,8 @@ Checker review or diagnosis is read-only unless implementation or fixes are
 requested. A checker implementation request authorizes the required lint runs.
 
 `tool/lint/check/` owns checkers and AST helpers. Follow the matching check's
-namespace and register new checks in `tool/lint/AobusLintModule.cpp` and
-`tool/lint/CMakeLists.txt`.
+namespace and register new checks in `tool/lint/AobusLintModule.cpp` and the
+checker build in `tool/lint/build.bzl`.
 
 Use `doc/development/test/test-suite.md` for fixture markers and runner behavior.
 Fixtures live under `test/lint/fixture/<check-alias>/`.
@@ -22,9 +22,10 @@ ordinary wording-only edits can reuse markers and inspect the emitted text.
 
 For symbol identity, macro safety, and uncertain AST shapes, consult
 `doc/development/lint/checker-development.md`; naming-proof details are in
-`doc/development/lint/naming-checks.md`. Use the native
-compile database and toolchain. `./ao tidy --no-build --check <alias> <source>`
-allows focused diagnostic inspection with a prepared plugin and compile database;
-it does not run the fixture's marker assertions or compiler-error canaries.
+`doc/development/lint/naming-checks.md`. Use the real
+Bazel compile actions and toolchain. `./ao tidy --check <alias> <source>`
+allows focused diagnostic inspection against the selected source's real compile
+action; it does not run the fixture's marker assertions or compiler-error
+canaries.
 
 Completion follows `doc/development/test/validation-and-review.md`.

@@ -1,0 +1,309 @@
+# Primary native product graph; the portal and explicit Bazel commands share it.
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "VERSION.txt",
+    "config/bazel/dependencies.json",
+    "dependency-contract.json",
+    "nixpkgs.json",
+    "vcpkg.json",
+    "vcpkg-configuration.json",
+    "script/ao/core/bazel_resolver.py",
+    "script/ao/core/bazel_environment.py",
+    "script/ao/__init__.py",
+    "script/ao/core/__init__.py",
+    "script/ao/core/bazel_lint_sdk.py",
+    "script/ao/core/windows_llvm_sdk.py",
+    "script/ao/core/bazel_lint_action.py",
+    "script/ao/core/bazel_lint_fixture.py",
+    "script/ao/windows-llvm-sdk.json",
+    "shell.nix",
+    "script/ao/macos-toolchain.json",
+    "doc/reference/shell/component-vocabulary.md",
+])
+
+# Runtime module inputs for the lint fixture suite, which replays ao tidy.
+filegroup(
+    name = "ao_python_sources",
+    srcs = glob(["script/ao/**/*.py"]),
+)
+
+# The cacheable lint verification and analysis actions import only these
+# stdlib-only modules, so other portal edits keep their reports cached.
+# test_bazel_lint_action compares this list with the helper's real imports:
+# an unsandboxed action would otherwise reuse reports after an undeclared edit.
+filegroup(
+    name = "ao_lint_action_sources",
+    srcs = [
+        "script/ao/__init__.py",
+        "script/ao/core/__init__.py",
+        "script/ao/core/bazel_lint_reports.py",
+        "script/ao/core/dedup.py",
+        "script/ao/core/paths.py",
+        "script/ao/core/tidyconfig.py",
+        "script/ao/core/tidydiagnostics.py",
+        "script/ao/core/tidypolicy.py",
+    ],
+)
+
+# The launcher selects one aggregate, not a second Python inventory. Native
+# GUI/backend/manual harnesses remain explicitly selected by their own labels.
+# test_suite.tests is non-configurable; platform compatibility belongs to its tests.
+test_suite(
+    name = "tests",
+    tests = [
+        "//test:async_test",
+        "//test:audio_platform_test",
+        "//test:audio_test",
+        "//test:cli_test",
+        "//test:desktop_test",
+        "//test:i18n_test",
+        "//test:library_test",
+        "//test:media_fixture_test",
+        "//test:media_test",
+        "//test:query_test",
+        "//test:runtime_test",
+        "//test:systemmedia_test",
+        "//test:tui_test",
+        "//test:uimodel_test",
+        "//test:utility_test",
+        "//test:winui_test",
+    ],
+)
+
+# These groups describe executable ownership, not another source-file inventory.
+test_suite(
+    name = "core_tests",
+    tests = [
+        "//test:async_test",
+        "//test:audio_platform_test",
+        "//test:audio_test",
+        "//test:library_test",
+        "//test:media_test",
+        "//test:query_test",
+        "//test:utility_test",
+    ],
+)
+
+test_suite(
+    name = "application_tests",
+    tests = [
+        "//test:desktop_test",
+        "//test:i18n_test",
+        "//test:media_fixture_test",
+        "//test:runtime_test",
+        "//test:uimodel_test",
+        "//test:winui_test",
+    ],
+)
+
+# Managed sanitizer tests add the configured check_native_tests backend roots.
+# They are scoped instrumentation runs, not the whole completion ownership gate.
+test_suite(
+    name = "asan_tests",
+    tests = [
+        ":application_tests",
+        ":core_tests",
+        "//test:cli_test",
+        "//test:gtk_test",
+        "//test:systemmedia_test",
+        "//test:tui_test",
+    ],
+)
+
+test_suite(
+    name = "tsan_tests",
+    tests = [
+        ":application_tests",
+        ":core_tests",
+        "//test:gtk_test",
+    ],
+)
+
+# Coverage is Linux-only. Keep its executable selection separate from ordinary
+# tests, which also contain system-media and omit the backend/headless GTK.
+test_suite(
+    name = "coverage_core_tests",
+    tests = [":core_tests"],
+)
+
+test_suite(
+    name = "coverage_application_tests",
+    tests = [":application_tests"],
+)
+
+test_suite(
+    name = "coverage_backend_tests",
+    tests = ["//test:backend_test"],
+)
+
+test_suite(
+    name = "coverage_default_tests",
+    tests = [
+        ":application_tests",
+        ":core_tests",
+        ":coverage_backend_tests",
+    ],
+)
+
+test_suite(
+    name = "coverage_all_tests",
+    tests = [
+        ":coverage_default_tests",
+        "//test:cli_test",
+        "//test:gtk_test",
+        "//test:tui_test",
+    ],
+)
+
+test_suite(
+    name = "coverage_tui_tests",
+    tests = ["//test:tui_test"],
+)
+
+test_suite(
+    name = "coverage_cli_tests",
+    tests = ["//test:cli_test"],
+)
+
+test_suite(
+    name = "coverage_gtk_tests",
+    tests = ["//test:gtk_test"],
+)
+
+test_suite(
+    name = "utility_tests",
+    tests = ["//test:utility_test"],
+)
+
+test_suite(
+    name = "library_tests",
+    tests = ["//test:library_test"],
+)
+
+test_suite(
+    name = "query_tests",
+    tests = ["//test:query_test"],
+)
+
+test_suite(
+    name = "async_tests",
+    tests = ["//test:async_test"],
+)
+
+test_suite(
+    name = "uimodel_tests",
+    tests = ["//test:uimodel_test"],
+)
+
+test_suite(
+    name = "cli_tests",
+    tests = ["//test:cli_test"],
+)
+
+test_suite(
+    name = "tui_tests",
+    tests = ["//test:tui_test"],
+)
+
+test_suite(
+    name = "tui_system_media_tests",
+    tests = ["//test:systemmedia_test"],
+)
+
+test_suite(
+    name = "audio_tests",
+    tests = [
+        "//test:audio_platform_test",
+        "//test:audio_test",
+    ],
+)
+
+test_suite(
+    name = "media_tests",
+    tests = [
+        "//test:media_fixture_test",
+        "//test:media_test",
+    ],
+)
+
+# Completion is a separate aggregate: ordinary test/build keep their bounded,
+# lazy-SDK defaults. Explicit suite members include the manual-tagged harnesses
+# that can run unattended with the portal's owned native service context.
+test_suite(
+    name = "check_tests",
+    tests = [
+        ":tests",
+        "//test:gtk_test",
+        "//test:lint_test",
+    ],
+)
+
+# The native backend suite runs unattended on every host, so a case without a
+# [.manual] marker can never be built without running. Its hidden hardware cases
+# stay opt-in. The portal reads this filegroup with cquery, not a Python list.
+filegroup(
+    name = "check_native_tests",
+    testonly = True,
+    srcs = ["//test:backend_test"],
+)
+
+# These executables are built, never run, by the completion gate.
+filegroup(
+    name = "check_benchmarks",
+    testonly = True,
+    srcs = [
+        "//test:ao_perf_baseline",
+        "//test:ao_tui_bench",
+    ],
+)
+
+filegroup(
+    name = "check_gui",
+    testonly = True,
+    srcs = select({
+        "@platforms//os:macos": ["//app/macos-appkit:ao_appkit_smoke"],
+        "@platforms//os:windows": [
+            "//app/windows-winui:ao_winui_activity_status_probe",
+            "//app/windows-winui:ao_winui_automation_probe",
+            "//app/windows-winui:ao_winui_credits_probe",
+            "//app/windows-winui:ao_winui_quality_tooltip_probe",
+            "//app/windows-winui:ao_winui_soul_probe",
+            "//app/windows-winui:ao_winui_track_table_probe",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+# The two native WinUI console contracts are safe for unattended execution.
+# cquery labels(srcs, ...) selects them without a parallel Python inventory.
+filegroup(
+    name = "check_runs",
+    testonly = True,
+    srcs = select({
+        "@platforms//os:windows": [
+            "//app/windows-winui:ao_winui_localization_probe",
+            "//app/windows-winui:ao_winui_track_item_probe",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+filegroup(
+    name = "check_products",
+    testonly = True,
+    srcs = [
+        ":check_benchmarks",
+        ":check_gui",
+        ":check_runs",
+        "//app/cli:aobus",
+        # Builds no file; its analysis enforces the CLI link-closure boundary.
+        "//app/cli:link_closure",
+        "//app/tui:aobus-tui",
+    ] + select({
+        "//bazel:linux_gtk_enabled": ["//app/linux-gtk:aobus-gtk"],
+        "@platforms//os:macos": ["//app/macos-appkit:aobus-appkit"],
+        "@platforms//os:windows": ["//app/windows-winui:aobus-winui"],
+        "//conditions:default": [],
+    }),
+)

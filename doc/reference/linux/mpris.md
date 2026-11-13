@@ -139,7 +139,7 @@ For a new cover resource, the first `Metadata` change may omit `mpris:artUrl`; s
 
 ## Availability
 
-The surface exists only when the Linux binary is built with `AOBUS_BUILD_SYSTEM_MEDIA`.
+The surface exists only when the Linux binary is built with the system-media graph setting enabled.
 TUI `--system-media=auto` starts it best effort; `--system-media=off` constructs no adapter.
 The same runtime option is accepted but inert in current Windows and macOS TUI builds.
 An absent or unusable session bus leaves the optional surface unavailable, with no autolaunch or automatic reconnect.

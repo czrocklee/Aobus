@@ -15,7 +15,7 @@ import venv
 from collections.abc import Iterator
 from pathlib import Path
 
-from . import builddir
+from . import builddir, buildenv
 
 PACKAGE_ROOT = Path(__file__).parent.parent
 TOOLCHAIN_FILE = PACKAGE_ROOT / "toolchain.json"
@@ -54,66 +54,20 @@ def validate_base_python(versions: dict[str, str], *, exact_patch: bool = True) 
 
 
 def _included_requirements(requirements_file: Path) -> list[Path]:
-    """Return the files referenced by pip ``-r`` include lines.
+    """Return the files referenced by the repository locks' ``-r <path>`` lines.
 
-    Includes resolve relative to the including file, like pip, and nested
-    includes of the same bounded form are read too. Aobus supports only the
-    single-token ``-r <path>`` spelling used by the repository locks; every
-    other pip include or constraint spelling, any other option line, and
-    variable, quoted or line-continuation forms fail closed, so an
-    unsupported lock can never silently keep a stale environment fingerprint.
+    Includes resolve relative to the including file, like pip.
     """
-    included: list[Path] = []
-    # pip strips a UTF-8 BOM before recognizing controls, including attached -r.
-    for line in requirements_file.read_text(encoding="utf-8-sig").splitlines():
-        tokens = line.split()
-        directive = tokens[0] if tokens else ""
-        # Empty lines, comments, package lines and pinned-wheel hash lines are
-        # the only non-include content the locks may carry; hash lines are
-        # matched by their exact spelling so they cannot be confused with
-        # option controls.
-        if (
-            not directive
-            or directive.startswith("#")
-            or directive == "--hash"
-            or directive.startswith("--hash=")
-            or not directive.startswith("-")
-        ):
-            continue
-        if line.endswith("\\"):
-            raise RuntimeError(
-                f"unsupported requirements line continuation in {requirements_file}: {line!r}; "
-                "Aobus locks support only single-line '-r <path>' includes"
-            )
-        if directive.startswith(("-c", "--constraint")):
-            raise RuntimeError(
-                f"unsupported requirements constraint in {requirements_file}: {line!r}; "
-                "Aobus locks do not support pip constraint controls"
-            )
-        if directive.startswith(("-r", "--requirement")):
-            if directive == "-r" and len(tokens) == 2 and not any(character in tokens[1] for character in "$%\"'"):
-                included.append(requirements_file.parent / tokens[1])
-                continue
-            raise RuntimeError(
-                f"unsupported requirements include in {requirements_file}: {line!r}; "
-                "Aobus locks support only '-r <path>' with a single literal path next to the lock"
-            )
-        raise RuntimeError(
-            f"unsupported pip requirements control in {requirements_file}: {line!r}; "
-            "Aobus locks support only '-r <path>' include lines"
-        )
-    return included
+    # pip strips a UTF-8 BOM before recognizing controls.
+    lines = requirements_file.read_text(encoding="utf-8-sig").splitlines()
+    return [requirements_file.parent / tokens[1] for tokens in map(str.split, lines) if tokens[:1] == ["-r"]]
 
 
-def _lock_input_bytes(requirements_file: Path, stack: tuple[Path, ...] = ()) -> Iterator[bytes]:
+def _lock_input_bytes(requirements_file: Path) -> Iterator[bytes]:
     """Yield the bytes of a lock and every included lock, depth first."""
-    resolved = requirements_file.resolve()
-    if resolved in stack:
-        chain = " -> ".join(str(path) for path in (*stack, resolved))
-        raise RuntimeError(f"requirements include cycle: {chain}")
     yield requirements_file.read_bytes()
     for included in _included_requirements(requirements_file):
-        yield from _lock_input_bytes(included, (*stack, resolved))
+        yield from _lock_input_bytes(included)
 
 
 def environment_fingerprint(
@@ -376,27 +330,44 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument("--project-root", type=Path, required=True)
     parser.add_argument("--state-root", type=Path, required=True)
-    parser.add_argument("--result-file", type=Path, required=True)
+    output = parser.add_mutually_exclusive_group(required=True)
+    output.add_argument("--result-file", type=Path)
+    output.add_argument("--launch-windows-portal", action="store_true")
     parser.add_argument("--platform", choices=("macos", "windows"))
     return parser
 
 
 def _native_platform_name(platform_name: str | None = None) -> str:
-    resolved = sys.platform if platform_name is None else platform_name
-    if resolved == "darwin":
-        return "macos"
-    if resolved == "win32":
-        return "windows"
-    raise RuntimeError(f"native Python tooling is unavailable on platform {resolved!r}")
+    return {"darwin": "macos", "win32": "windows"}[sys.platform if platform_name is None else platform_name]
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = _parser().parse_args(argv)
+    arguments = sys.argv[1:] if argv is None else argv
+    command = None
+    # The portal owns this tail, including its own '--' and help flags.
+    if "--" in arguments:
+        separator = arguments.index("--")
+        command = arguments[separator + 1 :]
+        arguments = arguments[:separator]
+    args = _parser().parse_args(arguments)
     try:
         platform_name = args.platform or _native_platform_name()
-        python = ensure_environment(args.project_root, args.state_root, platform_name=platform_name)
-        args.result_file.parent.mkdir(parents=True, exist_ok=True)
-        args.result_file.write_text(f"{python}\n", encoding="utf-8")
+        if (
+            platform_name == "windows"
+            and command is not None
+            and not buildenv.windows_bootstrap_requires_python_tools(command)
+        ):
+            # The governed base installation is already the portal runtime.
+            # Do not provision or inspect unrelated lint/documentation wheels.
+            validate_base_python(tool_versions())
+            python = Path(sys.executable)
+        else:
+            python = ensure_environment(args.project_root, args.state_root, platform_name=platform_name)
+        if args.result_file is not None:
+            args.result_file.parent.mkdir(parents=True, exist_ok=True)
+            args.result_file.write_text(f"{python}\n", encoding="utf-8")
+            return 0
+        return subprocess.run([str(python), "-m", "ao.core.windows_portal", *(command or [])], check=False).returncode
     except (OSError, RuntimeError, subprocess.CalledProcessError) as exc:
         print(f"Aobus native Python tooling bootstrap failed: {exc}", file=sys.stderr)
         return 1
