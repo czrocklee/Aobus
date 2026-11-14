@@ -18,7 +18,7 @@ subsystem owners linked below.
 
 ## Code boundary
 
-The shared pure rules and detached-launch mechanism form `ao_desktop_launch`, an
+The shared pure rules and detached-launch mechanism form the desktop-launch library, an
 application target under the [system architecture](overview.md)
 and [interactive session lifecycle architecture](session-lifecycle.md).
 Its public surface is under `app/include/ao/desktop/` and its implementation is

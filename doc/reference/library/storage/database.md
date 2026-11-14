@@ -588,7 +588,7 @@ Transaction-local dictionary publication does not change the row shape or librar
 - [`TrackWriter.h`](../../../../include/ao/library/TrackWriter.h), [`TrackWriter.cpp`](../../../../lib/library/TrackWriter.cpp), [`ListWriter.h`](../../../../include/ao/library/ListWriter.h), and [`ListWriter.cpp`](../../../../lib/library/ListWriter.cpp) own logical cross-Store and cross-row mutation invariants.
 - [`TrackWrite.cpp`](../../../../lib/library/TrackWrite.cpp) and [`ReservationWriterAccess.h`](../../../../lib/lmdb/detail/ReservationWriterAccess.h) own the source-private path from prepared hot/cold Track values to callback-scoped integer-key reservations.
 - Store and builder implementations under [`lib/library/`](../../../../lib/library) own key allocation, private preparation, and physical write validation.
-- [`lib/library/CMakeLists.txt`](../../../../lib/library/CMakeLists.txt) enforces that production code cannot include, define, or invoke the source-private physical access seam or call internal Track encoder helpers.
+- [`lib/library/BUILD.bazel`](../../../../lib/library/BUILD.bazel) enforces that production code cannot include, define, or invoke the source-private physical access seam or call internal Track encoder helpers.
 
 ## Test authority
 

@@ -4,10 +4,11 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from . import compiler_cache, phases, pythoncheck, workspace_cache
+from . import phases, pythoncheck
 from .jobs import default_workers
 from .paths import PROJECT_ROOT
 
@@ -24,7 +25,7 @@ def test_modules() -> list[str]:
 
 def _run_modules(modules: list[str], env: dict[str, str]) -> list[subprocess.CompletedProcess[str]]:
     # Each module gets its own interpreter: tests patch process-wide state, and the
-    # few modules that drive real compilers and CMake dominate a serial run.
+    # few modules that drive real compilers dominate a serial run.
     def run_module(module: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [sys.executable, "-m", "unittest", "-q", module],
@@ -51,26 +52,18 @@ def run(*, log: Path | None = None) -> int:
     env = dict(os.environ)
     # Unit modules invoke mocked portal operations. Keep their synthetic phases
     # out of the real command trace; profiling tests opt into private temp logs.
-    for key in (
-        phases.LOG_DIR_ENV,
-        compiler_cache.SHARED_WORKSPACES_EFFECTIVE,
-        compiler_cache.SHARED_WORKSPACES_CCACHE,
-        compiler_cache.SHARED_WORKSPACES_NAMESPACE_PREFIX,
-        compiler_cache.SHARED_WORKSPACES_FALLBACK,
-        compiler_cache.SHARED_WORKSPACES_MSBUILD_WRAPPER,
-        workspace_cache.WINDOWS_SOURCE_VIEW,
-        workspace_cache.WINDOWS_BUILD_VIEW,
-        workspace_cache.WINDOWS_BUILD_PHYSICAL_ROOT,
-        "CCACHE_NAMESPACE",
-        "CCACHE_BASEDIR",
-        "CCACHE_HASHDIR",
-        "CCACHE_SLOPPINESS",
-    ):
-        env.pop(key, None)
+    env.pop(phases.LOG_DIR_ENV, None)
     search_path = [str(PROJECT_ROOT / "script"), str(TEST_DIR)]
     if env.get("PYTHONPATH"):
         search_path.append(env["PYTHONPATH"])
     env["PYTHONPATH"] = os.pathsep.join(search_path)
+    # Products canonicalize the paths they select, and fixtures compare them
+    # with their temporary roots. A host temporary root reached through an
+    # alias (a Windows 8.3 short name, a symlinked TMPDIR) must not leak in.
+    temporary = str(Path(tempfile.gettempdir()).resolve())
+    for name in ("TMPDIR", "TEMP", "TMP"):
+        if name in env or (name == "TMPDIR" and os.name != "nt"):
+            env[name] = temporary
 
     modules = test_modules()
     results = _run_modules(modules, env)

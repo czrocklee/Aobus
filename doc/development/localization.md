@@ -108,7 +108,7 @@ Changes to the runtime or fallback model need proportionate design review and up
 1. Choose the canonical ICU resource name and public BCP 47 tag.
 2. Add `app/i18n/catalog/<icu-locale>.txt` with the matching top-level ICU table and reviewed translations for the intended surface.
 3. Add `<icu-locale>.res` to [`package.lst`](../../app/i18n/catalog/package.lst). Keep `root` and generated `qps_Ploc` in their special roles.
-4. Let CMake derive the `.txt` input, compiled resource, selectable tag, and WinUI qualifier; do not add parallel manual locale lists.
+4. Let the catalog build derive the `.txt` input, compiled resource, selectable tag, and WinUI qualifier; do not add parallel manual locale lists.
 5. Add focused catalog cases for canonical admission, representative direct translation, intentional English fallback, and selectable metadata.
 6. Add the locale to the native [`WinUiLocalizationProbe.cpp`](../../test/helper/WinUiLocalizationProbe.cpp) parity coverage, including regional/script fallback when applicable.
 7. Update the [ICU and MRT compatibility matrix](../system/presentation/localization.md#icu-and-mrt-compatibility-matrix) when the supported policy changes.

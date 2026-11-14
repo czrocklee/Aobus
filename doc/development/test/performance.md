@@ -36,7 +36,7 @@ ao.bat perf
 ```
 
 The default run performs one unmeasured warm-up and twenty measured samples per workload, then reports the median and 95th percentile.
-It builds only the `EXCLUDE_FROM_ALL` `ao_perf_baseline` target and selects the `PerformanceReview - ordering and completion-alias workloads` contract.
+It builds only the manual `//test:ao_perf_baseline` target and selects the `PerformanceReview - ordering and completion-alias workloads` contract.
 
 Useful controls are:
 
@@ -68,8 +68,10 @@ It compares an optional-policy-disabled snapshot with the ICU policy over 50,000
 The measured materialization includes the track-store scan, snapshot alias memoization, aggregate merge, and retained alias bytes; fixture construction is outside the timed region.
 Cached lookup rows separately cover enough whole-value hits to fill the limit, enough interior-word hits to fill it, no direct hits followed by alias hits, and a complete direct-plus-alias miss.
 
-`--no-build` uses the selected existing flavor tree and fails when its benchmark executable is absent.
-The configured compiler, sanitizer flags, and CMake build type must match the selected options; a mismatched tree is rejected before running or removing an existing report.
+`--no-build` runs the actual declared benchmark artifact and its declared runfiles
+from the selected tree's previous build, with no guessed output location, and
+fails when that declared artifact is absent.
+The selected configuration must match the requested options; a mismatched tree is rejected before running or removing an existing report.
 Its report and terminal summary mark the source revision as `unverified`: the current checkout does not establish which source produced an existing executable.
 Rerun without `--no-build` when the review needs source-attributed evidence.
 Revision provenance observes content-aware Git status without persisting optional stat-only index refreshes.
@@ -386,7 +388,7 @@ The benchmark itself must assert only fixture integrity and observable semantic 
 
 ## Troubleshooting
 
-If the executable is missing after `--no-build`, rerun without that flag so the portal configures and builds the selected tree.
+If the declared artifact is missing after `--no-build`, rerun without that flag so the portal builds the selected target.
 If results vary widely, increase the measured sample count and check for unrelated machine load before changing the workload.
 Do not remove outliers manually; the report's median and p95 are calculated from the complete measured sample set.
 
@@ -394,8 +396,8 @@ Do not remove outliers manually; the report's median and p95 are calculated from
 
 - [`script/ao/command/perf.py`](../../../script/ao/command/perf.py) owns portal arguments, build/run selection, metadata injection, and summary output.
 - [`test/perf/baseline/`](../../../test/perf/baseline) contains the standalone Catch2 workloads.
-- [`test/perf/report/`](../../../test/perf/report) contains shared report support and `PerformanceReportTest.cpp`, whose cases run in `ao_core_test`.
-- [`test/tui/TrackTableBenchmark.cpp`](../../../test/tui/TrackTableBenchmark.cpp) is the standalone `ao_tui_bench` target: allocation-bound TUI render micro-benchmarks that link mimalloc to mirror the shipping terminal allocator. It remains `EXCLUDE_FROM_ALL` and is built explicitly and run directly, never by the ordinary runtime or sanitizer gates. Its registrations are part of the same content audit as every other test source.
+- [`test/perf/report/`](../../../test/perf/report) contains shared report support and `PerformanceReportTest.cpp`, whose cases run in the core suite.
+- [`test/tui/TrackTableBenchmark.cpp`](../../../test/tui/TrackTableBenchmark.cpp) is the standalone `ao_tui_bench` target: allocation-bound TUI render micro-benchmarks that link mimalloc to mirror the shipping terminal allocator. It stays manual and is built explicitly and run directly, never by the ordinary runtime or sanitizer gates. Its registrations are part of the same content audit as every other test source.
 - [`test/script/test_cli.py`](../../../test/script/test_cli.py) and [`test/script/test_buildenv.py`](../../../test/script/test_buildenv.py) protect command registration and native-environment classification.
 
 ## Related documents

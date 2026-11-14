@@ -1,0 +1,64 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# ao_library includes these as "lmdb/detail/..." via its private lib/ include.
+# include_prefix/strip_include_prefix preserves that spelling. Not public hdrs of :lmdb.
+cc_library(
+    name = "private_headers",
+    hdrs = [
+        "detail/ReservationWriterAccess.h",
+        "detail/TransactionFailure.h",
+        "detail/UnvalidatedDatabase.h",
+    ],
+    include_prefix = "lmdb/detail",
+    strip_include_prefix = "detail",
+    visibility = ["//lib/library:__pkg__"],
+    deps = ["//include:lmdb_headers"],
+)
+
+# CMake ao_lmdb sources. Platform data-file sources follow if(WIN32).
+cc_library(
+    name = "lmdb",
+    srcs = glob(["detail/*.h"]) + [
+        "Database.cpp",
+        "Environment.cpp",
+        "Transaction.cpp",
+        "TransactionFailure.cpp",
+        "detail/MapCapacityPolicy.cpp",
+        "detail/ResultError.cpp",
+        "detail/ThrowError.cpp",
+    ] + select({
+        "@platforms//os:windows": ["detail/EnvironmentDataFileWindows.cpp"],
+        "//conditions:default": ["detail/EnvironmentDataFilePosix.cpp"],
+    }),
+    linkstatic = True,
+    deps = [
+        "//include:lmdb_headers",
+        "//lib/utility",
+        "@aobus_native_deps//:lmdb",
+    ],
+)
+
+# Test-only include spelling lib/lmdb/.... ResultError.h includes <lmdb.h>.
+cc_library(
+    name = "test_headers",
+    testonly = True,
+    hdrs = [
+        "detail/DatabaseOpenAdmissionProbe.h",
+        "detail/EnvironmentDataFile.h",
+        "detail/MapCapacityPolicy.h",
+        "detail/ReadFaultInjection.h",
+        "detail/ReservationWriterAccess.h",
+        "detail/ResultError.h",
+        "detail/TransactionFailure.h",
+        "detail/UnvalidatedDatabase.h",
+    ],
+    include_prefix = "lib/lmdb",
+    strip_include_prefix = ".",
+    visibility = ["//test:__pkg__"],
+    deps = [
+        "//include:lmdb_headers",
+        "@aobus_native_deps//:lmdb",
+    ],
+)

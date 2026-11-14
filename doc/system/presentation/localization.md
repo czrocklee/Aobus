@@ -13,6 +13,7 @@ The interactive facade is public under `app/include/ao/i18n/`.
 Its ICU-backed implementation and canonical assets live under `app/i18n/`, and the build compiler lives under `tool/catalog/`.
 GTK, TUI, WinUI, and AppKit construct localization at their composition roots.
 The concrete catalog implementation and ICU i18n runtime remain outside Core, application runtime, UIModel, and the CLI link closure.
+The completion products include `//app/cli:link_closure`, whose analysis fails when the CLI's configured link closure reaches `app/i18n` or the ICU i18n library.
 CLI diagnostics, commands, and machine output remain English and do not construct a catalog.
 
 Interactive catalog output is display text only.
@@ -28,7 +29,7 @@ The complete English **root** catalog is exposed publicly as `en` and projected 
 The generated **pseudo locale**, exposed as `qps-ploc`, expands literal spans to reveal clipping, concatenation, and untranslated literals; it is diagnostic rather than a maintained translation.
 
 [`package.lst`](../../../app/i18n/catalog/package.lst) is the single packaged-locale inventory.
-For each non-pseudo entry, CMake derives the authored `.txt` input, compiled ICU resource, WinUI resource path and language qualifier, and selectable locale metadata.
+For each non-pseudo entry, the catalog build derives the authored `.txt` input, compiled ICU resource, WinUI resource path and language qualifier, and selectable locale metadata.
 `root` maps to public `en`; underscores in authored locale names map to BCP 47 hyphens.
 The generated pseudo entry remains in the package but is excluded from selectable language metadata.
 
@@ -208,7 +209,7 @@ Changing the message runtime, fallback model, or ICU family is an architectural/
 - [`MessageCatalog.cpp`](../../../app/i18n/MessageCatalog.cpp) owns admission, explicit fallback, eager construction, lifetime, and formatting errors.
 - [`CatalogPattern.cpp`](../../../app/i18n/CatalogPattern.cpp) owns signature validation, pseudo transformation, and generated projection rules.
 - [`CatalogCompiler.cpp`](../../../tool/catalog/CatalogCompiler.cpp) validates the root inventory and sparse overrides and generates pseudo and WinUI resources.
-- [`app/i18n/CMakeLists.txt`](../../../app/i18n/CMakeLists.txt) derives resources and selectable locales from `package.lst`, compiles and embeds catalogs, and keeps ICU in the interactive leaf.
+- [`app/i18n/BUILD.bazel`](../../../app/i18n/BUILD.bazel) derives resources and selectable locales from `package.lst`, compiles and embeds catalogs, and keeps ICU in the interactive leaf.
 - [`SystemLocaleWindows.cpp`](../../../app/i18n/SystemLocaleWindows.cpp), [`SystemLocaleMacos.cpp`](../../../app/i18n/SystemLocaleMacos.cpp), and [`SystemLocaleLinux.cpp`](../../../app/i18n/SystemLocaleLinux.cpp) read the operating-system locale.
 - [`StringResources.cpp`](../../../app/windows-winui/platform/StringResources.cpp) owns the explicit MRT context.
 

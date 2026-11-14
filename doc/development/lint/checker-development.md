@@ -10,7 +10,7 @@ The [coding style](../coding-style.md), [naming conventions](../naming-conventio
 ## Custom checker development
 
 Checkers live in `tool/lint/check/`.
-Follow the owning check's namespace and register new sources in `tool/lint/AobusLintModule.cpp` and `tool/lint/CMakeLists.txt`.
+Follow the owning check's namespace and register new sources in `tool/lint/AobusLintModule.cpp` and the checker build in `tool/lint/build.bzl`.
 Keep a helper local until at least two current checks need the same stable contract.
 Existing `AstHelpers.h`, `CalleeQualificationHelpers.h`, and `RaiiHeuristics.h` own shared AST operations.
 
@@ -144,10 +144,10 @@ absent from the selected toolchain from registered checks without fixtures.
 Check working-tree additions and removals before assuming a rebuild is needed.
 
 Use `./ao test --lint` for the integration gate.
-For focused diagnosis with an already prepared native plugin and compile database, use:
+For focused diagnosis against the selected fixture's real compile action, use:
 
 ```bash
-./ao tidy --no-build --check <alias> <fixture>
+./ao tidy --check <alias> <fixture>
 ```
 
 ## Prefix comparisons
@@ -230,14 +230,13 @@ These controls supplement the rule fixtures, whose maintained paths all lie insi
 
 ## Fatal-contract source guardrails
 
-The `aobus_guardrails` target lexically scans production C++ under `app/`, `include/`, `lib/`, and `tool/`.
+The shared completion-audit backend lexically scans production C++ under `app/`, `include/`, `lib/`, and `tool/`.
 It rejects the C `assert` macro and raw gsl-lite contract spellings (`gsl_Expects`, `gsl_Ensures`, and `gsl_Assert`).
 The completion `./ao check` gate builds this target explicitly; ordinary incremental application builds do not rerun repository-wide source scans.
 Production code uses AO macros so category, source location, diagnostic context, and abort behavior remain project-owned.
 `static_assert`, third-party source, and test-source assertions remain outside this lexical rule.
 
-CMake automatically adds `ao_` custom targets ending in `_audit`, `_check`, `_guardrail`, or `_boundary_report` to `aobus_guardrails`.
-Use one of those suffixes for a new completion guardrail.
+New guardrail policy is owned by the shared Python inventory and rules in [`guardrails.py`](../../../script/ao/core/guardrails.py), which the completion gate runs directly.
 Conditional frontend targets are discovered only when their owner is enabled.
 The lexical check has no per-file production allowlist; isolate foreign code behind its owning adapter or outside production roots rather than suppressing the rule.
 
@@ -317,20 +316,17 @@ Shared, POSIX, and Windows production translation units are covered by their hos
 
 ## Native replay and header diagnostics
 
-Clang-tidy requires an exact native compilation command.
-For a selected header, the portal first prefers a same-component implementation with the same stem, including recognized `Windows`, `Linux`, or `Posix` suffixes.
-Otherwise it reads the native Ninja dependency graph and selects the lexicographically first repository translation unit that consumed the header.
-The selected consumer must also be present in the primary tidy compilation database, and the header borrows the exact command from that primary database rather than flags from a dependency-only tree.
-The portal does not build the full product graph merely to populate dependency records.
+Clang-tidy requires an exact native compilation command; the lint report actions
+capture real Bazel `CppCompile`/`ObjcCompile` contexts
+([lint reports](../bazel.md#lint-reports) owns the action, cache and gate
+contracts).
+For a selected header, the portal first prefers a same-component implementation with the same stem, including recognized `Windows`, `Linux`, or `Posix` suffixes;
+otherwise the nearest configured consumer's captured context is replayed with
+the header as the physical main file.
 
-With default selection, lookup consults the dedicated tidy Ninja tree and an existing normal debug tree: `debug` on Linux and macOS, `windows-debug` on Windows.
-Each tree uses its own `compile_commands.json` output-to-source mapping, including MSVC dependency records that name only an object output.
-`-p` and `BUILD_DIR` confine lookup to selected build state.
-The audited Visual Studio WinUI companion remains the exception: an explicit Windows tidy tree uses its `-winui` sibling, and Visual Studio-only headers use a small audited companion map because that generator provides no Ninja graph.
-
-The portal copies selected compiler flags into a temporary compilation database and checks the header as the main file.
-On Windows it removes the translation unit's `/TP` after replacing the input because the invocation supplies `-x c++-header`.
-It also removes the CMake-generated forced PCH to avoid redeclaring the headers that PCH aggregates, while retaining other forced includes.
+Derived header-main replay keeps the original command's semantic flags.
+Unix replay appends `-Wno-error`: a compiler warning that only the header main raises must stay a disabled compiler diagnostic, not become a fatal error under the native `-Werror`.
+On Windows it removes the translation unit's `/TP` after replacing the input because the invocation supplies `-x c++-header`, and excludes MSVC `/WX` warning promotion alongside the audited code-generation flags.
 For WinUI it suppresses only the nonportable-include-path compiler diagnostic because generated C++/WinRT headers preserve schema casing while Windows resolves paths case-insensitively.
 Intentional header-only WinUI support has audited implementation companions.
 
@@ -352,43 +348,26 @@ Keep selected-file positive controls alongside excluded-file controls: a
 successful process with no warnings cannot distinguish clean input from a
 mismatched filter.
 
-A platform-incompatible header without a safe pair, real Ninja consumer, or audited WinUI companion is deferred in a batch scan.
-A compatible header without that evidence fails closed and asks for a normal build or check to refresh dependency data.
+A platform-incompatible header without a safe pair or audited WinUI companion is deferred in a batch scan.
+A compatible header without that evidence fails closed and asks for a normal build or check to refresh the configured actions.
 An explicitly selected uncovered file fails.
 These rules cover main-file-only checks and prevent clang-tidy from falling back to a nearby unrelated command.
 
-### Windows tidy host
+### Windows lint host
 
-Windows uses the checkout-specific `windows-tidy` tree and the pinned official LLVM development archive.
-State and the shared verified SDK cache default below `%LOCALAPPDATA%\Aobus`; [Windows development](../windows.md) owns paths and overrides.
-CMake verifies the archive SHA-256 and statically links `tool/lint/AobusClangTidy.exe` with the Aobus checks.
+Windows uses the pinned official LLVM development archive provisioned by
+`ao.bat deps provision`; state and the shared verified SDK cache default below
+`%LOCALAPPDATA%\Aobus` ([Windows development](../windows.md) owns paths and
+overrides). The checker build statically links `tool/lint/AobusClangTidy.exe`
+with the Aobus checks from that SDK.
 The official Windows `clang-tidy.exe` does not export the symbols needed by an out-of-tree DLL.
 Never substitute a Visual Studio or `PATH` executable, which would omit every `aobus-*` check.
-
-The temporary Windows database merges two native trees.
-`windows-tidy` owns shared code, TUI, and CLI; the Visual Studio `windows-winui` tree owns WinUI and generated C++/WinRT headers.
-When WinUI is in scope, the portal configures the same Visual Studio tree used by `ao.bat check` and builds its Debug `aobus-winui-lint-context` target.
-This target generates native IDL/C++/WinRT projections and both XAML passes for the library and probe contexts without compiling or linking the application, executing probes, or deploying resources.
-The current `CMAKE_PROJECT_NAME` and `CMAKE_GENERATOR` select the WinUI solution: Visual Studio 18 uses `.slnx`, while supported legacy Visual Studio 14–17 generators use `.sln`.
-A retained alternate format is ignored; a missing chosen format or unknown generator fails with a regeneration hint, never a stale-format fallback.
-Obsolete project files left by reconfiguration are ignored without deletion.
-Under the build-tree lock, MSBuild evaluates their Debug|x64 `ClCompile` items, including `ExcludedFromBuild`; this is Debug replay ownership, not an all-configuration inventory.
-An unmapped active test source, a stale admission entry, or a selected project that does not compile its source in Debug fails closed.
-A support translation unit may belong to several probes; the map still selects one actual Debug owner rather than admitting all projects.
-When adding a WinUI test translation unit or executable, reconcile its evaluated Debug `ClCompile` membership with `_AUXILIARY_SOURCE_PROJECTS` in `script/ao/core/winuitidy.py`.
-Every active Debug test translation unit outside `app/windows-winui/` needs an entry selecting one real owning project; a new executable using only existing admitted test sources or sources inside `app/windows-winui/` does not by itself need another entry.
-Windows comparisons ignore path case; POSIX comparisons remain exact, and only owned compiler views are mapped to portal paths.
-Each current WinUI project is queried once per extraction: selected replay projects combine `-getItem:ClCompile` with `GetCompileCommands`, while other projects supply only the ownership inventory.
-Metadata queries use at most the caller's `--jobs` width; all workers finish under the build-tree lock before results or failures are published in inventory order.
-A pure snapshot validator reuses the command-scoped results to validate ownership.
-Extraction checks every selected translation unit, excludes generated translation units outside the repository, and supplies exact compiler state without changing compiler path spellings.
-Authoritative roots and candidates use the same normalized, owned-view-aware comparison keys; no alias state is cached across commands.
-Generation failures stop analysis; a prior full product build is not required.
-`--no-build` skips configuration and generation and requires an existing configured and generated tree.
-With `-p` or `BUILD_DIR`, the companion appends `-winui`; default names remain `windows-tidy` and `windows-winui`.
+WinUI and generated C++/WinRT headers enter through their real configured
+compile contexts; generated trees retain their producers rather than being
+reconstructed from path strings.
 
 Before replay, the portal removes only exact `/Zc:preprocessor`, `/c`, `/ZW:nostdlib`, `/GL`, `/GL-`, and `/experimental:deterministic` driver tokens.
-The first remains required in product builds; `/c` and `/ZW:nostdlib` describe MSVC behavior the clang-tidy driver already establishes; both IPO spellings are irrelevant to one-translation-unit analysis of the Release/IPO host tree; and deterministic output is a compiler code-generation toggle rather than analysis input.
+The first remains required in product builds; `/c` and `/ZW:nostdlib` describe MSVC behavior the clang-tidy driver already establishes; both IPO spellings are irrelevant to one-translation-unit analysis; and deterministic output is a compiler code-generation toggle rather than analysis input.
 Other related spellings, such as `/Zc:preprocessor-`, are retained.
 
 The Windows analysis command defines `_USE_STD_VECTOR_ALGORITHMS=0` only for clang-tidy as a workaround for [microsoft/STL#6294](https://github.com/microsoft/STL/issues/6294), in which Visual Studio 18 sends three-byte element types to a vectorized helper that accepts only one-, two-, four-, or eight-byte types.
@@ -396,12 +375,10 @@ This is an MSVC STL issue, not an LLVM 22 incompatibility, and does not affect p
 Remove the workaround when the corresponding STL fix enters the required Build Tools baseline.
 
 `AOBUS_LLVM_SDK_CACHE_ROOT` relocates the managed shared cache.
-The distinct `AOBUS_LLVM_SDK_ROOT` CMake cache option selects a pre-extracted exact archive, for example offline.
-That root must contain the LLVM and Clang CMake packages, static libraries, tools, and resource headers; configuration fails closed if a required file is absent.
 
 ## Validation
 
 Run the owning fixture through `./ao test --lint` after checker or fixture changes.
-Use focused `./ao tidy --no-build --check <alias> <fixture>` only for diagnosis, not as a replacement for the integration gate.
+Use a focused `./ao tidy --check <alias> <fixture>` scope only for diagnosis, not as a replacement for the integration gate.
 Changes to portal orchestration also follow the tooling and native-host matrix in [validation and review](../test/validation-and-review.md).
 A platform-specific checker boundary requires its native fixture pass; an unmatched AST on another host is not coverage.

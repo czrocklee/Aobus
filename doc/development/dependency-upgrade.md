@@ -61,9 +61,8 @@ nix-prefetch-url --unpack \
 ```
 
 4. Review the selected package versions before entering the new environment through `./ao`.
-   Tooling assertions fail early if the package set no longer provides the exact Python, Ruff, or mypy versions from `script/ao/toolchain.json`, or the ccache `local.linuxVersion` from `script/ao/compiler-cache.json`.
-   Keep the current Nixpkgs pin or update the corresponding tool contract deliberately; do not bypass the assertions.
-   After accepting the new pin, rerun `./ao setup compiler-cache` if ccache's Nix store identity changed.
+   Evaluation fails early if the package set no longer provides the exact Python, Ruff, mypy, Bazel, or Buildifier versions from the toolchain contracts.
+   One package set supplies the native dependencies and these tools together: either keep the current Nixpkgs pin, or update the affected tool contracts deliberately in the same change together with their cross-platform locks; do not bypass the assertions.
 5. Build and generate the new dependency report:
 
 ```bash
@@ -108,6 +107,12 @@ Use the least forceful shared vcpkg mechanism that preserves the contract:
 5. a versioned custom registry when the official registry lacks a maintained
    version;
 6. a repository overlay port only as a short-lived emergency measure.
+
+When an exact override needs an official recipe newer than the accepted
+default baseline, pin the default registry's immutable `reference` commit
+whose version database carries that recipe, keep the baseline floor
+unchanged, and confine the change to the overridden ports; see
+[dependency governance](dependency-governance.md#macos-and-windows-vcpkg).
 
 When the default registry baseline changes, update the vcpkg revision, archive
 URL, and verified archive SHA-256 in `script/ao/macos-toolchain.json` in the
@@ -185,8 +190,8 @@ For Windows App SDK or C++/WinRT upgrades:
 5. Run `ao.bat doctor winui`, a clean `ao.bat build --target winui`, then
    `ao.bat check`, dependency verification for the configured trees, and an
    interactive RDP smoke launch. The clean build exercises the application
-   target; `check` verifies that the shipping and default build graphs exclude
-   probes, builds all eight native probes through `aobus-winui-check`, and runs
+   target; `check` verifies that the shipping and default build selections exclude
+   probes, builds all eight native probes, and runs
    the two console checks.
 
 The NuGet package graph and installed Windows App Runtime are related but
@@ -217,21 +222,21 @@ explicit migration decision. Update its exact version in
 `dependency-contract.json`, its source tag and hash in `shell.nix`, and the
 vcpkg resolution together. Nixpkgs still packages 0.9, so the Linux derivation
 builds the same GitHub archive the vcpkg port verifies; compare the archive's
-SHA-512 with the port's before accepting a new hash. The vcpkg port exports
-`unofficial::lmdb::lmdb` while Linux resolves `PkgConfig::LMDB`, so the
-contract checks the `PkgLMDB` interface both feed. Run the complete native gate
+SHA-512 with the port's before accepting a new hash. The contract checks the
+imported LMDB interface both resolvers feed. Run the complete native gate
 (`./ao check` on Linux and macOS, `ao.bat check` on Windows) so LMDB primitives,
 library/storage consumers, and frontend library consumers are covered together.
 
 ### spdlog
 
 Treat the spdlog version and formatting backend as one contract. A matching
-version is insufficient unless CMake also confirms `SPDLOG_USE_STD_FORMAT` and
-rejects `SPDLOG_FMT_EXTERNAL`.
+version is insufficient unless the installed SDK metadata and dependency
+verification also confirm `SPDLOG_USE_STD_FORMAT` and reject
+`SPDLOG_FMT_EXTERNAL`.
 
 ### ICU
 
-Treat ICU data behavior as part of the governed capability contract, not only as a library version and target list.
+Treat ICU data behavior as part of the governed capability contract, not only as a library version and imported interface.
 An ICU upgrade must run the Unicode, catalog, collation, and completion-transliteration fixtures on Linux, macOS, and native Windows.
 In particular, rebaseline the fixed Kana and explicitly Mandarin Han aliases because transform output can change with ICU data even when the Aobus source is unchanged.
 
@@ -239,7 +244,7 @@ Run the Release performance review on Linux and native Windows, run the macOS
 Release gate, and compare first-use transform construction, the 50,000-track
 ASCII snapshot, the 5,155-track CJK-heavy snapshot, and the four cached lookup
 shapes where performance baselines exist.
-Verify that the dependency report still declares and resolves `script-transliteration`, and exercise both lazy transform constructors so a missing packaged transform is not mistaken for a valid CMake target.
+Keep `script-transliteration` declared in `dependency-contract.json`, and exercise both lazy transform constructors so a missing packaged transform is not mistaken for a valid imported interface.
 
 ## Updating Python, Ruff, mypy, or the documentation parser
 
@@ -262,9 +267,12 @@ Verify that the dependency report still declares and resolves `script-transliter
 5. Rebuild `script/ao/macos-requirements.txt` with hashes for the x86_64 and
    arm64 wheels used by macOS docs, format, tidy, and hygiene commands, with
    the same shared `-r` include.
-6. Ensure the Linux Nixpkgs set or a targeted Nix derivation supplies the same
-   exact versions. macOS must match Ruff and mypy but remains outside the exact
-   Python patch-level contract.
+6. Ensure the pinned Linux Nixpkgs set — or a targeted Nix derivation —
+   supplies the same exact versions. Because one package set feeds the native
+   dependencies too, this may couple the tool upgrade to a native pin move,
+   which then follows the [Nixpkgs update](#updating-nixpkgs) validation.
+   macOS must match Ruff and mypy but remains outside the exact Python
+   patch-level contract.
 7. Run the tooling gate on Linux and Windows:
 
 ```bash
@@ -286,25 +294,10 @@ Do not change Ruff `target-version` or mypy `python_version` merely because the
 managed interpreter patch release changed. Those settings express the minimum
 Python language target.
 
-The native requirement locks accept only the bounded single-token `-r <path>`
-include spelling. The tooling environment fingerprint reads every nested lock
-reached through that form, and every other pip include or constraint spelling,
-any other pip control line, and variable, quoted or line-continuation forms
-fail the fingerprint closed instead of being ignored, so an unsupported lock
-cannot silently reuse a cached managed environment.
-
-## Updating compiler-cache tools
-
-`script/ao/compiler-cache.json` governs local ccache versions and the CI sccache provider.
-Keep `local.linuxVersion` aligned with the ccache package selected by `nixpkgs.json`; macOS accepts its Homebrew formula at or above `local.minimumVersion`.
-When upgrading Windows ccache, update its version, official archive URL, verified SHA-256, and exact archive member together.
-When changing the pinned sccache action, update both `ci.action` and the workflow's literal action references; tooling tests enforce their agreement.
-The workflow reads the sccache version from the contract.
-
-Run `./ao setup compiler-cache` on affected Linux and macOS hosts, or `ao.bat setup compiler-cache` on Windows, to validate the replacement executable and refresh the saved activation record.
-This is also the recovery step after a Homebrew ccache upgrade or a cache-root purge.
-Run tooling checks on Linux and Windows and exercise setup and a native build on each affected host, verifying the launcher and capacity reported by setup.
-See [Compiler cache](compiler-cache.md) for shared-store locations and explicit override precedence.
+The tooling environment fingerprint reads every nested lock reached through a
+single-token `-r <path>` line. Keep lock includes to that spelling: other pip
+include or constraint forms are not followed, so a change in a file they name
+would not invalidate the cached managed environment.
 
 ## When vcpkg does not carry the contracted version
 
@@ -340,8 +333,8 @@ immutable sources and hashes and pass the minimum clean build and smoke tests.
 
 ## Validation for dependency pull requests
 
-Dependency changes need clean Debug and Release validation because stale CMake
-and vcpkg state can hide selection and ABI errors.
+Dependency changes need clean Debug and Release validation because stale
+provider and action-cache state can hide selection and ABI errors.
 
 Linux:
 
@@ -353,7 +346,7 @@ Linux:
 ./ao deps report --json /tmp/aobus-dependencies-linux.json
 ```
 
-macOS, using guest-local build state:
+macOS, using host-local build state:
 
 ```bash
 ./ao build --clean
@@ -376,9 +369,7 @@ ao.bat deps report --json %TEMP%\aobus-dependencies-windows.json
 Confirm in the report:
 
 - every governed dependency satisfies the contract;
-- conditionally disabled dependencies are `not-applicable`, not falsely marked
-  as verified;
-- required CMake targets and capabilities passed;
+- required imported interfaces passed;
 - all selected Boost library ports belong to one release family;
 - vcpkg port revisions, features, triplet, and registry baselines are present;
 - on Linux, the selected Nixpkgs revision and Nix store identities are present;

@@ -19,23 +19,23 @@ It owns GIO/D-Bus MPRIS mechanics over frontend-injected runtime, UIModel action
 Disabling the system-media build feature removes this target and both frontend integrations without changing Core, runtime, or UIModel.
 
 WinUI owns Windows App SDK application/window lifetime, XAML resources, dispatcher adaptation, native pickers, SMTC, and its Modern and Classic shells.
-Its Windows-only `aobus-winui-lib` owns compiled frontend implementation, including the shell's schema, dialect, element lattice, style resolution, responsive policy, and native adapters.
+Its Windows-only WinUI library owns compiled frontend implementation, including the shell's schema, dialect, element lattice, style resolution, responsive policy, and native adapters.
 The thin `aobus-winui` executable owns the final link and deployed resources.
-Windows-owned rules needing a native host run in the Windows suite; separable WinRT-free shell policy also compiles into `ao_core_test` on other hosts without becoming shared UIModel.
+Windows-owned rules needing a native host run in the Windows suite; separable WinRT-free shell policy also compiles into the core test binary on other hosts without becoming shared UIModel.
 
 AppKit is an incremental native development slice over the same runtime.
 Its `ao_appkit` object target supplies both the shipping bundle and an independent native GUI test bundle; scenario code is test-owned.
 `LibrarySession` retains runtime and UIModel observers across window presentation changes and tears them down before a successor process opens another library.
 AppKit uses native composition rather than the shared layout-document language.
 
-`ao_desktop_launch` supplies pure root, startup, successor-protocol, and detached-launch mechanisms shared by GTK, WinUI, and AppKit.
+The desktop-launch library supplies pure root, startup, successor-protocol, and detached-launch mechanisms shared by GTK, WinUI, and AppKit.
 It owns neither interactive runtime state nor toolkit event loops, checkpoint policy, failure presentation, or graph teardown.
 TUI and CLI do not link it.
 
 ## Code and evidence
 
-- [`app/CMakeLists.txt`](../../../app/CMakeLists.txt), [`app/systemmedia/CMakeLists.txt`](../../../app/systemmedia/CMakeLists.txt), and [`desktop/CMakeLists.txt`](../../../app/desktop/CMakeLists.txt) define frontend composition, shared Linux system media, and shared desktop support.
-- [`windows-winui/CMakeLists.txt`](../../../app/windows-winui/CMakeLists.txt) defines the WinUI implementation and executable boundary.
-- [`macos-appkit/CMakeLists.txt`](../../../app/macos-appkit/CMakeLists.txt) defines the AppKit bundle and native test composition.
-- [`ArchitectureAudit.cmake`](../../../app/cmake/ArchitectureAudit.cmake) enforces the application-layer dependency and capability constraints.
+- [`app/systemmedia/BUILD.bazel`](../../../app/systemmedia/BUILD.bazel) and [`app/desktop/BUILD.bazel`](../../../app/desktop/BUILD.bazel) define shared Linux system media and shared desktop support.
+- [`app/windows-winui/BUILD.bazel`](../../../app/windows-winui/BUILD.bazel) defines the WinUI implementation and executable boundary.
+- [`app/macos-appkit/BUILD.bazel`](../../../app/macos-appkit/BUILD.bazel) defines the AppKit bundle and native test composition.
+- The shared [architecture audit](../../../script/ao/core/guardrails.py) enforces the application-layer dependency and capability constraints.
 - [Validation and native host selection](../../development/test/validation-and-review.md) and [test suites](../../development/test/test-suite.md) explain how to verify a change at these boundaries.

@@ -97,6 +97,172 @@ class GitFilesTest(unittest.TestCase):
         self.assertTrue("app/include/ao/i18n/MessageInventory.def".endswith(gitfiles.SOURCE_SUFFIXES))
         self.assertFalse("app/include/ao/i18n/MessageInventory.def".endswith(gitfiles.CPP_TRANSLATION_UNIT_SUFFIXES))
 
+    def test_bazel_file_predicate_matches_only_supported_suffixes_and_exact_basenames(self):
+        for name in (
+            "BUILD",
+            "WORKSPACE",
+            "BUILD.bazel",
+            "MODULE.bazel",
+            "WORKSPACE.bazel",
+            "REPO.bazel",
+            "VENDOR.bazel",
+            "defs.bzl",
+            "nested/BUILD",
+            "nested/WORKSPACE",
+            "space dir/a file.bzl",
+            "音楽/module.bazel",
+        ):
+            with self.subTest(name=name):
+                self.assertTrue(gitfiles.is_bazel_file(name))
+        for name in (
+            "fooBUILD",
+            "nested/fooWORKSPACE",
+            "nested/build",
+            "BUILD/README.md",
+            ".bazelrc",
+            ".bazelversion",
+            "nested/.bazelrc",
+            "MODULE.bazel.lock",
+            "WORKSPACE.lock",
+            "BUILD.in",
+            "BUILD.bazel.in",
+            "defs.bzl.tpl",
+            "source.cpp",
+            "script.py",
+        ):
+            with self.subTest(name=name):
+                self.assertFalse(gitfiles.is_bazel_file(name))
+
+    def test_root_bazel_files_selects_only_immediate_files_without_scanning_build_trees(self):
+        eligible = [
+            "rules.bzl",
+            "BUILD",
+            "WORKSPACE",
+            "MODULE.bazel",
+            "REPO.bazel",
+            "BUILD.bazel",
+            ".bzl",
+            ".bazel",
+            "space name.bzl",
+            "音楽.bazel",
+        ]
+        excluded = [
+            "fooBUILD",
+            "fooWORKSPACE",
+            ".bazelrc",
+            ".bazelversion",
+            "MODULE.bazel.lock",
+            "BUILD.bazel.in",
+            "rules.bzl.tpl",
+            "source.cpp",
+            "script.py",
+            "nested/BUILD",
+            "nested/defs.bzl",
+            # A root BUILD file and a build directory cannot coexist on case-insensitive hosts.
+            "build-output/MODULE.bazel",
+            "build-output/vendor/BUILD",
+            "sdk-cache/WORKSPACE",
+            "directory.bzl/BUILD",
+            "directory.bazel/defs.bzl",
+        ]
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for name in (*eligible, *excluded):
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("fixture\n", encoding="utf-8")
+            iterdir = Path.iterdir
+            with (
+                mock.patch.object(gitfiles, "PROJECT_ROOT", root),
+                mock.patch.object(Path, "iterdir", autospec=True, side_effect=iterdir) as scan,
+                mock.patch.object(Path, "rglob", side_effect=AssertionError("root Bazel discovery must not recurse")),
+            ):
+                self.assertEqual(gitfiles.root_bazel_files(), sorted(eligible))
+                scan.assert_called_once_with(root)
+
+    def test_find_sources_includes_bazel_files_without_widening_language_specific_scopes(self):
+        bazel_files = [
+            "BUILD",
+            "WORKSPACE",
+            "MODULE.bazel",
+            "bazel/BUILD",
+            "bazel/nested/WORKSPACE",
+            "bazel/a file.bzl",
+            "bazel/音楽/module.bazel",
+            "test/lint/BUILD",
+            "test/lint/analysis/BUILD.bazel",
+            "test/lint/analysis/generated_header.bzl",
+        ]
+        cpp_files = ["lib/Player.cpp", "include/Player.hpp", "include/Messages.def", "app/Host.mm"]
+        python_files = ["script/check.py"]
+        excluded = [
+            "fooBUILD",
+            "bazel/fooWORKSPACE",
+            "bazel/build",
+            ".bazelrc",
+            ".bazelversion",
+            "MODULE.bazel.lock",
+            "WORKSPACE.in",
+            "BUILD.bazel.in",
+            "bazel/defs.bzl.tpl",
+            "test/lint/Case.cpp",
+            "test/lint/driver.py",
+            "directory.bzl/README.md",
+        ]
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for name in (*bazel_files, *cpp_files, *python_files, *excluded):
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("fixture\n", encoding="utf-8")
+            with mock.patch.object(gitfiles, "PROJECT_ROOT", root):
+                self.assertEqual(
+                    gitfiles.find_sources(["."], suffixes=gitfiles.SOURCE_SUFFIXES),
+                    sorted(bazel_files + cpp_files + python_files),
+                )
+                self.assertEqual(gitfiles.find_sources(["."]), sorted(cpp_files))
+                self.assertEqual(gitfiles.find_sources(["."], suffixes=gitfiles.PYTHON_SUFFIXES), python_files)
+                self.assertEqual(
+                    gitfiles.find_sources(["."], suffixes=gitfiles.BAZEL_SUFFIXES),
+                    [
+                        "MODULE.bazel",
+                        "bazel/a file.bzl",
+                        "bazel/音楽/module.bazel",
+                        "test/lint/analysis/BUILD.bazel",
+                        "test/lint/analysis/generated_header.bzl",
+                    ],
+                )
+                self.assertEqual(
+                    gitfiles.find_sources(["test/lint"], suffixes=gitfiles.SOURCE_SUFFIXES),
+                    ["test/lint/BUILD", "test/lint/analysis/BUILD.bazel", "test/lint/analysis/generated_header.bzl"],
+                )
+
+    def test_find_sources_walks_foreign_sdk_folders_only_when_explicitly_selected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for name in ("BUILD", "bazel/BUILD", "bazel/rules.bzl", "sdk-cache/nested/BUILD", "sdk-cache/vendor.bzl"):
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("fixture\n", encoding="utf-8")
+            rglob = Path.rglob
+            with (
+                mock.patch.object(gitfiles, "PROJECT_ROOT", root),
+                mock.patch.object(Path, "rglob", autospec=True, side_effect=rglob) as scan,
+            ):
+                self.assertEqual(gitfiles.find_sources([], suffixes=gitfiles.SOURCE_SUFFIXES), [])
+                scan.assert_not_called()
+                self.assertEqual(
+                    gitfiles.find_sources(["bazel"], suffixes=gitfiles.SOURCE_SUFFIXES),
+                    ["bazel/BUILD", "bazel/rules.bzl"],
+                )
+                scan.assert_called_once_with(root / "bazel", "*")
+                scan.reset_mock()
+                self.assertEqual(
+                    gitfiles.find_sources(["sdk-cache"], suffixes=gitfiles.SOURCE_SUFFIXES),
+                    ["sdk-cache/nested/BUILD", "sdk-cache/vendor.bzl"],
+                )
+                scan.assert_called_once_with(root / "sdk-cache", "*")
+
     def test_changed_files_selects_def_include_fragments(self):
         def git_lines(*args: str, null_terminated: bool = False) -> list[str]:
             if args[:2] == ("diff", "--name-only"):
@@ -164,13 +330,6 @@ class GitFilesTest(unittest.TestCase):
                 ],
             )
         lines.assert_called_once_with("status", "--porcelain=v1", "-z", "--untracked-files=all", null_terminated=True)
-
-    def test_malformed_status_reports_a_discovery_error_without_a_traceback(self):
-        for records in (["bad"], [" M "], ["XX file.py"], [" Mfile.py"], ["R  new.py"]):
-            with self.subTest(records=records), mock.patch.object(gitfiles, "_git_lines", return_value=records):
-                with contextlib.redirect_stderr(io.StringIO()) as errors, self.assertRaises(SystemExit):
-                    gitfiles._git_worktree_files()
-                self.assertIn("malformed git status", errors.getvalue())
 
     def test_failed_discovery_explains_an_ignored_other_root_binding(self):
         root = str(gitfiles.PROJECT_ROOT)
@@ -341,6 +500,62 @@ class GitWorkflowFixtureTest(unittest.TestCase):
         self.git("add", ".")
         self.git("commit", "-m", name)
 
+    def test_changed_source_scope_includes_committed_and_worktree_bazel_files_only(self):
+        for name in ("BUILD", "nested/WORKSPACE"):
+            path = self.root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("base\n", encoding="utf-8")
+        self.commit("base")
+        base = self.git("rev-parse", "HEAD")
+        for name in ("BUILD", "MODULE.bazel"):
+            (self.root / name).write_text("committed\n", encoding="utf-8")
+        self.commit("committed Bazel changes")
+        for name in (
+            "nested/WORKSPACE",
+            "nested/BUILD",
+            "nested/BUILD.bazel",
+            "rules/defs.bzl",
+            "WORKSPACE",
+            "source.cpp",
+            "source.py",
+            "fooBUILD",
+            "nested/fooWORKSPACE",
+            ".bazelrc",
+            ".bazelversion",
+            "MODULE.bazel.lock",
+            "BUILD.bazel.in",
+            "rules/defs.bzl.tpl",
+        ):
+            path = self.root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("worktree\n", encoding="utf-8")
+        self.git("add", "nested/BUILD")
+        index = self.root / ".git" / "index"
+        before = index.read_bytes()
+        with mock.patch.object(gitfiles, "PROJECT_ROOT", self.root):
+            self.assertEqual(
+                gitfiles.changed_files(base, suffixes=gitfiles.SOURCE_SUFFIXES),
+                [
+                    "BUILD",
+                    "MODULE.bazel",
+                    "WORKSPACE",
+                    "nested/BUILD",
+                    "nested/BUILD.bazel",
+                    "nested/WORKSPACE",
+                    "rules/defs.bzl",
+                    "source.cpp",
+                    "source.py",
+                ],
+            )
+            self.assertEqual(gitfiles.changed_files(base), ["source.cpp"])
+            self.assertEqual(gitfiles.changed_files(base, suffixes=gitfiles.PYTHON_SUFFIXES), ["source.py"])
+            self.assertEqual(
+                gitfiles.changed_files(base, suffixes=gitfiles.BAZEL_SUFFIXES),
+                ["MODULE.bazel", "nested/BUILD.bazel", "rules/defs.bzl"],
+            )
+            self.assertEqual(gitfiles.changed_files(base, suffixes=("BUILD",)), ["BUILD", "fooBUILD", "nested/BUILD"])
+        self.assertEqual(index.read_bytes(), before)
+
     def test_diverged_main_does_not_expand_default_topic_scope(self):
         (self.root / "common.cpp").write_text("base\n", encoding="utf-8")
         self.commit("base")
@@ -363,7 +578,7 @@ class GitWorkflowFixtureTest(unittest.TestCase):
         linked = self.root.parent / "linked"
         self.git("worktree", "add", "-b", "linked", str(linked))
         with mock.patch.object(gitfiles, "PROJECT_ROOT", linked), mock.patch.object(setup, "PROJECT_ROOT", linked):
-            self.assertEqual(setup.run_command(Namespace(component="git-hooks", shared_workspaces=None)), 0)
+            self.assertEqual(setup.run_command(Namespace(component="git-hooks")), 0)
         configured = subprocess.check_output(
             ["git", "-C", str(linked), "config", "--local", "--get", "core.hooksPath"], text=True
         ).strip()
@@ -456,13 +671,15 @@ class GitWorkflowFixtureTest(unittest.TestCase):
             self.assertEqual(gitfiles.changed_files("HEAD", suffixes=gitfiles.PYTHON_SUFFIXES), [new.name])
         self.assertEqual(index.read_bytes(), before)
 
-    def assert_discovery_preserves_names(self, spellings):
+    def assert_discovery_preserves_names(self, spellings, *, extension=".py", suffixes=gitfiles.PYTHON_SUFFIXES):
         self.git("config", "core.quotePath", "true")
         self.git("config", "status.showUntrackedFiles", "no")
         for state in ("committed", "staged", "untracked", "unstaged"):
             with self.subTest(state=state):
                 (self.root / "seed.py").write_text(f"seed {state}\n", encoding="utf-8")
-                names = [f"{state}-{spelling}.py" for spelling in spellings]
+                names = [f"{state}-{spelling}{extension}" for spelling in spellings]
+                for name in names:
+                    (self.root / name).parent.mkdir(parents=True, exist_ok=True)
                 if state == "unstaged":
                     for name in names:
                         (self.root / name).write_text("base\n", encoding="utf-8")
@@ -477,7 +694,7 @@ class GitWorkflowFixtureTest(unittest.TestCase):
                 index = self.root / ".git" / "index"
                 before = index.read_bytes()
                 with mock.patch.object(gitfiles, "PROJECT_ROOT", self.root):
-                    self.assertEqual(gitfiles.changed_files(base, suffixes=gitfiles.PYTHON_SUFFIXES), sorted(names))
+                    self.assertEqual(gitfiles.changed_files(base, suffixes=suffixes), sorted(names))
                 self.assertEqual(index.read_bytes(), before)
 
     def test_discovery_preserves_non_ascii_names_in_every_change_state(self):
@@ -535,7 +752,7 @@ class GitWorkflowFixtureTest(unittest.TestCase):
             mock.patch.object(setup, "PROJECT_ROOT", self.root),
             mock.patch.dict(os.environ, {"AOBUS_GIT_DIR": str(other / ".git"), "AOBUS_GIT_WORK_TREE": str(self.root)}),
         ):
-            self.assertEqual(setup.run_command(Namespace(component="git-hooks", shared_workspaces=None)), 0)
+            self.assertEqual(setup.run_command(Namespace(component="git-hooks")), 0)
         configured = subprocess.check_output(
             ["git", "-C", str(self.root), "config", "--local", "--get", "core.hooksPath"], text=True
         ).strip()

@@ -169,13 +169,27 @@ until the process exits.
 - Native-input tests skip unless the display marker is present. Never set it for
   an inherited desktop display.
 - The GTK test main disables any session bus that does not match the bus marker,
-  including for IDE and CTest launches. Tests that use the bus call
+  including for IDE and direct test-binary launches. Tests that use the bus call
   `requireOwnedGtkSessionBus()` first and skip otherwise. They must not tear down
   that bus while GTK's process-global clients still hold its connection.
-- GLib warnings and criticals are fatal. Fix the diagnostic's owner rather than
-  filtering logs; a fatal teardown diagnostic fails the run even after Catch2
-  reports success.
+- GLib warnings and criticals are fatal, except for the temporary dependency
+  exception below. A fatal teardown diagnostic fails the run even after Catch2
+  reports success; do not add general warning filters.
 - Tests that construct application windows call `ensureRegisteredGtkApplication()`.
+
+The test process temporarily allows GTK 4.24.0's duplicate frame-submission
+warning, matched by exact structured log level, Gdk domain and message in
+[`GtkTestMain.cpp`](../../../test/linux-gtk/GtkTestMain.cpp). It requires the
+portal-owned local X11 display and matching owned bus with the Cairo renderer;
+other versions and contexts retain fatal behavior. The writer prints both an
+explicit exception notice and the original warning without clearing the fatal
+mask. All other warnings, criticals, errors and sanitizer reports remain fatal.
+This is a known upstream dependency exception, not a lifecycle fix, a skipped
+case or a custom GTK build: popup and toplevel surfaces share a frame clock and
+can resubmit before after-paint fills the completeness metadata. See
+[the submission-accounting introduction](https://gitlab.gnome.org/GNOME/gtk/-/merge_requests/10035).
+Remove the exception and its dedicated probes once the pinned SDK passes the
+standalone popup/no-popup controls without it, then the GTK and ASan gates.
 
 The GApplication replacement probe and its instance children borrow the
 portal-owned bus after the same admission check. Direct unowned launches are

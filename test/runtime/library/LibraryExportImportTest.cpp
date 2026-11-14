@@ -4,6 +4,7 @@
 #include "runtime/library/LibraryYamlExporter.h"
 #include "runtime/library/LibraryYamlImporter.h"
 #include "test/TestFixtureSupport.h"
+#include "test/audio/AudioFixtureDirectory.h"
 #include "test/library/MusicLibraryTestSupport.h"
 #include "test/library/TrackTestSupport.h"
 #include "test/library/WritableLibraryTestSupport.h"
@@ -749,7 +750,7 @@ library:
 
     // Copy a real tagged FLAC input.
     auto const songPath = std::filesystem::path{temp.path()} / "A.flac";
-    std::filesystem::copy_file(std::filesystem::path{AUDIO_TEST_DATA_DIR} / "basic_metadata.flac", songPath);
+    std::filesystem::copy_file(audio::test::audioFixtureDirectory() / "basic_metadata.flac", songPath);
 
     {
       auto yaml = std::ofstream{yamlPath};
@@ -906,7 +907,7 @@ library:
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
     auto const uri = std::string{"tagged.flac"};
     auto const songPath = std::filesystem::path{temp.path()} / uri;
-    std::filesystem::copy_file(std::filesystem::path{AUDIO_TEST_DATA_DIR} / "classical_metadata.flac", songPath);
+    std::filesystem::copy_file(audio::test::audioFixtureDirectory() / "classical_metadata.flac", songPath);
 
     auto const yamlPath = std::filesystem::path{temp.path()} / "metadata.yaml";
     {

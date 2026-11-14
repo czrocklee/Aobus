@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Aobus Contributors
 
 #include "test/audio/backend/CoreAudioTestSupport.h"
+#include "test/fatal/ProbeProcess.h"
 #include <ao/Error.h>
 #include <ao/audio/Device.h>
 
@@ -69,6 +70,7 @@ int main(int argc, char* argv[])
 {
   if (argc == 3 && std::string_view{argv[1]} == "--aobus-probe-child")
   {
+    ao::test::reportProbeChildStarted();
     auto const scenario = std::string_view{argv[2]};
 
     if (!tryApplyScenario(scenario))

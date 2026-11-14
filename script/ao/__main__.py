@@ -1,16 +1,15 @@
 """Aobus development portal: `./ao <command> [options]`.
 
 Each command module registers an argparse subparser; `./ao help` lists them all.
-The repository shim prepares the platform's native environment before dispatching here.
+Platform launchers prepare the native environment before dispatching a parsed command.
 """
 
 import argparse
 import os
 import sys
-from contextlib import nullcontext
 
 from .command import COMMAND_MODULES
-from .core import buildenv, compiler_cache, msbuild_cache, phases, workspace_cache
+from .core import buildenv, phases
 
 
 def make_parser() -> argparse.ArgumentParser:
@@ -38,51 +37,35 @@ def parse_arguments(parser: argparse.ArgumentParser, arguments: list[str]) -> ar
     return args
 
 
-def main(argv: list[str] | None = None) -> int:
+def parse_invocation(arguments: list[str]) -> argparse.Namespace | None:
     # Child processes write straight to the underlying fd; line-buffer our own prints so
     # status lines interleave with subprocess output in the right order when piped.
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(line_buffering=True)
-    arguments = list(sys.argv[1:] if argv is None else argv)
     parser = make_parser()
     if not arguments or arguments[0] == "help":
         parser.print_help()
+        return None
+    return parse_arguments(parser, arguments)
+
+
+def dispatch(args: argparse.Namespace, *, build_environment_required: bool | None = None) -> int:
+    """Execute an already parsed invocation, including any prepared source scope."""
+    # Native commands own their governed Bazel tree. No implicit configure,
+    # source projection or alternate build graph runs before the selected command.
+    # Supervised run keeps a measurable root span.
+    with phases.measure("command", command=args.command) as phase:
+        status: int = args.func(args) or 0
+        phase.status = status
+        return status
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_invocation(list(sys.argv[1:] if argv is None else argv))
+    if args is None:
         return 0
-    args = parse_arguments(parser, arguments)
     buildenv.load_source_scope(args, os.environ.pop("AOBUS_PREFLIGHT_SCOPE", None))
-    previous_tracking = os.environ.get(msbuild_cache.TRACKING_ENV)
-    try:
-        if os.name == "nt":
-            os.environ[msbuild_cache.TRACKING_ENV] = "0"
-        if buildenv.requires_parsed_build_env(args) or workspace_cache.command_uses_context(args):
-            try:
-                compiler_cache.activate_local()
-            except compiler_cache.CompilerCacheError as exc:
-                print(f"Warning: compiler cache is disabled: {exc}", file=sys.stderr)
-        # run measures preparation itself: a successful exec cannot close a root span.
-        measurement = phases.measure("command", command=args.command) if args.command != "run" else nullcontext()
-        with measurement as phase:
-            try:
-                with workspace_cache.command_context(args):
-                    status: int = args.func(args) or 0
-                if phase is not None:
-                    phase.status = status
-                return status
-            except workspace_cache.WorkspaceCacheError as exc:
-                print(f"Error: {exc}", file=sys.stderr)
-                if phase is not None:
-                    phase.status = 1
-                else:
-                    # Context entry/cleanup failures are not successful launch preparation.
-                    with phases.measure("launch-error", command="run") as error_phase:
-                        error_phase.status = 1
-                return 1
-    finally:
-        if os.name == "nt":
-            if previous_tracking is None:
-                os.environ.pop(msbuild_cache.TRACKING_ENV, None)
-            else:
-                os.environ[msbuild_cache.TRACKING_ENV] = previous_tracking
+    return dispatch(args)
 
 
 if __name__ == "__main__":

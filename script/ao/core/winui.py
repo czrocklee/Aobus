@@ -1,4 +1,4 @@
-"""Windows App SDK host checks, runtime setup, WinUI launch guards, and build-graph verification."""
+"""Windows App SDK host checks, explicit runtime setup and native launch guards."""
 
 from __future__ import annotations
 
@@ -21,7 +21,6 @@ from .paths import PROJECT_ROOT
 
 WINDOWS_BUILD_TOOLS_CONFIG = PROJECT_ROOT / "config" / "windows-build-tools.vsconfig"
 WINDOWS_SDK_VERSION = "10.0.26100.0"
-VISUAL_STUDIO_GENERATOR = "Visual Studio 18 2026"
 
 # Visual Studio uses product-specific package IDs for the same installed
 # capabilities.  The governed .vsconfig intentionally targets the standalone
@@ -151,10 +150,6 @@ def installed_component(
         if visual_studio_installation(component=candidate, environ=environ) is not None:
             return candidate
     return None
-
-
-def bundled_cmake(installation: Path) -> Path:
-    return installation / "Common7" / "IDE" / "CommonExtensions" / "Microsoft" / "CMake" / "CMake" / "bin" / "cmake.exe"
 
 
 def _runtime_version(version: str) -> tuple[int, ...] | None:
@@ -289,17 +284,6 @@ def inspect_host(
                 detail if present else f"missing; install from {WINDOWS_BUILD_TOOLS_CONFIG}",
             )
         )
-
-    if installation:
-        cmake = bundled_cmake(installation)
-        generator_present = False
-        detail = str(cmake)
-        if cmake.is_file():
-            result = _run_text([str(cmake), "--help"], environ=environment)
-            generator_present = result.returncode == 0 and VISUAL_STUDIO_GENERATOR in result.stdout
-            if not generator_present:
-                detail = f"{cmake} does not advertise {VISUAL_STUDIO_GENERATOR}"
-        checks.append(HostCheck("CMake Visual Studio generator", generator_present, detail))
 
     sdk_root = _program_files_x86(environment) / "Windows Kits" / "10" / "Include" / WINDOWS_SDK_VERSION
     checks.append(HostCheck(f"Windows SDK {WINDOWS_SDK_VERSION}", sdk_root.is_dir(), str(sdk_root)))
@@ -502,72 +486,3 @@ def require_interactive_session() -> int:
             "Run `ao.bat run winui` inside the active RDP desktop session."
         )
     return session_id
-
-
-def _load_file_api_json(path: Path) -> Any:
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise RuntimeError(f"cannot read CMake File API reply {path}: {exc}") from exc
-
-
-def verify_build_graph(build_dir: Path, configuration: str) -> None:
-    """Keep shipping/default closures probe-free and validation complete.
-
-    The reply is produced by the immediately preceding locked configure.
-    Missing or malformed graph evidence fails validation rather than guessing.
-    """
-
-    def closure(target_id: str) -> set[str]:
-        reachable: set[str] = set()
-        pending = [target_id]
-        while pending:
-            current = pending.pop()
-            if current in reachable:
-                continue
-            reachable.add(current)
-            pending.extend(str(record["id"]) for record in records[current].get("dependencies", ()))
-        return {str(records[identifier]["name"]) for identifier in reachable}
-
-    reply_dir = build_dir / ".cmake" / "api" / "v1" / "reply"
-    index_files = sorted(reply_dir.glob("index-*.json"))
-    if not index_files:
-        raise RuntimeError(
-            f"no CMake File API index reply in {reply_dir}; create the codemodel-v2 query before configuring the build"
-        )
-    try:
-        index = _load_file_api_json(index_files[-1])
-        codemodel = _load_file_api_json(reply_dir / index["reply"]["codemodel-v2"]["jsonFile"])
-        chosen = next(entry for entry in codemodel["configurations"] if entry["name"] == configuration)
-        records = {summary["id"]: _load_file_api_json(reply_dir / summary["jsonFile"]) for summary in chosen["targets"]}
-        by_name = {str(record["name"]): identifier for identifier, record in records.items()}
-        probes = {name for name in by_name if name.startswith("ao_winui_") and name.endswith("_probe")}
-        if not probes:
-            raise RuntimeError(f"configuration {configuration!r} in {build_dir} declares no ao_winui_*_probe targets")
-        shipping_leak = closure(by_name["aobus-winui"]) & probes
-        if shipping_leak:
-            raise RuntimeError(f"aobus-winui transitively depends on probes {sorted(shipping_leak)} in {build_dir}")
-        check_closure = closure(by_name["aobus-winui-check"])
-        uncovered = probes - check_closure
-        if uncovered:
-            raise RuntimeError(f"aobus-winui-check does not depend on probes {sorted(uncovered)} in {build_dir}")
-        if "aobus-winui" not in check_closure:
-            raise RuntimeError(f"aobus-winui-check does not depend on the shipping aobus-winui target in {build_dir}")
-        # Visual Studio emits ALL_BUILD per project; directory 0 is the top-level directory.
-        root_defaults = [
-            summary["id"]
-            for summary in chosen["targets"]
-            if summary["name"] == "ALL_BUILD" and summary["directoryIndex"] == 0
-        ]
-        if len(root_defaults) != 1:
-            raise RuntimeError(f"expected one root ALL_BUILD target in {build_dir}, found {len(root_defaults)}")
-        default_closure = closure(root_defaults[0])
-        if "aobus-winui" not in default_closure:
-            raise RuntimeError(f"the default ALL_BUILD build omits the shipping aobus-winui target in {build_dir}")
-        default_leak = default_closure & probes
-        if default_leak:
-            raise RuntimeError(f"the default ALL_BUILD build reaches probes {sorted(default_leak)} in {build_dir}")
-    except (KeyError, TypeError, ValueError, StopIteration) as exc:
-        raise RuntimeError(
-            f"invalid CMake File API codemodel-v2 reply for configuration {configuration!r} in {build_dir}: {exc!r}"
-        ) from exc

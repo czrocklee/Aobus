@@ -1,6 +1,5 @@
-"""Tests for ao.core.builddir — flavor/preset/build-tree mapping."""
+"""Tests for ao.core.builddir — state/checkout roots and platform profiles."""
 
-import json
 import os
 import tempfile
 import unittest
@@ -10,27 +9,8 @@ from unittest import mock
 from ao.core import builddir
 
 
-class BuildDirTest(unittest.TestCase):
-    def test_linux_profile_presets_cover_all_flavors(self):
-        self.assertEqual(
-            builddir.platform_profile("posix").presets,
-            {
-                "debug": "linux-debug",
-                "release": "linux-release",
-                "profile": "profile",
-            },
-        )
-
-    def test_linux_plain_flavors_map_to_their_own_tree(self):
-        with mock.patch.dict("os.environ", {}, clear=False):
-            os.environ.pop("BUILD_DIR", None)
-            os.environ.pop("AOBUS_BUILD_ROOT", None)
-            root = Path("/tmp/build") / builddir.PROJECT_ROOT.name
-            self.assertEqual(builddir.build_dir("debug", os_name="posix"), root / "debug")
-            self.assertEqual(builddir.build_dir("release", os_name="posix"), root / "release")
-            self.assertEqual(builddir.build_dir("profile", os_name="posix"), root / "profile")
-
-    def test_linux_build_root_honors_aobus_build_root(self):
+class LinuxBuildRootTest(unittest.TestCase):
+    def test_linux_build_root_is_project_specific_and_host_overridable(self):
         project_root = Path("/home/alice/src/renamed-aobus")
         self.assertEqual(
             builddir.linux_build_root(environ={}, project_root=project_root),
@@ -44,202 +24,38 @@ class BuildDirTest(unittest.TestCase):
             builddir.linux_build_root(environ={"AOBUS_BUILD_ROOT": ""}, project_root=project_root),
             Path("/tmp/build/renamed-aobus"),
         )
+
+    def test_linux_profile_build_root_follows_the_environment_override(self):
         environment = {"AOBUS_BUILD_ROOT": "/var/cache/aobus"}
         with mock.patch.dict("os.environ", environment, clear=False):
-            os.environ.pop("BUILD_DIR", None)
             root = Path("/var/cache/aobus") / builddir.PROJECT_ROOT.name
             self.assertEqual(builddir.platform_profile("posix").build_root, root)
-            self.assertEqual(builddir.build_dir("debug", os_name="posix"), root / "debug")
 
-    def test_native_profile_rejects_unsupported_platforms(self):
-        host_os = mock.Mock(environ=os.environ)
-        host_os.name = "posix"
-        with (
-            mock.patch("ao.core.builddir.os", host_os),
-            mock.patch("ao.core.builddir.sys.platform", "freebsd14"),
-        ):
-            with self.assertRaisesRegex(RuntimeError, "freebsd14"):
-                builddir.platform_profile()
-            # Explicit os_name values keep working for cross-profile queries.
-            self.assertEqual(builddir.platform_profile("posix").name, "linux")
 
-    def test_macos_is_a_native_posix_profile_distinct_from_linux(self):
-        # os.name is "posix" on macOS too, so only sys.platform separates them.
-        host_os = mock.Mock(environ=os.environ)
-        host_os.name = "posix"
-        with (
-            mock.patch("ao.core.builddir.os", host_os),
-            mock.patch("ao.core.builddir.sys.platform", "darwin"),
-        ):
-            profile = builddir.platform_profile()
-            self.assertEqual(profile.name, "macos")
-            self.assertEqual(profile.presets["debug"], "macos-debug")
-            self.assertEqual(profile.presets["profile"], "macos-profile")
-            self.assertEqual(profile.compiler, "clang")
-            self.assertEqual(profile.apps, ("cli", "tui", "appkit"))
-            self.assertEqual(profile.default_suites, ("core", "backend", "tui"))
-            self.assertEqual(profile.all_suites, ("core", "backend", "tui", "cli", "lint"))
-            self.assertEqual(profile.tsan_suites, ("core", "backend"))
-            # GTK, system media, and Python repository tooling are not
-            # supported by this native profile; native clang-tidy integration is.
-            self.assertNotIn("gtk", profile.apps)
-            self.assertNotIn("gtk", profile.all_suites)
-            self.assertNotIn("systemmedia", profile.all_suites)
-            self.assertNotIn("tooling", profile.all_suites)
-            self.assertIn("lint", profile.all_suites)
-            self.assertEqual(builddir.tidy_preset(), "macos-debug")
-            # An explicit os_name still selects the Linux profile.
-            self.assertEqual(builddir.platform_profile("posix").name, "linux")
-
-    def test_macos_presets_and_portal_share_the_default_build_trees(self):
-        presets = json.loads((builddir.PROJECT_ROOT / "CMakePresets.json").read_text(encoding="utf-8"))[
-            "configurePresets"
-        ]
-        preset_by_name = {preset["name"]: preset for preset in presets}
-        host_os = mock.Mock(environ=os.environ)
-        host_os.name = "posix"
-
-        with (
-            mock.patch("ao.core.builddir.os", host_os),
-            mock.patch("ao.core.builddir.sys.platform", "darwin"),
-            mock.patch.dict("os.environ", {}, clear=False),
-        ):
-            os.environ.pop("BUILD_DIR", None)
-            os.environ.pop("AOBUS_BUILD_ROOT", None)
-            root = Path("/tmp/build") / builddir.PROJECT_ROOT.name
-            for flavor in ("debug", "release", "profile"):
-                preset_name = builddir.preset(flavor)
-                self.assertEqual(builddir.build_dir(flavor), root / flavor)
-                self.assertEqual(
-                    preset_by_name[preset_name]["binaryDir"],
-                    f"/tmp/build/${{sourceDirName}}/{flavor}",
-                )
-
-    def test_windows_builds_and_tests_share_one_flavor_tree(self):
-        environment = {
-            "AOBUS_STATE_ROOT": "C:/Users/Alice/AppData/Local/Aobus",
-            "AOBUS_CHECKOUT_ID": "checkout-a",
-        }
-        with mock.patch.dict("os.environ", environment, clear=True):
-            root = builddir.windows_build_root()
-            self.assertEqual(
-                builddir.build_dir("debug", os_name="nt"),
-                root / "windows-debug",
-            )
-            self.assertEqual(
-                builddir.build_dir("release", os_name="nt"),
-                root / "windows-release",
-            )
-
-    def test_windows_profile_exposes_only_built_apps_and_suites(self):
-        profile = builddir.platform_profile("nt")
-        self.assertEqual(profile.apps, ("cli", "tui", "winui"))
-        self.assertEqual(profile.default_suites, ("core", "tui"))
-        self.assertEqual(profile.all_suites, ("core", "tui", "cli", "tooling", "lint"))
-        self.assertEqual(profile.tsan_suites, ())
-        # The backend suite is compiled on Windows but never joins an
-        # unattended group; only an explicit selection runs it.
-        self.assertNotIn("backend", profile.default_suites)
-        self.assertNotIn("backend", profile.all_suites)
-        self.assertEqual(builddir.flavors("nt"), ("debug", "release"))
-
-    def test_winui_uses_a_dedicated_visual_studio_tree(self):
-        environment = {
-            "AOBUS_STATE_ROOT": "C:/Users/Alice/AppData/Local/Aobus",
-            "AOBUS_CHECKOUT_ID": "checkout-a",
-        }
-        with mock.patch.dict("os.environ", environment, clear=True):
-            self.assertEqual(
-                builddir.winui_build_dir("nt"),
-                builddir.windows_build_root() / "windows-winui",
-            )
-
-    def test_winui_companion_uses_default_tree_without_an_exact_primary_override(self):
-        environment = {
-            "AOBUS_STATE_ROOT": "C:/Users/Alice/AppData/Local/Aobus",
-            "AOBUS_CHECKOUT_ID": "checkout-a",
-        }
-        with mock.patch.dict("os.environ", environment, clear=True):
-            self.assertEqual(
-                builddir.winui_companion_build_dir(
-                    builddir.build_dir("debug", os_name="nt"),
-                    primary_path_was_explicit=False,
-                    os_name="nt",
-                ),
-                builddir.windows_build_root() / "windows-winui",
-            )
-
-    def test_winui_companion_is_a_sibling_of_an_exact_primary_tree(self):
-        primary = Path("C:/build/aobus-native")
-
-        with mock.patch.dict("os.environ", {"BUILD_DIR": "C:/ignored-environment-tree"}, clear=True):
-            self.assertEqual(
-                builddir.winui_companion_build_dir(
-                    primary,
-                    primary_path_was_explicit=True,
-                    os_name="nt",
-                ),
-                Path("C:/build/aobus-native-winui"),
-            )
-            self.assertEqual(
-                builddir.winui_companion_build_dir(
-                    Path("C:/ignored-environment-tree"),
-                    primary_path_was_explicit=False,
-                    os_name="nt",
-                ),
-                Path("C:/ignored-environment-tree-winui"),
-            )
-
-    def test_linux_profile_exposes_only_baselined_tsan_suites(self):
-        profile = builddir.platform_profile("posix")
-
-        self.assertEqual(profile.default_suites, ("core", "backend", "gtk"))
+class StateRootTest(unittest.TestCase):
+    def test_state_root_honors_override_and_platform_defaults(self):
         self.assertEqual(
-            profile.all_suites,
-            ("core", "backend", "tui", "cli", "gtk", "systemmedia", "tooling", "lint"),
+            builddir.state_root(environ={"AOBUS_STATE_ROOT": "/chosen"}, system="Linux"),
+            Path("/chosen"),
         )
-        self.assertEqual(profile.tsan_suites, ("core", "backend", "gtk"))
-
-    def test_tidy_uses_a_dedicated_native_preset_and_tree(self):
-        with mock.patch.dict("os.environ", {}, clear=False):
-            os.environ.pop("BUILD_DIR", None)
-            os.environ.pop("AOBUS_BUILD_ROOT", None)
-            self.assertEqual(builddir.tidy_preset("posix"), "linux-debug")
-            root = Path("/tmp/build") / builddir.PROJECT_ROOT.name
-            self.assertEqual(builddir.tidy_dir("posix"), root / "debug-clang-tidy")
-        self.assertEqual(builddir.tidy_preset("nt"), "windows-tidy")
-        self.assertEqual(builddir.tidy_dir("nt"), builddir.windows_build_root() / "windows-tidy")
-
-    def test_windows_lint_host_derivation_never_reuses_the_primary_product_tree(self):
-        # The ao test lint route and setup llvm-sdk own a dedicated checker
-        # host: BUILD_DIR stays a primary product override and always yields a
-        # -tidy sibling, while default product trees share the windows-tidy
-        # host. tidy_dir() keeps its generic ao tidy/format meaning of naming
-        # the override tree itself, so the two contracts stay explicit.
-        with (
-            mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
-            mock.patch.dict("os.environ", {}, clear=False),
-        ):
-            os.environ.pop("BUILD_DIR", None)
-            default_primary = builddir.WINDOWS_PROFILE.build_root / "windows-debug"
-            self.assertEqual(
-                builddir.windows_lint_build_dir(default_primary), builddir.WINDOWS_PROFILE.build_root / "windows-tidy"
-            )
-            self.assertEqual(
-                builddir.windows_lint_build_dir(Path("C:/prepared/custom")), Path("C:/prepared/custom-tidy")
-            )
-            with mock.patch.dict("os.environ", {"BUILD_DIR": "C:/state/primary"}):
-                self.assertEqual(builddir.tidy_dir(), Path("C:/state/primary"))
-                self.assertEqual(
-                    builddir.windows_lint_build_dir(builddir.build_dir("debug")), Path("C:/state/primary-tidy")
-                )
-                self.assertEqual(
-                    builddir.windows_lint_build_dir(Path("C:/state/primary")), Path("C:/state/primary-tidy")
-                )
+        self.assertEqual(
+            builddir.state_root(environ={"HOME": "/users/me"}, system="Linux"),
+            Path("/users/me/.cache/Aobus"),
+        )
+        self.assertEqual(
+            builddir.state_root(environ={"XDG_CACHE_HOME": "/xdg"}, system="Linux"),
+            Path("/xdg/Aobus"),
+        )
+        self.assertEqual(
+            builddir.state_root(environ={"HOME": "/Users/me"}, system="Darwin"),
+            Path("/Users/me/Library/Caches/Aobus"),
+        )
+        self.assertEqual(
+            builddir.state_root(environ={"LOCALAPPDATA": "C:/Users/me/AppData/Local"}, system="Windows"),
+            Path("C:/Users/me/AppData/Local/Aobus"),
+        )
 
     def test_windows_state_root_honors_override_localappdata_and_home_fallback(self):
-        # Assert externally visible locations only: the precedence contract is
-        # compiler_cache.state_root's, and Windows consumes it unchanged.
         self.assertEqual(
             builddir.windows_state_root(environ={"AOBUS_STATE_ROOT": "C:/chosen"}),
             Path("C:/chosen"),
@@ -251,41 +67,8 @@ class BuildDirTest(unittest.TestCase):
         with mock.patch("pathlib.Path.home", return_value=Path("C:/Users/Alice")):
             self.assertEqual(builddir.windows_state_root(environ={}), Path("C:/Users/Alice/AppData/Local/Aobus"))
 
-    def test_windows_defaults_to_checkout_isolated_local_app_data(self):
-        environment = {
-            "LOCALAPPDATA": "C:/Users/Alice/AppData/Local",
-            "AOBUS_CHECKOUT_ID": "checkout-a",
-        }
 
-        root = builddir.windows_build_root(environ=environment, project_root=Path("Y:/"))
-
-        self.assertEqual(root.parent, Path("C:/Users/Alice/AppData/Local/Aobus/build"))
-        self.assertRegex(root.name, r"^[A-Za-z0-9._-]+-[0-9a-f]{12}$")
-        self.assertNotIn("out", root.parts)
-
-    def test_windows_shared_profile_uses_a_separate_root_only_when_effective(self):
-        for base in ({"AOBUS_STATE_ROOT": "C:/state"}, {"AOBUS_BUILD_ROOT": "D:/builds"}):
-            environment = {**base, "AOBUS_CHECKOUT_ID": "checkout-a"}
-            ordinary = builddir.windows_build_root(environ=environment, project_root=Path("Y:/"))
-            for effective in ("0", "1"):
-                with self.subTest(base=base, effective=effective):
-                    actual = builddir.windows_build_root(
-                        environ={**environment, "AOBUS_SHARED_WORKSPACES_EFFECTIVE": effective},
-                        project_root=Path("Y:/"),
-                    )
-                    self.assertEqual(actual, ordinary / "shared-workspaces-v1" if effective == "1" else ordinary)
-
-    def test_windows_build_root_overrides_state_root_but_keeps_checkout_isolation(self):
-        environment = {
-            "AOBUS_STATE_ROOT": "C:/ignored-state",
-            "AOBUS_BUILD_ROOT": "D:/fast-builds",
-            "AOBUS_CHECKOUT_ID": "checkout-a",
-        }
-
-        root = builddir.windows_build_root(environ=environment, project_root=Path("Y:/"))
-
-        self.assertEqual(root.parent, Path("D:/fast-builds"))
-
+class CheckoutKeyTest(unittest.TestCase):
     def test_checkout_key_is_stable_and_path_sensitive(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             first = Path(temp_dir) / "first" / "Aobus"
@@ -380,30 +163,78 @@ class BuildDirTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "AOBUS_CHECKOUT_ID"):
                 builddir.windows_checkout_key(root, environ={}, create_id=True)
 
-    def test_native_executable_suffix_is_profile_specific(self):
-        path = Path("build/test/ao_core_test")
-        self.assertEqual(builddir.executable(path, "posix"), path)
-        self.assertEqual(builddir.executable(path, "nt"), Path("build/test/ao_core_test.exe"))
 
-    def test_suffixes_combine_in_fixed_order(self):
-        with mock.patch.dict("os.environ", {}, clear=False):
-            os.environ.pop("BUILD_DIR", None)
-            os.environ.pop("AOBUS_BUILD_ROOT", None)
-            root = Path("/tmp/build") / builddir.PROJECT_ROOT.name
-            self.assertEqual(builddir.build_dir("debug", clang=True, os_name="posix"), root / "debug-clang")
-            self.assertEqual(builddir.build_dir("debug", asan=True, os_name="posix"), root / "debug-asan")
-            self.assertEqual(builddir.build_dir("debug", tsan=True, os_name="posix"), root / "debug-tsan")
-            self.assertEqual(
-                builddir.build_dir("debug", clang=True, asan=True, os_name="posix"),
-                root / "debug-clang-asan",
-            )
+class WindowsBuildRootTest(unittest.TestCase):
+    def test_windows_defaults_to_checkout_isolated_local_app_data(self):
+        environment = {
+            "LOCALAPPDATA": "C:/Users/Alice/AppData/Local",
+            "AOBUS_CHECKOUT_ID": "checkout-a",
+        }
 
-    def test_build_dir_env_always_wins(self):
-        # External tooling can redirect builds via BUILD_DIR.
-        with mock.patch.dict("os.environ", {"BUILD_DIR": "/host/custom-build"}):
-            self.assertEqual(builddir.build_dir("debug", asan=True), Path("/host/custom-build"))
-            self.assertEqual(builddir.tidy_dir(), Path("/host/custom-build"))
-            self.assertEqual(builddir.analyze_dir(), Path("/host/custom-build"))
+        root = builddir.windows_build_root(environ=environment, project_root=Path("Y:/"))
+
+        self.assertEqual(root.parent, Path("C:/Users/Alice/AppData/Local/Aobus/build"))
+        self.assertRegex(root.name, r"^[A-Za-z0-9._-]+-[0-9a-f]{12}$")
+        self.assertNotIn("out", root.parts)
+
+    def test_windows_build_root_overrides_state_root_but_keeps_checkout_isolation(self):
+        environment = {
+            "AOBUS_STATE_ROOT": "C:/ignored-state",
+            "AOBUS_BUILD_ROOT": "D:/fast-builds",
+            "AOBUS_CHECKOUT_ID": "checkout-a",
+        }
+
+        root = builddir.windows_build_root(environ=environment, project_root=Path("Y:/"))
+
+        self.assertEqual(root.parent, Path("D:/fast-builds"))
+
+
+class PlatformProfileTest(unittest.TestCase):
+    def test_linux_profile_owns_the_full_native_suite_and_clang(self):
+        profile = builddir.platform_profile("posix")
+
+        self.assertEqual(profile.name, "linux")
+        self.assertEqual(profile.compiler, "clang")
+        self.assertEqual(profile.executable_suffix, "")
+        self.assertEqual(profile.apps, ("cli", "tui", "gtk"))
+        self.assertEqual(profile.default_suites, ("core", "application", "backend", "gtk"))
+        self.assertEqual(
+            profile.all_suites,
+            ("core", "application", "backend", "tui", "cli", "gtk", "systemmedia", "tooling", "lint"),
+        )
+        self.assertEqual(profile.tsan_suites, ("core", "application", "backend", "gtk"))
+
+    def test_macos_is_a_native_posix_profile_distinct_from_linux(self):
+        # os.name is "posix" on macOS too, so only sys.platform separates them.
+        host_os = mock.Mock(environ=os.environ)
+        host_os.name = "posix"
+        with (
+            mock.patch("ao.core.builddir.os", host_os),
+            mock.patch("ao.core.builddir.sys.platform", "darwin"),
+        ):
+            profile = builddir.platform_profile()
+            self.assertEqual(profile.name, "macos")
+            self.assertEqual(profile.compiler, "clang")
+            self.assertEqual(profile.apps, ("cli", "tui", "appkit"))
+            self.assertEqual(profile.default_suites, ("core", "application", "backend", "tui"))
+            self.assertEqual(profile.all_suites, ("core", "application", "backend", "tui", "cli", "lint"))
+            self.assertEqual(profile.tsan_suites, ("core", "application", "backend"))
+            # An explicit os_name still selects the Linux profile.
+            self.assertEqual(builddir.platform_profile("posix").name, "linux")
+
+    def test_windows_profile_exposes_only_built_apps_and_suites(self):
+        profile = builddir.platform_profile("nt")
+        self.assertEqual(profile.name, "windows")
+        self.assertEqual(profile.compiler, "msvc")
+        self.assertEqual(profile.executable_suffix, ".exe")
+        self.assertEqual(profile.apps, ("cli", "tui", "winui"))
+        self.assertEqual(profile.default_suites, ("core", "application", "tui"))
+        self.assertEqual(profile.all_suites, ("core", "application", "tui", "cli", "tooling", "lint"))
+        self.assertEqual(profile.tsan_suites, ())
+        # The backend suite is compiled on Windows but never joins an
+        # unattended group; only an explicit selection runs it.
+        self.assertNotIn("backend", profile.default_suites)
+        self.assertNotIn("backend", profile.all_suites)
 
 
 if __name__ == "__main__":

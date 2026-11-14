@@ -139,24 +139,59 @@ class PruneTest(unittest.TestCase):
         )
 
 
-class WindowsWorkflowStorageTest(unittest.TestCase):
-    def test_disposable_builds_use_the_data_drive_and_sealing_follows_them(self):
+class NativeWorkflowStorageTest(unittest.TestCase):
+    def test_native_provisioning_seals_and_saves_the_bazel_tree_before_completion(self):
         workflow = (Path(vcpkg_binary_cache.__file__).resolve().parents[3] / ".github/workflows/ci.yml").read_text(
             encoding="utf-8"
         )
-        windows = workflow.split("  windows:\n", 1)[1]
-        environment = windows.split("    env:\n", 1)[1].split("    steps:\n", 1)[0]
-        self.assertIn("      AOBUS_BUILD_ROOT: D:\\aobus-build\n", environment)
-        self.assertIn("      AOBUS_STATE_ROOT: C:\\aobus-state\n", environment)
-        self.assertIn("VCPKG_BINARY_SOURCES: clear;files,C:/aobus-state/cache/vcpkg-binary,readwrite", environment)
-        seal = windows.split("      - name: Seal vcpkg binary cache\n", 1)[1].split("      - name:", 1)[0]
-        self.assertIn('--build-root "$env:AOBUS_BUILD_ROOT"', seal)
-        self.assertNotIn("$env:AOBUS_STATE_ROOT\\build", seal)
+        for name in ("macos", "windows"):
+            with self.subTest(job=name):
+                source = re.split(r"\n(?=  \w+:\n)", workflow.split(f"\n  {name}:\n", 1)[1], maxsplit=1)[0]
+                prepare = source.split("      - name: Prepare vcpkg binary cache\n", 1)[1].split("      - name:", 1)[0]
+                seal = source.split("      - name: Seal vcpkg binary cache\n", 1)[1].split("      - name:", 1)[0]
+                save = source.split("      - name: Save vcpkg binary cache\n", 1)[1].split("      - name:", 1)[0]
+                self.assertIn("        id: vcpkg-prepare\n", prepare)
+                self.assertNotIn("continue-on-error:", prepare)
+                self.assertLess(prepare.index("setup bazel"), prepare.index("deps provision"))
+                # Seal the tree actually provisioned, independent of its drive or root name.
+                provisioned = re.search(r"deps provision --path ([^\r\n]+)", prepare)[1].strip()
+                sealed = re.search(r"--build-root ([^\r\n]+)", seal)[1].strip()
+                self.assertEqual(sealed, provisioned)
+                self.assertIn("        id: vcpkg-cache-ready\n", seal)
+                self.assertIn("        continue-on-error: true\n", seal)
+                # Full provisioning may fail after vcpkg fills its cache but
+                # before later NuGet/LLVM admission. Neither step requires a
+                # successful provision; sealing still admits installed ABIs only.
+                self.assertEqual(
+                    seal.split("        if: ", 1)[1].splitlines()[0],
+                    "${{ !cancelled() && steps.vcpkg-prepare.outcome != 'skipped' }}",
+                )
+                self.assertIn("        continue-on-error: true\n", save)
+                condition = " ".join(
+                    save.split("        if: >-\n", 1)[1].split("        continue-on-error:", 1)[0].split()
+                )
+                self.assertEqual(
+                    condition,
+                    "${{ !cancelled() && steps.vcpkg-cache.outcome == 'success' && "
+                    "steps.vcpkg-cache-ready.outputs.ready == 'true' && "
+                    "steps.vcpkg-cache-ready.outputs.key != steps.vcpkg-cache.outputs.cache-matched-key }}",
+                )
+                self.assertIn("key: ${{ steps.vcpkg-cache-ready.outputs.key }}", save)
+                positions = [
+                    source.index(f"      - name: {step}\n")
+                    for step in (
+                        "Prepare vcpkg binary cache",
+                        "Seal vcpkg binary cache",
+                        "Save vcpkg binary cache",
+                        "Check Bazel completion",
+                    )
+                ]
+                self.assertEqual(positions, sorted(positions))
 
 
 @unittest.skipIf(os.name == "nt", "The CI key step runs in Bash; exercise it on a POSIX tooling host.")
 class WindowsWorkflowCacheTest(unittest.TestCase):
-    def _restore_plan(self, manifest: str = "current") -> list[str]:
+    def _restore_plan(self) -> list[str]:
         workflow = (Path(vcpkg_binary_cache.__file__).resolve().parents[3] / ".github/workflows/ci.yml").read_text(
             encoding="utf-8"
         )
@@ -171,7 +206,7 @@ class WindowsWorkflowCacheTest(unittest.TestCase):
                     **os.environ,
                     "ARCH": "X64",
                     "IMAGE": "image-a",
-                    "MANIFEST": manifest,
+                    "MANIFEST": "current",
                     "GITHUB_OUTPUT": str(output),
                 },
                 capture_output=True,
@@ -216,7 +251,6 @@ class WindowsWorkflowCacheTest(unittest.TestCase):
 
         self.assertEqual(plan[0], "vcpkg-files-v3-windows-X64-image-a-current-")
         self.assertEqual(self._restore(plan, [other_image, same_image]), same_image)
-        self.assertEqual(self._restore(self._restore_plan("changed"), [other_image, same_image]), same_image)
 
     def test_current_manifest_precedes_other_manifests_on_the_same_image(self):
         current = "vcpkg-files-v3-windows-X64-image-a-current-abis"
@@ -242,14 +276,6 @@ class WindowsWorkflowCacheTest(unittest.TestCase):
         self.assertEqual(self._restore(plan, [v1, v2, v3]), v3)
         self.assertEqual(self._restore(plan, [v1, v2]), v2)
         self.assertEqual(self._restore(plan, [v1]), v1)
-
-    def test_first_migration_cannot_select_same_image_across_legacy_v2_manifests(self):
-        same_image_old_manifest = "vcpkg-files-v2-windows-X64-old-image-a-abis"
-        newer_foreign = "vcpkg-files-v2-windows-X64-current-image-b-abis"
-
-        # Legacy v2 puts the manifest first: without v3 or same-image v1,
-        # migration has only the broad v2 fallback, not an image-only prefix.
-        self.assertEqual(self._restore(self._restore_plan(), [newer_foreign, same_image_old_manifest]), newer_foreign)
 
     def test_fallbacks_never_cross_runner_architecture(self):
         foreign = "vcpkg-files-v3-windows-X64-image-b-other-abis"

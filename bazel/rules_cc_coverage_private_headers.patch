@@ -1,0 +1,25 @@
+diff --git a/cc/private/compile/cc_compilation_helper.bzl b/cc/private/compile/cc_compilation_helper.bzl
+--- a/cc/private/compile/cc_compilation_helper.bzl
++++ b/cc/private/compile/cc_compilation_helper.bzl
+@@ -661,7 +661,20 @@
+         system_includes = depset(system_include_dirs_for_context),
+         includes = depset(include_dirs_for_context),
+         local_includes = depset(local_includes),
+-        virtual_to_original_headers = depset(virtual_to_original_headers),
++        # Local Aobus coverage delta: the main compilation context must also
++        # carry the private implementation dependencies' virtual-to-original
++        # header mappings; upstream drops them, so coverage cannot remap
++        # virtual includes of implementation-only dependencies to their
++        # original sources. Remove this hunk when upstream rules_cc fixes it.
++        virtual_to_original_headers = depset(
++            virtual_to_original_headers,
++            transitive = [
++                dep.virtual_to_original_headers()
++                if hasattr(dep, "virtual_to_original_headers")
++                else dep._virtual_to_original_headers
++                for dep in implementation_deps
++            ] if config.coverage_enabled else [],
++        ),
+         dependent_cc_compilation_contexts = dependent_cc_compilation_contexts,
+         non_code_inputs = additional_inputs,
+         defines = depset(defines),

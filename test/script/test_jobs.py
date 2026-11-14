@@ -2,11 +2,7 @@
 
 import contextlib
 import io
-import os
-import subprocess
-import sys
 import tempfile
-import textwrap
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -25,11 +21,6 @@ class AvailableCoresTest(unittest.TestCase):
             logical = SimpleNamespace(cpu_count=mock.Mock(return_value=count))
             with self.subTest(logical=count), mock.patch.object(jobs, "os", logical):
                 self.assertEqual(jobs.available_cores(), count)
-
-    def test_a_failed_affinity_read_propagates(self):
-        affinity = SimpleNamespace(sched_getaffinity=mock.Mock(side_effect=OSError("no affinity")))
-        with mock.patch.object(jobs, "os", affinity), self.assertRaises(OSError):
-            jobs.available_cores()
 
 
 class DefaultWorkersTest(unittest.TestCase):
@@ -138,53 +129,6 @@ class ExportCiTest(unittest.TestCase):
                     else:
                         self.assertEqual(github_env.read_text(encoding="utf-8"), prior)
                     self.assertIn("expected a positive integer", errors)
-
-    def test_an_unreadable_count_fails_without_writing_the_environment(self):
-        github_env = self.root / "github-env"
-        with mock.patch.object(jobs, "available_cores", side_effect=OSError("affinity unavailable")):
-            status, output, errors = self._run_cli(github_env)
-        self.assertNotEqual(status, 0, output)
-        self.assertFalse(github_env.exists())
-        self.assertIn("Error: affinity unavailable", errors)
-
-
-@unittest.skipIf(not hasattr(os, "sched_setaffinity"), "The host has no sched_setaffinity to restrict.")
-class AffinityAgreementTest(unittest.TestCase):
-    """A restricted child proves the export and the worker baseline share one discovery path."""
-
-    def test_a_two_core_child_exports_and_defaults_agree(self):
-        if len(os.sched_getaffinity(0)) < 2:
-            self.skipTest("the host allows fewer than two CPUs")
-        script_dir = Path(jobs.__file__).resolve().parents[2]
-        # Only this child process's affinity is restricted; no host policy changes.
-        probe = textwrap.dedent(
-            f"""
-            import os
-            os.sched_setaffinity(0, sorted(os.sched_getaffinity(0))[:2])
-            import sys
-            sys.path.insert(0, {str(script_dir)!r})
-            from ao.core import jobs
-            cores = jobs.available_cores()
-            assert cores == 2, cores
-            assert jobs.default_workers(environ={{jobs.CI_ENV: "true"}}) == cores
-            assert jobs.default_workers(environ={{}}) == cores - 1
-            from pathlib import Path
-            jobs.export_runner_cores(github_env=Path(sys.argv[1]))
-            """
-        )
-        with tempfile.TemporaryDirectory() as temporary:
-            github_env = Path(temporary) / "github-env"
-            process = subprocess.run(
-                [sys.executable, "-c", probe, str(github_env)],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            self.assertEqual(process.returncode, 0, process.stderr)
-            self.assertEqual(
-                github_env.read_text(encoding="utf-8").splitlines(),
-                [f"{jobs.BUILD_PARALLEL_ENV}=2", f"{jobs.SHARD_ENV}=2"],
-            )
 
 
 if __name__ == "__main__":

@@ -24,7 +24,6 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <future>
@@ -46,6 +45,23 @@ namespace ao::systemmedia::test
     constexpr auto kPropertiesInterface = "org.freedesktop.DBus.Properties";
     constexpr auto kBusInterface = "org.freedesktop.DBus";
     constexpr auto kNamePrefix = "org.mpris.MediaPlayer2.aobus.tui.instance";
+
+    std::string tuiExecutablePath()
+    {
+#ifdef AOBUS_BAZEL_TUI_EXECUTABLE
+      auto const path = ao::test::resolveBazelTestRunfile("app/tui/aobus-tui");
+
+      if (path.empty() || !std::filesystem::is_regular_file(path))
+      {
+        throw std::runtime_error{"TUI product runfile is missing: " + path};
+      }
+
+      // The child changes cwd to its owned library; retain an absolute executable.
+      return std::filesystem::absolute(path).string();
+#else
+      return AOBUS_TUI_EXECUTABLE;
+#endif
+    }
 
     class [[nodiscard]] TerminalDescriptor final
     {
@@ -152,7 +168,7 @@ namespace ao::systemmedia::test
         }
 
         auto arguments =
-          std::vector<std::string>{AOBUS_TUI_EXECUTABLE, "--library", library.string(), "--cover-art-mode", "off"};
+          std::vector<std::string>{tuiExecutablePath(), "--library", library.string(), "--cover-art-mode", "off"};
 
         if (!mode.empty())
         {

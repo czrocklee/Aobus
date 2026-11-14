@@ -1,0 +1,32 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# ao_windows_platform: the Windows stream plumbing shared by the WinUI
+# frontend, matching the CMake ao_windows_platform target. The public system
+# libraries of that target become link options here.
+cc_library(
+    name = "windows_platform",
+    srcs = ["MemoryRandomAccessStream.cpp"],
+    hdrs = ["include/ao/winui/MemoryRandomAccessStream.h"],
+    includes = ["include"],
+    linkopts = [
+        "ole32.lib",
+        "runtimeobject.lib",
+        "shcore.lib",
+    ],
+    linkstatic = True,
+    target_compatible_with = ["@platforms//os:windows"],
+    visibility = [
+        "//app/windows-winui:__pkg__",
+        "//test:__pkg__",
+    ],
+    # Share the actual C++/WinRT projection with the WinUI consumer. The
+    # installed Windows SDK headers can carry a different runtime ABI.
+    deps = [
+        "//app/windows-winui:generated",
+        "//bazel:compile_contract",
+    ],
+)
+
+exports_files(["utf8-process.manifest"])

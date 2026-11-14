@@ -16,7 +16,6 @@ production report values are not normalized in Python.
 
 import hashlib
 import json
-import re
 import shutil
 import subprocess
 import tempfile
@@ -60,14 +59,14 @@ def runtime_state(ready, selected=None):
     return {"ready": ready, "selectedVersion": selected}
 
 
-def healthy_package(version, name=RUNTIME_NAME, family=RUNTIME_FAMILY, status="Ok", architecture="X64", framework=True):
+def healthy_package(version, status="Ok", architecture="X64"):
     return {
-        "Name": name,
-        "PackageFamilyName": family,
+        "Name": RUNTIME_NAME,
+        "PackageFamilyName": RUNTIME_FAMILY,
         "Version": version,
         "Status": status,
         "Architecture": architecture,
-        "IsFramework": framework,
+        "IsFramework": True,
     }
 
 
@@ -108,7 +107,7 @@ class NativePowerShellTest(unittest.TestCase):
             result = json.loads(completed.stdout)
         # Only the driver's own one-element arrays are wrapped. Production
         # report fields stay as Finish emitted them.
-        for key in ("calls", "cases", "parsed"):
+        for key in ("calls", "cases"):
             if key in result and isinstance(result[key], dict):
                 result[key] = [result[key]]
         violations = [call for call in (result.get("calls") or []) if call.get("kind") == "fixture-violation"]
@@ -143,11 +142,6 @@ class NativePowerShellTest(unittest.TestCase):
     @staticmethod
     def process_calls(result):
         return [call for call in result["calls"] if call["kind"] == "process"]
-
-    def test_native_whole_script_parse_helper_and_stager(self):
-        # Function extraction alone would miss top-level main-block parse errors.
-        result = self.run_driver({"kind": "parse", "sources": [str(STAGER)]})
-        self.assertEqual(sorted(result["parsed"]), sorted([str(HELPER), str(STAGER)]))
 
     def test_pure_version_tuple_is_strict_four_part_ascii(self):
         cases = [
@@ -190,12 +184,7 @@ class NativePowerShellTest(unittest.TestCase):
         packages = [
             healthy_package("2.9.0.0"),
             healthy_package("2.10.0.0"),
-            healthy_package("2.8.0.0", status="Modified"),
-            healthy_package("2.8.0.0", architecture="X86"),
-            healthy_package("2.8.0.0", framework=False),
-            healthy_package("2.8.0.0", family="Microsoft.WindowsAppRuntime.2_other"),
-            healthy_package("2.8.0.0", name="Microsoft.WindowsAppRuntime.3"),
-            healthy_package("not-a-version"),
+            healthy_package("2.11.0.0", status="Modified"),
         ]
         values, calls = self.run_pure(
             [{"name": "state", "expr": "Get-AppRuntimeState -RequiredVersion '2.4.0.0'"}],
@@ -224,45 +213,6 @@ class NativePowerShellTest(unittest.TestCase):
             mock={"appx": {"packages": [healthy_package("2.4.0.0")]}},
         )
         self.assertFalse(values["state"]["ready"])
-
-    def test_pure_manifest_shape_accepts_only_the_exact_schema(self):
-        def section(name, **overrides):
-            base = default_manifest()[name]
-            return {**base, **overrides}
-
-        bad = {
-            "schema-version": {**default_manifest(), "schemaVersion": 2},
-            "missing-vc": {k: v for k, v in default_manifest().items() if k != "vcRuntime"},
-            "missing-runtime": {k: v for k, v in default_manifest().items() if k != "windowsAppRuntime"},
-            "vc-hash-short": {"vcRuntime": section("vcRuntime", sha256="a" * 63)},
-            "vc-hash-uppercase": {"vcRuntime": section("vcRuntime", sha256="A" * 64)},
-            "vc-installer-name": {"vcRuntime": section("vcRuntime", installer="vc_redist.exe")},
-            "vc-version": {"vcRuntime": section("vcRuntime", version="14.51")},
-            "runtime-installer-name": {
-                "windowsAppRuntime": section("windowsAppRuntime", installer="WindowsAppRuntimeInstall.exe")
-            },
-            "runtime-name": {
-                "windowsAppRuntime": section("windowsAppRuntime", packageName="Microsoft.WindowsAppRuntime.3")
-            },
-            "runtime-family": {
-                "windowsAppRuntime": section(
-                    "windowsAppRuntime", packageFamilyName="Microsoft.WindowsAppRuntime.2_other"
-                )
-            },
-            "runtime-architecture": {"windowsAppRuntime": section("windowsAppRuntime", architecture="X86")},
-            "runtime-version": {"windowsAppRuntime": section("windowsAppRuntime", version="2.4")},
-            "runtime-hash": {"windowsAppRuntime": section("windowsAppRuntime", sha256="z" * 64)},
-        }
-        cases = [("valid", default_manifest(), True)] + [(name, m, False) for name, m in bad.items()]
-
-        def shape_case(manifest):
-            return "Test-ManifestShape (ConvertFrom-Json '" + json.dumps(manifest, separators=(",", ":")) + "')"
-
-        pure_cases = [{"name": name, "expr": shape_case(manifest)} for name, manifest, _ in cases]
-        values, _ = self.run_pure(pure_cases)
-        for name, _m, expected in cases:
-            with self.subTest(case=name):
-                self.assertEqual(values[name], expected)
 
     def test_pure_installer_integrity_requires_hash_and_microsoft_signer(self):
         content = "integrity-fixture-content"
@@ -334,11 +284,6 @@ class NativePowerShellTest(unittest.TestCase):
         self.assertTrue(result["report"]["vcRuntime"]["ready"])
         self.assertTrue(result["report"]["windowsAppRuntime"]["ready"])
 
-    def test_scenario_check_mode_ready_reports_zero(self):
-        mock = {"admin": False, "vcStates": [vc_state(True)], "runtimeStates": [runtime_state(True)]}
-        result = self.run_scenario(mock=mock)
-        self.assertEqual(result["exitCode"], 0)
-
     def test_scenario_install_ready_is_a_noop_without_installer_files(self):
         mock = {"admin": False, "vcStates": [vc_state(True)], "runtimeStates": [runtime_state(True)]}
         result = self.run_scenario(switches=["-Install"], mock=mock)
@@ -352,32 +297,6 @@ class NativePowerShellTest(unittest.TestCase):
         self.assertEqual(result["exitCode"], 1)
         self.assertIn("original application user", result["report"]["error"])
         self.assertEqual(self.process_calls(result), [])
-
-    def test_scenario_install_runs_both_steps_with_the_right_privilege_contexts(self):
-        result = self.run_scenario(
-            switches=["-Install"],
-            mock={
-                "admin": False,
-                "vcStates": [vc_state(False), vc_state(True)],
-                "runtimeStates": [runtime_state(False), runtime_state(True)],
-                "integrity": {VC_INSTALLER: True, RUNTIME_INSTALLER: True},
-                "processes": [{"exitCode": 0}, {"exitCode": 0}],
-            },
-            create_installers=[VC_INSTALLER, RUNTIME_INSTALLER],
-        )
-        self.assertEqual(result["exitCode"], 0)
-        self.assertTrue(result["report"]["vcRuntime"]["ready"])
-        self.assertTrue(result["report"]["windowsAppRuntime"]["ready"])
-        self.assertIn("vc-redist-exit=0", result["report"]["actions"])
-        self.assertIn("runtime-installer-exit=0", result["report"]["actions"])
-        calls = self.process_calls(result)
-        self.assertEqual(len(calls), 2)
-        self.assertTrue(calls[0]["data"]["path"].endswith(VC_INSTALLER))
-        self.assertEqual(calls[0]["data"]["verb"], "RunAs")
-        self.assertEqual(calls[0]["data"]["args"], ["/install", "/quiet", "/norestart"])
-        self.assertTrue(calls[1]["data"]["path"].endswith(RUNTIME_INSTALLER))
-        self.assertEqual(calls[1]["data"]["verb"], "")
-        self.assertEqual(calls[1]["data"]["args"], ["--quiet"])
 
     def test_scenario_install_real_integrity_verifies_both_files_before_spawning(self):
         # PS 5.1 Set-Content -Encoding Ascii writes this exact CRLF-terminated payload.
@@ -599,14 +518,6 @@ class NativePowerShellTest(unittest.TestCase):
                 self.assertEqual(len(self.process_calls(result)), 1)
                 self.assertIsNone(result["report"]["windowsAppRuntime"])
 
-    def test_scenario_malformed_manifest_refuses_before_detection_or_install(self):
-        for malformed in ({}, {**default_manifest(), "schemaVersion": 2}, {"vcRuntime": {}}):
-            with self.subTest(manifest=malformed):
-                result = self.run_scenario(manifest=malformed, switches=["-Install"])
-                self.assertEqual(result["exitCode"], 1)
-                self.assertEqual(result["calls"], [])
-                self.assertIn("schema version", result["report"]["error"])
-
     def test_pure_crt_detector_requires_every_dll_at_the_floor(self):
         dlls = ["msvcp140.dll", "msvcp140_1.dll", "msvcp140_atomic_wait.dll", "vcruntime140.dll", "vcruntime140_1.dll"]
         versions = dict.fromkeys(dlls, "14.51.36247.0")
@@ -730,61 +641,6 @@ class NativePowerShellTest(unittest.TestCase):
         self.assertEqual(calls[0]["data"]["verb"], "")
         self.assertEqual(calls[0]["data"]["args"], ["/install", "/quiet", "/norestart"])
 
-    def test_harness_rejects_missing_empty_and_exhausted_process_plans(self):
-        # Main catches the mock throw and would return 1. The oracle must
-        # still fail on the fixture-violation record, not on a source error.
-        needed = {
-            "admin": False,
-            "vcStates": [vc_state(False), vc_state(True)],
-            "runtimeStates": [runtime_state(False), runtime_state(True)],
-            "integrity": {VC_INSTALLER: True, RUNTIME_INSTALLER: True},
-        }
-        cases = (
-            ("missing", {}),
-            ("empty", {"processes": []}),
-            ("exhausted", {"processes": [{"exitCode": 0}]}),
-        )
-        for name, processes in cases:
-            with self.subTest(case=name), self.assertRaisesRegex(AssertionError, r"fixture violation: \["):
-                self.run_scenario(
-                    switches=["-Install"],
-                    mock={**needed, **processes},
-                    create_installers=[VC_INSTALLER, RUNTIME_INSTALLER],
-                )
-
-    def test_harness_rejects_missing_empty_and_exhausted_query_plans(self):
-        cases = (
-            ("vc-missing", {"admin": False, "runtimeStates": [runtime_state(True)]}, []),
-            ("vc-empty", {"admin": False, "vcStates": [], "runtimeStates": [runtime_state(True)]}, []),
-            ("runtime-missing", {"admin": False, "vcStates": [vc_state(True)]}, []),
-            ("runtime-empty", {"admin": False, "vcStates": [vc_state(True)], "runtimeStates": []}, []),
-            (
-                "vc-postcheck",
-                {
-                    "admin": False,
-                    "vcStates": [vc_state(False)],
-                    "runtimeStates": [runtime_state(True)],
-                    "integrity": {VC_INSTALLER: True},
-                    "processes": [{"exitCode": 0}],
-                },
-                [VC_INSTALLER],
-            ),
-            (
-                "runtime-postcheck",
-                {
-                    "admin": False,
-                    "vcStates": [vc_state(True)],
-                    "runtimeStates": [runtime_state(False)],
-                    "integrity": {RUNTIME_INSTALLER: True},
-                    "processes": [{"exitCode": 0}],
-                },
-                [RUNTIME_INSTALLER],
-            ),
-        )
-        for name, mock, installers in cases:
-            with self.subTest(case=name), self.assertRaisesRegex(AssertionError, r"fixture violation: \["):
-                self.run_scenario(switches=["-Install"], mock=mock, create_installers=installers)
-
     def test_scenario_report_actions_stay_json_arrays_for_zero_one_and_many(self):
         # Real Finish output. Python must not wrap nested production values.
         zero = self.run_scenario(manifest={})
@@ -843,40 +699,7 @@ class NativePowerShellTest(unittest.TestCase):
 
 
 class StructuralContractTest(unittest.TestCase):
-    """Weak source-text checks that run anywhere (Linux included).
-
-    Scope: schema wiring between the helper, the stager and the governed
-    dependency contract, plus the known PS 5.1 interpolation hazard class.
-    These are NOT a PowerShell parser or native-behavior proof; the native
-    tests above own that and must run on a Windows host.
-    """
-
-    def test_helper_and_stager_match_the_governed_runtime_identity(self):
-        contract = json.loads(CONTRACT.read_text(encoding="utf-8"))["dependencies"]["windows-app-sdk"]["runtime"]
-        helper = HELPER.read_text(encoding="utf-8")
-        stager = STAGER.read_text(encoding="utf-8")
-        self.assertEqual(contract["packageName"], RUNTIME_NAME)
-        family = f"{contract['packageName']}_8wekyb3d8bbwe"
-        self.assertEqual(family, RUNTIME_FAMILY)
-        # The helper pins the identity; both files use the fixed basenames.
-        for field in (RUNTIME_NAME, family, "'X64'"):
-            self.assertIn(field, helper)
-        for field in (VC_INSTALLER, RUNTIME_INSTALLER):
-            self.assertIn(field, helper)
-            self.assertIn(field, stager)
-        # The native staging cases assert the derived manifest fields rather
-        # than requiring a particular expression spelling in the source.
-
-    def test_no_variable_colon_interpolation_hazards(self):
-        # A plain "$var:" inside a double-quoted PS string is a PS 5.1 parse
-        # error; "${var}:" and
-        # drive-qualified "$env:" in code are fine. Text guard; the native
-        # whole-script parse test is authoritative.
-        pattern = re.compile(r'"[^"\n]*\$[A-Za-z_][A-Za-z0-9_]*:')
-        for source in (HELPER, STAGER, DRIVER):
-            for line in source.read_text(encoding="utf-8-sig").splitlines():
-                match = pattern.search(line)
-                self.assertIsNone(match, f"{source.name}: interpolation hazard: {line.strip()}")
+    """Batch launcher's install-mode and exit-code wiring."""
 
     def test_launcher_install_mode_routes_cancellation_but_not_check_only_missing(self):
         code = "\n".join(

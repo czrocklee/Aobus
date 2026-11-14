@@ -1,81 +1,32 @@
-"""Shared clang-tidy execution engine for the tidy and analyze commands.
+"""Shared native analysis scope, source ownership and verified SDK descriptors.
 
-Owns everything the two flows have in common: compile database provisioning, Nix system
-include discovery, scope resolution (changed files / folders / --all / explicit files),
-and the parallel per-file runner with progress reporting.
+Bazel owns compile commands, header inputs and generated artifacts. This module
+never configures a product, reads a CMake cache or invents a compile database.
 """
 
 import argparse
-import concurrent.futures
-import json
 import os
-import posixpath
-import re
-import shlex
-import subprocess
 import sys
-import tempfile
-from collections.abc import Callable, Iterator
-from contextvars import copy_context
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
-from typing import Literal
 
-from . import builddir, buildlock, cmakecache, compiler_cache, gitfiles, phases, workspace_cache
-from .dedup import DIAGNOSTIC_RE
-from .jobs import build_workers, default_workers
-from .paths import PROJECT_ROOT, absolute_path
+from . import builddir, gitfiles, windows_llvm_sdk
+from .jobs import default_workers
+from .paths import absolute_path
 from .proc import die
+from .tidypolicy import windows_analysis_arguments as windows_analysis_arguments
 
-# The pinned Windows LLVM SDK identity lives in one manifest shared with
-# cmake/LlvmSdk.cmake; the archive name, URL, and the Clang resource major are
-# derived from the pinned version.
-LLVM_SDK_MANIFEST = PROJECT_ROOT / "script" / "ao" / "windows-llvm-sdk.json"
-LLVM_SDK_COMPLETION_MARKER = ".aobus-llvm-sdk-complete"
+LLVM_SDK_MANIFEST = windows_llvm_sdk.MANIFEST
+LLVM_SDK_COMPLETION_MARKER = windows_llvm_sdk.MARKER
 
 
 @cache
-def windows_llvm_sdk_manifest() -> tuple[str, str, tuple[str, ...]]:
-    """Return (version, archiveSha256, requiredFiles) from the shared manifest.
-
-    The required file list gains the Clang resource include derived from the
-    pinned version's major, mirroring the CMake module's evaluation.
-    """
+def windows_llvm_sdk_manifest() -> windows_llvm_sdk.Manifest:
     try:
-        manifest = json.loads(LLVM_SDK_MANIFEST.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError) as error:
-        raise die(f"cannot read the Windows LLVM SDK manifest {LLVM_SDK_MANIFEST}: {error}") from None
-    except json.JSONDecodeError as error:
-        raise die(f"the Windows LLVM SDK manifest {LLVM_SDK_MANIFEST} is not valid JSON: {error}") from None
-    version = manifest.get("version") if isinstance(manifest, dict) else None
-    archive_sha256 = manifest.get("archiveSha256") if isinstance(manifest, dict) else None
-    required_files = manifest.get("requiredFiles") if isinstance(manifest, dict) else None
-    if (
-        not isinstance(version, str)
-        or re.fullmatch(r"[0-9]+[.][0-9]+[.][0-9]+", version) is None
-        or not isinstance(archive_sha256, str)
-        or re.fullmatch(r"[0-9a-f]{64}", archive_sha256) is None
-        or not isinstance(required_files, list)
-        or not required_files
-        or any(
-            not isinstance(entry, str)
-            or re.fullmatch(r"[A-Za-z0-9_.+-]+(/[A-Za-z0-9_.+-]+)*", entry) is None
-            or any(part in (".", "..") for part in entry.split("/"))
-            for entry in required_files
-        )
-    ):
-        raise die(
-            f"the Windows LLVM SDK manifest {LLVM_SDK_MANIFEST} needs a '<major>.<minor>.<patch>' "
-            "'version', a 64-digit lowercase-hex 'archiveSha256', and a non-empty "
-            "'requiredFiles' array of portable relative SDK paths "
-            "(slash-separated letters, digits, '_', '.', '+', '-'; no '.' or '..' components)"
-        )
-    return (
-        version,
-        archive_sha256,
-        (*required_files, f"lib/clang/{version.split('.', 1)[0]}/include/stddef.h"),
-    )
+        return windows_llvm_sdk.read_manifest(LLVM_SDK_MANIFEST)
+    except windows_llvm_sdk.WindowsLlvmSdkError as error:
+        raise die(str(error)) from None
 
 
 def default_jobs() -> int:
@@ -83,24 +34,19 @@ def default_jobs() -> int:
 
 
 def add_scope_arguments(parser: argparse.ArgumentParser, verb: str) -> None:
-    """Common scope and runner options shared by tidy and analyze."""
     parser.add_argument("files", nargs="*", metavar="file", help=f"explicit files to {verb}")
     parser.add_argument("--all", action="store_true", help=f"{verb} every source in the project folders")
     parser.add_argument(
-        "--folder", action="append", default=[], metavar="<dir>", help="all files under <dir> (repeatable)"
+        "--folder", action="append", default=[], metavar="<dir>", help="all files under directory (repeatable)"
     )
-    parser.add_argument("--commit", metavar="<rev>", help="changed files since <rev> + working tree + untracked")
-    parser.add_argument("--check", metavar="<name>", help="run only the specified check")
-    parser.add_argument("--debug", action="store_true", help="show debug info (config, system includes)")
-    parser.add_argument("-o", "--output", metavar="<file>", help="write diagnostics to <file>")
     parser.add_argument(
-        "-j",
-        "--jobs",
-        type=int,
-        default=default_jobs(),
-        help="parallel jobs (default: every core in CI, nproc - 1 locally)",
+        "--commit", metavar="<rev>", help="changed files since revision plus working tree and untracked"
     )
-    parser.add_argument("-p", "--path", metavar="<dir>", help="build directory with compile_commands.json")
+    parser.add_argument("--check", metavar="<name>", help="run only the specified check")
+    parser.add_argument("--debug", action="store_true", help="show analysis evidence/configuration")
+    parser.add_argument("-o", "--output", metavar="<file>", help="write diagnostics to file")
+    parser.add_argument("-j", "--jobs", type=int, default=default_jobs(), help="parallel native analysis workers")
+    parser.add_argument("-p", "--path", metavar="<dir>", help="external Bazel analysis tree (honors BUILD_DIR)")
 
 
 def resolve_scope(
@@ -110,7 +56,6 @@ def resolve_scope(
     *,
     suffixes: tuple[str, ...] = gitfiles.CPP_SUFFIXES,
 ) -> tuple[list[str], bool]:
-    """Return (files, explicit) where files are repo-relative or absolute paths."""
     if (prepared := getattr(args, "_resolved_sources", None)) is not None:
         return list(prepared), bool(args.files)
     if args.files:
@@ -118,245 +63,21 @@ def resolve_scope(
     if args.all:
         print(f"{label} all sources in: {' '.join(all_folders)}", file=sys.stderr)
         files = gitfiles.find_sources(all_folders, suffixes=suffixes)
+        if suffixes == gitfiles.SOURCE_SUFFIXES:
+            files = sorted(set(files).union(gitfiles.root_bazel_files()))
     elif args.folder:
         print(f"{label} folders: {' '.join(args.folder)}", file=sys.stderr)
         files = gitfiles.find_sources(args.folder, suffixes=suffixes)
     else:
         base = gitfiles.diff_base(args.commit)
-        print(
-            f"No files specified — using git diff {base}..HEAD + working tree + staged + untracked",
-            file=sys.stderr,
-        )
+        print(f"No files specified — using git diff {base}..HEAD + working tree + staged + untracked", file=sys.stderr)
         files = gitfiles.changed_files(base, suffixes=suffixes)
     return files, False
 
 
-def ensure_compile_db(
-    build_dir: Path,
-    configure_args: list[str] | None = None,
-    *,
-    preset: str | None = None,
-    reconfigure_preset: bool = False,
-) -> None:
-    """Provision a compile DB, optionally refreshing a dedicated preset-owned tree."""
-    with buildlock.build_tree_lock(build_dir):
-        _ensure_compile_db(
-            build_dir,
-            configure_args,
-            preset=preset,
-            reconfigure_preset=reconfigure_preset,
-        )
-
-
-def _ensure_compile_db(
-    build_dir: Path,
-    configure_args: list[str] | None = None,
-    *,
-    preset: str | None = None,
-    reconfigure_preset: bool = False,
-) -> None:
-    database = build_dir / "compile_commands.json"
-    database_existed = database.is_file()
-    try:
-        workspace = workspace_cache.prepare(build_dir)
-    except workspace_cache.WorkspaceCacheError as exc:
-        raise die(str(exc)) from exc
-    launcher_args = compiler_cache.cmake_launcher_arguments(build_dir=build_dir)
-    cache_args = [*launcher_args, *workspace.cmake_arguments]
-    cmake_build_dir = workspace.compiler_build_dir or build_dir
-    if database_existed and not reconfigure_preset and not cache_args:
-        return
-
-    if reconfigure_preset:
-        selected_preset = preset or builddir.preset("debug")
-        action = "Refreshing" if database_existed else "Creating"
-        print(f"{action} compile_commands.json with the {selected_preset} preset...")
-        if selected_preset == builddir.tidy_preset("nt"):
-            print(
-                "  The first Windows tidy configure downloads and verifies the pinned LLVM SDK; "
-                "later runs reuse the local Aobus cache."
-            )
-        configure = [
-            "cmake",
-            "-S",
-            str(workspace.source_dir),
-            "--preset",
-            selected_preset,
-            "-B",
-            str(cmake_build_dir),
-        ]
-        if selected_preset == builddir.tidy_preset("nt"):
-            # This dedicated tree must follow current platform defaults even
-            # after a preset stops overriding an AOBUS_BUILD_* cache option.
-            configure += ["-U", "AOBUS_BUILD_*"]
-    elif (build_dir / "CMakeCache.txt").is_file():
-        if database_existed:
-            print(f"Updating compiler-cache launchers in {build_dir}...")
-        else:
-            print("compile_commands.json missing, running cmake configure...")
-        configure = ["cmake", "-S", str(workspace.source_dir), "-B", str(cmake_build_dir)]
-    else:
-        print("compile_commands.json missing, running cmake configure...")
-        configure = [
-            "cmake",
-            "-S",
-            str(workspace.source_dir),
-            "--preset",
-            preset or builddir.preset("debug"),
-            "-B",
-            str(cmake_build_dir),
-        ]
-    configure += configure_args or []
-    configure += cache_args
-    # The logical analysis tree owns this configure cost even when this helper
-    # provisions a normal debug tree's compile database; the record claims no
-    # actual preset name. A configure failure ends the phase through die().
-    with phases.measure("configure", tree="tidy"):
-        _run_tail(configure, "configure")
-    print("Configure done.")
-    if not database.is_file():
-        raise die(f"configure did not generate {database}")
-
-    print("Generating required headers (gperf)...")
-    with phases.measure("generated-headers", tree="tidy"):
-        try:
-            workers = build_workers()
-        except ValueError as error:
-            raise die(str(error)) from error
-        _run_tail(
-            [
-                "cmake",
-                "--build",
-                str(cmake_build_dir),
-                "--target",
-                "aobus_generated_headers",
-                "--parallel",
-                str(workers),
-            ],
-            "header generation build",
-        )
-    print("Generated headers are ready.")
-
-
-def _cmake_cache(build_dir: Path) -> dict[str, str]:
-    try:
-        return {key: value.strip() for key, value in cmakecache.read_entries(build_dir / "CMakeCache.txt")}
-    except OSError:
-        return {}
-
-
-def llvm_sdk_root(build_dir: Path, *, os_name: str | None = None) -> Path:
-    """Return the exact configured Windows SDK root without consulting PATH."""
-    if builddir.platform_profile(os_name).name != "windows":
-        raise die("the downloaded LLVM SDK root is only defined for native Windows tidy builds.")
-    configured = _cmake_cache(build_dir).get("AOBUS_LLVM_SDK_RESOLVED_ROOT")
-    if not configured:
-        raise die(
-            f"pinned LLVM SDK root is missing from {build_dir / 'CMakeCache.txt'}; "
-            f"reconfigure the {builddir.tidy_preset(os_name)} preset."
-        )
-    root = Path(configured)
-    return root if root.is_absolute() else absolute_path(build_dir / root)
-
-
-def llvm_sdk_version(build_dir: Path, *, os_name: str | None = None) -> str:
-    """Return the exact LLVM SDK version recorded by the Windows tidy configure."""
-    if builddir.platform_profile(os_name).name != "windows":
-        raise die("the downloaded LLVM SDK version is only defined for native Windows tidy builds.")
-    configured = _cmake_cache(build_dir).get("AOBUS_LLVM_SDK_RESOLVED_VERSION")
-    if not configured:
-        raise die(
-            f"pinned LLVM SDK version is missing from {build_dir / 'CMakeCache.txt'}; "
-            f"reconfigure the {builddir.tidy_preset(os_name)} preset."
-        )
-    pinned_version, _, _ = windows_llvm_sdk_manifest()
-    if configured != pinned_version:
-        raise die(
-            f"configured LLVM SDK version {configured} does not match the portal pin "
-            f"{pinned_version}; reconfigure the {builddir.tidy_preset(os_name)} preset."
-        )
-    return configured
-
-
-def ensure_windows_llvm_sdk(build_dir: Path) -> None:
-    """Configure the pinned SDK tree when a native Windows tool is not ready."""
-    if builddir.platform_profile().name != "windows":
-        return
-    pinned_version, pinned_sha256, required_files = windows_llvm_sdk_manifest()
-    snapshot = _cmake_cache(build_dir)
-    root_value = snapshot.get("AOBUS_LLVM_SDK_RESOLVED_ROOT")
-    version_value = snapshot.get("AOBUS_LLVM_SDK_RESOLVED_VERSION")
-    preprovisioned_root = snapshot.get("AOBUS_LLVM_SDK_ROOT")
-    root = Path(root_value) if root_value else None
-    if root is not None and not root.is_absolute():
-        root = absolute_path(build_dir / root)
-    if version_value == pinned_version and root is not None:
-        complete = all((root / relative).is_file() for relative in required_files)
-        if complete and preprovisioned_root:
-            return
-        if complete:
-            marker = root / LLVM_SDK_COMPLETION_MARKER
-            expected_marker = f"version={pinned_version}\nsha256={pinned_sha256}\n"
-            try:
-                if marker.read_text(encoding="utf-8") == expected_marker:
-                    return
-            except (OSError, UnicodeDecodeError):
-                pass
-    ensure_compile_db(
-        build_dir,
-        ["-DAOBUS_BUILD_LINT_PLUGIN=ON"],
-        preset=builddir.tidy_preset(),
-        reconfigure_preset=True,
-    )
-
-
-def clang_resource_dir(build_dir: Path, *, os_name: str | None = None) -> Path | None:
-    """Return the SDK Clang resource headers required by the custom Windows tool."""
-    if builddir.platform_profile(os_name).name != "windows":
-        return None
-    major_version = llvm_sdk_version(build_dir, os_name=os_name).split(".", maxsplit=1)[0]
-    resource_dir = llvm_sdk_root(build_dir, os_name=os_name) / "lib" / "clang" / major_version
-    if not resource_dir.is_dir():
-        raise die(f"pinned Clang resource directory not found: {resource_dir}")
-    return resource_dir
-
-
-def clang_tool(build_dir: Path, name: str, *, os_name: str | None = None) -> str:
-    """Resolve the pinned LLVM tool used by the native lint implementation."""
-    if builddir.platform_profile(os_name).name != "windows":
-        return name
-
-    executable = f"{name}.exe"
-    if name == "clang-tidy":
-        expected = build_dir / "tool" / "lint" / "AobusClangTidy.exe"
-        if expected.is_file():
-            return str(expected)
-        matches = sorted((build_dir / "tool" / "lint").glob("**/AobusClangTidy.exe"))
-        if len(matches) == 1:
-            return str(matches[0])
-        if len(matches) > 1:
-            choices = ", ".join(str(path) for path in matches)
-            raise die(f"multiple AobusClangTidy.exe tools found: {choices}")
-        raise die(f"AobusClangTidy.exe not found at {expected}; build the Windows tidy target first.")
-
-    root = llvm_sdk_root(build_dir, os_name=os_name)
-    tool = root / "bin" / executable
-    if not tool.is_file():
-        raise die(f"pinned LLVM SDK tool not found: {tool}")
-    return str(tool)
-
-
 @dataclass(frozen=True)
 class TidyToolchain:
-    """The verified native clang-tidy host and its platform resources.
-
-    Prepared once by the tidy command's toolchain preflight and consumed by
-    every clang-tidy caller (tidy analysis, the lint fixture runner); the field
-    order is kept stable for existing positional uses. ``sdk_root`` is the
-    verified LLVM SDK root behind the Windows tools, filled once by the
-    preflight so downstream capability checks resolve from the verified SDK
-    instead of re-reading the build cache.
-    """
+    """A caller-verified checker host and resources, not a product build cache."""
 
     clang_tidy: str
     plugin: Path | None
@@ -365,98 +86,25 @@ class TidyToolchain:
     sdk_root: Path | None = None
 
 
-def windows_analysis_arguments(resource_dir: Path, *, driver_mode: bool = False) -> tuple[str, ...]:
-    """Return the Windows analysis arguments shared by tidy and lint fixtures.
-
-    The VS 18 STL lets Clang classify three-byte records as SIMD-find
-    candidates, but its vectorized helper supports only 1/2/4/8-byte elements.
-    clang-tidy does not link or execute the TU, so disabling that optional STL
-    implementation path preserves the analyzed API. Tidy passes the arguments
-    as extra-args-before; ``driver_mode`` returns the same two arguments with
-    the clang-cl ``/clang:`` and ``/D`` spellings the fixture runner needs.
-    """
-    if driver_mode:
-        return (f"/clang:-resource-dir={resource_dir}", "/D_USE_STD_VECTOR_ALGORITHMS=0")
-    return (f"-resource-dir={resource_dir}", "-D_USE_STD_VECTOR_ALGORITHMS=0")
-
-
-_TRANSLATION_UNIT_SUFFIXES = frozenset((".c", ".cc", ".cpp", ".cxx", ".mm"))
-_SELF_CONTAINED_HEADER_SUFFIXES = frozenset((".h", ".hh", ".hpp", ".hxx"))
-_INCLUDE_FRAGMENT_SUFFIXES = frozenset((".def",))
-_HEADER_SUFFIXES = _SELF_CONTAINED_HEADER_SUFFIXES | _INCLUDE_FRAGMENT_SUFFIXES
-_PLATFORM_IMPLEMENTATION_SUFFIXES = ("", "Linux", "Macos", "Posix", "Windows")
-
-
-def _path_key(path: Path) -> str:
-    return os.path.normcase(str(workspace_cache.canonical_portal_path(path)))
-
-
-@dataclass(frozen=True)
-class _CompileDatabaseEntry:
-    path: Path
-    data: dict[str, object]
-
-
-def _compile_database_entries(build_dir: Path) -> list[_CompileDatabaseEntry]:
-    database = build_dir / "compile_commands.json"
+def clang_tool(_build_dir: Path, name: str, *, os_name: str | None = None) -> str:
+    """Select a ready LLVM SDK tool; custom checker hosts require Bazel admission."""
+    if builddir.platform_profile(os_name).name != "windows":
+        return name
+    if name == "clang-tidy":
+        raise die("the Aobus checker host must come from the verified Bazel lint context")
+    manifest = windows_llvm_sdk_manifest()
     try:
-        entries = json.loads(database.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
-        raise die(f"cannot read {database}: {error}") from error
-    if not isinstance(entries, list):
-        raise die(f"invalid compilation database in {database}: expected a JSON array")
-
-    compiled: list[_CompileDatabaseEntry] = []
-    for entry in entries:
-        if not isinstance(entry, dict) or not isinstance(entry.get("file"), str):
-            continue
-        path = Path(entry["file"])
-        if not path.is_absolute():
-            directory = entry.get("directory")
-            base = Path(directory) if isinstance(directory, str) else PROJECT_ROOT
-            path = base / path
-        compiled.append(_CompileDatabaseEntry(workspace_cache.canonical_portal_path(path), entry))
-    return compiled
-
-
-def _common_parent_suffix_length(left: Path, right: Path, root: Path) -> int:
-    try:
-        left_parts = absolute_path(left).relative_to(absolute_path(root)).parent.parts
-        right_parts = absolute_path(right).relative_to(absolute_path(root)).parent.parts
-    except ValueError:
-        return 0
-    count = 0
-    for left_part, right_part in zip(reversed(left_parts), reversed(right_parts), strict=False):
-        if os.path.normcase(left_part) != os.path.normcase(right_part):
-            break
-        count += 1
-    return count
-
-
-def _common_parent_prefix_length(left: Path, right: Path, root: Path) -> int:
-    try:
-        left_parts = absolute_path(left).relative_to(absolute_path(root)).parent.parts
-        right_parts = absolute_path(right).relative_to(absolute_path(root)).parent.parts
-    except ValueError:
-        return 0
-    count = 0
-    for left_part, right_part in zip(left_parts, right_parts, strict=False):
-        if os.path.normcase(left_part) != os.path.normcase(right_part):
-            break
-        count += 1
-    return count
-
-
-def _translation_unit_tier(path: Path, root: Path) -> int:
-    try:
-        top = absolute_path(path).relative_to(absolute_path(root)).parts[0]
-    except (IndexError, ValueError):
-        return 3
-    return {"lib": 0, "app": 0, "tool": 1, "test": 2}.get(top, 3)
+        root, _cached = windows_llvm_sdk.ready_root(os.environ, manifest)
+    except windows_llvm_sdk.WindowsLlvmSdkError as error:
+        raise die(str(error)) from error
+    tool = root / "bin" / f"{name}.exe"
+    if not tool.is_file():
+        raise die(f"pinned LLVM SDK tool not found: {tool}")
+    return str(tool)
 
 
 def _is_platform_incompatible(path: Path, root: Path) -> bool:
-    """Identify project files that the current native product graph cannot compile."""
+    """Identify ownership by native OS, not by absence of a compile command."""
     try:
         parts = tuple(part.casefold() for part in absolute_path(path).relative_to(absolute_path(root)).parts)
     except ValueError:
@@ -464,13 +112,6 @@ def _is_platform_incompatible(path: Path, root: Path) -> bool:
     joined = "/".join(parts)
     stem = path.stem.casefold()
     profile = builddir.platform_profile().name
-
-    # Each rule below names the profile that owns a tree, not the one asking.
-    # Stating ownership once and selecting foreign owners per profile is what
-    # keeps a new profile from silently inheriting an empty rule set: adding
-    # macOS to the dispatch without these groups would have left it deferring
-    # nothing at all, which is how PlatformBackendProvidersMacos.cpp came to
-    # fail the Linux gate as a coverage hole rather than a platform deferral.
     owned_by_windows = (
         parts[:2] in {("app", "windows"), ("app", "windows-winui")}
         or parts[:2] == ("test", "windows")
@@ -479,8 +120,6 @@ def _is_platform_incompatible(path: Path, root: Path) -> bool:
         or "win32" in joined
         or "winui" in joined
         or stem.endswith("windows")
-        # tool/lint builds this driver under if(WIN32); every other profile
-        # runs clang-tidy from its own toolchain instead.
         or joined == "tool/lint/aobusclangtidymain.cpp"
     )
     owned_by_linux = (
@@ -501,759 +140,25 @@ def _is_platform_incompatible(path: Path, root: Path) -> bool:
         or "corefoundation" in joined
         or stem.endswith("macos")
     )
-    # POSIX sources belong to Linux and macOS alike, so only Windows defers
-    # them. They are deliberately not part of owned_by_linux for that reason.
-    owned_by_posix = stem.endswith("posix")
-
     if profile == "linux":
         return owned_by_windows or owned_by_macos
     if profile == "windows":
-        return owned_by_linux or owned_by_macos or owned_by_posix
+        return owned_by_linux or owned_by_macos or stem.endswith("posix")
     if profile == "macos":
         return owned_by_windows or owned_by_linux
     return False
 
 
-def _component_directory(path: Path, root: Path) -> tuple[str, ...] | None:
-    """Return a normalized component directory for safe header/TU pairing.
-
-    Public headers normalize to the implementation tree they belong to. Private
-    headers retain their top-level component, preventing identical trailing
-    directories in unrelated platform or layer trees from being paired.
-    """
-    try:
-        parent = absolute_path(path).relative_to(absolute_path(root)).parent.parts
-    except ValueError:
-        return None
-    if len(parent) >= 2 and parent[:2] == ("include", "ao"):
+def component_parts(parent: tuple[str, ...]) -> tuple[str, ...] | None:
+    """Map a public/private source directory to its actual implementation component."""
+    if parent[:2] == ("include", "ao"):
         return ("lib", *parent[2:])
-    if len(parent) >= 3 and parent[:3] == ("app", "include", "ao"):
+    if parent[:4] == ("app", "include", "ao", "rt"):
+        return ("app", "runtime", *parent[4:])
+    if parent[:3] == ("app", "include", "ao"):
         return ("app", *parent[3:])
+    if len(parent) >= 5 and parent[0] == "app" and parent[2:4] == ("include", "ao"):
+        return ("app", parent[1], *parent[5:])
     if parent and parent[0] in {"app", "lib", "test", "tool"}:
         return parent
     return None
-
-
-def _header_translation_unit(
-    header: Path,
-    compiled: list[_CompileDatabaseEntry],
-    root: Path,
-) -> Path | None:
-    """Choose a same-component implementation whose flags can compile ``header`` as the main file."""
-    expected_stems = {f"{header.stem}{suffix}".casefold() for suffix in _PLATFORM_IMPLEMENTATION_SUFFIXES}
-    header_component = _component_directory(header, root)
-    if header_component is None:
-        return None
-    candidates = [
-        entry.path
-        for entry in compiled
-        if entry.path.suffix.lower() in _TRANSLATION_UNIT_SUFFIXES
-        and entry.path.stem.casefold() in expected_stems
-        and _component_directory(entry.path, root) == header_component
-    ]
-
-    if not candidates:
-        return None
-
-    def rank(path: Path) -> tuple[int, int, int, str]:
-        return (
-            0 if path.stem.casefold() == header.stem.casefold() else 1,
-            -_common_parent_suffix_length(header, path, root),
-            _translation_unit_tier(path, root),
-            _path_key(path),
-        )
-
-    return min(candidates, key=rank)
-
-
-@dataclass(frozen=True)
-class _NinjaDependencyIndex:
-    consumers: dict[str, Path]
-    indexed_translation_units: frozenset[str]
-    compiled_translation_units: frozenset[str]
-
-    def missing_consumer_reason(self) -> str:
-        if not self.indexed_translation_units:
-            return "Ninja dependency data is unavailable for the compiled translation units"
-        if self.indexed_translation_units != self.compiled_translation_units:
-            return "Ninja dependency data is incomplete and contains no recorded consumer"
-        return "no compiled translation unit consumes the header"
-
-
-def _ninja_build_directories(
-    database_dir: Path,
-    compiled: list[_CompileDatabaseEntry],
-    additional_build_dirs: tuple[Path, ...],
-) -> list[Path]:
-    """Return every requested real Ninja tree without building or configuring it."""
-    candidates = {absolute_path(database_dir), *(absolute_path(path) for path in additional_build_dirs)}
-    for entry in compiled:
-        directory = entry.data.get("directory")
-        if not isinstance(directory, str):
-            continue
-        path = Path(directory)
-        if not path.is_absolute():
-            path = database_dir / path
-        candidates.add(workspace_cache.canonical_portal_path(path))
-    return sorted((path for path in candidates if (path / "build.ninja").is_file()), key=_path_key)
-
-
-_WINDOWS_ABSOLUTE_PATH_RE = re.compile(r"^[A-Za-z]:[/\\]")
-
-
-def _ninja_record_path(value: str, base: Path) -> Path:
-    """Resolve Ninja/compile-DB paths while accepting Windows separators on any test host."""
-    normalized = value.replace("\\", "/")
-    if _WINDOWS_ABSOLUTE_PATH_RE.match(normalized):
-        path = Path(posixpath.normpath(normalized))
-        return workspace_cache.canonical_portal_path(path) if os.name == "nt" else path
-    path = Path(normalized)
-    if path.is_absolute():
-        return workspace_cache.canonical_portal_path(path)
-
-    normalized_base = str(base).replace("\\", "/")
-    if _WINDOWS_ABSOLUTE_PATH_RE.match(normalized_base):
-        path = Path(posixpath.normpath(f"{normalized_base}/{normalized}"))
-        return workspace_cache.canonical_portal_path(path) if os.name == "nt" else path
-    return workspace_cache.canonical_portal_path(base / path)
-
-
-def _ninja_path_key(path: Path) -> str:
-    """Return a slash- and case-insensitive key for cross-platform Ninja metadata."""
-    return posixpath.normpath(str(path).replace("\\", "/")).casefold()
-
-
-def _compile_database_output(entry: _CompileDatabaseEntry, database_dir: Path) -> Path | None:
-    output = entry.data.get("output")
-    if not isinstance(output, str):
-        return None
-    directory = entry.data.get("directory")
-    base = _ninja_record_path(directory, database_dir) if isinstance(directory, str) else database_dir
-    return _ninja_record_path(output, base)
-
-
-def _parse_ninja_dependency_records(
-    output: str,
-    build_dir: Path,
-) -> Iterator[tuple[Path, tuple[Path, ...]]]:
-    """Parse dependency paths from ``ninja -t deps`` records.
-
-    A whole-project dump repeats the same few thousand headers across every
-    translation unit -- 819752 dependency lines over 6326 distinct paths in this
-    project -- and resolving each line costs a walk of the filesystem. Resolve
-    each distinct spelling once instead; the repeats are then dictionary lookups.
-    """
-    resolved: dict[str, Path] = {}
-
-    def record_path(value: str) -> Path:
-        if (path := resolved.get(value)) is None:
-            path = resolved[value] = _ninja_record_path(value, build_dir)
-        return path
-
-    dependencies: list[Path] = []
-    record_output: Path | None = None
-
-    for line in output.splitlines():
-        if not line:
-            if record_output is not None:
-                yield record_output, tuple(dependencies)
-            dependencies = []
-            record_output = None
-        elif line[0].isspace():
-            if record_output is not None and (dependency := line.strip()):
-                dependencies.append(record_path(dependency))
-        else:
-            if record_output is not None:
-                yield record_output, tuple(dependencies)
-            dependencies = []
-            target, marker, _ = line.partition(": #deps ")
-            if marker and line.rstrip().endswith("(VALID)"):
-                record_output = record_path(target)
-            else:
-                record_output = None
-    if record_output is not None:
-        yield record_output, tuple(dependencies)
-
-
-def _ninja_dependency_index(
-    database_dir: Path,
-    compiled: list[_CompileDatabaseEntry],
-    selected_header_keys: frozenset[str],
-    additional_build_dirs: tuple[Path, ...],
-) -> _NinjaDependencyIndex:
-    """Index headers by real consumers while retaining primary-DB compile commands."""
-    compiled_by_key = {
-        _path_key(entry.path): entry.path
-        for entry in compiled
-        if entry.path.suffix.lower() in _TRANSLATION_UNIT_SUFFIXES
-    }
-    primary_by_dependency_key = {_ninja_path_key(path): path for path in compiled_by_key.values()}
-    consumers_by_dependency: dict[str, set[Path]] = {}
-    indexed_translation_units: set[str] = set()
-
-    for ninja_dir in _ninja_build_directories(database_dir, compiled, additional_build_dirs):
-        if _path_key(ninja_dir) == _path_key(database_dir):
-            dependency_compiled = compiled
-        elif (ninja_dir / "compile_commands.json").is_file():
-            dependency_compiled = _compile_database_entries(ninja_dir)
-        else:
-            dependency_compiled = []
-
-        compiled_by_output: dict[str, set[Path]] = {}
-        compiled_by_dependency_key: dict[str, set[Path]] = {}
-        for entry in dependency_compiled:
-            if entry.path.suffix.lower() not in _TRANSLATION_UNIT_SUFFIXES:
-                continue
-            primary_consumer = compiled_by_key.get(_path_key(entry.path))
-            if primary_consumer is None:
-                continue
-            compiled_by_dependency_key.setdefault(_ninja_path_key(entry.path), set()).add(primary_consumer)
-            if output := _compile_database_output(entry, ninja_dir):
-                compiled_by_output.setdefault(_ninja_path_key(output), set()).add(primary_consumer)
-
-        try:
-            with buildlock.build_tree_lock(ninja_dir):
-                result = subprocess.run(
-                    ["ninja", "-t", "deps"],
-                    cwd=ninja_dir,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    encoding="utf-8",
-                    errors="replace",
-                )
-        except FileNotFoundError as error:
-            raise die("ninja is required to resolve header compile-command consumers.") from error
-        if result.returncode != 0:
-            raise die(
-                f"cannot read Ninja dependency data from {ninja_dir}; "
-                f"`ninja -t deps` exited {result.returncode}:\n{result.stdout}"
-            )
-
-        for output, dependencies in _parse_ninja_dependency_records(result.stdout, ninja_dir):
-            block_consumers = set(compiled_by_output.get(_ninja_path_key(output), ()))
-            if not block_consumers:
-                for dependency in dependencies:
-                    dependency_key = _ninja_path_key(dependency)
-                    block_consumers.update(compiled_by_dependency_key.get(dependency_key, ()))
-                    if primary_consumer := primary_by_dependency_key.get(dependency_key):
-                        block_consumers.add(primary_consumer)
-            if not block_consumers:
-                continue
-            indexed_translation_units.update(_path_key(consumer) for consumer in block_consumers)
-            for dependency in dependencies:
-                dependency_key = _ninja_path_key(dependency)
-                if dependency_key in selected_header_keys:
-                    consumers_by_dependency.setdefault(dependency_key, set()).update(block_consumers)
-
-    consumers = {
-        dependency: min(candidates, key=_path_key) for dependency, candidates in consumers_by_dependency.items()
-    }
-    return _NinjaDependencyIndex(
-        consumers,
-        frozenset(indexed_translation_units),
-        frozenset(compiled_by_key),
-    )
-
-
-@dataclass(frozen=True)
-class CompileCommandTarget:
-    """A selected file and the exact native translation unit used to check it."""
-
-    selected: Path
-    translation_unit: Path
-
-    @property
-    def is_header(self) -> bool:
-        return self.selected.suffix.lower() in _SELF_CONTAINED_HEADER_SUFFIXES
-
-    @property
-    def is_include_fragment(self) -> bool:
-        return self.selected.suffix.lower() in _INCLUDE_FRAGMENT_SUFFIXES
-
-
-@dataclass(frozen=True)
-class CompileCommandDeferral:
-    """Why a selected file cannot be checked with this native compilation database."""
-
-    selected: Path
-    reason: str
-    kind: Literal["native-coverage", "platform-incompatible"] = "native-coverage"
-
-    @property
-    def is_platform_incompatible(self) -> bool:
-        return self.kind == "platform-incompatible"
-
-
-@dataclass(frozen=True)
-class CompileCommandPlan:
-    """Native clang-tidy targets plus files deferred to another platform.
-
-    Self-contained headers are checked as main files. Headers and include fragments
-    prefer a same-component implementation, then a real consumer recorded by Ninja,
-    and use that exact compile command.
-    """
-
-    targets: tuple[CompileCommandTarget, ...]
-    deferred: tuple[Path, ...]
-    deferral_details: tuple[CompileCommandDeferral, ...] = ()
-
-
-def compile_command_plan(
-    build_dir: Path,
-    files: list[Path],
-    *,
-    project_root: Path = PROJECT_ROOT,
-    explicit_header_companions: dict[Path, Path] | None = None,
-    additional_dependency_build_dirs: tuple[Path, ...] = (),
-) -> CompileCommandPlan:
-    """Map every covered selection to an exact translation unit from the primary database."""
-    compiled = _compile_database_entries(build_dir)
-    compiled_by_key = {
-        _path_key(entry.path): entry.path
-        for entry in compiled
-        if entry.path.suffix.lower() in _TRANSLATION_UNIT_SUFFIXES
-    }
-
-    targets: list[CompileCommandTarget] = []
-    deferred: list[Path] = []
-    deferral_details: list[CompileCommandDeferral] = []
-    seen: set[str] = set()
-    dependency_index: _NinjaDependencyIndex | None = None
-    selected_header_keys = frozenset(
-        _ninja_path_key(absolute_path(path)) for path in files if path.suffix.lower() in _HEADER_SUFFIXES
-    )
-    companions = {
-        _path_key(header): absolute_path(translation_unit)
-        for header, translation_unit in (explicit_header_companions or {}).items()
-    }
-    for path in files:
-        path = absolute_path(path)
-        if (key := _path_key(path)) in seen:
-            continue
-        seen.add(key)
-        suffix = path.suffix.lower()
-        if suffix in _TRANSLATION_UNIT_SUFFIXES:
-            translation_unit = compiled_by_key.get(key)
-        elif suffix in _HEADER_SUFFIXES:
-            if explicit_companion := companions.get(key):
-                translation_unit = compiled_by_key.get(_path_key(explicit_companion))
-                if translation_unit is None:
-                    raise die(
-                        f"explicit header companion {explicit_companion} has no compile command "
-                        f"for selected header {path}."
-                    )
-            else:
-                translation_unit = _header_translation_unit(path, compiled, project_root)
-                if translation_unit is None:
-                    if dependency_index is None:
-                        dependency_index = _ninja_dependency_index(
-                            build_dir,
-                            compiled,
-                            selected_header_keys,
-                            additional_dependency_build_dirs,
-                        )
-                    translation_unit = dependency_index.consumers.get(_ninja_path_key(path))
-        else:
-            translation_unit = None
-        if translation_unit is None:
-            # Explicit lint fixtures and temporary files are intentionally absent
-            # from the native compile database. Ordinary project files must never
-            # borrow unrelated flags: without a safe companion they are deferred.
-            try:
-                resolved_path = absolute_path(path)
-                relative_path = resolved_path.relative_to(absolute_path(project_root))
-                is_under_root = True
-                is_lint_fixture = relative_path.parts[:3] == ("test", "lint", "fixture")
-            except ValueError:
-                is_under_root = False
-                is_lint_fixture = False
-
-            is_incompatible = _is_platform_incompatible(path, project_root)
-
-            if (not is_under_root or is_lint_fixture) and not is_incompatible and compiled:
-                # Find the best matching translation unit based on common parent directory prefix
-                best_match = None
-                best_length = -1
-                for entry in compiled:
-                    if entry.path.suffix.lower() in _TRANSLATION_UNIT_SUFFIXES:
-                        length = _common_parent_prefix_length(path, entry.path, project_root)
-                        if length > best_length:
-                            best_length = length
-                            best_match = entry.path
-                translation_unit = best_match if best_match is not None else compiled[0].path
-            else:
-                translation_unit = None
-
-        if translation_unit is None:
-            deferred.append(path)
-            if is_incompatible:
-                reason = "the file is incompatible with the current platform"
-            elif suffix in _HEADER_SUFFIXES and dependency_index is not None:
-                reason = dependency_index.missing_consumer_reason()
-            elif suffix in _TRANSLATION_UNIT_SUFFIXES:
-                reason = "the source file has no exact compile command"
-            else:
-                reason = "the file has no usable compile command"
-            kind: Literal["native-coverage", "platform-incompatible"] = (
-                "platform-incompatible" if is_incompatible else "native-coverage"
-            )
-            deferral_details.append(CompileCommandDeferral(path, reason, kind))
-        else:
-            targets.append(CompileCommandTarget(path, absolute_path(translation_unit)))
-
-    return CompileCommandPlan(tuple(targets), tuple(deferred), tuple(deferral_details))
-
-
-def _replace_compile_input(
-    entry: _CompileDatabaseEntry,
-    selected: Path,
-    command_line_style: Literal["posix", "windows"] = "posix",
-    main_file_language: str | None = None,
-) -> dict[str, object]:
-    """Clone one command while replacing its exact source token with ``selected``."""
-    data = dict(entry.data)
-    selected_compiler_path = workspace_cache.compiler_source_path(selected)
-    selected_text = str(selected_compiler_path)
-    arguments = data.get("arguments")
-    if isinstance(arguments, list) and all(isinstance(argument, str) for argument in arguments):
-        directory = data.get("directory")
-        base = Path(directory) if isinstance(directory, str) else PROJECT_ROOT
-        replaced = 0
-        rewritten_arguments: list[str] = []
-        for argument in arguments:
-            argument_path = Path(argument)
-            if not argument_path.is_absolute():
-                argument_path = base / argument_path
-            if _path_key(argument_path) == _path_key(entry.path):
-                if main_file_language is not None:
-                    rewritten_arguments.extend(["-x", main_file_language])
-                rewritten_arguments.append(selected_text)
-                replaced += 1
-            else:
-                rewritten_arguments.append(argument)
-        if replaced != 1:
-            raise die(
-                f"cannot derive a header compile command from {entry.path}: "
-                f"expected one input argument, replaced {replaced}."
-            )
-        data["arguments"] = rewritten_arguments
-    elif isinstance(command := data.get("command"), str):
-        spellings = {entry.path.as_posix(), str(entry.path)}
-        raw_file = data.get("file")
-        if isinstance(raw_file, str):
-            spellings.add(raw_file)
-        directory = data.get("directory")
-        base = Path(directory) if isinstance(directory, str) else PROJECT_ROOT
-        try:
-            spellings.add(os.path.relpath(entry.path, base))
-        except ValueError:
-            # Windows cannot express a relative path between the mapped source
-            # drive and the local build drive. Absolute and raw-file spellings
-            # remain available and still fail closed when neither is present.
-            pass
-
-        rewritten_command = command
-        replaced = 0
-
-        def replace_source(match: re.Match[str]) -> str:
-            prefix = match.group(1)
-            if prefix in {'"', "'"} or not any(character.isspace() for character in selected_text):
-                replacement = selected_text
-            elif command_line_style == "windows":
-                replacement = subprocess.list2cmdline([selected_text])
-            else:
-                replacement = shlex.quote(selected_text)
-            if main_file_language is not None:
-                # Language flags must precede the input, outside its path quotes.
-                if prefix in {'"', "'"}:
-                    return f"-x {main_file_language} {prefix}{replacement}"
-                return f"{prefix}-x {main_file_language} {replacement}"
-            return f"{prefix}{replacement}"
-
-        for spelling in sorted(spellings, key=len, reverse=True):
-            normalized = spelling.replace("\\", "/")
-            path_pattern = re.escape(normalized).replace("/", r"[/\\]")
-            pattern = rf"(^|[\s\"']){path_pattern}(?=$|[\s\"'])"
-            rewritten_command, count = re.subn(
-                pattern,
-                replace_source,
-                rewritten_command,
-                count=1,
-                flags=re.IGNORECASE if os.name == "nt" else 0,
-            )
-            replaced += count
-            if count:
-                break
-        if replaced != 1:
-            raise die(f"cannot derive a header compile command: source token not found for {entry.path}.")
-        data["command"] = rewritten_command
-    else:
-        raise die(f"compile command for {entry.path} has neither string command nor argument list.")
-
-    data["file"] = selected_compiler_path.as_posix()
-    data.pop("output", None)
-    return data
-
-
-def write_header_compile_database(
-    build_dir: Path,
-    targets: list[CompileCommandTarget],
-    destination: Path,
-    excluded_arguments: tuple[str, ...] = (),
-    excluded_argument_patterns: tuple[str, ...] = (),
-    additional_arguments: tuple[str, ...] = (),
-    command_line_style: Literal["posix", "windows"] = "posix",
-) -> Path:
-    """Write exact synthetic commands that make selected headers the main files."""
-    if command_line_style not in {"posix", "windows"}:
-        raise die(f"unsupported compile command line style: {command_line_style}.")
-
-    entries = {_path_key(entry.path): entry for entry in _compile_database_entries(build_dir)}
-    synthetic: list[dict[str, object]] = []
-    for target in targets:
-        if not target.is_header:
-            continue
-        entry = entries.get(_path_key(target.translation_unit))
-        if entry is None:
-            raise die(f"compile command disappeared for mapped translation unit {target.translation_unit}.")
-        main_file_language = "objective-c++-header" if target.translation_unit.suffix.lower() == ".mm" else None
-        data = _replace_compile_input(entry, target.selected, command_line_style, main_file_language)
-        data = _without_compile_arguments(data, excluded_arguments, excluded_argument_patterns)
-        arguments = data.get("arguments")
-        if isinstance(arguments, list) and all(isinstance(argument, str) for argument in arguments):
-            data["arguments"] = [*arguments, *additional_arguments]
-        elif isinstance(command := data.get("command"), str):
-            serialized_arguments = (
-                subprocess.list2cmdline(additional_arguments)
-                if command_line_style == "windows"
-                else shlex.join(additional_arguments)
-            )
-            data["command"] = f"{command} {serialized_arguments}" if serialized_arguments else command
-        else:
-            raise die("compile command has neither string command nor argument list.")
-        synthetic.append(data)
-
-    destination.mkdir(parents=True, exist_ok=True)
-    database = destination / "compile_commands.json"
-    database.write_text(json.dumps(synthetic, indent=2) + "\n", encoding="utf-8")
-    return destination
-
-
-def _without_compile_arguments(
-    data: dict[str, object],
-    excluded_arguments: tuple[str, ...],
-    excluded_argument_patterns: tuple[str, ...] = (),
-) -> dict[str, object]:
-    """Return one compile command with exact driver arguments removed."""
-    filtered = dict(data)
-    excluded = {argument.casefold() for argument in excluded_arguments}
-    patterns = tuple(re.compile(pattern, re.IGNORECASE) for pattern in excluded_argument_patterns)
-    arguments = filtered.get("arguments")
-    if isinstance(arguments, list) and all(isinstance(argument, str) for argument in arguments):
-        filtered["arguments"] = [
-            argument
-            for argument in arguments
-            if argument.casefold() not in excluded and not any(pattern.fullmatch(argument) for pattern in patterns)
-        ]
-    elif isinstance(command := filtered.get("command"), str):
-        for argument in excluded_arguments:
-            pattern = rf"(?<!\S){re.escape(argument)}(?=\s|$)"
-            command = re.sub(pattern, "", command, flags=re.IGNORECASE)
-        for pattern in excluded_argument_patterns:
-            command = re.sub(rf"(?<!\S)(?:{pattern})(?=\s|$)", "", command, flags=re.IGNORECASE)
-        filtered["command"] = command
-    else:
-        raise die("compile command has neither string command nor argument list.")
-    return filtered
-
-
-def write_filtered_compile_database(
-    build_dir: Path,
-    destination: Path,
-    excluded_arguments: tuple[str, ...],
-) -> Path:
-    """Copy a compile database while removing exact driver-only arguments."""
-    filtered: list[dict[str, object]] = []
-
-    for entry in _compile_database_entries(build_dir):
-        filtered.append(_without_compile_arguments(entry.data, excluded_arguments))
-
-    destination.mkdir(parents=True, exist_ok=True)
-    database = destination / "compile_commands.json"
-    database.write_text(json.dumps(filtered, indent=2) + "\n", encoding="utf-8")
-    return destination
-
-
-def write_merged_compile_database(
-    build_dir: Path,
-    destination: Path,
-    excluded_arguments: tuple[str, ...],
-    extra_entries: list[dict[str, object]],
-) -> Path:
-    """Merge native commands with authoritative platform-provider entries."""
-    merged: list[dict[str, object]] = []
-    by_path: dict[str, dict[str, object]] = {}
-
-    def normalize(entry: dict[str, object]) -> tuple[dict[str, object], str, Path]:
-        filtered = _without_compile_arguments(entry, excluded_arguments)
-        raw_file = filtered.get("file")
-        if not isinstance(raw_file, str):
-            raise die("compile command merge entry has no string file path.")
-        path = Path(raw_file)
-        if not path.is_absolute():
-            directory = filtered.get("directory")
-            base = Path(directory) if isinstance(directory, str) else PROJECT_ROOT
-            path = base / path
-        return filtered, _path_key(path), path
-
-    authoritative: dict[str, dict[str, object]] = {}
-    for entry in extra_entries:
-        filtered, key, path = normalize(entry)
-        if key in authoritative:
-            if authoritative[key] != filtered:
-                raise die(f"conflicting compile commands for {absolute_path(path)}.")
-            continue
-        authoritative[key] = filtered
-
-    for item in _compile_database_entries(build_dir):
-        filtered, key, path = normalize(item.data)
-        # The extra entries come from a more specific native provider, such as
-        # the Visual Studio WinUI project. The Ninja graph may also compile
-        # pure rules from that frontend for tests, but its command is not the
-        # frontend's authoritative compiler context.
-        if key in authoritative:
-            continue
-        if key in by_path:
-            if by_path[key] != filtered:
-                raise die(f"conflicting compile commands for {absolute_path(path)}.")
-            continue
-        by_path[key] = filtered
-        merged.append(filtered)
-
-    for key, filtered in authoritative.items():
-        by_path[key] = filtered
-        merged.append(filtered)
-
-    destination.mkdir(parents=True, exist_ok=True)
-    database = destination / "compile_commands.json"
-    database.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
-    return destination
-
-
-_COMPILE_COMMAND_ERROR_RE = re.compile(
-    r"(compile command not found|error while trying to load a compilation database|"
-    r"could not auto-detect compilation database)",
-    re.IGNORECASE,
-)
-
-
-def log_has_compile_command_error(log: Path) -> bool:
-    """Detect clang-tidy database failures even when the tool exits successfully."""
-    try:
-        return bool(_COMPILE_COMMAND_ERROR_RE.search(log.read_text(encoding="utf-8", errors="replace")))
-    except OSError:
-        return False
-
-
-def _run_tail(argv: list[str], what: str, tail: int = 5) -> None:
-    result = subprocess.run(argv, cwd=PROJECT_ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-    lines = result.stdout.splitlines()
-    for line in lines[-tail:]:
-        print(line)
-    if result.returncode != 0:
-        print("--- Full Output ---", file=sys.stderr)
-        print(result.stdout, file=sys.stderr)
-        raise die(f"{what} failed (exit {result.returncode}).")
-
-
-def system_include_args() -> list[str]:
-    """Nix store system include paths, passed explicitly so clang-tidy resolves libstdc++/GTK."""
-    if builddir.platform_profile().name == "windows":
-        return []
-    try:
-        result = subprocess.run(
-            ["clang++", "-E", "-x", "c++", "-", "-v"],
-            input="",
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
-    except FileNotFoundError:
-        return []
-    paths: list[str] = []
-    # clang-tidy prepends these paths ahead of the compile database. On macOS,
-    # that would otherwise put the driver's real libc++ directory ahead of the
-    # expected shim already present in the native command and defeat the shim.
-    # Preserve the native compiler's override by making it the first explicit
-    # system directory here as well.
-    if expected_shim := os.environ.get("AOBUS_LIBCXX_EXPECTED_SHIM"):
-        if Path(expected_shim).is_dir():
-            paths.append(expected_shim)
-    for line in result.stderr.splitlines():
-        if line.startswith(" /nix"):
-            path = line.strip()
-            if Path(path).is_dir() and path not in paths:
-                paths.append(path)
-    return [f"--extra-arg-before=-isystem{path}" for path in paths]
-
-
-@dataclass
-class BatchResult:
-    failed: bool = False
-    logs: list[Path] = field(default_factory=list)
-    failed_logs: list[Path] = field(default_factory=list)
-
-
-def run_parallel[WorkItem](
-    files: list[WorkItem],
-    jobs: int,
-    tmpdir: Path,
-    runner: Callable[[WorkItem, Path], int],
-) -> BatchResult:
-    """Run `runner(file, log_path)` for every file with bounded parallelism."""
-    result = BatchResult()
-    total = len(files)
-    done = 0
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max(jobs, 1)) as pool:
-        futures = {}
-        for index, file in enumerate(files):
-            log = tmpdir / f"{index:06d}.log"
-            result.logs.append(log)
-            # A fresh submitting-thread context per work item: pool workers
-            # do not inherit the submitter's ContextVars, so a runner's nested
-            # phase records keep the enclosing command and parent phase. Each
-            # item gets its own snapshot; one shared Context must never run
-            # concurrently in several tasks.
-            futures[pool.submit(copy_context().run, runner, file, log)] = (file, log)
-        for future in concurrent.futures.as_completed(futures):
-            file, log = futures[future]
-            try:
-                status = future.result()
-            except Exception as e:
-                status = -1
-                print(f"EXCEPTION running {file}: {e}", file=sys.stderr)
-            if status != 0:
-                result.failed = True
-                result.failed_logs.append(log)
-                print(f"FAILED: {file}", file=sys.stderr)
-            done += 1
-            print(f"\r  [{done}/{total}]", end="", file=sys.stderr, flush=True)
-    print(file=sys.stderr)
-    return result
-
-
-def logs_with_diagnostics(logs: list[Path]) -> list[Path]:
-    matching = []
-    for log in logs:
-        try:
-            with open(log, encoding="utf-8", errors="replace") as fh:
-                if any((m := DIAGNOSTIC_RE.match(line)) and m.group(4) in ("warning", "error") for line in fh):
-                    matching.append(log)
-        except OSError:
-            continue
-    return matching
-
-
-def make_tmpdir(prefix: str) -> Path:
-    return Path(tempfile.mkdtemp(prefix=prefix))

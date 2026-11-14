@@ -18,7 +18,7 @@ CORE_STEP_NAME = "Use every runner core"
 # The first step of each native job that runs portal build or cache work; the
 # core step must already have exported its environment by then.
 FIRST_PORTAL_STEP = {
-    "linux": "Build and test with private PipeWire",
+    "linux": "Provision Bazel tree",
     "macos": "Prepare vcpkg binary cache",
     "windows": "Prepare vcpkg binary cache",
 }
@@ -26,6 +26,12 @@ HYGIENE_JOBS_ARGUMENT = {
     "linux": '--jobs "$CMAKE_BUILD_PARALLEL_LEVEL"',
     "macos": '--jobs "$CMAKE_BUILD_PARALLEL_LEVEL"',
     "windows": "--jobs $env:CMAKE_BUILD_PARALLEL_LEVEL",
+}
+# The flat gate command each platform's shell actually invokes.
+HYGIENE_COMMANDS = {
+    "linux": "./ao hygiene",
+    "macos": "./ao hygiene",
+    "windows": r".\ao.bat hygiene",
 }
 
 
@@ -53,7 +59,7 @@ def _run_body(step: str) -> str:
 class CoreStepWorkflowTest(unittest.TestCase):
     def test_every_native_job_runs_one_core_step_right_after_checkout(self):
         workflow = WORKFLOW.read_text(encoding="utf-8")
-        self.assertEqual(workflow.count(f"      - name: {CORE_STEP_NAME}\n"), 3)
+        self.assertEqual(workflow.count(f"      - name: {CORE_STEP_NAME}\n"), len(FIRST_PORTAL_STEP))
         for job_name in FIRST_PORTAL_STEP:
             with self.subTest(job=job_name):
                 job = _job(job_name)
@@ -75,22 +81,29 @@ class CoreStepWorkflowTest(unittest.TestCase):
                 self.assertNotIn("\n        if:", step)
 
     def test_core_steps_use_each_platforms_ci_shell(self):
-        for job_name, shell in (("linux", "bash"), ("macos", "bash"), ("windows", "pwsh")):
+        for job_name, shell in (
+            ("linux", "bash"),
+            ("macos", "bash"),
+            ("windows", "pwsh"),
+        ):
             with self.subTest(job=job_name):
                 self.assertIn(f"        shell: {shell}\n", _step(_job(job_name), CORE_STEP_NAME))
 
     def test_hygiene_steps_tidy_with_the_detected_core_count(self):
         for job_name, argument in HYGIENE_JOBS_ARGUMENT.items():
             with self.subTest(job=job_name):
-                self.assertIn(argument, _step(_job(job_name), "Run hygiene"))
+                gate = _step(_job(job_name), "Run hygiene")
+                self.assertIn(argument, gate)
+                self.assertIn(HYGIENE_COMMANDS[job_name], gate)
+                self.assertNotIn("continue-on-error:", gate)
 
 
 @unittest.skipIf(os.name == "nt", "The CI bash core step runs on a POSIX tooling host.")
 class CoreStepBashTest(unittest.TestCase):
     """The extracted bash core step against the real host, not controlled inputs."""
 
-    # Both POSIX jobs share the bash core step; exercise every call site so a
-    # future mac-only edit does not lose local execution protection.
+    # Exercise every POSIX call site so a future mac-only edit does not lose
+    # local execution protection.
     POSIX_JOBS = ("linux", "macos")
 
     @staticmethod

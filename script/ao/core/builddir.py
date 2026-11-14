@@ -1,8 +1,9 @@
-"""Single source of truth for platform build profiles, presets, and build trees."""
+"""Native host metadata and checkout-isolated Bazel output/state roots."""
 
 import hashlib
 import ntpath
 import os
+import platform
 import re
 import sys
 import time
@@ -11,7 +12,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from . import compiler_cache
 from .paths import PROJECT_ROOT
 
 
@@ -46,9 +46,24 @@ def _windows_canonical_path(path: str) -> str | None:
     return resolved or None
 
 
+def state_root(*, environ: Mapping[str, str] | None = None, system: str | None = None) -> Path:
+    """Return host-local tool/cache state, preserving an explicit selection."""
+    environment = os.environ if environ is None else environ
+    if configured := environment.get("AOBUS_STATE_ROOT"):
+        return Path(configured)
+    host = platform.system() if system is None else system
+    if host == "Windows":
+        return Path(environment.get("LOCALAPPDATA", str(Path.home() / "AppData/Local"))) / "Aobus"
+    if host == "Darwin":
+        return Path(environment.get("HOME", str(Path.home()))) / "Library/Caches/Aobus"
+    if xdg_cache := environment.get("XDG_CACHE_HOME"):
+        return Path(xdg_cache) / "Aobus"
+    return Path(environment.get("HOME", str(Path.home()))) / ".cache/Aobus"
+
+
 def windows_state_root(*, environ: Mapping[str, str] | None = None) -> Path:
     """Return the native Windows state root shared by Aobus checkouts."""
-    return compiler_cache.state_root(environ=environ, system="Windows")
+    return state_root(environ=environ, system="Windows")
 
 
 def _git_directory(project_root: Path) -> Path | None:
@@ -151,46 +166,18 @@ def windows_build_root(
         if environment.get("AOBUS_BUILD_ROOT")
         else windows_state_root(environ=environment) / "build"
     )
-    root = base / windows_checkout_key(project_root, environ=environment, create_id=create_id)
-    if environment.get(compiler_cache.SHARED_WORKSPACES_EFFECTIVE) == "1":
-        return root / "shared-workspaces-v1"
-    return root
+    return base / windows_checkout_key(project_root, environ=environment, create_id=create_id)
 
 
 # Compatibility snapshot for callers that only need profile metadata. Native
 # path selection goes through ``platform_profile()`` and remains dynamic.
 WINDOWS_BUILD_ROOT = windows_build_root(create_id=False)
 
-PRESETS = {
-    "debug": "linux-debug",
-    "release": "linux-release",
-    "profile": "profile",
-}
-
-WINDOWS_PRESETS = {
-    "debug": "windows-debug",
-    "release": "windows-release",
-}
-WINDOWS_WINUI_PRESET = "windows-winui"
-
-MACOS_PRESETS = {
-    "debug": "macos-debug",
-    "release": "macos-release",
-    "profile": "macos-profile",
-}
-
-TIDY_PRESETS = {
-    "linux": "linux-debug",
-    "macos": "macos-debug",
-    "windows": "windows-tidy",
-}
-
 
 @dataclass(frozen=True)
 class PlatformProfile:
     name: str
     build_root: Path
-    presets: dict[str, str]
     executable_suffix: str
     apps: tuple[str, ...]
     default_suites: tuple[str, ...]
@@ -207,13 +194,12 @@ class PlatformProfile:
 LINUX_PROFILE = PlatformProfile(
     name="linux",
     build_root=BUILD_ROOT,
-    presets=PRESETS,
     executable_suffix="",
     apps=("cli", "tui", "gtk"),
-    default_suites=("core", "backend", "gtk"),
-    all_suites=("core", "backend", "tui", "cli", "gtk", "systemmedia", "tooling", "lint"),
-    tsan_suites=("core", "backend", "gtk"),
-    compiler="gcc",
+    default_suites=("core", "application", "backend", "gtk"),
+    all_suites=("core", "application", "backend", "tui", "cli", "gtk", "systemmedia", "tooling", "lint"),
+    tsan_suites=("core", "application", "backend", "gtk"),
+    compiler="clang",
 )
 
 # macOS builds the terminal and command-line frontends with Core Audio output.
@@ -223,12 +209,11 @@ LINUX_PROFILE = PlatformProfile(
 MACOS_PROFILE = PlatformProfile(
     name="macos",
     build_root=BUILD_ROOT,
-    presets=MACOS_PRESETS,
     executable_suffix="",
     apps=("cli", "tui", "appkit"),
-    default_suites=("core", "backend", "tui"),
-    all_suites=("core", "backend", "tui", "cli", "lint"),
-    tsan_suites=("core", "backend"),
+    default_suites=("core", "application", "backend", "tui"),
+    all_suites=("core", "application", "backend", "tui", "cli", "lint"),
+    tsan_suites=("core", "application", "backend"),
     compiler="clang",
 )
 
@@ -238,16 +223,13 @@ MACOS_PROFILE = PlatformProfile(
 WINDOWS_PROFILE = PlatformProfile(
     name="windows",
     build_root=WINDOWS_BUILD_ROOT,
-    presets=WINDOWS_PRESETS,
     executable_suffix=".exe",
     apps=("cli", "tui", "winui"),
-    default_suites=("core", "tui"),
-    all_suites=("core", "tui", "cli", "tooling", "lint"),
+    default_suites=("core", "application", "tui"),
+    all_suites=("core", "application", "tui", "cli", "tooling", "lint"),
     tsan_suites=(),
     compiler="msvc",
 )
-
-COVERAGE_DIR = BUILD_ROOT / "coverage"
 
 
 def platform_profile(os_name: str | None = None) -> PlatformProfile:
@@ -264,109 +246,3 @@ def platform_profile(os_name: str | None = None) -> PlatformProfile:
             f"Aobus native development supports Linux, macOS, and Windows; there is no profile for {sys.platform!r}."
         )
     return replace(LINUX_PROFILE, build_root=linux_build_root())
-
-
-def flavors(os_name: str | None = None) -> tuple[str, ...]:
-    return tuple(platform_profile(os_name).presets)
-
-
-def tidy_preset(os_name: str | None = None) -> str:
-    """Return the configure preset for the native clang-tidy toolchain."""
-    return TIDY_PRESETS[platform_profile(os_name).name]
-
-
-def tidy_dir(os_name: str | None = None) -> Path:
-    """Return the dedicated native clang-tidy build tree."""
-    if override := os.environ.get("BUILD_DIR"):
-        return Path(override)
-    profile = platform_profile(os_name)
-    name = "windows-tidy" if profile.name == "windows" else "debug-clang-tidy"
-    return profile.build_root / name
-
-
-def analyze_dir(os_name: str | None = None) -> Path:
-    """Return the dedicated native clang-analyzer build tree."""
-    if override := os.environ.get("BUILD_DIR"):
-        return Path(override)
-    profile = platform_profile(os_name)
-    name = "windows-analyzer" if profile.name == "windows" else "debug-clang-analyzer"
-    return profile.build_root / name
-
-
-def winui_build_dir(os_name: str | None = None) -> Path:
-    """Return the dedicated multi-config Visual Studio build tree for WinUI."""
-    if override := os.environ.get("BUILD_DIR"):
-        return Path(override)
-    profile = platform_profile(os_name)
-    if profile.name != "windows":
-        raise RuntimeError("The WinUI build tree is available only on Windows.")
-    return profile.build_root / WINDOWS_WINUI_PRESET
-
-
-def winui_companion_build_dir(
-    primary_build_dir: Path,
-    *,
-    primary_path_was_explicit: bool,
-    os_name: str | None = None,
-) -> Path:
-    """Return the separate WinUI tree used beside a composite command's primary tree."""
-    if primary_path_was_explicit or os.environ.get("BUILD_DIR"):
-        return primary_build_dir.with_name(f"{primary_build_dir.name}-winui")
-    return winui_build_dir(os_name)
-
-
-def windows_lint_build_dir(primary: Path) -> Path:
-    """Return the dedicated Windows checker host for a primary product tree.
-
-    Default product trees share the portal's ``windows-tidy`` host; any other
-    primary (an explicit path or a ``BUILD_DIR`` override) gets a ``-tidy``
-    sibling so the product configuration is never reconfigured in place. The
-    ``ao test`` lint route and ``setup llvm-sdk`` derive their host this way,
-    while ``tidy_dir()`` keeps its generic ``ao tidy``/``format`` meaning of
-    naming the override tree itself.
-    """
-    profile = platform_profile()
-    default_trees = {
-        profile.build_root / f"{preset}{suffix}" for preset in profile.presets.values() for suffix in ("", "-asan")
-    }
-    if primary in default_trees and not os.environ.get("BUILD_DIR"):
-        return profile.build_root / "windows-tidy"
-    return primary.with_name(f"{primary.name}-tidy")
-
-
-def preset(flavor: str, *, os_name: str | None = None) -> str:
-    return platform_profile(os_name).presets[flavor]
-
-
-def suffix(*, clang: bool = False, asan: bool = False, tsan: bool = False) -> str:
-    return ("-clang" if clang else "") + ("-asan" if asan else "") + ("-tsan" if tsan else "")
-
-
-def build_dir(
-    flavor: str,
-    *,
-    clang: bool = False,
-    asan: bool = False,
-    tsan: bool = False,
-    os_name: str | None = None,
-) -> Path:
-    """Resolve the native build tree for a flavor.
-
-    The BUILD_DIR environment variable always wins, which lets callers redirect builds into
-    dedicated host-persistent trees. Each Windows flavor has one tree shared by builds and tests.
-    """
-    if override := os.environ.get("BUILD_DIR"):
-        return Path(override)
-
-    profile = platform_profile(os_name)
-    if profile.name == "windows":
-        name = preset(flavor, os_name="nt")
-        return profile.build_root / f"{name}{suffix(clang=clang, asan=asan, tsan=tsan)}"
-
-    return profile.build_root / f"{flavor}{suffix(clang=clang, asan=asan, tsan=tsan)}"
-
-
-def executable(path: Path, os_name: str | None = None) -> Path:
-    """Add the native executable suffix to a target path."""
-    suffix_value = platform_profile(os_name).executable_suffix
-    return path.with_name(f"{path.name}{suffix_value}") if suffix_value else path

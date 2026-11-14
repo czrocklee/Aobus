@@ -6,20 +6,16 @@ import json
 import math
 import os
 import re
-import shlex
-import shutil
 import subprocess
 from collections import Counter
 from collections.abc import Mapping, Sequence
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from . import buildlock, concept_scope, tidyengine, workspace_cache
+from . import concept_scope
 from .paths import PROJECT_ROOT, absolute_path
-from .proc import die
 
 IDENTIFIER_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_:]*")
 CPP_COMMENT_OR_LITERAL_RE = re.compile(
@@ -75,85 +71,6 @@ TYPE_KEYWORDS = frozenset(
 CXX_METHOD_KINDS = frozenset({"CXXMethodDecl", "CXXConstructorDecl", "CXXDestructorDecl", "CXXConversionDecl"})
 FUNCTION_DECL_KINDS = frozenset({"FunctionDecl", "FunctionTemplateDecl"})
 DEPENDENCY_TARGET_KINDS = frozenset({"alias", "class", "enum"})
-KEEP_FLAG_PREFIXES = (
-    "-isystem",
-    "-idirafter",
-    "-iframework",
-    "-isysroot",
-    "--sysroot",
-    "-include",
-    "-stdlib",
-    "-std=",
-    "-pthread",
-    "-I",
-    "-D",
-    "-U",
-    "-f",
-    "-m",
-    "/std",
-    "/I",
-    "/D",
-    "/U",
-)
-DROP_EXACT_FLAGS = frozenset(
-    {
-        "-c",
-        "/c",
-        "-S",
-        "-E",
-        "-fsyntax-only",
-        "-pipe",
-        "-Werror",
-        "-fdiagnostics-color",
-        "-fdiagnostics-color=always",
-        "-fdiagnostics-color=auto",
-        "-fcolor-diagnostics",
-        "--",
-    }
-)
-DROP_FLAG_PREFIXES = (
-    "-Werror=",
-    "-o",
-    "/Fo",
-    "/Fe",
-    "/Fd",
-    "-MF",
-    "-MT",
-    "-MQ",
-    "-MD",
-    "-MMD",
-    "-l",
-    "-L",
-    "-Wl,",
-    "-rdynamic",
-)
-TAKES_VALUE = frozenset(
-    {
-        "-I",
-        "-D",
-        "-U",
-        "-isystem",
-        "-iquote",
-        "-idirafter",
-        "-include",
-        "-iframework",
-        "-isysroot",
-        "--sysroot",
-        "-stdlib",
-        "-o",
-        "-MF",
-        "-MT",
-        "-MQ",
-        "-Xclang",
-        "/I",
-        "/D",
-        "/U",
-        "/std",
-        "/Fo",
-        "/Fe",
-        "/Fd",
-    }
-)
 
 
 @dataclass(frozen=True)
@@ -203,64 +120,45 @@ def report_path(build_dir: Path) -> Path:
     return Path(build_dir) / concept_scope.REPORT_NAME
 
 
-def write_report(
+def assemble_report(
     build_dir: Path,
     *,
+    headers: Mapping[str, Sequence[Path]],
+    parses: Sequence[HeaderParse],
+    fan_out: Mapping[str, int],
+    provenance: Mapping[str, Any],
     root: Path = PROJECT_ROOT,
-    jobs: int | None = None,
-    clang: str | None = None,
-    compile_flags: Sequence[str] | None = None,
     chains: Sequence[concept_scope.ConstructionChain] | None = None,
 ) -> dict[str, object]:
-    """Build the concept report, write it next to the compile database, and return it."""
-    report = generate_report(
-        build_dir,
-        root=root,
-        jobs=jobs,
-        clang=clang,
-        compile_flags=compile_flags,
-        chains=chains,
-    )
-    path = report_path(build_dir)
-    path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    return report
-
-
-def generate_report(
-    build_dir: Path,
-    *,
-    root: Path = PROJECT_ROOT,
-    jobs: int | None = None,
-    clang: str | None = None,
-    compile_flags: Sequence[str] | None = None,
-    chains: Sequence[concept_scope.ConstructionChain] | None = None,
-) -> dict[str, object]:
+    """Assemble unchanged concept arithmetic only from complete admitted observations."""
     catalog = concept_scope.CONSTRUCTION_CHAINS if chains is None else tuple(chains)
     if chains is None:
         missing_chains = concept_scope.validate_construction_chains(root)
         if missing_chains:
             listed = ", ".join(missing_chains)
-            raise die(f"construction-chain catalog paths are missing: {listed}")
+            raise ValueError(f"construction-chain catalog paths are missing: {listed}")
 
-    headers = concept_scope.public_headers(root)
-    flags = list(compile_flags) if compile_flags is not None else compile_flag_union(build_dir, root)
-    clang_bin = clang if clang is not None else resolve_clang(build_dir)
-    workers = jobs if jobs is not None else tidyengine.default_jobs()
-
-    parses = parse_headers(headers, clang_bin, flags, root, workers)
+    if (
+        set(headers) != {"core", "application"}
+        or any(not paths for paths in headers.values())
+        or {area: tuple(sorted(paths)) for area, paths in headers.items()} != concept_scope.public_headers(root)
+    ):
+        raise ValueError("concept report requires both complete public-header areas")
+    expected = {(_relative(path, root), area) for area, paths in headers.items() for path in paths}
+    if set(fan_out) != {header for header, _ in expected} or any(
+        type(count) is not int or count < 0 for count in fan_out.values()
+    ):
+        raise ValueError("compiler include observations do not cover the exact public-header denominator")
     errors = [parsed.error for parsed in parses if parsed.error]
     if errors:
         preview = "\n".join(errors[:8])
         more = "" if len(errors) <= 8 else f"\n... {len(errors) - 8} more"
-        raise die(f"concept report failed to parse {len(errors)} public header(s):\n{preview}{more}")
+        raise ValueError(f"concept report failed to parse {len(errors)} public header(s):\n{preview}{more}")
 
     declarations = _dedup_declarations(parses)
     edges = resolve_edges(parses, declarations)
     include_includes = _include_edges(parses)
     public_headers = {area: sorted({_relative(path, root) for path in paths}) for area, paths in headers.items()}
-    all_public_headers = [header for area_headers in public_headers.values() for header in area_headers]
-    fan_out = translation_unit_fan_out(build_dir, root, all_public_headers)
-
     by_area = _area_totals(declarations, edges)
     include_stats = _include_stats(parses)
     fan_out_stats = _fan_out_stats(fan_out, public_headers["application"])
@@ -282,16 +180,17 @@ def generate_report(
         "generatedAt": datetime.now(UTC).isoformat(),
         "buildDir": str(absolute_path(build_dir)),
         "scope": concept_scope.scope_manifest(),
+        "measurement": dict(provenance),
         "primary": {
             "core": {
                 **by_area["core"],
                 "includeWeight": include_stats["core"],
-                "rebuildFanOut": core_fan_out,
+                "compilerIncludeFanOut": core_fan_out,
             },
             "application": {
                 **by_area["application"],
                 "includeWeight": include_stats["application"],
-                "rebuildFanOut": fan_out_stats,
+                "compilerIncludeFanOut": fan_out_stats,
             },
             "constructionHops": construction,
         },
@@ -320,126 +219,6 @@ def format_summary(report: Mapping[str, Any]) -> str:
     )
 
 
-def resolve_clang(build_dir: Path | None = None) -> str:
-    if os.name == "nt":
-        if build_dir is None:
-            raise die("Windows concept report requires a configured build directory to locate clang")
-        return tidyengine.clang_tool(build_dir, "clang")
-    found = shutil.which("clang")
-    if found is None:
-        raise die("clang is required for ./ao deps report --concepts")
-    return found
-
-
-def compile_flag_union(build_dir: Path, root: Path = PROJECT_ROOT) -> list[str]:
-    database = Path(build_dir) / "compile_commands.json"
-    if not database.is_file():
-        raise die(f"compile_commands.json not found in {build_dir}; run ./ao build first")
-    try:
-        entries = json.loads(database.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
-        raise die(f"cannot read {database}: {error}") from error
-    if not isinstance(entries, list):
-        raise die(f"invalid compilation database in {database}: expected a JSON array")
-
-    flags: list[str] = []
-    seen: set[str] = set()
-    for entry in entries:
-        if not isinstance(entry, dict):
-            continue
-        for flag in extract_compile_flags(entry, root, build_dir=Path(build_dir)):
-            if flag not in seen:
-                seen.add(flag)
-                flags.append(flag)
-    if not any(flag == "-std=c++26" or flag.startswith("-std=") or flag.startswith("/std") for flag in flags):
-        flags.insert(0, "-std=c++26")
-    return flags
-
-
-def extract_compile_flags(
-    entry: Mapping[str, Any],
-    root: Path = PROJECT_ROOT,
-    build_dir: Path | None = None,
-) -> list[str]:
-    raw = entry.get("arguments")
-    if isinstance(raw, list) and all(isinstance(item, str) for item in raw):
-        arguments = list(raw)
-    elif isinstance(command := entry.get("command"), str):
-        arguments = shlex.split(command, posix=os.name != "nt")
-    else:
-        return []
-
-    source = entry.get("file")
-    source_names = {str(source)} if isinstance(source, str) else set()
-    flags: list[str] = []
-    index = 1 if arguments else 0
-    while index < len(arguments):
-        argument = arguments[index]
-        if argument in source_names or _looks_like_source(argument):
-            index += 1
-            continue
-        if argument == "-Xclang" or argument in DROP_EXACT_FLAGS or argument.startswith(DROP_FLAG_PREFIXES):
-            if argument in TAKES_VALUE and index + 1 < len(arguments):
-                index += 2
-                continue
-            index += 1
-            continue
-        if argument in TAKES_VALUE:
-            if index + 1 < len(arguments):
-                flags.extend(
-                    _project_flags(
-                        _normalize_flag_pair(argument, arguments[index + 1], root, entry),
-                        root,
-                        build_dir,
-                        entry,
-                    )
-                )
-                index += 2
-                continue
-        if argument.startswith(KEEP_FLAG_PREFIXES):
-            flags.extend(_project_flags([_normalize_flag(argument, root, entry)], root, build_dir, entry))
-        index += 1
-    return flags
-
-
-def parse_headers(
-    headers: Mapping[str, Sequence[Path]],
-    clang: str,
-    flags: Sequence[str],
-    root: Path,
-    jobs: int,
-) -> list[HeaderParse]:
-    work: list[tuple[str, Path]] = []
-    for area, paths in headers.items():
-        work.extend((area, path) for path in paths)
-    if not work:
-        return []
-
-    workers = max(1, min(jobs, len(work)))
-    results: list[HeaderParse] = []
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = {pool.submit(parse_header, clang, flags, path, area, root): (area, path) for area, path in work}
-        for future in as_completed(futures):
-            results.append(future.result())
-    results.sort(key=lambda item: (item.area, item.header))
-    return results
-
-
-def parse_header(
-    clang: str,
-    flags: Sequence[str],
-    path: Path,
-    area: str,
-    root: Path,
-) -> HeaderParse:
-    relative = _relative(path, root)
-    try:
-        ast = dump_ast(clang, flags, path)
-    except (OSError, subprocess.CalledProcessError, json.JSONDecodeError, ValueError) as error:
-        return HeaderParse(header=relative, area=area, error=f"{relative}: {error}")
-    return extract_header(ast, path, area, root)
-
-
 def dump_ast(clang: str, flags: Sequence[str], path: Path) -> dict[str, Any]:
     command = [
         clang,
@@ -461,11 +240,12 @@ def dump_ast(clang: str, flags: Sequence[str], path: Path) -> dict[str, Any]:
     if result.returncode != 0:
         detail = (result.stderr or result.stdout).strip() or f"exit {result.returncode}"
         raise ValueError(detail)
-    payload = result.stdout.lstrip()
-    brace = payload.find("{")
-    if brace < 0:
-        return {"kind": "TranslationUnitDecl", "inner": []}
-    documents = _load_json_documents(payload[brace:])
+    return ast_from_output(result.stdout)
+
+
+def ast_from_output(payload: str) -> dict[str, Any]:
+    """Decode the real filtered AST stream, including multiple namespace documents."""
+    documents = _load_json_documents(payload)
     if not documents:
         return {"kind": "TranslationUnitDecl", "inner": []}
     if len(documents) == 1 and documents[0].get("kind") == "TranslationUnitDecl":
@@ -495,83 +275,6 @@ def extract_header(ast: Mapping[str, Any], path: Path, area: str, root: Path) ->
         bind_unbind=sorted(collector.bind_unbind),
         aggregates=collector.aggregates,
     )
-
-
-def translation_unit_fan_out(build_dir: Path, root: Path, headers: Sequence[str]) -> dict[str, int]:
-    """Count ninja consumers for each public header path (repo-relative posix)."""
-    ninja = shutil.which("ninja")
-    if ninja is None or not (Path(build_dir) / "build.ninja").is_file():
-        return {header: 0 for header in headers}
-
-    try:
-        with buildlock.build_tree_lock(build_dir):
-            result = subprocess.run(
-                [ninja, "-t", "deps"],
-                cwd=build_dir,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                check=False,
-            )
-    except OSError:
-        return {header: 0 for header in headers}
-    if result.returncode != 0:
-        return {header: 0 for header in headers}
-
-    live_outputs = _compile_outputs(build_dir)
-    return _fan_out_from_ninja_deps(result.stdout, build_dir, root, headers, live_outputs)
-
-
-def _compile_outputs(build_dir: Path) -> set[str]:
-    """Return outputs in the current compile graph, excluding stale Ninja deps-log records."""
-    database = Path(build_dir) / "compile_commands.json"
-    try:
-        entries = json.loads(database.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return set()
-    if not isinstance(entries, list):
-        return set()
-
-    outputs: set[str] = set()
-    for entry in entries:
-        if not isinstance(entry, dict) or not isinstance(output := entry.get("output"), str):
-            continue
-        outputs.add(_normalize_path(_ninja_path(output, build_dir)))
-    return outputs
-
-
-def _fan_out_from_ninja_deps(
-    output: str,
-    build_dir: Path,
-    root: Path,
-    headers: Sequence[str],
-    live_outputs: set[str],
-) -> dict[str, int]:
-    wanted = {_normalize_path(root / header): header for header in headers}
-    consumers: dict[str, set[str]] = {header: set() for header in headers}
-    current_output: str | None = None
-    for raw_line in output.splitlines():
-        if not raw_line:
-            current_output = None
-            continue
-        if raw_line[0].isspace():
-            if current_output is None:
-                continue
-            dependency = raw_line.strip()
-            if not dependency:
-                continue
-            key = _normalize_path(_ninja_path(dependency, build_dir))
-            if header := wanted.get(key):
-                consumers[header].add(current_output)
-            continue
-        target, marker, _ = raw_line.partition(": #deps ")
-        target_path = _normalize_path(_ninja_path(target.strip(), build_dir))
-        current_output = (
-            target_path if marker and raw_line.rstrip().endswith("(VALID)") and target_path in live_outputs else None
-        )
-    return {header: len(names) for header, names in consumers.items()}
 
 
 def percentile(values: Sequence[int], percent: float) -> int:
@@ -854,8 +557,7 @@ def _load_json_documents(payload: str) -> list[dict[str, Any]]:
             value, end = decoder.raw_decode(payload, index)
         except json.JSONDecodeError as error:
             raise ValueError(f"clang JSON AST was truncated: {error}") from error
-        if isinstance(value, dict):
-            documents.append(value)
+        documents.append(value)
         index = end
     return documents
 
@@ -1060,8 +762,8 @@ def _secondary_inventory(
     }
 
 
-def _source_aggregate_inventory(root: Path) -> list[dict[str, object]]:
-    entries: list[dict[str, object]] = []
+def aggregate_headers(root: Path) -> tuple[Path, ...]:
+    """The source-header read set of the existing aggregate inventory."""
     candidates: list[Path] = []
     for relative_root in ("include", "app"):
         base = root / relative_root
@@ -1071,7 +773,12 @@ def _source_aggregate_inventory(root: Path) -> list[dict[str, object]]:
             path for path in base.rglob("*") if path.is_file() and path.suffix in concept_scope.HEADER_SUFFIXES
         )
 
-    for path in sorted(candidates):
+    return tuple(sorted(candidates))
+
+
+def _source_aggregate_inventory(root: Path) -> list[dict[str, object]]:
+    entries: list[dict[str, object]] = []
+    for path in aggregate_headers(root):
         try:
             source = path.read_text(encoding="utf-8")
         except OSError:
@@ -1156,7 +863,7 @@ def _looks_like_data_member(statement: str) -> bool:
 
 def _area_line(label: str, area: Mapping[str, Any]) -> str:
     include = area["includeWeight"]
-    fan = area["rebuildFanOut"]
+    fan = area["compilerIncludeFanOut"]
     return (
         f"  {label + ' declarations:':<26}"
         f"{area['declarations']}  "
@@ -1165,106 +872,9 @@ def _area_line(label: str, area: Mapping[str, Any]) -> str:
         f"edges {area['dependencyEdges']}; "
         f"include p50 {include['medianHeaders']} hdr/{include['medianBytes']} B, "
         f"p95 {include['p95Headers']} hdr/{include['p95Bytes']} B; "
-        f"fan-out p50 {fan['medianTranslationUnits']} TU, "
+        f"compiler include fan-out p50 {fan['medianTranslationUnits']} TU, "
         f"p95 {fan['p95TranslationUnits']} TU)"
     )
-
-
-def _looks_like_source(argument: str) -> bool:
-    suffix = Path(argument).suffix.lower()
-    return suffix in {".c", ".cc", ".cpp", ".cxx", ".c++", ".h", ".hh", ".hpp", ".hxx"}
-
-
-def _normalize_flag(argument: str, root: Path, entry: Mapping[str, Any]) -> str:
-    if argument.startswith("/I"):
-        return "-I" + _resolve_include(argument[2:], root, entry)
-    if argument.startswith("/D"):
-        return "-D" + argument[2:]
-    if argument.startswith("/U"):
-        return "-U" + argument[2:]
-    if argument.startswith("/std:"):
-        return "-std=" + argument.split(":", 1)[1].replace("c++latest", "c++26")
-    for prefix in ("-isystem", "-iquote", "-idirafter", "-I"):
-        if argument.startswith(prefix) and len(argument) > len(prefix) and not argument[len(prefix) :].startswith("-"):
-            value = argument[len(prefix) :]
-            return prefix + _resolve_include(value, root, entry)
-    return argument
-
-
-def _normalize_flag_pair(flag: str, value: str, root: Path, entry: Mapping[str, Any]) -> list[str]:
-    mapped = {"/I": "-I", "/D": "-D", "/U": "-U"}
-    flag = mapped.get(flag, flag)
-    if flag in {"-I", "-isystem", "-iquote", "-idirafter"}:
-        return [flag + _resolve_include(value, root, entry)]
-    if flag in {"-include", "-iframework"}:
-        return [flag, _resolve_include(value, root, entry)]
-    if flag == "/std":
-        return ["-std=" + value.replace("c++latest", "c++26")]
-    return [flag, value]
-
-
-def _project_flags(
-    flags: Sequence[str],
-    root: Path,
-    build_dir: Path | None,
-    entry: Mapping[str, Any],
-) -> list[str]:
-    """Keep language/defines and project include paths; drop host SDK -isystem directories."""
-    kept: list[str] = []
-    skip_next = False
-    for flag in flags:
-        if skip_next:
-            skip_next = False
-            if _is_project_include_path(flag, root, build_dir, entry):
-                kept.append(flag)
-            continue
-        if flag in {"-I", "-isystem", "-iquote", "-idirafter", "-include", "-iframework"}:
-            skip_next = True
-            kept.append(flag)
-            continue
-        prefix = next(
-            (
-                item
-                for item in ("-isystem", "-iquote", "-idirafter", "-I")
-                if flag.startswith(item) and len(flag) > len(item)
-            ),
-            None,
-        )
-        if prefix is not None:
-            if _is_project_include_path(flag[len(prefix) :], root, build_dir, entry):
-                kept.append(flag)
-            continue
-        kept.append(flag)
-    if kept and kept[-1] in {"-I", "-isystem", "-iquote", "-idirafter", "-include", "-iframework"}:
-        kept.pop()
-    return kept
-
-
-def _is_project_include_path(value: str, root: Path, build_dir: Path | None, entry: Mapping[str, Any]) -> bool:
-    path = Path(value)
-    candidate = workspace_cache.canonical_portal_path(absolute_path(path))
-    bases = [workspace_cache.canonical_portal_path(root)]
-    if build_dir is not None:
-        bases.append(workspace_cache.canonical_portal_path(build_dir))
-    directory = entry.get("directory")
-    if isinstance(directory, str):
-        bases.append(workspace_cache.canonical_portal_path(Path(directory)))
-    for base in bases:
-        try:
-            candidate.relative_to(base)
-            return True
-        except ValueError:
-            continue
-    return False
-
-
-def _resolve_include(value: str, root: Path, entry: Mapping[str, Any]) -> str:
-    path = Path(value)
-    if path.is_absolute():
-        return str(absolute_path(path))
-    directory = entry.get("directory")
-    base = Path(directory) if isinstance(directory, str) else root
-    return str(absolute_path(base / path))
 
 
 def _relative(path: Path, root: Path) -> str:
@@ -1272,11 +882,4 @@ def _relative(path: Path, root: Path) -> str:
 
 
 def _normalize_path(path: Path | str) -> str:
-    return os.path.normcase(str(workspace_cache.canonical_portal_path(Path(path))))
-
-
-def _ninja_path(value: str, build_dir: Path) -> Path:
-    path = Path(value)
-    if path.is_absolute():
-        return path
-    return build_dir / path
+    return os.path.normcase(str(Path(path).resolve()))

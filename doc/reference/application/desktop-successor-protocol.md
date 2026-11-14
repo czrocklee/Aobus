@@ -15,7 +15,7 @@ version. The owning behavior is the
 
 ## Code boundary
 
-`ao_desktop_launch` owns parsing and encoding through
+The desktop-launch library owns parsing and encoding through
 [`LibrarySuccessorProtocol.h`](../../../app/include/ao/desktop/LibrarySuccessorProtocol.h).
 The [system architecture](../../system/overview.md) and
 [interactive session lifecycle architecture](../../system/session-lifecycle.md)

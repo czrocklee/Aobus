@@ -1,16 +1,11 @@
-"""ao analyze — Clang Static Analyzer via clang-tidy, report-only by default."""
+"""ao analyze — Clang Static Analyzer over native Bazel compile contexts."""
 
 import argparse
-import contextlib
 import os
-import re
-import shutil
-import subprocess
 import sys
 from pathlib import Path
 
-from ..core import builddir, tidyconfig, tidyengine, workspace_cache
-from ..core.dedup import deduplicate
+from ..core import bazel_lint, buildenv, gitfiles, tidyconfig, tidyengine
 from ..core.paths import PROJECT_ROOT, absolute_path
 from ..core.proc import die
 
@@ -32,29 +27,6 @@ examples:
 """
 
 ALL_FOLDERS = ["lib", "app", "include", "test", "tool/lint"]
-
-ANALYZER_CHECK_GROUPS = [
-    "clang-analyzer-core.*",
-    "clang-analyzer-cplusplus.*",
-    "clang-analyzer-deadcode.*",
-    "clang-analyzer-nullability.*",
-    "clang-analyzer-osx.*",
-    "clang-analyzer-optin.cplusplus.*",
-    "clang-analyzer-optin.performance.*",
-    "clang-analyzer-optin.portability.*",
-    "clang-analyzer-security.*",
-    "clang-analyzer-unix.*",
-    "clang-analyzer-valist.*",
-]
-
-_PATH_SEPARATOR_RE = r"[/\\]"
-
-
-def project_header_filter(*, source_roots: tuple[Path, ...] | None = None) -> str:
-    """Return an analyzer header filter that accepts native and POSIX separators."""
-    roots = tidyconfig.source_roots_or_default(source_roots, project_root=absolute_path(PROJECT_ROOT))
-    root = "|".join(re.escape(path.as_posix().rstrip("/")).replace("/", _PATH_SEPARATOR_RE) for path in roots)
-    return f"({root}){_PATH_SEPARATOR_RE}(lib|app|include|test|tool{_PATH_SEPARATOR_RE}lint){_PATH_SEPARATOR_RE}.*"
 
 
 def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
@@ -80,9 +52,16 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
     parser.set_defaults(func=run_command)
 
 
+def requires_build_environment(args: argparse.Namespace) -> bool:
+    if args.jobs < 1:
+        raise die("-j must be at least 1.")
+    files, _explicit = analyzable_sources(args)
+    return buildenv.requires_source_build_env(args, files)
+
+
 def classify(path: Path) -> bool:
-    """Skip checkout lint fixtures after canonicalizing active owned compiler views."""
-    path = workspace_cache.canonical_portal_path(path, project_root=PROJECT_ROOT)
+    """Skip the checkout's intentional lint negatives after native normalization."""
+    path = absolute_path(path)
     try:
         rel = path.relative_to(absolute_path(PROJECT_ROOT)).as_posix()
     except ValueError:
@@ -93,13 +72,26 @@ def classify(path: Path) -> bool:
     return not rel.startswith("test/lint/")
 
 
-def analyzer_checks(alpha: bool, only: str | None) -> str:
-    if only:
-        return f"-*,{only}"
-    groups = list(ANALYZER_CHECK_GROUPS)
-    if alpha:
-        groups.append("clang-analyzer-alpha.*")
-    return ",".join(["-*", *groups])
+def analyzable_sources(args: argparse.Namespace) -> tuple[list[str], bool]:
+    """Resolve the analyzer scope to existing files, excluding checkout lint fixtures."""
+    candidates, explicit = tidyengine.resolve_scope(args, ALL_FOLDERS, "Analyzing")
+    files: list[str] = []
+    seen: set[Path] = set()
+    for name in candidates:
+        path = Path(name)
+        if not path.is_absolute():
+            path = PROJECT_ROOT / path
+        if not path.is_file():
+            if explicit:
+                raise die(f"explicitly selected analyzer path does not exist or is not a file: {name}")
+            continue
+        if path.suffix not in gitfiles.CPP_SUFFIXES:
+            continue
+        path = absolute_path(path)
+        if path not in seen and classify(path):
+            seen.add(path)
+            files.append(str(path))
+    return files, explicit
 
 
 def run_command(args: argparse.Namespace) -> int:
@@ -112,126 +104,8 @@ def run_command(args: argparse.Namespace) -> int:
         return 1
     if args.jobs < 1:
         raise die("-j must be at least 1.")
-    build_dir = Path(args.path) if args.path else builddir.analyze_dir()
-
-    out = open(args.output, "w", encoding="utf-8") if args.output else sys.stdout
-    with contextlib.ExitStack() as stack:
-        if args.output:
-            stack.callback(out.close)
-
-        tidyengine.ensure_compile_db(build_dir)
-        try:
-            source_roots = workspace_cache.validated_source_roots(build_dir, project_root=PROJECT_ROOT)
-        except workspace_cache.WorkspaceCacheError as exc:
-            raise die(str(exc)) from exc
-        isystem = tidyengine.system_include_args()
-        if args.debug:
-            print(f"DEBUG ISYSTEM_ARGS: {isystem}", file=sys.stderr)
-
-        candidates, explicit = tidyengine.resolve_scope(args, ALL_FOLDERS, "Analyzing")
-        files: list[Path] = []
-        seen: set[Path] = set()
-        for name in candidates:
-            path = Path(name)
-            if not path.is_absolute():
-                path = PROJECT_ROOT / path
-            if not path.is_file():
-                continue
-            path = workspace_cache.canonical_portal_path(path, project_root=PROJECT_ROOT)
-            if path not in seen and classify(path):
-                seen.add(path)
-                files.append(path)
-        if not files:
-            print("No analyzable C++ or Objective-C++ sources found.", file=sys.stderr)
-            return 0
-
-        objective_cpp = [path for path in files if path.suffix.lower() == ".mm"]
-        if objective_cpp:
-            plan = tidyengine.compile_command_plan(build_dir, objective_cpp, project_root=PROJECT_ROOT)
-            exact = {target.selected for target in plan.targets if target.selected == target.translation_unit}
-            foreign = {detail.selected for detail in plan.deferral_details if detail.is_platform_incompatible}
-            missing = [path for path in objective_cpp if path not in exact and (explicit or path not in foreign)]
-            if missing:
-                print("ERROR: Objective-C++ analysis requires an exact native compile command:", file=sys.stderr)
-                for path in missing:
-                    print(f"  {path}", file=sys.stderr)
-                print(
-                    "Build these files on their native platform and select the resulting compile_commands.json.",
-                    file=sys.stderr,
-                )
-                return 1
-            if foreign:
-                print("Deferred Objective-C++ files incompatible with this platform (not analyzed):", file=sys.stderr)
-                for path in objective_cpp:
-                    if path in foreign:
-                        print(f"  {path}", file=sys.stderr)
-                files = [path for path in files if path not in foreign]
-                if not files:
-                    return 0
-
-        checks = analyzer_checks(args.alpha, args.check)
-
-        def run_one(file: str, log: Path) -> int:
-            file_checks = checks
-            try:
-                rel = absolute_path(file).relative_to(absolute_path(PROJECT_ROOT)).as_posix()
-            except ValueError:
-                rel = absolute_path(file).as_posix()
-            if not args.check and rel.startswith("test/"):
-                # Catch2 fixtures intentionally leak through REQUIRE-terminated paths.
-                file_checks += ",-clang-analyzer-cplusplus.NewDeleteLeaks"
-            extra: list[str] = list(isystem)
-            if "linux-gtk/" in rel:
-                extra.append("--extra-arg=-Wno-format-nonliteral")
-            config = f"{{Checks: '{file_checks}'}}"
-            command = [
-                "clang-tidy",
-                "-p",
-                str(build_dir),
-                *args.tidy_arg,
-                f"-config={config}",
-                f"-header-filter={project_header_filter(source_roots=source_roots)}",
-                *extra,
-                str(workspace_cache.compiler_source_path(Path(file), project_root=PROJECT_ROOT)),
-            ]
-            with open(log, "w", encoding="utf-8") as sink:
-                if args.debug:
-                    sink.write(f"DEBUG CONFIG: {config}\n")
-                return subprocess.call(command, cwd=PROJECT_ROOT, stdout=sink, stderr=subprocess.STDOUT)
-
-        print(f"=== clang-analyzer — {len(files)} file(s) ===")
-        tmpdir = tidyengine.make_tmpdir("analyzer-")
-        try:
-            result = tidyengine.run_parallel([str(path) for path in files], args.jobs, tmpdir, run_one)
-
-            diagnostic_count = 0
-            noisy = tidyengine.logs_with_diagnostics(result.logs)
-            if noisy:
-                diagnostic_count = deduplicate(
-                    noisy,
-                    out,
-                    PROJECT_ROOT,
-                    include_external=args.include_external_diagnostics,
-                    path_mapper=lambda path: workspace_cache.canonical_portal_path(path, project_root=PROJECT_ROOT),
-                )
-                out.flush()
-                if args.output:
-                    print(f"Output written to {args.output}")
-            if diagnostic_count == 0:
-                print("No analyzer diagnostics found.")
-
-            if result.failed:
-                print("Analyzer tool failure output:", file=sys.stderr)
-                for log in result.logs:
-                    text = log.read_text(encoding="utf-8", errors="replace") if log.is_file() else ""
-                    if text:
-                        print(f"=== {log.name} ===", file=sys.stderr)
-                        sys.stderr.write("".join(text.splitlines(keepends=True)[:120]))
-        finally:
-            shutil.rmtree(tmpdir, ignore_errors=True)
-
-        if diagnostic_count > 0:
-            print(f"Analyzer diagnostics: {diagnostic_count}")
-            if args.fail_on_diagnostics:
-                return 1
-        return 1 if result.failed else 0
+    files, explicit = analyzable_sources(args)
+    if not files:
+        print("No analyzable C++ or Objective-C++ sources found.", file=sys.stderr)
+        return 0
+    return bazel_lint.run_analyzer(args, files, explicit=explicit)

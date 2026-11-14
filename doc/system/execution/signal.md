@@ -85,8 +85,8 @@ Destroying a signal before a posted callback runs turns that callback into a suc
 - [`Signal.h`](../../../include/ao/async/Signal.h) implements the ordinary handler type, shared weak state, slot tombstoning, nested-emission depth, deferred payload ownership, and the `noexcept` owning emission boundary.
 - [`Subscription.h`](../../../include/ao/async/Subscription.h) defines the shared async lifetime name over `utility::ScopedRegistration`.
 - [`ScopedRegistration.h`](../../../include/ao/utility/ScopedRegistration.h) implements reset, destruction, and move-assignment release behavior.
-- [`lib/async/CMakeLists.txt`](../../../lib/async/CMakeLists.txt) records the public `ao_async -> ao_utility` dependency.
-- [`ArchitectureAudit.cmake`](../../../app/cmake/ArchitectureAudit.cmake) prevents generic signal primitives from returning to application-owned headers and namespaces.
+- [`lib/async/BUILD.bazel`](../../../lib/async/BUILD.bazel) records the public `ao_async -> ao_utility` dependency.
+- The shared [architecture audit](../../../script/ao/core/guardrails.py) prevents generic signal primitives from returning to application-owned headers and namespaces.
 
 ## Test map
 

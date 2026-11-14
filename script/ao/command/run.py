@@ -1,62 +1,62 @@
-"""ao run — run applications enabled by the native profile."""
+"""ao run — launch configured native products with their declared runfiles."""
 
 import argparse
 import os
 import subprocess
+from collections.abc import Generator
+from contextlib import ExitStack, contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..core import builddir, phases, winui, workspace_cache
+from ..core import bazel_workflows, builddir, phases, winui
+from ..core.bazel_native import BazelWorkspaceError
+from ..core.bazel_workflows import ExecutableArtifact
 from ..core.proc import die
-from . import build
 
-HELP = "Build and run an application enabled by the native profile"
+HELP = "Build and run a native application or an explicit executable target"
 NAME = "run"
-# True when ao.bat must initialize the MSVC/vcpkg build environment first.
 REQUIRES_BUILD_ENV = True
+REQUIRES_PYTHON_TOOLS = False
 
 
 def requires_build_environment(args: argparse.Namespace) -> bool:
-    """Return whether this invocation can build before launching."""
-    return not args.no_build
+    """Even --no-build needs positive native SDK/host analysis admission."""
+    return True
 
 
 @dataclass(frozen=True)
 class AppSpec:
     target: str
-    executable: Path
 
 
 APPS = {
-    "appkit": AppSpec("aobus-appkit", Path("app/macos-appkit/aobus-appkit.app/Contents/MacOS/aobus-appkit")),
-    "cli": AppSpec("aobus", Path("app/cli/aobus")),
-    "tui": AppSpec("aobus-tui", Path("app/tui/aobus-tui")),
-    "gtk": AppSpec("aobus-gtk", Path("app/linux-gtk/aobus-gtk")),
-    "winui": AppSpec("winui", Path("app/windows-winui")),
+    "appkit": AppSpec("//app/macos-appkit:aobus-appkit"),
+    "cli": AppSpec("//app/cli:aobus"),
+    "tui": AppSpec("//app/tui:aobus-tui"),
+    "gtk": AppSpec("//app/linux-gtk:aobus-gtk"),
+    "winui": AppSpec("//app/windows-winui:aobus-winui"),
 }
 
 EPILOG = """\
 examples:
-  ./ao run cli              # build and run the CLI client built in debug mode
-  ./ao run tui              # build and run the terminal client built in debug mode
-  ./ao run gtk              # build and run the GTK desktop client built in debug mode
-  ./ao run cli -n           # run the CLI client without rebuilding
-  ./ao run cli release      # build and run the CLI client with IPO/LTO
-  ./ao run gtk --clang      # build and run the GTK client built using clang compiler
-  ./ao run appkit           # build and run the native macOS desktop
-  ./ao run appkit --main-thread-checker  # requires full Xcode on macOS
-  ./ao run tui -- --library ~/Music   # forward option flags to the application after --
+  ./ao run cli                       # build and run the debug CLI
+  ./ao run tui release               # use the governed optimized build
+  ./ao run cli --no-build            # analyze and launch existing outputs only
+  ./ao run appkit --main-thread-checker  # diagnostic; requires full Xcode
+  ./ao run //test:utility_test        # build and run an explicit executable
+  ./ao run tui -- --library ~/Music  # preserve application argv after --
+
+--path (or BUILD_DIR) selects a Bazel tree outside the checkout; old build trees
+are not executable search paths. --no-build never builds missing outputs.
+WinUI requires an interactive desktop and the admitted Windows App Runtime.
 """
 
-WINDOWS_EPILOG = """\
-examples:
-  ao.bat run cli                         # build and run the CLI in debug mode
-  ao.bat run tui                         # build and run the TUI in debug mode
-  ao.bat run winui                       # build and run WinUI from an interactive desktop
-  ao.bat run tui -n                      # run without rebuilding
-  ao.bat run tui release                 # build and run the release TUI with IPO/LTCG
-  ao.bat run tui -- --library C:\\Music  # forward application options after --
-"""
+
+def _application(value: str) -> str:
+    apps = builddir.platform_profile().apps
+    if value in apps or value.startswith("//"):
+        return value
+    raise argparse.ArgumentTypeError(f"choose an application ({', '.join(apps)}) or a //package:target label")
 
 
 def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
@@ -65,22 +65,20 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
         NAME,
         help=HELP,
         description=HELP,
-        epilog=WINDOWS_EPILOG if builddir.platform_profile().name == "windows" else EPILOG,
+        epilog=EPILOG,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("app", choices=profile.apps, help=f"application to run ({', '.join(profile.apps)})")
-    build.add_build_arguments(parser)
-    parser.add_argument("-n", "--no-build", action="store_true", help="skip building the target")
+    parser.add_argument("app", type=_application, help=f"application ({', '.join(profile.apps)}) or executable label")
+    bazel_workflows.add_arguments(parser)
+    parser.add_argument(
+        "-n", "--no-build", action="store_true", help="analyze and run existing outputs without building"
+    )
     parser.add_argument(
         "--main-thread-checker",
         action="store_true",
-        help="inject Xcode's Main Thread Checker into a macOS AppKit application (diagnostic only)",
+        help="inject Xcode's Main Thread Checker into the macOS AppKit application (diagnostic only)",
     )
-    parser.add_argument(
-        "app_args",
-        nargs="*",
-        help="arguments forwarded to the application; put option flags after `--`",
-    )
+    parser.add_argument("app_args", nargs="*", help="application arguments; put option flags after --")
     parser.set_defaults(func=run_command)
 
 
@@ -96,7 +94,6 @@ def _main_thread_checker_environment() -> dict[str, str]:
         except (OSError, subprocess.CalledProcessError) as exc:
             raise die("--main-thread-checker requires a full Xcode installation selected by xcode-select.") from exc
     developer_dir = Path(developer)
-    # DEVELOPER_DIR also accepts an Xcode.app bundle, like Apple's tools do.
     if developer_dir.suffix == ".app":
         developer_dir = developer_dir / "Contents" / "Developer"
     library = developer_dir / "usr" / "lib" / "libMainThreadChecker.dylib"
@@ -112,75 +109,69 @@ def _main_thread_checker_environment() -> dict[str, str]:
     return env
 
 
-def _prepare_launch(args: argparse.Namespace) -> tuple[Path, dict[str, str] | None]:
-    profile = build.validate_build_options(args)
-    if args.app not in profile.apps:
+@contextmanager
+def _prepare_launch(args: argparse.Namespace) -> Generator[tuple[ExecutableArtifact, dict[str, str]], None, None]:
+    _config, host = bazel_workflows.validate_request(args)
+    profile = builddir.platform_profile()
+    target = APPS[args.app].target if args.app in APPS else args.app
+    app = next((name for name, spec in APPS.items() if spec.target == target), None)
+    if (app is not None and app not in profile.apps) or (app is None and not target.startswith("//")):
         available = ", ".join(profile.apps)
-        raise die(f"application '{args.app}' is unavailable on {profile.name}. Available applications: {available}.")
-
-    app = APPS[args.app]
+        raise die(f"application '{args.app}' is unavailable on {host}. Available applications: {available}.")
+    if app == "gtk" and getattr(args, "gtk", None) in (False, "off", "false"):
+        raise die("the GTK application is disabled by --gtk=off.")
     checker_env = None
     if args.main_thread_checker:
-        if profile.name != "macos" or args.app != "appkit":
+        if host != "macos" or app != "appkit":
             raise die("--main-thread-checker is available only for the macOS appkit application.")
         checker_env = _main_thread_checker_environment()
-
-    if not args.no_build:
-        build.do_build(args, [app.target])
-
-    if args.app == "winui":
-        build_dir = Path(args.path) if getattr(args, "path", None) else builddir.winui_build_dir()
-        configuration = "Debug" if args.flavor == "debug" else "Release"
-        executable = builddir.executable(build_dir / app.executable / configuration / "Aobus")
+    if app == "winui":
         try:
             winui.require_runtime()
             winui.require_interactive_session()
         except RuntimeError as exc:
             raise die(str(exc)) from exc
-    else:
-        build_dir = (
-            Path(args.path)
-            if getattr(args, "path", None)
-            else builddir.build_dir(args.flavor, clang=args.clang, asan=args.asan, tsan=args.tsan)
-        )
-        executable = builddir.executable(build_dir / app.executable)
+    with bazel_workflows.prepare_artifacts(args, [target], no_build=args.no_build) as artifacts:
+        (artifact,) = artifacts
+        environment = {**(checker_env if checker_env is not None else os.environ), **artifact.environment()}
+        yield artifact, environment
 
-    if not executable.exists():
-        command = "ao.bat build --target winui" if args.app == "winui" else "./ao build"
-        raise die(f"Executable not found at {executable}. Did you build the project? Run '{command}' first.")
-    workspace_cache.validate_consumer(build_dir)
-    return executable, checker_env
+
+def _run_application(command: list[str], environment: dict[str, str]) -> int:
+    """Settle the returned child before its caller releases configured artifacts."""
+    child: subprocess.Popen[bytes] | None = None
+    try:
+        # Install ownership handling before Popen returns, not after launch.
+        # Popen itself owns a construction failure before it returns a handle.
+        child = subprocess.Popen(command, env=environment)
+        return child.wait()
+    except BaseException as original:
+        if child is None:
+            raise
+        # Repeated Ctrl-C must not release the artifacts before the child is reaped.
+        while True:
+            try:
+                with suppress(ProcessLookupError):
+                    child.kill()
+                child.wait()
+                break
+            except (KeyboardInterrupt, InterruptedError):
+                continue
+        if isinstance(original, KeyboardInterrupt):
+            return 130
+        raise
 
 
 def run_command(args: argparse.Namespace) -> int:
-    with phases.measure("launch-preparation", command=NAME):
-        executable, checker_env = _prepare_launch(args)
-
-    if os.environ.get("AOBUS_WINDOWS_SOURCE_VIEW"):
-        with phases.measure("application", command=NAME) as phase:
-            with subprocess.Popen([str(executable), *args.app_args]) as child:
-                try:
-                    phase.status = child.wait()
-                except KeyboardInterrupt as interrupt:
-                    # Retire the views only after this application has exited.
-                    # An interrupted build still retains its views for surviving workers.
-                    try:
-                        child.kill()
-                        child.wait()
-                    except OSError as exc:
-                        interrupt.add_note(f"Could not reap the application: {exc}")
-                        raise interrupt from exc
-                    phase.status = 130
-            return phase.status
-    # Preparation success is not proof of exec success. Exec replaces this process;
-    # application runtime and exit status are not observed by the phase logger.
-    arguments = [str(executable), *args.app_args]
     try:
-        if checker_env is not None:
-            os.execvpe(str(executable), arguments, checker_env)
-        else:
-            os.execvp(str(executable), arguments)
-    except BaseException:
-        # Measure only error handling, never a span left open by successful exec.
-        with phases.measure("launch-error", command=NAME):
-            raise
+        # Supervision retains the artifact lock until exit without capturing
+        # stdin/stdout/stderr. Terminal frontends keep the caller's real terminal,
+        # and space-bearing argv is not reparsed through a shell or exec-on-CRT.
+        with ExitStack() as launch:
+            with phases.measure("launch-preparation", command=NAME):
+                artifact, environment = launch.enter_context(_prepare_launch(args))
+            with phases.measure("application", command=NAME) as phase:
+                phase.status = _run_application([str(artifact.executable), *args.app_args], environment)
+                return phase.status
+    except BazelWorkspaceError as error:
+        raise die(str(error)) from error

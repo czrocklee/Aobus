@@ -153,19 +153,13 @@ def checks_for(mode: str, selected: str | None) -> str:
 
 
 def source_roots_or_default(roots: tuple[Path, ...] | None, *, project_root: Path) -> tuple[Path, ...]:
-    """Select the checkout default or preserve a nonempty set of validated spellings."""
-    if roots is None:
-        return (project_root,)
-    if not roots:
-        raise ValueError("validated source roots must not be empty")
-    return roots
+    """Select the checkout default or preserve the validated spellings."""
+    return (project_root,) if roots is None else roots
 
 
 def config_for(checks: str, *, source_roots: tuple[Path, ...] | None = None) -> str:
     """Serialize check policy and the caller's nonempty validated source roots."""
     config = " ".join(CONFIG_BASE.replace("PLACEHOLDER", checks).split())
-    if config.count("SOURCE_ROOTS_JSON") != 1:
-        raise ValueError("clang-tidy policy must contain exactly one source-root option placeholder")
     roots = source_roots_or_default(source_roots, project_root=PROJECT_ROOT)
     # A JSON array inside the option preserves spaces, semicolons and native
     # separators; compact only the static policy, never the caller's paths.

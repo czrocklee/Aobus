@@ -5,14 +5,17 @@ let
     sha256 = pin.sha256;
   }) { };
   toolchain = builtins.fromJSON (builtins.readFile ./script/ao/toolchain.json);
-  compilerCache = builtins.fromJSON (builtins.readFile ./script/ao/compiler-cache.json);
-  # ./ao hashes these local inputs and the normalized GTK debug mode to reuse
-  # a matching shell without duplicating the stdenv compiler and linker flags.
+  bazelToolchain = builtins.fromJSON (builtins.readFile ./script/ao/bazel-toolchain.json);
+  buildifierToolchain = builtins.fromJSON (builtins.readFile ./script/ao/buildifier.json);
+  # Every local file this expression reads. The shell exports the list, and ./ao
+  # hashes it with the normalized GTK debug mode to reuse a matching shell
+  # without duplicating the stdenv compiler and linker flags.
   portalInputs = [
     ./shell.nix
     ./nixpkgs.json
     ./script/ao/toolchain.json
-    ./script/ao/compiler-cache.json
+    ./script/ao/bazel-toolchain.json
+    ./script/ao/buildifier.json
   ];
   portalFingerprint = builtins.hashString "sha256" (
     pkgs.lib.concatMapStrings (file: builtins.hashFile "sha256" file + "\n") portalInputs
@@ -147,26 +150,94 @@ let
     else
       pkgs.gtk4;
 
+  hardeningFlags = pkgs.stdenv.cc.defaultHardeningFlags;
+  # Reuse the JDK already selected by this Bazel package. Completion ignores
+  # system rc files, including Nixpkgs' otherwise implicit server_javabase.
+  bazelJavaInputs = builtins.filter (package: package ? home) pkgs.bazel_9.nativeBuildInputs;
+  bazelServerJavabase =
+    assert builtins.length bazelJavaInputs == 1;
+    toString (builtins.head bazelJavaInputs);
+  dependencyEntry = package: {
+    version = package.version;
+    storePath = toString package;
+    # Extra identities describe declared outputs without adding realization dependencies.
+    drvPath = builtins.unsafeDiscardStringContext package.drvPath;
+    outputs = pkgs.lib.genAttrs package.outputs (
+      name: builtins.unsafeDiscardStringContext (toString (pkgs.lib.getOutput name package))
+    );
+  };
   dependencyReport = pkgs.writeText "aobus-nix-dependencies.json" (builtins.toJSON {
     schemaVersion = 1;
     nixpkgsRevision = pin.rev;
+    ccWrapper = {
+      suffixSalt = pkgs.llvmPackages_22.clang.suffixSalt;
+      gccSuffixSalt = pkgs.stdenv.cc.suffixSalt;
+      hardeningEnable = hardeningFlags;
+      tools = {
+        clang = "${pkgs.llvmPackages_22.clang}/bin/clang";
+        "clang++" = "${pkgs.llvmPackages_22.clang}/bin/clang++";
+        ar = "${pkgs.llvmPackages_22.llvm}/bin/llvm-ar";
+        strip = "${pkgs.llvmPackages_22.llvm}/bin/llvm-strip";
+        objcopy = "${pkgs.llvmPackages_22.llvm}/bin/llvm-objcopy";
+        gcov = "${pkgs.llvmPackages_22.llvm}/bin/llvm-cov";
+      };
+      sanitizerIncludeDirectory = "${pkgs.llvmPackages_22.compiler-rt.dev}/include";
+      builtinRoots = map toString [
+        pkgs.llvmPackages_22.clang-unwrapped.lib
+        pkgs.gcc.cc
+        pkgs.glibc.dev
+      ];
+    };
     dependencies = {
-      boost = { version = pkgs.boost.version; storePath = toString pkgs.boost; };
-      fast-float = { version = aobus-fast-float.version; storePath = toString aobus-fast-float; };
-      ftxui = { version = pkgs.ftxui.version; storePath = toString pkgs.ftxui; };
-      icu = { version = aobus-icu.version; storePath = toString aobus-icu; };
-      lmdb = { version = aobus-lmdb.version; storePath = toString aobus-lmdb; };
-      spdlog = { version = aobus-spdlog.version; storePath = toString aobus-spdlog; };
-      catch2 = { version = pkgs.catch2_3.version; storePath = toString pkgs.catch2_3; };
-      cli11 = { version = pkgs.cli11.version; storePath = toString pkgs.cli11; };
-      rapidyaml = { version = pkgs.rapidyaml.version; storePath = toString pkgs.rapidyaml; };
-      gsl-lite = { version = pkgs.gsl-lite.version; storePath = toString pkgs.gsl-lite; };
-      lexy = { version = lexy.version; storePath = toString lexy; };
-      alac = { version = aobus-alac.version; storePath = toString aobus-alac; };
-      fakeit = { version = fakeit.version; storePath = toString fakeit; };
-      stb = {
+      boost = dependencyEntry pkgs.boost;
+      fast-float = dependencyEntry aobus-fast-float;
+      ftxui = dependencyEntry pkgs.ftxui;
+      mimalloc = dependencyEntry pkgs.mimalloc;
+      glib = dependencyEntry pkgs.glib;
+      glibmm = dependencyEntry pkgs.glibmm_2_68;
+      libsigcxx = dependencyEntry pkgs.libsigcxx_3_0;
+      gtkmm = dependencyEntry pkgs.gtkmm4;
+      # gtkmm4 consumes the normal GTK output, not the optional unstripped shell variant.
+      gtk4 = dependencyEntry pkgs.gtk4;
+      cairo = dependencyEntry pkgs.cairo;
+      cairomm = dependencyEntry pkgs.cairomm_1_16;
+      pango = dependencyEntry pkgs.pango;
+      pangomm = dependencyEntry pkgs.pangomm_2_48;
+      gdk-pixbuf = dependencyEntry pkgs.gdk-pixbuf;
+      graphene = dependencyEntry pkgs.graphene;
+      harfbuzz = dependencyEntry pkgs.harfbuzz;
+      freetype = dependencyEntry pkgs.freetype;
+      fontconfig = dependencyEntry pkgs.fontconfig;
+      vulkan-headers = dependencyEntry pkgs.vulkan-headers;
+      vulkan-loader = dependencyEntry pkgs.vulkan-loader;
+      dbus = dependencyEntry pkgs.dbus;
+      icu = dependencyEntry aobus-icu;
+      lmdb = dependencyEntry aobus-lmdb;
+      xxhash = dependencyEntry pkgs.xxhash;
+      spdlog = dependencyEntry aobus-spdlog;
+      catch2 = dependencyEntry pkgs.catch2_3;
+      cli11 = dependencyEntry pkgs.cli11;
+      rapidyaml = dependencyEntry pkgs.rapidyaml;
+      gsl-lite = dependencyEntry pkgs.gsl-lite;
+      lexy = dependencyEntry lexy;
+      gperf = dependencyEntry pkgs.gperf;
+      alac = dependencyEntry aobus-alac;
+      flac = dependencyEntry pkgs.flac;
+      fdk-aac = dependencyEntry pkgs.fdk_aac;
+      mpg123 = dependencyEntry pkgs.mpg123;
+      opus = dependencyEntry pkgs.libopus;
+      alsa-lib = dependencyEntry pkgs.alsa-lib;
+      pipewire = dependencyEntry pkgs.pipewire;
+      udev = dependencyEntry pkgs.udev;
+      # Linux GTK test imports and their already selected Xvfb/private-bus tools.
+      libX11 = dependencyEntry pkgs.libX11;
+      libXi = dependencyEntry pkgs.libXi;
+      libXtst = dependencyEntry pkgs.libXtst;
+      # xorgproto supplies the XTest/X11/Xi pkg-config Requires metadata.
+      xorgproto = dependencyEntry pkgs.xorgproto;
+      fakeit = dependencyEntry fakeit;
+      stb = dependencyEntry aobus-stb // {
         version = "${pkgs.stb.version}+resize2-2c980bb";
-        storePath = toString aobus-stb;
       };
     };
   });
@@ -177,8 +248,6 @@ let
       && requireToolVersion "mypy" toolchain.mypy pkgs.python3Packages.mypy.version
       && requireToolVersion "markdown-it-py" toolchain.markdown-it-py pkgs.python3Packages.markdown-it-py.version
       && requireToolVersion "mdurl" toolchain.mdurl pkgs.python3Packages.mdurl.version;
-  compilerCacheMatchesContract =
-    requireToolVersion "ccache" compilerCache.local.linuxVersion pkgs.ccache.version;
 
   # Linux desktop, audio, and development tooling.
   linuxOnlyInputs = with pkgs; [
@@ -211,18 +280,26 @@ in
 assert pkgs.stdenv.hostPlatform.isLinux || throw "Aobus shell.nix supports Linux only; on macOS use ./ao with the native vcpkg profile.";
 assert toolchain.schemaVersion == 1;
 assert toolchainMatchesContract;
-assert compilerCache.schemaVersion == 1;
-assert compilerCacheMatchesContract;
+assert bazelToolchain.schemaVersion == 1;
+assert requireToolVersion "Bazel" bazelToolchain.version pkgs.bazel_9.version;
+assert buildifierToolchain.schemaVersion == 1;
+assert requireToolVersion "Buildifier" buildifierToolchain.version pkgs.buildifier.version;
 pkgs.mkShell {
   name = "cpp-dev-env";
+  hardeningEnable = hardeningFlags;
+  nativeBuildInputs = [ pkgs.bazel_9 pkgs.buildifier ];
   passthru.portalShell = pkgs.bashInteractive;
   AOBUS_NIX_DEPENDENCY_REPORT = dependencyReport;
+  AOBUS_BAZEL_SERVER_JAVABASE = bazelServerJavabase;
   AO_NIX_SHELL_FINGERPRINT = portalFingerprint;
+  AO_NIX_SHELL_INPUTS = pkgs.lib.concatMapStringsSep " " (
+    file: pkgs.lib.removePrefix (toString ./. + "/") (toString file)
+  ) portalInputs;
   AO_NIX_PORTAL_PYTHON = "${portalPython}/bin/python3";
+  AO_NIX_BUILDIFIER = "${pkgs.buildifier}/bin/buildifier";
   buildInputs =
     with pkgs;
     [
-      ccache
       rsync
       cmake
       git
@@ -267,7 +344,7 @@ pkgs.mkShell {
     export CMAKE_INCLUDE_PATH="${lexy}/include:${aobus-stb}/include:$CMAKE_INCLUDE_PATH"
     export CPLUS_INCLUDE_PATH="${lexy}/include:${aobus-stb}/include/stb:${pkgs.gsl-lite}/include:$CPLUS_INCLUDE_PATH"
 
-    echo "Using nixpkgs pinned (see nixpkgs.json)"
-    echo "Using GCC by default"
+    echo "Using nixpkgs pinned (see nixpkgs.json)" >&2
+    echo "Bazel owns native product compilation with the pinned Clang toolchain" >&2
   '';
 }

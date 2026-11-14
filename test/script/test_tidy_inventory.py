@@ -1,13 +1,15 @@
 """Fixture-derived custom-check inventory and symmetric plugin validation."""
 
-import contextlib
-import io
+import argparse
+import json
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
 from ao.command import tidy
+from ao.core import bazel_lint_action as action
 from ao.core import linttest
 
 
@@ -15,8 +17,9 @@ class TidyInventoryTest(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
-        self.fixtures = Path(temporary.name) / "fixtures"
-        self.fixtures.mkdir()
+        self.root = Path(temporary.name)
+        self.fixtures = self.root / "test/lint/fixture"
+        self.fixtures.mkdir(parents=True)
         self.enterContext(mock.patch.object(linttest, "FIXTURE_DIR", self.fixtures))
 
     def fixture(self, name, source="// POSITIVE\nint value;\n"):
@@ -46,70 +49,94 @@ class TidyInventoryTest(unittest.TestCase):
             frozenset({"aobus-first", "aobus-header", "aobus-darwin", "aobus-Legacy_Alias", "aobus-clean"}),
         )
 
-    def test_empty_or_missing_custom_inventory_fails_before_running_a_tool(self):
-        self.fixture("modernize-use-starts-ends-with/Basic.cpp")
-        toolchain = tidy.TidyToolchain("clang-tidy", Path("plugin.so"), None)
-        with (
-            mock.patch.object(tidy.subprocess, "run") as run,
-            contextlib.redirect_stderr(io.StringIO()) as error,
-            self.assertRaises(SystemExit),
-        ):
-            tidy.verify_tidy_toolchain(toolchain)
-        run.assert_not_called()
-        self.assertIn("no non-blank Aobus checker fixtures", error.getvalue())
-        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
-            tidy.expected_aobus_checks(self.fixtures / "missing")
+    def prepare(self):
+        configuration = self.root / "configuration.json"
+        configuration.write_text(
+            json.dumps(
+                {
+                    "schema": 1,
+                    "source_root": str(self.root),
+                    "alpha": False,
+                    "check": None,
+                    "header_filter": None,
+                    "clang_tidy_args": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+        policy = self.root / "policy.json"
+        action.prepare(argparse.Namespace(configuration=configuration, output=policy))
+        return policy
+
+    def tools(self):
+        policy = self.prepare()
+        sdk = self.root / "sdk.json"
+        sdk.write_text(
+            json.dumps(
+                {
+                    "schema": 1,
+                    "platform": "linux",
+                    "version": "22.1.0",
+                    "host_kind": "plugin",
+                    "system_arguments": [],
+                    "analysis_arguments": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+        host, plugin = self.root / "clang-tidy", self.root / "plugin.so"
+        host.touch()
+        plugin.touch()
+        return argparse.Namespace(
+            policy=policy,
+            sdk=sdk,
+            tidy=host,
+            plugin=plugin,
+            output=self.root / "verified.json",
+            log=self.root / "verification.log",
+        )
 
     def test_registry_reports_both_fixture_and_toolchain_mismatches(self):
         self.fixture("aobus-first/Basic.cpp")
-        self.fixture("aobus-Legacy_Alias/Basic.cpp")
+        self.fixture("aobus-second/Basic.cpp")
         self.fixture("aobus-whitespace/Basic.cpp", " \t\n")
-        toolchain = tidy.TidyToolchain("clang-tidy", Path("plugin.so"), None)
-        for registered, expected_errors in (
-            (("aobus-first", "aobus-Legacy_Alias"), ()),
-            (("aobus-first",), ("fixture checks absent from the selected toolchain: aobus-Legacy_Alias",)),
+        tools = self.tools()
+        for registered, errors in (
+            (("aobus-first", "aobus-second"), ()),
+            (("aobus-first",), ("fixture checks absent from the selected toolchain: aobus-second",)),
             (
-                ("aobus-first", "aobus-Legacy_Alias", "aobus-stale", "aobus-whitespace"),
+                ("aobus-first", "aobus-second", "aobus-stale", "aobus-whitespace"),
                 ("registered checks without non-blank supported fixtures: aobus-stale, aobus-whitespace",),
             ),
             (
                 ("aobus-stale",),
                 (
-                    "fixture checks absent from the selected toolchain: aobus-Legacy_Alias, aobus-first",
+                    "fixture checks absent from the selected toolchain: aobus-first, aobus-second",
                     "registered checks without non-blank supported fixtures: aobus-stale",
                 ),
             ),
+            (("aobus-first", "aobus-second", "aobus-first"), ("duplicate registered Aobus checks",)),
         ):
-            with self.subTest(registered=registered), contextlib.redirect_stderr(io.StringIO()) as error:
-                result = mock.Mock(returncode=0, stdout="Enabled checks:\n" + "\n".join(registered))
-                with mock.patch.object(tidy.subprocess, "run", return_value=result):
-                    if not expected_errors:
-                        tidy.verify_tidy_toolchain(toolchain)
-                    else:
-                        with self.assertRaises(SystemExit):
-                            tidy.verify_tidy_toolchain(toolchain)
-                        for expected_error in expected_errors:
-                            self.assertIn(expected_error, error.getvalue())
-                        self.assertIn(str(self.fixtures), error.getvalue())
-                        self.assertIn("including untracked files", error.getvalue())
 
-    def test_failed_registry_query_is_not_reported_as_a_fixture_mismatch(self):
-        self.fixture("aobus-first/Basic.cpp")
-        with (
-            mock.patch.object(tidy.subprocess, "run", return_value=mock.Mock(returncode=2, stdout="")),
-            contextlib.redirect_stderr(io.StringIO()) as error,
-            self.assertRaises(SystemExit),
-        ):
-            tidy.verify_tidy_toolchain(tidy.TidyToolchain("clang-tidy", Path("plugin.so"), None))
-        self.assertIn("cannot list the selected clang-tidy check registry (exit 2)", error.getvalue())
-        self.assertNotIn("working-tree fixtures", error.getvalue())
+            def invoke(command, registered=registered, **_kwargs):
+                if command == [str(tools.tidy), "--version"]:
+                    return subprocess.CompletedProcess(command, 0, "LLVM version 22.1.0\n")
+                self.assertEqual(
+                    command, [str(tools.tidy), f"-load={tools.plugin}", "-checks=-*,aobus-*", "-list-checks"]
+                )
+                return subprocess.CompletedProcess(command, 0, "Enabled checks:\n" + "\n".join(registered))
 
-    def test_fixture_read_failure_names_the_inventory_root(self):
-        self.fixture("aobus-first/Basic.cpp")
-        with (
-            mock.patch.object(Path, "read_text", side_effect=OSError("read denied")),
-            contextlib.redirect_stderr(io.StringIO()) as error,
-            self.assertRaises(SystemExit),
-        ):
-            tidy.expected_aobus_checks()
-        self.assertIn(f"cannot read Aobus checker fixtures under {self.fixtures}", error.getvalue())
+            with self.subTest(registered=registered), mock.patch.object(action.subprocess, "run", side_effect=invoke):
+                if not errors:
+                    self.assertEqual(action.verify(tools), 0)
+                    self.assertTrue(json.loads(tools.output.read_text())["verified"])
+                else:
+                    with self.assertRaisesRegex(
+                        ValueError, "registry differs from the working fixture registry"
+                    ) as failure:
+                        action.verify(tools)
+                    self.assertFalse(tools.output.exists())
+                    for error in errors:
+                        self.assertIn(error, str(failure.exception))
+                        self.assertIn(error, tools.log.read_text())
+                    self.assertIn("\n".join(registered), tools.log.read_text())

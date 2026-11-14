@@ -572,6 +572,7 @@ int main(int argc, char* argv[])
 
     if (argc == 3 && std::string_view{argv[1]} == kScenarioOption)
     {
+      ao::test::reportProbeChildStarted();
       auto const scenario = std::string_view{argv[2]};
 
       if (scenario == "unowned-bus" || scenario == "mismatched-bus" || scenario == "unowned-instance")

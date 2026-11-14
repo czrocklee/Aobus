@@ -10,8 +10,8 @@ Product structure and behavior live in the [system guide](../system/README.md), 
 
 - [Build and run](build.md): Linux quick start, portal commands, build-tree selection, locks, and dependency inspection.
 - [macOS](macos.md) and [Windows](windows.md): native bootstrap, toolchains, state, platform commands, and limitations. Use `ao.bat` on Windows.
-- [Compiler cache](compiler-cache.md): optional setup, shared workspaces, and cache ownership.
 - [Optimized builds](optimized-builds.md): Release, IPO/LTO, profiling, and performance investigation.
+- [Bazel build system](bazel.md): the graph, toolchains, profiles, lint, completion, coverage, caching, and CI contracts behind the default portal commands.
 
 ## Implement a change
 

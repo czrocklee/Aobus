@@ -12,13 +12,13 @@ Detailed ordering, failure, storage, and lifecycle contracts live with their [to
 An arrow means “depends on”:
 
 ```text
-GTK ----+-> ao_app_uimodel -> ao_app_runtime -> core libraries
+GTK ----+-> uimodel -> app runtime -> core libraries
 TUI ----+
 WinUI --+
 AppKit -+
-CLI --------------------> ao_app_runtime -> core libraries
+CLI --------------------> app runtime -> core libraries
 
-GTK, WinUI and AppKit -> ao_desktop_launch -> utility / Boost.Process
+GTK, WinUI and AppKit -> desktop-launch library -> utility / Boost.Process
 Linux GTK and TUI -----> ao_system_media_linux -> GIO / D-Bus
 
 core libraries: utility, async, lmdb, media, library, query, audio
@@ -52,13 +52,13 @@ The [library structure](library/structure.md) owns write-capability acquisition;
 
 ### UIModel
 
-`ao_app_uimodel` converts runtime state into platform-neutral presentation and interaction policy.
+The UIModel library converts runtime state into platform-neutral presentation and interaction policy.
 It may own edit drafts, gestures, projections, formatting, layout values, and UI-local preference state, but not a second authority for library, playback, or workspace truth.
 [Presentation](presentation/README.md) explains how it composes runtime values and frontend adapters.
 
 ### Desktop application support
 
-`ao_desktop_launch`, under `app/include/ao/desktop/` and `app/desktop/`, supplies pure root selection, startup/switch plans, successor-protocol rules, and detached process creation to graphical frontends.
+The desktop-launch library, under `app/include/ao/desktop/` and `app/desktop/`, supplies pure root selection, startup/switch plans, successor-protocol rules, and detached process creation to graphical frontends.
 It is beside runtime and UIModel, not their lifecycle owner.
 It cannot inspect state stores, drive event loops, checkpoint a runtime, show failures, or tear down the graph.
 TUI and CLI do not link it; [desktop lifecycle](desktop-library-lifecycle.md) owns the shared handoff contract.
@@ -95,7 +95,7 @@ CLI owns arguments and output around `CoreRuntime`, bypassing UIModel when no in
 - Shared signals live in `ao_async`; each event owner still defines payload, executor affinity, and exception containment.
 
 These are executable constraints, not only diagram conventions.
-The check-owned `aobus_guardrails` target runs the declarative [application architecture audit](../../app/cmake/ArchitectureAudit.cmake) across Core, desktop support, runtime, UIModel, frontends, and focused tests.
+The shared completion-audit backend's declarative [application architecture audit](../../script/ao/core/guardrails.py) runs across Core, desktop support, runtime, UIModel, frontends, and focused tests; the completion gate consumes it.
 
 ## Data and control flow
 
@@ -127,7 +127,7 @@ Playback observations return through the callback executor before application st
 
 ## Implementation and tests
 
-- [`lib/CMakeLists.txt`](../../lib/CMakeLists.txt) and [`app/CMakeLists.txt`](../../app/CMakeLists.txt) define the target graph.
+- The [Bazel BUILD graph](../development/bazel.md) — the per-module `BUILD.bazel` files under `lib/` and `app/` — defines the target graph.
 - [`CoreRuntime`](../../app/include/ao/rt/CoreRuntime.h), [`AppRuntime`](../../app/include/ao/rt/AppRuntime.h), and [`LibraryPaths`](../../app/include/ao/rt/library/LibraryPaths.h) expose runtime composition and per-library paths.
 - [`AppRuntimeTest.cpp`](../../test/runtime/AppRuntimeTest.cpp) protects factory failure isolation, stable identity, and graph composition; [`LibraryPathsTest.cpp`](../../test/runtime/library/LibraryPathsTest.cpp) protects path derivation.
 - [Execution](execution/README.md), [session lifecycle](session-lifecycle.md), and the subsystem pages locate focused implementation and contract tests.

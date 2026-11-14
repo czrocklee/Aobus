@@ -55,7 +55,7 @@ Recognition for ingestion and decoder selection are therefore independent capabi
 - Runtime may compose `ao_media` and `ao_library`; UIModel and frontends do not parse containers or retain mapped-media views.
 - Container primitives expose validated structure and borrowed ranges, not product policy.
 
-The `ao_media_boundary_check` and `ao_library_media_file_boundary_check` targets protect the principal forbidden directions.
+The shared [architecture audit](../../../script/ao/core/guardrails.py) protects the principal forbidden directions at every completion gate.
 The [system architecture](../overview.md) owns the top-level layer model.
 
 ## Ownership and lifetime
@@ -123,7 +123,7 @@ The [outcome channel specification](../failure/outcome-channel.md) owns common r
 - [`include/ao/media/file/`](../../../include/ao/media/file) and [`lib/media/file/`](../../../lib/media/file) define the encoded-file boundary and format readers.
 - [`include/ao/media/`](../../../include/ao/media) and [`lib/media/`](../../../lib/media) contain reusable container primitives.
 - [`MediaTrack.h`](../../../app/runtime/library/MediaTrack.h) owns runtime visitor adaptation and backing lifetime.
-- [`lib/media/CMakeLists.txt`](../../../lib/media/CMakeLists.txt) defines `ao_media` and its dependency checks.
+- [`lib/media/BUILD.bazel`](../../../lib/media/BUILD.bazel) defines `ao_media` and its dependency checks.
 
 Detailed implementation and test authorities are listed by the behavior pages above rather than duplicated here.
 

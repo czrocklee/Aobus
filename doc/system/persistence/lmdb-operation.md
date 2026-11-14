@@ -342,13 +342,13 @@ UIModel and normal frontends consume retained values and snapshots rather than t
 - [`ThrowError.h`](../../../lib/lmdb/detail/ThrowError.h) dispatches native read faults to the owning transaction channel and constructs mutation-failure control flow; the private [`TransactionFailure.h`](../../../lib/lmdb/detail/TransactionFailure.h) carries the narrow transaction-control error to an owner boundary.
 - [`ReadFaultInjection.h`](../../../lib/lmdb/detail/ReadFaultInjection.h) and
   [`ThrowError.cpp`](../../../lib/lmdb/detail/ThrowError.cpp) own the
-  source-private, single-use native-read test seam; [`lib/lmdb/CMakeLists.txt`](../../../lib/lmdb/CMakeLists.txt)
+  source-private, single-use native-read test seam; [`lib/lmdb/BUILD.bazel`](../../../lib/lmdb/BUILD.bazel)
   guards its production boundary.
 - [`DatabaseOpenAdmissionProbe.h`](../../../lib/lmdb/detail/DatabaseOpenAdmissionProbe.h) and
   [`Transaction.cpp`](../../../lib/lmdb/Transaction.cpp) own the source-private
   contention observation used by deterministic gate tests; the LMDB build
   guard prevents production consumers from constructing it.
-- [`lib/lmdb/CMakeLists.txt`](../../../lib/lmdb/CMakeLists.txt) defines the independent `ao_lmdb` target and external dependency.
+- [`lib/lmdb/BUILD.bazel`](../../../lib/lmdb/BUILD.bazel) defines the independent `ao_lmdb` target and external dependency.
 
 ## Test map
 

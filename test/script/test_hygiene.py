@@ -3,10 +3,7 @@
 import argparse
 import contextlib
 import io
-import json
 import os
-import re
-import shlex
 import sys
 import tempfile
 import unittest
@@ -15,32 +12,14 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+from ao.__main__ import make_parser
 from ao.command import format as format_command
 from ao.command import hygiene, tidy
-from ao.core import tidyconfig
+from ao.core import bazel_native as native
+from ao.core.paths import PROJECT_ROOT
 
 
 class FormatCommandTest(unittest.TestCase):
-    def test_clang_format_recognizes_angled_project_headers_as_main_include(self):
-        configuration = (format_command.PROJECT_ROOT / ".clang-format").read_text(encoding="utf-8")
-
-        self.assertRegex(configuration, r"(?m)^MainIncludeChar:\s+Any\s*$")
-
-    def test_clang_format_groups_posix_headers_with_platform_headers(self):
-        configuration = (format_command.PROJECT_ROOT / ".clang-format").read_text(encoding="utf-8")
-        categories = re.findall(r"- Regex:\s+'([^']+)'\s+Priority:\s+(\d+)", configuration)
-
-        for header, expected in (
-            ("<sys/types.h>", 3),
-            ("<sys/file.h>", 3),
-            ("<fcntl.h>", 3),
-            ("<unistd.h>", 3),
-            ("<cstdint>", 4),
-        ):
-            with self.subTest(header=header):
-                priority = next(int(value) for pattern, value in categories if re.search(pattern, header))
-                self.assertEqual(priority, expected)
-
     def test_dispatches_cpp_and_python_files_to_their_formatters(self):
         args = Namespace(files=["lib/Foo.cpp", "script/foo.py"], all=False, commit=None, check=True)
 
@@ -50,8 +29,42 @@ class FormatCommandTest(unittest.TestCase):
                     with contextlib.redirect_stdout(io.StringIO()):
                         self.assertEqual(format_command.run_command(args), 0)
 
-        clang.assert_called_once_with(["lib/Foo.cpp"], check=True, build_dir=None)
-        ruff.assert_called_once_with(["script/foo.py"], check=True)
+        clang.assert_called_once_with(["lib/Foo.cpp"], check=True, build_dir=None, clang_format=None)
+        ruff.assert_called_once_with(["script/foo.py"], check=True, python=None)
+
+    def test_bazel_coverage_collector_stays_in_changed_and_all_format_scopes(self):
+        collector = "bazel/coverage/collect.py"
+        changed_args = Namespace(files=[], all=False, folder=[], commit=None)
+        all_args = Namespace(files=[], all=True, folder=[], commit=None)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            collector_file = root / "bazel" / "coverage" / "collect.py"
+            collector_file.parent.mkdir(parents=True)
+            collector_file.write_text("# coverage collector\n", encoding="utf-8")
+            generated = root / "bazel" / "coverage" / "__pycache__" / "collect.cpython-314.pyc"
+            generated.parent.mkdir()
+            generated.write_bytes(b"generated")
+            foreign = root / "sdk-cache" / "Cache.cpp"
+            foreign.parent.mkdir(parents=True)
+            foreign.write_text("// foreign SDK cache tree\n", encoding="utf-8")
+
+            with (
+                mock.patch.object(format_command, "PROJECT_ROOT", root),
+                mock.patch.object(format_command.gitfiles, "PROJECT_ROOT", root),
+            ):
+                with mock.patch.object(
+                    format_command.gitfiles,
+                    "changed_files",
+                    return_value=[collector, "sdk-cache/Cache.cpp"],
+                ) as changed:
+                    self.assertEqual(format_command.resolve_files(changed_args), [collector])
+                changed.assert_called_once_with(None, suffixes=format_command.gitfiles.SOURCE_SUFFIXES)
+
+                # The --all scan walks the real folder selection: the tracked collector
+                # is selected while the generated __pycache__ artifact and the foreign
+                # SDK cache tree stay out of the scope.
+                self.assertEqual(format_command.resolve_files(all_args), [collector])
 
     def test_ruff_format_uses_shared_cache_commands_and_preserves_tool_failures(self):
         # Mocked platform argv is not proof of a native filesystem or cache write.
@@ -97,50 +110,41 @@ class FormatCommandTest(unittest.TestCase):
             self.assertEqual(format_command.run_ruff_format([], check=True), 0)
         run.assert_not_called()
 
-    def test_windows_clang_format_uses_the_pinned_llvm_sdk_tool(self):
-        pinned = r"C:\llvm-22.1.8\bin\clang-format.exe"
-        tidy_build_dir = Path(r"C:\local\aobus\windows-tidy")
+    def test_windows_clang_format_uses_the_ready_pinned_sdk_tool(self):
+        sdk = Path(r"C:\state\llvm\toolchains\llvm-22.1.8-x86_64-windows-msvc")
+        manifest = mock.Mock()
 
-        with mock.patch.object(
-            format_command.builddir,
-            "platform_profile",
-            return_value=format_command.builddir.WINDOWS_PROFILE,
-        ):
-            with mock.patch.object(format_command.builddir, "tidy_dir", return_value=tidy_build_dir):
-                with mock.patch.object(format_command.tidyengine, "ensure_windows_llvm_sdk") as ensure_sdk:
-                    with mock.patch.object(
-                        format_command.tidyengine,
-                        "clang_tool",
-                        return_value=pinned,
-                    ):
-                        with mock.patch.object(
-                            format_command.subprocess,
-                            "run",
-                            return_value=mock.Mock(returncode=0),
-                        ) as run:
-                            self.assertEqual(format_command.run_clang_format(["lib/Foo.cpp"], check=True), 0)
-
-        ensure_sdk.assert_called_once_with(tidy_build_dir)
-        run.assert_called_once_with(
-            [pinned, "--dry-run", "-Werror", "lib/Foo.cpp"],
-            cwd=format_command.PROJECT_ROOT,
-        )
-
-    def test_windows_format_provisions_the_explicit_tree_without_visiting_default(self):
-        selected = Path("/custom/builds/tidy")
         with (
             mock.patch.object(
                 format_command.builddir, "platform_profile", return_value=format_command.builddir.WINDOWS_PROFILE
             ),
-            mock.patch.object(format_command.builddir, "tidy_dir") as default,
-            mock.patch.object(format_command.tidyengine, "ensure_windows_llvm_sdk") as sdk,
-            mock.patch.object(format_command.tidyengine, "clang_tool", return_value="clang-format") as tool,
-            mock.patch.object(format_command.subprocess, "run", return_value=mock.Mock(returncode=0)),
+            mock.patch.object(format_command.windows_llvm_sdk, "read_manifest", return_value=manifest) as read,
+            mock.patch.object(format_command.windows_llvm_sdk, "ready_root", return_value=(sdk, True)),
+            mock.patch.object(format_command.subprocess, "run", return_value=mock.Mock(returncode=0)) as run,
+            contextlib.redirect_stdout(io.StringIO()),
         ):
-            self.assertEqual(format_command.run_clang_format(["lib/Foo.cpp"], check=True, build_dir=selected), 0)
-        default.assert_not_called()
-        sdk.assert_called_once_with(selected)
-        tool.assert_called_once_with(selected, "clang-format")
+            self.assertEqual(format_command.run_clang_format(["lib/Foo.cpp"], check=True), 0)
+
+        read.assert_called_once_with(format_command.windows_llvm_sdk.MANIFEST)
+        run.assert_called_once_with(
+            [str(sdk / "bin" / "clang-format.exe"), "--dry-run", "-Werror", "lib/Foo.cpp"],
+            cwd=format_command.PROJECT_ROOT,
+        )
+
+    def test_explicit_clang_format_replaces_the_sdk_selection(self):
+        explicit = r"C:\sdk\bin\clang-format.exe"
+        with (
+            mock.patch.object(
+                format_command.builddir, "platform_profile", return_value=format_command.builddir.WINDOWS_PROFILE
+            ),
+            mock.patch.object(
+                format_command.windows_llvm_sdk, "read_manifest", side_effect=AssertionError("no SDK discovery")
+            ),
+            mock.patch.object(format_command.subprocess, "run", return_value=mock.Mock(returncode=0)) as run,
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            self.assertEqual(format_command.run_clang_format(["lib/Foo.cpp"], check=False, clang_format=explicit), 0)
+        run.assert_called_once_with([explicit, "-i", "lib/Foo.cpp"], cwd=format_command.PROJECT_ROOT)
 
     def test_clang_format_batches_include_fragments_with_cpp_sources(self):
         with mock.patch.object(
@@ -172,701 +176,68 @@ class FormatCommandTest(unittest.TestCase):
         )
 
 
-class TidyCommandTest(unittest.TestCase):
-    def test_header_filters_accept_native_and_posix_separators(self):
-        native = str(tidy.PROJECT_ROOT / "lib" / "audio" / "Player.h")
-        posix = (tidy.PROJECT_ROOT / "lib" / "audio" / "Player.h").as_posix()
-
-        self.assertRegex(native, tidy.project_header_filter(tidy.STRICT_HEADER_FOLDERS))
-        self.assertRegex(posix, tidy.project_header_filter(tidy.STRICT_HEADER_FOLDERS))
-
-    def test_def_include_fragment_is_tidied_through_its_consumer(self):
-        fragment = tidy.PROJECT_ROOT / "app" / "include" / "ao" / "i18n" / "MessageInventory.def"
-        companion = tidy.PROJECT_ROOT / "app" / "i18n" / "MessageCatalog.cpp"
-        invocation = tidy.TidyInvocation(fragment, companion)
-
-        self.assertTrue(invocation.is_include_fragment)
-        self.assertFalse(invocation.is_header)
-        self.assertTrue(tidy.limits_diagnostics_to_selected_path(invocation))
-        consumer_invocation = tidy.TidyInvocation(companion, companion)
-        self.assertFalse(consumer_invocation.is_include_fragment)
-        self.assertFalse(tidy.limits_diagnostics_to_selected_path(consumer_invocation))
-
-    def test_all_header_suffixes_limit_diagnostics_to_the_selected_file(self):
-        core_source = tidy.PROJECT_ROOT / "app" / "i18n" / "MessageCatalog.cpp"
-        for suffix in (".h", ".hh", ".hpp", ".hxx", ".HPP"):
-            with self.subTest(suffix=suffix):
-                header = tidy.PROJECT_ROOT / "app" / "include" / "ao" / "i18n" / f"MessageCatalog{suffix}"
-                invocation = tidy.TidyInvocation(header, core_source)
-                self.assertTrue(invocation.is_header)
-                self.assertTrue(tidy.limits_diagnostics_to_selected_path(invocation))
-
-    def test_winui_sources_and_auxiliary_sources_limit_diagnostics_to_the_selected_file(self):
-        for name in (
-            "app/windows-winui/MainWindow.xaml.cpp",
-            "test/helper/WinUiLocalizationProbe.cpp",
-            "test/helper/WinUiTrackItemProbe.cpp",
-            "test/winui/probe/WinUiCreditsProbe.cpp",
-            "test/winui/probe/WinUiSoulProbe.cpp",
-            "test/winui/probe/WinUiTrackTableProbe.cpp",
-        ):
-            with self.subTest(name=name):
-                source = tidy.PROJECT_ROOT / name
-                self.assertTrue(tidy.limits_diagnostics_to_selected_path(tidy.TidyInvocation(source, source)))
-
-    def test_ordinary_translation_units_do_not_limit_diagnostics_to_the_selected_file(self):
-        for name in ("lib/audio/Player.cpp", "app/i18n/MessageCatalog.cpp", "test/audio/PlayerTest.cpp"):
-            with self.subTest(name=name):
-                source = tidy.PROJECT_ROOT / name
-                self.assertFalse(tidy.limits_diagnostics_to_selected_path(tidy.TidyInvocation(source, source)))
-
-    def test_default_tidy_uses_only_an_existing_normal_debug_dependency_tree(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            tidy_build_dir = root / "debug-clang-tidy"
-            normal_debug_dir = root / "debug"
-            tidy_build_dir.mkdir()
-            normal_debug_dir.mkdir()
-            (normal_debug_dir / "build.ninja").touch()
-            (normal_debug_dir / "compile_commands.json").write_text("[]\n", encoding="utf-8")
-
-            with mock.patch.dict(tidy.os.environ, {}, clear=False):
-                tidy.os.environ.pop("BUILD_DIR", None)
-                with mock.patch.object(tidy.builddir, "build_dir", return_value=normal_debug_dir):
-                    self.assertEqual(
-                        tidy.additional_dependency_build_directories(
-                            tidy_build_dir,
-                            path_was_explicit=False,
-                        ),
-                        (normal_debug_dir,),
-                    )
-                    self.assertEqual(
-                        tidy.additional_dependency_build_directories(
-                            tidy_build_dir,
-                            path_was_explicit=True,
-                        ),
-                        (),
-                    )
-
-    def test_windows_compile_filter_consumes_production_exclusion_policy(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            build_dir = root / "build"
-            destination = root / "filtered"
-            source = root / "Player.cpp"
-            build_dir.mkdir()
-            source.touch()
-            (build_dir / "compile_commands.json").write_text(
-                json.dumps(
-                    [
-                        {
-                            "directory": str(root),
-                            "file": str(source),
-                            "command": (
-                                "cl.exe /Zc:preprocessor /c /ZW:nostdlib /GL /GL- "
-                                f"/experimental:deterministic /DKEEP=1 {source}"
-                            ),
-                        },
-                        {
-                            "directory": str(root),
-                            "file": str(source),
-                            "arguments": ["cl.exe", "/EXPERIMENTAL:DETERMINISTIC", "/DKEEP=1", str(source)],
-                        },
-                    ]
-                ),
-                encoding="utf-8",
+class TidyDiagnosticRoutingTest(unittest.TestCase):
+    def test_mixed_scope_preserves_native_python_and_buildifier_diagnostics_in_one_report(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            files = ["lib/Example.cpp", "script/example.py", "BUILD.bazel"]
+            for name in files:
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.touch()
+            report = root / "diagnostics.txt"
+            args = Namespace(
+                check=None,
+                output=str(report),
+                config="debug",
+                path=None,
+                vcpkg_prefix=None,
+                jobs=1,
+                remote_cache=None,
             )
 
-            tidy.tidyengine.write_filtered_compile_database(
-                build_dir,
-                destination,
-                tidy.WINDOWS_EXCLUDED_COMPILE_ARGUMENTS,
+            def native(arguments):
+                self.assertEqual(arguments._resolved_sources, ["lib/Example.cpp"])
+                Path(arguments.output).write_text("native diagnostic\n", encoding="utf-8")
+                return 1
+
+            def python(paths, *, python, sink):
+                self.assertEqual(paths, ["script/example.py"])
+                sink.write("Python diagnostic\n")
+                return 1
+
+            def bazel(paths, *, check, lint, sink):
+                self.assertEqual(paths, ["BUILD.bazel"])
+                self.assertTrue(check and lint)
+                sink.write("Buildifier diagnostic\n")
+                return 1
+
+            with (
+                mock.patch.object(tidy, "PROJECT_ROOT", root),
+                mock.patch.object(tidy.bazel_lint, "run", side_effect=native),
+                mock.patch.object(tidy.pythoncheck, "run_paths", side_effect=python),
+                mock.patch.object(tidy.buildifier, "run", side_effect=bazel),
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                self.assertEqual(tidy.run_lint_stages(args, files, True), 1)
+            self.assertEqual(
+                report.read_text(encoding="utf-8"), "native diagnostic\nPython diagnostic\nBuildifier diagnostic\n"
             )
 
-            entries = json.loads((destination / "compile_commands.json").read_text(encoding="utf-8"))
-            command = entries[0]["command"]
-            for argument in tidy.WINDOWS_EXCLUDED_COMPILE_ARGUMENTS:
-                self.assertNotIn(f" {argument} ", command)
-            self.assertNotIn("/experimental:deterministic", command)
-            self.assertIn("/DKEEP=1", command)
-            self.assertEqual(entries[1]["arguments"], ["cl.exe", "/DKEEP=1", str(source)])
-
-    def test_python_only_scope_runs_pythoncheck_without_preparing_clang_tidy(self):
-        args = Namespace(
-            files=["script/foo.py"],
-            all=False,
-            folder=[],
-            commit=None,
-            check=None,
-            debug=False,
-            output=None,
-            jobs=1,
-            path=None,
-            no_build=False,
-            tidy_arg=[],
-            header_filter=None,
-        )
-
-        with mock.patch.object(tidy.tidyengine, "resolve_scope", return_value=(["script/foo.py"], True)):
-            with mock.patch.object(tidy, "missing_explicit_files", return_value=[]):
-                with mock.patch.object(tidy, "split_existing", return_value=([], ["script/foo.py"])):
-                    with mock.patch.object(tidy.pythoncheck, "run_paths", return_value=0) as pythoncheck:
-                        with mock.patch.object(tidy, "prepare_toolchain") as prepare_toolchain:
-                            with contextlib.redirect_stdout(io.StringIO()):
-                                self.assertEqual(tidy.run_command(args), 0)
-
-        pythoncheck.assert_called_once_with(["script/foo.py"], sink=None)
-        prepare_toolchain.assert_not_called()
-
-    def test_explicit_nonexistent_file_fails_before_toolchain_setup(self):
-        args = Namespace(
-            files=["lib/DoesNotExist.cpp"],
-            all=False,
-            folder=[],
-            commit=None,
-            check=None,
-            debug=False,
-            output=None,
-            jobs=1,
-            path=None,
-            no_build=False,
-            tidy_arg=[],
-            header_filter=None,
-        )
-        stderr = io.StringIO()
-
-        with mock.patch.object(tidy.tidyengine, "resolve_scope", return_value=(args.files, True)):
-            with mock.patch.object(tidy, "prepare_toolchain") as prepare_toolchain:
-                with contextlib.redirect_stderr(stderr):
-                    self.assertEqual(tidy.run_command(args), 1)
-
-        prepare_toolchain.assert_not_called()
-        self.assertIn("do not exist or are not files", stderr.getvalue())
-        self.assertIn(args.files[0], stderr.getvalue())
-
-    def test_explicit_file_without_native_compile_command_fails(self):
-        for name, kind, reason in (
-            ("lib/Foreign.cpp", "native-coverage", "the source file has no exact compile command"),
-            (
-                "app/systemmedia/linux/MprisBridge.cpp",
-                "platform-incompatible",
-                "the file is incompatible with the current platform",
-            ),
-        ):
-            with self.subTest(name=name):
-                args = Namespace(
-                    files=[name],
-                    all=False,
-                    folder=[],
-                    commit=None,
-                    check=None,
-                    debug=False,
-                    output=None,
-                    jobs=1,
-                    path=None,
-                    no_build=False,
-                    tidy_arg=[],
-                    header_filter=None,
-                )
-                foreign = Path(name)
-                stderr = io.StringIO()
-
-                with contextlib.ExitStack() as stack:
-                    stack.enter_context(
-                        mock.patch.object(tidy.tidyengine, "resolve_scope", return_value=(args.files, True))
-                    )
-                    stack.enter_context(mock.patch.object(tidy, "missing_explicit_files", return_value=[]))
-                    stack.enter_context(mock.patch.object(tidy, "split_existing", return_value=(args.files, [])))
-                    stack.enter_context(
-                        mock.patch.object(
-                            tidy,
-                            "prepare_toolchain",
-                            return_value=tidy.TidyToolchain("clang-tidy", Path("plugin"), None),
-                        )
-                    )
-                    stack.enter_context(
-                        mock.patch.object(
-                            tidy,
-                            "classify_existing",
-                            return_value={"STRICT": [foreign], "RELAXED": []},
-                        )
-                    )
-                    stack.enter_context(
-                        mock.patch.object(
-                            tidy.tidyengine,
-                            "compile_command_plan",
-                            return_value=tidy.tidyengine.CompileCommandPlan(
-                                (),
-                                (foreign,),
-                                (tidy.tidyengine.CompileCommandDeferral(foreign, reason, kind),),
-                            ),
-                        )
-                    )
-                    run_parallel = stack.enter_context(mock.patch.object(tidy.tidyengine, "run_parallel"))
-                    stack.enter_context(contextlib.redirect_stderr(stderr))
-                    self.assertEqual(tidy.run_command(args), 1)
-
-                run_parallel.assert_not_called()
-                self.assertIn("explicitly selected files", stderr.getvalue())
-                self.assertIn(reason, stderr.getvalue())
-
-    def test_non_explicit_scope_visibly_defers_foreign_platform_files(self):
-        args = Namespace(
-            files=[],
-            all=True,
-            folder=[],
-            commit=None,
-            check=None,
-            debug=False,
-            output=None,
-            jobs=1,
-            path=None,
-            no_build=False,
-            tidy_arg=[],
-            header_filter=None,
-        )
-        native = Path("lib/Native.cpp")
-        foreign = Path("lib/Foreign.cpp")
-        result = tidy.tidyengine.BatchResult(failed=False, logs=[], failed_logs=[])
-        stderr = io.StringIO()
-
-        with tempfile.TemporaryDirectory() as temp_dir, contextlib.ExitStack() as stack:
-            stack.enter_context(
-                mock.patch.object(
-                    tidy.tidyengine,
-                    "resolve_scope",
-                    return_value=([str(native), str(foreign)], False),
-                )
-            )
-            stack.enter_context(
-                mock.patch.object(tidy, "split_existing", return_value=([str(native), str(foreign)], []))
-            )
-            stack.enter_context(
-                mock.patch.object(
-                    tidy,
-                    "prepare_toolchain",
-                    return_value=tidy.TidyToolchain("clang-tidy", Path("plugin"), None),
-                )
-            )
-            stack.enter_context(
-                mock.patch.object(
-                    tidy,
-                    "classify_existing",
-                    return_value={"STRICT": [native, foreign], "RELAXED": []},
-                )
-            )
-            stack.enter_context(
-                mock.patch.object(
-                    tidy.tidyengine,
-                    "compile_command_plan",
-                    return_value=tidy.tidyengine.CompileCommandPlan(
-                        (tidy.tidyengine.CompileCommandTarget(native, native),),
-                        (foreign,),
-                        (
-                            tidy.tidyengine.CompileCommandDeferral(
-                                foreign,
-                                "the file is incompatible with the current platform",
-                                "platform-incompatible",
-                            ),
-                        ),
-                    ),
-                )
-            )
-            stack.enter_context(mock.patch.object(tidy.tidyengine, "system_include_args", return_value=[]))
-            stack.enter_context(mock.patch.object(tidy.tidyengine, "make_tmpdir", return_value=Path(temp_dir) / "tidy"))
-            run_parallel = stack.enter_context(mock.patch.object(tidy.tidyengine, "run_parallel", return_value=result))
-            stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
-            stack.enter_context(contextlib.redirect_stderr(stderr))
-            self.assertEqual(tidy.run_command(args), 0)
-
-        invocations = run_parallel.call_args.args[0]
-        self.assertEqual(len(invocations), 1)
-        self.assertEqual(invocations[0].selected, tidy.absolute_path(native))
-        self.assertEqual(invocations[0].compile_command_source, tidy.absolute_path(native))
-        self.assertFalse(invocations[0].is_header)
-        self.assertIn("Deferred files", stderr.getvalue())
-        self.assertIn("the file is incompatible with the current platform", stderr.getvalue())
-        self.assertIn("not checked here", stderr.getvalue())
-
-    def test_non_explicit_scope_allows_only_foreign_platform_files(self):
-        args = Namespace(
-            files=[],
-            all=True,
-            folder=[],
-            commit=None,
-            check=None,
-            debug=False,
-            output=None,
-            jobs=1,
-            path=None,
-            no_build=False,
-            tidy_arg=[],
-            header_filter=None,
-        )
-        foreign = Path("lib/Foreign.cpp")
-        stderr = io.StringIO()
-
-        with contextlib.ExitStack() as stack:
-            stack.enter_context(
-                mock.patch.object(tidy.tidyengine, "resolve_scope", return_value=([str(foreign)], False))
-            )
-            stack.enter_context(mock.patch.object(tidy, "split_existing", return_value=([str(foreign)], [])))
-            stack.enter_context(
-                mock.patch.object(
-                    tidy,
-                    "prepare_toolchain",
-                    return_value=tidy.TidyToolchain("clang-tidy", Path("plugin"), None),
-                )
-            )
-            stack.enter_context(
-                mock.patch.object(
-                    tidy,
-                    "classify_existing",
-                    return_value={"STRICT": [foreign], "RELAXED": []},
-                )
-            )
-            stack.enter_context(
-                mock.patch.object(
-                    tidy.tidyengine,
-                    "compile_command_plan",
-                    return_value=tidy.tidyengine.CompileCommandPlan(
-                        (),
-                        (foreign,),
-                        (
-                            tidy.tidyengine.CompileCommandDeferral(
-                                foreign,
-                                "the file is incompatible with the current platform",
-                                "platform-incompatible",
-                            ),
-                        ),
-                    ),
-                )
-            )
-            run_parallel = stack.enter_context(mock.patch.object(tidy.tidyengine, "run_parallel"))
-            stack.enter_context(contextlib.redirect_stderr(stderr))
-            self.assertEqual(tidy.run_command(args), 0)
-
-        run_parallel.assert_not_called()
-        self.assertIn("Deferred files", stderr.getvalue())
-        self.assertIn("not checked here", stderr.getvalue())
-        self.assertNotIn("coverage is incomplete", stderr.getvalue())
-
-    def test_non_explicit_native_deferral_fails_before_partial_tidy_run(self):
-        args = Namespace(
-            files=[],
-            all=True,
-            folder=[],
-            commit=None,
-            check=None,
-            debug=False,
-            output=None,
-            jobs=1,
-            path=None,
-            no_build=False,
-            tidy_arg=[],
-            header_filter=None,
-        )
-        native = Path("lib/Native.cpp")
-        header = Path("include/ao/HeaderOnly.h")
-        stderr = io.StringIO()
-
-        with contextlib.ExitStack() as stack:
-            stack.enter_context(
-                mock.patch.object(
-                    tidy.tidyengine,
-                    "resolve_scope",
-                    return_value=([str(native), str(header)], False),
-                )
-            )
-            stack.enter_context(
-                mock.patch.object(tidy, "split_existing", return_value=([str(native), str(header)], []))
-            )
-            stack.enter_context(
-                mock.patch.object(
-                    tidy,
-                    "prepare_toolchain",
-                    return_value=tidy.TidyToolchain("clang-tidy", Path("plugin"), None),
-                )
-            )
-            stack.enter_context(
-                mock.patch.object(
-                    tidy,
-                    "classify_existing",
-                    return_value={"STRICT": [native, header], "RELAXED": []},
-                )
-            )
-            stack.enter_context(
-                mock.patch.object(
-                    tidy.tidyengine,
-                    "compile_command_plan",
-                    return_value=tidy.tidyengine.CompileCommandPlan(
-                        (tidy.tidyengine.CompileCommandTarget(native, native),),
-                        (header,),
-                        (
-                            tidy.tidyengine.CompileCommandDeferral(
-                                header,
-                                "Ninja dependency data is unavailable for the compiled translation units",
-                            ),
-                        ),
-                    ),
-                )
-            )
-            run_parallel = stack.enter_context(mock.patch.object(tidy.tidyengine, "run_parallel"))
-            stack.enter_context(contextlib.redirect_stderr(stderr))
-
-            self.assertEqual(tidy.run_command(args), 1)
-
-        run_parallel.assert_not_called()
-        self.assertIn("native clang-tidy coverage is incomplete", stderr.getvalue())
-        portal = "ao.bat" if os.name == "nt" else "./ao"
-        self.assertIn(f"`{portal} build` or `{portal} check`", stderr.getvalue())
-        self.assertIn("does not build the full product graph automatically", stderr.getvalue())
-
-    def test_non_explicit_all_deferred_scope_fails_as_incomplete(self):
-        args = Namespace(
-            files=[],
-            all=True,
-            folder=[],
-            commit=None,
-            check=None,
-            debug=False,
-            output=None,
-            jobs=1,
-            path=None,
-            no_build=False,
-            tidy_arg=[],
-            header_filter=None,
-        )
-        foreign = Path("lib/Foreign.cpp")
-        stderr = io.StringIO()
-
-        with contextlib.ExitStack() as stack:
-            stack.enter_context(
-                mock.patch.object(tidy.tidyengine, "resolve_scope", return_value=([str(foreign)], False))
-            )
-            stack.enter_context(mock.patch.object(tidy, "split_existing", return_value=([str(foreign)], [])))
-            stack.enter_context(
-                mock.patch.object(
-                    tidy,
-                    "prepare_toolchain",
-                    return_value=tidy.TidyToolchain("clang-tidy", Path("plugin"), None),
-                )
-            )
-            stack.enter_context(
-                mock.patch.object(
-                    tidy,
-                    "classify_existing",
-                    return_value={"STRICT": [foreign], "RELAXED": []},
-                )
-            )
-            stack.enter_context(
-                mock.patch.object(
-                    tidy.tidyengine,
-                    "compile_command_plan",
-                    return_value=tidy.tidyengine.CompileCommandPlan((), (foreign,)),
-                )
-            )
-            run_parallel = stack.enter_context(mock.patch.object(tidy.tidyengine, "run_parallel"))
-            stack.enter_context(contextlib.redirect_stderr(stderr))
-            self.assertEqual(tidy.run_command(args), 1)
-
-        run_parallel.assert_not_called()
-        self.assertIn("coverage is incomplete", stderr.getvalue())
-
-    def test_clang_tidy_warnings_make_tidy_fail_even_when_process_succeeds(self):
-        args = Namespace(
-            files=["lib/Foo.cpp"],
-            all=False,
-            folder=[],
-            commit=None,
-            check=None,
-            debug=False,
-            output=None,
-            jobs=1,
-            path=None,
-            no_build=False,
-            tidy_arg=[],
-            header_filter=None,
-        )
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            log = root / "foo.log"
-            log.write_text("lib/Foo.cpp:12:3: warning: injected diagnostic [aobus-example]\n", encoding="utf-8")
-            result = tidy.tidyengine.BatchResult(failed=False, logs=[log], failed_logs=[])
-
-            with mock.patch.object(tidy.tidyengine, "resolve_scope", return_value=(["lib/Foo.cpp"], True)):
-                with mock.patch.object(tidy, "missing_explicit_files", return_value=[]):
-                    with mock.patch.object(tidy, "split_existing", return_value=(["lib/Foo.cpp"], [])):
-                        with mock.patch.object(
-                            tidy,
-                            "prepare_toolchain",
-                            return_value=tidy.TidyToolchain(
-                                "clang-tidy",
-                                Path("/tmp/libAobusLintPlugin.so"),
-                                None,
-                            ),
-                        ):
-                            with mock.patch.object(
-                                tidy.tidyengine,
-                                "compile_command_plan",
-                                return_value=tidy.tidyengine.CompileCommandPlan(
-                                    (
-                                        tidy.tidyengine.CompileCommandTarget(
-                                            Path("lib/Foo.cpp"),
-                                            Path("lib/Foo.cpp"),
-                                        ),
-                                    ),
-                                    (),
-                                ),
-                            ):
-                                with mock.patch.object(tidy.tidyengine, "system_include_args", return_value=[]):
-                                    buckets = {"STRICT": [Path("lib/Foo.cpp")], "RELAXED": []}
-                                    with mock.patch.object(tidy, "classify_existing", return_value=buckets):
-                                        with mock.patch.object(tidy.tidyengine, "make_tmpdir", return_value=root):
-                                            with mock.patch.object(
-                                                tidy.tidyengine, "run_parallel", return_value=result
-                                            ):
-                                                with contextlib.redirect_stdout(io.StringIO()):
-                                                    self.assertEqual(tidy.run_command(args), 1)
-
-    def test_mapped_header_runs_as_main_file_with_synthetic_native_flags(self):
-        for suffix in (".cpp", ".mm"):
-            with self.subTest(suffix=suffix):
-                args = Namespace(
-                    files=["include/ao/Foo.h"],
-                    all=False,
-                    folder=[],
-                    commit=None,
-                    check="aobus-include-convention",
-                    debug=False,
-                    output=None,
-                    jobs=1,
-                    path=None,
-                    no_build=False,
-                    tidy_arg=[],
-                    header_filter=None,
-                )
-                header = Path("include/ao/Foo.h")
-                translation_unit = Path(f"lib/Foo{suffix}")
-                native_language = "-x objective-c++ -fobjc-arc" if suffix == ".mm" else ""
-                toolchain = tidy.TidyToolchain(
-                    "AobusClangTidy.exe",
-                    None,
-                    Path("C:/llvm/lib/clang/22"),
-                )
-
-                def run_parallel(invocations, _jobs, tmpdir, runner):
-                    self.assertEqual(len(invocations), 1)
-                    log = tmpdir / "000000.log"
-                    status = runner(invocations[0], log)
-                    return tidy.tidyengine.BatchResult(
-                        failed=status != 0,
-                        logs=[log],
-                        failed_logs=[log] if status else [],
-                    )
-
-                with tempfile.TemporaryDirectory() as temp_dir, contextlib.ExitStack() as stack:
-                    build_dir = Path(temp_dir) / "build"
-                    tmpdir = Path(temp_dir) / "tidy"
-                    build_dir.mkdir()
-                    tmpdir.mkdir()
-                    (build_dir / "compile_commands.json").write_text(
-                        json.dumps(
-                            [
-                                {
-                                    "directory": str(build_dir),
-                                    "file": str(tidy.absolute_path(translation_unit)),
-                                    "command": (
-                                        f"clang++ {native_language} -DAOBUS_NATIVE_FLAGS=1 -c "
-                                        f'"{tidy.absolute_path(translation_unit)}"'
-                                    ),
-                                }
-                            ]
-                        ),
-                        encoding="utf-8",
-                    )
-                    args.path = str(build_dir)
-                    stack.enter_context(
-                        mock.patch.object(tidy.tidyengine, "resolve_scope", return_value=(args.files, True))
-                    )
-                    stack.enter_context(mock.patch.object(tidy, "missing_explicit_files", return_value=[]))
-                    stack.enter_context(mock.patch.object(tidy, "split_existing", return_value=(args.files, [])))
-                    stack.enter_context(mock.patch.object(tidy, "prepare_toolchain", return_value=toolchain))
-                    stack.enter_context(
-                        mock.patch.object(
-                            tidy.workspace_cache,
-                            "validated_source_roots",
-                            return_value=(tidy.absolute_path(tidy.PROJECT_ROOT),),
-                        )
-                    )
-                    stack.enter_context(
-                        mock.patch.object(
-                            tidy,
-                            "classify_existing",
-                            return_value={"STRICT": [header], "RELAXED": []},
-                        )
-                    )
-                    stack.enter_context(
-                        mock.patch.object(
-                            tidy.tidyengine,
-                            "compile_command_plan",
-                            return_value=tidy.tidyengine.CompileCommandPlan(
-                                (tidy.tidyengine.CompileCommandTarget(header, translation_unit),),
-                                (),
-                            ),
-                        )
-                    )
-                    stack.enter_context(mock.patch.object(tidy.tidyengine, "system_include_args", return_value=[]))
-                    stack.enter_context(mock.patch.object(tidy.tidyengine, "make_tmpdir", return_value=tmpdir))
-                    stack.enter_context(mock.patch.object(tidy.tidyengine, "run_parallel", side_effect=run_parallel))
-                    stack.enter_context(mock.patch.object(tidy.shutil, "rmtree"))
-                    clang_tidy = stack.enter_context(mock.patch.object(tidy.subprocess, "call", return_value=0))
-                    config = stack.enter_context(mock.patch.object(tidy, "config_for", wraps=tidy.config_for))
-                    stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
-                    stack.enter_context(contextlib.redirect_stderr(io.StringIO()))
-
-                    self.assertEqual(tidy.run_command(args), 0)
-                    config.assert_called_once_with(
-                        tidy.checks_for("STRICT", args.check),
-                        source_roots=(tidy.absolute_path(tidy.PROJECT_ROOT),),
-                    )
-                    command = clang_tidy.call_args.args[0]
-                    database_dir = Path(command[command.index("-p") + 1])
-                    synthetic = json.loads((database_dir / "compile_commands.json").read_text(encoding="utf-8"))
-
-                self.assertEqual(command[-1], str(tidy.absolute_path(header)))
-                self.assertNotEqual(database_dir, build_dir)
-                self.assertEqual(synthetic[0]["file"], tidy.absolute_path(header).as_posix())
-                self.assertIn("-DAOBUS_NATIVE_FLAGS=1", synthetic[0]["command"])
-                self.assertIn(str(tidy.absolute_path(header)), synthetic[0]["command"])
-                self.assertNotIn(str(tidy.absolute_path(translation_unit)), synthetic[0]["command"])
-                self.assertIn(f"--extra-arg-before=-resource-dir={toolchain.resource_dir}", command)
-                self.assertIn("--extra-arg-before=-D_USE_STD_VECTOR_ALGORITHMS=0", command)
-                self.assertTrue(any(argument.startswith("-header-filter=^(") for argument in command))
-                line_filters = [argument for argument in command if argument.startswith("-line-filter=")]
-                self.assertEqual(len(line_filters), 1)
-                entries = json.loads(line_filters[0].removeprefix("-line-filter="))
-                names = [entry["name"] for entry in entries]
-                expected_names = {str(tidy.absolute_path(header)), tidy.absolute_path(header).as_posix()}
-                self.assertEqual(set(names), expected_names)
-                self.assertEqual(len(names), len(expected_names))
-                self.assertTrue(
-                    all(entry == {"name": entry["name"], "lines": [[1, 2_147_483_647]]} for entry in entries)
-                )
-                self.assertNotIn(str(tidy.absolute_path(translation_unit)), names)
-                self.assertNotIn(tidy.absolute_path(translation_unit).as_posix(), names)
-                self.assertFalse(any(argument.startswith("-load=") for argument in command))
-
-                if suffix == ".mm":
-                    self.assertIn("-x objective-c++ -fobjc-arc", synthetic[0]["command"])
-                    native_args = shlex.split(synthetic[0]["command"])
-                    header_index = native_args.index(str(tidy.absolute_path(header)))
-                    self.assertEqual(native_args[header_index - 2 : header_index], ["-x", "objective-c++-header"])
-                    self.assertNotIn("--extra-arg=-x", command)
-                    self.assertNotIn("--extra-arg-before=c++-header", command)
-                else:
-                    self.assertIn("--extra-arg-before=c++-header", command)
+    def test_cpp_check_selector_skips_unrelated_language_checks(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            files = ["example.py", "BUILD.bazel"]
+            for name in files:
+                (root / name).touch()
+            with (
+                mock.patch.object(tidy, "PROJECT_ROOT", root),
+                mock.patch.object(tidy.pythoncheck, "run_paths") as python,
+                mock.patch.object(tidy.buildifier, "run") as bazel,
+            ):
+                self.assertEqual(tidy.run_lint_stages(Namespace(check="aobus-example", output=None), files, True), 0)
+            python.assert_not_called()
+            bazel.assert_not_called()
 
 
 def _hygiene_args(**overrides):
@@ -894,18 +265,27 @@ class HygieneCommandTest(unittest.TestCase):
         self.format = self.stack.enter_context(mock.patch.object(hygiene.format_command, "run_command", return_value=0))
         self.test_audit = self.stack.enter_context(mock.patch.object(hygiene.test_audit, "run_command", return_value=0))
         self.name_audit = self.stack.enter_context(mock.patch.object(hygiene.name_audit, "run_command", return_value=0))
-        self.tidy = self.stack.enter_context(mock.patch.object(hygiene.tidy, "run_command", return_value=0))
+        self.lint = self.stack.enter_context(mock.patch.object(tidy, "run_lint_stages", return_value=0))
+        self.native_gate = self.stack.enter_context(mock.patch.object(hygiene, "_run_native", return_value=0))
         self.stderr = self.stack.enter_context(contextlib.redirect_stderr(io.StringIO()))
         self.stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
 
-    def test_explicit_tree_reaches_both_formatting_and_tidy(self):
-        selected = str(Path("/custom/builds/tidy"))
-        self.assertEqual(hygiene.run_command(_hygiene_args(path=selected)), 0)
-        self.assertEqual(self.format.call_args.kwargs["build_dir"], Path(selected))
-        self.assertEqual(self.tidy.call_args.args[0].path, selected)
+    def test_the_default_route_delegates_to_the_governed_native_hygiene(self):
+        args = _hygiene_args()
+        self.native_gate.return_value = 3
+        self.assertEqual(hygiene.run_command(args), 3)
+        self.native_gate.assert_called_once_with(args)
+        self.format.assert_not_called()
+        self.lint.assert_not_called()
 
-    def test_resolves_once_and_preserves_implicit_scope_for_native_deferrals(self):
-        self.assertEqual(hygiene.run_command(_hygiene_args()), 0)
+    def test_explicit_tree_reaches_formatting_and_the_lint_stage(self):
+        selected = str(Path("/custom/builds/tidy"))
+        self.assertEqual(hygiene.run_command(_hygiene_args(path=selected), lint=("tidy", self.lint)), 0)
+        self.assertEqual(self.format.call_args.kwargs["build_dir"], Path(selected))
+        self.lint.assert_called_once_with(self.files, False)
+
+    def test_resolves_once_and_preserves_implicit_scope_for_the_lint_stage(self):
+        self.assertEqual(hygiene.run_command(_hygiene_args(), lint=("tidy", self.lint)), 0)
         self.resolve.assert_called_once()
         self.assertTrue(self.format.call_args.args[0].check)
         self.assertEqual(self.format.call_args.kwargs["files"], self.files)
@@ -915,18 +295,18 @@ class HygieneCommandTest(unittest.TestCase):
         self.assertEqual(self.test_audit.call_args.args[0].paths, self.test_tree_files)
         self.assertEqual(self.name_audit.call_args.args[0].paths, self.files[:4])
         self.assertTrue(self.test_audit.call_args.args[0].fail_on_issue)
-        self.assertEqual(self.tidy.call_args.kwargs["resolved_scope"], (self.files, False))
+        self.lint.assert_called_once_with(self.files, False)
 
     def test_python_scope_skips_cpp_audits_and_preserves_explicit_selection(self):
         self.resolve.return_value = ["script/foo.py"]
-        self.assertEqual(hygiene.run_command(_hygiene_args(files=["script/foo.py"])), 0)
+        self.assertEqual(hygiene.run_command(_hygiene_args(files=["script/foo.py"]), lint=("tidy", self.lint)), 0)
         self.test_audit.assert_not_called()
         self.name_audit.assert_not_called()
-        self.assertEqual(self.tidy.call_args.kwargs["resolved_scope"], (["script/foo.py"], True))
+        self.lint.assert_called_once_with(["script/foo.py"], True)
 
     def test_objective_cpp_tests_reach_the_test_audit(self):
         self.resolve.return_value = ["test/media/FooTest.mm"]
-        self.assertEqual(hygiene.run_command(_hygiene_args()), 0)
+        self.assertEqual(hygiene.run_command(_hygiene_args(), lint=("tidy", self.lint)), 0)
         self.assertEqual(self.test_audit.call_args.args[0].paths, ["test/media/FooTest.mm"])
         self.assertTrue(self.test_audit.call_args.args[0].fail_on_issue)
 
@@ -944,40 +324,53 @@ class HygieneCommandTest(unittest.TestCase):
             with mock.patch.object(
                 hygiene.testaudit, "is_audit_candidate", side_effect=lambda name: is_candidate(name, root)
             ):
-                self.assertEqual(hygiene.run_command(_hygiene_args()), 1)
+                self.assertEqual(hygiene.run_command(_hygiene_args(), lint=("tidy", self.lint)), 1)
         self.assertTrue(self.test_audit.call_args.args[0].fail_on_issue)
         self.name_audit.assert_called_once()
-        self.tidy.assert_called_once()
+        self.lint.assert_called_once()
 
     def test_lint_fixtures_never_reach_the_test_audit(self):
         self.resolve.return_value = ["test/lint/fixture/aobus-check/BasicTest.cpp"]
-        self.assertEqual(hygiene.run_command(_hygiene_args()), 0)
+        self.assertEqual(hygiene.run_command(_hygiene_args(), lint=("tidy", self.lint)), 0)
         self.test_audit.assert_not_called()
         self.assertEqual(self.name_audit.call_args.args[0].paths, self.resolve.return_value)
 
     def test_empty_scope_does_not_expand_to_a_repository_scan(self):
         self.resolve.return_value = []
-        self.assertEqual(hygiene.run_command(_hygiene_args()), 0)
-        for stage in (self.format, self.test_audit, self.name_audit, self.tidy):
+        self.assertEqual(hygiene.run_command(_hygiene_args(), lint=("tidy", self.lint)), 0)
+        for stage in (self.format, self.test_audit, self.name_audit, self.lint):
             stage.assert_not_called()
 
-    def test_format_failure_stops_before_audits_and_tidy(self):
+    def test_format_failure_stops_before_audits_and_the_lint_stage(self):
         self.format.return_value = 1
-        self.assertEqual(hygiene.run_command(_hygiene_args()), 1)
+        self.assertEqual(hygiene.run_command(_hygiene_args(), lint=("tidy", self.lint)), 1)
         self.test_audit.assert_not_called()
         self.name_audit.assert_not_called()
-        self.tidy.assert_not_called()
+        self.lint.assert_not_called()
         self.assertIn("check-only", self.stderr.getvalue())
         self.assertIn("./ao format", self.stderr.getvalue())
 
-    def test_audit_failures_propagate_without_claiming_tidy_failed(self):
+    def test_audit_failures_propagate_without_claiming_lint_failed(self):
         for stage, label in ((self.test_audit, "Test names/tags"), (self.name_audit, "Class/file names")):
             with self.subTest(label=label):
                 stage.return_value = 1
-                self.assertEqual(hygiene.run_command(_hygiene_args()), 1)
+                self.assertEqual(hygiene.run_command(_hygiene_args(), lint=("tidy", self.lint)), 1)
                 self.assertIn(label, self.stderr.getvalue())
                 self.assertNotIn("Lint findings", self.stderr.getvalue())
                 stage.return_value = 0
+
+    def test_caller_lint_stage_replaces_tidy_with_the_same_scope_and_failure_report(self):
+        stage = mock.Mock(return_value=1)
+        args = _hygiene_args(files=list(self.files))
+        managed = Path("managed tool env") / "bin" / "python"
+        self.assertEqual(
+            hygiene.run_command(args, clang_format="sdk-clang-format", python=managed, lint=("bazel lint", stage)), 1
+        )
+        self.assertEqual(self.format.call_args.kwargs["clang_format"], "sdk-clang-format")
+        self.assertEqual(self.format.call_args.kwargs["python"], managed)
+        stage.assert_called_once_with(self.files, True)
+        self.native_gate.assert_not_called()
+        self.assertIn("Lint findings", self.stderr.getvalue())
 
     def test_subcommand_args_use_the_real_parser_defaults(self):
         args = _hygiene_args(jobs=4)
@@ -985,46 +378,237 @@ class HygieneCommandTest(unittest.TestCase):
             (format_command.register, "format", lambda _: hygiene._format_args()),
             (hygiene.test_audit.register, "test-audit", lambda _: hygiene._test_audit_args([])),
             (hygiene.name_audit.register, "name-audit", lambda _: hygiene._name_audit_args([])),
-            (tidy.register, "tidy", hygiene._tidy_args),
         ):
             parser = argparse.ArgumentParser()
             register_command(parser.add_subparsers())
             self.assertEqual(vars(build(args)).keys(), vars(parser.parse_args([name])).keys(), name)
 
-    def test_unknown_override_is_rejected(self):
-        with self.assertRaises(AttributeError):
-            hygiene._subcommand_defaults(tidy.register, "tidy", not_a_tidy_argument=1)
 
+class NativeHygieneSelectionTest(unittest.TestCase):
+    """The flat gate's native-tools selection and staged lint callback."""
 
-class TidyNamingPolicyTest(unittest.TestCase):
-    """The identifier-naming method exemption is an exact-anchored policy."""
+    STATE = str(Path(tempfile.gettempdir()) / "aobus-native-hygiene-state")
+    TOOLS = Path(tempfile.gettempdir()) / "aobus-native-hygiene-tools" / "bin" / "python"
 
-    def ignored_regexp(self) -> re.Pattern[str]:
-        match = re.search(
-            r"readability-identifier-naming\.MethodIgnoredRegexp', value: '([^']+)'", tidyconfig.CONFIG_BASE
+    def gate(self, arguments, host="linux", environment=None, files=None):
+        """Run the flat gate with its shared stages faked; return the gate's selections."""
+        if files is None:
+            files = ["script/ao/command/hygiene.py", "lib/utility/Base64.cpp"]
+        args = make_parser().parse_args(["hygiene", *arguments])
+        run_command = hygiene.run_command
+        with (
+            mock.patch.object(native, "native_platform", return_value=host),
+            mock.patch.dict(os.environ, {"AOBUS_STATE_ROOT": self.STATE, **(environment or {})}),
+            mock.patch("ao.core.gitfiles.changed_files", return_value=files),
+            mock.patch("ao.core.pythonenv.ensure_environment", return_value=self.TOOLS) as tools,
+            mock.patch.object(hygiene, "run_command", return_value=0) as gate,
+        ):
+            self.assertEqual(run_command(args), 0)
+        gate.assert_called_once()
+        self.assertIs(gate.call_args.args[0], args)
+        # The Nix shell's interpreter already carries Ruff and mypy.
+        if host == "linux" or not any(name.endswith(".py") for name in files):
+            tools.assert_not_called()
+            self.assertIsNone(gate.call_args.kwargs["python"])
+        else:
+            tools.assert_called_once_with(PROJECT_ROOT, Path(self.STATE), platform_name=host)
+            self.assertEqual(gate.call_args.kwargs["python"], self.TOOLS)
+        self.assertEqual(args._resolved_sources, files)
+        return gate.call_args.kwargs
+
+    def test_lint_stage_routes_python_to_its_checks_and_cpp_to_bazel_lint_in_the_gate_tree(self):
+        tree = str(Path(tempfile.gettempdir()) / "aobus-native-hygiene")
+        stage = self.gate(
+            [
+                *("--config", "release", "--path", tree, "--vcpkg-prefix", "/vcpkg", "-j", "6"),
+                *("--remote-cache", "https://cache.example"),
+            ]
         )
-        assert match is not None
-        return re.compile(match.group(1))
+        self.assertIsNone(stage["clang_format"])
+        label, lint = stage["lint"]
+        self.assertEqual(label, "bazel lint")
+        files = ["script/ao/command/hygiene.py", "lib/utility/Base64.cpp", "lib/utility/Missing.cpp"]
+        # The lint stage parses tidy's own registration for its defaults.
+        parser = argparse.ArgumentParser()
+        tidy.register(parser.add_subparsers())
+        defaults = vars(parser.parse_args(["tidy"]))
+        for explicit in (True, False):
+            with (
+                self.subTest(explicit=explicit),
+                mock.patch("ao.core.pythoncheck.run_paths", return_value=0) as python,
+                mock.patch("ao.core.bazel_lint.run", return_value=1) as native_lint,
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                self.assertEqual(lint(files, explicit), 1)
+            python.assert_called_once_with(["script/ao/command/hygiene.py"], python=None, sink=None)
+            selected = vars(native_lint.call_args.args[0])
+            self.assertEqual(selected.pop("_resolved_sources"), ["lib/utility/Base64.cpp"])
+            expected = {
+                **defaults,
+                "config": "release",
+                "path": tree,
+                "vcpkg_prefix": "/vcpkg",
+                "jobs": 6,
+                "remote_cache": "https://cache.example",
+                "files": ["lib/utility/Base64.cpp"] if explicit else [],
+            }
+            self.assertEqual(selected, expected)
 
-    def test_winrt_metadata_abi_accessors_are_exempt(self):
-        # Every projected winrt::_Class_base type repeats these two metadata ABI
-        # accessors; they are generated surface, not project naming style.
-        pattern = self.ignored_regexp()
-        for name in ("GetXamlType", "GetXmlnsDefinitions"):
-            self.assertTrue(pattern.fullmatch(name), name)
+    def test_python_failure_fails_the_stage_without_starting_bazel_for_no_cpp_scope(self):
+        _, lint = self.gate([])["lint"]
+        with (
+            mock.patch("ao.core.pythoncheck.run_paths", return_value=1),
+            mock.patch("ao.core.bazel_lint.run", side_effect=AssertionError("no C++ scope")),
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            self.assertEqual(lint(["script/ao/command/hygiene.py"], True), 1)
 
-    def test_exemptions_stay_exact_and_anchored(self):
-        pattern = self.ignored_regexp()
-        for name in ("GetXamlTypeExtra", "MyGetXamlType", "getxamltype", "GetTemplate"):
-            self.assertIsNone(pattern.fullmatch(name), name)
-        # Existing external-method entries keep matching.
-        for name in ("GetAt", "MoveNext", "property_foo"):
-            self.assertTrue(pattern.fullmatch(name), name)
+    def test_native_hosts_run_only_ruff_and_mypy_in_the_managed_tool_environment(self):
+        # Both native hosts take the same non-Linux branch in the native gate; one
+        # representative host proves the managed-tool environment is used.
+        with mock.patch("ao.core.windows_llvm_sdk.ready_root", return_value=(Path("sdk"), True)):
+            _, lint = self.gate([], host="macos")["lint"]
+            with (
+                mock.patch("ao.core.pythoncheck.run_paths", return_value=0) as python,
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                self.assertEqual(lint(["script/ao/command/hygiene.py"], True), 0)
+            python.assert_called_once_with(["script/ao/command/hygiene.py"], python=self.TOOLS, sink=None)
 
-    def test_idl_property_names_are_not_globally_exempt(self):
-        pattern = self.ignored_regexp()
-        for name in ("Text", "Width"):
-            self.assertIsNone(pattern.fullmatch(name), name)
+    def test_empty_scope_skips_native_tool_requirements(self):
+        for host in ("windows", "macos"):
+            args = make_parser().parse_args(["hygiene"])
+            with (
+                self.subTest(host=host),
+                mock.patch.object(native, "native_platform", return_value=host),
+                mock.patch("ao.core.gitfiles.changed_files", return_value=[]) as changed,
+                mock.patch("ao.core.windows_llvm_sdk.ready_root", side_effect=AssertionError("no SDK for empty scope")),
+                mock.patch(
+                    "ao.core.pythonenv.ensure_environment", side_effect=AssertionError("no empty tooling stage")
+                ),
+                mock.patch("ao.command.format.run_command", side_effect=AssertionError("no formatting stage")),
+                contextlib.redirect_stdout(io.StringIO()) as stdout,
+            ):
+                self.assertEqual(hygiene.run_command(args), 0)
+            changed.assert_called_once()
+            self.assertEqual(args._resolved_sources, [])
+            self.assertIn("No files to check.", stdout.getvalue())
+
+    def test_python_only_windows_scope_needs_no_llvm_sdk(self):
+        source = "script/ao/core/pythoncheck.py"
+        args = make_parser().parse_args(["hygiene", source])
+        with (
+            mock.patch.object(native, "native_platform", return_value="windows"),
+            mock.patch.dict(os.environ, {"AOBUS_STATE_ROOT": self.STATE}),
+            mock.patch("ao.core.windows_llvm_sdk.ready_root", side_effect=AssertionError("SDK not provisioned")),
+            mock.patch("ao.core.pythonenv.ensure_environment", return_value=self.TOOLS) as tools,
+            mock.patch("ao.command.format.run_ruff_format", return_value=0) as formatting,
+            mock.patch("ao.core.pythoncheck.run_paths", return_value=0) as python,
+            mock.patch("ao.core.bazel_lint.run", side_effect=AssertionError("no C++ stage")),
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            self.assertEqual(hygiene.run_command(args), 0)
+        tools.assert_called_once_with(PROJECT_ROOT, Path(self.STATE), platform_name="windows")
+        formatting.assert_called_once_with([source], check=True, python=self.TOOLS)
+        python.assert_called_once_with([source], python=self.TOOLS, sink=None)
+
+    def test_cpp_only_native_scope_does_not_prepare_python_tools(self):
+        source = "lib/utility/Base64.cpp"
+        for host in ("windows", "macos"):
+            args = make_parser().parse_args(["hygiene", source])
+            with (
+                self.subTest(host=host),
+                mock.patch.object(native, "native_platform", return_value=host),
+                mock.patch("ao.core.windows_llvm_sdk.ready_root", return_value=(Path("sdk"), True)) as sdk,
+                mock.patch("ao.core.pythonenv.ensure_environment", side_effect=AssertionError("no Python scope")),
+                mock.patch("ao.command.format.run_clang_format", return_value=0) as formatting,
+                mock.patch("ao.command.name_audit.run_command", return_value=0),
+                mock.patch("ao.core.pythoncheck.run_paths", side_effect=AssertionError("no Python stage")),
+                mock.patch("ao.core.bazel_lint.run", return_value=0) as native_lint,
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                self.assertEqual(hygiene.run_command(args), 0)
+            formatting.assert_called_once_with(
+                [source],
+                check=True,
+                build_dir=None,
+                clang_format=str(Path("sdk/bin/clang-format.exe")) if host == "windows" else None,
+            )
+            self.assertEqual(native_lint.call_args.args[0]._resolved_sources, [source])
+            if host == "windows":
+                sdk.assert_called_once()
+            else:
+                sdk.assert_not_called()
+
+    def test_scope_is_reused_and_managed_tools_leave_bazel_on_the_portal_interpreter(self):
+        sources = ["script/ao/core/pythoncheck.py", "lib/utility/Base64.cpp"]
+        args = make_parser().parse_args(["hygiene"])
+        portal_python = sys.executable
+
+        def lint(selected):
+            self.assertEqual(selected._resolved_sources, [sources[1]])
+            self.assertEqual(sys.executable, portal_python)
+            return 0
+
+        with (
+            mock.patch.object(native, "native_platform", return_value="windows"),
+            mock.patch.dict(os.environ, {"AOBUS_STATE_ROOT": self.STATE}),
+            mock.patch("ao.core.gitfiles.changed_files", return_value=sources) as changed,
+            mock.patch("ao.core.windows_llvm_sdk.ready_root", return_value=(Path("sdk"), True)),
+            mock.patch("ao.core.pythonenv.ensure_environment", return_value=self.TOOLS) as tools,
+            mock.patch("ao.command.format.run_clang_format", return_value=0),
+            mock.patch("ao.command.format.run_ruff_format", return_value=0) as formatting,
+            mock.patch("ao.command.name_audit.run_command", return_value=0),
+            mock.patch("ao.core.pythoncheck.run_paths", return_value=0) as python,
+            mock.patch("ao.core.bazel_lint.run", side_effect=lint) as native_lint,
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            self.assertEqual(hygiene.run_command(args), 0)
+        changed.assert_called_once()
+        tools.assert_called_once_with(PROJECT_ROOT, Path(self.STATE), platform_name="windows")
+        formatting.assert_called_once_with([sources[0]], check=True, python=self.TOOLS)
+        python.assert_called_once_with([sources[0]], python=self.TOOLS, sink=None)
+        native_lint.assert_called_once()
+        self.assertEqual(sys.executable, portal_python)
+
+    def test_tool_environment_failure_stops_before_any_stage(self):
+        args = make_parser().parse_args(["hygiene", "script/ao/command/hygiene.py"])
+        run_command = hygiene.run_command
+        with (
+            mock.patch.object(native, "native_platform", return_value="macos"),
+            mock.patch.dict(os.environ, {"AOBUS_STATE_ROOT": self.STATE}),
+            mock.patch("ao.core.pythonenv.ensure_environment", side_effect=RuntimeError("no locked wheel")),
+            mock.patch.object(hygiene, "run_command", side_effect=AssertionError("no gate without tools")),
+            contextlib.redirect_stderr(io.StringIO()) as stderr,
+            self.assertRaises(SystemExit),
+        ):
+            run_command(args)
+        self.assertIn("Python tooling bootstrap failed: no locked wheel", stderr.getvalue())
+
+    def test_windows_formats_with_the_provisioned_sdk_or_names_provisioning(self):
+        from ao.core import windows_llvm_sdk
+
+        with tempfile.TemporaryDirectory(prefix="aobus-native-hygiene-sdk-") as temporary:
+            root = Path(temporary)
+            for relative in windows_llvm_sdk.read_manifest(windows_llvm_sdk.MANIFEST).required_files:
+                (root / relative).parent.mkdir(parents=True, exist_ok=True)
+                (root / relative).write_bytes(b"")
+            stage = self.gate(
+                [], host="windows", environment={"AOBUS_LLVM_SDK_ROOT": temporary}, files=["lib/utility/Base64.cpp"]
+            )
+            self.assertEqual(stage["clang_format"], str(root / "bin/clang-format.exe"))
+            (root / "bin/clang-format.exe").unlink()
+            args = make_parser().parse_args(["hygiene", "lib/utility/Base64.cpp"])
+            run_command = hygiene.run_command
+            with (
+                mock.patch.object(native, "native_platform", return_value="windows"),
+                mock.patch.dict(os.environ, {"AOBUS_LLVM_SDK_ROOT": temporary}),
+                mock.patch.object(hygiene, "run_command", side_effect=AssertionError("no gate without an SDK")),
+                contextlib.redirect_stderr(io.StringIO()) as stderr,
+                self.assertRaises(SystemExit),
+            ):
+                run_command(args)
+        self.assertIn("ao deps provision", stderr.getvalue())
 
 
 if __name__ == "__main__":

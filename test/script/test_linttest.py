@@ -3,7 +3,6 @@
 import contextlib
 import io
 import tempfile
-import threading
 import unittest
 from dataclasses import replace
 from pathlib import Path
@@ -22,6 +21,25 @@ _FIX_ARGUMENT_PREFIXES = (
     "-fix",
 )
 _TIDY_ARGUMENT_WRAPPERS = ("--tidy-arg=", "--extra-arg=")
+_TEST_TOOLS = linttest.FixtureTools(
+    tidy="declared-tools/test-clang-tidy",
+    flags=("-resource-dir=test-resources",),
+    windows=False,
+    plugin=Path("declared-tools/test-plugin"),
+)
+
+
+def _native_result(test: unittest.TestCase, completed):
+    """Fake only the admitted native process boundary, not command selection."""
+
+    def invoke(command, **_kwargs):
+        test.assertEqual(command[0], _TEST_TOOLS.tidy)
+        test.assertIn(f"-load={_TEST_TOOLS.plugin}", command)
+        test.assertIn("--", command)
+        assert_no_fix_arguments(test, command)
+        return completed
+
+    return invoke
 
 
 def _raw_tidy_argument(token: str) -> str:
@@ -264,20 +282,6 @@ int plain; // POSITIVE
                 saw_message = saw_message or bool(expectations.messages)
         self.assertTrue(saw_message)
 
-    def test_fix_argument_helper_rejects_wrapped_and_joined_forms(self):
-        assert_no_fix_arguments(self, ["tidy", "--tidy-arg=--extra-arg=-std=c++26", "--no-build", "fixture.cpp"])
-        rejected = (
-            ["tidy", "--tidy-arg=-export-fixes=/tmp/fixes.yaml"],
-            ["tidy", "-export-fixes=/tmp/fixes.yaml"],
-            ["tidy", "--fix=true"],
-            ["tidy", "--fix-errors=true"],
-            ["tidy", "--fix-notes=true"],
-        )
-        self.assertEqual(len(rejected), 5)
-        for command in rejected:
-            with self.subTest(command=command), self.assertRaises(AssertionError):
-                assert_no_fix_arguments(self, command)
-
     def test_diagnostic_verification_reports_missing_unexpected_and_negative_cases(self):
         source = """\
 // POSITIVE
@@ -379,36 +383,32 @@ int unexpected;
         path = Path("fixture.cpp")
         fixture = linttest.Fixture(path, "aobus-example")
         warning = f"{path}:1:1: warning: expected [aobus-example]\n"
-        for direct_host in (False, True):
-            for status in (0, 1):
-                for error in (
-                    f"{path}:2:1: error: unknown type\n",
-                    f"{path}:2:1: fatal error: missing header\n",
-                    "fixture.cpp(2,1): error: unknown type\n",
-                    "clang-cl: error: invalid argument\n",
-                    "error: invalid argument\n",
-                ):
-                    with self.subTest(direct_host=direct_host, status=status, error=error):
-                        result = linttest.subprocess.CompletedProcess([], status, stdout=warning + error)
-                        errors = linttest._diagnostic_errors(
-                            fixture, {path.resolve(): "int bad; // POSITIVE\n"}, result, direct_host=direct_host
-                        )
-                        self.assertIn("clang-tidy reported a fatal compiler diagnostic", errors)
+        for status in (0, 1):
+            for error in (
+                f"{path}:2:1: error: unknown type\n",
+                f"{path}:2:1: fatal error: missing header\n",
+                "fixture.cpp(2,1): error: unknown type\n",
+                "clang-cl: error: invalid argument\n",
+                "error: invalid argument\n",
+            ):
+                with self.subTest(status=status, error=error):
+                    result = linttest.subprocess.CompletedProcess([], status, stdout=warning + error)
+                    errors = linttest._diagnostic_errors(fixture, {path.resolve(): "int bad; // POSITIVE\n"}, result)
+                    self.assertIn("clang-tidy reported a fatal compiler diagnostic", errors)
 
-    def test_expected_warnings_cannot_hide_a_normalized_portal_tool_failure(self):
+    def test_expected_warnings_cannot_hide_a_native_tool_failure(self):
         path = Path("fixture.cpp")
         fixture = linttest.Fixture(path, "aobus-example")
         warning = f"{path}:1:1: warning: expected [aobus-example]\n"
         source = {path.resolve(): "int value; // POSITIVE\n"}
         findings = linttest.subprocess.CompletedProcess([], 1, stdout=warning)
-        self.assertEqual(linttest._diagnostic_errors(fixture, source, findings, direct_host=False), [])
+        self.assertEqual(linttest._diagnostic_errors(fixture, source, findings), ["clang-tidy exited with status 1"])
 
-        # run_parallel marks a native failure even though the portal's final
-        # status is the same 1 used for findings. Matching all warning markers
-        # must not turn that failure into a successful fixture.
+        # Warning markers cannot admit status 1, with or without an additional
+        # failure banner left by an external launcher.
         failed = linttest.subprocess.CompletedProcess([], 1, stdout=f"FAILED: {path}\n=== Failed logs ===\n{warning}")
-        errors = linttest._diagnostic_errors(fixture, source, failed, direct_host=False)
-        self.assertIn("portal reported a failed clang-tidy invocation", errors)
+        errors = linttest._diagnostic_errors(fixture, source, failed)
+        self.assertIn("clang-tidy exited with status 1", errors)
 
     def test_echoed_source_lines_are_not_compiler_errors(self):
         # Actual portal output captured from the governed PR126 claim-7 repro:
@@ -446,8 +446,8 @@ int unexpected;
         self.assertFalse(linttest.has_fatal_compiler_error(warning))
         self.assertFalse(linttest.has_fatal_compiler_error(warning, tag="[clang-diagnostic-error]"))
 
-        result = linttest.subprocess.CompletedProcess([], 1, stdout=warning)
-        errors = linttest._diagnostic_errors(fixture, {path: source}, result, direct_host=False)
+        result = linttest.subprocess.CompletedProcess([], 0, stdout=warning)
+        errors = linttest._diagnostic_errors(fixture, {path: source}, result)
         self.assertEqual(errors, [])
 
         # Genuine error headers of every producer shape still fail, including a
@@ -464,7 +464,7 @@ int unexpected;
             with self.subTest(fatal=fatal.splitlines()[0]):
                 self.assertTrue(linttest.has_fatal_compiler_error(fatal))
                 result = linttest.subprocess.CompletedProcess([], 1, stdout=warning + fatal)
-                errors = linttest._diagnostic_errors(fixture, {path: source}, result, direct_host=False)
+                errors = linttest._diagnostic_errors(fixture, {path: source}, result)
                 self.assertIn("clang-tidy reported a fatal compiler diagnostic", errors)
         self.assertTrue(
             linttest.has_fatal_compiler_error(
@@ -539,6 +539,19 @@ int unexpected;
                 self.assertEqual(header.severity, severity)
                 self.assertEqual(header.is_error, severity in ("error", "fatal error"))
 
+    def test_diagnostic_locations_belong_to_the_first_header_not_quoted_messages(self):
+        for line, location in (
+            ("warning: quoted other/Table.def:1:1: warning: text", None),
+            ("clang-tidy: warning: quoted other/Table.def(1,1): warning: text", None),
+            ("first.cpp:2:3: warning: quoted other.cpp(4,5): error: text", "first.cpp"),
+            ("first.cpp(2,3): warning: quoted other.cpp:4:5: error: text", "first.cpp"),
+            (r"C:\source\Header.h(7): note: referenced here", r"C:\source\Header.h"),
+        ):
+            with self.subTest(line=line):
+                header = linttest.parse_diagnostic_header(line)
+                self.assertIsNotNone(header)
+                self.assertEqual(header.path, location)
+
     def test_bare_or_driver_headers_never_reinterpret_quoted_locations(self):
         # Both directions of the quoting bug: a bare warning whose message
         # quotes an error location is not a false failure, and a bare or
@@ -550,9 +563,9 @@ int unexpected;
         source = {path: "int value; // POSITIVE\n"}
         warning = f"{path}:1:11: warning: expected [aobus-example]\nwarning: quoting fake.cpp:1:2: error: bad\n"
         findings = linttest.subprocess.CompletedProcess([], 1, stdout=warning)
-        self.assertEqual(linttest._diagnostic_errors(fixture, source, findings, direct_host=False), [])
+        self.assertEqual(linttest._diagnostic_errors(fixture, source, findings), ["clang-tidy exited with status 1"])
         passed = linttest.subprocess.CompletedProcess([], 0, stdout=warning)
-        self.assertEqual(linttest._diagnostic_errors(fixture, source, passed, direct_host=True), [])
+        self.assertEqual(linttest._diagnostic_errors(fixture, source, passed), [])
 
         fatals = (
             "error: quoting fake.cpp:1:2: warning: bad\n",
@@ -562,18 +575,27 @@ int unexpected;
             with self.subTest(fatal=fatal.strip()):
                 self.assertTrue(linttest.has_fatal_compiler_error(fatal))
                 result = linttest.subprocess.CompletedProcess([], 1, stdout=warning + fatal)
-                errors = linttest._diagnostic_errors(fixture, source, result, direct_host=False)
+                errors = linttest._diagnostic_errors(fixture, source, result)
                 self.assertIn("clang-tidy reported a fatal compiler diagnostic", errors)
 
-    def test_tidy_command_reuses_the_current_python_cli_without_building(self):
+    def test_tidy_command_uses_only_verified_tools_and_the_explicit_fixture_profile(self):
         fixture = linttest.Fixture(Path("/tmp/BasicFixture.cpp"), "aobus-example")
 
-        command = linttest._tidy_command(fixture, Path("/tmp/build"), "--tidy-arg=--extra-arg=-std=c++26")
+        command = linttest._tidy_command(
+            fixture,
+            Path("unused-work"),
+            "--tidy-arg=--extra-arg=-std=c++26",
+            tools=_TEST_TOOLS,
+        )
 
-        self.assertEqual(command[:3], [linttest.sys.executable, "-m", "ao"])
-        self.assertIn("--no-build", command)
-        self.assertIn("--tidy-arg=--extra-arg=-std=c++26", command)
-        self.assertEqual(command[-1], str(fixture.path))
+        self.assertEqual(command[0], _TEST_TOOLS.tidy)
+        self.assertIn(f"-load={_TEST_TOOLS.plugin}", command)
+        self.assertIn("--extra-arg=-std=c++26", command)
+        self.assertEqual(command[command.index("--") - 1], str(fixture.path))
+        self.assertEqual(command[command.index("--") + 1 :], [*_TEST_TOOLS.flags, "-x", "c++"])
+        self.assertNotIn("--no-build", command)
+        self.assertNotIn("ao", command)
+        self.assertFalse(any(arg.startswith("--tidy-arg=") for arg in command))
         assert_no_fix_arguments(self, command)
 
     def test_fixture_tidy_args_define_a_parseable_warning_profile(self):
@@ -610,12 +632,6 @@ int unexpected;
 
 
 class LintTestRunnerTest(unittest.TestCase):
-    def setUp(self):
-        # These cases exercise the established POSIX runner independently of host.
-        profile = mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE)
-        profile.start()
-        self.addCleanup(profile.stop)
-
     def test_objective_cpp_context_follows_local_headers_without_loading_unincluded_siblings(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -643,8 +659,13 @@ class LintTestRunnerTest(unittest.TestCase):
                 [], 1, stdout=f"{header}:2:1: warning: wrong file [aobus-example]\n"
             )
 
-            with mock.patch.object(linttest.subprocess, "run", return_value=completed):
-                success, log = linttest._run_diagnostic(linttest.Fixture(source, "aobus-example"), root, root)
+            with mock.patch.object(linttest.subprocess, "run", side_effect=_native_result(self, completed)):
+                success, log = linttest._run_diagnostic(
+                    linttest.Fixture(source, "aobus-example"),
+                    root,
+                    root,
+                    tools=_TEST_TOOLS,
+                )
 
             self.assertFalse(success)
             output = log.read_text(encoding="utf-8")
@@ -659,13 +680,13 @@ class LintTestRunnerTest(unittest.TestCase):
             fixture = linttest.Fixture(fixture_path, "aobus-example")
             completed = linttest.subprocess.CompletedProcess([], 2, stdout="clang-tidy failed\n")
 
-            with mock.patch.object(linttest.subprocess, "run", return_value=completed):
-                success, log = linttest._run_diagnostic(fixture, root, root)
+            with mock.patch.object(linttest.subprocess, "run", side_effect=_native_result(self, completed)):
+                success, log = linttest._run_diagnostic(fixture, root, root, tools=_TEST_TOOLS)
 
             self.assertFalse(success)
             self.assertIn("clang-tidy exited with status 2", log.read_text(encoding="utf-8"))
 
-    def test_diagnostic_stage_accepts_nonzero_tidy_exit_for_expected_warnings(self):
+    def test_diagnostic_stage_accepts_zero_native_exit_for_expected_warnings(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             fixture_path = root / "BasicFixture.cpp"
@@ -673,27 +694,32 @@ class LintTestRunnerTest(unittest.TestCase):
             fixture = linttest.Fixture(fixture_path, "aobus-example")
             completed = linttest.subprocess.CompletedProcess(
                 [],
-                1,
+                0,
                 stdout=f"{fixture_path}:1:1: warning: expected [aobus-example]\n",
             )
 
-            with mock.patch.object(linttest.subprocess, "run", return_value=completed):
-                success, log = linttest._run_diagnostic(fixture, root, root)
+            with mock.patch.object(linttest.subprocess, "run", side_effect=_native_result(self, completed)):
+                success, log = linttest._run_diagnostic(fixture, root, root, tools=_TEST_TOOLS)
 
             self.assertTrue(success)
             self.assertNotIn("clang-tidy exited", log.read_text(encoding="utf-8"))
 
-    def test_portal_diagnostic_stage_rejects_arbitrary_failures_after_all_expected_warnings(self):
+    def test_native_diagnostic_stage_rejects_arbitrary_failures_after_all_expected_warnings(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             path = root / "BasicFixture.cpp"
             path.write_text("int first; // POSITIVE\nint second; // POSITIVE\n", encoding="utf-8")
             output = "".join(f"{path}:{line}:1: warning: expected [aobus-example]\n" for line in (1, 2))
-            for status in (2, 3, -6, 3221225477):
+            for status in (1, 2, 3, -6, 3221225477):
                 with self.subTest(status=status):
                     result = linttest.subprocess.CompletedProcess([], status, stdout=output)
-                    with mock.patch.object(linttest.subprocess, "run", return_value=result):
-                        success, log = linttest._run_diagnostic(linttest.Fixture(path, "aobus-example"), root, root)
+                    with mock.patch.object(linttest.subprocess, "run", side_effect=_native_result(self, result)):
+                        success, log = linttest._run_diagnostic(
+                            linttest.Fixture(path, "aobus-example"),
+                            root,
+                            root,
+                            tools=_TEST_TOOLS,
+                        )
                     self.assertFalse(success)
                     self.assertIn(f"clang-tidy exited with status {status}", log.read_text(encoding="utf-8"))
                     self.assertNotIn("missing expected diagnostic", log.read_text(encoding="utf-8"))
@@ -713,30 +739,33 @@ class LintTestRunnerTest(unittest.TestCase):
                 ),
             )
 
-            with mock.patch.object(linttest.subprocess, "run", return_value=completed):
-                success, log = linttest._run_diagnostic(fixture, root, root)
+            with mock.patch.object(linttest.subprocess, "run", side_effect=_native_result(self, completed)):
+                success, log = linttest._run_diagnostic(fixture, root, root, tools=_TEST_TOOLS)
 
             self.assertFalse(success)
             text = log.read_text(encoding="utf-8")
             self.assertIn("clang-tidy reported a fatal compiler diagnostic", text)
             self.assertIn("clang-tidy exited with status 1", text)
 
-    def test_runner_requires_existing_compile_database_and_plugin(self):
+    def test_runner_requires_verified_tools_before_any_native_or_output_work(self):
         with tempfile.TemporaryDirectory() as temp_dir:
-            build_dir = Path(temp_dir)
-            with contextlib.redirect_stdout(io.StringIO()):
-                self.assertEqual(linttest.run(build_dir), 1)
-
-            (build_dir / "compile_commands.json").touch()
-            with contextlib.redirect_stdout(io.StringIO()):
-                self.assertEqual(linttest.run(build_dir), 1)
+            work = Path(temp_dir) / "work"
+            with mock.patch.object(linttest.subprocess, "run") as native:
+                with self.assertRaisesRegex(TypeError, "tools"):
+                    linttest.run(work)
+                with self.assertRaisesRegex(ValueError, "caller-verified FixtureTools"):
+                    linttest.run(work, tools=None)
+            native.assert_not_called()
+            self.assertFalse(work.exists())
 
     def test_compiler_error_smoke_requires_fatal_errors_but_allows_unused_code(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
 
             def run_canary(command, **_kwargs):
-                name = Path(command[-1]).stem
+                self.assertEqual(command[0], _TEST_TOOLS.tidy)
+                self.assertIn(f"-load={_TEST_TOOLS.plugin}", command)
+                name = Path(command[command.index("--") - 1]).stem
                 if name == "unused-code":
                     return linttest.subprocess.CompletedProcess(command, 0, stdout="")
                 return linttest.subprocess.CompletedProcess(
@@ -746,7 +775,7 @@ class LintTestRunnerTest(unittest.TestCase):
                 )
 
             with mock.patch.object(linttest.subprocess, "run", side_effect=run_canary):
-                success, _log = linttest._run_compiler_error_smoke(root, root)
+                success, _log = linttest._run_compiler_error_smoke(root, root, tools=_TEST_TOOLS)
 
             self.assertTrue(success)
 
@@ -758,8 +787,8 @@ class LintTestRunnerTest(unittest.TestCase):
                     result = linttest.subprocess.CompletedProcess(
                         [], status, stdout="fixture.cpp:1:1: error: injected [clang-diagnostic-error]\n"
                     )
-                    with mock.patch.object(linttest.subprocess, "run", return_value=result):
-                        success, log = linttest._run_compiler_error_smoke(root, root)
+                    with mock.patch.object(linttest.subprocess, "run", side_effect=_native_result(self, result)):
+                        success, log = linttest._run_compiler_error_smoke(root, root, tools=_TEST_TOOLS)
                     self.assertFalse(success)
                     self.assertIn(
                         "missing-include canary did not produce a fatal compiler diagnostic",
@@ -771,8 +800,8 @@ class LintTestRunnerTest(unittest.TestCase):
             root = Path(temp_dir)
             completed = linttest.subprocess.CompletedProcess([], 0, stdout="")
 
-            with mock.patch.object(linttest.subprocess, "run", return_value=completed):
-                success, log = linttest._run_compiler_error_smoke(root, root)
+            with mock.patch.object(linttest.subprocess, "run", side_effect=_native_result(self, completed)):
+                success, log = linttest._run_compiler_error_smoke(root, root, tools=_TEST_TOOLS)
 
             self.assertFalse(success)
             self.assertIn(
@@ -795,18 +824,19 @@ class LintTestRunnerTest(unittest.TestCase):
             commands = []
 
             def run_native(command, **_kwargs):
+                self.assertEqual(command[0], _TEST_TOOLS.tidy)
                 commands.append(command)
                 return linttest.subprocess.CompletedProcess(
-                    command, 1, stdout=f"{fixture_path}:2:1: warning: expected [aobus-example]\n"
+                    command, 0, stdout=f"{fixture_path}:2:1: warning: expected [aobus-example]\n"
                 )
 
             with mock.patch.object(linttest.subprocess, "run", side_effect=run_native):
-                success, _log = linttest._run_diagnostic(fixture, root, root)
+                success, _log = linttest._run_diagnostic(fixture, root, root, tools=_TEST_TOOLS)
 
             self.assertTrue(success)
             self.assertEqual(len(commands), 1)
             assert_no_fix_arguments(self, commands[0])
-            self.assertEqual(commands[0][-1], str(fixture_path))
+            self.assertEqual(commands[0][commands[0].index("--") - 1], str(fixture_path))
             self.assertEqual(fixture_path.read_bytes(), original_bytes)
             self.assertEqual(sibling.read_bytes(), sibling_bytes)
 
@@ -822,10 +852,6 @@ class LintTestRunnerTest(unittest.TestCase):
                     root = Path(temp_dir)
                     build_dir = root / "build"
                     build_dir.mkdir()
-                    (build_dir / "compile_commands.json").touch()
-                    plugin = build_dir / "tool" / "lint" / "libAobusLintPlugin.so"
-                    plugin.parent.mkdir(parents=True)
-                    plugin.touch()
                     fixture_path = root / "BasicFixture.cpp"
                     fixture_path.write_text(source, encoding="utf-8")
                     fixture = linttest.Fixture(fixture_path, "aobus-example")
@@ -836,7 +862,7 @@ class LintTestRunnerTest(unittest.TestCase):
                         mock.patch.object(linttest.subprocess, "run") as run_native,
                         contextlib.redirect_stdout(io.StringIO()) as output,
                     ):
-                        self.assertEqual(linttest.run(build_dir, jobs=1), 1)
+                        self.assertEqual(linttest.run(build_dir, tools=_TEST_TOOLS, jobs=1), 1)
                     run_native.assert_not_called()
                     self.assertEqual(recorder.records, [])
                     text = output.getvalue()
@@ -860,10 +886,6 @@ class LintTestRunnerTest(unittest.TestCase):
                 header.write_text("// POSITIVE\nint hidden; // NEGATIVE\n", encoding="utf-8")
                 build_dir = root / "build"
                 build_dir.mkdir()
-                (build_dir / "compile_commands.json").touch()
-                plugin = build_dir / "tool" / "lint" / "libAobusLintPlugin.so"
-                plugin.parent.mkdir(parents=True)
-                plugin.touch()
                 recorder = _PhaseRecorder()
                 with (
                     mock.patch.object(builddir, "platform_profile", return_value=profile),
@@ -877,7 +899,10 @@ class LintTestRunnerTest(unittest.TestCase):
                     mock.patch.object(linttest.subprocess, "run") as run_native,
                     contextlib.redirect_stdout(io.StringIO()) as output,
                 ):
-                    self.assertEqual(linttest.run(build_dir, jobs=1, toolchain=object()), 1)
+                    self.assertEqual(
+                        linttest.run(build_dir, tools=replace(_TEST_TOOLS, windows=profile.name == "windows"), jobs=1),
+                        1,
+                    )
                 run_native.assert_not_called()
                 fixture_tools.assert_not_called()
                 self.assertEqual(recorder.records, [])
@@ -894,78 +919,22 @@ class LintTestRunnerTest(unittest.TestCase):
             root = Path(temp_dir)
             fixture_path = root / "BasicFixture.cpp"
             fixture_path.write_text("// POSITIVE | alpha\nint bad; // POSITIVE | beta\n", encoding="utf-8")
-            completed = linttest.subprocess.CompletedProcess([], 0, stdout="")
-            with mock.patch.object(linttest.subprocess, "run", return_value=completed):
+            with mock.patch.object(linttest.subprocess, "run") as native:
                 with self.assertRaises(ValueError) as raised:
-                    linttest._run_diagnostic(linttest.Fixture(fixture_path, "aobus-example"), root, root)
+                    linttest._run_diagnostic(
+                        linttest.Fixture(fixture_path, "aobus-example"),
+                        root,
+                        root,
+                        tools=_TEST_TOOLS,
+                    )
+            native.assert_not_called()
             self.assertIn("conflicting POSITIVE diagnostic text", str(raised.exception))
             self.assertIn(str(fixture_path.resolve()), str(raised.exception))
 
-    def test_a_stage_reports_its_first_fixture_before_the_next_one_finishes(self):
+    def test_runner_aggregates_all_stages_and_removes_only_successful_temporary_workspace(self):
         with tempfile.TemporaryDirectory() as temp_dir:
-            build_dir = Path(temp_dir) / "build"
+            build_dir = Path(temp_dir) / "work"
             build_dir.mkdir()
-            (build_dir / "compile_commands.json").touch()
-            plugin = build_dir / "tool" / "lint" / "libAobusLintPlugin.so"
-            plugin.parent.mkdir(parents=True)
-            plugin.touch()
-            result_log = Path(temp_dir) / "case.log"
-            result_log.touch()
-            # Both fixtures belong to the diagnostic stage and share one pool.
-            fixtures: list[linttest.Fixture] = []
-            for name in ("First", "Second"):
-                path = Path(temp_dir) / f"{name}.cpp"
-                path.write_text("int original;\n", encoding="utf-8")
-                fixtures.append(linttest.Fixture(path, "aobus-example"))
-            first, second = fixtures
-
-            reported: list[str] = []
-            first_reported = threading.Event()
-            released: list[bool] = []
-
-            class RecordingReporter(linttest.Reporter):
-                def write(self, message: str = "") -> None:
-                    reported.append(message)
-                    if first.path.name in message:
-                        first_reported.set()
-
-            def run_diagnostic(fixture: linttest.Fixture, *_args: object, **_kwargs: object) -> tuple[bool, Path]:
-                if fixture is second:
-                    # Far longer than appending one line takes, and short
-                    # enough to keep a regression cheap: a stage that collects
-                    # its results before reporting any of them can never set
-                    # this event, so it times out here instead of deadlocking.
-                    released.append(first_reported.wait(timeout=5))
-                return True, result_log
-
-            with (
-                mock.patch.object(linttest, "discover_fixtures", return_value=fixtures),
-                mock.patch.object(linttest, "Reporter", RecordingReporter),
-                mock.patch.object(linttest, "_run_diagnostic", side_effect=run_diagnostic),
-                mock.patch.object(linttest, "_run_source_policy_smoke", return_value=(True, result_log)),
-                mock.patch.object(linttest, "_run_compiler_error_smoke", return_value=(True, result_log)),
-            ):
-                self.assertEqual(linttest.run(build_dir, jobs=1), 0)
-
-            self.assertEqual(released, [True])
-            self.assertEqual(
-                reported[:4],
-                [
-                    "=== Diagnostic Verification (2 fixtures) ===",
-                    "  [PASS] aobus-example/First.cpp",
-                    "  [PASS] aobus-example/Second.cpp",
-                    "Diagnostics: passed",
-                ],
-            )
-
-    def test_runner_aggregates_all_stages_and_removes_success_workspace(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            build_dir = Path(temp_dir) / "build"
-            build_dir.mkdir()
-            (build_dir / "compile_commands.json").touch()
-            plugin = build_dir / "tool" / "lint" / "libAobusLintPlugin.so"
-            plugin.parent.mkdir(parents=True)
-            plugin.touch()
             fixture_path = Path(temp_dir) / "BasicFixture.cpp"
             fixture_path.write_text("int original;\n", encoding="utf-8")
             fixture = linttest.Fixture(fixture_path, "aobus-example")
@@ -980,87 +949,57 @@ class LintTestRunnerTest(unittest.TestCase):
                 mock.patch.object(linttest.shutil, "rmtree") as remove_tree,
                 contextlib.redirect_stdout(io.StringIO()),
             ):
-                self.assertEqual(linttest.run(build_dir, jobs=1), 0)
+                self.assertEqual(linttest.run(build_dir, tools=_TEST_TOOLS, jobs=1), 0)
 
-            run_diagnostic.assert_called_once_with(fixture, build_dir, mock.ANY, tools=None)
+            run_diagnostic.assert_called_once_with(fixture, build_dir, mock.ANY, tools=_TEST_TOOLS)
             remove_tree.assert_called_once()
 
-    def test_default_worker_count_shares_the_baseline_capped_by_the_fixture_count(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            build_dir = Path(temp_dir) / "build"
-            build_dir.mkdir()
-            (build_dir / "compile_commands.json").touch()
-            plugin = build_dir / "tool" / "lint" / "libAobusLintPlugin.so"
-            plugin.parent.mkdir(parents=True)
-            plugin.touch()
-            fixtures = []
-            for name in ("First", "Second"):
-                path = Path(temp_dir) / f"{name}.cpp"
-                path.write_text("int original;\n", encoding="utf-8")
-                fixtures.append(linttest.Fixture(path, "aobus-example"))
-            result_log = Path(temp_dir) / "case.log"
-            result_log.touch()
-
-            for jobs, expected in ((None, 2), (3, 2), (1, 1)):
-                with self.subTest(jobs=jobs):
-                    with (
-                        mock.patch.object(linttest, "discover_fixtures", return_value=fixtures),
-                        mock.patch.object(linttest, "default_workers", return_value=5),
-                        mock.patch.object(linttest.concurrent.futures, "ThreadPoolExecutor") as executor,
-                        mock.patch.object(linttest, "_run_source_policy_smoke", return_value=(True, result_log)),
-                        mock.patch.object(linttest, "_run_compiler_error_smoke", return_value=(True, result_log)),
-                        contextlib.redirect_stdout(io.StringIO()),
-                    ):
-                        # The mocked pool never runs a diagnostic, so its map feeds
-                        # the stage report directly with per-fixture results.
-                        pool = executor.return_value.__enter__.return_value
-                        pool.map.return_value = [(True, result_log)] * len(fixtures)
-                        self.assertEqual(linttest.run(build_dir, jobs=jobs), 0)
-                    executor.assert_called_once_with(max_workers=expected)
-
-
-class StagePhaseInstrumentationTest(unittest.TestCase):
-    def test_stages_record_counts_and_failure_statuses_in_order(self):
+    def test_caller_owned_outputs_and_all_stage_logs_survive_completed_success_or_failure(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
-            build_dir = root / "build"
-            build_dir.mkdir()
-            (build_dir / "compile_commands.json").touch()
-            plugin = build_dir / "tool" / "lint" / "libAobusLintPlugin.so"
-            plugin.parent.mkdir(parents=True)
-            plugin.touch()
-            fixture_path = root / "BasicFixture.cpp"
-            fixture_path.write_text("int original;\n", encoding="utf-8")
-            fixture = linttest.Fixture(fixture_path, "aobus-example")
-            case_log = root / "case.log"
-            case_log.touch()
-            recorder = _PhaseRecorder()
-
-            with (
-                mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE),
-                mock.patch.object(linttest, "phases", recorder),
-                mock.patch.object(linttest, "discover_fixtures", return_value=[fixture]),
-                mock.patch.object(linttest, "_run_diagnostic", return_value=(False, case_log)),
-                mock.patch.object(linttest, "_run_source_policy_smoke", return_value=(True, case_log)),
-                mock.patch.object(linttest, "_run_compiler_error_smoke", return_value=(True, case_log)),
-                contextlib.redirect_stdout(io.StringIO()),
-            ):
-                self.assertEqual(linttest.run(build_dir, jobs=1), 1)
-
-            self.assertEqual(
-                recorder.records,
-                [
-                    {"name": "lint-diagnostics", "tree": "tidy", "jobs": 1, "count": 1, "status": 1},
-                    {
-                        "name": "lint-source-policy",
-                        "tree": "tidy",
-                        "jobs": 1,
-                        "count": linttest._source_policy_case_count(windows=False),
-                        "status": 0,
-                    },
-                    {"name": "lint-compiler-errors", "tree": "tidy", "count": 4, "status": 0},
-                ],
-            )
+            source = root / "Fixture.cpp"
+            source.write_bytes(b"int clean;\n")
+            fixture = linttest.Fixture(source, "aobus-example")
+            stage_logs = []
+            for name in ("diagnostic", "policy", "compiler"):
+                path = root / (name + ".log")
+                path.write_text(name + " evidence\n", encoding="utf-8")
+                stage_logs.append(path)
+            for failed_stage in (None, "diagnostic", "policy", "compiler"):
+                with self.subTest(failed_stage=failed_stage):
+                    work = root / str(failed_stage)
+                    aggregate = work / "suite.log"
+                    with (
+                        mock.patch.object(linttest, "discover_fixtures", return_value=[fixture]),
+                        mock.patch.object(
+                            linttest, "_run_diagnostic", return_value=(failed_stage != "diagnostic", stage_logs[0])
+                        ) as diagnostic,
+                        mock.patch.object(
+                            linttest, "_run_source_policy_smoke", return_value=(failed_stage != "policy", stage_logs[1])
+                        ) as policy,
+                        mock.patch.object(
+                            linttest,
+                            "_run_compiler_error_smoke",
+                            return_value=(failed_stage != "compiler", stage_logs[2]),
+                        ) as compiler,
+                        mock.patch.object(linttest.shutil, "rmtree") as remove,
+                        contextlib.redirect_stdout(io.StringIO()),
+                    ):
+                        self.assertEqual(
+                            linttest.run(root / "unused", tools=_TEST_TOOLS, work=work, log=aggregate),
+                            int(failed_stage is not None),
+                        )
+                    self.assertTrue(work.is_dir())
+                    remove.assert_not_called()
+                    diagnostic.assert_called_once()
+                    policy.assert_called_once()
+                    compiler.assert_called_once()
+                    retained = aggregate.read_text(encoding="utf-8")
+                    for name, path in zip(("diagnostic", "policy", "compiler"), stage_logs, strict=True):
+                        self.assertEqual(path.read_text(encoding="utf-8"), name + " evidence\n")
+                        self.assertIn(name + " evidence\n", retained)
+                    self.assertIn("TESTS PASSED" if failed_stage is None else "TESTS FAILED", retained)
+                    self.assertEqual(source.read_bytes(), b"int clean;\n")
 
 
 class WindowsLintFixtureTest(unittest.TestCase):
@@ -1069,16 +1008,10 @@ class WindowsLintFixtureTest(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory(prefix="aobus windows fixtures ")
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
-        self.build = self.root / "build"
+        self.build = self.root / "work"
         self.sdk = self.root / "LLVM SDK"
         self.build.mkdir()
-        (self.build / "compile_commands.json").write_text("[]", encoding="utf-8")
-        (self.build / "CMakeCache.txt").write_text(
-            f"AOBUS_LLVM_SDK_RESOLVED_ROOT:INTERNAL={self.sdk.as_posix()}\n"
-            f"AOBUS_LLVM_SDK_RESOLVED_VERSION:INTERNAL={self.version}\n",
-            encoding="utf-8",
-        )
-        self.host = self.build / "tool/lint/AobusClangTidy.exe"
+        self.host = self.root / "declared-tools/AobusClangTidy.exe"
         self.host.parent.mkdir(parents=True)
         self.host.touch()
         for relative in self.required_files:
@@ -1123,46 +1056,47 @@ class WindowsLintFixtureTest(unittest.TestCase):
         self.assertNotIn("ambient-g++", " ".join(tools.flags))
         self.assertNotIn("g++", tools.flags)
 
-    def test_missing_or_ambiguous_static_artifact_never_uses_sdk_tidy_or_unix_plugin(self):
-        # The tidy host is resolved once, at preflight time, by clang_tool; the
-        # fixture tools consume that verified host from the toolchain context.
+    def test_missing_declared_host_never_selects_other_configurations_sdk_tidy_or_unix_plugin(self):
         self.host.unlink()
         (self.host.parent / "libAobusLintPlugin.so").touch()
-        with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
-            tidyengine.clang_tool(self.build, "clang-tidy")
         for config in ("Debug", "Release"):
             path = self.host.parent / config / self.host.name
             path.parent.mkdir()
             path.touch()
-        with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
-            tidyengine.clang_tool(self.build, "clang-tidy")
-        (self.host.parent / "Debug" / self.host.name).unlink()
-        self.assertEqual(
-            tidyengine.clang_tool(self.build, "clang-tidy"), str(self.host.parent / "Release" / self.host.name)
-        )
+        source = self.root / "Fixture.cpp"
+        source.write_bytes(b"int clean;\n")
+        fixture = linttest.Fixture(source, "aobus-example")
+        tools = linttest._windows_fixture_tools(self.build, self.verified_context())
 
-    def test_every_required_configured_sdk_file_fails_closed_when_missing(self):
-        for relative in self.required_files:
-            with self.subTest(relative=relative):
-                path = self.sdk / relative
-                path.unlink()
-                with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
-                    linttest._windows_fixture_tools(self.build, self.verified_context())
-                path.touch()
+        def missing_host(command, **_kwargs):
+            self.assertEqual(command[0], str(self.host))
+            self.assertFalse(any("load=" in argument for argument in command))
+            raise FileNotFoundError("declared host disappeared")
+
+        for config in ("both", "Release only"):
+            if config == "Release only":
+                (self.host.parent / "Debug" / self.host.name).unlink()
+            with (
+                self.subTest(config=config),
+                mock.patch.object(
+                    linttest.subprocess,
+                    "run",
+                    side_effect=missing_host,
+                ) as native,
+            ):
+                with self.assertRaisesRegex(FileNotFoundError, "declared host disappeared"):
+                    linttest._run_diagnostic(fixture, self.build, self.root, tools=tools)
+            native.assert_called_once()
+        self.assertEqual(source.read_bytes(), b"int clean;\n")
 
     def test_the_windows_suite_requires_a_prepared_toolchain_context(self):
         context = self.verified_context()
         for field in ("expected_llvm_version", "resource_dir", "sdk_root"):
             with self.subTest(field=field), self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
                 linttest._windows_fixture_tools(self.build, replace(context, **{field: None}))
-        with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+        with mock.patch.object(linttest.subprocess, "run") as native, self.assertRaisesRegex(TypeError, "tools"):
             linttest.run(self.build)
-
-    def test_a_wholly_empty_include_environment_fails_closed(self):
-        for value in ("", ";", ";;", "  "):
-            with self.subTest(value=value), mock.patch.dict(linttest.os.environ, {"INCLUDE": value}):
-                with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
-                    linttest._windows_fixture_tools(self.build, self.verified_context())
+        native.assert_not_called()
 
     def test_compiler_tolerant_include_shapes_follow_the_compiler_search(self):
         # Native cl.exe accepts trailing semicolons, empty segments, and absent
@@ -1184,15 +1118,10 @@ class WindowsLintFixtureTest(unittest.TestCase):
 
     def test_verified_toolchain_context_supplies_the_fixture_tools(self):
         context = self.verified_context()
-        # A stale build cache can name another SDK entirely; the verified
-        # context's SDK root is the single source for the fixture-only tools
-        # and the required-file check.
-        (self.build / "CMakeCache.txt").write_text(
-            f"AOBUS_LLVM_SDK_RESOLVED_ROOT:INTERNAL={(self.root / 'Another SDK').as_posix()}\n"
-            "AOBUS_LLVM_SDK_RESOLVED_VERSION:INTERNAL=0.0.0\n",
-            encoding="utf-8",
-        )
-        tools = linttest._windows_fixture_tools(self.build, context)
+        # An unrelated scratch directory cannot select a different SDK/host.
+        # The verified context, not output-directory discovery, owns the tools.
+        unrelated_work = self.root / "unrelated work"
+        tools = linttest._windows_fixture_tools(unrelated_work, context)
         self.assertEqual(tools.tidy, str(self.host))
         self.assertIn(f"/clang:-resource-dir={self.sdk / 'lib/clang/22'}", tools.flags)
         self.assertFalse(hasattr(tools, "compiler"))
@@ -1208,8 +1137,8 @@ class WindowsLintFixtureTest(unittest.TestCase):
                 linttest._windows_fixture_tools(self.build, context)
             (self.sdk / relative).touch()
 
-    def test_run_forwards_the_verified_toolchain_on_windows(self):
-        context = self.verified_context()
+    def test_run_uses_preconstructed_verified_tools_without_reselecting_a_host(self):
+        tools = linttest._windows_fixture_tools(self.build, self.verified_context())
         fixture_path = self.root / "Basic.cpp"
         fixture_path.write_text("int clean;\n", encoding="utf-8")
         fixture = linttest.Fixture(fixture_path, "aobus-example")
@@ -1223,9 +1152,9 @@ class WindowsLintFixtureTest(unittest.TestCase):
             mock.patch.object(linttest, "_run_compiler_error_smoke", return_value=(True, log)),
             contextlib.redirect_stdout(io.StringIO()),
         ):
-            self.assertEqual(linttest.run(self.build, jobs=1, toolchain=context), 0)
-        fixture_tools.assert_called_once_with(self.build, context)
-        self.assertEqual(run_diagnostic.call_args.kwargs["tools"], fixture_tools.return_value)
+            self.assertEqual(linttest.run(self.build, tools=tools, jobs=1), 0)
+        fixture_tools.assert_not_called()
+        self.assertEqual(run_diagnostic.call_args.kwargs["tools"], tools)
 
     def test_native_fixture_command_has_fixed_cl_flags_shared_config_and_no_load(self):
         tools = linttest._windows_fixture_tools(self.build, self.verified_context())
@@ -1251,20 +1180,13 @@ class WindowsLintFixtureTest(unittest.TestCase):
     def test_windows_fixture_config_matches_the_portal_strict_policy(self):
         tools = linttest._windows_fixture_tools(self.build, self.verified_context())
         # The portal runs explicit fixtures as STRICT; a check disabled there
-        # must stay disabled for the direct host, and every existing fixture
-        # check must resolve through the shared policy.
+        # must stay disabled for the direct host.
         for check in ("aobus-modernize-braced-initialization", "modernize-use-auto"):
             fixture = linttest.Fixture(self.root / "fixture.cpp", check)
             command = linttest._tidy_command(fixture, self.build, tools=tools)
             expected = tidyconfig.config_for(tidyconfig.checks_for("STRICT", check))
             self.assertIn(f"-config={expected}", command)
         self.assertIn("-modernize-use-auto", tidyconfig.checks_for("STRICT", "modernize-use-auto").split(","))
-        for fixture in linttest.discover_fixtures():
-            with self.subTest(check=fixture.check):
-                command = linttest._tidy_command(fixture, self.build, tools=tools)
-                expected = tidyconfig.config_for(tidyconfig.checks_for("STRICT", fixture.check))
-                self.assertIn(f"-config={expected}", command)
-                assert_no_fix_arguments(self, command)
 
     def test_direct_host_requires_zero_exit_even_after_all_expected_warnings(self):
         path = self.root / "Diagnostic.cpp"
@@ -1274,7 +1196,13 @@ class WindowsLintFixtureTest(unittest.TestCase):
         for status in (0, 1, 2, 3, -6, -1073741819, 3221225477, 1073741845):
             with self.subTest(status=status):
                 result = linttest.subprocess.CompletedProcess([], status, stdout=output)
-                with mock.patch.object(linttest.subprocess, "run", return_value=result):
+
+                def invoke(command, result=result, **_kwargs):
+                    self.assertEqual(command[0], str(self.host))
+                    self.assertEqual(command[command.index("--") + 1 :], list(tools.flags))
+                    return result
+
+                with mock.patch.object(linttest.subprocess, "run", side_effect=invoke):
                     success, log = linttest._run_diagnostic(
                         linttest.Fixture(path, "aobus-example"), self.build, self.root, tools=tools
                     )
@@ -1303,7 +1231,12 @@ class WindowsLintFixtureTest(unittest.TestCase):
             mock.patch.object(linttest, "_run_compiler_error_smoke", return_value=(True, log)) as compiler,
             contextlib.redirect_stdout(io.StringIO()) as output,
         ):
-            self.assertEqual(linttest.run(self.build, jobs=1, toolchain=self.verified_context()), 0)
+            self.assertEqual(
+                linttest.run(
+                    self.build, tools=linttest._windows_fixture_tools(self.build, self.verified_context()), jobs=1
+                ),
+                0,
+            )
         self.assertEqual([call.args[0] for call in diagnostic.call_args_list], fixtures[:2])
         self.assertIn("tools", diagnostic.call_args.kwargs)
         compiler.assert_called_once()
@@ -1316,6 +1249,7 @@ class WindowsLintFixtureTest(unittest.TestCase):
         check.mkdir(parents=True)
         (check / "Only.mm").write_text("int value; // NEGATIVE\n", encoding="utf-8")
         original_discover = linttest.discover_fixtures
+        tools = linttest._windows_fixture_tools(self.build, self.verified_context())
         with (
             mock.patch.object(
                 linttest,
@@ -1327,7 +1261,7 @@ class WindowsLintFixtureTest(unittest.TestCase):
             mock.patch.object(linttest.subprocess, "run") as run_native,
             contextlib.redirect_stdout(io.StringIO()) as output,
         ):
-            self.assertEqual(linttest.run(self.build, jobs=1, toolchain=self.verified_context()), 1)
+            self.assertEqual(linttest.run(self.build, tools=tools, jobs=1), 1)
         run_native.assert_not_called()
         fixture_tools.assert_not_called()
         diagnostic.assert_not_called()

@@ -7,8 +7,10 @@ The native Windows profile builds the shared core, CLI, FTXUI terminal frontend,
 WinUI 3 desktop, native tests, and a dedicated clang-tidy executable. GTK is not
 available.
 
-This page owns host setup, portal commands, local state, WinUI build/runtime
-requirements, native lint provisioning, and offline LLVM SDK setup. Observable
+This page owns platform prerequisites, portal commands, local state, WinUI
+build/runtime requirements, native lint provisioning, and offline LLVM SDK setup.
+Machine access, source synchronization, account settings, and operator-selected
+paths belong in machine-local guidance, not this project contract. Observable
 WinUI behavior belongs to the [Windows frontend contract](../system/frontend/windows.md).
 
 ## Prerequisites
@@ -68,6 +70,7 @@ ao.bat test --all
 ao.bat check
 ao.bat check release
 ao.bat check --asan
+ao.bat setup llvm-sdk
 ao.bat format --check
 ao.bat tidy
 ao.bat hygiene
@@ -81,15 +84,91 @@ a complete CLI reference.
 
 Build-capable commands initialize the Visual Studio x64 environment only when
 the command needs it. Help, tooling-only tests, and Python-only source scopes
-skip native setup. `ao.bat run <app> --no-build` launches an existing executable
-without preparing a build environment.
+skip native setup. `ao.bat run <app> --no-build` still prepares the native
+environment for positive SDK and configured-artifact analysis admission, but
+never builds missing outputs. Existing binary source provenance remains unverified.
+It admits declared outputs and runfiles, but performs no dedicated comparison
+between adjacent DLLs and their original SDK sources. With `--no-build`, SDK/DLL
+freshness and post-build integrity are not guaranteed.
+
+The Windows bootstrap launches the selected interpreter directly; it does not
+return interpreter paths through temporary files. The selected Python process
+parses once, retains any resolved source scope, and dispatches the same invocation.
+Visual Studio's batch setup runs separately with no application arguments; its
+environment returns through a private in-memory channel. Argument forwarding does
+not use `CALL`. Parsing keeps the caller's working directory, while command
+execution uses the repository root; UNC roots retain a `pushd` mapping until the
+foreground portal exits. This does not replace build-tree or provisioning locks.
 
 `start-msbuild-env.bat <command> [args...]` is available when another tool needs
 the same Visual Studio environment. It preserves an explicit `VCPKG_ROOT` and
 otherwise selects Visual Studio's bundled vcpkg.
 
-The completion `check` builds the `aobus_guardrails` aggregate. Incremental
+The completion `check` runs the shared completion audits. Incremental
 `build` and `run` commands do not repeat repository-wide source scans.
+
+### Dependency linkage
+
+The governed target and host triplets are the standard `x64-windows` vcpkg
+triplet: target dependencies and host tools resolve from the same reviewed
+SDK with normal dynamic linkage. Recipe-backed static-only ports remain
+static; this introduces no first-party DLL ABI. The CRT remains `/MDd` in
+Debug and `/MD` in Release, supplied by the native toolchain. Windows system libraries, the
+Windows App SDK/runtime and build-tool executables remain separate boundaries;
+this is a dynamic development SDK, not a fully static executable.
+
+Let `ao.bat deps provision` install the reviewed SDK closure into the
+selected tree; do not rename old import libraries, mix installations from
+different triplets, or copy old caches into it. A stale
+`x64-windows-static-md` installation is not this SDK. The build consumes that
+installed SDK without restoring it; see
+[Bazel setup](bazel.md#setup-and-commands).
+
+Dynamic linkage makes the declared DLL runtime closure part of the SDK
+contract: the installed inventory owns the DLLs the reviewed binaries import,
+and import/runtime-closure checks reject unowned dependencies. Standard rules_cc
+places linked and runtime-only `cc_import` DLLs beside binaries, tests and the
+compiled catalog tool. WinUI assembles that output group together with its
+WinAppSDK runtime payload in the executable's resource directory. These are
+graph-owned outputs, not launch-time copies or `PATH` discovery; `data` alone
+does not place a DLL beside an executable. Actual Debug/Release deployment,
+CRT-flavor and loading validation remain separate from SDK admission.
+
+FLAC consumes Ogg from the SDK as a normal dynamic dependency. CLI/TUI keep
+the existing executable C++ global `new`/`delete` forwarding operators from
+`mimalloc-new-delete.h`. This does not preserve or claim broad CRT
+`malloc`/`free` or arbitrary cross-DLL allocation interception. Allocation
+ownership must still match the allocating interface.
+
+Validate a changed SDK in both Debug and Release, including product startup,
+allocation behavior, decoder workflows and the catalog build-tool closure.
+An installed archive inventory is not product acceptance, and results from a
+former linkage do not validate a changed SDK. Select the affected native
+gates through [validation and review](test/validation-and-review.md).
+
+### Distribution and storage boundaries
+
+[mpg123](https://www.mpg123.de/) is licensed under LGPL-2.1. Before distributing
+Windows binaries that link it, choose and validate a compliance plan
+for [LGPL-2.1 section 6](https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html),
+including recipients' ability to modify the library and relink the application.
+That may require application object code or source, library source, and usable
+relink instructions, alongside the required license notices and other terms.
+The application's MIT license does not waive those obligations; the SDK's
+dynamic linkage alone would not establish complete compliance either. There is
+currently no Windows binary release/installer workflow in this repository. Any
+future one must resolve this distribution boundary before publishing binaries.
+The shared
+[binary-distribution guidance](dependency-governance.md#binary-distribution)
+covers other dependencies, including FDK-AAC source/notice requirements, and
+the actual SDK/runtime payloads and assets that a release includes — with the
+dynamic SDK, those payloads include the declared DLL closure a release actually
+ships and loads.
+
+Budget for installed SDK trees, intermediate archives, Debug symbols and
+Release LTCG scratch space when sizing build trees and hosted runners.
+Measure the selected tree's actual size and free-space headroom before
+release/CI capacity decisions.
 
 ## Local state and build trees
 
@@ -97,7 +176,7 @@ Managed state defaults to `%LOCALAPPDATA%\Aobus`:
 
 ```text
 %LOCALAPPDATA%\Aobus\
-  build\<checkout-key>\<preset>\
+  build\<checkout-key>\
   n\<lock-id>\p\
   cache\llvm\
     toolchains\
@@ -113,20 +192,21 @@ worktrees while allowing mapped-drive, UNC, and junction aliases for one
 checkout to reuse state. If that private Git directory is unavailable or
 read-only, set one stable, unique `AOBUS_CHECKOUT_ID` for the checkout.
 
-Debug and Release use `windows-debug` and `windows-release`; MSVC ASan uses
-`windows-debug-asan`; tidy uses `windows-tidy`; WinUI uses the separate
-multi-config `windows-winui` Visual Studio tree. A Visual Studio tree cannot
-share the Ninja build directory.
+Without an explicit selection, each configuration gets its own default tree
+named `bazel-<config>` under that checkout-isolated build root. An explicitly
+selected tree (`-p`/`BUILD_DIR`) is mode-neutral: the `debug`/`release`/`asan`
+profile is selected per invocation, not by the tree, and the composite
+sanitizer check uses one selected tree for its normal Debug completion and the
+managed sanitizer profile.
 
 Overrides apply in this order:
 
-1. command-line `-p <dir>` or `BUILD_DIR` selects one exact primary tree;
+1. command-line `-p <dir>` or `BUILD_DIR` selects one exact tree;
 2. `AOBUS_BUILD_ROOT` replaces only the build base;
 3. `AOBUS_STATE_ROOT` replaces the complete managed-state base;
 4. otherwise `%LOCALAPPDATA%\Aobus` is used.
 
-A composite `ao.bat check` derives `<primary>-winui` when the primary path is
-explicit. Keep build, tool, and cache overrides on a local Windows disk; mapped
+Keep build, tool, and cache overrides on a local Windows disk; mapped
 drives are not reliably distinguishable from local disks and drive mappings are
 login-session scoped. This is a storage requirement, not automatic local-volume
 enforcement; verify the actual backing storage for overrides.
@@ -142,6 +222,29 @@ move Git metadata or Python bytecode.
 Portal build-tree writers use a persistent lock beside the tree. This prevents
 concurrent mutation but does not make a stable snapshot for a simultaneously
 running application, test, or analyzer.
+
+### Source checkout routes
+
+Use a Windows-local NTFS source root and host-local tools, SDKs, caches and
+output ([native hosts and caching](bazel.md#native-hosts-and-caching)). The portal
+rejects UNC and mapped-network Bazel working roots; it does not mount shares,
+synchronize source, or fall back to a network build. The project does not
+prescribe an editing host, transfer protocol, or source-mirror layout.
+
+Keep the selected source stable while native commands or applications use it,
+and preserve exact path spelling and repository line endings. Windows
+case-insensitive lookup does not prove exact governed source spelling.
+
+A source root without usable private Git metadata needs a stable
+`AOBUS_CHECKOUT_ID` for managed-tool identity. Git-backed discovery independently
+needs a supported [metadata binding](#shared-source-git-discovery).
+Neither setting copies metadata, synchronizes source, or prepares another
+root's tooling. Follow the [locked bootstrap](#prerequisites) for each checkout;
+virtual environments contain checkout-specific paths and are not relocatable.
+
+The checkout key's tolerance of mapped-drive, UNC and junction aliases is an
+identity feature, not permission to build from a network root. Run the selected
+local checkout's `ao.bat` from that root.
 
 ### Shared-source Git discovery
 
@@ -237,47 +340,39 @@ session can build and verify but cannot display WinUI.
 For offline deployment without SDKs, Python, or network access, see
 [staging prerequisites](#stage-offline-prerequisites).
 
-`build --target winui` builds and deploys only the shipping application, without
-building or executing probes. `ao.bat check` builds the `aobus-winui-check`
-validation aggregate after the native Debug graph except under MSVC ASan.
-The aggregate builds the application and every native probe, deploys the probes'
+`build --target winui` builds and stages only the shipping application, without
+building or executing probes. `ao.bat check` builds the application and every
+native probe, stages the probes'
 XBF/PRI resources, then executes the track-item and localization console checks.
-It never launches GUI probes. For this validation alone, use
-`ao.bat build --target aobus-winui-check`. As a utility target, each requested
-aggregate build repeats the deployment commands and both console checks; a
-console-check failure fails the build.
-Before building it, the portal verifies the fresh CMake codemodel: neither the
-shipping nor default build may transitively depend on probes, and the validation
-aggregate must include the application and every configured probe.
+It never launches GUI probes. The configured graph owns the boundary that
+neither the shipping nor default build transitively depends on probes, and the
+completion selection includes the application and every configured probe.
 
-`ao.bat check release` validates the native IPO graph and the same WinUI
-validation aggregate in Release with LTCG.
+`ao.bat check release` validates the managed Release IPO graph — MSVC `/GL` and
+`/LTCG` with the exact MainWindow per-file exception — and the same WinUI
+validation in Release.
 
-The portal uses one concurrency limit for both CMake project scheduling and
-MSBuild's cross-project C++ compiler scheduling. The
-[shared worker baseline](build.md#default-parallelism) leaves one available
-logical processor free locally. Set `CMAKE_BUILD_PARALLEL_LEVEL` to a positive
-integer to override both limits; CI sets it to the full detected logical processor count:
-
-```powershell
-$env:CMAKE_BUILD_PARALLEL_LEVEL = 12
-ao.bat build --target winui
-```
-
-The WinUI build enables MSBuild MultiToolTask with a process-count semaphore,
-so this single limit controls concurrent `cl.exe` work across generated
-projects instead of multiplying project-level and translation-unit-level
-parallelism.
-
-A current CMake/MSBuild limitation means WinUI may not relink when only a
-linked library changed. If shared code outside `app/windows-winui/` changed,
-delete the WinUI executable before rebuilding or pass `--clean`; otherwise a
-successful library build can leave stale executable contents.
+The [shared worker baseline](build.md#default-parallelism) leaves one available
+logical processor free locally; `--jobs` overrides the concurrency limit.
 
 All first-party Windows executables verify their UTF-8 process manifest after
 link. Narrow `argv` and audited narrow process boundaries are UTF-8, but
 filesystem paths still require the project's explicit native/UTF-8 conversion
 facades.
+
+### Bazel product details
+
+The [WinUI target](bazel.md#winui-product) stages the real
+product as `//app/windows-winui:aobus-winui`. `ao.bat deps provision` installs
+the tree's vcpkg manifest and restores the locked NuGet closure into the managed
+cache; the existing `packages.config`, dependency
+policy and Windows SDK selection remain the version authorities, and builds
+themselves neither restore nor install packages. The build also
+exposes explicit native probe targets and lint; development build acceptance
+supplies no signing or installer workflow. The [WinUI product](bazel.md#winui-product)
+owns compilation and executable-local staging. A successful build or bounded
+startup does not replace the interactive GUI gates below or establish complete
+WinUI GUI acceptance.
 
 ### Stage offline prerequisites
 
@@ -315,7 +410,7 @@ include applicable notices, and verify its hash after transfer.
 `ao.bat check` also produces `ao_winui_soul_probe`, a separate native GUI
 executable not run by unattended suites. From a
 logged-in desktop, run
-`<reported-build-dir>\app\windows-winui\soul-probe\Debug\ao_winui_soul_probe.exe`.
+`<printed staged probe path>\ao_winui_soul_probe.exe`.
 It removes and reinserts the same Soul in a real XAML tree, checking that both a
 pause coast and an aura fade settle on `Unloaded` and do not replay on `Loaded`.
 Exit code 0 requires both cases to complete; a 20-second dispatcher timeout
@@ -327,13 +422,12 @@ probe switches.
 
 `ao_winui_quality_tooltip_probe` is built by native checks but runs only from a
 logged-in desktop:
-`<reported-build-dir>\app\windows-winui\quality-tooltip-probe\Debug\ao_winui_quality_tooltip_probe.exe STATE_ROOT AUDIO_FIXTURE`.
+`<printed staged probe path>\ao_winui_quality_tooltip_probe.exe STATE_ROOT AUDIO_FIXTURE`.
 Both arguments must be absolute paths canonically outside the checkout used
-at build time. CMake resolves and reports `Quality tooltip probe checkout root`
-when configuring the probe. For an SMB checkout, verify that this is the UNC
-checkout path, not an SSH session's temporary `pushd` drive or `S:` compiler
-view. The desktop logon must have access to that same checkout; resolving the
-path does not transfer SMB credentials between logons. Admission fails rather
+at build time. The probe resolves and reports its compiled checkout root;
+verify that it is the actual native-local checkout path, not an alias or a
+mapped view. The desktop logon must have access to that same checkout.
+Admission fails rather
 than skipping checkout checks if the compiled root is inaccessible.
 The state directory must not exist (even as a symlink), its parent must exist,
 and it must be outside the fixture's directory tree. The probe resolves existing
@@ -379,7 +473,7 @@ build; no interactive desktop or audio endpoint is required.
 
 `ao_winui_track_table_probe` is built by native checks but runs only from a
 logged-in desktop, like the Soul probe:
-`<reported-build-dir>\app\windows-winui\track-table-probe\Debug\ao_winui_track_table_probe.exe`.
+`<printed staged probe path>\ao_winui_track_table_probe.exe`.
 Its temporary offline library and real application runtime exercise registered
 track-table selection, stable-id restoration, scroll anchoring and reveal
 priority. The frame's compiled header template verifies localized column-resize
@@ -401,7 +495,7 @@ Light. A 90-second dispatcher deadline bounds execution; failure reports a
 nonzero exit rather than a dialog.
 
 `ao_winui_activity_status_probe` also runs only from a logged-in desktop:
-`<reported-build-dir>\app\windows-winui\activity-status-probe\Debug\ao_winui_activity_status_probe.exe`.
+`<printed staged probe path>\ao_winui_activity_status_probe.exe`.
 It builds the registered `status.activity` component — real chrome, adapter, and
 runtime — in its own window, taking the strip's styles from the actual compiled
 `MainWindow` resources through an uninitialized donor window, and invokes the
@@ -415,7 +509,7 @@ playback, or user state. A 30-second dispatcher deadline bounds the probe. Nativ
 checks build it but do not execute it unattended.
 
 `ao_winui_credits_probe` likewise requires a logged-in desktop:
-`<reported-build-dir>\app\windows-winui\credits-probe\Debug\ao_winui_credits_probe.exe`.
+`<printed staged probe path>\ao_winui_credits_probe.exe`.
 It hosts the shipping Credits controls at a constrained width and exercises empty,
 single, and multiple entries, duplicates, roles, reordering, locked/full kind scope,
 automation-driven kind dropdown choice, default Add kind, row command names,
@@ -437,9 +531,15 @@ and probes before another portal build or hygiene refresh can relink them.
 
 ### UI Automation naming gate
 
-`ao.bat test --winui` is a Windows-only explicit suite: it builds the Debug `aobus-winui-check` aggregate in the dedicated WinUI tree, then runs `ao_winui_automation_probe` on a desktop. `-n/--no-build` reuses an existing dedicated WinUI tree, and `-p` selects that dedicated tree. Reuse requires a recent `aobus-winui-check` aggregate build in that tree: the shipping-only `build --target winui` does not build or refresh the automation probe. Missing probes fail, but `-n` does not detect stale binaries. Ordinary `check` builds the WinUI validation graph but never executes GUI probes; the `all` test group does not include this explicit desktop suite.
+`ao.bat test --winui` is a Windows-only explicit suite: it builds the Debug
+WinUI validation selection, then runs `ao_winui_automation_probe` on a desktop.
+`-p` selects the tree. Reuse requires a recent validation build in that tree:
+the shipping-only `build --target winui` does not build or refresh the
+automation probe. Missing probes fail. Ordinary `check` builds the WinUI
+validation graph but never executes GUI probes; the `all` test group does not
+include this explicit desktop suite.
 
-The probe requires an authenticated interactive console: it exits with a diagnostic instead of starting a GUI whenever the process is not in the active console session (no session 0, no silent skip, no fallback), so an unattended host fails rather than reports false success. CI runs it as a separate required Windows gate after `check`; the runner must provide that session. The gate does not provision or bypass desktop login.
+The probe requires an authenticated interactive console: it exits with a diagnostic instead of starting a GUI whenever the process is not in the active console session (no session 0, no silent skip, no fallback), so an unattended host fails rather than reports false success. CI runs the same real probe as a separate required Windows gate after its completion check, through Bazel, with the same runtime and interactive-console admission; the runner must provide that session. The gate does not provision or bypass desktop login.
 
 The probe loads the real `MainWindow` against an isolated `LibrarySession` with two metadata-only tracks in one album (a disposable scratch root, no playback or personal saved settings). It drives the true Modern and Classic shells, flat and album-grouped rows, a narrowed Classic window, and the volume and overflow popups. It walks the automation tree — peers and their children, including disabled controls — and requires a nonblank final `AutomationPeer.Name` from the audited interactive and item roles; an attached property or id stamp alone is never accepted as a name. Decorative (`Raw` view), text, and layout roles are out of scope, and `ScrollBar` template internals are explicitly excluded.
 
@@ -447,117 +547,35 @@ Positive landmarks use those same audited observations, not visual existence or 
 
 Name presence is not semantic correctness: dialogs the probe never opens, rows it never materializes, names in other locales, and real assistive technology such as Narrator remain uncertified. The [frontend accessibility contract](../system/frontend/windows.md#frontend-observations) owns how controls receive names; the existing track-table and activity-status probes stay separate, manual desktop contracts.
 
-### Capture MSBuild incrementality
-
-Use the build-only `--msbuild-capture <directory>` option for private diagnosis
-of a native WinUI build:
-
-```powershell
-.\ao.bat build --target winui --msbuild-capture "$env:LOCALAPPDATA\Aobus\diagnostics\first"
-.\ao.bat build --target winui --msbuild-capture "$env:LOCALAPPDATA\Aobus\diagnostics\second"
-```
-
-Prepare the private parent directory first. Each capture destination must be a
-new absolute guest-local directory, separate from the source and selected build
-trees. Existing destinations, remote storage, whitespace, quotes, and
-logger-delimiter characters are rejected; use a plain directory spelling for
-the initial capture interface. The option is unavailable for Ninja targets, other platforms, and
-`check`, the `aobus-winui-check` aggregate, or the generation-only lint-context
-target; it does not expose arbitrary native build arguments.
-
-The normal portal still configures and builds the real WinUI target under its
-build-tree lock. Capture adds a binary log with `ProjectImports=None`, private
-tracking/state snapshots around configuration/build, and selected identity
-metadata. It never forces tracking on, substitutes a cache provider, cleans a tree, or skips
-an ordinary target build. Keep the source, generated inputs, configuration,
-launcher and backend unchanged when comparing consecutive invocations. A local
-managed-ccache or uncached result is not evidence for CI's sccache fallback.
-The captured tracking policy flag is not the evaluated `TrackFileAccess`
-property: for example, an uncached tree has no compiler-cache props import even
-when the policy flag is `0`. Check the selected wrapper and evaluated MSBuild
-evidence before drawing a tracking conclusion.
-
-**Keep the whole capture private.** Binary logs and tlogs can contain compiler
-arguments, paths and environment-derived properties. `ProjectImports=None`
-omits imported project contents; it does not redact secrets. Choose a parent
-with suitable native filesystem permissions, do not blindly upload captures as
-CI artifacts, and publish only reviewed derived facts. Public
-[phase summaries](build.md#measure-native-validation) never include this raw
-capture. No diagnostic-verbosity console or full-environment dump is enabled.
-
-Snapshots privately preserve tree-relative raw `.tlog` and `.lastbuildstate`
-files, the bare `unsuccessfulbuild` marker, and suffix-shaped
-`*.unsuccessfulbuild` project markers; basename matching is case-insensitive.
-The per-stage `project_state` list and `project-state` copies distinguish a
-zero-byte marker from absence; compare lists across stages to identify removal.
-These are selected diagnostic files, not a complete incremental filesystem or
-replayable build state. Selected `.exe`, `.dll`, and `.lib` outputs have
-size/mtime/SHA-256 identities only; their payloads and object files are not
-copied, and object files are not hashed. Each stage independently hashes its
-selected files. Only the build-tree-root `vcpkg_installed` and `third-party_deps`
-subtrees (including nested dependencies/tools) are pruned from traversal;
-identically named directories deeper in first-party output/tool trees remain
-eligible. Native project tracking files, nested WinUI outputs and other selected
-output identities outside those dependency roots remain eligible. Selected
-compiler/wrapper tools are hashed separately even if located in a pruned tree.
-This selection does not bound file count, bytes read, or elapsed time; other
-configurations and unexcluded nested output/tool trees can still add work.
-
-The private `capture.json` lifecycle receipt is separate from each snapshot's
-`complete` flag, which describes only that snapshot. Its fixed fields are
-`stage` (`setup`, `before-configure`, `configure`, `before-build`, `build`, or
-`after-build`), `outcome` (`aborted`, `failed`, or `ok`), and `build_status`
-(`not-run`, `failed`, or `ok`, describing the native build only). The initial
-receipt is `setup`/`aborted`/`not-run`; finalization records the original failing
-stage, or `after-build` for final evidence and success. Setup failures do not fabricate
-pre-build snapshots. Missing/empty binlog evidence after native success fails
-capture even though the receipt's native `build_status` is `ok`. Receipt updates
-replace atomically, retaining the initial classification if a later write
-fails; persistent storage errors can prevent even the initial receipt. Evidence
-I/O failures never replace an existing build/setup exception. Leaves are never
-deleted or reused, including failed attempts. These fields/lists are a private
-diagnostic contract, not additions to the public phase schema or a replay API;
-they contain no exception text, argv, or environment dump.
-
-Capture itself adds logging, copying and hashing work. Use it to explain dirty
-compile/generate/link tasks, not as a matched end-to-end speed benchmark; run
-performance comparisons separately without diagnostic capture. No native
-performance improvement follows from the narrowed selection alone. Preserve
-failed attempts and their trees rather than cleaning away the evidence.
-
-## Compiler cache
-
-Run `ao.bat setup compiler-cache` to install and verify governed ccache and
-activate the host-local shared store. The Ninja trees use CMake compiler
-launchers. The Visual Studio generator uses the managed host-local `cl.exe`
-wrapper selected by `AOBUS_MSBUILD_CL_TOOL_EXE`; its directory is not added to
-`PATH`.
-
-See [compiler cache](compiler-cache.md) for override precedence, file-tracking
-safety, and the optional fixed `S:`/`B:` compiler views available only in
-isolated Windows SSH logons.
-
 ## Native tests and sanitizers
 
-The default test group is core and TUI. Windows `all` and `ao.bat check` add
-CLI, tooling, and lint. The backend suite is compiled but explicit-only. Both
+The default test group is core, application, and TUI. Windows `all` and `ao.bat check` add
+CLI, tooling, and lint. The backend suite is explicit-only for `ao.bat test`.
+Both of its
 cases are hidden `[.manual]`, so `ao.bat test --backend` without a filter selects
-no case and fails (non-zero). Use the exact case name to select the probe whose
+no case and fails (non-zero). `ao.bat check` still runs the backend executable,
+as on every host; it selects none of those cases and passes
+([completion gate](bazel.md#completion-gate)). Use the exact case name to select the probe whose
 hardware prerequisites you prepared, as the provider example below shows;
 `[.manual]` selects both cases.
-Automatic `all` and concurrency selections exclude them. `ao.bat test --lint` prepares the separate
-`windows-tidy` host and runs the custom-check fixture diagnostics with the governed LLVM SDK and Visual Studio includes.
+Automatic `all` and concurrency selections exclude them. `ao.bat test --lint` runs the
+custom-check fixture diagnostics from the Bazel lint graph with the governed
+LLVM SDK and Visual Studio includes, replaying the actual configured fixture
+producer action (FixtureTools) fresh in a new attempt directory; cached lint
+results are never replayed.
 Compiler errors in those diagnostic invocations fail the fixtures; there is no second syntax-only pass.
 Objective-C++ fixtures are explicitly deferred, not counted as Windows coverage.
 Use `ao.bat tidy` for native source findings and `ao.bat format --check` for
 formatting. The managed environment owns Ruff and mypy; ambient tools are not used.
 
-`ao.bat check --asan` runs the native suite group with MSVC AddressSanitizer.
+`ao.bat check --asan` runs the full normal Debug completion first, then a
+separate managed MSVC AddressSanitizer profile in the same selected
+tree.
 Third-party vcpkg libraries are not instrumented, so cross-boundary STL
 container annotations are disabled. MSVC provides neither UBSan nor TSan, and
 resumable coroutine instrumentation is incomplete; Linux ASan/UBSan and TSan
 remain complementary. Windows `--tsan` and application `--clang` selections
-fail before configuration.
+fail before tree or SDK work.
 
 Source inspection and portal tests do not certify native builds, GUI behavior,
 audio, or sanitizer results. Run the opt-in WASAPI endpoint and playback probe
@@ -579,66 +597,48 @@ of acceptance. Record the checks performed and remaining limits with the change.
 
 Windows format/tidy uses the official LLVM development archive pinned by
 [`script/ao/windows-llvm-sdk.json`](../../script/ao/windows-llvm-sdk.json);
-`cmake/LlvmSdk.cmake` provisions that archive. The portal reads the manifest
+explicit provisioning installs it into the shared
+verified cache used by lint and its [hygiene
+gate](bazel.md#hygiene-gate): `ao.bat deps provision` and
+`ao.bat setup llvm-sdk` call the same native installer. Ordinary ready-only
+build, lint and format commands never install it. The portal reads the manifest
 lazily when Windows SDK code needs it, not while registering commands.
+Hygiene checks for a ready LLVM SDK only when its resolved scope contains
+C++ files; Python-only and empty scopes do not require it. Managed Python tooling
+is prepared only for Python files; see the [gate's tool-selection contract](bazel.md#hygiene-gate).
 Required-file entries use portable forward-slash-separated components containing
 ASCII letters, digits, `_`, `.`, `+`, or `-`; `.` and `..` components are rejected.
-This keeps the same relative-path interpretation in CMake and Python on every host.
-On first native C++ format or tidy configure, CMake
-downloads it, verifies SHA-256, and extracts it below
-`%LOCALAPPDATA%\Aobus\cache\llvm` by default. Later trees reuse the verified
+This keeps the same relative-path interpretation on every host.
+Provisioning downloads the archive, verifies SHA-256, and extracts it below
+`%LOCALAPPDATA%\Aobus\cache\llvm` by default. Later use reuses the verified
 cache. Concurrent provisioning is locked, and incomplete or stale SDKs are not
-accepted.
+accepted. Ready-only validation also rejects malformed completion
+markers, including non-UTF-8 text; explicit provisioning repairs an invalid
+automatic cache under its shared lock. Access errors propagate rather than being
+treated as proof that an existing cache is corrupt.
 
-Prepare the same governed SDK explicitly before native tooling controls with
-`ao.bat setup llvm-sdk`. This initializes the required Visual Studio environment
-and provisions the SDK in its dedicated lint-host context, without formatting
-an unrelated source file or building the custom checker. For SDK setup and
-product-test groups, `BUILD_DIR` names a primary product tree and the checker
-host is its `<primary>-tidy` sibling. In contrast, direct `tidy` and `format`
-commands treat `BUILD_DIR` as the exact tool tree. To reuse the host prepared
-by setup, pass that sibling explicitly, for example
-`ao.bat tidy -p C:\build\primary-tidy <source>`. Prefer `AOBUS_BUILD_ROOT` when
-you only want to relocate the base while retaining separate product and tool
-trees.
+`ao.bat format` uses the ready provisioned SDK directly: no CMake, no
+provisioning, and no Visual Studio environment are needed for formatting.
 
-`AOBUS_LLVM_SDK_CACHE_ROOT` relocates the managed cache. For an existing CMake
-tree, reconfigure with the corresponding CMake option or create a new tree.
+`AOBUS_LLVM_SDK_CACHE_ROOT` relocates the managed cache.
 `AOBUS_LLVM_SDK_ROOT` instead names one complete pre-extracted SDK; it is
 validated and never modified.
 
 ### Offline SDK setup
 
-On an offline machine, extract the exact pinned archive in advance. From an
-initialized Visual Studio x64 developer prompt with `VCPKG_ROOT` set, configure
-a local tidy tree explicitly:
-
-```bat
-cmake -S . --preset windows-tidy -B C:\local\aobus-build\windows-tidy ^
-  -DAOBUS_LLVM_SDK_ROOT=C:/toolchains/clang+llvm-<version>-x86_64-pc-windows-msvc
-```
-
-Use `start-msbuild-env.bat cmd` to open such a prompt from an ordinary terminal.
-The value persists in that build tree. Reconfigure with
-`-DAOBUS_LLVM_SDK_ROOT=` to return to the automatic verified cache. A
-pre-provisioned root is never repaired in place; configuration names any missing
+On an offline machine, extract the exact pinned archive in advance and place it
+as `AOBUS_LLVM_SDK_ROOT`, or populate the managed cache with a complete
+previously verified SDK including its `.aobus-llvm-sdk-complete` marker.
+A pre-provisioned root is never repaired in place; admission names any missing
 required path and fails.
 
 The official `clang-tidy.exe` cannot load Aobus's out-of-tree C++ plugin.
 Therefore the project builds `tool/lint/AobusClangTidy.exe`, statically linking
 upstream and `aobus-*` checks from the same SDK. The portal verifies registration
-and never falls back to Visual Studio or `PATH`. `--no-build` requires the
-executable, compile database, and configured SDK to exist already.
+and never falls back to Visual Studio or `PATH`.
 
-Windows tidy replays exact Windows compile commands, including a companion WinUI
-command database when needed. WinUI lint preparation configures that tree and
-runs only `aobus-winui-lint-context`: native IDL/C++/WinRT and XAML generation,
-not application compilation, linking, probe execution, or resource deployment.
-`ao.bat check` still owns the full product build and tests. To diagnose generation
-separately, run `ao.bat build --target aobus-winui-lint-context`; tidy consumes the
-Debug context, even after a Release product build. Private `--msbuild-capture`
-remains restricted to shipping WinUI builds, not validation or generation targets.
-Tidy reports and defers platform-incompatible files
+Windows tidy replays exact Windows compile actions, including WinUI generated
+contexts when needed. Tidy reports and defers platform-incompatible files
 for batch scopes; an explicitly named uncovered file fails. Complete shared C++
 coverage still requires the affected Linux, macOS, and Windows native tidy
 passes. See [checker development](lint/checker-development.md#native-replay-and-header-diagnostics)
@@ -647,29 +647,25 @@ for replay mechanics.
 ## Migrating a repository-local `out` tree
 
 The portal does not move or delete an old `out` directory. Run a normal portal
-command to create fresh local state. Do not copy CMake caches, build trees,
+command to create fresh local state. Do not copy build trees,
 `vcpkg_installed`, or Python virtual environments; they contain absolute or
 checkout-specific paths.
 
-A complete previously verified LLVM SDK may be copied into the automatic cache
-only with its `.aobus-llvm-sdk-complete` marker. Without that marker, select the
-old directory through `AOBUS_LLVM_SDK_ROOT` instead. Validate a build or hygiene
+Validate a build or hygiene
 run from new state before manually removing old files.
 
 ## Troubleshooting
 
 - **LLVM SDK provisioning failure**: `llvm-<version>.lock` is a coordination
-  file used by CMake's `file(LOCK ... GUARD FUNCTION)`, not an existence-based
-  stale-lock marker. If lock acquisition times out, check whether another CMake
-  process is still provisioning the SDK. Do not delete lock or cache files while
-  a writer may be active. After interruption, rerun configuration: it validates
-  the SDK and completion marker and re-extracts an invalid cache. For offline
+  file used by `ao.bat deps provision`,
+  not an existence-based stale-lock marker. If lock acquisition times out, check
+  whether another provisioning process is still installing the SDK. Do not delete lock or cache files while
+  a writer may be active. After interruption, wait for the portal's installer
+  to settle before starting another writer, then rerun
+  `ao.bat deps provision` as appropriate: it validates the SDK and completion
+  marker and re-extracts an invalid automatic cache. For offline
   provisioning, use the complete extracted SDK and `AOBUS_LLVM_SDK_ROOT`
   procedure under [offline SDK setup](#offline-sdk-setup).
-- **WinUI relinking staleness**: repeating an ordinary target build does not
-  force a missed link. Follow the executable-removal or `--clean` procedure in
-  [Build and run WinUI](#build-and-run-winui), selecting the same configuration
-  and build tree as the application being tested.
 - **`vswhere` or toolset discovery failure**: install or repair Visual Studio
   Build Tools with the required `.vsconfig`, including
   `Microsoft.VisualStudio.Component.VC.Tools.x86.x64`. Both `ao.bat` and

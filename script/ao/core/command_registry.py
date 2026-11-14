@@ -8,6 +8,7 @@ each module declares the same name. Reading these identities loads no commands.
 COMMAND_MODULE_NAMES = (
     "build",
     "check",
+    "verify",
     "test",
     "test_audit",
     "name_audit",

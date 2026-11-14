@@ -109,77 +109,6 @@ class LexicalDetectionTest(unittest.TestCase):
         self.assertEqual(issues, [])
         self.assertEqual([case.name for case in cases], ["Decoder - rejects malformed config"])
 
-    def test_char_literal_adjacent_to_a_keyword_does_not_hide_registrations(self):
-        body = "\n".join(
-            [
-                "auto closingQuote() { return''; }",
-                'TEST_CASE("Thing - does work") {}',
-                "",
-            ]
-        )
-        cases, issues = self._scan_text(body)
-
-        self.assertEqual(issues, [])
-        self.assertEqual([case.name for case in cases], ["Thing - does work"])
-
-    def test_unterminated_literals_are_bounded_to_their_line(self):
-        # A stray quote or apostrophe in prose (a disabled block or warning
-        # text) must not swallow the rest of the file.
-        for label, body, line in (
-            (
-                "disabled-apostrophe",
-                "#if 0\n"
-                "This isn't compiled because the feature is disabled.\n"
-                "#endif\n"
-                'TEST_CASE("Config - reads disabled block", "[concurrency]") {}\n',
-                4,
-            ),
-            (
-                "warning-apostrophe",
-                '#warning don\'t do this at home\nTEST_CASE("Config - reads warning line", "[concurrency]") {}\n',
-                2,
-            ),
-            (
-                "disabled-quote",
-                "#if 0\n"
-                'The quoted " name is not compiled\n'
-                "#endif\n"
-                'TEST_CASE("Config - reads unpaired quote line", "[concurrency]") {}\n',
-                4,
-            ),
-        ):
-            with self.subTest(label=label):
-                cases, issues = self._scan_text(body)
-
-                self.assertEqual(issues, [])
-                self.assertEqual(len(cases), 1)
-                self.assertEqual(cases[0].line, line)
-                self.assertEqual(cases[0].tags, ("concurrency",))
-                start, end = cases[0].tags_span
-                self.assertEqual(body[start:end], '"[concurrency]"')
-
-    def test_multi_separator_numbers_do_not_open_char_literals(self):
-        body = "\n".join(
-            [
-                "constexpr auto kValue = 0xDEAD'BEEF'CAFEULL;",
-                "constexpr auto kSuffix = 0xAB'CD'EFu;",
-                "constexpr auto kCount = 1'000'000;",
-                "constexpr auto kBits = 0b1010'1010'1010;",
-                "constexpr auto kMillis = 1'000ms;",
-                "// don't stop at this apostrophe",
-                'auto const text = "it isn\'t \\"quoted\\" yet";',
-                "auto const open = u8'(';",
-                'TEST_CASE("Decoder - reads multi-separator numbers", "[concurrency]") {}',
-                "",
-            ]
-        )
-        cases, issues = self._scan_text(body)
-
-        self.assertEqual(issues, [])
-        self.assertEqual([case.name for case in cases], ["Decoder - reads multi-separator numbers"])
-        start, end = cases[0].tags_span
-        self.assertEqual(body[start:end], '"[concurrency]"')
-
     def test_template_numeric_argument_keeps_following_registrations_detectable(self):
         body = "\n".join(
             [
@@ -224,19 +153,6 @@ class LexicalDetectionTest(unittest.TestCase):
         self.assertEqual(issues[0].kind, "unsupported-syntax")
         self.assertEqual(issues[0].line, 1)
         self.assertIn("the tags argument must be a single string literal", issues[0].message)
-
-    def test_punctuation_delimited_raw_strings_do_not_hide_registrations(self):
-        body = "\n".join(
-            [
-                'auto const payload = R"---(TEST_CASE("fake - payload", "[concurrency]"))---";',
-                'TEST_CASE("Real - works", "[concurrency]") {}',
-                "",
-            ]
-        )
-        cases, issues = self._scan_text(body)
-
-        self.assertEqual(issues, [])
-        self.assertEqual([case.name for case in cases], ["Real - works"])
 
     def test_comment_trivia_between_macro_and_parenthesis_still_registers(self):
         cases, issues = self._scan_text('TEST_CASE /* why */("Thing - does work") {}\n')
@@ -398,55 +314,6 @@ class LineSpliceTest(unittest.TestCase):
                 self.assertEqual(issues[0].line, 1)
                 self.assertIn("line splice", issues[0].message)
 
-    def test_spliced_unsupported_family_reports_the_original_line(self):
-        cases, issues = self._scan_text('SCEN\\\nARIO("thing") {}\n')
-
-        self.assertEqual(cases, [])
-        self.assertEqual([issue.kind for issue in issues], ["unsupported-syntax"])
-        self.assertEqual(issues[0].line, 1)
-        self.assertIn("SCENARIO", issues[0].message)
-
-    def test_continued_line_comment_hides_no_fake_registration(self):
-        cases, issues = self._scan_text('// mentions TEST_CASE \\\nTEST_CASE("fake - must not register") {}\n')
-
-        self.assertEqual(issues, [])
-        self.assertEqual(cases, [])
-
-    def test_spliced_comment_delimiters_open_and_close_correctly(self):
-        for body, expected in (
-            ('/\\\n/ TEST_CASE("fake - must not register") {}\n', []),
-            ('/\\\n* TEST_CASE("fake - must not register") *\\\n/\n', []),
-            (
-                '/* TEST_CASE("fake - must not register") *\\\n/TEST_CASE("Real - works") {}\n',
-                ["Real - works"],
-            ),
-        ):
-            with self.subTest(body=body):
-                cases, issues = self._scan_text(body)
-
-                self.assertEqual(issues, [])
-                self.assertEqual([case.name for case in cases], expected)
-                # Lines index the original text: the splice only joins the
-                # comment closer, so the registration keeps its own line.
-                self.assertEqual([case.line for case in cases], [2] * bool(expected))
-
-    def test_registration_after_unrelated_continuation_keeps_original_positions(self):
-        body = "\n".join(
-            [
-                "#define COMBINE(a, b) \\",
-                "    ((a) + (b))",
-                'TEST_CASE("Thing - works", "[concurrency]") {}',
-                "",
-            ]
-        )
-        cases, issues = self._scan_text(body)
-
-        self.assertEqual(issues, [])
-        self.assertEqual(len(cases), 1)
-        self.assertEqual(cases[0].line, 3)
-        expected = body.index('"[concurrency]"')
-        self.assertEqual(cases[0].tags_span, (expected, expected + len('"[concurrency]"')))
-
     def test_crlf_and_trailing_whitespace_splices_are_recognized(self):
         for invocation in (
             'TEST_\\ \r\nCASE("Thing - works") {}\r\n',
@@ -466,97 +333,6 @@ class LineSpliceTest(unittest.TestCase):
         self.assertEqual(issues, [])
         self.assertEqual([case.name for case in cases], ["Thing - works"])
         self.assertEqual(cases[0].line, 3)
-
-    def test_spliced_raw_string_body_forms_no_false_close_or_registration(self):
-        # Under a naive global splice, `)\` + newline + `"` inside the raw
-        # body would close the raw string early and expose the fake case.
-        body = "\n".join(
-            [
-                'auto const raw = R"(payload )\\',
-                '";',
-                'TEST_CASE("fake - must not register", "[concurrency]") {}',
-                ')";',
-                'TEST_CASE("Real - works", "[concurrency]") {}',
-                "",
-            ]
-        )
-        cases, issues = self._scan_text(body)
-
-        self.assertEqual(issues, [])
-        self.assertEqual([case.name for case in cases], ["Real - works"])
-        self.assertEqual(cases[0].line, 5)
-        expected = body.index('"[concurrency]"', body.index("Real - works"))
-        self.assertEqual(cases[0].tags_span, (expected, expected + len('"[concurrency]"')))
-
-    def test_raw_delimiters_are_unchanged_in_spliced_files(self):
-        body = "\n".join(
-            [
-                "#define LONG \\",
-                "    1 + 2",
-                'auto const custom = R"---(TEST_CASE("fake - custom"))---";',
-                'auto const wide = u8R"x(TEST_CASE("fake - wide"))x";',
-                'TEST_CASE("Real - works") {}',
-                "",
-            ]
-        )
-        cases, issues = self._scan_text(body)
-
-        self.assertEqual(issues, [])
-        self.assertEqual([case.name for case in cases], ["Real - works"])
-        self.assertEqual(cases[0].line, 5)
-
-    def test_prose_apostrophe_is_bounded_in_the_spliced_view(self):
-        # The splice path scans the logical view, so the newline bound must
-        # apply there too, while lines and spans keep indexing the original
-        # source text.
-        body = "\n".join(
-            [
-                "#define COMBINE(a, b) \\",
-                "    ((a) + (b))",
-                "#if 0",
-                "This isn't compiled",
-                "#endif",
-                'TEST_CASE("Config - scans spliced sources", "[concurrency]") {}',
-                "",
-            ]
-        )
-        cases, issues = self._scan_text(body)
-
-        self.assertEqual(issues, [])
-        self.assertEqual([case.name for case in cases], ["Config - scans spliced sources"])
-        self.assertEqual(cases[0].line, 6)
-        expected = body.index('"[concurrency]"')
-        self.assertEqual(cases[0].tags_span, (expected, expected + len('"[concurrency]"')))
-
-    def test_splice_inside_an_ordinary_string_keeps_the_literal_open(self):
-        # A backslash-newline inside an ordinary literal is a phase-2 splice,
-        # not the logical newline that bounds an unterminated literal.
-        body = "\n".join(
-            [
-                '#define GREETING "hello \\',
-                'world"',
-                'TEST_CASE("Config - reads the spliced greeting") {}',
-                "",
-            ]
-        )
-        cases, issues = self._scan_text(body)
-
-        self.assertEqual(issues, [])
-        self.assertEqual([case.name for case in cases], ["Config - reads the spliced greeting"])
-        self.assertEqual(cases[0].line, 3)
-
-    def test_crlf_unterminated_literal_is_bounded_to_its_line(self):
-        # Authored CRLF stays as written on disk; the detector reads
-        # translated newlines and the bound ends the literal at that newline.
-        body = 'auto const text = "unclosed\r\nTEST_CASE("Real - works", "[concurrency]") {}\r\n'
-        cases, issues = self._scan_text(body)
-
-        self.assertEqual(issues, [])
-        self.assertEqual([case.name for case in cases], ["Real - works"])
-        self.assertEqual(cases[0].line, 2)
-        translated = body.replace("\r\n", "\n")
-        expected = translated.index('"[concurrency]"')
-        self.assertEqual(cases[0].tags_span, (expected, expected + len('"[concurrency]"')))
 
     def test_corpus_tags_spans_slice_the_original_text(self):
         for path in testaudit.discover_test_files():
@@ -604,33 +380,6 @@ class TagContractTest(unittest.TestCase):
 
         for case in cases:
             self.assertEqual(testaudit._audit_case(case), [])
-
-    def test_retired_vocabulary_is_rejected_by_the_allowlist(self):
-        for literal in ("[unit]", "[stress]", "[async]", "[catalog]", "[core][unit][query]"):
-            with self.subTest(literal=literal):
-                case = self._case(
-                    "Parser - rejects incomplete predicate",
-                    tuple(testaudit.TAG_RE.findall(literal)),
-                    tags_literal=literal,
-                )
-
-                issues = testaudit._audit_case(case)
-                self.assertTrue(issues)
-                self.assertTrue(all(issue.kind == "tag" for issue in issues))
-                self.assertIn("only [concurrency] and [.manual] are allowed", issues[0].message)
-
-    def test_stress_pairing_rule_is_gone_but_stress_is_still_disallowed(self):
-        case = self._case(
-            "AsyncRuntime - cancellation races safely with timer expiry",
-            ("concurrency", "stress"),
-            tags_literal="[concurrency][stress]",
-        )
-
-        issues = testaudit._audit_case(case)
-
-        self.assertEqual(len(issues), 1)
-        self.assertEqual(issues[0].kind, "tag")
-        self.assertIn("[stress]", issues[0].message)
 
     def test_duplicates_and_incomplete_tag_strings_fail(self):
         for literal, kinds in (

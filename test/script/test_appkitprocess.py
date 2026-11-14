@@ -12,7 +12,7 @@ from pathlib import Path
 from unittest import mock
 
 from ao.command import test as test_command
-from ao.core import appkitprocess
+from ao.core import appkitprocess, bazel_workflows
 
 
 @unittest.skipIf(os.name == "nt", "AppKit launch supervision uses a POSIX bridge")
@@ -22,7 +22,9 @@ class AppKitProcessTests(unittest.TestCase):
             with self.subTest(mode=mode), tempfile.TemporaryDirectory(prefix="appkit process ") as directory:
                 root = Path(directory)
                 build = root / "build"
-                binary = build / "test" / "ao_appkit_smoke.app" / "Contents" / "MacOS" / "ao_appkit_smoke"
+                execution_root = build / "state/output/execroot/_main"
+                relative = "bazel-out/macos/bin/smoke.app/Contents/MacOS/custom-smoke"
+                binary = execution_root / relative
                 binary.parent.mkdir(parents=True)
                 binary.write_text(
                     f"#!{sys.executable}\n"
@@ -59,6 +61,22 @@ class AppKitProcessTests(unittest.TestCase):
                     encoding="utf-8",
                 )
                 binary.chmod(0o700)
+                artifact = bazel_workflows.parse_artifact(
+                    {
+                        "label": "//app/macos-appkit:ao_appkit_smoke",
+                        "incompatible": False,
+                        "executable": relative,
+                        "files": [{"path": relative, "directory": False}],
+                        "runfiles": [],
+                        "manifest": None,
+                        "environment": {},
+                    },
+                    target="//app/macos-appkit:ao_appkit_smoke",
+                    checksum="a" * 64,
+                    config="debug",
+                    tree=build,
+                    execution_root=execution_root,
+                )
                 started = []
                 real_popen = subprocess.Popen
 
@@ -84,6 +102,7 @@ class AppKitProcessTests(unittest.TestCase):
                                                     scenario="desktop",
                                                     library=root / "music",
                                                     state_root=root / "state",
+                                                    artifact=artifact,
                                                 )
                                         else:
                                             status = test_command.run_appkit_smoke(
@@ -91,6 +110,7 @@ class AppKitProcessTests(unittest.TestCase):
                                                 scenario="desktop",
                                                 library=root / "music",
                                                 state_root=root / "state",
+                                                artifact=artifact,
                                             )
                                             self.assertEqual(
                                                 status,

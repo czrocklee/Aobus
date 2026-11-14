@@ -1,0 +1,107 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("//bazel/lint:canary.bzl", "lint_cache_canaries")
+load("//bazel/lint:fixtures.bzl", "lint_fixture_test")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "fixtures",
+    srcs = glob(["fixture/**"]),
+)
+
+# These independent native contexts test cacheable findings, not shipping code.
+# Request their lint aspect only: compiling the error control is deliberately invalid.
+lint_cache_canaries(
+    name = "cache_inputs",
+    clean = "CacheClean.cpp",
+    error = "CacheError.cpp",
+    header = "CacheControl.h",
+    header_template = "CacheControl.h.in",
+    tags = ["manual"],
+    warning = "CacheWarning.cpp",
+)
+
+cc_library(
+    name = "cache_warning",
+    testonly = True,
+    srcs = [":CacheWarning.cpp"],
+    hdrs = [":CacheControl.h"],
+    features = [
+        "-aobus_warnings",
+        "-treat_warnings_as_errors",
+    ],
+    tags = ["manual"],
+    deps = ["//bazel:compile_contract"],
+)
+
+cc_library(
+    name = "cache_clean",
+    testonly = True,
+    srcs = [":CacheClean.cpp"],
+    hdrs = [":CacheControl.h"],
+    features = [
+        "-aobus_warnings",
+        "-treat_warnings_as_errors",
+    ],
+    tags = ["manual"],
+    deps = ["//bazel:compile_contract"],
+)
+
+cc_library(
+    name = "cache_error",
+    testonly = True,
+    srcs = [":CacheError.cpp"],
+    hdrs = [":CacheControl.h"],
+    features = [
+        "-aobus_warnings",
+        "-treat_warnings_as_errors",
+    ],
+    tags = ["manual"],
+    deps = ["//bazel:compile_contract"],
+)
+
+# The preamble intentionally includes the paired header in source mode. Its
+# declarations/macros must remain available in the physical-header replay.
+cc_library(
+    name = "header_replay",
+    testonly = True,
+    srcs = ["HeaderReplay.cpp"],
+    hdrs = [
+        "HeaderReplay.h",
+        "HeaderReplayDetail.h",
+        "HeaderReplayPreamble.h",
+    ],
+    copts = select({
+        "@platforms//os:windows": ["/FItest/lint/HeaderReplayPreamble.h"],
+        "//conditions:default": [
+            "-include",
+            "test/lint/HeaderReplayPreamble.h",
+        ],
+    }),
+    features = [
+        "-aobus_warnings",
+        "-treat_warnings_as_errors",
+    ],
+    tags = ["manual"],
+    deps = ["//bazel:compile_contract"],
+)
+
+# The owned warning feature keeps the product's warning promotion in this
+# context, so an analysis-only compiler warning exercises the report gate.
+cc_library(
+    name = "werror_replay",
+    testonly = True,
+    srcs = ["WerrorReplay.cpp"],
+    hdrs = ["WerrorReplay.h"],
+    tags = ["manual"],
+    deps = ["//bazel:compile_contract"],
+)
+
+# Explicit until each native checker/fixture profile is admitted; raw report
+# builds are not a replacement for the portal's per-invocation findings gate.
+lint_fixture_test(
+    name = "lint_test",
+    size = "large",
+    timeout = "long",
+    tags = ["manual"],
+)

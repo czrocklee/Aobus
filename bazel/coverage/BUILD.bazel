@@ -1,0 +1,32 @@
+load(":support.bzl", "coverage_merger", "coverage_runtime_enabled", "coverage_support")
+
+package(default_visibility = ["//visibility:public"])
+
+coverage_runtime_enabled(
+    name = "runtime_enabled",
+    build_setting_default = False,
+)
+
+config_setting(
+    name = "_runtime_enabled",
+    flag_values = {":runtime_enabled": "true"},
+)
+
+coverage_merger(
+    name = "merger",
+    java_runtime = select({
+        ":_runtime_enabled": "@bazel_tools//tools/jdk:jdk",
+        "//conditions:default": None,
+    }),
+    stock_payload = select({
+        ":_runtime_enabled": "@remote_coverage_tools//:all_lcov_merger_lib",
+        "//conditions:default": None,
+    }),
+    target_compatible_with = ["@platforms//os:linux"],
+)
+
+coverage_support(
+    name = "coverage_support",
+    collector = "collect.py",
+    target_compatible_with = ["@platforms//os:linux"],
+)

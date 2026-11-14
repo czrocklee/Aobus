@@ -234,7 +234,7 @@ The shared channel contract is in [outcome channels](../system/failure/outcome-c
 
 ## Platform-specific code
 
-Put platform implementations in files selected by CMake, using either a platform suffix or a platform file family, for example `SignalExitWatcherPosix.cpp`, `SignalExitWatcherWindows.cpp`, `backend/WasapiProvider.cpp`, and `backend/PipeWireProvider.cpp`.
+Put platform implementations in files selected by the build graph, using either a platform suffix or a platform file family, for example `SignalExitWatcherPosix.cpp`, `SignalExitWatcherWindows.cpp`, `backend/WasapiProvider.cpp`, and `backend/PipeWireProvider.cpp`.
 A small localized branch containing only a conditional include and a call or two may use preprocessor conditionals; split a larger branch into platform files.
 Prefer platform-selected source files to generated availability macros in shared source.
 Raw compiler and OS macros such as `_WIN32` and `__linux__` belong only in platform-suffixed files or those small localized branches.

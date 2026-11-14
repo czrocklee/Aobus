@@ -38,8 +38,9 @@ The [documentation home](doc/README.md) connects these reading paths.
 
 ## Build and run
 
-Aobus uses CMake with pinned Nix dependencies on Linux and the shared governed vcpkg manifest on macOS and Windows.
-On Linux, the portal selects the development environment automatically:
+Aobus builds with Bazel, using pinned Nix dependencies on Linux and the shared governed vcpkg
+manifest on macOS and Windows. On Linux, the portal selects the development environment
+automatically:
 
 ```bash
 ./ao build

@@ -6,6 +6,9 @@
 #include <ao/utility/Path.h>
 
 #include <fcntl.h>
+#include <sys/file.h>  // NOLINT(misc-include-cleaner) -- public flock header; Darwin forwards the declaration.
+#include <sys/stat.h>  // NOLINT(misc-include-cleaner) -- public permission constants; Darwin uses private SDK headers.
+#include <sys/types.h> // NOLINT(misc-include-cleaner) -- public mode_t header; Darwin uses a private SDK header.
 #include <unistd.h>
 
 #include <cerrno>
@@ -14,9 +17,6 @@
 #include <filesystem>
 #include <format>
 #include <memory>
-#include <sys/file.h>  // NOLINT(misc-include-cleaner) -- public flock header; Darwin forwards the declaration.
-#include <sys/stat.h>  // NOLINT(misc-include-cleaner) -- public permission constants; Darwin uses private SDK headers.
-#include <sys/types.h> // NOLINT(misc-include-cleaner) -- public mode_t header; Darwin uses a private SDK header.
 #include <utility>
 
 namespace ao::library::detail

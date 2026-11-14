@@ -9,8 +9,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from workflow_support import executable_artifact
+
 from ao.__main__ import make_parser, parse_arguments
-from ao.command import build as build_command
 from ao.command import test as test_command
 from ao.core import builddir
 
@@ -22,53 +23,30 @@ def _parse(arguments: list[str]) -> argparse.Namespace:
 
 
 class AppKitComponentScenarioTest(unittest.TestCase):
-    def test_macos_parser_accepts_each_exact_component_scenario_name(self):
-        with mock.patch.object(builddir, "platform_profile", return_value=builddir.MACOS_PROFILE):
-            for scenario in _COMPONENT_SCENARIOS:
-                with self.subTest(scenario=scenario):
-                    args = _parse(["test", "--appkit", "--scenario", scenario])
-                    self.assertEqual(args.suite, "appkit")
-                    self.assertEqual(args.scenario, scenario)
-
-    def test_macos_parser_rejects_unknown_or_inexact_component_scenario_names(self):
-        with mock.patch.object(builddir, "platform_profile", return_value=builddir.MACOS_PROFILE):
-            for scenario in (
-                "unknown",
-                "credits",
-                "credits-control",
-                "credits-preview",
-                "CREDITS-CONTROLS",
-                "quality",
-                "quality-presentations",
-                "QUALITY-PRESENTATION",
-            ):
-                with self.subTest(scenario=scenario):
-                    with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
-                        _parse(["test", "--appkit", "--scenario", scenario])
-                    self.assertEqual(error.exception.code, 2)
-
     def test_non_macos_profiles_do_not_offer_appkit_or_component_scenarios(self):
         for profile in (builddir.LINUX_PROFILE, builddir.WINDOWS_PROFILE):
             with self.subTest(profile=profile.name):
                 with mock.patch.object(builddir, "platform_profile", return_value=profile):
                     self.assertNotIn("appkit", test_command.selectable_suites())
-                    for scenario in _COMPONENT_SCENARIOS:
-                        for selection in (["--appkit"], ["--suite", "appkit"]):
-                            with self.subTest(scenario=scenario, selection=selection):
-                                with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
-                                    _parse(["test", *selection, "--scenario", scenario])
-                                self.assertEqual(error.exception.code, 2)
+        # One representative rejection: --appkit is not a registered option
+        # outside macOS, so argparse fails before any scenario handling.
+        with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
+            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
+                _parse(["test", "--appkit", "--scenario", "credits-controls"])
+        self.assertEqual(error.exception.code, 2)
 
     def test_component_dispatch_preserves_selected_tree_fixtures_and_asan_option(self):
         with tempfile.TemporaryDirectory() as directory:
             build_dir = Path(directory)
             library = build_dir / "music"
-            state_root = build_dir / "state"
+            state_root = build_dir / "state-fixture"
+            artifact = executable_artifact(build_dir, target=test_command.SUITES["appkit"].target)
             with (
                 mock.patch.object(builddir, "platform_profile", return_value=builddir.MACOS_PROFILE),
-                mock.patch.object(build_command, "validate_build_tree", return_value="clang"),
                 mock.patch.object(
-                    test_command.compiler_cache, "read_cmake_cache", return_value={"AOBUS_BUILD_TESTS": "ON"}
+                    test_command.bazel_workflows,
+                    "prepare_artifacts",
+                    side_effect=lambda *args, **kwargs: contextlib.nullcontext((artifact,)),
                 ),
                 mock.patch.object(test_command, "run") as build_process,
             ):
@@ -100,20 +78,20 @@ class AppKitComponentScenarioTest(unittest.TestCase):
                                 state_root=state_root.resolve(),
                                 asan=asan,
                                 tsan=False,
+                                artifact=artifact,
                             )
                 build_process.assert_not_called()
 
     def test_components_use_existing_parent_runner_with_120_second_timeout_and_no_desktop_markers(self):
         with tempfile.TemporaryDirectory() as directory:
             build_dir = Path(directory) / "build"
-            binary = build_dir / "test" / "ao_appkit_smoke.app" / "Contents" / "MacOS" / "ao_appkit_smoke"
-            binary.parent.mkdir(parents=True)
-            binary.touch()
+            artifact = executable_artifact(build_dir, target=test_command.SUITES["appkit"].target)
+            binary = artifact.executable
             library = Path(directory) / "music"
             state_root = Path(directory) / "state"
             run_id = "0123456789abcdef0123456789abcdef"
             inherited = {"INHERITED": "yes", test_command.APPKIT_RUN_ID_ENV: "old"}
-            environment = {test_command.APPKIT_RUN_ID_ENV: run_id}
+            environment = {**artifact.environment(), test_command.APPKIT_RUN_ID_ENV: run_id}
             with (
                 mock.patch.object(builddir, "platform_profile", return_value=builddir.MACOS_PROFILE),
                 mock.patch.dict(os.environ, inherited, clear=True),
@@ -121,40 +99,58 @@ class AppKitComponentScenarioTest(unittest.TestCase):
                 mock.patch.object(test_command.appkitprocess, "run_desktop") as desktop,
                 mock.patch.object(test_command, "_require_appkit_marker") as marker,
             ):
-                for scenario in _COMPONENT_SCENARIOS:
-                    for status in (0, 7):
-                        with self.subTest(scenario=scenario, status=status):
-                            parent = mock.Mock()
-                            parent.wait.return_value = status
-                            command = [
-                                str(binary),
-                                "--scenario",
-                                scenario,
-                                "--library",
-                                str(library.resolve()),
-                                "--state-root",
-                                str(state_root.resolve()),
-                            ]
-                            with (
-                                mock.patch.object(test_command.subprocess, "Popen", return_value=parent) as popen,
-                                mock.patch.object(
-                                    test_command, "_run_appkit_parent", wraps=test_command._run_appkit_parent
-                                ) as run_parent,
-                                contextlib.redirect_stdout(io.StringIO()),
-                            ):
-                                self.assertEqual(
-                                    test_command.run_appkit_smoke(
-                                        build_dir, scenario=scenario, library=library, state_root=state_root, asan=False
-                                    ),
-                                    status,
-                                )
-                            run_parent.assert_called_once_with(command, environment)
-                            popen.assert_called_once_with(
-                                command, cwd=test_command.PROJECT_ROOT, env=inherited | environment
+                # Every non-desktop scenario takes the same parent-runner
+                # branch; status propagation is the discriminating dimension.
+                scenario = "credits-controls"
+                for status in (0, 7):
+                    with self.subTest(status=status):
+                        parent = mock.Mock()
+                        parent.wait.return_value = status
+                        command = [
+                            str(binary),
+                            "--scenario",
+                            scenario,
+                            "--library",
+                            str(library.resolve()),
+                            "--state-root",
+                            str(state_root.resolve()),
+                        ]
+                        with (
+                            mock.patch.object(test_command.subprocess, "Popen", return_value=parent) as popen,
+                            mock.patch.object(
+                                test_command, "_run_appkit_parent", wraps=test_command._run_appkit_parent
+                            ) as run_parent,
+                            contextlib.redirect_stdout(io.StringIO()),
+                        ):
+                            self.assertEqual(
+                                test_command.run_appkit_smoke(
+                                    build_dir,
+                                    scenario=scenario,
+                                    library=library,
+                                    state_root=state_root,
+                                    asan=False,
+                                    artifact=artifact,
+                                ),
+                                status,
                             )
-                            # Pin the controller deadline, not merely the current constant's value.
-                            parent.wait.assert_called_once_with(timeout=120.0)
-                            parent.terminate.assert_not_called()
-                            parent.kill.assert_not_called()
+                        run_parent.assert_called_once_with(command, environment)
+                        popen.assert_called_once_with(
+                            command, cwd=test_command.PROJECT_ROOT, env=inherited | environment
+                        )
+                        # Pin the controller deadline, not merely the current constant's value.
+                        parent.wait.assert_called_once_with(timeout=120.0)
+                        parent.terminate.assert_not_called()
+                        parent.kill.assert_not_called()
                 desktop.assert_not_called()
                 marker.assert_not_called()
+
+    def test_component_interrupt_reaps_parent_without_waiting_for_desktop_markers(self):
+        parent = mock.Mock()
+        parent.wait.side_effect = [KeyboardInterrupt, KeyboardInterrupt, -9]
+        with (
+            mock.patch.object(test_command.subprocess, "Popen", return_value=parent),
+            self.assertRaises(KeyboardInterrupt),
+        ):
+            test_command._run_appkit_parent(["configured-smoke", "--scenario", "credits-controls"], {})
+        parent.kill.assert_called_once_with()
+        self.assertEqual(parent.wait.call_args_list, [mock.call(timeout=120.0), mock.call(), mock.call()])

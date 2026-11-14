@@ -1,18 +1,19 @@
-"""ao format - format C++ and Python sources by default, the whole tree on demand."""
+"""ao format - format C++, Python and Bazel sources, the whole tree on demand."""
 
 import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
 
-from ..core import builddir, buildenv, gitfiles, pythoncheck, tidyengine
+from ..core import builddir, buildenv, buildifier, gitfiles, pythoncheck, windows_llvm_sdk
 from ..core.paths import PROJECT_ROOT
 from ..core.proc import die
 
-HELP = "Format C++ and Python sources (changed files by default)"
+HELP = "Format C++, Python and Bazel sources (changed files by default)"
 NAME = "format"
-# True when ao.bat must initialize the MSVC/vcpkg build environment first.
-REQUIRES_BUILD_ENV = True
+# Formatting needs a ready LLVM tool, not a Visual Studio compiler environment.
+REQUIRES_BUILD_ENV = False
 REQUIRES_PYTHON_TOOLS = True
 
 
@@ -25,7 +26,7 @@ examples:
   ./ao format --all             # format the whole tree
 """
 
-FORMAT_TOP_DIRS = ("app", "include", "lib", "script", "test", "tool")
+FORMAT_TOP_DIRS = ("app", "asset", "bazel", "include", "lib", "script", "test", "tool")
 CHUNK = 100
 
 
@@ -55,14 +56,20 @@ def resolve_files(args: argparse.Namespace) -> list[str]:
     if args.files:
         return list(args.files)
     if args.all:
-        return gitfiles.find_sources(list(FORMAT_TOP_DIRS), suffixes=gitfiles.SOURCE_SUFFIXES)
+        files = gitfiles.find_sources(list(FORMAT_TOP_DIRS), suffixes=gitfiles.SOURCE_SUFFIXES)
+        files.extend(gitfiles.root_bazel_files())
+        return sorted(set(files))
     if args.folder:
         return gitfiles.find_sources(args.folder, suffixes=gitfiles.SOURCE_SUFFIXES)
     changed = gitfiles.changed_files(args.commit, suffixes=gitfiles.SOURCE_SUFFIXES)
     return [
         name
         for name in changed
-        if name.startswith(tuple(f"{top}/" for top in FORMAT_TOP_DIRS)) and (PROJECT_ROOT / name).is_file()
+        if (
+            name.startswith(tuple(f"{top}/" for top in FORMAT_TOP_DIRS))
+            or (Path(name).parent == Path(".") and gitfiles.is_bazel_file(name))
+        )
+        and (PROJECT_ROOT / name).is_file()
     ]
 
 
@@ -74,21 +81,32 @@ def _file_exists(name: str) -> bool:
 
 
 def requires_build_environment(args: argparse.Namespace) -> bool:
-    return buildenv.requires_source_build_env(args, resolve_files(args))
+    cpp_scope = buildenv.requires_source_build_env(args, resolve_files(args))
+    # macOS exposes ready LLVM tools through its native environment, not ambient PATH.
+    return cpp_scope and builddir.platform_profile().name == "macos"
 
 
-def run_clang_format(files: list[str], *, check: bool, build_dir: Path | None = None) -> int:
+def run_clang_format(
+    files: list[str], *, check: bool, build_dir: Path | None = None, clang_format: str | None = None
+) -> int:
+    """Run clang-format; an explicit executable replaces the Windows lint-tree SDK selection."""
     if not files:
         return 0
 
     mode = ["--dry-run", "-Werror"] if check else ["-i"]
     action = "Checking" if check else "Formatting"
     print(f"{action} {len(files)} file(s) with clang-format...")
-    clang_format = "clang-format"
-    if builddir.platform_profile().name == "windows":
-        tidy_build_dir = build_dir if build_dir is not None else builddir.tidy_dir()
-        tidyengine.ensure_windows_llvm_sdk(tidy_build_dir)
-        clang_format = tidyengine.clang_tool(tidy_build_dir, "clang-format")
+    if clang_format is None:
+        clang_format = "clang-format"
+        if builddir.platform_profile().name == "windows":
+            try:
+                manifest = windows_llvm_sdk.read_manifest(windows_llvm_sdk.MANIFEST)
+                root, _cached = windows_llvm_sdk.ready_root(os.environ, manifest)
+                clang_format = str(root / "bin/clang-format.exe")
+            except windows_llvm_sdk.WindowsLlvmSdkError as error:
+                raise die(
+                    f"format requires the ready pinned LLVM SDK: {error}; run ao setup llvm-sdk explicitly"
+                ) from error
 
     status = 0
     for start in range(0, len(files), CHUNK):
@@ -105,7 +123,7 @@ def run_clang_format(files: list[str], *, check: bool, build_dir: Path | None = 
     return 0
 
 
-def run_ruff_format(files: list[str], *, check: bool) -> int:
+def run_ruff_format(files: list[str], *, check: bool, python: Path | None = None) -> int:
     if not files:
         return 0
 
@@ -113,26 +131,39 @@ def run_ruff_format(files: list[str], *, check: bool) -> int:
     action = "Checking" if check else "Formatting"
     print(f"{action} {len(files)} file(s) with ruff format...")
     try:
-        result = subprocess.run(pythoncheck.ruff_command("format", *mode, *files), cwd=PROJECT_ROOT)
+        result = subprocess.run(pythoncheck.ruff_command("format", *mode, *files, python=python), cwd=PROJECT_ROOT)
     except FileNotFoundError as exc:
-        raise die(f"Python environment is unavailable: {sys.executable}") from exc
+        raise die(f"Python environment is unavailable: {python or sys.executable}") from exc
     return 1 if result.returncode != 0 else 0
 
 
-def run_command(args: argparse.Namespace, *, files: list[str] | None = None, build_dir: Path | None = None) -> int:
+def run_command(
+    args: argparse.Namespace,
+    *,
+    files: list[str] | None = None,
+    build_dir: Path | None = None,
+    clang_format: str | None = None,
+    python: Path | None = None,
+) -> int:
     if files is None:
         files = resolve_files(args)
     cpp_files = [name for name in files if name.endswith(gitfiles.CPP_SUFFIXES) and _file_exists(name)]
     python_files = [name for name in files if name.endswith(gitfiles.PYTHON_SUFFIXES) and _file_exists(name)]
-    if not cpp_files and not python_files:
+    bazel_files = [name for name in files if gitfiles.is_bazel_file(name) and _file_exists(name)]
+    if not cpp_files and not python_files and not bazel_files:
         print("No files to format.")
         return 0
 
     status = 0
-    if run_clang_format(cpp_files, check=args.check, build_dir=build_dir) != 0:
+    if run_clang_format(cpp_files, check=args.check, build_dir=build_dir, clang_format=clang_format) != 0:
         status = 1
-    if run_ruff_format(python_files, check=args.check) != 0:
+    if run_ruff_format(python_files, check=args.check, python=python) != 0:
         status = 1
+    try:
+        if buildifier.run(bazel_files, check=args.check) != 0:
+            status = 1
+    except buildifier.BuildifierError as exc:
+        raise die(str(exc)) from exc
 
     if status != 0 and args.check:
         print("Formatting issues found.", file=sys.stderr)

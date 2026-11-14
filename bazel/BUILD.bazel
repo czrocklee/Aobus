@@ -1,0 +1,118 @@
+load("@platforms//host:constraints.bzl", "HOST_CONSTRAINTS")
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load(":build_profiles.bzl", "profile_request_flag")
+load(":product_features.bzl", "product_flag")
+load(":sanitizers.bzl", "sanitizer_flag", "sanitizer_platforms")
+
+package(default_visibility = ["//visibility:public"])
+
+product_flag(
+    name = "gtk_enabled",
+    build_setting_default = True,
+)
+
+product_flag(
+    name = "system_media_enabled",
+    build_setting_default = True,
+)
+
+config_setting(
+    name = "linux_gtk_enabled",
+    constraint_values = ["@platforms//os:linux"],
+    flag_values = {":gtk_enabled": "true"},
+)
+
+config_setting(
+    name = "linux_system_media_enabled",
+    constraint_values = ["@platforms//os:linux"],
+    flag_values = {":system_media_enabled": "true"},
+)
+
+sanitizer_flag(
+    name = "asan_enabled",
+    build_setting_default = False,
+)
+
+sanitizer_flag(
+    name = "tsan_enabled",
+    build_setting_default = False,
+)
+
+# Request markers and platform constraints form one checked native profile.
+profile_request_flag(
+    name = "release_ipo_enabled",
+    build_setting_default = False,
+)
+
+profile_request_flag(
+    name = "sampling_enabled",
+    build_setting_default = False,
+)
+
+constraint_setting(name = "aobus_profile")
+
+constraint_value(
+    name = "debug_profile",
+    constraint_setting = ":aobus_profile",
+)
+
+constraint_value(
+    name = "release_profile",
+    constraint_setting = ":aobus_profile",
+)
+
+constraint_value(
+    name = "sampling_profile",
+    constraint_setting = ":aobus_profile",
+)
+
+sanitizer_platforms(host_constraints = HOST_CONSTRAINTS)
+
+config_setting(
+    name = "asan",
+    flag_values = {":asan_enabled": "true"},
+)
+
+config_setting(
+    name = "tsan",
+    flag_values = {":tsan_enabled": "true"},
+)
+
+config_setting(
+    name = "optimized_contracts",
+    values = {"compilation_mode": "opt"},
+)
+
+# Runtime contract behavior follows the actual compilation mode. Standalone
+# probes share this interface without importing the Core utility header tree.
+cc_library(
+    name = "compile_contract",
+    defines = ["gsl_CONFIG_CONTRACT_CHECKING_ON"] + select({
+        ":optimized_contracts": ["gsl_CONFIG_CONTRACT_VIOLATION_TERMINATES"],
+        "//conditions:default": ["gsl_CONFIG_CONTRACT_VIOLATION_ASSERTS"],
+    }),
+)
+
+exports_files([
+    "apple_support_llvm.patch",
+    "build_profiles.bzl",
+    "catalog.bzl",
+    "compile_context.bzl",
+    "compiler_policy.bzl",
+    "dependencies.bzl",
+    "gperf.bzl",
+    "host_tools.bzl",
+    "host_tools_repository.bzl",
+    "import_repository.bzl",
+    "imports.bzl",
+    "linux_toolchain.bzl",
+    "macos_cc_config.bzl",
+    "product_features.bzl",
+    "rules_cc_coverage_private_headers.patch",
+    "sanitizers.bzl",
+    "toolchain_repository.bzl",
+    "verify_windows_utf8_manifest.ps1",
+    "windows_utf8_manifest.bzl",
+    "winui_repository.bzl",
+    "winui_sdk.bzl",
+])

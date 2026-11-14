@@ -8,7 +8,6 @@ import unittest
 from pathlib import Path
 
 from ao.core import concept_report, concept_scope
-from ao.core.paths import absolute_path
 
 
 def _decl(
@@ -65,12 +64,6 @@ class ConceptScopeTest(unittest.TestCase):
     def test_scope_roots_match_the_rfc_measurement_contract(self):
         self.assertEqual(concept_scope.CORE_ROOTS, ("include/ao",))
         self.assertEqual(concept_scope.APPLICATION_ROOTS, ("app/include/ao",))
-        self.assertEqual(
-            concept_scope.OVERLOAD_TREATMENT,
-            "each public callable overload, free function or explicit member, is one declaration",
-        )
-        self.assertIn("owner edge", concept_scope.DEPENDENCY_EDGE_TREATMENT)
-        self.assertTrue(concept_scope.EXCLUSIONS)
         self.assertEqual(concept_scope.validate_construction_chains(), [])
 
     def test_construction_hops_are_crossed_api_boundaries(self):
@@ -535,75 +528,7 @@ class ConceptMetricTest(unittest.TestCase):
         self.assertEqual(concept_report.percentile([1, 2, 3, 4], 95), 4)
         self.assertEqual(concept_report.percentile([10], 95), 10)
 
-    def test_compile_flags_keep_include_and_language_and_drop_linker_inputs(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            fixture = Path(temp_dir)
-            root = fixture / "src"
-            build_dir = fixture / "build"
-            source = root / "lib" / "Foo.cpp"
-            system_include = fixture / "sdk" / "include"
-            flags = concept_report.extract_compile_flags(
-                {
-                    "directory": str(build_dir),
-                    "file": str(source),
-                    "arguments": [
-                        "g++",
-                        "-c",
-                        "-std=c++26",
-                        "-I",
-                        "include",
-                        "-isystem",
-                        str(system_include),
-                        "-DFOO=1",
-                        "-Werror",
-                        "-o",
-                        "Foo.cpp.o",
-                        str(source),
-                    ],
-                },
-                root,
-            )
-
-            self.assertIn("-std=c++26", flags)
-            self.assertIn("-DFOO=1", flags)
-            self.assertIn("-I" + str(absolute_path(build_dir / "include")), flags)
-            self.assertNotIn("-Werror", flags)
-            self.assertNotIn(str(source), flags)
-
-    def test_system_include_directories_are_dropped_and_isystem_switches_stay_glued(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            fixture = Path(temp_dir)
-            root = fixture / "src"
-            build_dir = fixture / "build"
-            source = root / "lib" / "Foo.cpp"
-            system_include = fixture / "sdk" / "gtk-4.0"
-            flags = concept_report.extract_compile_flags(
-                {
-                    "directory": str(build_dir),
-                    "file": str(source),
-                    "arguments": [
-                        "g++",
-                        "-c",
-                        "-isystem",
-                        str(system_include),
-                        "-isystem",
-                        "generated",
-                        "-I",
-                        "include",
-                        str(source),
-                    ],
-                },
-                root,
-                build_dir=build_dir,
-            )
-
-            self.assertTrue(any(flag.startswith("-I") and flag.endswith("include") for flag in flags))
-            self.assertTrue(any(flag.startswith("-isystem") and "generated" in flag for flag in flags))
-            self.assertFalse(any("gtk-4.0" in flag for flag in flags))
-            self.assertNotIn("-isystem", flags)
-
-    def test_ninja_fan_out_parser_counts_unique_translation_units(self):
-        # The public helper inverts records; feed it through the percentile path.
+    def test_fan_out_statistics_use_the_header_cohort(self):
         fan_out = {
             "include/ao/a.h": 2,
             "include/ao/b.h": 10,
@@ -638,35 +563,6 @@ class ConceptMetricTest(unittest.TestCase):
                 {"header": "app/include/ao/b.h", "area": "application", "translationUnits": 7},
             ],
         )
-
-    def test_ninja_fan_out_ignores_outputs_removed_from_the_current_compile_graph(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            fixture = Path(temp_dir)
-            root = fixture / "source"
-            build_dir = fixture / "build"
-            header = root / "app" / "include" / "ao" / "Feature.h"
-            live_output = build_dir / "app" / "Feature.cpp.o"
-            stale_output = build_dir / "app" / "Removed.cpp.o"
-            deps = "\n".join(
-                [
-                    f"{live_output}: #deps 1, deps mtime 0 (VALID)",
-                    f"    {header}",
-                    "",
-                    f"{stale_output}: #deps 1, deps mtime 0 (VALID)",
-                    f"    {header}",
-                    "",
-                ]
-            )
-
-            fan_out = concept_report._fan_out_from_ninja_deps(
-                deps,
-                build_dir,
-                root,
-                ["app/include/ao/Feature.h"],
-                {concept_report._normalize_path(live_output)},
-            )
-
-        self.assertEqual(fan_out, {"app/include/ao/Feature.h": 1})
 
     def test_source_aggregate_inventory_covers_collaborator_bags_and_skips_forwards(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -746,6 +642,80 @@ class ConceptMetricTest(unittest.TestCase):
             {(item["header"], tuple(item["includes"])) for item in includes},
             {(edge.source, (edge.target,)) for edge in edges},
         )
+
+
+class ConceptReportAssemblyTest(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        core = self.root / "include/ao/A.h"
+        application = self.root / "app/include/ao/B.h"
+        for path in (core, application):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"class;\n")
+        self.headers = {"core": (core,), "application": (application,)}
+        self.parses = [
+            concept_report.HeaderParse(
+                "include/ao/A.h",
+                "core",
+                declarations=[_decl("class", "ao::A", "include/ao/A.h")],
+                project_headers=["include/ao/A.h"],
+                include_bytes=7,
+            ),
+            concept_report.HeaderParse(
+                "app/include/ao/B.h",
+                "application",
+                declarations=[_decl("class", "ao::B", "app/include/ao/B.h", "application")],
+                pending_edges=[concept_report.PendingEdge("ao::B", "ao::A", "field")],
+                project_headers=["app/include/ao/B.h", "include/ao/A.h"],
+                include_bytes=14,
+            ),
+        ]
+        self.fan_out = {"include/ao/A.h": 2, "app/include/ao/B.h": 0}
+
+    def assemble(self, **changes):
+        arguments = dict(
+            headers=self.headers,
+            parses=self.parses,
+            fan_out=self.fan_out,
+            provenance={"nativeMethod": "fresh compiler observation"},
+            root=self.root,
+            chains=[],
+        )
+        arguments.update(changes)
+        return concept_report.assemble_report(self.root / "tree", **arguments)
+
+    def test_schema_four_retains_literal_concept_vector_and_honest_fan_out_name(self):
+        report = self.assemble()
+        self.assertEqual(report["schemaVersion"], 4)
+        self.assertEqual(report["primary"]["core"]["declarations"], 1)
+        self.assertEqual(report["primary"]["application"]["dependencyEdges"], 1)
+        self.assertEqual(report["primary"]["application"]["includeWeight"]["medianHeaders"], 2)
+        self.assertEqual(report["primary"]["application"]["includeWeight"]["medianBytes"], 14)
+        self.assertEqual(
+            report["primary"]["core"]["compilerIncludeFanOut"],
+            {"medianTranslationUnits": 2, "p95TranslationUnits": 2, "headers": 1},
+        )
+        self.assertEqual(
+            report["headerFanOut"],
+            [
+                {"header": "include/ao/A.h", "area": "core", "translationUnits": 2},
+                {"header": "app/include/ao/B.h", "area": "application", "translationUnits": 0},
+            ],
+        )
+        self.assertNotIn("rebuildFanOut", report["primary"]["core"])
+        self.assertIn("compiler include fan-out", concept_report.format_summary(report))
+        self.assertIn("not last-build", report["scope"]["compilerIncludeFanOut"])
+
+    def test_missing_observation_is_not_a_zero_consumer_header(self):
+        with self.assertRaisesRegex(ValueError, "exact public-header denominator"):
+            self.assemble(fan_out={"include/ao/A.h": 2})
+
+    def test_added_public_header_cannot_be_silently_omitted(self):
+        (self.root / "include/ao/New.h").write_bytes(b"// new\n")
+        with self.assertRaisesRegex(ValueError, "complete public-header areas"):
+            self.assemble()
 
 
 class ConceptClangTest(unittest.TestCase):
