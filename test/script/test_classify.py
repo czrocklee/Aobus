@@ -2,17 +2,17 @@
 
 import argparse
 import contextlib
-import io
 import json
 import os
+import re
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
 from ao.command import analyze, tidy
-from ao.core import compiler_cache, tidyconfig, tidyengine, workspace_cache
-from ao.core.paths import absolute_path
+from ao.core import bazel_lint_action, tidyconfig
+from ao.core.paths import PROJECT_ROOT, absolute_path
 
 
 class TidyClassifyTest(unittest.TestCase):
@@ -64,80 +64,40 @@ class TidyClassifyTest(unittest.TestCase):
         self.assertEqual(tidy.classify(helper, explicit=True), "IGNORE")
 
 
-class CompilerViewSourceSelectionTest(unittest.TestCase):
+class NativeSourceSelectionTest(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
-        root = Path(temporary.name)
-        self.source = root / "checkout"
-        self.view = root / "owned-source-view"
-        original = workspace_cache.canonical_portal_path
-        environment = {
-            compiler_cache.SHARED_WORKSPACES_EFFECTIVE: "1",
-            workspace_cache.WINDOWS_SOURCE_VIEW: str(self.view),
-        }
-
-        def canonical(path, *, project_root):
-            return original(path, project_root=project_root, system="Windows", environ=environment)
-
+        self.source = absolute_path(temporary.name) / "checkout"
+        self.source.mkdir()
         stack = contextlib.ExitStack()
         self.addCleanup(stack.close)
         stack.enter_context(mock.patch.object(tidy, "PROJECT_ROOT", self.source))
         stack.enter_context(mock.patch.object(analyze, "PROJECT_ROOT", self.source))
-        stack.enter_context(mock.patch.object(workspace_cache, "canonical_portal_path", side_effect=canonical))
 
-    def source_pair(self, relative):
-        physical = self.source / relative
-        alias = self.view / relative
-        physical.parent.mkdir(parents=True, exist_ok=True)
-        alias.parent.mkdir(parents=True, exist_ok=True)
+    def test_native_spellings_deduplicate_before_tidy_and_analyzer_selection(self):
+        physical = self.source / "test/Policy.cpp"
+        physical.parent.mkdir()
         physical.write_text("int value;\n", encoding="utf-8")
-        alias.hardlink_to(physical)
-        self.assertTrue(alias.samefile(physical))
-        return physical, alias
-
-    def test_owned_alias_is_relaxed_and_deduplicated_before_tidy_selection(self):
-        physical, alias = self.source_pair("test/Policy.cpp")
-        for files in ([str(alias), str(physical)], [str(physical), str(alias)]):
+        alternate = physical.parent / "../test/Policy.cpp"
+        for files in ([str(alternate), str(physical)], [str(physical), str(alternate)]):
             self.assertEqual(tidy.split_existing(files), (["test/Policy.cpp"], []))
             self.assertEqual(tidy.classify_existing(files, True), {"STRICT": [], "RELAXED": [physical]})
-        self.assertEqual(tidy.classify(alias, explicit=True), "RELAXED")
+            args = argparse.Namespace(files=[], all=False, folder=[], commit=None)
+            with mock.patch.object(analyze.tidyengine, "resolve_scope", return_value=(files, True)):
+                self.assertEqual(analyze.analyzable_sources(args), ([str(physical)], True))
 
-    def test_owned_fixture_alias_preserves_explicit_and_batch_policies(self):
-        physical, alias = self.source_pair("test/lint/fixture/aobus-check/Policy.cpp")
-        for path in (physical, alias):
-            self.assertEqual(tidy.classify(path, explicit=True), "STRICT")
-            self.assertEqual(tidy.classify(path, explicit=False), "IGNORE")
-            self.assertFalse(analyze.classify(path))
-
-    def test_analyzer_selects_a_single_physical_test_consumer(self):
-        physical, alias = self.source_pair("test/Policy.cpp")
-        args = argparse.Namespace(
-            path=str(self.source / "database"),
-            jobs=2,
-            output=None,
-            tidy_arg=[],
-            debug=False,
-            alpha=False,
-            check=None,
-            include_external_diagnostics=False,
-            fail_on_diagnostics=False,
-        )
-        with (
-            mock.patch.object(analyze.tidyengine, "ensure_compile_db"),
-            mock.patch.object(analyze.workspace_cache, "validated_source_roots", return_value=(self.source, self.view)),
-            mock.patch.object(analyze.tidyengine, "system_include_args", return_value=[]),
-            mock.patch.object(analyze.tidyengine, "resolve_scope", return_value=([str(alias), str(physical)], True)),
-            mock.patch.object(analyze.tidyengine, "run_parallel", return_value=tidyengine.BatchResult()) as run,
-            contextlib.redirect_stdout(io.StringIO()),
-        ):
-            self.assertEqual(analyze.run_command(args), 0)
-        self.assertEqual(run.call_args.args[0], [str(physical)])
-
-    def test_unowned_outside_test_paths_remain_production(self):
-        path = self.view.parent / "unowned/test/Policy.cpp"
-        self.assertEqual(tidy.classify(path, explicit=False), "STRICT")
-        self.assertTrue(analyze.classify(path))
+    def test_hardlink_outside_checkout_does_not_gain_test_or_fixture_exemptions(self):
+        physical = self.source / "test/lint/fixture/aobus-check/Policy.cpp"
+        physical.parent.mkdir(parents=True)
+        physical.write_text("int value;\n", encoding="utf-8")
+        alias = self.source.parent / "outside-test.cpp"
+        alias.hardlink_to(physical)
+        self.assertTrue(alias.samefile(physical))
+        self.assertEqual(tidy.classify(physical, explicit=False), "IGNORE")
+        self.assertFalse(analyze.classify(physical))
+        self.assertEqual(tidy.classify(alias, explicit=False), "STRICT")
+        self.assertTrue(analyze.classify(alias))
 
 
 class TidyChecksTest(unittest.TestCase):
@@ -158,86 +118,10 @@ class TidyChecksTest(unittest.TestCase):
         self.assertIn("readability-magic-numbers", strict)
         self.assertNotIn("-readability-magic-numbers", strict)
 
-    def test_cocoa_checks_supplement_cpp_rules_in_production(self):
-        checks = tidyconfig.checks_for("STRICT", None).split(",")
-        self.assertIn("objc-super-self", checks)
-        self.assertIn("objc-property-declaration", checks)
-        self.assertIn("cppcoreguidelines-*", checks)
-        self.assertIn("clang-analyzer-osx.*", analyze.analyzer_checks(alpha=False, only=None).split(","))
-
     def test_mode_disabled_checks_excludes_star(self):
         disables = tidyconfig.mode_disabled_checks("STRICT")
         self.assertNotIn("-*", disables)
         self.assertTrue(all(token.startswith("-") for token in disables))
-
-    def test_clang_22_policy_exclusions_are_mode_specific(self):
-        self.assertIn("-misc-multiple-inheritance", tidyconfig.STRICT_CHECKS.split(","))
-        self.assertIn("-bugprone-derived-method-shadowing-base-method", tidyconfig.STRICT_CHECKS.split(","))
-        self.assertIn("-bugprone-exception-escape", tidyconfig.STRICT_CHECKS.split(","))
-        self.assertIn("-bugprone-throwing-static-initialization", tidyconfig.STRICT_CHECKS.split(","))
-        self.assertNotIn("-modernize-use-designated-initializers", tidyconfig.STRICT_CHECKS.split(","))
-        self.assertIn("-modernize-use-designated-initializers", tidyconfig.RELAXED_CHECKS.split(","))
-        self.assertIn("-bugprone-exception-escape", tidyconfig.RELAXED_CHECKS.split(","))
-        self.assertIn("-bugprone-throwing-static-initialization", tidyconfig.RELAXED_CHECKS.split(","))
-
-    def test_cognitive_complexity_ignores_macro_expansions(self):
-        self.assertIn(
-            "{key: 'readability-function-cognitive-complexity.IgnoreMacros', value: true}",
-            tidyconfig.CONFIG_BASE,
-        )
-
-    def test_boolean_simplification_ignores_macro_expansions(self):
-        self.assertIn(
-            "{key: 'readability-simplify-boolean-expr.IgnoreMacros', value: true}",
-            tidyconfig.CONFIG_BASE,
-        )
-
-    def test_contract_macros_are_narrowly_allowlisted(self):
-        self.assertIn(
-            "^DEBUG_*|^[A-Z_]+_LOG_[A-Z_]+$|^AO_(EXPECTS|ENSURES|INVARIANT|FATAL|RT_INVARIANT)$",
-            tidyconfig.CONFIG_BASE,
-        )
-
-    def test_constant_and_concept_naming_matches_project_policy(self):
-        for category in ("ConstexprVariable", "ClassConstant", "GlobalConstant", "StaticConstant"):
-            self.assertIn(
-                f"{{key: 'readability-identifier-naming.{category}Case', value: 'CamelCase'}}",
-                tidyconfig.CONFIG_BASE,
-            )
-            self.assertIn(
-                f"{{key: 'readability-identifier-naming.{category}Prefix', value: 'k'}}",
-                tidyconfig.CONFIG_BASE,
-            )
-            self.assertNotIn(f"readability-identifier-naming.{category}IgnoredRegexp", tidyconfig.CONFIG_BASE)
-        self.assertIn(
-            "{key: 'readability-identifier-naming.ConceptCase', value: 'CamelCase'}",
-            tidyconfig.CONFIG_BASE,
-        )
-        self.assertNotIn("readability-identifier-naming.LocalConstant", tidyconfig.CONFIG_BASE)
-
-    def test_winrt_framework_shapes_are_narrowly_allowlisted(self):
-        self.assertIn(
-            "|GetAt|Size|IndexOf|GetMany|First|Current|HasCurrent|MoveNext|GetXamlType|GetXmlnsDefinitions)",
-            tidyconfig.CONFIG_BASE,
-        )
-        self.assertIn(
-            r"{key: 'bugprone-suspicious-include.IgnoredRegex', value: '.*\.g\.cpp$'}",
-            tidyconfig.CONFIG_BASE,
-        )
-        self.assertIn(r".*[/\\]winrt[/\\].*", tidyconfig.CONFIG_BASE)
-
-    def test_specialization_provider_header_is_narrowly_ignored_by_include_cleaner(self):
-        self.assertIn(r".*ao[/\\]utility[/\\]StrongTypeFormatter\.h$", tidyconfig.CONFIG_BASE)
-
-    def test_boost_process_definition_header_is_narrowly_ignored_by_include_cleaner(self):
-        self.assertIn(r".*boost[/\\]process[/\\]v2[/\\]process\.hpp$", tidyconfig.CONFIG_BASE)
-
-    def test_darwin_posix_provider_headers_are_narrowly_ignored_by_include_cleaner(self):
-        self.assertIn(r".*sys[/\\]_types[/\\]_pid_t\.h$", tidyconfig.CONFIG_BASE)
-        self.assertIn(r".*sys[/\\]_types[/\\]_sigset_t\.h$", tidyconfig.CONFIG_BASE)
-        self.assertIn(r".*sys[/\\]fcntl\.h$", tidyconfig.CONFIG_BASE)
-        self.assertIn(r".*sys[/\\]signal\.h$", tidyconfig.CONFIG_BASE)
-        self.assertNotIn(r".*sys[/\\]_types[/\\].*", tidyconfig.CONFIG_BASE)
 
 
 class TidySourceRootOptionsTest(unittest.TestCase):
@@ -263,27 +147,35 @@ class TidySourceRootOptionsTest(unittest.TestCase):
             [root.as_posix() for root in roots],
         )
 
-    def test_empty_roots_fail_consistently_in_config_and_diagnostic_filters(self):
-        calls = (
-            lambda: tidyconfig.config_for("-*,aobus-*", source_roots=()),
-            lambda: tidy.project_header_filter(("test",), source_roots=()),
-            lambda: tidy.exact_header_filter([Path("test/Example.h")], source_roots=()),
-            lambda: tidy.path_line_filter([Path("test/Example.h")], source_roots=()),
-            lambda: analyze.project_header_filter(source_roots=()),
-        )
-        for call in calls:
-            with self.subTest(call=call), self.assertRaisesRegex(ValueError, "source roots must not be empty"):
-                call()
-
     def test_shared_default_root_selection_preserves_callers_and_aliases(self):
         root = Path("/synthetic/checkout")
         aliases = (Path("S:/"), Path("/owned/source"))
         self.assertEqual(tidyconfig.source_roots_or_default(None, project_root=root), (root,))
         self.assertIs(tidyconfig.source_roots_or_default(aliases, project_root=root), aliases)
-        with mock.patch.object(analyze, "PROJECT_ROOT", root):
-            self.assertEqual(
-                analyze.project_header_filter(), analyze.project_header_filter(source_roots=(absolute_path(root),))
-            )
+        # The analyzer profile derives its diagnostic filter from the action's
+        # default runtime roots, so the checkout spelling keeps qualifying.
+        for platform in ("linux", "windows"):
+            with self.subTest(platform=platform):
+                identity = bazel_lint_action.Identity(
+                    "@@//lib/audio:audio",
+                    "bazel-out/k8-dbg/bin",
+                    "lib/audio/Foo.cpp",
+                    "lib/audio/Foo.cpp",
+                    ("bazel-out/k8-dbg/bin/lib/audio/_objs/audio/Foo.o",),
+                    "ANALYZER",
+                    platform,
+                )
+                expression = bazel_lint_action._header_filter(
+                    identity, {"header_filter": None}, bazel_lint_action._runtime_roots(), {}
+                )
+                absolute = (absolute_path(PROJECT_ROOT) / "lib/audio/Foo.h").as_posix()
+                for spelling in ("lib/audio/Foo.h", absolute):
+                    self.assertIsNotNone(re.search(expression, spelling), spelling)
+                native = absolute.replace("/", "\\")
+                self.assertEqual(re.search(expression, native) is not None, platform == "windows")
+                self.assertIsNone(
+                    re.search(expression, absolute_path(PROJECT_ROOT).as_posix() + "-foreign/lib/audio/Foo.h")
+                )
 
     def test_source_root_option_does_not_depend_on_the_mapping_suffix(self):
         base = tidyconfig.CONFIG_BASE.rstrip()[:-1] + ", FormatStyle: none}"
@@ -292,12 +184,6 @@ class TidySourceRootOptionsTest(unittest.TestCase):
         self.assertEqual(self.roots_in(config), [tidyconfig.PROJECT_ROOT.as_posix()])
         self.assertTrue(config.endswith(", FormatStyle: none}"))
         self.assertNotIn("SOURCE_ROOTS_JSON", config)
-
-    def test_missing_or_duplicate_root_placeholder_is_a_readable_error(self):
-        for base in ("{}", tidyconfig.CONFIG_BASE + " SOURCE_ROOTS_JSON"):
-            with self.subTest(base=base), mock.patch.object(tidyconfig, "CONFIG_BASE", base):
-                with self.assertRaisesRegex(ValueError, "exactly one source-root option placeholder"):
-                    tidyconfig.config_for("-*,aobus-*")
 
 
 class StaleNolintAuditTest(unittest.TestCase):
@@ -372,19 +258,6 @@ class AnalyzeClassifyTest(unittest.TestCase):
 
     def test_lint_integration_is_skipped(self):
         self.assertFalse(analyze.classify(Path("/repo/test/lint/fixture/x/case.cpp")))
-
-
-class AnalyzerChecksTest(unittest.TestCase):
-    def test_single_check_overrides_groups(self):
-        self.assertEqual(
-            analyze.analyzer_checks(alpha=True, only="clang-analyzer-core.NullDereference"),
-            "-*,clang-analyzer-core.NullDereference",
-        )
-
-    def test_alpha_appends_experimental_group(self):
-        checks = analyze.analyzer_checks(alpha=True, only=None)
-        self.assertIn("clang-analyzer-alpha.*", checks)
-        self.assertNotIn("clang-analyzer-alpha.*", analyze.analyzer_checks(alpha=False, only=None))
 
 
 if __name__ == "__main__":

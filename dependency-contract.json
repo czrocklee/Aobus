@@ -31,14 +31,6 @@
           "boost-process",
           "boost-unordered"
         ]
-      },
-      "cmake": {
-        "package": "Boost",
-        "targets": [
-          "Boost::headers",
-          "Boost::process",
-          "Boost::filesystem"
-        ]
       }
     },
     "fast-float": {
@@ -58,12 +50,6 @@
         "strategy": "baseline",
         "ports": [
           "fast-float"
-        ]
-      },
-      "cmake": {
-        "package": "FastFloat",
-        "targets": [
-          "FastFloat::fast_float"
         ]
       }
     },
@@ -85,15 +71,6 @@
         "ports": [
           "ftxui"
         ]
-      },
-      "cmake": {
-        "package": "ftxui",
-        "requiredWhen": "AOBUS_BUILD_TUI",
-        "targets": [
-          "ftxui::screen",
-          "ftxui::dom",
-          "ftxui::component"
-        ]
       }
     },
     "icu": {
@@ -113,14 +90,6 @@
         "strategy": "baseline",
         "ports": [
           "icu"
-        ]
-      },
-      "cmake": {
-        "package": "ICU",
-        "targets": [
-          "ICU::i18n",
-          "ICU::uc",
-          "ICU::data"
         ]
       },
       "capabilities": [
@@ -149,12 +118,6 @@
         "ports": [
           "lmdb"
         ]
-      },
-      "cmake": {
-        "package": "lmdb",
-        "targets": [
-          "PkgLMDB"
-        ]
       }
     },
     "spdlog": {
@@ -176,12 +139,6 @@
           "spdlog"
         ]
       },
-      "cmake": {
-        "package": "spdlog",
-        "targets": [
-          "spdlog::spdlog"
-        ]
-      },
       "capabilities": [
         "spdlog-std-format",
         "spdlog-no-external-fmt"
@@ -198,9 +155,6 @@
       "nuget": {
         "package": "Microsoft.WindowsAppSDK",
         "lock": "app/windows-winui/packages.config"
-      },
-      "msbuild": {
-        "requiredWhen": "AOBUS_BUILD_WINUI"
       },
       "runtime": {
         "packageName": "Microsoft.WindowsAppRuntime.2",
@@ -221,9 +175,6 @@
       "nuget": {
         "package": "Microsoft.Windows.CppWinRT",
         "lock": "app/windows-winui/packages.config"
-      },
-      "msbuild": {
-        "requiredWhen": "AOBUS_BUILD_WINUI"
       }
     }
   },

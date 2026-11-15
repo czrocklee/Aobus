@@ -193,6 +193,47 @@ aobus_macos_sha256() {
     shasum -a 256 "$1" | awk '{print $1}'
 }
 
+aobus_macos_check_triplet_deployment() {
+    local project_root="$1"
+    local triplet_directory="$project_root/cmake/vcpkg-triplets"
+    if ! "$AOBUS_PYTHON" -I -c '
+import re
+import sys
+
+# Both consumed vcpkg triplets are checked-in CMake files whose only
+# deployment contract is one plain set(VCPKG_OSX_DEPLOYMENT_TARGET <value>)
+# assignment. This is a narrow consistency check for that contract, not a
+# CMake parser: unsupported spellings fail closed, including extra overrides
+# that a plain-assignment-only search would miss.
+deployment = sys.argv[1]
+assignment = re.compile(r"\s*set\(VCPKG_OSX_DEPLOYMENT_TARGET\s+([^()\s]+)\)\s*")
+for triplet in sys.argv[2:]:
+    try:
+        content = open(triplet, encoding="utf-8").read()
+    except OSError as error:
+        raise SystemExit("cannot read the consumed triplet " + triplet + ": " + str(error))
+    declarations = [
+        line for line in content.splitlines()
+        if "VCPKG_OSX_DEPLOYMENT_TARGET" in line and not line.lstrip().startswith("#")
+    ]
+    target = assignment.fullmatch(declarations[0]) if len(declarations) == 1 else None
+    if target is None:
+        raise SystemExit(
+            triplet + " needs exactly one VCPKG_OSX_DEPLOYMENT_TARGET assignment in plain set form, found "
+            + str(len(declarations))
+        )
+    if target[1] != deployment:
+        raise SystemExit(
+            triplet + " targets deployment " + target[1] + ", but the toolchain lock requires " + deployment
+        )
+' "$AOBUS_MACOS_DEPLOYMENT_TARGET" \
+        "$triplet_directory/x64-aobus-osx.cmake" \
+        "$triplet_directory/arm64-aobus-osx.cmake"; then
+        aobus_macos_error 'consumed vcpkg triplets do not match the toolchain lock deployment target.'
+        return 1
+    fi
+}
+
 aobus_macos_install_pinned_vcpkg() (
     local destination="$1"
     local archive_url="$2"
@@ -321,13 +362,20 @@ aobus_macos_prepare_expected_shim() {
     export AOBUS_LIBCXX_EXPECTED_SHIM="$shim_root"
 }
 
-aobus_macos_prepare_build_environment() {
+# Common native initialization for the ready-only Bazel route and the full
+# provisioning route. Both admit the same lock facts, require both consumed
+# vcpkg triplets to carry the lock's deployment target before any Homebrew or
+# provisioning side effect, select the same state root and ready LLVM toolchain
+# with pkg-config, and publish the same exports. Only the PATH assembly and the
+# provisioned build tools differ between the routes.
+aobus_macos_prepare_native_environment() {
     local project_root="$1"
-    local state_root llvm_root llvm_version cmake_root ninja_root pkgconf_root architecture
-    local autoconf_root autoconf_archive_root automake_root libtool_root
-    local vcpkg_root
+    local state_root llvm_root
 
     if ! aobus_macos_load_toolchain_lock "$project_root"; then
+        return 1
+    fi
+    if ! aobus_macos_check_triplet_deployment "$project_root"; then
         return 1
     fi
     if [[ -n "${AOBUS_STATE_ROOT:-}" ]]; then
@@ -335,17 +383,55 @@ aobus_macos_prepare_build_environment() {
     elif ! state_root="$(aobus_macos_default_state_root)"; then
         return 1
     fi
-    export AOBUS_STATE_ROOT="$state_root"
     if ! llvm_root="$(aobus_macos_formula_prefix "$AOBUS_HOMEBREW" "$AOBUS_MACOS_LLVM_FORMULA")"; then
+        return 1
+    fi
+    if ! AOBUS_PKGCONF_ROOT="$(aobus_macos_formula_prefix "$AOBUS_HOMEBREW" pkgconf)"; then
+        return 1
+    fi
+    AOBUS_MACOS_LLVM_VERSION="$("$llvm_root/bin/clang++" -dumpversion)"
+    if [[ "${AOBUS_MACOS_LLVM_VERSION%%.*}" != "$AOBUS_MACOS_LLVM_MAJOR" ]]; then
+        aobus_macos_error \
+            "'$AOBUS_MACOS_LLVM_FORMULA' provides Clang $AOBUS_MACOS_LLVM_VERSION; expected major $AOBUS_MACOS_LLVM_MAJOR."
+        return 1
+    fi
+    if ! AOBUS_VCPKG_TRIPLET="$(aobus_macos_triplet "$(uname -m)")"; then
+        return 1
+    fi
+    export AOBUS_STATE_ROOT="$state_root"
+    export AOBUS_VCPKG_TRIPLET
+    export AOBUS_LLVM_ROOT="$llvm_root"
+    export AOBUS_PKGCONF_ROOT
+    export AOBUS_MACOS_LLVM_VERSION
+    export CC="$llvm_root/bin/clang"
+    export CXX="$llvm_root/bin/clang++"
+    export MACOSX_DEPLOYMENT_TARGET="$AOBUS_MACOS_DEPLOYMENT_TARGET"
+}
+
+# Bazel consumes an existing dependency installation. It needs the native
+# compiler and pkg-config, not CMake/Ninja or a second vcpkg bootstrap.
+aobus_macos_prepare_bazel_environment() {
+    local project_root="$1"
+
+    if ! aobus_macos_prepare_native_environment "$project_root"; then
+        return 1
+    fi
+    export PATH="$AOBUS_LLVM_ROOT/bin:$AOBUS_PKGCONF_ROOT/bin:$PATH"
+    aobus_macos_prepare_expected_shim "$AOBUS_LLVM_ROOT" "$AOBUS_MACOS_LLVM_VERSION" "$AOBUS_STATE_ROOT"
+}
+
+aobus_macos_prepare_build_environment() {
+    local project_root="$1"
+    local cmake_root ninja_root autoconf_root autoconf_archive_root automake_root libtool_root
+    local vcpkg_root
+
+    if ! aobus_macos_prepare_native_environment "$project_root"; then
         return 1
     fi
     if ! cmake_root="$(aobus_macos_formula_prefix "$AOBUS_HOMEBREW" cmake)"; then
         return 1
     fi
     if ! ninja_root="$(aobus_macos_formula_prefix "$AOBUS_HOMEBREW" ninja)"; then
-        return 1
-    fi
-    if ! pkgconf_root="$(aobus_macos_formula_prefix "$AOBUS_HOMEBREW" pkgconf)"; then
         return 1
     fi
     if ! autoconf_root="$(aobus_macos_formula_prefix "$AOBUS_HOMEBREW" autoconf)"; then
@@ -360,22 +446,7 @@ aobus_macos_prepare_build_environment() {
     if ! libtool_root="$(aobus_macos_formula_prefix "$AOBUS_HOMEBREW" libtool)"; then
         return 1
     fi
-    llvm_version="$("$llvm_root/bin/clang++" -dumpversion)"
-    if [[ "${llvm_version%%.*}" != "$AOBUS_MACOS_LLVM_MAJOR" ]]; then
-        aobus_macos_error "'$AOBUS_MACOS_LLVM_FORMULA' provides Clang $llvm_version; expected major $AOBUS_MACOS_LLVM_MAJOR."
-        return 1
-    fi
-
-    architecture="$(uname -m)"
-    if ! AOBUS_VCPKG_TRIPLET="$(aobus_macos_triplet "$architecture")"; then
-        return 1
-    fi
-    export AOBUS_VCPKG_TRIPLET
-    export AOBUS_LLVM_ROOT="$llvm_root"
-    export CC="$llvm_root/bin/clang"
-    export CXX="$llvm_root/bin/clang++"
-    export MACOSX_DEPLOYMENT_TARGET="$AOBUS_MACOS_DEPLOYMENT_TARGET"
-    export PATH="$llvm_root/bin:$cmake_root/bin:$ninja_root/bin:$pkgconf_root/bin:$autoconf_root/bin:$automake_root/bin:$libtool_root/libexec/gnubin:$PATH"
+    export PATH="$AOBUS_LLVM_ROOT/bin:$cmake_root/bin:$ninja_root/bin:$AOBUS_PKGCONF_ROOT/bin:$autoconf_root/bin:$automake_root/bin:$libtool_root/libexec/gnubin:$PATH"
     # Resolving the archive prefix above is intentional even though it has no
     # executable: autoreconf discovers its macro collection through Homebrew.
     : "$autoconf_archive_root"
@@ -383,12 +454,12 @@ aobus_macos_prepare_build_environment() {
     if [[ -n "${VCPKG_ROOT:-}" ]]; then
         vcpkg_root="$VCPKG_ROOT"
     else
-        vcpkg_root="$state_root/tools/vcpkg/$AOBUS_MACOS_VCPKG_REVISION"
+        vcpkg_root="$AOBUS_STATE_ROOT/tools/vcpkg/$AOBUS_MACOS_VCPKG_REVISION"
         if ! aobus_macos_install_pinned_vcpkg \
             "$vcpkg_root" \
             "$AOBUS_MACOS_VCPKG_ARCHIVE_URL" \
             "$AOBUS_MACOS_VCPKG_ARCHIVE_SHA256" \
-            "$state_root" \
+            "$AOBUS_STATE_ROOT" \
             "$AOBUS_MACOS_VCPKG_REVISION"; then
             return 1
         fi
@@ -399,11 +470,11 @@ aobus_macos_prepare_build_environment() {
     fi
     export VCPKG_ROOT="$vcpkg_root"
     export VCPKG_DISABLE_METRICS=1
-    export VCPKG_DOWNLOADS="$state_root/cache/vcpkg/downloads"
-    export VCPKG_DEFAULT_BINARY_CACHE="$state_root/cache/vcpkg/binaries"
+    export VCPKG_DOWNLOADS="$AOBUS_STATE_ROOT/cache/vcpkg/downloads"
+    export VCPKG_DEFAULT_BINARY_CACHE="$AOBUS_STATE_ROOT/cache/vcpkg/binaries"
     mkdir -p "$VCPKG_DOWNLOADS" "$VCPKG_DEFAULT_BINARY_CACHE"
 
-    if ! aobus_macos_prepare_expected_shim "$llvm_root" "$llvm_version" "$state_root"; then
+    if ! aobus_macos_prepare_expected_shim "$AOBUS_LLVM_ROOT" "$AOBUS_MACOS_LLVM_VERSION" "$AOBUS_STATE_ROOT"; then
         return 1
     fi
 }

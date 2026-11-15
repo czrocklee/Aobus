@@ -1,5 +1,6 @@
-"""Own both native desktop test processes while exercising the production launcher."""
+"""Supervise opt-in native AppKit smoke scenarios for the Bazel bundle launcher."""
 
+import argparse
 import json
 import os
 import shlex
@@ -8,8 +9,22 @@ import subprocess
 import sys
 import tempfile
 import time
+import uuid
 from pathlib import Path
 
+SCENARIOS = (
+    "desktop",
+    "authoring",
+    "presentation",
+    "media",
+    "credits-controls",
+    "credits-previews",
+    "quality-presentation",
+)
+PARENT_TIMEOUT_SECONDS = 120.0
+SUCCESSOR_TIMEOUT_SECONDS = 60.0
+TERMINATE_TIMEOUT_SECONDS = 5.0
+RUN_ID_ENV = "AOBUS_APPKIT_TEST_RUN_ID"
 SUCCESSOR_LAUNCHER_ENV = "AOBUS_APPKIT_TEST_SUCCESSOR_LAUNCHER"
 _MAX_REQUEST_BYTES = 65536
 _POLL_SECONDS = 0.05
@@ -71,7 +86,9 @@ def run_desktop(
         endpoint = root / "launch.sock"
         launcher = root / "launch"
         launcher.write_text(
-            "#!/bin/sh\nexec " + shlex.join([sys.executable, str(Path(__file__).resolve()), str(endpoint)]) + ' "$@"\n',
+            "#!/bin/sh\nexec "
+            + shlex.join([sys.executable, str(Path(__file__).resolve()), "--handoff", str(endpoint)])
+            + ' "$@"\n',
             encoding="utf-8",
         )
         launcher.chmod(0o700)
@@ -145,5 +162,100 @@ def _handoff(endpoint: str, arguments: list[str]) -> None:
             raise RuntimeError("desktop controller rejected the successor launch")
 
 
+def _resolve_fixtures(library: Path, state_root: Path) -> tuple[Path, Path]:
+    library, state_root = library.resolve(), state_root.resolve()
+    if library == state_root or library in state_root.parents or state_root in library.parents:
+        raise ValueError("AppKit --library and --state-root must not equal or contain one another")
+    for option, path in (("--library", library), ("--state-root", state_root)):
+        if path.exists():
+            if not path.is_dir():
+                raise ValueError(f"AppKit {option} is not a directory: {path}")
+            if next(path.iterdir(), None) is not None:
+                raise ValueError(f"AppKit {option} must be absent or empty: {path}")
+    return library, state_root
+
+
+def _require_marker(marker: Path, run_id: str) -> None:
+    if marker.read_text(encoding="utf-8") != f"{run_id}\n":
+        raise RuntimeError(f"AppKit marker does not belong to this invocation: {marker}")
+
+
+def _run_parent(command: list[str], environment: dict[str, str]) -> int:
+    parent = subprocess.Popen(command, env={**os.environ, **environment})
+    try:
+        try:
+            return parent.wait(timeout=PARENT_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired:
+            print(
+                f"Error: AppKit smoke parent exceeded the {PARENT_TIMEOUT_SECONDS:g}-second timeout.", file=sys.stderr
+            )
+            _stop(parent, TERMINATE_TIMEOUT_SECONDS)
+            return 1
+    except BaseException:
+        try:
+            parent.kill()
+        except ProcessLookupError:
+            pass
+        while True:
+            try:
+                parent.wait()
+                break
+            except KeyboardInterrupt:
+                continue
+        raise
+
+
+def run_smoke(executable: Path, *, scenario: str, library: Path, state_root: Path) -> int:
+    """Run one configured native bundle without artifact discovery or build policy.
+
+    The caller supplies the bundle executable and its runtime environment.
+    Disposable fixtures, bounded child lifetimes and per-invocation desktop
+    markers remain owned here, not by the retired portal test command.
+    """
+    library, state_root = _resolve_fixtures(library, state_root)
+    command = [
+        str(executable.resolve()),
+        "--scenario",
+        scenario,
+        "--library",
+        str(library),
+        "--state-root",
+        str(state_root),
+    ]
+    run_id = uuid.uuid4().hex
+    environment = {RUN_ID_ENV: run_id}
+    if scenario != "desktop":
+        return _run_parent(command, environment)
+    status = run_desktop(
+        command,
+        cwd=Path.cwd(),
+        environment=environment,
+        parent_timeout=PARENT_TIMEOUT_SECONDS,
+        successor_timeout=SUCCESSOR_TIMEOUT_SECONDS,
+        terminate_timeout=TERMINATE_TIMEOUT_SECONDS,
+    )
+    if status == 0:
+        _require_marker(state_root / "desktop-pass.txt", run_id)
+        _require_marker(state_root / "successor-pass.txt", run_id)
+    return status
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("executable", type=Path, help="configured smoke bundle executable")
+    parser.add_argument("--scenario", choices=SCENARIOS, default="desktop")
+    parser.add_argument("--library", type=Path, required=True, help="absent or empty disposable media directory")
+    parser.add_argument("--state-root", type=Path, required=True, help="absent or empty isolated state directory")
+    args = parser.parse_args(argv)
+    try:
+        return run_smoke(args.executable, scenario=args.scenario, library=args.library, state_root=args.state_root)
+    except (OSError, RuntimeError, ValueError) as error:
+        print(f"Error: AppKit {error}.", file=sys.stderr)
+        return 1
+
+
 if __name__ == "__main__":
-    _handoff(sys.argv[1], sys.argv[2:])
+    if len(sys.argv) > 1 and sys.argv[1] == "--handoff":
+        _handoff(sys.argv[2], sys.argv[3:])
+    else:
+        sys.exit(main())

@@ -5,8 +5,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from ao.command import analyze, tidy
-from ao.core import paths
+from ao.core import bazel_lint_action, paths
 
 
 class AbsolutePathTest(unittest.TestCase):
@@ -35,17 +34,25 @@ class AbsolutePathTest(unittest.TestCase):
 
 class DriveRootFilterTest(unittest.TestCase):
     def test_project_filters_accept_both_separators_at_a_windows_drive_root(self):
-        drive_root = mock.Mock()
-        drive_root.as_posix.return_value = "Y:/"
-
-        with mock.patch.object(tidy, "absolute_path", return_value=drive_root):
-            tidy_filter = tidy.project_header_filter(("lib",))
-        with mock.patch.object(analyze, "absolute_path", return_value=drive_root):
-            analyze_filter = analyze.project_header_filter()
-
-        for path in ("Y:/lib/Foo.cpp", r"Y:\lib\Foo.cpp"):
-            self.assertIsNotNone(re.fullmatch(tidy_filter, path))
-            self.assertIsNotNone(re.fullmatch(analyze_filter, path))
+        for mode, folder in (("STRICT", "lib"), ("RELAXED", "test"), ("ANALYZER", "lib")):
+            expression = bazel_lint_action._header_filter(
+                bazel_lint_action.Identity(
+                    "@@//lib:lib",
+                    "bazel-out/k8-dbg/bin",
+                    "lib/Foo.cpp",
+                    "lib/Foo.cpp",
+                    ("bazel-out/k8-dbg/bin/lib/_objs/Foo.o",),
+                    mode,
+                    "windows",
+                ),
+                {"header_filter": None},
+                (Path("Y:/"),),
+                {},
+            )
+            for path in (f"Y:/{folder}/Foo.cpp", f"Y:\\{folder}\\Foo.cpp"):
+                with self.subTest(mode=mode, path=path):
+                    self.assertIsNotNone(re.search(expression, path))
+            self.assertIsNone(re.search(expression, "Y:/outside/Foo.cpp"))
 
 
 if __name__ == "__main__":

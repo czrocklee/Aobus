@@ -10,7 +10,7 @@ NAME = "doctor"
 REQUIRES_BUILD_ENV = False
 
 
-def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
+def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     parser = subparsers.add_parser(NAME, help=HELP, description=HELP)
     parser.add_argument("area", choices=("winui",), help="development surface to inspect")
     parser.add_argument(

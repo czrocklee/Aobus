@@ -5,8 +5,9 @@ resolution, explicit-file resolution, and the selected-file path that
 ``ao hygiene`` routes through ``ao test-audit``. Discovery is content-driven:
 every candidate C++/Objective-C++ file under ``test/`` is scanned, including
 headers and include fragments, so a registration cannot hide behind a file
-name. Executable ownership stays with CMake (see
-``cmake/AobusTestSources.cmake``); this module never assigns or infers it.
+name. Executable ownership belongs to the Bazel graph (``test/BUILD.bazel``),
+which the completion gate's ownership check
+(``bazel_test_ownership``) checks; this module never assigns or infers it.
 
 The detector is deliberately bounded. It skips comments, character and
 string literals, and custom-delimiter raw strings while locating

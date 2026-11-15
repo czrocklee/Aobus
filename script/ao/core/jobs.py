@@ -16,12 +16,6 @@ from pathlib import Path
 # The pinned CI provider sets this automatically in every workflow step.
 CI_ENV = "GITHUB_ACTIONS"
 BUILD_PARALLEL_ENV = "CMAKE_BUILD_PARALLEL_LEVEL"
-SHARD_ENV = "AOBUS_TEST_SHARDS"
-# Shards own fixtures, temporary trees and sometimes X servers, unlike compiler jobs.
-# Core-suite measurements improved 34.0s -> 23.7s at 8 -> 16 shards on a 16-vCPU
-# Windows guest, and 8.6s -> 5.9s at 8 -> 31 on 32-core Linux: 16 is a process
-# budget, not a measured throughput optimum. AOBUS_TEST_SHARDS overrides it.
-SHARD_CAP = 16
 
 
 def available_cores() -> int | None:
@@ -40,21 +34,6 @@ def default_workers(*, environ: Mapping[str, str] | None = None) -> int:
     return max(cores - 1, 1)
 
 
-def build_workers(*, environ: Mapping[str, str] | None = None) -> int:
-    """Resolve a positive build override, otherwise use the shared default baseline."""
-    environment = os.environ if environ is None else environ
-    configured = environment.get(BUILD_PARALLEL_ENV)
-    if configured is None:
-        return default_workers(environ=environment)
-    try:
-        count = int(configured)
-    except ValueError:
-        raise ValueError(f"{BUILD_PARALLEL_ENV} must be a positive integer.") from None
-    if count < 1:
-        raise ValueError(f"{BUILD_PARALLEL_ENV} must be a positive integer.")
-    return count
-
-
 def export_runner_cores(*, github_env: Path) -> None:
     """Validate the runner's core count, then append the CI worker exports.
 
@@ -64,10 +43,9 @@ def export_runner_cores(*, github_env: Path) -> None:
     cores = available_cores()
     if cores is None or cores < 1:
         raise ValueError(f"the runner core count was reported as {cores!r}; expected a positive integer")
-    shards = min(cores, SHARD_CAP)
     with github_env.open("a", encoding="utf-8", newline="\n") as stream:
-        stream.write(f"{BUILD_PARALLEL_ENV}={cores}\n{SHARD_ENV}={shards}\n")
-    print(f"Detected {cores} runner cores: build and tidy jobs={cores}, test shards={shards}.")
+        stream.write(f"{BUILD_PARALLEL_ENV}={cores}\n")
+    print(f"Detected {cores} runner cores: Bazel and tidy jobs={cores}.")
 
 
 def _parser() -> argparse.ArgumentParser:

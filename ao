@@ -13,7 +13,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# Resolve repository-relative hook and compiler-cache paths consistently.
+# Resolve repository-relative portal and policy paths consistently.
 cd "$ROOT"
 
 if [[ "$(uname -s)" == "Darwin" ]]; then
@@ -29,26 +29,36 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
 
     NEEDS_BUILD_ENV=0
     NEEDS_PYTHON_TOOLS=0
+    NEEDS_PROVIDER_TOOLS=0
     if [[ $# -gt 0 ]]; then
         NEEDS_BUILD_ENV="$("$AOBUS_PYTHON" -m ao.core.buildenv "$@")"
         NEEDS_PYTHON_TOOLS="$("$AOBUS_PYTHON" -m ao.core.buildenv --python-tools "$@")"
+        NEEDS_PROVIDER_TOOLS="$("$AOBUS_PYTHON" -m ao.core.buildenv --provider-tools "$@")"
     fi
     if [[ "$NEEDS_PYTHON_TOOLS" == "1" ]]; then
         aobus_macos_prepare_python_tools "$ROOT" || exit $?
     fi
     if [[ "$NEEDS_BUILD_ENV" == "1" ]]; then
-        aobus_macos_prepare_build_environment "$ROOT" || exit $?
+        # Parsed execution intent, including flat default commands, decides
+        # whether port-build tools are required. Consumers never provision SDKs.
+        if [[ "$NEEDS_PROVIDER_TOOLS" == "1" ]]; then
+            aobus_macos_prepare_build_environment "$ROOT" || exit $?
+        else
+            aobus_macos_prepare_bazel_environment "$ROOT" || exit $?
+        fi
     fi
     "$AOBUS_PYTHON" -m ao "$@"
     exit $?
 fi
 
-# The same inputs and hashing as portalFingerprint in shell.nix.
+# The same hashing as portalFingerprint in shell.nix, over the input list the
+# entered shell exports; a changed list also changes the hashed shell.nix.
 aobus_nix_shell_fingerprint() {
-    local input
+    local input inputs
+    read -r -a inputs <<< "${AO_NIX_SHELL_INPUTS:-}"
     {
-        for input in shell.nix nixpkgs.json script/ao/toolchain.json script/ao/compiler-cache.json; do
-            sha256sum "$ROOT/$input" | cut -c1-64
+        for input in "${inputs[@]}"; do
+            sha256sum "$ROOT/$input" 2>/dev/null | cut -c1-64
         done
         if [[ "${AOBUS_NIX_UNSTRIPPED_GTK:-}" == "1" ]]; then
             printf 'gtk-unstripped=1\n'
@@ -62,7 +72,7 @@ aobus_nix_shell_fingerprint() {
 # Reuse it: nesting nix-shell appends a second copy of NIX_CFLAGS_COMPILE,
 # NIX_LDFLAGS, and CPLUS_INCLUDE_PATH to every compiler invocation.
 if [[ -z "${AO_IN_NIX_PORTAL:-}" && -n "${AO_NIX_SHELL_FINGERPRINT:-}" &&
-      -n "${AO_NIX_PORTAL_PYTHON:-}" &&
+      -n "${AO_NIX_SHELL_INPUTS:-}" && -n "${AO_NIX_PORTAL_PYTHON:-}" &&
       "$AO_NIX_SHELL_FINGERPRINT" == "$(aobus_nix_shell_fingerprint)" ]]; then
     AO_IN_NIX_PORTAL=1
 fi

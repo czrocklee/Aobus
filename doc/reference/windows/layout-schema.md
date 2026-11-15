@@ -15,7 +15,7 @@ These surfaces are shipped contracts today. The WinUI window builds its Modern a
 
 Two boundaries run through this reference, and they are not the same one. What both shells decide the same way - parsing the version 1 common fields, walking a candidate against a schema, the parse-expand-validate step - belongs to the **UIModel** layer in the [system architecture](../../system/overview.md), under the [application shell architecture](../../system/shell/README.md). What is this shell's own belongs to this shell, however portable the code is: a component schema naming `windows.navigationPane` is not a shared model just because deciding it needs no XAML.
 
-So the shared traversal lives in `app/uimodel/layout/document/`, and everything below - the schema, the dialect that extends the shared rules, the element lattice, the themed surfaces, the style resolution, and the WinUI half of placement - lives in the Windows-only `aobus-winui-lib` under `app/windows-winui/`, in the `ao::winui` namespace. Public frontend headers live under `app/windows-winui/include/ao/winui/`. Pure Windows-owned rule sources that name no platform API are compiled directly into `ao_core_test` on every host; rules that name WinRT or XAML types run only in the native Windows test profile. Neither path exports a second WinUI model target. The preset resources, native construction, controllers, and resource lookup all remain under `app/windows-winui/`.
+So the shared traversal lives in `app/uimodel/layout/document/`, and everything below - the schema, the dialect that extends the shared rules, the element lattice, the themed surfaces, the style resolution, and the WinUI half of placement - lives in the Windows-only WinUI library under `app/windows-winui/`, in the `ao::winui` namespace. Public frontend headers live under `app/windows-winui/include/ao/winui/`. Pure Windows-owned rule sources that name no platform API are compiled directly into the core test binary on every host; rules that name WinRT or XAML types run only in the native Windows test profile. Neither path exports a second WinUI model target. The preset resources, native construction, controllers, and resource lookup all remain under `app/windows-winui/`.
 
 ## Surface
 
@@ -296,8 +296,8 @@ root:
 ## Implementation authority
 
 Everything below is the WinUI shell's own, which is why it lives in
-`aobus-winui-lib` rather than in `ao_app_uimodel`.
-Pure rules carrying no WinRT dependency compile in `ao_core_test` on every host; native Windows builds additionally cover their XAML composition.
+the Windows-only WinUI library rather than in the UIModel library.
+Pure rules carrying no WinRT dependency compile in the core test binary on every host; native Windows builds additionally cover their XAML composition.
 
 - [`LayoutSchema.cpp`](../../../app/windows-winui/layout/LayoutSchema.cpp) owns registered component and action ids, presentation-dependent element and child rules, and required ids.
 - [`LayoutDialect.cpp`](../../../app/windows-winui/layout/LayoutDialect.cpp) owns what this shell adds to the shared rules: the styling field it rejects, its `styleKey`, and its themed surfaces. Whole-candidate rejection itself belongs to the shared [`LayoutValidation.cpp`](../../../app/uimodel/layout/document/LayoutValidation.cpp).

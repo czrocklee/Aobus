@@ -3,6 +3,7 @@
 
 #include <ao/uimodel/layout/component/LayoutSchema.h>
 
+#include "test/TestFixtureSupport.h"
 #include <ao/uimodel/layout/component/LayoutSurface.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
@@ -11,7 +12,6 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
-#include <filesystem>
 #include <format>
 #include <fstream>
 #include <iterator>
@@ -453,7 +453,7 @@ namespace ao::uimodel::test
 
   TEST_CASE("LayoutSchema - shared component reference is generated from the canonical table")
   {
-    auto input = std::ifstream{std::filesystem::path{AOBUS_SOURCE_DIR} / "doc/reference/shell/component-vocabulary.md"};
+    auto input = std::ifstream{ao::test::testInputPath("doc/reference/shell/component-vocabulary.md")};
     REQUIRE(input);
     auto const document = std::string{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
     auto const generated = generatedSharedSchemaReference();

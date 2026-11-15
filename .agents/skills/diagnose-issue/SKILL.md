@@ -9,9 +9,11 @@ A diagnosis request permits reproduction and inspection; code changes require a
 fix request. Keep work on the failing path and preserve the original reproducer
 and build logs. A passing retry alone does not explain an intermittent failure.
 
-Use the native portal's focused suite/filter or existing build log before
-requesting another full build. `./ao test --help` lists the host's suites;
-`-n` reuses existing binaries and does not validate changed C++.
+Use a focused native Bazel target/filter or existing log before requesting
+another full build. `doc/development/test/test-suite.md` owns selection and
+native prerequisites. Filter the actual owning binary with `--test_filter`;
+a zero-match binary fails. Running an existing artifact directly is diagnostic
+reuse, not evidence for changed C++ or automatic service preparation.
 
 For a race, deadlock, or asynchronous teardown failure, use `review-concurrency`.
 For GTK ownership or signal rebinding, use `managing-gtk-lifetimes`.

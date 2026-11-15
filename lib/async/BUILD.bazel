@@ -1,0 +1,25 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# Asynchronous runtime and executor sources over //include:async_headers,
+# //lib/utility, and Boost, without platform sources or system-library selects.
+# On Windows, Asio's MSVC #pragma comment(lib) in socket_types.hpp links the
+# socket libraries independently of BOOST_ALL_NO_LIB.
+cc_library(
+    name = "async",
+    srcs = [
+        "LifetimeScope.cpp",
+        "LoopExecutor.cpp",
+        "OperationCancelled.cpp",
+        "Parallel.cpp",
+        "QueuedExecutorBase.cpp",
+        "Runtime.cpp",
+    ],
+    linkstatic = True,
+    deps = [
+        "//include:async_headers",
+        "//lib/utility",
+        "@aobus_native_deps//:boost",
+    ],
+)

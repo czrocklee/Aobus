@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "test/audio/AudioFixtureDirectory.h"
 #include "test/library/WritableLibraryTestSupport.h"
 #include "test/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
@@ -153,7 +154,7 @@ namespace ao::rt::test
 
     std::filesystem::path copyFixtureAudio(MusicLibraryFixture const& libraryFixture, std::string const& name)
     {
-      auto const source = std::filesystem::path{AUDIO_TEST_DATA_DIR} / "empty.flac";
+      auto const source = audio::test::audioFixtureDirectory() / "empty.flac";
 
       INFO("Required audio fixture: " << source);
       REQUIRE(std::filesystem::is_regular_file(source));

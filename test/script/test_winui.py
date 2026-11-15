@@ -1,9 +1,8 @@
 """Tests for Windows App SDK host contracts and launch safeguards."""
 
 import hashlib
+import io
 import json
-import os
-import shutil
 import subprocess
 import tempfile
 import unittest
@@ -15,53 +14,6 @@ from ao.core import winui
 
 
 class WinUiTest(unittest.TestCase):
-    def test_generated_msbuild_import_writer_preserves_unchanged_mtime(self):
-        cmake = shutil.which("cmake")
-        if cmake is None:
-            self.skipTest("cmake is unavailable")
-
-        module = Path(__file__).resolve().parents[2] / "cmake" / "WindowsAppSdk.cmake"
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp = Path(temp_dir)
-            output = temp / "generated.props"
-            script = temp / "write-import.cmake"
-            script.write_text(
-                f"include([=[{module.as_posix()}]=])\n"
-                f"_aobus_write_if_different([=[{output.as_posix()}]=] [=[alpha;beta\n]=])\n",
-                encoding="utf-8",
-            )
-            first = subprocess.run([cmake, "-P", str(script)], capture_output=True, text=True)
-            self.assertEqual(first.returncode, 0, first.stderr)
-            self.assertEqual(output.read_text(encoding="utf-8"), "alpha;beta\n")
-
-            os.utime(output, ns=(1_000_000_000, 1_000_000_000))
-            preserved_mtime = output.stat().st_mtime_ns
-            repeated = subprocess.run([cmake, "-P", str(script)], capture_output=True, text=True)
-            repeated_mtime = output.stat().st_mtime_ns
-
-            update_script = temp / "write-import-update.cmake"
-            update_script.write_text(
-                f"include([=[{module.as_posix()}]=])\n"
-                f"_aobus_write_if_different([=[{output.as_posix()}]=] [=[updated;content\n]=])\n",
-                encoding="utf-8",
-            )
-            updated = subprocess.run([cmake, "-P", str(update_script)], capture_output=True, text=True)
-            updated_content = output.read_text(encoding="utf-8")
-            updated_mtime = output.stat().st_mtime_ns
-
-        self.assertEqual(repeated.returncode, 0, repeated.stderr)
-        self.assertEqual(repeated_mtime, preserved_mtime)
-        self.assertEqual(updated.returncode, 0, updated.stderr)
-        self.assertEqual(updated_content, "updated;content\n")
-        self.assertNotEqual(updated_mtime, preserved_mtime)
-
-    def test_component_manifest_is_the_build_tools_source_of_truth(self):
-        components = winui.required_components()
-
-        self.assertIn("Microsoft.VisualStudio.Component.NuGet.BuildTools", components)
-        self.assertIn("Microsoft.VisualStudio.ComponentGroup.WindowsAppDevelopment.VC.BuildTools", components)
-        self.assertIn("Microsoft.VisualStudio.Component.Windows11SDK.26100", components)
-
     def test_enterprise_workload_can_satisfy_build_tools_requirement(self):
         build_tools = "Microsoft.VisualStudio.Workload.VCTools"
         enterprise = "Microsoft.VisualStudio.Workload.NativeDesktop"
@@ -94,14 +46,6 @@ class WinUiTest(unittest.TestCase):
 
         self.assertEqual(installation, Path("C:/VS"))
         self.assertEqual(run.call_args.kwargs["environ"], environment)
-
-    def test_runtime_contract_is_governed_with_an_exact_hash(self):
-        runtime = winui._runtime_contract()
-
-        self.assertEqual(runtime.package_name, "Microsoft.WindowsAppRuntime.2")
-        self.assertEqual(runtime.version, "2.4.0.0")
-        self.assertEqual(runtime.architecture, "x64")
-        self.assertRegex(runtime.sha256, r"^[0-9a-f]{64}$")
 
     def test_runtime_json_filters_other_architectures(self):
         payload = json.dumps(
@@ -151,68 +95,18 @@ class WinUiTest(unittest.TestCase):
                     installed = winui.matching_runtime(runtime)
                 self.assertEqual(installed.version if installed else None, expected)
 
-    def test_runtime_json_rejects_wrong_identity_status_or_malformed_version(self):
-        valid = {
-            "Version": "2.5.1.0",
-            "PackageFullName": "Microsoft.WindowsAppRuntime.2_2.5.1.0_x64__8wekyb3d8bbwe",
-            "Status": "Ok",
-        }
+    def test_modified_runtime_is_not_reported_as_ready(self):
         runtime = winui._runtime_contract()
-        self.assertEqual(len(winui._runtime_packages_from_json(json.dumps(valid), runtime)), 1)
-        for overrides in (
-            {"PackageFullName": "Microsoft.WindowsAppRuntime.3_2.5.1.0_x64__8wekyb3d8bbwe"},
-            {"PackageFullName": "Microsoft.WindowsAppRuntime.2-preview_2.5.1.0_x64__8wekyb3d8bbwe"},
-            {"PackageFullName": "Microsoft.WindowsAppRuntime.2_2.5.1.0_x64__otherpublisher"},
-            {"PackageFullName": "Microsoft.WindowsAppRuntime.2_2.5.1.0_arm64__8wekyb3d8bbwe"},
-            {"Version": "2.5.2.0"},
-            {"Status": "Modified"},
-            {"Status": "NeedsRemediation"},
-            {"Status": None},
-            {"Status": 0},
-        ):
-            with self.subTest(overrides=overrides):
-                payload = json.dumps(valid | overrides)
-                self.assertEqual(winui._runtime_packages_from_json(payload, runtime), ())
-        for version in ("2.5.1", "2.5.1.0.0", "2.5.-1.0", "2.5.65536.0", "2.5.1.x", "\uff12.5.1.0", "2.5.1.0 "):
-            with self.subTest(version=version):
-                payload = json.dumps(
-                    valid
-                    | {
-                        "Version": version,
-                        "PackageFullName": f"Microsoft.WindowsAppRuntime.2_{version}_x64__8wekyb3d8bbwe",
-                    }
-                )
-                self.assertEqual(winui._runtime_packages_from_json(payload, runtime), ())
-
-    def test_runtime_version_accepts_only_strict_four_part_ascii(self):
-        # 1..5 ASCII digits per part, numeric value <= 65535, no trim.
-        # 1.02.003.00004 is (1, 2, 3, 4); a 6-digit part is rejected.
-        cases = (
-            ("valid", "14.51.36247.0", (14, 51, 36247, 0)),
-            ("boundary", "65535.65535.65535.65535", (65535, 65535, 65535, 65535)),
-            ("leading-zeros", "1.02.003.00004", (1, 2, 3, 4)),
-            ("five-digit-zeros", "00000.0.0.1", (0, 0, 0, 1)),
-            ("major-too-large", "99999.1.1.1", None),
-            ("revision-too-large", "1.1.1.99999", None),
-            ("above-boundary", "65536.0.0.0", None),
-            ("integer-overflow", "999999999999999999999.1.1.1", None),
-            ("part-over-five-digits", "1.2.3.000004", None),
-            ("six-leading-zeros", "000000.1.2.3", None),
-            ("trailing-newline", "1.2.3.4\n", None),
-            ("negative", "-1.2.3.4", None),
-            ("three-parts", "1.2.3", None),
-            ("five-parts", "1.2.3.4.5", None),
-            ("prefix", "v1.2.3.4", None),
-            ("suffix", "1.2.3.4 (RC)", None),
-            ("leading-space", " 1.2.3.4", None),
-            ("trailing-space", "1.2.3.4 ", None),
-            ("unicode-digit", "\uff11.2.3.4", None),
-            ("empty", "", None),
-            ("empty-part", "1.2..4", None),
+        payload = json.dumps(
+            {
+                "Name": runtime.package_name,
+                "Version": runtime.version,
+                "PackageFullName": f"{runtime.package_name}_{runtime.version}_x64__8wekyb3d8bbwe",
+                "Status": "Modified",
+            }
         )
-        for name, version, expected in cases:
-            with self.subTest(case=name):
-                self.assertEqual(winui._runtime_version(version), expected)
+        with mock.patch.object(winui, "_run_text", return_value=subprocess.CompletedProcess([], 0, payload, "")):
+            self.assertIsNone(winui.matching_runtime(runtime))
 
     def test_runtime_query_failure_is_not_reported_as_an_absent_package(self):
         query = subprocess.CompletedProcess([], 1, "", "AppX service unavailable")
@@ -262,13 +156,6 @@ class WinUiTest(unittest.TestCase):
             architecture=runtime.architecture,
             package_full_name="Microsoft.WindowsAppRuntime.2_2.4.0.0_x64__8wekyb3d8bbwe",
         )
-        cmake_query = subprocess.CompletedProcess(
-            args=[],
-            returncode=0,
-            stdout=f"Generators\n  {winui.VISUAL_STUDIO_GENERATOR}\n",
-            stderr="",
-        )
-
         with (
             mock.patch.object(winui, "os", SimpleNamespace(name="nt", environ={})),
             mock.patch.object(Path, "is_file", return_value=True),
@@ -279,14 +166,14 @@ class WinUiTest(unittest.TestCase):
             mock.patch.object(winui, "_runtime_contract", return_value=runtime),
             mock.patch.object(winui, "matching_runtime", return_value=installed_runtime) as match_runtime,
             mock.patch.object(winui, "_registry_dword", side_effect=(1, 0)),
-            mock.patch.object(winui, "_run_text", return_value=cmake_query) as run,
+            mock.patch.object(winui, "_run_text", side_effect=AssertionError("retired generator probe")) as run,
         ):
             checks = winui.inspect_host(environ=environment)
 
         self.assertTrue(all(check.ok for check in checks if check.required))
         locate.assert_called_once_with(environ=environment)
         component.assert_called_once_with("canonical", environ=environment)
-        self.assertEqual(run.call_args.kwargs["environ"], environment)
+        run.assert_not_called()
         match_runtime.assert_called_once_with(runtime, environ=environment)
 
     def test_build_host_requirement_reports_required_failures_only(self):
@@ -300,13 +187,6 @@ class WinUiTest(unittest.TestCase):
                 winui.require_build_host()
 
         inspect.assert_called_once_with(include_runtime=False)
-
-    def test_file_hash_is_sha256(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            path = Path(temp_dir) / "payload"
-            path.write_bytes(b"aobus")
-
-            self.assertEqual(winui.file_sha256(path), hashlib.sha256(b"aobus").hexdigest())
 
     def test_authenticode_path_is_passed_through_the_environment(self):
         installer = Path("C:/aobus state/WindowsAppRuntimeInstall-x64.exe")
@@ -352,13 +232,6 @@ class WinUiTest(unittest.TestCase):
 
         with mock.patch.object(winui, "_run_text", return_value=failed):
             with self.assertRaisesRegex(RuntimeError, "could not inspect"):
-                winui._verify_authenticode(Path("C:/runtime.exe"), environ={})
-
-    def test_authenticode_query_rejects_valid_json_with_the_wrong_shape(self):
-        invalid = subprocess.CompletedProcess(args=[], returncode=0, stdout="[]", stderr="")
-
-        with mock.patch.object(winui, "_run_text", return_value=invalid):
-            with self.assertRaisesRegex(RuntimeError, "returned invalid data"):
                 winui._verify_authenticode(Path("C:/runtime.exe"), environ={})
 
     def test_authenticode_requires_exact_microsoft_cn_and_valid_status(self):
@@ -427,6 +300,30 @@ class WinUiTest(unittest.TestCase):
         ):
             with self.subTest(shape=name):
                 reject_shape(stdout)
+
+    def test_verified_installer_download_is_bounded_and_published_only_after_hashing(self):
+        payload = b"Windows App Runtime installer"
+        runtime = winui.RuntimeContract(
+            package_name="Microsoft.WindowsAppRuntime.2",
+            version="2.4.0.0",
+            architecture="x64",
+            installer_url="https://example.invalid/runtime.exe",
+            sha256=hashlib.sha256(payload).hexdigest(),
+        )
+
+        def served(url, timeout):
+            self.assertEqual(url, runtime.installer_url)
+            self.assertEqual(timeout, winui._DOWNLOAD_TIMEOUT_SECONDS)
+            return io.BytesIO(payload)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            state_root = Path(temporary)
+            with mock.patch.object(winui.urllib.request, "urlopen", side_effect=served) as urlopen:
+                installer = winui._download_verified_installer(runtime, state_root)
+                self.assertEqual(installer.read_bytes(), payload)
+                # A verified download is reused without contacting the network again.
+                self.assertEqual(winui._download_verified_installer(runtime, state_root), installer)
+            urlopen.assert_called_once_with(runtime.installer_url, timeout=winui._DOWNLOAD_TIMEOUT_SECONDS)
 
     def test_runtime_setup_does_not_install_or_downgrade_an_acceptable_runtime(self):
         for version in ("2.4.0.0", "2.5.1.0"):

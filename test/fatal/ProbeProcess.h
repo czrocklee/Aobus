@@ -54,9 +54,28 @@ namespace ao::test
   std::filesystem::path siblingProbeExecutablePath(std::string_view executableStem);
   std::filesystem::path fatalProbeExecutablePath();
 
+  /**
+   * Runs `executablePath --aobus-probe-child <scenario>` and captures its output.
+   *
+   * On POSIX hosts `timeout` starts once the child calls
+   * reportProbeChildStarted() or exits. Host work before the child's first
+   * instruction is not scenario time: macOS can hold a new ad-hoc signed
+   * process there while its execution policy checks the binary, which takes
+   * longer than a scenario timeout when parallel suites launch many probes. A
+   * child that never starts still times out, after a fixed startup limit.
+   * Windows measures from process creation.
+   */
   ProbeProcessResult runProbeProcess(std::filesystem::path const& executablePath,
                                      std::string_view scenario,
                                      std::chrono::milliseconds timeout);
+
+  /**
+   * Tells the runProbeProcess() parent that this probe child is running.
+   *
+   * Every `--aobus-probe-child` entry calls this first. It does nothing outside
+   * a probe child and on Windows.
+   */
+  void reportProbeChildStarted() noexcept;
 
   /**
    * Keeps a probe child's intentional abort out of host crash collection.

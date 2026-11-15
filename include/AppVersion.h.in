@@ -1,0 +1,6 @@
+#pragma once
+
+namespace ao
+{
+  inline constexpr auto kAppVersion = "@AOBUS_VERSION@";
+}

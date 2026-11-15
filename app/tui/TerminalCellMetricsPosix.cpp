@@ -3,9 +3,8 @@
 
 #include "CoverArt.h"
 
-#include <unistd.h>
-
 #include <sys/ioctl.h>
+#include <unistd.h>
 
 namespace ao::tui
 {

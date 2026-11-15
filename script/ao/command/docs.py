@@ -9,7 +9,7 @@ REQUIRES_BUILD_ENV = False
 REQUIRES_PYTHON_TOOLS = True
 
 
-def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
+def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     parser = subparsers.add_parser(NAME, help=HELP, description=HELP)
     actions = parser.add_subparsers(dest="docs_action", metavar="<action>", required=True)
 

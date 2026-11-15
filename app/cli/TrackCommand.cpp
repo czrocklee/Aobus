@@ -1543,11 +1543,11 @@ namespace ao::cli
           .metadata = patch, .tagsToAdd = std::move(tagsToAdd), .tagsToRemove = std::move(tagsToRemove)});
     }
 
-    // The literal credit operands below rely on CLI11 2.6.2 internals: the
+    // The literal credit operands below rely on CLI11 2.7.2 internals: the
     // protected classifier and the argv order App::_parse_arg leaves behind.
     // Re-verify both, and the literal-argument tests, before changing this.
-    static_assert(std::string_view{CLI11_VERSION} == "2.6.2",
-                  "TrackCommand literal credit parsing was verified against CLI11 2.6.2 internals");
+    static_assert(std::string_view{CLI11_VERSION} == "2.7.2",
+                  "TrackCommand literal credit parsing was verified against CLI11 2.7.2 internals");
 
     // CLI11's protected subclassing surface keeps optional vector operands on
     // the native classifier, including numeric short-option and parent context.
@@ -1571,7 +1571,7 @@ namespace ao::cli
     std::string_view recognizedLiteralToken(std::vector<std::string> const& args,
                                             std::span<std::string const> originalArgs)
     {
-      // CLI11 2.6.2 App::_parse_arg pops the recognized long token before its
+      // CLI11 2.7.2 App::_parse_arg pops the recognized long token before its
       // immediate zero-arity callback. Child parsing uses the same vector.
       // Short-option remainders are processed before the next long token;
       // none of these literal options has a short spelling. Thus the untouched

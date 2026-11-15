@@ -100,7 +100,7 @@ Use `test/cli/...Test.cpp` and `test/tui/...Test.cpp` for frontend-owned parsing
 
 Use `test/winui/...Test.cpp` for native WinUI composition and frontend-owned behavior such as XAML resource lookup, Windows layout dialects, shell policy, startup options, and process-boundary adapters.
 
-Keep pure shared policy in `uimodel` tests. A test remains Windows-frontend-owned when the behavior belongs to the WinUI frontend even if the implementation is a small pure helper. Many WinRT-free WinUI policy tests are intentionally compiled into `ao_core_test` on every host; suite membership does not change their frontend layer.
+Keep pure shared policy in `uimodel` tests. A test remains Windows-frontend-owned when the behavior belongs to the WinUI frontend even if the implementation is a small pure helper. Many WinRT-free WinUI policy tests are intentionally compiled into the core test binary on every host; suite membership does not change their frontend layer.
 
 ## Assertion boundaries
 
@@ -130,7 +130,7 @@ component itself, stays a frontend contract even with an owned runtime
 fixture.
 
 Neither choice promises speed or hermeticity, and neither decides the owning
-binary: suite membership comes from CMake registration, not from the case's
+binary: suite membership comes from build-graph registration, not from the case's
 contract. The only test-case metadata is the retained `[concurrency]` and
 `[.manual]` markers.
 

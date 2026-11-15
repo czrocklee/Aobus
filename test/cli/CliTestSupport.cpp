@@ -4,6 +4,7 @@
 #include "test/cli/CliTestSupport.h"
 
 #include "Run.h"
+#include "test/audio/AudioFixtureDirectory.h"
 #include "test/library/MusicLibraryTestSupport.h"
 #include "test/library/TrackTestSupport.h"
 #include "test/library/WritableLibraryTestSupport.h"
@@ -116,7 +117,7 @@ namespace ao::cli::test
 
   void CliFixture::copyAudio(std::string_view sourceName, std::string_view targetName) const
   {
-    std::filesystem::copy_file(std::filesystem::path{AUDIO_TEST_DATA_DIR} / sourceName,
+    std::filesystem::copy_file(audio::test::audioFixtureDirectory() / sourceName,
                                root() / targetName,
                                std::filesystem::copy_options::overwrite_existing);
   }

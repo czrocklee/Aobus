@@ -3,9 +3,10 @@
 
 #include <ao/utility/FileAllocation.h>
 
+#include <sys/stat.h>
+
 #include <cstdint>
 #include <filesystem>
-#include <sys/stat.h>
 
 namespace ao::utility
 {

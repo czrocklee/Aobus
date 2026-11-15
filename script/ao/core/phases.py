@@ -26,7 +26,7 @@ from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
 
-from . import command_registry, test_suites
+from . import command_registry
 
 SCHEMA_VERSION = 1
 LOG_DIR_ENV = "AOBUS_PHASE_LOG_DIR"
@@ -52,7 +52,6 @@ PHASES = frozenset(
         "lint-compiler-errors",
         "analysis",
         "analysis-item",
-        "suite",
     )
 )
 TREES = frozenset(("native", "winui", "tidy"))
@@ -171,7 +170,6 @@ def validate_metadata(
     command: str | None = None,
     tree: str | None = None,
     mode: str | None = None,
-    suite: str | None = None,
     jobs: int | None = None,
     count: int | None = None,
     source_id: str | None = None,
@@ -182,7 +180,6 @@ def validate_metadata(
         _check_enum("command", command, _allowed_commands())
     _check_enum("tree", tree, TREES)
     _check_enum("mode", mode, MODES)
-    _check_enum("suite", suite, test_suites.SUITES)
     _check_count("jobs", jobs, 1)
     _check_count("count", count, 0)
     _check_source_id(phase, source_id)
@@ -195,7 +192,6 @@ def measure(
     command: str | None = None,
     tree: str | None = None,
     mode: str | None = None,
-    suite: str | None = None,
     jobs: int | None = None,
     count: int | None = None,
     source_id: str | None = None,
@@ -210,9 +206,7 @@ def measure(
     to the exception's own code. Invalid values fail fast before any work
     starts.
     """
-    validate_metadata(
-        phase, command=command, tree=tree, mode=mode, suite=suite, jobs=jobs, count=count, source_id=source_id
-    )
+    validate_metadata(phase, command=command, tree=tree, mode=mode, jobs=jobs, count=count, source_id=source_id)
     state = _Phase()
     log_dir = os.environ.get(LOG_DIR_ENV, "")
     if not log_dir:
@@ -241,7 +235,6 @@ def measure(
         ("command", effective_command),
         ("tree", tree),
         ("mode", mode),
-        ("suite", suite),
         ("jobs", jobs),
         ("count", count),
         ("source_id", source_id),
@@ -293,7 +286,7 @@ def _bad_int(value: object, minimum: int) -> bool:
 
 
 _BEGIN_REQUIRED = frozenset(("schema_version", "kind", "session_id", "pid", "phase_id", "phase", "walltime_start_ns"))
-_BEGIN_OPTIONAL = frozenset(("parent_id", "command", "tree", "mode", "suite", "jobs", "count", "source_id"))
+_BEGIN_OPTIONAL = frozenset(("parent_id", "command", "tree", "mode", "jobs", "count", "source_id"))
 _END_REQUIRED = frozenset(
     (
         "schema_version",
@@ -342,7 +335,7 @@ def _row_problem(row: object) -> str | None:
         return "invalid walltime_start_ns"
     # Type before membership: unhashable or nested values are invalid rows,
     # never an uncaught TypeError.
-    for name, allowed in (("tree", TREES), ("mode", MODES), ("suite", test_suites.SUITES)):
+    for name, allowed in (("tree", TREES), ("mode", MODES)):
         if name in keys:
             value = row[name]
             if not isinstance(value, str) or value not in allowed:
@@ -387,7 +380,7 @@ def _load_rows(directory: Path) -> list[dict[str, Any]] | None:
     for ordinal, path in enumerate(files, 1):
         try:
             text = path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
+        except OSError, UnicodeDecodeError:
             _fail(f"unreadable phase log file {ordinal}")
             return None
         if not text:
@@ -482,7 +475,6 @@ def _summary(records: list[dict[str, Any]]) -> str:
             record["phase"],
             record.get("tree", "-"),
             record.get("mode", "-"),
-            record.get("suite", "-"),
         )
         entry = stats.setdefault(key, [0, 0, 0, 0, 0, 0])
         entry[0] += 1
@@ -495,8 +487,8 @@ def _summary(records: list[dict[str, Any]]) -> str:
     lines = [
         "## ao phase measurements",
         "",
-        "| command | phase | tree | mode | suite | records | items | failed | total ms | max ms |",
-        "|---|---|---|---|---|---:|---:|---:|---:|---:|",
+        "| command | phase | tree | mode | records | items | failed | total ms | max ms |",
+        "|---|---|---|---|---:|---:|---:|---:|---:|",
     ]
     for group in sorted(stats):
         records_count, failed, total_ns, max_ns, total_items, counted_records = stats[group]

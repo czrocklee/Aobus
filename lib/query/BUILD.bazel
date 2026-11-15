@@ -1,0 +1,75 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("//bazel:gperf.bzl", "gperf_header")
+
+package(default_visibility = ["//visibility:public"])
+
+# Generate query/UnitDispatch.h under the package-local generated/ root so
+# private includes resolve "query/UnitDispatch.h" via includes = ["generated"]
+# without exposing a workspace-root include.
+gperf_header(
+    name = "unit_dispatch",
+    src = "UnitDispatch.gperf",
+    out = "generated/query/UnitDispatch.h",
+    visibility = ["//visibility:private"],
+)
+
+cc_library(
+    name = "unit_dispatch_header",
+    hdrs = [":unit_dispatch"],
+    includes = ["generated"],
+    visibility = ["//visibility:private"],
+)
+
+# Query parser and evaluator sources; private headers stay in srcs so :query
+# does not re-export them, and the generated unit table is an implementation header.
+cc_library(
+    name = "query",
+    srcs = [
+        "Completion.cpp",
+        "ExecutionPlan.cpp",
+        "Expression.cpp",
+        "Field.cpp",
+        "FieldCatalog.cpp",
+        "FormatExpression.cpp",
+        "Parser.cpp",
+        "PlanEvaluator.cpp",
+        "Predicate.cpp",
+        "Serializer.cpp",
+        "detail/CompletionTokenRules.h",
+        "detail/CompletionTokenizer.cpp",
+        "detail/CompletionTokenizer.h",
+        "detail/CreditField.h",
+        "detail/Lexical.h",
+        "detail/Normalize.h",
+        "detail/QueryError.cpp",
+        "detail/QueryError.h",
+    ],
+    implementation_deps = [
+        ":unit_dispatch_header",
+        "//lib/utility:unicode_text",
+        "@aobus_native_deps//:gsl_lite",
+        "@aobus_native_deps//:lexy",
+    ],
+    linkstatic = True,
+    deps = [
+        "//include:query_headers",
+        "//lib/library",
+        "@aobus_native_deps//:boost",
+    ],
+)
+
+# Test-only include spelling lib/query/.... Not a public hdr of :query, and
+# not an includes entry that resolves to the workspace root.
+cc_library(
+    name = "test_headers",
+    testonly = True,
+    hdrs = [
+        "detail/CompletionTokenizer.h",
+        "detail/Normalize.h",
+        "detail/QueryError.h",
+    ],
+    include_prefix = "lib/query",
+    strip_include_prefix = ".",
+    visibility = ["//test:__pkg__"],
+    deps = ["//include:query_headers"],
+)

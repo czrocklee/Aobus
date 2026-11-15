@@ -12,6 +12,14 @@ namespace ao::rt::test
   std::span<RuntimeFatalProbeExpectation const> runtimeFatalProbeExpectations() noexcept
   {
     static constexpr auto kExpectations = std::array{
+      RuntimeFatalProbeExpectation{"duplicate-prepared-next",
+                                   "expects",
+                                   "!hasActivePreparedToken",
+                                   "Prepared-next request must be cleared before preparing a replacement",
+                                   "RuntimeFatalProbeScenario.cpp:",
+                                   "runRuntimeFatalProbeScenario",
+                                   {},
+                                   {}},
       RuntimeFatalProbeExpectation{"yaml-export-missing-cover-resource",
                                    "invariant",
                                    "optDescriptor",

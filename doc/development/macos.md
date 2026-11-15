@@ -6,10 +6,13 @@ id: development.macos
 The native macOS profile builds the shared core, CLI, FTXUI terminal frontend,
 AppKit desktop development slice, Core Audio backend, and native tests. GTK is
 not built. The deployment target is owned by
-`script/ao/macos-toolchain.json`; the portal and project triplets apply it.
+`script/ao/macos-toolchain.json`; native compiler setup rejects project triplets
+whose deployment values disagree with that authority.
 
-This page owns host setup, portal commands, local state, native AppKit smoke,
-and macOS validation. Current AppKit and Core Audio behavior belongs to the
+This page owns platform prerequisites, portal commands, local state, native
+AppKit smoke, and macOS validation. Machine access, source mounts, login/power
+configuration, and persistent shell settings belong in machine-local guidance.
+Current AppKit and Core Audio behavior belongs to the
 [frontend](../system/frontend/README.md),
 [session lifecycle](../system/session-lifecycle.md), and
 [playback](../system/playback/README.md) contracts.
@@ -30,7 +33,19 @@ mismatch, follow the exact formula named by the portal rather than an old shell
 history entry. Nix is not used on macOS: `shell.nix` intentionally rejects
 Darwin.
 
-Run repository operations from the project root through `./ao`. The portal:
+Run from the project root. Use pinned native Bazel for ordinary build/test/run;
+use `./ao` for project-specific commands. Explicit setup is:
+
+```bash
+./ao setup bazel
+./ao deps provision --path /tmp/build/aobus-native-sdk
+```
+
+Use the pinned executable printed by setup (or a Bazelisk pinned to
+`.bazelversion`); it is not automatically on `PATH`. Select the provisioned
+target-triplet prefix with `AOBUS_BAZEL_VCPKG_PREFIX`, including both Debug and
+Release artifacts and host tools. Follow [native Bazel setup](bazel.md#direct-bazel-without-the-portal)
+for the complete ready-SDK contract. Provisioning through the portal:
 
 - starts with the locked Homebrew Python major/minor;
 - selects the governed Homebrew Clang major and deployment target;
@@ -45,94 +60,79 @@ normal build.
 Git hooks are separate optional setup; see the
 [contributor workflow](../../CONTRIBUTING.md#optional-local-setup).
 
-### Unattended native host
-
-Native GUI and Core Audio validation still requires a logged-in console user.
-For a dedicated unattended validation host, enable automatic login through the
-macOS user settings and disable system sleep with the host administrator's
-power policy:
-
-```bash
-sudo pmset -a sleep 0
-```
-
-After a reboot or configuration change, verify the observable state rather than
-assuming that SSH access created a console session:
-
-```bash
-stat -f "%Su" /dev/console
-pmset -g custom
-```
-
-The console owner must be the validation user rather than `root`, and the active
-power profile must report `sleep 0`. Automatic login and power-policy changes
-are host provisioning, not actions performed by `./ao`.
-
 ## Build, run, and check
 
 Use `./ao <command> --help` for current options. Common tasks are:
 
 ```bash
-./ao build                    # Debug graph
-./ao build release            # Release graph; C++ uses ThinLTO
-./ao build profile            # RelWithDebInfo sampling build with frame pointers
-./ao run cli
-./ao run tui
-./ao run appkit
-./ao test                     # core, backend, and TUI fast loop
-./ao test --lint              # custom clang-tidy integration fixtures
-./ao test --all               # core, backend, TUI, CLI, and lint
-./ao check                    # complete native Debug gate
+bazel build //app/cli:aobus //app/tui:aobus-tui //app/macos-appkit:aobus-appkit
+bazel build --config=release //app/macos-appkit:aobus-appkit  # C++ ThinLTO
+bazel build --config=profile //app/tui:aobus-tui  # sampling with frame pointers
+bazel run //app/cli:aobus -- --help
+bazel run //app/tui:aobus-tui
+bazel run //app/macos-appkit:aobus-appkit
+bazel test //:tests           # ordinary default selection
+bazel test //test/lint:lint_test --nocache_test_results  # fresh result assertions
+./ao check                    # complete native fastbuild gate
 ./ao check release            # complete native Release gate
 ./ao check --asan             # supported suites with ASan/UBSan
-./ao check --tsan             # TSan-safe core and backend suites
-./ao hygiene                  # scoped format/audit/tidy gate
+./ao check --tsan             # TSan-safe core, application, and backend suites
+./ao hygiene                  # standalone scoped check-only entry
 ./ao deps report
 ./ao deps verify
 ```
 
-`./ao check` does not run fixture-dependent AppKit GUI scenarios. The macOS
-`all` group intentionally excludes AppKit smoke and the Python `tooling` suite.
-`./ao check --tsan` is narrower still: it builds and runs only the macOS
-TSan-safe suite group (currently core and backend) plus architecture guardrails. It does not
-build either AppKit GUI bundle and is not evidence for native GUI behavior. Use
-an explicit `./ao test --appkit --tsan ...` invocation when the selected AppKit
-scenario is required under TSan.
+`./ao check` includes live documentation validation and scoped hygiene, but
+does not run fixture-dependent AppKit GUI scenarios. macOS has no repository
+Python tooling suite. Ordinary `//:tests` excludes GUI smoke, backend service
+checks, and lint fixtures; completion owns the broader native selection.
+`./ao check --tsan` runs the full normal fastbuild completion first — which builds
+the completion products, including the AppKit product bundle (built, never
+run) — then a separate
+managed TSan profile over the graph-owned macOS-compatible scope (currently
+core, application, and backend) in the same selected tree; the sanitizer
+profile itself does not build GUI smoke. This is not evidence for native GUI
+behavior. Use
+an explicitly configured native smoke target with `--config=tsan` when an
+AppKit scenario needs TSan; that raw run and its runtime are caller-owned.
 
-The portal starts with Homebrew Python and selects the managed Ruff/mypy venv
-on demand for format/tidy/hygiene work. Other commands can use the base
+The portal starts with Homebrew Python and selects the managed environment
+on demand for check/docs/format/tidy/hygiene work. Other commands can use the base
 interpreter; `/usr/bin/python3` only reads initial bootstrap JSON fields.
 The managed environment matches Ruff and mypy pins, but macOS does not claim
-exact Python patch parity and does not expose `./ao test --tooling`.
+exact Python patch parity or expose a standalone tooling suite. Full `check`
+requires the managed Python tools, including documentation parser dependencies.
 
 Release IPO is checked for C++ only. C++ translation units and final links use
 ThinLTO; Objective-C++ translation units use normal Release optimization.
 See [optimized builds](optimized-builds.md).
 
+The native triplets link third-party libraries statically. Before publishing
+binaries or an AppKit bundle, review the shared
+[binary-distribution obligations](dependency-governance.md#binary-distribution),
+including mpg123's library modification/relinking requirements. Development
+build and smoke-test success is not release-compliance evidence.
+
 ## Build and tool state
 
-Default build trees are `/tmp/build/<checkout-directory>/<flavor>` and contain
-`build.log`. Default sanitizer trees use sibling suffixes; tidy and analyzer
-use separate tool trees. `<checkout-directory>` is only the checkout folder's
+Managed validation trees are `/tmp/build/<checkout-directory>/bazel-<config>`
+and contain `build.log`. `<checkout-directory>` is only the checkout folder's
 final name, not a unique identity. Same-named checkouts sharing one base select
 the same paths; use distinct names or absolute local build bases.
 
 `AOBUS_BUILD_ROOT` replaces only the `/tmp/build` base; the portal still appends
-the checkout name and flavor or tool suffix. `BUILD_DIR` selects one exact tree
-instead, bypassing flavor, sanitizer, tidy, and analyzer path separation. It is
+the checkout name and `bazel-<config>`. `BUILD_DIR` selects one exact tree
+instead. It is
 never a base and takes precedence over `AOBUS_BUILD_ROOT`. An explicit `-p` or
-`--path` takes precedence over both.
-
-By default, C++ tidy/hygiene without `-p` refreshes the selected tree with the
-`macos-debug` lint preset, even when selected through `BUILD_DIR`; this can
-reconfigure a Release tree as Debug. `tidy --no-build` skips that provisioning.
-Prefer `AOBUS_BUILD_ROOT` to retain independent product and tool trees.
-An explicit tidy/hygiene `-p` suppresses that forced preset refresh, but does
-not make the selected tree read-only.
+`--path` takes precedence over both. An explicitly selected tree is
+mode-neutral: the selected
+profile, not the tree, picks the compilation mode, and the composite sanitizer
+check uses one selected tree for its normal fastbuild completion and the managed
+profile.
 
 The default `/tmp` location is temporary storage, not a persistence guarantee.
 For a persistent local base, for example, use
-`AOBUS_BUILD_ROOT="$HOME/Library/Caches/Aobus/build" ./ao check`.
+`AOBUS_BUILD_ROOT=/absolute/local/build-base ./ao check`.
 Repeat the assignment for related invocations, or use a directory-scoped
 environment. That base holds build trees only; `AOBUS_STATE_ROOT` still selects
 the managed tool and package state described below.
@@ -142,19 +142,21 @@ Managed state defaults to `$HOME/Library/Caches/Aobus`:
 - `tools/vcpkg/<revision>` — bootstrapped pinned vcpkg;
 - `cache/vcpkg/downloads` and `cache/vcpkg/binaries` — reusable package state;
 - `tools/venvs/<checkout>/<fingerprint>` — managed Ruff/mypy environment;
-- `tools/libcxx-expected-shim/<llvm-version>` — generated compatibility header;
-- `ccache` — optional compiler cache after explicit setup.
+- `tools/libcxx-expected-shim/<llvm-version>` — generated compatibility header.
+
+The Bazel environment repository materializes its own shim copy under its
+repository-local `_state`; ordinary portal tooling uses the managed-state copy.
+Both use the same fail-closed transform over the selected LLVM header.
 
 `AOBUS_STATE_ROOT` replaces that base. `VCPKG_ROOT` is a diagnostic override for
 a complete pre-bootstrapped checkout; registry and manifest locks still apply.
-Use `./ao setup compiler-cache` for optional managed ccache behavior.
+`./ao deps provision` installs the selected tree's vcpkg manifest.
 
-Keep build trees, vcpkg state, managed Python environments, and compiler-cache
-stores on the macOS host's local disk. A source checkout may be local or shared,
-including over SMB. Mounting and maintaining a source share is host
-administration, not portal behavior. Keep source files stable while building
-or collecting validation evidence; do not edit the same shared files
-concurrently from multiple hosts.
+Keep build trees, vcpkg state, managed Python environments, tools and SDK
+caches on host-local storage, independently of the source location. The portal
+does not prescribe or administer a source-sharing topology. Keep source files
+stable while building or collecting validation evidence; concurrent edits are
+not a supported snapshot mechanism.
 
 This is a storage requirement, not automatic local-volume enforcement; verify
 the actual backing storage for overrides. Ruff check/format and mypy use
@@ -223,37 +225,81 @@ Neither the binding nor these discovery options prove a write-free checkout.
 
 ## Native desktop development slice
 
+### Bazel AppKit product
+
+The explicit `//app/macos-appkit:aobus-appkit` target builds the existing
+incremental AppKit product as `Aobus.app`; it is outside Bazel's default test
+aggregate. After `./ao deps provision` installs the tree's vcpkg manifest, build
+and run from the repository root:
+
+```bash
+bazel build //app/macos-appkit:aobus-appkit
+bazel run //app/macos-appkit:aobus-appkit -- \
+  --state-root /tmp/aobus-bazel-appkit-state --library /tmp/aobus-bazel-appkit-music
+```
+
+Use separate disposable state and library directories, not your personal data:
+the shipping application opens and scans `--library`, and an unisolated launch
+can use its normal saved state. These are existing shipping arguments, not smoke
+scenario controls.
+
+Standard rules_cc `objc_library` targets compile the mixed C++/Objective-C++
+implementation and the separate entry and smoke units with the existing governed
+Homebrew compiler and SDK. The standard rule selects ARC; mode, warning, SDK and
+external-header policy stay with the [composed toolchain](bazel.md#macos-toolchain-composition),
+not a default Apple/Xcode compiler or a new compiler pin. The bundle action declares the original
+Info.plist template, icon, brand license, catalog inventory and minimum-OS
+metadata; Python retains the existing catalog SDK's host-absolute interpreter
+boundary. Shared desktop launch uses the existing static vcpkg Boost.Process
+and Boost.Filesystem artifacts without another installer.
+
+This is the same incremental native frontend, not GTK/WinUI feature parity or
+a new GUI smoke framework. The explicit
+`ao_appkit_smoke` bundle builds the same existing smoke scenario
+units and preserves their separate identity and controls; it is not an unattended
+test. The scenario runner below owns the controlled scenarios. This bundle adds no installation,
+signing or notarization workflow. Product build/run support is not native
+GUI acceptance and does not establish ARM64 validation.
+
 ### AppKit smoke scenarios
 
-`./ao run appkit` builds and launches the shipping development bundle. Native
+`bazel run //app/macos-appkit:aobus-appkit` builds and launches the shipping
+development bundle. Native
 smoke uses `ao_appkit_smoke`, which links the same production objects but owns
 disposable scenario controls. The shipping executable does not accept those
 test flags. Both startup paths must preserve the
 [AppKit restoration and geometry ownership contract](../system/session-lifecycle.md#appkit).
 
 Each scenario requires an absent or empty music directory and an absent or empty
-state directory. The two paths must not equal or contain one another. The portal
-rejects unsafe paths before creating the native application and prepares its own
-deterministic media fixtures.
+state directory. The two paths must not equal or contain one another. The
+native smoke main rejects unsafe roots and prepares deterministic media fixtures
+before creating the application. The bundle launcher retains the process
+supervisor and library-successor launch bridge for the `desktop` scenario;
+`script/ao/core/appkitprocess.py` owns that process policy.
 
 ```bash
-./ao test --appkit --scenario desktop \
+bazel run //app/macos-appkit:ao_appkit_smoke -- --scenario desktop \
   --state-root /tmp/aobus-desktop-state --library /tmp/aobus-desktop-music
-./ao test --appkit --scenario authoring \
+bazel run //app/macos-appkit:ao_appkit_smoke -- --scenario authoring \
   --state-root /tmp/aobus-authoring-state --library /tmp/aobus-authoring-music
-./ao test --appkit --scenario presentation \
+bazel run //app/macos-appkit:ao_appkit_smoke -- --scenario presentation \
   --state-root /tmp/aobus-presentation-state --library /tmp/aobus-presentation-music
-./ao test --appkit --scenario quality-presentation \
+bazel run //app/macos-appkit:ao_appkit_smoke -- --scenario quality-presentation \
   --state-root /tmp/aobus-quality-state --library /tmp/aobus-quality-music
-./ao test --appkit --scenario media \
+bazel run //app/macos-appkit:ao_appkit_smoke -- --scenario media \
   --state-root /tmp/aobus-media-state --library /tmp/aobus-media-music
+bazel run //app/macos-appkit:ao_appkit_smoke -- --scenario credits-controls \
+  --state-root /tmp/aobus-credits-state --library /tmp/aobus-credits-music
+bazel run //app/macos-appkit:ao_appkit_smoke -- --scenario credits-previews \
+  --state-root /tmp/aobus-credits-previews-state --library /tmp/aobus-credits-previews-music
 ```
 
-Use `--asan`, `--tsan`, or `--path` when the applicable bundle already belongs
-to that tree. `--no-build` is valid only after the selected tree contains the
-bundle. For native lifecycle or authoring work, run the relevant scenarios in
-Debug, Release, and TSan; add ASan for memory-sensitive changes. Include both
-`app/macos-appkit` and `test/macos-appkit` in scoped hygiene.
+Select Release, ASan, or TSan with native Bazel `--config=release|asan|tsan`
+before the application-argument `--`; raw sanitizer runtime options remain
+caller-owned, not managed sanitizer-gate evidence. For native lifecycle or
+authoring work, run applicable scenarios in Debug, Release, and TSan; add ASan
+for memory-sensitive changes. Include both `app/macos-appkit` and
+`test/macos-appkit` in scoped hygiene.
 
 Treat each scenario only as evidence for the surface it drives:
 
@@ -264,6 +310,10 @@ Treat each scenario only as evidence for the surface it drives:
 | `presentation` | Browser projection and reuse, selection/sort/drag adaptation, activity and inspector presentation, accessibility dismissal actions, and inert callbacks after detach. |
 | `quality-presentation` | Isolated classic quality-tooltip updates, clearing, resize and repeated-layout preservation, plus modern transport separation, using synthetic state and native bar captures without a runtime or audio endpoint. |
 | `media` | MediaPlayer metadata/artwork publication, the seven supported remote commands and disabled unsupported commands, stale-seek guards, main-thread admission, runtime handoff, and retirement. |
+
+The `credits-controls` and `credits-previews` scenarios follow the same
+disposable-path admission, timeout, and evidence rules; their specific
+direct-evidence surfaces are not enumerated here.
 
 The isolated `quality-presentation` scenario exercises English and Simplified
 Chinese catalogs at normal and constrained client sizes. Its captures show the
@@ -280,23 +330,23 @@ than a VoiceOver session. Validate any claimed OS surface separately in a
 logged-in desktop and report that interactive evidence apart from scenario
 results.
 
-For an optional UI-thread diagnostic with a full Xcode installation:
+For an optional UI-thread diagnostic, resolve Main Thread Checker's dylib from
+an installed full Xcode and inject it explicitly into the application, not the
+Bazel server. For example, after setting `checker` to that dylib's absolute path:
 
 ```bash
-DEVELOPER_DIR=/Applications/Xcode.app ./ao run appkit --main-thread-checker
+bazel run --run_under="env DYLD_INSERT_LIBRARIES='$checker'" //app/macos-appkit:aobus-appkit
 ```
 
-`DEVELOPER_DIR` may name either the Xcode application bundle or its
-`Contents/Developer` directory. If it is unset, the portal uses the developer
-directory selected by `xcode-select`. Command Line Tools alone do not include
-Main Thread Checker. This launch option is independent of static analysis,
-clang-tidy, and sanitizers.
+Command Line Tools alone do not include Main Thread Checker. Native Bazel does
+not discover or inject this library for the caller. The diagnostic is separate
+from static analysis, clang-tidy, and sanitizers.
 
 ## Validation
 
 Choose completion scope from
 [validation and review](test/validation-and-review.md). A macOS C++ change
-normally runs `./ao check` and scoped `./ao hygiene`. Changes to Release
+normally runs `./ao check`, which includes scoped hygiene and documentation. Changes to Release
 configuration, dependencies, or optimizer-sensitive code also run
 `./ao check release`. Concurrency and memory work follows
 [concurrency and sanitizer validation](test/concurrency-and-sanitizer.md).
@@ -312,17 +362,17 @@ startup fails.
 
 ### Silent Core Audio test output
 
-A host without usable audio hardware, such as a VM, can run the native Core
-Audio cases against a software HAL endpoint such as BlackHole 2ch. That is
-still a real Core Audio route, not the application's null backend. Installing,
-reloading, or removing the driver is host administration that `ao` never
-performs, and the system default output does not need to change.
+Native Core Audio cases can use a live software HAL output endpoint. This is
+still a real Core Audio route, not the application's null backend. Endpoint
+installation, driver choice and persistent environment settings are operator
+concerns; `ao` does not configure them or change the system default output.
 
-Select the endpoint by its exact UID for the test process:
+Set `testOutputUid` from native device enumeration and select that exact UID
+for the test process:
 
 ```bash
-AOBUS_TEST_COREAUDIO_DEVICE_UID=BlackHole2ch_UID ./ao check release
-AOBUS_TEST_COREAUDIO_DEVICE_UID=BlackHole2ch_UID ./ao test --appkit --scenario presentation \
+AOBUS_TEST_COREAUDIO_DEVICE_UID="$testOutputUid" ./ao check release
+AOBUS_TEST_COREAUDIO_DEVICE_UID="$testOutputUid" bazel run //app/macos-appkit:ao_appkit_smoke -- --scenario presentation \
   --state-root /tmp/aobus-presentation-state --library /tmp/aobus-presentation-music
 ```
 
@@ -345,20 +395,13 @@ whitespace do not match. With the variable unset, the cases keep their existing
 selection and skip on a host without an output device. Take the UID from native
 device enumeration; numeric device IDs do not survive a Core Audio reload.
 
-A dedicated development VM may keep the driver installed and set a default in
-the development user's `~/.zshenv`:
-
-```zsh
-export AOBUS_TEST_COREAUDIO_DEVICE_UID="${AOBUS_TEST_COREAUDIO_DEVICE_UID-BlackHole2ch_UID}"
-```
-
-An explicit value, including an empty one, still wins. GUI or service launches
-that do not inherit the shell environment need the setting passed explicitly.
-To exercise the host's normal output from such a shell, remove it for one
-command and select the backend suite:
+GUI or service launches that do not inherit the shell environment need the
+setting passed explicitly. To exercise normal output with this test override
+unset, remove it for one command and select the backend suite:
 
 ```bash
-env -u AOBUS_TEST_COREAUDIO_DEVICE_UID ./ao test --backend "CoreAudioBackend*"
+env -u AOBUS_TEST_COREAUDIO_DEVICE_UID bazel test //test:backend_test \
+  --test_filter='CoreAudioBackend*'
 ```
 
 The backend suite owns the native Core Audio cases that open a live output;
@@ -373,14 +416,15 @@ where a short tone is acceptable. It ignores `AOBUS_TEST_COREAUDIO_DEVICE_UID`
 and uses the host's normal output:
 
 ```bash
-./ao test --backend "CoreAudioProvider - enumerates and renders through a real output"
+bazel test //test:backend_test \
+  --test_filter='CoreAudioProvider - enumerates and renders through a real output'
 ```
 
 The exact case name selects the provider probe only; the hidden Core Audio
 channel-map readback probe has different prerequisites and stays separate.
 
 Then exercise output selection, pause/resume, seek/flush, drain, and device
-removal through `./ao run tui`. The silent automated probe does not prove audible
+removal through `bazel run //app/tui:aobus-tui`. The silent automated probe does not prove audible
 hardware behavior.
 
 ## Troubleshooting
@@ -392,9 +436,7 @@ hardware behavior.
   named by the portal and rerun the command.
 - Never bypass a vcpkg archive hash mismatch. Follow the
   [verified archive recovery](dependency-upgrade.md#recovering-a-regenerated-macos-vcpkg-archive).
-- `AOBUS_LIBCXX_EXPECTED_SHIM` missing at configure time means CMake was run
-  outside the portal. Remove that manual tree and use `./ao`.
-- If a build tree is selected on a source share, choose an absolute local path
+- If a build tree is selected on non-local storage, choose an absolute local path
   with `-p` or `BUILD_DIR`, or omit `-p` and unset `BUILD_DIR` before selecting
   an absolute local `AOBUS_BUILD_ROOT`. Also check `AOBUS_STATE_ROOT` for managed
   tool and package state, including managed Ruff/mypy caches. These settings do
@@ -410,12 +452,9 @@ hardware behavior.
   an ID override alone does not repair Git linkage.
 - If no Core Audio outputs appear, confirm a live output in Audio MIDI Setup.
   Aobus does not invent a route when macOS publishes none.
-- If AUHAL or `afplay` fails over SSH, `stat -f "%Su" /dev/console` must name
-  the logged-in user rather than `root`; on an unattended host also verify that
-  `pmset -g custom` still reports `sleep 0`.
-- macOS does not provide a `timeout` command by default. Bound remote native
-  operations from the controlling host rather than adding an ambient utility
-  or leaving a hidden blocking loop in the guest.
+- If AUHAL fails from a noninteractive invocation, verify the logged-in console
+  prerequisite under [validation](#validation). SSH connectivity alone does not
+  establish that session; machine login and power policy are outside the portal.
 - Preserve the selected build tree, `build.log`, and local caches while
   diagnosing a cold or failed native build.
 

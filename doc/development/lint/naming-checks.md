@@ -133,6 +133,6 @@ The general [suppression policy](../linting.md#suppressions) still applies.
 
 ## Maintenance evidence
 
-The implementation classes live in `tool/lint/check/` and are registered in `tool/lint/AobusLintModule.cpp` and `tool/lint/CMakeLists.txt`.
+The implementation classes live in `tool/lint/check/` and are registered in `tool/lint/AobusLintModule.cpp` and the checker build in `tool/lint/build.bzl`.
 Their fixtures live under `test/lint/fixture/<check-alias>/`.
 Use the [checker development workflow](checker-development.md#custom-checker-development) for fixture markers, AST investigation, and validation.

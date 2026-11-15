@@ -15,10 +15,12 @@
 #include <cstdint>
 #include <exception>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <future>
 #include <ios>
 #include <memory>
+#include <random>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -26,6 +28,9 @@
 #include <thread>
 #include <tuple>
 #include <utility>
+#ifdef AOBUS_BAZEL_TUI_EXECUTABLE
+#include <cstdlib>
+#endif
 
 namespace ao::systemmedia::test
 {
@@ -71,6 +76,29 @@ namespace ao::systemmedia::test
 
       return std::string{linePtr.get(), length};
     }
+
+    // sockaddr_un caps Unix socket paths at 108 bytes, and an inherited
+    // TMPDIR/TEST_TMPDIR root can already exceed that budget. The daemon
+    // therefore listens in a fixture-owned short directory directly under
+    // /tmp; cleanup removes the whole directory so a force-killed daemon
+    // cannot leak its socket file into the shared /tmp root.
+    std::filesystem::path createOwnedSocketDirectory()
+    {
+      auto device = std::random_device{};
+      auto distribution = std::uniform_int_distribution<std::uint64_t>{};
+
+      for (std::uint32_t attempt = 0; attempt != 100; ++attempt)
+      {
+        auto const candidate = std::filesystem::path{"/tmp"} / std::format("ao-mpris-{:016x}", distribution(device));
+
+        if (auto error = std::error_code{}; std::filesystem::create_directory(candidate, error))
+        {
+          return candidate;
+        }
+      }
+
+      throw std::runtime_error{"Could not create a private D-Bus socket directory"};
+    }
   } // namespace
 
   namespace detail
@@ -93,14 +121,18 @@ namespace ao::systemmedia::test
 
   PrivateBus::PrivateBus(std::string const& listenAddress, std::chrono::milliseconds const startupTimeout)
   {
-    // The pinned daemon's --session default can refer to a host-only configuration.
-    // Own the policy instead, with no activation directories or host configuration includes.
-    auto const configPath = _directory.path() / "bus.conf";
-    auto config = std::ofstream{configPath, std::ios::binary};
-    config.exceptions(std::ios::failbit | std::ios::badbit);
-    config << R"(<busconfig>
+    try
+    {
+      // The pinned daemon's --session default can refer to a host-only configuration.
+      // Own the policy instead, with no activation directories or host configuration includes.
+      _socketDirectory = createOwnedSocketDirectory();
+      auto const configPath = _directory.path() / "bus.conf";
+      auto config = std::ofstream{configPath, std::ios::binary};
+      config.exceptions(std::ios::failbit | std::ios::badbit);
+      config << R"(<busconfig>
   <type>session</type>
-  <listen>unix:tmpdir=/tmp</listen>
+  <listen>unix:tmpdir=)"
+             << _socketDirectory.string() << R"(</listen>
   <auth>EXTERNAL</auth>
   <policy context="default">
     <allow own="*"/>
@@ -109,29 +141,37 @@ namespace ao::systemmedia::test
   </policy>
 </busconfig>
 )";
-    config.close();
+      config.close();
 
-    auto const configOption = "--config-file=" + configPath.string();
-    auto const addressOption = "--address=" + listenAddress;
-    ::GError* error = nullptr;
-    // Inherit stderr so a startup failure retains the daemon's diagnostic in test output.
-    _process = ::g_subprocess_new(G_SUBPROCESS_FLAGS_STDOUT_PIPE,
-                                  &error,
-                                  "dbus-daemon",
-                                  configOption.c_str(),
-                                  "--nofork",
-                                  "--print-address",
-                                  listenAddress.empty() ? nullptr : addressOption.c_str(),
-                                  nullptr);
-    auto const errorPtr = detail::ErrorPtr{error};
+      auto const configOption = "--config-file=" + configPath.string();
+      auto const addressOption = "--address=" + listenAddress;
+      ::GError* error = nullptr;
+      auto const* daemon = "dbus-daemon";
+#ifdef AOBUS_BAZEL_TUI_EXECUTABLE
+      daemon = std::getenv("AOBUS_TEST_DBUS_DAEMON");
 
-    if (_process == nullptr)
-    {
-      throw std::runtime_error{errorMessage(error, "Could not launch dbus-daemon")};
-    }
+      if (daemon == nullptr || !std::filesystem::path{daemon}.is_absolute() ||
+          !std::filesystem::is_regular_file(daemon))
+      {
+        throw std::runtime_error{"Bazel TUI process tests require a declared D-Bus daemon"};
+      }
+#endif
+      // Inherit stderr so a startup failure retains the daemon's diagnostic in test output.
+      _process = ::g_subprocess_new(G_SUBPROCESS_FLAGS_STDOUT_PIPE,
+                                    &error,
+                                    daemon,
+                                    configOption.c_str(),
+                                    "--nofork",
+                                    "--print-address",
+                                    listenAddress.empty() ? nullptr : addressOption.c_str(),
+                                    nullptr);
+      auto const errorPtr = detail::ErrorPtr{error};
 
-    try
-    {
+      if (_process == nullptr)
+      {
+        throw std::runtime_error{errorMessage(error, "Could not launch dbus-daemon")};
+      }
+
       auto* const output = ::g_subprocess_get_stdout_pipe(_process);
       auto outputPtr = ObjectPtr{g_object_ref(output)};
       auto addressFuture =
@@ -161,8 +201,13 @@ namespace ao::systemmedia::test
     catch (...)
     {
       stopNoThrow();
-      ::g_object_unref(_process);
-      _process = nullptr;
+
+      if (_process != nullptr)
+      {
+        ::g_object_unref(_process);
+        _process = nullptr;
+      }
+
       throw;
     }
   }
@@ -229,6 +274,7 @@ namespace ao::systemmedia::test
     }
 
     _stopped = true;
+    removeSocketDirectoryNoThrow();
   }
 
   ::pid_t PrivateBus::parsePid(char const* const identifier)
@@ -287,15 +333,29 @@ namespace ao::systemmedia::test
 
   void PrivateBus::stopNoThrow() noexcept
   {
-    if (_process == nullptr || _stopped)
+    if (_process != nullptr && !_stopped)
+    {
+      resumeNoThrow();
+      ::g_subprocess_force_exit(_process);
+      std::ignore = ::g_subprocess_wait(_process, nullptr, nullptr);
+      _stopped = true;
+    }
+
+    removeSocketDirectoryNoThrow();
+  }
+
+  void PrivateBus::removeSocketDirectoryNoThrow() noexcept
+  {
+    if (_socketDirectory.empty())
     {
       return;
     }
 
-    resumeNoThrow();
-    ::g_subprocess_force_exit(_process);
-    std::ignore = ::g_subprocess_wait(_process, nullptr, nullptr);
-    _stopped = true;
+    // A force-exited daemon cannot unlink its socket, so removing the owned
+    // directory is what retires the socket file after the reaping above.
+    auto error = std::error_code{};
+    std::ignore = std::filesystem::remove_all(_socketDirectory, error);
+    _socketDirectory.clear();
   }
 
   VariantPtr takeVariant(::GVariant* const value)

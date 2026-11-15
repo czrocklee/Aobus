@@ -1,7 +1,7 @@
 # Native test-only driver. No injection API ships in production.
 # Scenario mode mocks every installer spawn; pure mode evaluates the original
 # helper functions; stage mode runs the complete stager with mocked signature
-# and EXE metadata but real files, hashes and manifests. Parse mode checks syntax.
+# and EXE metadata but real files, hashes and manifests.
 # Scenario plans are strict and finite. A missing, empty, or exhausted plan
 # records fixture-violation and throws; trailing unused plans are allowed.
 # Stage mode records the same violation if Start-Process is reached.
@@ -19,22 +19,10 @@ Set-StrictMode -Version 2.0
 # native Utility module explicitly so its Get-FileHash function stays real.
 Import-Module (Join-Path $PSHOME 'Modules\Microsoft.PowerShell.Utility\Microsoft.PowerShell.Utility.psd1') -ErrorAction Stop
 $scenario = Get-Content -LiteralPath $ScenarioFile -Raw | ConvertFrom-Json
-foreach ($name in @('manifest','mock','cases','createInstallers','fixtureFile','sources','switches','stage','relativeManifest')) {
+foreach ($name in @('manifest','mock','cases','createInstallers','fixtureFile','switches','stage','relativeManifest')) {
     if (-not $scenario.PSObject.Properties[$name]) {
         $scenario | Add-Member -MemberType NoteProperty -Name $name -Value $null
     }
-}
-
-if ($scenario.kind -eq 'parse') {
-    $sources = @($ProductionSource) + @($scenario.sources)
-    foreach ($path in $sources) {
-        if (-not $path) { continue }
-        $tokens = $null; $parseErrors = $null
-        [void][System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$tokens, [ref]$parseErrors)
-        if ($parseErrors.Count -gt 0) { throw ('parse failure in ' + $path + ': ' + $parseErrors[0].Message) }
-    }
-    [pscustomobject]@{ parsed = @($sources) } | ConvertTo-Json -Compress
-    exit 0
 }
 
 $source = [IO.File]::ReadAllText($ProductionSource)

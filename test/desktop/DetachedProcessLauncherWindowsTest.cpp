@@ -26,21 +26,7 @@ namespace ao::desktop::test
   {
     std::filesystem::path processProbePath()
     {
-      auto buffer = std::wstring(MAX_PATH, L'\0');
-
-      while (true)
-      {
-        auto const written = ::GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
-        REQUIRE(written != 0);
-
-        if (written < buffer.size())
-        {
-          buffer.resize(written);
-          return std::filesystem::path{buffer}.parent_path() / "ao_detached_process_probe.exe";
-        }
-
-        buffer.resize(buffer.size() * 2);
-      }
+      return ao::test::resolveBazelTestRunfile("test/ao_detached_process_probe.exe");
     }
   } // namespace
 

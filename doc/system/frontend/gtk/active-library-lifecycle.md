@@ -24,7 +24,7 @@ This is a **GTK frontend composition-root** contract under the
 Its implementation is `app/linux-gtk/main.cpp`, `GtkStartupPlan.cpp`,
 `LibraryWindowLifecycle.cpp`, `MainWindow.cpp`, and
 `SuccessorProcessLauncher.cpp`. Common root, protocol, startup, and detached
-process rules are supplied by `ao_desktop_launch` under `app/include/ao/desktop/`
+process rules are supplied by the desktop-launch library under `app/include/ao/desktop/`
 and `app/desktop/`.
 
 GTK may select platform paths, construct stores and executors, register audio
@@ -193,7 +193,7 @@ playback schema or migration is implied.
 - [`SuccessorProcessLauncher`](../../../../app/linux-gtk/platform/SuccessorProcessLauncher.h)
   owns executable, activation, environment, and standard-stream adaptation.
 - [`ImportExportCoordinator`](../../../../app/linux-gtk/portal/ImportExportCoordinator.h)
-  owns chooser admission; `ao_desktop_launch`, `AppRuntime`, and
+  owns chooser admission; the desktop-launch library, `AppRuntime`, and
   `PlaybackSessionPersistence` own the shared rules linked above.
 
 Tests under `test/desktop/` protect shared planning, identity, protocol, and

@@ -7,6 +7,7 @@
 #include "runtime/resource/ResourceByteReader.h"
 #include "runtime/resource/ResourceCarrierIndex.h"
 #include "test/TestFixtureSupport.h"
+#include "test/audio/AudioFixtureDirectory.h"
 #include "test/library/MusicLibraryTestSupport.h"
 #include "test/library/TrackTestSupport.h"
 #include "test/library/WritableLibraryTestSupport.h"
@@ -47,7 +48,7 @@ namespace ao::rt::test
     std::filesystem::path copyCoverFixture(std::filesystem::path const& root, std::string_view const name)
     {
       auto const target = root / name;
-      std::filesystem::copy_file(std::filesystem::path{AUDIO_TEST_DATA_DIR} / "with_cover.flac", target);
+      std::filesystem::copy_file(audio::test::audioFixtureDirectory() / "with_cover.flac", target);
       return target;
     }
 
@@ -179,7 +180,7 @@ namespace ao::rt::test
     // not a failed request. Rescanning is what reconciles the stale reference.
     std::filesystem::remove(fixture.temp.path() / fixture.uris[0]);
     std::filesystem::copy_file(
-      std::filesystem::path{AUDIO_TEST_DATA_DIR} / "basic_metadata.flac", fixture.temp.path() / fixture.uris[0]);
+      audio::test::audioFixtureDirectory() / "basic_metadata.flac", fixture.temp.path() / fixture.uris[0]);
 
     auto const index = fixture.buildIndex();
     auto const cache = makeDisabledCache();
@@ -252,7 +253,7 @@ namespace ao::rt::test
     auto fixture = CarrierFixture{1};
     std::filesystem::remove(fixture.temp.path() / fixture.uris[0]);
     std::filesystem::copy_file(
-      std::filesystem::path{AUDIO_TEST_DATA_DIR} / "basic_metadata.flac", fixture.temp.path() / fixture.uris[0]);
+      audio::test::audioFixtureDirectory() / "basic_metadata.flac", fixture.temp.path() / fixture.uris[0]);
 
     auto const index = fixture.buildIndex();
     auto const cache = makeDisabledCache();

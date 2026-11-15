@@ -10,6 +10,7 @@
 #include <sys/types.h>
 
 #include <chrono>
+#include <filesystem>
 #include <future>
 #include <memory>
 #include <string>
@@ -36,6 +37,8 @@ namespace ao::systemmedia::test
    * The daemon uses an owned minimal configuration without host service activation.
    * It is a direct child (no shell), no process environment is changed, and cleanup
    * signals and reaps only that child. A stalled child is always resumed before termination.
+   * The daemon listens in a fixture-owned short directory under /tmp, so cleanup
+   * removes the whole directory and a force-killed daemon cannot leak its socket.
    */
   class [[nodiscard]] PrivateBus final
   {
@@ -61,8 +64,10 @@ namespace ao::systemmedia::test
     void waitForStoppedState(bool expected, std::chrono::milliseconds timeout) const;
     void resumeNoThrow() noexcept;
     void stopNoThrow() noexcept;
+    void removeSocketDirectoryNoThrow() noexcept;
 
     ao::test::TempDir _directory;
+    std::filesystem::path _socketDirectory;
     ::GSubprocess* _process = nullptr;
     std::string _address;
     ::pid_t _pid = 0;

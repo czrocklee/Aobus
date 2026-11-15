@@ -13,8 +13,8 @@ Use `doc/development/linting.md` for the affected triage or suppression policy.
 Agents make explicit edits; `tidy` and `analyze` are diagnostic-only and never export or apply replacements.
 
 Use explicit paths, `--folder`, or `--commit` for a limited request. `--all` is
-for requested whole-repository linting. `--no-build --check <name>` reuses a
-prepared compile database and plugin for focused diagnostic inspection; it does
+for requested whole-repository linting. `--check <name>` scopes a focused
+diagnostic inspection to the selected check; it does
 not run the lint suite's fixture assertions.
 
 Validate the requested scope and report remaining diagnostics or suppressions.

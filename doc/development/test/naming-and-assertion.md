@@ -41,7 +41,7 @@ The only supported markers are:
 
 - `[concurrency]` marks the contracts in
   [concurrency and sanitizer validation](concurrency-and-sanitizer.md) and
-  selects the `--concurrency` gate.
+  supports focused `--test_filter='[concurrency]~[.]'` selection.
 - `[.manual]` hides a case from automatic runs. Reserve it for real hardware or
   deliberate manual execution whose prerequisites an automated run cannot
   provide.
@@ -58,7 +58,9 @@ Catch2 treats commas as OR separators even inside shell quotes. Escape every
 literal comma as `\,` when selecting a name that contains commas:
 
 ```bash
-./ao test --core --list "FieldCatalog - finds descriptors by canonical name\, alias\, and field"
+bazel test //test:query_test \
+  --test_filter='FieldCatalog - finds descriptors by canonical name\, alias\, and field' \
+  --test_arg=--list-tests --test_output=all
 ```
 
 `TEMPLATE_TEST_CASE` requires a tag argument: pass an empty string for an
@@ -87,7 +89,8 @@ test sources (the exact lowercase suffixes `.cpp`, `.mm`, `.h`, `.hpp`, and
 this is the same case-sensitive suffix contract used by the other source tools,
 not host-filesystem case folding. Uppercase suffixes such as `.CPP` and `.HPP`
 are outside that governed universe; registration filenames must use the
-conventional lowercase suffixes on every host. CMake rejects case-variant source
+conventional lowercase suffixes on every host. The build graph rejects
+case-variant source
 extensions such as `.CPP` in registered test targets so they cannot compile
 outside this audit contract. In candidate files, comments, strings,
 character literals, and custom raw strings outside invocations are not
@@ -98,10 +101,13 @@ keep their original spelling, so a splice cannot forge a closing delimiter. Regi
 include fragments, and other discovered filenames such as `FooSupport.cpp`.
 `./ao test-audit` and the source audit in `./ao hygiene` check
 registration syntax, names, markers, and placement without requiring a build
-tree. After a successful build, `./ao check` reconciles whole-project discovery
-with that build's fresh CMake-configured owner/disabled manifest. Only that
-configured check establishes ownership completeness; standalone source audits
-do not detect a missing CMake owner.
+tree. Before it compiles, `./ao check` joins whole-project discovery with the
+configured graph: each registered source must belong to a `cc_test` the gate
+executes, or to a `cc_binary`, such as a benchmark, that the gate builds, unless
+that owner is incompatible with this host
+([test ownership](../bazel.md#test-ownership)). Hidden cases inside
+an executed test stay skipped. Only that configured check establishes ownership
+completeness; standalone source audits do not detect a missing owner.
 
 ```bash
 ./ao test-audit test/query

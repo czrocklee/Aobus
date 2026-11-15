@@ -3,6 +3,7 @@
 import errno
 import importlib
 import os
+import sys
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -29,6 +30,8 @@ class _PosixLocking(Protocol):
 
     def flock(self, fd: int, operation: int) -> None: ...
 
+    def lockf(self, fd: int, cmd: int) -> None: ...
+
 
 def _windows_locking() -> _WindowsLocking:
     return cast(_WindowsLocking, importlib.import_module("msvcrt"))
@@ -39,7 +42,7 @@ def _posix_locking() -> _PosixLocking:
 
 
 def lock_path(build_dir: Path) -> Path:
-    """Keep the lock outside the tree so `ao build --clean` cannot remove it."""
+    """Keep the lock outside the tree so `ao check --clean` cannot remove it."""
     resolved = build_dir.resolve()
     return resolved.parent / f".{resolved.name}.ao-build.lock"
 
@@ -155,7 +158,7 @@ def build_tree_lock(build_dir: Path) -> Iterator[None]:
             try:
                 acquired = _try_lock(stream)
                 if not acquired:
-                    print(f"Waiting for active build in {build_dir}...", flush=True)
+                    print(f"Waiting for active build in {build_dir}...", flush=True, file=sys.stderr)
                     _lock(stream)
             except OSError as exc:
                 raise die(f"cannot acquire build-tree lock {path}: {exc}") from exc
@@ -166,3 +169,26 @@ def build_tree_lock(build_dir: Path) -> Iterator[None]:
                 _unlock(stream)
     finally:
         _leave_process_lock(path)
+
+
+@contextmanager
+def shared_file_lock(path: Path) -> Iterator[None]:
+    """Serialize publishers of shared tools and dependency cache entries.
+
+    Every caller coordinates through the same lock file, using a POSIX record
+    lock or an exclusive Windows byte lock. This lock is independent of a
+    command's selected build tree.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a+b") as stream:
+        if os.name == "nt":
+            _lock(stream)
+        else:
+            _posix_locking().lockf(stream.fileno(), _posix_locking().LOCK_EX)
+        try:
+            yield
+        finally:
+            if os.name == "nt":
+                _unlock(stream)
+            else:
+                _posix_locking().lockf(stream.fileno(), _posix_locking().LOCK_UN)

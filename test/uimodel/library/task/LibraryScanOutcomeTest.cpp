@@ -3,8 +3,8 @@
 
 #include <ao/uimodel/library/task/LibraryScanOutcome.h>
 
-#include "app/uimodel/library/task/LibraryScanWorkflow.h"
 #include "test/MessageCatalogTestSupport.h"
+#include "uimodel/library/task/LibraryScanWorkflow.h"
 #include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/NotificationState.h>

@@ -3,16 +3,21 @@
 
 #include "TestFixtureSupport.h"
 
+#include <rules_cc/cc/runfiles/runfiles.h>
+
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <format>
 #include <fstream>
 #include <ios>
 #include <iterator>
+#include <memory>
 #include <random>
 #include <span>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <system_error>
 #include <utility>
@@ -127,5 +132,31 @@ namespace ao::test
   {
     auto input = std::ifstream{path, std::ios::binary};
     return {std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
+  }
+
+  std::string resolveBazelTestRunfile(std::string_view relativePath)
+  {
+    using rules_cc::cc::runfiles::Runfiles;
+    auto error = std::string{};
+    auto runfilesPtr = std::unique_ptr<Runfiles>{Runfiles::CreateForTest(BAZEL_CURRENT_REPOSITORY, &error)};
+
+    if (!runfilesPtr)
+    {
+      throw std::runtime_error{"Cannot initialize Bazel test runfiles: " + error};
+    }
+
+    auto const* const workspace = std::getenv("TEST_WORKSPACE");
+
+    if (workspace == nullptr || *workspace == '\0')
+    {
+      throw std::runtime_error{"Bazel test runfiles require a nonempty TEST_WORKSPACE"};
+    }
+
+    return runfilesPtr->Rlocation(std::string{workspace} + "/" + std::string{relativePath});
+  }
+
+  std::filesystem::path testInputPath(std::string_view const workspaceRelativePath)
+  {
+    return std::filesystem::path{resolveBazelTestRunfile(workspaceRelativePath)};
   }
 } // namespace ao::test

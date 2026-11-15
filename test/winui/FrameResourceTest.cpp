@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "test/TestFixtureSupport.h"
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
 #include <ao/winui/layout/ElementKind.h>
@@ -55,7 +56,8 @@ namespace ao::winui::test
 
     std::string readShippedDocument(ShellPreset const preset)
     {
-      return readFile(std::filesystem::path{AOBUS_WINDOWS_LAYOUT_DIR} / shellPresetResource(preset));
+      return readFile(
+        ao::test::testInputPath(std::string{"app/windows-winui/layout/"} + std::string{shellPresetResource(preset)}));
     }
 
     /// The value of attribute @p name in @p tag, or nullopt when it carries none.
@@ -174,7 +176,7 @@ namespace ao::winui::test
      */
     std::vector<FrameResource> windowScopeResources()
     {
-      auto const tags = xamlTags(readFile(std::filesystem::path{AOBUS_WINDOWS_FRAME_XAML}));
+      auto const tags = xamlTags(readFile(ao::test::testInputPath("app/windows-winui/MainWindow.xaml")));
       auto const opening = std::ranges::find_if(
         tags, [](std::string const& tag) { return !isClosingTag(tag) && tagName(tag) == "Grid.Resources"; });
 
@@ -352,7 +354,7 @@ namespace ao::winui::test
 
   TEST_CASE("FrameResource - track column events bind their required field id")
   {
-    auto const tags = xamlTags(readFile(std::filesystem::path{AOBUS_WINDOWS_FRAME_XAML}));
+    auto const tags = xamlTags(readFile(ao::test::testInputPath("app/windows-winui/MainWindow.xaml")));
     auto const tagForHandler = [&tags](std::string_view const eventName,
                                        std::string_view const handler) -> std::optional<std::string>
     {

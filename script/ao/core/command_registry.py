@@ -6,9 +6,8 @@ each module declares the same name. Reading these identities loads no commands.
 """
 
 COMMAND_MODULE_NAMES = (
-    "build",
     "check",
-    "test",
+    "verify",
     "test_audit",
     "name_audit",
     "coverage",
@@ -21,6 +20,5 @@ COMMAND_MODULE_NAMES = (
     "format",
     "hygiene",
     "perf",
-    "run",
 )
 COMMAND_NAMES = frozenset(name.replace("_", "-") for name in COMMAND_MODULE_NAMES)

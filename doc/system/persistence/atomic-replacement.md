@@ -27,7 +27,7 @@ Result<> writeAtomically(std::filesystem::path const& targetPath, std::string_vi
 Result<> publishAtomically(std::filesystem::path const& targetPath, std::string_view data);
 ```
 
-[`lib/utility/CMakeLists.txt`](../../../lib/utility/CMakeLists.txt) selects [`AtomicFilePosix.cpp`](../../../lib/utility/AtomicFilePosix.cpp) for non-Windows builds and [`AtomicFileWindows.cpp`](../../../lib/utility/AtomicFileWindows.cpp) for Windows builds.
+[`lib/utility/BUILD.bazel`](../../../lib/utility/BUILD.bazel) selects [`AtomicFilePosix.cpp`](../../../lib/utility/AtomicFilePosix.cpp) for non-Windows builds and [`AtomicFileWindows.cpp`](../../../lib/utility/AtomicFileWindows.cpp) for Windows builds.
 [`AtomicFileTransaction.h`](../../../lib/utility/AtomicFileTransaction.h) contains the source-private common state machine and its deterministic test seam.
 None of these mechanisms can depend on application runtime, UIModel, a frontend, YAML, or an application payload type.
 
@@ -204,7 +204,7 @@ No platform barrier receipt crosses into `ConfigStore` or frontend state owners.
 - [`AtomicFileTransaction.h`](../../../lib/utility/AtomicFileTransaction.h) owns the private common state sequence.
 - [`AtomicFilePosix.cpp`](../../../lib/utility/AtomicFilePosix.cpp) owns POSIX temporary-file RAII, mode, write, barriers, replacement, and parent synchronization.
 - [`AtomicFileWindows.cpp`](../../../lib/utility/AtomicFileWindows.cpp) owns extended paths, protected DACL creation, Windows temporary-file RAII, barriers, and replacement.
-- [`lib/utility/CMakeLists.txt`](../../../lib/utility/CMakeLists.txt) selects one platform implementation and links the Windows security API.
+- [`lib/utility/BUILD.bazel`](../../../lib/utility/BUILD.bazel) selects one platform implementation and links the Windows security API.
 - [`ConfigStore.cpp`](../../../app/runtime/ConfigStore.cpp), [`LibraryYamlExporter.cpp`](../../../app/runtime/library/LibraryYamlExporter.cpp), [`LibCommand.cpp`](../../../app/cli/LibCommand.cpp), and [`ShellLayoutComponentStateStore.cpp`](../../../app/linux-gtk/app/ShellLayoutComponentStateStore.cpp) use durable writes; [`ResourceByteDiskCache.cpp`](../../../app/runtime/resource/ResourceByteDiskCache.cpp) and [`MprisArtUrlCache.cpp`](../../../app/systemmedia/linux/MprisArtUrlCache.cpp) use visibility-only publication for discardable artwork.
 
 ## Test map

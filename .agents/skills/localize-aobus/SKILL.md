@@ -36,7 +36,8 @@ encode literal apostrophes as `''`. Edit authored catalogs, not generated `.res`
 
 When adding a locale, update the build/package inputs, WinUI projection, parity
 cases, and governing fallback specification together. Build catalogs before
-launching the UI; `-n` is only valid against an already rebuilt tree.
+launching the UI; native `bazel run` builds the selected frontend and its
+catalog inputs. Directly reusing an old executable does not validate changed copy.
 
 Inspect the requested locale in affected frontends at normal and constrained
 widths. Pseudo-localization (`qps-ploc`) detects structural omissions but does

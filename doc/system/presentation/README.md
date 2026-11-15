@@ -141,6 +141,6 @@ Platform-neutral public interfaces are under
 implementations under [`app/uimodel/`](../../../app/uimodel). Runtime interfaces
 are under [`app/include/ao/rt/`](../../../app/include/ao/rt). GTK, TUI, WinUI,
 and AppKit adapters live in their respective application directories.
-[`app/uimodel/CMakeLists.txt`](../../../app/uimodel/CMakeLists.txt) and
-[`ArchitectureAudit.cmake`](../../../app/cmake/ArchitectureAudit.cmake) enforce
+[`app/uimodel/BUILD.bazel`](../../../app/uimodel/BUILD.bazel) and the shared
+[architecture audit](../../../script/ao/core/guardrails.py) enforce
 important dependency and vocabulary boundaries.

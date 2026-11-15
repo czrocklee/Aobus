@@ -3,6 +3,9 @@
 
 #include "i18n/MessageIds.h"
 #include "i18n/WinUiResourceProjection.h"
+#ifdef AOBUS_BAZEL_TEST_INPUTS
+#include "test/TestFixtureSupport.h"
+#endif
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -17,6 +20,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace ao::winui::test
 {
@@ -48,6 +52,43 @@ namespace ao::winui::test
       auto stream = std::ifstream{path, std::ios::binary};
       REQUIRE(stream.is_open());
       return std::string{std::istreambuf_iterator<char>{stream}, std::istreambuf_iterator<char>{}};
+    }
+
+    std::vector<std::filesystem::path> frontendSourcePaths()
+    {
+#ifdef AOBUS_BAZEL_TEST_INPUTS
+      auto stream = std::ifstream{ao::test::testInputPath(AOBUS_BAZEL_TEST_INPUTS), std::ios::binary};
+      REQUIRE(stream.is_open());
+      auto paths = std::vector<std::filesystem::path>{};
+      auto line = std::string{};
+
+      while (std::getline(stream, line))
+      {
+        if (!line.empty() && line.back() == '\r')
+        {
+          line.pop_back();
+        }
+
+        if (!line.empty())
+        {
+          paths.push_back(ao::test::testInputPath(line));
+        }
+      }
+
+      return paths;
+#else
+      auto paths = std::vector<std::filesystem::path>{};
+
+      for (auto const& entry : std::filesystem::recursive_directory_iterator{AOBUS_WINDOWS_WINUI_DIR})
+      {
+        if (entry.is_regular_file())
+        {
+          paths.push_back(entry.path());
+        }
+      }
+
+      return paths;
+#endif
     }
 
     /// The literal that follows every occurrence of @p call in @p source.
@@ -139,21 +180,16 @@ namespace ao::winui::test
         std::array<std::string_view, 4>{"resourceString(", "resourceHstring(", "resourceStringOr(", "formatResource("};
       auto references = ResourceReferences{};
 
-      for (auto const& entry : std::filesystem::recursive_directory_iterator{AOBUS_WINDOWS_WINUI_DIR})
+      for (auto const& path : frontendSourcePaths())
       {
-        if (!entry.is_regular_file())
-        {
-          continue;
-        }
-
-        auto const extension = entry.path().extension().string();
+        auto const extension = path.extension().string();
 
         if (extension != ".cpp" && extension != ".h" && extension != ".xaml" && extension != ".yaml")
         {
           continue;
         }
 
-        auto const source = readFile(entry.path());
+        auto const source = readFile(path);
 
         if (extension == ".cpp" || extension == ".h")
         {

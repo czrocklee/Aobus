@@ -1,0 +1,16 @@
+# Local state, outputs and tool caches hold no packages. Unlike REPO.bazel
+# ignore_directories patterns, these prefixes also stop //... from listing
+# their directories, which every later invocation would re-check. Tracked
+# files must never fall under an entry.
+.git
+.aobus
+.cache
+.direnv
+.mypy_cache
+.ruff_cache
+CMakeFiles
+build
+install
+logs
+out
+vcpkg_installed
