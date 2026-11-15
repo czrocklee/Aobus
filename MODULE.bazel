@@ -17,14 +17,16 @@ single_version_override(
     patches = ["//bazel:apple_support_llvm.patch"],
 )
 
-# Local coverage delta: rules_cc drops the private implementation dependencies'
-# virtual-to-original header mappings from the main compilation context, so
-# coverage cannot remap virtual includes of implementation-only dependencies.
-# Retire this override when upstream rules_cc propagates the mappings itself.
+# Local rules_cc deltas retain private coverage header mappings and make the
+# default MSVC exception flag selectable for the SDK-linked lint host. Retire
+# each patch when upstream provides the corresponding behavior.
 single_version_override(
     module_name = "rules_cc",
     patch_strip = 1,
-    patches = ["//bazel:rules_cc_coverage_private_headers.patch"],
+    patches = [
+        "//bazel:rules_cc_coverage_private_headers.patch",
+        "//bazel:rules_cc_msvc_exception_handling.patch",
+    ],
 )
 
 # Reuse Bazel's pinned, precompiled coverage payload without constructing an

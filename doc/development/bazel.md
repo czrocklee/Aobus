@@ -1592,8 +1592,8 @@ requirements contain `requires-darwin`, before applying the toolchain environmen
 this is not a host-OS condition. Its pinned
 feature admission accepts `aobus_warnings`, `treat_warnings_as_errors`,
 `external_include_paths`, `static_link_msvcrt`, `dynamic_link_msvcrt`,
-`default_compile_flags` and the disabled `default_cpp_std` for the actual report
-context; unsupported requested or
+`default_compile_flags`, `default_cpp_std` and `default_exception_handling`
+for the actual report context; unsupported requested or
 disabled features fail rather than receiving an approximate replay. Linux
 clang-tidy does not execute the compiler wrapper from its database, so the
 launcher projects the governed Nix wrapper of the selected target compiler,
@@ -1718,7 +1718,13 @@ The SDK importer drops the SDK metadata's own standard flag, including the MSVC
 dash-colon `-std:c++17` spelling, and projects the LLVM EH/RTTI/static-build
 ABI facts from the shared and MSVC policy literals; those overrides remain
 necessary for the uninstrumented static LLVM host, not a separate language
-policy.
+policy. The local [rules_cc patch](../../bazel/rules_cc_msvc_exception_handling.patch)
+keeps ordinary MSVC compile arguments unchanged and makes only the default
+`/EHsc` independently selectable. The Windows checker disables
+`default_exception_handling` while retaining the SDK's explicit `/EHs-c-`;
+this avoids D9025 overrides without disabling the other default compile flags
+or changing the product's exception policy. Retire the patch when upstream
+provides that selection directly.
 Unix builds the existing plugin against its externally supplied host, excluding
 product sanitizer instrumentation from compilation and linking. Windows builds
 the linked `AobusClangTidy` host optimized with `/MT`, independently of product

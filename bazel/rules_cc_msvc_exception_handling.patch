@@ -1,0 +1,58 @@
+diff --git a/cc/private/toolchain/windows_cc_toolchain_config.bzl b/cc/private/toolchain/windows_cc_toolchain_config.bzl
+--- a/cc/private/toolchain/windows_cc_toolchain_config.bzl
++++ b/cc/private/toolchain/windows_cc_toolchain_config.bzl
+@@ -835,3 +835,11 @@
++        # Keep the ordinary flag order unchanged while allowing SDK-linked
++        # targets with a different exception ABI to omit only the default.
++        # Retire this delta when upstream exposes that selection directly.
++        default_exception_handling_feature = feature(
++            name = "default_exception_handling",
++            enabled = True,
++        )
++
+         default_compile_flags_feature = feature(
+             name = "default_compile_flags",
+             enabled = True,
+@@ -857,6 +865,34 @@
+                             flags = default_compile_flags_list + ctx.attr.default_compile_flags,
+                         ),
+                     ],
++                    with_features = [with_feature_set(features = ["default_exception_handling"])],
++                ),
++                flag_set(
++                    actions = [
++                        ACTION_NAMES.assemble,
++                        ACTION_NAMES.preprocess_assemble,
++                        ACTION_NAMES.linkstamp_compile,
++                        ACTION_NAMES.c_compile,
++                        ACTION_NAMES.cpp_compile,
++                        ACTION_NAMES.cpp_header_parsing,
++                        ACTION_NAMES.cpp_module_compile,
++                        ACTION_NAMES.cpp_module_codegen,
++                        ACTION_NAMES.cpp_module_deps_scanning,
++                        ACTION_NAMES.cpp20_module_compile,
++                        ACTION_NAMES.cpp20_module_codegen,
++                        ACTION_NAMES.lto_backend,
++                        ACTION_NAMES.clif_match,
++                    ],
++                    flag_groups = [
++                        flag_group(
++                            flags = [
++                                flag
++                                for flag in default_compile_flags_list
++                                if flag != "/EHsc"
++                            ] + ctx.attr.default_compile_flags,
++                        ),
++                    ],
++                    with_features = [with_feature_set(not_features = ["default_exception_handling"])],
+                 ),
+             ],
+         )
+@@ -1398,6 +1434,7 @@
+             copy_dynamic_libraries_to_binary_feature,
+             default_c_std_feature,
+             default_cpp_std_feature,
++            default_exception_handling_feature,
+             default_compile_flags_feature,
+             msvc_env_feature,
+             msvc_compile_env_feature,

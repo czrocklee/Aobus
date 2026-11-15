@@ -95,5 +95,6 @@ exports_files([
     "compiler_policy.bzl",
     "msvc_policy.bzl",
     "rules_cc_coverage_private_headers.patch",
+    "rules_cc_msvc_exception_handling.patch",
     "verify_windows_utf8_manifest.ps1",
 ])

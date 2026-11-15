@@ -45,9 +45,9 @@ def lint_checker(srcs, hdrs):
             # The compiling MSVC toolchain owns the language standard; the SDK
             # metadata's own std/EH/RTTI spellings never reach these copts.
             copts = LINT_SDK_COPTS + ["/I" + native.package_name()] + MSVC_LLVM_HOST_COPTS,
-            # The MSVC action implies its default flags. SDK copts follow those
-            # defaults and select the checker's exception/RTTI ABI explicitly.
-            features = ["static_link_msvcrt", "-dynamic_link_msvcrt"],
+            # Keep all ordinary defaults except /EHsc: the SDK's /EHs-c- must
+            # select the no-exception ABI without contradictory driver flags.
+            features = ["static_link_msvcrt", "-dynamic_link_msvcrt", "-default_exception_handling"],
             additional_linker_inputs = WINDOWS_UTF8_LINKER_INPUTS,
             linkopts = WINDOWS_UTF8_LINKOPTS,
             tags = ["manual", "aobus-lint-sdk-host"],
