@@ -640,9 +640,11 @@ namespace ao::tui::test
     CHECK(fixture.listAuthoringPtr->activeEditor()->editListId() == listId);
   }
 
-  TEST_CASE("EventController - a list save behind an in-flight order write keeps its draft for retry")
+  TEST_CASE("EventController - a list save behind an in-flight order write keeps its draft for retry", "[concurrency]")
   {
-    auto fixture = EventControllerFixture{};
+    // The preview debounce must not queue an unrelated callback while the two
+    // submissions wait below; its controlled sleeper is never fired.
+    auto fixture = EventControllerFixture{true};
     auto library = fixture.makeLibrary();
     auto controller = fixture.makeEvents(library);
     auto const firstId = library.tracks()[0].id;
@@ -650,14 +652,21 @@ namespace ao::tui::test
     openManualOrderList(fixture, library);
     auto const listId = library.currentListId();
 
-    // The order key leaves its write in flight; the editor then opens over
-    // the same List and submits a rename behind it.
+    REQUIRE(fixture.executor->queuedCount() == 0);
+    // Queue the order's initial callback before starting the save. Draining
+    // that callback admits the order write before the save can reach the lane.
     CHECK(controller.tryHandleEvent(ftxui::Event::Special("\x1b[1;3B")));
+    REQUIRE(fixture.executor->tryWaitUntilQueuedCount(1));
+    REQUIRE(fixture.executor->queuedCount() == 1);
     enterCommand(controller, "list edit");
     REQUIRE(fixture.listAuthoringPtr->activeEditor() != nullptr);
     CHECK(controller.tryHandleEvent(ftxui::Event::Character("x")));
     CHECK(controller.tryHandleEvent(ftxui::Event::CtrlS));
     REQUIRE(fixture.listAuthoringPtr->hasPendingSubmission());
+    // The save's initial callback must already be queued before any draining:
+    // FIFO then puts it before the order's publication can release the lane.
+    REQUIRE(fixture.executor->tryWaitUntilQueuedCount(2));
+    REQUIRE(fixture.executor->queuedCount() == 2);
 
     REQUIRE(fixture.executor->tryDrainUntil(
       [&] { return !fixture.listAuthoringPtr->hasPendingSubmission() && notificationCount(fixture) == 1; }));
