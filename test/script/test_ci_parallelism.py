@@ -89,7 +89,7 @@ class CoreStepWorkflowTest(unittest.TestCase):
             with self.subTest(job=job_name):
                 self.assertIn(f"        shell: {shell}\n", _step(_job(job_name), CORE_STEP_NAME))
 
-    def test_each_native_job_uses_one_fresh_complete_gate_with_the_verified_base_and_core_count(self):
+    def test_each_native_job_uses_one_cacheable_complete_gate_with_the_verified_base_and_core_count(self):
         for job_name, argument in CHECK_JOBS_ARGUMENT.items():
             with self.subTest(job=job_name):
                 job = _job(job_name)
@@ -97,7 +97,8 @@ class CoreStepWorkflowTest(unittest.TestCase):
                 gate = _step(job, "Check Bazel completion")
                 self.assertIn(argument, gate)
                 base = "$env:BASE_SHA" if job_name == "windows" else '"$BASE_SHA"'
-                self.assertIn(f"{CHECK_COMMANDS[job_name]} --fresh --commit {base}", gate)
+                self.assertIn(f"{CHECK_COMMANDS[job_name]} --commit {base}", gate)
+                self.assertNotIn("--fresh", gate)
                 self.assertIn("BASE_SHA: ${{ needs.changes.outputs.base }}", gate)
                 self.assertNotIn("\n        if:", gate)
                 if job_name == "linux":

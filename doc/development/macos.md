@@ -82,8 +82,9 @@ bazel test //test/lint:lint_test --nocache_test_results  # fresh result assertio
 ./ao deps verify
 ```
 
-`./ao check` includes live documentation validation and scoped hygiene, but
-does not run fixture-dependent AppKit GUI scenarios. macOS has no repository
+`./ao check` includes live documentation validation, complete native C++ lint,
+and scoped remaining hygiene, but does not run fixture-dependent AppKit GUI
+scenarios. macOS has no repository
 Python tooling suite. Ordinary `//:tests` excludes GUI smoke, backend service
 checks, and lint fixtures; completion owns the broader native selection.
 `./ao check --tsan` runs the full normal fastbuild completion first — which builds
@@ -346,7 +347,8 @@ from static analysis, clang-tidy, and sanitizers.
 
 Choose completion scope from
 [validation and review](test/validation-and-review.md). A macOS C++ change
-normally runs `./ao check`, which includes scoped hygiene and documentation. Changes to Release
+normally runs `./ao check`, which includes complete native C++ lint, scoped
+remaining hygiene, and documentation. Changes to Release
 configuration, dependencies, or optimizer-sensitive code also run
 `./ao check release`. Concurrency and memory work follows
 [concurrency and sanitizer validation](test/concurrency-and-sanitizer.md).

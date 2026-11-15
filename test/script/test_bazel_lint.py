@@ -5,6 +5,7 @@ import contextlib
 import io
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -89,18 +90,18 @@ QUERY_XML = """<?xml version="1.1" encoding="UTF-8" standalone="no"?>
       <label value="//app/macos-appkit:Foo.mm"/>
     </list>
   </rule>
-  <source-file name="lib/sample/Sample.cpp"/>
-  <source-file name="lib/sample/SampleLinux.cpp"/>
-  <source-file name="lib/sample/Grouped.cpp"/>
-  <source-file name="lib/sample/Aliased.cpp"/>
-  <source-file name="lib/other/Other.cpp"/>
-  <source-file name="lib/utility/AtomicFile.cpp"/>
-  <source-file name="lib/utility/AtomicFileWindows.cpp"/>
-  <source-file name="app/sample/Main.cpp"/>
-  <source-file name="app/foo/BarWindows.cpp"/>
-  <source-file name="lib/foo/BarPosix.cpp"/>
-  <source-file name="test/winui/ThemeTest.cpp"/>
-  <source-file name="app/macos-appkit/Foo.mm"/>
+  <source-file name="//lib/sample:Sample.cpp"/>
+  <source-file name="//lib/sample:SampleLinux.cpp"/>
+  <source-file name="//lib/sample:Grouped.cpp"/>
+  <source-file name="//lib/sample:Aliased.cpp"/>
+  <source-file name="//lib/other:Other.cpp"/>
+  <source-file name="//lib/utility:AtomicFile.cpp"/>
+  <source-file name="//lib/utility:AtomicFileWindows.cpp"/>
+  <source-file name="//app/sample:Main.cpp"/>
+  <source-file name="//app/foo:BarWindows.cpp"/>
+  <source-file name="//lib/foo:BarPosix.cpp"/>
+  <source-file name="//test:winui/ThemeTest.cpp"/>
+  <source-file name="//app/macos-appkit:Foo.mm"/>
 </query>
 """
 
@@ -144,6 +145,174 @@ SPAN = "include/ao/util/Span.h"
 INVENTORY = "app/include/ao/i18n/Inventory.def"
 _CONSUMER_CONFIG_PREFIX = "build:aobus_lint_consumers "
 _CONSUMER_PARAMETER_OPTION = "--aspects_parameters=aobus_lint_consumers="
+
+# The complete ao check graph: rules plus the source-file targets that make
+# authored checkout inputs distinguishable from generated ones.
+PROJECT_XML = """<?xml version="1.1" encoding="UTF-8" standalone="no"?>
+<query version="2">
+  <rule class="cc_library" name="//lib/sample:sample">
+    <list name="srcs">
+      <label value="//lib/sample:Sample.cpp"/>
+      <label value="//lib/sample:Sample.h"/>
+    </list>
+    <list name="hdrs">
+      <label value="//include/ao/sample:Sample.h"/>
+    </list>
+    <list name="textual_hdrs">
+      <label value="//lib/sample:Internal.h"/>
+    </list>
+  </rule>
+  <rule class="cc_library" name="//lib/sample:header_only">
+    <list name="hdrs">
+      <label value="//include/ao/sample:Only.h"/>
+    </list>
+  </rule>
+  <rule class="cc_library" name="//lib/generated:generated">
+    <list name="srcs">
+      <label value="//lib/generated:Generated.cpp"/>
+    </list>
+    <list name="hdrs">
+      <label value="//lib/generated:Generated.h"/>
+    </list>
+  </rule>
+  <rule class="cc_library" name="//test/lint:negative">
+    <list name="srcs">
+      <label value="//test/lint:HeaderReplay.cpp"/>
+    </list>
+  </rule>
+  <rule class="cc_test" name="//test:winui_test">
+    <list name="srcs">
+      <label value="//test:winui/ThemeTest.cpp"/>
+    </list>
+  </rule>
+  <source-file name="//lib/sample:Sample.cpp"/>
+  <source-file name="//lib/sample:Sample.h"/>
+  <source-file name="//include/ao/sample:Sample.h"/>
+  <source-file name="//lib/sample:Internal.h"/>
+  <source-file name="//include/ao/sample:Only.h"/>
+  <source-file name="//test/lint:HeaderReplay.cpp"/>
+  <source-file name="//test:winui/ThemeTest.cpp"/>
+  <generated-file name="//lib/generated:Generated.cpp"/>
+</query>
+"""
+
+# Complete-graph orchestration fixtures: every rule kind the project gate
+# builds, with authored files present for the scope's existence filter.
+PROJECT_BUILD_XML = """<?xml version="1.1" encoding="UTF-8" standalone="no"?>
+<query version="2">
+  <rule class="cc_library" name="//lib/alpha:alpha">
+    <list name="srcs"><label value="//lib/alpha:Alpha.cpp"/></list>
+    <list name="hdrs"><label value="//include/ao/alpha:Alpha.h"/></list>
+  </rule>
+  <rule class="cc_library" name="//lib/utility:utility">
+    <list name="srcs">
+      <label value="//lib/utility:AtomicFile.cpp"/>
+      <label value="//lib/utility:AtomicFileWindows.cpp"/>
+    </list>
+  </rule>
+  <rule class="cc_test" name="//test/zeta:zeta">
+    <list name="srcs"><label value="//test/zeta:Zeta.cpp"/></list>
+  </rule>
+  <source-file name="//lib/alpha:Alpha.cpp"/>
+  <source-file name="//include/ao/alpha:Alpha.h"/>
+  <source-file name="//lib/utility:AtomicFile.cpp"/>
+  <source-file name="//lib/utility:AtomicFileWindows.cpp"/>
+  <source-file name="//test/zeta:Zeta.cpp"/>
+</query>
+"""
+
+PROJECT_CONSUMER_XML = """<?xml version="1.1" encoding="UTF-8" standalone="no"?>
+<query version="2">
+  <rule class="cc_library" name="//include:util_headers">
+    <list name="hdrs"><label value="//include:ao/util/Span.h"/></list>
+  </rule>
+  <rule class="cc_library" name="//lib/util:util">
+    <list name="srcs"><label value="//lib/util:Clock.cpp"/></list>
+    <list name="deps"><label value="//include:util_headers"/></list>
+  </rule>
+  <rule class="cc_test" name="//test/unit:unit">
+    <list name="srcs"><label value="//test/unit:SpanTest.cpp"/></list>
+    <list name="deps"><label value="//lib/util:util"/></list>
+  </rule>
+  <source-file name="//include:ao/util/Span.h"/>
+  <source-file name="//lib/util:Clock.cpp"/>
+  <source-file name="//test/unit:SpanTest.cpp"/>
+</query>
+"""
+
+PROJECT_INCOMPATIBLE_XML = """<?xml version="1.1" encoding="UTF-8" standalone="no"?>
+<query version="2">
+  <rule class="cc_library" name="//tool/thing:thing">
+    <list name="srcs"><label value="//tool/thing:Thing.cpp"/></list>
+  </rule>
+  <source-file name="//tool/thing:Thing.cpp"/>
+</query>
+"""
+
+# A declaration another native platform owns: the inherited policy defers it
+# and the complete gate rejects the empty remainder instead of passing clean.
+PROJECT_FOREIGN_XML = """<?xml version="1.1" encoding="UTF-8" standalone="no"?>
+<query version="2">
+  <rule class="cc_library" name="//tool/thing:thing">
+    <list name="srcs"><label value="//tool/thing:DeviceMacos.cpp"/></list>
+  </rule>
+  <source-file name="//tool/thing:DeviceMacos.cpp"/>
+</query>
+"""
+
+PROJECT_DEAD_XML = """<?xml version="1.1" encoding="UTF-8" standalone="no"?>
+<query version="2">
+  <rule class="cc_library" name="//include:dead_headers">
+    <list name="hdrs"><label value="//include:Dead.h"/></list>
+  </rule>
+  <rule class="cc_library" name="//lib/alpha:alpha">
+    <list name="srcs"><label value="//lib/alpha:Alpha.cpp"/></list>
+  </rule>
+  <source-file name="//include:Dead.h"/>
+  <source-file name="//lib/alpha:Alpha.cpp"/>
+</query>
+"""
+
+PROJECT_DEFERRED_XML = """<?xml version="1.1" encoding="UTF-8" standalone="no"?>
+<query version="2">
+  <rule class="cc_library" name="//lib/sample:sample">
+    <list name="srcs"><label value="//lib/sample:Sample.cpp"/></list>
+    <list name="textual_hdrs"><label value="//lib/sample:Internal.h"/></list>
+  </rule>
+  <rule class="cc_library" name="//lib/utility:utility">
+    <list name="srcs">
+      <label value="//lib/utility:AtomicFile.cpp"/>
+      <label value="//lib/utility:PortableRing.cpp"/>
+    </list>
+  </rule>
+  <source-file name="//lib/sample:Sample.cpp"/>
+  <source-file name="//lib/sample:Internal.h"/>
+  <source-file name="//lib/utility:AtomicFile.cpp"/>
+  <source-file name="//lib/utility:PortableRing.cpp"/>
+</query>
+"""
+
+# A broad header glob declares every platform's headers on every host, so the
+# configured closure stays conservative: platform-owned headers defer under
+# the inherited policy while portable dead declarations still fail.
+PROJECT_PLATFORM_XML = """<?xml version="1.1" encoding="UTF-8" standalone="no"?>
+<query version="2">
+  <rule class="cc_library" name="//lib/audio:audio">
+    <list name="srcs">
+      <label value="//lib/audio:Audio.cpp"/>
+      <label value="//lib/audio:backend/CoreAudioBackend.h"/>
+    </list>
+  </rule>
+  <rule class="cc_library" name="//lib/sample:sample">
+    <list name="srcs"><label value="//lib/sample:Sample.cpp"/></list>
+    <list name="textual_hdrs"><label value="//lib/sample:PortableDead.h"/></list>
+  </rule>
+  <source-file name="//lib/audio:Audio.cpp"/>
+  <source-file name="//lib/audio:backend/CoreAudioBackend.h"/>
+  <source-file name="//lib/sample:Sample.cpp"/>
+  <source-file name="//lib/sample:PortableDead.h"/>
+</query>
+"""
 
 
 def bazel_action_of(command):
@@ -250,6 +419,92 @@ class TidyLintParserTest(unittest.TestCase):
         scope.assert_not_called()
 
 
+class TidyProjectStageTest(unittest.TestCase):
+    """run_lint_stages routes only the native C++ stage to the complete graph."""
+
+    def args(self, root: Path) -> argparse.Namespace:
+        return argparse.Namespace(
+            config="debug",
+            path=str(root / "tree"),
+            vcpkg_prefix=None,
+            jobs=2,
+            remote_cache=None,
+            check=None,
+            output=None,
+            debug=False,
+        )
+
+    def test_project_lint_runs_once_on_an_empty_cpp_scope(self):
+        with tempfile.TemporaryDirectory(prefix="ao-tidy-project-") as temporary:
+            root = Path(temporary)
+            with (
+                patch.object(tidy_command, "PROJECT_ROOT", root),
+                patch.object(tidy_command.bazel_lint, "run_project", return_value=1) as project,
+                patch.object(tidy_command.bazel_lint, "run") as scoped,
+            ):
+                # The stage collapses any nonzero native gate to its own failure.
+                self.assertEqual(tidy_command.run_lint_stages(self.args(root), [], False, project_lint=True), 1)
+            project.assert_called_once()
+            scoped.assert_not_called()
+
+    def test_project_lint_replaces_the_cpp_stage_and_keeps_other_stages_scoped(self):
+        with tempfile.TemporaryDirectory(prefix="ao-tidy-project-") as temporary:
+            root = Path(temporary)
+            for name in ("script/module.py", "BUILD", "lib/utility/Base64.cpp"):
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("# fixture\n", encoding="utf-8")
+            files = ["script/module.py", "BUILD", "lib/utility/Base64.cpp"]
+            with (
+                patch.object(tidy_command, "PROJECT_ROOT", root),
+                patch.object(tidy_command.bazel_lint, "run_project", return_value=1) as project,
+                patch.object(tidy_command.bazel_lint, "run") as scoped,
+                patch.object(tidy_command.pythoncheck, "run_paths", return_value=0) as python,
+                patch.object(tidy_command.buildifier, "run", return_value=0) as buildifier_run,
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                self.assertEqual(tidy_command.run_lint_stages(self.args(root), files, False, project_lint=True), 1)
+            project.assert_called_once()
+            scoped.assert_not_called()
+            python.assert_called_once_with(["script/module.py"], python=None, sink=None)
+            buildifier_run.assert_called_once_with(["BUILD"], check=True, lint=True, sink=None)
+
+    def test_scoped_cpp_lint_stays_the_default(self):
+        with tempfile.TemporaryDirectory(prefix="ao-tidy-project-") as temporary:
+            root = Path(temporary)
+            source = root / "lib" / "utility" / "Base64.cpp"
+            source.parent.mkdir(parents=True)
+            source.write_text("// fixture\n", encoding="utf-8")
+            with (
+                patch.object(tidy_command, "PROJECT_ROOT", root),
+                patch.object(tidy_command.bazel_lint, "run", return_value=0) as scoped,
+                patch.object(tidy_command.bazel_lint, "run_project") as project,
+            ):
+                self.assertEqual(tidy_command.run_lint_stages(self.args(root), [str(source)], False), 0)
+                self.assertEqual(tidy_command.run_lint_stages(self.args(root), [], False), 0)
+            scoped.assert_called_once()
+            project.assert_not_called()
+
+    def test_project_lint_carries_optional_completion_flags_to_the_native_gate(self):
+        with tempfile.TemporaryDirectory(prefix="ao-tidy-project-") as temporary:
+            root = Path(temporary)
+            args = self.args(root)
+            args.clang = True
+            args.gtk = "off"
+            with (
+                patch.object(tidy_command, "PROJECT_ROOT", root),
+                patch.object(tidy_command.bazel_lint, "run_project", return_value=0) as project,
+            ):
+                self.assertEqual(tidy_command.run_lint_stages(args, [], False, project_lint=True), 0)
+            forwarded = project.call_args.args[0]
+            self.assertIs(forwarded.clang, True)
+            self.assertEqual(forwarded.gtk, "off")
+            # Absent optional fields stay absent: the standalone parser's
+            # namespace contract is unchanged.
+            self.assertNotIn("compiler", vars(forwarded))
+            self.assertNotIn("system_media", vars(forwarded))
+
+
 class QueryGraphTest(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix="ao-lint-graph-")
@@ -347,6 +602,132 @@ class QueryGraphTest(unittest.TestCase):
             with self.subTest(target=target), self.assertRaises(ValueError):
                 bazel_lint._validate_targets(self.graph, [target])
 
+    def test_query_words_use_literal_delimiters_without_json_escapes(self):
+        for label, expected in (
+            ("//lib:owner(1)", '"//lib:owner(1)"'),
+            ('//lib:na"me', "'//lib:na\"me'"),
+            ("//lib:can't", '"//lib:can\'t"'),
+            ("//lib:café", '"//lib:café"'),
+        ):
+            with self.subTest(label=label):
+                self.assertEqual(bazel_lint._query_word(label), expected)
+        with self.assertRaisesRegex(ValueError, "both quote characters"):
+            bazel_lint._query_word("//lib:both'\"quotes")
+
+    def test_trusted_target_labels_admit_documented_punctuation(self):
+        self.path.write_text(
+            """<query>
+  <rule class="cc_library" name="//lib/odd:odd#rule$1">
+    <list name="srcs"><label value="//lib/odd:Source=File.cpp"/></list>
+    <list name="hdrs"><label value="//lib/odd:Header@2x.h"/></list>
+  </rule>
+  <rule class="cc_library" name="//lib/odd:odd(rule)">
+    <list name="srcs"><label value="//lib/odd:Source (1).cpp"/></list>
+  </rule>
+  <source-file name="//lib/odd:Source=File.cpp"/>
+  <source-file name="@@//lib/odd:Header@2x.h"/>
+  <source-file name="//lib/odd:Source (1).cpp"/>
+  <source-file name="//lib/odd:na&quot;me.cpp"/>
+  <source-file name="@external//x:y.h"/>
+</query>""",
+            encoding="utf-8",
+        )
+        graph = bazel_lint.parse_query_xml(self.path)
+        owner = "//lib/odd:odd#rule$1"
+        self.assertIn(owner, graph.rules)
+        self.assertIn("//lib/odd:odd(rule)", graph.rules)
+        self.assertEqual(graph.source_owners("lib/odd/Source=File.cpp"), (owner,))
+        self.assertEqual(graph.declared_paths(owner), ("lib/odd/Source=File.cpp", "lib/odd/Header@2x.h"))
+        self.assertEqual(graph.source_owners("lib/odd/Source (1).cpp"), ("//lib/odd:odd(rule)",))
+        # Canonical @@ and bare spellings are one checkout file; external
+        # repository labels are not authored project inputs.
+        self.assertEqual(
+            graph.checkout_files,
+            frozenset(
+                {
+                    "lib/odd/Source=File.cpp",
+                    "lib/odd/Header@2x.h",
+                    "lib/odd/Source (1).cpp",
+                    'lib/odd/na"me.cpp',
+                }
+            ),
+        )
+
+    def test_structurally_invalid_target_labels_fail_closed(self):
+        for name in ("//lib/odd:..", "//lib/odd", "//lib/odd:a:b", "//lib/odd:./x.cpp"):
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                bazel_lint.parse_query_xml(self._xml(name))
+
+    def _xml(self, name: str) -> Path:
+        self.path.write_text(f'<query><rule class="cc_library" name="{name}"/></query>', encoding="utf-8")
+        return self.path
+
+    def test_checkout_source_files_follow_the_trusted_label_grammar(self):
+        self.assertIn("lib/sample/Sample.cpp", self.graph.checkout_files)
+        self.assertNotIn("lib/sample/Unknown.cpp", self.graph.checkout_files)
+        self.path.write_text(PROJECT_XML, encoding="utf-8")
+        graph = bazel_lint.parse_query_xml(self.path)
+        self.assertIn("test/winui/ThemeTest.cpp", graph.checkout_files)
+        self.assertNotIn("lib/generated/Generated.cpp", graph.checkout_files)
+
+
+class ProjectScopeTest(unittest.TestCase):
+    """Complete owner/path derivation from the actual project graph."""
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory(prefix="ao-lint-project-scope-")
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.path = self.root / "query.xml"
+        self.path.write_text(PROJECT_XML, encoding="utf-8")
+        self.graph = bazel_lint.parse_query_xml(self.path)
+
+    def authored(self, *names: str) -> None:
+        for name in names:
+            path = self.root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("// test input\n", encoding="utf-8")
+
+    def test_scope_gates_declared_checkout_paths_and_builds_every_declaring_owner(self):
+        with patch.object(bazel_lint, "PROJECT_ROOT", self.root):
+            self.authored(
+                "lib/sample/Sample.cpp",
+                "lib/sample/Sample.h",
+                "include/ao/sample/Sample.h",
+                "lib/sample/Internal.h",
+                "include/ao/sample/Only.h",
+                "test/lint/HeaderReplay.cpp",
+                "test/winui/ThemeTest.cpp",
+            )
+            owners, gated = bazel_lint._project_scope(self.graph)
+        self.assertEqual(owners, ("//lib/sample:header_only", "//lib/sample:sample", "//test:winui_test"))
+        self.assertEqual(
+            gated,
+            frozenset(
+                {
+                    "lib/sample/Sample.cpp",
+                    "lib/sample/Sample.h",
+                    "include/ao/sample/Sample.h",
+                    "lib/sample/Internal.h",
+                    "include/ao/sample/Only.h",
+                    "test/winui/ThemeTest.cpp",
+                }
+            ),
+        )
+        # Header-only owners join the build so their configured inventories
+        # carry the select authority; generated-only and canary rules neither
+        # join the build nor the set.
+        self.assertNotIn("//lib/generated:generated", owners)
+        self.assertNotIn("//test/lint:negative", owners)
+        self.assertNotIn("lib/generated/Generated.cpp", gated)
+        self.assertNotIn("test/lint/HeaderReplay.cpp", gated)
+
+    def test_graph_declarations_without_an_authored_file_never_gate(self):
+        with patch.object(bazel_lint, "PROJECT_ROOT", self.root):
+            owners, gated = bazel_lint._project_scope(self.graph)
+        self.assertEqual(owners, ())
+        self.assertEqual(gated, frozenset())
+
 
 class CqueryRowsTest(unittest.TestCase):
     def test_exact_rows_are_parsed_with_bazel_label_spellings(self):
@@ -442,7 +823,9 @@ class LintConfigurationTest(unittest.TestCase):
             self.assertEqual(json.loads(path.read_text(encoding="utf-8")), configuration)
 
 
-class RunOrchestrationTest(unittest.TestCase):
+class _OrchestrationHarness:
+    """The owned transport fakes shared by the scoped and project gates."""
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix="ao-bazel-lint-")
         self.addCleanup(self.temporary.cleanup)
@@ -523,12 +906,13 @@ class RunOrchestrationTest(unittest.TestCase):
             patcher.start()
             self.addCleanup(patcher.stop)
 
-    def fake_prepare(self, tree, config, *, prefix=None, lint_configuration=None):
+    def fake_prepare(self, tree, config, *, prefix=None, graph_options=None, lint_configuration=None):
         self.prepare_calls.append(
             {
                 "tree": tree,
                 "config": config,
                 "prefix": prefix,
+                "graph_options": graph_options,
                 "lint_configuration": lint_configuration,
             }
         )
@@ -617,6 +1001,13 @@ class RunOrchestrationTest(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             return bazel_lint.run(args)
 
+    def touch(self, *names: str) -> None:
+        """Create authored checkout files the complete graph scope must see."""
+        for name in names:
+            path = self.checkout / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("// test input\n", encoding="utf-8")
+
     def report(self, owner, source, *, header=None, outcome="clean", log="", includes=()):
         configuration = "bazel-out/k8-dbg/bin"
         main = header or source
@@ -647,6 +1038,8 @@ class RunOrchestrationTest(unittest.TestCase):
             owner, configuration, "config-id", tuple(reports), paths, (), self.root / "execroot"
         )
 
+
+class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
     def test_source_scope_writes_fixed_configuration_and_gates_the_current_report(self):
         owner = "@@//lib/sample:sample"
         self.inventories = (self.owner_inventory(owner, self.report(owner, "lib/sample/Sample.cpp")),)
@@ -696,7 +1089,7 @@ class RunOrchestrationTest(unittest.TestCase):
         self.assertIn('kind("rule", //...)', query)
         self.assertIn("--output=xml", query)
         cquery = next(command for command in self.commands if bazel_action_of(command) == "cquery")
-        self.assertEqual(bazel_expression_of(cquery), "config(set(//lib/sample:sample), target)")
+        self.assertEqual(bazel_expression_of(cquery), 'config(set("//lib/sample:sample"), target)')
         self.assertIn(
             '--starlark:expr=str(target.label) + "|" + str("IncompatiblePlatformProvider" in providers(target))',
             cquery,
@@ -770,6 +1163,23 @@ class RunOrchestrationTest(unittest.TestCase):
         self.assertNotIn("--build_event_publish_all_actions", self.execute_calls[0]["targets"])
         self.assertIn("--build_event_publish_all_actions", self.execute_calls[1]["targets"])
 
+    def test_scoped_lint_forwards_explicit_feature_selections_to_the_prepared_workspace(self):
+        owner = "@@//lib/sample:sample"
+        self.cquery_text = "@@//lib/sample:sample|False\n"
+        self.inventories = (self.owner_inventory(owner, self.report(owner, "lib/sample/Sample.cpp")),)
+        # A fixed Linux profile keeps the cross-host assertion deterministic.
+        linux = argparse.Namespace(name="linux")
+        with patch.object(bazel_lint.bazel_workflows.builddir, "platform_profile", return_value=linux):
+            status = self.run_quiet(
+                self.args(files=[str(self.checkout / "lib/sample/Sample.cpp")], clang=True, gtk="off")
+            )
+        self.assertEqual(status, 0)
+        # The scoped portal shares the same prepared analysis interface.
+        self.assertEqual(
+            self.prepare_calls[0]["graph_options"],
+            ("--//bazel:gtk_enabled=false", "--compiler=clang"),
+        )
+
     def test_target_only_selects_source_and_paired_header_reports(self):
         owner = "@@//lib/sample:sample"
         source = self.report(owner, "lib/sample/Sample.cpp")
@@ -792,7 +1202,7 @@ class RunOrchestrationTest(unittest.TestCase):
         self.inventories = (self.owner_inventory(owner, self.report(owner, "lib/sample/Grouped.cpp")),)
         self.assertEqual(self.run_quiet(self.args(owner_targets=["//lib/sample:sample"])), 0)
         query = next(command for command in self.commands if bazel_action_of(command) == "query")
-        self.assertEqual(bazel_expression_of(query), 'kind("rule", set(//lib/sample:sample))')
+        self.assertEqual(bazel_expression_of(query), 'kind("rule", set("//lib/sample:sample"))')
         receipt = json.loads((self.tree / "lint").glob("run-*/run.receipt.json").__next__().read_text(encoding="utf-8"))
         self.assertEqual(receipt["selected"], ["lib/sample/Grouped.cpp"])
 
@@ -847,7 +1257,7 @@ class RunOrchestrationTest(unittest.TestCase):
             0,
         )
         cquery = next(command for command in self.commands if bazel_action_of(command) == "cquery")
-        self.assertEqual(bazel_expression_of(cquery), "config(set(//lib/sample:sample //lib/other:other), target)")
+        self.assertEqual(bazel_expression_of(cquery), 'config(set("//lib/sample:sample" "//lib/other:other"), target)')
 
     def test_actual_incompatible_owners_are_filtered_before_the_report_build(self):
         sample = "@@//lib/sample:sample"
@@ -861,7 +1271,7 @@ class RunOrchestrationTest(unittest.TestCase):
         self.assertEqual(self.read_calls[0][1], [sample])
         cquery = next(command for command in self.commands if bazel_action_of(command) == "cquery")
         self.assertEqual(
-            bazel_expression_of(cquery), "config(set(//lib/sample:sample //app/macos-appkit:appkit), target)"
+            bazel_expression_of(cquery), 'config(set("//lib/sample:sample" "//app/macos-appkit:appkit"), target)'
         )
         receipt = json.loads(
             (self.tree / "lint").glob("run-*/cquery.receipt.json").__next__().read_text(encoding="utf-8")
@@ -1041,7 +1451,11 @@ class RunOrchestrationTest(unittest.TestCase):
 
         cqueries = [bazel_expression_of(command) for command in self.commands if bazel_action_of(command) == "cquery"]
         self.assertEqual(
-            cqueries, ["config(set(//app/i18n:i18n), target)", "config(set(//tool/catalog:compiler), target)"]
+            cqueries,
+            [
+                'config(set("//app/i18n:i18n"), target)',
+                'config(set("//tool/catalog:compiler"), target)',
+            ],
         )
         self.assertEqual(
             [[target for target in call["targets"] if target.startswith("//")] for call in self.execute_calls],
@@ -1078,7 +1492,7 @@ class RunOrchestrationTest(unittest.TestCase):
         self.assertEqual(self.run_quiet(self.args(files=[str(self.checkout / SPAN)])), 1)
         self.assertEqual(
             [bazel_expression_of(command) for command in self.commands if bazel_action_of(command) == "cquery"],
-            ["config(set(//lib/util:util), target)", "config(set(//test/unit:unit), target)"],
+            ['config(set("//lib/util:util"), target)', 'config(set("//test/unit:unit"), target)'],
         )
         self.assertEqual(self.read_calls[-1][1], [owner])
         self.assertEqual(self.execute_calls[-1]["consumers"], {owner: [[source.identity.source, SPAN]]})
@@ -1223,6 +1637,406 @@ class RunOrchestrationTest(unittest.TestCase):
         self.assertEqual(self.run_quiet(args), 0)
         self.assertFalse(self.prepare_calls)
         self.assertFalse(self.commands)
+
+
+class AuthoredManifestTest(unittest.TestCase):
+    """The complete gate's independent Git manifest collector contract."""
+
+    def setUp(self):
+        # The collector honors the native VM mirror binding in production; a
+        # repository-fixture test must not inherit that ambient selection.
+        for key in ("AOBUS_GIT_DIR", "AOBUS_GIT_WORK_TREE"):
+            value = os.environ.pop(key, None)
+            if value is not None:
+                self.addCleanup(os.environ.__setitem__, key, value)
+
+    def test_manifest_keeps_nul_separated_filenames_whole(self):
+        # Exercise the documented Git wire format without requiring filenames
+        # the host filesystem cannot represent (notably newlines on Windows).
+        result = subprocess.CompletedProcess([], 0, stdout=b"Plain.cpp\0We ird.cpp\0New\nline.cpp\0", stderr=b"")
+        with patch.object(bazel_lint.subprocess, "run", return_value=result):
+            manifest = bazel_lint._authored_manifest()
+        self.assertEqual(manifest, ["Plain.cpp", "We ird.cpp", "New\nline.cpp"])
+
+    def test_manifest_failure_fails_closed(self):
+        with tempfile.TemporaryDirectory(prefix="ao-authored-manifest-") as temporary:
+            # A directory without a repository is a failed inventory, never an
+            # empty one that would silently pass the coverage audit.
+            with patch.object(bazel_lint, "PROJECT_ROOT", Path(temporary)):
+                with self.assertRaises(ValueError):
+                    bazel_lint._authored_manifest()
+
+
+class ProjectLintTest(_OrchestrationHarness, unittest.TestCase):
+    """The complete project graph gate ao check runs instead of a scoped stage."""
+
+    def setUp(self):
+        super().setUp()
+        # The complete gate audits the authored inventory independently, so
+        # each test's fixture declares exactly the files it touches; the real
+        # Git manifest is covered by its own collector contract test.
+        for path in sorted(self.checkout.rglob("*"), reverse=True):
+            if path.is_file():
+                path.unlink()
+        manifest = patch.object(
+            bazel_lint,
+            "_authored_manifest",
+            side_effect=lambda: [
+                path.relative_to(self.checkout).as_posix()
+                for path in sorted(self.checkout.rglob("*"))
+                if path.is_file()
+            ],
+        )
+        manifest.start()
+        self.addCleanup(manifest.stop)
+
+    def run_project(self, args):
+        with contextlib.redirect_stdout(io.StringIO()) as out, contextlib.redirect_stderr(io.StringIO()) as err:
+            status = bazel_lint.run_project(args)
+        return status, out.getvalue(), err.getvalue()
+
+    def test_project_lint_gates_the_whole_graph_with_every_compatible_owner_once(self):
+        self.query_xml = PROJECT_BUILD_XML
+        self.touch(
+            "lib/alpha/Alpha.cpp",
+            "include/ao/alpha/Alpha.h",
+            "lib/utility/AtomicFile.cpp",
+            "lib/utility/AtomicFileWindows.cpp",
+            "test/zeta/Zeta.cpp",
+        )
+        alpha = "@@//lib/alpha:alpha"
+        utility = "@@//lib/utility:utility"
+        zeta = "@@//test/zeta:zeta"
+        self.cquery_text = f"{alpha}|False\n{utility}|False\n{zeta}|False\n"
+        self.inventories = (
+            self.owner_inventory(
+                alpha,
+                self.report(alpha, "lib/alpha/Alpha.cpp"),
+                self.report(alpha, "lib/alpha/Alpha.cpp", header="include/ao/alpha/Alpha.h"),
+            ),
+            self.owner_inventory(utility, self.report(utility, "lib/utility/AtomicFile.cpp")),
+            self.owner_inventory(
+                zeta,
+                self.report(
+                    zeta,
+                    "test/zeta/Zeta.cpp",
+                    outcome="warning",
+                    log="test/zeta/Zeta.cpp:1:1: warning: project [aobus-example]\n",
+                ),
+            ),
+        )
+        # A scoped file selection cannot narrow the complete graph gate.
+        # This fixture represents a Linux configuration on every test host.
+        with patch.object(
+            bazel_lint.tidyengine.builddir, "platform_profile", return_value=argparse.Namespace(name="linux")
+        ):
+            status, _out, err = self.run_project(self.args(files=[str(self.checkout / "lib/alpha/Alpha.cpp")]))
+        self.assertEqual(status, 1)
+        # The select-omitted source defers only through the inherited
+        # platform ownership contract.
+        self.assertIn("Deferred files that are incompatible with this platform:", err)
+        self.assertIn("  lib/utility/AtomicFileWindows.cpp", err)
+
+        query = next(command for command in self.commands if bazel_action_of(command) == "query")
+        self.assertEqual(bazel_expression_of(query), 'kind("rule|source file", //...:*)')
+        cquery = next(command for command in self.commands if bazel_action_of(command) == "cquery")
+        self.assertEqual(
+            bazel_expression_of(cquery),
+            'config(set("//lib/alpha:alpha" "//lib/utility:utility" "//test/zeta:zeta"), target)',
+        )
+        self.assertEqual(len(self.execute_calls), 1)
+        self.assertEqual(self.read_calls[0][1], [alpha, utility, zeta])
+        receipt = json.loads((self.tree / "lint").glob("run-*/run.receipt.json").__next__().read_text(encoding="utf-8"))
+        self.assertEqual(receipt["scope"], "project")
+        self.assertEqual(receipt["owners"], ["//lib/alpha:alpha", "//lib/utility:utility", "//test/zeta:zeta"])
+        self.assertEqual(
+            receipt["selected"],
+            ["include/ao/alpha/Alpha.h", "lib/alpha/Alpha.cpp", "lib/utility/AtomicFile.cpp", "test/zeta/Zeta.cpp"],
+        )
+        self.assertEqual(receipt["deferred"], ["lib/utility/AtomicFileWindows.cpp"])
+        self.assertEqual(receipt["consumers"], {})
+        # The readable summary keeps the complete gate's scale explainable.
+        self.assertIn(
+            "Complete native C++ lint graph: 3 compatible owner(s), 4 selected path(s), "
+            "0 consumer-bound header(s)/fragment(s), 1 deferred path(s)",
+            err,
+        )
+
+    def test_project_lint_binds_header_declarations_through_one_consumer_pass(self):
+        self.query_xml = PROJECT_CONSUMER_XML
+        self.touch(SPAN, "lib/util/Clock.cpp", "test/unit/SpanTest.cpp")
+        headers = "@@//include:util_headers"
+        util = "@@//lib/util:util"
+        unit = "@@//test/unit:unit"
+        self.cquery_text = f"{headers}|False\n{util}|False\n{unit}|False\n"
+        source = self.report(util, "lib/util/Clock.cpp", includes=(SPAN,))
+        test_source = self.report(unit, "test/unit/SpanTest.cpp", includes=(SPAN,))
+        header = self.report(
+            util,
+            "lib/util/Clock.cpp",
+            header=SPAN,
+            outcome="warning",
+            log=f"{SPAN}:1:1: warning: project header [aobus-example]\n",
+        )
+        self.pass_inventories = [
+            (
+                self.owner_inventory(headers, sources=(SPAN,)),
+                self.owner_inventory(util, source),
+                self.owner_inventory(unit, test_source),
+            ),
+            (
+                self.owner_inventory(headers, sources=(SPAN,)),
+                self.owner_inventory(util, source, header),
+                self.owner_inventory(unit, test_source),
+            ),
+        ]
+        status, _out, _err = self.run_project(self.args())
+        self.assertEqual(status, 1)
+        self.assertEqual(len(self.execute_calls), 2)
+        self.assertEqual(
+            [target for target in self.execute_calls[0]["targets"] if target.startswith("//")],
+            ["//include:util_headers", "//lib/util:util", "//test/unit:unit"],
+        )
+        # One consumer pass over the same owners keeps one inventory provenance.
+        self.assertEqual(
+            [target for target in self.execute_calls[1]["targets"] if target.startswith("//")],
+            ["//include:util_headers", "//lib/util:util", "//test/unit:unit"],
+        )
+        parameters = canonical_consumer_parameters({util: [["lib/util/Clock.cpp", SPAN]]})
+        self.assertEqual(self.read_consumers, ["{}", parameters])
+        self.assertEqual(self.read_calls[1][1], [headers, util, unit])
+        receipt = json.loads((self.tree / "lint").glob("run-*/run.receipt.json").__next__().read_text(encoding="utf-8"))
+        self.assertEqual(receipt["consumers"], {SPAN: {"owner": util, "source": "lib/util/Clock.cpp"}})
+        self.assertEqual(Path(receipt["bep"]).name, "consumers.bep.json")
+
+    def test_project_lint_rejects_a_complete_gate_without_any_compatible_inputs(self):
+        self.query_xml = PROJECT_FOREIGN_XML
+        self.touch("tool/thing/DeviceMacos.cpp")
+        self.cquery_text = "@@//tool/thing:thing|True\n"
+        # A fixed Linux profile keeps the inherited platform policy deterministic.
+        linux = argparse.Namespace(name="linux")
+        with patch.object(bazel_lint.tidyengine.builddir, "platform_profile", return_value=linux):
+            status, _out, err = self.run_project(self.args())
+        self.assertEqual(status, 2)
+        self.assertFalse(self.execute_calls)
+        # Every input is platform-owned elsewhere, so nothing remains to gate.
+        self.assertIn("complete project lint has no compatible native C++ inputs", err)
+        self.assertIn("Deferred files that are incompatible with this platform:", err)
+        self.assertIn("  tool/thing/DeviceMacos.cpp", err)
+        receipt = json.loads((self.tree / "lint").glob("run-*/run.receipt.json").__next__().read_text(encoding="utf-8"))
+        self.assertEqual(receipt["deferred"], ["tool/thing/DeviceMacos.cpp"])
+        self.assertEqual(receipt["selected"], [])
+
+    def test_project_lint_fails_declarations_no_compatible_owner_reports(self):
+        self.query_xml = PROJECT_INCOMPATIBLE_XML
+        self.touch("tool/thing/Thing.cpp")
+        self.cquery_text = "@@//tool/thing:thing|True\n"
+        status, _out, err = self.run_project(self.args())
+        self.assertEqual(status, 2)
+        self.assertFalse(self.execute_calls)
+        # Without platform ownership, a foreign owner's portable declaration is
+        # an unreported source, never a silent deferral.
+        self.assertIn("Uncovered lint source: tool/thing/Thing.cpp", err)
+        receipt = json.loads((self.tree / "lint").glob("run-*/run.receipt.json").__next__().read_text(encoding="utf-8"))
+        self.assertEqual(receipt["deferred"], [])
+        self.assertEqual(receipt["selected"], ["tool/thing/Thing.cpp"])
+
+    def test_project_lint_fails_declarations_no_translation_unit_reaches(self):
+        self.query_xml = PROJECT_DEAD_XML
+        self.touch("include/Dead.h", "lib/alpha/Alpha.cpp")
+        dead = "@@//include:dead_headers"
+        alpha = "@@//lib/alpha:alpha"
+        self.cquery_text = f"{dead}|False\n{alpha}|False\n"
+        self.inventories = (
+            self.owner_inventory(dead, sources=("include/Dead.h",)),
+            self.owner_inventory(alpha, self.report(alpha, "lib/alpha/Alpha.cpp")),
+        )
+        status, _out, err = self.run_project(self.args())
+        self.assertEqual(status, 2)
+        # The header-only declarer joins the build; its configured declaration
+        # without any including translation unit stays a failure.
+        self.assertIn("//include:dead_headers", self.execute_calls[0]["targets"])
+        self.assertIn("include/Dead.h: no analyzed translation unit includes it", err)
+        receipt = json.loads((self.tree / "lint").glob("run-*/run.receipt.json").__next__().read_text(encoding="utf-8"))
+        self.assertEqual(receipt["selected"], ["include/Dead.h", "lib/alpha/Alpha.cpp"])
+        self.assertEqual(receipt["deferred"], [])
+
+    def test_project_lint_fails_unreported_select_branches_and_dead_declarations(self):
+        self.query_xml = PROJECT_DEFERRED_XML
+        self.touch("lib/sample/Sample.cpp", "lib/sample/Internal.h", "lib/utility/PortableRing.cpp")
+        sample = "@@//lib/sample:sample"
+        utility = "@@//lib/utility:utility"
+        self.cquery_text = f"{sample}|False\n{utility}|False\n"
+        self.inventories = (
+            self.owner_inventory(
+                sample,
+                self.report(sample, "lib/sample/Sample.cpp"),
+                sources=("lib/sample/Sample.cpp", "lib/sample/Internal.h"),
+            ),
+            self.owner_inventory(utility, self.report(utility, "lib/utility/AtomicFile.cpp")),
+        )
+        status, _out, err = self.run_project(self.args())
+        self.assertEqual(status, 2)
+        # An inactive select branch has no report and no platform ownership: it
+        # fails instead of silently passing as covered elsewhere, and the
+        # configured textual header no translation unit includes still fails.
+        self.assertIn("Uncovered lint source: lib/utility/PortableRing.cpp", err)
+        self.assertIn("lib/sample/Internal.h: no analyzed translation unit includes it", err)
+        receipt = json.loads((self.tree / "lint").glob("run-*/run.receipt.json").__next__().read_text(encoding="utf-8"))
+        self.assertEqual(receipt["deferred"], [])
+
+    def test_project_lint_defers_configured_platform_headers_but_fails_portable_declarations(self):
+        self.query_xml = PROJECT_PLATFORM_XML
+        self.touch(
+            "lib/audio/Audio.cpp",
+            "lib/audio/backend/CoreAudioBackend.h",
+            "lib/sample/Sample.cpp",
+            "lib/sample/PortableDead.h",
+        )
+        audio = "@@//lib/audio:audio"
+        sample = "@@//lib/sample:sample"
+        self.cquery_text = f"{audio}|False\n{sample}|False\n"
+        self.inventories = (
+            self.owner_inventory(
+                audio,
+                self.report(audio, "lib/audio/Audio.cpp"),
+                sources=("lib/audio/Audio.cpp", "lib/audio/backend/CoreAudioBackend.h"),
+            ),
+            self.owner_inventory(
+                sample,
+                self.report(sample, "lib/sample/Sample.cpp"),
+                sources=("lib/sample/Sample.cpp", "lib/sample/PortableDead.h"),
+            ),
+        )
+        # A fixed Linux profile keeps the inherited platform policy deterministic.
+        linux = argparse.Namespace(name="linux")
+        with patch.object(bazel_lint.tidyengine.builddir, "platform_profile", return_value=linux):
+            status, _out, err = self.run_project(self.args())
+        self.assertEqual(status, 2)
+        # The broad declared closure is conservative: a configured but
+        # unincluded platform-owned header defers under the inherited policy,
+        # while a portable configured declaration with no consumer fails.
+        self.assertIn("Deferred files that are incompatible with this platform:", err)
+        self.assertIn("  lib/audio/backend/CoreAudioBackend.h", err)
+        self.assertIn("lib/sample/PortableDead.h: no analyzed translation unit includes it", err)
+        receipt = json.loads((self.tree / "lint").glob("run-*/run.receipt.json").__next__().read_text(encoding="utf-8"))
+        self.assertEqual(receipt["deferred"], ["lib/audio/backend/CoreAudioBackend.h"])
+        self.assertEqual(
+            receipt["selected"],
+            ["lib/audio/Audio.cpp", "lib/sample/PortableDead.h", "lib/sample/Sample.cpp"],
+        )
+
+    def test_project_lint_fails_stale_suppressions_over_the_complete_selection(self):
+        self.query_xml = PROJECT_BUILD_XML
+        self.touch(
+            "lib/alpha/Alpha.cpp",
+            "include/ao/alpha/Alpha.h",
+            "lib/utility/AtomicFile.cpp",
+            "lib/utility/AtomicFileWindows.cpp",
+        )
+        self.touch("test/zeta/Zeta.cpp")
+        (self.checkout / "test/zeta/Zeta.cpp").write_text("// NOLINT(readability-magic-numbers)\n", encoding="utf-8")
+        status, _out, err = self.run_project(self.args())
+        self.assertEqual(status, 1)
+        self.assertIn("stale NOLINT suppressions", err)
+        self.assertIn("test/zeta/Zeta.cpp:1: readability-magic-numbers", err)
+        self.assertFalse(self.execute_calls)
+        self.assertFalse(any(bazel_action_of(command) == "cquery" for command in self.commands))
+
+    def test_project_lint_forwards_explicit_feature_selections_to_the_prepared_workspace(self):
+        self.query_xml = PROJECT_BUILD_XML
+        self.touch("lib/alpha/Alpha.cpp", "include/ao/alpha/Alpha.h")
+        alpha = "@@//lib/alpha:alpha"
+        self.cquery_text = alpha + "|False\n"
+        self.inventories = (
+            self.owner_inventory(
+                alpha,
+                self.report(alpha, "lib/alpha/Alpha.cpp"),
+                self.report(alpha, "lib/alpha/Alpha.cpp", header="include/ao/alpha/Alpha.h"),
+            ),
+        )
+        # A fixed Linux profile keeps the cross-host assertion deterministic.
+        linux = argparse.Namespace(name="linux")
+        with patch.object(bazel_lint.bazel_workflows.builddir, "platform_profile", return_value=linux):
+            status, _out, _err = self.run_project(self.args(clang=True, gtk="off", system_media="on"))
+        self.assertEqual(status, 0)
+        self.assertEqual(
+            self.prepare_calls[0]["graph_options"],
+            ("--//bazel:gtk_enabled=false", "--//bazel:system_media_enabled=true", "--compiler=clang"),
+        )
+
+    def test_project_lint_quotes_discovered_owner_labels_in_queries(self):
+        self.query_xml = (
+            '<query><rule class="cc_library" name="//lib/odd:odd@rule">'
+            '<list name="srcs"><label value="//lib/odd:Source=File.cpp"/></list></rule>'
+            '<source-file name="//lib/odd:Source=File.cpp"/></query>'
+        )
+        self.touch("lib/odd/Source=File.cpp")
+        odd = "@@//lib/odd:odd@rule"
+        self.cquery_text = odd + "|False\n"
+        self.inventories = (self.owner_inventory(odd, self.report(odd, "lib/odd/Source=File.cpp")),)
+        status, _out, _err = self.run_project(self.args())
+        self.assertEqual(status, 0)
+        # A punctuation-bearing discovered label joins the query expression as
+        # one quoted word instead of being rejected or injected.
+        cquery = next(command for command in self.commands if bazel_action_of(command) == "cquery")
+        self.assertEqual(bazel_expression_of(cquery), 'config(set("//lib/odd:odd@rule"), target)')
+        self.assertIn("//lib/odd:odd@rule", self.execute_calls[0]["targets"])
+
+    def test_project_lint_fails_an_authored_source_no_rule_declares(self):
+        self.query_xml = PROJECT_BUILD_XML
+        self.touch(
+            "lib/alpha/Alpha.cpp",
+            "include/ao/alpha/Alpha.h",
+            "lib/utility/AtomicFile.cpp",
+            "lib/utility/AtomicFileWindows.cpp",
+            "test/zeta/Zeta.cpp",
+            "lib/orphan/Mystery.cpp",
+        )
+        status, _out, err = self.run_project(self.args())
+        # The independent authored inventory catches a physical file no Bazel
+        # rule declares, before any expensive native work.
+        self.assertEqual(status, 2)
+        self.assertIn("authored C++ sources no Bazel lint owner declares", err)
+        self.assertIn("  lib/orphan/Mystery.cpp", err)
+        self.assertFalse(any(bazel_action_of(command) == "cquery" for command in self.commands))
+        self.assertFalse(self.execute_calls)
+
+    def test_project_lint_fails_authored_sources_outside_every_listed_root(self):
+        self.query_xml = PROJECT_BUILD_XML
+        self.touch(
+            "lib/alpha/Alpha.cpp",
+            "include/ao/alpha/Alpha.h",
+            "lib/utility/AtomicFile.cpp",
+            "lib/utility/AtomicFileWindows.cpp",
+            "test/zeta/Zeta.cpp",
+            "RootNew.cpp",
+            "newcomponent/Widget.cpp",
+        )
+        status, _out, err = self.run_project(self.args())
+        # The full manifest is not limited to any folder list: an undeclared
+        # root file or a brand-new component fails the complete gate too.
+        self.assertEqual(status, 2)
+        self.assertIn("authored C++ sources no Bazel lint owner declares", err)
+        self.assertIn("  RootNew.cpp", err)
+        self.assertIn("  newcomponent/Widget.cpp", err)
+        self.assertFalse(self.execute_calls)
+
+    def test_project_lint_fails_closed_when_authored_sources_have_no_lint_owner(self):
+        self.query_xml = (
+            '<query><rule class="filegroup" name="//lib:group">'
+            '<list name="srcs"><label value="//lib:Grouped.cpp"/></list></rule>'
+            '<source-file name="//lib:Grouped.cpp"/></query>'
+        )
+        self.touch("lib/Grouped.cpp")
+        status, _out, err = self.run_project(self.args())
+        # A filegroup is not a lint owner; the authored audit fails closed
+        # before the empty-graph check can read as a clean pass.
+        self.assertEqual(status, 2)
+        self.assertIn("authored C++ sources no Bazel lint owner declares", err)
+        self.assertIn("  lib/Grouped.cpp", err)
+        self.assertFalse(any(bazel_action_of(command) == "cquery" for command in self.commands))
+        self.assertFalse(self.execute_calls)
 
 
 class AnalyzerOrchestrationTest(unittest.TestCase):

@@ -52,7 +52,8 @@ bazel test //:tests
 See [build and setup](doc/development/build.md) for build trees and tooling, or the native [macOS](doc/development/macos.md) and [Windows](doc/development/windows.md) guides for prerequisites.
 Native macOS and Windows require explicit SDK provisioning before Bazel commands.
 Use `ao.bat` for project-specific commands on Windows. `ao check` is the complete
-local and CI validation gate, including scoped hygiene. The [native AppKit desktop](doc/development/macos.md#native-desktop-development-slice)
+local and CI validation gate: complete native C++ lint plus scoped remaining hygiene
+([completion gate](doc/development/bazel.md#completion-gate)). The [native AppKit desktop](doc/development/macos.md#native-desktop-development-slice)
 is available as `//app/macos-appkit:aobus-appkit` and remains under development.
 
 For testing, start with the [testing guide](doc/development/test.md); [validation and review](doc/development/test/validation-and-review.md) selects the required checks for a change.

@@ -58,15 +58,21 @@ def lint_checker(srcs, hdrs):
         native.filegroup(name = "plugin")
     else:
         output = "libAobusLintPlugin.dylib" if LINT_SDK_HOST == "macos" else "libAobusLintPlugin.so"
+        compatibility_headers = ["@aobus_lint_sdk//:GccLlvmNonnullCompatibility.h"] if LINT_SDK_HOST == "linux" else []
+        compatibility_copts = [
+            "-include",
+            "$(execpath %s)" % compatibility_headers[0],
+        ] if compatibility_headers else []
         cc_binary(
             name = output,
-            srcs = srcs + hdrs,
+            srcs = srcs + hdrs + compatibility_headers,
             deps = ["@aobus_lint_sdk//:sdk"],
             # The compiling Unix toolchain owns the language standard; the SDK
             # host keeps its own unsanitized LLVM ABI for compile and link.
-            copts = LINT_SDK_COPTS + ["-iquote", native.package_name()] + UNIX_LLVM_HOST_COPTS,
+            # The forced include scopes GCC 16 / LLVM 22's nonnull workaround
+            # to the SDK definitions, never the checker implementation.
+            copts = LINT_SDK_COPTS + ["-iquote", native.package_name()] + UNIX_LLVM_HOST_COPTS + compatibility_copts,
             linkopts = UNIX_LLVM_HOST_COPTS,
-            features = ["aobus_llvm_host"] if LINT_SDK_HOST == "linux" else [],
             linkshared = True,
             linkstatic = True,
             tags = ["manual", "aobus-lint-sdk-host"],

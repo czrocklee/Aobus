@@ -5,7 +5,8 @@ and most clang-tidy findings have no safe auto-fix. The gate reports; fixes are 
 explicitly (./ao format for formatting, manual edits for lint findings).
 
 Stop on formatting failure before collecting diagnostics whose locations would
-be invalidated by formatting. Every stage uses the same resolved source scope.
+be invalidated by formatting. Standalone stages share one resolved source scope;
+complete checks additionally request the full native C++ lint graph.
 """
 
 import argparse
@@ -118,8 +119,8 @@ def _check_workflows(files: list[str]) -> int:
         raise die(f"cannot execute pinned actionlint: {error}") from error
 
 
-def _run_native(args: argparse.Namespace) -> int:
-    """Select ready native tools and share one source scope across every stage."""
+def _run_native(args: argparse.Namespace, *, project_lint: bool = False) -> int:
+    """Select native tools for scoped hygiene and optional complete C++ lint."""
     from ..core import builddir, pythonenv, windows_llvm_sdk
     from . import tidy
 
@@ -140,9 +141,11 @@ def _run_native(args: argparse.Namespace) -> int:
             raise bazel_native.BazelWorkspaceError(f"Aobus native Python tooling bootstrap failed: {exc}") from exc
 
     def lint(files: list[str], explicit: bool) -> int:
-        return tidy.run_lint_stages(args, files, explicit, python=python)
+        return tidy.run_lint_stages(args, files, explicit, python=python, project_lint=project_lint)
 
-    return run_command(args, clang_format=clang_format, python=python, lint=("bazel lint", lint))
+    return run_command(
+        args, clang_format=clang_format, python=python, lint=("bazel lint", lint), project_lint=project_lint
+    )
 
 
 def run_command(
@@ -151,15 +154,19 @@ def run_command(
     clang_format: str | None = None,
     python: Path | None = None,
     lint: tuple[str, LintStage] | None = None,
+    project_lint: bool = False,
 ) -> int:
-    """Run the gate; native setup supplies the verified tools and lint callback."""
+    """Check scoped sources; completion also gates the full native C++ graph."""
     if lint is None:
         try:
-            return _run_native(args)
+            return _run_native(args, project_lint=project_lint)
         except (bazel_native.BazelWorkspaceError, OSError, ValueError) as error:
             raise die(str(error)) from error
     files = format_command.resolve_files(args)
     if not files:
+        if project_lint:
+            print("=== Complete native C++ lint graph ===")
+            return lint[1]([], False)
         print("No files to check.")
         return 0
 

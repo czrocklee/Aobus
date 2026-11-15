@@ -92,16 +92,26 @@ def classify(path: Path, explicit: bool) -> str:
 
 
 def classify_existing(files: list[str], explicit: bool) -> dict[str, list[Path]]:
+    root = absolute_path(PROJECT_ROOT)
     buckets: dict[str, list[Path]] = {"STRICT": [], "RELAXED": []}
     seen: set[Path] = set()
+    relatives: dict[str, Path] = {}
+    outside: list[Path] = []
     for name in files:
         path = absolute_path(PROJECT_ROOT / name)
         if not path.is_file() or path in seen:
             continue
         seen.add(path)
-        mode = classify(path, explicit)
-        if mode != "IGNORE":
-            buckets[mode].append(path)
+        try:
+            relative = path.relative_to(root).as_posix()
+        except ValueError:
+            outside.append(path)
+            continue
+        relatives[relative] = path
+    for mode, names in tidyengine.mode_buckets(relatives, explicit=explicit).items():
+        buckets[mode].extend(relatives[name] for name in names)
+    # Files outside the checkout stay STRICT, matching the shared classifier.
+    buckets["STRICT"].extend(outside)
     return buckets
 
 
@@ -131,13 +141,30 @@ def _lint_args(args: argparse.Namespace, sources: list[str], explicit: bool) -> 
     selected = parser.parse_args([NAME])
     for key in ("config", "path", "vcpkg_prefix", "jobs", "remote_cache"):
         setattr(selected, key, getattr(args, key))
+    # ao check's completion flags travel with its namespace; the standalone
+    # parser keeps its own contract because these fields are optional there.
+    for key in ("compiler", "clang", "gtk", "system_media"):
+        if hasattr(args, key):
+            setattr(selected, key, getattr(args, key))
     selected.files = list(sources) if explicit else []
     selected._resolved_sources = sources
     return selected
 
 
-def run_lint_stages(args: argparse.Namespace, files: list[str], explicit: bool, *, python: Path | None = None) -> int:
-    """Gate the same frozen scope for standalone tidy and hygiene's lint stage."""
+def run_lint_stages(
+    args: argparse.Namespace,
+    files: list[str],
+    explicit: bool,
+    *,
+    python: Path | None = None,
+    project_lint: bool = False,
+) -> int:
+    """Gate the same frozen scope for standalone tidy and hygiene's lint stage.
+
+    ``project_lint`` swaps only the native C++ stage for ``ao check``'s
+    complete project graph gate; Python and Bazel checks stay scoped to
+    ``files``, and an empty C++ scope still lints the whole project once.
+    """
     cpp_files, python_files = split_existing(files)
     # A named C++ check must not silently run unrelated language checks.
     if getattr(args, "check", None):
@@ -151,7 +178,9 @@ def run_lint_stages(args: argparse.Namespace, files: list[str], explicit: bool, 
     else:
         destination = nullcontext(None)
     with destination as sink:
-        return _run_lint_stages(args, files, explicit, cpp_files, python_files, python=python, sink=sink)
+        return _run_lint_stages(
+            args, files, explicit, cpp_files, python_files, python=python, sink=sink, project_lint=project_lint
+        )
 
 
 def _run_lint_stages(
@@ -163,9 +192,10 @@ def _run_lint_stages(
     *,
     python: Path | None,
     sink: TextIO | None,
+    project_lint: bool = False,
 ) -> int:
     failed = False
-    if cpp_files:
+    if project_lint or cpp_files:
         lint_args = _lint_args(args, cpp_files, explicit)
         for name in ("check", "header_filter", "output", "debug", "clang_tidy_arg", "owner_targets"):
             if hasattr(args, name):
@@ -174,7 +204,10 @@ def _run_lint_stages(
         # append remaining language diagnostics after it finishes.
         if sink is not None:
             sink.flush()
-        failed = bazel_lint.run(lint_args) != 0 or failed
+        # The complete graph gate replaces the scoped native stage; the diff
+        # scope still feeds the Python and Bazel stages below.
+        native_lint = bazel_lint.run_project if project_lint else bazel_lint.run
+        failed = native_lint(lint_args) != 0 or failed
         if sink is not None:
             sink.seek(0, 2)
     if python_files:

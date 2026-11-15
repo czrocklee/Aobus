@@ -573,7 +573,7 @@ namespace
 
         for (auto const& control : popupControls)
         {
-          if (std::ranges::find(found, control) == found.end())
+          if (!std::ranges::contains(found, control))
           {
             found.push_back(control);
           }

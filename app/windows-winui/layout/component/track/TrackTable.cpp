@@ -37,6 +37,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <ranges>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -339,9 +340,9 @@ namespace ao::winui::layout
           auto restoreSuppression =
             gsl_lite::finally([this, previousSuppression] { _suppressSelectionPublication = previousSuppression; });
 
-          for (auto it = invalidSelectedIndices.rbegin(); it != invalidSelectedIndices.rend(); ++it)
+          for (auto const invalidSelectedIndex : invalidSelectedIndices | std::views::reverse)
           {
-            nativeSelection.RemoveAt(*it);
+            nativeSelection.RemoveAt(invalidSelectedIndex);
           }
 
           // A header-only gesture is not a request to clear the view's selection.

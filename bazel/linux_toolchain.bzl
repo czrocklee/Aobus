@@ -7,7 +7,7 @@ load("@rules_cc//cc/toolchains:tool.bzl", "cc_tool")
 load("@rules_cc//cc/toolchains:tool_map.bzl", "cc_tool_map")
 load("@rules_cc//cc/toolchains:toolchain.bzl", "cc_toolchain")
 load(":clang_linux_policy.bzl", CLANG_POLICY = "POLICY")
-load(":gcc_linux_policy.bzl", "GCC16_LLVM_HOST_COPTS", "GCC16_PFR_COPTS", "GCC_RELEASE_LINK_WARNING_ARGS", "GCOV_SOURCE_MAP_ARG", "GCOV_SOURCE_ROOTS", GCC_POLICY = "POLICY")
+load(":gcc_linux_policy.bzl", "GCC16_PFR_COPTS", "GCC_RELEASE_LINK_WARNING_ARGS", "GCOV_SOURCE_MAP_ARG", "GCOV_SOURCE_ROOTS", GCC_POLICY = "POLICY")
 
 def _hardening_environment(nix_cc_wrapper, optimized):
     # Fortify makes the Nix wrapper inject -O2 and requires optimized libc headers.
@@ -379,17 +379,6 @@ def linux_toolchain(
         feature_name = "external_include_paths",
     )
 
-    cc_args(
-        name = "llvm_host_compatibility",
-        actions = ["@rules_cc//cc/toolchains/actions:cpp_compile_actions"],
-        args = GCC16_LLVM_HOST_COPTS if gcc_major == 16 else [],
-    )
-    cc_feature(
-        name = "aobus_llvm_host",
-        feature_name = "aobus_llvm_host",
-        args = [":llvm_host_compatibility"],
-    )
-
     test_warnings = policy.test_warnings if gcc_major >= 15 else []
     cc_args(
         name = "test_warning_policy",
@@ -454,7 +443,6 @@ def linux_toolchain(
             ":tsan",
             ":aobus_warnings",
             ":aobus_test_warnings",
-            ":aobus_llvm_host",
             ":aobus_release_ipo",
             ":aobus_sampling",
             ":default_compile_flags",

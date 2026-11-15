@@ -1,9 +1,11 @@
-"""Portal orchestration for the native C++ stage of ``ao tidy``.
+"""Portal orchestration for the native C++ stage of ``ao tidy`` and ``ao check``.
 
 The portal owns scope selection, owner discovery, configured compatibility,
 the report build and the public failure gate.  Bazel owns the actual native
 compile contexts and report actions; this module never prepares CMake or runs
-clang-tidy itself.
+clang-tidy itself.  ``run_project`` gates the complete C++ lint graph from the
+Bazel query plus an independent authored-coverage audit; the diff-driven
+``run`` keeps its file scope.
 """
 
 from __future__ import annotations
@@ -17,16 +19,18 @@ import subprocess
 import sys
 import tempfile
 import xml.etree.ElementTree as ET
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 from urllib.parse import urlparse
 
-from . import bazel_lint_reports, bazel_workspace, builddir, tidyengine
+from . import bazel_lint_reports, bazel_workflows, bazel_workspace, builddir, gitfiles, tidyengine
 from . import bazel_native as native
 from .buildlock import build_tree_lock
 from .paths import PROJECT_ROOT, absolute_path
+from .tidypolicy import classify_relative, find_stale_nolint_suppressions
 
 _ASPECT = "//bazel/lint:lint.bzl%lint_aspect"
 _ANALYZER_ASPECT = "//bazel/lint:lint.bzl%analyzer_aspect"
@@ -36,6 +40,11 @@ _ANALYZER_TREE = "bazel-analyzer"
 _ANALYZER_CONFIG = "fastbuild"
 _OUTPUT_GROUP = "aobus_lint"
 _QUERY_EXPRESSION = 'kind("rule", //...)'
+# The complete project gate also needs the graph's own source-file targets:
+# they are the authority that separates checkout inputs from generated ones.
+# ``//...`` expands only rule targets in Bazel's query contract; ``//...:*``
+# is the universe that also admits source files.
+_PROJECT_QUERY_EXPRESSION = 'kind("rule|source file", //...:*)'
 _CQUERY_EXPRESSION = 'str(target.label) + "|" + str("IncompatiblePlatformProvider" in providers(target))'
 
 _SOURCE_SUFFIXES = frozenset((".c", ".cc", ".cpp", ".cxx", ".mm"))
@@ -67,8 +76,11 @@ class QueryGraph:
     lint ownership.  A dependency closure is never treated as a lint scope.
     """
 
-    def __init__(self, rules: Mapping[str, Rule]) -> None:
+    def __init__(self, rules: Mapping[str, Rule], checkout_files: frozenset[str] = frozenset()) -> None:
         self.rules = dict(rules)
+        # Source-file targets the query itself returned: the graph's own
+        # authority that a declared label is an authored checkout input.
+        self.checkout_files = checkout_files
         self._srcs: dict[str, tuple[str, ...]] = {}
         self._headers: dict[str, tuple[str, ...]] = {}
         self._closures: dict[str, frozenset[str]] = {}
@@ -124,6 +136,14 @@ class QueryGraph:
         """Return the native translation units declared by one owner."""
         return tuple(source for source in self._rule_srcs(label) if _is_source(source))
 
+    def declared_paths(self, label: str) -> tuple[str, ...]:
+        """Return every srcs/hdrs/textual/additional input one owner declares."""
+        if label not in self.rules:
+            return ()
+        paths = list(self._rule_srcs(label))
+        paths.extend(self._rule_headers(label))
+        return tuple(dict.fromkeys(paths))
+
     def _closure(self, label: str, active: frozenset[str]) -> frozenset[str]:
         """Return the project rules ``label`` reaches through its dependencies."""
         if label in self._closures:
@@ -135,12 +155,9 @@ class QueryGraph:
         if rule is not None:
             for attribute in ("deps", "implementation_deps", "actual"):
                 for value in _attribute_labels(rule, attribute):
-                    try:
-                        dependency = _query_label(value)
-                    except ValueError:
-                        if value.startswith("@") and not value.startswith("@//"):
-                            continue
-                        raise
+                    dependency = _normalize_target(value)
+                    if dependency is None:
+                        continue
                     reached.add(dependency)
                     reached.update(self._closure(dependency, active | {label}))
         self._closures[label] = frozenset(reached)
@@ -182,14 +199,11 @@ class QueryGraph:
             raise ValueError("excessive Bazel query filegroup/alias nesting")
         paths: list[str] = []
         for value in labels:
-            try:
-                label = _query_label(value)
-            except ValueError:
+            label = _normalize_target(value)
+            if label is None:
                 # External labels cannot own project source files.  Keep them
                 # out of the project ownership graph rather than guessing.
-                if value.startswith("@") and not value.startswith("@//"):
-                    continue
-                raise
+                continue
             rule = self.rules.get(label)
             if rule is not None:
                 if rule.kind == "filegroup":
@@ -197,9 +211,7 @@ class QueryGraph:
                 elif rule.kind == "alias":
                     paths.extend(self._expand_labels(_attribute_labels(rule, "actual"), active | {label}))
                 continue
-            path = _label_path(label)
-            if path is not None:
-                paths.append(path)
+            paths.append(_target_path(label))
         return tuple(dict.fromkeys(paths))
 
 
@@ -213,7 +225,7 @@ def _attribute_labels(rule: Rule, name: str) -> tuple[str, ...]:
 
 
 def _query_label(value: object) -> str:
-    """Normalize one bare project label and reject patterns/external repos."""
+    """Validate one explicit CLI owner label with the strict owner pattern."""
     if not isinstance(value, str):
         raise ValueError("Bazel label must be a string")
     text = value.strip()
@@ -234,13 +246,49 @@ def _query_label(value: object) -> str:
     return f"//{package}:{name}"
 
 
-def _label_path(label: str) -> str | None:
-    match = _LABEL.fullmatch(label)
-    if match is None:
+def _normalize_target(value: object) -> str | None:
+    """Canonicalize one trusted main-repository target label from query data.
+
+    Bazel target names admit any documented punctuation, including quotes,
+    parentheses and spaces, so labels from Bazel's own output are validated
+    structurally only; external repository labels are not authored project
+    inputs and return None.  File labels only ever become checkout paths,
+    and owner labels are quoted before they join a query expression.
+    """
+    if not isinstance(value, str) or not value or "\x00" in value:
+        raise ValueError(f"invalid Bazel target label: {value!r}")
+    text = value
+    if text.startswith("@@//"):
+        text = text[2:]
+    elif text.startswith("@//"):
+        text = text[1:]
+    elif text.startswith("@"):
+        # Any remaining repository-qualified spelling names an external target.
         return None
-    package, name = match.groups()
-    path = f"{package}/{name}" if package else name
-    return path
+    if not text.startswith("//"):
+        raise ValueError(f"invalid bare Bazel target label: {value}")
+    package, separator, name = text[2:].partition(":")
+    if not separator or not name or ":" in name:
+        raise ValueError(f"invalid Bazel target label: {value}")
+    for segment in (*(package.split("/") if package else ()), *name.split("/")):
+        if segment in {"", ".", "..", "..."}:
+            raise ValueError(f"unsafe Bazel target label: {value}")
+    return f"//{package}:{name}"
+
+
+def _query_word(label: str) -> str:
+    """Quote an owner literally: Bazel's query lexer has no string escapes."""
+    if '"' not in label:
+        return f'"{label}"'
+    if "'" not in label:
+        return f"'{label}'"
+    raise ValueError(f"Bazel query cannot quote an owner containing both quote characters: {label}")
+
+
+def _target_path(label: str) -> str:
+    """Return the checkout path of one canonical main-repository target label."""
+    package, _, name = label[2:].partition(":")
+    return f"{package}/{name}" if package else name
 
 
 def _canonical_owner(query_label: str) -> str:
@@ -310,12 +358,18 @@ def parse_query_xml(path: Path) -> QueryGraph:
     except (OSError, ET.ParseError) as error:
         raise ValueError(f"invalid Bazel query XML: {error}") from error
     rules: dict[str, Rule] = {}
+    checkout_files: set[str] = set()
     for element in root:
         if element.tag == "rule":
-            label = _query_label(element.get("name"))
-            # Lint ownership follows only rule ``srcs`` through filegroups and aliases.
-            rules[label] = Rule(label, element.get("class", ""), _attributes(element))
-    return QueryGraph(rules)
+            label = _normalize_target(element.get("name"))
+            if label is not None:
+                # Lint ownership follows only rule ``srcs`` through filegroups and aliases.
+                rules[label] = Rule(label, element.get("class", ""), _attributes(element))
+        elif element.tag == "source-file":
+            label = _normalize_target(element.get("name"))
+            if label is not None:
+                checkout_files.add(_target_path(label))
+    return QueryGraph(rules, checkout_files=frozenset(checkout_files))
 
 
 def parse_cquery_rows(text: str) -> dict[str, bool]:
@@ -324,7 +378,9 @@ def parse_cquery_rows(text: str) -> dict[str, bool]:
     for line in text.splitlines():
         if line.strip():
             label, _, value = line.strip().rpartition("|")
-            rows[_query_label(label)] = value.strip() == "True"
+            owner = _normalize_target(label)
+            if owner is not None:
+                rows[owner] = value.strip() == "True"
     return rows
 
 
@@ -401,10 +457,20 @@ def _print_failure(what: str, status: int, stderr: Path) -> None:
         print("\n".join(lines[-20:]), file=sys.stderr)
 
 
-def _query_graph(executable: Path, prepared: Path, run_dir: Path, owners: Sequence[str]) -> QueryGraph:
+def _query_graph(
+    executable: Path,
+    prepared: Path,
+    run_dir: Path,
+    owners: Sequence[str],
+    *,
+    universe: str | None = None,
+) -> QueryGraph:
     # Explicit roots need rule-kind validation, not recursive workspace discovery.
     # Their configured native action/index inventory remains the coverage authority.
-    expression = 'kind("rule", set(' + " ".join(owners) + "))" if owners else _QUERY_EXPRESSION
+    if owners:
+        expression = 'kind("rule", set(' + " ".join(_query_word(owner) for owner in owners) + "))"
+    else:
+        expression = universe or _QUERY_EXPRESSION
     stdout = run_dir / "query.xml"
     stderr = run_dir / "query.stderr.log"
     argv = [
@@ -431,7 +497,7 @@ def _query_compatibility(
     stderr = run_dir / f"{name}.stderr.log"
     # An owner that another requested owner also builds as a tool appears in
     # the exec configuration too; only its top-level configuration is linted.
-    expression = "config(set(" + " ".join(owners) + "), target)"
+    expression = "config(set(" + " ".join(_query_word(owner) for owner in owners) + "), target)"
     argv = [
         *bazel_workspace.invocation(executable, prepared, isolate_rc=True),
         "cquery",
@@ -886,24 +952,84 @@ def _report_pass(
     )
 
 
-def _run(args: argparse.Namespace) -> int:
+@dataclass(frozen=True)
+class _LintRequest:
+    """The validated diagnostic and workspace options both lint portals share."""
+
+    check: str | None
+    header_filter: str | None
+    clang_tidy_args: tuple[str, ...]
+    output: Path | None
+    jobs: int
+    config: str
+    remote_cache: str | None
+    debug: bool
+    tree_path: str | None
+    vcpkg_prefix: str | None
+
+
+def _common_lint_request(args: argparse.Namespace) -> _LintRequest:
+    """Validate the options the scoped and complete portals share."""
     # Diagnostic-only validation precedes workspace selection and tool lookup.
     clang_tidy_args = _diagnostic_arguments(getattr(args, "clang_tidy_arg", []))
     check = _optional_text(getattr(args, "check", None), "check")
     header_filter = _optional_text(getattr(args, "header_filter", None), "header_filter")
     _validate_lint_configuration(check, header_filter, clang_tidy_args)
-    output = _output_path(getattr(args, "output", None))
-    jobs = _jobs(getattr(args, "jobs", 2))
-    config = _config(getattr(args, "config", "fastbuild"))
-    remote_cache = _remote_cache(getattr(args, "remote_cache", None))
+    return _LintRequest(
+        check=check,
+        header_filter=header_filter,
+        clang_tidy_args=tuple(clang_tidy_args),
+        output=_output_path(getattr(args, "output", None)),
+        jobs=_jobs(getattr(args, "jobs", 2)),
+        config=_config(getattr(args, "config", "fastbuild")),
+        remote_cache=_remote_cache(getattr(args, "remote_cache", None)),
+        debug=bool(getattr(args, "debug", False)),
+        tree_path=_path_argument(getattr(args, "path", None), "path"),
+        vcpkg_prefix=_path_argument(getattr(args, "vcpkg_prefix", None), "vcpkg_prefix"),
+    )
+
+
+@contextmanager
+def _lint_workspace(request: _LintRequest, args: argparse.Namespace) -> Iterator[tuple[Path, Path, Path, Path]]:
+    """Prepare one governed lint tree and hold its lock through the gate.
+
+    Both portals share tree, configuration and workspace preparation; their
+    scope, ownership and deferral decisions stay explicit in the callers.
+    Explicit feature selections travel with the caller's namespace on both
+    paths, so a prepared tree never depends on ambient rc inheritance.
+    """
+    tree = bazel_workspace.workspace_path(request.tree_path, request.config)
+    executable = bazel_workspace.bazel_executable()
+    native.require_supported_source()
+    with build_tree_lock(tree):
+        tree.mkdir(parents=True, exist_ok=True)
+        lint_configuration = tree / "configuration" / "lint.json"
+        _write_lint_config(
+            lint_configuration, _lint_configuration(request.check, request.header_filter, request.clang_tidy_args)
+        )
+        prepared = bazel_workspace.prepare_workspace(
+            tree,
+            request.config,
+            prefix=request.vcpkg_prefix,
+            graph_options=bazel_workflows.feature_options(args),
+            lint_configuration=lint_configuration,
+        )
+        run_dir = _new_run_dir(tree)
+        if request.debug:
+            print(f"Bazel lint tree: {tree}", file=sys.stderr)
+            print(f"Bazel lint evidence: {run_dir}", file=sys.stderr)
+        yield executable, tree, prepared, run_dir
+
+
+def _run(args: argparse.Namespace) -> int:
+    request = _common_lint_request(args)
+    output, jobs, config, remote_cache = request.output, request.jobs, request.config, request.remote_cache
+    debug = request.debug
     targets = _owner_targets(getattr(args, "owner_targets", []))
     files = _string_list(getattr(args, "files", []), "files")
     all_sources = bool(getattr(args, "all", False))
     folders = _string_list(getattr(args, "folder", []), "folder")
     commit = _optional_text(getattr(args, "commit", None), "commit")
-    debug = bool(getattr(args, "debug", False))
-    tree_path = _path_argument(getattr(args, "path", None), "path")
-    vcpkg_prefix = _path_argument(getattr(args, "vcpkg_prefix", None), "vcpkg_prefix")
     prepared_sources = getattr(args, "_resolved_sources", None)
     has_scope = bool(files or all_sources or folders or commit or prepared_sources)
     target_only = bool(targets) and not has_scope
@@ -928,26 +1054,8 @@ def _run(args: argparse.Namespace) -> int:
     for path in selected:
         _validate_selected_suffix(path)
 
-    tree = bazel_workspace.workspace_path(tree_path, config)
-    executable = bazel_workspace.bazel_executable()
-    native.require_supported_source()
-    with build_tree_lock(tree):
-        tree.mkdir(parents=True, exist_ok=True)
-        lint_configuration = tree / "configuration" / "lint.json"
-        _write_lint_config(
-            lint_configuration,
-            _lint_configuration(check, header_filter, clang_tidy_args),
-        )
-        prepared = bazel_workspace.prepare_workspace(
-            tree,
-            config,
-            prefix=vcpkg_prefix,
-            lint_configuration=lint_configuration,
-        )
-        run_dir = _new_run_dir(tree)
+    with _lint_workspace(request, args) as (executable, tree, prepared, run_dir):
         if debug:
-            print(f"Bazel lint tree: {tree}", file=sys.stderr)
-            print(f"Bazel lint evidence: {run_dir}", file=sys.stderr)
             print(f"Bazel lint selected: {' '.join(selected) if selected else '<explicit owners>'}", file=sys.stderr)
 
         graph = _query_graph(executable, prepared, run_dir, targets)
@@ -1065,6 +1173,204 @@ def run(args: argparse.Namespace) -> int:
         return _run(args)
     except (OSError, ValueError, RuntimeError, KeyError, TypeError, subprocess.SubprocessError) as error:
         print(f"Bazel lint failed: {error}", file=sys.stderr)
+        return 2
+
+
+def _project_scope(graph: QueryGraph) -> tuple[tuple[str, ...], frozenset[str]]:
+    """Derive the complete lint owner and gated path scope from the graph.
+
+    Every native compile owner's declared srcs, hdrs, textual_hdrs and
+    additional inputs form the gated path set.  Only inputs the graph itself
+    declares as source files and that exist as authored project files are
+    gated, so external and generated inputs stay out of the authored scope
+    while their producers keep their dependency role.  The shared tidy policy
+    keeps deliberate lint canaries out.  Header-only owners join the report
+    build too, so a declared header without a companion is represented in the
+    configured inventories instead of being dropped; only the inherited
+    platform contract may defer an unreported input.
+    """
+    owners: list[str] = []
+    paths: set[str] = set()
+    for label in sorted(graph.rules):
+        rule = graph.rules[label]
+        if rule.kind not in _COMPILE_OWNER_KINDS:
+            continue
+        gated = tuple(
+            path
+            for path in graph.declared_paths(label)
+            if path in graph.checkout_files
+            and (PROJECT_ROOT / path).is_file()
+            and PurePosixPath(path).suffix.lower() in _LINT_SUFFIXES
+            and classify_relative(path, explicit=False) != "IGNORE"
+        )
+        if not gated:
+            continue
+        paths.update(gated)
+        owners.append(label)
+    return tuple(owners), frozenset(paths)
+
+
+def _authored_manifest() -> list[str]:
+    """List every tracked and non-ignored untracked file of the checkout.
+
+    The full Git manifest is the independent authored inventory: it is not
+    diff-derived and covers files outside any fixed folder list, while Git's
+    ignore semantics keep cache, build and vendor trees out.  A Git failure
+    fails closed instead of passing as an empty inventory.
+    """
+    result = subprocess.run(
+        gitfiles.git_command("ls-files", "--cached", "--others", "--exclude-standard", "-z", source_discovery=True),
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        detail = os.fsdecode(result.stderr).strip() or f"exit {result.returncode}"
+        raise ValueError(f"git ls-files authored inventory failed: {detail}")
+    # The NUL-separated protocol keeps any filename, including ones with
+    # newlines, one inventory entry.
+    return [name for name in os.fsdecode(result.stdout).split("\0") if name]
+
+
+def _authored_orphans(declared: frozenset[str]) -> list[str]:
+    """Return authored C++ inputs no native lint owner's declarations cover.
+
+    The Git manifest is independent of the audited graph, so a physical file
+    no Bazel rule declares cannot hide from the complete gate, wherever it
+    lives in the checkout.  Deliberate lint canaries stay excluded by the
+    shared policy, and inputs another native platform owns keep their
+    inherited deferral contract.
+    """
+    authored = [
+        name
+        for name in _authored_manifest()
+        if PurePosixPath(name).suffix.lower() in _LINT_SUFFIXES
+        and classify_relative(name, explicit=False) != "IGNORE"
+        and (PROJECT_ROOT / name).is_file()
+    ]
+    return sorted(path for path in authored if path not in declared and not _platform_incompatible(path))
+
+
+def _project_stale_suppressions(selected: Sequence[str]) -> list[Any]:
+    """Scan the complete selected set for suppressions of disabled checks."""
+    buckets = {
+        mode: [PROJECT_ROOT / path for path in names] for mode, names in tidyengine.mode_buckets(selected).items()
+    }
+    return find_stale_nolint_suppressions(buckets)
+
+
+def _run_project(args: argparse.Namespace) -> int:
+    """Gate the complete project C++ lint graph once, from the real Bazel graph."""
+    request = _common_lint_request(args)
+    output, jobs, config, remote_cache = request.output, request.jobs, request.config, request.remote_cache
+    debug = request.debug
+
+    with _lint_workspace(request, args) as (executable, tree, prepared, run_dir):
+        if debug:
+            print("Bazel lint selected: <complete project graph>", file=sys.stderr)
+
+        # Scope selectors belong to the diff-driven portal; the complete gate
+        # derives its owner and path set from the query and audits the authored
+        # inventory independently.
+        graph = _query_graph(executable, prepared, run_dir, [], universe=_PROJECT_QUERY_EXPRESSION)
+        owners, gated = _project_scope(graph)
+        orphans = _authored_orphans(gated)
+        if orphans:
+            print("ERROR: authored C++ sources no Bazel lint owner declares:", file=sys.stderr)
+            for path in orphans:
+                print(f"  {path}", file=sys.stderr)
+            raise ValueError("declare the authored C++ sources in a native rule or remove them")
+        selected = sorted(gated)
+        if not selected:
+            # A wrong query universe or a broken derivation must not pass as
+            # a clean complete gate; this repository always exposes C++ sources.
+            raise ValueError("the project graph exposes no C++ lint sources; the complete gate refuses to pass")
+        stale = _project_stale_suppressions(selected)
+        if stale:
+            _print_stale(stale)
+            return 1
+
+        incompatible: set[str] = set()
+        compatible: list[str] = []
+        if owners:
+            compatibility = _query_compatibility(executable, prepared, run_dir, owners)
+            incompatible = {owner for owner, value in compatibility.items() if value}
+            compatible = [owner for owner in owners if owner not in incompatible]
+        if incompatible:
+            print("Deferred lint owners incompatible with this platform:", file=sys.stderr)
+            for owner in sorted(incompatible):
+                print(f"  {owner}", file=sys.stderr)
+
+        def report_pass(
+            name: str, build_owners: Sequence[str], consumers: Mapping[str, tuple[str, str]]
+        ) -> tuple[Path, tuple[bazel_lint_reports.OwnerInventory, ...]]:
+            return _report_pass(
+                executable,
+                tree,
+                prepared,
+                run_dir,
+                name=name,
+                aspect=_ASPECT,
+                profile="lint",
+                config=config,
+                owners=build_owners,
+                consumers=consumers,
+                jobs=jobs,
+                remote_cache=remote_cache,
+                debug=debug,
+            )
+
+        bep: Path | None = None
+        inventories: tuple[bazel_lint_reports.OwnerInventory, ...] = ()
+        consumers: dict[str, tuple[str, str]] = {}
+        if compatible:
+            bep, inventories = report_pass("build", compatible, {})
+            # Every compatible owner already joined the first pass, so the
+            # includes on record are the complete consumer evidence; one
+            # consumer pass over the same owners keeps one inventory provenance.
+            consumers = _choose_consumers(_unreported(selected, inventories), inventories)
+            if consumers:
+                bep, inventories = report_pass("consumers", compatible, consumers)
+
+        # The inherited platform policy owns every deferral: a declared input
+        # another native platform owns defers, and a reported path always wins.
+        # Any other unreported declaration stays a coverage failure, so an
+        # inactive select branch cannot silently pass as covered elsewhere.
+        deferred = _deferred_paths(selected, inventories, allow=True)
+        if deferred:
+            _print_deferred(deferred)
+        selected = [path for path in selected if path not in deferred]
+        _write_json(
+            run_dir / "run.receipt.json",
+            {
+                "schema": 1,
+                "scope": "project",
+                "owners": compatible,
+                "incompatible": sorted(incompatible),
+                "selected": selected,
+                "deferred": sorted(deferred),
+                "consumers": {path: {"owner": owner, "source": source} for path, (owner, source) in consumers.items()},
+                "bep": str(bep) if bep is not None else None,
+            },
+        )
+        # One readable summary line; the receipt lists remain the evidence.
+        print(
+            "Complete native C++ lint graph: "
+            f"{len(compatible)} compatible owner(s), {len(selected)} selected path(s), "
+            f"{len(consumers)} consumer-bound header(s)/fragment(s), {len(deferred)} deferred path(s)",
+            file=sys.stderr,
+        )
+        if not selected:
+            raise ValueError("complete project lint has no compatible native C++ inputs")
+        reasons = dict.fromkeys(_unreported(selected, inventories), _NO_CONSUMER)
+        return bazel_lint_reports.gate_reports(inventories, set(selected), output, reasons=reasons)
+
+
+def run_project(args: argparse.Namespace) -> int:
+    """Run the complete project lint graph and return its public gate status."""
+    try:
+        return _run_project(args)
+    except (OSError, ValueError, RuntimeError, KeyError, TypeError, subprocess.SubprocessError) as error:
+        print(f"Bazel project lint failed: {error}", file=sys.stderr)
         return 2
 
 

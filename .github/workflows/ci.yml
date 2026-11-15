@@ -197,9 +197,10 @@ jobs:
           ./ao coverage --analysis-only --path "$RUNNER_TEMP/aobus-bazel-coverage-analysis" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL"
 
       # Preserve independent correctness outcomes for the final mandatory gate.
-      # Completion owns fastbuild products, tests, tooling, scoped hygiene and
-      # compile contracts; Release keeps its analysis-only contract scope. Required native
-      # admission stays fresh; --fresh disables Bazel test-result cache reuse.
+      # Completion owns fastbuild products, tests, tooling, complete native C++
+      # lint, scoped source hygiene and compile contracts; Release keeps its
+      # analysis-only contract scope.
+      # Matching passing test results may be reused through Bazel's action keys.
       - name: Check Bazel completion
         id: bazel-check
         continue-on-error: true
@@ -207,7 +208,7 @@ jobs:
           AOBUS_STATE_ROOT: ${{ runner.temp }}/aobus-state
           AOBUS_BAZEL_REMOTE_CACHE: ${{ steps.bazel-remote.outputs.url }}
           BASE_SHA: ${{ needs.changes.outputs.base }}
-        run: ./ao check --fresh --commit "$BASE_SHA" --path "$RUNNER_TEMP/aobus-bazel-fastbuild" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL"
+        run: ./ao check --commit "$BASE_SHA" --path "$RUNNER_TEMP/aobus-bazel-fastbuild" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL"
 
       - name: Verify Bazel Release compile contracts
         id: bazel-verify-release
@@ -617,14 +618,13 @@ jobs:
           CACHE_URL: ${{ steps.bazel-remote.outputs.url }}
         run: test -n "$CACHE_URL"
 
-      # Required native admission stays fresh; --fresh disables Bazel
-      # test-result cache reuse.
+      # Reuse matching passing test results; diagnostics can request --fresh.
       - name: Check Bazel completion
         id: build
         env:
           AOBUS_BAZEL_REMOTE_CACHE: ${{ steps.bazel-remote.outputs.url }}
           BASE_SHA: ${{ needs.changes.outputs.base }}
-        run: ./ao check --fresh --commit "$BASE_SHA" --path "$RUNNER_TEMP/aobus-bazel-fastbuild" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL"
+        run: ./ao check --commit "$BASE_SHA" --path "$RUNNER_TEMP/aobus-bazel-fastbuild" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL"
 
       # Retain the native bootstrap, triplet and pinned bare executable route;
       # Fastbuild completion does not prove the optimized Release product link.
@@ -919,8 +919,7 @@ jobs:
           CACHE_URL: ${{ steps.bazel-remote.outputs.url }}
         run: test -n "$CACHE_URL"
 
-      # Required native admission stays fresh; --fresh disables Bazel
-      # test-result cache reuse.
+      # Reuse matching passing test results; diagnostics can request --fresh.
       - name: Check Bazel completion
         id: build
         shell: pwsh
@@ -928,7 +927,7 @@ jobs:
           AOBUS_BAZEL_REMOTE_CACHE: ${{ steps.bazel-remote.outputs.url }}
           BASE_SHA: ${{ needs.changes.outputs.base }}
         run: |
-          .\ao.bat check --fresh --commit $env:BASE_SHA --path D:\aobus-bazel-fastbuild --jobs $env:CMAKE_BUILD_PARALLEL_LEVEL
+          .\ao.bat check --commit $env:BASE_SHA --path D:\aobus-bazel-fastbuild --jobs $env:CMAKE_BUILD_PARALLEL_LEVEL
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       # Retain the pinned native bare route and explicit initialized compiler/

@@ -52,13 +52,6 @@ GCOV_SOURCE_MAP_ARG = "-fprofile-prefix-map=%s/%s=%s"
 GCC16_PFR_COPTS = ["-DBOOST_PFR_USE_CPP26=0"]
 GCC15_TEST_COPTS = ["-Wno-mismatched-new-delete"]
 
-# LLVM 22's LazyOffsetPtr direct-pointer fast path guards get(nullptr) with
-# !isOffset(). GCC 16 diagnoses the impossible offset branch before removing
-# it during optimization. Keep the SDK warning visible, without failing the
-# checker build. Retire when the include-only reproducer is clean after a
-# governed GCC/LLVM upgrade; no product or test target requests this variant.
-GCC16_LLVM_HOST_COPTS = ["-Wno-error=nonnull"]
-
 POLICY = struct(
     base_compile = BASE_COMPILE_ARGS,
     cpp_standard = CPP_STANDARD_ARGS,

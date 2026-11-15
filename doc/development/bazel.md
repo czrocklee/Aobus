@@ -7,8 +7,9 @@ Bazel owns the complete native product build: Core, CLI, TUI, Linux GTK,
 incremental macOS AppKit and the bounded native Windows WinUI product. The
 ordinary workflow uses pinned native `bazel build`, `bazel test`, and
 `bazel run` from the checkout root; see [native setup](#direct-bazel-without-the-portal).
-`./ao check` is complete local and CI validation, including the same scoped
-check-only implementation exposed by `./ao hygiene`. Project-specific setup,
+`./ao check` is complete local and CI validation, including the check-only
+implementation exposed by `./ao hygiene`; the gate's C++ lint stage covers the
+complete native project graph, while hygiene's other stages stay diff-scoped. Project-specific setup,
 provisioning, verification, coverage, performance, lint, analysis, formatting,
 documentation, and source audits remain portal commands. There are no
 ordinary lifecycle aliases or `ao bazel` command tree. Nix/vcpkg remain the
@@ -21,8 +22,8 @@ application dependencies.
 
 The cacheable native C++ lint reports come from the Bazel lint report actions;
 [lint reports](#lint-reports) defines their workflow, cache and failure contracts,
-and the `./ao tidy`/`./ao hygiene` commands consume those actions with the same
-STRICT/RELAXED policy. Explicit scoped sanitizer and
+and the `./ao tidy`/`./ao hygiene` commands and the `ao check` completion gate
+consume those actions with the same STRICT/RELAXED policy. Explicit scoped sanitizer and
 coverage instrumentation routes exist beside the ordinary fastbuild/Release
 modes and explicit Debug instrumentation; [sanitizer and coverage
 instrumentation](#sanitizer-and-coverage-instrumentation) owns their commands,
@@ -1517,6 +1518,33 @@ no owner, fails the operation; it is not a quiet partial pass. `--all` selects
 the project C++ scope and uses the same rules. The portal prints every deferred
 owner or path.
 
+The completion gate's C++ stage requests the complete project report graph
+through [bazel_lint.run_project](../../script/ao/core/bazel_lint.py), independently
+of Git diffs or rule-change filename lists. Bazel source-file targets distinguish
+authored checkout inputs from generated ones. Eligible owners declare STRICT or
+RELAXED inputs through `srcs`, `hdrs`, `textual_hdrs` or additional compiler inputs;
+compatible owners, including header-only libraries, contribute configured
+inventories. Those inventories identify inactive `select()` inputs, while the
+stage preserves `check`'s compiler and graph-feature selections. Declared header
+closures can include other platforms' headers through broad globs, so the
+existing native ownership policy still defers unreported platform-specific
+headers. Unpaired headers and include fragments require observed include
+consumers; a configured portable declaration with no consumer fails. The stale
+`NOLINT` scan covers the complete candidate set. The gate also validates
+authored-source ownership independently of the declarations it audits: an
+authored C++ source or header outside the declared graph fails the completion
+gate, with the known lint-fixture exclusion unchanged. A declared portable
+path that no admitted configuration selects — for example, only under an
+off-by-default feature flag — fails rather than silently passing; deferral
+stays reserved for recognized foreign-native-platform paths.
+
+The graph lints each owner's top-level target configuration, including authored
+tool source, without separately covering exec-configuration compilations of the
+same source. Full coverage is not full fresh execution: matching reports are
+reused and cached warnings still fail. Cold caches pay the complete analysis
+cost; conservative declared input closures can invalidate more reports than the
+actual include relationships alone would require.
+
 The report aspect is nonpropagating; its required provider-only aspect follows
 dependencies solely to map virtual include headers. It captures actual native
 argv and declared inputs, adds reports for paired headers analyzed as main
@@ -1672,10 +1700,20 @@ Unix toolchain, including the GCC execution toolchain that builds the Linux
 checker independently of the selected target compiler, and `/std:c++latest` on
 MSVC — beside the selected SDK ABI. On Linux the governed LLVM SDK uses
 libstdc++ with RTTI enabled and assertions disabled; the checker retains those
-facts and the SDK's exception policy when built with GCC. Its Linux-only
-`aobus_llvm_host` feature retains GCC 16's `-Wnonnull` diagnostic for LLVM 22's
-guarded lazy-pointer fast path without promoting that known false positive to
-an error; ordinary products and tests keep their warning policy unchanged.
+facts and the SDK's exception policy when built with GCC. Linux checker
+compilations force-include a GCC/LLVM compatibility header that the tracked
+[SDK repository generator](../../bazel/lint/sdk.bzl) emits into the existing
+`@aobus_lint_sdk` facade, which exports the SDK imports; the checker build
+declares the generated external header and adds the force-include line on
+Linux only. The shim keeps the narrow guard unchanged: for GCC 16 with LLVM 22
+only, it disables `-Wnonnull` while parsing `clang/AST/ExternalASTSource.h`,
+whose guarded lazy-pointer fast path triggers a known false positive, then
+restores the full diagnostic policy, with push/pop warning boundaries, the
+projected ABI facts and version pins preserved and no modification of the
+pinned SDK's original bytes. Checker implementation code keeps
+`-Werror=nonnull`; there is no translation-unit-wide downgrade, and ordinary
+products and tests remain unchanged. Retire the generated shim when the pinned
+compiler/SDK pair accepts the fast-path reproducer without it.
 The SDK importer drops the SDK metadata's own standard flag, including the MSVC
 dash-colon `-std:c++17` spelling, and projects the LLVM EH/RTTI/static-build
 ABI facts from the shared and MSVC policy literals; those overrides remain
@@ -1721,7 +1759,12 @@ invoked by `ao check`: format check, test and name audits, the Linux-owned
 files. The C++ stage uses the Bazel lint report actions, the same actions
 `./ao tidy` consumes. It accepts hygiene's scope selectors
 (`files`, `--folder`, `--commit`, `--all`) plus `--config`, `--path`,
-`--vcpkg-prefix`, `--jobs` and `--remote-cache`. For C++ scope, Windows formats
+`--vcpkg-prefix`, `--jobs` and `--remote-cache`. Standalone `./ao hygiene`
+keeps those selectors as its C++ scope; when `ao check` invokes the same
+implementation, the non-C++ stages keep the gate's diff-scoped hygiene scope
+while the C++ stage is replaced by the complete project graph
+([lint reports](#lint-reports)), so `--commit` never narrows native C++ lint
+in the completion gate. For C++ scope, Windows formats
 with the `clang-format` of the LLVM SDK that `ao.bat deps provision` installs
 and requires that SDK to be ready before any stage. It never configures a lint
 tree; ordinary `ao.bat format` uses the same ready provisioned SDK directly,
@@ -1743,14 +1786,19 @@ Its stage boundaries and completion role are owned by
 
 `./ao check` is complete local and CI validation: live documentation checking,
 repository tooling on Linux/Windows, native completion, an optional managed
-sanitizer profile, and scoped check-only hygiene using the standalone
-`ao hygiene` implementation. The positional `release` flavor selects Release;
+sanitizer profile, and check-only hygiene using the standalone `ao hygiene`
+implementation. Hygiene's formatting, source-audit, Python, Bazel and workflow
+stages stay diff-scoped, while the gate's C++ lint stage covers the complete
+native project graph regardless of `--commit` or local changes
+([lint reports](#lint-reports)); standalone `ao hygiene` and `ao tidy` remain
+scoped. The positional `release` flavor selects Release;
 `--asan`/`--tsan` run fastbuild normal completion first, then the Debug
 instrumented scope. Common selectors include
 `--path`, `--jobs`, `--vcpkg-prefix`, `--remote-cache`, `--clean`, and
 `--fresh` ([test-result cache admission](#test-result-cache-admission)).
 `--commit BASE` specifies hygiene's diff base; default local changed-source
-scope is unchanged. It does not narrow native completion. The gate accepts no
+scope is unchanged. It does not narrow native completion or the full C++ lint
+stage. The gate accepts no
 targets, forwarded Bazel arguments, or test filters: there is no partial native
 completion selection. The standalone `ao docs check` and `ao hygiene` commands
 remain useful scoped/task-specific entries. Completion ignores system and
@@ -1818,7 +1866,7 @@ startup failures retain terminal receipts and diagnostics; an interrupted contro
 not establish that native writers have stopped. The native completion receipt
 does not certify interactive GUI runs, performance runs, coverage, or
 distribution. Optional sanitizers have their own receipts. Documentation,
-supported-host tooling, and scoped hygiene are part of the enclosing `check`,
+supported-host tooling, and hygiene are part of the enclosing `check`,
 not inferred from a native BEP summary.
 
 ### Test-result cache admission
@@ -1830,7 +1878,11 @@ strict membership — exact configured labels, the full configuration and a
 complete BEP — as before. A cached PASS is valid for the declared inputs,
 environment and configuration Bazel hashed; it is not a claim of a new host
 execution, and cache authority follows the existing trusted-cache
-boundaries ([native hosts and caching](#native-hosts-and-caching)). The
+boundaries ([native hosts and caching](#native-hosts-and-caching)). A cached
+pass samples no new random schedule or interleaving, so it can conceal an
+intermittent failure while its declared inputs and configuration stay
+unchanged; relevant changes invalidate it, and `--fresh` remains the explicit
+request for new executions when a fix needs fresh samples. The
 `external`-tagged native audio, platform and Linux system-media tests stay
 outside that caching and execute on every attempt, the two unattended native
 WinUI console probes remain actual runs, and the frozen private Linux
@@ -1845,12 +1897,12 @@ a cache miss.
 
 The check controller
 ([bazel_check.py](../../script/ao/core/bazel_check.py)) records each test
-result's run, cached and executed counts in the receipt, and the receipt's
-mode together with the CLI summary states whether the attempt was fresh,
-cached or mixed. `--fresh` forces `--nocache_test_results` and rejects any cached result: missing
-suites, cached results or mismatched configurations fail even if the Bazel
-process exits zero. It keeps a fresh-execution admission for the required
-CI jobs without changing the gate's scope, forwarded arguments or filters.
+result's run, cached and executed counts in the receipt. The recorded cache
+policy and CLI summary distinguish fresh, cached and mixed attempts. Ordinary
+local and CI checks admit matching passing test results from cache; `--fresh`
+forces `--nocache_test_results` and rejects cached results. Missing suites or
+mismatched configurations fail in either mode even if the Bazel process exits
+zero. The cache choice does not change the gate's scope or expose test filters.
 Lint-producer and other actions may still be legitimately cached in either
 mode, so the gate makes no fresh-producer claim beyond test results, and
 hygiene, audits and documentation stay outside this caching claim. The
@@ -2042,9 +2094,13 @@ invocations of the default aggregate. Catch case tags are unchanged; cached resu
 from other tests are not fresh binary executions.
 
 The [Linux workflow](../../.github/workflows/ci.yml) runs
-`ao check --fresh` (fastbuild) as its complete native-host gate, including
-documentation, Linux tooling, and scoped hygiene. The independent documentation
-job remains responsible for docs-only routing.
+`ao check` (fastbuild) as its complete native-host gate, including
+documentation, Linux tooling, and hygiene whose C++ lint stage covers the
+complete project C++ graph. Ordinary CI admits matching
+passing test results from Bazel's cache; `--fresh` remains available when new
+executions are needed for diagnosis. Tests tagged `external` retain their native
+rerun behavior. The independent documentation job remains responsible for
+docs-only routing.
 
 The same workflow transports only
 `${{ runner.temp }}/aobus-state/cache/bazel` using pinned cache restore/save
@@ -2078,10 +2134,14 @@ gates passed. A build-system migration requires successful results from the
 full affected native matrix before merging, independently of that setting.
 A separate unconditional documentation job keeps `ao docs check`, the
 docs-only routing and the failed-prerequisite behavior. Each native job runs
-`ao check --fresh --commit BASE` in fastbuild with the verified comparison base —
-explicit fresh admission, not narrowed native scope. It includes live
-documentation, Linux/Windows tooling, native completion, and the same scoped
-hygiene implementation used locally. The former
+`ao check --commit BASE` in fastbuild with the verified comparison base —
+that base selects the diff-scoped hygiene stages, not native test scope or the
+full C++ lint stage. Matching passing test
+results may be cached; execution/cache counts remain visible in the receipts
+and CI summary. It includes live
+documentation, Linux/Windows tooling, native completion, and the local hygiene
+implementation whose C++ lint stage covers the complete project C++ graph
+([lint reports](#lint-reports)). The former
 advisory/manual `*_bazel` product jobs and the dispatch `mode` selector are
 removed; only the explicit `r2` boolean remains. Native SDK provisioning
 keeps the existing `ao setup bazel`/`ao deps provision` routes. Package providers and
@@ -2188,8 +2248,9 @@ caller-owned scoped instrumentation, not managed completion substitutes;
 coverage keeps its separate project-specific route. Select checks through
 [validation and review](test/validation-and-review.md). `./ao check` is complete
 local and CI validation ([Completion gate](#completion-gate)), including
-live documentation, tooling on supported hosts, and the same scoped hygiene
-implementation exposed by the standalone entry.
+live documentation, tooling on supported hosts, and the hygiene
+implementation exposed by the standalone entry, whose C++ lint stage the gate
+widens to the complete project graph.
 Action checks do not transfer the graph's full ownership or replace native
 tests.
 Tests of the Bazel support layer follow the
