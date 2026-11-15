@@ -2214,7 +2214,10 @@ requested live validation.
 
 The [remote-cache helper](../../script/ao/core/bazel_remote_cache.py) downloads
 the version and SHA-256 that
-[`bazel-remote.json`](../../script/ao/bazel-remote.json) pins. Each cached Bazel
+[`bazel-remote.json`](../../script/ao/bazel-remote.json) pins. Its CI start and
+stop calls use the governed Python: the Nix shell on Linux, the selected
+Homebrew Python on macOS, and the managed interpreter selected from
+`toolchain.json` on Windows, never an ambient runner Python. Each cached Bazel
 step selects its loopback URL explicitly. Startup
 rejects occupied fixed ports and checks that its own child is live even when
 HTTP status answers. Shutdown first waits for uploads with a bounded drain,

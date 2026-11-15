@@ -156,13 +156,10 @@ jobs:
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SCCACHE_SECRET_ACCESS_KEY }}
           CACHE_PREFIX: ${{ github.event_name == 'workflow_dispatch' && format('bazel-ci-validation/{0}/{1}/linux', github.run_id, github.run_attempt) || 'bazel-v1' }}
           CACHE_UPLOAD: ${{ github.event_name != 'pull_request' }}
-        run: >-
-          python3 script/ao/core/bazel_remote_cache.py start
-          --state "$RUNNER_TEMP/aobus-bazel-remote"
-          --github-output "$GITHUB_OUTPUT"
-          --runner-os "$RUNNER_OS"
-          --runner-arch "$RUNNER_ARCH"
-          --trusted-writer "$CACHE_UPLOAD" --key-prefix "$CACHE_PREFIX"
+        run: |
+          # Expand variables inside the Nix child, not the runner's host shell.
+          # shellcheck disable=SC2016
+          nix-shell --run 'python3 script/ao/core/bazel_remote_cache.py start --state "$RUNNER_TEMP/aobus-bazel-remote" --github-output "$GITHUB_OUTPUT" --runner-os "$RUNNER_OS" --runner-arch "$RUNNER_ARCH" --trusted-writer "$CACHE_UPLOAD" --key-prefix "$CACHE_PREFIX"'
 
       - name: Require requested R2 cache
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.r2 }}
@@ -266,9 +263,10 @@ jobs:
         if: ${{ always() && steps.bazel-remote.outcome == 'success' }}
         continue-on-error: ${{ github.event_name != 'workflow_dispatch' || !inputs.r2 }}
         shell: bash
-        run: >-
-          python3 script/ao/core/bazel_remote_cache.py stop --state "$RUNNER_TEMP/aobus-bazel-remote"
-          --report "$RUNNER_TEMP/bazel-r2-stop.json"
+        run: |
+          # Expand variables inside the Nix child, not the runner's host shell.
+          # shellcheck disable=SC2016
+          nix-shell --run 'python3 script/ao/core/bazel_remote_cache.py stop --state "$RUNNER_TEMP/aobus-bazel-remote" --report "$RUNNER_TEMP/bazel-r2-stop.json"'
 
       - name: Summarize native validation
         if: ${{ always() }}
@@ -605,7 +603,7 @@ jobs:
           CACHE_PREFIX: ${{ github.event_name == 'workflow_dispatch' && format('bazel-ci-validation/{0}/{1}/macos-{2}', github.run_id, github.run_attempt, matrix.cache_arch) || 'bazel-v1' }}
           CACHE_UPLOAD: ${{ github.event_name != 'pull_request' }}
         run: >-
-          python3 script/ao/core/bazel_remote_cache.py start
+          "$(brew --prefix python@3.14)/bin/python3.14" script/ao/core/bazel_remote_cache.py start
           --state "$RUNNER_TEMP/aobus-bazel-remote"
           --github-output "$GITHUB_OUTPUT"
           --runner-os "$RUNNER_OS"
@@ -668,7 +666,7 @@ jobs:
         continue-on-error: ${{ github.event_name != 'workflow_dispatch' || !inputs.r2 }}
         shell: bash
         run: >-
-          python3 script/ao/core/bazel_remote_cache.py stop --state "$RUNNER_TEMP/aobus-bazel-remote"
+          "$(brew --prefix python@3.14)/bin/python3.14" script/ao/core/bazel_remote_cache.py stop --state "$RUNNER_TEMP/aobus-bazel-remote"
           --report "$RUNNER_TEMP/bazel-r2-stop.json"
 
       - name: Summarize native validation
@@ -897,20 +895,25 @@ jobs:
                ((github.event_name == 'push' && github.ref == 'refs/heads/main') ||
                 (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository))) }}
         continue-on-error: ${{ github.event_name != 'workflow_dispatch' || !inputs.r2 }}
-        shell: bash
+        shell: pwsh
         env:
           R2_ENDPOINT: ${{ secrets.R2_SCCACHE_ENDPOINT }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_SCCACHE_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SCCACHE_SECRET_ACCESS_KEY }}
           CACHE_PREFIX: ${{ github.event_name == 'workflow_dispatch' && format('bazel-ci-validation/{0}/{1}/windows', github.run_id, github.run_attempt) || 'bazel-v1' }}
           CACHE_UPLOAD: ${{ github.event_name != 'pull_request' }}
-        run: >-
-          python script/ao/core/bazel_remote_cache.py start
-          --state "$RUNNER_TEMP/aobus-bazel-remote"
-          --github-output "$GITHUB_OUTPUT"
-          --runner-os "$RUNNER_OS"
-          --runner-arch "$RUNNER_ARCH"
-          --trusted-writer "$CACHE_UPLOAD" --key-prefix "$CACHE_PREFIX"
+        run: |
+          $contract = Get-Content script/ao/toolchain.json -Raw | ConvertFrom-Json
+          $python = Join-Path $env:AOBUS_STATE_ROOT "tools\python\$($contract.python)\python.exe"
+          if (-not (Test-Path $python)) { throw "Governed Python is missing: $python" }
+          & $python -I -S -B -X utf8 script/ao/core/bazel_remote_cache.py start `
+            --state "$env:RUNNER_TEMP\aobus-bazel-remote" `
+            --github-output $env:GITHUB_OUTPUT `
+            --runner-os $env:RUNNER_OS `
+            --runner-arch $env:RUNNER_ARCH `
+            --trusted-writer $env:CACHE_UPLOAD `
+            --key-prefix $env:CACHE_PREFIX
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Require requested R2 cache
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.r2 }}
@@ -1037,10 +1040,15 @@ jobs:
         id: bazel-remote-stop
         if: ${{ always() && steps.bazel-remote.outcome != 'skipped' }}
         continue-on-error: ${{ github.event_name != 'workflow_dispatch' || !inputs.r2 }}
-        shell: bash
-        run: >-
-          python script/ao/core/bazel_remote_cache.py stop --state "$RUNNER_TEMP/aobus-bazel-remote"
-          --report "$RUNNER_TEMP/bazel-r2-stop.json"
+        shell: pwsh
+        run: |
+          $contract = Get-Content script/ao/toolchain.json -Raw | ConvertFrom-Json
+          $python = Join-Path $env:AOBUS_STATE_ROOT "tools\python\$($contract.python)\python.exe"
+          if (-not (Test-Path $python)) { throw "Governed Python is missing: $python" }
+          & $python -I -S -B -X utf8 script/ao/core/bazel_remote_cache.py stop `
+            --state "$env:RUNNER_TEMP\aobus-bazel-remote" `
+            --report "$env:RUNNER_TEMP\bazel-r2-stop.json"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Summarize native validation
         if: ${{ always() }}
