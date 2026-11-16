@@ -30,7 +30,7 @@ Empty subsets are skipped, a formatting failure stops later stages, and reposito
 - `STRICT` applies to production C++ under `lib/`, `app/`, `include/`, and `tool/`.
 - `RELAXED` applies to C++ under `test/` with the same baseline but disables test-noisy checks: unchecked optional access, discarded return values, designated initializers for positional expected-data tables, cognitive complexity, identifier length, magic numbers, C arrays, C varargs, and test-only casts.
 - Non-fixture C++ files under `test/lint/` are ignored by normal tidy runs.
-- C++ fixtures under `test/lint/fixture/` are skipped in batch scans and checked only when explicitly named. The native lint fixture test owns their diagnostics.
+- C++ fixtures under `test/lint/fixture/` are skipped in batch scans, and naming one explicitly fails with `no native lint owner covers selected path(s)` because fixtures have no `cc_*` compile owner; the native lint fixture test owns their diagnostics.
 - Python files in scope are checked against `pyproject.toml` by Ruff and mypy through `./ao tidy`.
 
 ### Frontend adjustments
@@ -57,6 +57,7 @@ The completion gate's C++ stage derives the complete project scope from the Baze
 Reports are cached from actual native compile contexts and gated from the current BEP: 0 clean, 1 findings, 2 incomplete.
 Cached warnings still fail.
 `--check` and `--header-filter` are analysis-keyed; scope is not.
+`--check` skips Python lint and still applies the file's mode disables, so a check disabled in `RELAXED` mode produces no diagnostics on `test/` files.
 `--tidy-arg` accepts only the documented diagnostic-only allowlist, and other raw options are rejected before preparation.
 The existing ownership/suppression policy, including stale `NOLINT` detection, applies; the route never exports or applies fixes.
 Windows Clang replay excludes MSVC `/WX` warning promotion alongside audited code-generation flags: Clang-only compatibility warnings must not become MSVC hard errors. Unix replay appends `-Wno-error` for the same reason. Native product compilation keeps its warning promotion; the linter's configured checks and genuine compiler-error failures are unchanged.
@@ -293,7 +294,7 @@ The launcher may still prepare its initial Nix shell or Python interpreter befor
 Direct programmatic command calls also validate the boundary.
 Compiler database arguments and `--extra-arg=@responsefile` compiler responses remain supported because they select compile state rather than clang-tidy options.
 
-Agents make explicit, reviewable edits under the `use-clang-tidy` skill.
+Agents make explicit, reviewable edits under the `run-lint` skill.
 Prefer hand edits for ownership, public API, behavior, naming, readability tradeoffs, and framework boundaries.
 
 ## Verification

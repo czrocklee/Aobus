@@ -31,7 +31,7 @@ If the change affects a shared domain mapping, update the owning UIModel formatt
 
 Treat the current English root and maintained translations as user-visible behavior.
 Do not rewrite unrelated wording, reorder concepts, or fill deliberate fallback omissions as mechanical cleanup.
-Preserve dedicated fallback probes and their intentionally sparse coverage unless the task explicitly changes that contract.
+Preserve dedicated fallback probes (`pilot_english_fallback` in `root.txt` only, and `pilot_simplified_only_probe` in `root.txt` and `zh_Hans.txt` only) and their intentionally sparse coverage unless the task explicitly changes that contract.
 
 ### 2. Add the canonical identity
 
@@ -70,7 +70,7 @@ When handling an open id, preserve the fallback in [presentation text semantics]
 
 Most WinUI resources retain the canonical key and need no hand-authored native resource.
 Edit [`WinUiResourceProjection.h`](../../app/i18n/WinUiResourceProjection.h) only when an existing native `std::vformat` consumer needs the supported one-argument `{0}` projection or XAML `x:Uid` needs a property-qualified alias.
-The projection supports exactly one plain named value; it is not a general converter for plural, select, or multi-argument ICU patterns.
+Positional projection supports exactly one plain named value (not plural, select, or multi-argument ICU patterns), and XAML `x:Uid` property aliases accept zero-argument messages only.
 
 Do not edit generated `.resw` files.
 Do not put shared user-facing copy in the WinUI-only English resource list.

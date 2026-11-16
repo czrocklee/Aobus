@@ -34,7 +34,7 @@ while IFS= read -r -d '' path; do
     # The native LayoutSchema test asserts this file's generated shared
     # component region, so it must never take the docs-only fast path.
     doc/reference/shell/component-vocabulary.md) docs_only=false ;;
-    AGENTS.md|CLAUDE.md|GEMINI.md|CONTRIBUTING.md|README.md|doc/*.md|.agents/skills/*.md|tool/*.md|app/*.md|asset/*.md) ;;
+    AGENTS.md|CONTRIBUTING.md|README.md|doc/*.md|.agents/skills/*.md|tool/*.md|app/*.md|asset/*.md) ;;
     *) docs_only=false ;;
   esac
 done < "$changed_files"

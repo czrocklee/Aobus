@@ -10,7 +10,7 @@ The [coding style](../coding-style.md), [naming conventions](../naming-conventio
 ## Custom checker development
 
 Checkers live in `tool/lint/check/`.
-Follow the owning check's namespace and register new sources in `tool/lint/AobusLintModule.cpp` and the checker build in `tool/lint/build.bzl`.
+Follow the owning check's namespace and register new sources in `tool/lint/AobusLintModule.cpp` and the `lint_checker` `srcs` list in `tool/lint/BUILD.bazel`.
 Keep a helper local until at least two current checks need the same stable contract.
 Existing `AstHelpers.h`, `CalleeQualificationHelpers.h`, and `RaiiHeuristics.h` own shared AST operations.
 
@@ -142,17 +142,16 @@ It needs that fixture tree even for a selected production file. Non-blank
 supported files establish inventory membership; they do not prove positive
 coverage. Header-only and marker-free clean inputs are valid fixtures. Native
 `.mm` fixtures participate regardless of host; stock-check groups do not.
-An empty custom inventory fails closed. Diagnostics distinguish fixture checks
-absent from the selected toolchain from registered checks without fixtures.
+An empty custom inventory or any 1:1 mismatch between registered `aobus-*` checks and `<check-alias>/` directories with non-blank supported files fails preflight closed; diagnostics distinguish fixture checks absent from the selected toolchain from registered checks without fixtures.
 Check working-tree additions and removals before assuming a rebuild is needed.
 
 Use `bazel test //test/lint:lint_test --nocache_test_results` for fresh
 integration-result assertions. The Clang fixture producer may be action-cached;
 see the [test-suite reference](../test/test-suite.md#tooling-and-lint-fixtures).
-For focused diagnosis against the selected fixture's real compile action, use:
+For focused diagnosis against an owned product or test translation unit's real compile action (`test/lint/fixture/` files have no `cc_*` compile owner), use:
 
 ```bash
-./ao tidy --check <alias> <fixture>
+./ao tidy --check <alias> <owned-source>
 ```
 
 ## Prefix comparisons
@@ -391,6 +390,6 @@ Remove the workaround when the corresponding STL fix enters the required Build T
 
 Run `bazel test //test/lint:lint_test --nocache_test_results` after checker
 or fixture changes.
-Use a focused `./ao tidy --check <alias> <fixture>` scope only for diagnosis, not as a replacement for the integration gate.
+Use a focused `./ao tidy --check <alias> <owned-source>` scope only to inspect owned translation units during diagnosis, not on `test/lint/fixture/` files or as a replacement for the integration gate.
 Changes to portal orchestration also follow the tooling and native-host matrix in [validation and review](../test/validation-and-review.md).
 A platform-specific checker boundary requires its native fixture pass; an unmatched AST on another host is not coverage.

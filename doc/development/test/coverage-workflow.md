@@ -16,6 +16,10 @@ not manually run the collector or build tools. Run the coverage command:
 GCC is the default target compiler; use `--compiler=clang` to select Clang.
 The same selection governs configured analysis, compilation and the coverage
 reader, independently of the unprofiled GCC execution tools.
+The launcher strips ambient `LLVM_PROFILE_FILE`, `GCOV_PREFIX`,
+`GCOV_PREFIX_STRIP`, and `IGNORE_COVERAGE_COLLECTION_FAILURES` from child
+environments without warning so external profile settings cannot divert or mask
+collection.
 
 Select `--core`, `--application`, `--backend`, `--cli`, `--tui`, or `--gtk` for
 a single suite; the default runs core, application, and backend, and `--all`

@@ -28,7 +28,7 @@ Headers own declarations and local API preconditions. Documentation retains cros
 An internal C++ interface can still deserve a contract: PCM byte alignment, exception containment, transactions, cancellation, observer reentrancy, and teardown are not disposable API inventories.
 Use source assets or schemas for mechanical lists; generate a view only when a real reader needs one. Do not maintain a second hand-written copy of catalog messages, constructor parameters, or ordinary member defaults.
 
-Check changed claims against the relevant code and tests. A disagreement may be an implementation bug: do not silently rewrite a normative contract to match code.
+Check changed claims against the relevant code and tests. A disagreement may be an implementation bug: do not silently rewrite or weaken a normative contract to match code; report the conflict instead.
 Name the relevant implementation and tests where they help readers verify a contract; there is no mandatory exhaustive map for every page.
 When restructuring several owners, keep a temporary fact ledger outside the repository recording the source fact, destination, evidence, affected links, and reason for deletion or consolidation.
 This is migration evidence, not a permanent registry or a requirement for ordinary edits.
@@ -74,6 +74,7 @@ All discovered Markdown locations exclude a closed leading front-matter block fr
 ## Validation
 
 Run `./ao docs check` from the repository root.
+It discovers Markdown under `doc/` (excluding `doc/plan/`), `.agents/skills/`, `tool/`, `app/`, and `asset/`, plus root `README.md`, `AGENTS.md`, and `CONTRIBUTING.md`; Markdown under other trees such as `lib/`, `test/`, `bazel/`, or `script/` is not checked.
 It checks optional metadata integrity, ids, inline and reference-style links, Markdown anchors, forbidden local-plan links, and reachability from the documentation home.
 The governed Markdown parser supplies CommonMark block and inline structure, with the GFM table extension enabled.
 Links, reference definitions, headings, and HTML anchors use that same parse; code examples do not contribute links or anchors.

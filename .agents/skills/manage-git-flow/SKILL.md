@@ -1,56 +1,47 @@
 ---
 name: manage-git-flow
-description: Manage Aobus commits, branches, and pull requests. Use before Git or PR mutations; read-only inspection does not require this skill.
+description: Manage Aobus Git branches, commits, history rewrites, pushes, and pull requests. Load before creating a branch or mutating Git history or PRs; do not load for read-only git status, diff, or log inspection.
 ---
 
 # Manage Aobus Git flow
 
-Preserve unrelated changes and use a topic branch unless the user requested
+Preserve unrelated worktree changes and work on a topic branch unless requested
 otherwise. Repository hooks remain authoritative unless the user explicitly
-authorizes a bypass for the current operation. Keep an authorized bypass local
-to that operation; do not persistently disable hooks or infer permission from a
-general request to commit or publish. Read
-`doc/development/commit-message.md` before committing.
+authorizes a bypass for the current operation; keep an authorized bypass local to
+that single operation and never disable hooks persistently or infer permission
+from a general commit or publish request. If a hook blocks or resets an
+operation, stop and report. Destructive `checkout`, `restore`, or `reset`
+commands require explicit approval, and the default branch must never be
+rewritten.
 
-## History and authorization
+## History and rewrite authorization
 
-Use commits as coherent review/revert units. Amend follow-ups that complete the
-same intent, including review fixes, into the owning commit when unpublished or
-covered by the authorization below; otherwise use an additive commit. Separate
-independently useful changes. Preserve the user's chosen history shape across
-turns. Do not squash merely to reduce commit count.
+Preserve the user's chosen history shape, separate independently useful changes,
+and do not squash merely to reduce commit count.
 
-For an agent-managed topic branch or PR, user authorization to commit and publish
-that work includes standing authorization to amend your own published commits for
-same-intent follow-ups.
-Do not request separate rewrite approval for each such iteration.
-This does not authorize folding independently useful changes, rewriting another
-contributor's commits, or discarding unexpected remote work.
+On an agent-managed topic branch or PR, authorization to commit and publish
+includes standing authorization to amend your own published commits for
+same-intent follow-ups (including review fixes) without per-iteration approval;
+when unpublished or covered by that rule, amend the owning commit, and otherwise
+push an additive commit normally. Standing authorization never covers folding
+unrelated changes, rewriting another contributor's commits, or discarding
+unexpected remote work—those require explicit approval (an explicit amend or
+squash request supplies it).
 
-Before rewriting published history, establish the intended range and observed
-remote tip. Rewrites outside that standing authorization require explicit approval;
-an existing request to amend or squash supplies it. Never rewrite the default
-branch. Push with an OID-bound lease:
+Before rewriting published history, record the intended range and observed
+remote OID, then push with an OID-bound lease (if it fails, inspect the remote
+change rather than weakening the lease):
 
 ```bash
 git push --force-with-lease=<remote-ref>:<observed-remote-oid> <remote> <local-ref>:<remote-ref>
 ```
 
-If the lease fails, inspect the remote change; do not weaken the lease.
-Destructive checkout, restore, or reset operations need explicit approval.
-Commit/push/PR authorization does not authorize merging or changing repository rules.
+## Commits and pull requests
 
-## Commit and publish
+Route commit formatting through [commit-message guidelines](../../../doc/development/commit-message.md)
+and PR preparation (including manual [`.github/pull_request_template.md`](../../../.github/pull_request_template.md)
+adherence when passing `gh pr create --body` or `--body-file`) through [prepare a review](../../../CONTRIBUTING.md#prepare-a-review).
 
-Inspect the worktree, staged diff, branch range, and existing PR. Stage only the
-intended changes. Use `doc/development/test/validation-and-review.md` for completion
-and evidence reuse; activating this skill does not require another hygiene run.
-
-Commit messages describe the technical result without AI attribution or validation
-trailers. Verify the resulting commit and worktree. Use a normal push for additive
-history, and verify that the remote ref matches the intended commit.
-
-Create or update the existing PR with the correct base/head and a description of
-the full branch diff. Follow any repository template. Monitor checks on the current
-HEAD; superseded runs do not validate it. Diagnose failures before rerunning and
-report unvalidated platforms. Merge only with separate authorization.
+Monitor CI checks on the current `HEAD`—superseded runs do not validate it.
+Commit, push, or PR authorization never authorizes merging or changing
+repository rules.

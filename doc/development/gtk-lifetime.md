@@ -32,6 +32,7 @@ Do not rely on member declaration order, a non-reentrant destruction sequence, o
 
 The connection lifetime must not exceed either endpoint's lifetime.
 An ignored connection is acceptable only when automatic lifetime tracking covers the receiver, or ownership guarantees that the emitter is disconnected or destroyed before the receiver and cannot emit during teardown.
+A raw `this` capture in a synchronous or owner-bounded callback is likewise sound when the emitter cannot outlive or emit into a partially destroyed receiver.
 Document the non-obvious ownership and destruction order next to the connection.
 
 Callbacks retained outside their owner use the repository's GTK callback-lifetime boundary, weak ownership, or explicit cancellation.
