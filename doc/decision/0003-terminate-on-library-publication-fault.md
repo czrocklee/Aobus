@@ -2,6 +2,7 @@
 id: decision.0003.terminate-on-library-publication-fault
 status: accepted
 ---
+
 # Decision 0003: terminate on live library publication fault
 
 ## Context

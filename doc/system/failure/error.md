@@ -1,6 +1,7 @@
 ---
 id: failure.error-value
 ---
+
 # Error value reference
 
 ## Scope and version
@@ -19,35 +20,35 @@ The public authority is `include/ao/Error.h`; runtime, UIModel, and frontends ma
 
 ### `ao::Error`
 
-| Field | C++ type | Default | Meaning |
-|---|---|---|---|
-| `code` | `Error::Code` | `Generic` | Machine-readable recoverable category. |
-| `message` | `std::string` | empty | Human-readable diagnostic context; never a machine-policy discriminator. |
+| Field      | C++ type               | Default           | Meaning                                                                          |
+| ---------- | ---------------------- | ----------------- | -------------------------------------------------------------------------------- |
+| `code`     | `Error::Code`          | `Generic`         | Machine-readable recoverable category.                                           |
+| `message`  | `std::string`          | empty             | Human-readable diagnostic context; never a machine-policy discriminator.         |
 | `location` | `std::source_location` | construction site | Cold-path diagnostic origin for logging; not user-visible recoverable semantics. |
 
 ### `ao::Error::Code`
 
 `Code` is a scoped enum with underlying type `std::uint8_t`.
 
-| Enumerator | Current meaning |
-|---|---|
-| `Generic` | Fallback when no more specific current code describes the recoverable failure. |
-| `NotFound` | A requested target is absent at an API that also needs recoverable diagnostics. |
-| `DeviceNotFound` | A requested or active media output device is unavailable. |
-| `InvalidInput` | User- or caller-supplied command data is syntactically or semantically invalid. |
-| `CorruptData` | External or persisted data violates a structural, size, or version invariant. |
-| `FormatRejected` | Text, configuration, query, container, or schema input is malformed or rejected by the requested format contract. |
-| `InitFailed` | A decoder, codec, backend, device, or other external facility could not initialize. |
-| `IoError` | Filesystem, mapping, database, stream, or other IO failed. |
-| `DecodeFailed` | Media decoding failed after the input or decoder had been accepted. |
-| `SeekFailed` | A media seek operation failed. |
-| `NotSupported` | The request is valid in shape, but the file type, codec, mode, capability, or operation is unsupported. |
-| `InvalidState` | The runtime object state cannot currently satisfy the requested operation. |
-| `Conflict` | A create or update conflicts with existing state or identity. |
-| `ResourceBusy` | A requested native or sequenced runtime resource is temporarily owned or busy; callers may surface contention but do not infer automatic retry or preemption policy. |
-| `ValueTooLarge` | External data is valid in shape but exceeds a serialized or configured size limit. |
-| `ResourceExhausted` | A finite identifier, storage, or runtime resource pool is exhausted. |
-| `StorageFull` | A database's mapped capacity is exhausted; the same work may succeed where more capacity is available. |
+| Enumerator          | Current meaning                                                                                                                                                      |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Generic`           | Fallback when no more specific current code describes the recoverable failure.                                                                                       |
+| `NotFound`          | A requested target is absent at an API that also needs recoverable diagnostics.                                                                                      |
+| `DeviceNotFound`    | A requested or active media output device is unavailable.                                                                                                            |
+| `InvalidInput`      | User- or caller-supplied command data is syntactically or semantically invalid.                                                                                      |
+| `CorruptData`       | External or persisted data violates a structural, size, or version invariant.                                                                                        |
+| `FormatRejected`    | Text, configuration, query, container, or schema input is malformed or rejected by the requested format contract.                                                    |
+| `InitFailed`        | A decoder, codec, backend, device, or other external facility could not initialize.                                                                                  |
+| `IoError`           | Filesystem, mapping, database, stream, or other IO failed.                                                                                                           |
+| `DecodeFailed`      | Media decoding failed after the input or decoder had been accepted.                                                                                                  |
+| `SeekFailed`        | A media seek operation failed.                                                                                                                                       |
+| `NotSupported`      | The request is valid in shape, but the file type, codec, mode, capability, or operation is unsupported.                                                              |
+| `InvalidState`      | The runtime object state cannot currently satisfy the requested operation.                                                                                           |
+| `Conflict`          | A create or update conflicts with existing state or identity.                                                                                                        |
+| `ResourceBusy`      | A requested native or sequenced runtime resource is temporarily owned or busy; callers may surface contention but do not infer automatic retry or preemption policy. |
+| `ValueTooLarge`     | External data is valid in shape but exceeds a serialized or configured size limit.                                                                                   |
+| `ResourceExhausted` | A finite identifier, storage, or runtime resource pool is exhausted.                                                                                                 |
+| `StorageFull`       | A database's mapped capacity is exhausted; the same work may succeed where more capacity is available.                                                               |
 
 `StorageFull` is deliberately narrower than `ResourceExhausted`.
 It marks the one exhaustion a caller can answer by arranging more capacity and repeating the work, so a caller may branch on it to do exactly that.

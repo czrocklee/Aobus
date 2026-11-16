@@ -1,6 +1,7 @@
 ---
 id: playback.decoder-session
 ---
+
 # Decoder session
 
 ## Scope
@@ -40,12 +41,12 @@ Its constructor and one-shot `initialize()` step are private, and it exposes no 
 Every current decoder normalizes its codec-native output through the same precision-preserving PCM adapter.
 The resulting set depends on the inspected signal rather than the output device:
 
-| Inspected signal | Supported output encodings |
-|---|---|
+| Inspected signal         | Supported output encodings                                                   |
+| ------------------------ | ---------------------------------------------------------------------------- |
 | Integer, at most 16 bits | Signed 16-bit; packed 24-bit; 24-bit in 32-bit; signed 32-bit; 32-bit float. |
-| Integer, 17–24 bits | Packed 24-bit; 24-bit in 32-bit; signed 32-bit; 32-bit float. |
-| Integer, 25–32 bits | Signed 32-bit. |
-| 32-bit float | 32-bit float. |
+| Integer, 17–24 bits      | Packed 24-bit; 24-bit in 32-bit; signed 32-bit; 32-bit float.                |
+| Integer, 25–32 bits      | Signed 32-bit.                                                               |
+| 32-bit float             | 32-bit float.                                                                |
 
 The ordered exact enum surface and byte layouts belong to the [PCM format reference](pcm-format.md).
 Integer-to-float mapping is bit-transparent only through 24-bit precision.

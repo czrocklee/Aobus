@@ -1,6 +1,7 @@
 ---
 id: architecture.failure-reporting
 ---
+
 # Failure and reporting architecture
 
 This page explains who classifies a failure, who may recover, and how an outcome

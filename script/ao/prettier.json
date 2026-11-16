@@ -1,0 +1,33 @@
+{
+  "version": "3.9.10",
+  "package": {
+    "url": "https://registry.npmjs.org/prettier/-/prettier-3.9.10.tgz",
+    "sha256": "9dc72045591793dff972432fb78722f7ab91aaa90a7fa8c1261ede55969246b7"
+  },
+  "packageTreeSha256": "6b34982660d32767ff6f184fae4cbd7a8961ae25f0f3d70c2c93ae0e4c397167",
+  "node": {
+    "version": "24.22.2",
+    "artifacts": {
+      "linux-x86_64": {
+        "url": "https://nodejs.org/dist/v24.22.2/node-v24.22.2-linux-x64.tar.xz",
+        "sha256": "48cc0e21e048790e54c0cf5749c2725005313d652651c40b7a21feb9697aaf75",
+        "nodeExecutableSha256": "904a6d3484241d466989f9df9ba3aab822b1496191bdb28230eb491a55c32a52"
+      },
+      "darwin-x86_64": {
+        "url": "https://nodejs.org/dist/v24.22.2/node-v24.22.2-darwin-x64.tar.xz",
+        "sha256": "6965578fd823e72c1b5387f5ab84cb25368f886e02eb8779e6f0fce6b91c27b7",
+        "nodeExecutableSha256": "bdcd4500054d48c9ec6058706795d91cac83e3e3eaced218434294d8f2fbf7fa"
+      },
+      "darwin-arm64": {
+        "url": "https://nodejs.org/dist/v24.22.2/node-v24.22.2-darwin-arm64.tar.xz",
+        "sha256": "1f5ac075be50bed4780ea3be19a007fda95ea4d527d28d76d0b91de47d915115",
+        "nodeExecutableSha256": "b6fb419f0f43bb2fbca273700294dd2f3b685a64b60e8417c295f47646a70e4a"
+      },
+      "windows-x86_64": {
+        "url": "https://nodejs.org/dist/v24.22.2/node-v24.22.2-win-x64.zip",
+        "sha256": "ca1bff5d8ead13c9f2ea404a176db46bd430704d5b5113734049fa365e7799e2",
+        "nodeExecutableSha256": "1c331340fa6cac5e4294725959070a143fa0507195a78ad77eed7943f719aac9"
+      }
+    }
+  }
+}

@@ -1,6 +1,7 @@
 ---
 id: architecture.persistence-versioning
 ---
+
 # Persisted format versioning
 
 ## Scope

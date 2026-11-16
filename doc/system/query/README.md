@@ -1,6 +1,7 @@
 ---
 id: architecture.track-expression
 ---
+
 # Track expression architecture
 
 ## Find the contract for your change

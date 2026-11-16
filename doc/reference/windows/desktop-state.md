@@ -1,6 +1,7 @@
 ---
 id: reference.windows-desktop-state
 ---
+
 # Windows desktop state
 
 ## Scope and version
@@ -18,19 +19,19 @@ The [system architecture](../../system/overview.md), [application shell architec
 
 `windows-settings.yaml` is a grouped configuration document. Its `desktop` map requires `version` and accepts the following fields, each of which keeps the caller's seeded value when absent:
 
-| Field | Type | Default |
-|---|---|---|
-| `version` | unsigned integer | `1` |
-| `window.x`, `window.y` | signed integer | `80`, `80` |
-| `window.width`, `window.height` | signed integer | `1280`, `800` |
-| `window.maximized` | Boolean | `false` |
-| `shellMode` | `modern` or `classic` | `modern` |
-| `lastLibraryPath` | string | empty |
-| `lastOutputBackendId` | string | empty |
-| `lastOutputProfileId` | string | empty |
-| `lastOutputDeviceId` | string | empty |
-| `navigationPaneWidth` | finite number | `240` |
-| `inspectorPaneWidth` | finite number | `320` |
+| Field                           | Type                  | Default       |
+| ------------------------------- | --------------------- | ------------- |
+| `version`                       | unsigned integer      | `1`           |
+| `window.x`, `window.y`          | signed integer        | `80`, `80`    |
+| `window.width`, `window.height` | signed integer        | `1280`, `800` |
+| `window.maximized`              | Boolean               | `false`       |
+| `shellMode`                     | `modern` or `classic` | `modern`      |
+| `lastLibraryPath`               | string                | empty         |
+| `lastOutputBackendId`           | string                | empty         |
+| `lastOutputProfileId`           | string                | empty         |
+| `lastOutputDeviceId`            | string                | empty         |
+| `navigationPaneWidth`           | finite number         | `240`         |
+| `inspectorPaneWidth`            | finite number         | `320`         |
 
 The four window coordinates encode the native normal-position rectangle in
 Windows workspace coordinates. `window.maximized` is applied independently.

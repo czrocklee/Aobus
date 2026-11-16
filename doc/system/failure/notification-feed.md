@@ -1,6 +1,7 @@
 ---
 id: reporting.notification-feed
 ---
+
 # Notification feed
 
 ## Scope
@@ -56,12 +57,12 @@ Ids have service-lifetime scope; enum ordinals and C++ layouts are not persisten
 
 ## Commands
 
-| Command | Effect |
-|---|---|
-| `post(severity, message, lifetime)` | Builds a request and applies `post(request)`. |
-| `post(request)` | Validates the request, evicts oldest eligible history if required, appends a new entry, schedules transient expiry when applicable, and publishes `Posted`. |
-| `createOrUpdate(key, request)` | Updates the entry with that key without reordering it, or performs a keyed post when absent. An effective replacement publishes `ReportUpdated`. |
-| Scheduled expiry | Removes the matching transient id and current registration, then publishes `Expired`. Stale callbacks do nothing. |
+| Command                             | Effect                                                                                                                                                      |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `post(severity, message, lifetime)` | Builds a request and applies `post(request)`.                                                                                                               |
+| `post(request)`                     | Validates the request, evicts oldest eligible history if required, appends a new entry, schedules transient expiry when applicable, and publishes `Posted`. |
+| `createOrUpdate(key, request)`      | Updates the entry with that key without reordering it, or performs a keyed post when absent. An effective replacement publishes `ReportUpdated`.            |
+| Scheduled expiry                    | Removes the matching transient id and current registration, then publishes `Expired`. Stale callbacks do nothing.                                           |
 
 The update identifies the command target with one `id`.
 Its immutable snapshot is the authority for any history eviction caused by that commit.

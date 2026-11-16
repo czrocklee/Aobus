@@ -1,6 +1,7 @@
 ---
 id: linux-gtk.mpris
 ---
+
 # Linux MPRIS system-media integration
 
 ## Scope

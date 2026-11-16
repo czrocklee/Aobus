@@ -1,6 +1,7 @@
 ---
 id: tui.track-authoring
 ---
+
 # TUI track authoring
 
 ## Scope

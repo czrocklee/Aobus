@@ -1,6 +1,7 @@
 ---
 id: async.signal
 ---
+
 # Signal delivery
 
 ## Scope

@@ -1,6 +1,7 @@
 ---
 id: presentation.metadata-editing
 ---
+
 # Metadata-editing specification
 
 ## Scope
@@ -126,10 +127,10 @@ Conductor, Ensemble, Soloist, and Performer always offer a one-kind entry point.
 
 One shared `TrackCreditsEditorModel` handles empty, singleton, and larger lists:
 
-| Entry | Immutable session scope | Kind control |
-|---|---|---|
-| Category preview | One kind | Hidden or locked |
-| Full Credits | All kinds | Editable |
+| Entry            | Immutable session scope | Kind control     |
+| ---------------- | ----------------------- | ---------------- |
+| Category preview | One kind                | Hidden or locked |
+| Full Credits     | All kinds               | Editable         |
 
 Binding and owning baseline come from the same short-lived snapshot, released before UI work, submission, or waiting.
 Opening or cancelling emits no replacement. A common scope loads every entry; a mixed scope starts unseeded and requires explicit **Replace this scope on all selected tracks** intent.

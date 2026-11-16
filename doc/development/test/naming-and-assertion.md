@@ -1,6 +1,7 @@
 ---
 id: development.test.naming-and-assertion
 ---
+
 # Test naming, tags, and assertions
 
 ## Naming
@@ -119,7 +120,7 @@ completeness; standalone source audits do not detect a missing owner.
 1. Arrange only the state needed by the behavior.
 2. Act once, unless the contract is specifically about repeated calls, ordering, or idempotence.
 3. Assert observable outcomes and postconditions.
-4. Split independent contracts into separate `TEST_CASE`s; reserve `SECTION` for variants of one contract that share an arrange (see *SECTION vs TEST_CASE* below).
+4. Split independent contracts into separate `TEST_CASE`s; reserve `SECTION` for variants of one contract that share an arrange (see _SECTION vs TEST_CASE_ below).
 5. Prefer local helpers over hidden global state.
 6. Reuse existing `*TestSupport.h` helpers before introducing new shared test plumbing.
 7. Delete commented-out assertions and stale notes.

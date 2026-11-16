@@ -1,6 +1,7 @@
 ---
 id: workspace.session-state
 ---
+
 # Workspace session state
 
 ## Scope and version
@@ -34,13 +35,13 @@ Frontends select the containing path but do not deserialize or redefine fields.
 The literal top-level group is `workspace`.
 Its value is one mapping with these required fields in canonical emitted order:
 
-| Field | YAML shape | Meaning |
-|---|---|---|
-| `presentationVersion` | Unsigned 32-bit scalar. | Required and exactly `1`. |
-| `libraryId` | Canonical UUID string. | Library the session was saved for; its `openViews` list ids belong to that library. |
-| `openViews` | Sequence of view mappings. | Ordered semantic view reconstruction records. |
-| `activeViewIndex` | Unsigned 32-bit scalar. | Zero-based position of the exact active entry in `openViews`. |
-| `customPresets` | Sequence of custom-preset mappings. | Complete workspace custom-preset collection. |
+| Field                 | YAML shape                          | Meaning                                                                             |
+| --------------------- | ----------------------------------- | ----------------------------------------------------------------------------------- |
+| `presentationVersion` | Unsigned 32-bit scalar.             | Required and exactly `1`.                                                           |
+| `libraryId`           | Canonical UUID string.              | Library the session was saved for; its `openViews` list ids belong to that library. |
+| `openViews`           | Sequence of view mappings.          | Ordered semantic view reconstruction records.                                       |
+| `activeViewIndex`     | Unsigned 32-bit scalar.             | Zero-based position of the exact active entry in `openViews`.                       |
+| `customPresets`       | Sequence of custom-preset mappings. | Complete workspace custom-preset collection.                                        |
 
 The session stores no `ViewId`.
 `activeViewIndex` identifies an ordered semantic entry, so multiple filtered or differently presented views over one base list remain unambiguous across runtime lifetimes.
@@ -49,11 +50,11 @@ The session stores no `ViewId`.
 
 Every `openViews` entry contains:
 
-| Field | YAML shape | Requirement and meaning |
-|---|---|---|
-| `listId` | Unsigned 32-bit scalar. | Required and nonzero; identifies the base library or virtual list. |
-| `filterExpression` | String. | Required; empty means no transient filter. |
-| `presentation` | Presentation mapping. | Required exact presentation used to reconstruct the view. |
+| Field              | YAML shape              | Requirement and meaning                                            |
+| ------------------ | ----------------------- | ------------------------------------------------------------------ |
+| `listId`           | Unsigned 32-bit scalar. | Required and nonzero; identifies the base library or virtual list. |
+| `filterExpression` | String.                 | Required; empty means no transient filter.                         |
+| `presentation`     | Presentation mapping.   | Required exact presentation used to reconstruct the view.          |
 
 Legacy top-level `groupBy`, `sortBy`, and optional presentation fields are not part of version 1.
 Grouping and sorting occur only inside the required exact presentation.
@@ -62,13 +63,13 @@ Grouping and sorting occur only inside the required exact presentation.
 
 Each view `presentation` and custom-preset `spec` contains:
 
-| Field | YAML shape | Requirement |
-|---|---|---|
-| `id` | String. | Required and nonempty; opaque presentation identity. |
-| `group` | Stable group-key string. | Required and known. |
-| `sort` | Sequence of sort-term mappings. | Required; sort fields must be unique. |
-| `visibleFields` | Sequence of stable track-field strings. | Required, nonempty, known, and unique. |
-| `redundantFields` | Sequence of stable track-field strings. | Required, known, and unique. |
+| Field             | YAML shape                              | Requirement                                          |
+| ----------------- | --------------------------------------- | ---------------------------------------------------- |
+| `id`              | String.                                 | Required and nonempty; opaque presentation identity. |
+| `group`           | Stable group-key string.                | Required and known.                                  |
+| `sort`            | Sequence of sort-term mappings.         | Required; sort fields must be unique.                |
+| `visibleFields`   | Sequence of stable track-field strings. | Required, nonempty, known, and unique.               |
+| `redundantFields` | Sequence of stable track-field strings. | Required, known, and unique.                         |
 
 The stable token catalogs are owned by the [runtime track-field catalog](../library/model/track-field.md) and routed through the [persisted presentation-state reference](../presentation/persisted-state.md).
 Presentation ids are not resolved against the current catalog during deserialization.
@@ -77,20 +78,20 @@ Presentation ids are not resolved against the current catalog during deserializa
 
 Every `sort` entry contains:
 
-| Field | YAML shape | Requirement |
-|---|---|---|
-| `field` | Stable sort-field string. | Required, known, and unique within the presentation. |
-| `direction` | String. | Required; exactly `ascending` or `descending`. |
+| Field       | YAML shape                | Requirement                                          |
+| ----------- | ------------------------- | ---------------------------------------------------- |
+| `field`     | Stable sort-field string. | Required, known, and unique within the presentation. |
+| `direction` | String.                   | Required; exactly `ascending` or `descending`.       |
 
 ### Custom presentation preset
 
 Every `customPresets` entry contains:
 
-| Field | YAML shape | Meaning |
-|---|---|---|
-| `label` | String. | User-visible label. |
-| `basePresetId` | String. | Opaque source/base preset identity; may be empty. |
-| `spec` | Presentation mapping. | Complete version-1 presentation spec. |
+| Field          | YAML shape            | Meaning                                           |
+| -------------- | --------------------- | ------------------------------------------------- |
+| `label`        | String.               | User-visible label.                               |
+| `basePresetId` | String.               | Opaque source/base preset identity; may be empty. |
+| `spec`         | Presentation mapping. | Complete version-1 presentation spec.             |
 
 ## Validation rules
 

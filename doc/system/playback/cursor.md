@@ -1,6 +1,7 @@
 ---
 id: playback.cursor
 ---
+
 # Playback succession cursor
 
 ## Scope
@@ -46,11 +47,11 @@ It consumes `ViewService`, source leases, live projections, library reads, and t
 
 The public succession state has three source states:
 
-| State | Cursor/session meaning | Command authority |
-|---|---|---|
-| Inactive | No active cursor session; current and source identities are invalid. Shuffle and repeat preferences remain available. | Succession commands are no-ops. |
-| Live | The session projection and cursor are valid succession authority. | Commands use repeat, shuffle, history, and anchor policy. |
-| Invalidated | The source identity was deleted; the current subject and frozen anchor remain observable. | No projection or shuffle state may be consulted; only current-track restart remains possible. |
+| State       | Cursor/session meaning                                                                                                | Command authority                                                                             |
+| ----------- | --------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Inactive    | No active cursor session; current and source identities are invalid. Shuffle and repeat preferences remain available. | Succession commands are no-ops.                                                               |
+| Live        | The session projection and cursor are valid succession authority.                                                     | Commands use repeat, shuffle, history, and anchor policy.                                     |
+| Invalidated | The source identity was deleted; the current subject and frozen anchor remain observable.                             | No projection or shuffle state may be consulted; only current-track restart remains possible. |
 
 An explicit `clear()` transitions an active succession session to Inactive, disarms lookahead, and preserves a last-restorable cursor snapshot.
 It does not stop audio that is already playing.
@@ -60,10 +61,10 @@ Terminal exhaustion or unrecoverable sequence failure instead stops transport an
 
 While the source is Live, Bound and Gap form an independent anchor axis:
 
-| Anchor | Identity relation | Successor position |
-|---|---|---|
-| Bound | `currentTrackId` is present at `anchorIndex`. | Sequential next begins at `anchorIndex + 1`. |
-| Gap | `currentTrackId` is absent from the projection. | Sequential next begins at `anchorIndex`. |
+| Anchor | Identity relation                               | Successor position                           |
+| ------ | ----------------------------------------------- | -------------------------------------------- |
+| Bound  | `currentTrackId` is present at `anchorIndex`.   | Sequential next begins at `anchorIndex + 1`. |
+| Gap    | `currentTrackId` is absent from the projection. | Sequential next begins at `anchorIndex`.     |
 
 The current library record may disappear while its decoded audio remains current.
 That changes a Bound cursor to Gap without changing the current subject.

@@ -58,7 +58,7 @@ class BuildifierCommandTest(unittest.TestCase):
         selected = ["BUILD", "MODULE.bazel", "asset/BUILD.bazel", "bazel/policy.bzl"]
         for name in (*selected, "cache/BUILD.bazel"):
             self.source(name)
-        with mock.patch.object(gitfiles, "changed_files", return_value=[*selected, "cache/BUILD.bazel"]):
+        with mock.patch.object(gitfiles, "changed_paths", return_value=[*selected, "cache/BUILD.bazel"]):
             self.assertEqual(format.resolve_files(arguments(format)), selected)
 
     def test_all_tidy_scope_includes_root_graph_only_for_the_full_source_query(self):

@@ -1,6 +1,7 @@
 ---
 id: playback.pcm-format
 ---
+
 # PCM representation and lossless output
 
 ## Scope and version
@@ -65,14 +66,14 @@ Neither ordering parameter alone nor decoder normalization proves native deliver
 WAV already uses ascending assigned-bit order; attaching identity does not permute PCM or change channel-count-based frame stride.
 The decoder applies this policy before output adaptation, preserving the effective mask in both source and output formats:
 
-| Input | Effective interpretation |
-|---|---|
-| Absent mask, mono/stereo | FC `0x4` / FL-FR `0x3`, `Identified` format defaults. |
-| Absent mask, 3–8 channels | [WAV compatibility sets](../../reference/media/channel-order.md#canonical-role-sets), `Inferred`. |
-| Extensible explicit zero, 1–8 channels | The same compatibility sets, `Inferred`. |
-| Complete supported nonzero declaration | Its actual set, `Identified`, including alternate mono/two-channel roles. |
-| Excess positional bits | Discard highest set positions until their number matches the channel count, then validate the effective set. |
-| Partial assignment, remaining reserved positions, `SPEAKER_ALL`, or absent/zero outside the fallback table | `NotSupported` source refusal before backend open. |
+| Input                                                                                                      | Effective interpretation                                                                                     |
+| ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Absent mask, mono/stereo                                                                                   | FC `0x4` / FL-FR `0x3`, `Identified` format defaults.                                                        |
+| Absent mask, 3–8 channels                                                                                  | [WAV compatibility sets](../../reference/media/channel-order.md#canonical-role-sets), `Inferred`.            |
+| Extensible explicit zero, 1–8 channels                                                                     | The same compatibility sets, `Inferred`.                                                                     |
+| Complete supported nonzero declaration                                                                     | Its actual set, `Identified`, including alternate mono/two-channel roles.                                    |
+| Excess positional bits                                                                                     | Discard highest set positions until their number matches the channel count, then validate the effective set. |
+| Partial assignment, remaining reserved positions, `SPEAKER_ALL`, or absent/zero outside the fallback table | `NotSupported` source refusal before backend open.                                                           |
 
 `SPEAKER_ALL` is rejected before trimming; it is never an excess position.
 Reserved positions that survive trimming are refused rather than replaced with guessed roles.
@@ -124,14 +125,14 @@ This is a parsing/resource contract, not a measured performance improvement.
 
 Only a complete trustworthy metadata chain and completely inspectable comment blocks permit publication of either a declared identity or an absent-comment default:
 
-| Optional identity evidence | Source/output mask and origin |
-|---|---|
-| Complete trustworthy inspection, no exact recognized key, 1/2/3/4/7/8 channels | Count default, `Identified`. |
-| Complete trustworthy inspection, no exact recognized key, 5/6 channels | `0`, `Unknown`; unresolved back/side geometry. |
-| Complete supported declaration, all numeric duplicates agree | Exact declared mask, `Identified`. |
-| Recognized malformed or conflicting declaration | `0`, `Unknown`. |
-| Zero, partial, excess, reserved-bit, or `SPEAKER_ALL` declaration | `0`, `Unknown`; never trimmed or replaced with a default. |
-| Nonfirst STREAMINFO, incomplete comments, or inability to inspect optional positions, marker, or native-boundary cross-checks safely | `0`, `Unknown`. |
+| Optional identity evidence                                                                                                           | Source/output mask and origin                             |
+| ------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------- |
+| Complete trustworthy inspection, no exact recognized key, 1/2/3/4/7/8 channels                                                       | Count default, `Identified`.                              |
+| Complete trustworthy inspection, no exact recognized key, 5/6 channels                                                               | `0`, `Unknown`; unresolved back/side geometry.            |
+| Complete supported declaration, all numeric duplicates agree                                                                         | Exact declared mask, `Identified`.                        |
+| Recognized malformed or conflicting declaration                                                                                      | `0`, `Unknown`.                                           |
+| Zero, partial, excess, reserved-bit, or `SPEAKER_ALL` declaration                                                                    | `0`, `Unknown`; never trimmed or replaced with a default. |
+| Nonfirst STREAMINFO, incomplete comments, or inability to inspect optional positions, marker, or native-boundary cross-checks safely | `0`, `Unknown`.                                           |
 
 A short comment payload, out-of-bounds entry length, or unaccounted trailing bytes withholds identity without newly rejecting otherwise-valid STREAMINFO and audio.
 Unknown is absorbing for this inspection: neither an earlier valid candidate nor a later good declaration repairs malformed, conflicting, unsupported, or incomplete evidence.
@@ -186,12 +187,12 @@ ALAC's validated decoder configuration owns sample rate, channel count, and logi
 After mandatory cookie/configuration and provider initialization succeed, the decoder resolves one final effective layout before its sole output-adapter configuration.
 Source and output masks agree, and only a ready session is published; identity requires no PCM read.
 
-| Optional metadata | Effective interpretation |
-|---|---|
-| Trustworthy complete absence of `chan`, mono/stereo | FC `0x4` / FL-FR `0x3`, `Identified` ALAC format defaults. |
-| Trustworthy absence, more than two channels | Zero mask, `Unknown`; ALAC leaves these roles unassigned. |
-| Complete supported named, bitmap, or ordered-label declarations, all agreeing | Declared set, `Identified`; provider-arrival slots normalize to ascending WAVE bits before output adaptation. |
-| Any malformed, unsupported, conflicting, ambiguous, or uninspectable optional metadata | Zero mask, `Unknown`, with legacy ordinal PCM order; no later good declaration repairs it. |
+| Optional metadata                                                                      | Effective interpretation                                                                                      |
+| -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Trustworthy complete absence of `chan`, mono/stereo                                    | FC `0x4` / FL-FR `0x3`, `Identified` ALAC format defaults.                                                    |
+| Trustworthy absence, more than two channels                                            | Zero mask, `Unknown`; ALAC leaves these roles unassigned.                                                     |
+| Complete supported named, bitmap, or ordered-label declarations, all agreeing          | Declared set, `Identified`; provider-arrival slots normalize to ascending WAVE bits before output adaptation. |
+| Any malformed, unsupported, conflicting, ambiguous, or uninspectable optional metadata | Zero mask, `Unknown`, with legacy ordinal PCM order; no later good declaration repairs it.                    |
 
 Agreement includes slot order, not just the role set.
 Neither reference-encoder conventions nor WAV count defaults fill an ALAC multichannel mask.
@@ -321,14 +322,14 @@ Source identity proves neither native delivery nor physical routing, and it adds
 
 `SampleEncoding` identifies the exact little-endian bytes exchanged with a backend.
 
-| Enumerator | Container | Nominal precision | Byte/layout meaning |
-|---|---:|---:|---|
-| `Unknown` | 0 | 0 | No concrete encoding. |
-| `Signed16Le` | 16 bits | 16 bits | Two-byte signed integer. |
-| `Signed24PackedLe` | 24 bits | 24 bits | Three-byte signed integer; ALSA `S24_3LE`. |
-| `Signed24In32Le` | 32 bits | 24 bits | Four-byte signed word containing a sign-extended value in its low 24 bits; ALSA `S24_LE`. |
-| `Signed32Le` | 32 bits | 32 bits | Four-byte signed integer using the full 32-bit scale; ALSA `S32_LE`. |
-| `Float32Le` | 32 bits | 32 bits | Four-byte IEEE 754 binary32 sample. |
+| Enumerator         | Container | Nominal precision | Byte/layout meaning                                                                       |
+| ------------------ | --------: | ----------------: | ----------------------------------------------------------------------------------------- |
+| `Unknown`          |         0 |                 0 | No concrete encoding.                                                                     |
+| `Signed16Le`       |   16 bits |           16 bits | Two-byte signed integer.                                                                  |
+| `Signed24PackedLe` |   24 bits |           24 bits | Three-byte signed integer; ALSA `S24_3LE`.                                                |
+| `Signed24In32Le`   |   32 bits |           24 bits | Four-byte signed word containing a sign-extended value in its low 24 bits; ALSA `S24_LE`. |
+| `Signed32Le`       |   32 bits |           32 bits | Four-byte signed integer using the full 32-bit scale; ALSA `S32_LE`.                      |
+| `Float32Le`        |   32 bits |           32 bits | Four-byte IEEE 754 binary32 sample.                                                       |
 
 `Signed24In32Le` and `Signed32Le` are not interchangeable.
 For example, packed bytes `56 34 12` become `56 34 12 00` in `Signed24In32Le`, but become `00 56 34 12` when scaled to `Signed32Le`.
@@ -390,12 +391,12 @@ The linked headers provide the helper declarations.
 
 The private lossless-output helper returns only encodings that can retain every bit of the inspected signal, in this order:
 
-| Signal | Ordered encodings |
-|---|---|
-| Integer, 1–16 bits | `Signed16Le`, `Signed24PackedLe`, `Signed24In32Le`, `Signed32Le`, `Float32Le` |
-| Integer, 17–24 bits | `Signed24PackedLe`, `Signed24In32Le`, `Signed32Le`, `Float32Le` |
-| Integer, 25–32 bits | `Signed32Le` |
-| 32-bit float | `Float32Le` |
+| Signal              | Ordered encodings                                                             |
+| ------------------- | ----------------------------------------------------------------------------- |
+| Integer, 1–16 bits  | `Signed16Le`, `Signed24PackedLe`, `Signed24In32Le`, `Signed32Le`, `Float32Le` |
+| Integer, 17–24 bits | `Signed24PackedLe`, `Signed24In32Le`, `Signed32Le`, `Float32Le`               |
+| Integer, 25–32 bits | `Signed32Le`                                                                  |
+| 32-bit float        | `Float32Le`                                                                   |
 
 Integer-to-float conversion is considered bit-transparent only through 24-bit integer precision.
 Zero precision, integer precision above 32 bits, and unsupported float precision produce no candidates.

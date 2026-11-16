@@ -1,6 +1,7 @@
 ---
 id: presentation.list-preference
 ---
+
 # List presentation preference
 
 ## Scope

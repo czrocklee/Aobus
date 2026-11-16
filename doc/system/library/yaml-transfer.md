@@ -1,6 +1,7 @@
 ---
 id: library.yaml-transfer
 ---
+
 # Library YAML transfer
 
 ## Scope
@@ -91,12 +92,12 @@ It does not reuse a nullable branch inside the live operation and is not the fro
 
 ### Export modes
 
-| Payload mode | Metadata | Custom metadata | Tags | Covers | Technical and manifest facts | Lists |
-|---|---|---|---|---|---|---|
-| `delta` | Fields different from a readable file baseline; otherwise all non-empty fields. | Complete map when non-empty. | Complete sequence when non-empty. | Never emitted. | Omitted. | Included. |
-| `metadata` | All non-empty scalar metadata and explicit Credits sequence, including empty. | Complete map when non-empty. | Complete sequence when non-empty. | Never emitted. | Omitted. | Included. |
-| `full` | All non-empty scalar metadata and explicit Credits sequence, including empty. | Complete map when non-empty. | Complete sequence when non-empty. | Reference sequence, including empty, plus the `library.resources` table. | Included, including zero values. | Included. |
-| `list-only` | No track records. | No track records. | No track records. | No track records. | No track records. | Included with URI rank references; a segment reference adds `ordinal`. |
+| Payload mode | Metadata                                                                        | Custom metadata              | Tags                              | Covers                                                                   | Technical and manifest facts     | Lists                                                                  |
+| ------------ | ------------------------------------------------------------------------------- | ---------------------------- | --------------------------------- | ------------------------------------------------------------------------ | -------------------------------- | ---------------------------------------------------------------------- |
+| `delta`      | Fields different from a readable file baseline; otherwise all non-empty fields. | Complete map when non-empty. | Complete sequence when non-empty. | Never emitted.                                                           | Omitted.                         | Included.                                                              |
+| `metadata`   | All non-empty scalar metadata and explicit Credits sequence, including empty.   | Complete map when non-empty. | Complete sequence when non-empty. | Never emitted.                                                           | Omitted.                         | Included.                                                              |
+| `full`       | All non-empty scalar metadata and explicit Credits sequence, including empty.   | Complete map when non-empty. | Complete sequence when non-empty. | Reference sequence, including empty, plus the `library.resources` table. | Included, including zero values. | Included.                                                              |
+| `list-only`  | No track records.                                                               | No track records.            | No track records.                 | No track records.                                                        | No track records.                | Included with URI rank references; a segment reference adds `ordinal`. |
 
 No mode carries a cover byte; `full` carries each cover's digest, length, picture type, and order, and names each distinct cover once.
 No mode is a copy of the files' tags either: a document carries only what the database holds, and a source field that the [source field mapping](../../reference/media/audio-file.md#source-field-mapping) does not import is never there.
@@ -186,12 +187,12 @@ List-only transfer never carries or changes track credits.
 Covers follow the same overlay rule as any other collection: a present `covers` sequence replaces the baseline's, and an absent one preserves it.
 Only `full` may carry that key, so the mode decides the outcome:
 
-| Payload mode | Restore | Merge |
-|---|---|---|
-| `full` | The document's reference graph, including which tracks share one cover. | The document's reference graph for the tracks it names. |
-| `metadata` | The file's current art, which may differ from the exporting database's state when the file was retagged in between; no covers when the file cannot be read. | The target track's covers, unchanged. |
-| `delta` | The file's current art; no covers when the file cannot be read. | The target's covers, filled from the file only when the target has none. |
-| `list-only` | Untouched. | Untouched. |
+| Payload mode | Restore                                                                                                                                                     | Merge                                                                    |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `full`       | The document's reference graph, including which tracks share one cover.                                                                                     | The document's reference graph for the tracks it names.                  |
+| `metadata`   | The file's current art, which may differ from the exporting database's state when the file was retagged in between; no covers when the file cannot be read. | The target track's covers, unchanged.                                    |
+| `delta`      | The file's current art; no covers when the file cannot be read.                                                                                             | The target's covers, filled from the file only when the target has none. |
+| `list-only`  | Untouched.                                                                                                                                                  | Untouched.                                                               |
 
 A `full` import derives each `ResourceId` from the digest rather than reading one from the document, and writes descriptors only: no cover content is written, whatever the size of the collection.
 A declared length fills a descriptor row that does not exist and never overwrites one a writer counted.
@@ -219,18 +220,18 @@ Saved order keeps the first resolved occurrence and preserves first-occurrence o
 
 Every import, preview, and plan returns an `ImportReport`:
 
-| Field | Meaning |
-|---|---|
-| `payloadVersion` | Accepted interchange version; currently `1`. |
-| `payloadMode` | `delta`, `metadata`, `full`, or `list-only`. |
-| `targetScope` | `ImportTargetScope::Library` for track-bearing payloads or `ImportTargetScope::Lists` for `list-only`. |
-| `tracksCreated` | Imported records that do not match a merge baseline. |
-| `tracksUpdated` | Imported records that match an existing target track: a whole-file URI, or a carrier `(uri, ordinal)`. |
-| `tracksDeleted` | Pre-restore tracks when scope clears tracks; otherwise `0`. |
-| `listsCreated` | Payload lists created by the import. |
-| `listsDeleted` | Pre-restore lists; otherwise `0`. |
-| `danglingReferencesIgnored` | Unresolved parent, payload-track-ID, and manifest-URI references. |
-| `invalidFiltersKept` | Imported nonempty List filters that do not parse or compile, kept byte-exactly. |
+| Field                       | Meaning                                                                                                |
+| --------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `payloadVersion`            | Accepted interchange version; currently `1`.                                                           |
+| `payloadMode`               | `delta`, `metadata`, `full`, or `list-only`.                                                           |
+| `targetScope`               | `ImportTargetScope::Library` for track-bearing payloads or `ImportTargetScope::Lists` for `list-only`. |
+| `tracksCreated`             | Imported records that do not match a merge baseline.                                                   |
+| `tracksUpdated`             | Imported records that match an existing target track: a whole-file URI, or a carrier `(uri, ordinal)`. |
+| `tracksDeleted`             | Pre-restore tracks when scope clears tracks; otherwise `0`.                                            |
+| `listsCreated`              | Payload lists created by the import.                                                                   |
+| `listsDeleted`              | Pre-restore lists; otherwise `0`.                                                                      |
+| `danglingReferencesIgnored` | Unresolved parent, payload-track-ID, and manifest-URI references.                                      |
+| `invalidFiltersKept`        | Imported nonempty List filters that do not parse or compile, kept byte-exactly.                        |
 
 Counts describe processed matches and creations, not only byte-different records.
 Preview and commit produce the same report when source bytes and target binding remain unchanged.

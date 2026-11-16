@@ -1,6 +1,7 @@
 ---
 id: query.expression-completion
 ---
+
 # Query expression completion
 
 ## Scope
@@ -53,12 +54,12 @@ Insertion uses the query serializer so names that require quoting produce valid 
 
 After a complete left-hand variable, completion offers the valid operator family for that field:
 
-| Field family | Suggestions |
-|---|---|
-| String, dictionary, custom | `=`, `!=`, `~`, `in`, `?` |
-| Numeric and duration | `=`, `!=`, `<`, `<=`, `>`, `>=`, `in`, `?` |
-| Tag | `?` |
-| Other scalar fallback | `=`, `!=`, `in`, `?` |
+| Field family               | Suggestions                                |
+| -------------------------- | ------------------------------------------ |
+| String, dictionary, custom | `=`, `!=`, `~`, `in`, `?`                  |
+| Numeric and duration       | `=`, `!=`, `<`, `<=`, `>`, `>=`, `in`, `?` |
+| Tag                        | `?`                                        |
+| Other scalar fallback      | `=`, `!=`, `in`, `?`                       |
 
 An empty operator prefix is valid after whitespace.
 A completed `~` enters value completion. Text and URI fields share that surface token even though predicate evaluation keeps their Unicode-caseless and byte-exact semantics distinct.

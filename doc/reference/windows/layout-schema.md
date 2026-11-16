@@ -1,6 +1,7 @@
 ---
 id: windows.layout-schema
 ---
+
 # Windows layout schema
 
 ## Scope and version
@@ -21,9 +22,9 @@ So the shared traversal lives in `app/uimodel/layout/document/`, and everything 
 
 ### Built-in preset documents
 
-| Preset | Preset id | Resource |
-|---|---|---|
-| Modern | `windows.modern` | `windows_modern_layout.yaml` |
+| Preset  | Preset id         | Resource                      |
+| ------- | ----------------- | ----------------------------- |
+| Modern  | `windows.modern`  | `windows_modern_layout.yaml`  |
 | Classic | `windows.classic` | `windows_classic_layout.yaml` |
 
 Both documents are `version: 1`, declare no templates, and use disjoint node ids so component runtime state never crosses a shell.
@@ -32,14 +33,14 @@ They ship as application content in `Assets\Layout` beside the executable, not a
 
 ### Registered component types
 
-| Family | Type ids |
-|---|---|
-| Container | **`box`**, **`split`** |
-| Shell | **`app.menuBar`**, `windows.inspectorPane`, `windows.libraryPath`, `windows.navigationPane`, `windows.statusBar`, `windows.titleBar` |
-| Track | **`track.coverArt`**, `track.detail`, **`track.presentationButton`**, **`track.quickFilter`**, **`track.table`** |
-| Playback | `playback.nowPlayingInfo`, **`playback.outputDeviceSelector`**, **`playback.seekSlider`**, **`playback.soulButton`**, **`playback.timeLabel`**, **`playback.transportButton`**, **`playback.volumeControl`** |
-| Status | **`status.activity`**, **`status.message`**, **`status.selectionInfo`**, **`status.trackCount`** |
-| Generic | **`actionButton`**, **`label`**, **`menuButton`** |
+| Family    | Type ids                                                                                                                                                                                                     |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Container | **`box`**, **`split`**                                                                                                                                                                                       |
+| Shell     | **`app.menuBar`**, `windows.inspectorPane`, `windows.libraryPath`, `windows.navigationPane`, `windows.statusBar`, `windows.titleBar`                                                                         |
+| Track     | **`track.coverArt`**, `track.detail`, **`track.presentationButton`**, **`track.quickFilter`**, **`track.table`**                                                                                             |
+| Playback  | `playback.nowPlayingInfo`, **`playback.outputDeviceSelector`**, **`playback.seekSlider`**, **`playback.soulButton`**, **`playback.timeLabel`**, **`playback.transportButton`**, **`playback.volumeControl`** |
+| Status    | **`status.activity`**, **`status.message`**, **`status.selectionInfo`**, **`status.trackCount`**                                                                                                             |
+| Generic   | **`actionButton`**, **`label`**, **`menuButton`**                                                                                                                                                            |
 
 Bold ids come from the [shared component vocabulary](../shell/component-vocabulary.md), which owns their display name, category, child range, action slots, and shared properties. The rest are Windows' own.
 
@@ -49,29 +50,29 @@ Bold ids come from the [shared component vocabulary](../shell/component-vocabula
 
 Shared properties - `orientation`, `spacing`, `text`, `variant` on `track.presentationButton`, `placeholderStyle`, `command`, `strokeWidth`, `glyphScale`, `mode` - are defined by the [shared component vocabulary](../shell/component-vocabulary.md) and are not restated here. What follows is what Windows adds.
 
-| Type | Property | Kind | Values | Default |
-|---|---|---|---|---|
-| `split` | `initialPositionPercent` | Double | — | `0.5` |
-| `windows.navigationPane` | `presentation` | Enum | `navigationView`, `tree` | `navigationView` |
-| `playback.seekSlider` | `presentation` | Enum | `overlay`, `inline` | `inline` |
-| `playback.volumeControl` | `presentation` | Enum | `flyout`, `inline` | `flyout` |
-| `status.trackCount`, `status.selectionInfo` | `variant` | Enum | `status`, `summary` | `status` |
-| `actionButton`, `menuButton` | `glyph` | String | — | empty |
-| `label`, `actionButton`, `menuButton` | `textResourceKey` | String | — | empty |
-| `playback.soulButton` | `showGlyph` | Bool | — | `true` |
-| `menuButton` | `menuId` | Enum | `modernOverflow`, `nowPlayingOverflow` | `modernOverflow` |
+| Type                                        | Property                 | Kind   | Values                                 | Default          |
+| ------------------------------------------- | ------------------------ | ------ | -------------------------------------- | ---------------- |
+| `split`                                     | `initialPositionPercent` | Double | —                                      | `0.5`            |
+| `windows.navigationPane`                    | `presentation`           | Enum   | `navigationView`, `tree`               | `navigationView` |
+| `playback.seekSlider`                       | `presentation`           | Enum   | `overlay`, `inline`                    | `inline`         |
+| `playback.volumeControl`                    | `presentation`           | Enum   | `flyout`, `inline`                     | `flyout`         |
+| `status.trackCount`, `status.selectionInfo` | `variant`                | Enum   | `status`, `summary`                    | `status`         |
+| `actionButton`, `menuButton`                | `glyph`                  | String | —                                      | empty            |
+| `label`, `actionButton`, `menuButton`       | `textResourceKey`        | String | —                                      | empty            |
+| `playback.soulButton`                       | `showGlyph`              | Bool   | —                                      | `true`           |
+| `menuButton`                                | `menuId`                 | Enum   | `modernOverflow`, `nowPlayingOverflow` | `modernOverflow` |
 
 Windows draws the live transport icon as the soul's inner mark, so the only question a document can answer here is whether to draw it: `showGlyph`, a Windows property. GTK's `glyph` chooses between two static ornaments, which is a different question, so neither name is shared.
 
 ### Child counts
 
-| Type | Children |
-|---|---|
-| `box`, `windows.titleBar`, `windows.statusBar` | any |
-| `split` | exactly 2 |
-| `windows.inspectorPane` | exactly 1 |
-| `windows.navigationPane` | exactly 1 in `navigationView` presentation, exactly 0 in `tree` |
-| every other type | 0 |
+| Type                                           | Children                                                        |
+| ---------------------------------------------- | --------------------------------------------------------------- |
+| `box`, `windows.titleBar`, `windows.statusBar` | any                                                             |
+| `split`                                        | exactly 2                                                       |
+| `windows.inspectorPane`                        | exactly 1                                                       |
+| `windows.navigationPane`                       | exactly 1 in `navigationView` presentation, exactly 0 in `tree` |
+| every other type                               | 0                                                               |
 
 ### Components that require a stable id
 
@@ -85,21 +86,21 @@ The `navigationView` presentation is the exception. It draws its own pane inside
 
 ### Registered action ids
 
-| Action id | Category | Capabilities |
-|---|---|---|
-| `library.open` | Library | `RequiresAnchor` |
-| `library.rescan` | Library | None |
-| `shell.toggleInspector` | Shell | None |
-| `shell.showSystemMenu` | Shell | `RequiresAnchor`, `PresentsMenu` |
-| `shell.showSoul` | Shell | None |
-| `playback.play` | Playback | None |
-| `playback.pause` | Playback | None |
-| `playback.playPause` | Playback | None |
-| `playback.stop` | Playback | None |
-| `playback.next` | Playback | None |
-| `playback.previous` | Playback | None |
-| `playback.toggleShuffle` | Playback | None |
-| `playback.cycleRepeat` | Playback | None |
+| Action id                           | Category | Capabilities                     |
+| ----------------------------------- | -------- | -------------------------------- |
+| `library.open`                      | Library  | `RequiresAnchor`                 |
+| `library.rescan`                    | Library  | None                             |
+| `shell.toggleInspector`             | Shell    | None                             |
+| `shell.showSystemMenu`              | Shell    | `RequiresAnchor`, `PresentsMenu` |
+| `shell.showSoul`                    | Shell    | None                             |
+| `playback.play`                     | Playback | None                             |
+| `playback.pause`                    | Playback | None                             |
+| `playback.playPause`                | Playback | None                             |
+| `playback.stop`                     | Playback | None                             |
+| `playback.next`                     | Playback | None                             |
+| `playback.previous`                 | Playback | None                             |
+| `playback.toggleShuffle`            | Playback | None                             |
+| `playback.cycleRepeat`              | Playback | None                             |
 | `playback.showOutputDeviceSelector` | Playback | `RequiresAnchor`, `PresentsMenu` |
 
 Menus, reveal-current-track, and column editing remain native behavior of the component that owns them and have no layout-schema action id.
@@ -120,14 +121,14 @@ The shared `text` property is the words a reader sees, verbatim, so a document t
 
 ### Accepted layout fields
 
-| Field | Windows interpretation |
-|---|---|
-| `hexpand`, `vexpand` | The parent container allocates a star slot on the matching axis; otherwise the slot is auto-sized |
-| `halign`, `valign` | Child `HorizontalAlignment` / `VerticalAlignment`; `fill` maps to `Stretch`, `start` to `Left`/`Top`, `end` to `Right`/`Bottom`, `center` to `Center` |
-| `widthRequest`, `heightRequest` | Child `MinWidth` / `MinHeight`; a negative value keeps the version 1 meaning of no minimum |
-| `visible` | Authored gate: `false` always collapses, and runtime state may additionally hide an authored-visible element but never reveals a hidden one |
-| `styleKey` | Windows extension naming a `Style` resource |
-| `surface` | Windows extension naming the themed surface the element paints itself as |
+| Field                           | Windows interpretation                                                                                                                                |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `hexpand`, `vexpand`            | The parent container allocates a star slot on the matching axis; otherwise the slot is auto-sized                                                     |
+| `halign`, `valign`              | Child `HorizontalAlignment` / `VerticalAlignment`; `fill` maps to `Stretch`, `start` to `Left`/`Top`, `end` to `Right`/`Bottom`, `center` to `Center` |
+| `widthRequest`, `heightRequest` | Child `MinWidth` / `MinHeight`; a negative value keeps the version 1 meaning of no minimum                                                            |
+| `visible`                       | Authored gate: `false` always collapses, and runtime state may additionally hide an authored-visible element but never reveals a hidden one           |
+| `styleKey`                      | Windows extension naming a `Style` resource                                                                                                           |
+| `surface`                       | Windows extension naming the themed surface the element paints itself as                                                                              |
 
 `cssClasses` is a GTK extension and is rejected. A component may also declare per-child layout fields in its schema entry; no built-in Windows component currently does.
 
@@ -135,16 +136,16 @@ A field the document does not author leaves the corresponding `Style` setter in 
 
 ### Native element mapping
 
-| Element | Component types |
-|---|---|
-| `Grid` | `box`, `split`, `windows.titleBar`, `windows.statusBar`, `windows.inspectorPane`, `windows.navigationPane` in `tree` presentation, `track.quickFilter`, `playback.nowPlayingInfo`, `status.activity` |
-| `ScrollViewer` | `track.detail`, `track.table` |
-| `Border` | `track.coverArt` |
-| `NavigationView` | `windows.navigationPane` in `navigationView` presentation |
-| `MenuBar` | `app.menuBar` |
-| `Button` | `track.presentationButton`, `playback.transportButton`, `playback.soulButton`, `playback.outputDeviceSelector`, `playback.volumeControl` in `flyout` presentation, `actionButton`, `menuButton` |
-| `Slider` | `playback.seekSlider`, `playback.volumeControl` in `inline` presentation |
-| `TextBlock` | `label`, `playback.timeLabel`, `status.message`, `status.selectionInfo`, `status.trackCount`, `windows.libraryPath` |
+| Element          | Component types                                                                                                                                                                                      |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Grid`           | `box`, `split`, `windows.titleBar`, `windows.statusBar`, `windows.inspectorPane`, `windows.navigationPane` in `tree` presentation, `track.quickFilter`, `playback.nowPlayingInfo`, `status.activity` |
+| `ScrollViewer`   | `track.detail`, `track.table`                                                                                                                                                                        |
+| `Border`         | `track.coverArt`                                                                                                                                                                                     |
+| `NavigationView` | `windows.navigationPane` in `navigationView` presentation                                                                                                                                            |
+| `MenuBar`        | `app.menuBar`                                                                                                                                                                                        |
+| `Button`         | `track.presentationButton`, `playback.transportButton`, `playback.soulButton`, `playback.outputDeviceSelector`, `playback.volumeControl` in `flyout` presentation, `actionButton`, `menuButton`      |
+| `Slider`         | `playback.seekSlider`, `playback.volumeControl` in `inline` presentation                                                                                                                             |
+| `TextBlock`      | `label`, `playback.timeLabel`, `status.message`, `status.selectionInfo`, `status.trackCount`, `windows.libraryPath`                                                                                  |
 
 Every structural container is a `Grid` because WinUI expresses remaining-space allocation on a row or column definition, which is what `hexpand` and `vexpand` mean. `windows.inspectorPane` and the `tree` navigation pane are among them despite what they show: each carries a resize thumb over one edge, so the thumb and the pane content share a cell.
 
@@ -179,33 +180,33 @@ The overlay dictionary also holds `ModernSeekThumbTemplate`. A thumb is drawn by
 
 A `styleKey` resolves only against the window's `RootGrid.Resources`. The outcomes are:
 
-| Outcome | Condition |
-|---|---|
-| `NoStyleAuthored` | The node authored no `styleKey` |
-| `Applied` | The key resolved in `RootGrid.Resources` and its `TargetType` is the constructed element's kind or a base of it |
-| `MissingKey` | The key did not resolve, or resolved only in application resources |
-| `IncompatibleTarget` | The key resolved in scope but its `TargetType` does not accept the constructed element |
+| Outcome              | Condition                                                                                                       |
+| -------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `NoStyleAuthored`    | The node authored no `styleKey`                                                                                 |
+| `Applied`            | The key resolved in `RootGrid.Resources` and its `TargetType` is the constructed element's kind or a base of it |
+| `MissingKey`         | The key did not resolve, or resolved only in application resources                                              |
+| `IncompatibleTarget` | The key resolved in scope but its `TargetType` does not accept the constructed element                          |
 
 The shipped frame declares these styles for the shipped presets. `ChromeLessButtonStyle` is shared; the rest belong to one preset each.
 
-| Style | `TargetType` | Carries |
-|---|---|---|
-| `ChromeLessButtonStyle` | `Button` | Transparent chrome, 36px hit target, 18px radius |
-| `ModernTitleBarStyle` | `Grid` | 16px side padding, and a transparent fill so the caption drag region takes hits |
-| `ModernLibraryPathStyle` | `TextBlock` | 12px subdued text, trimmed, inset clear of the caption buttons |
-| `ModernTrackControlsStyle` | `Grid` | 12×8 padding |
-| `ModernSubduedTextStyle` | `TextBlock` | 0.55 opacity |
-| `ModernInspectorStyle` | `Grid` | Card margin, 1px divider border, 16px radius |
-| `ModernInspectorCoverStyle` | `Border` | Cover inset, 320px cap, 16px radius, and the card fill behind the artwork |
-| `ModernNowPlayingStyle` | `Grid` | 1px divider along the top edge |
-| `ModernNowPlayingRowStyle` | `Grid` | 16×8 padding on the content row, so the seek overlay above still reaches both edges |
-| `ModernSeekOverlayStyle` | `Slider` | Negative margins that hang the overlay over the strip's top edge, and the z-order that keeps it there |
-| `ModernTimeLabelStyle` | `TextBlock` | 11px subdued text |
-| `ClassicPlaybackStripStyle` | `Grid` | 6px padding, 1px divider below |
-| `ClassicToolbarStyle` | `Grid` | 6×3 padding, 1px divider above and below |
-| `ClassicInspectorStyle` | `Grid` | 1px divider along the leading edge |
-| `ClassicInspectorCoverStyle` | `Border` | 10px inset, 200px cap, Classic chrome radius, 1px divider border, and card fill |
-| `ClassicStatusBarStyle` | `Grid` | 6×2 padding, 1px divider above |
+| Style                        | `TargetType` | Carries                                                                                               |
+| ---------------------------- | ------------ | ----------------------------------------------------------------------------------------------------- |
+| `ChromeLessButtonStyle`      | `Button`     | Transparent chrome, 36px hit target, 18px radius                                                      |
+| `ModernTitleBarStyle`        | `Grid`       | 16px side padding, and a transparent fill so the caption drag region takes hits                       |
+| `ModernLibraryPathStyle`     | `TextBlock`  | 12px subdued text, trimmed, inset clear of the caption buttons                                        |
+| `ModernTrackControlsStyle`   | `Grid`       | 12×8 padding                                                                                          |
+| `ModernSubduedTextStyle`     | `TextBlock`  | 0.55 opacity                                                                                          |
+| `ModernInspectorStyle`       | `Grid`       | Card margin, 1px divider border, 16px radius                                                          |
+| `ModernInspectorCoverStyle`  | `Border`     | Cover inset, 320px cap, 16px radius, and the card fill behind the artwork                             |
+| `ModernNowPlayingStyle`      | `Grid`       | 1px divider along the top edge                                                                        |
+| `ModernNowPlayingRowStyle`   | `Grid`       | 16×8 padding on the content row, so the seek overlay above still reaches both edges                   |
+| `ModernSeekOverlayStyle`     | `Slider`     | Negative margins that hang the overlay over the strip's top edge, and the z-order that keeps it there |
+| `ModernTimeLabelStyle`       | `TextBlock`  | 11px subdued text                                                                                     |
+| `ClassicPlaybackStripStyle`  | `Grid`       | 6px padding, 1px divider below                                                                        |
+| `ClassicToolbarStyle`        | `Grid`       | 6×3 padding, 1px divider above and below                                                              |
+| `ClassicInspectorStyle`      | `Grid`       | 1px divider along the leading edge                                                                    |
+| `ClassicInspectorCoverStyle` | `Border`     | 10px inset, 200px cap, Classic chrome radius, 1px divider border, and card fill                       |
+| `ClassicStatusBarStyle`      | `Grid`       | 6×2 padding, 1px divider above                                                                        |
 
 Each `TargetType` is the element the native element mapping says the node constructs, and the pairing of every authored `styleKey` with the frame that declares it is a test, not a convention.
 
@@ -213,16 +214,16 @@ Each `TargetType` is the element the native element mapping says the node constr
 
 A `styleKey` carries geometry, spacing, and typography. It does not carry colour: a `Style` is parsed once when the window loads, while the active theme changes underneath it. A node names a themed surface instead, and the shell resolves that slot against the loaded `winui::Theme` while the generation is being built.
 
-| Slot | Theme token |
-|---|---|
-| `window` | `shared.windowBackground` |
-| `surface` | `shared.surface` |
+| Slot                | Theme token                   |
+| ------------------- | ----------------------------- |
+| `window`            | `shared.windowBackground`     |
+| `surface`           | `shared.surface`              |
 | `modern.navigation` | `modern.navigationBackground` |
-| `modern.inspector` | `modern.inspectorBackground` |
+| `modern.inspector`  | `modern.inspectorBackground`  |
 | `modern.nowPlaying` | `modern.nowPlayingBackground` |
-| `classic.toolbar` | `classic.toolbarBackground` |
-| `classic.tree` | `classic.treeBackground` |
-| `classic.statusBar` | `classic.statusBackground` |
+| `classic.toolbar`   | `classic.toolbarBackground`   |
+| `classic.tree`      | `classic.treeBackground`      |
+| `classic.statusBar` | `classic.statusBackground`    |
 
 With no theme override loaded the stock brushes apply: `modern.inspector`, `modern.nowPlaying`, `classic.toolbar`, and `classic.statusBar` take `CardBackgroundFillColorDefaultBrush`, `classic.tree` takes `ApplicationPageBackgroundThemeBrush`, and `window`, `surface`, and `modern.navigation` name no brush at all so those elements keep the stock chrome.
 
@@ -234,20 +235,20 @@ A built-in document is one candidate. The first defect in document order rejects
 
 Rejection reasons are exact:
 
-| Reason | Condition |
-|---|---|
-| `UnknownComponentType` | The type is not registered in the Windows schema |
-| `UnsupportedLayoutField` | `cssClasses`, a `surface` on an element that owns no background, or a field neither common nor declared by the component |
+| Reason                    | Condition                                                                                                                                         |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `UnknownComponentType`    | The type is not registered in the Windows schema                                                                                                  |
+| `UnsupportedLayoutField`  | `cssClasses`, a `surface` on an element that owns no background, or a field neither common nor declared by the component                          |
 | `InvalidLayoutFieldValue` | An alignment outside the version 1 vocabulary, a non-numeric size request, an empty or non-string `styleKey`, or a `surface` naming no known slot |
-| `UnknownProperty` | A property the component does not declare |
-| `InvalidPropertyValue` | A property whose value type does not match its declared kind, or an enum value outside its declared list |
-| `ChildCountBelowMinimum` | Fewer children than the schema entry or the authored presentation requires |
-| `ChildCountAboveMaximum` | More children than the schema entry or the authored presentation allows |
-| `MissingRequiredId` | A component that must be locatable carries no id |
-| `DuplicateNodeId` | An id already used elsewhere in the document |
-| `UnsupportedActionSlot` | An action property whose slot the component policy disallows |
-| `UnknownAction` | A bound or defaulted action id outside the Windows action schema |
-| `UnsupportedSurface` | An authored tooltip subtree; Windows components own their own tooltips |
+| `UnknownProperty`         | A property the component does not declare                                                                                                         |
+| `InvalidPropertyValue`    | A property whose value type does not match its declared kind, or an enum value outside its declared list                                          |
+| `ChildCountBelowMinimum`  | Fewer children than the schema entry or the authored presentation requires                                                                        |
+| `ChildCountAboveMaximum`  | More children than the schema entry or the authored presentation allows                                                                           |
+| `MissingRequiredId`       | A component that must be locatable carries no id                                                                                                  |
+| `DuplicateNodeId`         | An id already used elsewhere in the document                                                                                                      |
+| `UnsupportedActionSlot`   | An action property whose slot the component policy disallows                                                                                      |
+| `UnknownAction`           | A bound or defaulted action id outside the Windows action schema                                                                                  |
+| `UnsupportedSurface`      | An authored tooltip subtree; Windows components own their own tooltips                                                                            |
 
 An action binding of `none` or an empty string leaves the slot explicitly unbound and is accepted.
 

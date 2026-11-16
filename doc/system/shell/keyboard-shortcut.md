@@ -1,6 +1,7 @@
 ---
 id: shell.keyboard-shortcut
 ---
+
 # Keyboard shortcuts
 
 ## Scope

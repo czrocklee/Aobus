@@ -1,6 +1,7 @@
 ---
 id: architecture.persistence-and-managed-state
 ---
+
 # Persistence and managed-state architecture
 
 Aobus does not have one universal persistence service.
@@ -28,14 +29,14 @@ Follow the linked topic contracts and references for exact behavior, paths, grou
 
 The main persistence classes have different authority and recovery expectations:
 
-| Class | Examples | Authority |
-|---|---|---|
-| Durable library truth | Tracks, lists, resources, file identity, and library metadata | [`ao::library::MusicLibrary` over LMDB](../library/structure.md) |
-| Managed application state | Workspace, playback intent, preferences, shortcuts, and presentation choices | [The runtime, UIModel, or frontend component whose live behavior uses the value](../../reference/persistence/application-config.md) |
-| Authored documents | Customized shell layouts | The [layout document model](../../reference/shell/layout-document.md) and [shell workflow](../shell/layout-lifecycle.md) |
-| Transient component state | Per-layout split and collapsible-panel state | The [component-state model and specialized store](../../reference/shell/layout-state.md) |
-| Interchange | User-selected library YAML imports and exports | The [library format](../../reference/library/format/yaml.md) and [transfer workflow](../library/yaml-transfer.md), not `ConfigStore` |
-| Regenerable output | [Cover caches](../resource/cover-art-delivery.md), [MPRIS artwork](../frontend/mpris.md), and [logs](../../reference/persistence/location.md) | The producing subsystem; these are not application truth |
+| Class                     | Examples                                                                                                                                      | Authority                                                                                                                            |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Durable library truth     | Tracks, lists, resources, file identity, and library metadata                                                                                 | [`ao::library::MusicLibrary` over LMDB](../library/structure.md)                                                                     |
+| Managed application state | Workspace, playback intent, preferences, shortcuts, and presentation choices                                                                  | [The runtime, UIModel, or frontend component whose live behavior uses the value](../../reference/persistence/application-config.md)  |
+| Authored documents        | Customized shell layouts                                                                                                                      | The [layout document model](../../reference/shell/layout-document.md) and [shell workflow](../shell/layout-lifecycle.md)             |
+| Transient component state | Per-layout split and collapsible-panel state                                                                                                  | The [component-state model and specialized store](../../reference/shell/layout-state.md)                                             |
+| Interchange               | User-selected library YAML imports and exports                                                                                                | The [library format](../../reference/library/format/yaml.md) and [transfer workflow](../library/yaml-transfer.md), not `ConfigStore` |
+| Regenerable output        | [Cover caches](../resource/cover-art-delivery.md), [MPRIS artwork](../frontend/mpris.md), and [logs](../../reference/persistence/location.md) | The producing subsystem; these are not application truth                                                                             |
 
 Deleting a cache must not change library or managed-state facts.
 It can still change what is immediately displayable: cached cover bytes may be the only remaining copy after every carrying audio file is gone.

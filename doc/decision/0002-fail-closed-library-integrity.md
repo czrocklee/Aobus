@@ -2,6 +2,7 @@
 id: decision.0002.fail-closed-library-integrity
 status: superseded
 ---
+
 # Decision 0002: fail closed at the library integrity boundary
 
 ## Context

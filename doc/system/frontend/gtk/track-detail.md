@@ -1,6 +1,7 @@
 ---
 id: linux-gtk.track-detail
 ---
+
 # GTK track-detail specification
 
 ## Scope

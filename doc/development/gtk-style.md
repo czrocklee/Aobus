@@ -1,6 +1,7 @@
 ---
 id: development.gtk-style
 ---
+
 # GTK style
 
 ## Scope

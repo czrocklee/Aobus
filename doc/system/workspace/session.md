@@ -1,6 +1,7 @@
 ---
 id: workspace.session
 ---
+
 # Workspace session
 
 ## Scope

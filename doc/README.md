@@ -9,17 +9,17 @@ The [user guides](user/README.md) also cover metadata, Lists, customization, Win
 
 Start with the [contributor workflow](../CONTRIBUTING.md) and choose a task in the [development guide](development/README.md).
 
-| Task | Start here |
-|---|---|
-| Build on Linux, macOS, or Windows | [Build and setup](development/README.md#build-and-setup) |
-| Change a library command, scan, or live view | [Library](system/library/README.md) |
-| Change playback or audio output | [Playback](system/playback/README.md) |
-| Diagnose cancellation, callbacks, or teardown | [Execution](system/execution/README.md) and [session lifecycle](system/session-lifecycle.md) |
-| Change a stored format | [Persistence](system/persistence/README.md) and the [format reference](reference/README.md#stored-and-authored-formats) |
-| Change UI behavior or translations | [Presentation](system/presentation/README.md) and [localization workflow](development/localization.md) |
-| Add a command or platform adapter | [Frontends](system/frontend/README.md) and [command reference](reference/README.md#commands-and-languages) |
-| Write tests or investigate a lint finding | [Testing](development/test.md) and [linting](development/linting.md) |
-| Maintain a lint checker | [Checker development](development/lint/checker-development.md) |
+| Task                                          | Start here                                                                                                              |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Build on Linux, macOS, or Windows             | [Build and setup](development/README.md#build-and-setup)                                                                |
+| Change a library command, scan, or live view  | [Library](system/library/README.md)                                                                                     |
+| Change playback or audio output               | [Playback](system/playback/README.md)                                                                                   |
+| Diagnose cancellation, callbacks, or teardown | [Execution](system/execution/README.md) and [session lifecycle](system/session-lifecycle.md)                            |
+| Change a stored format                        | [Persistence](system/persistence/README.md) and the [format reference](reference/README.md#stored-and-authored-formats) |
+| Change UI behavior or translations            | [Presentation](system/presentation/README.md) and [localization workflow](development/localization.md)                  |
+| Add a command or platform adapter             | [Frontends](system/frontend/README.md) and [command reference](reference/README.md#commands-and-languages)              |
+| Write tests or investigate a lint finding     | [Testing](development/test.md) and [linting](development/linting.md)                                                    |
+| Maintain a lint checker                       | [Checker development](development/lint/checker-development.md)                                                          |
 
 ## Understand Aobus
 

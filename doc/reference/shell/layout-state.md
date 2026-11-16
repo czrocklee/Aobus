@@ -1,6 +1,7 @@
 ---
 id: shell.layout-state
 ---
+
 # Shell layout component state
 
 ## Scope and version
@@ -17,27 +18,27 @@ The concrete file, locking, and atomic-write adapter belongs to the GTK frontend
 
 The file is a standalone mapping, not a `ConfigStore` group:
 
-| Key | Type | Required | Current value |
-|---|---|---|---|
-| `version` | Unsigned integer | Yes | `1`. |
-| `preset` | String | Yes | Preset id matching the file name. |
-| `components` | Mapping from node id to entry | Yes | May be empty. |
+| Key          | Type                          | Required | Current value                     |
+| ------------ | ----------------------------- | -------- | --------------------------------- |
+| `version`    | Unsigned integer              | Yes      | `1`.                              |
+| `preset`     | String                        | Yes      | Preset id matching the file name. |
+| `components` | Mapping from node id to entry | Yes      | May be empty.                     |
 
 Each component entry is:
 
-| Key | Type | Required | Meaning |
-|---|---|---|---|
-| `type` | String | Yes | Layout component type. |
-| `stateVersion` | Unsigned integer | Yes | Current value `1`. |
-| `baselineHash` | String | Yes | XXH3-64 hexadecimal hash of state-relevant authored defaults. |
-| `state` | Mapping from string to `LayoutValue` | Yes | Type-specific runtime state. |
+| Key            | Type                                 | Required | Meaning                                                       |
+| -------------- | ------------------------------------ | -------- | ------------------------------------------------------------- |
+| `type`         | String                               | Yes      | Layout component type.                                        |
+| `stateVersion` | Unsigned integer                     | Yes      | Current value `1`.                                            |
+| `baselineHash` | String                               | Yes      | XXH3-64 hexadecimal hash of state-relevant authored defaults. |
+| `state`        | Mapping from string to `LayoutValue` | Yes      | Type-specific runtime state.                                  |
 
 ## Stateful component inventory
 
-| Type | Runtime state keys | Authored baseline inputs | Promotion |
-|---|---|---|---|
-| `split` | `positionPercent` number. | `orientation`, `initialPositionPercent`, `position`, `resizeStart`, `resizeEnd`, `shrinkStart`, `shrinkEnd`. | Writes clamped `initialPositionPercent`; removes authored `position` and runtime `positionPercent`. |
-| `collapsibleSplit` | `size` integer and `revealed` boolean. | `orientation`, `collapseSide`, `initialPositionPercent`, `position`, `revealed`. | Writes `position` with minimum `50`; removes authored `initialPositionPercent` and runtime `size`; retains `revealed`. |
+| Type               | Runtime state keys                     | Authored baseline inputs                                                                                     | Promotion                                                                                                              |
+| ------------------ | -------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| `split`            | `positionPercent` number.              | `orientation`, `initialPositionPercent`, `position`, `resizeStart`, `resizeEnd`, `shrinkStart`, `shrinkEnd`. | Writes clamped `initialPositionPercent`; removes authored `position` and runtime `positionPercent`.                    |
+| `collapsibleSplit` | `size` integer and `revealed` boolean. | `orientation`, `collapseSide`, `initialPositionPercent`, `position`, `revealed`.                             | Writes `position` with minimum `50`; removes authored `initialPositionPercent` and runtime `size`; retains `revealed`. |
 
 A component persists runtime state when its `ComponentSchema::persistentState` is true.
 The shared `split` schema entry sets that field; GTK's `collapsibleSplit` sets it at registration.

@@ -2,6 +2,7 @@
 id: decision.0020.versioning-and-upgrade-policy
 status: accepted
 ---
+
 # Decision 0020: version persisted data for explicit upgrade
 
 ## Context

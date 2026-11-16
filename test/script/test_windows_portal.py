@@ -262,7 +262,12 @@ class WindowsPortalMainTest(unittest.TestCase):
                     buildenv, "requires_parsed_build_env", wraps=buildenv.requires_parsed_build_env
                 ) as required,
                 mock.patch.object(format_command, "resolve_files", wraps=format_command.resolve_files) as resolve,
-                mock.patch.object(gitfiles, "find_sources", wraps=gitfiles.find_sources) as scan,
+                # Deterministic Python-only scope: the real script/ao tree also
+                # carries JSON manifests whose Prettier pass must never run (or
+                # download) inside this unit test. Text discovery is Git-based
+                # and separate from the filesystem scan, so it is bounded too.
+                mock.patch.object(gitfiles, "find_sources", return_value=[WINDOWS_PORTAL_SCOPE]) as scan,
+                mock.patch.object(gitfiles, "prettier_sources", return_value=[]) as prettier,
                 contextlib.redirect_stdout(io.StringIO()) as stdout,
                 contextlib.redirect_stderr(io.StringIO()) as stderr,
             ):
@@ -283,6 +288,7 @@ class WindowsPortalMainTest(unittest.TestCase):
         self.assertIs(resolve.call_args_list[0].args[0], args)
         self.assertIs(resolve.call_args_list[1].args[0], args)
         scan.assert_called_once_with(["script/ao"], suffixes=gitfiles.SOURCE_SUFFIXES)
+        prettier.assert_called_once_with(["script/ao"])
         prepared = args._resolved_sources
         self.assertIn(WINDOWS_PORTAL_SCOPE, prepared)
         self.assertEqual(len(calls), 1)

@@ -1,6 +1,7 @@
 ---
 id: persistence.location
 ---
+
 # Managed file locations
 
 ## Scope and version
@@ -26,14 +27,14 @@ UIModel receives paths or stores and does not resolve storage locations.
 
 ### Path notation
 
-| Token | Linux meaning | Windows meaning |
-|---|---|---|
-| `<config>` | `utility::applicationConfigDirectory()`, which reads `$XDG_CONFIG_HOME/aobus`, then `$HOME/.config/aobus`, then the account entry's `.config/aobus`, and accepts only absolute values | `utility::applicationConfigDirectory()`, which reads `%LOCALAPPDATA%\Aobus` then `%APPDATA%\Aobus`, accepting only absolute values |
-| `<state>` | `$XDG_STATE_HOME` when non-empty; otherwise the `state` sibling of `Glib::get_user_data_dir()`, normally `~/.local/state` | Not used |
-| `<cache>` | `Glib::get_user_cache_dir()`, normally `$XDG_CACHE_HOME` or `~/.cache` | Not used |
-| `<app-cache>` | `utility::applicationCacheDirectory()`, which reads `$XDG_CACHE_HOME/aobus`, then `$HOME/.cache/aobus`, then the account entry's `.cache/aobus` | `utility::applicationCacheDirectory()`, which reads `%LOCALAPPDATA%\Aobus\Cache` |
-| `<root>` | The selected music-library root | The selected music-library root |
-| `<preset-id>` | A validated shell-layout preset identifier | A validated shell-layout preset identifier |
+| Token         | Linux meaning                                                                                                                                                                         | Windows meaning                                                                                                                    |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `<config>`    | `utility::applicationConfigDirectory()`, which reads `$XDG_CONFIG_HOME/aobus`, then `$HOME/.config/aobus`, then the account entry's `.config/aobus`, and accepts only absolute values | `utility::applicationConfigDirectory()`, which reads `%LOCALAPPDATA%\Aobus` then `%APPDATA%\Aobus`, accepting only absolute values |
+| `<state>`     | `$XDG_STATE_HOME` when non-empty; otherwise the `state` sibling of `Glib::get_user_data_dir()`, normally `~/.local/state`                                                             | Not used                                                                                                                           |
+| `<cache>`     | `Glib::get_user_cache_dir()`, normally `$XDG_CACHE_HOME` or `~/.cache`                                                                                                                | Not used                                                                                                                           |
+| `<app-cache>` | `utility::applicationCacheDirectory()`, which reads `$XDG_CACHE_HOME/aobus`, then `$HOME/.cache/aobus`, then the account entry's `.cache/aobus`                                       | `utility::applicationCacheDirectory()`, which reads `%LOCALAPPDATA%\Aobus\Cache`                                                   |
+| `<root>`      | The selected music-library root                                                                                                                                                       | The selected music-library root                                                                                                    |
+| `<preset-id>` | A validated shell-layout preset identifier                                                                                                                                            | A validated shell-layout preset identifier                                                                                         |
 
 `<app-cache>` is deliberately local-machine on Windows: a roaming profile would synchronize derived files between machines that can each rebuild them.
 A root that cannot resolve it composes a runtime with no cache directory rather than failing to start.
@@ -49,20 +50,20 @@ The [grouped configuration store specification](../../system/persistence/config-
 
 ### Global GTK application locations
 
-| Location | Class | Writer or reader |
-|---|---|---|
-| `<config>/config.yaml` | Global managed state for GTK application preferences, window/session state, keymap overrides, and the active library's playback session | `AppConfigStore` and the runtime playback-session owner through its borrowed store |
-| `<config>/layouts/<preset-id>.yaml` | One user-customized shell layout document | `ShellLayoutStore` |
-| `<config>/user.css` | Optional user-authored GTK style override | `GtkStyleRuntime` reads and monitors it; Aobus does not generate it |
-| `<state>/aobus/layout-state/<preset-id>.yaml` | Per-preset shell component runtime state | `ShellLayoutComponentStateStore` |
-| `<cache>/aobus/logs/` | GTK operational logs | Runtime logging configured by the GTK composition root |
+| Location                                      | Class                                                                                                                                   | Writer or reader                                                                   |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `<config>/config.yaml`                        | Global managed state for GTK application preferences, window/session state, keymap overrides, and the active library's playback session | `AppConfigStore` and the runtime playback-session owner through its borrowed store |
+| `<config>/layouts/<preset-id>.yaml`           | One user-customized shell layout document                                                                                               | `ShellLayoutStore`                                                                 |
+| `<config>/user.css`                           | Optional user-authored GTK style override                                                                                               | `GtkStyleRuntime` reads and monitors it; Aobus does not generate it                |
+| `<state>/aobus/layout-state/<preset-id>.yaml` | Per-preset shell component runtime state                                                                                                | `ShellLayoutComponentStateStore`                                                   |
+| `<cache>/aobus/logs/`                         | GTK operational logs                                                                                                                    | Runtime logging configured by the GTK composition root                             |
 
 ### Cross-frontend derived cache
 
-| Location | Class | Writer or reader |
-|---|---|---|
-| `<app-cache>/cover/` | Derived cover-art cache for GTK, TUI, WinUI, and CLI libraries using this cache root | `ResourceByteDiskCache`, constructed by the runtime from the directory its composition root supplied |
-| `<cache>/aobus/mpris-art-v2/` | Linux GTK/TUI MPRIS file URLs, named by full SHA-256 plus detected extension and published owner-only | `MprisArtUrlCache` in each system-media-enabled process |
+| Location                      | Class                                                                                                 | Writer or reader                                                                                     |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `<app-cache>/cover/`          | Derived cover-art cache for GTK, TUI, WinUI, and CLI libraries using this cache root                  | `ResourceByteDiskCache`, constructed by the runtime from the directory its composition root supplied |
+| `<cache>/aobus/mpris-art-v2/` | Linux GTK/TUI MPRIS file URLs, named by full SHA-256 plus detected extension and published owner-only | `MprisArtUrlCache` in each system-media-enabled process                                              |
 
 The MPRIS directory is shared by Linux frontends but contains only discardable delivery artifacts. Different `ResourceId` handles for equal bytes converge on the same digest path; no ResourceId-named sibling cleanup occurs. A process-memoized entry receives regular-file and byte-size validation, not a readback digest check.
 The unused legacy `<cache>/aobus/mpris-art/` directory is retained, and the current MPRIS directory has no automatic size limit or eviction; see [MPRIS artwork retention and manual cleanup](../../system/frontend/mpris.md#artwork-delivery).
@@ -77,8 +78,8 @@ The [cover-art delivery specification](../../system/resource/cover-art-delivery.
 
 The TUI keeps its own file rather than sharing GTK's. `ConfigStore` writes a whole document from the snapshot it took at first read, so two frontends pointed at one file would drop each other's groups whenever they ran at the same time.
 
-| Location | Class | Writer or reader |
-|---|---|---|
+| Location            | Class                                                                                | Writer or reader                                    |
+| ------------------- | ------------------------------------------------------------------------------------ | --------------------------------------------------- |
 | `<config>/tui.yaml` | Global managed state for TUI application preferences and editable shortcut overrides | One `ConfigStore` owned by the TUI composition root |
 
 The TUI loads the `shortcuts` group from this global file, independently of the selected library and `--config` workspace override.
@@ -91,13 +92,13 @@ normally `~/Library/Application Support/Aobus/macos`. `--state-root <path>`
 selects another absolute location; failure to resolve the default is a startup
 error. It is not the shared POSIX `<config>` directory.
 
-| Location | Class | Writer or reader |
-|---|---|---|
-| `<appkit-state>/desktop.plist` | Native desktop settings, including selected root and window state | `DesktopApplication`; Foundation property-list persistence, not `ConfigStore` YAML |
-| `<appkit-state>/desktop.lock` | Exclusive application-state lease | `ApplicationStateLease` |
-| `<appkit-state>/empty-library/` | Empty startup library when no root is selected | Desktop startup planning |
-| `<appkit-state>/logs/` | AppKit operational logs | Runtime logging configured by `DesktopApplication` |
-| `<appkit-state>/cache/cover/` | Derived cover cache shared by AppKit libraries using this state root | Runtime `ResourceByteDiskCache` |
+| Location                        | Class                                                                | Writer or reader                                                                   |
+| ------------------------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `<appkit-state>/desktop.plist`  | Native desktop settings, including selected root and window state    | `DesktopApplication`; Foundation property-list persistence, not `ConfigStore` YAML |
+| `<appkit-state>/desktop.lock`   | Exclusive application-state lease                                    | `ApplicationStateLease`                                                            |
+| `<appkit-state>/empty-library/` | Empty startup library when no root is selected                       | Desktop startup planning                                                           |
+| `<appkit-state>/logs/`          | AppKit operational logs                                              | Runtime logging configured by `DesktopApplication`                                 |
+| `<appkit-state>/cache/cover/`   | Derived cover cache shared by AppKit libraries using this state root | Runtime `ResourceByteDiskCache`                                                    |
 
 AppKit workspace and playback state are per-library, not in `desktop.plist`.
 The [session lifecycle](../../system/session-lifecycle.md#appkit) owns startup,
@@ -105,16 +106,16 @@ checkpoint, and successor persistence admission.
 
 ### Per-library locations
 
-| Location | Frontend | Class | Override |
-|---|---|---|---|
-| `<root>/.aobus/library/` | GTK, TUI, WinUI, AppKit, and CLI | Default LMDB music-library database | TUI `--database` may select another database path; CLI derives this path from `-C`/`--root` or `AOBUS_ROOT` |
-| `<root>/.aobus/library/workspace.yaml` | GTK and WinUI | Runtime workspace and view session | None in the current GTK or WinUI command surface |
-| `<root>/.aobus/library/appkit-workspace.yaml` | AppKit | Runtime workspace, playback-session, and List-presentation preference groups in one owned `ConfigStore` | Selected library root |
-| `<root>/.aobus/gtk_layout.yaml` | GTK | Per-library desktop track-column and list-presentation preferences | None |
-| `<root>/.aobus/tui_layout.yaml` | TUI | Per-library List navigation visibility, sidebar widths, terminal-cell track-column and list-presentation preferences | None |
-| `<root>/.aobus/winui_layout.yaml` | WinUI | Per-library desktop track-column and list-presentation preferences | None |
-| `<root>/.aobus/tui-workspace.yaml` | TUI | Default workspace and playback-session `ConfigStore` | `--config` selects another file |
-| `<root>/.aobus/logs/` | TUI | TUI operational logs | The library root changes the base location |
+| Location                                      | Frontend                         | Class                                                                                                                | Override                                                                                                    |
+| --------------------------------------------- | -------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `<root>/.aobus/library/`                      | GTK, TUI, WinUI, AppKit, and CLI | Default LMDB music-library database                                                                                  | TUI `--database` may select another database path; CLI derives this path from `-C`/`--root` or `AOBUS_ROOT` |
+| `<root>/.aobus/library/workspace.yaml`        | GTK and WinUI                    | Runtime workspace and view session                                                                                   | None in the current GTK or WinUI command surface                                                            |
+| `<root>/.aobus/library/appkit-workspace.yaml` | AppKit                           | Runtime workspace, playback-session, and List-presentation preference groups in one owned `ConfigStore`              | Selected library root                                                                                       |
+| `<root>/.aobus/gtk_layout.yaml`               | GTK                              | Per-library desktop track-column and list-presentation preferences                                                   | None                                                                                                        |
+| `<root>/.aobus/tui_layout.yaml`               | TUI                              | Per-library List navigation visibility, sidebar widths, terminal-cell track-column and list-presentation preferences | None                                                                                                        |
+| `<root>/.aobus/winui_layout.yaml`             | WinUI                            | Per-library desktop track-column and list-presentation preferences                                                   | None                                                                                                        |
+| `<root>/.aobus/tui-workspace.yaml`            | TUI                              | Default workspace and playback-session `ConfigStore`                                                                 | `--config` selects another file                                                                             |
+| `<root>/.aobus/logs/`                         | TUI                              | TUI operational logs                                                                                                 | The library root changes the base location                                                                  |
 
 GTK's workspace file is inside its default database directory because the GTK composition root derives it as `<database-path>/workspace.yaml`.
 The current GTK database path is `<root>/.aobus/library/`.

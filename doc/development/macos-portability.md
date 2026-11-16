@@ -1,6 +1,7 @@
 ---
 id: development.macos-portability
 ---
+
 # macOS portability compromises
 
 ## Scope
@@ -33,18 +34,18 @@ load with a missing symbol.
 Every entry below exists only because of a defect or gap outside this
 repository. None of them is a design choice.
 
-| # | Deviation | Location | Retire when |
-|---|---|---|---|
-| 1 | `ao::compat::MoveOnlyFunction` | `include/ao/compat/MoveOnlyFunction.h` | libc++ defines `__cpp_lib_move_only_function` |
-| 2 | `ao::compat::views::enumerate` | `include/ao/compat/Enumerate.h` | libc++ defines `__cpp_lib_ranges_enumerate` |
-| 3 | `ao::compat::AtomicSharedPtr` | `include/ao/compat/AtomicSharedPtr.h` | libc++ defines `__cpp_lib_atomic_shared_ptr` |
-| 4 | libc++ `expected` shim | `script/ao/macos-vcpkg-bootstrap.sh`, Bazel macOS toolchain composition | libc++ constrains `expected`'s equality operators without self-reference |
-| 5 | `-Wno-c2y-extensions` | governed Unix warning policy (`bazel/compiler_policy.bzl`) | fakeit stops expanding `__COUNTER__`, or Clang stops reporting it |
-| 6 | `StringMaker<file_time_type>` | `test/FilesystemTestSupport.h` | Catch2 can stringify `__int128`, or Darwin stops using it for the file clock |
-| 7 | c4core `C4_CPP=17` header mode | Bazel imported-interface declarations | c4core accepts C++26 consumers under Darwin Clang without invalid likelihood attributes |
-| 8 | Objective-C++26 compiler flag mapping | Bazel macOS toolchain composition | the composed toolchain supplies Clang's Objective-C++26 standard flags |
-| 9 | `__cpp_lib_chrono` clock-conversion branches | `lib/library/FileClockConversion.h`, `test/FilesystemTestSupport.h` | libc++ defines `__cpp_lib_chrono` as at least `201907L` |
-| 10 | `date` time-zone database | `vcpkg.json`, Bazel imported-interface declarations, `app/uimodel/field/TrackFieldFormatter.cpp` | libc++ defines `__cpp_lib_chrono` as at least `201907L` with its time-zone database enabled |
+| #   | Deviation                                    | Location                                                                                         | Retire when                                                                                 |
+| --- | -------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
+| 1   | `ao::compat::MoveOnlyFunction`               | `include/ao/compat/MoveOnlyFunction.h`                                                           | libc++ defines `__cpp_lib_move_only_function`                                               |
+| 2   | `ao::compat::views::enumerate`               | `include/ao/compat/Enumerate.h`                                                                  | libc++ defines `__cpp_lib_ranges_enumerate`                                                 |
+| 3   | `ao::compat::AtomicSharedPtr`                | `include/ao/compat/AtomicSharedPtr.h`                                                            | libc++ defines `__cpp_lib_atomic_shared_ptr`                                                |
+| 4   | libc++ `expected` shim                       | `script/ao/macos-vcpkg-bootstrap.sh`, Bazel macOS toolchain composition                          | libc++ constrains `expected`'s equality operators without self-reference                    |
+| 5   | `-Wno-c2y-extensions`                        | governed Unix warning policy (`bazel/compiler_policy.bzl`)                                       | fakeit stops expanding `__COUNTER__`, or Clang stops reporting it                           |
+| 6   | `StringMaker<file_time_type>`                | `test/FilesystemTestSupport.h`                                                                   | Catch2 can stringify `__int128`, or Darwin stops using it for the file clock                |
+| 7   | c4core `C4_CPP=17` header mode               | Bazel imported-interface declarations                                                            | c4core accepts C++26 consumers under Darwin Clang without invalid likelihood attributes     |
+| 8   | Objective-C++26 compiler flag mapping        | Bazel macOS toolchain composition                                                                | the composed toolchain supplies Clang's Objective-C++26 standard flags                      |
+| 9   | `__cpp_lib_chrono` clock-conversion branches | `lib/library/FileClockConversion.h`, `test/FilesystemTestSupport.h`                              | libc++ defines `__cpp_lib_chrono` as at least `201907L`                                     |
+| 10  | `date` time-zone database                    | `vcpkg.json`, Bazel imported-interface declarations, `app/uimodel/field/TrackFieldFormatter.cpp` | libc++ defines `__cpp_lib_chrono` as at least `201907L` with its time-zone database enabled |
 
 ### 1-3: standard-library seams
 
@@ -228,13 +229,13 @@ the full macOS check.
 These are not compromises and must not be removed. They are genuine differences
 between Darwin and Linux, and deleting them breaks macOS again.
 
-| Difference | Location |
-|---|---|
-| `mdb_mode_t` is 16-bit on Darwin, 32-bit on Linux | `include/ao/lmdb/Environment.h` |
-| `sigemptyset` and `sigaddset` are function-like macros | `lib/utility/Fatal.cpp`, `app/tui/SignalExitWatcherPosix.cpp` |
-| `environ` is declared only for the main executable | `test/fatal/ProbeProcessPosix.cpp` |
-| No procfs, so `/proc/self/exe` does not resolve | `test/fatal/ProbeProcessPosix.cpp` |
-| LMDB locks through named POSIX semaphores that outlive an aborted owner | `test/lmdb/LmdbProbeScratch.cpp` |
+| Difference                                                              | Location                                                      |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `mdb_mode_t` is 16-bit on Darwin, 32-bit on Linux                       | `include/ao/lmdb/Environment.h`                               |
+| `sigemptyset` and `sigaddset` are function-like macros                  | `lib/utility/Fatal.cpp`, `app/tui/SignalExitWatcherPosix.cpp` |
+| `environ` is declared only for the main executable                      | `test/fatal/ProbeProcessPosix.cpp`                            |
+| No procfs, so `/proc/self/exe` does not resolve                         | `test/fatal/ProbeProcessPosix.cpp`                            |
+| LMDB locks through named POSIX semaphores that outlive an aborted owner | `test/lmdb/LmdbProbeScratch.cpp`                              |
 
 The `Environment.h` mapping is guarded by a `static_assert` against
 `::mdb_mode_t` in `lib/lmdb/Environment.cpp`, so a wrong branch fails the build

@@ -1,6 +1,7 @@
 ---
 id: query.format-evaluation
 ---
+
 # Format expression evaluation
 
 ## Scope

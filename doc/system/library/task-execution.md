@@ -1,6 +1,7 @@
 ---
 id: library.task-execution
 ---
+
 # Library task execution
 
 ## Scope
@@ -79,12 +80,12 @@ Neither the finished pulse nor an awaited-task caller refreshes runtime replicas
 
 Every task uses its stop token at worker/callback executor hops, but only operations with a synchronous stop-token surface support cancellation while their core work is running.
 
-| Operation | In-operation cancellation |
-|---|---|
-| YAML import/export | None after synchronous transfer work begins. |
-| Scan plan build | Cooperative while copying the manifest, walking entries, reporting progress, matching moves, and hashing candidates. |
-| Scan plan apply | Cooperative between items and fingerprint chunks; cancellation aborts the plan transaction. |
-| Identity backfill | Cooperative between hash chunks; completed hashes in the current batch may be flushed. |
+| Operation          | In-operation cancellation                                                                                            |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| YAML import/export | None after synchronous transfer work begins.                                                                         |
+| Scan plan build    | Cooperative while copying the manifest, walking entries, reporting progress, matching moves, and hashing candidates. |
+| Scan plan apply    | Cooperative between items and fingerprint chunks; cancellation aborts the plan transaction.                          |
+| Identity backfill  | Cooperative between hash chunks; completed hashes in the current batch may be flushed.                               |
 
 Lifetime cancellation unwinds the coroutine and prevents post-cancellation access to destroyed borrowed owners.
 Business code does not reinterpret cancellation as a generic recoverable error or encode it in a successful value.

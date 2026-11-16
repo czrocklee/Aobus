@@ -1,6 +1,7 @@
 ---
 id: failure.outcome-channel
 ---
+
 # Outcome channel specification
 
 ## Scope
@@ -58,14 +59,14 @@ UIModel and frontends may adapt an already classified outcome for interaction or
 
 The successful domain value determines the base return shape before a recoverable channel is added.
 
-| Shape | Contract |
-|---|---|
-| `bool` | A binary predicate or normal yes/no outcome with no external failure mode. |
-| `T*` or `T const*` | A borrowed in-memory lookup where `nullptr` means absent. |
-| `std::optional<T>` | A value lookup where absence is the only normal miss state. |
-| `Result<>` | A command with no successful payload that can fail recoverably. |
-| `Result<T>` | A value-producing operation that can fail recoverably; a diagnostic lookup miss uses `NotFound`. |
-| `Result<Enum>` | An operation with several normal success states and an additional recoverable failure channel. |
+| Shape              | Contract                                                                                         |
+| ------------------ | ------------------------------------------------------------------------------------------------ |
+| `bool`             | A binary predicate or normal yes/no outcome with no external failure mode.                       |
+| `T*` or `T const*` | A borrowed in-memory lookup where `nullptr` means absent.                                        |
+| `std::optional<T>` | A value lookup where absence is the only normal miss state.                                      |
+| `Result<>`         | A command with no successful payload that can fail recoverably.                                  |
+| `Result<T>`        | A value-producing operation that can fail recoverably; a diagnostic lookup miss uses `NotFound`. |
+| `Result<Enum>`     | An operation with several normal success states and an additional recoverable failure channel.   |
 
 The [audio backend-open boundary](../playback/audio-execution.md#backend-lifetime-and-properties)
 uses `BackendOpenResult`, an expected value whose failure retains the original
@@ -93,13 +94,13 @@ When runtime composes a lower operation, it follows the enclosing operation's de
 
 Use the fatal form whose owner can know the failed fact:
 
-| Fact owner | Channel |
-|---|---|
-| Caller-supplied argument, capability, or documented call order | `AO_EXPECTS` |
-| Callee's result or observable state guarantee on normal return | `AO_ENSURES` |
-| Construction, successful validation, private lifecycle, or internal state transition | `AO_INVARIANT` |
-| Mandatory infrastructure after recovery is no longer truthful | `AO_FATAL` |
-| Realtime capacity or state-machine planning invariant | `AO_RT_INVARIANT` |
+| Fact owner                                                                           | Channel           |
+| ------------------------------------------------------------------------------------ | ----------------- |
+| Caller-supplied argument, capability, or documented call order                       | `AO_EXPECTS`      |
+| Callee's result or observable state guarantee on normal return                       | `AO_ENSURES`      |
+| Construction, successful validation, private lifecycle, or internal state transition | `AO_INVARIANT`    |
+| Mandatory infrastructure after recovery is no longer truthful                        | `AO_FATAL`        |
+| Realtime capacity or state-machine planning invariant                                | `AO_RT_INVARIANT` |
 
 `AO_INVARIANT` states a proposition about internal state that must hold at the check point.
 `AO_FATAL` is selected only after control flow has already established an unrecoverable mandatory failure and no useful condition remains to test.

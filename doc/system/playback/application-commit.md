@@ -1,6 +1,7 @@
 ---
 id: playback.application-commit
 ---
+
 # Playback application commits
 
 ## Scope

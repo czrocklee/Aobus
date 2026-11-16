@@ -1,6 +1,7 @@
 ---
 id: playback.session-state
 ---
+
 # Playback session state
 
 ## Scope and version
@@ -18,30 +19,30 @@ The payload belongs to the **application runtime** layer in the [system architec
 The literal top-level group is `playback-session`.
 The schema requires every root field below except `currentTrackOrdinal`, whose omission identifies a whole-file Track:
 
-| Field | C++ type | Default | Meaning |
-|---|---|---|---|
-| `schemaVersion` | Unsigned 32-bit integer | `1` | Exact compatibility gate. |
-| `libraryId` | Canonical UUID string | Nil UUID | Library the session was saved for. |
-| `sourceListId` | `ListId` | Invalid id | Library-scoped source list. |
-| `quickFilterExpression` | String | Empty | Ad-hoc filter applied over the source. |
-| `sortBy` | Sequence of `TrackSortTerm` | Empty | Ordered field/direction terms. |
-| `currentTrackId` | `TrackId` | Invalid id | Last restorable subject. |
-| `currentTrackUri` | String | Empty | Library URI of that subject's file as the library last confirmed it, including after a relink while the app runs; the URI it was opened with when the library never confirmed another. A saved value is never empty. |
-| `currentTrackOrdinal` | Unsigned 16-bit integer | `0` | `0` for a whole file, otherwise CUE ordinal `1..99`. Always emitted; accepted as `0` when omitted. URI and ordinal together identify the subject within a carrier. |
-| `anchorIndex` | Unsigned 64-bit integer | `0` | Saved semantic cursor anchor. |
-| `positionMs` | Unsigned 64-bit integer | `0` | Transport offset in milliseconds. |
-| `shuffleMode` | `ShuffleMode` | `Off` | Current shuffle policy. |
-| `repeatMode` | `RepeatMode` | `Off` | Current repeat policy. |
-| `volume` | Float | `1.0` | Normalized application volume intent. |
-| `muted` | Boolean | `false` | Mute intent. |
+| Field                   | C++ type                    | Default    | Meaning                                                                                                                                                                                                              |
+| ----------------------- | --------------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schemaVersion`         | Unsigned 32-bit integer     | `1`        | Exact compatibility gate.                                                                                                                                                                                            |
+| `libraryId`             | Canonical UUID string       | Nil UUID   | Library the session was saved for.                                                                                                                                                                                   |
+| `sourceListId`          | `ListId`                    | Invalid id | Library-scoped source list.                                                                                                                                                                                          |
+| `quickFilterExpression` | String                      | Empty      | Ad-hoc filter applied over the source.                                                                                                                                                                               |
+| `sortBy`                | Sequence of `TrackSortTerm` | Empty      | Ordered field/direction terms.                                                                                                                                                                                       |
+| `currentTrackId`        | `TrackId`                   | Invalid id | Last restorable subject.                                                                                                                                                                                             |
+| `currentTrackUri`       | String                      | Empty      | Library URI of that subject's file as the library last confirmed it, including after a relink while the app runs; the URI it was opened with when the library never confirmed another. A saved value is never empty. |
+| `currentTrackOrdinal`   | Unsigned 16-bit integer     | `0`        | `0` for a whole file, otherwise CUE ordinal `1..99`. Always emitted; accepted as `0` when omitted. URI and ordinal together identify the subject within a carrier.                                                   |
+| `anchorIndex`           | Unsigned 64-bit integer     | `0`        | Saved semantic cursor anchor.                                                                                                                                                                                        |
+| `positionMs`            | Unsigned 64-bit integer     | `0`        | Transport offset in milliseconds.                                                                                                                                                                                    |
+| `shuffleMode`           | `ShuffleMode`               | `Off`      | Current shuffle policy.                                                                                                                                                                                              |
+| `repeatMode`            | `RepeatMode`                | `Off`      | Current repeat policy.                                                                                                                                                                                               |
+| `volume`                | Float                       | `1.0`      | Normalized application volume intent.                                                                                                                                                                                |
+| `muted`                 | Boolean                     | `false`    | Mute intent.                                                                                                                                                                                                         |
 
 `sortBy` contains at most `kTrackSortFieldCount` terms.
 Every term is an exact mapping:
 
-| Field | Serialized value | Meaning |
-|---|---|---|
-| `field` | Signed 32-bit enum scalar. | Raw `TrackSortField` value from the [runtime track-field catalog](../library/model/track-field.md#sort-fields). |
-| `ascending` | Boolean. | `true` for ascending and `false` for descending. |
+| Field       | Serialized value           | Meaning                                                                                                         |
+| ----------- | -------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `field`     | Signed 32-bit enum scalar. | Raw `TrackSortField` value from the [runtime track-field catalog](../library/model/track-field.md#sort-fields). |
+| `ascending` | Boolean.                   | `true` for ascending and `false` for descending.                                                                |
 
 This playback schema deliberately remains separate from the stable textual presentation-state vocabulary.
 

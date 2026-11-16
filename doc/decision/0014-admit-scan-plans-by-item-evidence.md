@@ -2,6 +2,7 @@
 id: decision.0014.admit-scan-plans-by-item-evidence
 status: accepted
 ---
+
 # Decision 0014: admit scan plans by item evidence
 
 ## Context

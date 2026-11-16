@@ -1,6 +1,7 @@
 ---
 id: architecture.library
 ---
+
 # Library architecture
 
 ## Scope
@@ -34,12 +35,12 @@ CLI operations use this core composition without constructing interactive views 
 
 All stages remain in the application-runtime or core-library layers defined by the [system overview](../overview.md):
 
-| Stage | Layer | Public boundary | Implementation |
-|---|---|---|---|
-| Physical storage | Core libraries | `include/ao/library/` | `lib/library/` |
-| Runtime library facade | Application runtime | `app/include/ao/rt/library/` | `app/runtime/library/` |
-| Track sources | Application runtime | `app/include/ao/rt/source/` | `app/runtime/source/` |
-| Live projections | Application runtime | `app/include/ao/rt/projection/` | `app/runtime/projection/` |
+| Stage                  | Layer               | Public boundary                 | Implementation            |
+| ---------------------- | ------------------- | ------------------------------- | ------------------------- |
+| Physical storage       | Core libraries      | `include/ao/library/`           | `lib/library/`            |
+| Runtime library facade | Application runtime | `app/include/ao/rt/library/`    | `app/runtime/library/`    |
+| Track sources          | Application runtime | `app/include/ao/rt/source/`     | `app/runtime/source/`     |
+| Live projections       | Application runtime | `app/include/ao/rt/projection/` | `app/runtime/projection/` |
 
 UIModel and frontends consume runtime values and semantic commands; they do not join the storage or runtime-library implementation boundary.
 

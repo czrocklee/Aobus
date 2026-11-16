@@ -1,6 +1,7 @@
 ---
 id: architecture.interactive-session-lifecycle
 ---
+
 # Interactive session lifecycle architecture
 
 This page owns final placement and lifetime of a library-bound `AppRuntime` in

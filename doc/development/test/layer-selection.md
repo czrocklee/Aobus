@@ -1,6 +1,7 @@
 ---
 id: development.test.layer-selection
 ---
+
 # Test layer selection
 
 Choose the lowest layer that proves the behavior. Higher layers should not duplicate lower-layer policy unless the behavior is specifically about binding, rendering, lifecycle, or integration.

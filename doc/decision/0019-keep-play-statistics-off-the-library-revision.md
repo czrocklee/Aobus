@@ -2,6 +2,7 @@
 id: decision.0019.keep-play-statistics-off-the-library-revision
 status: accepted
 ---
+
 # Decision 0019: keep play statistics off the library revision
 
 ## Context

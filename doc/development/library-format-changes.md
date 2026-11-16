@@ -1,6 +1,7 @@
 ---
 id: development.library-format-changes
 ---
+
 # Library format changes
 
 ## Scope
@@ -16,10 +17,10 @@ The [database reference](../reference/library/storage/database.md#compatibility-
 
 Each format keeps its current version beside the last released one:
 
-| Format | Current | Last released |
-|---|---|---|
-| Library database | `kLibraryVersion` in [`MetadataLayout.h`](../../include/ao/library/MetadataLayout.h) | `kLastReleasedLibraryVersion` |
-| Library YAML | `kYamlFormatVersion` in [`LibraryTransfer.h`](../../app/include/ao/rt/library/LibraryTransfer.h) | `kLastReleasedYamlFormatVersion` |
+| Format           | Current                                                                                          | Last released                    |
+| ---------------- | ------------------------------------------------------------------------------------------------ | -------------------------------- |
+| Library database | `kLibraryVersion` in [`MetadataLayout.h`](../../include/ao/library/MetadataLayout.h)             | `kLastReleasedLibraryVersion`    |
+| Library YAML     | `kYamlFormatVersion` in [`LibraryTransfer.h`](../../app/include/ao/rt/library/LibraryTransfer.h) | `kLastReleasedYamlFormatVersion` |
 
 A last released version of `0` means that no release has shipped the format, and the current version is then 1.
 After a release, the current version equals the last released one until the first incompatible change of the next cycle increments it by one.

@@ -196,6 +196,7 @@ class GitFilesTest(unittest.TestCase):
         ]
         cpp_files = ["lib/Player.cpp", "include/Player.hpp", "include/Messages.def", "app/Host.mm"]
         python_files = ["script/check.py"]
+        text_files = ["directory.bzl/README.md", "doc/guide.md", "config.json", "app/layout.yaml", "app/style.css"]
         excluded = [
             "fooBUILD",
             "bazel/fooWORKSPACE",
@@ -207,19 +208,19 @@ class GitFilesTest(unittest.TestCase):
             "bazel/defs.bzl.tpl",
             "test/lint/Case.cpp",
             "test/lint/driver.py",
-            "directory.bzl/README.md",
         ]
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            for name in (*bazel_files, *cpp_files, *python_files, *excluded):
+            for name in (*bazel_files, *cpp_files, *python_files, *text_files, *excluded):
                 path = root / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text("fixture\n", encoding="utf-8")
             with mock.patch.object(gitfiles, "PROJECT_ROOT", root):
                 self.assertEqual(
                     gitfiles.find_sources(["."], suffixes=gitfiles.SOURCE_SUFFIXES),
-                    sorted(bazel_files + cpp_files + python_files),
+                    sorted(bazel_files + cpp_files + python_files + text_files),
                 )
+                self.assertEqual(gitfiles.find_sources(["."], suffixes=gitfiles.PRETTIER_SUFFIXES), sorted(text_files))
                 self.assertEqual(gitfiles.find_sources(["."]), sorted(cpp_files))
                 self.assertEqual(gitfiles.find_sources(["."], suffixes=gitfiles.PYTHON_SUFFIXES), python_files)
                 self.assertEqual(
@@ -462,6 +463,170 @@ class GitFilesTest(unittest.TestCase):
                 ["git", "config", "--local", "core.hooksPath", "script/git-hook"],
             )
 
+    def test_changed_paths_keep_control_files_before_the_source_suffix_filter(self):
+        def git_lines(*args: str, null_terminated: bool = False) -> list[str]:
+            if args[:2] == ("diff", "--name-only"):
+                return [".prettierignore", "doc/guide.md"]
+            return []
+
+        with (
+            mock.patch.object(gitfiles, "diff_base", return_value="main"),
+            mock.patch.object(gitfiles, "_git_worktree_files", return_value=[".gitignore", "script/ao/prettier.json"]),
+            mock.patch.object(gitfiles, "_git_lines", side_effect=git_lines),
+        ):
+            self.assertEqual(
+                gitfiles.changed_paths(),
+                [".gitignore", ".prettierignore", "doc/guide.md", "script/ao/prettier.json"],
+            )
+            # The suffix filter still owns source selection; control names are
+            # only visible to callers that ask for the unfiltered set.
+            self.assertEqual(
+                gitfiles.changed_files(suffixes=gitfiles.SOURCE_SUFFIXES),
+                ["doc/guide.md", "script/ao/prettier.json"],
+            )
+        self.assertTrue(gitfiles.matches_source(".gitignore", (".gitignore",)))
+        self.assertFalse(gitfiles.matches_source(".gitignore", gitfiles.SOURCE_SUFFIXES))
+
+    def test_prettier_sources_use_git_names_and_keep_the_fixture_exclusion(self):
+        names = [
+            "AGENTS.md",
+            ".prettierrc.json",
+            "app/ui.css",
+            "doc/guide.md",
+            "doc/deleted.md",
+            "script/tool.py",
+            "test/lint/fixture/notes.md",
+        ]
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for name in names:
+                if name == "doc/deleted.md":
+                    continue
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("fixture\n", encoding="utf-8")
+            with (
+                mock.patch.object(gitfiles, "PROJECT_ROOT", root),
+                mock.patch.object(gitfiles, "_git_lines_if_repository", return_value=names) as git_names,
+            ):
+                self.assertEqual(
+                    gitfiles.prettier_sources(["doc", "app"], include_root=True),
+                    [".prettierrc.json", "AGENTS.md", "app/ui.css", "doc/guide.md"],
+                )
+                self.assertEqual(gitfiles.prettier_sources(["doc"]), ["doc/guide.md"])
+            git_names.assert_called_with(
+                "ls-files", "-z", "--cached", "--others", "--exclude-standard", null_terminated=True
+            )
+
+    @unittest.skipIf(os.name == "nt", "native symlink creation needs separate Windows privileges")
+    def test_prettier_sources_fall_back_to_a_bounded_filesystem_scan(self):
+        with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as external:
+            root = Path(temporary)
+            for name in ("AGENTS.md", "doc/guide.md", "doc/plan/local.md", "lib/Foo.cpp"):
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("fixture\n", encoding="utf-8")
+            outside = Path(external) / "outside.md"
+            outside.write_text("outside\n", encoding="utf-8")
+            (root / "doc/linked.md").symlink_to(outside)
+            with (
+                mock.patch.object(gitfiles, "PROJECT_ROOT", root),
+                mock.patch.object(gitfiles, "_git_lines_if_repository", return_value=None),
+            ):
+                # Without Git the scan cannot know ignore rules, so ignored-looking
+                # text stays (Prettier's own --ignore-path skips it); a discovered
+                # link that escapes the checkout is dropped before it can abort.
+                self.assertEqual(
+                    gitfiles.prettier_sources(["doc"], include_root=True),
+                    ["AGENTS.md", "doc/guide.md", "doc/plan/local.md"],
+                )
+                self.assertEqual(gitfiles.prettier_sources(["doc"]), ["doc/guide.md", "doc/plan/local.md"])
+
+    def test_prettier_sources_fall_back_only_when_git_cannot_enumerate_the_checkout(self):
+        missing = mock.Mock(
+            returncode=128,
+            stdout=b"",
+            stderr=b"fatal: not a git repository (or any of the parent directories): .git\n",
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "doc").mkdir()
+            (root / "doc/guide.md").write_text("fixture\n", encoding="utf-8")
+            binding = {"AOBUS_GIT_DIR": str(root / "metadata"), "AOBUS_GIT_WORK_TREE": str(root)}
+            with mock.patch.object(gitfiles, "PROJECT_ROOT", root):
+                with mock.patch.object(gitfiles.subprocess, "run", return_value=missing):
+                    self.assertEqual(gitfiles.prettier_sources(["doc"]), ["doc/guide.md"])
+                with mock.patch.object(
+                    gitfiles.subprocess, "run", side_effect=FileNotFoundError(2, "No such file or directory", "git")
+                ):
+                    self.assertEqual(gitfiles.prettier_sources(["doc"]), ["doc/guide.md"])
+                # An explicit binding that does not resolve is a misconfiguration,
+                # never a plain exported tree.
+                with (
+                    mock.patch.object(gitfiles.subprocess, "run", return_value=missing),
+                    mock.patch.dict(
+                        os.environ, {"AOBUS_GIT_DIR": str(root / "metadata"), "AOBUS_GIT_WORK_TREE": str(root)}
+                    ),
+                    contextlib.redirect_stderr(io.StringIO()) as errors,
+                    self.assertRaises(SystemExit),
+                ):
+                    gitfiles.prettier_sources(["doc"])
+                self.assertIn("not a git repository", errors.getvalue())
+                # A missing executable cannot honor an explicit selection either.
+                with (
+                    mock.patch.object(
+                        gitfiles.subprocess, "run", side_effect=FileNotFoundError(2, "No such file or directory", "git")
+                    ),
+                    mock.patch.dict(os.environ, binding),
+                    contextlib.redirect_stderr(io.StringIO()) as errors,
+                    self.assertRaises(SystemExit),
+                ):
+                    gitfiles.prettier_sources(["doc"])
+                self.assertIn("No such file or directory", errors.getvalue())
+
+    def test_prettier_sources_ignore_a_binding_for_another_checkout(self):
+        missing = mock.Mock(
+            returncode=128,
+            stdout=b"",
+            stderr=b"fatal: not a git repository (or any of the parent directories): .git\n",
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "checkout"
+            (root / "doc").mkdir(parents=True)
+            (root / "doc/guide.md").write_text("fixture\n", encoding="utf-8")
+            other = Path(temporary) / "another checkout"
+            other.mkdir()
+            # git_command ignores a well-formed binding for a different work tree,
+            # so it cannot make this checkout's Git unavailable.
+            binding = {"AOBUS_GIT_DIR": str(other / "metadata"), "AOBUS_GIT_WORK_TREE": str(other)}
+            with (
+                mock.patch.object(gitfiles, "PROJECT_ROOT", root),
+                mock.patch.dict(os.environ, binding),
+            ):
+                with mock.patch.object(gitfiles.subprocess, "run", return_value=missing):
+                    self.assertEqual(gitfiles.prettier_sources(["doc"]), ["doc/guide.md"])
+                with mock.patch.object(
+                    gitfiles.subprocess, "run", side_effect=FileNotFoundError(2, "No such file or directory", "git")
+                ):
+                    self.assertEqual(gitfiles.prettier_sources(["doc"]), ["doc/guide.md"])
+
+    def test_prettier_sources_report_os_failures_instead_of_falling_back(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "doc").mkdir()
+            (root / "doc/guide.md").write_text("fixture\n", encoding="utf-8")
+            for environment in ({}, {"AOBUS_GIT_DIR": str(root / "metadata"), "AOBUS_GIT_WORK_TREE": str(root)}):
+                with (
+                    self.subTest(environment=environment),
+                    mock.patch.object(gitfiles, "PROJECT_ROOT", root),
+                    mock.patch.object(gitfiles.subprocess, "run", side_effect=PermissionError("permission denied")),
+                    mock.patch.dict(os.environ, environment),
+                    contextlib.redirect_stderr(io.StringIO()) as errors,
+                    self.assertRaises(SystemExit),
+                ):
+                    gitfiles.prettier_sources(["doc"])
+                self.assertIn("permission denied", errors.getvalue())
+
 
 class GitWorkflowFixtureTest(unittest.TestCase):
     def setUp(self):
@@ -499,6 +664,54 @@ class GitWorkflowFixtureTest(unittest.TestCase):
     def commit(self, name):
         self.git("add", ".")
         self.git("commit", "-m", name)
+
+    @unittest.skipIf(os.name == "nt", "native symlink creation needs separate Windows privileges")
+    def test_prettier_sources_exclude_ignored_compile_commands_links_in_root_and_nested_folders(self):
+        (self.root / ".gitignore").write_text("compile_commands.json\ndoc/plan/\n", encoding="utf-8")
+        for name in ("README.md", "doc/guide.md", "doc/plan/local.md"):
+            path = self.root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("fixture\n", encoding="utf-8")
+        self.commit("base")
+        outside = self.root.parent / "external compile database.json"
+        outside.write_text("{}\n", encoding="utf-8")
+        (self.root / "compile_commands.json").symlink_to(outside)
+        (self.root / "doc/compile_commands.json").symlink_to(outside)
+        with mock.patch.object(gitfiles, "PROJECT_ROOT", self.root):
+            self.assertEqual(gitfiles.prettier_sources(["doc"], include_root=True), ["README.md", "doc/guide.md"])
+            self.assertEqual(gitfiles.prettier_sources(["doc"]), ["doc/guide.md"])
+
+    def test_prettier_sources_accept_absolute_and_normalized_folder_selections(self):
+        for name in ("AGENTS.md", "app/ui.css", "doc/guide.md", "doc/deep/nested.md"):
+            path = self.root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("fixture\n", encoding="utf-8")
+        self.commit("base")
+        with mock.patch.object(gitfiles, "PROJECT_ROOT", self.root):
+            expected = ["doc/deep/nested.md", "doc/guide.md"]
+            self.assertEqual(gitfiles.prettier_sources(["doc"]), expected)
+            self.assertEqual(gitfiles.prettier_sources([str(self.root / "doc")]), expected)
+            self.assertEqual(gitfiles.prettier_sources(["./doc"]), expected)
+            self.assertEqual(gitfiles.prettier_sources([f"../{self.root.name}/doc"]), expected)
+            self.assertEqual(gitfiles.prettier_sources(["."]), ["AGENTS.md", "app/ui.css", *expected])
+            # A selection outside the checkout owns no checkout-relative name and
+            # must never widen to the whole tree.
+            self.assertEqual(gitfiles.prettier_sources([str(self.root.parent)]), [])
+
+    @unittest.skipIf(os.name == "nt", "native symlink creation needs separate Windows privileges")
+    def test_prettier_sources_keep_tracked_and_unignored_links_for_prettier_containment(self):
+        (self.root / "doc").mkdir()
+        (self.root / "doc/guide.md").write_text("fixture\n", encoding="utf-8")
+        outside = self.root.parent / "external text.md"
+        outside.write_text("# outside\n", encoding="utf-8")
+        (self.root / "doc/tracked.md").symlink_to(outside)
+        self.commit("base")
+        (self.root / "doc/untracked.md").symlink_to(outside)
+        with mock.patch.object(gitfiles, "PROJECT_ROOT", self.root):
+            # Git-enumerated links stay in discovery so Prettier's own containment
+            # error reports them; only the filesystem fallback drops them.
+            self.assertEqual(gitfiles.prettier_sources(["doc"]), ["doc/guide.md", "doc/tracked.md", "doc/untracked.md"])
+            self.assertTrue(gitfiles._escapes_checkout("doc/tracked.md"))
 
     def test_changed_source_scope_includes_committed_and_worktree_bazel_files_only(self):
         for name in ("BUILD", "nested/WORKSPACE"):
@@ -887,10 +1100,7 @@ class GitWorkflowFixtureTest(unittest.TestCase):
             ("asset/brand/nested/Soul.md", "true"),
             ("asset/brand/Soul.svg", "false"),
             ("doc/plan/nested/draft.md", "true"),
-            # The shared component vocabulary carries a generated region the
-            # native LayoutSchema test asserts, so it selects native validation
-            # while sibling reference prose keeps the docs-only route.
-            ("doc/reference/shell/component-vocabulary.md", "false"),
+            ("doc/reference/shell/component-vocabulary.md", "true"),
             ("doc/reference/shell/glossary.md", "true"),
         ):
             with self.subTest(name=name):

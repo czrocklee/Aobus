@@ -1,6 +1,7 @@
 ---
 id: media.audio-file-library-surface
 ---
+
 # Supported audio files
 
 ## Scope and version
@@ -16,13 +17,13 @@ The public Core surface is `ao::media::file::File`, `Visitor`, and `PayloadView`
 
 `File::isSupported()` and `File::open()` share one case-normalized extension table.
 
-| Extension | Reader/container | `AudioCodec` emitted |
-|---|---|---|
-| `.flac` | FLAC | `Flac` |
-| `.mp3` | MPEG audio with optional ID3 | `Mp3` |
-| `.m4a` | MP4 audio | `Alac` for `alac`; `Aac` for `mp4a`; otherwise no codec callback |
-| `.wav` | RIFF/WAVE | `Wav` |
-| `.opus` | Ogg Opus | `Opus` |
+| Extension | Reader/container             | `AudioCodec` emitted                                             |
+| --------- | ---------------------------- | ---------------------------------------------------------------- |
+| `.flac`   | FLAC                         | `Flac`                                                           |
+| `.mp3`    | MPEG audio with optional ID3 | `Mp3`                                                            |
+| `.m4a`    | MP4 audio                    | `Alac` for `alac`; `Aac` for `mp4a`; otherwise no codec callback |
+| `.wav`    | RIFF/WAVE                    | `Wav`                                                            |
+| `.opus`   | Ogg Opus                     | `Opus`                                                           |
 
 Other paths are unsupported. In particular, `.mp4`, ADTS `.aac`, literal `.alac`, images, and playlists are not recognized scan inputs. `.m4a` is the only accepted MP4 audio extension. `.ogg` is also unrecognized: it names a container rather than a codec, and its common Vorbis payload has no reader, so accepting it would make scanning report errors for most real files. Opus is recognized only under its own `.opus` extension.
 
@@ -52,32 +53,32 @@ Mappings are case-insensitive for FLAC/Vorbis keys, MP4 metadata/freeform aliase
 Opus carries its metadata as a Vorbis comment list in its `OpusTags` packet and therefore uses the FLAC/Vorbis column below unchanged, including whole-file `ORCHESTRA` fallback and repeated `PERFORMER` credits.
 Conductor, Ensemble, Soloist, and every credits row below emit credit kinds, not scalar `TextField` callbacks; the non-performing credit rows follow MusicBrainz Picard's tag names. WAVE embedded ID3 uses every supported ID3 mapping, not just `TMCL`; `INFO` has no credit mapping.
 
-| Visitor field | FLAC/Vorbis | MP4/iTunes or `mdta` | ID3v2 | WAVE `INFO` |
-|---|---|---|---|---|
-| `Title` | `TITLE` | `©nam`; `title` | `TIT2` | `INAM` |
-| `Artist` | `ARTIST` | `©ART`; `artist` | `TPE1` | `IART` |
-| `Album` | `ALBUM` | `©alb`; `album` | `TALB` | `IPRD` |
-| `AlbumArtist` | `ALBUMARTIST`, `ALBUM ARTIST`, `ALBUM_ARTIST` | `aART`; `album_artist`, `albumartist` | `TPE2` | — |
-| `Composer` | `COMPOSER` | `©wrt`; `composer` | `TCOM` | — |
-| `Conductor` | `CONDUCTOR` | freeform/`mdta` `conductor` | `TPE3`; `TXXX:conductor` | — |
-| `Ensemble` | `ENSEMBLE`; fallback `ORCHESTRA` | freeform/`mdta` `ensemble`; fallback `orchestra` | `TXXX:ensemble`; fallback `TXXX:orchestra` | — |
-| `Genre` | `GENRE` | `©gen`; `genre` | `TCON` | `IGNR` |
-| `Work` | `WORK` > `GROUPING` | `©wrk` > `mdta` `work` > `©grp` > `mdta` `grouping` | `TXXX:work` > `TIT1` > `TXXX:grouping` | — |
-| `Movement` | `MOVEMENTNAME` | `©mvn`; `movementname`, `movement_name`, `mvnm` | `MVNM`; equivalent `TXXX` aliases | — |
-| `Soloist` | `SOLOIST` | freeform/`mdta` `soloist` | `TXXX:soloist` | — |
-| Performer credits | Repeated `PERFORMER` | — | ID3v2.4 `TMCL` | Embedded ID3, not `INFO` |
-| Lyricist credits | `LYRICIST` | freeform/`mdta` `lyricist` | `TEXT` | Embedded ID3, not `INFO` |
-| Arranger credits | `ARRANGER` | freeform/`mdta` `arranger` | `TIPL`/`IPLS` `arranger` | Embedded ID3, not `INFO` |
-| Writer credits | `WRITER` | freeform/`mdta` `writer` | `TXXX:writer` | Embedded ID3, not `INFO` |
-| Producer credits | `PRODUCER` | freeform/`mdta` `producer` | `TIPL`/`IPLS` `producer` | Embedded ID3, not `INFO` |
-| Engineer credits | `ENGINEER` | freeform/`mdta` `engineer` | `TIPL`/`IPLS` `engineer` | Embedded ID3, not `INFO` |
-| Mixer credits | `MIXER` | freeform/`mdta` `mixer` | `TIPL`/`IPLS` `mix` | Embedded ID3, not `INFO` |
-| DJ-mixer credits | `DJMIXER` | freeform/`mdta` `djmixer` | `TIPL`/`IPLS` `DJ-mix` | Embedded ID3, not `INFO` |
-| Remixer credits | `REMIXER` | freeform/`mdta` `remixer` | `TPE4` | Embedded ID3, not `INFO` |
-| `Year` | `DATE`, `YEAR` | `©day`; `date`, `year` | `TYER`, `TDRC` | first four decimal digits of `ICRD` |
-| Track number/total | `TRACKNUMBER`, `TRACK` as `n` or `n/total`; `TRACKTOTAL`, `TOTALTRACKS` | `trkn`; `track`, `tracknumber` slash value | `TRCK` slash value | — |
-| Disc number/total | `DISCNUMBER`, `DISC` slash value; `DISCTOTAL`, `TOTALDISCS` | `disk`; `disc`, `disk`, `discnumber` slash value | `TPOS` slash value | — |
-| Movement number/total | `MOVEMENT` slash value; `MOVEMENTTOTAL` | `©mvi`, `©mvc` signed non-negative big-endian integer; equivalent `mdta` aliases | `MVIN` slash value; equivalent `TXXX` aliases | — |
+| Visitor field         | FLAC/Vorbis                                                             | MP4/iTunes or `mdta`                                                             | ID3v2                                         | WAVE `INFO`                         |
+| --------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------- | --------------------------------------------- | ----------------------------------- |
+| `Title`               | `TITLE`                                                                 | `©nam`; `title`                                                                  | `TIT2`                                        | `INAM`                              |
+| `Artist`              | `ARTIST`                                                                | `©ART`; `artist`                                                                 | `TPE1`                                        | `IART`                              |
+| `Album`               | `ALBUM`                                                                 | `©alb`; `album`                                                                  | `TALB`                                        | `IPRD`                              |
+| `AlbumArtist`         | `ALBUMARTIST`, `ALBUM ARTIST`, `ALBUM_ARTIST`                           | `aART`; `album_artist`, `albumartist`                                            | `TPE2`                                        | —                                   |
+| `Composer`            | `COMPOSER`                                                              | `©wrt`; `composer`                                                               | `TCOM`                                        | —                                   |
+| `Conductor`           | `CONDUCTOR`                                                             | freeform/`mdta` `conductor`                                                      | `TPE3`; `TXXX:conductor`                      | —                                   |
+| `Ensemble`            | `ENSEMBLE`; fallback `ORCHESTRA`                                        | freeform/`mdta` `ensemble`; fallback `orchestra`                                 | `TXXX:ensemble`; fallback `TXXX:orchestra`    | —                                   |
+| `Genre`               | `GENRE`                                                                 | `©gen`; `genre`                                                                  | `TCON`                                        | `IGNR`                              |
+| `Work`                | `WORK` > `GROUPING`                                                     | `©wrk` > `mdta` `work` > `©grp` > `mdta` `grouping`                              | `TXXX:work` > `TIT1` > `TXXX:grouping`        | —                                   |
+| `Movement`            | `MOVEMENTNAME`                                                          | `©mvn`; `movementname`, `movement_name`, `mvnm`                                  | `MVNM`; equivalent `TXXX` aliases             | —                                   |
+| `Soloist`             | `SOLOIST`                                                               | freeform/`mdta` `soloist`                                                        | `TXXX:soloist`                                | —                                   |
+| Performer credits     | Repeated `PERFORMER`                                                    | —                                                                                | ID3v2.4 `TMCL`                                | Embedded ID3, not `INFO`            |
+| Lyricist credits      | `LYRICIST`                                                              | freeform/`mdta` `lyricist`                                                       | `TEXT`                                        | Embedded ID3, not `INFO`            |
+| Arranger credits      | `ARRANGER`                                                              | freeform/`mdta` `arranger`                                                       | `TIPL`/`IPLS` `arranger`                      | Embedded ID3, not `INFO`            |
+| Writer credits        | `WRITER`                                                                | freeform/`mdta` `writer`                                                         | `TXXX:writer`                                 | Embedded ID3, not `INFO`            |
+| Producer credits      | `PRODUCER`                                                              | freeform/`mdta` `producer`                                                       | `TIPL`/`IPLS` `producer`                      | Embedded ID3, not `INFO`            |
+| Engineer credits      | `ENGINEER`                                                              | freeform/`mdta` `engineer`                                                       | `TIPL`/`IPLS` `engineer`                      | Embedded ID3, not `INFO`            |
+| Mixer credits         | `MIXER`                                                                 | freeform/`mdta` `mixer`                                                          | `TIPL`/`IPLS` `mix`                           | Embedded ID3, not `INFO`            |
+| DJ-mixer credits      | `DJMIXER`                                                               | freeform/`mdta` `djmixer`                                                        | `TIPL`/`IPLS` `DJ-mix`                        | Embedded ID3, not `INFO`            |
+| Remixer credits       | `REMIXER`                                                               | freeform/`mdta` `remixer`                                                        | `TPE4`                                        | Embedded ID3, not `INFO`            |
+| `Year`                | `DATE`, `YEAR`                                                          | `©day`; `date`, `year`                                                           | `TYER`, `TDRC`                                | first four decimal digits of `ICRD` |
+| Track number/total    | `TRACKNUMBER`, `TRACK` as `n` or `n/total`; `TRACKTOTAL`, `TOTALTRACKS` | `trkn`; `track`, `tracknumber` slash value                                       | `TRCK` slash value                            | —                                   |
+| Disc number/total     | `DISCNUMBER`, `DISC` slash value; `DISCTOTAL`, `TOTALDISCS`             | `disk`; `disc`, `disk`, `discnumber` slash value                                 | `TPOS` slash value                            | —                                   |
+| Movement number/total | `MOVEMENT` slash value; `MOVEMENTTOTAL`                                 | `©mvi`, `©mvc` signed non-negative big-endian integer; equivalent `mdta` aliases | `MVIN` slash value; equivalent `TXXX` aliases | —                                   |
 
 Unknown fields do not become `TrackBuilder::customMetadata`. Invalid isolated scalar values leave their field at zero.
 A source field without a row here, such as a MusicBrainz identifier, an ISRC, or a record label, never enters the library database: the library keeps no raw-tag store and no allowlist of extra fields.
@@ -181,13 +182,13 @@ Image bytes are borrowed views at this boundary. `readMediaTrack` passes them to
 
 ## Technical properties
 
-| Format | Property sources |
-|---|---|
-| FLAC | `StreamInfo` sample rate, channels, bit depth, and total-sample duration; bitrate from mapped file bytes and duration. A nonzero `STREAMINFO` total-sample count is the exact PCM frame count; zero means the extent is unknown. |
-| MP3 | First confirmed MPEG frame; table bitrate or adjacent-frame-derived free-format bitrate; Xing frame/byte evidence when valid, otherwise frame bitrate and tag-trimmed payload extent. Bit depth is `16`. |
-| MP4 | Selected audio track `mdhd` timing and first `stsd` `alac`/`mp4a` sample entry. Malformed optional timing may leave duration absent. |
-| WAVE | Validated format and data chunks; duration from frames and sample rate, bitrate from mapped file bytes and duration. Exact frame count is the data length divided by block alignment. |
-| Opus | `OpusHead` channel count; sample rate is always the fixed 48 kHz decode rate, never the header's informational input rate. Duration is the final page granule position less the stream's playback start, which is the derived decode origin advanced past the header pre-skip; bitrate comes from mapped file bytes and duration. A stream that never reached a complete end of stream reports no duration and therefore no bitrate. No bit depth is emitted, because Opus defines none. |
+| Format | Property sources                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FLAC   | `StreamInfo` sample rate, channels, bit depth, and total-sample duration; bitrate from mapped file bytes and duration. A nonzero `STREAMINFO` total-sample count is the exact PCM frame count; zero means the extent is unknown.                                                                                                                                                                                                                                                         |
+| MP3    | First confirmed MPEG frame; table bitrate or adjacent-frame-derived free-format bitrate; Xing frame/byte evidence when valid, otherwise frame bitrate and tag-trimmed payload extent. Bit depth is `16`.                                                                                                                                                                                                                                                                                 |
+| MP4    | Selected audio track `mdhd` timing and first `stsd` `alac`/`mp4a` sample entry. Malformed optional timing may leave duration absent.                                                                                                                                                                                                                                                                                                                                                     |
+| WAVE   | Validated format and data chunks; duration from frames and sample rate, bitrate from mapped file bytes and duration. Exact frame count is the data length divided by block alignment.                                                                                                                                                                                                                                                                                                    |
+| Opus   | `OpusHead` channel count; sample rate is always the fixed 48 kHz decode rate, never the header's informational input rate. Duration is the final page granule position less the stream's playback start, which is the derived decode origin advanced past the header pre-skip; bitrate comes from mapped file bytes and duration. A stream that never reached a complete end of stream reports no duration and therefore no bitrate. No bit depth is emitted, because Opus defines none. |
 
 A Vorbis comment named `CUESHEET` is copied as text and visited through `cueSheet`, not as a `TextField`. FLAC and Opus share that extraction. The binary FLAC `CUESHEET` metadata block is not interpreted. Only a nonempty FLAC comment can divide a file, as the [CUE sheet reference](cue-sheet.md#embedded-text) defines.
 
@@ -195,25 +196,25 @@ A Vorbis comment named `CUESHEET` is copied as text and visited through `cueShee
 
 `File::audioPayload()` returns a borrowed non-empty span plus its file offset:
 
-| Format | Payload range |
-|---|---|
-| FLAC | All bytes after the final metadata block. |
-| MP4 | Payload of the single non-empty top-level `mdat`, after its compact or extended header; a size `0` `mdat` extends to end of file. Multiple `mdat` atoms are rejected. |
-| MP3 | From the first confirmed MPEG frame through the trailing-tag boundary; a valid leading ID3v2 envelope is excluded. A `TAG` marker at the historical end-of-file-minus-128 position remains payload only inside a complete contiguous frame chain that reaches the APE-trimmed end; otherwise the 128-byte tag is trimmed. The [media file reading specification](../../system/media/file-reading.md#mpeg-audio-and-id3) owns the chain walk, its terminal tolerance, and its byte-only limitations. |
-| WAV | RIFF `data` chunk payload. |
-| Opus | From the start of the first audio page through the end of the file, excluding the identification and tag pages. |
+| Format | Payload range                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FLAC   | All bytes after the final metadata block.                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| MP4    | Payload of the single non-empty top-level `mdat`, after its compact or extended header; a size `0` `mdat` extends to end of file. Multiple `mdat` atoms are rejected.                                                                                                                                                                                                                                                                                                                               |
+| MP3    | From the first confirmed MPEG frame through the trailing-tag boundary; a valid leading ID3v2 envelope is excluded. A `TAG` marker at the historical end-of-file-minus-128 position remains payload only inside a complete contiguous frame chain that reaches the APE-trimmed end; otherwise the 128-byte tag is trimmed. The [media file reading specification](../../system/media/file-reading.md#mpeg-audio-and-id3) owns the chain walk, its terminal tolerance, and its byte-only limitations. |
+| WAV    | RIFF `data` chunk payload.                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| Opus   | From the start of the first audio page through the end of the file, excluding the identification and tag pages.                                                                                                                                                                                                                                                                                                                                                                                     |
 
 The range excludes known tag and non-audio container regions but does not decode samples. MP3 encoder padding inside frames remains part of the payload. Opus page headers stay inside the range, so a tag edit that changes how many pages the Opus header occupies shifts the audio page sequence numbers and changes the identity of an otherwise unmodified file.
 
 ## Errors and lifetime
 
-| Condition | Result |
-|---|---|
-| Unsupported extension | `NotSupported` from `File::open()` |
-| Mapping failure | `IoError` with path context |
+| Condition                                                                                                                                                     | Result                                            |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| Unsupported extension                                                                                                                                         | `NotSupported` from `File::open()`                |
+| Mapping failure                                                                                                                                               | `IoError` with path context                       |
 | Recognized WAVE with an unsupported format code, extensible subformat, channel count, valid-bit/container combination, PCM bit depth, or float representation | `NotSupported` from `visit()` or `audioPayload()` |
-| Required malformed container or empty/ambiguous payload | `CorruptData` or `FormatRejected` |
-| Bounded malformed optional metadata subtree | Successful omission |
+| Required malformed container or empty/ambiguous payload                                                                                                       | `CorruptData` or `FormatRejected`                 |
+| Bounded malformed optional metadata subtree                                                                                                                   | Successful omission                               |
 
 `File` is move-only and non-concurrent. Payload, text, and image views remain valid while the backing `File` lives; moving the file transfers that backing without copying it. `MediaTrack` is the runtime owner that pairs such views with a library builder.
 

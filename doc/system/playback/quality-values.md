@@ -1,6 +1,7 @@
 ---
 id: playback.audio-quality-surface
 ---
+
 # Audio quality values and presentation
 
 Quality values carry evidence about source fidelity, changes along the output path, and confidence in that evidence.
@@ -15,15 +16,15 @@ Frontend adapters consume shared categories rather than deriving another quality
 `worseQuality` uses the following rank; higher rank wins.
 `Unknown` means absence of a useful rating, not the worst degradation. Confidence remains separate from severity, and neither a default confidence flag nor a lossless source proves a verified output path.
 
-| Rank | Quality | Meaning | Default presentation category |
-|---:|---|---|---|
-| 0 | `Unknown` | No useful quality rating | `Unknown` |
-| 1 | `BitwisePerfect` | No reported signal change | `Medal` |
-| 2 | `LosslessPadded` | Bit-transparent integer widening | `Positive` |
-| 3 | `LosslessFloat` | Bit-transparent float mapping or proven round trip | `Positive` |
-| 4 | `LinearIntervention` | Reported conversion, gain, mute, or mixing | `Diagnostic` |
-| 5 | `LossySource` | Encoded source is lossy | `Informational` |
-| 6 | `Clipped` | Reserved sample-clipping severity | `Clipped` |
+| Rank | Quality              | Meaning                                            | Default presentation category |
+| ---: | -------------------- | -------------------------------------------------- | ----------------------------- |
+|    0 | `Unknown`            | No useful quality rating                           | `Unknown`                     |
+|    1 | `BitwisePerfect`     | No reported signal change                          | `Medal`                       |
+|    2 | `LosslessPadded`     | Bit-transparent integer widening                   | `Positive`                    |
+|    3 | `LosslessFloat`      | Bit-transparent float mapping or proven round trip | `Positive`                    |
+|    4 | `LinearIntervention` | Reported conversion, gain, mute, or mixing         | `Diagnostic`                  |
+|    5 | `LossySource`        | Encoded source is lossy                            | `Informational`               |
+|    6 | `Clipped`            | Reserved sample-clipping severity                  | `Clipped`                     |
 
 The current analyzer does not infer actual clipping from amplification metadata.
 Software amplification remains `LinearIntervention`, with a `Warning` presentation override for clipping risk.
@@ -33,23 +34,23 @@ Consumers use the analyzer-assigned finding quality, not enum declaration order 
 
 This table describes semantic evidence, not display strings or struct layouts.
 
-| Finding kind | Analyzer quality | Evidence and interpretation |
-|---|---|---|
-| `Unknown` | `Unknown` | No useful finding |
-| `BitPerfect` | `BitwisePerfect` | No other finding at the assessed node |
-| `LossySource` | `LossySource` | Source encoding is lossy |
-| `SoftwareVolumeModification` | `LinearIntervention` | Reported software attenuation; positive gain can be displayed |
-| `SoftwareAmplification` | `LinearIntervention` | Reported software gain above unity; a risk, not measured clipping |
-| `HardwareVolumeModification` | `BitwisePerfect` | Gain attributed to hardware, not a digital-path modification |
-| `UnclassifiedVolumeModification` | `LinearIntervention` | Gain change whose origin is unverified |
-| `Muted` | `LinearIntervention` | Reported muting |
-| `Resampling` | `LinearIntervention` | Source and destination sample rates |
-| `ChannelMapping` | `LinearIntervention` | Source and destination channel counts/layout evidence |
-| `LosslessPadding` | `LosslessPadded` | Integer precision fits the wider representation |
-| `LosslessFloat` | `LosslessFloat` | Proven lossless float mapping |
-| `LosslessRoundTrip` | `LosslessFloat` or `LosslessPadded` | Proven source precision survives a representation round trip |
-| `Truncation` | `LinearIntervention` | Source/destination precision and sample domains |
-| `MixedSources` | `LinearIntervention` | Additional sources; application names may be unavailable |
+| Finding kind                     | Analyzer quality                    | Evidence and interpretation                                       |
+| -------------------------------- | ----------------------------------- | ----------------------------------------------------------------- |
+| `Unknown`                        | `Unknown`                           | No useful finding                                                 |
+| `BitPerfect`                     | `BitwisePerfect`                    | No other finding at the assessed node                             |
+| `LossySource`                    | `LossySource`                       | Source encoding is lossy                                          |
+| `SoftwareVolumeModification`     | `LinearIntervention`                | Reported software attenuation; positive gain can be displayed     |
+| `SoftwareAmplification`          | `LinearIntervention`                | Reported software gain above unity; a risk, not measured clipping |
+| `HardwareVolumeModification`     | `BitwisePerfect`                    | Gain attributed to hardware, not a digital-path modification      |
+| `UnclassifiedVolumeModification` | `LinearIntervention`                | Gain change whose origin is unverified                            |
+| `Muted`                          | `LinearIntervention`                | Reported muting                                                   |
+| `Resampling`                     | `LinearIntervention`                | Source and destination sample rates                               |
+| `ChannelMapping`                 | `LinearIntervention`                | Source and destination channel counts/layout evidence             |
+| `LosslessPadding`                | `LosslessPadded`                    | Integer precision fits the wider representation                   |
+| `LosslessFloat`                  | `LosslessFloat`                     | Proven lossless float mapping                                     |
+| `LosslessRoundTrip`              | `LosslessFloat` or `LosslessPadded` | Proven source precision survives a representation round trip      |
+| `Truncation`                     | `LinearIntervention`                | Source/destination precision and sample domains                   |
+| `MixedSources`                   | `LinearIntervention`                | Additional sources; application names may be unavailable          |
 
 The analyzer's [node-property rules](quality-analysis.md#node-properties), [format transitions](quality-analysis.md#format-transitions), and [round-trip proof](quality-analysis.md#round-trip-proof) define how these findings arise, including gain thresholds and proof invalidation. [Result axes and confidence](quality-analysis.md#result-axes-and-confidence) defines the independent verification flag.
 
@@ -74,16 +75,16 @@ This runtime evidence boundary intentionally differs from the count-only metadat
 The first matching row wins. Headline meanings below are not literal catalog strings.
 The headline does not repeat per-node rates, gain, shared applications, or other details already carried by findings.
 
-| Priority | Condition | Meaning | Category |
-|---:|---|---|---|
-| 1 | Overall quality is unknown | No usable pipeline rating | `Unknown` |
-| 2 | Any software-amplification finding | Clipping risk | `Warning` |
-| 3 | Any mute, truncation, resampling, software or unclassified volume modification, mixing, or channel mapping | Pipeline intervention | `Diagnostic` |
-| 4 | Path is not fully verified | Incomplete format/path evidence | `Informational` |
-| 5 | Any lossless padding, round trip, or float mapping | Signal preserved | `Positive` |
-| 6 | Source is lossy | Clean delivery of a lossy source | `Informational` |
-| 7 | No visible findings and source quality is bit-perfect | Bit-perfect PCM at the observed software boundary | `Medal` |
-| 8 | Otherwise | Clean delivery | `Positive` |
+| Priority | Condition                                                                                                  | Meaning                                           | Category        |
+| -------: | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------- | --------------- |
+|        1 | Overall quality is unknown                                                                                 | No usable pipeline rating                         | `Unknown`       |
+|        2 | Any software-amplification finding                                                                         | Clipping risk                                     | `Warning`       |
+|        3 | Any mute, truncation, resampling, software or unclassified volume modification, mixing, or channel mapping | Pipeline intervention                             | `Diagnostic`    |
+|        4 | Path is not fully verified                                                                                 | Incomplete format/path evidence                   | `Informational` |
+|        5 | Any lossless padding, round trip, or float mapping                                                         | Signal preserved                                  | `Positive`      |
+|        6 | Source is lossy                                                                                            | Clean delivery of a lossy source                  | `Informational` |
+|        7 | No visible findings and source quality is bit-perfect                                                      | Bit-perfect PCM at the observed software boundary | `Medal`         |
+|        8 | Otherwise                                                                                                  | Clean delivery                                    | `Positive`      |
 
 `BitPerfect` and `HardwareVolumeModification` do not count as visible findings here.
 The structured headline has no direct `Clipped` branch; raw conclusion/category mapping and Soul aura do.
@@ -95,12 +96,12 @@ Unknown, Unverified, and Inferred channel confidence do not suppress numerical p
 No assessments means no observed pipeline and no channel note, regardless of the confidence value.
 For a nonempty assessment list:
 
-| Channel confidence | Note meaning |
-|---|---|
-| `Unknown` | Channel layout not identified |
-| `Unverified` | Channel delivery not proved |
-| `Inferred` | Source channel layout inferred |
-| `Verified` | No warning |
+| Channel confidence | Note meaning                   |
+| ------------------ | ------------------------------ |
+| `Unknown`          | Channel layout not identified  |
+| `Unverified`       | Channel delivery not proved    |
+| `Inferred`         | Source channel layout inferred |
+| `Verified`         | No warning                     |
 
 Unknown can mean either incomplete source interpretation or no Sink-reaching path, even when the source identity is known; its generic note does not attribute the missing evidence to the source.
 Inferred specifically describes source interpretation.
@@ -115,15 +116,15 @@ In AppKit's fallback mode, an empty shared fallback restores the localized Outpu
 GTK exposes these category hooks; native adapters own their styling mechanics.
 Shared palette values and usage guidance live with the [brand recipe](../../../asset/brand/Soul.md#color-tokens), not in another color table here.
 
-| Category | GTK CSS class |
-|---|---|
-| `Unknown` | none |
-| `Medal` | `ao-quality-medal` |
-| `Positive` | `ao-quality-positive` |
-| `Diagnostic` | `ao-quality-diagnostic` |
-| `Warning` | `ao-quality-warning` |
+| Category        | GTK CSS class              |
+| --------------- | -------------------------- |
+| `Unknown`       | none                       |
+| `Medal`         | `ao-quality-medal`         |
+| `Positive`      | `ao-quality-positive`      |
+| `Diagnostic`    | `ao-quality-diagnostic`    |
+| `Warning`       | `ao-quality-warning`       |
 | `Informational` | `ao-quality-informational` |
-| `Clipped` | `ao-quality-clipped` |
+| `Clipped`       | `ao-quality-clipped`       |
 
 ## Soul aura and motion
 
@@ -133,15 +134,15 @@ The first aura is adopted directly; later aura changes cross-fade in OKLab from 
 
 For Playing and Paused, aura selection uses the first matching rule:
 
-| Priority | Condition | Aura |
-|---:|---|---|
-| 1 | Output not ready | `Veiled` |
-| 2 | Overall or pipeline quality is clipped | `Burning` |
-| 3 | Pipeline quality is linear intervention | `Turbulent` |
-| 4 | Incomplete format verification, or source quality is lossy/unknown | `Veiled` |
-| 5 | Pipeline quality is bit-perfect | `Radiant` |
-| 6 | Pipeline quality is lossless padded/float | `Flowing` |
-| 7 | Pipeline quality is lossy/unknown | `Veiled` |
+| Priority | Condition                                                          | Aura        |
+| -------: | ------------------------------------------------------------------ | ----------- |
+|        1 | Output not ready                                                   | `Veiled`    |
+|        2 | Overall or pipeline quality is clipped                             | `Burning`   |
+|        3 | Pipeline quality is linear intervention                            | `Turbulent` |
+|        4 | Incomplete format verification, or source quality is lossy/unknown | `Veiled`    |
+|        5 | Pipeline quality is bit-perfect                                    | `Radiant`   |
+|        6 | Pipeline quality is lossless padded/float                          | `Flowing`   |
+|        7 | Pipeline quality is lossy/unknown                                  | `Veiled`    |
 
 Channel confidence never selects an aura; the separate channel note carries that uncertainty, and neither aura nor headline upgrades it to a verified-channel claim.
 Known conversion reaches Turbulent only through its finding's pipeline severity, never from the confidence value.

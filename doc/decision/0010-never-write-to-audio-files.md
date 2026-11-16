@@ -2,6 +2,7 @@
 id: decision.0010.never-write-audio-files
 status: accepted
 ---
+
 # Decision 0010: never write to an audio file
 
 ## Context

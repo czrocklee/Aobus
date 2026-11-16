@@ -1,6 +1,7 @@
 ---
 id: shell.keymap
 ---
+
 # Keyboard map
 
 ## Scope and version
@@ -27,31 +28,31 @@ A canonical chord is zero or more modifiers followed by one key token:
 Canonical modifier order is `Ctrl`, `Shift`, `Alt`, `Super`.
 Parsing accepts case-insensitive aliases:
 
-| Canonical | Accepted aliases |
-|---|---|
-| `Ctrl` | `Ctrl`, `Control`, `Primary` |
-| `Shift` | `Shift` |
-| `Alt` | `Alt`, `Option` |
-| `Super` | `Super`, `Meta`, `Cmd`, `Win`, `Windows` |
+| Canonical | Accepted aliases                         |
+| --------- | ---------------------------------------- |
+| `Ctrl`    | `Ctrl`, `Control`, `Primary`             |
+| `Shift`   | `Shift`                                  |
+| `Alt`     | `Alt`, `Option`                          |
+| `Super`   | `Super`, `Meta`, `Cmd`, `Win`, `Windows` |
 
 Single ASCII letters canonicalize to uppercase.
 Digits and punctuation are stored verbatim.
 Named keys and function keys F1 through F24 are matched case-insensitively:
 
-| Canonical | Accepted aliases |
-|---|---|
-| `Enter` | `Enter`, `Return` |
-| `Escape` | `Escape`, `Esc` |
-| `Delete` | `Delete`, `Del` |
-| `Backspace` | `Backspace` |
-| `Tab` | `Tab` |
-| `Space` | `Space` |
-| `Insert` | `Insert`, `Ins` |
-| `Left` `Right` `Up` `Down` | those names |
-| `Home` `End` | those names |
-| `PageUp` | `PageUp`, `PgUp` |
-| `PageDown` | `PageDown`, `PgDown`, `PgDn` |
-| `F1`–`F24` | `F1`–`F24` in any case, such as `f12` |
+| Canonical                  | Accepted aliases                      |
+| -------------------------- | ------------------------------------- |
+| `Enter`                    | `Enter`, `Return`                     |
+| `Escape`                   | `Escape`, `Esc`                       |
+| `Delete`                   | `Delete`, `Del`                       |
+| `Backspace`                | `Backspace`                           |
+| `Tab`                      | `Tab`                                 |
+| `Space`                    | `Space`                               |
+| `Insert`                   | `Insert`, `Ins`                       |
+| `Left` `Right` `Up` `Down` | those names                           |
+| `Home` `End`               | those names                           |
+| `PageUp`                   | `PageUp`, `PgUp`                      |
+| `PageDown`                 | `PageDown`, `PgDown`, `PgDn`          |
+| `F1`–`F24`                 | `F1`–`F24` in any case, such as `f12` |
 
 Media keys use the `Media:` prefix followed by a name.
 Known names `Play`, `Pause`, `Stop`, `Next`, and `Prev` are canonicalized with that prefix; unknown suffixes and unrelated tokens survive verbatim, including GTK- or WinUI-specific names a given shell cannot execute.
@@ -70,19 +71,19 @@ The literal plus key is `+` without modifiers or a trailing doubled plus after m
 
 ## Shipped application defaults
 
-| Action id | Ordered chords |
-|---|---|
-| `playback.playPause` | `Ctrl+P`, `Media:Play`, `Media:Pause` |
-| `playback.stop` | `Media:Stop` |
-| `playback.next` | `Ctrl+Right`, `Media:Next` |
-| `playback.previous` | `Ctrl+Left`, `Media:Prev` |
-| `playback.toggleShuffle` | `Ctrl+U` |
-| `playback.cycleRepeat` | `Ctrl+R` |
-| `workspace.revealCurrentTrack` | `Ctrl+L` |
-| `track.orderMoveUp` | `Alt+Up` |
-| `track.orderMoveDown` | `Alt+Down` |
-| `track.orderMoveToTop` | `Alt+Home` |
-| `track.orderMoveToBottom` | `Alt+End` |
+| Action id                      | Ordered chords                        |
+| ------------------------------ | ------------------------------------- |
+| `playback.playPause`           | `Ctrl+P`, `Media:Play`, `Media:Pause` |
+| `playback.stop`                | `Media:Stop`                          |
+| `playback.next`                | `Ctrl+Right`, `Media:Next`            |
+| `playback.previous`            | `Ctrl+Left`, `Media:Prev`             |
+| `playback.toggleShuffle`       | `Ctrl+U`                              |
+| `playback.cycleRepeat`         | `Ctrl+R`                              |
+| `workspace.revealCurrentTrack` | `Ctrl+L`                              |
+| `track.orderMoveUp`            | `Alt+Up`                              |
+| `track.orderMoveDown`          | `Alt+Down`                            |
+| `track.orderMoveToTop`         | `Alt+Home`                            |
+| `track.orderMoveToBottom`      | `Alt+End`                             |
 
 Other actions have no shipped global shortcut.
 `Ctrl+,` is an app-scoped fixed preference accelerator and is not part of this keymap.
@@ -98,58 +99,58 @@ The prefix and each root navigation action can be rebound separately. Effective 
 The TUI defines its own defaults and reuses shared action identities for playback and reveal. Desktop chords are not inherited. Global TUI overrides apply to this terminal default map.
 The defaults below use canonical chord spelling: `C` is lowercase `c`, and `Shift+C` is uppercase `C`.
 
-| Action id | Terminal default chords |
-|---|---|
-| `tui.shell.openSettings` | `,` |
-| `tui.shell.quit` | `Shift+Q` |
-| `tui.shell.toggleListChooser` | `L` |
-| `tui.shell.toggleTrackDetail` | `D` |
-| `tui.detail.focus` | `Shift+D` |
-| `tui.shell.toggleAudioQuality` | `A` |
-| `tui.shell.toggleOutputDevices` | `O` |
-| `tui.shell.togglePresentationChooser` | `P` |
-| `tui.shell.toggleNotifications` | `N` |
-| `tui.shell.showHelp` | `?`, `F1` |
-| `tui.shell.openCommandPalette` | `:` |
-| `tui.workspace.switchFocus` | `Tab`, `Shift+Tab` |
-| `tui.workspace.beginPanelResize` | `Ctrl+W` |
-| `tui.workspace.togglePinnedLists` | `Shift+L` |
-| `tui.navigation.openGoTo` | `G` |
-| `tui.navigation.currentArtist` | none |
-| `tui.navigation.currentAlbum` | none |
-| `tui.navigation.back` | none |
-| `tui.navigation.forward` | none |
-| `tui.library.openQuickFilter` | `/` |
-| `tui.library.clearFilter` | `Shift+C` |
-| `tui.library.reloadActiveList` | `Shift+R` |
-| `tui.library.scan` | none |
-| `tui.library.scanCancel` | none |
-| `tui.library.selectToggle` | `M` |
-| `tui.library.selectVisual` | `V` |
-| `tui.library.selectAll` | `Shift+A` |
-| `tui.library.selectClear` | `U` |
-| `tui.library.editProperties` | `E` |
-| `tui.library.editTags` | `T` |
-| `tui.library.playSelection` | `Enter` |
-| `track.orderMoveUp` | `Alt+Up` |
-| `track.orderMoveDown` | `Alt+Down` |
-| `track.orderMoveToTop` | `Alt+Home` |
-| `track.orderMoveToBottom` | `Alt+End` |
-| `tui.library.previousRow` | `K` |
-| `tui.library.nextRow` | `J` |
-| `tui.library.previousSection` | `{` |
-| `tui.library.nextSection` | `}` |
-| `tui.playback.seekBackward` | `Left`, `[` |
-| `tui.playback.seekForward` | `Right`, `]` |
-| `tui.playback.volumeDown` | `-` |
-| `tui.playback.volumeUp` | `+`, `=` |
-| `playback.playPause` | `Space` |
-| `playback.stop` | `S` |
-| `playback.previous` | `<`, `Ctrl+Left` |
-| `playback.next` | `>`, `Ctrl+Right` |
-| `playback.toggleShuffle` | `Shift+S` |
-| `playback.cycleRepeat` | `R` |
-| `workspace.revealCurrentTrack` | `C` |
+| Action id                             | Terminal default chords |
+| ------------------------------------- | ----------------------- |
+| `tui.shell.openSettings`              | `,`                     |
+| `tui.shell.quit`                      | `Shift+Q`               |
+| `tui.shell.toggleListChooser`         | `L`                     |
+| `tui.shell.toggleTrackDetail`         | `D`                     |
+| `tui.detail.focus`                    | `Shift+D`               |
+| `tui.shell.toggleAudioQuality`        | `A`                     |
+| `tui.shell.toggleOutputDevices`       | `O`                     |
+| `tui.shell.togglePresentationChooser` | `P`                     |
+| `tui.shell.toggleNotifications`       | `N`                     |
+| `tui.shell.showHelp`                  | `?`, `F1`               |
+| `tui.shell.openCommandPalette`        | `:`                     |
+| `tui.workspace.switchFocus`           | `Tab`, `Shift+Tab`      |
+| `tui.workspace.beginPanelResize`      | `Ctrl+W`                |
+| `tui.workspace.togglePinnedLists`     | `Shift+L`               |
+| `tui.navigation.openGoTo`             | `G`                     |
+| `tui.navigation.currentArtist`        | none                    |
+| `tui.navigation.currentAlbum`         | none                    |
+| `tui.navigation.back`                 | none                    |
+| `tui.navigation.forward`              | none                    |
+| `tui.library.openQuickFilter`         | `/`                     |
+| `tui.library.clearFilter`             | `Shift+C`               |
+| `tui.library.reloadActiveList`        | `Shift+R`               |
+| `tui.library.scan`                    | none                    |
+| `tui.library.scanCancel`              | none                    |
+| `tui.library.selectToggle`            | `M`                     |
+| `tui.library.selectVisual`            | `V`                     |
+| `tui.library.selectAll`               | `Shift+A`               |
+| `tui.library.selectClear`             | `U`                     |
+| `tui.library.editProperties`          | `E`                     |
+| `tui.library.editTags`                | `T`                     |
+| `tui.library.playSelection`           | `Enter`                 |
+| `track.orderMoveUp`                   | `Alt+Up`                |
+| `track.orderMoveDown`                 | `Alt+Down`              |
+| `track.orderMoveToTop`                | `Alt+Home`              |
+| `track.orderMoveToBottom`             | `Alt+End`               |
+| `tui.library.previousRow`             | `K`                     |
+| `tui.library.nextRow`                 | `J`                     |
+| `tui.library.previousSection`         | `{`                     |
+| `tui.library.nextSection`             | `}`                     |
+| `tui.playback.seekBackward`           | `Left`, `[`             |
+| `tui.playback.seekForward`            | `Right`, `]`            |
+| `tui.playback.volumeDown`             | `-`                     |
+| `tui.playback.volumeUp`               | `+`, `=`                |
+| `playback.playPause`                  | `Space`                 |
+| `playback.stop`                       | `S`                     |
+| `playback.previous`                   | `<`, `Ctrl+Left`        |
+| `playback.next`                       | `>`, `Ctrl+Right`       |
+| `playback.toggleShuffle`              | `Shift+S`               |
+| `playback.cycleRepeat`                | `R`                     |
+| `workspace.revealCurrentTrack`        | `C`                     |
 
 The stored `tui.*` ids identify terminal actions; `tui.library.playSelection` deliberately differs from shared `playback.play`, because it starts a sequence from the selected row rather than resuming the current playback subject.
 
@@ -157,13 +158,13 @@ The TUI workspace focus action `tui.workspace.switchFocus` defaults to Tab and S
 
 ### Coverage per shell
 
-| Action family | GTK | TUI | Windows |
-|---|---|---|---|
-| `playback.*` transport, keyboard chords | installed | Play/Pause, Stop, Previous, Next, Shuffle, Repeat descriptors | installed |
-| `playback.*` transport, media chords | installed | omitted | system media controls |
-| `workspace.revealCurrentTrack` | installed | installed | installed |
-| `track.orderMove*` | installed | installed | installed |
-| `tui.*` | no handler | installed when projectable | no handler |
+| Action family                           | GTK        | TUI                                                           | Windows               |
+| --------------------------------------- | ---------- | ------------------------------------------------------------- | --------------------- |
+| `playback.*` transport, keyboard chords | installed  | Play/Pause, Stop, Previous, Next, Shuffle, Repeat descriptors | installed             |
+| `playback.*` transport, media chords    | installed  | omitted                                                       | system media controls |
+| `workspace.revealCurrentTrack`          | installed  | installed                                                     | installed             |
+| `track.orderMove*`                      | installed  | installed                                                     | installed             |
+| `tui.*`                                 | no handler | installed when projectable                                    | no handler            |
 
 The Windows shell installs an accelerator only when it has a handler for the action, the action does not present from an anchor, the chord is not a media key, and Windows has a key for the chord; anything else is skipped and logged rather than installed dead.
 

@@ -1,6 +1,7 @@
 ---
 id: library.scan-identity
 ---
+
 # Library scan and audio identity
 
 ## Scope
@@ -61,16 +62,16 @@ The runtime-private `ScanApplyOperation::run()` is the distinct offline composit
 
 The planner recursively walks the configured music root, skips unsupported and non-regular entries, normalizes root-relative URIs, and compares supported regular files with the manifest.
 
-| Classification | Meaning |
-|---|---|
-| `New` | Supported URI has no manifest row and is not unambiguously matched as a move. |
-| `Changed` | URI exists but file size or modification time differs, or a present file restores a manifest row whose status is `Missing`. |
-| `Moved` | New URI is uniquely matched to one missing manifest row by audio identity. |
-| `Missing` | Manifest URI has no corresponding supported file and was not matched as a move. |
-| `MissingSegments` | An unchanged carrier's sheet has ordinals the carrier lacks, and every stored segment still equals the sheet's segment of that ordinal. |
-| `Unchanged` | URI and file facts match the manifest, and no missing ordinal is being created. |
-| `Error` | The item could not be inspected or classified, its directory's sheets could not be read and it is not `Unchanged`, or CUE binding refused to import a new file. |
-| `Notice` | A report-only entry: a readable CUE sheet with two or more audio tracks names no supported file. It names no library file and is never applied. |
+| Classification    | Meaning                                                                                                                                                         |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `New`             | Supported URI has no manifest row and is not unambiguously matched as a move.                                                                                   |
+| `Changed`         | URI exists but file size or modification time differs, or a present file restores a manifest row whose status is `Missing`.                                     |
+| `Moved`           | New URI is uniquely matched to one missing manifest row by audio identity.                                                                                      |
+| `Missing`         | Manifest URI has no corresponding supported file and was not matched as a move.                                                                                 |
+| `MissingSegments` | An unchanged carrier's sheet has ordinals the carrier lacks, and every stored segment still equals the sheet's segment of that ordinal.                         |
+| `Unchanged`       | URI and file facts match the manifest, and no missing ordinal is being created.                                                                                 |
+| `Error`           | The item could not be inspected or classified, its directory's sheets could not be read and it is not `Unchanged`, or CUE binding refused to import a new file. |
+| `Notice`          | A report-only entry: a readable CUE sheet with two or more audio tracks names no supported file. It names no library file and is never applied.                 |
 
 A missing root or a walk that cannot start or advance to the next entry is a
 plan-building error; the walk iteration cannot continue past a failed advance.
@@ -111,17 +112,17 @@ Only a nonempty FLAC comment is an embedded binding source; Opus text from share
 
 For each supported file the planner derives one binding state after the file classification above:
 
-| Binding | Meaning |
-|---|---|
-| Bound | The deciding sheet is readable, has two or more audio tracks, and the file is FLAC or WAV with an exact frame count. |
-| Unbound | The file has no sheet, or its sheet has one audio track. |
+| Binding      | Meaning                                                                                                               |
+| ------------ | --------------------------------------------------------------------------------------------------------------------- |
+| Bound        | The deciding sheet is readable, has two or more audio tracks, and the file is FLAC or WAV with an exact frame count.  |
+| Unbound      | The file has no sheet, or its sheet has one audio track.                                                              |
 | Undetermined | The deciding sheet is unreadable or malformed, several sheets share that precedence, or the file cannot be a carrier. |
 
-| Library state | Bound | Unbound | Undetermined |
-|---|---|---|---|
-| New file | Create segment Tracks. | Create a whole-file Track. | `Error`; the file is not imported until the sheet is fixed. |
-| Whole-file Track | Keep the Track. Report that it was imported as a whole file and must be removed to be split. | Unchanged as a binding. | Keep the Track and report the sheet. |
-| Carrier | Create ordinals the carrier lacks when every stored segment still matches; otherwise keep every member and range and report the mismatch. | Keep the members and report that no sheet divides the file. | Keep the members and report the sheet. |
+| Library state    | Bound                                                                                                                                     | Unbound                                                     | Undetermined                                                |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------- |
+| New file         | Create segment Tracks.                                                                                                                    | Create a whole-file Track.                                  | `Error`; the file is not imported until the sheet is fixed. |
+| Whole-file Track | Keep the Track. Report that it was imported as a whole file and must be removed to be split.                                              | Unchanged as a binding.                                     | Keep the Track and report the sheet.                        |
+| Carrier          | Create ordinals the carrier lacks when every stored segment still matches; otherwise keep every member and range and report the mismatch. | Keep the members and report that no sheet divides the file. | Keep the members and report the sheet.                      |
 
 "Unchanged" in that table means no Track is created and no member or range changes. It does not withhold a status, file-fact, technical, or cover refresh.
 A carrier whose exact extent or sample rate differs from the stored ones is `Error` and stays unchanged, including when the file would otherwise be `Changed`.
@@ -204,7 +205,7 @@ There is no nested LMDB transaction, item savepoint, or partial batch commit.
 - `New` parses metadata and technical properties, maps the public source-ordered Credits into the builder, validates text and bounds, and persists NFC text in canonical kind order through the logical Track writer together with the available manifest row. RecordingDate remains absent because there is no file-tag mapping for it. A bound file instead creates its segment Tracks through `createCarrier` and publishes every created id.
 - `MissingSegments` adds only the new members through `addCarrierMembers`. It rewrites neither the existing members nor the row's identity, status, file facts, or extent, and it does not hash the file again.
 - `Changed` preserves curated metadata, including exact recording-date precision and credit kinds, within-kind order, names, duplicates, and optional roles, replaces the track's cover references with the set the new file carries, then replaces Track data and file/identity facts through one logical operation. A carrier keeps every member's sample rate, range, and derived duration; bitrate, channels, codec, bit depth, covers, and file facts may refresh when the extent and rate still match.
-Every carrier member is validated before the first write. A member the writer would reject is reported at the `serialize` stage and skips a changed carrier, or aborts the complete application for a moved one, as it would a whole-file Track.
+  Every carrier member is validated before the first write. A member the writer would reject is reported at the `serialize` stage and skips a changed carrier, or aborts the complete application for a moved one, as it would a whole-file Track.
 - `Moved` first requires the stored Track URI to equal the plan's old URI, then rebuilds the existing track with the new URI, refreshed technical properties, and the destination file's cover references, and uses the logical relink operation to replace the manifest key while preserving the Track id; a mismatch reports the item failure and aborts the complete scan transaction. A carrier uses `relinkCarrier`, so every member moves together and no range changes.
 - `Missing` preserves the previous identity and uses the manifest-only logical update to mark the row missing. A carrier's segments are missing together.
 - `Unchanged` performs no write. The desktop summary still reports a binding notice on that item; apply does not count it as a failure. The CLI dry-run item list omits an `Unchanged` item only when it carries no diagnostic; a diagnostic-bearing unchanged item stays in that list under its file classification. That emission limit is recorded in the [command reference](../../reference/cli/command.md). Apply preparation progress is separate from the dry-run item list and reports every item, including a diagnostic-free `Unchanged` item.

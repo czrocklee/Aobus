@@ -1,6 +1,7 @@
 ---
 id: media.cue-sheet
 ---
+
 # CUE sheet
 
 ## Scope

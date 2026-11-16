@@ -1,6 +1,7 @@
 ---
 id: presentation.track-preset
 ---
+
 # Track presentation presets
 
 ## Scope and version
@@ -17,21 +18,21 @@ UIModel joins those values with `builtinTrackPresentation` over `MessageCatalog`
 
 ## Surface
 
-| Order | Id | Grouping and structural intent |
-|---:|---|---|
-| 1 | `library` | Flat album-artist/album/disc/track order; global default. |
-| 2 | `list-order` | Flat source order; user-facing **Manual Order**, selected explicitly or by the New Playlist template. |
-| 3 | `songs` | Flat title/artist/album order. |
-| 4 | `albums` | Album groups with track-oriented columns. |
-| 5 | `artists` | Album-artist groups with discography order. |
-| 6 | `performers` | Track-artist groups. |
-| 7 | `genres` | Genre groups with album-artist discography order. |
-| 8 | `years` | Year groups with album-artist discography order. |
-| 9 | `classical-composers` | Composer groups with Work, Movement, and Recording Date columns. |
-| 10 | `classical-conductors` | Conductor groups with Work, Composer, Ensemble, Movement, and Recording Date columns. |
-| 11 | `classical-works` | Work groups with Movement rows and Recording Date visible. |
-| 12 | `tagging` | Flat curation fields with raw disc/track numbers and tags. |
-| 13 | `technical` | Flat technical summary, file size, and path. |
+| Order | Id                     | Grouping and structural intent                                                                        |
+| ----: | ---------------------- | ----------------------------------------------------------------------------------------------------- |
+|     1 | `library`              | Flat album-artist/album/disc/track order; global default.                                             |
+|     2 | `list-order`           | Flat source order; user-facing **Manual Order**, selected explicitly or by the New Playlist template. |
+|     3 | `songs`                | Flat title/artist/album order.                                                                        |
+|     4 | `albums`               | Album groups with track-oriented columns.                                                             |
+|     5 | `artists`              | Album-artist groups with discography order.                                                           |
+|     6 | `performers`           | Track-artist groups.                                                                                  |
+|     7 | `genres`               | Genre groups with album-artist discography order.                                                     |
+|     8 | `years`                | Year groups with album-artist discography order.                                                      |
+|     9 | `classical-composers`  | Composer groups with Work, Movement, and Recording Date columns.                                      |
+|    10 | `classical-conductors` | Conductor groups with Work, Composer, Ensemble, Movement, and Recording Date columns.                 |
+|    11 | `classical-works`      | Work groups with Movement rows and Recording Date visible.                                            |
+|    12 | `tagging`              | Flat curation fields with raw disc/track numbers and tags.                                            |
+|    13 | `technical`            | Flat technical summary, file size, and path.                                                          |
 
 The catalog order is the frontend menu order.
 Custom presets carry their own stable id, user-authored label, base preset id, and normalized presentation spec and follow the built-ins in catalogs.

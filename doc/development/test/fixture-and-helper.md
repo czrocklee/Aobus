@@ -1,6 +1,7 @@
 ---
 id: development.test.fixture-and-helper
 ---
+
 # Fixtures, helpers, fakes, and test data
 
 ## Before adding or restructuring tests
@@ -57,14 +58,14 @@ has one narrow owner, deterministic semantics, an owning specification, and a
 build guard that rejects production consumers outside its implementation
 owner:
 
-| Seam | Permitted evidence | Boundary |
-|---|---|---|
-| `library::detail::PhysicalStoreAccess` | Exact malformed library bytes and isolated Store representation state that no logical mutation can create. | Source-private header; production roots cannot include, define, or invoke it. |
-| `WriteTransaction::Options::optInjectedCommitFailure` | Rollback and publication behavior for a native commit result that cannot be induced portably. | Data-only input; production roots cannot reference it, and it invokes no callback while locks are held. |
-| `library::detail::OpenValidationMetrics` | Exact named-DBI-open counts and operation counts for the open gate's linear Track/manifest growth law. | Source-private observation; only `MusicLibrary` may record/reset it and production roots cannot consume it. |
-| `lmdb::detail::ReadFaultInjection` | Admission, live-read, and writer-read ownership for a native LMDB fault without damaging a mapped environment. | Source-private, single-use, same-thread scope; destruction requires that the next read consumed it, and production roots cannot reference it. |
-| `lmdb::detail::DatabaseOpenAdmissionProbe` | Deterministic observation that a second writer reached the contended process-wide DBI-open gate after native writer begin. | Source-private, same-thread observation; production roots cannot construct it, and it does not alter gate behavior. |
-| `gtk::layout::detail::TrackFieldGridOperationProbe` | Admitted-to-terminal field-grid metadata workflow observation before negative frontend assertions. | Source-private, live-owner/GTK-executor observation; only the field-grid implementation may reference it outside tests. It does not schedule, mutate, or cancel work. |
+| Seam                                                  | Permitted evidence                                                                                                         | Boundary                                                                                                                                                              |
+| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `library::detail::PhysicalStoreAccess`                | Exact malformed library bytes and isolated Store representation state that no logical mutation can create.                 | Source-private header; production roots cannot include, define, or invoke it.                                                                                         |
+| `WriteTransaction::Options::optInjectedCommitFailure` | Rollback and publication behavior for a native commit result that cannot be induced portably.                              | Data-only input; production roots cannot reference it, and it invokes no callback while locks are held.                                                               |
+| `library::detail::OpenValidationMetrics`              | Exact named-DBI-open counts and operation counts for the open gate's linear Track/manifest growth law.                     | Source-private observation; only `MusicLibrary` may record/reset it and production roots cannot consume it.                                                           |
+| `lmdb::detail::ReadFaultInjection`                    | Admission, live-read, and writer-read ownership for a native LMDB fault without damaging a mapped environment.             | Source-private, single-use, same-thread scope; destruction requires that the next read consumed it, and production roots cannot reference it.                         |
+| `lmdb::detail::DatabaseOpenAdmissionProbe`            | Deterministic observation that a second writer reached the contended process-wide DBI-open gate after native writer begin. | Source-private, same-thread observation; production roots cannot construct it, and it does not alter gate behavior.                                                   |
+| `gtk::layout::detail::TrackFieldGridOperationProbe`   | Admitted-to-terminal field-grid metadata workflow observation before negative frontend assertions.                         | Source-private, live-owner/GTK-executor observation; only the field-grid implementation may reference it outside tests. It does not schedule, mutate, or cancel work. |
 
 These seams do not authorize application behavior, arbitrary collaborator
 control, or a general test API. Adding another seam requires updating this

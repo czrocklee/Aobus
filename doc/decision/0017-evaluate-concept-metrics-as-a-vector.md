@@ -2,6 +2,7 @@
 id: decision.0017.evaluate-concept-metrics-as-a-vector
 status: accepted
 ---
+
 # Decision 0017: evaluate concept metrics as a vector
 
 ## Context
@@ -15,19 +16,19 @@ An absolute per-number veto would reject that exchange and encourage changes opt
 
 The completed refactor was measured from the same complete Linux debug target set before and after the work:
 
-| Primary measurement | Before | After | Change |
-|---|---:|---:|---:|
-| Application declarations | 1,718 | 1,554 | -164 |
-| Application dependency edges | 2,533 | 2,305 | -228 |
-| Application include weight, median | 5 headers / 10,006 B | 5 headers / 10,570 B | 0 headers / +564 B |
-| Application include weight, p95 | 26 headers / 83,823 B | 21 headers / 51,298 B | -5 headers / -32,525 B |
-| Application rebuild fan-out, median / p95 | 18 / 215 TUs | 17 / 142 TUs | -1 / -73 TUs |
-| Core declarations | 1,558 | 1,546 | -12 |
-| Core dependency edges | 1,748 | 1,742 | -6 |
-| Core include weight, median | 3 headers / 7,631 B | 3 headers / 7,962 B | 0 headers / +331 B |
-| Core include weight, p95 | 16 headers / 64,565 B | 16 headers / 64,565 B | unchanged |
-| Core rebuild fan-out, median / p95 | 78 / 396 TUs | 80 / 342 TUs | +2 / -54 TUs |
-| Named construction hops | 5, 2, 2, 2, 2 | 3, 1, 1, 1, 1 | every chain reduced |
+| Primary measurement                       |                Before |                 After |                 Change |
+| ----------------------------------------- | --------------------: | --------------------: | ---------------------: |
+| Application declarations                  |                 1,718 |                 1,554 |                   -164 |
+| Application dependency edges              |                 2,533 |                 2,305 |                   -228 |
+| Application include weight, median        |  5 headers / 10,006 B |  5 headers / 10,570 B |     0 headers / +564 B |
+| Application include weight, p95           | 26 headers / 83,823 B | 21 headers / 51,298 B | -5 headers / -32,525 B |
+| Application rebuild fan-out, median / p95 |          18 / 215 TUs |          17 / 142 TUs |           -1 / -73 TUs |
+| Core declarations                         |                 1,558 |                 1,546 |                    -12 |
+| Core dependency edges                     |                 1,748 |                 1,742 |                     -6 |
+| Core include weight, median               |   3 headers / 7,631 B |   3 headers / 7,962 B |     0 headers / +331 B |
+| Core include weight, p95                  | 16 headers / 64,565 B | 16 headers / 64,565 B |              unchanged |
+| Core rebuild fan-out, median / p95        |          78 / 396 TUs |          80 / 342 TUs |           +2 / -54 TUs |
+| Named construction hops                   |         5, 2, 2, 2, 2 |         3, 1, 1, 1, 1 |    every chain reduced |
 
 The two median regressions are real and remain visible.
 They do not outweigh the reductions in declarations, dependency edges, every named construction chain, p95 include weight, and p95 rebuild fan-out.

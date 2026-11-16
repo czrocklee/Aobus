@@ -1,6 +1,7 @@
 ---
 id: workspace.navigation
 ---
+
 # Workspace navigation
 
 ## Scope
@@ -70,11 +71,11 @@ Invalid input and preparation failure use `Result` errors.
 `WorkspaceService` is the sole authority for the reuse-or-create decision.
 Presentation intent follows this matrix:
 
-| Request presentation | Reused view | Newly created view |
-|---|---|---|
-| Absent | Preserve the exact current presentation. | Use the `ViewService` default. |
-| `Override` | Normalize and apply the supplied specification. | Normalize and apply the supplied specification. |
-| `NewViewDefault` | Ignore the supplied specification and preserve the exact current presentation. | Normalize and apply the supplied specification. |
+| Request presentation | Reused view                                                                    | Newly created view                              |
+| -------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------- |
+| Absent               | Preserve the exact current presentation.                                       | Use the `ViewService` default.                  |
+| `Override`           | Normalize and apply the supplied specification.                                | Normalize and apply the supplied specification. |
+| `NewViewDefault`     | Ignore the supplied specification and preserve the exact current presentation. | Normalize and apply the supplied specification. |
 
 A filtered target is never reusable, so a supplied `NewViewDefault` applies to its newly created view.
 When the request records history, its navigation point stores the final effective presentation after this decision.

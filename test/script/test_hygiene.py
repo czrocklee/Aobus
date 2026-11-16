@@ -102,11 +102,11 @@ class FormatCommandTest(unittest.TestCase):
             ):
                 with mock.patch.object(
                     format_command.gitfiles,
-                    "changed_files",
+                    "changed_paths",
                     return_value=[collector, "sdk-cache/Cache.cpp"],
                 ) as changed:
                     self.assertEqual(format_command.resolve_files(changed_args), [collector])
-                changed.assert_called_once_with(None, suffixes=format_command.gitfiles.SOURCE_SUFFIXES)
+                changed.assert_called_once_with(None)
 
                 # The --all scan walks the real folder selection: the tracked collector
                 # is selected while the generated __pycache__ artifact and the foreign
@@ -459,7 +459,7 @@ class NativeHygieneSelectionTest(unittest.TestCase):
         with (
             mock.patch.object(native, "native_platform", return_value=host),
             mock.patch.dict(os.environ, {"AOBUS_STATE_ROOT": self.STATE, **(environment or {})}),
-            mock.patch("ao.core.gitfiles.changed_files", return_value=files),
+            mock.patch("ao.core.gitfiles.changed_paths", return_value=files),
             mock.patch("ao.core.pythonenv.ensure_environment", return_value=self.TOOLS) as tools,
             mock.patch.object(hygiene, "run_command", return_value=0) as gate,
         ):
@@ -474,7 +474,8 @@ class NativeHygieneSelectionTest(unittest.TestCase):
         else:
             tools.assert_called_once_with(PROJECT_ROOT, Path(self.STATE), platform_name=host)
             self.assertEqual(gate.call_args.kwargs["python"], self.TOOLS)
-        self.assertEqual(args._resolved_sources, files)
+        # The changed-path scope is resolved as a sorted selection.
+        self.assertEqual(args._resolved_sources, sorted(files))
         return gate.call_args.kwargs
 
     def test_complete_lint_uses_the_project_graph_instead_of_repeating_scoped_native_lint(self):
@@ -556,7 +557,7 @@ class NativeHygieneSelectionTest(unittest.TestCase):
             with (
                 self.subTest(host=host),
                 mock.patch.object(native, "native_platform", return_value=host),
-                mock.patch("ao.core.gitfiles.changed_files", return_value=[]) as changed,
+                mock.patch("ao.core.gitfiles.changed_paths", return_value=[]) as changed,
                 mock.patch("ao.core.windows_llvm_sdk.ready_root", side_effect=AssertionError("no SDK for empty scope")),
                 mock.patch(
                     "ao.core.pythonenv.ensure_environment", side_effect=AssertionError("no empty tooling stage")
@@ -628,7 +629,7 @@ class NativeHygieneSelectionTest(unittest.TestCase):
         with (
             mock.patch.object(native, "native_platform", return_value="windows"),
             mock.patch.dict(os.environ, {"AOBUS_STATE_ROOT": self.STATE}),
-            mock.patch("ao.core.gitfiles.changed_files", return_value=sources) as changed,
+            mock.patch("ao.core.gitfiles.changed_paths", return_value=sources) as changed,
             mock.patch("ao.core.windows_llvm_sdk.ready_root", return_value=(Path("sdk"), True)),
             mock.patch("ao.core.pythonenv.ensure_environment", return_value=self.TOOLS) as tools,
             mock.patch("ao.command.format.run_clang_format", return_value=0),

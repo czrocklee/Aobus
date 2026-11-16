@@ -1,6 +1,7 @@
 ---
 id: playback.audio-quality
 ---
+
 # Audio quality analysis
 
 ## Scope

@@ -73,7 +73,8 @@ All discovered Markdown locations exclude a closed leading front-matter block fr
 
 ## Validation
 
-Run `./ao docs check` from the repository root.
+Run `./ao docs check --format` from the repository root for documentation integrity and Markdown formatting.
+Omit `--format` when checking only links, metadata, and navigation; the formatter policy is in [authored-text formatting](linting.md#authored-text-formatting).
 It discovers Markdown under `doc/` (excluding `doc/plan/`), `.agents/skills/`, `tool/`, `app/`, and `asset/`, plus root `README.md`, `AGENTS.md`, and `CONTRIBUTING.md`; Markdown under other trees such as `lib/`, `test/`, `bazel/`, or `script/` is not checked.
 It checks optional metadata integrity, ids, inline and reference-style links, Markdown anchors, forbidden local-plan links, and reachability from the documentation home.
 The governed Markdown parser supplies CommonMark block and inline structure, with the GFM table extension enabled.

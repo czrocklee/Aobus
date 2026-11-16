@@ -1,6 +1,7 @@
 ---
 id: shell.layout-adaptation
 ---
+
 # Shell layout-adaptation specification
 
 ## Scope

@@ -31,7 +31,7 @@ jobs:
       docs-only: ${{ steps.scope.outputs.docs-only }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -43,7 +43,7 @@ jobs:
         run: |
           python3 -c 'import json; print("version=" + json.load(open("script/ao/toolchain.json"))["python"])' >> "$GITHUB_OUTPUT"
       - name: Set up documentation Python
-        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ steps.python-version.outputs.version }}
       - name: Install locked documentation parser
@@ -51,10 +51,22 @@ jobs:
           python -m pip install --disable-pip-version-check --no-input
           --only-binary=:all: --require-hashes --no-deps
           -r script/ao/docs-requirements.txt
+      - name: Select documentation tool state
+        run: echo "AOBUS_STATE_ROOT=$RUNNER_TEMP/aobus-doc-tools" >> "$GITHUB_ENV"
+      - name: Cache pinned documentation formatter
+        continue-on-error: true
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/aobus-doc-tools/tools/prettier
+          key: docs-prettier-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('script/ao/prettier.json', 'script/ao/core/prettier.py') }}
+      - name: Set up pinned documentation formatter
+        env:
+          PYTHONPATH: script
+        run: python -m ao setup prettier
       - name: Check documentation
         env:
           PYTHONPATH: script
-        run: python -m ao docs check
+        run: python -m ao docs check --format
 
   linux:
     name: Linux / check
@@ -73,7 +85,7 @@ jobs:
         run: exit 1
 
       - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -85,7 +97,7 @@ jobs:
           --github-env "$GITHUB_ENV"
 
       - name: Install Nix
-        uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b  # v31.11.3
+        uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
         with:
           enable_kvm: false
 
@@ -117,7 +129,7 @@ jobs:
       - name: Restore Bazel disk cache
         id: bazel-cache
         continue-on-error: true
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/aobus-state/cache/bazel
           key: >-
@@ -326,7 +338,7 @@ jobs:
               steps.bazel-cache.outcome == 'success' && steps.bazel-cache.outputs.cache-hit != 'true' &&
               steps.bazel-cache-trim.outcome == 'success' }}
         continue-on-error: true
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/aobus-state/cache/bazel
           key: ${{ steps.bazel-cache.outputs.cache-primary-key }}
@@ -347,7 +359,7 @@ jobs:
 
       - name: Preserve Bazel completion evidence
         if: ${{ always() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: bazel-linux-${{ github.run_attempt }}
           path: |
@@ -406,7 +418,7 @@ jobs:
         run: exit 1
 
       - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -483,15 +495,17 @@ jobs:
       - name: Restore managed macOS tools
         id: macos-state
         continue-on-error: true
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ${{ runner.temp }}/aobus-state/tools/vcpkg
             ${{ runner.temp }}/aobus-state/tools/libcxx-expected-shim
             ${{ runner.temp }}/aobus-state/tools/buildifier
+            ${{ runner.temp }}/aobus-state/tools/prettier
           key: >-
             macos-state-v1-${{ runner.arch }}-${{ steps.macos-toolchain.outputs.llvm }}-${{
-              hashFiles('script/ao/macos-toolchain.json', 'script/ao/buildifier.json')
+              hashFiles('script/ao/macos-toolchain.json', 'script/ao/buildifier.json',
+                        'script/ao/prettier.json', 'script/ao/core/prettier.py')
             }}
 
       - name: Resolve vcpkg binary cache key
@@ -513,7 +527,7 @@ jobs:
       - name: Restore vcpkg binary cache
         id: vcpkg-cache
         continue-on-error: true
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/aobus-state/cache/vcpkg/binaries
           key: ${{ steps.vcpkg-key.outputs.prefix }}
@@ -551,19 +565,26 @@ jobs:
         shell: bash
         run: ./ao setup buildifier
 
+      - name: Set up pinned Prettier
+        id: prettier
+        shell: bash
+        run: ./ao setup prettier
+
       - name: Save managed macOS tools
         if: >-
           ${{ !cancelled() && steps.macos-state.outcome == 'success' &&
               steps.macos-state.outputs.cache-hit != 'true' &&
               steps.vcpkg-prepare.outcome == 'success' &&
-              steps.buildifier.outcome == 'success' }}
+              steps.buildifier.outcome == 'success' &&
+              steps.prettier.outcome == 'success' }}
         continue-on-error: true
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ${{ runner.temp }}/aobus-state/tools/vcpkg
             ${{ runner.temp }}/aobus-state/tools/libcxx-expected-shim
             ${{ runner.temp }}/aobus-state/tools/buildifier
+            ${{ runner.temp }}/aobus-state/tools/prettier
           key: ${{ steps.macos-state.outputs.cache-primary-key }}
 
       - name: Save vcpkg binary cache
@@ -572,7 +593,7 @@ jobs:
               steps.vcpkg-cache-ready.outputs.ready == 'true' &&
               steps.vcpkg-cache-ready.outputs.key != steps.vcpkg-cache.outputs.cache-matched-key }}
         continue-on-error: true
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/aobus-state/cache/vcpkg/binaries
           key: ${{ steps.vcpkg-cache-ready.outputs.key }}
@@ -687,7 +708,7 @@ jobs:
 
       - name: Preserve Bazel evidence
         if: ${{ always() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: bazel-macos-${{ matrix.cache_arch }}-${{ github.run_attempt }}
           path: |
@@ -732,7 +753,7 @@ jobs:
         run: exit 1
 
       - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -772,7 +793,7 @@ jobs:
       - name: Restore vcpkg binary cache
         id: vcpkg-cache
         continue-on-error: true
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: C:\aobus-state\cache\vcpkg-binary
           key: ${{ steps.vcpkg-key.outputs.prefix }}
@@ -787,7 +808,7 @@ jobs:
       - name: Restore managed Windows tools
         id: windows-state
         continue-on-error: true
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             C:\aobus-state\tools
@@ -801,6 +822,8 @@ jobs:
                 'script/ao/bazel-toolchain.json',
                 '.bazelversion',
                 'script/ao/buildifier.json',
+                'script/ao/prettier.json',
+                'script/ao/core/prettier.py',
                 'script/ao/windows-requirements.txt',
                 'script/ao/docs-requirements.txt',
                 'dependency-contract.json',
@@ -812,7 +835,7 @@ jobs:
       - name: Restore Windows LLVM SDK
         id: windows-llvm
         continue-on-error: true
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: C:\aobus-state\cache\llvm\toolchains
           key: >-
@@ -864,7 +887,7 @@ jobs:
               steps.vcpkg-cache-ready.outputs.ready == 'true' &&
               steps.vcpkg-cache-ready.outputs.key != steps.vcpkg-cache.outputs.cache-matched-key }}
         continue-on-error: true
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: C:\aobus-state\cache\vcpkg-binary
           key: ${{ steps.vcpkg-cache-ready.outputs.key }}
@@ -1094,7 +1117,7 @@ jobs:
               steps.windows-llvm.outputs.cache-hit != 'true' &&
               steps.windows-llvm-ready.outputs.ready == 'true' }}
         continue-on-error: true
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: C:\aobus-state\cache\llvm\toolchains
           key: ${{ steps.windows-llvm.outputs.cache-primary-key }}
@@ -1108,7 +1131,7 @@ jobs:
               steps.windows-state.outcome == 'success' &&
               steps.windows-state.outputs.cache-hit != 'true' }}
         continue-on-error: true
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             C:\aobus-state\tools
@@ -1119,7 +1142,7 @@ jobs:
 
       - name: Preserve Bazel evidence
         if: ${{ always() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: bazel-windows-${{ github.run_attempt }}
           path: |
@@ -1134,7 +1157,7 @@ jobs:
       # roots would make upload-artifact resolve its LCA against the checkout.
       - name: Preserve direct Bazel evidence
         if: ${{ always() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: bazel-windows-direct-${{ github.run_attempt }}
           path: D:\aobus-bare\*.bep.json
@@ -1145,7 +1168,7 @@ jobs:
       - name: Preserve R2 stop receipt
         if: ${{ always() && steps.bazel-remote.outcome != 'skipped' }}
         continue-on-error: true
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: bazel-windows-r2-${{ github.run_attempt }}
           path: ${{ runner.temp }}/bazel-r2-stop.json
@@ -1153,7 +1176,7 @@ jobs:
 
       - name: Preserve portal tooling evidence
         if: ${{ always() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: bazel-windows-tooling-${{ github.run_attempt }}
           path: D:\aobus-bazel-fastbuild\tooling.log

@@ -1,6 +1,7 @@
 ---
 id: architecture.resource-delivery
 ---
+
 # Resource delivery architecture
 
 ## Find the contract for your change

@@ -1,6 +1,7 @@
 ---
 id: media.channel-order
 ---
+
 # Channel order and codec slot conventions
 
 ## Scope
@@ -23,16 +24,16 @@ Opus mapping families 0 and 1 publish their channel count's row as their identif
 These sets are not defaults for Opus family 255, unidentified PCM, or native backend observations.
 AAC resolves its [actual output-role groups](#aac), not a row selected from channel count.
 
-| Channels | Mask | Canonical roles |
-|---:|---:|---|
-| 1 | `0x004` | FC |
-| 2 | `0x003` | FL FR |
-| 3 | `0x007` | FL FR FC |
-| 4 | `0x033` | FL FR BL BR |
-| 5 | `0x037` | FL FR FC BL BR |
-| 6 | `0x03F` | FL FR FC LFE BL BR |
-| 7 | `0x70F` | FL FR FC LFE BC SL SR |
-| 8 | `0x63F` | FL FR FC LFE BL BR SL SR |
+| Channels |    Mask | Canonical roles          |
+| -------: | ------: | ------------------------ |
+|        1 | `0x004` | FC                       |
+|        2 | `0x003` | FL FR                    |
+|        3 | `0x007` | FL FR FC                 |
+|        4 | `0x033` | FL FR BL BR              |
+|        5 | `0x037` | FL FR FC BL BR           |
+|        6 | `0x03F` | FL FR FC LFE BL BR       |
+|        7 | `0x70F` | FL FR FC LFE BC SL SR    |
+|        8 | `0x63F` | FL FR FC LFE BL BR SL SR |
 
 `FL`/`FR` are front left/right, `FC` is front center, and `LFE` is low-frequency effects.
 `BL`/`BR` are back left/right, `BC` is back center, and `SL`/`SR` are side left/right.
@@ -52,14 +53,14 @@ Aobus accepts a bounded union of full named tags, not a channel-count lookup.
 Representative declarations below show raw provider-arrival roles and the zero-based source slot copied to each canonical destination.
 They are explicit declarations, never defaults for untagged multichannel ALAC.
 
-| Tag (identifier/count) | Raw roles | Effective mask | Destination-to-source slots |
-|---|---|---:|---|
-| Generic `114/3` (`0x00720003`) | FC FL FR | `0x007` | `[1,2,0]` |
-| Shared `116/4` | FC FL FR BC | `0x107` | `[1,2,0,3]` |
-| Shared `120/5` | FC FL FR BL BR | `0x037` | `[1,2,0,3,4]` |
-| Shared `124/6` | FC FL FR BL BR LFE | `0x03F` | `[1,2,0,5,3,4]` |
-| Shared `142/7` | FC FL FR BL BR BC LFE | `0x13F` | `[1,2,0,6,3,4,5]` |
-| Shared `127/8` | FC FLC FRC FL FR BL BR LFE | `0x0FF` | `[3,4,0,7,5,6,1,2]` |
+| Tag (identifier/count)         | Raw roles                  | Effective mask | Destination-to-source slots |
+| ------------------------------ | -------------------------- | -------------: | --------------------------- |
+| Generic `114/3` (`0x00720003`) | FC FL FR                   |        `0x007` | `[1,2,0]`                   |
+| Shared `116/4`                 | FC FL FR BC                |        `0x107` | `[1,2,0,3]`                 |
+| Shared `120/5`                 | FC FL FR BL BR             |        `0x037` | `[1,2,0,3,4]`               |
+| Shared `124/6`                 | FC FL FR BL BR LFE         |        `0x03F` | `[1,2,0,5,3,4]`             |
+| Shared `142/7`                 | FC FL FR BL BR BC LFE      |        `0x13F` | `[1,2,0,6,3,4,5]`           |
+| Shared `127/8`                 | FC FLC FRC FL FR BL BR LFE |        `0x0FF` | `[3,4,0,7,5,6,1,2]`         |
 
 The four-channel ALAC reference layout is not quad; the seven-channel layout is not the WAV seven-channel compatibility set, and the eight-channel layout uses front-wide/back roles rather than WAV's side/back set.
 Their masks are respectively `0x107`, `0x13F`, and `0xFF`, not count-derived WAV masks.
@@ -134,15 +135,15 @@ Indices are relative to all channels of that type: center first when present, th
 The normal-height types are defined by [`AUDIO_CHANNEL_TYPE`](https://github.com/mstorsjo/fdk-aac/blob/v2.0.3/libSYS/include/FDK_audio.h).
 Aobus admits only the following exact populations of each present type:
 
-| FDK type | Population | Complete index-to-WAVE assignment |
-|---|---:|---|
-| `ACT_FRONT` | 1 | `0 → FC (0x4)` |
-| `ACT_FRONT` | 2 | `0 → FL (0x1)`, `1 → FR (0x2)` |
-| `ACT_FRONT` | 3 | `0 → FC (0x4)`, `1 → FL (0x1)`, `2 → FR (0x2)` |
-| `ACT_BACK` | 1 | `0 → BC (0x100)` |
-| `ACT_BACK` | 2 | `0 → BL (0x10)`, `1 → BR (0x20)` |
-| `ACT_SIDE` | 2 | `0 → SL (0x200)`, `1 → SR (0x400)` |
-| `ACT_LFE` | 1 | `0 → LFE (0x8)` |
+| FDK type    | Population | Complete index-to-WAVE assignment              |
+| ----------- | ---------: | ---------------------------------------------- |
+| `ACT_FRONT` |          1 | `0 → FC (0x4)`                                 |
+| `ACT_FRONT` |          2 | `0 → FL (0x1)`, `1 → FR (0x2)`                 |
+| `ACT_FRONT` |          3 | `0 → FC (0x4)`, `1 → FL (0x1)`, `2 → FR (0x2)` |
+| `ACT_BACK`  |          1 | `0 → BC (0x100)`                               |
+| `ACT_BACK`  |          2 | `0 → BL (0x10)`, `1 → BR (0x20)`               |
+| `ACT_SIDE`  |          2 | `0 → SL (0x200)`, `1 → SR (0x400)`             |
+| `ACT_LFE`   |          1 | `0 → LFE (0x8)`                                |
 
 A group may be absent, but every present group must have exactly its complete index set, without duplicates, holes, or out-of-range indices.
 Both arrays must be available and every actual output slot must resolve to a distinct assigned WAVE position.

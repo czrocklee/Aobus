@@ -2,6 +2,7 @@
 id: decision.0001.unified-list-ordering
 status: accepted
 ---
+
 # Decision 0001: unify saved Lists with an independent order overlay
 
 ## Context

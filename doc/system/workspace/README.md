@@ -1,6 +1,7 @@
 ---
 id: architecture.workspace-lifecycle
 ---
+
 # Workspace architecture
 
 ## Find the contract for your change

@@ -1,6 +1,7 @@
 ---
 id: development.naming-convention
 ---
+
 # Naming conventions
 
 This document is the source of truth for project-owned names.
@@ -105,21 +106,21 @@ Walk this decision in order and stop when one contract fits:
 
 ### Role table
 
-| Family | Roles and contract |
-| --- | --- |
-| Authority and lifetime | `Service` owns an application/runtime side-effect boundary; `Session` owns a bounded active conversation; `Store` owns source-of-truth state or persistence access. |
-| Derived reads | `Source` supplies ordered membership or a stream; `Projection` derives a read model; `Cache` retains invalidatable non-authoritative data. |
-| UIModel state | `ViewModel` publishes UI-facing state and user actions; `InteractionModel` owns transient gestures; `EditorModel` or `FormModel` owns a draft, validation, and collection. Bare `Model` is used only when none is narrower. |
-| Pure definition and choice | `Schema` defines valid structure; `Catalog` is a mostly static inventory; `Policy` makes deterministic decisions; `Recommender` chooses a preferred default. |
-| User flow | `Workflow` is a stateless or short-lived multi-step user/business operation. It is not a subscription owner or generic helper. |
-| Prepared execution | `Plan` describes computed work; `Operation` owns one stateful execution; `Compiler` lowers declarations; `Evaluator` executes a plan or rule. |
-| Construction | `Builder` constructs incrementally; `Factory` selects an implementation family. A normal value uses a constructor or `make*` free function. |
-| Boundary adaptation | `Adapter` reshapes an interface; `Bridge` crosses an external protocol/framework; `Provider` supplies a capability or backend. |
-| Data boundaries | `Reader` and `Writer` perform boundary-scoped access; `Importer` and `Exporter` own durable formats; `Parser` converts syntax or bytes; `Formatter` creates presentation text; `Resolver` binds ids or references using context; `Codec` converts editable text and typed values both ways. |
-| Passive values | `State` is passive current state; `Snapshot` is a point-in-time copy; `Config` is required value-only construction data; `Options` is optional knobs; `Spec` is requested shape; `Descriptor` is declared capability or metadata. |
-| Inputs and results | `Dependencies` is construction-scoped collaborator wiring; `Context` is one-call non-owning input; `Request` crosses a service/process boundary; `Reply` is a synchronous domain response; `Outcome` classifies completion; `Result` summarizes completed work; `Progress` is in-flight data. |
-| Frontend surfaces | `Widget`, `Dialog`, `Panel`, and `Component` own native or terminal presentation. `Controller` translates frontend events for one surface; `Coordinator` sequences multiple independent owners; `Host` owns placement/lifetime; `Bridge` adapts a platform protocol. |
-| Test support | `Fixture` owns test lifetime; `TestSupport` is shared setup/assertion code; `Fake`, `Mock`, `Spy`, and `Stub` keep their ordinary test-double meanings. |
+| Family                     | Roles and contract                                                                                                                                                                                                                                                                            |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Authority and lifetime     | `Service` owns an application/runtime side-effect boundary; `Session` owns a bounded active conversation; `Store` owns source-of-truth state or persistence access.                                                                                                                           |
+| Derived reads              | `Source` supplies ordered membership or a stream; `Projection` derives a read model; `Cache` retains invalidatable non-authoritative data.                                                                                                                                                    |
+| UIModel state              | `ViewModel` publishes UI-facing state and user actions; `InteractionModel` owns transient gestures; `EditorModel` or `FormModel` owns a draft, validation, and collection. Bare `Model` is used only when none is narrower.                                                                   |
+| Pure definition and choice | `Schema` defines valid structure; `Catalog` is a mostly static inventory; `Policy` makes deterministic decisions; `Recommender` chooses a preferred default.                                                                                                                                  |
+| User flow                  | `Workflow` is a stateless or short-lived multi-step user/business operation. It is not a subscription owner or generic helper.                                                                                                                                                                |
+| Prepared execution         | `Plan` describes computed work; `Operation` owns one stateful execution; `Compiler` lowers declarations; `Evaluator` executes a plan or rule.                                                                                                                                                 |
+| Construction               | `Builder` constructs incrementally; `Factory` selects an implementation family. A normal value uses a constructor or `make*` free function.                                                                                                                                                   |
+| Boundary adaptation        | `Adapter` reshapes an interface; `Bridge` crosses an external protocol/framework; `Provider` supplies a capability or backend.                                                                                                                                                                |
+| Data boundaries            | `Reader` and `Writer` perform boundary-scoped access; `Importer` and `Exporter` own durable formats; `Parser` converts syntax or bytes; `Formatter` creates presentation text; `Resolver` binds ids or references using context; `Codec` converts editable text and typed values both ways.   |
+| Passive values             | `State` is passive current state; `Snapshot` is a point-in-time copy; `Config` is required value-only construction data; `Options` is optional knobs; `Spec` is requested shape; `Descriptor` is declared capability or metadata.                                                             |
+| Inputs and results         | `Dependencies` is construction-scoped collaborator wiring; `Context` is one-call non-owning input; `Request` crosses a service/process boundary; `Reply` is a synchronous domain response; `Outcome` classifies completion; `Result` summarizes completed work; `Progress` is in-flight data. |
+| Frontend surfaces          | `Widget`, `Dialog`, `Panel`, and `Component` own native or terminal presentation. `Controller` translates frontend events for one surface; `Coordinator` sequences multiple independent owners; `Host` owns placement/lifetime; `Bridge` adapts a platform protocol.                          |
+| Test support               | `Fixture` owns test lifetime; `TestSupport` is shared setup/assertion code; `Fake`, `Mock`, `Spy`, and `Stub` keep their ordinary test-double meanings.                                                                                                                                       |
 
 `View` is valid for a non-owning Core read view or for the product's workspace view concept.
 It does not mean a native widget or a convenient bag of display state.

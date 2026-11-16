@@ -1,6 +1,7 @@
 ---
 id: user.use-tui
 ---
+
 # Use the terminal frontend
 
 ## Outcome
@@ -88,16 +89,16 @@ If the library changes while the editor is open, the draft becomes stale and can
 
 Use these shipped shortcuts:
 
-| Key | Surface |
-|---|---|
-| `d` | show or hide track Detail |
-| uppercase `D` | show and focus Detail |
-| `a` | audio quality pipeline |
-| `o` | output devices |
-| `p` | presentations |
-| `n` | notifications |
-| `g` | Go to current track, artist, album, or workspace history |
-| `c` | reveal the playing track directly |
+| Key           | Surface                                                  |
+| ------------- | -------------------------------------------------------- |
+| `d`           | show or hide track Detail                                |
+| uppercase `D` | show and focus Detail                                    |
+| `a`           | audio quality pipeline                                   |
+| `o`           | output devices                                           |
+| `p`           | presentations                                            |
+| `n`           | notifications                                            |
+| `g`           | Go to current track, artist, album, or workspace history |
+| `c`           | reveal the playing track directly                        |
 
 Detail stays beside the track table while you browse. Escape closes temporary overlays but does not hide Detail.
 Credits show complete names, kinds, and optional roles. With Detail focused, Ctrl+K opens all Credits for the current selection: every marked track, or the focused track when none is marked. `1` through `9` open one of the first nine kinds, Conductor through Engineer, for the same tracks; edit Mixer, DJ-mixer, and Remixer with Ctrl+K.

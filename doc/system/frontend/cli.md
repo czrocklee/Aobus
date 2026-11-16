@@ -1,6 +1,7 @@
 ---
 id: cli.execution
 ---
+
 # CLI execution specification
 
 ## Scope

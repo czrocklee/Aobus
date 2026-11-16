@@ -1,6 +1,7 @@
 ---
 id: shell.layout-document
 ---
+
 # Shell layout document
 
 ## Scope and version
@@ -25,11 +26,11 @@ The model and YAML schema are under `app/include/ao/uimodel/layout/document/` an
 
 A serialized `LayoutDocument` is a mapping:
 
-| Key | Type | Required | Meaning |
-|---|---|---|---|
-| `version` | Unsigned integer | Yes | Document version marker; current emitted value is `1`. |
-| `root` | `LayoutNode` mapping | Yes | Root node of the authored layout. |
-| `templates` | Mapping from template id to `LayoutNode` | No | Reusable authored subtrees. |
+| Key         | Type                                     | Required | Meaning                                                |
+| ----------- | ---------------------------------------- | -------- | ------------------------------------------------------ |
+| `version`   | Unsigned integer                         | Yes      | Document version marker; current emitted value is `1`. |
+| `root`      | `LayoutNode` mapping                     | Yes      | Root node of the authored layout.                      |
+| `templates` | Mapping from template id to `LayoutNode` | No       | Reusable authored subtrees.                            |
 
 GTK persists the document inside the literal `layout` top-level `ConfigStore` group.
 Built-in `classic` and `modern` presets are compiled from `default_layout.yaml` and `modern_layout.yaml` resources.
@@ -38,14 +39,14 @@ Built-in `classic` and `modern` presets are compiled from `default_layout.yaml` 
 
 Each `LayoutNode` is a mapping:
 
-| Key | Type | Emission | Meaning |
-|---|---|---|---|
-| `id` | String | Omitted when empty. | Stable node identity; required for persistent stateful behavior. |
-| `type` | String | Always emitted. | Component type id or special `template` reference type. |
-| `props` | Mapping from string to `LayoutValue` | Omitted when empty. | Component properties interpreted through its descriptor/factory. |
-| `layout` | Mapping from string to `LayoutValue` | Omitted when empty. | Parent/common placement and CSS properties. |
-| `children` | Sequence of `LayoutNode` | Omitted when empty. | Ordered structural children. |
-| `tooltip` | One `LayoutNode` | Omitted when absent. | Tooltip-surface subtree. |
+| Key        | Type                                 | Emission             | Meaning                                                          |
+| ---------- | ------------------------------------ | -------------------- | ---------------------------------------------------------------- |
+| `id`       | String                               | Omitted when empty.  | Stable node identity; required for persistent stateful behavior. |
+| `type`     | String                               | Always emitted.      | Component type id or special `template` reference type.          |
+| `props`    | Mapping from string to `LayoutValue` | Omitted when empty.  | Component properties interpreted through its descriptor/factory. |
+| `layout`   | Mapping from string to `LayoutValue` | Omitted when empty.  | Parent/common placement and CSS properties.                      |
+| `children` | Sequence of `LayoutNode`             | Omitted when empty.  | Ordered structural children.                                     |
+| `tooltip`  | One `LayoutNode`                     | Omitted when absent. | Tooltip-surface subtree.                                         |
 
 Node keys are closed to the six fields above.
 Unknown or duplicate keys reject the whole document.
@@ -56,14 +57,14 @@ The `props` and `layout` mappings deliberately allow dynamic nonempty keys, whil
 
 `LayoutValue` is exactly one of:
 
-| C++ alternative | YAML form |
-|---|---|
-| `monostate` | Null. |
-| `bool` | Scalar `true` or `false`. |
-| signed 64-bit integer | Integer scalar. |
-| `double` | Floating-point scalar. |
-| `string` | Any remaining scalar. |
-| `vector<string>` | Sequence whose every element is a non-null scalar string. |
+| C++ alternative       | YAML form                                                 |
+| --------------------- | --------------------------------------------------------- |
+| `monostate`           | Null.                                                     |
+| `bool`                | Scalar `true` or `false`.                                 |
+| signed 64-bit integer | Integer scalar.                                           |
+| `double`              | Floating-point scalar.                                    |
+| `string`              | Any remaining scalar.                                     |
+| `vector<string>`      | Sequence whose every element is a non-null scalar string. |
 
 Deserialize preserves every quoted scalar as a string.
 It classifies unquoted scalar text in this order: canonical boolean, complete signed integer parse, complete double parse, then string.
@@ -134,15 +135,15 @@ layout:
 `LayoutDocumentLimits` owns the defaults below.
 `ShellLayoutStore` applies the file ceiling, and every document used by the GTK shell must pass the authored/effective ceilings through `prepareLayout()`:
 
-| Dimension | Limit |
-|---|---:|
-| Serialized custom-layout file | 256 KiB |
-| Authored entries | 4,096 |
-| Authored depth | 64 |
-| Authored owned string bytes | 256 KiB |
-| Effective entries after template expansion | 2,048 |
-| Effective depth, including template traversal | 64 |
-| Effective owned string bytes | 512 KiB |
+| Dimension                                     |   Limit |
+| --------------------------------------------- | ------: |
+| Serialized custom-layout file                 | 256 KiB |
+| Authored entries                              |   4,096 |
+| Authored depth                                |      64 |
+| Authored owned string bytes                   | 256 KiB |
+| Effective entries after template expansion    |   2,048 |
+| Effective depth, including template traversal |      64 |
+| Effective owned string bytes                  | 512 KiB |
 
 Root depth is `1`.
 Child and tooltip edges increase depth by one; following a template reference also increases effective depth by one.

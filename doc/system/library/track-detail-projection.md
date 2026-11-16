@@ -1,6 +1,7 @@
 ---
 id: library.track-detail-projection
 ---
+
 # Track-detail projection
 
 ## Scope

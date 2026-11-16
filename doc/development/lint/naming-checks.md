@@ -1,6 +1,7 @@
 ---
 id: development.lint.naming-checks
 ---
+
 # Naming checks
 
 This reference serves maintainers of naming audits and contributors diagnosing a naming diagnostic.

@@ -1,6 +1,7 @@
 ---
 id: query.format-language
 ---
+
 # Format expression language
 
 ## Scope and version
@@ -42,29 +43,29 @@ Keyword strings such as `and` or `in` must be quoted.
 
 ### Supported metadata variables
 
-| Variable | Output source |
-|---|---|
-| `$title` | Raw title text |
-| `$artist` | Resolved dictionary text |
-| `$album` | Resolved dictionary text |
-| `$albumArtist` | Resolved dictionary text |
-| `$composer` | Resolved dictionary text |
-| `$conductor` | All Conductor names joined with `; ` |
-| `$ensemble` | All Ensemble names joined with `; ` |
-| `$work` | Resolved dictionary text |
-| `$movement` | Resolved dictionary text |
-| `$soloist` | All Soloist names joined with `; ` |
-| `$performer` | All Performer names joined with `; ` |
-| `$credit` | All credit names joined with `; `, in canonical kind order |
-| `$genre` | Resolved dictionary text |
-| `$recordingDate` | Canonical `YYYY`, `YYYY-MM`, or `YYYY-MM-DD` at stored precision, or empty when absent |
-| `$year` | Decimal value or empty for zero |
-| `$trackNumber` | Decimal value or empty for zero |
-| `$trackTotal` | Decimal value or empty for zero |
-| `$discNumber` | Decimal value or empty for zero |
-| `$discTotal` | Decimal value or empty for zero |
-| `$movementNumber` | Decimal value or empty for zero |
-| `$movementTotal` | Decimal value or empty for zero |
+| Variable          | Output source                                                                          |
+| ----------------- | -------------------------------------------------------------------------------------- |
+| `$title`          | Raw title text                                                                         |
+| `$artist`         | Resolved dictionary text                                                               |
+| `$album`          | Resolved dictionary text                                                               |
+| `$albumArtist`    | Resolved dictionary text                                                               |
+| `$composer`       | Resolved dictionary text                                                               |
+| `$conductor`      | All Conductor names joined with `; `                                                   |
+| `$ensemble`       | All Ensemble names joined with `; `                                                    |
+| `$work`           | Resolved dictionary text                                                               |
+| `$movement`       | Resolved dictionary text                                                               |
+| `$soloist`        | All Soloist names joined with `; `                                                     |
+| `$performer`      | All Performer names joined with `; `                                                   |
+| `$credit`         | All credit names joined with `; `, in canonical kind order                             |
+| `$genre`          | Resolved dictionary text                                                               |
+| `$recordingDate`  | Canonical `YYYY`, `YYYY-MM`, or `YYYY-MM-DD` at stored precision, or empty when absent |
+| `$year`           | Decimal value or empty for zero                                                        |
+| `$trackNumber`    | Decimal value or empty for zero                                                        |
+| `$trackTotal`     | Decimal value or empty for zero                                                        |
+| `$discNumber`     | Decimal value or empty for zero                                                        |
+| `$discTotal`      | Decimal value or empty for zero                                                        |
+| `$movementNumber` | Decimal value or empty for zero                                                        |
+| `$movementTotal`  | Decimal value or empty for zero                                                        |
 
 The aliases from the predicate language are accepted for the same fields.
 `$coverArt` is rejected because it is not a scalar string field.
@@ -79,14 +80,14 @@ It is independent of `$year` and reads only the cold record, without dictionary 
 
 ### Supported property variables
 
-| Variable | Output source |
-|---|---|
-| `@duration` | Millisecond count or empty for zero |
-| `@bitrate` | Bits-per-second count or empty for zero |
-| `@sampleRate` | Hertz count or empty for zero |
-| `@channels` | Channel count or empty for zero |
-| `@bitDepth` | Bit count or empty for zero |
-| `@codec` | Codec name or empty for `UNKNOWN` |
+| Variable      | Output source                           |
+| ------------- | --------------------------------------- |
+| `@duration`   | Millisecond count or empty for zero     |
+| `@bitrate`    | Bits-per-second count or empty for zero |
+| `@sampleRate` | Hertz count or empty for zero           |
+| `@channels`   | Channel count or empty for zero         |
+| `@bitDepth`   | Bit count or empty for zero             |
+| `@codec`      | Codec name or empty for `UNKNOWN`       |
 
 Property aliases from the predicate language are accepted.
 
@@ -132,14 +133,14 @@ $artist " - " $title
 
 Representative invalid forms are:
 
-| Expression | Rejection |
-|---|---|
-| `$artist = Bach` | Comparisons are predicate-only. |
-| `$year?` | Existence is predicate-only. |
-| `not $title` | Unary operators are unsupported. |
-| `$year in 1990..1999` | Lists, ranges, and `in` are predicate-only. |
-| `#favorite` | A tag is not a scalar string field. |
-| `$coverArt` | Cover selection is not a scalar string field. |
+| Expression            | Rejection                                     |
+| --------------------- | --------------------------------------------- |
+| `$artist = Bach`      | Comparisons are predicate-only.               |
+| `$year?`              | Existence is predicate-only.                  |
+| `not $title`          | Unary operators are unsupported.              |
+| `$year in 1990..1999` | Lists, ranges, and `in` are predicate-only.   |
+| `#favorite`           | A tag is not a scalar string field.           |
+| `$coverArt`           | Cover selection is not a scalar string field. |
 
 ## Implementation authority
 

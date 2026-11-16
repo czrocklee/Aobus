@@ -1,6 +1,7 @@
 ---
 id: failure.fatal-facility
 ---
+
 # Fatal facility reference
 
 ## Scope and version
@@ -21,14 +22,14 @@ Core code may invoke the macros and register no application dependency; the appl
 
 ### Fatal categories
 
-| `FatalCategory` value | Diagnostic token | Meaning |
-|---|---|---|
-| `Expects` | `expects` | A caller violated a documented precondition. |
-| `Ensures` | `ensures` | A function cannot satisfy its documented normal-return guarantee. |
-| `Invariant` | `invariant` | Construction, validation, or an internal transition previously established a false fact. |
-| `Fatal` | `fatal` | Mandatory infrastructure cannot preserve its contract and recovery is no longer truthful. |
-| `RealtimeInvariant` | `realtime-invariant` | A realtime capacity or state-machine planning invariant failed. |
-| `UnhandledException` | `unhandled-exception` | An owning terminal boundary received an escaping non-cancellation exception after mandatory bookkeeping. |
+| `FatalCategory` value | Diagnostic token      | Meaning                                                                                                  |
+| --------------------- | --------------------- | -------------------------------------------------------------------------------------------------------- |
+| `Expects`             | `expects`             | A caller violated a documented precondition.                                                             |
+| `Ensures`             | `ensures`             | A function cannot satisfy its documented normal-return guarantee.                                        |
+| `Invariant`           | `invariant`           | Construction, validation, or an internal transition previously established a false fact.                 |
+| `Fatal`               | `fatal`               | Mandatory infrastructure cannot preserve its contract and recovery is no longer truthful.                |
+| `RealtimeInvariant`   | `realtime-invariant`  | A realtime capacity or state-machine planning invariant failed.                                          |
+| `UnhandledException`  | `unhandled-exception` | An owning terminal boundary received an escaping non-cancellation exception after mandatory bookkeeping. |
 
 `fatalCategoryName(FatalCategory)` returns the token above without allocation or failure.
 

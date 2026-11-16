@@ -1,6 +1,7 @@
 ---
 id: storage.lmdb-operation
 ---
+
 # LMDB operation specification
 
 ## Scope
@@ -82,11 +83,11 @@ Destruction closes the native handle; the same process may then reopen that path
 
 ### Transaction
 
-| State | Read behavior | Write behavior | Transition |
-|---|---|---|---|
-| Active read | Snapshot reads and iteration are available. | Not available. | Destruction aborts/releases the native read transaction. |
-| Active write | Snapshot reads and staged writes are available. | Create, update, append, delete, clear, commit, and abort are available. | `commit()`, `abort()`, destruction, or move-out makes the transaction terminal. A `detail::TransactionFailure` requires the owner to take the abort transition. |
-| Terminal write | No transaction handle remains. | Writer use is invalid. | No transition back to active. |
+| State          | Read behavior                                   | Write behavior                                                          | Transition                                                                                                                                                      |
+| -------------- | ----------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Active read    | Snapshot reads and iteration are available.     | Not available.                                                          | Destruction aborts/releases the native read transaction.                                                                                                        |
+| Active write   | Snapshot reads and staged writes are available. | Create, update, append, delete, clear, commit, and abort are available. | `commit()`, `abort()`, destruction, or move-out makes the transaction terminal. A `detail::TransactionFailure` requires the owner to take the abort transition. |
+| Terminal write | No transaction handle remains.                  | Writer use is invalid.                                                  | No transition back to active.                                                                                                                                   |
 
 `ReadTransaction::isActive()` reports whether a native handle remains.
 `WriteTransaction::isFinished()` is its inverse and becomes true after successful commit, failed commit, explicit abort, or move-out, so it does not independently prove durable success; callers inspect the `Result` returned by `commit()`.
@@ -212,13 +213,13 @@ Opening a database from an inactive transaction or creating a reader/writer from
 
 ### Reads and iteration
 
-| Operation | Existing data | Missing or empty | Other LMDB fault |
-|---|---|---|---|
-| `Reader::get` | Transaction-scoped byte span. | `std::nullopt`. | Fatal on an ordinary read transaction; private transaction failure on a write transaction. |
-| `Writer::get` | Transaction-scoped byte span. | `std::nullopt`. | Private transaction failure. |
-| `Reader::maxKey` | Largest integer key. | `0`. | Same channel as `Reader::get`. |
-| `ByteKeyDatabase::Reader::lowerBound` | First key/value whose key is not less than the target. | End sentinel. | Same channel as `Reader::get`. |
-| Iterator construction/increment | Current key/value view. | End sentinel. | Same channel as the owning transaction. |
+| Operation                             | Existing data                                          | Missing or empty | Other LMDB fault                                                                           |
+| ------------------------------------- | ------------------------------------------------------ | ---------------- | ------------------------------------------------------------------------------------------ |
+| `Reader::get`                         | Transaction-scoped byte span.                          | `std::nullopt`.  | Fatal on an ordinary read transaction; private transaction failure on a write transaction. |
+| `Writer::get`                         | Transaction-scoped byte span.                          | `std::nullopt`.  | Private transaction failure.                                                               |
+| `Reader::maxKey`                      | Largest integer key.                                   | `0`.             | Same channel as `Reader::get`.                                                             |
+| `ByteKeyDatabase::Reader::lowerBound` | First key/value whose key is not less than the target. | End sentinel.    | Same channel as `Reader::get`.                                                             |
+| Iterator construction/increment       | Current key/value view.                                | End sentinel.    | Same channel as the owning transaction.                                                    |
 
 `ByteKeyDatabase::Reader::lowerBound` requires a nonempty target; an empty target violates `AO_EXPECTS` rather than aliasing `begin()`.
 Reader iteration follows database key order and yields borrowed key/value spans.
@@ -226,14 +227,14 @@ Integer `maxKey` reads the last database key at the time of the transaction snap
 
 ### Writes
 
-| Operation | Behavior | Normal non-success | Failure channel |
-|---|---|---|---|
-| `create(key, data)` | Insert without overwrite. | Existing key is `Conflict`. | Other LMDB mutation faults throw `detail::TransactionFailure`. |
-| `update(key, data)` | Upsert the supplied value. | None. | An LMDB mutation fault throws `detail::TransactionFailure`. |
-| `IntegerKeyDatabase::Writer::append(data)` | Allocate cached maximum plus one and exclusively create it. | Exhaustion is `ResourceExhausted`. | Other create failure is propagated. |
-| `IntegerKeyDatabase::Writer::raiseMaxKey(key)` | Raise the cached append maximum to at least `key` without writing. | None. | None. |
-| `tryDelete(key)` | Remove an existing record. | Missing key returns `false`; deletion returns `true`. | Other faults use `detail::TransactionFailure`. |
-| `clear()` | Remove all records while retaining the named database; an integer writer also resets its cached append maximum to zero. | Empty clear succeeds. | An LMDB mutation fault throws `detail::TransactionFailure`. |
+| Operation                                      | Behavior                                                                                                                | Normal non-success                                    | Failure channel                                                |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | -------------------------------------------------------------- |
+| `create(key, data)`                            | Insert without overwrite.                                                                                               | Existing key is `Conflict`.                           | Other LMDB mutation faults throw `detail::TransactionFailure`. |
+| `update(key, data)`                            | Upsert the supplied value.                                                                                              | None.                                                 | An LMDB mutation fault throws `detail::TransactionFailure`.    |
+| `IntegerKeyDatabase::Writer::append(data)`     | Allocate cached maximum plus one and exclusively create it.                                                             | Exhaustion is `ResourceExhausted`.                    | Other create failure is propagated.                            |
+| `IntegerKeyDatabase::Writer::raiseMaxKey(key)` | Raise the cached append maximum to at least `key` without writing.                                                      | None.                                                 | None.                                                          |
+| `tryDelete(key)`                               | Remove an existing record.                                                                                              | Missing key returns `false`; deletion returns `true`. | Other faults use `detail::TransactionFailure`.                 |
+| `clear()`                                      | Remove all records while retaining the named database; an integer writer also resets its cached append maximum to zero. | Empty clear succeeds.                                 | An LMDB mutation fault throws `detail::TransactionFailure`.    |
 
 The public create, update, and append operations on `IntegerKeyDatabase::Writer` and `ByteKeyDatabase::Writer` accept only copied input bytes.
 The source-private `detail::ReservationWriterAccess` is the sole mutable-reservation boundary, and its sole production consumer is library Track encoding.
@@ -262,14 +263,14 @@ If exclusive creation fails after the cache was incremented, append restores the
 
 The shared result adapter maps native codes as follows on `Result`-returning paths:
 
-| Native result | `Error::Code` |
-|---|---|
-| `MDB_SUCCESS` | Successful value. |
-| `MDB_NOTFOUND` | `NotFound`. |
-| `MDB_KEYEXIST` | `Conflict`. |
-| `MDB_MAP_FULL` | `StorageFull`. |
-| `MDB_MAP_RESIZED` | `InvalidState`. |
-| Any other LMDB code | `IoError`. |
+| Native result       | `Error::Code`     |
+| ------------------- | ----------------- |
+| `MDB_SUCCESS`       | Successful value. |
+| `MDB_NOTFOUND`      | `NotFound`.       |
+| `MDB_KEYEXIST`      | `Conflict`.       |
+| `MDB_MAP_FULL`      | `StorageFull`.    |
+| `MDB_MAP_RESIZED`   | `InvalidState`.   |
+| Any other LMDB code | `IoError`.        |
 
 The adapter prefixes the native LMDB diagnostic with the originating operation and captures the adapter call site that invokes the result-mapping helper.
 Integer append exhaustion originates `ResourceExhausted` directly rather than mapping a native LMDB result.

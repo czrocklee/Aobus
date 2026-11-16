@@ -25,7 +25,6 @@ exports_files([
     "script/ao/windows-llvm-sdk.json",
     "shell.nix",
     "script/ao/macos-toolchain.json",
-    "doc/reference/shell/component-vocabulary.md",
 ])
 
 # Runtime module inputs for the lint fixture suite, which replays ao tidy.

@@ -1,6 +1,7 @@
 ---
 id: development.bazel
 ---
+
 # Bazel build system
 
 Bazel owns the complete native product build: Core, CLI, TUI, Linux GTK,
@@ -895,11 +896,11 @@ Toolchain identity is declared data of
 tools and policy arguments, including mode-specific hardening, so compilation
 and link action keys include it.
 
-| Mode | Compiler policy | Nix hardening policy |
-|---|---|---|
-| `dbg` | `-O0 -g`, no `NDEBUG` | Supported policy except `fortify`/`fortify3` |
-| `opt` | `-O2 -g0 -DNDEBUG`, function/data sections | Full supported policy |
-| `fastbuild` | `-O0 -g0`, no `NDEBUG` | Supported policy except `fortify`/`fortify3` |
+| Mode        | Compiler policy                            | Nix hardening policy                         |
+| ----------- | ------------------------------------------ | -------------------------------------------- |
+| `dbg`       | `-O0 -g`, no `NDEBUG`                      | Supported policy except `fortify`/`fortify3` |
+| `opt`       | `-O2 -g0 -DNDEBUG`, function/data sections | Full supported policy                        |
+| `fastbuild` | `-O0 -g0`, no `NDEBUG`                     | Supported policy except `fortify`/`fortify3` |
 
 Only optimization-dependent fortify is excluded in Debug/fastbuild; other
 supported hardening remains. Each observed Nix wrapper owns its compiler's

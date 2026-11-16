@@ -1,6 +1,7 @@
 ---
 id: playback.decoder-error
 ---
+
 # Decoder error reference
 
 ## Scope and version
@@ -21,17 +22,17 @@ The exact common error vocabulary belongs to the [error value reference](../fail
 
 `openDecoderSession(path, outputEncoding)` returns a non-null, fully initialized session or an error.
 
-| Condition | Code |
-| --- | --- |
-| `.flac`, `.mp3`, `.opus`, or `.wav` extension with valid supported media | ready matching session value |
-| `.m4a` with a valid supported `alac` sample entry | ready ALAC session value |
-| `.m4a` with a valid supported `mp4a` sample entry | ready AAC session value |
-| `.m4a` cannot be mapped | `IoError` |
-| `.m4a` has no audio track | `NotSupported` |
-| unsupported MP4 audio sample entry | `NotSupported` |
-| malformed MP4 structure encountered before audio-track selection | propagated `CorruptData` or `FormatRejected` |
-| selected decoder initialization fails | propagated `IoError`, `CorruptData`, or `FormatRejected`; codec `InitFailed`, `DecodeFailed`, or `NotSupported` |
-| unsupported extension | `NotSupported` |
+| Condition                                                                | Code                                                                                                            |
+| ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `.flac`, `.mp3`, `.opus`, or `.wav` extension with valid supported media | ready matching session value                                                                                    |
+| `.m4a` with a valid supported `alac` sample entry                        | ready ALAC session value                                                                                        |
+| `.m4a` with a valid supported `mp4a` sample entry                        | ready AAC session value                                                                                         |
+| `.m4a` cannot be mapped                                                  | `IoError`                                                                                                       |
+| `.m4a` has no audio track                                                | `NotSupported`                                                                                                  |
+| unsupported MP4 audio sample entry                                       | `NotSupported`                                                                                                  |
+| malformed MP4 structure encountered before audio-track selection         | propagated `CorruptData` or `FormatRejected`                                                                    |
+| selected decoder initialization fails                                    | propagated `IoError`, `CorruptData`, or `FormatRejected`; codec `InitFailed`, `DecodeFailed`, or `NotSupported` |
+| unsupported extension                                                    | `NotSupported`                                                                                                  |
 
 Extension matching is ASCII case-insensitive.
 The `.mp4` extension is unsupported; Aobus accepts MP4 audio only through the music-specific `.m4a` extension.
@@ -41,12 +42,12 @@ WAV construction uses the RIFF parser's `RequiredAudio` extent and therefore doe
 
 ## Session operation surface
 
-| Operation | Success/normal value | Recoverable code families |
-| --- | --- | --- |
-| `seek(offset)` | decoder positioned for the requested offset | `SeekFailed`, plus a propagated packet-source or frame-decoding error encountered during seeking |
-| `readNextBlock()` | PCM block or empty end-of-stream block | `DecodeFailed`, `NotSupported`, or a propagated lower read error |
-| `flush()` | codec buffers reset when supported | none; `noexcept` |
-| `streamInfo()` | complete value established by successful construction | none; `noexcept` |
+| Operation         | Success/normal value                                  | Recoverable code families                                                                        |
+| ----------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `seek(offset)`    | decoder positioned for the requested offset           | `SeekFailed`, plus a propagated packet-source or frame-decoding error encountered during seeking |
+| `readNextBlock()` | PCM block or empty end-of-stream block                | `DecodeFailed`, `NotSupported`, or a propagated lower read error                                 |
+| `flush()`         | codec buffers reset when supported                    | none; `noexcept`                                                                                 |
+| `streamInfo()`    | complete value established by successful construction | none; `noexcept`                                                                                 |
 
 Codec-specific initialization-time narrowing includes:
 

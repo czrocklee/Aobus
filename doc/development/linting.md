@@ -1,9 +1,10 @@
 ---
 id: development.linting
 ---
+
 # Linting policy
 
-This guide tells contributors how to handle `clang-tidy`, Ruff, mypy, and Buildifier findings.
+This guide covers native lint, Python and Starlark checks, and authored-text formatting.
 Checker internals, fixture design, AST proof, and native replay mechanics are in [checker development](lint/checker-development.md); naming-specific proof is in [naming checks](lint/naming-checks.md).
 
 Use project commands as the public entry points:
@@ -11,6 +12,7 @@ Use project commands as the public entry points:
 - `./ao tidy` runs C++ clang-tidy, Python Ruff/mypy, and Bazel Buildifier checks for files in scope; the C++ stage consumes the Bazel lint report actions.
 - `./ao hygiene` is a scoped check-only entry: format check, source audits, workflow lint, then tidy. `ao check` invokes the same implementation for those diff-scoped stages, while the gate's C++ lint stage covers the complete native project graph; standalone `hygiene` and `tidy` stay scoped.
 - `bazel test //test/lint:lint_test --nocache_test_results` runs fresh assertions on the Aobus clang-tidy fixture result; it is not the Python lint command.
+- `./ao format` formats native, Python, Bazel, Markdown, JSON, YAML, and CSS sources; `--check` checks the same scope without rewriting it.
 
 Use the corresponding `ao.bat` commands on native Windows.
 Do not call clang-tidy, Ruff, mypy, or Buildifier directly during normal repository work.
@@ -129,13 +131,13 @@ The `tooling` suite on Linux and Windows owns the version and behavior gate.
 
 The coding and product contracts remain authoritative when a custom check reports them:
 
-| Diagnostic area | Contributor action | Technical reference |
-| --- | --- | --- |
-| Semantic naming | Apply the [naming conventions](naming-convention.md); rename the complete declaration and consumer set. | [Naming checks](lint/naming-checks.md) |
-| Header definitions | Move a disallowed definition to its owning `.cpp`; do not infer an exception from size, accessor intent, or `inline`. | [Header function definitions](lint/checker-development.md#header-function-definitions) |
-| AO fatal and exception boundaries | Use the owned AO contract or exception-carrier surface; do not suppress the raw-fatal and raw-throw checks. | [Fatal-contract source guardrails](lint/checker-development.md#fatal-contract-source-guardrails) |
-| Broad coroutine catches | Transfer cancellation first through one of the approved forms; later disposition remains the workflow owner's invariant. | [Cancellation handling](lint/checker-development.md#cancellation-handling-in-coroutine-catches) |
-| Filesystem path text | Use `pathToUtf8()`, `pathToGenericUtf8()`, `pathFromUtf8()`, `pathFromNative()`, or `path::native()` at the appropriate boundary. | [Filesystem path text boundaries](lint/checker-development.md#filesystem-path-text-boundaries) |
+| Diagnostic area                   | Contributor action                                                                                                                | Technical reference                                                                              |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Semantic naming                   | Apply the [naming conventions](naming-convention.md); rename the complete declaration and consumer set.                           | [Naming checks](lint/naming-checks.md)                                                           |
+| Header definitions                | Move a disallowed definition to its owning `.cpp`; do not infer an exception from size, accessor intent, or `inline`.             | [Header function definitions](lint/checker-development.md#header-function-definitions)           |
+| AO fatal and exception boundaries | Use the owned AO contract or exception-carrier surface; do not suppress the raw-fatal and raw-throw checks.                       | [Fatal-contract source guardrails](lint/checker-development.md#fatal-contract-source-guardrails) |
+| Broad coroutine catches           | Transfer cancellation first through one of the approved forms; later disposition remains the workflow owner's invariant.          | [Cancellation handling](lint/checker-development.md#cancellation-handling-in-coroutine-catches)  |
+| Filesystem path text              | Use `pathToUtf8()`, `pathToGenericUtf8()`, `pathFromUtf8()`, `pathFromNative()`, or `path::native()` at the appropriate boundary. | [Filesystem path text boundaries](lint/checker-development.md#filesystem-path-text-boundaries)   |
 
 The raw contract lexical guard remains an early failure for common spellings; AST checks own symbol resolution and narrow implementation-marker exceptions.
 New guardrail policy is owned by the shared Python inventory and rules in [`guardrails.py`](../../script/ao/core/guardrails.py), which the completion gate consumes directly.
@@ -259,15 +261,48 @@ contract. This is a single documented policy exception, not scattered local
 suppressions. Other warning categories remain enabled and returned diagnostics
 are never filtered by category. C++ and Python lint policies are unchanged.
 
+## Authored-text formatting
+
+`./ao format` applies pinned Prettier to `.md`, `.json`, `.yaml`, `.yml`, and
+`.css` files in scope, including root documents and `.agents/skills/`.
+Explicit files, `--folder`, `--commit`, and `--all` use the same selectors as
+other formatters. `./ao hygiene` checks that formatting before later lint stages.
+For default and `--commit` scopes, a change to `.prettierrc.json`,
+`.prettierignore`, `.gitignore`, or `script/ao/prettier.json` expands the
+Prettier subset to all authored text in the format roots. Other formatters keep
+their diff scope; explicit file and folder selections remain bounded.
+
+[`.prettierrc.json`](../../.prettierrc.json) preserves semantic prose line breaks,
+leaves embedded code examples unchanged, and emits LF line endings.
+[`.prettierignore`](../../.prettierignore) excludes `test/data/library/` so
+compatibility inputs retain their original scalar and escape spellings.
+Git-backed discovery excludes ignored local plans, caches, and generated output;
+explicit checkout-escaping paths still fail rather than formatting external files.
+Release-frozen compatibility documents also follow the
+[YAML compatibility policy](../reference/library/format/yaml.md#test-authority).
+
+`./ao setup prettier` prepares only the formatter and its pinned Node runtime;
+formatting also prepares a missing managed tool when applicable. Linux uses the
+Nix formatter; native hosts and lightweight documentation CI use hash-verified
+managed artifacts ([tool ownership](dependency-governance.md#repository-tooling)).
+An existing damaged cache fails rather than silently repairing itself or choosing
+an ambient Node or npm installation. Provisioning discards the download archives
+after verification; decoded content and the provenance receipt are sufficient
+for offline reuse. Existing caches may retain their original download archives.
+
+`./ao docs check --format` combines documentation integrity with check-only
+formatting of the discovered Markdown set. Plain `./ao docs check` remains the
+links, metadata, and navigation checker.
+
 ## GitHub Actions workflow lint
 
 `./ao hygiene` and `./ao check` include a check-only workflow-lint stage as
 repository source hygiene; it is not a C++ or Python test stage and has no
 standalone command. Scope is only direct `.github/workflows/*.yml` and
 `*.yaml` files: the changed-file, explicit-file, `--folder`, and `--all`
-selectors apply to that directory and never to arbitrary YAML. Formatting
-never rewrites workflow YAML. An empty workflow scope is skipped without
-resolving the tool.
+selectors apply to that directory and never to arbitrary YAML. Prettier formats
+workflow YAML through `./ao format`; actionlint remains check-only. An empty
+workflow-lint scope is skipped without resolving actionlint.
 
 On Linux the stage runs the actionlint pinned by
 [`nixpkgs.json`](../../nixpkgs.json), including the packaged ShellCheck and

@@ -1,6 +1,7 @@
 ---
 id: architecture.encoded-media
 ---
+
 # Encoded media architecture
 
 ## Find the contract for your change

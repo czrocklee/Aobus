@@ -2,6 +2,7 @@
 id: decision.0013.adopt-icu-collation
 status: accepted
 ---
+
 # Decision 0013: adopt ICU collation
 
 ## Context

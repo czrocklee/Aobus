@@ -1,6 +1,7 @@
 ---
 id: presentation.activity-status
 ---
+
 # Activity status
 
 ## Scope

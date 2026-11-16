@@ -15,16 +15,25 @@ CPP_INCLUDE_FRAGMENT_SUFFIXES = (*CPP_HEADER_SUFFIXES, ".def")
 CPP_SUFFIXES = (*CPP_TRANSLATION_UNIT_SUFFIXES, *CPP_INCLUDE_FRAGMENT_SUFFIXES)
 PYTHON_SUFFIXES = (".py",)
 BAZEL_SUFFIXES = (".bzl", ".bazel")
-SOURCE_SUFFIXES = (*CPP_SUFFIXES, *PYTHON_SUFFIXES, *BAZEL_SUFFIXES)
+PRETTIER_SUFFIXES = (".md", ".json", ".yaml", ".yml", ".css")
+SOURCE_SUFFIXES = (*CPP_SUFFIXES, *PYTHON_SUFFIXES, *BAZEL_SUFFIXES, *PRETTIER_SUFFIXES)
 
 # Lint checker fixtures contain deliberate violations; batch scans must never pick them up.
 LINT_INTEGRATION_DIR = "test/lint"
 WORKFLOW_DIR = ".github/workflows"
+# Git reports this when the checkout has no repository at all; text discovery then
+# falls back to a bounded filesystem scan instead of failing the command.
+MISSING_REPOSITORY_DIAGNOSTIC = "not a git repository"
 
 
 def is_bazel_file(name: str) -> bool:
     """Return whether a path names a Buildifier-supported source file."""
     return name.endswith(BAZEL_SUFFIXES) or Path(name).name in ("BUILD", "WORKSPACE")
+
+
+def is_prettier_file(name: str) -> bool:
+    """Return whether the repository formats this authored text family with Prettier."""
+    return name.endswith(PRETTIER_SUFFIXES)
 
 
 def is_bazel_rc_file(name: str) -> bool:
@@ -51,7 +60,7 @@ def root_bazel_files() -> list[str]:
     )
 
 
-def _matches_source(name: str, suffixes: tuple[str, ...]) -> bool:
+def matches_source(name: str, suffixes: tuple[str, ...]) -> bool:
     # Named Bazel files and workflows belong to whole-source hygiene only.
     return name.endswith(suffixes) or (
         suffixes == SOURCE_SUFFIXES and (is_bazel_file(name) or is_bazel_rc_file(name) or is_workflow_file(name))
@@ -115,7 +124,7 @@ def git_command(
                 raise die("AOBUS_GIT_DIR and AOBUS_GIT_WORK_TREE must be absolute paths")
             # Bind discovery only: setup mutations and disposable repositories
             # must not inherit an alternate repository selection.
-            if absolute_path(work_tree) == absolute_path(PROJECT_ROOT):
+            if _binds_this_checkout(work_tree):
                 command += ["--git-dir", git_directory, "--work-tree", str(PROJECT_ROOT)]
     resolved_os_name = os.name if os_name is None else os_name
     resolved_platform_name = sys.platform if platform_name is None else platform_name
@@ -138,6 +147,13 @@ def git_command(
     return [*command, *args]
 
 
+def _git_output(stdout: str | bytes, null_terminated: bool) -> list[str]:
+    if null_terminated:
+        # Text-mode newline conversion would corrupt CR/CRLF inside POSIX paths.
+        return [field for field in os.fsdecode(stdout).split("\0") if field]
+    return [line for line in os.fsdecode(stdout).splitlines() if line.strip()]
+
+
 def _git_lines(*args: str, null_terminated: bool = False) -> list[str]:
     result = subprocess.run(
         git_command(*args, source_discovery=True),
@@ -153,10 +169,55 @@ def _git_lines(*args: str, null_terminated: bool = False) -> list[str]:
                 f"; ignored AOBUS_GIT_WORK_TREE={work_tree!r}: it does not match PROJECT_ROOT={str(PROJECT_ROOT)!r}"
             )
         raise die(f"git {' '.join(args)} failed: {detail}")
-    if null_terminated:
-        # Text-mode newline conversion would corrupt CR/CRLF inside POSIX paths.
-        return [field for field in os.fsdecode(result.stdout).split("\0") if field]
-    return [line for line in result.stdout.splitlines() if line.strip()]
+    return _git_output(result.stdout, null_terminated)
+
+
+def _git_lines_if_repository(*args: str, null_terminated: bool = False) -> list[str] | None:
+    """Run one discovery command, or None when this checkout has no repository.
+
+    Only two states select the caller's filesystem fallback: no Git executable
+    and an unversioned checkout, and only while no effective ``AOBUS_GIT_*``
+    binding selects this checkout. Malformed bindings, an effective binding
+    that cannot be honored, and every other Git or process failure stay fatal,
+    so a broken selection is never mistaken for a plain exported tree.
+    """
+    try:
+        result = subprocess.run(
+            git_command(*args, source_discovery=True),
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=not null_terminated,
+        )
+    except FileNotFoundError as exc:
+        # Only a missing executable is an unavailable tool, and even then an
+        # effective binding cannot be honored by a filesystem fallback.
+        if _explicit_git_binding():
+            raise die(f"git {' '.join(args)} failed: {exc}") from exc
+        return None
+    except OSError as exc:
+        raise die(f"git {' '.join(args)} failed: {exc}") from exc
+    if result.returncode != 0:
+        detail = os.fsdecode(result.stderr).strip() or f"exit {result.returncode}"
+        if MISSING_REPOSITORY_DIAGNOSTIC in detail and not _explicit_git_binding():
+            return None
+        raise die(f"git {' '.join(args)} failed: {detail}")
+    return _git_output(result.stdout, null_terminated)
+
+
+def _binds_this_checkout(work_tree: str) -> bool:
+    """A discovery binding applies only to the checkout it names."""
+    return absolute_path(work_tree) == absolute_path(PROJECT_ROOT)
+
+
+def _explicit_git_binding() -> bool:
+    """An effective binding selects this checkout and must fail loudly, never fall back.
+
+    A well-formed binding for another checkout is ignored by ``git_command``, so
+    it cannot make Git unavailable here and keeps the filesystem fallback.
+    """
+    git_directory = os.environ.get("AOBUS_GIT_DIR")
+    work_tree = os.environ.get("AOBUS_GIT_WORK_TREE")
+    return bool(git_directory and work_tree and _binds_this_checkout(work_tree))
 
 
 def _git_ok(*args: str) -> bool:
@@ -199,13 +260,22 @@ def _git_worktree_files() -> list[str]:
     return names
 
 
-def changed_files(commit: str | None = None, *, suffixes: tuple[str, ...] = CPP_SUFFIXES) -> list[str]:
-    """Repo-relative sources changed since the diff base, plus working tree, staged, untracked."""
+def changed_paths(commit: str | None = None) -> list[str]:
+    """Repo-relative names changed since the diff base, plus working tree, staged, untracked.
+
+    Unfiltered: callers apply ``matches_source`` or their own selection, so a
+    formatting-control edit stays visible before any suffix filter drops it.
+    """
     base = diff_base(commit)
     names: set[str] = set()
     names.update(_git_lines("diff", "--name-only", "-z", f"{base}..HEAD", null_terminated=True))
     names.update(_git_worktree_files())
-    return sorted(name for name in names if _matches_source(name, suffixes))
+    return sorted(names)
+
+
+def changed_files(commit: str | None = None, *, suffixes: tuple[str, ...] = CPP_SUFFIXES) -> list[str]:
+    """Repo-relative sources changed since the diff base, plus working tree, staged, untracked."""
+    return [name for name in changed_paths(commit) if matches_source(name, suffixes)]
 
 
 def find_sources(folders: list[str], *, suffixes: tuple[str, ...] = CPP_SUFFIXES) -> list[str]:
@@ -219,9 +289,63 @@ def find_sources(folders: list[str], *, suffixes: tuple[str, ...] = CPP_SUFFIXES
             if not path.is_file():
                 continue
             rel = path.relative_to(PROJECT_ROOT).as_posix()
-            if not _matches_source(rel, suffixes):
+            if not matches_source(rel, suffixes):
                 continue
             if rel.startswith(f"{LINT_INTEGRATION_DIR}/") and not is_bazel_file(rel):
                 continue
             found.add(rel)
     return sorted(found)
+
+
+def prettier_sources(folders: list[str], *, include_root: bool = False) -> list[str]:
+    """Authored Prettier-family sources, enumerated through Git when possible.
+
+    Tracked files plus non-ignored untracked files are the authored scope, so
+    ignored local artifacts (a root ``compile_commands.json`` link, ``doc/plan``)
+    never enter text formatting. Tracked or unignored links that escape the
+    checkout still reach Prettier's own containment error. A checkout Git cannot
+    enumerate falls back to a bounded filesystem scan that drops the escaping
+    links it discovers, keeping ``--all`` and ``--folder`` usable without a
+    repository.
+    """
+    names = _git_lines_if_repository(
+        "ls-files", "-z", "--cached", "--others", "--exclude-standard", null_terminated=True
+    )
+    if names is None:
+        return _prettier_sources_from_filesystem(folders, include_root=include_root)
+    return sorted(
+        name for name in names if _prettier_in_scope(name, folders, include_root) and (PROJECT_ROOT / name).is_file()
+    )
+
+
+def _prettier_in_scope(name: str, folders: list[str], include_root: bool) -> bool:
+    if not is_prettier_file(name) or name.startswith(f"{LINT_INTEGRATION_DIR}/"):
+        return False
+    if include_root and Path(name).parent == Path("."):
+        return True
+    path = Path(name)
+    for folder in folders:
+        # Folder arguments may be absolute or carry "."/".." segments. Compare
+        # the logical checkout-relative selection through Path so containment
+        # keeps its platform case semantics instead of matching raw text.
+        try:
+            selected = Path(os.path.normpath(PROJECT_ROOT / folder)).relative_to(PROJECT_ROOT)
+        except ValueError:
+            continue
+        if path.is_relative_to(selected):
+            return True
+    return False
+
+
+def _prettier_sources_from_filesystem(folders: list[str], *, include_root: bool) -> list[str]:
+    """Bounded fallback scan; ignored artifacts stay only where Prettier skips them."""
+    found = find_sources(folders, suffixes=PRETTIER_SUFFIXES)
+    if include_root:
+        found.extend(path.name for path in PROJECT_ROOT.iterdir() if path.is_file() and is_prettier_file(path.name))
+    return sorted({name for name in found if not _escapes_checkout(name)})
+
+
+def _escapes_checkout(name: str) -> bool:
+    """Mirror Prettier's containment rule for links a filesystem scan discovers."""
+    checkout = Path(os.path.realpath(PROJECT_ROOT))
+    return not Path(os.path.realpath(PROJECT_ROOT / name)).is_relative_to(checkout)

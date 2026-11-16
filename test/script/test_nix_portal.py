@@ -17,6 +17,7 @@ SHELL_INPUTS = (
     "script/ao/toolchain.json",
     "script/ao/bazel-toolchain.json",
     "script/ao/buildifier.json",
+    "script/ao/prettier.json",
 )
 # Flags and search paths that nix-shell setup hooks extend for each target role rather than replace.
 INHERITED_SEARCH_STATE = (
@@ -151,6 +152,15 @@ class NativeNixPortalTest(unittest.TestCase):
     def test_buildifier_pin_changes_invalidate_the_entered_shell(self):
         fingerprint = self._fingerprint()
         manifest = self.checkout / "script/ao/buildifier.json"
+        manifest.write_text(manifest.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+        result = self._run_portal(AO_NIX_SHELL_FINGERPRINT=fingerprint)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "nix-shell re-entered")
+
+    def test_prettier_pin_changes_invalidate_the_entered_shell(self):
+        fingerprint = self._fingerprint()
+        manifest = self.checkout / "script/ao/prettier.json"
         manifest.write_text(manifest.read_text(encoding="utf-8") + "\n", encoding="utf-8")
         result = self._run_portal(AO_NIX_SHELL_FINGERPRINT=fingerprint)
 

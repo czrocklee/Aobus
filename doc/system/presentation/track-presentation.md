@@ -1,6 +1,7 @@
 ---
 id: presentation.track-list
 ---
+
 # Track-list presentation
 
 ## Scope
@@ -124,16 +125,16 @@ Classical Conductors groups by Conductor and keeps Composer, Work, Ensemble, and
 
 Saved-List recommendation inspects successfully parsed local-filter variables with this priority:
 
-| Filter signal | Recommended intent |
-|---|---|
-| Work | Classical Works |
-| Composer | Classical Composers |
-| Sample rate, bit depth, or bitrate | Technical |
-| Tag | Tagging |
-| Genre or year | Albums |
-| Album artist | Artists |
-| Artist or album | Albums |
-| No recognized signal | Albums |
+| Filter signal                      | Recommended intent  |
+| ---------------------------------- | ------------------- |
+| Work                               | Classical Works     |
+| Composer                           | Classical Composers |
+| Sample rate, bit depth, or bitrate | Technical           |
+| Tag                                | Tagging             |
+| Genre or year                      | Albums              |
+| Album artist                       | Artists             |
+| Artist or album                    | Albums              |
+| No recognized signal               | Albums              |
 
 Canonical variable names and their documented aliases resolve through the same typed core descriptor before UIModel applies this priority.
 Recommendation is a one-way read of expression structure.

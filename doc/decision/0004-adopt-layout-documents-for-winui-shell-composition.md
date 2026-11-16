@@ -2,6 +2,7 @@
 id: decision.0004.winui-layout-documents
 status: accepted
 ---
+
 # Decision 0004: adopt layout documents for WinUI shell composition
 
 ## Context

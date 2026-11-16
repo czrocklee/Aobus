@@ -1,6 +1,7 @@
 ---
 id: linux-gtk.active-library-lifecycle
 ---
+
 # GTK active-library lifecycle
 
 ## Scope

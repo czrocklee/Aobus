@@ -1,6 +1,7 @@
 ---
 id: presentation.track-column-layout
 ---
+
 # Track-column layout specification
 
 ## Scope

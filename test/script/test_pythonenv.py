@@ -281,8 +281,10 @@ class NativePythonEnvironmentTest(unittest.TestCase):
             (["--", "help"], False),
             (["--", "verify"], False),
             (["--", "docs", "check"], True),
-            (["--", "format", "--check"], True),
-            (["--", "hygiene", "script/ao/core/proc.py"], True),  # explicit scope, not this checkout's diff
+            (["--", "format", "--check", "script/ao/core/proc.py"], True),
+            (["--", "format", "--check", "README.md"], False),
+            (["--", "hygiene", "script/ao/core/proc.py"], True),
+            (["--", "hygiene", "README.md"], False),
             (["--", "tidy"], True),
             (["--", "check"], True),
             (["--", "setup", "llvm-sdk"], False),

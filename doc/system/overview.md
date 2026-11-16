@@ -1,6 +1,7 @@
 ---
 id: architecture.system
 ---
+
 # System overview
 
 Aobus has five interactive or automation frontends over shared Core libraries and an application runtime.
@@ -113,17 +114,17 @@ Playback observations return through the callback executor before application st
 
 ## Major system flows
 
-| Change | Follow these contracts |
-|---|---|
-| Maintain the library | [Mutation](library/mutation.md) → [publication](library/change-publication.md) → [sources](library/track-source.md) and [projections](library/track-list-projection.md) |
-| Read files or reconcile identity | [Media](media/README.md) → [scan and identity](library/scan-and-identity.md) |
-| Deliver artwork | [Resource identity](../reference/resource/blob.md) → [verified delivery and frontend transforms](resource/cover-art-delivery.md) |
-| Discover and organize tracks | [Expressions](query/README.md) → [library sources](library/track-source.md) → [presentation](presentation/README.md) |
-| Play music | [Workspace](workspace/README.md) → [playback commits](playback/application-commit.md) and [succession](playback/cursor.md) → [audio execution](playback/audio-execution.md) |
-| Restore, switch library, or close | [Persistence](persistence/README.md) → [session lifecycle](session-lifecycle.md) → [frontend adaptation](frontend/README.md) |
-| Build a shell | [Shared layout and actions](shell/README.md) → [frontend-owned construction and policy](frontend/README.md) |
-| Propagate or report failure | Originating [subsystem](README.md) → [outcome channels](failure/outcome-channel.md) → [recovery/reporting owner](failure/README.md) |
-| Explain audio fidelity | [Quality evidence](playback/quality.md) → [analysis](playback/quality-analysis.md) → [presentation](playback/quality-values.md) |
+| Change                            | Follow these contracts                                                                                                                                                      |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Maintain the library              | [Mutation](library/mutation.md) → [publication](library/change-publication.md) → [sources](library/track-source.md) and [projections](library/track-list-projection.md)     |
+| Read files or reconcile identity  | [Media](media/README.md) → [scan and identity](library/scan-and-identity.md)                                                                                                |
+| Deliver artwork                   | [Resource identity](../reference/resource/blob.md) → [verified delivery and frontend transforms](resource/cover-art-delivery.md)                                            |
+| Discover and organize tracks      | [Expressions](query/README.md) → [library sources](library/track-source.md) → [presentation](presentation/README.md)                                                        |
+| Play music                        | [Workspace](workspace/README.md) → [playback commits](playback/application-commit.md) and [succession](playback/cursor.md) → [audio execution](playback/audio-execution.md) |
+| Restore, switch library, or close | [Persistence](persistence/README.md) → [session lifecycle](session-lifecycle.md) → [frontend adaptation](frontend/README.md)                                                |
+| Build a shell                     | [Shared layout and actions](shell/README.md) → [frontend-owned construction and policy](frontend/README.md)                                                                 |
+| Propagate or report failure       | Originating [subsystem](README.md) → [outcome channels](failure/outcome-channel.md) → [recovery/reporting owner](failure/README.md)                                         |
+| Explain audio fidelity            | [Quality evidence](playback/quality.md) → [analysis](playback/quality-analysis.md) → [presentation](playback/quality-values.md)                                             |
 
 ## Implementation and tests
 

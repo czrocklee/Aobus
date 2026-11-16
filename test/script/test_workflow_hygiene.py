@@ -13,7 +13,6 @@ from ao.__main__ import make_parser
 from ao.command import format as format_command
 from ao.command import hygiene
 from ao.core import bazel_native as native
-from ao.core import gitfiles
 
 
 def _make_checkout(root: Path) -> None:
@@ -34,9 +33,9 @@ def _make_checkout(root: Path) -> None:
 
 
 class WorkflowFileDiscoveryTest(unittest.TestCase):
-    """The shared resolver admits direct workflow files next to named Bazel files."""
+    """The shared resolver admits direct workflows, repository YAML, and named Bazel files."""
 
-    def test_all_and_folder_scans_select_direct_workflows_and_the_root_build_file(self):
+    def test_all_and_folder_scans_select_workflows_repository_yaml_and_the_root_build_file(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             _make_checkout(root)
@@ -44,44 +43,80 @@ class WorkflowFileDiscoveryTest(unittest.TestCase):
                 mock.patch.object(format_command, "PROJECT_ROOT", root),
                 mock.patch.object(format_command.gitfiles, "PROJECT_ROOT", root),
             ):
-                expected = [".github/workflows/ci.yml", ".github/workflows/release.yaml", "BUILD", "lib/Foo.cpp"]
+                # Every .yaml/.yml file is a Prettier source, including
+                # non-workflow and nested YAML; only the format scope is broad,
+                # not the actionlint scope.
+                expected = [
+                    ".github/other.yml",
+                    ".github/workflows/ci.yml",
+                    ".github/workflows/nested/deep.yml",
+                    ".github/workflows/release.yaml",
+                    "BUILD",
+                    "doc/example.yml",
+                    "lib/Foo.cpp",
+                ]
                 self.assertEqual(
                     format_command.resolve_files(Namespace(files=[], all=True, folder=[], commit=None)), expected
                 )
                 arguments = Namespace(files=[], all=False, folder=[".github/workflows"], commit=None)
                 self.assertEqual(
                     format_command.resolve_files(arguments),
-                    [".github/workflows/ci.yml", ".github/workflows/release.yaml"],
+                    [
+                        ".github/workflows/ci.yml",
+                        ".github/workflows/nested/deep.yml",
+                        ".github/workflows/release.yaml",
+                    ],
                 )
 
-    def test_changed_scope_keeps_workflows_but_drops_removed_and_nonworkflow_files(self):
+    def test_changed_scope_keeps_workflows_and_repository_yaml_but_drops_removed_files(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             _make_checkout(root)
+            # Sorted like the real changed_paths contract.
             changed_names = [
-                ".github/workflows/ci.yml",
-                ".github/workflows/removed.yml",  # deleted in the working tree
                 ".github/other.yml",
+                ".github/workflows/ci.yml",
+                ".github/workflows/nested/deep.yml",
+                ".github/workflows/removed.yml",  # deleted in the working tree
                 "BUILD",
+                "doc/example.yml",
                 "lib/Foo.cpp",
             ]
             with (
                 mock.patch.object(format_command, "PROJECT_ROOT", root),
                 mock.patch.object(format_command.gitfiles, "PROJECT_ROOT", root),
-                mock.patch.object(format_command.gitfiles, "changed_files", return_value=changed_names) as changed,
+                mock.patch.object(format_command.gitfiles, "changed_paths", return_value=changed_names) as changed,
             ):
                 arguments = Namespace(files=[], all=False, folder=[], commit=None)
                 self.assertEqual(
-                    format_command.resolve_files(arguments), [".github/workflows/ci.yml", "BUILD", "lib/Foo.cpp"]
+                    format_command.resolve_files(arguments),
+                    [
+                        ".github/other.yml",
+                        ".github/workflows/ci.yml",
+                        ".github/workflows/nested/deep.yml",
+                        "BUILD",
+                        "doc/example.yml",
+                        "lib/Foo.cpp",
+                    ],
                 )
-            changed.assert_called_once_with(None, suffixes=gitfiles.SOURCE_SUFFIXES)
+            changed.assert_called_once_with(None)
 
 
 class WorkflowHygieneGateTest(unittest.TestCase):
     """Workflow findings propagate through the check-only gate."""
 
     def test_actionlint_findings_fail_the_gate_at_the_subprocess_boundary(self):
-        files = [".github/workflows/ci.yml", ".github/workflows/release.yaml", "lib/Foo.cpp"]
+        # The scope mixes direct workflows with nested, repository, and
+        # documentation YAML; actionlint still receives only the two direct
+        # workflow paths.
+        files = [
+            ".github/workflows/ci.yml",
+            ".github/workflows/release.yaml",
+            ".github/workflows/nested/deep.yml",
+            ".github/other.yml",
+            "doc/example.yml",
+            "lib/Foo.cpp",
+        ]
         tool = "/nix/store/aobus-actionlint-bin/actionlint"
         with (
             mock.patch.object(hygiene.format_command, "resolve_files", return_value=files),
@@ -104,7 +139,7 @@ class WorkflowHygieneGateTest(unittest.TestCase):
         )
         lint.assert_called_once_with(files, False)
 
-    def test_yaml_only_scope_runs_the_gate_without_native_tools_or_the_workflow_lint(self):
+    def test_yaml_only_scope_runs_prettier_without_native_tools_or_subprocesses(self):
         arguments = make_parser().parse_args(["hygiene", "doc/example.yml"])
         with (
             mock.patch.object(native, "native_platform", return_value="windows"),
@@ -116,11 +151,15 @@ class WorkflowHygieneGateTest(unittest.TestCase):
                 "ao.core.pythonenv.ensure_environment",
                 side_effect=AssertionError("no managed Python for a YAML-only scope"),
             ),
+            # Prettier is mocked at the tool boundary: the pinned tool must
+            # never be provisioned or spawned inside this unit test.
+            mock.patch("ao.core.prettier.run", return_value=0) as prettier_run,
             mock.patch.object(hygiene.subprocess, "run") as run,
             contextlib.redirect_stdout(io.StringIO()),
             contextlib.redirect_stderr(io.StringIO()),
         ):
             self.assertEqual(hygiene.run_command(arguments), 0)
+        prettier_run.assert_called_once_with(["doc/example.yml"], check=True)
         run.assert_not_called()
 
 
