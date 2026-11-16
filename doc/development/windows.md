@@ -116,9 +116,10 @@ the same Visual Studio environment. It preserves an explicit `VCPKG_ROOT` and
 otherwise selects Visual Studio's bundled vcpkg.
 
 `ao.bat check` includes documentation, Windows tooling, native completion,
-shared audits, and scoped hygiene using the standalone `ao.bat hygiene`
-implementation. Ordinary native Bazel builds/runs do not repeat repository-wide
-source scans.
+shared audits, and hygiene using the standalone `ao.bat hygiene`
+implementation — complete native C++ lint plus scoped remaining stages
+([completion gate](bazel.md#completion-gate)). Ordinary native Bazel builds/runs
+do not repeat repository-wide source scans.
 
 ### Dependency linkage
 
@@ -570,7 +571,8 @@ Name presence is not semantic correctness: dialogs the probe never opens, rows i
 
 The ordinary `bazel test //:tests` selection covers Core, application, TUI,
 and CLI contracts. `ao.bat check` adds tooling, lint fixtures, native completion,
-documentation, and scoped hygiene. It runs `//test:backend_test` as on every
+documentation, and hygiene with complete native C++ lint coverage. It runs
+`//test:backend_test` as on every
 host, but both current Windows cases are hidden `[.manual]`; the unattended
 executable permits an empty selection. A passing empty selection is not hardware
 evidence ([completion gate](bazel.md#completion-gate)). Choose the exact case

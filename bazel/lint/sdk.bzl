@@ -26,6 +26,29 @@ _ENVIRONMENT = [
     "VSINSTALLDIR",
 ]
 
+# This shim belongs to the SDK facade, not the authored C++ source inventory.
+_GCC_LLVM_NONNULL_COMPATIBILITY_HEADER = """// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Aobus Contributors
+
+#pragma once
+
+#if defined(__GNUC__) && !defined(__clang__) && __GNUC__ == 16
+#include <clang/Basic/Version.inc>
+
+#if CLANG_VERSION_MAJOR == 22
+// GCC diagnoses LLVM's guarded LazyOffsetPtr::get(nullptr) fast path before
+// optimization removes its unreachable offset branch. Parse only this SDK
+// header with the diagnostic disabled, then restore the checker's full policy.
+// Force-include this file before any Clang AST header; retire after the pinned
+// GCC/LLVM pair compiles that fast path cleanly without the workaround.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wnonnull"
+#include <clang/AST/ExternalASTSource.h> // IWYU pragma: keep
+#pragma GCC diagnostic pop
+#endif
+#endif
+"""
+
 _SDK_BUILD = """load("@aobus//bazel/lint:imports.bzl", "lint_sdk_imports")
 load(":sdk_data.bzl", "SDK")
 
@@ -144,6 +167,8 @@ def _lint_sdk_impl(ctx):
     host = "windows" if name.startswith("windows") else "macos" if name.startswith("mac") else name
     if host not in ["linux", "macos", "windows"]:
         fail("Unsupported lint execution host: " + name)
+    if host == "linux":
+        ctx.file("GccLlvmNonnullCompatibility.h", _GCC_LLVM_NONNULL_COMPATIBILITY_HEADER, executable = False)
     environment = {}
     for key in _ENVIRONMENT:
         if key in prepared:

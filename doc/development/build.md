@@ -27,7 +27,8 @@ alias). An unknown compiler value fails resolution; there is no silent
 fallback. `//:tests` is the ordinary
 test selection, not the completion gate. `check` combines documentation,
 supported-host tooling, native products/tests and shared audits, optional
-sanitizers, and scoped hygiene; see the [completion gate](bazel.md#completion-gate).
+sanitizers, and hygiene — complete native C++ lint plus scoped remaining stages;
+see the [completion gate](bazel.md#completion-gate).
 Standalone `./ao hygiene` uses that same check-only implementation for a selected
 source scope. Choose completion checks from
 [validation and review](test/validation-and-review.md).
@@ -192,7 +193,7 @@ explicitly rejected with a diagnostic, and no private capture is created.
 ## Dependencies and optional setup
 
 - [Dependency governance](dependency-governance.md) explains resolver ownership; `./ao deps report` shows governed versions and native identities from the actual installed native and test SDK manifests and hash inputs.
-- [Bazel build system](bazel.md): the graph, toolchains, profiles, lint, completion, coverage, and caching contracts behind the native workflow and complete `ao check`, including scoped hygiene.
+- [Bazel build system](bazel.md): the graph, toolchains, profiles, lint, completion, coverage, and caching contracts behind the native workflow and complete `ao check`, including its full C++ lint stage and scoped remaining hygiene.
 - [Dependency upgrade](dependency-upgrade.md) owns pin changes, including C++, Python, Ruff, and mypy.
 - [Concept metrics](concept-metrics.md) owns `./ao deps report --concepts` and its interpretation.
 - [Contributor workflow](../../CONTRIBUTING.md) explains optional Git hooks and preparing a review.

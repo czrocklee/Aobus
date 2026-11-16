@@ -206,5 +206,7 @@ The dependency-closure limits above apply unchanged: the Linux GTK closure is
 not TSan-instrumented, and Windows dependencies from the normal vcpkg triplet
 remain uninstrumented. A raw scoped sanitizer run is not whole completion.
 The managed `ao check --asan/--tsan` includes ordinary fastbuild completion,
-documentation, supported-host tooling, and scoped hygiene in addition to its
-sanitizer phase; Release evidence remains separate when required.
+documentation, supported-host tooling, and hygiene — complete native C++ lint
+plus scoped remaining stages ([completion gate](../bazel.md#completion-gate)) — in
+addition to its sanitizer phase; Release evidence remains separate when
+required.

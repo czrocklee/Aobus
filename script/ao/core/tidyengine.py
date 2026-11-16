@@ -7,6 +7,7 @@ never configures a product, reads a CMake cache or invents a compile database.
 import argparse
 import os
 import sys
+from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
@@ -15,6 +16,7 @@ from . import builddir, gitfiles, windows_llvm_sdk
 from .jobs import default_workers
 from .paths import absolute_path
 from .proc import die
+from .tidypolicy import classify_relative
 from .tidypolicy import windows_analysis_arguments as windows_analysis_arguments
 
 LLVM_SDK_MANIFEST = windows_llvm_sdk.MANIFEST
@@ -31,6 +33,20 @@ def windows_llvm_sdk_manifest() -> windows_llvm_sdk.Manifest:
 
 def default_jobs() -> int:
     return default_workers()
+
+
+def mode_buckets(relatives: Iterable[str], *, explicit: bool = False) -> dict[str, list[str]]:
+    """Bucket repository-relative POSIX paths into STRICT/RELAXED tidy modes.
+
+    IGNORE paths drop out; ``classify_relative`` stays the only classification
+    authority, and command layers reuse this loop instead of duplicating it.
+    """
+    buckets: dict[str, list[str]] = {"STRICT": [], "RELAXED": []}
+    for relative in relatives:
+        mode = classify_relative(relative, explicit)
+        if mode in buckets:
+            buckets[mode].append(relative)
+    return buckets
 
 
 def add_scope_arguments(parser: argparse.ArgumentParser, verb: str) -> None:

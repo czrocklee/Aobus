@@ -44,7 +44,7 @@ from urllib.parse import urlsplit
 if __package__:
     from .r2_credentials import R2_BUCKET, R2Credentials, r2_credentials
 else:
-    # CI invokes this file with the runner's Python before the portal's environment exists.
+    # CI invokes this file with the governed Python before the portal tool environment exists.
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
     from ao.core.r2_credentials import R2_BUCKET, R2Credentials, r2_credentials
 
@@ -158,7 +158,7 @@ def s3_endpoint(endpoint: str) -> str:
 
 
 def _file_sha256(path: Path) -> str:
-    # The runner's Python may predate hashlib.file_digest.
+    # Stream the digest so a large artifact does not need to be read into memory.
     digest = hashlib.sha256()
     with path.open("rb") as stream:
         for chunk in iter(lambda: stream.read(1 << 20), b""):

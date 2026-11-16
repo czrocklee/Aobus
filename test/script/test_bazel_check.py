@@ -1228,7 +1228,8 @@ class CheckDispatchTest(unittest.TestCase):
             mock.patch("ao.core.bazel_check.run", side_effect=lambda arguments: stage("native", arguments)),
             mock.patch("ao.core.bazel_sanitizers.run", side_effect=lambda arguments: stage("sanitizer", arguments)),
             mock.patch(
-                "ao.command.check.hygiene.run_command", side_effect=lambda arguments: stage("hygiene", arguments)
+                "ao.command.check.hygiene.run_command",
+                side_effect=lambda arguments, *, project_lint: stage("hygiene", (arguments, project_lint)),
             ),
             contextlib.redirect_stdout(console),
             contextlib.redirect_stderr(io.StringIO()),
@@ -1237,10 +1238,12 @@ class CheckDispatchTest(unittest.TestCase):
             self.console = console.getvalue()
             return status
 
-    def test_complete_check_uses_the_same_scoped_hygiene_after_native_validation(self):
+    def test_complete_check_combines_scoped_hygiene_with_complete_native_lint_after_validation(self):
         self.assertEqual(self.route("--commit", "review-base", "--fresh", "--jobs", "3"), 0)
         self.assertEqual(self.calls, ["docs", "tooling", "native", "hygiene"])
-        normal, hygiene_request = self.requests["native"], self.requests["hygiene"]
+        normal = self.requests["native"]
+        hygiene_request, project_lint = self.requests["hygiene"]
+        self.assertTrue(project_lint)
         self.assertEqual((normal.config, normal.path, normal.fresh), ("fastbuild", str(self.tree), True))
         self.assertEqual(self.requests["tooling"], {"log": self.tree / "tooling.log", "jobs": 3})
         self.assertEqual((hygiene_request.commit, hygiene_request.jobs), ("review-base", 3))
@@ -1253,8 +1256,10 @@ class CheckDispatchTest(unittest.TestCase):
         self.assertEqual(bazel_workflows.configuration(self.requests["native"]), "fastbuild")
         self.assertEqual(self.requests["sanitizer"].config, "asan")
         self.assertTrue(self.requests["sanitizer"].fresh)
-        self.assertEqual(bazel_workflows.configuration(self.requests["hygiene"]), "fastbuild")
-        self.assertEqual(self.requests["hygiene"].path, self.requests["sanitizer"].path)
+        hygiene_request, project_lint = self.requests["hygiene"]
+        self.assertTrue(project_lint)
+        self.assertEqual(bazel_workflows.configuration(hygiene_request), "fastbuild")
+        self.assertEqual(hygiene_request.path, self.requests["sanitizer"].path)
         # The console names the actual normal completion; nothing is relabeled Debug.
         self.assertIn("=== Whole-project Fastbuild completion before the independent sanitizer gate ===", self.console)
 
@@ -1263,7 +1268,9 @@ class CheckDispatchTest(unittest.TestCase):
         self.assertEqual(self.calls, ["docs", "tooling", "native", "sanitizer", "hygiene"])
         self.assertEqual(bazel_workflows.configuration(self.requests["native"]), "debug")
         self.assertEqual(self.requests["sanitizer"].config, "asan")
-        self.assertEqual(bazel_workflows.configuration(self.requests["hygiene"]), "debug")
+        hygiene_request, project_lint = self.requests["hygiene"]
+        self.assertTrue(project_lint)
+        self.assertEqual(bazel_workflows.configuration(hygiene_request), "debug")
         self.assertIn("=== Whole-project Debug completion before the independent sanitizer gate ===", self.console)
 
     def test_sanitizer_check_rejects_release_and_profile_normal_completions(self):

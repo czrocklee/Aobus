@@ -10,7 +10,7 @@ from ..core.proc import die
 from . import docs, hygiene
 
 NAME = "check"
-HELP = "Validate documentation, tooling, native products and tests, then scoped hygiene"
+HELP = "Validate documentation, tooling, native products and tests, then hygiene and the complete C++ lint graph"
 REQUIRES_BUILD_ENV = True
 REQUIRES_PYTHON_TOOLS = True
 
@@ -24,7 +24,9 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
         action="store_true",
         help="require new normal and sanitizer test executions instead of cached results",
     )
-    parser.add_argument("--commit", metavar="<rev>", help="hygiene scope: changed files since <rev> plus local changes")
+    parser.add_argument(
+        "--commit", metavar="<rev>", help="format and source-hygiene diff base; never narrows native tests or C++ lint"
+    )
     parser.set_defaults(func=run_command)
 
 
@@ -99,11 +101,11 @@ def run_command(args: argparse.Namespace) -> int:
                 print(f"=== Independent {config} execution ===")
                 if (status := bazel_sanitizers.run(instrumented)) != 0:
                     return status
-            print("=== Source hygiene ===")
+            print("=== Source hygiene and complete native C++ lint ===")
             scoped = copy.copy(normal)
             scoped.files = []
             scoped.all = False
             scoped.folder = []
-            return hygiene.run_command(scoped)
+            return hygiene.run_command(scoped, project_lint=True)
     except (native.BazelWorkspaceError, OSError, ValueError) as error:
         raise die(str(error)) from error

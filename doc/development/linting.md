@@ -9,7 +9,7 @@ Checker internals, fixture design, AST proof, and native replay mechanics are in
 Use project commands as the public entry points:
 
 - `./ao tidy` runs C++ clang-tidy, Python Ruff/mypy, and Bazel Buildifier checks for files in scope; the C++ stage consumes the Bazel lint report actions.
-- `./ao hygiene` is a scoped check-only entry: format check, source audits, workflow lint, then tidy. `ao check` invokes the same implementation.
+- `./ao hygiene` is a scoped check-only entry: format check, source audits, workflow lint, then tidy. `ao check` invokes the same implementation for those diff-scoped stages, while the gate's C++ lint stage covers the complete native project graph; standalone `hygiene` and `tidy` stay scoped.
 - `bazel test //test/lint:lint_test --nocache_test_results` runs fresh assertions on the Aobus clang-tidy fixture result; it is not the Python lint command.
 
 Use the corresponding `ao.bat` commands on native Windows.
@@ -25,6 +25,7 @@ An explicit `--commit <rev>` compares the endpoint against that revision.
 
 Hygiene resolves source scope once for formatting, applicable naming and test audits, workflow lint, and tidy.
 Empty subsets are skipped, a formatting failure stops later stages, and repository-wide guardrails remain part of `check`.
+`ao check` keeps those hygiene stages diff-scoped but does not diff-scope C++ lint: its C++ stage lints the complete native project graph on the current host regardless of `--commit` or local changes, so a documentation-only edit still validates every applicable translation unit. Explicit `ao tidy` and `ao hygiene` scopes are unchanged.
 
 - `STRICT` applies to production C++ under `lib/`, `app/`, `include/`, and `tool/`.
 - `RELAXED` applies to C++ under `test/` with the same baseline but disables test-noisy checks: unchecked optional access, discarded return values, designated initializers for positional expected-data tables, cognitive complexity, identifier length, magic numbers, C arrays, C varargs, and test-only casts.
@@ -44,12 +45,14 @@ is accepted without nonportable-include-path warnings.
 
 ### Bazel-backed reports
 
-The C++ stage's Bazel lint report route has bounded native Debug evidence on Linux, macOS and Windows. The Linux workflow contains a representative lint step; current-head CI status remains a separate gate.
+The C++ stage's Bazel lint report route has bounded native Debug evidence on Linux, macOS and Windows. The Linux workflow contains a representative lint step; the native CI check jobs gate the complete project C++ graph through `ao check`.
 It accepts the file/`--folder`/`--commit`/`--all` selectors plus repeatable `--target`; `--target` alone covers every actual translation unit and paired header main in those owners, not unpaired declared headers.
 Without `--target`, scope maps through actual Bazel `srcs` owners (including filegroups and aliases), not a dependency closure; with `--target`, those owners restrict the request and the selected scope gates the reports.
 A header without a same-component companion, or an include fragment, is analyzed in the native context of a translation unit whose report recorded including it. Fragment warnings are scoped to its normalized file identity; consumer compiler errors and unlocated diagnostics remain, and scoping cannot hide an incomplete attempt.
 Deferral is limited to platform-incompatible files; a compatible header or fragment that no analyzed translation unit includes, or a compatible selected path with no owner, fails rather than producing a partial pass.
 `--all` selects the project C++ scope with the same rules.
+
+The completion gate's C++ stage derives the complete project scope from the Bazel query alone, without a diff selector, so `--commit` never narrows it: every compile owner's declared `srcs`, `hdrs`, `textual_hdrs` and additional compiler inputs that classify STRICT or RELAXED are gated — authored sources only, so external and generated inputs stay out — with unpaired headers and fragments covered through actual include-consumer passes. The gate also rejects an authored C++ source or header outside the declared graph, and defers only recognized foreign-native-platform paths ([report contracts](bazel.md#lint-reports)). Full coverage reuses the existing report graph, action cache and BEP completeness contract, with no new rule set, filename classifier or separate CI job, and it is not full fresh execution: a warm cache replays existing reports while a cold cache pays the complete analysis cost once.
 
 Reports are cached from actual native compile contexts and gated from the current BEP: 0 clean, 1 findings, 2 incomplete.
 Cached warnings still fail.
@@ -109,6 +112,7 @@ the target compiler.
 - Shared units are intentionally checked on every host that builds them.
 
 Changed-file, folder, and `--all` scopes may defer only files incompatible with the current host, and the portal reports every deferral.
+A declared path that no admitted configuration selects fails rather than silently passing.
 An explicitly selected uncovered file always fails.
 If a compatible project file lacks an exact translation-unit command or a proved header consumer, the whole requested scope fails before a partial tidy pass.
 Check the selected owner and native prerequisites, then retry through `ao tidy`.
@@ -162,7 +166,7 @@ Use `NOLINT` only for an external API shape, a clear false positive, or a test-o
 
 Acceptable cases include GTKmm ownership handoff such as `Glib::make_refptr_for_instance(new T)`, GLib or GTK macros, C varargs or arrays at an API boundary, unavoidable test `reinterpret_cast`, framework-required method names, and genuine template or framework false positives.
 
-`./ao tidy` rejects a named `NOLINT` when that check is disabled for the file's `STRICT` or `RELAXED` mode.
+`./ao tidy` rejects a named `NOLINT` when that check is disabled for the file's `STRICT` or `RELAXED` mode, and a complete `ao check` runs the same stale-suppression scan over the whole project C++ set, not only changed files.
 Because it cannot suppress a diagnostic, such a directive is stale.
 Remove local suppressions in the same change that disables a check or removes it from a mode.
 
@@ -297,7 +301,7 @@ Prefer hand edits for ownership, public API, behavior, naming, readability trade
 After C++ lint edits, rerun the narrowest `./ao tidy` scope covering modified C++ files.
 After Python hygiene edits, rerun `./ao tidy` for modified Python and the
 [tooling runner](test/test-suite.md#tooling-and-lint-fixtures) when tooling
-behavior changed; complete `ao check` includes both tooling and scoped hygiene.
+behavior changed; complete `ao check` includes both tooling and hygiene.
 After workflow edits, rerun `./ao hygiene` over the changed
 `.github/workflows` files.
 Run focused build or test validation when a lint fix changes behavior, ownership, public API, or test semantics.

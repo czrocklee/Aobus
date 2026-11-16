@@ -326,7 +326,7 @@ class HygieneCommandTest(unittest.TestCase):
         args = _hygiene_args()
         self.native_gate.return_value = 3
         self.assertEqual(hygiene.run_command(args), 3)
-        self.native_gate.assert_called_once_with(args)
+        self.native_gate.assert_called_once_with(args, project_lint=False)
         self.format.assert_not_called()
         self.lint.assert_not_called()
 
@@ -393,6 +393,14 @@ class HygieneCommandTest(unittest.TestCase):
         for stage in (self.format, self.test_audit, self.name_audit, self.lint):
             stage.assert_not_called()
 
+    def test_complete_native_lint_is_not_skipped_by_an_empty_source_diff(self):
+        self.resolve.return_value = []
+        self.lint.return_value = 1
+        self.assertEqual(hygiene.run_command(_hygiene_args(), lint=("bazel lint", self.lint), project_lint=True), 1)
+        self.lint.assert_called_once_with([], False)
+        for stage in (self.format, self.test_audit, self.name_audit):
+            stage.assert_not_called()
+
     def test_format_failure_stops_before_audits_and_the_lint_stage(self):
         self.format.return_value = 1
         self.assertEqual(hygiene.run_command(_hygiene_args(), lint=("tidy", self.lint)), 1)
@@ -442,7 +450,7 @@ class NativeHygieneSelectionTest(unittest.TestCase):
     STATE = str(Path(tempfile.gettempdir()) / "aobus-native-hygiene-state")
     TOOLS = Path(tempfile.gettempdir()) / "aobus-native-hygiene-tools" / "bin" / "python"
 
-    def gate(self, arguments, host="linux", environment=None, files=None):
+    def gate(self, arguments, host="linux", environment=None, files=None, project_lint=False):
         """Run the flat gate with its shared stages faked; return the gate's selections."""
         if files is None:
             files = ["script/ao/command/hygiene.py", "lib/utility/Base64.cpp"]
@@ -455,9 +463,10 @@ class NativeHygieneSelectionTest(unittest.TestCase):
             mock.patch("ao.core.pythonenv.ensure_environment", return_value=self.TOOLS) as tools,
             mock.patch.object(hygiene, "run_command", return_value=0) as gate,
         ):
-            self.assertEqual(run_command(args), 0)
+            self.assertEqual(run_command(args, project_lint=project_lint), 0)
         gate.assert_called_once()
         self.assertIs(gate.call_args.args[0], args)
+        self.assertEqual(gate.call_args.kwargs["project_lint"], project_lint)
         # The Nix shell's interpreter already carries Ruff and mypy.
         if host == "linux" or not any(name.endswith(".py") for name in files):
             tools.assert_not_called()
@@ -467,6 +476,20 @@ class NativeHygieneSelectionTest(unittest.TestCase):
             self.assertEqual(gate.call_args.kwargs["python"], self.TOOLS)
         self.assertEqual(args._resolved_sources, files)
         return gate.call_args.kwargs
+
+    def test_complete_lint_uses_the_project_graph_instead_of_repeating_scoped_native_lint(self):
+        for files in ([], ["lib/utility/Base64.cpp"]):
+            with self.subTest(files=files):
+                stage = self.gate([], files=files, project_lint=True)
+                _, lint = stage["lint"]
+                with (
+                    mock.patch("ao.core.bazel_lint.run_project", return_value=1) as project,
+                    mock.patch("ao.core.bazel_lint.run") as scoped,
+                    contextlib.redirect_stdout(io.StringIO()),
+                ):
+                    self.assertEqual(lint(files, False), 1)
+                project.assert_called_once()
+                scoped.assert_not_called()
 
     def test_lint_stage_routes_python_to_its_checks_and_cpp_to_bazel_lint_in_the_gate_tree(self):
         tree = str(Path(tempfile.gettempdir()) / "aobus-native-hygiene")

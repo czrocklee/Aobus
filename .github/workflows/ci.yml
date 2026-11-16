@@ -156,13 +156,10 @@ jobs:
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SCCACHE_SECRET_ACCESS_KEY }}
           CACHE_PREFIX: ${{ github.event_name == 'workflow_dispatch' && format('bazel-ci-validation/{0}/{1}/linux', github.run_id, github.run_attempt) || 'bazel-v1' }}
           CACHE_UPLOAD: ${{ github.event_name != 'pull_request' }}
-        run: >-
-          python3 script/ao/core/bazel_remote_cache.py start
-          --state "$RUNNER_TEMP/aobus-bazel-remote"
-          --github-output "$GITHUB_OUTPUT"
-          --runner-os "$RUNNER_OS"
-          --runner-arch "$RUNNER_ARCH"
-          --trusted-writer "$CACHE_UPLOAD" --key-prefix "$CACHE_PREFIX"
+        run: |
+          # Expand variables inside the Nix child, not the runner's host shell.
+          # shellcheck disable=SC2016
+          nix-shell --run 'python3 script/ao/core/bazel_remote_cache.py start --state "$RUNNER_TEMP/aobus-bazel-remote" --github-output "$GITHUB_OUTPUT" --runner-os "$RUNNER_OS" --runner-arch "$RUNNER_ARCH" --trusted-writer "$CACHE_UPLOAD" --key-prefix "$CACHE_PREFIX"'
 
       - name: Require requested R2 cache
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.r2 }}
@@ -197,9 +194,10 @@ jobs:
           ./ao coverage --analysis-only --path "$RUNNER_TEMP/aobus-bazel-coverage-analysis" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL"
 
       # Preserve independent correctness outcomes for the final mandatory gate.
-      # Completion owns fastbuild products, tests, tooling, scoped hygiene and
-      # compile contracts; Release keeps its analysis-only contract scope. Required native
-      # admission stays fresh; --fresh disables Bazel test-result cache reuse.
+      # Completion owns fastbuild products, tests, tooling, complete native C++
+      # lint, scoped source hygiene and compile contracts; Release keeps its
+      # analysis-only contract scope.
+      # Matching passing test results may be reused through Bazel's action keys.
       - name: Check Bazel completion
         id: bazel-check
         continue-on-error: true
@@ -207,7 +205,7 @@ jobs:
           AOBUS_STATE_ROOT: ${{ runner.temp }}/aobus-state
           AOBUS_BAZEL_REMOTE_CACHE: ${{ steps.bazel-remote.outputs.url }}
           BASE_SHA: ${{ needs.changes.outputs.base }}
-        run: ./ao check --fresh --commit "$BASE_SHA" --path "$RUNNER_TEMP/aobus-bazel-fastbuild" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL"
+        run: ./ao check --commit "$BASE_SHA" --path "$RUNNER_TEMP/aobus-bazel-fastbuild" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL"
 
       - name: Verify Bazel Release compile contracts
         id: bazel-verify-release
@@ -265,9 +263,10 @@ jobs:
         if: ${{ always() && steps.bazel-remote.outcome == 'success' }}
         continue-on-error: ${{ github.event_name != 'workflow_dispatch' || !inputs.r2 }}
         shell: bash
-        run: >-
-          python3 script/ao/core/bazel_remote_cache.py stop --state "$RUNNER_TEMP/aobus-bazel-remote"
-          --report "$RUNNER_TEMP/bazel-r2-stop.json"
+        run: |
+          # Expand variables inside the Nix child, not the runner's host shell.
+          # shellcheck disable=SC2016
+          nix-shell --run 'python3 script/ao/core/bazel_remote_cache.py stop --state "$RUNNER_TEMP/aobus-bazel-remote" --report "$RUNNER_TEMP/bazel-r2-stop.json"'
 
       - name: Summarize native validation
         if: ${{ always() }}
@@ -604,7 +603,7 @@ jobs:
           CACHE_PREFIX: ${{ github.event_name == 'workflow_dispatch' && format('bazel-ci-validation/{0}/{1}/macos-{2}', github.run_id, github.run_attempt, matrix.cache_arch) || 'bazel-v1' }}
           CACHE_UPLOAD: ${{ github.event_name != 'pull_request' }}
         run: >-
-          python3 script/ao/core/bazel_remote_cache.py start
+          "$(brew --prefix python@3.14)/bin/python3.14" script/ao/core/bazel_remote_cache.py start
           --state "$RUNNER_TEMP/aobus-bazel-remote"
           --github-output "$GITHUB_OUTPUT"
           --runner-os "$RUNNER_OS"
@@ -617,14 +616,13 @@ jobs:
           CACHE_URL: ${{ steps.bazel-remote.outputs.url }}
         run: test -n "$CACHE_URL"
 
-      # Required native admission stays fresh; --fresh disables Bazel
-      # test-result cache reuse.
+      # Reuse matching passing test results; diagnostics can request --fresh.
       - name: Check Bazel completion
         id: build
         env:
           AOBUS_BAZEL_REMOTE_CACHE: ${{ steps.bazel-remote.outputs.url }}
           BASE_SHA: ${{ needs.changes.outputs.base }}
-        run: ./ao check --fresh --commit "$BASE_SHA" --path "$RUNNER_TEMP/aobus-bazel-fastbuild" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL"
+        run: ./ao check --commit "$BASE_SHA" --path "$RUNNER_TEMP/aobus-bazel-fastbuild" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL"
 
       # Retain the native bootstrap, triplet and pinned bare executable route;
       # Fastbuild completion does not prove the optimized Release product link.
@@ -668,7 +666,7 @@ jobs:
         continue-on-error: ${{ github.event_name != 'workflow_dispatch' || !inputs.r2 }}
         shell: bash
         run: >-
-          python3 script/ao/core/bazel_remote_cache.py stop --state "$RUNNER_TEMP/aobus-bazel-remote"
+          "$(brew --prefix python@3.14)/bin/python3.14" script/ao/core/bazel_remote_cache.py stop --state "$RUNNER_TEMP/aobus-bazel-remote"
           --report "$RUNNER_TEMP/bazel-r2-stop.json"
 
       - name: Summarize native validation
@@ -897,20 +895,25 @@ jobs:
                ((github.event_name == 'push' && github.ref == 'refs/heads/main') ||
                 (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository))) }}
         continue-on-error: ${{ github.event_name != 'workflow_dispatch' || !inputs.r2 }}
-        shell: bash
+        shell: pwsh
         env:
           R2_ENDPOINT: ${{ secrets.R2_SCCACHE_ENDPOINT }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_SCCACHE_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SCCACHE_SECRET_ACCESS_KEY }}
           CACHE_PREFIX: ${{ github.event_name == 'workflow_dispatch' && format('bazel-ci-validation/{0}/{1}/windows', github.run_id, github.run_attempt) || 'bazel-v1' }}
           CACHE_UPLOAD: ${{ github.event_name != 'pull_request' }}
-        run: >-
-          python script/ao/core/bazel_remote_cache.py start
-          --state "$RUNNER_TEMP/aobus-bazel-remote"
-          --github-output "$GITHUB_OUTPUT"
-          --runner-os "$RUNNER_OS"
-          --runner-arch "$RUNNER_ARCH"
-          --trusted-writer "$CACHE_UPLOAD" --key-prefix "$CACHE_PREFIX"
+        run: |
+          $contract = Get-Content script/ao/toolchain.json -Raw | ConvertFrom-Json
+          $python = Join-Path $env:AOBUS_STATE_ROOT "tools\python\$($contract.python)\python.exe"
+          if (-not (Test-Path $python)) { throw "Governed Python is missing: $python" }
+          & $python -I -S -B -X utf8 script/ao/core/bazel_remote_cache.py start `
+            --state "$env:RUNNER_TEMP\aobus-bazel-remote" `
+            --github-output $env:GITHUB_OUTPUT `
+            --runner-os $env:RUNNER_OS `
+            --runner-arch $env:RUNNER_ARCH `
+            --trusted-writer $env:CACHE_UPLOAD `
+            --key-prefix $env:CACHE_PREFIX
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Require requested R2 cache
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.r2 }}
@@ -919,8 +922,7 @@ jobs:
           CACHE_URL: ${{ steps.bazel-remote.outputs.url }}
         run: test -n "$CACHE_URL"
 
-      # Required native admission stays fresh; --fresh disables Bazel
-      # test-result cache reuse.
+      # Reuse matching passing test results; diagnostics can request --fresh.
       - name: Check Bazel completion
         id: build
         shell: pwsh
@@ -928,7 +930,7 @@ jobs:
           AOBUS_BAZEL_REMOTE_CACHE: ${{ steps.bazel-remote.outputs.url }}
           BASE_SHA: ${{ needs.changes.outputs.base }}
         run: |
-          .\ao.bat check --fresh --commit $env:BASE_SHA --path D:\aobus-bazel-fastbuild --jobs $env:CMAKE_BUILD_PARALLEL_LEVEL
+          .\ao.bat check --commit $env:BASE_SHA --path D:\aobus-bazel-fastbuild --jobs $env:CMAKE_BUILD_PARALLEL_LEVEL
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       # Retain the pinned native bare route and explicit initialized compiler/
@@ -1038,10 +1040,15 @@ jobs:
         id: bazel-remote-stop
         if: ${{ always() && steps.bazel-remote.outcome != 'skipped' }}
         continue-on-error: ${{ github.event_name != 'workflow_dispatch' || !inputs.r2 }}
-        shell: bash
-        run: >-
-          python script/ao/core/bazel_remote_cache.py stop --state "$RUNNER_TEMP/aobus-bazel-remote"
-          --report "$RUNNER_TEMP/bazel-r2-stop.json"
+        shell: pwsh
+        run: |
+          $contract = Get-Content script/ao/toolchain.json -Raw | ConvertFrom-Json
+          $python = Join-Path $env:AOBUS_STATE_ROOT "tools\python\$($contract.python)\python.exe"
+          if (-not (Test-Path $python)) { throw "Governed Python is missing: $python" }
+          & $python -I -S -B -X utf8 script/ao/core/bazel_remote_cache.py stop `
+            --state "$env:RUNNER_TEMP\aobus-bazel-remote" `
+            --report "$env:RUNNER_TEMP\bazel-r2-stop.json"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Summarize native validation
         if: ${{ always() }}

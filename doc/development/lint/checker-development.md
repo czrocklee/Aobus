@@ -330,6 +330,11 @@ otherwise the nearest configured consumer's captured context is replayed with
 the header as the physical main file.
 
 Derived header-main replay keeps the original command's semantic flags.
+Forced includes remain in place: the Unix helper that omitted a forced include
+resolving to the selected header main itself is retired, because its only
+consumer was the Linux compatibility shim that the lint SDK repository now
+generates instead of the authored tree. Windows forced-include handling is
+unchanged.
 Unix replay appends `-Wno-error`: a compiler warning that only the header main raises must stay a disabled compiler diagnostic, not become a fatal error under the native `-Werror`.
 On Windows it removes the translation unit's `/TP` after replacing the input because the invocation supplies `-x c++-header`, and excludes MSVC `/WX` warning promotion alongside the audited code-generation flags.
 For WinUI it suppresses only the nonportable-include-path compiler diagnostic because generated C++/WinRT headers preserve schema casing while Windows resolves paths case-insensitively.

@@ -24,15 +24,16 @@ def lint_sdk_imports(sdk):
     """
     if sdk["host"] not in ["linux", "macos", "windows"]:
         fail("Unsupported lint SDK host: %s" % sdk["host"])
+    compatibility_headers = ["GccLlvmNonnullCompatibility.h"] if sdk["host"] == "linux" else []
     if sdk.get("state", "") == "unavailable":
         # Query-only projection: the repository graph is loadable, but every
         # actual lint target fails analysis with the retained native diagnostic.
         _lint_sdk_unavailable(name = "sdk", diagnostic = sdk["diagnostic"])
         native.alias(name = "clang_tidy", actual = ":sdk")
         native.alias(name = "tools", actual = ":sdk")
-        native.exports_files(["flags.bzl"])
+        native.exports_files(["flags.bzl"] + compatibility_headers)
         return
-    native.exports_files(["metadata.json", "flags.bzl"])
+    native.exports_files(["metadata.json", "flags.bzl"] + compatibility_headers)
     dependencies = []
     for index, library in enumerate(sdk["libraries"]):
         name = "library_%d" % index

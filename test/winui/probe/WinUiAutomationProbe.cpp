@@ -161,14 +161,13 @@ namespace
                   std::string_view const scope,
                   std::string_view const name = {})
   {
-    return std::ranges::any_of(
-      audit.controls,
-      [=](AuditedControl const& control)
-      {
-        return control.role == role && !control.offscreen &&
-               (control.id == scope || std::ranges::find(control.scopes, scope) != control.scopes.end()) &&
-               (name.empty() || control.name == name);
-      });
+    return std::ranges::any_of(audit.controls,
+                               [=](AuditedControl const& control)
+                               {
+                                 return control.role == role && !control.offscreen &&
+                                        (control.id == scope || std::ranges::contains(control.scopes, scope)) &&
+                                        (name.empty() || control.name == name);
+                               });
   }
 
   void auditPeer(AutomationPeer const& peer,
