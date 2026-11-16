@@ -7,6 +7,7 @@
 #include "test/library/MusicLibraryTestSupport.h"
 #include "test/library/TrackTestSupport.h"
 #include "test/library/WritableLibraryTestSupport.h"
+#include "test/runtime/library/LibraryYamlTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/LibraryWrite.h>
@@ -44,9 +45,10 @@
 // and copying <root>/.aobus/library/data.mdb. The created and deleted Track
 // and List give the library an identity history: its highest ids are gone, and
 // a later write must not reuse them. v1.yaml is the full export of the result,
-// so exporting any of the fixtures reproduces it byte for byte. The fixtures
-// are frozen at the first release; a later format change adds fixtures of its
-// own version instead of regenerating these.
+// so exporting any of the fixtures holds its content: the test compares the
+// export to the document's parsed structure, while the file stays the frozen
+// import input. The fixtures are frozen at the first release; a later format
+// change adds fixtures of its own version instead of regenerating these.
 
 namespace ao::rt::test
 {
@@ -188,7 +190,7 @@ namespace ao::rt::test
         {
           auto libraryRes = library::test::openTestMusicLibrary(temp.path(), databasePath);
           REQUIRE(libraryRes);
-          CHECK(exportFull(*libraryRes, temp.path() / "export.yaml") == expectedYaml);
+          checkLibraryYamlFixtureEqual(expectedYaml, exportFull(*libraryRes, temp.path() / "export.yaml"));
 
           // One write that reaches the Track, manifest, dictionary, List, and
           // identifier stores of a library another platform laid out. The tag is
@@ -237,7 +239,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("Library format fixtures - the version 1 document restores into an empty library and exports unchanged")
+  TEST_CASE("Library format fixtures - the version 1 document restores into an empty library and exports its content")
   {
     auto const yamlPath = fixtureFile("v1.yaml");
     auto const temp = ao::test::TempDir{};
@@ -253,6 +255,11 @@ namespace ao::rt::test
     REQUIRE(reportRes);
     CHECK(reportRes->payloadVersion == kYamlFormatVersion);
     CHECK(reportRes->tracksCreated == kFixtureTrackCount);
-    CHECK(exportFull(*libraryRes, temp.path() / "export.yaml") == ao::test::readFile(yamlPath));
+
+    // The export holds the document's parsed structure, and one state's export
+    // is byte-stable, separately from the frozen document's spelling.
+    auto const exported = exportFull(*libraryRes, temp.path() / "export.yaml");
+    checkLibraryYamlFixtureEqual(ao::test::readFile(yamlPath), exported);
+    CHECK(exportFull(*libraryRes, temp.path() / "export-again.yaml") == exported);
   }
 } // namespace ao::rt::test

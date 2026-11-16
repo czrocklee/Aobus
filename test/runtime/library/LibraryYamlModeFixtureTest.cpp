@@ -5,6 +5,7 @@
 #include "runtime/library/LibraryYamlImporter.h"
 #include "test/TestFixtureSupport.h"
 #include "test/library/MusicLibraryTestSupport.h"
+#include "test/runtime/library/LibraryYamlTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/CoreIds.h>
 #include <ao/FileTimestamp.h>
@@ -44,9 +45,13 @@
 //   aobus -C <root> lib import v1-<mode>.yaml --mode restore --confirm-destructive-restore
 //   aobus -C <root> lib export <root>/out.yaml --mode <mode>
 //
-// so the test reproduces each byte for byte. v1-list-only.yaml is written by
-// hand in the shape of a list-only export; it ranks the Tracks of
-// v1-metadata.yaml by URI, segments by ordinal. v1-scalars.yaml is written by
+// so each document is its mode's own export. The test compares an export to
+// the document's parsed structure - node kinds, map key sets, sequence order,
+// and each scalar's exact text and explicit-null form - while quoting,
+// indentation, flow layout, and mapping key order stay the exporter's choice;
+// a separate check keeps one state's export byte-stable. v1-list-only.yaml
+// is written by hand in the shape of a list-only export; it ranks the Tracks
+// of v1-metadata.yaml by URI, segments by ordinal. v1-scalars.yaml is written by
 // hand in spellings the exporter does not produce: YAML implicit typing would
 // read many of them as a number, a boolean, or null, and the format gives each
 // field its meaning instead.
@@ -148,6 +153,87 @@ namespace ao::rt::test
       }
 
       return shapes;
+    }
+
+    // Literal values of the delta document's restore, so a symmetric
+    // importer/exporter mistake cannot pass by reproducing itself.
+    void checkDeltaRestoredState(MusicLibrary const& library)
+    {
+      {
+        auto transaction = library.readTransaction();
+        auto const optBlueHour =
+          findTrack(library, transaction, "Jazz/Example Quartet/Night Session/01 Blue Hour.flac");
+        REQUIRE(optBlueHour);
+        CHECK(optBlueHour->metadata().title() == "Blue Hour");
+        CHECK(optBlueHour->metadata().year() == 1961);
+        // The document's month precision is the stored precision.
+        CHECK(optBlueHour->performance().recordingDate() == RecordingDate{.year = 1961, .month = 3});
+
+        auto const& dictionary = library.dictionary();
+        CHECK(dictionary.get(optBlueHour->metadata().artistId()) == "Example Quartet");
+
+        auto custom = std::map<std::string, std::string, std::less<>>{};
+
+        for (auto const [keyId, value] : optBlueHour->customMetadata())
+        {
+          custom.emplace(dictionary.get(keyId), value);
+        }
+
+        CHECK(custom == std::map<std::string, std::string, std::less<>>{{"session", "take 3"}});
+
+        auto tags = std::vector<std::string>{};
+
+        for (auto const tagId : optBlueHour->tags())
+        {
+          tags.emplace_back(dictionary.get(tagId));
+        }
+
+        std::ranges::sort(tags);
+        CHECK(tags == std::vector<std::string>{"jazz"});
+
+        auto const optIntro = findTrack(library, transaction, "Jazz/Example Quartet/Night Session (Live).wav");
+        REQUIRE(optIntro);
+        REQUIRE(optIntro->property().segment());
+        CHECK(optIntro->property().segment()->ordinal == 1);
+        CHECK(optIntro->property().duration() == std::chrono::milliseconds{2000});
+      }
+
+      CHECK(listShapes(library) ==
+            std::vector<ListShape>{
+              ListShape{
+                .name = "Jazz", .filter = "#jazz", .order = {"Jazz/Example Quartet/Night Session/02 Late Train.opus"}},
+              ListShape{.name = "Late", .parentName = "Jazz", .filter = "#late"},
+              ListShape{.name = "Live intro", .order = {"Jazz/Example Quartet/Night Session (Live).wav#1"}},
+            });
+    }
+
+    // Literal values of the metadata document's restore, for the same
+    // reason; its two segment Tracks appear through their list ranks.
+    void checkMetadataRestoredState(MusicLibrary const& library)
+    {
+      {
+        auto transaction = library.readTransaction();
+        auto const optPrelude =
+          findTrack(library, transaction, "Classical/Bach/Cello Suite No. 1/01 Pr\u00e9lude.flac");
+        REQUIRE(optPrelude);
+        CHECK(optPrelude->metadata().title() == "Pr\u00e9lude");
+        CHECK(optPrelude->metadata().year() == 1939);
+        CHECK(optPrelude->performance().recordingDate() == RecordingDate{.year = 1938, .month = 6, .day = 2});
+        CHECK(library.dictionary().get(optPrelude->metadata().composerId()) == "Johann Sebastian Bach");
+      }
+
+      auto const carrier = std::string{"Live/The Carrier Band/Live at the Hall.flac"};
+      CHECK(listShapes(library) == std::vector<ListShape>{
+                                     ListShape{.name = "Favorites",
+                                               .filter = "#favorite",
+                                               .order = {"Pop/Example Artist/Single/01 Example Song.mp3",
+                                                         "Classical/Bach/Cello Suite No. 1/01 Pr\u00e9lude.flac"}},
+                                     ListShape{.name = "Baroque favorites",
+                                               .parentName = "Favorites",
+                                               .description = "Favorites that are also tagged baroque",
+                                               .filter = "#baroque"},
+                                     ListShape{.name = "Concert", .order = {carrier + "#2", carrier + "#1"}},
+                                   });
     }
 
     // Each scalar edge case of v1-scalars.yaml holds the meaning the format
@@ -252,7 +338,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("Library YAML mode fixtures - the delta and metadata documents restore and export unchanged")
+  TEST_CASE("Library YAML mode fixtures - the delta and metadata documents restore and export the same content")
   {
     struct ModeFixture final
     {
@@ -276,7 +362,24 @@ namespace ao::rt::test
                                                          .payloadMode = fixture.mode,
                                                          .tracksCreated = fixture.trackCount,
                                                          .listsCreated = 3});
-        CHECK(exportAs(library, temp.path() / "export.yaml", fixture.mode) == ao::test::readFile(yamlPath));
+
+        // The export holds the document's parsed structure; its spelling,
+        // layout, and map key order are the exporter's choice.
+        auto const exported = exportAs(library, temp.path() / "export.yaml", fixture.mode);
+        checkLibraryYamlFixtureEqual(ao::test::readFile(yamlPath), exported);
+
+        // One state's export is byte-stable, separately from the frozen
+        // document's spelling.
+        CHECK(exportAs(library, temp.path() / "repeat.yaml", fixture.mode) == exported);
+
+        if (fixture.mode == ExportMode::Delta)
+        {
+          checkDeltaRestoredState(library);
+        }
+        else
+        {
+          checkMetadataRestoredState(library);
+        }
       }
     }
   }
