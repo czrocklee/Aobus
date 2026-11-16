@@ -7,6 +7,8 @@ let
   toolchain = builtins.fromJSON (builtins.readFile ./script/ao/toolchain.json);
   bazelToolchain = builtins.fromJSON (builtins.readFile ./script/ao/bazel-toolchain.json);
   buildifierToolchain = builtins.fromJSON (builtins.readFile ./script/ao/buildifier.json);
+  prettierToolchain = builtins.fromJSON (builtins.readFile ./script/ao/prettier.json);
+  aobus-prettier = pkgs.prettier.override { nodejs = pkgs.nodejs_24; };
   # Every local file this expression reads. The shell exports the list, and ./ao
   # hashes it with the normalized GTK debug mode to reuse a matching shell
   # without duplicating the stdenv compiler and linker flags.
@@ -16,6 +18,7 @@ let
     ./script/ao/toolchain.json
     ./script/ao/bazel-toolchain.json
     ./script/ao/buildifier.json
+    ./script/ao/prettier.json
   ];
   portalFingerprint = builtins.hashString "sha256" (
     pkgs.lib.concatMapStrings (file: builtins.hashFile "sha256" file + "\n") portalInputs
@@ -318,10 +321,12 @@ assert bazelToolchain.schemaVersion == 1;
 assert requireToolVersion "Bazel" bazelToolchain.version pkgs.bazel_9.version;
 assert buildifierToolchain.schemaVersion == 1;
 assert requireToolVersion "Buildifier" buildifierToolchain.version pkgs.buildifier.version;
+assert requireToolVersion "Prettier" prettierToolchain.version aobus-prettier.version;
+assert requireToolVersion "Node (Prettier)" prettierToolchain.node.version pkgs.nodejs_24.version;
 pkgs.mkShell {
   name = "cpp-dev-env";
   hardeningEnable = hardeningFlags;
-  nativeBuildInputs = [ pkgs.bazel_9 pkgs.buildifier pkgs.actionlint ];
+  nativeBuildInputs = [ pkgs.bazel_9 pkgs.buildifier pkgs.actionlint aobus-prettier ];
   passthru.portalShell = pkgs.bashInteractive;
   AOBUS_NIX_DEPENDENCY_REPORT = dependencyReport;
   AOBUS_BAZEL_SERVER_JAVABASE = bazelServerJavabase;
@@ -331,6 +336,7 @@ pkgs.mkShell {
   ) portalInputs;
   AO_NIX_PORTAL_PYTHON = "${portalPython}/bin/python3";
   AO_NIX_BUILDIFIER = "${pkgs.buildifier}/bin/buildifier";
+  AO_NIX_PRETTIER = "${aobus-prettier}/bin/prettier";
   AO_NIX_ACTIONLINT = "${pkgs.actionlint}/bin/actionlint";
   buildInputs =
     with pkgs;

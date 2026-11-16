@@ -1,4 +1,4 @@
-"""ao format - format C++, Python and Bazel sources, the whole tree on demand."""
+"""ao format - format native, Python, Bazel, and authored text sources."""
 
 import argparse
 import os
@@ -10,11 +10,10 @@ from ..core import builddir, buildenv, buildifier, compiler_policy, gitfiles, py
 from ..core.paths import PROJECT_ROOT
 from ..core.proc import die
 
-HELP = "Format C++, Python and Bazel sources (changed files by default)"
+HELP = "Format native, Python, Bazel, Markdown, JSON, YAML, and CSS sources"
 NAME = "format"
 # Formatting needs a ready LLVM tool, not a Visual Studio compiler environment.
 REQUIRES_BUILD_ENV = False
-REQUIRES_PYTHON_TOOLS = True
 
 
 EPILOG = """\
@@ -26,7 +25,24 @@ examples:
   ./ao format --all             # format the whole tree
 """
 
-FORMAT_TOP_DIRS = ("app", "asset", "bazel", "include", "lib", "script", "test", "tool", gitfiles.WORKFLOW_DIR)
+FORMAT_TOP_DIRS = (
+    "app",
+    "asset",
+    "bazel",
+    "cmake",
+    "config",
+    "doc",
+    "include",
+    "lib",
+    "script",
+    "test",
+    "tool",
+    ".agents/skills",
+    ".github",
+)
+# One control edit can change the result for every file it governs, so those diff
+# scopes widen to the whole Prettier family; unrelated scope stays unchanged.
+PRETTIER_CONTROL_FILES = (".prettierrc.json", ".prettierignore", ".gitignore", "script/ao/prettier.json")
 CHUNK = 100
 
 
@@ -56,22 +72,56 @@ def resolve_files(args: argparse.Namespace) -> list[str]:
     if args.files:
         return list(args.files)
     if args.all:
-        files = gitfiles.find_sources(list(FORMAT_TOP_DIRS), suffixes=gitfiles.SOURCE_SUFFIXES)
-        files.extend(gitfiles.root_bazel_files())
-        return sorted(set(files))
+        return _whole_tree_sources()
     if args.folder:
-        return gitfiles.find_sources(args.folder, suffixes=gitfiles.SOURCE_SUFFIXES)
-    changed = gitfiles.changed_files(args.commit, suffixes=gitfiles.SOURCE_SUFFIXES)
-    return [
+        return _folder_sources(args.folder)
+    return _changed_sources(args.commit)
+
+
+def _whole_tree_sources() -> list[str]:
+    """Every source under FORMAT_TOP_DIRS plus the root Bazel and authored text files."""
+    files = _non_text_sources(gitfiles.find_sources(list(FORMAT_TOP_DIRS), suffixes=gitfiles.SOURCE_SUFFIXES))
+    files.extend(gitfiles.root_bazel_files())
+    files.extend(gitfiles.prettier_sources(list(FORMAT_TOP_DIRS), include_root=True))
+    return sorted(set(files))
+
+
+def _folder_sources(folders: list[str]) -> list[str]:
+    files = _non_text_sources(gitfiles.find_sources(folders, suffixes=gitfiles.SOURCE_SUFFIXES))
+    files.extend(gitfiles.prettier_sources(folders))
+    return sorted(set(files))
+
+
+def _non_text_sources(files: list[str]) -> list[str]:
+    """Keep the existing filesystem scan for native, Python, and Bazel sources.
+
+    Prettier's family is discovered separately so ignored artifacts never enter
+    text formatting; the shared scan still owns the other languages.
+    """
+    return [name for name in files if not gitfiles.is_prettier_file(name)]
+
+
+def _changed_sources(commit: str | None) -> list[str]:
+    changed = gitfiles.changed_paths(commit)
+    files = [
         name
         for name in changed
-        if (
+        if gitfiles.matches_source(name, gitfiles.SOURCE_SUFFIXES)
+        and (
             name.startswith(tuple(f"{top}/" for top in FORMAT_TOP_DIRS))
-            or (Path(name).parent == Path(".") and (gitfiles.is_bazel_file(name) or gitfiles.is_bazel_rc_file(name)))
+            or (
+                Path(name).parent == Path(".")
+                and (gitfiles.is_bazel_file(name) or gitfiles.is_bazel_rc_file(name) or gitfiles.is_prettier_file(name))
+            )
             or gitfiles.is_workflow_file(name)
         )
         and (PROJECT_ROOT / name).is_file()
     ]
+    if any(name in PRETTIER_CONTROL_FILES for name in changed):
+        # A control edit can change the result for every governed file, so the
+        # diff scope widens to the whole owned text family, never to native code.
+        files.extend(gitfiles.prettier_sources(list(FORMAT_TOP_DIRS), include_root=True))
+    return sorted(set(files))
 
 
 def _file_exists(name: str) -> bool:
@@ -85,6 +135,17 @@ def requires_build_environment(args: argparse.Namespace) -> bool:
     cpp_scope = buildenv.requires_source_build_env(args, resolve_files(args))
     # macOS exposes ready LLVM tools through its native environment, not ambient PATH.
     return cpp_scope and builddir.platform_profile().name == "macos"
+
+
+def requires_python_tools(args: argparse.Namespace) -> bool:
+    """Only a Python source scope needs the managed Ruff/mypy environment."""
+    buildenv.load_source_scope(args, os.environ.get("AOBUS_PREFLIGHT_SCOPE"))
+    files = resolve_files(args)
+    args._resolved_sources = files
+    return any(name.endswith(gitfiles.PYTHON_SUFFIXES) for name in files)
+
+
+REQUIRES_PYTHON_TOOLS = requires_python_tools
 
 
 def run_clang_format(
@@ -151,8 +212,9 @@ def run_command(
     cpp_files = [name for name in files if name.endswith(gitfiles.CPP_SUFFIXES) and _file_exists(name)]
     python_files = [name for name in files if name.endswith(gitfiles.PYTHON_SUFFIXES) and _file_exists(name)]
     bazel_files = [name for name in files if gitfiles.is_bazel_file(name) and _file_exists(name)]
+    prettier_files = [name for name in files if gitfiles.is_prettier_file(name) and _file_exists(name)]
     msvc_rc = compiler_policy.selects_msvc_rc(files)
-    if not cpp_files and not python_files and not bazel_files and not msvc_rc:
+    if not cpp_files and not python_files and not bazel_files and not prettier_files and not msvc_rc:
         print("No files to format.")
         return 0
 
@@ -166,6 +228,13 @@ def run_command(
             status = 1
     except buildifier.BuildifierError as exc:
         raise die(str(exc)) from exc
+    if prettier_files:
+        from ..core import prettier
+
+        try:
+            status = max(status, prettier.run(prettier_files, check=args.check))
+        except prettier.PrettierError as exc:
+            raise die(str(exc)) from exc
     if msvc_rc:
         try:
             status = max(status, compiler_policy.format_msvc_rc(check=args.check))

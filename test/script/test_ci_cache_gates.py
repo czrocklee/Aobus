@@ -34,6 +34,12 @@ def _inline_condition(step: str) -> str:
     return re.search(r"^        if: \$\{\{ (.*) \}\}$", step, re.MULTILINE).group(1)
 
 
+def _cache_paths(step: str) -> set[str]:
+    """Return the multi-line cache path list of a cache step as a set."""
+    block = step.split("          path: |\n", 1)[1].split("          key:", 1)[0]
+    return {line.strip() for line in block.splitlines() if line.strip()}
+
+
 class WindowsManagedToolsKeyTest(unittest.TestCase):
     def test_the_key_covers_the_pinned_bazel_artifact(self):
         step = _step(_job("windows"), "Restore managed Windows tools")
@@ -42,6 +48,29 @@ class WindowsManagedToolsKeyTest(unittest.TestCase):
         # the Bazel pins in the key, a pin change would restore a stale Bazel
         # or never stage the requested one.
         self.assertLessEqual({".bazelversion", "script/ao/bazel-toolchain.json"}, key_inputs)
+
+    def test_the_key_covers_prettier_artifacts_and_cache_layout(self):
+        step = _step(_job("windows"), "Restore managed Windows tools")
+        key_inputs = set(re.findall(r"'([^']+)'", step.partition("hashFiles(")[2]))
+        self.assertLessEqual({"script/ao/prettier.json", "script/ao/core/prettier.py"}, key_inputs)
+
+
+class MacosManagedToolsKeyTest(unittest.TestCase):
+    def test_the_key_covers_prettier_artifacts_and_cache_layout(self):
+        step = _step(_job("macos"), "Restore managed macOS tools")
+        key_inputs = set(re.findall(r"'([^']+)'", step.partition("hashFiles(")[2]))
+        self.assertLessEqual({"script/ao/prettier.json", "script/ao/core/prettier.py"}, key_inputs)
+
+
+class MacosPrettierPathAgreementTest(unittest.TestCase):
+    def test_restore_and_save_paths_agree_on_prettier(self):
+        job = _job("macos")
+        restore_paths = _cache_paths(_step(job, "Restore managed macOS tools"))
+        save_paths = _cache_paths(_step(job, "Save managed macOS tools"))
+        prettier = "${{ runner.temp }}/aobus-state/tools/prettier"
+        # The managed tools archive restores and saves the same prepared tree.
+        self.assertIn(prettier, restore_paths)
+        self.assertEqual(restore_paths, save_paths)
 
 
 class ManagedToolsSaveGateTest(unittest.TestCase):
@@ -54,6 +83,7 @@ class ManagedToolsSaveGateTest(unittest.TestCase):
     MACOS_POPULATING_STEPS = (
         ("Prepare vcpkg binary cache", "vcpkg-prepare"),
         ("Set up Buildifier", "buildifier"),
+        ("Set up pinned Prettier", "prettier"),
     )
 
     def test_windows_save_requires_every_cache_populating_setup_step(self):

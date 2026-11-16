@@ -1,6 +1,7 @@
 ---
 id: development.test.validation-and-review
 ---
+
 # Test validation and review
 
 ## Adding new files
@@ -46,7 +47,7 @@ clean `test-audit` or passing run does not show the review is complete.
 When adding to an already large test file, prefer a new focused file if the behavior belongs to a separable contract area. Split by behavior domain, not by arbitrary line count.
 
 Prefer standalone `TEST_CASE`s for independent behavior contracts; keep `SECTION` for
-variants of one contract that share an arrange (see *SECTION vs TEST_CASE* in
+variants of one contract that share an arrange (see _SECTION vs TEST_CASE_ in
 [test naming and assertions](naming-and-assertion.md)). Splitting duplicates the arrange, so route genuinely shared
 setup into an existing `*TestSupport.h` rather than copying it — and do not hide a
 duplicate helper behind a nested namespace to dodge a collision.
@@ -68,15 +69,15 @@ This document owns completion validation for contributors and agent skills.
 Choose the route from the behavior and execution boundary being changed, and
 combine routes when a change spans several rows.
 
-| Change or task | Completion evidence |
-|---|---|
-| Read-only review or diagnosis | Source evidence and the relevant existing validator or focused reproducer. No build is required solely to finish a review. |
-| Documentation or agent instructions | `./ao docs check`, agreement with the owning code/policy, and representative task routing when skill behavior changes. Changes to skill scripts also take the tooling row. |
-| Python portal or automation scripts | `./ao check` on Linux, `ao.bat check` on Windows for affected Windows behavior; these include tooling and hygiene. Use the [standalone tooling runner](test-suite.md#tooling-and-lint-fixtures) while iterating. Exercise changed shell/bootstrap/process boundaries on their native hosts. macOS has no tooling suite; use native portal probes and scoped hygiene there. |
-| C++ implementation, headers, or tests | One full native `check`, including its full C++ lint coverage and scoped hygiene. Add affected native hosts when their implementation, toolchain, or frontend is involved. |
-| Build configuration, dependencies, native test orchestration, or CI | Tooling checks plus the affected native build/test matrix. Include Release or sanitizers when the changed configuration or behavior requires them. |
-| Catalog-only wording in an existing maintained locale | Build affected frontends to regenerate catalogs, run the catalog suite (`bazel test //test:i18n_test`) and any affected message-specific tests identified by the [text-catalog reference](../../system/presentation/text-catalog.md#compatibility-and-test-authority), and inspect the changed UI at normal and constrained widths. Native Windows UI evidence is needed when WinUI consumes the changed text; unchanged projection rules do not independently require the full Windows parity gate. |
-| UI, localization, or audio behavior | The applicable implementation route plus focused visual, catalog, or audible evidence for the changed user-facing behavior. New locales or changes to locale selection, signatures, or WinUI projection rules include native Windows parity validation. |
+| Change or task                                                      | Completion evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Read-only review or diagnosis                                       | Source evidence and the relevant existing validator or focused reproducer. No build is required solely to finish a review.                                                                                                                                                                                                                                                                                                                                                                           |
+| Documentation or agent instructions                                 | `./ao docs check --format`, agreement with the owning code/policy, and representative task routing when skill behavior changes. Changes to skill scripts also take the tooling row.                                                                                                                                                                                                                                                                                                                  |
+| Python portal or automation scripts                                 | `./ao check` on Linux, `ao.bat check` on Windows for affected Windows behavior; these include tooling and hygiene. Use the [standalone tooling runner](test-suite.md#tooling-and-lint-fixtures) while iterating. Exercise changed shell/bootstrap/process boundaries on their native hosts. macOS has no tooling suite; use native portal probes and scoped hygiene there.                                                                                                                           |
+| C++ implementation, headers, or tests                               | One full native `check`, including its full C++ lint coverage and scoped hygiene. Add affected native hosts when their implementation, toolchain, or frontend is involved.                                                                                                                                                                                                                                                                                                                           |
+| Build configuration, dependencies, native test orchestration, or CI | Tooling checks plus the affected native build/test matrix. Include Release or sanitizers when the changed configuration or behavior requires them.                                                                                                                                                                                                                                                                                                                                                   |
+| Catalog-only wording in an existing maintained locale               | Build affected frontends to regenerate catalogs, run the catalog suite (`bazel test //test:i18n_test`) and any affected message-specific tests identified by the [text-catalog reference](../../system/presentation/text-catalog.md#compatibility-and-test-authority), and inspect the changed UI at normal and constrained widths. Native Windows UI evidence is needed when WinUI consumes the changed text; unchanged projection rules do not independently require the full Windows parity gate. |
+| UI, localization, or audio behavior                                 | The applicable implementation route plus focused visual, catalog, or audible evidence for the changed user-facing behavior. New locales or changes to locale selection, signatures, or WinUI projection rules include native Windows parity validation.                                                                                                                                                                                                                                              |
 
 Alongside the selected completion route, use [design review](../design-review.md) for structural acceptance and refactor evidence when work changes ownership or a public boundary, introduces an abstraction, or structurally refactors a subsystem.
 
@@ -103,7 +104,7 @@ is unchanged. An explicitly invoked `./ao check` is complete for every change,
 including documentation-only edits: the full C++ graph lint and authored-source
 ownership audits run regardless of the diff, and a cold cache pays that
 analysis cost — cache reuse never makes the gate free. Docs-only local
-validation has the fast `./ao docs check` entry, while docs-only CI events
+validation has the fast `./ao docs check --format` entry, while docs-only CI events
 route to the documentation job ([continuous integration](#continuous-integration)).
 CI uses the same full command for native changes, and its separate
 documentation job remains responsible for docs-only routing.
@@ -213,7 +214,7 @@ for the new inputs.
 
 The existing Linux, macOS Intel/ARM64, and Windows check identities are
 retained. A separate unconditional documentation job resolves the event's
-verified comparison base once, then runs `ao docs check` for
+verified comparison base once, then runs `ao docs check --format` for
 documentation-only, code-only, and mixed changes before native build work.
 A successful, nonempty Markdown-only change in the recognized root-document,
 `doc/`, `.agents/skills/`, `tool/`, `app/`, or `asset/` paths skips native jobs.
@@ -224,9 +225,10 @@ its path classification does not make it a supported tracked-document location.
 The documentation job prepares the Python version from
 `script/ao/toolchain.json`, installs the hash-locked documentation parser from
 `script/ao/docs-requirements.txt` with `--require-hashes`,
-`--only-binary=:all:`, and `--no-deps`, and invokes `python -m ao docs check`
-with `PYTHONPATH=script`; it does not enter the C++ Nix development
-environment.
+`--only-binary=:all:`, and `--no-deps`, then prepares the hash-pinned Node/Prettier
+closure with `python -m ao setup prettier`. It invokes
+`python -m ao docs check --format` with `PYTHONPATH=script`; neither step enters
+the C++ Nix development environment.
 Unknown paths, script or workflow changes, empty comparisons, and manual
 `workflow_dispatch` runs select the full native matrix.
 Renames are compared as deletion plus addition so moving code into a Markdown

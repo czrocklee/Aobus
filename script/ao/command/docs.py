@@ -3,6 +3,8 @@
 import argparse
 import sys
 
+from ..core.paths import PROJECT_ROOT
+
 HELP = "Check documentation links, reachability, and semantic references"
 NAME = "docs"
 REQUIRES_BUILD_ENV = False
@@ -16,10 +18,11 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
     check = actions.add_parser(
         "check", help="check optional metadata, links, anchors, reachability, and naming vocabulary"
     )
+    check.add_argument("--format", action="store_true", help="also check discovered Markdown with pinned Prettier")
     check.set_defaults(func=run_check)
 
 
-def run_check(_args: argparse.Namespace) -> int:
+def run_check(args: argparse.Namespace) -> int:
     # Native preflight imports every command before selecting managed packages.
     from ..core import doccheck
 
@@ -31,5 +34,16 @@ def run_check(_args: argparse.Namespace) -> int:
         print(f"Documentation check failed: {len(issues)} issue(s).", file=sys.stderr)
         return 1
 
-    print(f"Documentation check passed ({len(doccheck.discover_markdown())} Markdown files).")
+    markdown = doccheck.discover_markdown()
+    if getattr(args, "format", False):
+        from ..core import prettier
+
+        try:
+            status = prettier.run([path.relative_to(PROJECT_ROOT).as_posix() for path in markdown], check=True)
+            if status:
+                return status
+        except prettier.PrettierError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+    print(f"Documentation check passed ({len(markdown)} Markdown files).")
     return 0

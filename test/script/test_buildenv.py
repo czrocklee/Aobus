@@ -110,10 +110,27 @@ class BuildEnvSelectionTest(unittest.TestCase):
 
 class PythonToolsSelectionTest(unittest.TestCase):
     def test_python_tool_commands_need_the_managed_environment(self):
-        for command in ("docs", "format", "tidy"):
+        # Format answers from its resolved scope, so it needs an explicit real
+        # .py source; the default dirty scope may be text-only.
+        for command, source in (
+            ("docs", "lib/utility/Path.cpp"),
+            ("format", "script/ao/core/proc.py"),
+            ("tidy", "lib/utility/Path.cpp"),
+        ):
             with self.subTest(command=command):
-                arguments = _choice_backed_arguments(command)
+                arguments = _choice_backed_arguments(command, source)
                 self.assertTrue(buildenv.requires_python_tools(command, arguments), command)
+
+    def test_format_python_tools_require_an_actual_python_source(self):
+        # Only real .py sources select the managed Ruff/mypy environment;
+        # C++-only and Prettier-only scopes run on the ambient tools.
+        for source, expected in (
+            ("lib/utility/Path.cpp", False),
+            ("README.md", False),
+            ("script/ao/core/proc.py", True),
+        ):
+            with self.subTest(source=source):
+                self.assertEqual(buildenv.requires_python_tools("format", [source]), expected)
 
     def test_hygiene_python_tools_follow_the_resolved_source_scope(self):
         # Real repository sources select the managed Ruff/mypy environment; the

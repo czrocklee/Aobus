@@ -1,6 +1,7 @@
 ---
 id: development.windows
 ---
+
 # Windows development
 
 The native Windows profile builds the shared core, CLI, FTXUI terminal frontend,
@@ -37,8 +38,8 @@ git config --global core.longpaths true
 
 Use `--system` instead only for a machine-wide setting from an elevated terminal.
 
-Initial Python setup and explicit SDK provisioning need network access unless
-their governed payloads are already cached. Ordinary Bazel builds consume a
+Initial Python setup, formatter setup, and explicit SDK provisioning need
+network access unless their governed payloads are already cached. Ordinary Bazel builds consume a
 ready SDK; they never install native dependencies.
 
 Visual Studio's bundled vcpkg is the default. `VCPKG_ROOT` may select another
@@ -85,6 +86,7 @@ ao.bat check
 ao.bat check release
 ao.bat check --asan
 ao.bat setup llvm-sdk
+ao.bat setup prettier
 ao.bat format --check
 ao.bat tidy
 ao.bat hygiene
@@ -97,8 +99,12 @@ Use
 a complete CLI reference.
 
 Build-capable project commands initialize Visual Studio x64 only when needed;
-help and Python-only source scopes skip native setup. Ordinary native Bazel
+help and Python-only or authored-text source scopes skip native setup. Ordinary native Bazel
 commands instead require the caller's initialized environment and selectors.
+Prettier uses its own governed Node/tool bundle, not ambient Node or npm.
+Markdown/JSON/YAML/CSS-only formatting needs neither a C++ SDK nor the managed
+Ruff/mypy environment; [formatter setup](linting.md#authored-text-formatting)
+prepares only that tool.
 Running an existing binary directly is diagnostic reuse, not proof of source
 provenance, SDK/DLL freshness, or post-build integrity.
 

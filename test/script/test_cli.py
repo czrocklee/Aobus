@@ -181,10 +181,8 @@ class NativePortalTest(unittest.TestCase):
                     self.assertEqual(configured, "custom-hooks")
 
     def test_macos_managed_python_is_requested_for_checks_and_documentation(self):
-        for command in ("format", "tidy"):
-            self.assertTrue(buildenv.requires_python_tools(command))
-        # Hygiene follows its source scope; an explicit file keeps this checkout's Git diff out of the result.
-        self.assertTrue(buildenv.requires_python_tools("hygiene", ["script/ao/core/proc.py"]))
+        for command in ("format", "tidy", "hygiene"):
+            self.assertTrue(buildenv.requires_python_tools(command, ["script/ao/command/format.py"]))
         self.assertTrue(buildenv.requires_python_tools("docs", ["check"]))
         self.assertTrue(buildenv.requires_python_tools("check"))
         for command, arguments in (

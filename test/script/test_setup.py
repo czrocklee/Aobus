@@ -30,6 +30,17 @@ class SetupCommandTest(unittest.TestCase):
         execute.assert_not_called()
         self.assertIn("Bazel ready: bazel", stdout.getvalue())
 
+    def test_prettier_setup_only_prepares_the_formatter_command(self):
+        with (
+            mock.patch("ao.core.prettier.command", return_value=("node", "prettier.cjs")) as command,
+            mock.patch.object(bazel_workspace, "prepare_workspace") as prepare,
+            contextlib.redirect_stdout(io.StringIO()) as stdout,
+        ):
+            self.assertEqual(setup.run_command(self.parse(["setup", "prettier"])), 0)
+        command.assert_called_once_with()
+        prepare.assert_not_called()
+        self.assertIn("Pinned Prettier ready: node prettier.cjs", stdout.getvalue())
+
     def test_llvm_sdk_is_a_registered_public_component(self):
         self.assertEqual(self.parse(["setup", "llvm-sdk"]).component, "llvm-sdk")
         with self.assertRaises(SystemExit):

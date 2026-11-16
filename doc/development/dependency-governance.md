@@ -1,6 +1,7 @@
 ---
 id: development.dependency-governance
 ---
+
 # Dependency version governance
 
 This page explains how to identify the authoritative dependency input, inspect a
@@ -30,22 +31,23 @@ of truth. A resolved version becomes project policy only through an explicit
 
 Use the owner for the question being asked:
 
-| Question | Owner |
-|---|---|
-| Accepted cross-platform C++/Windows SDK versions, capabilities, and temporary exceptions | `dependency-contract.json` |
-| Linux package-set revision and source hash | `nixpkgs.json` |
-| vcpkg registry snapshots | `vcpkg-configuration.json` |
-| vcpkg ports, features, and exact overrides | `vcpkg.json` |
-| macOS compiler, deployment target, and vcpkg tool archive | `script/ao/macos-toolchain.json` |
-| Windows tidy LLVM SDK version, archive SHA-256, and required files | `script/ao/windows-llvm-sdk.json` |
-| CI Bazel remote-cache proxy version and artifact SHA-256, and its Windows WSL host rootfs SHA-256 | `script/ao/bazel-remote.json` |
-| Bazel version | `script/ao/bazel-toolchain.json`, `.bazelversion` |
-| Buildifier formatter/linter version and native artifact SHA-256 | `script/ao/buildifier.json` |
-| GitHub Actions workflow linter (actionlint, with packaged ShellCheck/Pyflakes on Linux) | `nixpkgs.json` |
-| WinUI NuGet closure and trusted source | `app/windows-winui/packages.config`, `app/windows-winui/NuGet.Config` |
-| Python, Ruff, mypy, and documentation-parser policy | `script/ao/toolchain.json` |
-| Accepted Python tooling and documentation-parser artifacts | `script/ao/docs-requirements.txt`, `script/ao/windows-requirements.txt`, `script/ao/macos-requirements.txt` |
-| Installed native and test SDK manifests and hash inputs | verified by `./ao deps report` or `./ao deps verify` |
+| Question                                                                                          | Owner                                                                                                       |
+| ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Accepted cross-platform C++/Windows SDK versions, capabilities, and temporary exceptions          | `dependency-contract.json`                                                                                  |
+| Linux package-set revision and source hash                                                        | `nixpkgs.json`                                                                                              |
+| vcpkg registry snapshots                                                                          | `vcpkg-configuration.json`                                                                                  |
+| vcpkg ports, features, and exact overrides                                                        | `vcpkg.json`                                                                                                |
+| macOS compiler, deployment target, and vcpkg tool archive                                         | `script/ao/macos-toolchain.json`                                                                            |
+| Windows tidy LLVM SDK version, archive SHA-256, and required files                                | `script/ao/windows-llvm-sdk.json`                                                                           |
+| CI Bazel remote-cache proxy version and artifact SHA-256, and its Windows WSL host rootfs SHA-256 | `script/ao/bazel-remote.json`                                                                               |
+| Bazel version                                                                                     | `script/ao/bazel-toolchain.json`, `.bazelversion`                                                           |
+| Buildifier formatter/linter version and native artifact SHA-256                                   | `script/ao/buildifier.json`                                                                                 |
+| Prettier formatter, Node runtime, and managed artifact SHA-256                                    | `script/ao/prettier.json`                                                                                   |
+| GitHub Actions workflow linter (actionlint, with packaged ShellCheck/Pyflakes on Linux)           | `nixpkgs.json`                                                                                              |
+| WinUI NuGet closure and trusted source                                                            | `app/windows-winui/packages.config`, `app/windows-winui/NuGet.Config`                                       |
+| Python, Ruff, mypy, and documentation-parser policy                                               | `script/ao/toolchain.json`                                                                                  |
+| Accepted Python tooling and documentation-parser artifacts                                        | `script/ao/docs-requirements.txt`, `script/ao/windows-requirements.txt`, `script/ao/macos-requirements.txt` |
+| Installed native and test SDK manifests and hash inputs                                           | verified by `./ao deps report` or `./ao deps verify`                                                        |
 
 Do not copy a current version from this guide. Read the owning file or a verified
 build report.
@@ -115,8 +117,8 @@ triplet, features, tool version, and `version#port-version`.
 `shell.nix` imports the exact revision and hash in `nixpkgs.json` and rejects
 ambient `NIX_PATH`, channel, or `PATH` packages as substitutes. Project
 derivations remain governed by their own source hashes and the shared contract.
-Nix evaluation also checks applicable Python, Ruff, mypy, and Buildifier
-pins. One package set supplies both the native dependencies and these tools,
+Nix evaluation also checks applicable Python, Ruff, mypy, Buildifier, Prettier,
+and formatter Node pins. One package set supplies both the native dependencies and these tools,
 so the native pin and the exact tool contracts are coupled: a package-set
 change that moves a tool version must update the corresponding contract in
 the same change, and a tool upgrade needs a package set that supplies it.
@@ -223,6 +225,18 @@ rather than falling back or silently repairing it. `./ao setup buildifier`
 also prepare a missing native tool when their scope contains Bazel files; no
 C++ SDK is required for a Bazel-only scope. See [Starlark hygiene](linting.md#bazelstarlark-hygiene)
 and [workflow lint](linting.md#github-actions-workflow-lint).
+
+Prettier and its Node runtime are governed by `script/ao/prettier.json`.
+Linux selects the matching Nix formatter through `AO_NIX_PRETTIER`, with the
+contracted Node provider. Native hosts and the lightweight Linux documentation
+job use the hash-verified official Node archive and self-contained Prettier npm
+archive in managed tool state; no npm install or checkout-local `node_modules`
+is required. Manifest-pinned executable and package-tree digests bind freshly
+extracted and cached files before execution; cache receipts record provenance,
+not an independent source of trusted hashes. `./ao setup prettier` explicitly prepares that closure, and text
+formatting can prepare a missing managed entry. The documentation job uses this
+bounded bootstrap without entering the C++ Nix environment. See
+[authored-text formatting](linting.md#authored-text-formatting) for scope and options.
 
 The native requirements files are artifact locks with hashes, not alternative
 policy files. Python checks and formatting derive their language target from

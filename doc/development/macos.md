@@ -1,6 +1,7 @@
 ---
 id: development.macos
 ---
+
 # macOS development
 
 The native macOS profile builds the shared core, CLI, FTXUI terminal frontend,
@@ -78,6 +79,7 @@ bazel test //test/lint:lint_test --nocache_test_results  # fresh result assertio
 ./ao check --asan             # supported suites with ASan/UBSan
 ./ao check --tsan             # TSan-safe core, application, and backend suites
 ./ao hygiene                  # standalone scoped check-only entry
+./ao setup prettier           # pinned formatter/Node bundle only
 ./ao deps report
 ./ao deps verify
 ```
@@ -98,11 +100,14 @@ an explicitly configured native smoke target with `--config=tsan` when an
 AppKit scenario needs TSan; that raw run and its runtime are caller-owned.
 
 The portal starts with Homebrew Python and selects the managed environment
-on demand for check/docs/format/tidy/hygiene work. Other commands can use the base
+on demand for check/docs and Python format/tidy/hygiene scopes. Other commands can use the base
 interpreter; `/usr/bin/python3` only reads initial bootstrap JSON fields.
 The managed environment matches Ruff and mypy pins, but macOS does not claim
 exact Python patch parity or expose a standalone tooling suite. Full `check`
 requires the managed Python tools, including documentation parser dependencies.
+Markdown/JSON/YAML/CSS-only formatting instead uses the governed Prettier/Node
+bundle without a C++ SDK, managed Python tools, or a system Node installation;
+see [formatter setup](linting.md#authored-text-formatting).
 
 Release IPO is checked for C++ only. C++ translation units and final links use
 ThinLTO; Objective-C++ translation units use normal Release optimization.
@@ -304,13 +309,13 @@ for memory-sensitive changes. Include both `app/macos-appkit` and
 
 Treat each scenario only as evidence for the surface it drives:
 
-| Scenario | Direct evidence |
-|---|---|
-| `desktop` | Shipping-window composition, native browsing and playback controls, close/quit coordination, restoration and geometry ownership, `desktop.plist` defaults for malformed values and unknown appearance names, per-mode inspector visibility restoration, unknown-key preservation, and supervised library-successor handoff. |
-| `authoring` | Native property/List editors, validation and stale-draft behavior, save/close/discard ordering, and authoring teardown. |
-| `presentation` | Browser projection and reuse, selection/sort/drag adaptation, activity and inspector presentation, accessibility dismissal actions, and inert callbacks after detach. |
-| `quality-presentation` | Isolated classic quality-tooltip updates, clearing, resize and repeated-layout preservation, plus modern transport separation, using synthetic state and native bar captures without a runtime or audio endpoint. |
-| `media` | MediaPlayer metadata/artwork publication, the seven supported remote commands and disabled unsupported commands, stale-seek guards, main-thread admission, runtime handoff, and retirement. |
+| Scenario               | Direct evidence                                                                                                                                                                                                                                                                                                             |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `desktop`              | Shipping-window composition, native browsing and playback controls, close/quit coordination, restoration and geometry ownership, `desktop.plist` defaults for malformed values and unknown appearance names, per-mode inspector visibility restoration, unknown-key preservation, and supervised library-successor handoff. |
+| `authoring`            | Native property/List editors, validation and stale-draft behavior, save/close/discard ordering, and authoring teardown.                                                                                                                                                                                                     |
+| `presentation`         | Browser projection and reuse, selection/sort/drag adaptation, activity and inspector presentation, accessibility dismissal actions, and inert callbacks after detach.                                                                                                                                                       |
+| `quality-presentation` | Isolated classic quality-tooltip updates, clearing, resize and repeated-layout preservation, plus modern transport separation, using synthetic state and native bar captures without a runtime or audio endpoint.                                                                                                           |
+| `media`                | MediaPlayer metadata/artwork publication, the seven supported remote commands and disabled unsupported commands, stale-seek guards, main-thread admission, runtime handoff, and retirement.                                                                                                                                 |
 
 The `credits-controls` and `credits-previews` scenarios follow the same
 disposable-path admission, timeout, and evidence rules; their specific

@@ -29,7 +29,7 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
     parser = subparsers.add_parser(NAME, help=HELP, description=HELP)
     parser.add_argument(
         "component",
-        choices=("bazel", "buildifier", "git-hooks", "llvm-sdk", "winui-runtime"),
+        choices=("bazel", "buildifier", "git-hooks", "llvm-sdk", "prettier", "winui-runtime"),
         help="host component to install",
     )
     parser.set_defaults(func=run_command)
@@ -70,6 +70,15 @@ def run_command(args: argparse.Namespace) -> int:
         except buildifier.BuildifierError as exc:
             raise die(str(exc)) from exc
         print(f"Pinned Buildifier ready at {tool}.")
+        return 0
+    if args.component == "prettier":
+        from ..core import prettier
+
+        try:
+            command = prettier.command()
+        except prettier.PrettierError as exc:
+            raise die(str(exc)) from exc
+        print(f"Pinned Prettier ready: {' '.join(command)}")
         return 0
     try:
         installed = winui.setup_runtime()
