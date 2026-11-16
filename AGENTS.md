@@ -1,60 +1,26 @@
 # Aobus Agent Guide
 
-Aobus is a C++26 music application with GTK4, TUI, CLI, WinUI, and an incremental
-AppKit frontend over shared Core and application runtime libraries. Work from
-the repository root. Use the pinned native `bazel build`, `bazel test`, and
-`bazel run` for ordinary development; `bazel test //:tests` is the default test
-selection. Follow [native Bazel setup](doc/development/bazel.md#direct-bazel-without-the-portal),
-including explicit SDK provisioning and Windows Visual Studio selectors.
-Use `./ao` (`ao.bat` on Windows) for project-specific commands: `check` is the
-complete local and CI validation gate and includes the same check-only
-implementation exposed by scoped `hygiene`. Setup, dependency provisioning,
-compile-contract verification, coverage, performance, lint, analysis, formatting,
-documentation and source audits remain project commands. `./ao help` and
-`./ao <command> --help` describe them; there are no `ao build`, `ao test`,
-`ao run`, or `ao bazel` commands. Native Bazel success does not replace `ao check`.
+Work from the repository root. Use pinned native `bazel build`, `bazel test`,
+and `bazel run`; `bazel test //:tests` is the default test selection.
+Use `./ao` (`ao.bat` on Windows) for project tooling; `./ao check` is the full
+validation gate. Linux tools come from the pinned `nix-shell`.
+Follow [native setup](doc/development/bazel.md#direct-bazel-without-the-portal)
+for host prerequisites.
 
-## Project constraints
+## Repository rules
 
 - Use English for code comments, commit messages, and documentation.
-- Put throwaway artifacts in `/tmp`, outside the repository.
-- Preserve build trees when diagnosing failures; managed check output is in the
-  selected tree's `build.log`, with per-attempt receipts and phase logs.
-- Keep abstractions tied to current consumers and an independent contract.
-  Keep one-consumer helpers local; do not add speculative registries or policies.
-- Follow the [formatting and validation order](doc/development/test/validation-and-review.md#formatting-before-validation)
-  before completion checks.
+- Put throwaway artifacts outside the checkout, in the platform temporary directory.
+- Preserve build trees when diagnosing failures.
+- Never silently drop review feedback, including non-blocking items: apply valid in-scope improvements or state why not.
 
-## Read by task
+## Guidance and authorization
 
-These are authority pointers, not a prerequisite reading list. Read the
-sections relevant to the change; reuse material already read in this session.
+- [Development guide](doc/development/README.md): task-specific contributor policy.
+- [System guide](doc/system/README.md): product contracts and subsystem code.
+- [Validation and review](doc/development/test/validation-and-review.md): select
+  checks by changed behavior, including formatting order and result reuse.
 
-| Task | Authority |
-|---|---|
-| Contributor or Git workflow | `CONTRIBUTING.md`; `doc/development/commit-message.md` before committing |
-| C++ implementation | `doc/development/coding-style.md`; `doc/development/naming-convention.md` |
-| Find product contracts or subsystem code | `doc/system/README.md` and the relevant topic |
-| Write, review, or reorganize documentation | `doc/development/documentation.md` |
-| Finding dependency headers, libraries, tools, or SDKs | `doc/development/dependency-governance.md#locating-an-existing-dependency` |
-| Test design and fixtures | `doc/development/test.md` and the linked task-specific reference |
-| Lint findings or suppressions | `doc/development/linting.md` |
-| Concurrency contracts | `doc/development/test/concurrency-and-sanitizer.md` |
-| Native macOS work | `doc/development/macos.md` before using the native environment |
-| Native Windows work | `doc/development/windows.md` before using the native environment |
-| Native Bazel build system, profiles, and gates | `doc/development/bazel.md` |
-
-Linux dependencies come from the pinned `nix-shell`; use it for manual compiler
-or dependency inspection. Native macOS and Windows use the shared vcpkg
-manifest and their documented bootstrap paths.
-
-## Completion and authorization
-
-Use `doc/development/test/validation-and-review.md` to select validation for the
-changed behavior. It owns completion and scoped hygiene, lint boundaries, and result reuse.
-Run local checks, fix failures caused by the authorized change, and rerun affected
-checks without asking for approval at each step. Continue through the requested
-implementation and validation; report any remaining failure or unvalidated boundary.
-
-Git history and PR mutations use the `manage-git-flow` skill. Existing user
-authorization persists; publishing a branch does not authorize merging its PR.
+Run required checks and fix failures within the authorized scope without
+per-step approval; report remaining failures or unvalidated boundaries.
+Before Git or PR mutations, load [manage-git-flow](.agents/skills/manage-git-flow/SKILL.md).

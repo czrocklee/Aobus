@@ -1,70 +1,35 @@
 # Music and audio terminology
 
-Use this reference to establish the English concept before choosing an idiomatic target-language term. It is not a table of mandatory literal translations: grammar, platform convention, and established music-player vocabulary in the target language still decide the final wording.
+Aobus-specific product concepts and non-obvious translation traps. Normative overrides live in [presentation text semantics](../../../../doc/system/presentation/text-catalog.md): [text ownership boundary](../../../../doc/system/presentation/text-catalog.md#text-ownership-boundary) (untranslated ids, backend labels, and external values), [locale-neutral formatting](../../../../doc/system/presentation/text-catalog.md#locale-neutral-formatting), and [Chinese metadata terminology](../../../../doc/system/presentation/text-catalog.md#chinese-metadata-terminology).
 
-Project-specific terminology decisions take precedence over the general guidance here. For Chinese metadata copy, follow the canonical terms and scope in the [text semantics](../../../../doc/system/presentation/text-catalog.md#chinese-metadata-terminology).
+## Library and lists
 
-## Library and organization
+| Catalog term, key, or concept | Aobus meaning and translation trap |
+|---|---|
+| `Library` | The indexed music collection and its database views—not a software code library or a single saved `List`. |
+| `List` vs `Playlist` | `List` is the general saved collection (`zh_Hans`: `列表`; `zh_Hant`: `列表`). `Playlist` wording (`zh_Hans`: `播放列表`; `zh_Hant`: `播放清單`) refers to [direct tag-backed membership editing](../../../../doc/system/library/mutation.md#tag-backed-membership-editing), not a persisted kind or a distinction based on manual ordering. Retain capitalized `List` only where English names the domain object; do not mimic awkward capitalization in locales without case distinction. |
+| `smart_list_*` key prefix | Internal key namespace for `List` authoring—`"Smart List"` never appears in English UI copy (`gtk_smart_list_new_title` is `"New List"`). Translate the English text (`List` / `Playlist`), never the key prefix. Membership supports both direct tag-backed editing (`smart_list_membership_direct`) and computed filter expressions (`smart_list_membership_computed`). |
+| No user playback queue | Aobus has no user-facing enqueue/dequeue track queue; prepared-next audio and internal command FIFOs are runtime internals. Never translate `Playlist`, `List`, or `{source, ...}` selectors as a playback queue. |
+| `Presentation` / `View` | Shipped English uses `"Presentation"` (`track_presentation_picker_label`) and `"Create Custom View..."` (`create_custom_track_presentation`) for the same grouping/sorting/column arrangement; keep distinct from its persisted preset id. |
+| `Tag` vs `Genre` | Both are live fields: `Tag` is user/library classification metadata (not an ID3 container or UI label); `Genre` is musical style metadata. |
 
-| Concept | Meaning in Aobus | Avoid confusing it with |
-|---|---|---|
-| Library | The user's indexed music collection and its database-backed views. | A software/code library or one playlist. |
-| List | A saved user-authored collection. Some messages distinguish a regular Playlist from a rule-driven Smart List. | The entire Library, the active playback source, or a generic visual list widget. |
-| Playlist | A saved List used for direct membership or order authoring. | The captured source of an ongoing playback conversation. |
-| Smart List | A saved List whose membership is produced by a filter expression. | A manually ordered Playlist. |
-| Playback source / succession | The captured live source and presentation order, advanced by cursor, repeat, and shuffle policy. | A saved List definition or an explicitly authored queue of pending tracks. |
-| Presentation / view | A named arrangement of grouping, sorting, and visible columns. | The underlying tracks or a persisted translation identity. |
-| Tag | User/library classification metadata attached to tracks. | An ID3 container generally, a filename token, or a UI label. |
+## Metadata and classical fields
 
-Aobus does not currently expose an enqueue/dequeue track queue. Prepared-next audio and the internal FIFO of playback commands are different concepts; do not describe either as a restorable user queue.
+| Catalog term or concept | Aobus meaning and translation trap |
+|---|---|
+| `Track` | Playable library item, or numeric disc position in `track_field_track_number` (`"Track"`)—not an audio channel/stream. |
+| `Album Artist` vs `Artist` | `Album Artist` groups albums/discographies and may differ from per-track `Artist`; use the locale's established music-player term rather than a literal word-by-word compound, and never merge the two to save width. |
+| `Disc` / `Total Discs` | Numeric multi-disc release positions, not storage media. |
+| `Work` / `Movement` | Classical parent composition and its subdivision (`Movement No.`, `Total Movements`)—never employment/verb or playback seeking/motion. |
 
-Retain the project's capitalized `List` terminology only where the English product vocabulary uses it as the Aobus domain object. Choose a natural equivalent rather than reproducing unusual English capitalization when the target language does not support that distinction.
+## Audio path and quality findings
 
-## Track and classical metadata
-
-| Concept | Meaning in Aobus | Avoid confusing it with |
-|---|---|---|
-| Track | One playable music item in the Library; in number fields, its position on a disc. | A low-level audio stream/channel. |
-| Track artist / Artist | The performer credited for the individual track. | Album Artist or Composer. |
-| Album Artist | The credit used to group an album/discography, which may differ from each track's artist. | A literal phrase assembled from separate “album” and “artist” translations when the locale has an established term. |
-| Album | A release/container grouping tracks and possibly multiple discs. | A saved Playlist or filesystem folder. |
-| Disc | A disc/volume within a multi-disc release; `Disc` and `Total Discs` are numeric metadata. | An arbitrary storage disk. |
-| Composer | The person who composed the musical work. | Performer, songwriter credit in general, or Conductor. |
-| Conductor | The person directing an orchestra or ensemble. | Composer or lead performer. |
-| Ensemble | A performing group in classical metadata. | The set of all track artists or an audio channel group. |
-| Soloist | A featured individual performer in classical metadata. | Every Track Artist. |
-| Work | The parent musical composition, especially in classical music. | Employment, a verb, or the recording itself. |
-| Movement | A subdivision of a Work. `Movement No.` and `Total Movements` are numeric metadata. | Playback movement, seeking, or Track Number. |
-| Genre | The track's musical style/category metadata. | A user Tag when the UI specifically addresses the Genre field. |
-
-## Audio and playback
-
-| Concept | Meaning in Aobus | Avoid confusing it with |
-|---|---|---|
-| Codec | The encoded audio format/codec reported for a track. | The container filename extension unless they are actually identical. |
-| Sample rate | Samples per second, displayed with `Hz` or `kHz`. | Bitrate or bit depth. |
-| Bit depth | Source or signal precision in bits per sample. | Bitrate or PCM container width, which can be larger than the signal precision. |
-| Bitrate | Encoded data rate, displayed with `kbps`. | Sample rate. |
-| Channel | One audio signal channel; Mono/Stereo are localized lexical descriptions. | A Track or an output device. |
-| Output device | The selected playback endpoint. | The audio backend/server. |
-| Audio backend | The platform audio system used to reach devices, such as PipeWire, ALSA, or WASAPI. | A particular speaker/headphone endpoint or an output profile. |
-| Shared mode | Playback mixed by the operating system with other applications. | Sharing a Library or Playlist. |
-| Exclusive mode | Direct/exclusive access to an output device. | Exclusive ownership of a track or account. |
-| Resampling | Conversion from one sample rate to another. | Re-encoding to another codec. |
-| Channel mapping | Reassignment or conversion of channel layouts/counts. | Track ordering. |
-| Software attenuation/amplification | Digital gain applied in the software path. | Hardware volume control. |
-| Hardware volume control | Gain/volume modification attributed to device hardware. | Any visible volume slider regardless of where gain is applied. |
-| Muted | Audio intentionally silenced. | Paused or stopped playback. |
-| Clipping | Signal peaks exceeding the representable range. | UI/content truncation or an incomplete file. |
-| Lossless | Encoding or processing that preserves the represented audio samples. | Bit-perfect output through the complete playback path. |
-| Bit-perfect | The output path preserves the relevant digital sample values and format without modifying stages. | Merely using a lossless source codec. |
-
-Follow each consumer's owning section in the [text semantics](../../../../doc/system/presentation/text-catalog.md) for locale-neutral notation; track-field formatting rules are not automatically global.
-
-## Wording checks
-
-- Use the target language's normal music-player term, not whichever source-language cognate looks closest.
-- Keep labels concise, but do not erase distinctions such as Album Artist versus Artist to save width.
-- Prefer verbs for actions and nouns for states/headings according to the target platform's convention.
-- Keep repeated concepts consistent across affected frontends even when sentence structure differs.
-- Preserve external names and metadata values exactly when they arrive as message arguments.
+| Catalog term or concept | Aobus meaning and translation trap |
+|---|---|
+| `Bit Depth` | Signal/source precision in bits per sample, which can be narrower than the PCM container width ([locale-neutral formatting](../../../../doc/system/presentation/text-catalog.md#locale-neutral-formatting)). |
+| `Channel` (`Mono` / `Stereo`) | Shared lexical labels obey different consumer contracts in [mapping and fallback contracts](../../../../doc/system/presentation/text-catalog.md#mapping-and-fallback-contracts) (track-field count branches vs. runtime audio-quality layout identity). |
+| `Output device` vs `Audio backend` | Selected endpoint vs. platform audio system (`PipeWire`, `ALSA`, `WASAPI`, `Core Audio`). Backend names themselves are untranslated identities; only `audio_backend_*_description` and `*_output_fallback` are translated. |
+| `Shared Mode` / `Exclusive Mode` | OS-mixed playback vs. direct hardware device access—not library/playlist sharing or account exclusivity. |
+| `Software volume attenuation` / `amplification` vs `Hardware volume control` | Digital gain in the software path vs. gain attributed to device hardware (distinct from `Device volume ... (source unverified)`). |
+| `Signal clipping detected` / `Clipping risk` | Signal peaks exceeding representable range—not UI text truncation. |
+| `Bit-transparent` vs `Bit-perfect PCM (observed software path)` | `Bit-transparent` (`audio_finding_lossless_*`) describes a lossless sample conversion stage (integer padding, float mapping, float round-trip). `Bit-perfect PCM (observed software path)` (`audio_quality_bit_perfect_playback`) describes unmodified PCM across the observed software boundary—always preserve the `"observed software path"` hedge rather than promising end-to-end hardware bit-perfection. |

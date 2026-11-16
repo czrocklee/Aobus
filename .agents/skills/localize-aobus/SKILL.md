@@ -1,55 +1,28 @@
 ---
 name: localize-aobus
-description: Add or review Aobus UI messages, translations, and locales. Excludes Unicode normalization and collation changes without displayed copy.
+description: Add, translate, or review Aobus UI copy, i18n catalogs (zh_Hans, zh_Hant, root.txt, MessageInventory.def), and locales across GTK, TUI, WinUI, and AppKit. Do not load for CLI text or Unicode/collation without copy changes.
 ---
 
 # Localize Aobus
 
-Review is read-only unless fixes are requested. For the affected messages, read
-`app/i18n/catalog/root.txt`, the target catalog, and call sites needed to resolve
-UI meaning.
+Review is read-only unless fixes are requested. Trace each affected message
+through [`MessageInventory.def`](../../../app/include/ao/i18n/MessageInventory.def),
+[`root.txt`](../../../app/i18n/catalog/root.txt), [`app/i18n/catalog/`](../../../app/i18n/catalog),
+and its C++ call sites or semantic formatter.
 
-Read the sections needed for the task:
-
-- `doc/development/localization.md`: authoring, translation, locale-addition,
-  and validation workflows.
-- `doc/system/presentation/text-catalog.md`: domain mapping, external values,
-  terminology, and locale-neutral formatting.
-- `doc/system/presentation/localization.md`: argument signatures, lifetimes,
-  fallback, frontend admission, generated resources, and native parity.
-- [Music and audio terminology](references/music-audio-terminology.md): translating
-  metadata, library/List, playback, routing, or quality-analysis vocabulary.
-
-For reviews:
-
-- Verify external reports against the English source, actual handlers, and the
-  governing document section; a formatter's rule may have a narrower scope.
-- Render complete sentences with reachable counts and scope arguments. ICU parity
-  does not prove grammar or preserve distinctions such as all versus partial results.
-- Equal text is only a deduplication candidate. Compare meaning and grammatical
-  role; trace render branches and narrow-layout command access before removing UI.
-
-Preserve ICU argument names and kinds, selectors, `#`, braces, and `other` branches;
-encode literal apostrophes as `''`. Edit authored catalogs, not generated `.res`,
-`.dat`, or `.resw` output. Preserve the intentional root-only
-`pilot_english_fallback` and Simplified Chinese `pilot_simplified_only_probe`.
-
-When adding a locale, update the build/package inputs, WinUI projection, parity
-cases, and governing fallback specification together. Build catalogs before
-launching the UI; native `bazel run` builds the selected frontend and its
-catalog inputs. Directly reusing an old executable does not validate changed copy.
-
-Inspect the requested locale in affected frontends at normal and constrained
-widths. Pseudo-localization (`qps-ploc`) detects structural omissions but does
-not validate wording. Do not hide layout defects by distorting translations.
-A newly maintained language needs fluent or domain-informed review.
-Check every selection and expanded popup at the GTK window-manager minimum;
-character counts do not establish rendered width. Confirm the displayed locale
-and inspect images and layout warnings; UI Automation alone does not prove correct rendering.
-Record DPI and client size before comparing desktop widths with layout breakpoints.
-
-Use the completion policy in `doc/development/test/validation-and-review.md`.
-Use its catalog-only route for text edits within maintained locales. New locales
-and changes to WinUI projection rules require native Windows parity evidence;
-ordinary translated text does not change those rules. Inspect Windows UI when it
-consumes the affected messages. Report uncertainties, fallback, and untested surfaces.
+- [Localization workflow](../../../doc/development/localization.md):
+  [meaning and sparse fallback probes](../../../doc/development/localization.md#1-establish-meaning-and-reachability)
+  (`pilot_english_fallback`, `pilot_simplified_only_probe`),
+  [WinUI `{0}` and zero-arg `x:Uid` projection](../../../doc/development/localization.md#5-add-only-required-winui-projection-metadata),
+  [adding a locale](../../../doc/development/localization.md#add-a-maintained-locale),
+  and [validation](../../../doc/development/localization.md#validation).
+- [Presentation text semantics](../../../doc/system/presentation/text-catalog.md):
+  [text ownership boundary](../../../doc/system/presentation/text-catalog.md#text-ownership-boundary),
+  domain mappings, locale-neutral formatting, and normative
+  [Chinese metadata terminology](../../../doc/system/presentation/text-catalog.md#chinese-metadata-terminology).
+- [Interactive localization contract](../../../doc/system/presentation/localization.md):
+  [message and argument contract](../../../doc/system/presentation/localization.md#message-and-argument-contract),
+  [ICU/MRT matrix](../../../doc/system/presentation/localization.md#icu-and-mrt-compatibility-matrix),
+  and [WinUI projection](../../../doc/system/presentation/localization.md#frontend-resolution-and-winui-projection).
+- [Music and audio terminology](references/music-audio-terminology.md):
+  Aobus-specific domain concepts and translation traps.

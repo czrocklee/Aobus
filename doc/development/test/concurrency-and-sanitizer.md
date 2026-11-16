@@ -21,6 +21,8 @@ For each shared object or asynchronous callback, identify:
 Then trace outward calls, suspension points, and teardown in that order. Apply
 the threading rules in `doc/development/coding-style.md`, especially callback invocation
 outside locks and the distinction between requesting stop and joining work.
+Ground every review finding in the specific ownership, executor-affinity,
+synchronization, or quiescence contract it violates.
 
 ## Test matrix
 
@@ -73,7 +75,9 @@ contract, but it takes no marker: `[concurrency]` is only for boundaries that
 cross threads or processes. Synchronous reentrancy and notification, an
 incidental worker, a coroutine that merely returns a value, and destruction
 with nothing outstanding take no marker either. Added repetition is not a
-marker; [the test-suite reference](test-suite.md) owns native repetition.
+marker; [the test-suite reference](test-suite.md) owns native repetition, and
+[reviewing existing tests](validation-and-review.md#reviewing-existing-tests)
+owns per-case tag audits.
 A concurrency filter must exclude hidden `[.manual]` probes with `~[.]`.
 
 ## Validation

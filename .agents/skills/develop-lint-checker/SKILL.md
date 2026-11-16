@@ -1,33 +1,28 @@
 ---
 name: develop-lint-checker
-description: Create, debug, or extend Aobus custom Clang-Tidy checkers and their integration fixtures.
+description: Create, debug, or extend custom Aobus Clang-Tidy checkers in tool/lint/ and their integration fixtures in test/lint/fixture/. Do not load for running ./ao tidy on product code or triaging ordinary lint findings.
 ---
 
 # Develop an Aobus lint checker
 
-Checker review or diagnosis is read-only unless implementation or fixes are
-requested. A checker implementation request authorizes the required lint runs.
+Checker review or diagnosis is read-only unless code changes are requested; an
+implementation request authorizes the required lint runs.
 
-`tool/lint/check/` owns checkers and AST helpers. Follow the matching check's
-namespace and register new checks in `tool/lint/AobusLintModule.cpp` and the
-checker build in `tool/lint/build.bzl`.
-
-Use `doc/development/test/test-suite.md` for fixture markers and runner behavior.
-Fixtures live under `test/lint/fixture/<check-alias>/`.
-`bazel test //test/lint:lint_test --nocache_test_results` checks fresh result
-assertions for the fixture producer. Clang parses original fixtures with
-marker assertions and compiler-error detection; that producer may be cached.
-There is no separate syntax-only compiler stage.
-Extend the owning fixture for new behavior. Use an optional `POSITIVE | text`
-assertion when diagnostic advice must preserve logical polarity or API identity;
-ordinary wording-only edits can reuse markers and inspect the emitted text.
-
-For symbol identity, macro safety, and uncertain AST shapes, consult
-`doc/development/lint/checker-development.md`; naming-proof details are in
-`doc/development/lint/naming-checks.md`. Use the real
-Bazel compile actions and toolchain. `./ao tidy --check <alias> <source>`
-allows focused diagnostic inspection against the selected source's real compile
-action; it does not run the fixture's marker assertions or compiler-error
-canaries.
-
-Completion follows `doc/development/test/validation-and-review.md`.
+- Sources and shared AST helpers live in [`tool/lint/check/`](../../../tool/lint/check);
+  register new checks in [`AobusLintModule.cpp`](../../../tool/lint/AobusLintModule.cpp)
+  and the `lint_checker` `srcs` list in [`tool/lint/BUILD.bazel`](../../../tool/lint/BUILD.bazel)
+  (not `tool/lint/build.bzl`).
+- Route AST matcher traps, lookup proofs, and marker rules through
+  [checker development](../../../doc/development/lint/checker-development.md)
+  ([fixture contract](../../../doc/development/lint/checker-development.md#fixture-contract)),
+  [naming checks](../../../doc/development/lint/naming-checks.md), and
+  [test suites](../../../doc/development/test/test-suite.md#tooling-and-lint-fixtures).
+- Silent workflow traps ([fixture contract](../../../doc/development/lint/checker-development.md#fixture-contract),
+  [Bazel-backed reports](../../../doc/development/linting.md#bazel-backed-reports)):
+  registered `aobus-*` checks and `<check-alias>/` directories with non-blank
+  supported files under [`test/lint/fixture/`](../../../test/lint/fixture) must
+  match 1:1; validate fixtures with
+  `bazel test //test/lint:lint_test --nocache_test_results` (excluded from
+  `//:tests` and batch `ao tidy`), and keep
+  `./ao tidy --check <alias> <owned-source>` to compile-owned TUs where
+  `<alias>` is not `RELAXED`-disabled.
