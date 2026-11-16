@@ -219,10 +219,6 @@ A successful, nonempty Markdown-only change in the recognized root-document,
 `doc/`, `.agents/skills/`, `tool/`, `app/`, or `asset/` paths skips native jobs.
 The documentation gate includes naming vocabulary and referenced lint-check
 contracts, so prose changes cannot bypass their semantic validation.
-One Markdown input is excluded from the docs-only route:
-`doc/reference/shell/component-vocabulary.md` always selects native validation
-because the native `LayoutSchema` test asserts its generated shared-component
-region; sibling reference prose keeps the docs-only route.
 The ignored local `doc/plan/` tree remains outside documentation discovery;
 its path classification does not make it a supported tracked-document location.
 The documentation job prepares the Python version from

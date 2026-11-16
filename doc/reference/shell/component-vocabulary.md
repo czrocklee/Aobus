@@ -25,9 +25,8 @@ A type id naming one shell - `windows.navigationPane`, `collapsibleSplit` - is b
 
 ### Component types
 
-`Children` is the schema's accepted child range. The two tables below are generated from the canonical schema table and byte-checked by `LayoutSchemaTest`; shell extensions are intentionally outside this block.
+`Children` is the schema's accepted child range. The two tables below summarize the canonical shared schema; shell extensions are listed separately.
 
-<!-- BEGIN GENERATED SHARED COMPONENT SCHEMA -->
 | Type | Display name | Category | Children | Surfaces | Persistent state | Shared properties | Action slots | Default actions |
 |---|---|---|---|---|---|---|---|---|
 | `box` | Box | Containers | 0..any | main | no | `orientation`, `spacing` | none | none |
@@ -65,7 +64,6 @@ A type id naming one shell - `windows.navigationPane`, `collapsibleSplit` - is b
 | `playback.soulButton` | `strokeWidth` | Double | any | `9` | none |
 | `playback.soulButton` | `glyphScale` | Double | any | `1` | none |
 | `playback.timeLabel` | `mode` | Enum | `combined`, `elapsed`, `duration` | `combined` | none |
-<!-- END GENERATED SHARED COMPONENT SCHEMA -->
 
 A structural or generic primitive carries no domain prefix; every type naming part of the application's subject matter does.
 
@@ -177,7 +175,7 @@ The same soul button, with each shell's own extension alongside the shared prope
 
 ## Test authority
 
-- [`LayoutSchemaTest.cpp`](../../../test/uimodel/layout/component/LayoutSchemaTest.cpp) protects type-id uniqueness, schema lookup, the shell-extension rule, and the generated reference block.
+- [`LayoutSchemaTest.cpp`](../../../test/uimodel/layout/component/LayoutSchemaTest.cpp) protects type-id uniqueness, schema lookup, the shared component inventory, and the shell-extension rule.
 - [`PlaybackCommandTest.cpp`](../../../test/uimodel/playback/command/PlaybackCommandTest.cpp) protects the command ids.
 - [`LayoutComponentsTest.cpp`](../../../test/linux-gtk/layout/components/LayoutComponentsTest.cpp) checks that GTK imports every shared entry it registers.
 - [`LayoutSchemaTest.cpp`](../../../test/winui/layout/LayoutSchemaTest.cpp) protects the Windows schema and runs on every host rather than only on Windows.

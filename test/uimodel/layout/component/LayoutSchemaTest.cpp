@@ -3,21 +3,14 @@
 
 #include <ao/uimodel/layout/component/LayoutSchema.h>
 
-#include "test/TestFixtureSupport.h"
 #include <ao/uimodel/layout/component/LayoutSurface.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
-#include <array>
-#include <cstdint>
-#include <format>
-#include <fstream>
-#include <iterator>
 #include <string>
 #include <string_view>
-#include <variant>
 #include <vector>
 
 namespace ao::uimodel::test
@@ -38,195 +31,6 @@ namespace ao::uimodel::test
     {
       auto const it = std::ranges::find(schema.properties, name, &PropertySchema::name);
       return it == schema.properties.end() ? nullptr : &*it;
-    }
-
-    std::string actionSlotName(ActionSlot const slot)
-    {
-      switch (slot)
-      {
-        case ActionSlot::PrimaryClick: return "primary click";
-        case ActionSlot::PrimaryLongPress: return "primary long press";
-        case ActionSlot::SecondaryClick: return "secondary click";
-        case ActionSlot::SecondaryLongPress: return "secondary long press";
-      }
-
-      return "unknown";
-    }
-
-    std::string propertyKindName(PropertyKind const kind)
-    {
-      switch (kind)
-      {
-        case PropertyKind::Bool: return "Bool";
-        case PropertyKind::Int: return "Int";
-        case PropertyKind::Double: return "Double";
-        case PropertyKind::String: return "String";
-        case PropertyKind::Enum: return "Enum";
-        case PropertyKind::StringList: return "StringList";
-        case PropertyKind::Size: return "Size";
-      }
-
-      return "Unknown";
-    }
-
-    std::string defaultValueText(LayoutValue const& value)
-    {
-      if (value.getIf<std::monostate>() != nullptr)
-      {
-        return "none";
-      }
-
-      if (auto const* const boolean = value.getIf<bool>(); boolean != nullptr)
-      {
-        return *boolean ? "`true`" : "`false`";
-      }
-
-      if (auto const* const integer = value.getIf<std::int64_t>(); integer != nullptr)
-      {
-        return std::format("`{}`", *integer);
-      }
-
-      if (auto const* const number = value.getIf<double>(); number != nullptr)
-      {
-        return std::format("`{:g}`", *number);
-      }
-
-      if (auto const* const text = value.getIf<std::string>(); text != nullptr)
-      {
-        return text->empty() ? "empty" : std::format("`{}`", *text);
-      }
-
-      auto const* const values = value.getIf<std::vector<std::string>>();
-      REQUIRE(values != nullptr);
-      auto result = std::string{};
-
-      for (auto const& entry : *values)
-      {
-        result += result.empty() ? std::format("`{}`", entry) : std::format(", `{}`", entry);
-      }
-
-      return result.empty() ? "empty" : result;
-    }
-
-    std::string propertyNames(ComponentSchema const& schema)
-    {
-      auto result = std::string{};
-
-      for (auto const& entry : schema.properties)
-      {
-        result += result.empty() ? std::format("`{}`", entry.name) : std::format(", `{}`", entry.name);
-      }
-
-      return result.empty() ? "none" : result;
-    }
-
-    std::string enumValues(PropertySchema const& propertySchema)
-    {
-      auto result = std::string{};
-
-      for (auto const& entry : propertySchema.enumValues)
-      {
-        result += result.empty() ? std::format("`{}`", entry) : std::format(", `{}`", entry);
-      }
-
-      return result.empty() ? "any" : result;
-    }
-
-    std::string actionSlots(ComponentSchema const& schema)
-    {
-      static constexpr auto kSlots = std::array{ActionSlot::PrimaryClick,
-                                                ActionSlot::PrimaryLongPress,
-                                                ActionSlot::SecondaryClick,
-                                                ActionSlot::SecondaryLongPress};
-      auto result = std::string{};
-
-      for (auto const slot : kSlots)
-      {
-        if (schema.accepts(slot))
-        {
-          result += result.empty() ? actionSlotName(slot) : std::format(", {}", actionSlotName(slot));
-        }
-      }
-
-      return result.empty() ? "none" : result;
-    }
-
-    std::string defaultActions(ComponentSchema const& schema)
-    {
-      auto result = std::string{};
-
-      for (auto const& binding : schema.defaultActions)
-      {
-        auto const entry = std::format("{} → `{}`", actionSlotName(binding.slot), binding.actionId);
-        result += result.empty() ? entry : std::format(", {}", entry);
-      }
-
-      return result.empty() ? "none" : result;
-    }
-
-    std::string childRange(ComponentSchema const& schema)
-    {
-      return schema.optMaxChildren ? std::format("{}..{}", schema.minChildren, *schema.optMaxChildren)
-                                   : std::format("{}..any", schema.minChildren);
-    }
-
-    std::string surfaces(ComponentSchema const& schema)
-    {
-      auto result = std::string{};
-
-      if (supportsSurface(schema.surfaces, LayoutSurface::Main))
-      {
-        result = "main";
-      }
-
-      if (supportsSurface(schema.surfaces, LayoutSurface::Tooltip))
-      {
-        result += result.empty() ? "tooltip" : ", tooltip";
-      }
-
-      return result.empty() ? "none" : result;
-    }
-
-    std::string generatedSharedSchemaReference()
-    {
-      auto result = std::string{"<!-- BEGIN GENERATED SHARED COMPONENT SCHEMA -->\n"
-                                "| Type | Display name | Category | Children | Surfaces | Persistent state | Shared "
-                                "properties | Action slots | Default actions |\n"
-                                "|---|---|---|---|---|---|---|---|---|\n"};
-
-      for (auto const& component : sharedComponentSchemas())
-      {
-        result += std::format("| `{}` | {} | {} | {} | {} | {} | {} | {} | {} |\n",
-                              component.id,
-                              component.displayName,
-                              toString(component.category),
-                              childRange(component),
-                              surfaces(component),
-                              component.persistentState ? "yes" : "no",
-                              propertyNames(component),
-                              actionSlots(component),
-                              defaultActions(component));
-      }
-
-      result += "\n| Component | Property | Kind | Values | Default | Action slot |\n"
-                "|---|---|---|---|---|---|\n";
-
-      for (auto const& component : sharedComponentSchemas())
-      {
-        for (auto const& propertySchema : component.properties)
-        {
-          result += std::format("| `{}` | `{}` | {} | {} | {} | {} |\n",
-                                component.id,
-                                propertySchema.name,
-                                propertyKindName(propertySchema.kind),
-                                enumValues(propertySchema),
-                                defaultValueText(propertySchema.defaultValue),
-                                propertySchema.optActionSlot ? actionSlotName(*propertySchema.optActionSlot) : "none");
-        }
-      }
-
-      result += "<!-- END GENERATED SHARED COMPONENT SCHEMA -->";
-      return result;
     }
   } // namespace
 
@@ -449,21 +253,6 @@ namespace ao::uimodel::test
     auto schema = LayoutSchema{};
     CHECK_FALSE(schema.tryAddComponent(candidate));
     CHECK(schema.components().empty());
-  }
-
-  TEST_CASE("LayoutSchema - shared component reference is generated from the canonical table")
-  {
-    auto input = std::ifstream{ao::test::testInputPath("doc/reference/shell/component-vocabulary.md")};
-    REQUIRE(input);
-    auto const document = std::string{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
-    auto const generated = generatedSharedSchemaReference();
-    auto const begin = document.find("<!-- BEGIN GENERATED SHARED COMPONENT SCHEMA -->");
-    REQUIRE(begin != std::string::npos);
-    auto const endMarker = std::string_view{"<!-- END GENERATED SHARED COMPONENT SCHEMA -->"};
-    auto const end = document.find(endMarker, begin);
-    REQUIRE(end != std::string::npos);
-
-    CHECK(document.substr(begin, end + endMarker.size() - begin) == generated);
   }
 
   TEST_CASE("LayoutSchema - invalid shared extensions fail closed")

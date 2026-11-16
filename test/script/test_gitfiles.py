@@ -887,10 +887,7 @@ class GitWorkflowFixtureTest(unittest.TestCase):
             ("asset/brand/nested/Soul.md", "true"),
             ("asset/brand/Soul.svg", "false"),
             ("doc/plan/nested/draft.md", "true"),
-            # The shared component vocabulary carries a generated region the
-            # native LayoutSchema test asserts, so it selects native validation
-            # while sibling reference prose keeps the docs-only route.
-            ("doc/reference/shell/component-vocabulary.md", "false"),
+            ("doc/reference/shell/component-vocabulary.md", "true"),
             ("doc/reference/shell/glossary.md", "true"),
         ):
             with self.subTest(name=name):

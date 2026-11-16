@@ -481,7 +481,6 @@ cc_test(
     srcs = glob(["uimodel/**/*Test.cpp"]),
     copts = TEST_WARNING_COPTS,
     data = [
-        "//:doc/reference/shell/component-vocabulary.md",
         "//test/data/audio:audio_fixtures",
     ],
     # date::current_zone() uses the OS zone on macOS; the independent C-library
