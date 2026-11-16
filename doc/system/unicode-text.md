@@ -1,6 +1,7 @@
 ---
 id: text.unicode-operations
 ---
+
 # Unicode text operations
 
 ## Scope
@@ -109,13 +110,13 @@ than an editing position. Every returned offset is a boundary suitable for
 
 All operations are synchronous and have no cancellation point.
 
-| Condition | Result |
-|---|---|
-| Malformed UTF-8 | `InvalidInput`, with the first invalid byte offset where available. |
-| Boundary offset past the end of the input | `InvalidInput`, naming the offset and the validated length. |
-| Input or generated intermediate exceeds ICU's signed 32-bit operation limit | `ValueTooLarge`. |
-| ICU data or service initialization fails | `InitFailed`. |
-| ICU reports allocation failure | `ResourceExhausted`. |
+| Condition                                                                   | Result                                                              |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Malformed UTF-8                                                             | `InvalidInput`, with the first invalid byte offset where available. |
+| Boundary offset past the end of the input                                   | `InvalidInput`, naming the offset and the validated length.         |
+| Input or generated intermediate exceeds ICU's signed 32-bit operation limit | `ValueTooLarge`.                                                    |
+| ICU data or service initialization fails                                    | `InitFailed`.                                                       |
+| ICU reports allocation failure                                              | `ResourceExhausted`.                                                |
 
 A failed operation returns no partial normalized text, key, or boundary.
 Callers may preserve their previous state or apply an explicitly documented

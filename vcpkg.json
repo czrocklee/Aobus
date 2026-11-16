@@ -1,10 +1,7 @@
 {
   "name": "aobus",
   "version-string": "0.1.0",
-  "default-features": [
-    "tests",
-    "frontends"
-  ],
+  "default-features": ["tests", "frontends"],
   "dependencies": [
     "alac",
     "boost-algorithm",
@@ -32,9 +29,7 @@
     {
       "name": "icu",
       "default-features": false,
-      "features": [
-        "tools"
-      ]
+      "features": ["tools"]
     },
     {
       "name": "gperf",
@@ -54,9 +49,7 @@
     {
       "name": "spdlog",
       "default-features": false,
-      "features": [
-        "tz-offset"
-      ],
+      "features": ["tz-offset"],
       "$reason": "Disabling the default fmt feature makes the port build spdlog with SPDLOG_USE_STD_FORMAT, matching the Linux build."
     },
     "xxhash"
@@ -82,18 +75,11 @@
   "features": {
     "frontends": {
       "description": "Dependencies needed by the CLI and terminal frontends.",
-      "dependencies": [
-        "cli11",
-        "ftxui",
-        "stb"
-      ]
+      "dependencies": ["cli11", "ftxui", "stb"]
     },
     "tests": {
       "description": "Dependencies needed to build Aobus unit tests.",
-      "dependencies": [
-        "catch2",
-        "fakeit"
-      ]
+      "dependencies": ["catch2", "fakeit"]
     }
   }
 }

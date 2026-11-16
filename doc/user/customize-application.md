@@ -1,6 +1,7 @@
 ---
 id: user.customize-application
 ---
+
 # Customize the GTK application
 
 ## Outcome

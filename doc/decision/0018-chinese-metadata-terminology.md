@@ -2,6 +2,7 @@
 id: decision.0018.chinese-metadata-terminology
 status: accepted
 ---
+
 # Decision 0018: choose consistent Chinese metadata terminology
 
 ## Context

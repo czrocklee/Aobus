@@ -1,6 +1,7 @@
 ---
 id: architecture.application-shell
 ---
+
 # Application shell architecture
 
 ## Find the contract for your change

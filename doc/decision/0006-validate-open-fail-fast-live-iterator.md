@@ -2,6 +2,7 @@
 id: decision.0006.validate-open-fail-fast-live-iterator
 status: superseded
 ---
+
 # Decision 0006: validate before exposure and fail fast on live iterator faults
 
 ## Context

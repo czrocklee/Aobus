@@ -1,6 +1,7 @@
 ---
 id: development.coding-style
 ---
+
 # Aobus C++ coding style
 
 This guide defines the C++ rules contributors apply while writing Aobus code.
@@ -207,15 +208,15 @@ Pass mandatory services by reference rather than smart pointer to express non-nu
 
 Choose an outcome channel by contract:
 
-| Situation | Channel |
-|---|---|
-| Recoverable failure the caller handles | `ao::Result<T>` |
-| Legitimate absence | `std::optional<T>` |
-| Caller violation known before a call | `AO_EXPECTS` |
-| Normal-return guarantee cannot be met | `AO_ENSURES` |
+| Situation                                                         | Channel                                                 |
+| ----------------------------------------------------------------- | ------------------------------------------------------- |
+| Recoverable failure the caller handles                            | `ao::Result<T>`                                         |
+| Legitimate absence                                                | `std::optional<T>`                                      |
+| Caller violation known before a call                              | `AO_EXPECTS`                                            |
+| Normal-return guarantee cannot be met                             | `AO_ENSURES`                                            |
 | Private lifecycle, state-machine, construction, or validated fact | `AO_INVARIANT`, or `AO_RT_INVARIANT` on a realtime path |
-| Mandatory infrastructure can no longer report recovery truthfully | `AO_FATAL` |
-| Whitelisted transport or foreign mechanism | Exception contained by its named boundary |
+| Mandatory infrastructure can no longer report recovery truthfully | `AO_FATAL`                                              |
+| Whitelisted transport or foreign mechanism                        | Exception contained by its named boundary               |
 
 `ao::Error` contains a `Code` for programmatic dispatch and a contextual `message`.
 Use `ao::makeError(code, message)` for concise error construction.

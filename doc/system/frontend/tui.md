@@ -1,6 +1,7 @@
 ---
 id: tui.interaction
 ---
+
 # TUI interaction specification
 
 ## Scope
@@ -263,7 +264,7 @@ Artist navigation treats the complete metadata value as one quoted query constan
 Artist and album navigation checkpoint the current live filter and presentation before leaving, so workspace Back/Forward restores the previous view without rewriting saved List predicates.
 An empty artist or album field supplies no link; a missing title uses the clickable track-id fallback. An invalid playback track supplies no links. A click captured before the playback subject or its metadata changes is consumed without navigating until the new text has been rendered.
 Each hit region covers only its painted text, excluding separators and padding. Narrow docks shorten whole display-cell clusters and omit trailing metadata fields when space is insufficient; hidden fields have no hit region.
-The title is accented and bold, the artist uses normal text, and the album is dimmed, with ` · ` before the artist and ` / ` before the album when both are present.
+The title is accented and bold, the artist uses normal text, and the album is dimmed, with `·` before the artist and `/` before the album when both are present.
 Hover applies the shared button highlight only to the pointed field without changing its geometry; separators, hidden fields, and metadata behind active input or overlays are not hover targets.
 Within the admitted fields, shortening preserves the title before the artist and the album while retaining small readable linked fragments.
 The `artist` and `album` commands expose the same destinations when their text is hidden. Text input, editors, and floating-menu dismissal retain their existing pointer ownership.

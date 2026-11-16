@@ -1,6 +1,7 @@
 ---
 id: user.get-started
 ---
+
 # Get started with the Linux GTK application
 
 ## Outcome

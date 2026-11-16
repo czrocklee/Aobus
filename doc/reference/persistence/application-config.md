@@ -1,6 +1,7 @@
 ---
 id: persistence.application-config
 ---
+
 # Application managed-state surface
 
 ## Scope and version
@@ -35,19 +36,19 @@ The standalone shell component-state store uses the shared YAML and atomic-file 
 Logical names in this reference identify schemas independently of their platform paths.
 The location reference owns platform paths and command-line overrides.
 
-| Logical document | Composition | Container | Registered top-level surface |
-|---|---|---|---|
-| Global GTK config | One application-global GTK file. | `AppConfigStore` over one `ConfigStore`. | `window`, `runtime`, `session`, `shortcuts`, plus `playback-session` for the active library runtime. |
-| Global TUI config | One application-global TUI file. | One `ConfigStore` owned by the TUI composition root. | `runtime`, `shortcuts`, `preferences`. |
-| Runtime workspace config | One file associated with the selected library or TUI override. | The `ConfigStore` owned by `AppRuntime`. | `workspace`; also `playback-session` when no separate playback store is injected. |
-| AppKit library state | One per-library AppKit file. | The `ConfigStore` owned by `AppRuntime`, borrowed by `LibrarySession`. | `workspace`, `playback-session`, and `trackView.presentations`. |
-| GTK library presentation | One per-library GTK file. | `GtkLayoutStateStore` over one `ConfigStore`. | `trackView.columnLayouts` and `trackView.presentations`. |
-| TUI library presentation | One per-library TUI file. | `LayoutStateStore` over one `ConfigStore`. | `trackView.columnLayouts`, `trackView.presentations`, `navigation`, and `panels`. |
-| Windows desktop settings | One application-global WinUI file. | `LibrarySession` over one `ConfigStore`. | `desktop` and `shortcuts`. |
-| Windows playback session | One application-global WinUI file, kept separate from desktop settings. | The `ConfigStore` borrowed by `AppRuntime` from `LibrarySession`. | `playback-session`. |
-| WinUI library presentation | One per-library WinUI file. | `LibrarySession` over one `ConfigStore`. | `trackView.columnLayouts` and `trackView.presentations`. |
-| Shell layout preset | One user-authored file per preset id. | `ShellLayoutStore` creates a `ConfigStore` per operation. | `layout`. |
-| Shell component state | One runtime-state file per preset id. | `ShellLayoutComponentStateStore` uses a standalone YAML document. | Document root; it has no `ConfigStore` group. |
+| Logical document           | Composition                                                             | Container                                                              | Registered top-level surface                                                                         |
+| -------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Global GTK config          | One application-global GTK file.                                        | `AppConfigStore` over one `ConfigStore`.                               | `window`, `runtime`, `session`, `shortcuts`, plus `playback-session` for the active library runtime. |
+| Global TUI config          | One application-global TUI file.                                        | One `ConfigStore` owned by the TUI composition root.                   | `runtime`, `shortcuts`, `preferences`.                                                               |
+| Runtime workspace config   | One file associated with the selected library or TUI override.          | The `ConfigStore` owned by `AppRuntime`.                               | `workspace`; also `playback-session` when no separate playback store is injected.                    |
+| AppKit library state       | One per-library AppKit file.                                            | The `ConfigStore` owned by `AppRuntime`, borrowed by `LibrarySession`. | `workspace`, `playback-session`, and `trackView.presentations`.                                      |
+| GTK library presentation   | One per-library GTK file.                                               | `GtkLayoutStateStore` over one `ConfigStore`.                          | `trackView.columnLayouts` and `trackView.presentations`.                                             |
+| TUI library presentation   | One per-library TUI file.                                               | `LayoutStateStore` over one `ConfigStore`.                             | `trackView.columnLayouts`, `trackView.presentations`, `navigation`, and `panels`.                    |
+| Windows desktop settings   | One application-global WinUI file.                                      | `LibrarySession` over one `ConfigStore`.                               | `desktop` and `shortcuts`.                                                                           |
+| Windows playback session   | One application-global WinUI file, kept separate from desktop settings. | The `ConfigStore` borrowed by `AppRuntime` from `LibrarySession`.      | `playback-session`.                                                                                  |
+| WinUI library presentation | One per-library WinUI file.                                             | `LibrarySession` over one `ConfigStore`.                               | `trackView.columnLayouts` and `trackView.presentations`.                                             |
+| Shell layout preset        | One user-authored file per preset id.                                   | `ShellLayoutStore` creates a `ConfigStore` per operation.              | `layout`.                                                                                            |
+| Shell component state      | One runtime-state file per preset id.                                   | `ShellLayoutComponentStateStore` uses a standalone YAML document.      | Document root; it has no `ConfigStore` group.                                                        |
 
 TUI validates that its runtime workspace override, per-library presentation path, and global application-preference path do not alias before it constructs their stores.
 
@@ -56,30 +57,30 @@ It does not denote nested mappings.
 
 ### Group registry
 
-| Logical document | Literal group | Payload type | Deserialize/serialize path | Current version authority | Semantic writer |
-|---|---|---|---|---|---|
-| Global GTK config | `window` | `ao::gtk::WindowState` | Frontend-local `WindowStateYamlSchema`. | None. | `MainWindow::saveSessionState`. |
-| Global GTK config | `runtime` | `ao::rt::AppPrefsState` | Runtime `AppState`, shared with every frontend that keeps this group. | Required `version`; current value `1`. | `AppConfigStore::saveAppPrefs`. |
-| Global GTK config | `session` | `ao::rt::AppSessionState` | Runtime `AppState`, shared with every frontend that keeps this group. | None. | `AppConfigStore::saveAppSession`. |
-| Global GTK config | `shortcuts` | `ao::uimodel::KeymapOverrides` | UIModel `KeymapOverridesYamlSchema`. | Required `version`; current value `1`. | `ao::uimodel::saveKeymap` through `AppConfigStore`. |
-| Global TUI config | `runtime` | `ao::rt::AppPrefsState` | Runtime `AppState`. | Required `version`; current value `1`. | `ao::rt::saveAppPrefs`. |
-| Global TUI config | `shortcuts` | `ao::uimodel::KeymapOverrides` | UIModel `KeymapOverridesYamlSchema`. | Required `version`; current value `1`. | TUI Settings through `ao::uimodel::saveKeymap` and the App-owned `ConfigStore`. |
-| Global TUI config | `preferences` | `ao::tui::Preferences` | TUI-local `PreferencesSchema`. | Required `version`; current value `1`. | TUI Settings through the App-owned `ConfigStore`. |
-| Windows desktop settings | `shortcuts` | `ao::uimodel::KeymapOverrides` | UIModel `KeymapOverridesYamlSchema`. | Required `version`; current value `1`. | None; WinUI loads hand-authored overrides. |
-| Frontend-selected playback-session document | `playback-session` | `ao::rt::PlaybackSessionState` | Runtime `PlaybackSessionYamlSchema`. | Required `schemaVersion`; current value `1`. | `PlaybackSessionPersistence`. |
-| Runtime workspace config | `workspace` | [`ao::rt::WorkspaceSessionState`](../workspace/session-state.md) | Runtime `WorkspaceSessionYamlSchema`. | Required `presentationVersion`; current value `1`. | `WorkspaceService`. |
-| AppKit library state | `trackView.presentations` | `ao::uimodel::ListPresentationPreferenceDocument` converted to `ListPresentations::Snapshot`. | UIModel `ListPresentationPreferenceYamlSchema`. | Required `version`; current value `1`. | AppKit `LibrarySession`. |
-| GTK library presentation | `trackView.columnLayouts` | `ao::uimodel::TrackColumnLayoutDocument` converted to `TrackColumnLayouts::Snapshot`. | UIModel `TrackColumnLayoutYamlSchema`. | Required `version`; current value `1`. | `GtkLayoutStateStore`. |
-| GTK library presentation | `trackView.presentations` | `ao::uimodel::ListPresentationPreferenceDocument` converted to `ListPresentations::Snapshot`. | UIModel `ListPresentationPreferenceYamlSchema`. | Required `version`; current value `1`. | `GtkLayoutStateStore`. |
-| TUI library presentation | `trackView.columnLayouts` | `ao::uimodel::TrackColumnLayoutDocument` converted to `TrackColumnLayouts::Snapshot`; positive widths are terminal cells. | UIModel `TrackColumnLayoutYamlSchema`. | Required `version`; current value `1`. | `LayoutStateStore`. |
-| TUI library presentation | `trackView.presentations` | `ao::uimodel::ListPresentationPreferenceDocument` converted to `ListPresentations::Snapshot`. | UIModel `ListPresentationPreferenceYamlSchema`. | Required `version`; current value `1`. | `LayoutStateStore`. |
-| TUI library presentation | `navigation` | Boolean `enabled`. | TUI-local `NavigationSchema` in `LayoutStateStore.cpp`. | Required `version`; current value `1`. | `LayoutStateStore`. |
-| TUI library presentation | `panels` | `ao::tui::PanelWidths`. | TUI-local `PanelWidthsSchema` in `LayoutStateStore.cpp`. | Required `version`; current value `1`. | `LayoutStateStore`. |
-| Windows desktop settings | `desktop` | `ao::winui::DesktopSettings`. | WinUI frontend `DesktopSettingsYamlSchema`. | Required `version`; current value `1`. | WinUI `LibrarySession`. |
-| WinUI library presentation | `trackView.columnLayouts` | `ao::uimodel::TrackColumnLayoutDocument` converted to `TrackColumnLayouts::Snapshot`. | UIModel `TrackColumnLayoutYamlSchema`. | Required `version`; current value `1`. | WinUI `LibrarySession`. |
-| WinUI library presentation | `trackView.presentations` | `ao::uimodel::ListPresentationPreferenceDocument` converted to `ListPresentations::Snapshot`. | UIModel `ListPresentationPreferenceYamlSchema`. | Required `version`; current value `1`. | WinUI `LibrarySession`. |
-| Shell layout preset | `layout` | `ao::uimodel::LayoutDocument` | UIModel `LayoutDocumentYamlSchema`. | Required `version`; accepted value `1`. | Shell-layout workflow through `ShellLayoutStore`. |
-| Shell component state | No group; standalone root. | `ao::uimodel::LayoutComponentStateDocument` | UIModel `LayoutComponentStateYamlSchema`. | Root `version = 1`; each entry has `stateVersion = 1`. | Layout runtime and promotion workflow through `ShellLayoutComponentStateStore`. |
+| Logical document                            | Literal group              | Payload type                                                                                                              | Deserialize/serialize path                                            | Current version authority                              | Semantic writer                                                                 |
+| ------------------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| Global GTK config                           | `window`                   | `ao::gtk::WindowState`                                                                                                    | Frontend-local `WindowStateYamlSchema`.                               | None.                                                  | `MainWindow::saveSessionState`.                                                 |
+| Global GTK config                           | `runtime`                  | `ao::rt::AppPrefsState`                                                                                                   | Runtime `AppState`, shared with every frontend that keeps this group. | Required `version`; current value `1`.                 | `AppConfigStore::saveAppPrefs`.                                                 |
+| Global GTK config                           | `session`                  | `ao::rt::AppSessionState`                                                                                                 | Runtime `AppState`, shared with every frontend that keeps this group. | None.                                                  | `AppConfigStore::saveAppSession`.                                               |
+| Global GTK config                           | `shortcuts`                | `ao::uimodel::KeymapOverrides`                                                                                            | UIModel `KeymapOverridesYamlSchema`.                                  | Required `version`; current value `1`.                 | `ao::uimodel::saveKeymap` through `AppConfigStore`.                             |
+| Global TUI config                           | `runtime`                  | `ao::rt::AppPrefsState`                                                                                                   | Runtime `AppState`.                                                   | Required `version`; current value `1`.                 | `ao::rt::saveAppPrefs`.                                                         |
+| Global TUI config                           | `shortcuts`                | `ao::uimodel::KeymapOverrides`                                                                                            | UIModel `KeymapOverridesYamlSchema`.                                  | Required `version`; current value `1`.                 | TUI Settings through `ao::uimodel::saveKeymap` and the App-owned `ConfigStore`. |
+| Global TUI config                           | `preferences`              | `ao::tui::Preferences`                                                                                                    | TUI-local `PreferencesSchema`.                                        | Required `version`; current value `1`.                 | TUI Settings through the App-owned `ConfigStore`.                               |
+| Windows desktop settings                    | `shortcuts`                | `ao::uimodel::KeymapOverrides`                                                                                            | UIModel `KeymapOverridesYamlSchema`.                                  | Required `version`; current value `1`.                 | None; WinUI loads hand-authored overrides.                                      |
+| Frontend-selected playback-session document | `playback-session`         | `ao::rt::PlaybackSessionState`                                                                                            | Runtime `PlaybackSessionYamlSchema`.                                  | Required `schemaVersion`; current value `1`.           | `PlaybackSessionPersistence`.                                                   |
+| Runtime workspace config                    | `workspace`                | [`ao::rt::WorkspaceSessionState`](../workspace/session-state.md)                                                          | Runtime `WorkspaceSessionYamlSchema`.                                 | Required `presentationVersion`; current value `1`.     | `WorkspaceService`.                                                             |
+| AppKit library state                        | `trackView.presentations`  | `ao::uimodel::ListPresentationPreferenceDocument` converted to `ListPresentations::Snapshot`.                             | UIModel `ListPresentationPreferenceYamlSchema`.                       | Required `version`; current value `1`.                 | AppKit `LibrarySession`.                                                        |
+| GTK library presentation                    | `trackView.columnLayouts`  | `ao::uimodel::TrackColumnLayoutDocument` converted to `TrackColumnLayouts::Snapshot`.                                     | UIModel `TrackColumnLayoutYamlSchema`.                                | Required `version`; current value `1`.                 | `GtkLayoutStateStore`.                                                          |
+| GTK library presentation                    | `trackView.presentations`  | `ao::uimodel::ListPresentationPreferenceDocument` converted to `ListPresentations::Snapshot`.                             | UIModel `ListPresentationPreferenceYamlSchema`.                       | Required `version`; current value `1`.                 | `GtkLayoutStateStore`.                                                          |
+| TUI library presentation                    | `trackView.columnLayouts`  | `ao::uimodel::TrackColumnLayoutDocument` converted to `TrackColumnLayouts::Snapshot`; positive widths are terminal cells. | UIModel `TrackColumnLayoutYamlSchema`.                                | Required `version`; current value `1`.                 | `LayoutStateStore`.                                                             |
+| TUI library presentation                    | `trackView.presentations`  | `ao::uimodel::ListPresentationPreferenceDocument` converted to `ListPresentations::Snapshot`.                             | UIModel `ListPresentationPreferenceYamlSchema`.                       | Required `version`; current value `1`.                 | `LayoutStateStore`.                                                             |
+| TUI library presentation                    | `navigation`               | Boolean `enabled`.                                                                                                        | TUI-local `NavigationSchema` in `LayoutStateStore.cpp`.               | Required `version`; current value `1`.                 | `LayoutStateStore`.                                                             |
+| TUI library presentation                    | `panels`                   | `ao::tui::PanelWidths`.                                                                                                   | TUI-local `PanelWidthsSchema` in `LayoutStateStore.cpp`.              | Required `version`; current value `1`.                 | `LayoutStateStore`.                                                             |
+| Windows desktop settings                    | `desktop`                  | `ao::winui::DesktopSettings`.                                                                                             | WinUI frontend `DesktopSettingsYamlSchema`.                           | Required `version`; current value `1`.                 | WinUI `LibrarySession`.                                                         |
+| WinUI library presentation                  | `trackView.columnLayouts`  | `ao::uimodel::TrackColumnLayoutDocument` converted to `TrackColumnLayouts::Snapshot`.                                     | UIModel `TrackColumnLayoutYamlSchema`.                                | Required `version`; current value `1`.                 | WinUI `LibrarySession`.                                                         |
+| WinUI library presentation                  | `trackView.presentations`  | `ao::uimodel::ListPresentationPreferenceDocument` converted to `ListPresentations::Snapshot`.                             | UIModel `ListPresentationPreferenceYamlSchema`.                       | Required `version`; current value `1`.                 | WinUI `LibrarySession`.                                                         |
+| Shell layout preset                         | `layout`                   | `ao::uimodel::LayoutDocument`                                                                                             | UIModel `LayoutDocumentYamlSchema`.                                   | Required `version`; accepted value `1`.                | Shell-layout workflow through `ShellLayoutStore`.                               |
+| Shell component state                       | No group; standalone root. | `ao::uimodel::LayoutComponentStateDocument`                                                                               | UIModel `LayoutComponentStateYamlSchema`.                             | Root `version = 1`; each entry has `stateVersion = 1`. | Layout runtime and promotion workflow through `ShellLayoutComponentStateStore`. |
 
 The playback-session document is the global GTK config in GTK composition.
 It is the runtime workspace config in the current TUI composition because TUI does not inject a separate playback store.
@@ -92,11 +93,11 @@ The `session` and `playback-session` groups are unrelated payloads.
 
 The `window` group is a mapping with these explicit fields:
 
-| Field | YAML value | C++ default | Current validation |
-|---|---|---|---|
-| `width` | Signed 32-bit integer. | `989` | Scalar syntax and range only. |
-| `height` | Signed 32-bit integer. | `801` | Scalar syntax and range only. |
-| `maximized` | Boolean. | `false` | Canonical boolean parsing. |
+| Field       | YAML value             | C++ default | Current validation            |
+| ----------- | ---------------------- | ----------- | ----------------------------- |
+| `width`     | Signed 32-bit integer. | `989`       | Scalar syntax and range only. |
+| `height`    | Signed 32-bit integer. | `801`       | Scalar syntax and range only. |
+| `maximized` | Boolean.               | `false`     | Canonical boolean parsing.    |
 
 Missing known fields retain the value supplied as the deserialize seed; the C++ defaults in the table apply to a default-constructed seed.
 Unknown fields are tolerated, duplicate fields are rejected, and a malformed present known field rejects the complete candidate.
@@ -107,13 +108,13 @@ The persistence schema does not impose positive-size or display-geometry bounds.
 
 The `runtime` group is a mapping of a required `version`, which must be `1` and is read before every other field, and string fields with an empty C++ default:
 
-| Field | Stored identity |
-|---|---|
-| `lastOutputBackendId` | Preferred audio backend id requested through the selector. |
+| Field                 | Stored identity                                              |
+| --------------------- | ------------------------------------------------------------ |
+| `lastOutputBackendId` | Preferred audio backend id requested through the selector.   |
 | `lastOutputProfileId` | Preferred backend profile id requested through the selector. |
-| `lastOutputDeviceId` | Preferred output device id requested through the selector. |
-| `lastLayoutPreset` | Last selected shell-layout preset id. |
-| `lastThemePreset` | Last selected theme preset id. |
+| `lastOutputDeviceId`  | Preferred output device id requested through the selector.   |
+| `lastLayoutPreset`    | Last selected shell-layout preset id.                        |
+| `lastThemePreset`     | Last selected theme preset id.                               |
 
 The schema accepts arbitrary strings.
 Current layout and theme workflows interpret unknown or empty preset ids through their own fallback behavior; this group does not validate those catalogs.
@@ -125,12 +126,12 @@ A non-empty device id may remain preferred while temporarily unavailable; an emp
 
 The `session` group is a mapping whose fields are all strings with an empty C++ default:
 
-| Field | Stored identity |
-|---|---|
-| `lastLibraryPath` | Last selected music-library root path. |
-| `lastOutputBackendId` | Last active audio backend id. |
-| `lastOutputProfileId` | Last active backend profile id. |
-| `lastOutputDeviceId` | Last active output device id. |
+| Field                 | Stored identity                        |
+| --------------------- | -------------------------------------- |
+| `lastLibraryPath`     | Last selected music-library root path. |
+| `lastOutputBackendId` | Last active audio backend id.          |
+| `lastOutputProfileId` | Last active backend profile id.        |
+| `lastOutputDeviceId`  | Last active output device id.          |
 
 The schema stores `lastLibraryPath` as text and applies no normalization, existence check, or platform-path validation.
 It has no `version` and otherwise uses the same seeded-missing, unknown-field, duplicate-field, and malformed-known-field policy as the `runtime` group.
@@ -141,21 +142,21 @@ An incomplete session tuple is ignored; restore never synthesizes missing identi
 
 The `preferences` mapping in `<config>/tui.yaml` is owned by `Preferences` and its local `PreferencesSchema`. `version` is required, must be `1`, and is read before every other field; missing preference fields use the defaults below. Malformed present values reject the group.
 
-| Field | Default | Accepted values |
-|---|---|---|
-| `language` | empty string | System (empty), `en`, `de`, `es`, `fr`, `ja`, `zh-Hans`, `zh-Hant` |
-| `coverArtMode` | `auto` | `auto`, `kitty`, `blocks`, `off` |
-| `panelSeparator` | `single` | `single` (shared border), `double` (adjacent panel borders) |
-| `terminalTitleFormat` | `$artist " - " $title` | A scalar [format expression](../query/format-language.md); empty disables terminal-title ownership |
-| `terminalTitleSoul` | `true` | Prefix the enabled terminal title with the shared three-cell Soul animation |
-| `revealIndicatorsOnHover` | `false` | Show panel arrows only while hovering their divider or collapsed edge |
-| `dimBackdrop` | `true` | Boolean |
-| `reducedMotion` | `false` | Boolean |
-| `mouseEnabled` | `true` | Boolean |
-| `qualityHover` | `true` | Boolean |
-| `wheelStep` | `3` | Integer 1–10 tracks |
-| `seekSeconds` | `5` | Integer 1–60 seconds |
-| `volumePercent` | `5` | Integer 1–10 percentage points |
+| Field                     | Default                | Accepted values                                                                                    |
+| ------------------------- | ---------------------- | -------------------------------------------------------------------------------------------------- |
+| `language`                | empty string           | System (empty), `en`, `de`, `es`, `fr`, `ja`, `zh-Hans`, `zh-Hant`                                 |
+| `coverArtMode`            | `auto`                 | `auto`, `kitty`, `blocks`, `off`                                                                   |
+| `panelSeparator`          | `single`               | `single` (shared border), `double` (adjacent panel borders)                                        |
+| `terminalTitleFormat`     | `$artist " - " $title` | A scalar [format expression](../query/format-language.md); empty disables terminal-title ownership |
+| `terminalTitleSoul`       | `true`                 | Prefix the enabled terminal title with the shared three-cell Soul animation                        |
+| `revealIndicatorsOnHover` | `false`                | Show panel arrows only while hovering their divider or collapsed edge                              |
+| `dimBackdrop`             | `true`                 | Boolean                                                                                            |
+| `reducedMotion`           | `false`                | Boolean                                                                                            |
+| `mouseEnabled`            | `true`                 | Boolean                                                                                            |
+| `qualityHover`            | `true`                 | Boolean                                                                                            |
+| `wheelStep`               | `3`                    | Integer 1–10 tracks                                                                                |
+| `seekSeconds`             | `5`                    | Integer 1–60 seconds                                                                               |
+| `volumePercent`           | `5`                    | Integer 1–10 percentage points                                                                     |
 
 If saved TUI preferences cannot be read or validated, startup uses defaults and posts a warning without resetting the store or rewriting that group; a group of a newer version posts the newer-version warning instead. A malformed document remains protected by `ConfigStore` write rejection; a later explicit Settings save can replace a schema-invalid preference group in an otherwise valid document, but never a group of a newer version.
 
@@ -199,14 +200,14 @@ The `panels` group in `<root>/.aobus/tui_layout.yaml` stores required `version: 
 
 The registry fixes the group-to-type association, but these domain owners define payload fields and meaning:
 
-| Payload | Current schema authority |
-|---|---|
-| `PlaybackSessionState` | [Playback session persistence specification](../../system/playback/session-persistence.md), [state reference](../playback/session-state.md), and [`PlaybackSessionState.h`](../../../app/runtime/PlaybackSessionState.h). |
-| `WorkspaceSessionDocument` / `WorkspaceSessionState` | [Workspace session state](../workspace/session-state.md). |
-| `TrackColumnLayoutDocument` / `TrackColumnLayouts::Snapshot` | [Persisted presentation state](../presentation/persisted-state.md) and [`TrackColumnLayoutYamlSchema.h`](../../../app/include/ao/uimodel/library/presentation/TrackColumnLayoutYamlSchema.h). |
+| Payload                                                              | Current schema authority                                                                                                                                                                                                                                                                                     |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `PlaybackSessionState`                                               | [Playback session persistence specification](../../system/playback/session-persistence.md), [state reference](../playback/session-state.md), and [`PlaybackSessionState.h`](../../../app/runtime/PlaybackSessionState.h).                                                                                    |
+| `WorkspaceSessionDocument` / `WorkspaceSessionState`                 | [Workspace session state](../workspace/session-state.md).                                                                                                                                                                                                                                                    |
+| `TrackColumnLayoutDocument` / `TrackColumnLayouts::Snapshot`         | [Persisted presentation state](../presentation/persisted-state.md) and [`TrackColumnLayoutYamlSchema.h`](../../../app/include/ao/uimodel/library/presentation/TrackColumnLayoutYamlSchema.h).                                                                                                                |
 | `ListPresentationPreferenceDocument` / `ListPresentations::Snapshot` | [Persisted presentation state](../presentation/persisted-state.md), [list presentation preference specification](../../system/presentation/list-preference.md), and [`ListPresentationPreferenceYamlSchema.h`](../../../app/include/ao/uimodel/library/presentation/ListPresentationPreferenceYamlSchema.h). |
-| `LayoutDocument` | [Shell layout document](../shell/layout-document.md) and its model-specific YAML schema. |
-| `LayoutComponentStateDocument` | [Shell layout component state](../shell/layout-state.md) and its model-specific YAML schema. |
+| `LayoutDocument`                                                     | [Shell layout document](../shell/layout-document.md) and its model-specific YAML schema.                                                                                                                                                                                                                     |
+| `LayoutComponentStateDocument`                                       | [Shell layout component state](../shell/layout-state.md) and its model-specific YAML schema.                                                                                                                                                                                                                 |
 
 ## Validation rules
 
@@ -247,20 +248,20 @@ The composition root logs the degraded application-preference session once, wher
 
 ## Compatibility and versioning
 
-| Surface | Compatibility mechanism |
-|---|---|
-| `window` and `session` | No explicit version or migration. Their schemas retain seeded values for missing known fields and tolerate unknown fields while rejecting duplicates and malformed known fields. |
-| `runtime` | Required version `1`, read first; otherwise the `window` and `session` field policy. A protected group. |
-| `shortcuts` | Required version `1`, read first, and strict group fields. Action ids are dynamic; the schema strictly validates the mapping/sequence/scalar structure, and keymap semantics handle unknown actions and invalid chord text. A protected group. |
-| TUI `preferences` | Required payload version `1`, read first, strict field membership and value validation, defaults for missing preference fields, and no earlier-version migration. A protected group. |
-| `workspace` | Nested presentation vocabulary version `1`, strict deserialization, stable textual ids, and no unversioned migration. The [workspace session state reference](../workspace/session-state.md) owns remaining root compatibility limits. |
-| `trackView.columnLayouts` | Independent payload version `1`, strict deserialization, stable text identities, required visibility, and no earlier-version migration. |
-| `trackView.presentations` | Independent payload version `1`, strict deserialization, stable text identities, and no unversioned migration. |
-| TUI `navigation` and `panels` | Independent payload version `1` for each group, strict field membership, and no earlier-version migration. Invalid navigation falls back to enabled; invalid panel widths fall back to automatic sizing at the owning workflow. |
-| Windows `desktop` | Explicit version, currently `1`, read down to the oldest this schema ever wrote (`1`). Every field is optional over the caller's seed, so an accepted older document is read in full and rewritten at the current version on the next checkpoint. A newer version is rejected and kept unchanged because this build cannot preserve fields it does not know; a version below the oldest is rejected because no document was written that way and the value marks a malformed one. A protected group. Exact fields belong to the [Windows desktop state reference](../windows/desktop-state.md). |
-| `playback-session` | Explicit schema version `1`; other versions are rejected rather than migrated. |
-| `layout` | Required version `1`; unsupported versions are rejected before the root or templates are interpreted. No legacy or reflected fallback is attempted. A protected group. `ShellLayoutStore` also refuses to remove a preset file of a newer version, or one whose bytes it cannot read. |
-| Shell component state | Required file version `1` and entry version `1`; unsupported versions are rejected before version-specific payload interpretation. No legacy fallback is attempted. |
+| Surface                       | Compatibility mechanism                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `window` and `session`        | No explicit version or migration. Their schemas retain seeded values for missing known fields and tolerate unknown fields while rejecting duplicates and malformed known fields.                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `runtime`                     | Required version `1`, read first; otherwise the `window` and `session` field policy. A protected group.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `shortcuts`                   | Required version `1`, read first, and strict group fields. Action ids are dynamic; the schema strictly validates the mapping/sequence/scalar structure, and keymap semantics handle unknown actions and invalid chord text. A protected group.                                                                                                                                                                                                                                                                                                                                                  |
+| TUI `preferences`             | Required payload version `1`, read first, strict field membership and value validation, defaults for missing preference fields, and no earlier-version migration. A protected group.                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `workspace`                   | Nested presentation vocabulary version `1`, strict deserialization, stable textual ids, and no unversioned migration. The [workspace session state reference](../workspace/session-state.md) owns remaining root compatibility limits.                                                                                                                                                                                                                                                                                                                                                          |
+| `trackView.columnLayouts`     | Independent payload version `1`, strict deserialization, stable text identities, required visibility, and no earlier-version migration.                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `trackView.presentations`     | Independent payload version `1`, strict deserialization, stable text identities, and no unversioned migration.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| TUI `navigation` and `panels` | Independent payload version `1` for each group, strict field membership, and no earlier-version migration. Invalid navigation falls back to enabled; invalid panel widths fall back to automatic sizing at the owning workflow.                                                                                                                                                                                                                                                                                                                                                                 |
+| Windows `desktop`             | Explicit version, currently `1`, read down to the oldest this schema ever wrote (`1`). Every field is optional over the caller's seed, so an accepted older document is read in full and rewritten at the current version on the next checkpoint. A newer version is rejected and kept unchanged because this build cannot preserve fields it does not know; a version below the oldest is rejected because no document was written that way and the value marks a malformed one. A protected group. Exact fields belong to the [Windows desktop state reference](../windows/desktop-state.md). |
+| `playback-session`            | Explicit schema version `1`; other versions are rejected rather than migrated.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `layout`                      | Required version `1`; unsupported versions are rejected before the root or templates are interpreted. No legacy or reflected fallback is attempted. A protected group. `ShellLayoutStore` also refuses to remove a preset file of a newer version, or one whose bytes it cannot read.                                                                                                                                                                                                                                                                                                           |
+| Shell component state         | Required file version `1` and entry version `1`; unsupported versions are rejected before version-specific payload interpretation. No legacy fallback is attempted.                                                                                                                                                                                                                                                                                                                                                                                                                             |
 
 A protected group of a newer version is neither read nor written: the store refuses every load and save of it, and every removal once a load or save has found it newer, as the [grouped configuration store](../../system/persistence/config-store.md#protected-groups) specifies. The build keeps its defaults for that group for the session.
 The frontend posts one warning when it loads such a group, as the [versioning page](../../system/persistence/versioning.md#protected-configuration) states.

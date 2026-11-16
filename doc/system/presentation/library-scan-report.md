@@ -1,6 +1,7 @@
 ---
 id: shell.library-scan-report
 ---
+
 # Library scan report
 
 ## Scope
@@ -20,14 +21,14 @@ shell posts the decision; it does not derive a second verdict or sentence.
 retention, while `formatLibraryScanMessage` formats the typed outcome through
 the injected catalog.
 
-| Verdict | Condition | Severity | Lifetime |
-| --- | --- | --- | --- |
-| `UpToDate` | Planning found nothing to apply. | Info | Transient |
-| `Complete` | A plan applied without missing or failed items. Stale evidence left for a later scan is not an error. | Info | Transient |
-| `NeedsReview` | The plan applied, but known tracks are missing; or the library is current or the plan applied without failures, but notices report state such as a CUE sheet beside a whole-file import. | Warning | History |
-| `CompletedWithErrors` | The plan applied and one or more items failed. | Warning | History |
-| `Unreadable` | Planning found errors only, so nothing was applied. | Error | History |
-| `Failed` | The workflow failed, or an actionable plan returned no apply result. | Error | History |
+| Verdict               | Condition                                                                                                                                                                                | Severity | Lifetime  |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | --------- |
+| `UpToDate`            | Planning found nothing to apply.                                                                                                                                                         | Info     | Transient |
+| `Complete`            | A plan applied without missing or failed items. Stale evidence left for a later scan is not an error.                                                                                    | Info     | Transient |
+| `NeedsReview`         | The plan applied, but known tracks are missing; or the library is current or the plan applied without failures, but notices report state such as a CUE sheet beside a whole-file import. | Warning  | History   |
+| `CompletedWithErrors` | The plan applied and one or more items failed.                                                                                                                                           | Warning  | History   |
+| `Unreadable`          | Planning found errors only, so nothing was applied.                                                                                                                                      | Error    | History   |
+| `Failed`              | The workflow failed, or an actionable plan returned no apply result.                                                                                                                     | Error    | History   |
 
 Anything requiring attention remains in history; a clean confirmation is
 transient. Relinking moved files is informational rather than a warning.

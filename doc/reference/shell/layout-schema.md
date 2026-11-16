@@ -1,6 +1,7 @@
 ---
 id: shell.layout-schema
 ---
+
 # GTK layout schema and actions
 
 ## Scope and version
@@ -37,13 +38,13 @@ Action-capable components can expose these standard properties according to thei
 
 Types marked shared are registered from the [shared component vocabulary](component-vocabulary.md), which owns their display name, category, child range, action slots, and shared properties; this shell adds only what GTK alone can honor.
 
-| Family | Type ids |
-|---|---|
-| Container and decorator | `absoluteCanvas`, **`box`**, `centerBox`, `collapsibleSplit`, `responsiveClass`, `scroll`, `separator`, `spacer`, **`split`**, `tabs` |
-| Generic/application/library | **`actionButton`**, **`app.menuBar`**, **`label`**, **`menuButton`**, `library.listTree`, `library.openLibraryButton`, `workspace.withDetailPane` |
-| Track | **`track.coverArt`**, `track.detailScope`, `track.detailUndoBar`, `track.fieldGrid`, **`track.presentationButton`**, **`track.quickFilter`**, `track.selectionRegion`, **`track.table`**, `track.tagEditor` |
-| Playback | `playback.audioPipelinePanel`, `playback.currentArtistLabel`, `playback.currentTitleLabel`, `playback.image`, **`playback.outputDeviceSelector`**, `playback.qualityIndicator`, **`playback.seekSlider`**, **`playback.soulButton`**, `playback.soulPlayPauseButton`, **`playback.timeLabel`**, **`playback.transportButton`**, **`playback.volumeControl`** |
-| Status | **`status.activity`**, **`status.message`**, `status.nowPlaying`, `status.playbackDetails`, **`status.selectionInfo`**, **`status.trackCount`** |
+| Family                      | Type ids                                                                                                                                                                                                                                                                                                                                                     |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Container and decorator     | `absoluteCanvas`, **`box`**, `centerBox`, `collapsibleSplit`, `responsiveClass`, `scroll`, `separator`, `spacer`, **`split`**, `tabs`                                                                                                                                                                                                                        |
+| Generic/application/library | **`actionButton`**, **`app.menuBar`**, **`label`**, **`menuButton`**, `library.listTree`, `library.openLibraryButton`, `workspace.withDetailPane`                                                                                                                                                                                                            |
+| Track                       | **`track.coverArt`**, `track.detailScope`, `track.detailUndoBar`, `track.fieldGrid`, **`track.presentationButton`**, **`track.quickFilter`**, `track.selectionRegion`, **`track.table`**, `track.tagEditor`                                                                                                                                                  |
+| Playback                    | `playback.audioPipelinePanel`, `playback.currentArtistLabel`, `playback.currentTitleLabel`, `playback.image`, **`playback.outputDeviceSelector`**, `playback.qualityIndicator`, **`playback.seekSlider`**, **`playback.soulButton`**, `playback.soulPlayPauseButton`, **`playback.timeLabel`**, **`playback.transportButton`**, **`playback.volumeControl`** |
+| Status                      | **`status.activity`**, **`status.message`**, `status.nowPlaying`, `status.playbackDetails`, **`status.selectionInfo`**, **`status.trackCount`**                                                                                                                                                                                                              |
 
 Bold ids are shared.
 
@@ -57,11 +58,11 @@ One transport button carries every command: `playback.transportButton` takes a `
 The three graphical cover locations expose an enum property with the exact values `monogram`, `note`, `vinyl`, `equalizer`, and `soul`.
 These properties are authored in the layout YAML and are shown by the Layout Editor; they are not application preferences.
 
-| Component | Property | Default |
-| --- | --- | --- |
-| `track.table` | `groupCoverPlaceholderStyle` | `monogram` |
-| `track.coverArt` | `placeholderStyle` | `vinyl` |
-| `playback.image` | `placeholderStyle` | `equalizer` |
+| Component        | Property                     | Default     |
+| ---------------- | ---------------------------- | ----------- |
+| `track.table`    | `groupCoverPlaceholderStyle` | `monogram`  |
+| `track.coverArt` | `placeholderStyle`           | `vinyl`     |
+| `playback.image` | `placeholderStyle`           | `equalizer` |
 
 The shipped Classic/default and Modern layouts declare their intended values explicitly.
 The 500-pixel cover inside the Modern playback tooltip uses `vinyl`, while its 58-pixel persistent Now Playing image uses `equalizer`.
@@ -75,23 +76,23 @@ Capability values are `RequiresAnchor` and `PresentsMenu`.
 The live registry additionally owns one handler and optional availability provider per schema entry.
 `id` is the stable binding identity. `label` and `category` are locale-selected display text; the table lists the English-root category baseline.
 
-| Action id | Category | Capabilities |
-|---|---|---|
-| `playback.play` | Playback | None |
-| `playback.pause` | Playback | None |
-| `playback.playPause` | Playback | None |
-| `playback.stop` | Playback | None |
-| `playback.next` | Playback | None |
-| `playback.previous` | Playback | None |
-| `playback.toggleShuffle` | Playback | None |
-| `playback.cycleRepeat` | Playback | None |
-| `playback.showOutputDeviceSelector` | Playback | `RequiresAnchor`, `PresentsMenu` |
-| `shell.showSystemMenu` | Shell | `RequiresAnchor`, `PresentsMenu` |
-| `shell.showSoul` | Shell | None |
-| `shell.editLayout` | Shell | None |
-| `workspace.revealCurrentTrack` | Workspace | None |
-| `track.presentProperties` | Tracks | None |
-| `track.editTags` | Tracks | `RequiresAnchor`, `PresentsMenu` |
+| Action id                           | Category  | Capabilities                     |
+| ----------------------------------- | --------- | -------------------------------- |
+| `playback.play`                     | Playback  | None                             |
+| `playback.pause`                    | Playback  | None                             |
+| `playback.playPause`                | Playback  | None                             |
+| `playback.stop`                     | Playback  | None                             |
+| `playback.next`                     | Playback  | None                             |
+| `playback.previous`                 | Playback  | None                             |
+| `playback.toggleShuffle`            | Playback  | None                             |
+| `playback.cycleRepeat`              | Playback  | None                             |
+| `playback.showOutputDeviceSelector` | Playback  | `RequiresAnchor`, `PresentsMenu` |
+| `shell.showSystemMenu`              | Shell     | `RequiresAnchor`, `PresentsMenu` |
+| `shell.showSoul`                    | Shell     | None                             |
+| `shell.editLayout`                  | Shell     | None                             |
+| `workspace.revealCurrentTrack`      | Workspace | None                             |
+| `track.presentProperties`           | Tracks    | None                             |
+| `track.editTags`                    | Tracks    | `RequiresAnchor`, `PresentsMenu` |
 
 ## Validation rules
 

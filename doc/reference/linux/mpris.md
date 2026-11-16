@@ -1,6 +1,7 @@
 ---
 id: linux-gtk.mpris-surface
 ---
+
 # Linux MPRIS reference
 
 ## Scope and authority
@@ -13,37 +14,37 @@ The introspection XML in [`MprisBridge.cpp`](../../../app/systemmedia/linux/Mpri
 
 Every session exports the same object path and interfaces:
 
-| Item | Value |
-| --- | --- |
-| Object path | `/org/mpris/MediaPlayer2` |
-| Root interface | `org.mpris.MediaPlayer2` |
+| Item             | Value                           |
+| ---------------- | ------------------------------- |
+| Object path      | `/org/mpris/MediaPlayer2`       |
+| Root interface   | `org.mpris.MediaPlayer2`        |
 | Player interface | `org.mpris.MediaPlayer2.Player` |
 
 Frontend-specific identity is:
 
-| Frontend | Bus name | Identity | Desktop entry |
-| --- | --- | --- | --- |
-| GTK | `org.mpris.MediaPlayer2.aobus` | `Aobus` | `aobus` |
-| TUI | `org.mpris.MediaPlayer2.aobus.tui.instance<suffix>` | `Aobus TUI` | not exported |
+| Frontend | Bus name                                            | Identity    | Desktop entry |
+| -------- | --------------------------------------------------- | ----------- | ------------- |
+| GTK      | `org.mpris.MediaPlayer2.aobus`                      | `Aobus`     | `aobus`       |
+| TUI      | `org.mpris.MediaPlayer2.aobus.tui.instance<suffix>` | `Aobus TUI` | not exported  |
 
 GTK requests its canonical name without queueing, so at most one GTK instance exports it.
 Each TUI connection derives `<suffix>` from the unique name assigned by the bus, removes the leading colon, and replaces dots with underscores; for example, `:1.42` produces `org.mpris.MediaPlayer2.aobus.tui.instance1_42`.
 
 ## Root interface
 
-| Member | Kind | GTK mapping/value | TUI mapping/value |
-| --- | --- | --- | --- |
-| `Raise` | method | present the injected GTK window | unsupported |
-| `Quit` | method | request injected application quit after reply submission | request normal TUI exit after reply submission |
-| `CanRaise` | property | `true` when the callback is installed | `false` |
-| `CanQuit` | property | `true` when the callback is installed | `true` |
-| `Fullscreen` | property | `false` | `false` |
-| `CanSetFullscreen` | property | `false` | `false` |
-| `HasTrackList` | property | `false` | `false` |
-| `Identity` | property | `Aobus` | `Aobus TUI` |
-| `DesktopEntry` | optional property | `aobus` | not exported |
-| `SupportedUriSchemes` | property | empty array | empty array |
-| `SupportedMimeTypes` | property | empty array | empty array |
+| Member                | Kind              | GTK mapping/value                                        | TUI mapping/value                              |
+| --------------------- | ----------------- | -------------------------------------------------------- | ---------------------------------------------- |
+| `Raise`               | method            | present the injected GTK window                          | unsupported                                    |
+| `Quit`                | method            | request injected application quit after reply submission | request normal TUI exit after reply submission |
+| `CanRaise`            | property          | `true` when the callback is installed                    | `false`                                        |
+| `CanQuit`             | property          | `true` when the callback is installed                    | `true`                                         |
+| `Fullscreen`          | property          | `false`                                                  | `false`                                        |
+| `CanSetFullscreen`    | property          | `false`                                                  | `false`                                        |
+| `HasTrackList`        | property          | `false`                                                  | `false`                                        |
+| `Identity`            | property          | `Aobus`                                                  | `Aobus TUI`                                    |
+| `DesktopEntry`        | optional property | `aobus`                                                  | not exported                                   |
+| `SupportedUriSchemes` | property          | empty array                                              | empty array                                    |
+| `SupportedMimeTypes`  | property          | empty array                                              | empty array                                    |
 
 The `Raise` member remains present in the common introspection surface when `CanRaise` is false; calling it then returns the adapter's unsupported-method error.
 `OpenUri` is not exported.
@@ -51,69 +52,69 @@ Aobus installs no TUI desktop file, so the TUI omits the optional `DesktopEntry`
 
 ## Player methods
 
-| Method | Aobus mapping |
-| --- | --- |
-| `PlayPause` | `PlaybackCommand::PlayPause` |
-| `Play` | `PlaybackCommand::Play` |
-| `Pause` | `PlaybackCommand::Pause` |
-| `Stop` | `PlaybackCommand::Stop` |
-| `Next` | `PlaybackCommand::Next` through the ordinary capability-gated command path |
-| `Previous` | `PlaybackCommand::Previous` |
-| `Seek(offset)` | queued occurrence-guarded relative positioning; execution-time live elapsed determines final seek or guarded past-end Next |
-| `SetPosition(track, position)` | queued final seek for the current occurrence-qualified track path and valid range, revalidated at execution |
+| Method                         | Aobus mapping                                                                                                              |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| `PlayPause`                    | `PlaybackCommand::PlayPause`                                                                                               |
+| `Play`                         | `PlaybackCommand::Play`                                                                                                    |
+| `Pause`                        | `PlaybackCommand::Pause`                                                                                                   |
+| `Stop`                         | `PlaybackCommand::Stop`                                                                                                    |
+| `Next`                         | `PlaybackCommand::Next` through the ordinary capability-gated command path                                                 |
+| `Previous`                     | `PlaybackCommand::Previous`                                                                                                |
+| `Seek(offset)`                 | queued occurrence-guarded relative positioning; execution-time live elapsed determines final seek or guarded past-end Next |
+| `SetPosition(track, position)` | queued final seek for the current occurrence-qualified track path and valid range, revalidated at execution                |
 
 A successful method reply acknowledges accepted submission, not eventual audio completion.
 Root `Quit` submits its reply before the deferred host callback runs; shutdown still provides no unconditional peer-receipt guarantee.
 
 ## Player properties
 
-| Property | Access | Mapping/value |
-| --- | --- | --- |
-| `PlaybackStatus` | read | transport mapping below |
-| `LoopStatus` | read/write | repeat mapping below |
-| `Rate` | read/write | reads `1.0`; zero pauses; other finite values accepted without change |
-| `Shuffle` | read/write | sequence shuffle off/on |
-| `Metadata` | read | metadata map below |
-| `Volume` | read/write | `PlaybackState::volume.level` / `PlaybackCommands::setVolume` |
-| `Position` | read | occurrence-correlated live `PlaybackService::elapsed()` converted to microseconds |
-| `MinimumRate` | read | `1.0` |
-| `MaximumRate` | read | `1.0` |
-| `CanGoNext` | read | `isCapable(Next)` |
-| `CanGoPrevious` | read | `isCapable(Previous)` |
-| `CanPlay` | read | `isCapable(Play)` |
-| `CanPause` | read | `isCapable(Pause)` |
-| `CanSeek` | read | current track and occurrence are valid, with a known positive duration |
-| `CanControl` | read | `true` |
+| Property         | Access     | Mapping/value                                                                     |
+| ---------------- | ---------- | --------------------------------------------------------------------------------- |
+| `PlaybackStatus` | read       | transport mapping below                                                           |
+| `LoopStatus`     | read/write | repeat mapping below                                                              |
+| `Rate`           | read/write | reads `1.0`; zero pauses; other finite values accepted without change             |
+| `Shuffle`        | read/write | sequence shuffle off/on                                                           |
+| `Metadata`       | read       | metadata map below                                                                |
+| `Volume`         | read/write | `PlaybackState::volume.level` / `PlaybackCommands::setVolume`                     |
+| `Position`       | read       | occurrence-correlated live `PlaybackService::elapsed()` converted to microseconds |
+| `MinimumRate`    | read       | `1.0`                                                                             |
+| `MaximumRate`    | read       | `1.0`                                                                             |
+| `CanGoNext`      | read       | `isCapable(Next)`                                                                 |
+| `CanGoPrevious`  | read       | `isCapable(Previous)`                                                             |
+| `CanPlay`        | read       | `isCapable(Play)`                                                                 |
+| `CanPause`       | read       | `isCapable(Pause)`                                                                |
+| `CanSeek`        | read       | current track and occurrence are valid, with a known positive duration            |
+| `CanControl`     | read       | `true`                                                                            |
 
 Transport mapping:
 
-| Aobus transport | `PlaybackStatus` |
-| --- | --- |
-| `Opening`, `Buffering`, `Seeking`, `Playing` | `Playing` |
-| `Paused` | `Paused` |
-| `Idle`, `Stopping`, `Error` | `Stopped` |
+| Aobus transport                              | `PlaybackStatus` |
+| -------------------------------------------- | ---------------- |
+| `Opening`, `Buffering`, `Seeking`, `Playing` | `Playing`        |
+| `Paused`                                     | `Paused`         |
+| `Idle`, `Stopping`, `Error`                  | `Stopped`        |
 
 Repeat mapping:
 
 | Aobus repeat | `LoopStatus` |
-| --- | --- |
-| `Off` | `None` |
-| `One` | `Track` |
-| `All` | `Playlist` |
+| ------------ | ------------ |
+| `Off`        | `None`       |
+| `One`        | `Track`      |
+| `All`        | `Playlist`   |
 
 ## Metadata
 
 An invalid current track or zero occurrence produces an empty metadata map.
 Present non-empty values use:
 
-| Key | Value |
-| --- | --- |
-| `mpris:trackid` | `/org/mpris/MediaPlayer2/Track/<TrackId>_<PlaybackOccurrenceId>` |
-| `xesam:title` | current title string |
-| `xesam:artist` | one-element artist string array |
-| `xesam:album` | current album string |
-| `mpris:length` | positive duration in microseconds |
-| `mpris:artUrl` | current non-empty local file URL; omitted while asynchronous export is pending or unavailable |
+| Key             | Value                                                                                         |
+| --------------- | --------------------------------------------------------------------------------------------- |
+| `mpris:trackid` | `/org/mpris/MediaPlayer2/Track/<TrackId>_<PlaybackOccurrenceId>`                              |
+| `xesam:title`   | current title string                                                                          |
+| `xesam:artist`  | one-element artist string array                                                               |
+| `xesam:album`   | current album string                                                                          |
+| `mpris:length`  | positive duration in microseconds                                                             |
+| `mpris:artUrl`  | current non-empty local file URL; omitted while asynchronous export is pending or unavailable |
 
 MPRIS artwork files use `<cache>/aobus/mpris-art-v2/<full-sha256><detected-extension>`.
 The detected extensions are `.png`, `.jpg`, `.gif`, `.webp`, and fallback `.img`.

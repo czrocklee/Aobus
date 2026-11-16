@@ -1,6 +1,7 @@
 ---
 id: persistence.yaml-adapter
 ---
+
 # Reusable YAML adapter
 
 ## Scope
@@ -66,11 +67,11 @@ Managed-state schemas are owner-local application code layered above the adapter
 The adapter itself retains no process-wide state.
 Callers compose three lifetime domains:
 
-| Domain | Owner | Required lifetime |
-|---|---|---|
-| Callback state | The caller or a containing store. | Until callbacks are replaced or every callback-using tree operation is complete. |
-| In-place source buffer | The caller or a containing store. | Through every read of nodes that may reference the parsed source. |
-| Tree arena | `ryml::Tree`. | Through every borrowed arena key, value, or arena-parsed node view. |
+| Domain                 | Owner                             | Required lifetime                                                                |
+| ---------------------- | --------------------------------- | -------------------------------------------------------------------------------- |
+| Callback state         | The caller or a containing store. | Until callbacks are replaced or every callback-using tree operation is complete. |
+| In-place source buffer | The caller or a containing store. | Through every read of nodes that may reference the parsed source.                |
+| Tree arena             | `ryml::Tree`.                     | Through every borrowed arena key, value, or arena-parsed node view.              |
 
 `ConfigStore` keeps its callback state, input buffer, and tree in one object so the first two lifetimes cover the cached document.
 Short-lived importers and frontend adapters keep all three values within one parse operation.
@@ -113,11 +114,11 @@ The tree's exact partial state after a rejected parse is not a usable document c
 `readFileResult(path, optMaxBytes)` opens the file in binary mode at end, obtains its size, applies an optional caller-owned ceiling, seeks to the beginning, allocates one exact-size `std::vector<char>`, and reads that byte count.
 It returns:
 
-| Condition | Result |
-|---|---|
-| Open, size inspection, seek, or complete read fails | `IoError` with path context. |
+| Condition                                                                  | Result                                    |
+| -------------------------------------------------------------------------- | ----------------------------------------- |
+| Open, size inspection, seek, or complete read fails                        | `IoError` with path context.              |
 | The inspected size exceeds `optMaxBytes` or the stream-size representation | `ValueTooLarge` before buffer allocation. |
-| Complete read succeeds, including a zero-length file | The byte vector. |
+| Complete read succeeds, including a zero-length file                       | The byte vector.                          |
 
 The ceiling defaults to absent; the adapter does not select a document-size policy.
 The helper does not impose text serialization, terminator, newline, or YAML validation.
@@ -206,16 +207,16 @@ The model or payload owner decides where such fallback is permitted.
 
 The low-level channel depends on the operation:
 
-| Operation family | Failure channel |
-|---|---|
+| Operation family                                                        | Failure channel                                                                                        |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | `parseInPlace()`, `parseInArena()`, or `resolve()` RapidYAML diagnostic | `Result<>` with `FormatRejected`; the private callback carrier is caught inside the adapter operation. |
-| RapidYAML callback outside an admitted parse operation | AO fatal invariant; the caller has no usable partial tree contract. |
-| Complete-file read | `Result` with `IoError`, or `ValueTooLarge` for a configured/representational size violation. |
-| Strict `tryParseScalar` or `tryReadScalar` | `false`, with destination retained. |
-| Node-kind, key, child, `MapReader`, sequence, or `scalarAs` validation | `Result` with `FormatRejected` and bounded caller context. |
-| Caller-supplied sequence or string-map writer or reader | The first returned error, without adapter-side logging or translation. |
-| Empty string-map key | `InvalidState` while serialization live state; `FormatRejected` while deserialization persisted input. |
-| Lenient `readBoolOr` or `asInt` | Caller-supplied default. |
+| RapidYAML callback outside an admitted parse operation                  | AO fatal invariant; the caller has no usable partial tree contract.                                    |
+| Complete-file read                                                      | `Result` with `IoError`, or `ValueTooLarge` for a configured/representational size violation.          |
+| Strict `tryParseScalar` or `tryReadScalar`                              | `false`, with destination retained.                                                                    |
+| Node-kind, key, child, `MapReader`, sequence, or `scalarAs` validation  | `Result` with `FormatRejected` and bounded caller context.                                             |
+| Caller-supplied sequence or string-map writer or reader                 | The first returned error, without adapter-side logging or translation.                                 |
+| Empty string-map key                                                    | `InvalidState` while serialization live state; `FormatRejected` while deserialization persisted input. |
+| Lenient `readBoolOr` or `asInt`                                         | Caller-supplied default.                                                                               |
 
 A public configuration, interchange, layout, or component-state boundary preserves the parse result or adds owner context while retaining `FormatRejected`.
 Wrong node kinds, unsupported schema versions, and semantic rejection are not parser errors at this layer.

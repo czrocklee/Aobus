@@ -1,6 +1,7 @@
 ---
 id: presentation.persisted-state
 ---
+
 # Persisted presentation state
 
 ## Scope and version
@@ -32,9 +33,9 @@ Tokens are lowercase, case-sensitive strings and are independent of C++ enum nam
 
 Workspace sort directions use exactly:
 
-| Token | Meaning |
-|---|---|
-| `ascending` | Apply the sort field in ascending order. |
+| Token        | Meaning                                   |
+| ------------ | ----------------------------------------- |
+| `ascending`  | Apply the sort field in ascending order.  |
 | `descending` | Apply the sort field in descending order. |
 
 Presentation and preset ids are nonempty opaque strings.
@@ -64,27 +65,27 @@ trackView.columnLayouts:
 
 ### Root fields
 
-| Field | Type | Requirement |
-|---|---|---|
-| `version` | Unsigned 32-bit integer. | Required and exactly `1`. |
-| `libraryId` | Canonical UUID string. | Required; the library the layouts were saved for. |
-| `layouts` | Sequence of layout mappings. | Required; may be empty. |
+| Field       | Type                         | Requirement                                       |
+| ----------- | ---------------------------- | ------------------------------------------------- |
+| `version`   | Unsigned 32-bit integer.     | Required and exactly `1`.                         |
+| `libraryId` | Canonical UUID string.       | Required; the library the layouts were saved for. |
+| `layouts`   | Sequence of layout mappings. | Required; may be empty.                           |
 
 ### Layout fields
 
-| Field | Type | Requirement |
-|---|---|---|
-| `listId` | Unsigned 32-bit integer. | Required, nonzero, and unique in the document. |
+| Field     | Type                                 | Requirement                                            |
+| --------- | ------------------------------------ | ------------------------------------------------------ |
+| `listId`  | Unsigned 32-bit integer.             | Required, nonzero, and unique in the document.         |
 | `columns` | Ordered sequence of column mappings. | Required; field ids must be unique within this layout. |
 
 ### Column fields
 
-| Field | Type | Requirement |
-|---|---|---|
-| `field` | Stable track-field id. | Required and known. |
-| `width` | Signed 32-bit integer. | Fixed state uses a positive value in the containing frontend document's geometry unit; flexible state uses `-1`. GTK and WinUI interpret positive widths as desktop pixel units, while TUI interprets them as terminal cells. |
-| `weight` | Floating-point number. | Fixed state uses `-1`; flexible state uses a finite positive value. |
-| `visible` | Boolean. | Required. `true` exposes the field in that list; `false` retains its order and sizing while hiding it. |
+| Field     | Type                   | Requirement                                                                                                                                                                                                                   |
+| --------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `field`   | Stable track-field id. | Required and known.                                                                                                                                                                                                           |
+| `width`   | Signed 32-bit integer. | Fixed state uses a positive value in the containing frontend document's geometry unit; flexible state uses `-1`. GTK and WinUI interpret positive widths as desktop pixel units, while TUI interprets them as terminal cells. |
+| `weight`  | Floating-point number. | Fixed state uses `-1`; flexible state uses a finite positive value.                                                                                                                                                           |
+| `visible` | Boolean.               | Required. `true` exposes the field in that list; `false` retains its order and sizing while hiding it.                                                                                                                        |
 
 Exactly one canonical dimension form is accepted, and it must match the field's sizing role from `TrackColumnDefaults`:
 
@@ -109,18 +110,18 @@ trackView.presentations:
 
 ### Root fields
 
-| Field | Type | Requirement |
-|---|---|---|
-| `version` | Unsigned 32-bit integer. | Required and exactly `1`. |
-| `libraryId` | Canonical UUID string. | Required; the library the preferences were saved for. |
-| `preferences` | Sequence of preference mappings. | Required; may be empty. |
+| Field         | Type                             | Requirement                                           |
+| ------------- | -------------------------------- | ----------------------------------------------------- |
+| `version`     | Unsigned 32-bit integer.         | Required and exactly `1`.                             |
+| `libraryId`   | Canonical UUID string.           | Required; the library the preferences were saved for. |
+| `preferences` | Sequence of preference mappings. | Required; may be empty.                               |
 
 ### Preference fields
 
-| Field | Type | Requirement |
-|---|---|---|
-| `listId` | Unsigned 32-bit integer. | Required, nonzero, and unique in the document. |
-| `presentationId` | String. | Required and nonempty. It need not resolve in the current catalog. |
+| Field            | Type                     | Requirement                                                        |
+| ---------------- | ------------------------ | ------------------------------------------------------------------ |
+| `listId`         | Unsigned 32-bit integer. | Required, nonzero, and unique in the document.                     |
+| `presentationId` | String.                  | Required and nonempty. It need not resolve in the current catalog. |
 
 An unavailable `presentationId` survives deserialization and follows the recommendation fallback in the [list-preference specification](../../system/presentation/list-preference.md).
 This extensible-reference rule does not apply to closed field, sort, group, or direction tokens.

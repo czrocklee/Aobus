@@ -1,6 +1,7 @@
 ---
 id: cli.command-surface
 ---
+
 # CLI command reference
 
 ## Scope and version
@@ -18,50 +19,50 @@ CLI11 help is the executable syntax authority; this document is the durable repo
 
 ### Global options
 
-| Option | Meaning |
-| --- | --- |
-| `-C, --root <dir>` | music root; falls back to `AOBUS_ROOT`, then the current directory; database is `<root>/.aobus/library` |
-| `-O, --output <plain|yaml|json>` | output format; default `plain`; names are case-insensitive |
-| `--help-all` | recursive complete command help |
-| `--version` | application version |
+| Option               | Meaning                                                                                                 |
+| -------------------- | ------------------------------------------------------------------------------------------------------- |
+| `-C, --root <dir>`   | music root; falls back to `AOBUS_ROOT`, then the current directory; database is `<root>/.aobus/library` |
+| `-O, --output <plain | yaml                                                                                                    | json>` | output format; default `plain`; names are case-insensitive |
+| `--help-all`         | recursive complete command help                                                                         |
+| `--version`          | application version                                                                                     |
 
 Exactly one top-level command is required.
 
 ### Command inventory
 
-| Command | Arguments/options |
-| --- | --- |
-| `init` | `[--dry-run]` |
-| `scan` | `[--dry-run] [--verbose] [--defer-fingerprint]` |
-| `track show` | `[<id>...] [-f, --filter <expr>] [-l, --limit N] [-o, --offset N] [--format <expr>]` |
-| `track create` | `<path> [--dry-run]` |
-| `track update` | `(<id>... | -f, --filter <expr>) [<field-option>...] [--add-tag <tag>...] [--remove-tag <tag>...] [--dry-run]` |
-| `track delete` | `<id> [--dry-run]` |
-| `track dump` | `[--id <id>] [--raw]` |
-| `list show` | `[<id>]` |
-| `list create` | `-n, --name <name> [-f, --filter <expr>] [-d, --desc <text>] [-p, --parent <id>] [--dry-run]` |
-| `list update` | `<id> [--name <name>] [--desc <text>] [--filter <expr>] [--parent <id>] [--dry-run]` |
-| `list add` | `<listId> <trackId>... [--dry-run]` |
-| `list remove` | `<listId> <trackId>... [--dry-run]` |
-| `list order move` | `<listId> <trackId>... [--before <trackId>]` |
-| `list order reset` | `<listId>` |
-| `list order forget-hidden` | `<listId>` |
-| `list delete` | `<id> [--descendants] [--dry-run]` |
-| `list dump` | `[--raw]` |
-| `tag list` | none |
-| `tag show` | `(<id>... | -f, --filter <expr>)` |
-| `tag add` | `<tag> (<id>... | -f, --filter <expr>) [--dry-run]` |
-| `tag remove` | `<tag> (<id>... | -f, --filter <expr>) [--dry-run]` |
-| `lib show` | none |
-| `lib stats` | none |
-| `lib verify` | none |
-| `lib relink` | `[--from <old-uri> --to <new-uri>] [--dry-run]` |
-| `lib fingerprint` | `--pending [--verbose]` |
-| `lib export` | `(<output> | -o, --output-file <file>) [-m, --mode delta|metadata|full|list-only]`; default mode is `full` |
-| `lib import` | `(<input> | -i, --input <file>) [-m, --mode restore|merge] [--dry-run] [--confirm-destructive-restore]`; default mode is `merge` |
-| `lib dump` | `[--dict] [--manifest] [--meta] [--resources] [--raw]` |
-| `lib resource list` | none |
-| `lib resource export` | `<id> -o, --output-file <file>` |
+| Command                    | Arguments/options                                                                             |
+| -------------------------- | --------------------------------------------------------------------------------------------- |
+| `init`                     | `[--dry-run]`                                                                                 |
+| `scan`                     | `[--dry-run] [--verbose] [--defer-fingerprint]`                                               |
+| `track show`               | `[<id>...] [-f, --filter <expr>] [-l, --limit N] [-o, --offset N] [--format <expr>]`          |
+| `track create`             | `<path> [--dry-run]`                                                                          |
+| `track update`             | `(<id>...                                                                                     | -f, --filter <expr>) [<field-option>...] [--add-tag <tag>...] [--remove-tag <tag>...] [--dry-run]` |
+| `track delete`             | `<id> [--dry-run]`                                                                            |
+| `track dump`               | `[--id <id>] [--raw]`                                                                         |
+| `list show`                | `[<id>]`                                                                                      |
+| `list create`              | `-n, --name <name> [-f, --filter <expr>] [-d, --desc <text>] [-p, --parent <id>] [--dry-run]` |
+| `list update`              | `<id> [--name <name>] [--desc <text>] [--filter <expr>] [--parent <id>] [--dry-run]`          |
+| `list add`                 | `<listId> <trackId>... [--dry-run]`                                                           |
+| `list remove`              | `<listId> <trackId>... [--dry-run]`                                                           |
+| `list order move`          | `<listId> <trackId>... [--before <trackId>]`                                                  |
+| `list order reset`         | `<listId>`                                                                                    |
+| `list order forget-hidden` | `<listId>`                                                                                    |
+| `list delete`              | `<id> [--descendants] [--dry-run]`                                                            |
+| `list dump`                | `[--raw]`                                                                                     |
+| `tag list`                 | none                                                                                          |
+| `tag show`                 | `(<id>...                                                                                     | -f, --filter <expr>)`                                                                              |
+| `tag add`                  | `<tag> (<id>...                                                                               | -f, --filter <expr>) [--dry-run]`                                                                  |
+| `tag remove`               | `<tag> (<id>...                                                                               | -f, --filter <expr>) [--dry-run]`                                                                  |
+| `lib show`                 | none                                                                                          |
+| `lib stats`                | none                                                                                          |
+| `lib verify`               | none                                                                                          |
+| `lib relink`               | `[--from <old-uri> --to <new-uri>] [--dry-run]`                                               |
+| `lib fingerprint`          | `--pending [--verbose]`                                                                       |
+| `lib export`               | `(<output>                                                                                    | -o, --output-file <file>) [-m, --mode delta                                                        | metadata                                                                     | full | list-only]`; default mode is `full` |
+| `lib import`               | `(<input>                                                                                     | -i, --input <file>) [-m, --mode restore                                                            | merge] [--dry-run] [--confirm-destructive-restore]`; default mode is `merge` |
+| `lib dump`                 | `[--dict] [--manifest] [--meta] [--resources] [--raw]`                                        |
+| `lib resource list`        | none                                                                                          |
+| `lib resource export`      | `<id> -o, --output-file <file>`                                                               |
 
 Presence flags such as `--dry-run`, `--descendants`, `--clear-credits`, and `--confirm-destructive-restore` take no value.
 An attached `=true` means the same as the bare flag; every other attached value, including `=false`, is rejected with CLI11 argument-mismatch status `114` before the command runs.
@@ -145,33 +146,33 @@ There are no duplicated editable `conductor`, `ensemble`, or `soloist` keys in s
 
 Mutation/administrative shapes:
 
-| Command | Top-level fields |
-| --- | --- |
-| `scan` | `dryRun, new, changed, missingSegments, moved, missing, unchanged, errors, warnings`; dry-run adds `items[{type,uri,message?}]` |
-| `track create` | `action, dryRun, trackId?, trackIds, uri, title, artist` |
-| `track update` | `dryRun, matched, updated, trackIds, changes, tagChanges?` |
-| `track delete` | `action, dryRun, trackId, uri, title, removedFromListIds` |
-| `list show` | collection rows use `id,name,description,parentId,filter,order`; the detail document wraps one row in `list` and additionally uses effective `tracks[{id,title,artist,album}]` |
-| `list create` | `action, dryRun, listId?, name, parentId, filter` |
-| `list update` | `action, dryRun, listId, changed, fields` |
-| `list add/remove` | `action, dryRun, listId, listName, tag, changed, targetTrackIds, changes, forgottenPositionTrackIds`; `targetTrackIds` names each requested Track once; Add leaves `forgottenPositionTrackIds` empty |
-| `list order move` | `action, listId, status, selectedTrackIds, beforeTrackId?` |
-| `list order reset/forget-hidden` | `action, listId, status, selectedTrackIds, forgottenPositionCount` |
-| `list delete` | ordinary: `action, dryRun, listId, name, forgottenPositionCount`; descendants: `action, dryRun, rootListId, deletedLists` |
-| `tag list` | `tags[{name,count}]` |
-| `tag show` | `trackId?` or `trackIds?`, plus `tags` |
-| `tag add/remove` | `action, tag, dryRun, updated, trackIds, changes` |
-| `lib show` | `libraryId, libraryVersion, flags, createdTime` |
-| `lib stats` | `tracks, lists, resources, resourceBytes, manifest, dictionary, tags, diskBytes, highWaterBytes, mapBytes` |
-| `lib verify` | `ok, issues[{type,uri,message?}]` |
-| `lib relink` list | `missing, newFiles, candidates[{oldUri,newUri,trackId,audioPayloadLength,trackIds?}]` |
-| `lib relink` apply | `dryRun, oldUri, newUri, trackId, trackIds?` |
-| `lib fingerprint` | `completed, skipped, failures` |
-| `lib import` | `action, path, mode, payloadVersion, payloadMode, targetScope, dryRun, tracksCreated, tracksUpdated, tracksDeleted, listsCreated, listsDeleted, danglingReferencesIgnored, invalidFiltersKept` |
-| `lib export` | `action, path, mode` |
-| `lib resource list` | `resources[{id,size}]`, where `size` is the descriptor's described length |
-| `lib resource export` | `id, output, size` |
-| `lib dump` | selected optional `meta`, `dictionary`, `manifest`, `resources` sections |
+| Command                          | Top-level fields                                                                                                                                                                                     |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scan`                           | `dryRun, new, changed, missingSegments, moved, missing, unchanged, errors, warnings`; dry-run adds `items[{type,uri,message?}]`                                                                      |
+| `track create`                   | `action, dryRun, trackId?, trackIds, uri, title, artist`                                                                                                                                             |
+| `track update`                   | `dryRun, matched, updated, trackIds, changes, tagChanges?`                                                                                                                                           |
+| `track delete`                   | `action, dryRun, trackId, uri, title, removedFromListIds`                                                                                                                                            |
+| `list show`                      | collection rows use `id,name,description,parentId,filter,order`; the detail document wraps one row in `list` and additionally uses effective `tracks[{id,title,artist,album}]`                       |
+| `list create`                    | `action, dryRun, listId?, name, parentId, filter`                                                                                                                                                    |
+| `list update`                    | `action, dryRun, listId, changed, fields`                                                                                                                                                            |
+| `list add/remove`                | `action, dryRun, listId, listName, tag, changed, targetTrackIds, changes, forgottenPositionTrackIds`; `targetTrackIds` names each requested Track once; Add leaves `forgottenPositionTrackIds` empty |
+| `list order move`                | `action, listId, status, selectedTrackIds, beforeTrackId?`                                                                                                                                           |
+| `list order reset/forget-hidden` | `action, listId, status, selectedTrackIds, forgottenPositionCount`                                                                                                                                   |
+| `list delete`                    | ordinary: `action, dryRun, listId, name, forgottenPositionCount`; descendants: `action, dryRun, rootListId, deletedLists`                                                                            |
+| `tag list`                       | `tags[{name,count}]`                                                                                                                                                                                 |
+| `tag show`                       | `trackId?` or `trackIds?`, plus `tags`                                                                                                                                                               |
+| `tag add/remove`                 | `action, tag, dryRun, updated, trackIds, changes`                                                                                                                                                    |
+| `lib show`                       | `libraryId, libraryVersion, flags, createdTime`                                                                                                                                                      |
+| `lib stats`                      | `tracks, lists, resources, resourceBytes, manifest, dictionary, tags, diskBytes, highWaterBytes, mapBytes`                                                                                           |
+| `lib verify`                     | `ok, issues[{type,uri,message?}]`                                                                                                                                                                    |
+| `lib relink` list                | `missing, newFiles, candidates[{oldUri,newUri,trackId,audioPayloadLength,trackIds?}]`                                                                                                                |
+| `lib relink` apply               | `dryRun, oldUri, newUri, trackId, trackIds?`                                                                                                                                                         |
+| `lib fingerprint`                | `completed, skipped, failures`                                                                                                                                                                       |
+| `lib import`                     | `action, path, mode, payloadVersion, payloadMode, targetScope, dryRun, tracksCreated, tracksUpdated, tracksDeleted, listsCreated, listsDeleted, danglingReferencesIgnored, invalidFiltersKept`       |
+| `lib export`                     | `action, path, mode`                                                                                                                                                                                 |
+| `lib resource list`              | `resources[{id,size}]`, where `size` is the descriptor's described length                                                                                                                            |
+| `lib resource export`            | `id, output, size`                                                                                                                                                                                   |
+| `lib dump`                       | selected optional `meta`, `dictionary`, `manifest`, `resources` sections                                                                                                                             |
 
 A whole-file `lib relink` candidate and apply result keep `trackId` as that Track's id and omit `trackIds`.
 A carrier candidate, dry-run preview, and committed result keep header `trackId` zero and add `trackIds`, the member ids in stored order.
@@ -228,13 +229,13 @@ Plain `lib import` output identifies whether the operation is a preview, then pr
 
 ### Streams and exit codes
 
-| Channel/status | Contract |
-| --- | --- |
-| stdout | command payload |
-| stderr | domain errors and `--verbose` progress |
-| exit `0` | success, including empty/no-op |
-| exit `1` | domain or internal failure |
-| other nonzero | CLI11 usage/parse failure |
+| Channel/status | Contract                               |
+| -------------- | -------------------------------------- |
+| stdout         | command payload                        |
+| stderr         | domain errors and `--verbose` progress |
+| exit `0`       | success, including empty/no-op         |
+| exit `1`       | domain or internal failure             |
+| other nonzero  | CLI11 usage/parse failure              |
 
 For saved-order commands, runtime `Stale` maps to a `Conflict` domain failure and runtime `Unavailable` maps to an `InvalidState` domain failure.
 Both write the error to stderr, emit no success document, and exit `1`; only `Applied` and `NoOp` reach the normal output path.

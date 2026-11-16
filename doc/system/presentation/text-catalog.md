@@ -1,6 +1,7 @@
 ---
 id: presentation.text-catalog
 ---
+
 # Presentation text semantics
 
 ## Scope and authority
@@ -81,12 +82,12 @@ Known audio backends use these display labels, device fallbacks, and semantic
 icon kinds. These current display mappings are not persisted identities or a
 separate versioned API; exact localized descriptions remain catalog-owned.
 
-| Backend id | Display label / short label | Device fallback | Icon kind |
-|---|---|---|---|
-| `pipewire` | PipeWire / PW | PipeWire | `AudioServer` |
-| `alsa` | ALSA / ALSA | none | `OutputDevice` |
-| `wasapi` | WASAPI / WASAPI | localized WASAPI render endpoint | `OutputDevice` |
-| `coreaudio` | Core Audio / Core Audio | localized Core Audio output device | `OutputDevice` |
+| Backend id  | Display label / short label | Device fallback                    | Icon kind      |
+| ----------- | --------------------------- | ---------------------------------- | -------------- |
+| `pipewire`  | PipeWire / PW               | PipeWire                           | `AudioServer`  |
+| `alsa`      | ALSA / ALSA                 | none                               | `OutputDevice` |
+| `wasapi`    | WASAPI / WASAPI             | localized WASAPI render endpoint   | `OutputDevice` |
+| `coreaudio` | Core Audio / Core Audio     | localized Core Audio output device | `OutputDevice` |
 
 Unknown backends use their stable id as label and short label, and use `OutputDevice` as the conservative icon kind.
 
@@ -161,9 +162,9 @@ copy changes.
 
 Aobus uses these terms consistently in its maintained Chinese catalogs:
 
-| English concept | `zh_Hans` | `zh_Hant` |
-|---|---|---|
-| Metadata | 元数据 | 後設資料 |
+| English concept | `zh_Hans`    | `zh_Hant`    |
+| --------------- | ------------ | ------------ |
+| Metadata        | 元数据       | 後設資料     |
 | Custom Metadata | 自定义元数据 | 自訂後設資料 |
 
 Use the same concept across GTK, TUI, WinUI, and AppKit while allowing sentence

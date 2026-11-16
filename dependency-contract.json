@@ -3,11 +3,7 @@
   "leadResolver": "nix",
   "dependencies": {
     "boost": {
-      "platforms": [
-        "linux",
-        "macos",
-        "windows"
-      ],
+      "platforms": ["linux", "macos", "windows"],
       "policy": {
         "kind": "exact",
         "version": "1.91.0"
@@ -34,11 +30,7 @@
       }
     },
     "fast-float": {
-      "platforms": [
-        "linux",
-        "macos",
-        "windows"
-      ],
+      "platforms": ["linux", "macos", "windows"],
       "policy": {
         "kind": "exact",
         "version": "8.2.10"
@@ -48,17 +40,11 @@
       },
       "vcpkg": {
         "strategy": "baseline",
-        "ports": [
-          "fast-float"
-        ]
+        "ports": ["fast-float"]
       }
     },
     "ftxui": {
-      "platforms": [
-        "linux",
-        "macos",
-        "windows"
-      ],
+      "platforms": ["linux", "macos", "windows"],
       "policy": {
         "kind": "exact",
         "version": "7.0.3"
@@ -68,17 +54,11 @@
       },
       "vcpkg": {
         "strategy": "baseline",
-        "ports": [
-          "ftxui"
-        ]
+        "ports": ["ftxui"]
       }
     },
     "icu": {
-      "platforms": [
-        "linux",
-        "macos",
-        "windows"
-      ],
+      "platforms": ["linux", "macos", "windows"],
       "policy": {
         "kind": "exact",
         "version": "78.3"
@@ -88,9 +68,7 @@
       },
       "vcpkg": {
         "strategy": "baseline",
-        "ports": [
-          "icu"
-        ]
+        "ports": ["icu"]
       },
       "capabilities": [
         "unicode-17.0",
@@ -101,11 +79,7 @@
       ]
     },
     "lmdb": {
-      "platforms": [
-        "linux",
-        "macos",
-        "windows"
-      ],
+      "platforms": ["linux", "macos", "windows"],
       "policy": {
         "kind": "exact",
         "version": "1.0.1"
@@ -115,17 +89,11 @@
       },
       "vcpkg": {
         "strategy": "baseline",
-        "ports": [
-          "lmdb"
-        ]
+        "ports": ["lmdb"]
       }
     },
     "spdlog": {
-      "platforms": [
-        "linux",
-        "macos",
-        "windows"
-      ],
+      "platforms": ["linux", "macos", "windows"],
       "policy": {
         "kind": "exact",
         "version": "1.17.0"
@@ -135,19 +103,12 @@
       },
       "vcpkg": {
         "strategy": "baseline",
-        "ports": [
-          "spdlog"
-        ]
+        "ports": ["spdlog"]
       },
-      "capabilities": [
-        "spdlog-std-format",
-        "spdlog-no-external-fmt"
-      ]
+      "capabilities": ["spdlog-std-format", "spdlog-no-external-fmt"]
     },
     "windows-app-sdk": {
-      "platforms": [
-        "windows"
-      ],
+      "platforms": ["windows"],
       "policy": {
         "kind": "exact",
         "version": "2.4.0"
@@ -165,9 +126,7 @@
       }
     },
     "cppwinrt": {
-      "platforms": [
-        "windows"
-      ],
+      "platforms": ["windows"],
       "policy": {
         "kind": "exact",
         "version": "3.0.260715.1"

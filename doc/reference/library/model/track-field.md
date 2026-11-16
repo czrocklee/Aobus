@@ -1,6 +1,7 @@
 ---
 id: library.track-field
 ---
+
 # Runtime track field catalog
 
 ## Scope and version
@@ -24,27 +25,27 @@ The tables list the additional capabilities and exact bridge values.
 
 ### Curated metadata
 
-| Raw | Field | Id | Label | Kind | Editable | Sort key | Group key | Query variable | Value completion |
-|---:|---|---|---|---|:---:|---|---|---|:---:|
-| 0 | `Title` | `title` | Title | Text | Yes | `Title` | — | `$title` | No |
-| 1 | `Artist` | `artist` | Artist | Text | Yes | `Artist` | `Artist` | `$artist` | Yes |
-| 2 | `Album` | `album` | Album | Text | Yes | `Album` | `Album` | `$album` | Yes |
-| 3 | `AlbumArtist` | `album-artist` | Album Artist | Text | Yes | `AlbumArtist` | `AlbumArtist` | `$albumArtist` | Yes |
-| 4 | `Genre` | `genre` | Genre | Text | Yes | `Genre` | `Genre` | `$genre` | Yes |
-| 5 | `Composer` | `composer` | Composer | Text | Yes | `Composer` | `Composer` | `$composer` | Yes |
-| 6 | `Conductor` | `conductor` | Conductor | Text | No | `Conductor` | `Conductor` | `$conductor` | Yes |
-| 7 | `Ensemble` | `ensemble` | Ensemble | Text | No | `Ensemble` | `Ensemble` | `$ensemble` | Yes |
-| 8 | `Work` | `work` | Work | Text | Yes | `Work` | `Work` | `$work` | Yes |
-| 9 | `Movement` | `movement` | Movement | Text | Yes | `Movement` | — | `$movement` | Yes |
-| 10 | `Soloist` | `soloist` | Soloist | Text | No | `Soloist` | — | `$soloist` | Yes |
-| 11 | `Year` | `year` | Year | Number | Yes | `Year` | `Year` | `$year` | No |
-| 12 | `DiscNumber` | `disc-number` | Disc | Number | Yes | `DiscNumber` | — | `$discNumber` | No |
-| 13 | `DiscTotal` | `disc-total` | Total Discs | Number | Yes | — | — | `$discTotal` | No |
-| 14 | `TrackNumber` | `track-number` | Track | Number | Yes | `TrackNumber` | — | `$trackNumber` | No |
-| 15 | `TrackTotal` | `track-total` | Total Tracks | Number | Yes | — | — | `$trackTotal` | No |
-| 16 | `MovementNumber` | `movement-number` | Movement No. | Number | Yes | `Movement` | — | `$movementNumber` | No |
-| 17 | `MovementTotal` | `movement-total` | Total Movements | Number | Yes | — | — | `$movementTotal` | No |
-| 31 | `RecordingDate` | `recording-date` | Recording Date | RecordingDate | Yes | `RecordingDate` | — | `$recordingDate` | No |
+| Raw | Field            | Id                | Label           | Kind          | Editable | Sort key        | Group key     | Query variable    | Value completion |
+| --: | ---------------- | ----------------- | --------------- | ------------- | :------: | --------------- | ------------- | ----------------- | :--------------: |
+|   0 | `Title`          | `title`           | Title           | Text          |   Yes    | `Title`         | —             | `$title`          |        No        |
+|   1 | `Artist`         | `artist`          | Artist          | Text          |   Yes    | `Artist`        | `Artist`      | `$artist`         |       Yes        |
+|   2 | `Album`          | `album`           | Album           | Text          |   Yes    | `Album`         | `Album`       | `$album`          |       Yes        |
+|   3 | `AlbumArtist`    | `album-artist`    | Album Artist    | Text          |   Yes    | `AlbumArtist`   | `AlbumArtist` | `$albumArtist`    |       Yes        |
+|   4 | `Genre`          | `genre`           | Genre           | Text          |   Yes    | `Genre`         | `Genre`       | `$genre`          |       Yes        |
+|   5 | `Composer`       | `composer`        | Composer        | Text          |   Yes    | `Composer`      | `Composer`    | `$composer`       |       Yes        |
+|   6 | `Conductor`      | `conductor`       | Conductor       | Text          |    No    | `Conductor`     | `Conductor`   | `$conductor`      |       Yes        |
+|   7 | `Ensemble`       | `ensemble`        | Ensemble        | Text          |    No    | `Ensemble`      | `Ensemble`    | `$ensemble`       |       Yes        |
+|   8 | `Work`           | `work`            | Work            | Text          |   Yes    | `Work`          | `Work`        | `$work`           |       Yes        |
+|   9 | `Movement`       | `movement`        | Movement        | Text          |   Yes    | `Movement`      | —             | `$movement`       |       Yes        |
+|  10 | `Soloist`        | `soloist`         | Soloist         | Text          |    No    | `Soloist`       | —             | `$soloist`        |       Yes        |
+|  11 | `Year`           | `year`            | Year            | Number        |   Yes    | `Year`          | `Year`        | `$year`           |        No        |
+|  12 | `DiscNumber`     | `disc-number`     | Disc            | Number        |   Yes    | `DiscNumber`    | —             | `$discNumber`     |        No        |
+|  13 | `DiscTotal`      | `disc-total`      | Total Discs     | Number        |   Yes    | —               | —             | `$discTotal`      |        No        |
+|  14 | `TrackNumber`    | `track-number`    | Track           | Number        |   Yes    | `TrackNumber`   | —             | `$trackNumber`    |        No        |
+|  15 | `TrackTotal`     | `track-total`     | Total Tracks    | Number        |   Yes    | —               | —             | `$trackTotal`     |        No        |
+|  16 | `MovementNumber` | `movement-number` | Movement No.    | Number        |   Yes    | `Movement`      | —             | `$movementNumber` |        No        |
+|  17 | `MovementTotal`  | `movement-total`  | Total Movements | Number        |   Yes    | —               | —             | `$movementTotal`  |        No        |
+|  31 | `RecordingDate`  | `recording-date`  | Recording Date  | RecordingDate |   Yes    | `RecordingDate` | —             | `$recordingDate`  |        No        |
 
 All rows in this table have category `Metadata`.
 Movement name and movement number intentionally map to the same `Movement` sort key; projection ordering uses the number while the name remains display text.
@@ -59,68 +60,68 @@ Category-specific name completion includes every name of that kind, and role com
 
 ### Tags and technical fields
 
-| Raw | Field | Id | Label | Category | Kind | Sort key | Query variable |
-|---:|---|---|---|---|---|---|---|
-| 18 | `Duration` | `duration` | Duration | Technical | Duration | `Duration` | `@duration` |
-| 19 | `Tags` | `tags` | Tags | Tag | TagList | — | — |
-| 20 | `FilePath` | `file-path` | File Path | Technical | FilePath | — | — |
-| 21 | `Codec` | `codec` | Codec | Technical | TechnicalText | — | `@codec` |
-| 22 | `SampleRate` | `sample-rate` | Sample Rate | Technical | TechnicalText | — | `@sampleRate` |
-| 23 | `Channels` | `channels` | Channels | Technical | TechnicalText | — | `@channels` |
-| 24 | `BitDepth` | `bit-depth` | Bit Depth | Technical | TechnicalText | — | `@bitDepth` |
-| 25 | `Bitrate` | `bitrate` | Bitrate | Technical | TechnicalText | — | `@bitrate` |
-| 26 | `FileSize` | `file-size` | File Size | Technical | TechnicalText | — | — |
-| 27 | `ModifiedTime` | `modified-time` | Modified | Technical | TechnicalText | — | — |
+| Raw | Field          | Id              | Label       | Category  | Kind          | Sort key   | Query variable |
+| --: | -------------- | --------------- | ----------- | --------- | ------------- | ---------- | -------------- |
+|  18 | `Duration`     | `duration`      | Duration    | Technical | Duration      | `Duration` | `@duration`    |
+|  19 | `Tags`         | `tags`          | Tags        | Tag       | TagList       | —          | —              |
+|  20 | `FilePath`     | `file-path`     | File Path   | Technical | FilePath      | —          | —              |
+|  21 | `Codec`        | `codec`         | Codec       | Technical | TechnicalText | —          | `@codec`       |
+|  22 | `SampleRate`   | `sample-rate`   | Sample Rate | Technical | TechnicalText | —          | `@sampleRate`  |
+|  23 | `Channels`     | `channels`      | Channels    | Technical | TechnicalText | —          | `@channels`    |
+|  24 | `BitDepth`     | `bit-depth`     | Bit Depth   | Technical | TechnicalText | —          | `@bitDepth`    |
+|  25 | `Bitrate`      | `bitrate`       | Bitrate     | Technical | TechnicalText | —          | `@bitrate`     |
+|  26 | `FileSize`     | `file-size`     | File Size   | Technical | TechnicalText | —          | —              |
+|  27 | `ModifiedTime` | `modified-time` | Modified    | Technical | TechnicalText | —          | —              |
 
 These fields are not editable and do not support metadata-value completion.
 Tags use dynamic `#name` variables rather than one fixed query-variable mapping.
 
 ### Synthetic fields
 
-| Raw | Field | Id | Label | Kind | Meaning |
-|---:|---|---|---|---|---|
-| 28 | `DisplayTrackNumber` | `display-track-number` | Track # | TechnicalText | Formatted disc/track position |
-| 29 | `TechnicalSummary` | `technical-summary` | Technical | TechnicalText | Combined codec, rate, depth, and bitrate text |
-| 30 | `Quality` | `quality` | Quality | TechnicalText | Derived quality label |
+| Raw | Field                | Id                     | Label     | Kind          | Meaning                                       |
+| --: | -------------------- | ---------------------- | --------- | ------------- | --------------------------------------------- |
+|  28 | `DisplayTrackNumber` | `display-track-number` | Track #   | TechnicalText | Formatted disc/track position                 |
+|  29 | `TechnicalSummary`   | `technical-summary`    | Technical | TechnicalText | Combined codec, rate, depth, and bitrate text |
+|  30 | `Quality`            | `quality`              | Quality   | TechnicalText | Derived quality label                         |
 
 All three rows have category `Synthetic`, set the synthetic capability, and are neither editable, sortable, groupable, value-completable, nor filter-mapped.
 
 ### Sort fields
 
-| Raw | `TrackSortField` | Stable id |
-|---:|---|---|
-| 0 | `Artist` | `artist` |
-| 1 | `Album` | `album` |
-| 2 | `AlbumArtist` | `album-artist` |
-| 3 | `Genre` | `genre` |
-| 4 | `Composer` | `composer` |
-| 5 | `Conductor` | `conductor` |
-| 6 | `Ensemble` | `ensemble` |
-| 7 | `Work` | `work` |
-| 8 | `Movement` | `movement` |
-| 9 | `Soloist` | `soloist` |
-| 10 | `Year` | `year` |
-| 11 | `DiscNumber` | `disc-number` |
-| 12 | `TrackNumber` | `track-number` |
-| 13 | `Title` | `title` |
-| 14 | `Duration` | `duration` |
-| 15 | `RecordingYear` | `recording-year` |
-| 16 | `RecordingDate` | `recording-date` |
+| Raw | `TrackSortField` | Stable id        |
+| --: | ---------------- | ---------------- |
+|   0 | `Artist`         | `artist`         |
+|   1 | `Album`          | `album`          |
+|   2 | `AlbumArtist`    | `album-artist`   |
+|   3 | `Genre`          | `genre`          |
+|   4 | `Composer`       | `composer`       |
+|   5 | `Conductor`      | `conductor`      |
+|   6 | `Ensemble`       | `ensemble`       |
+|   7 | `Work`           | `work`           |
+|   8 | `Movement`       | `movement`       |
+|   9 | `Soloist`        | `soloist`        |
+|  10 | `Year`           | `year`           |
+|  11 | `DiscNumber`     | `disc-number`    |
+|  12 | `TrackNumber`    | `track-number`   |
+|  13 | `Title`          | `title`          |
+|  14 | `Duration`       | `duration`       |
+|  15 | `RecordingYear`  | `recording-year` |
+|  16 | `RecordingDate`  | `recording-date` |
 
 ### Group keys
 
-| Raw | `TrackGroupKey` | Stable id |
-|---:|---|---|
-| 0 | `None` | `none` |
-| 1 | `Artist` | `artist` |
-| 2 | `Album` | `album` |
-| 3 | `AlbumArtist` | `album-artist` |
-| 4 | `Genre` | `genre` |
-| 5 | `Composer` | `composer` |
-| 6 | `Conductor` | `conductor` |
-| 7 | `Ensemble` | `ensemble` |
-| 8 | `Work` | `work` |
-| 9 | `Year` | `year` |
+| Raw | `TrackGroupKey` | Stable id      |
+| --: | --------------- | -------------- |
+|   0 | `None`          | `none`         |
+|   1 | `Artist`        | `artist`       |
+|   2 | `Album`         | `album`        |
+|   3 | `AlbumArtist`   | `album-artist` |
+|   4 | `Genre`         | `genre`        |
+|   5 | `Composer`      | `composer`     |
+|   6 | `Conductor`     | `conductor`    |
+|   7 | `Ensemble`      | `ensemble`     |
+|   8 | `Work`          | `work`         |
+|   9 | `Year`          | `year`         |
 
 ## Validation rules
 

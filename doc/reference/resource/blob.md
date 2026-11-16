@@ -1,6 +1,7 @@
 ---
 id: resource.blob
 ---
+
 # Resource descriptors
 
 ## Scope and version
@@ -35,10 +36,10 @@ A digest is portable; a handle is not, so a transfer document carries the digest
 
 ## Descriptor surface
 
-| Field | Type | Meaning |
-|---|---|---|
-| `digest` | 32 bytes | SHA-256 of the content; the sole identity. |
-| `byteLength` | unsigned 32-bit | Length of the content the digest names. |
+| Field        | Type            | Meaning                                    |
+| ------------ | --------------- | ------------------------------------------ |
+| `digest`     | 32 bytes        | SHA-256 of the content; the sole identity. |
+| `byteLength` | unsigned 32-bit | Length of the content the digest names.    |
 
 The persisted row is exactly 36 bytes: the digest, then the length as four bytes in the machine's own order, which is the record's object representation written whole.
 The row has no header, MIME type, file extension, dimensions, refcount, or payload.
@@ -46,9 +47,9 @@ The row has no header, MIME type, file extension, dimensions, refcount, or paylo
 `byteLength` is a stored fact, never an admission rule: it lets a caller report a cover's size without holding it, and it never decides whether content is read.
 Its evidence decides how it is written:
 
-| Evidence | Writer | Effect on an existing row |
-|---|---|---|
-| Counted | The writer hashed the bytes it counted. | Corrects a disagreeing stored length. |
+| Evidence | Writer                                       | Effect on an existing row                                    |
+| -------- | -------------------------------------------- | ------------------------------------------------------------ |
+| Counted  | The writer hashed the bytes it counted.      | Corrects a disagreeing stored length.                        |
 | Declared | A document stated it and nothing checked it. | Leaves the stored length alone; creates the row when absent. |
 
 `ObservedResourceDescriptor` is the typed counted-evidence wrapper around a `ResourceDescriptor`.
@@ -56,35 +57,35 @@ It carries no payload and has no distinct persisted representation; it lets prep
 
 ## Store surface
 
-| Role | Operation | Result |
-|---|---|---|
-| Reader | `begin()` / `end()` | Input iteration over `(ResourceId, ResourceDescriptor)` in database order. |
-| Reader | `get(id)` | Optional descriptor. |
-| Reader | `maxKey()` | Greatest current numeric key or the underlying empty-store value. |
-| Writer | `get(id)` | Optional descriptor under the write transaction. |
-| Writer | `create(bytes)` | Existing id for equal content or a newly created id, with a counted length; `ValueTooLarge` above `UINT32_MAX`; typed error on storage failure or exhaustion. |
-| Writer | `getOrCreate(descriptor)` | Existing id for that digest, or a newly created row with the declared length. |
-| Writer | `getOrCreate(observed)` | Existing id for that digest, correcting a disagreeing length, or a newly created row with the counted length. |
-| Writer | `tryRemove(id)` | `true` when a row existed and was removed. No production path calls it. |
-| Writer | `clear()` | Typed result from clearing all rows. |
+| Role   | Operation                 | Result                                                                                                                                                        |
+| ------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Reader | `begin()` / `end()`       | Input iteration over `(ResourceId, ResourceDescriptor)` in database order.                                                                                    |
+| Reader | `get(id)`                 | Optional descriptor.                                                                                                                                          |
+| Reader | `maxKey()`                | Greatest current numeric key or the underlying empty-store value.                                                                                             |
+| Writer | `get(id)`                 | Optional descriptor under the write transaction.                                                                                                              |
+| Writer | `create(bytes)`           | Existing id for equal content or a newly created id, with a counted length; `ValueTooLarge` above `UINT32_MAX`; typed error on storage failure or exhaustion. |
+| Writer | `getOrCreate(descriptor)` | Existing id for that digest, or a newly created row with the declared length.                                                                                 |
+| Writer | `getOrCreate(observed)`   | Existing id for that digest, correcting a disagreeing length, or a newly created row with the counted length.                                                 |
+| Writer | `tryRemove(id)`           | `true` when a row existed and was removed. No production path calls it.                                                                                       |
+| Writer | `clear()`                 | Typed result from clearing all rows.                                                                                                                          |
 
 Descriptors are append-only in practice: a rescan that replaces a track's covers leaves earlier rows in place, and a row displaced by a collision must stay reachable along its probe chain.
 Removing one row from the middle of a chain turns a later row's path into a hole, which the open gate rejects as corruption.
 
 The `CoreRuntime`-owned `ResourceByteReader` is the runtime owned-byte operation used by interactive consumers and export:
 
-| Input/result | Exact behavior |
-| --- | --- |
-| `kInvalidResourceId` | successful `nullopt` |
-| missing descriptor | successful `nullopt` |
-| no cache entry and no carrier yielding the digest | successful `nullopt` |
-| bytes within the caller's ceiling | successful owned byte vector |
-| bytes above the caller's ceiling | `ValueTooLarge` |
-| `AppRuntime::resourceBytes()` interactive source | ceiling of `33,554,432` bytes |
-| `readResourceBytesForExportAsync()` export path | no ceiling |
-| cancellation at an executor transition or between candidates | throws `OperationCancelled` |
-| successful or error result affinity | callback executor |
-| library task progress/completion events | none |
+| Input/result                                                 | Exact behavior                |
+| ------------------------------------------------------------ | ----------------------------- |
+| `kInvalidResourceId`                                         | successful `nullopt`          |
+| missing descriptor                                           | successful `nullopt`          |
+| no cache entry and no carrier yielding the digest            | successful `nullopt`          |
+| bytes within the caller's ceiling                            | successful owned byte vector  |
+| bytes above the caller's ceiling                             | `ValueTooLarge`               |
+| `AppRuntime::resourceBytes()` interactive source             | ceiling of `33,554,432` bytes |
+| `readResourceBytesForExportAsync()` export path              | no ceiling                    |
+| cancellation at an executor transition or between candidates | throws `OperationCancelled`   |
+| successful or error result affinity                          | callback executor             |
+| library task progress/completion events                      | none                          |
 
 The read transaction that resolves the descriptor and the carrier snapshot is closed before any cache lookup or file open.
 This operation does not decode or mutate resources, and it never rewrites a reference it could not satisfy.

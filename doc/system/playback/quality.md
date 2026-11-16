@@ -1,6 +1,7 @@
 ---
 id: architecture.audio-quality
 ---
+
 # Audio quality architecture
 
 ## Scope
@@ -37,12 +38,12 @@ UIModel: shared verdict, labels, category, Soul aura
 
 The relevant boundaries are:
 
-| Boundary | System layer | Public surface | Implementation |
-|---|---|---|---|
-| Graph evidence and analysis | Core libraries | `include/ao/audio/` | `lib/audio/` and `lib/audio/backend/` |
-| Accepted application snapshot and event | Application runtime | `app/include/ao/rt/playback/PlaybackService.h`, `PlaybackSnapshot.h` | `app/runtime/playback/PlaybackService.cpp`, `PlaybackTransport.cpp` |
-| Shared presentation policy | UIModel | `app/include/ao/uimodel/playback/quality/` and `soul/` | `app/uimodel/playback/quality/` and `soul/` |
-| Toolkit/terminal adaptation | Frontends | Frontend-local | `app/linux-gtk/playback/`, `app/linux-gtk/css/`, `app/tui/`, `app/windows-winui/playback/`, and `app/macos-appkit/` |
+| Boundary                                | System layer        | Public surface                                                       | Implementation                                                                                                      |
+| --------------------------------------- | ------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Graph evidence and analysis             | Core libraries      | `include/ao/audio/`                                                  | `lib/audio/` and `lib/audio/backend/`                                                                               |
+| Accepted application snapshot and event | Application runtime | `app/include/ao/rt/playback/PlaybackService.h`, `PlaybackSnapshot.h` | `app/runtime/playback/PlaybackService.cpp`, `PlaybackTransport.cpp`                                                 |
+| Shared presentation policy              | UIModel             | `app/include/ao/uimodel/playback/quality/` and `soul/`               | `app/uimodel/playback/quality/` and `soul/`                                                                         |
+| Toolkit/terminal adaptation             | Frontends           | Frontend-local                                                       | `app/linux-gtk/playback/`, `app/linux-gtk/css/`, `app/tui/`, `app/windows-winui/playback/`, and `app/macos-appkit/` |
 
 ## Responsibilities
 

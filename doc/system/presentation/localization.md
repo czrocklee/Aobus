@@ -1,6 +1,7 @@
 ---
 id: presentation.localization
 ---
+
 # Interactive localization
 
 ## Scope and boundaries
@@ -100,20 +101,20 @@ The English root is complete, so a successfully published catalog resolves every
 This matrix is an independently queryable cross-adapter compatibility contract.
 “Then `en`” means that a sparse maintained translation may omit an individual message.
 
-| Requested tag | ICU catalog result | WinUI MRT qualifier chain |
-|---|---|---|
-| `en-GB` | English root | `en` |
-| `de-DE` | neutral German, then English root | `de`, then `en` |
-| `de-AT` | neutral German, then English root | `de`, then `en` |
-| `zh-CN` | Simplified Chinese, then English root | `zh-Hans`, then `en` |
-| `zh-Hans` | Simplified Chinese, then English root | `zh-Hans`, then `en` |
-| `zh-TW` | Traditional Chinese, then English root | `zh-Hant`, then `en` |
-| `zh-Hant` | Traditional Chinese, then English root | `zh-Hant`, then `en` |
-| `ja-JP` | Japanese, then English root | `ja`, then `en` |
-| `es-ES` | Spanish, then English root | `es`, then `en` |
-| `fr-FR` | French, then English root | `fr`, then `en` |
-| valid unsupported tag such as `sv-SE` | English root | `en` |
-| `qps-ploc` | generated pseudo, then English root | `qps-ploc`, then `en` |
+| Requested tag                         | ICU catalog result                     | WinUI MRT qualifier chain |
+| ------------------------------------- | -------------------------------------- | ------------------------- |
+| `en-GB`                               | English root                           | `en`                      |
+| `de-DE`                               | neutral German, then English root      | `de`, then `en`           |
+| `de-AT`                               | neutral German, then English root      | `de`, then `en`           |
+| `zh-CN`                               | Simplified Chinese, then English root  | `zh-Hans`, then `en`      |
+| `zh-Hans`                             | Simplified Chinese, then English root  | `zh-Hans`, then `en`      |
+| `zh-TW`                               | Traditional Chinese, then English root | `zh-Hant`, then `en`      |
+| `zh-Hant`                             | Traditional Chinese, then English root | `zh-Hant`, then `en`      |
+| `ja-JP`                               | Japanese, then English root            | `ja`, then `en`           |
+| `es-ES`                               | Spanish, then English root             | `es`, then `en`           |
+| `fr-FR`                               | French, then English root              | `fr`, then `en`           |
+| valid unsupported tag such as `sv-SE` | English root                           | `en`                      |
+| `qps-ploc`                            | generated pseudo, then English root    | `qps-ploc`, then `en`     |
 
 The shared `zh_Hans` and `zh_Hant` assets serve corresponding regional requests rather than duplicating equivalent regional bundles.
 This does not change the maintained-locale policy or promise region-specific wording.
@@ -180,12 +181,12 @@ The complete authored-versus-external boundary and domain-specific pass-through 
 No partially constructed catalog is published.
 Construction reports:
 
-| Condition | Error code |
-|---|---|
-| Invalid explicit locale tag | `InvalidInput` |
-| Incomplete, unreadable, or malformed embedded catalog | `CorruptData` |
-| ICU allocation failure | `ResourceExhausted` |
-| Other initialization failure | `InitFailed` |
+| Condition                                             | Error code          |
+| ----------------------------------------------------- | ------------------- |
+| Invalid explicit locale tag                           | `InvalidInput`      |
+| Incomplete, unreadable, or malformed embedded catalog | `CorruptData`       |
+| ICU allocation failure                                | `ResourceExhausted` |
+| Other initialization failure                          | `InitFailed`        |
 
 Fixed lookup reports `NotFound` for an out-of-range typed id and `InvalidInput` when the selected message requires arguments.
 Formatting reports `NotFound` for an out-of-range typed id and `InvalidInput` for a missing, duplicate, unexpected, mistyped, out-of-range, or invalid-UTF-8 argument.

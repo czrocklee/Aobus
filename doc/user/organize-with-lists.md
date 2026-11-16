@@ -1,6 +1,7 @@
 ---
 id: user.organize-with-lists
 ---
+
 # Organize music with Lists and Playlists
 
 ## Outcome
@@ -76,12 +77,12 @@ If the tag is restored later, the track returns to that position.
    Windows currently has no drag handle.
 4. In either desktop frontend, use the selected-row **Manual Order** submenu or these shortcuts:
 
-   | Command | Shortcut |
-   |---|---|
-   | Move Up | `Alt+Up` |
-   | Move Down | `Alt+Down` |
-   | Move to Top | `Alt+Home` |
-   | Move to Bottom | `Alt+End` |
+   | Command        | Shortcut   |
+   | -------------- | ---------- |
+   | Move Up        | `Alt+Up`   |
+   | Move Down      | `Alt+Down` |
+   | Move to Top    | `Alt+Home` |
+   | Move to Bottom | `Alt+End`  |
 
 GTK accepts one order mutation per physical key press.
 Holding a shortcut key does not repeat the move through OS auto-repeat; release it and press again for another committed step.

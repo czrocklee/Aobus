@@ -1,6 +1,7 @@
 ---
 id: development.managed-state-schemas
 ---
+
 # Managed-state schemas
 
 ## Scope

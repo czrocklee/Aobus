@@ -25,8 +25,8 @@
 
 /* Popover shell utilities */
 popover.ao-popover-transparent,
-popover.ao-popover-transparent>contents,
-popover.ao-popover-transparent>arrow {
+popover.ao-popover-transparent > contents,
+popover.ao-popover-transparent > arrow {
   background-color: rgba(0, 0, 0, 0);
   background-image: none;
   border: none;
@@ -35,11 +35,11 @@ popover.ao-popover-transparent>arrow {
   outline: none;
 }
 
-popover.ao-popover-p-none>contents {
+popover.ao-popover-p-none > contents {
   padding: 0;
 }
 
-popover.ao-popover-rounded-md>contents {
+popover.ao-popover-rounded-md > contents {
   border-radius: var(--ao-radius-md);
 }
 
@@ -99,7 +99,8 @@ popover.ao-popover-rounded-md>contents {
   opacity: 0.7;
 }
 
-.ao-center-group-modern {}
+.ao-center-group-modern {
+}
 
 .ao-time-label {
   font-size: 0.75rem;
@@ -107,12 +108,12 @@ popover.ao-popover-rounded-md>contents {
   font-feature-settings: "tnum";
 }
 
-.ao-clickable {}
+.ao-clickable {
+}
 
 .ao-clickable:hover {
   opacity: 0.8;
 }
-
 
 /* Bottom bar right-side status */
 

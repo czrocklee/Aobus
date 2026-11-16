@@ -1,6 +1,7 @@
 ---
 id: development.index
 ---
+
 # Develop Aobus
 
 Use the [contributor workflow](../../CONTRIBUTING.md) to begin a change, then choose only the references needed for the task.
@@ -15,17 +16,17 @@ Product structure and behavior live in the [system guide](../system/README.md), 
 
 ## Implement a change
 
-| Task | Guidance |
-|---|---|
-| Write ordinary C++ | [Coding style](coding-style.md) and [naming](naming-convention.md) |
-| Change ownership, a boundary, or an abstraction | [Design review](design-review.md) and the relevant [system topic](../system/README.md) |
-| Place runtime, UIModel, or frontend behavior | [Application-layer review](application-layer-review.md) and [UIModel organization](uimodel-organization.md) |
-| Change GTK signal wiring, binding, or teardown | [GTK lifetime](gtk-lifetime.md) |
-| Change GTK appearance | [GTK style](gtk-style.md) |
-| Add messages, translations, or a locale | [Localization workflow](localization.md) |
-| Change a managed payload | [Managed-state schemas](managed-state-schemas.md) |
-| Change the library database or library YAML | [Library format changes](library-format-changes.md) |
-| Write or reorganize documentation | [Documentation maintenance](documentation.md) |
+| Task                                            | Guidance                                                                                                    |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Write ordinary C++                              | [Coding style](coding-style.md) and [naming](naming-convention.md)                                          |
+| Change ownership, a boundary, or an abstraction | [Design review](design-review.md) and the relevant [system topic](../system/README.md)                      |
+| Place runtime, UIModel, or frontend behavior    | [Application-layer review](application-layer-review.md) and [UIModel organization](uimodel-organization.md) |
+| Change GTK signal wiring, binding, or teardown  | [GTK lifetime](gtk-lifetime.md)                                                                             |
+| Change GTK appearance                           | [GTK style](gtk-style.md)                                                                                   |
+| Add messages, translations, or a locale         | [Localization workflow](localization.md)                                                                    |
+| Change a managed payload                        | [Managed-state schemas](managed-state-schemas.md)                                                           |
+| Change the library database or library YAML     | [Library format changes](library-format-changes.md)                                                         |
+| Write or reorganize documentation               | [Documentation maintenance](documentation.md)                                                               |
 
 ## Test and validate
 

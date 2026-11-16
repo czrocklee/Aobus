@@ -1,6 +1,7 @@
 ---
 id: user.windows-desktop
 ---
+
 # Use the Windows desktop
 
 ## Outcome

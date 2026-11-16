@@ -167,7 +167,7 @@
 .ao-theme-classic .ao-detail-pane {
   /* Use the standard window background to clearly separate it from the main list. */
   background: @theme_bg_color;
-  
+
   /* Tight padding maximizes information density. */
   padding: 6px 10px;
 
@@ -190,9 +190,9 @@
 }
 
 .ao-theme-classic .ao-detail-pane .ao-inline-editor-label {
-  font-size: 0.78rem; 
+  font-size: 0.78rem;
   opacity: 0.85; /* higher contrast than muted — reads like a data label */
-  margin-bottom: 1px; 
+  margin-bottom: 1px;
 }
 
 /* Minimal tag styling. */
@@ -297,7 +297,7 @@
 
 .ao-theme-classic .ao-track-detail-section-header:hover,
 .ao-theme-classic .ao-track-detail-section-header:focus-within {
-  opacity: 1.0;
+  opacity: 1;
   background-color: alpha(@theme_selected_bg_color, 0.08);
 }
 
@@ -322,7 +322,7 @@
 
 .ao-theme-classic .ao-detail-show-all-button:hover,
 .ao-theme-classic .ao-detail-show-all-button:focus-visible {
-  opacity: 1.0;
+  opacity: 1;
   background: alpha(@theme_selected_bg_color, 0.12);
   color: @theme_fg_color;
   text-decoration: none;

@@ -1,6 +1,7 @@
 ---
 id: development.commit-message
 ---
+
 # Commit message guidelines
 
 Commit messages are part of the project history. Write them for the next person

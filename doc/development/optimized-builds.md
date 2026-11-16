@@ -1,6 +1,7 @@
 ---
 id: development.optimized-builds
 ---
+
 # Optimized builds
 
 Use `release` for optimized correctness and shipping-style evidence. Use
@@ -10,10 +11,10 @@ Linux already preserves frame pointers in its
 
 ## Choose a flavor
 
-| Flavor | Platforms | Configuration | Intended evidence |
-|---|---|---|---|
+| Flavor    | Platforms             | Configuration                                                                                              | Intended evidence                                                    |
+| --------- | --------------------- | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
 | `release` | Linux, macOS, Windows | Release with IPO/LTO for supported C++ targets; MSVC uses `/GL`+`/LTCG`, with one exact per-file exception | Optimized build, test, integration, size, and performance validation |
-| `profile` | Linux, macOS | Unix `-O2` with debug information and frame pointers; no IPO | Sampling and call-graph investigation |
+| `profile` | Linux, macOS          | Unix `-O2` with debug information and frame pointers; no IPO                                               | Sampling and call-graph investigation                                |
 
 Every Release configuration enables interprocedural optimization for supported
 C++ targets. Debug, ASan, TSan, and `profile` do not enable IPO. Prebuilt

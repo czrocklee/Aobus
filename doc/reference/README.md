@@ -1,6 +1,7 @@
 ---
 id: reference.index
 ---
+
 # Reference
 
 Use these pages to look up exact commands, languages, formats, compatibility rules, and semantic vocabularies.

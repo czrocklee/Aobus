@@ -1,6 +1,7 @@
 ---
 id: decision.index
 ---
+
 # Architectural decisions
 
 Decision records preserve why a consequential choice was made, the alternatives considered, and the accepted consequences.

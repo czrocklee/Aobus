@@ -2,6 +2,7 @@
 id: decision.0007.unify-fatal-diagnostics-and-abort
 status: accepted
 ---
+
 # Decision 0007: unify fatal diagnostics and abort
 
 ## Context

@@ -1,6 +1,7 @@
 ---
 id: user.manage-library
 ---
+
 # Manage a music library
 
 ## Outcome

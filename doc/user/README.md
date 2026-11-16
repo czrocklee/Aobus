@@ -1,6 +1,7 @@
 ---
 id: user.index
 ---
+
 # User documentation
 
 This area explains how to accomplish tasks with the Linux GTK application, Windows desktop, TUI, and CLI without requiring knowledge of Aobus internals.

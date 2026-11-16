@@ -1,6 +1,7 @@
 ---
 id: architecture.playback
 ---
+
 # Playback architecture
 
 ## Find the contract for your change
@@ -50,13 +51,13 @@ Player / Engine
 
 The graph crosses the layers in the [system architecture](../overview.md):
 
-| Area | Layer | Boundary |
-|---|---|---|
-| Succession, transport, and persistence | Application runtime | [`app/include/ao/rt/`](../../../app/include/ao/rt/) with private owners under [`app/runtime/`](../../../app/runtime/) |
-| Commands and display adaptation | UIModel | [`app/include/ao/uimodel/playback/`](../../../app/include/ao/uimodel/playback/) |
-| Player, Engine, decoder, PCM, and backend interfaces | Core libraries | [`include/ao/audio/`](../../../include/ao/audio/) |
-| Concrete decoding, buffering, routing, and native output | Core libraries | [`lib/audio/`](../../../lib/audio/) |
-| Widgets and platform lifecycle | Frontends | [GTK, TUI, WinUI, and AppKit application trees](../frontend/README.md) |
+| Area                                                     | Layer               | Boundary                                                                                                              |
+| -------------------------------------------------------- | ------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Succession, transport, and persistence                   | Application runtime | [`app/include/ao/rt/`](../../../app/include/ao/rt/) with private owners under [`app/runtime/`](../../../app/runtime/) |
+| Commands and display adaptation                          | UIModel             | [`app/include/ao/uimodel/playback/`](../../../app/include/ao/uimodel/playback/)                                       |
+| Player, Engine, decoder, PCM, and backend interfaces     | Core libraries      | [`include/ao/audio/`](../../../include/ao/audio/)                                                                     |
+| Concrete decoding, buffering, routing, and native output | Core libraries      | [`lib/audio/`](../../../lib/audio/)                                                                                   |
+| Widgets and platform lifecycle                           | Frontends           | [GTK, TUI, WinUI, and AppKit application trees](../frontend/README.md)                                                |
 
 Playback is not one state machine shared by all layers. Application runtime owns listening semantics; Core audio owns execution. The boundary between them carries explicit starts, prepared transitions, output commands, opaque audio identities, and observations.
 
@@ -142,14 +143,14 @@ Persistence captures matching succession and transport state from a coherent app
 
 ## Execution and thread boundaries
 
-| Domain | Owns | Boundary rule |
-|---|---|---|
-| Runtime callback executor | PlaybackService, succession, transport, persistence, Player application state | Runtime-visible mutations, public observations, and Player public state are executor-affine. |
-| Async runtime workers/timers | Decoder inspection/preparation, lookahead preparation, persistence delays | Workers hold isolated values; accepted results return through cancellation-checked executor hops. Decoder calls are not forcibly interruptible. |
-| Engine control synchronization | Timeline, backend attachment, route and playback generations | Public control calls run on their callers and are serialized internally; this is not a dedicated control thread. |
-| Engine event worker | Backend/source events and realtime transition signals | Applies accepted events and originates Engine callbacks off producer stacks. |
-| StreamingSource decode worker | PCM production for one source | One producer writes a bounded ring; seek stops and joins it before reset. |
-| Backend render/device domains | Native output and PCM consumption | Realtime work is bounded and does not take application or Engine control locks. |
+| Domain                         | Owns                                                                          | Boundary rule                                                                                                                                   |
+| ------------------------------ | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Runtime callback executor      | PlaybackService, succession, transport, persistence, Player application state | Runtime-visible mutations, public observations, and Player public state are executor-affine.                                                    |
+| Async runtime workers/timers   | Decoder inspection/preparation, lookahead preparation, persistence delays     | Workers hold isolated values; accepted results return through cancellation-checked executor hops. Decoder calls are not forcibly interruptible. |
+| Engine control synchronization | Timeline, backend attachment, route and playback generations                  | Public control calls run on their callers and are serialized internally; this is not a dedicated control thread.                                |
+| Engine event worker            | Backend/source events and realtime transition signals                         | Applies accepted events and originates Engine callbacks off producer stacks.                                                                    |
+| StreamingSource decode worker  | PCM production for one source                                                 | One producer writes a bounded ring; seek stops and joins it before reset.                                                                       |
+| Backend render/device domains  | Native output and PCM consumption                                             | Realtime work is bounded and does not take application or Engine control locks.                                                                 |
 
 Player intentionally bridges the callback executor and thread-tolerant Engine. Engine bridges synchronous control with event, decode, and render domains. Cancellation evidence is local to its owner: service command generations, Player task handles, Engine playback/route generations, prepared-next tokens, and persistence task generations are not interchangeable.
 

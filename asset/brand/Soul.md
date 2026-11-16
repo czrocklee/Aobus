@@ -8,7 +8,7 @@ The **Aobus Soul** is the brand system for Aobus: a two-part mark built from `a`
 
 ## Brand Story
 
-The name **Aobus** comes from *"Ao-bu"*, an early, deliberate syllable spoken by the creator's daughter. That origin gives the brand its emotional center: the effort to turn raw voice into expression. Aobus applies that same idea to audio, bridging precise digital structure and lived musical feeling.
+The name **Aobus** comes from _"Ao-bu"_, an early, deliberate syllable spoken by the creator's daughter. That origin gives the brand its emotional center: the effort to turn raw voice into expression. Aobus applies that same idea to audio, bridging precise digital structure and lived musical feeling.
 
 ## Core Visual Idea
 
@@ -19,17 +19,17 @@ The name **Aobus** comes from *"Ao-bu"*, an early, deliberate syllable spoken by
 
 ## Color Tokens
 
-| Token | Value | Use |
-| :--- | :--- | :--- |
-| Brand cyan | `#06B6D4` | Master SVG, documentation, and hero visuals |
-| UI cyan | `#00E5FF` | Dormant aura; stopped playback in small GTK rendering |
-| Anchor amber | `#F97316` | Static `a` anchor |
-| Radiant purple | `#A855F7` | Radiant aura; reserved for the top verified signal state |
-| Flowing green | `#10B981` | Flowing aura; preserved-signal states |
-| Turbulent orange | `#F59E0B` | Turbulent aura; linear intervention state |
-| Burning red | `#EF4444` | Burning aura; clipped signal state |
-| Veiled gray | `#6B7280` | Veiled aura; lossy, unknown, partially verified, or unavailable state |
-| Night field | `#111827` | Dark icon tile and presentation background |
+| Token            | Value     | Use                                                                   |
+| :--------------- | :-------- | :-------------------------------------------------------------------- |
+| Brand cyan       | `#06B6D4` | Master SVG, documentation, and hero visuals                           |
+| UI cyan          | `#00E5FF` | Dormant aura; stopped playback in small GTK rendering                 |
+| Anchor amber     | `#F97316` | Static `a` anchor                                                     |
+| Radiant purple   | `#A855F7` | Radiant aura; reserved for the top verified signal state              |
+| Flowing green    | `#10B981` | Flowing aura; preserved-signal states                                 |
+| Turbulent orange | `#F59E0B` | Turbulent aura; linear intervention state                             |
+| Burning red      | `#EF4444` | Burning aura; clipped signal state                                    |
+| Veiled gray      | `#6B7280` | Veiled aura; lossy, unknown, partially verified, or unavailable state |
+| Night field      | `#111827` | Dark icon tile and presentation background                            |
 
 ## Geometry And Motion
 
@@ -48,13 +48,13 @@ The system is tuned around the Golden Ratio (`phi ~= 1.618`) to keep the animati
 
 ## Asset Set
 
-| File | Role |
-| :--- | :--- |
-| `Soul.svg` | The animated master asset on a fixed night-field tile. Used as the primary hero visual. |
-| `SoulMark.svg` | Static full-color mark on a transparent background. |
-| `SoulSymbol.svg` | Static soul-only symbol for tiny or square placements. |
-| `SoulMono.svg` | Single-color transparent mark for one-color applications. |
-| `Aobus.icns` | Native macOS application icon rendered from the unmodified `SoulSymbol.svg`. |
+| File             | Role                                                                                    |
+| :--------------- | :-------------------------------------------------------------------------------------- |
+| `Soul.svg`       | The animated master asset on a fixed night-field tile. Used as the primary hero visual. |
+| `SoulMark.svg`   | Static full-color mark on a transparent background.                                     |
+| `SoulSymbol.svg` | Static soul-only symbol for tiny or square placements.                                  |
+| `SoulMono.svg`   | Single-color transparent mark for one-color applications.                               |
+| `Aobus.icns`     | Native macOS application icon rendered from the unmodified `SoulSymbol.svg`.            |
 
 ## Usage
 

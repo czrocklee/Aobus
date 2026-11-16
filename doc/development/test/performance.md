@@ -1,6 +1,7 @@
 ---
 id: development.test.performance
 ---
+
 # Performance review
 
 ## Scope
@@ -192,7 +193,7 @@ Each library is measured over its full source and its first tenth (1,000 or 10,0
 - A byte-only row records the freshly seeded library's database high-water allocation before the update workload, not live payload bytes or projection heap.
 
 The dataset label records `page-cache=seeded-warm`: seeding and warm-ups leave mapped database pages resident.
-This is cold-*metadata* access with fresh derived caches, not a cold OS page-cache or first-process-start measurement.
+This is cold-_metadata_ access with fresh derived caches, not a cold OS page-cache or first-process-start measurement.
 No global cache drop is performed.
 Retain the command, CPU/load conditions, source diff and untracked-source hashes with the raw report, and repeat the same workload after the format change.
 The single-entry category fixture remains separate from the cardinality workloads below; their latencies are not interchangeable.
@@ -340,13 +341,13 @@ convention.
 
 Future reviews must satisfy every row on both platforms:
 
-| Workload | Median budget | p95 budget | Relative or key-byte budget |
-|---|---:|---:|---:|
-| 50k full rebuild | 50 ms | 75 ms | At most 3.0x the same-run byte median |
-| One-row update over 50k | 5 ms | 10 ms | Absolute budget only |
-| Completion vocabulary | 2 ms | 5 ms | Absolute budget only |
-| Warm collator construction | 1 ms | 2 ms | One construction per startup locale |
-| Unique generated key bytes | N/A | N/A | At most 1.5x the matching byte-key fixture |
+| Workload                   | Median budget | p95 budget |                Relative or key-byte budget |
+| -------------------------- | ------------: | ---------: | -----------------------------------------: |
+| 50k full rebuild           |         50 ms |      75 ms |      At most 3.0x the same-run byte median |
+| One-row update over 50k    |          5 ms |      10 ms |                       Absolute budget only |
+| Completion vocabulary      |          2 ms |       5 ms |                       Absolute budget only |
+| Warm collator construction |          1 ms |       2 ms |        One construction per startup locale |
+| Unique generated key bytes |           N/A |        N/A | At most 1.5x the matching byte-key fixture |
 
 Arena-backed workloads derive the byte metric from new `StringArena` interns;
 vocabulary workloads deduplicate equal binary keys before summing them. It must

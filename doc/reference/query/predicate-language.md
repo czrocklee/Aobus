@@ -1,6 +1,7 @@
 ---
 id: query.predicate-language
 ---
+
 # Predicate expression language
 
 ## Scope and version
@@ -109,23 +110,23 @@ Consequently, every casing of `and`, `or`, `not`, and `in` is reserved as a bare
 
 ### Operator precedence
 
-| Precedence | Operators | Surface role |
-|---:|---|---|
-| 1 | `?` | Postfix variable existence |
-| 2 | `not`, `!` | Boolean negation |
-| 3 | `+`, adjacency | Shared-parser string concatenation; rejected by predicate compilation |
-| 4 | `=`, `!=`, `<`, `<=`, `>`, `>=`, `~`, `in` | Comparison and membership |
-| 5 | `and`, `&&` | Conjunction |
-| 6 | `or`, `||` | Disjunction |
+| Precedence | Operators                                  | Surface role                                                          |
+| ---------: | ------------------------------------------ | --------------------------------------------------------------------- |
+|          1 | `?`                                        | Postfix variable existence                                            |
+|          2 | `not`, `!`                                 | Boolean negation                                                      |
+|          3 | `+`, adjacency                             | Shared-parser string concatenation; rejected by predicate compilation |
+|          4 | `=`, `!=`, `<`, `<=`, `>`, `>=`, `~`, `in` | Comparison and membership                                             |
+|          5 | `and`, `&&`                                | Conjunction                                                           |
+|          6 | `or`, `                                    |                                                                       | `   | Disjunction |
 
 ### Variable domains
 
-| Prefix | Domain | Name form | Example |
-|---|---|---|---|
-| `$` | Curated metadata | System identifier | `$albumArtist` |
-| `@` | Technical property | System identifier | `@sampleRate` |
-| `#` | Tag membership | Bare or quoted user name | `#favorite`, `#"90s Rock"` |
-| `%` | Custom metadata | Bare or quoted user name | `%isrc`, `%"Replay Gain"` |
+| Prefix | Domain             | Name form                | Example                    |
+| ------ | ------------------ | ------------------------ | -------------------------- |
+| `$`    | Curated metadata   | System identifier        | `$albumArtist`             |
+| `@`    | Technical property | System identifier        | `@sampleRate`              |
+| `#`    | Tag membership     | Bare or quoted user name | `#favorite`, `#"90s Rock"` |
+| `%`    | Custom metadata    | Bare or quoted user name | `%isrc`, `%"Replay Gain"`  |
 
 System identifiers cannot start with a digit.
 Tag and custom names may start with a digit and support the compact quoted form `#"name"` or `%"name"` and the bracketed form `#["name"]` or `%["name"]`.
@@ -134,29 +135,29 @@ Quoted user-variable names must be non-empty.
 ### Metadata variables
 
 | Canonical variable | Alias |
-|---|---|
-| `$title` | `$t` |
-| `$artist` | `$a` |
-| `$album` | `$al` |
-| `$albumArtist` | `$aa` |
-| `$composer` | `$c` |
-| `$conductor` | None |
-| `$ensemble` | None |
-| `$work` | `$w` |
-| `$movement` | `$m` |
-| `$soloist` | None |
-| `$recordingDate` | None |
-| `$performer` | None |
-| `$credit` | None |
-| `$genre` | `$g` |
-| `$year` | `$y` |
-| `$trackNumber` | `$tn` |
-| `$trackTotal` | `$tt` |
-| `$discNumber` | `$dn` |
-| `$discTotal` | `$td` |
-| `$movementNumber` | `$mn` |
-| `$movementTotal` | `$mt` |
-| `$coverArt` | `$ca` |
+| ------------------ | ----- |
+| `$title`           | `$t`  |
+| `$artist`          | `$a`  |
+| `$album`           | `$al` |
+| `$albumArtist`     | `$aa` |
+| `$composer`        | `$c`  |
+| `$conductor`       | None  |
+| `$ensemble`        | None  |
+| `$work`            | `$w`  |
+| `$movement`        | `$m`  |
+| `$soloist`         | None  |
+| `$recordingDate`   | None  |
+| `$performer`       | None  |
+| `$credit`          | None  |
+| `$genre`           | `$g`  |
+| `$year`            | `$y`  |
+| `$trackNumber`     | `$tn` |
+| `$trackTotal`      | `$tt` |
+| `$discNumber`      | `$dn` |
+| `$discTotal`       | `$td` |
+| `$movementNumber`  | `$mn` |
+| `$movementTotal`   | `$mt` |
+| `$coverArt`        | `$ca` |
 
 Each text metadata variable holds one stored value, even when that value names several people.
 `=` compares the whole value: `$artist = "Glenn Gould"` does not match `Glenn Gould; Yo-Yo Ma`, `Glenn Gould & Yo-Yo Ma`, or `Glenn Gould/Yo-Yo Ma`.
@@ -166,23 +167,23 @@ No operator splits a stored value into names; only the [credit selectors](#credi
 ### Property variables
 
 | Canonical variable | Alias |
-|---|---|
-| `@duration` | `@l` |
-| `@bitrate` | `@br` |
-| `@sampleRate` | `@sr` |
-| `@channels` | None |
-| `@bitDepth` | `@bd` |
-| `@codec` | None |
+| ------------------ | ----- |
+| `@duration`        | `@l`  |
+| `@bitrate`         | `@br` |
+| `@sampleRate`      | `@sr` |
+| `@channels`        | None  |
+| `@bitDepth`        | `@bd` |
+| `@codec`           | None  |
 
 `@codec` constants are `UNKNOWN`, `FLAC`, `ALAC`, `WAV`, `AAC`, `MP3`, and `Opus`, matched case-insensitively.
 
 ### Unit literals
 
-| Left-field context | Units | Scale |
-|---|---|---|
-| `@duration` | `ms`, `s`, `m`, `h` | Milliseconds, seconds, minutes, hours |
-| `@bitrate` | `k`, `m` | Thousand, million |
-| `@sampleRate` | `k`, `m` | Thousand, million |
+| Left-field context | Units               | Scale                                 |
+| ------------------ | ------------------- | ------------------------------------- |
+| `@duration`        | `ms`, `s`, `m`, `h` | Milliseconds, seconds, minutes, hours |
+| `@bitrate`         | `k`, `m`            | Thousand, million                     |
+| `@sampleRate`      | `k`, `m`            | Thousand, million                     |
 
 Unit suffixes are case-insensitive.
 Duration may concatenate unit segments, as in `2m30s`.
@@ -209,15 +210,15 @@ For `=`, `!=`, `<`, `<=`, `>`, and `>=`, compare a present stored date only at t
 Components missing from the stored date remain zero, never filled from the literal.
 This is a deterministic partial-key comparison, not inferred evidence of an actual month or day:
 
-| Stored date | Predicate | Result |
-|---|---|---|
-| `1981-05-12` | `= "1981"` | True |
-| `1981-05-12` | `> "1981"` | False |
-| `1981-05-12` | `<= "1981"` | True |
-| `1981-05-12` | `= "1981-05"` | True |
-| `1981` | `= "1981-05"` | False |
-| `1981` | `< "1981-05"` | True, by zero-component ordering |
-| `1981-05-12` | `> "1981-05-11"` | True |
+| Stored date  | Predicate        | Result                           |
+| ------------ | ---------------- | -------------------------------- |
+| `1981-05-12` | `= "1981"`       | True                             |
+| `1981-05-12` | `> "1981"`       | False                            |
+| `1981-05-12` | `<= "1981"`      | True                             |
+| `1981-05-12` | `= "1981-05"`    | True                             |
+| `1981`       | `= "1981-05"`    | False                            |
+| `1981`       | `< "1981-05"`    | True, by zero-component ordering |
+| `1981-05-12` | `> "1981-05-11"` | True                             |
 
 `in [a, b]` is equality against each literal at that literal's precision.
 `in lower..upper` is exactly `>= lower and <= upper`, each bound retaining its own precision.
@@ -238,13 +239,13 @@ Outside queries, exact date equality includes every component and stored precisi
 `$musician` is not a field or an alias.
 These selectors test names, never role text, and are not scalar text or ordinary dictionary-id fields:
 
-| Form | Meaning |
-|---|---|
-| `$credit?` | At least one selected entry exists. |
-| `$credit = "X"` | Any selected name equals X by case-sensitive NFC dictionary identity. |
-| `$credit != "X"` | No selected name equals X, including an empty selection. |
-| `$credit ~ "X"` | Any individual selected name contains X under the ordinary Unicode-caseless substring semantic. |
-| `$credit in ["X", "Y"]` | Any selected name equals one of the supplied strings. |
+| Form                    | Meaning                                                                                         |
+| ----------------------- | ----------------------------------------------------------------------------------------------- |
+| `$credit?`              | At least one selected entry exists.                                                             |
+| `$credit = "X"`         | Any selected name equals X by case-sensitive NFC dictionary identity.                           |
+| `$credit != "X"`        | No selected name equals X, including an empty selection.                                        |
+| `$credit ~ "X"`         | Any individual selected name contains X under the ordinary Unicode-caseless substring semantic. |
+| `$credit in ["X", "Y"]` | Any selected name equals one of the supplied strings.                                           |
 
 The same operators apply to each category selector.
 
@@ -342,26 +343,26 @@ $performer? and $performer != "Glenn Gould"
 
 Representative invalid forms are:
 
-| Expression | Rejection |
-|---|---|
-| `$123 = x` | A system identifier cannot start with a digit. |
-| `#""` | A quoted user name cannot be empty. |
-| `$artist in []` | A list cannot be empty. |
-| `$year in 1990..` | Both range bounds are required. |
-| `$artist in 1..5` | Ordered dictionary comparison requires strings. |
-| `$year` | A non-tag variable is not a predicate. |
-| `!$year` | Missing-field syntax requires `!$year?`. |
-| `$title + $artist = x` | Predicate compilation rejects concatenation. |
-| `@duration ~ "three"` | Substring applies only to text and URI fields. |
-| `@duration >= 10k` | `k` is not a duration unit. |
-| `@codec = VORBIS` | `VORBIS` is not a supported codec constant. |
-| `$recordingDate = 1981-05` | A hyphenated date requires quotes. |
-| `$recordingDate = "1900-02-29"` | The calendar date is invalid. |
-| `$recordingDate = $year` | The date operand must be a literal, not another field. |
-| `$credit > "Gould"` | Member-name ordering is unsupported. |
-| `$creditRole = "piano"` | No role query field exists. |
-| `"Gould" = $soloist` | The member field must be on the left. |
-| `$musician?` | No musician field or alias exists. |
+| Expression                      | Rejection                                              |
+| ------------------------------- | ------------------------------------------------------ |
+| `$123 = x`                      | A system identifier cannot start with a digit.         |
+| `#""`                           | A quoted user name cannot be empty.                    |
+| `$artist in []`                 | A list cannot be empty.                                |
+| `$year in 1990..`               | Both range bounds are required.                        |
+| `$artist in 1..5`               | Ordered dictionary comparison requires strings.        |
+| `$year`                         | A non-tag variable is not a predicate.                 |
+| `!$year`                        | Missing-field syntax requires `!$year?`.               |
+| `$title + $artist = x`          | Predicate compilation rejects concatenation.           |
+| `@duration ~ "three"`           | Substring applies only to text and URI fields.         |
+| `@duration >= 10k`              | `k` is not a duration unit.                            |
+| `@codec = VORBIS`               | `VORBIS` is not a supported codec constant.            |
+| `$recordingDate = 1981-05`      | A hyphenated date requires quotes.                     |
+| `$recordingDate = "1900-02-29"` | The calendar date is invalid.                          |
+| `$recordingDate = $year`        | The date operand must be a literal, not another field. |
+| `$credit > "Gould"`             | Member-name ordering is unsupported.                   |
+| `$creditRole = "piano"`         | No role query field exists.                            |
+| `"Gould" = $soloist`            | The member field must be on the left.                  |
+| `$musician?`                    | No musician field or alias exists.                     |
 
 ## Implementation authority
 

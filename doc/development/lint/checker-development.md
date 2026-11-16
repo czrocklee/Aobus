@@ -1,6 +1,7 @@
 ---
 id: development.lint.checker-development
 ---
+
 # Aobus clang-tidy checker development
 
 This page serves maintainers of `tool/lint/` and its integration fixtures.

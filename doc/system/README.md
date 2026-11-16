@@ -1,6 +1,7 @@
 ---
 id: architecture.index
 ---
+
 # How Aobus works
 
 Aobus exposes GTK, WinUI, AppKit, TUI, and CLI frontends over shared runtime and Core libraries.
@@ -9,17 +10,17 @@ These pages describe current structure and the contracts implementations and tes
 
 ## Find a subsystem
 
-| Question | Topic |
-|---|---|
-| How do library reads, mutations, scans, and live views fit together? | [Library](library/README.md) |
-| How do playback commands become an audio stream? | [Playback](playback/README.md) |
-| How are predicates, formatting, and completion evaluated? | [Track expressions](query/README.md) |
-| How are encoded audio files recognized and read? | [Media](media/README.md) |
-| How do covers travel from media evidence to frontend images? | [Resource delivery](resource/README.md) |
-| Who owns open views, navigation, selection, and sessions? | [Workspace](workspace/README.md) |
-| Which behavior belongs to runtime, UIModel, or a frontend? | [Presentation](presentation/README.md) |
-| How are layouts, actions, shortcuts, and shell state composed? | [Application shell](shell/README.md) |
-| What differs between graphical, terminal, and command-line adapters? | [Frontends](frontend/README.md) |
+| Question                                                             | Topic                                   |
+| -------------------------------------------------------------------- | --------------------------------------- |
+| How do library reads, mutations, scans, and live views fit together? | [Library](library/README.md)            |
+| How do playback commands become an audio stream?                     | [Playback](playback/README.md)          |
+| How are predicates, formatting, and completion evaluated?            | [Track expressions](query/README.md)    |
+| How are encoded audio files recognized and read?                     | [Media](media/README.md)                |
+| How do covers travel from media evidence to frontend images?         | [Resource delivery](resource/README.md) |
+| Who owns open views, navigation, selection, and sessions?            | [Workspace](workspace/README.md)        |
+| Which behavior belongs to runtime, UIModel, or a frontend?           | [Presentation](presentation/README.md)  |
+| How are layouts, actions, shortcuts, and shell state composed?       | [Application shell](shell/README.md)    |
+| What differs between graphical, terminal, and command-line adapters? | [Frontends](frontend/README.md)         |
 
 ## Follow a cross-cutting contract
 

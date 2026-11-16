@@ -1,6 +1,7 @@
 ---
 id: query.predicate-evaluation
 ---
+
 # Predicate evaluation
 
 ## Scope
@@ -46,18 +47,18 @@ Its public compiler and evaluator interfaces live under `include/ao/query/` and 
 
 ### Existence
 
-| Field kind | Exists when |
-|---|---|
-| Title and URI text | The string is non-empty. |
-| Dictionary metadata | The dictionary id is not invalid. |
-| Year, track/disc/movement numbers and totals | The stored value is greater than zero. |
-| Recording date | The stored date has a nonzero year. |
-| Credit member selector | The selected category or all-credit list is nonempty. |
-| Duration, bitrate, sample rate, channels, and bit depth | The stored value is greater than zero. |
-| Codec | The codec is not `UNKNOWN`. |
-| Cover art | Primary cover selection yields a valid resource id. |
-| Tag | The track contains the named tag id. |
-| Custom metadata | The named key is present, even if its value is empty. |
+| Field kind                                              | Exists when                                           |
+| ------------------------------------------------------- | ----------------------------------------------------- |
+| Title and URI text                                      | The string is non-empty.                              |
+| Dictionary metadata                                     | The dictionary id is not invalid.                     |
+| Year, track/disc/movement numbers and totals            | The stored value is greater than zero.                |
+| Recording date                                          | The stored date has a nonzero year.                   |
+| Credit member selector                                  | The selected category or all-credit list is nonempty. |
+| Duration, bitrate, sample rate, channels, and bit depth | The stored value is greater than zero.                |
+| Codec                                                   | The codec is not `UNKNOWN`.                           |
+| Cover art                                               | Primary cover selection yields a valid resource id.   |
+| Tag                                                     | The track contains the named tag id.                  |
+| Custom metadata                                         | The named key is present, even if its value is empty. |
 
 Dictionary metadata includes artist, album, album artist, genre, composer, work, and movement.
 Conductor, Ensemble, Soloist, and Performer are credit category selectors; Credit selects all categories.

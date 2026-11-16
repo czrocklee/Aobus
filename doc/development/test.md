@@ -1,6 +1,7 @@
 ---
 id: development.test
 ---
+
 # Testing policy
 
 Aobus tests are behavior contracts, not coverage probes. Prefer small tests that
@@ -14,19 +15,19 @@ samples), see the focused documents under `doc/development/test/`.
 
 ## Detailed references
 
-| Document | Scope |
-|---|---|
-| [`test/scope.md`](test/scope.md) | Whether a test, runtime check, or gate step should exist, and when to remove one |
-| [`test/layer-selection.md`](test/layer-selection.md) | Layer boundaries and contract/assertion-layer choices |
-| [`test/naming-and-assertion.md`](test/naming-and-assertion.md) | Test names, tags, structure, and assertion quality |
-| [`test/fixture-and-helper.md`](test/fixture-and-helper.md) | Fixtures, helpers, FakeIt, test data, and filesystem setup |
-| [`test/runtime-and-async.md`](test/runtime-and-async.md) | Deterministic async, runtime service, callback, and lifetime tests |
-| [`test/concurrency-and-sanitizer.md`](test/concurrency-and-sanitizer.md) | Concurrency tags, race matrices, TSan gates, and review checklist |
-| [`test/uimodel-and-gtk.md`](test/uimodel-and-gtk.md) | UIModel policy tests, GTK adapter tests, geometry, lifecycle, and testability |
-| [`test/coverage-workflow.md`](test/coverage-workflow.md) | Coverage reports and the measure-analyze-test-verify loop |
-| [`test/validation-and-review.md`](test/validation-and-review.md) | New files, reviewing existing tests, validation, smells, and review checklist |
-| [`test/test-suite.md`](test/test-suite.md) | Native Bazel test selection, prerequisites, and complete validation |
-| [`test/performance.md`](test/performance.md) | Standalone optimized performance sampling and report evidence |
+| Document                                                                 | Scope                                                                            |
+| ------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| [`test/scope.md`](test/scope.md)                                         | Whether a test, runtime check, or gate step should exist, and when to remove one |
+| [`test/layer-selection.md`](test/layer-selection.md)                     | Layer boundaries and contract/assertion-layer choices                            |
+| [`test/naming-and-assertion.md`](test/naming-and-assertion.md)           | Test names, tags, structure, and assertion quality                               |
+| [`test/fixture-and-helper.md`](test/fixture-and-helper.md)               | Fixtures, helpers, FakeIt, test data, and filesystem setup                       |
+| [`test/runtime-and-async.md`](test/runtime-and-async.md)                 | Deterministic async, runtime service, callback, and lifetime tests               |
+| [`test/concurrency-and-sanitizer.md`](test/concurrency-and-sanitizer.md) | Concurrency tags, race matrices, TSan gates, and review checklist                |
+| [`test/uimodel-and-gtk.md`](test/uimodel-and-gtk.md)                     | UIModel policy tests, GTK adapter tests, geometry, lifecycle, and testability    |
+| [`test/coverage-workflow.md`](test/coverage-workflow.md)                 | Coverage reports and the measure-analyze-test-verify loop                        |
+| [`test/validation-and-review.md`](test/validation-and-review.md)         | New files, reviewing existing tests, validation, smells, and review checklist    |
+| [`test/test-suite.md`](test/test-suite.md)                               | Native Bazel test selection, prerequisites, and complete validation              |
+| [`test/performance.md`](test/performance.md)                             | Standalone optimized performance sampling and report evidence                    |
 
 ## What deserves a test
 

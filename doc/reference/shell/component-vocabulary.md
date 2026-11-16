@@ -1,6 +1,7 @@
 ---
 id: shell.component-vocabulary
 ---
+
 # Shared component vocabulary
 
 ## Scope and version
@@ -27,43 +28,43 @@ A type id naming one shell - `windows.navigationPane`, `collapsibleSplit` - is b
 
 `Children` is the schema's accepted child range. The two tables below summarize the canonical shared schema; shell extensions are listed separately.
 
-| Type | Display name | Category | Children | Surfaces | Persistent state | Shared properties | Action slots | Default actions |
-|---|---|---|---|---|---|---|---|---|
-| `box` | Box | Containers | 0..any | main | no | `orientation`, `spacing` | none | none |
-| `split` | Split Pane | Containers | 2..2 | main | yes | `orientation` | none | none |
-| `label` | Label | Generic | 0..0 | main | no | `text` | none | none |
-| `actionButton` | Action Button | Generic | 0..0 | main | no | `text` | primary click, primary long press | none |
-| `menuButton` | Menu Button | Generic | 0..0 | main | no | `text` | none | none |
-| `app.menuBar` | Menu Bar | Application | 0..0 | main | no | none | none | none |
-| `track.table` | Track Table | Tracks | 0..0 | main | no | none | none | none |
-| `track.quickFilter` | Quick Filter | Tracks | 0..0 | main | no | none | none | none |
-| `track.presentationButton` | Presentation Button | Tracks | 0..0 | main | no | `variant` | none | none |
-| `track.coverArt` | Cover Art | Tracks | 0..0 | main | no | `placeholderStyle` | none | none |
-| `playback.transportButton` | Transport Button | Playback | 0..0 | main | no | `command` | none | none |
-| `playback.soulButton` | Soul Button | Playback | 0..0 | main | no | `strokeWidth`, `glyphScale` | primary click, primary long press, secondary click | none |
-| `playback.seekSlider` | Seek Slider | Playback | 0..0 | main | no | none | none | none |
-| `playback.timeLabel` | Time Label | Playback | 0..0 | main | no | `mode` | none | none |
-| `playback.volumeControl` | Volume Control | Playback | 0..0 | main | no | none | none | none |
-| `playback.outputDeviceSelector` | Output Device Selector | Playback | 0..0 | main | no | none | none | none |
-| `status.activity` | Activity Status | Status | 0..0 | main | no | none | none | none |
-| `status.trackCount` | Track Count | Status | 0..0 | main | no | none | none | none |
-| `status.selectionInfo` | Selection Info | Status | 0..0 | main | no | none | none | none |
-| `status.message` | Status Message | Status | 0..0 | main | no | none | none | none |
+| Type                            | Display name           | Category    | Children | Surfaces | Persistent state | Shared properties           | Action slots                                       | Default actions |
+| ------------------------------- | ---------------------- | ----------- | -------- | -------- | ---------------- | --------------------------- | -------------------------------------------------- | --------------- |
+| `box`                           | Box                    | Containers  | 0..any   | main     | no               | `orientation`, `spacing`    | none                                               | none            |
+| `split`                         | Split Pane             | Containers  | 2..2     | main     | yes              | `orientation`               | none                                               | none            |
+| `label`                         | Label                  | Generic     | 0..0     | main     | no               | `text`                      | none                                               | none            |
+| `actionButton`                  | Action Button          | Generic     | 0..0     | main     | no               | `text`                      | primary click, primary long press                  | none            |
+| `menuButton`                    | Menu Button            | Generic     | 0..0     | main     | no               | `text`                      | none                                               | none            |
+| `app.menuBar`                   | Menu Bar               | Application | 0..0     | main     | no               | none                        | none                                               | none            |
+| `track.table`                   | Track Table            | Tracks      | 0..0     | main     | no               | none                        | none                                               | none            |
+| `track.quickFilter`             | Quick Filter           | Tracks      | 0..0     | main     | no               | none                        | none                                               | none            |
+| `track.presentationButton`      | Presentation Button    | Tracks      | 0..0     | main     | no               | `variant`                   | none                                               | none            |
+| `track.coverArt`                | Cover Art              | Tracks      | 0..0     | main     | no               | `placeholderStyle`          | none                                               | none            |
+| `playback.transportButton`      | Transport Button       | Playback    | 0..0     | main     | no               | `command`                   | none                                               | none            |
+| `playback.soulButton`           | Soul Button            | Playback    | 0..0     | main     | no               | `strokeWidth`, `glyphScale` | primary click, primary long press, secondary click | none            |
+| `playback.seekSlider`           | Seek Slider            | Playback    | 0..0     | main     | no               | none                        | none                                               | none            |
+| `playback.timeLabel`            | Time Label             | Playback    | 0..0     | main     | no               | `mode`                      | none                                               | none            |
+| `playback.volumeControl`        | Volume Control         | Playback    | 0..0     | main     | no               | none                        | none                                               | none            |
+| `playback.outputDeviceSelector` | Output Device Selector | Playback    | 0..0     | main     | no               | none                        | none                                               | none            |
+| `status.activity`               | Activity Status        | Status      | 0..0     | main     | no               | none                        | none                                               | none            |
+| `status.trackCount`             | Track Count            | Status      | 0..0     | main     | no               | none                        | none                                               | none            |
+| `status.selectionInfo`          | Selection Info         | Status      | 0..0     | main     | no               | none                        | none                                               | none            |
+| `status.message`                | Status Message         | Status      | 0..0     | main     | no               | none                        | none                                               | none            |
 
-| Component | Property | Kind | Values | Default | Action slot |
-|---|---|---|---|---|---|
-| `box` | `orientation` | Enum | `vertical`, `horizontal` | `vertical` | none |
-| `box` | `spacing` | Int | any | `0` | none |
-| `split` | `orientation` | Enum | `vertical`, `horizontal` | `vertical` | none |
-| `label` | `text` | String | any | empty | none |
-| `actionButton` | `text` | String | any | empty | none |
-| `menuButton` | `text` | String | any | empty | none |
-| `track.presentationButton` | `variant` | Enum | `default`, `title`, `compact` | `default` | none |
-| `track.coverArt` | `placeholderStyle` | Enum | `monogram`, `note`, `vinyl`, `equalizer`, `soul` | `vinyl` | none |
-| `playback.transportButton` | `command` | Enum | `play`, `pause`, `playPause`, `stop`, `next`, `previous`, `toggleShuffle`, `cycleRepeat` | `playPause` | none |
-| `playback.soulButton` | `strokeWidth` | Double | any | `9` | none |
-| `playback.soulButton` | `glyphScale` | Double | any | `1` | none |
-| `playback.timeLabel` | `mode` | Enum | `combined`, `elapsed`, `duration` | `combined` | none |
+| Component                  | Property           | Kind   | Values                                                                                   | Default     | Action slot |
+| -------------------------- | ------------------ | ------ | ---------------------------------------------------------------------------------------- | ----------- | ----------- |
+| `box`                      | `orientation`      | Enum   | `vertical`, `horizontal`                                                                 | `vertical`  | none        |
+| `box`                      | `spacing`          | Int    | any                                                                                      | `0`         | none        |
+| `split`                    | `orientation`      | Enum   | `vertical`, `horizontal`                                                                 | `vertical`  | none        |
+| `label`                    | `text`             | String | any                                                                                      | empty       | none        |
+| `actionButton`             | `text`             | String | any                                                                                      | empty       | none        |
+| `menuButton`               | `text`             | String | any                                                                                      | empty       | none        |
+| `track.presentationButton` | `variant`          | Enum   | `default`, `title`, `compact`                                                            | `default`   | none        |
+| `track.coverArt`           | `placeholderStyle` | Enum   | `monogram`, `note`, `vinyl`, `equalizer`, `soul`                                         | `vinyl`     | none        |
+| `playback.transportButton` | `command`          | Enum   | `play`, `pause`, `playPause`, `stop`, `next`, `previous`, `toggleShuffle`, `cycleRepeat` | `playPause` | none        |
+| `playback.soulButton`      | `strokeWidth`      | Double | any                                                                                      | `9`         | none        |
+| `playback.soulButton`      | `glyphScale`       | Double | any                                                                                      | `1`         | none        |
+| `playback.timeLabel`       | `mode`             | Enum   | `combined`, `elapsed`, `duration`                                                        | `combined`  | none        |
 
 A structural or generic primitive carries no domain prefix; every type naming part of the application's subject matter does.
 
@@ -72,11 +73,11 @@ A structural or generic primitive carries no domain prefix; every type naming pa
 
 ### Action policy
 
-| Type | Slots the vocabulary opens |
-|---|---|
-| `actionButton` | primary click, primary long press |
-| `playback.soulButton` | primary click, primary long press, secondary click |
-| every other shared type | none |
+| Type                    | Slots the vocabulary opens                         |
+| ----------------------- | -------------------------------------------------- |
+| `actionButton`          | primary click, primary long press                  |
+| `playback.soulButton`   | primary click, primary long press, secondary click |
+| every other shared type | none                                               |
 
 Which action id fills a slot by default is drawn from the shell's own action inventory and is not part of the vocabulary.
 
@@ -90,20 +91,20 @@ The rule is per type, because a property name is scoped to the component that de
 
 Extensions in the shipped shells:
 
-| Type | GTK adds | Windows adds |
-|---|---|---|
-| `box` | `homogeneous` | none |
-| `split` | `position`, `initialPositionPercent`, `resizeStart`, `shrinkStart`, `resizeEnd`, `shrinkEnd` | `initialPositionPercent` |
-| `actionButton` | `icon`, `size`, `style` | `glyph` |
-| `menuButton` | `icon`, `style` | `menuId`, `glyph` |
-| `track.table` | `view`, `groupCoverPlaceholderStyle` | none |
-| `track.coverArt` | `targetSize`, `forceSquare`, and the `widthRequest`, `heightRequest`, `cssClasses` layout properties | none |
-| `playback.transportButton` | `showLabel`, `size` | none |
-| `playback.soulButton` | `showFullLogo` | none |
-| `playback.seekSlider` | none | `presentation` |
-| `playback.volumeControl` | `orientation` | `presentation` |
-| `status.activity` | `variant`, `idleBehavior`, `maxTextChars` | none |
-| `status.trackCount`, `status.selectionInfo` | none | `variant` |
+| Type                                        | GTK adds                                                                                             | Windows adds             |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------ |
+| `box`                                       | `homogeneous`                                                                                        | none                     |
+| `split`                                     | `position`, `initialPositionPercent`, `resizeStart`, `shrinkStart`, `resizeEnd`, `shrinkEnd`         | `initialPositionPercent` |
+| `actionButton`                              | `icon`, `size`, `style`                                                                              | `glyph`                  |
+| `menuButton`                                | `icon`, `style`                                                                                      | `menuId`, `glyph`        |
+| `track.table`                               | `view`, `groupCoverPlaceholderStyle`                                                                 | none                     |
+| `track.coverArt`                            | `targetSize`, `forceSquare`, and the `widthRequest`, `heightRequest`, `cssClasses` layout properties | none                     |
+| `playback.transportButton`                  | `showLabel`, `size`                                                                                  | none                     |
+| `playback.soulButton`                       | `showFullLogo`                                                                                       | none                     |
+| `playback.seekSlider`                       | none                                                                                                 | `presentation`           |
+| `playback.volumeControl`                    | `orientation`                                                                                        | `presentation`           |
+| `status.activity`                           | `variant`, `idleBehavior`, `maxTextChars`                                                            | none                     |
+| `status.trackCount`, `status.selectionInfo` | none                                                                                                 | `variant`                |
 
 Windows also widens `actionButton` from the shared primary slots to secondary click, because its button binds a right-click gesture.
 GTK widens `playback.soulButton` with secondary long press because GDK distinguishes it from primary hold while Windows does not.

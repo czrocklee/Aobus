@@ -1,6 +1,7 @@
 ---
 id: development.test.uimodel-and-gtk
 ---
+
 # UIModel and GTK testing
 
 UI behavior should be tested at the lowest layer that can express the contract.

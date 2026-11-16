@@ -1,6 +1,7 @@
 ---
 id: presentation.field-completion
 ---
+
 # Track-field value completion
 
 ## Scope
@@ -109,12 +110,12 @@ A snapshot rebuild clears every borrowing materialization before replacing the r
 Completion aliases are available to every interactive user and do not depend on the presentation locale.
 The first implementation recognizes these source shapes:
 
-| Source shape | Derived spelling |
-|---|---|
-| ASCII or non-CJK text | None. |
-| Hiragana or Katakana | Each useful contiguous Kana run is romanized. |
-| Mixed Han and Kana | Only Kana runs are romanized; the Han portion receives no inferred reading. |
-| Han with no Kana | The complete value receives one explicitly Mandarin-pinyin alias. |
+| Source shape          | Derived spelling                                                            |
+| --------------------- | --------------------------------------------------------------------------- |
+| ASCII or non-CJK text | None.                                                                       |
+| Hiragana or Katakana  | Each useful contiguous Kana run is romanized.                               |
+| Mixed Han and Kana    | Only Kana runs are romanized; the Han portion receives no inferred reading. |
+| Han with no Kana      | The complete value receives one explicitly Mandarin-pinyin alias.           |
 
 Kana runs separated only by whitespace or punctuation also produce one concatenated whole-value alias; significant Han or Latin text prevents that concatenation.
 Aliases shorter than three ASCII letters/digits are discarded, equal aliases for one source are deduplicated, and a spelling equal to the compact direct source is removed.

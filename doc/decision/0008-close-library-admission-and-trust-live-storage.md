@@ -2,6 +2,7 @@
 id: decision.0008.close-library-admission-and-trust-live-storage
 status: accepted
 ---
+
 # Decision 0008: close library admission and trust live storage
 
 ## Context

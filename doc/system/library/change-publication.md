@@ -1,6 +1,7 @@
 ---
 id: library.change-publication
 ---
+
 # Library change publication
 
 ## Scope

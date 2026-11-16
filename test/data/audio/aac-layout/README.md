@@ -14,16 +14,16 @@ ffmpeg -hide_banner -nostdin -loglevel error -fflags +bitexact \
   -c:a aac -aac_pce 1 -b:a "$bitrate" -flags:a +bitexact "$output_m4a"
 ```
 
-| File | Authored layout | Native FDK output groups | Effective identity |
-|---|---|---|---|
-| `mono.m4a` | mono | FRONT1 | FC `0x4` |
-| `stereo.m4a` | stereo | FRONT2 | FL/FR `0x3` |
-| `front3.m4a` | 3.0 | FRONT3 | FL/FR/FC `0x7` |
-| `back3.m4a` | 3.0(back) | FRONT2 + BACK1 | FL/FR/BC `0x103` |
-| `quad.m4a` | quad | FRONT2 + BACK2 | FL/FR/BL/BR `0x33` |
-| `back51.m4a` | 5.1 | FRONT3 + LFE1 + BACK2 | FL/FR/FC/LFE/BL/BR `0x3F` |
-| `surround71.m4a` | 7.1 | FRONT3 + LFE1 + BACK4 | Zero / Unknown |
-| `wide71.m4a` | 7.1(wide) | FRONT5 + LFE1 + BACK2 | Zero / Unknown |
+| File             | Authored layout | Native FDK output groups | Effective identity        |
+| ---------------- | --------------- | ------------------------ | ------------------------- |
+| `mono.m4a`       | mono            | FRONT1                   | FC `0x4`                  |
+| `stereo.m4a`     | stereo          | FRONT2                   | FL/FR `0x3`               |
+| `front3.m4a`     | 3.0             | FRONT3                   | FL/FR/FC `0x7`            |
+| `back3.m4a`      | 3.0(back)       | FRONT2 + BACK1           | FL/FR/BC `0x103`          |
+| `quad.m4a`       | quad            | FRONT2 + BACK2           | FL/FR/BL/BR `0x33`        |
+| `back51.m4a`     | 5.1             | FRONT3 + LFE1 + BACK2    | FL/FR/FC/LFE/BL/BR `0x3F` |
+| `surround71.m4a` | 7.1             | FRONT3 + LFE1 + BACK4    | Zero / Unknown            |
+| `wide71.m4a`     | 7.1(wide)       | FRONT5 + LFE1 + BACK2    | Zero / Unknown            |
 
 The two eight-channel cases intentionally do not infer WAVE roles from count or the input filename.
 They retain all eight native channels and ordinal PCM because the bounded resolver does not assign FRONT5 or BACK4 groups.
@@ -52,13 +52,13 @@ It does not use Aobus channel planning or output adaptation; identified role exp
 This test-only phase coordinate neither changes production decoder parameters nor trims delay/padding, and does not enable vcpkg's optional HE-AAC feature.
 These fixed-point expectations still require validation on every claimed native implementation.
 
-| File | SHA-256 |
-|---|---|
-| `mono.m4a` | `2447956523e45ada84d65f6580d49dea44908d784877fe80e4143369abc38d54` |
-| `stereo.m4a` | `bbc669f5fa4ddc02a11eb4739a4bc44cab0150899f73159be42bec278a3e8809` |
-| `front3.m4a` | `85034bd6ea43f84c4d06e08264b97f6e872b8e5256a8eb3532e4f100302f4ea1` |
-| `back3.m4a` | `558219645079687057f6d33b42e2d6f93daf1bf8e7a0a7f967a3dfbd55824361` |
-| `quad.m4a` | `8b908b0a57ec8efd4ffe6921de567708a43a20b7a6544ef8e42d4390238ef65b` |
-| `back51.m4a` | `fc103eb020c7aa132e663cb8c8db7880dad8dea7731036e9ce0db35779e88999` |
+| File             | SHA-256                                                            |
+| ---------------- | ------------------------------------------------------------------ |
+| `mono.m4a`       | `2447956523e45ada84d65f6580d49dea44908d784877fe80e4143369abc38d54` |
+| `stereo.m4a`     | `bbc669f5fa4ddc02a11eb4739a4bc44cab0150899f73159be42bec278a3e8809` |
+| `front3.m4a`     | `85034bd6ea43f84c4d06e08264b97f6e872b8e5256a8eb3532e4f100302f4ea1` |
+| `back3.m4a`      | `558219645079687057f6d33b42e2d6f93daf1bf8e7a0a7f967a3dfbd55824361` |
+| `quad.m4a`       | `8b908b0a57ec8efd4ffe6921de567708a43a20b7a6544ef8e42d4390238ef65b` |
+| `back51.m4a`     | `fc103eb020c7aa132e663cb8c8db7880dad8dea7731036e9ce0db35779e88999` |
 | `surround71.m4a` | `ee6b49e739272a195d09fac196900336d359d6d210d5a970cea98ebc902e5452` |
-| `wide71.m4a` | `19893c6dd10c72cd98861e077dac8b0806b424ab040d867d1d08944c22cb2a93` |
+| `wide71.m4a`     | `19893c6dd10c72cd98861e077dac8b0806b424ab040d867d1d08944c22cb2a93` |

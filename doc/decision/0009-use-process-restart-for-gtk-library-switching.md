@@ -2,6 +2,7 @@
 id: decision.0009.gtk-process-library-restart
 status: accepted
 ---
+
 # Decision 0009: use process restart for GTK library switching
 
 ## Context

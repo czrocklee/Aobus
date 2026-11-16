@@ -1,6 +1,7 @@
 ---
 id: resource.cover-art-delivery
 ---
+
 # Cover-art resource delivery
 
 ## Scope
@@ -123,11 +124,11 @@ The equalizer uses five solid rounded bars over approximately 72 percent of the 
 
 The slot defaults are:
 
-| Slot | Default |
-| --- | --- |
-| Group heading | `monogram` |
-| Inspector or track detail | `vinyl` |
-| Now Playing | `equalizer` |
+| Slot                      | Default     |
+| ------------------------- | ----------- |
+| Group heading             | `monogram`  |
+| Inspector or track detail | `vinyl`     |
+| Now Playing               | `equalizer` |
 
 GTK exposes those choices through `track.table.groupCoverPlaceholderStyle`, `track.coverArt.placeholderStyle`, and `playback.image.placeholderStyle`.
 Unknown values fall back to the slot default and produce a diagnostic.
@@ -258,13 +259,13 @@ Decode or file-export failure degrades to no image/URL and logs where the adapte
 
 ### Interactive limits
 
-| Boundary | Limit | Result when exceeded |
-| --- | ---: | --- |
-| Resource bytes read for GTK, WinUI, AppKit, TUI, or MPRIS | 32 MiB | `ValueTooLarge`, adapted to no decoded image/URL/artwork |
-| Runtime encoded-byte memory cache | 128 entries and 128 MiB aggregate | least-recently-used entries are evicted |
-| GTK or TUI source width or height | 8192 pixels | no image |
-| GTK or TUI decoded source pixels | 32,000,000 | no image |
-| TUI generated Kitty PNG retained bytes | 8 MiB | no image |
+| Boundary                                                  |                             Limit | Result when exceeded                                     |
+| --------------------------------------------------------- | --------------------------------: | -------------------------------------------------------- |
+| Resource bytes read for GTK, WinUI, AppKit, TUI, or MPRIS |                            32 MiB | `ValueTooLarge`, adapted to no decoded image/URL/artwork |
+| Runtime encoded-byte memory cache                         | 128 entries and 128 MiB aggregate | least-recently-used entries are evicted                  |
+| GTK or TUI source width or height                         |                       8192 pixels | no image                                                 |
+| GTK or TUI decoded source pixels                          |                        32,000,000 | no image                                                 |
+| TUI generated Kitty PNG retained bytes                    |                             8 MiB | no image                                                 |
 
 Limits are inclusive, and a ceiling applies to bytes actually read rather than to a descriptor's declared length.
 CLI raw resource export is not constrained by these interactive limits.

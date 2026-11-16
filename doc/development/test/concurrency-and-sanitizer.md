@@ -1,6 +1,7 @@
 ---
 id: development.test.concurrency-and-sanitizer
 ---
+
 # Concurrency and sanitizer validation
 
 Use this reference for cross-thread state, callback affinity, cancellation races,
@@ -28,17 +29,17 @@ synchronization, or quiescence contract it violates.
 
 Cover the applicable boundaries with observable outcomes:
 
-| Boundary | Required observation |
-|---|---|
-| Cancel before start | The task body or first side effect does not run. |
-| Cancel while suspended | Work exits without completion or a user-visible error. |
-| Completion races with cancel | Exactly one terminal path wins. |
-| Callback queued, then owner destroyed | The callback becomes a safe no-op. |
-| Callback requests owner teardown | By default, teardown is deferred until publication unwinds and synchronous destruction is rejected; only an explicitly documented stronger reentrant lifetime model permits an exception (see below). |
-| Shutdown with active work | Producers stop and callbacks quiesce before the state they use is destroyed. |
-| Repeated cancellation | Cancellation and teardown are idempotent. |
-| Executor hop | The callback runs on its documented executor. |
-| Multiple workers | The contract holds with more than one worker. |
+| Boundary                              | Required observation                                                                                                                                                                                  |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cancel before start                   | The task body or first side effect does not run.                                                                                                                                                      |
+| Cancel while suspended                | Work exits without completion or a user-visible error.                                                                                                                                                |
+| Completion races with cancel          | Exactly one terminal path wins.                                                                                                                                                                       |
+| Callback queued, then owner destroyed | The callback becomes a safe no-op.                                                                                                                                                                    |
+| Callback requests owner teardown      | By default, teardown is deferred until publication unwinds and synchronous destruction is rejected; only an explicitly documented stronger reentrant lifetime model permits an exception (see below). |
+| Shutdown with active work             | Producers stop and callbacks quiesce before the state they use is destroyed.                                                                                                                          |
+| Repeated cancellation                 | Cancellation and teardown are idempotent.                                                                                                                                                             |
+| Executor hop                          | The callback runs on its documented executor.                                                                                                                                                         |
+| Multiple workers                      | The contract holds with more than one worker.                                                                                                                                                         |
 
 The [threading and callback rules](../coding-style.md#threading-and-callbacks)
 allow a stronger lifetime model only where the API documents it.

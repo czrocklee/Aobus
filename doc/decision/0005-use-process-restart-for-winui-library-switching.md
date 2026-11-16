@@ -2,6 +2,7 @@
 id: decision.0005.winui-process-library-restart
 status: accepted
 ---
+
 # Decision 0005: use process restart for WinUI library switching
 
 ## Context

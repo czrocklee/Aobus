@@ -1,6 +1,7 @@
 ---
 id: development.uimodel-organization
 ---
+
 # UIModel organization
 
 ## Scope
@@ -60,7 +61,7 @@ A file that announces which frontend it serves is by that admission not shared, 
 
 Such code goes to the frontend target that owns it. Do not create a cross-platform model target solely to make another host's gate compile frontend vocabulary. WinUI keeps these rules in the Windows-only WinUI library, under the `ao::winui` namespace with headers in `app/windows-winui/include/ao/winui/`.
 
-Ownership decides the *target*; it does not decide where a rule is *gated*. A frontend-owned source that names no platform API is compiled straight into the core test binary on every host, so its rules are covered by whichever gate runs. The Windows desktop settings schema, output-preference resolution, root-commit transaction, restart sequencing, and shell-state vocabulary qualify today: they stay Windows-owned and stay out of the UIModel library, while `./ao check` still exercises them on Linux. Only sources that genuinely need native types — XAML elements, WinRT projections, resource dictionaries — remain gated to the native Windows suite. This is not a licence to relocate frontend vocabulary; it is the recognition that "one frontend owns this rule" and "only one host can test this rule" are separate claims, and the second one costs real coverage whenever it is asserted without cause.
+Ownership decides the _target_; it does not decide where a rule is _gated_. A frontend-owned source that names no platform API is compiled straight into the core test binary on every host, so its rules are covered by whichever gate runs. The Windows desktop settings schema, output-preference resolution, root-commit transaction, restart sequencing, and shell-state vocabulary qualify today: they stay Windows-owned and stay out of the UIModel library, while `./ao check` still exercises them on Linux. Only sources that genuinely need native types — XAML elements, WinRT projections, resource dictionaries — remain gated to the native Windows suite. This is not a licence to relocate frontend vocabulary; it is the recognition that "one frontend owns this rule" and "only one host can test this rule" are separate claims, and the second one costs real coverage whenever it is asserted without cause.
 
 What is left in UIModel is what more than one frontend genuinely decides the same way, expressed so no frontend's name appears in it. A shared traversal that a frontend extends takes the extension as data - see `LayoutDialect` - rather than naming the frontend in a branch.
 The shared UIModel neutrality audit in [`guardrails.py`](../../script/ao/core/guardrails.py) enforces both halves: no file inside UIModel may be named after a frontend, and none may spell a frontend's API vocabulary in code. Naming a frontend in a comment stays allowed, because explaining that GTK derives expansion from a widget's children is exactly why a shared field is optional, and that reason belongs beside the field.

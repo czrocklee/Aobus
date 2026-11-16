@@ -1,6 +1,7 @@
 ---
 id: persistence.atomic-replacement
 ---
+
 # Atomic file replacement
 
 ## Scope
@@ -67,16 +68,16 @@ None of these mechanisms can depend on application runtime, UIModel, a frontend,
 
 The implementation advances through one linear attempt:
 
-| State | Filesystem effect | Target visibility |
-|---|---|---|
-| Initial | No helper-created path. | Existing target or absence. |
-| Parent ready | Missing parent directories may have been created. | Existing target or absence. |
-| Temporary owned | A unique private same-directory path and handle have one RAII owner. | Existing target or absence. |
-| Data written | Every input byte has been handed to the temporary handle. | Existing target or absence. |
+| State             | Filesystem effect                                                                                           | Target visibility           |
+| ----------------- | ----------------------------------------------------------------------------------------------------------- | --------------------------- |
+| Initial           | No helper-created path.                                                                                     | Existing target or absence. |
+| Parent ready      | Missing parent directories may have been created.                                                           | Existing target or absence. |
+| Temporary owned   | A unique private same-directory path and handle have one RAII owner.                                        | Existing target or absence. |
+| Data written      | Every input byte has been handed to the temporary handle.                                                   | Existing target or absence. |
 | Data synchronized | For a durable write, the platform data barrier has succeeded; visibility-only publication skips this state. | Existing target or absence. |
-| Temporary closed | The temporary handle has closed successfully. | Existing target or absence. |
-| Replaced | The operating-system replacement call has succeeded and temporary ownership is committed. | Complete new target. |
-| Returned success | Any operation-specific post-replacement best effort has finished. | Complete new target. |
+| Temporary closed  | The temporary handle has closed successfully.                                                               | Existing target or absence. |
+| Replaced          | The operating-system replacement call has succeeded and temporary ownership is committed.                   | Complete new target.        |
+| Returned success  | Any operation-specific post-replacement best effort has finished.                                           | Complete new target.        |
 
 Any ordinary failure before Replaced returns `IoError` and lets the temporary owner attempt cleanup.
 There is no reported-failure transition after Replaced: non-Windows parent-directory synchronization is best effort, and Windows has no separate post-replacement operation.
@@ -140,10 +141,10 @@ The contract records successful completion of the documented API sequence and do
 
 The installed file is the secured temporary file, not the old target object:
 
-| Platform | Enforced creation policy |
-|---|---|
-| POSIX-like | Effective owner read/write only through mode `0600`. |
-| Windows | A protected DACL grants full control to the process-token user and Local System; broad inherited allow entries are excluded. |
+| Platform   | Enforced creation policy                                                                                                     |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| POSIX-like | Effective owner read/write only through mode `0600`.                                                                         |
+| Windows    | A protected DACL grants full control to the process-token user and Local System; broad inherited allow entries are excluded. |
 
 The Windows policy assumes the supported application runs under its interactive process identity.
 It does not claim protection from administrators, privileged processes, backup operators, inherited auditing or integrity policy, or offline access.
@@ -161,17 +162,17 @@ Runtime and frontend stores must assign one semantic writer per managed target.
 
 ## Failure and cancellation
 
-| Failure point | Result | Existing target before replacement |
-|---|---|---|
-| Windows target normalization | `IoError`. | Unchanged. |
-| Parent-directory creation | `IoError`. | Unchanged; some new ancestors may remain. |
-| Private security preparation, unique temporary creation, or collision exhaustion | `IoError`. | Unchanged. |
-| POSIX permission application | `IoError`; RAII cleanup attempted. | Unchanged. |
-| Write, interrupted-write retry exhaustion through another error, or zero progress | `IoError`; RAII cleanup attempted. | Unchanged. |
-| `fsync` or `FlushFileBuffers` during `writeAtomically` | `IoError`; RAII cleanup attempted. | Unchanged. |
-| Temporary-handle close | `IoError`; path removal attempted. | Unchanged. |
-| `rename` or `MoveFileExW` | `IoError`; path removal attempted. | The helper has not deliberately written the target. |
-| Non-Windows parent-directory open, `fsync`, or close after `writeAtomically` replacement | Ignored; operation returns success. | Complete new target is already visible. |
+| Failure point                                                                            | Result                              | Existing target before replacement                  |
+| ---------------------------------------------------------------------------------------- | ----------------------------------- | --------------------------------------------------- |
+| Windows target normalization                                                             | `IoError`.                          | Unchanged.                                          |
+| Parent-directory creation                                                                | `IoError`.                          | Unchanged; some new ancestors may remain.           |
+| Private security preparation, unique temporary creation, or collision exhaustion         | `IoError`.                          | Unchanged.                                          |
+| POSIX permission application                                                             | `IoError`; RAII cleanup attempted.  | Unchanged.                                          |
+| Write, interrupted-write retry exhaustion through another error, or zero progress        | `IoError`; RAII cleanup attempted.  | Unchanged.                                          |
+| `fsync` or `FlushFileBuffers` during `writeAtomically`                                   | `IoError`; RAII cleanup attempted.  | Unchanged.                                          |
+| Temporary-handle close                                                                   | `IoError`; path removal attempted.  | Unchanged.                                          |
+| `rename` or `MoveFileExW`                                                                | `IoError`; path removal attempted.  | The helper has not deliberately written the target. |
+| Non-Windows parent-directory open, `fsync`, or close after `writeAtomically` replacement | Ignored; operation returns success. | Complete new target is already visible.             |
 
 The temporary owner closes any still-owned handle before attempting path removal.
 Cleanup deliberately does not replace the primary error with a removal error.

@@ -1,6 +1,7 @@
 ---
 id: reference.application.desktop-successor-protocol
 ---
+
 # Desktop successor protocol
 
 ## Scope and version
@@ -29,12 +30,12 @@ The canonical encoded form is:
 --aobus-successor --library-root <absolute-utf8-path> [--scan-after-open]
 ```
 
-| Argument | Cardinality | Value | Meaning |
-|---|---:|---|---|
-| `--aobus-successor` | exactly one in successor mode | none | Marks the invocation as a private parent-created successor. |
-| `--library-root` | exactly one in successor mode | next argument | Supplies the target library root. |
-| `--library-root=<value>` | alternative spelling | suffix after `=` | Supplies the same target root without a separate argument. |
-| `--scan-after-open` | zero or one | none | Requests a scan after the successor activates. |
+| Argument                 |                   Cardinality | Value            | Meaning                                                     |
+| ------------------------ | ----------------------------: | ---------------- | ----------------------------------------------------------- |
+| `--aobus-successor`      | exactly one in successor mode | none             | Marks the invocation as a private parent-created successor. |
+| `--library-root`         | exactly one in successor mode | next argument    | Supplies the target library root.                           |
+| `--library-root=<value>` |          alternative spelling | suffix after `=` | Supplies the same target root without a separate argument.  |
+| `--scan-after-open`      |                   zero or one | none             | Requests a scan after the successor activates.              |
 
 The marker and either root spelling form one required pair. Their order, and
 the optional scan argument's order, are not significant. The encoder always

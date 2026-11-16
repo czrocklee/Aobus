@@ -2,6 +2,7 @@
 id: decision.0012.adopt-icu-resource-catalogs
 status: accepted
 ---
+
 # Decision 0012: adopt ICU resource catalogs
 
 ## Context

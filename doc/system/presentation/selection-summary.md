@@ -1,6 +1,7 @@
 ---
 id: presentation.selection-summary
 ---
+
 # Selection summary
 
 The summary presents the active track-list selection's count and aggregate known duration.

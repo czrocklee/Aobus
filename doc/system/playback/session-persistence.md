@@ -1,6 +1,7 @@
 ---
 id: playback.session-persistence
 ---
+
 # Playback session persistence
 
 ## Scope
@@ -46,13 +47,13 @@ discarded-payload guard, the last observed `PlaybackService` snapshot,
 subscriptions to succession restorable-state changes and committed snapshots,
 and one scheduled debounce task.
 
-| Lifecycle | Observation and save admission | Exit behavior |
-|---|---|---|
-| `Dormant` | No subscriptions or natural saves. Start, restore, checkpoint, or discard may establish the observation baseline. | Ordinary shutdown moves to `Shutdown` without saving; successful retirement moves to `Retired`. |
-| `Observing` | Subscriptions and natural, explicit, and lifecycle checkpoints are admitted. | Ordinary shutdown performs the one final save and moves to `Shutdown`; write sealing moves to `WriteSealed`; successful retirement moves to `Retired`. |
-| `WriteSealed` | Subscriptions and debounce are absent; start, natural triggers, explicit checkpoint, and shutdown perform no store write. | Retirement may still retry physical group removal and move to `Retired`; ordinary shutdown moves to `Shutdown` without saving. |
-| `Retired` | The group was removed successfully, runtime restorable snapshots were discarded, and no save can be rearmed. | Repeated retirement and shutdown are no-ops. |
-| `Shutdown` | Subscriptions and debounce are absent and no later save is admitted. | Repeated shutdown is a no-op; retirement returns `InvalidState`. |
+| Lifecycle     | Observation and save admission                                                                                            | Exit behavior                                                                                                                                          |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Dormant`     | No subscriptions or natural saves. Start, restore, checkpoint, or discard may establish the observation baseline.         | Ordinary shutdown moves to `Shutdown` without saving; successful retirement moves to `Retired`.                                                        |
+| `Observing`   | Subscriptions and natural, explicit, and lifecycle checkpoints are admitted.                                              | Ordinary shutdown performs the one final save and moves to `Shutdown`; write sealing moves to `WriteSealed`; successful retirement moves to `Retired`. |
+| `WriteSealed` | Subscriptions and debounce are absent; start, natural triggers, explicit checkpoint, and shutdown perform no store write. | Retirement may still retry physical group removal and move to `Retired`; ordinary shutdown moves to `Shutdown` without saving.                         |
+| `Retired`     | The group was removed successfully, runtime restorable snapshots were discarded, and no save can be rearmed.              | Repeated retirement and shutdown are no-ops.                                                                                                           |
+| `Shutdown`    | Subscriptions and debounce are absent and no later save is admitted.                                                      | Repeated shutdown is a no-op; retirement returns `InvalidState`.                                                                                       |
 
 Only `Dormant` moves to `Observing` when observation is ensured; calls made in a
 sealed or terminal lifecycle do not rearm subscriptions. Restore-in-progress
@@ -78,11 +79,11 @@ This occurs before source lookup, so source absence cannot hide malformed serial
 A valid payload is then compared with the open library before any lookup that could reinterpret it.
 Restore drops the payload, reporting no restored session and leaving live state unchanged, when:
 
-| Finding | Why the payload is dropped |
-|---|---|
-| `libraryId` differs from the open library's id. | Its ids were issued by another library and may name unrelated objects here. |
-| `currentTrackId` names a track whose URI or ordinal differs from the saved pair. | The id now names another subject. A relink made while the app was closed moves the same audio, but a database rolled back to an older copy can reissue the id to an unrelated subject, and the two look alike here. |
-| `currentTrackId` names no track, but some track has the saved `(currentTrackUri, currentTrackOrdinal)`. | The library replaced the saved track, as a restore does, so the saved anchor and position describe a record that is gone. |
+| Finding                                                                                                 | Why the payload is dropped                                                                                                                                                                                          |
+| ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `libraryId` differs from the open library's id.                                                         | Its ids were issued by another library and may name unrelated objects here.                                                                                                                                         |
+| `currentTrackId` names a track whose URI or ordinal differs from the saved pair.                        | The id now names another subject. A relink made while the app was closed moves the same audio, but a database rolled back to an older copy can reissue the id to an unrelated subject, and the two look alike here. |
+| `currentTrackId` names no track, but some track has the saved `(currentTrackUri, currentTrackOrdinal)`. | The library replaced the saved track, as a restore does, so the saved anchor and position describe a record that is gone.                                                                                           |
 
 Ordinal zero identifies a whole-file Track; a carrier member has its immutable CUE ordinal, distinct from curated track number.
 When the id names a track with the saved URI/ordinal pair, or neither the id nor that pair is present, restore continues to source resolution.
@@ -98,13 +99,13 @@ A live library restore leaves the current subject playing under an id the librar
 
 For an existing source, the saved anchor is clamped to live projection size.
 
-| Finding | Restore result |
-|---|---|
-| Current exists and is projected. | Bound at its current live index; retain offset. |
-| Current exists but is filtered out. | Gap at restored anchor; retain offset. |
-| Current is missing and anchor has a successor. | Promote successor, bind, and reset offset. |
-| Current is missing at end, repeat-all is on, and projection is non-empty. | Promote row zero and reset offset. |
-| Current is missing with no deterministic successor. | Discard candidate. |
+| Finding                                                                   | Restore result                                  |
+| ------------------------------------------------------------------------- | ----------------------------------------------- |
+| Current exists and is projected.                                          | Bound at its current live index; retain offset. |
+| Current exists but is filtered out.                                       | Gap at restored anchor; retain offset.          |
+| Current is missing and anchor has a successor.                            | Promote successor, bind, and reset offset.      |
+| Current is missing at end, repeat-all is on, and projection is non-empty. | Promote row zero and reset offset.              |
+| Current is missing with no deterministic successor.                       | Discard candidate.                              |
 
 Shuffle does not select a replacement during restore.
 Deterministic recovery establishes current before restored shuffle and repeat policy become active.

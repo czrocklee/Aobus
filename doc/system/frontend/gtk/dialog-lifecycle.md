@@ -1,6 +1,7 @@
 ---
 id: linux-gtk.dialog-lifecycle
 ---
+
 # GTK dialog-lifecycle specification
 
 ## Scope

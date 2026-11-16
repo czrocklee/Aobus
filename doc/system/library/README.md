@@ -1,6 +1,7 @@
 ---
 id: library.spec-index
 ---
+
 # Library
 
 The library connects durable Track, List, dictionary, file, and resource facts to live application views:
@@ -19,16 +20,16 @@ Interactive `AppRuntime` composition adds `ViewService`, live projections, works
 
 ## Change or investigate a behavior
 
-| Task | Contract |
-|---|---|
-| Add a read or mutation command | [Reads and mutation](mutation.md), then [change publication](change-publication.md) |
-| Schedule a long-running operation | [Task execution](task-execution.md), then the operation's own contract |
-| Scan, reconcile, relink, recover file identity, or bind a CUE sheet | [Scan and identity](scan-and-identity.md) |
-| Export, restore, merge, or preview library YAML | [Transfer](yaml-transfer.md) and [YAML format](../../reference/library/format/yaml.md) |
-| Change ordered membership, leases, or cached sources | [Track sources](track-source.md) |
-| Change rows, grouping, deltas, or invalidation | [Track-list projection](track-list-projection.md) |
-| Change detail snapshots or field aggregation | [Track-detail projection](track-detail-projection.md) |
-| Change metadata or storage representation | [Track](../../reference/library/model/track.md), [List](../../reference/library/model/list.md), [field vocabulary](../../reference/library/model/track-field.md), and [database format](../../reference/library/storage/database.md) |
+| Task                                                                | Contract                                                                                                                                                                                                                             |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Add a read or mutation command                                      | [Reads and mutation](mutation.md), then [change publication](change-publication.md)                                                                                                                                                  |
+| Schedule a long-running operation                                   | [Task execution](task-execution.md), then the operation's own contract                                                                                                                                                               |
+| Scan, reconcile, relink, recover file identity, or bind a CUE sheet | [Scan and identity](scan-and-identity.md)                                                                                                                                                                                            |
+| Export, restore, merge, or preview library YAML                     | [Transfer](yaml-transfer.md) and [YAML format](../../reference/library/format/yaml.md)                                                                                                                                               |
+| Change ordered membership, leases, or cached sources                | [Track sources](track-source.md)                                                                                                                                                                                                     |
+| Change rows, grouping, deltas, or invalidation                      | [Track-list projection](track-list-projection.md)                                                                                                                                                                                    |
+| Change detail snapshots or field aggregation                        | [Track-detail projection](track-detail-projection.md)                                                                                                                                                                                |
+| Change metadata or storage representation                           | [Track](../../reference/library/model/track.md), [List](../../reference/library/model/list.md), [field vocabulary](../../reference/library/model/track-field.md), and [database format](../../reference/library/storage/database.md) |
 
 The mutation and publication contracts remain separate because transaction settlement and callback observation have independent ordering and failure guarantees.
 Do not hold a transaction across coroutine suspension or reconstruct these guarantees from a frontend adapter.

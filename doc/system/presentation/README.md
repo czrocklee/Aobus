@@ -1,6 +1,7 @@
 ---
 id: architecture.presentation
 ---
+
 # Presentation architecture
 
 Presentation is the boundary where runtime facts become reusable view state and

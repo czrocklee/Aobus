@@ -1,6 +1,7 @@
 ---
 id: application.desktop-library-lifecycle
 ---
+
 # Desktop library lifecycle
 
 ## Scope

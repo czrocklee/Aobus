@@ -1,6 +1,7 @@
 ---
 id: tui.command-surface
 ---
+
 # TUI command reference
 
 ## Scope and version
@@ -23,15 +24,15 @@ On supported Linux builds, `App.cpp` optionally composes the shared `ao::systemm
 
 ### Startup options
 
-| Option | Default/meaning |
-| --- | --- |
-| `-l, --library <root>` | music library root; default current directory; normalized absolute path |
-| `--database <path>` | default `<root>/.aobus/library`; normalized absolute path |
-| `--config <path>` | workspace/playback-session file; default `<root>/.aobus/tui-workspace.yaml`; normalized absolute path; does not relocate the layout file and must not alias another TUI managed-state file |
-| `--cover-art-mode <auto|kitty|blocks|off>` | session override of the saved cover renderer; omitted uses the preference (default `auto`) |
-| `--system-media <auto|off>` | system media controls; default `auto`; `off` constructs no adapter, native thread, or MPRIS artwork interests |
-| `--log-level <trace|debug|info|warn|error|critical|off>` | case-insensitive runtime log level |
-| `--version` | prints `Aobus TUI <version>` and exits |
+| Option                  | Default/meaning                                                                                                                                                                            |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `-l, --library <root>`  | music library root; default current directory; normalized absolute path                                                                                                                    |
+| `--database <path>`     | default `<root>/.aobus/library`; normalized absolute path                                                                                                                                  |
+| `--config <path>`       | workspace/playback-session file; default `<root>/.aobus/tui-workspace.yaml`; normalized absolute path; does not relocate the layout file and must not alias another TUI managed-state file |
+| `--cover-art-mode <auto | kitty                                                                                                                                                                                      | blocks                                                                                                        | off>` | session override of the saved cover renderer; omitted uses the preference (default `auto`) |
+| `--system-media <auto   | off>`                                                                                                                                                                                      | system media controls; default `auto`; `off` constructs no adapter, native thread, or MPRIS artwork interests |
+| `--log-level <trace     | debug                                                                                                                                                                                      | info                                                                                                          | warn  | error                                                                                      | critical | off>` | case-insensitive runtime log level |
+| `--version`             | prints `Aobus TUI <version>` and exits                                                                                                                                                     |
 
 Per-library List navigation visibility, column layouts, and presentation preferences always use `<root>/.aobus/tui_layout.yaml`; there is no startup override for that file. Startup rejects a `--config` path that aliases this document or the global TUI application-preference document so one `ConfigStore` remains authoritative for each physical file.
 Startup also exits with a diagnostic when it cannot prepare the selected workspace configuration directory.
@@ -53,59 +54,59 @@ Tab/Shift+Tab selects a page; Escape closes, asking for confirmation if a failed
 Commands are entered through the Command Palette (shipped root shortcut `:`) and are case-insensitive after trimming.
 The parser accepts the Command Palette draft with or without its leading `:`; `/` is reserved for live Quick Filter input and is never a command prefix.
 
-| Prefix | Action |
-| --- | --- |
-| `filter <text>` | quick filter |
+| Prefix              | Action                 |
+| ------------------- | ---------------------- |
+| `filter <text>`     | quick filter           |
 | `presentation <id>` | set track presentation |
-| `preset <id>` | set track presentation |
-| `view <id>` | set track presentation |
+| `preset <id>`       | set track presentation |
+| `view <id>`         | set track presentation |
 
 The parser accepts only known prefixes and exact aliases. The palette also searches localized action names and aliases, showing one row per action; Return activates a highlighted search result. An unmatched draft reports an unknown command without changing the filter.
 
 ### Command aliases
 
-| Aliases | Action |
-| --- | --- |
-| `lists` | focus pinned Lists, or toggle the Lists popup when no pinned pane is visible |
-| `sidebar` | toggle the pinned Lists preference |
-| `detail`, `details` | open/toggle detail |
-| `quality`, `audio`, `pipeline` | open/toggle quality pipeline |
-| `output`, `outputs`, `device`, `devices` | open/toggle output devices |
-| `views` | open/toggle presentation panel |
-| `notifications`, `notification` | open/toggle notification center |
-| `close`, `hide`, `esc` | close overlay |
-| `help` | help |
-| `goto` | open the Go to navigation menu |
-| `current`, `now`, `reveal` | reveal current track |
-| `artist` | open an All Tracks view filtered by the current track's exact artist metadata |
-| `album` | open All Tracks with the `albums` presentation and reveal the current track |
-| `clear` | clear filter |
-| `reload`, `refresh` | reload active list |
-| `scan`, `rescan` | start an eager library scan |
-| `scan cancel` | request cooperative cancellation of the running scan |
-| `select toggle` | mark or unmark the focused track |
-| `select visual` | start a visual selection at the focused track, or confirm the running one |
-| `select all` | mark every track in the current view |
-| `select clear` | clear marked tracks |
-| `order up` | move the focused selection one unselected position up in the active saved List's manual order |
-| `order down` | move the focused selection one unselected position down in the active saved List's manual order |
-| `order top` | move the focused selection to the top of the active saved List's manual order |
-| `order bottom` | move the focused selection to the bottom of the active saved List's manual order |
-| `order reset` | clear the active saved List's saved manual order |
-| `edit`, `properties` | open the Track Properties editor over the current selection |
-| `tags` | open the quick tag popover over the current selection |
-| `list new` | open the Saved-List editor for a new List under the target List |
-| `list edit` | open the Saved-List editor over the target List's definition |
-| `list delete` | preview and confirm deletion of the target List |
-| `play` | play the focused track |
-| `pause`, `toggle`, `space` | toggle playback |
-| `stop` | stop playback |
-| `previous`, `next` | play the previous/next track in the playback sequence |
-| `shuffle` | toggle shuffle |
-| `repeat` | cycle repeat Off → All → One → Off |
-| `back`, `forward` | navigate workspace history, including the view left by reveal |
-| `settings`, `config` | open global TUI Settings |
-| `quit` | request normal checkpoint-and-stop exit |
+| Aliases                                  | Action                                                                                          |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `lists`                                  | focus pinned Lists, or toggle the Lists popup when no pinned pane is visible                    |
+| `sidebar`                                | toggle the pinned Lists preference                                                              |
+| `detail`, `details`                      | open/toggle detail                                                                              |
+| `quality`, `audio`, `pipeline`           | open/toggle quality pipeline                                                                    |
+| `output`, `outputs`, `device`, `devices` | open/toggle output devices                                                                      |
+| `views`                                  | open/toggle presentation panel                                                                  |
+| `notifications`, `notification`          | open/toggle notification center                                                                 |
+| `close`, `hide`, `esc`                   | close overlay                                                                                   |
+| `help`                                   | help                                                                                            |
+| `goto`                                   | open the Go to navigation menu                                                                  |
+| `current`, `now`, `reveal`               | reveal current track                                                                            |
+| `artist`                                 | open an All Tracks view filtered by the current track's exact artist metadata                   |
+| `album`                                  | open All Tracks with the `albums` presentation and reveal the current track                     |
+| `clear`                                  | clear filter                                                                                    |
+| `reload`, `refresh`                      | reload active list                                                                              |
+| `scan`, `rescan`                         | start an eager library scan                                                                     |
+| `scan cancel`                            | request cooperative cancellation of the running scan                                            |
+| `select toggle`                          | mark or unmark the focused track                                                                |
+| `select visual`                          | start a visual selection at the focused track, or confirm the running one                       |
+| `select all`                             | mark every track in the current view                                                            |
+| `select clear`                           | clear marked tracks                                                                             |
+| `order up`                               | move the focused selection one unselected position up in the active saved List's manual order   |
+| `order down`                             | move the focused selection one unselected position down in the active saved List's manual order |
+| `order top`                              | move the focused selection to the top of the active saved List's manual order                   |
+| `order bottom`                           | move the focused selection to the bottom of the active saved List's manual order                |
+| `order reset`                            | clear the active saved List's saved manual order                                                |
+| `edit`, `properties`                     | open the Track Properties editor over the current selection                                     |
+| `tags`                                   | open the quick tag popover over the current selection                                           |
+| `list new`                               | open the Saved-List editor for a new List under the target List                                 |
+| `list edit`                              | open the Saved-List editor over the target List's definition                                    |
+| `list delete`                            | preview and confirm deletion of the target List                                                 |
+| `play`                                   | play the focused track                                                                          |
+| `pause`, `toggle`, `space`               | toggle playback                                                                                 |
+| `stop`                                   | stop playback                                                                                   |
+| `previous`, `next`                       | play the previous/next track in the playback sequence                                           |
+| `shuffle`                                | toggle shuffle                                                                                  |
+| `repeat`                                 | cycle repeat Off → All → One → Off                                                              |
+| `back`, `forward`                        | navigate workspace history, including the view left by reveal                                   |
+| `settings`, `config`                     | open global TUI Settings                                                                        |
+| `quit`                                   | request normal checkpoint-and-stop exit                                                         |
 
 The `list` commands draft against the Lists-navigation cursor while the docked Lists pane owns focus, otherwise the active List; `list edit` and `list delete` refuse All Tracks, while `list new` parents a new List at the library root instead. Inside the docked Lists pane, the `tui.library.editProperties` key (`e` by default) edits the List under the cursor and the fixed `Delete` key starts its deletion; creating a List has no key because it has no focused object. The [TUI List-authoring specification](../../system/frontend/tui-list-authoring.md) owns their workflow.
 
@@ -114,69 +115,69 @@ The `list` commands draft against the Lists-navigation cursor while the docked L
 The following table shows shipped defaults.
 Except for rows marked **fixed protocol**, each action is configurable through its stable id in the [keyboard map reference](../shell/keymap.md), and every visible hint uses the effective projected shortcut.
 
-| Default key | Action | Ownership |
-| --- | --- | --- |
-| `Up`, `Down` | previous/next track or active panel row | fixed protocol |
-| `PageUp`, `PageDown` | page selection | fixed protocol |
-| `Home`, `End` | first/last selection | fixed protocol |
-| `Return` | play the focused track | configurable at root; Return is fixed activation inside supported overlays |
-| `j` / `k` | move focus to next/previous row | configurable |
-| `Space` | toggle play/pause | configurable |
-| `s` | stop | configurable |
-| `<` / `>`, `Ctrl+Left` / `Ctrl+Right` | previous/next playback track | configurable |
-| `S` | toggle shuffle | configurable |
-| `r` | cycle repeat Off → All → One → Off | configurable |
-| `Left` / `Right`, `[` / `]` | seek -/+ 5 seconds | configurable |
-| `{` / `}` | previous/next presentation group | configurable |
-| `-` / `+` / `=` | volume -/+ 5 percentage points | configurable |
-| `l` | focus docked Lists, or toggle the button-anchored chooser when undocked | configurable |
-| `L` | toggle pinned Lists; pinning the chooser promotes it into the sidebar | configurable |
-| `d` | toggle the persistent Detail sidebar | configurable |
-| `D` | show and focus Detail | configurable |
-| `Ctrl+K`, `1`–`9` in focused Detail | open Credits over the current selection for all kinds, or for one of the first nine kinds in `CreditKind` order, Conductor through Engineer | fixed protocol inside Detail |
-| `g` | open the Go to menu for current track, artist, album, or workspace history | configurable |
-| `Ctrl+W` | begin keyboard panel resizing; Tab selects a divider, Left/Right moves it, Enter commits, Esc cancels | configurable entry; fixed protocol inside resize mode |
-| `Shift+Left` / `Shift+Right` | resize the focused Lists or Detail sidebar | fixed protocol |
-| `a`, `o`, `p`, `n` | toggle the corresponding popover | configurable |
-| `,` | open Settings | configurable at root |
-| `?`, `F1` | open/close help | configurable |
-| `c` | reveal current track | configurable |
-| `C` | clear filter | configurable |
-| `R` | reload active list | configurable |
-| `Tab`, `Shift+Tab` | switch Lists/Tracks focus when docked; return to Tracks from Detail | configurable |
-| `m` | mark or unmark the focused track | configurable |
-| `v` | start a visual selection at the focus, or confirm the running one | configurable |
-| `Shift+A` | mark every track in the current view | configurable |
-| `u` | clear marked tracks | configurable |
-| `Alt+Up` / `Alt+Down` | move the focused selection one unselected position up/down in the active saved List's manual order | configurable |
-| `Alt+Home` / `Alt+End` | move the focused selection to the top/bottom of the active saved List's manual order | configurable |
-| `e` | open the Track Properties editor over the current selection | configurable |
-| `t` | open the quick tag popover over the current selection | configurable |
-| `/` | open an empty live Quick Filter input | configurable |
-| `:` | open an empty Command Palette input | configurable |
-| `Q` (Shift+Q) | request normal exit | configurable |
-| `Ctrl-C` | graceful exit request through the App exit gate | fixed protocol |
-| `Esc` | close overlay, cancel active text input, or cancel a running visual selection according to its mode | fixed protocol |
+| Default key                           | Action                                                                                                                                      | Ownership                                                                  |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `Up`, `Down`                          | previous/next track or active panel row                                                                                                     | fixed protocol                                                             |
+| `PageUp`, `PageDown`                  | page selection                                                                                                                              | fixed protocol                                                             |
+| `Home`, `End`                         | first/last selection                                                                                                                        | fixed protocol                                                             |
+| `Return`                              | play the focused track                                                                                                                      | configurable at root; Return is fixed activation inside supported overlays |
+| `j` / `k`                             | move focus to next/previous row                                                                                                             | configurable                                                               |
+| `Space`                               | toggle play/pause                                                                                                                           | configurable                                                               |
+| `s`                                   | stop                                                                                                                                        | configurable                                                               |
+| `<` / `>`, `Ctrl+Left` / `Ctrl+Right` | previous/next playback track                                                                                                                | configurable                                                               |
+| `S`                                   | toggle shuffle                                                                                                                              | configurable                                                               |
+| `r`                                   | cycle repeat Off → All → One → Off                                                                                                          | configurable                                                               |
+| `Left` / `Right`, `[` / `]`           | seek -/+ 5 seconds                                                                                                                          | configurable                                                               |
+| `{` / `}`                             | previous/next presentation group                                                                                                            | configurable                                                               |
+| `-` / `+` / `=`                       | volume -/+ 5 percentage points                                                                                                              | configurable                                                               |
+| `l`                                   | focus docked Lists, or toggle the button-anchored chooser when undocked                                                                     | configurable                                                               |
+| `L`                                   | toggle pinned Lists; pinning the chooser promotes it into the sidebar                                                                       | configurable                                                               |
+| `d`                                   | toggle the persistent Detail sidebar                                                                                                        | configurable                                                               |
+| `D`                                   | show and focus Detail                                                                                                                       | configurable                                                               |
+| `Ctrl+K`, `1`–`9` in focused Detail   | open Credits over the current selection for all kinds, or for one of the first nine kinds in `CreditKind` order, Conductor through Engineer | fixed protocol inside Detail                                               |
+| `g`                                   | open the Go to menu for current track, artist, album, or workspace history                                                                  | configurable                                                               |
+| `Ctrl+W`                              | begin keyboard panel resizing; Tab selects a divider, Left/Right moves it, Enter commits, Esc cancels                                       | configurable entry; fixed protocol inside resize mode                      |
+| `Shift+Left` / `Shift+Right`          | resize the focused Lists or Detail sidebar                                                                                                  | fixed protocol                                                             |
+| `a`, `o`, `p`, `n`                    | toggle the corresponding popover                                                                                                            | configurable                                                               |
+| `,`                                   | open Settings                                                                                                                               | configurable at root                                                       |
+| `?`, `F1`                             | open/close help                                                                                                                             | configurable                                                               |
+| `c`                                   | reveal current track                                                                                                                        | configurable                                                               |
+| `C`                                   | clear filter                                                                                                                                | configurable                                                               |
+| `R`                                   | reload active list                                                                                                                          | configurable                                                               |
+| `Tab`, `Shift+Tab`                    | switch Lists/Tracks focus when docked; return to Tracks from Detail                                                                         | configurable                                                               |
+| `m`                                   | mark or unmark the focused track                                                                                                            | configurable                                                               |
+| `v`                                   | start a visual selection at the focus, or confirm the running one                                                                           | configurable                                                               |
+| `Shift+A`                             | mark every track in the current view                                                                                                        | configurable                                                               |
+| `u`                                   | clear marked tracks                                                                                                                         | configurable                                                               |
+| `Alt+Up` / `Alt+Down`                 | move the focused selection one unselected position up/down in the active saved List's manual order                                          | configurable                                                               |
+| `Alt+Home` / `Alt+End`                | move the focused selection to the top/bottom of the active saved List's manual order                                                        | configurable                                                               |
+| `e`                                   | open the Track Properties editor over the current selection                                                                                 | configurable                                                               |
+| `t`                                   | open the quick tag popover over the current selection                                                                                       | configurable                                                               |
+| `/`                                   | open an empty live Quick Filter input                                                                                                       | configurable                                                               |
+| `:`                                   | open an empty Command Palette input                                                                                                         | configurable                                                               |
+| `Q` (Shift+Q)                         | request normal exit                                                                                                                         | configurable                                                               |
+| `Ctrl-C`                              | graceful exit request through the App exit gate                                                                                             | fixed protocol                                                             |
+| `Esc`                                 | close overlay, cancel active text input, or cancel a running visual selection according to its mode                                         | fixed protocol                                                             |
 
 Playback shortcuts also work in browse panels after local navigation, activation, and toggle handling. Active search, shell text input, Settings, and track editors consume their own input exclusively. Rebinding a root key does not change fixed picker or editor keys. Uppercase letters in this table require Shift; canonical configuration uses `Shift+C`, `Shift+R`, and `Shift+S`.
 
 ### Quick Filter keys
 
-| Key | Action |
-| --- | --- |
-| printable UTF-8 | insert at the caret |
-| `Backspace`, `Delete` | remove one grapheme before/at the caret |
-| `Left`, `Right` | move by grapheme; clicking input also positions the caret |
-| `Home`, `End`, `Ctrl+A`, `Ctrl+E` | move to the beginning/end |
-| `Alt+B`, `Alt+F`, `Ctrl+Left`, `Ctrl+Right` | move across space-delimited words |
-| `Ctrl+W` | delete the preceding word |
-| `Ctrl+U`, `Ctrl+K` | delete text before/after the caret |
-| `Ctrl+P`, `Ctrl+N` | recall older/newer session history, restoring the unfinished draft past the newest entry |
-| `Up`, `Down` | cycle completion selection |
-| `PageUp`, `PageDown` | move selection by one bounded completion page |
-| `Tab` | apply selected completion and keep editing |
-| `Return` | apply selected completion, apply the filter immediately, and close; an untouched empty draft clears the filter |
-| `Esc` | ignore selected completion, apply the literal edited draft immediately, and close; an untouched draft preserves the existing filter |
+| Key                                         | Action                                                                                                                              |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| printable UTF-8                             | insert at the caret                                                                                                                 |
+| `Backspace`, `Delete`                       | remove one grapheme before/at the caret                                                                                             |
+| `Left`, `Right`                             | move by grapheme; clicking input also positions the caret                                                                           |
+| `Home`, `End`, `Ctrl+A`, `Ctrl+E`           | move to the beginning/end                                                                                                           |
+| `Alt+B`, `Alt+F`, `Ctrl+Left`, `Ctrl+Right` | move across space-delimited words                                                                                                   |
+| `Ctrl+W`                                    | delete the preceding word                                                                                                           |
+| `Ctrl+U`, `Ctrl+K`                          | delete text before/after the caret                                                                                                  |
+| `Ctrl+P`, `Ctrl+N`                          | recall older/newer session history, restoring the unfinished draft past the newest entry                                            |
+| `Up`, `Down`                                | cycle completion selection                                                                                                          |
+| `PageUp`, `PageDown`                        | move selection by one bounded completion page                                                                                       |
+| `Tab`                                       | apply selected completion and keep editing                                                                                          |
+| `Return`                                    | apply selected completion, apply the filter immediately, and close; an untouched empty draft clears the filter                      |
+| `Esc`                                       | ignore selected completion, apply the literal edited draft immediately, and close; an untouched draft preserves the existing filter |
 
 Opening Quick Filter through its effective shortcut does not copy or clear the current filter.
 Confirming that untouched empty input with Return clears the filter, while closing it with Escape leaves the current filter unchanged.
@@ -188,37 +189,37 @@ Quick Filter edits are live, so Return accepts the highlighted value and Escape 
 
 ### Command Palette keys
 
-| Key | Action |
-| --- | --- |
-| printable UTF-8 | insert at the caret |
-| `Backspace`, `Delete` | remove one grapheme before/at the caret |
-| `Left`, `Right` | move by grapheme; clicking input also positions the caret |
-| `Home`, `End`, `Ctrl+A`, `Ctrl+E` | move to the beginning/end |
-| `Alt+B`, `Alt+F`, `Ctrl+Left`, `Ctrl+Right` | move across space-delimited words |
-| `Ctrl+W` | delete the preceding word |
-| `Ctrl+U`, `Ctrl+K` | delete text before/after the caret |
-| `Ctrl+P`, `Ctrl+N` | recall older/newer session history, restoring the unfinished draft past the newest entry |
-| `Up`, `Down` | cycle completion selection |
-| `PageUp`, `PageDown` | move selection by one bounded completion page |
-| `Tab` | apply selected completion and keep editing |
-| `Return` | run a complete typed command; otherwise activate the highlighted candidate. Explicit candidate navigation takes priority; argument prefixes remain open |
-| `Esc` | discard the command draft and close |
+| Key                                         | Action                                                                                                                                                  |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| printable UTF-8                             | insert at the caret                                                                                                                                     |
+| `Backspace`, `Delete`                       | remove one grapheme before/at the caret                                                                                                                 |
+| `Left`, `Right`                             | move by grapheme; clicking input also positions the caret                                                                                               |
+| `Home`, `End`, `Ctrl+A`, `Ctrl+E`           | move to the beginning/end                                                                                                                               |
+| `Alt+B`, `Alt+F`, `Ctrl+Left`, `Ctrl+Right` | move across space-delimited words                                                                                                                       |
+| `Ctrl+W`                                    | delete the preceding word                                                                                                                               |
+| `Ctrl+U`, `Ctrl+K`                          | delete text before/after the caret                                                                                                                      |
+| `Ctrl+P`, `Ctrl+N`                          | recall older/newer session history, restoring the unfinished draft past the newest entry                                                                |
+| `Up`, `Down`                                | cycle completion selection                                                                                                                              |
+| `PageUp`, `PageDown`                        | move selection by one bounded completion page                                                                                                           |
+| `Tab`                                       | apply selected completion and keep editing                                                                                                              |
+| `Return`                                    | run a complete typed command; otherwise activate the highlighted candidate. Explicit candidate navigation takes priority; argument prefixes remain open |
+| `Esc`                                       | discard the command draft and close                                                                                                                     |
 
 ### Quick tag popover keys
 
 `t` or `:tags` opens a centered tag editor over the marked tracks, or the focused track when nothing is marked.
 Its title shows the captured target count.
 
-| Input | Action |
-| --- | --- |
-| Type | search existing tags or name a new tag; spaces remain text while editing the query |
-| Up/Down, PageUp/PageDown | focus and navigate tag results |
-| Space with results focused, or click a tag | cycle that tag's pending state |
-| Tab / Shift+Tab | switch between query and results |
-| Enter | apply pending changes and close; while querying, add the offered new name first, even alongside partial matches; with results focused, create only when the new-tag row is selected |
-| Ctrl+G | restore the focused tag's original state |
-| Esc, Close / Discard changes footer, outside click | close the popover, discarding any pending changes |
-| Ctrl+R | in failed or stale state, reload captured targets and discard the draft; ignored while ready |
+| Input                                              | Action                                                                                                                                                                              |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Type                                               | search existing tags or name a new tag; spaces remain text while editing the query                                                                                                  |
+| Up/Down, PageUp/PageDown                           | focus and navigate tag results                                                                                                                                                      |
+| Space with results focused, or click a tag         | cycle that tag's pending state                                                                                                                                                      |
+| Tab / Shift+Tab                                    | switch between query and results                                                                                                                                                    |
+| Enter                                              | apply pending changes and close; while querying, add the offered new name first, even alongside partial matches; with results focused, create only when the new-tag row is selected |
+| Ctrl+G                                             | restore the focused tag's original state                                                                                                                                            |
+| Esc, Close / Discard changes footer, outside click | close the popover, discarding any pending changes                                                                                                                                   |
+| Ctrl+R                                             | in failed or stale state, reload captured targets and discard the draft; ignored while ready                                                                                        |
 
 Only tag changes are submitted.
 Saving uses the same captured authoring session and recovery behavior as the full editor.
@@ -229,26 +230,26 @@ Input is blocked during submission; failed or stale submissions keep the popover
 The editor is composed as a centered modal overlay over the live workspace and consumes every event it does not use, trapping keyboard and mouse interactions while open.
 It provides pages for `Metadata`, `Tags`, read-only `Properties`, and (for multi-track selections) `Tracks`.
 
-| Key | Action |
-| --- | --- |
-| `Tab`, `Shift-Tab` | switch to the next or previous page (`Metadata`, `Tags`, `Properties`, `Tracks`) |
-| `Up`, `Down` | move focused row; navigate completion candidates or tag rows; scroll read-only pages |
-| `j`, `k` | scroll down/up on the read-only Properties and Tracks pages |
-| `PageUp`, `PageDown` | move metadata/tag rows or scroll read-only pages by the visible viewport; move completion candidates by six rows |
-| `Left`, `Right` | move the caret by one extended grapheme cluster (dismisses completion popup) |
-| `Home`, `End`, `Ctrl-A`, `Ctrl-E` | move the caret to the start or end of the text field (dismisses completion popup); Home/End moves to the first/last row on read-only pages |
-| `Alt-B`, `Alt-F`, `Ctrl-Left`, `Ctrl-Right` | move across space-delimited words in text inputs (dismisses completion popup) |
-| `Ctrl-W` | delete the preceding space-delimited word |
-| printable UTF-8, `Backspace` | edit focused metadata field (refreshes completion candidates); edit the always-live tag query |
-| `Ctrl-N` | explicitly open metadata value completion popup for supported fields |
-| `Return` | accept selected completion candidate; cycle the selected tag's intent or create the tag the query names; confirm discard or reload prompt |
-| `Ctrl-U`, `Ctrl-K` | delete text before/after the caret; an unchanged mixed field keeps its values |
-| `Ctrl-D` | explicitly clear the focused metadata field across all targets |
-| `Ctrl-G` | restore focused metadata field or tag to its baseline value |
-| `Delete` | delete forward in text inputs, including the tag query |
-| `Ctrl-S` | submit unified properties patch (metadata and tags) for every captured target |
-| `Ctrl-R` | re-read every captured target and replace the draft baselines |
-| `Esc` | close completion popup; clear a non-empty tag query; close editor (prompts confirmation if dirty) |
+| Key                                         | Action                                                                                                                                     |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Tab`, `Shift-Tab`                          | switch to the next or previous page (`Metadata`, `Tags`, `Properties`, `Tracks`)                                                           |
+| `Up`, `Down`                                | move focused row; navigate completion candidates or tag rows; scroll read-only pages                                                       |
+| `j`, `k`                                    | scroll down/up on the read-only Properties and Tracks pages                                                                                |
+| `PageUp`, `PageDown`                        | move metadata/tag rows or scroll read-only pages by the visible viewport; move completion candidates by six rows                           |
+| `Left`, `Right`                             | move the caret by one extended grapheme cluster (dismisses completion popup)                                                               |
+| `Home`, `End`, `Ctrl-A`, `Ctrl-E`           | move the caret to the start or end of the text field (dismisses completion popup); Home/End moves to the first/last row on read-only pages |
+| `Alt-B`, `Alt-F`, `Ctrl-Left`, `Ctrl-Right` | move across space-delimited words in text inputs (dismisses completion popup)                                                              |
+| `Ctrl-W`                                    | delete the preceding space-delimited word                                                                                                  |
+| printable UTF-8, `Backspace`                | edit focused metadata field (refreshes completion candidates); edit the always-live tag query                                              |
+| `Ctrl-N`                                    | explicitly open metadata value completion popup for supported fields                                                                       |
+| `Return`                                    | accept selected completion candidate; cycle the selected tag's intent or create the tag the query names; confirm discard or reload prompt  |
+| `Ctrl-U`, `Ctrl-K`                          | delete text before/after the caret; an unchanged mixed field keeps its values                                                              |
+| `Ctrl-D`                                    | explicitly clear the focused metadata field across all targets                                                                             |
+| `Ctrl-G`                                    | restore focused metadata field or tag to its baseline value                                                                                |
+| `Delete`                                    | delete forward in text inputs, including the tag query                                                                                     |
+| `Ctrl-S`                                    | submit unified properties patch (metadata and tags) for every captured target                                                              |
+| `Ctrl-R`                                    | re-read every captured target and replace the draft baselines                                                                              |
+| `Esc`                                       | close completion popup; clear a non-empty tag query; close editor (prompts confirmation if dirty)                                          |
 
 With Mouse control enabled, click tabs, fields, tag rows, or completion candidates; click within a text value to place the caret.
 Wheel input navigates the active page or completion.
@@ -268,14 +269,14 @@ Lists has two presentations. `l` / `:lists` focuses the pinned tree when docked,
 
 ### Overlay-specific keys
 
-| Overlay | Keys |
-| --- | --- |
+| Overlay        | Keys                                                                                                                                                      |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Detail sidebar | effective toggle (default `d`) or its divider arrow shows/hides it; Escape and temporary popovers leave it visible, and workspace gestures stay available |
-| Pipeline | effective toggle (default `a`), `Esc` close |
-| Output | effective toggle (default `o`), `Return` select, `Esc` close |
-| Views | effective toggle (default `p`), `Return` select, `Esc` close |
-| Notifications | effective toggle (default `n`), `x` hide compact/local entry when eligible, `Esc` close |
-| Help | effective toggle (defaults `?` and F1), `Esc` close; navigation keys scroll the body within its fixed frame |
+| Pipeline       | effective toggle (default `a`), `Esc` close                                                                                                               |
+| Output         | effective toggle (default `o`), `Return` select, `Esc` close                                                                                              |
+| Views          | effective toggle (default `p`), `Return` select, `Esc` close                                                                                              |
+| Notifications  | effective toggle (default `n`), `x` hide compact/local entry when eligible, `Esc` close                                                                   |
+| Help           | effective toggle (defaults `?` and F1), `Esc` close; navigation keys scroll the body within its fixed frame                                               |
 
 ### Playback mode codes
 
@@ -283,14 +284,14 @@ The playback bar uses four ASCII characters in every locale.
 The prefix identifies sequential (`SEQ`) or shuffled (`SHF`) order; the suffix identifies no repeat (`-`), repeat all (`*`), or repeat one (`1`).
 Hover uses localized names instead of these codes.
 
-| Code | Ordering | Repeat |
-| --- | --- | --- |
-| `SEQ-` | Sequential | Off |
-| `SEQ*` | Sequential | All |
-| `SHF-` | Shuffle | Off |
-| `SHF*` | Shuffle | All |
+| Code   | Ordering   | Repeat    |
+| ------ | ---------- | --------- |
+| `SEQ-` | Sequential | Off       |
+| `SEQ*` | Sequential | All       |
+| `SHF-` | Shuffle    | Off       |
+| `SHF*` | Shuffle    | All       |
 | `SEQ1` | Sequential | One track |
-| `SHF1` | Shuffle | One track |
+| `SHF1` | Shuffle    | One track |
 
 The [playback-mode interaction specification](../../system/frontend/tui.md#playback-modes) owns the mouse cycle and how independent shuffle/repeat commands interact with it.
 
@@ -298,22 +299,22 @@ The [playback-mode interaction specification](../../system/frontend/tui.md#playb
 
 All track-table gestures below remain available while the detail inspector is open and are blocked by modal overlays. A left press outside a rendered floating menu dismisses it and consumes the click; a different trigger therefore needs a subsequent click. Command Palette and Quick Filter outside presses follow their respective Escape semantics, with the Quick Filter status-row field counted as inside. Centered Help follows the same outside-click dismissal rule. The Detail sidebar uses its divider arrow or `d`; editor dialogs use their close controls.
 
-| Target/gesture | Action |
-| --- | --- |
-| track-table wheel | move selection by three tracks |
-| table scrollbar press/drag | map visual row to selected track |
-| header column edge drag/release | preview a terminal-cell width, then persist the current list's canonical layout on release; interruption rolls back |
-| group header click | select first track in section |
-| seek rail press/drag/release | preview/final seek |
-| playback mode button hover | show the localized current mode and click destination in the status bar; narrow windows prioritize the current mode |
-| playback mode button click | advance to the next preset in the [playback-mode cycle](../../system/frontend/tui.md#playback-modes) |
-| Soul button click | toggle playback |
-| Soul button hover | show quality hover panel |
-| playback title click | reveal the current track |
-| playback artist click | open an All Tracks view filtered by the complete artist metadata value |
-| playback album click | open All Tracks with the `albums` presentation and reveal the current track |
-| library/view/status/quality/output indicators | open corresponding panel |
-| list/view/output row click | select/activate according to panel |
+| Target/gesture                                | Action                                                                                                              |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| track-table wheel                             | move selection by three tracks                                                                                      |
+| table scrollbar press/drag                    | map visual row to selected track                                                                                    |
+| header column edge drag/release               | preview a terminal-cell width, then persist the current list's canonical layout on release; interruption rolls back |
+| group header click                            | select first track in section                                                                                       |
+| seek rail press/drag/release                  | preview/final seek                                                                                                  |
+| playback mode button hover                    | show the localized current mode and click destination in the status bar; narrow windows prioritize the current mode |
+| playback mode button click                    | advance to the next preset in the [playback-mode cycle](../../system/frontend/tui.md#playback-modes)                |
+| Soul button click                             | toggle playback                                                                                                     |
+| Soul button hover                             | show quality hover panel                                                                                            |
+| playback title click                          | reveal the current track                                                                                            |
+| playback artist click                         | open an All Tracks view filtered by the complete artist metadata value                                              |
+| playback album click                          | open All Tracks with the `albums` presentation and reveal the current track                                         |
+| library/view/status/quality/output indicators | open corresponding panel                                                                                            |
+| list/view/output row click                    | select/activate according to panel                                                                                  |
 
 ## Validation rules
 

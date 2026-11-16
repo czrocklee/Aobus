@@ -1,6 +1,7 @@
 ---
 id: development.test.coverage-workflow
 ---
+
 # Coverage workflow
 
 ## Generating and inspecting coverage

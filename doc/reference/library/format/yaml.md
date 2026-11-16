@@ -1,6 +1,7 @@
 ---
 id: library.yaml-format
 ---
+
 # Library YAML format
 
 ## Scope and version
@@ -32,19 +33,19 @@ library:
   lists: []
 ```
 
-| Field | Required | Producer | Type and values |
-|---|---|---|---|
-| `version` | Yes. | Always `1`. | Unsigned 32-bit integer; only `1` is accepted. |
-| `export-mode` | Yes. | Always emitted. | `delta`, `metadata`, `full`, or `list-only`. |
-| `library` | Yes. | Always emitted. | Closed map containing only `resources`, `tracks`, and `lists`. |
+| Field         | Required | Producer        | Type and values                                                |
+| ------------- | -------- | --------------- | -------------------------------------------------------------- |
+| `version`     | Yes.     | Always `1`.     | Unsigned 32-bit integer; only `1` is accepted.                 |
+| `export-mode` | Yes.     | Always emitted. | `delta`, `metadata`, `full`, or `list-only`.                   |
+| `library`     | Yes.     | Always emitted. | Closed map containing only `resources`, `tracks`, and `lists`. |
 
 Collection presence declares payload scope:
 
-| `export-mode` | `library.resources` | `library.tracks` | `library.lists` |
-|---|---|---|---|
-| `full` | Required sequence, including when empty. | Required sequence, including when empty. | Required sequence, including when empty. |
-| `delta`, `metadata` | Forbidden. | Required sequence, including when empty. | Required sequence, including when empty. |
-| `list-only` | Forbidden. | Forbidden. | Required sequence, including when empty. |
+| `export-mode`       | `library.resources`                      | `library.tracks`                         | `library.lists`                          |
+| ------------------- | ---------------------------------------- | ---------------------------------------- | ---------------------------------------- |
+| `full`              | Required sequence, including when empty. | Required sequence, including when empty. | Required sequence, including when empty. |
+| `delta`, `metadata` | Forbidden.                               | Required sequence, including when empty. | Required sequence, including when empty. |
+| `list-only`         | Forbidden.                               | Forbidden.                               | Required sequence, including when empty. |
 
 No document of any mode carries a cover byte.
 
@@ -89,20 +90,20 @@ These rules do not case-fold display text and do not apply Unicode normalization
 
 Each track is a closed map.
 
-| Field | Required | Type | Producer behavior |
-|---|---|---|---|
-| `id` | No. | Unsigned 32-bit integer. | Always emitted; nonzero producer-local identity. |
-| `uri` | Yes. | Library URI string. | Always emitted. |
-| Metadata fields | No. | String or unsigned 16-bit integer according to the tables below. | Mode-dependent. |
-| `recording-date` | No. | Canonical partial-date scalar, or empty scalar text that clears the value. | Mode-dependent; see [recording date](#recording-date). |
-| `credits` | No. | Sequence of closed `name`/`kind`/`role` maps. | Explicit sequence, including empty, in full/metadata; difference from the selected baseline in delta. See [Credits](#credits). |
-| `custom` | No. | Map of arbitrary scalar string keys to scalar string values. | Emitted only when non-empty. |
-| `segment` | No. | Closed map. | Emitted for every segment Track, in every mode that emits track records. |
-| `tags` | No. | Sequence of scalar strings. | Emitted only when non-empty. |
-| `covers` | No. | Sequence of closed cover maps. | Mode-dependent; an empty sequence is meaningful. |
-| Technical fields | No. | Scalars from the technical table. | Emitted in `full`. |
-| `file-size` | No. | Unsigned 64-bit integer. | Emitted in `full`; `0` when no manifest row exists. |
-| `mtime` | No. | Closed `seconds`/`nanoseconds` map or an explicit YAML null. | Emitted in `full`: the map when the manifest stores a modification time, an explicit null when it stores none, including when no manifest row exists. |
+| Field            | Required | Type                                                                       | Producer behavior                                                                                                                                     |
+| ---------------- | -------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`             | No.      | Unsigned 32-bit integer.                                                   | Always emitted; nonzero producer-local identity.                                                                                                      |
+| `uri`            | Yes.     | Library URI string.                                                        | Always emitted.                                                                                                                                       |
+| Metadata fields  | No.      | String or unsigned 16-bit integer according to the tables below.           | Mode-dependent.                                                                                                                                       |
+| `recording-date` | No.      | Canonical partial-date scalar, or empty scalar text that clears the value. | Mode-dependent; see [recording date](#recording-date).                                                                                                |
+| `credits`        | No.      | Sequence of closed `name`/`kind`/`role` maps.                              | Explicit sequence, including empty, in full/metadata; difference from the selected baseline in delta. See [Credits](#credits).                        |
+| `custom`         | No.      | Map of arbitrary scalar string keys to scalar string values.               | Emitted only when non-empty.                                                                                                                          |
+| `segment`        | No.      | Closed map.                                                                | Emitted for every segment Track, in every mode that emits track records.                                                                              |
+| `tags`           | No.      | Sequence of scalar strings.                                                | Emitted only when non-empty.                                                                                                                          |
+| `covers`         | No.      | Sequence of closed cover maps.                                             | Mode-dependent; an empty sequence is meaningful.                                                                                                      |
+| Technical fields | No.      | Scalars from the technical table.                                          | Emitted in `full`.                                                                                                                                    |
+| `file-size`      | No.      | Unsigned 64-bit integer.                                                   | Emitted in `full`; `0` when no manifest row exists.                                                                                                   |
+| `mtime`          | No.      | Closed `seconds`/`nanoseconds` map or an explicit YAML null.               | Emitted in `full`: the map when the manifest stores a modification time, an explicit null when it stores none, including when no manifest row exists. |
 
 `mtime` carries the manifest's modification time as one portable instant on the Unix/POSIX time scale: `seconds` is a signed 64-bit count from `1970-01-01 00:00:00 UTC`, excluding leap seconds, and `nanoseconds` is the fraction of that second, at least `0` and below `1000000000`.
 The map is closed and contains exactly both keys; an explicit YAML null records that no modification time is known, while the epoch instant `seconds: 0` with `nanoseconds: 0` is a present value distinct from it.
@@ -121,21 +122,21 @@ Keys in one `custom` map must be unique both as YAML keys and after NFC normaliz
 
 The following fields are scalar strings, read as [library text scalars](#library-text-scalars):
 
-| Field | Field | Field |
-|---|---|---|
-| `title` | `artist` | `album` |
-| `album-artist` | `genre` | `composer` |
-| `work` | `movement` | |
+| Field          | Field      | Field      |
+| -------------- | ---------- | ---------- |
+| `title`        | `artist`   | `album`    |
+| `album-artist` | `genre`    | `composer` |
+| `work`         | `movement` |            |
 
 ### Numeric metadata
 
 The following fields are unsigned 16-bit integers:
 
-| Field | Field | Field |
-|---|---|---|
-| `year` | `track-number` | `track-total` |
-| `disc-number` | `disc-total` | `movement-number` |
-| `movement-total` | | |
+| Field            | Field          | Field             |
+| ---------------- | -------------- | ----------------- |
+| `year`           | `track-number` | `track-total`     |
+| `disc-number`    | `disc-total`   | `movement-number` |
+| `movement-total` |                |                   |
 
 These names come from `rt::trackFieldId()`.
 
@@ -196,14 +197,14 @@ The `duration` scalar remains an unsigned 32-bit millisecond value.
 Library storage uses signed 32-bit `TrackDuration`, so import rejects values above `2147483647` ms with `FormatRejected` rather than narrowing or clamping them.
 This is a core-storage representability check, not a change to the scalar grammar or database layout; `0` (unknown) and `2147483647` ms round-trip exactly.
 
-| Field | Type | Units or accepted values |
-|---|---|---|
-| `duration` | Unsigned 32-bit integer. | Milliseconds. |
-| `bitrate` | Unsigned 32-bit integer. | Bits per second. |
-| `sample-rate` | Unsigned 32-bit integer. | Hertz. |
-| `codec` | String. | Case-insensitive `UNKNOWN`, `FLAC`, `ALAC`, `WAV`, `AAC`, `MP3`, or `Opus`. |
-| `channels` | Unsigned 8-bit integer. | Channel count. |
-| `bit-depth` | Unsigned 8-bit integer. | Bits per sample. |
+| Field         | Type                     | Units or accepted values                                                    |
+| ------------- | ------------------------ | --------------------------------------------------------------------------- |
+| `duration`    | Unsigned 32-bit integer. | Milliseconds.                                                               |
+| `bitrate`     | Unsigned 32-bit integer. | Bits per second.                                                            |
+| `sample-rate` | Unsigned 32-bit integer. | Hertz.                                                                      |
+| `codec`       | String.                  | Case-insensitive `UNKNOWN`, `FLAC`, `ALAC`, `WAV`, `AAC`, `MP3`, or `Opus`. |
+| `channels`    | Unsigned 8-bit integer.  | Channel count.                                                              |
+| `bit-depth`   | Unsigned 8-bit integer.  | Bits per sample.                                                            |
 
 Any other codec token rejects the complete document.
 
@@ -212,13 +213,13 @@ Any other codec token rejects the complete document.
 `segment` is a closed map. The producer emits it whenever the Track is a segment, including in `delta` and `metadata`, because those modes otherwise omit technical facts and a carrier's records would be duplicate URIs without it.
 Only a `.flac` or `.wav` URI can carry `segment`, matching the files CUE binding divides; the extension check is ASCII case-insensitive.
 
-| Field | Required | Type |
-|---|---|---|
-| `ordinal` | Yes. | Unsigned 16-bit CUE track number, 1 through 99. |
-| `start-frame` | Yes. | Unsigned 64-bit inclusive PCM start. |
-| `frame-count` | Yes. | Unsigned 64-bit nonzero length. |
-| `total-frames` | Yes. | Unsigned 64-bit carrier extent; equal on every record of that URI. |
-| `sample-rate` | Yes. | Unsigned 32-bit positive Hertz, the Track's hot sample rate; equal on every record of that URI. |
+| Field          | Required | Type                                                                                            |
+| -------------- | -------- | ----------------------------------------------------------------------------------------------- |
+| `ordinal`      | Yes.     | Unsigned 16-bit CUE track number, 1 through 99.                                                 |
+| `start-frame`  | Yes.     | Unsigned 64-bit inclusive PCM start.                                                            |
+| `frame-count`  | Yes.     | Unsigned 64-bit nonzero length.                                                                 |
+| `total-frames` | Yes.     | Unsigned 64-bit carrier extent; equal on every record of that URI.                              |
+| `sample-rate`  | Yes.     | Unsigned 32-bit positive Hertz, the Track's hot sample rate; equal on every record of that URI. |
 
 `segment.sample-rate` is the hot sample rate. A record that also has the top-level `sample-rate` must give the same value.
 The producer emits `duration` as `floor(frame-count * 1000 / sample-rate)`. A present `duration` that is not that value rejects the document.
@@ -237,10 +238,10 @@ resources:
     length: 174829
 ```
 
-| Field | Required | Type |
-|---|---|---|
-| `digest` | Yes. | Exactly 64 lowercase hexadecimal characters: the SHA-256 digest of the cover content. |
-| `length` | Yes. | Unsigned 32-bit integer: the length of that content. |
+| Field    | Required | Type                                                                                  |
+| -------- | -------- | ------------------------------------------------------------------------------------- |
+| `digest` | Yes.     | Exactly 64 lowercase hexadecimal characters: the SHA-256 digest of the cover content. |
+| `length` | Yes.     | Unsigned 32-bit integer: the length of that content.                                  |
 
 A `full` export emits exactly the descriptors its exported tracks reference, not every row the database holds.
 
@@ -254,10 +255,10 @@ covers:
     resource: 3a7bd3e2360a3d29eea436fcfb7e44c735d117c42d1c1835420b6b9942dd4f1b
 ```
 
-| Field | Required | Type |
-|---|---|---|
-| `type` | Yes. | Unsigned 32-bit integer from `0` through `20`, matching the APIC/FLAC picture-type vocabulary. |
-| `resource` | Yes. | A digest present in `library.resources`; never a `ResourceId`, which is local to the library that minted it. |
+| Field      | Required | Type                                                                                                         |
+| ---------- | -------- | ------------------------------------------------------------------------------------------------------------ |
+| `type`     | Yes.     | Unsigned 32-bit integer from `0` through `20`, matching the APIC/FLAC picture-type vocabulary.               |
+| `resource` | Yes.     | A digest present in `library.resources`; never a `ResourceId`, which is local to the library that minted it. |
 
 The reference graph must close in both directions: a cover naming no row, a row no track references, and two rows carrying one digest each reject the complete document.
 Unknown fields inside a resource or cover map, out-of-range picture types, an uppercase digest spelling, a digest that is not exactly 64 lowercase hexadecimal characters, and a `length` that is negative, non-integral, or above `UINT32_MAX` also reject it.
@@ -269,14 +270,14 @@ If a stored cover references a missing core descriptor, export fails rather than
 
 Each list is a closed map.
 
-| Field | Required | Type and meaning |
-|---|---|---|
-| `id` | Yes. | Nonzero unique unsigned 32-bit payload identity. |
-| `parent-id` | No. | Unsigned 32-bit payload list identity; omission or `0` means root. |
-| `name` | Yes. | Scalar string. |
-| `description` | No. | Scalar string. |
-| `filter` | No. | Scalar local predicate text; empty or omitted means identity (`true`). |
-| `order` | No. | Sequence of saved rank references; empty or omitted means no saved rank. |
+| Field         | Required | Type and meaning                                                         |
+| ------------- | -------- | ------------------------------------------------------------------------ |
+| `id`          | Yes.     | Nonzero unique unsigned 32-bit payload identity.                         |
+| `parent-id`   | No.      | Unsigned 32-bit payload list identity; omission or `0` means root.       |
+| `name`        | Yes.     | Scalar string.                                                           |
+| `description` | No.      | Scalar string.                                                           |
+| `filter`      | No.      | Scalar local predicate text; empty or omitted means identity (`true`).   |
+| `order`       | No.      | Sequence of saved rank references; empty or omitted means no saved rank. |
 
 `filter` and `order` are independent and may coexist.
 The document version names the predicate language of its filters, which carry no version of their own: a version-1 filter means what the version-1 [predicate language](../../query/predicate-language.md) defines, and a grammar, field-binding, or evaluation change that alters the outcome of filter text that language accepts increments the format version, as the [predicate language reference](../../query/predicate-language.md#compatibility-and-versioning) defines.

@@ -1,6 +1,7 @@
 ---
 id: user.play-music
 ---
+
 # Play music in the Linux GTK application
 
 ## Outcome

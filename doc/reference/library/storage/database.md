@@ -1,6 +1,7 @@
 ---
 id: library.database
 ---
+
 # Library database
 
 ## Scope and version
@@ -119,14 +120,14 @@ Filter bytes remain opaque throughout these storage operations.
 
 ## Named databases
 
-| Database | Key | Value |
-|---|---|---|
-| `meta` | Fixed integer record id | Record `1`: `MetadataHeader`; record `2`: one `std::uint64_t` library revision; record `3`: `IdSpace`. |
-| `tracks_hot` | `TrackId` integer | `TrackHotHeader`, tag-id array, title bytes. |
-| `tracks_cold` | `TrackId` integer | `TrackColdHeader`, optional block payloads, URI bytes. |
-| `lists` | `ListId` integer | `ListHeader`, order-track-id array, name/description/filter bytes, zero padding. |
-| `resources` | Digest-derived `ResourceId` integer | 36-byte `ResourceDescriptor`. |
-| `dictionary` | `DictionaryId` integer | Scalar-valid UTF-8 NFC bytes without a terminator. |
+| Database        | Key                                              | Value                                                                                                                                                                                              |
+| --------------- | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `meta`          | Fixed integer record id                          | Record `1`: `MetadataHeader`; record `2`: one `std::uint64_t` library revision; record `3`: `IdSpace`.                                                                                             |
+| `tracks_hot`    | `TrackId` integer                                | `TrackHotHeader`, tag-id array, title bytes.                                                                                                                                                       |
+| `tracks_cold`   | `TrackId` integer                                | `TrackColdHeader`, optional block payloads, URI bytes.                                                                                                                                             |
+| `lists`         | `ListId` integer                                 | `ListHeader`, order-track-id array, name/description/filter bytes, zero padding.                                                                                                                   |
+| `resources`     | Digest-derived `ResourceId` integer              | 36-byte `ResourceDescriptor`.                                                                                                                                                                      |
+| `dictionary`    | `DictionaryId` integer                           | Scalar-valid UTF-8 NFC bytes without a terminator.                                                                                                                                                 |
 | `file_manifest` | Root-relative URI padded to a four-byte multiple | `FileManifestHeader`, plus an optional carrier tail: little-endian `totalFrames` and the member `TrackId` values. The URI is the key, not a value tail. See [Manifest records](#manifest-records). |
 
 One database slot remains spare.
@@ -148,14 +149,14 @@ All integer identifiers are 32-bit values and reserve `0` as invalid.
 
 `MetadataHeader` is 40 bytes and contains:
 
-| Field | Representation |
-|---|---|
-| `magic` | `0x42534C52` |
-| `libraryVersion` | Unsigned 32-bit format version. |
-| `flags` | Unsigned 32-bit flags; must be zero. |
-| `reserved` | Unsigned 32-bit word at offset 12; must be zero. |
-| `createdTime` | Millisecond system timestamp at offset 16. |
-| `libraryId` | 16 UUID bytes at offset 24; must not be all zero (the nil id). |
+| Field            | Representation                                                 |
+| ---------------- | -------------------------------------------------------------- |
+| `magic`          | `0x42534C52`                                                   |
+| `libraryVersion` | Unsigned 32-bit format version.                                |
+| `flags`          | Unsigned 32-bit flags; must be zero.                           |
+| `reserved`       | Unsigned 32-bit word at offset 12; must be zero.               |
+| `createdTime`    | Millisecond system timestamp at offset 16.                     |
+| `libraryId`      | 16 UUID bytes at offset 24; must not be all zero (the nil id). |
 
 Every header byte is a named field, so no indeterminate padding reaches storage.
 Creating the environment draws a random non-nil `libraryId`, and nothing rewrites the header afterwards.
@@ -170,10 +171,10 @@ Recording playback history, such as a play, a skip, or a last-played time, must 
 
 The id space record is required and is exactly 8 bytes:
 
-| Field | Representation |
-|---|---|
-| `lastTrackId` | Unsigned 32-bit highest Track id ever committed, at offset 0. |
-| `lastListId` | Unsigned 32-bit highest List id ever committed, at offset 4; at most `UINT32_MAX - 1`, the highest allocatable List id. |
+| Field         | Representation                                                                                                          |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `lastTrackId` | Unsigned 32-bit highest Track id ever committed, at offset 0.                                                           |
+| `lastListId`  | Unsigned 32-bit highest List id ever committed, at offset 4; at most `UINT32_MAX - 1`, the highest allocatable List id. |
 
 Creating the environment writes the record with both marks at zero.
 A write transaction reads it beside the revision, raises each Track and List writer's allocation floor to its mark, and, when either mark moved, writes the record before the revision.
@@ -197,13 +198,13 @@ The tag-id array follows the header, followed by title bytes.
 `TrackColdHeader` is 32 bytes, four-byte aligned, and contains duration, bitrate, track/disc numbers and totals, five block offsets, URI offset/length, channels, and one reserved byte.
 Defined block slots are written in slot order:
 
-| Slot | Payload |
-|---|---|
-| `0` cover art | Zero or more eight-byte `CoverArtEntry` values: `ResourceId`, picture type, three reserved bytes. |
-| `1` work | One 12-byte `TrackWorkBlock`: work and movement dictionary ids, then two unsigned 16-bit movement number/total values. |
-| `2` custom metadata | Eight-byte header, eight-byte entries, then value bytes. |
-| `3` performance | One four-byte `TrackPerformanceBlock` prefix, followed by 12-byte `TrackCreditEntry` values. |
-| `4` segment | One 20-byte `TrackSegmentBlock` when the Track is one CUE segment of a carrier file; absent for a whole-file Track. |
+| Slot                | Payload                                                                                                                |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `0` cover art       | Zero or more eight-byte `CoverArtEntry` values: `ResourceId`, picture type, three reserved bytes.                      |
+| `1` work            | One 12-byte `TrackWorkBlock`: work and movement dictionary ids, then two unsigned 16-bit movement number/total values. |
+| `2` custom metadata | Eight-byte header, eight-byte entries, then value bytes.                                                               |
+| `3` performance     | One four-byte `TrackPerformanceBlock` prefix, followed by 12-byte `TrackCreditEntry` values.                           |
+| `4` segment         | One 20-byte `TrackSegmentBlock` when the Track is one CUE segment of a carrier file; absent for a whole-file Track.    |
 
 An absent payload has offset zero.
 Every present payload starts on a four-byte boundary, and URI bytes follow the block area.
@@ -225,21 +226,21 @@ These blocks are storage domains, not Work or Performance entities or recording 
 
 The performance payload has this exact layout; integers use the format's little-endian byte order:
 
-| Byte offset | Value | Bytes |
-|---:|---|---:|
-| `0` | Recording year, unsigned 16-bit | `2` |
-| `2` | Recording month, unsigned 8-bit | `1` |
-| `3` | Recording day, unsigned 8-bit | `1` |
-| `4` onward | Credit entries | `12` per entry |
+| Byte offset | Value                           |          Bytes |
+| ----------: | ------------------------------- | -------------: |
+|         `0` | Recording year, unsigned 16-bit |            `2` |
+|         `2` | Recording month, unsigned 8-bit |            `1` |
+|         `3` | Recording day, unsigned 8-bit   |            `1` |
+|  `4` onward | Credit entries                  | `12` per entry |
 
 Each credit entry has this layout:
 
-| Byte offset | Value | Bytes |
-|---:|---|---:|
-| `0` | Name dictionary id, unsigned 32-bit | `4` |
-| `4` | Role dictionary id, unsigned 32-bit; zero is no role | `4` |
-| `8` | `CreditKind` value, unsigned 8-bit | `1` |
-| `9` | Reserved bytes; zero | `3` |
+| Byte offset | Value                                                | Bytes |
+| ----------: | ---------------------------------------------------- | ----: |
+|         `0` | Name dictionary id, unsigned 32-bit                  |   `4` |
+|         `4` | Role dictionary id, unsigned 32-bit; zero is no role |   `4` |
+|         `8` | `CreditKind` value, unsigned 8-bit                   |   `1` |
+|         `9` | Reserved bytes; zero                                 |   `3` |
 
 Entries are in nondecreasing kind order, so each kind's credits are one contiguous run.
 
@@ -311,13 +312,13 @@ The write surface is not a damaged-database repair path because a one-sided phys
 `ListHeader` is 20 bytes and four-byte aligned.
 Its five unsigned 32-bit fields have these stable byte offsets:
 
-| Offset | Field | Meaning |
-|---:|---|---|
-| `0` | `orderTrackIdCount` | Number of four-byte `TrackId` values in the stored rank overlay. |
-| `4` | `nameLength` | Name byte length. |
-| `8` | `descLength` | Description byte length. |
-| `12` | `filterLength` | Local expression byte length. |
-| `16` | `parentId` | Parent `ListId`; zero means the All Tracks root. |
+| Offset | Field               | Meaning                                                          |
+| -----: | ------------------- | ---------------------------------------------------------------- |
+|    `0` | `orderTrackIdCount` | Number of four-byte `TrackId` values in the stored rank overlay. |
+|    `4` | `nameLength`        | Name byte length.                                                |
+|    `8` | `descLength`        | Description byte length.                                         |
+|   `12` | `filterLength`      | Local expression byte length.                                    |
+|   `16` | `parentId`          | Parent `ListId`; zero means the All Tracks root.                 |
 
 The complete value uses one canonical packing.
 This diagram is part of the layout reference and mirrors the authoritative diagram in `ListLayout.h`:
@@ -384,17 +385,17 @@ Dictionary rows created for a referencing record are written in the same LMDB tr
 
 `FileManifestHeader` is 52 bytes and four-byte aligned:
 
-| Offset | Field | Representation |
-|---:|---|---|
-| `0` | Track | `TrackId`. |
-| `4` | File size | Low/high unsigned 32-bit halves of one unsigned 64-bit value. |
-| `12` | Modification-time seconds | Low/high 32-bit halves of one signed 64-bit seconds value. |
-| `20` | Modification-time nanoseconds | Unsigned 32-bit fraction of the same second, below `1000000000`. |
-| `24` | Audio payload length | Low/high unsigned 32-bit halves of one unsigned 64-bit value. |
-| `32` | Audio signature | 16-byte XXH128 canonical big-endian serialization. |
-| `48` | Status | `Available = 0`, `Missing = 1`, or `Error = 2`. |
-| `49` | `hasMtime` | `1` when a modification time is stored, `0` when it is absent. |
-| `50` | `segmentCount` | Unsigned 16-bit. Zero is a whole-file row. `1` through `99` is a carrier row. |
+| Offset | Field                         | Representation                                                                |
+| -----: | ----------------------------- | ----------------------------------------------------------------------------- |
+|    `0` | Track                         | `TrackId`.                                                                    |
+|    `4` | File size                     | Low/high unsigned 32-bit halves of one unsigned 64-bit value.                 |
+|   `12` | Modification-time seconds     | Low/high 32-bit halves of one signed 64-bit seconds value.                    |
+|   `20` | Modification-time nanoseconds | Unsigned 32-bit fraction of the same second, below `1000000000`.              |
+|   `24` | Audio payload length          | Low/high unsigned 32-bit halves of one unsigned 64-bit value.                 |
+|   `32` | Audio signature               | 16-byte XXH128 canonical big-endian serialization.                            |
+|   `48` | Status                        | `Available = 0`, `Missing = 1`, or `Error = 2`.                               |
+|   `49` | `hasMtime`                    | `1` when a modification time is stored, `0` when it is absent.                |
+|   `50` | `segmentCount`                | Unsigned 16-bit. Zero is a whole-file row. `1` through `99` is a carrier row. |
 
 The modification time is one 12-byte `FileTimestamp` instant: a signed 64-bit seconds count from the Unix/POSIX epoch `1970-01-01 00:00:00 UTC`, excluding leap seconds, plus a normalized nanoseconds fraction in `[0, 1000000000)`.
 The seconds value is stored in low/high 32-bit halves like the other 64-bit manifest fields, but it is a signed count, so instants before 1970 are representable.
@@ -415,14 +416,14 @@ The stored extent lets open bound every segment. It is not a substitute for the 
 
 `TrackSegmentBlock` is 20 bytes, four-byte aligned, and has no padding:
 
-| Offset | Field | Representation |
-|---:|---|---|
-| `0` | `startFrameLo` | Low 32 bits of the inclusive PCM start. |
-| `4` | `startFrameHi` | High 32 bits of that start. |
-| `8` | `frameCountLo` | Low 32 bits of the nonzero frame count. |
-| `12` | `frameCountHi` | High 32 bits of that count. |
-| `16` | `ordinal` | Unsigned 16-bit CUE `TRACK` number, 1 through 99. |
-| `18` | `reserved` | Unsigned 16-bit zero. |
+| Offset | Field          | Representation                                    |
+| -----: | -------------- | ------------------------------------------------- |
+|    `0` | `startFrameLo` | Low 32 bits of the inclusive PCM start.           |
+|    `4` | `startFrameHi` | High 32 bits of that start.                       |
+|    `8` | `frameCountLo` | Low 32 bits of the nonzero frame count.           |
+|   `12` | `frameCountHi` | High 32 bits of that count.                       |
+|   `16` | `ordinal`      | Unsigned 16-bit CUE `TRACK` number, 1 through 99. |
+|   `18` | `reserved`     | Unsigned 16-bit zero.                             |
 
 A segment Track's cold duration is `floor(frameCount * 1000 / sampleRate)` milliseconds, using the hot sample rate.
 Admission requires that equality, so duration cannot contradict the range.

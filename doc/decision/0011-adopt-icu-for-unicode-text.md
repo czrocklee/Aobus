@@ -2,6 +2,7 @@
 id: decision.0011.adopt-icu-for-unicode-text
 status: accepted
 ---
+
 # Decision 0011: adopt ICU for Unicode text
 
 ## Context

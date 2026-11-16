@@ -1,6 +1,7 @@
 ---
 id: development.concept-metrics
 ---
+
 # Concept metrics
 
 ## Scope

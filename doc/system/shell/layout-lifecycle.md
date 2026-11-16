@@ -1,6 +1,7 @@
 ---
 id: shell.layout-lifecycle
 ---
+
 # Shell layout lifecycle
 
 ## Scope

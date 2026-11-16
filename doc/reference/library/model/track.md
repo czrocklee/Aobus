@@ -1,6 +1,7 @@
 ---
 id: library.track-model
 ---
+
 # Track model
 
 ## Scope and version
@@ -21,25 +22,25 @@ Runtime and presentation consumers adapt these values without changing their sto
 
 ## Curated metadata
 
-| Field | Logical type | Persisted representation |
-|---|---|---|
-| Title | Text | Inline UTF-8 hot title |
-| Artist | Text | Hot `DictionaryId` |
-| Album | Text | Hot `DictionaryId` |
-| Album artist | Text | Hot `DictionaryId` |
-| Genre | Text | Hot `DictionaryId` |
-| Composer | Text | Hot `DictionaryId` |
-| Work | Text | Work-block `DictionaryId` |
-| Movement | Text | Work-block `DictionaryId` |
-| Recording date | Optional partial calendar date | Performance prefix: year, month, day |
-| Credits | Canonical list of name, kind, optional role | Performance tail: name and role dictionary ids and a kind byte per entry, grouped by kind |
-| Year | Unsigned 16-bit | Hot scalar |
-| Disc number | Unsigned 16-bit | Cold scalar |
-| Disc total | Unsigned 16-bit | Cold scalar |
-| Track number | Unsigned 16-bit | Cold scalar |
-| Track total | Unsigned 16-bit | Cold scalar |
-| Movement number | Unsigned 16-bit | Work-block scalar |
-| Movement total | Unsigned 16-bit | Work-block scalar |
+| Field           | Logical type                                | Persisted representation                                                                  |
+| --------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Title           | Text                                        | Inline UTF-8 hot title                                                                    |
+| Artist          | Text                                        | Hot `DictionaryId`                                                                        |
+| Album           | Text                                        | Hot `DictionaryId`                                                                        |
+| Album artist    | Text                                        | Hot `DictionaryId`                                                                        |
+| Genre           | Text                                        | Hot `DictionaryId`                                                                        |
+| Composer        | Text                                        | Hot `DictionaryId`                                                                        |
+| Work            | Text                                        | Work-block `DictionaryId`                                                                 |
+| Movement        | Text                                        | Work-block `DictionaryId`                                                                 |
+| Recording date  | Optional partial calendar date              | Performance prefix: year, month, day                                                      |
+| Credits         | Canonical list of name, kind, optional role | Performance tail: name and role dictionary ids and a kind byte per entry, grouped by kind |
+| Year            | Unsigned 16-bit                             | Hot scalar                                                                                |
+| Disc number     | Unsigned 16-bit                             | Cold scalar                                                                               |
+| Disc total      | Unsigned 16-bit                             | Cold scalar                                                                               |
+| Track number    | Unsigned 16-bit                             | Cold scalar                                                                               |
+| Track total     | Unsigned 16-bit                             | Cold scalar                                                                               |
+| Movement number | Unsigned 16-bit                             | Work-block scalar                                                                         |
+| Movement total  | Unsigned 16-bit                             | Work-block scalar                                                                         |
 
 Work and performance are independently optional storage domains.
 The work block is absent when both ids and both movement numbers are zero; performance is absent when RecordingDate is absent and there are no credits.
@@ -68,17 +69,17 @@ Tag additions/removals use the separate tag command contract in [library access 
 
 ## Technical properties
 
-| Field | Logical type | Units or values | Persisted location |
-|---|---|---|---|
-| `duration` | Signed 32-bit duration | Milliseconds | Cold header |
-| `bitrate` | Unsigned 32-bit | Bits per second | Cold header |
-| `sample-rate` | Unsigned 32-bit | Hertz | Hot header |
-| `codec` | `AudioCodec` | See codec table | Hot header |
-| `channels` | Unsigned 8-bit | Channel count | Cold header |
-| `bit-depth` | Unsigned 8-bit | Bits per sample | Hot header |
-| `file-path` | Text path | Music-root-relative URI. Unique for a whole-file Track; shared by the segment Tracks of one carrier. | Cold URI |
-| `file-size` | Unsigned 64-bit | Bytes | Manifest |
-| `modified-time` | Optional portable instant | Signed 64-bit Unix/POSIX-epoch seconds plus nanoseconds below `1000000000`; absent when unknown | Manifest |
+| Field           | Logical type              | Units or values                                                                                      | Persisted location |
+| --------------- | ------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------ |
+| `duration`      | Signed 32-bit duration    | Milliseconds                                                                                         | Cold header        |
+| `bitrate`       | Unsigned 32-bit           | Bits per second                                                                                      | Cold header        |
+| `sample-rate`   | Unsigned 32-bit           | Hertz                                                                                                | Hot header         |
+| `codec`         | `AudioCodec`              | See codec table                                                                                      | Hot header         |
+| `channels`      | Unsigned 8-bit            | Channel count                                                                                        | Cold header        |
+| `bit-depth`     | Unsigned 8-bit            | Bits per sample                                                                                      | Hot header         |
+| `file-path`     | Text path                 | Music-root-relative URI. Unique for a whole-file Track; shared by the segment Tracks of one carrier. | Cold URI           |
+| `file-size`     | Unsigned 64-bit           | Bytes                                                                                                | Manifest           |
+| `modified-time` | Optional portable instant | Signed 64-bit Unix/POSIX-epoch seconds plus nanoseconds below `1000000000`; absent when unknown      | Manifest           |
 
 Display projects `modified-time` without changing it: a present instant renders in the local zone, or UTC when that zone is unavailable; an instant outside the display calendar's range renders empty, and an absent value renders empty.
 
@@ -86,11 +87,11 @@ Display projects `modified-time` without changing it: a present instant renders 
 
 A whole-file Track has no segment. A segment Track is one CUE audio track of a carrier file, as the [CUE sheet reference](../../media/cue-sheet.md) defines.
 
-| Field | Logical type | Meaning |
-|---|---|---|
-| `ordinal` | Unsigned 16-bit, 1 through 99 | CUE `TRACK` number. Stable across rescans, and distinct from the curated track number. |
-| `start-frame` | Unsigned 64-bit | Inclusive PCM start in the carrier. |
-| `frame-count` | Unsigned 64-bit, nonzero | Length in PCM frames. The end is exclusive. |
+| Field         | Logical type                  | Meaning                                                                                |
+| ------------- | ----------------------------- | -------------------------------------------------------------------------------------- |
+| `ordinal`     | Unsigned 16-bit, 1 through 99 | CUE `TRACK` number. Stable across rescans, and distinct from the curated track number. |
+| `start-frame` | Unsigned 64-bit               | Inclusive PCM start in the carrier.                                                    |
+| `frame-count` | Unsigned 64-bit, nonzero      | Length in PCM frames. The end is exclusive.                                            |
 
 The carrier's exact frame count and the shared sample rate live on the manifest row and in the hot header, not as a second copy of the range.
 Cold `duration` is `floor(frame-count * 1000 / sample-rate)` and is a display value. The builder derives it; a caller cannot store a different duration for a segment Track.
@@ -100,15 +101,15 @@ Byte placement, carrier rows, and the writer rule that no operation changes a st
 
 `AudioCodec` identifies the audio encoding, not the container or filename extension.
 
-| Name | Raw value | Display/YAML name |
-|---|---:|---|
-| `Unknown` | `0` | `UNKNOWN` |
-| `Flac` | `1` | `FLAC` |
-| `Alac` | `2` | `ALAC` |
-| `Wav` | `3` | `WAV` |
-| `Aac` | `128` | `AAC` |
-| `Mp3` | `129` | `MP3` |
-| `Opus` | `130` | `Opus` |
+| Name      | Raw value | Display/YAML name |
+| --------- | --------: | ----------------- |
+| `Unknown` |       `0` | `UNKNOWN`         |
+| `Flac`    |       `1` | `FLAC`            |
+| `Alac`    |       `2` | `ALAC`            |
+| `Wav`     |       `3` | `WAV`             |
+| `Aac`     |     `128` | `AAC`             |
+| `Mp3`     |     `129` | `MP3`             |
+| `Opus`    |     `130` | `Opus`            |
 
 `audioCodecName` produces the canonical name, `parseAudioCodecName` parses names case-insensitively, and `audioCodecFromStorage` converts unknown raw values to `Unknown`.
 

@@ -1,6 +1,7 @@
 ---
 id: development.gtk-lifetime
 ---
+
 # GTK lifetime and wiring
 
 ## Scope

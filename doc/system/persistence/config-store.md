@@ -1,6 +1,7 @@
 ---
 id: persistence.config-store
 ---
+
 # Grouped configuration store
 
 ## Scope
@@ -67,10 +68,10 @@ The payload owner decides whether `deserialize()` uses the seed, requires every 
 
 The store has only lazy-load state. In a located store, every public mutation either completes its whole-file replacement or leaves the live document unchanged; no-location stores install only an in-memory candidate as described below.
 
-| State | Document source | Next initialization attempt |
-|---|---|---|
-| Unloaded | Default-constructed in-memory tree. | `contains()`, `load()`, `save()`, and `removeGroup()` inspect and, when present, parse the backing file. |
-| Loaded | A validated existing top-level mapping or a new empty mapping for a missing `ReadWrite` file. | No operation rereads the backing file. |
+| State    | Document source                                                                               | Next initialization attempt                                                                              |
+| -------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Unloaded | Default-constructed in-memory tree.                                                           | `contains()`, `load()`, `save()`, and `removeGroup()` inspect and, when present, parse the backing file. |
+| Loaded   | A validated existing top-level mapping or a new empty mapping for a missing `ReadWrite` file. | No operation rereads the backing file.                                                                   |
 
 A missing backing file transitions a `ReadWrite` store to Loaded with an empty mapping.
 The same condition returns `NotFound` and leaves a `ReadOnly` store Unloaded.
@@ -118,9 +119,9 @@ A later save may therefore replace the external change with the cached whole-fil
 
 ### Group inspection and loading
 
-| Operation | Present accepted group | Missing group | Initialization or deserialize failure |
-|---|---|---|---|
-| `contains(group)` | Returns `true`. | Returns `false`. | Returns the initialization error. |
+| Operation                    | Present accepted group                                                                                                                                                                         | Missing group                                                    | Initialization or deserialize failure                                                   |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `contains(group)`            | Returns `true`.                                                                                                                                                                                | Returns `false`.                                                 | Returns the initialization error.                                                       |
 | `load(group, value, schema)` | Calls `schema.deserialize(node, value)`, move-assigns its returned value, and returns `true`. A [protected schema](#protected-groups) first refuses a newer group without invoking the schema. | Returns `false` without invoking the schema or changing `value`. | Returns the initialization or contextualized schema error and leaves `value` unchanged. |
 
 `load()` returns `Result<bool>` so callers do not need a separate `contains()` call to distinguish absence.
@@ -186,19 +187,19 @@ Repeated removal is idempotent.
 
 ## Failure and cancellation
 
-| Condition | Observable channel |
-|---|---|
-| Backing-path inspection or complete-file read fails | `Result` with `IoError`. |
-| Backing file is missing in `ReadWrite` mode | Successful initialization of an empty document. |
-| Backing file is missing in `ReadOnly` mode | `Result` with `NotFound`. |
-| Existing or emitted complete file exceeds the configured byte ceiling | `Result` with `ValueTooLarge`; the live document and backing file remain unchanged. |
-| YAML syntax parsing or root mapping validation fails | `Result` with `FormatRejected` and backing-file context. |
-| A schema returns an error | That error code with bounded group/operation context. |
-| A protected group's stored `version` exceeds the schema's `kVersion` | `Result` with `NotSupported`; the value, the live document, and the backing file remain unchanged. |
-| An exception escapes deserialization | The exception propagates; assignment has not occurred, so the seeded value remains unchanged. |
-| An exception escapes serialization, candidate assembly, or emission | The exception propagates; replacement has not been attempted, so the live document and backing file remain unchanged. |
-| Atomic replacement fails | The helper's recoverable error, currently `IoError`; the live document remains unchanged. |
-| Save or removal is called on a `ReadOnly` store | `AO_EXPECTS` precondition fault. |
+| Condition                                                             | Observable channel                                                                                                    |
+| --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Backing-path inspection or complete-file read fails                   | `Result` with `IoError`.                                                                                              |
+| Backing file is missing in `ReadWrite` mode                           | Successful initialization of an empty document.                                                                       |
+| Backing file is missing in `ReadOnly` mode                            | `Result` with `NotFound`.                                                                                             |
+| Existing or emitted complete file exceeds the configured byte ceiling | `Result` with `ValueTooLarge`; the live document and backing file remain unchanged.                                   |
+| YAML syntax parsing or root mapping validation fails                  | `Result` with `FormatRejected` and backing-file context.                                                              |
+| A schema returns an error                                             | That error code with bounded group/operation context.                                                                 |
+| A protected group's stored `version` exceeds the schema's `kVersion`  | `Result` with `NotSupported`; the value, the live document, and the backing file remain unchanged.                    |
+| An exception escapes deserialization                                  | The exception propagates; assignment has not occurred, so the seeded value remains unchanged.                         |
+| An exception escapes serialization, candidate assembly, or emission   | The exception propagates; replacement has not been attempted, so the live document and backing file remain unchanged. |
+| Atomic replacement fails                                              | The helper's recoverable error, currently `IoError`; the live document remains unchanged.                             |
+| Save or removal is called on a `ReadOnly` store                       | `AO_EXPECTS` precondition fault.                                                                                      |
 
 Schema and candidate-processing exceptions are not translated by `ConfigStore`; callers that permit throwing schemas or allocation failures must contain them at their own operation boundary.
 All operations are synchronous and expose no cancellation point.
