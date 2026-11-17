@@ -24,15 +24,123 @@
 #include <ao/uimodel/preference/ThemePreset.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <glibmm/main.h>
+#include <glibmm/refptr.h>
 #include <gtkmm/dialog.h>
+#include <gtkmm/entry.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/menubutton.h>
+#include <gtkmm/popover.h>
 #include <gtkmm/window.h>
+#include <sigc++/scoped_connection.h>
 
 #include <memory>
 
 namespace ao::gtk::test
 {
+  namespace
+  {
+    AppDialog* findCustomViewEditor()
+    {
+      return findAppDialogByTitle("Edit Custom View");
+    }
+
+    void clickSave(AppDialog& editor)
+    {
+      auto* const saveButton = findButtonByLabel(editor, "Save");
+      REQUIRE(saveButton != nullptr);
+      emitClicked(*saveButton);
+    }
+
+    void sendOkIfEditorStillLive()
+    {
+      // A response, hide, or rebind may already have destroyed the editor.
+      // Only exercise late delivery if GTK still lists a live toplevel.
+      if (auto* const editor = findCustomViewEditor(); editor != nullptr)
+      {
+        editor->response(Gtk::ResponseType::OK);
+      }
+    }
+
+    struct CustomViewPickerFixture final
+    {
+      Glib::RefPtr<Gtk::Application> appPtr = ensureGtkApplication();
+      GtkRuntimeFixture runtimeFixture;
+      rt::AppRuntime& runtime = runtimeFixture.runtime();
+      ThemeCoordinator themeCoordinator;
+      uimodel::TrackPresentationCatalog catalog{runtime.workspace(), ao::test::englishMessageCatalog()};
+      uimodel::ListPresentations listPresentations{catalog, runtime.library().changes()};
+      Gtk::Window window;
+      std::unique_ptr<TrackPresentationButton> pickerPtr =
+        std::make_unique<TrackPresentationButton>(runtime.views(),
+                                                  runtime.workspace(),
+                                                  ao::test::englishMessageCatalog());
+      rt::ViewId const activeViewId =
+        ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
+
+      CustomViewPickerFixture()
+      {
+        pickerPtr->setPresentationServices(&catalog, &listPresentations, &themeCoordinator);
+        window.set_child(*pickerPtr);
+        window.present();
+        drainGtkEvents();
+      }
+
+      Gtk::Popover& openMenu() const
+      {
+        auto* const menuButton = findWidget<Gtk::MenuButton>(*pickerPtr);
+        REQUIRE(menuButton != nullptr);
+        auto* const popover = menuButton->get_popover();
+        REQUIRE(popover != nullptr);
+        menuButton->popup();
+        drainGtkEvents();
+        REQUIRE(popover->get_visible());
+        return *popover;
+      }
+
+      void hidePicker() const
+      {
+        REQUIRE(pickerPtr->get_mapped());
+        pickerPtr->hide();
+        REQUIRE_FALSE(pickerPtr->get_mapped());
+        REQUIRE(pickerPtr->get_root() == &window);
+        REQUIRE(window.get_mapped());
+      }
+
+      AppDialog& openEditor() { return openEditor(openMenu()); }
+
+      AppDialog& openEditor(Gtk::Popover& popover)
+      {
+        auto* const createButton = findButtonByLabel(popover, "Create Custom View...");
+        REQUIRE(createButton != nullptr);
+
+        bool enteredNestedLoop = false;
+        // Escape the former modal loop if the click starts dispatching idles.
+        auto nestedLoopGuard = sigc::scoped_connection{Glib::signal_idle().connect(
+          [&]
+          {
+            enteredNestedLoop = true;
+
+            if (auto* const editor = findCustomViewEditor(); editor != nullptr)
+            {
+              editor->response(Gtk::ResponseType::CANCEL);
+            }
+
+            return false;
+          })};
+        emitClicked(*createButton);
+        nestedLoopGuard.disconnect();
+        REQUIRE_FALSE(enteredNestedLoop);
+
+        auto* const editor = findCustomViewEditor();
+        REQUIRE(editor != nullptr);
+        REQUIRE(editor->get_transient_for() == &window);
+        REQUIRE(editor->get_visible());
+        return *editor;
+      }
+    };
+  } // namespace
+
   // Catalog tests own menu contents; the widget owns binding and apply-before-persist.
   TEST_CASE("TrackPresentationButton - binds the active title and applies a menu selection")
   {
@@ -90,6 +198,254 @@ namespace ao::gtk::test
     CHECK(*optStored == "albums");
     window.close();
     drainGtkEvents();
+  }
+
+  TEST_CASE("TrackPresentationButton - saves one custom draft and defers applying it")
+  {
+    auto fixture = CustomViewPickerFixture{};
+    auto& editor = fixture.openEditor();
+    auto* const nameEntry = findWidget<Gtk::Entry>(editor);
+    REQUIRE(nameEntry != nullptr);
+    nameEntry->set_text("Release Review");
+
+    clickSave(editor);
+    REQUIRE(findCustomViewEditor() == &editor);
+    nameEntry->set_text("Late Edit");
+    sendOkIfEditorStillLive();
+
+    CHECK(fixture.catalog.customPresentations().empty());
+    CHECK(fixture.runtime.views().trackListState(fixture.activeViewId).presentation.id ==
+          rt::kDefaultTrackPresentationId);
+    CHECK_FALSE(fixture.listPresentations.presentationIdForList(rt::kAllTracksListId).has_value());
+    drainGtkEvents();
+
+    CHECK(findCustomViewEditor() == nullptr);
+    auto const presets = fixture.catalog.customPresentations();
+    REQUIRE(presets.size() == 1);
+    CHECK(presets.front().label == "Release Review");
+    CHECK(fixture.runtime.views().trackListState(fixture.activeViewId).presentation.id == presets.front().spec.id);
+    auto const optStored = fixture.listPresentations.presentationIdForList(rt::kAllTracksListId);
+    REQUIRE(optStored);
+    CHECK(*optStored == presets.front().spec.id);
+  }
+
+  TEST_CASE("TrackPresentationButton - preserves a custom draft when only the picker is hidden")
+  {
+    auto fixture = CustomViewPickerFixture{};
+    auto& editor = fixture.openEditor();
+    auto* const nameEntry = findWidget<Gtk::Entry>(editor);
+    REQUIRE(nameEntry != nullptr);
+    nameEntry->set_text("Visibility Draft");
+
+    SECTION("the editor and typed draft survive hiding and showing the picker")
+    {
+      fixture.hidePicker();
+      drainGtkEvents();
+      REQUIRE(findCustomViewEditor() == &editor);
+      CHECK(editor.get_mapped());
+
+      fixture.pickerPtr->show();
+      REQUIRE(tryPumpGtkEventsUntil([&] { return fixture.pickerPtr->get_mapped(); }));
+      REQUIRE(findCustomViewEditor() == &editor);
+      CHECK(nameEntry->get_text() == "Visibility Draft");
+      clickSave(editor);
+    }
+
+    SECTION("a queued Save can commit while the picker is still hidden")
+    {
+      clickSave(editor);
+      fixture.hidePicker();
+    }
+
+    CHECK(fixture.catalog.customPresentations().empty());
+    drainGtkEvents();
+
+    CHECK(findCustomViewEditor() == nullptr);
+    auto const presets = fixture.catalog.customPresentations();
+    REQUIRE(presets.size() == 1);
+    CHECK(presets.front().label == "Visibility Draft");
+    CHECK(fixture.runtime.views().trackListState(fixture.activeViewId).presentation.id == presets.front().spec.id);
+    CHECK(fixture.listPresentations.presentationIdForList(rt::kAllTracksListId) == presets.front().spec.id);
+  }
+
+  TEST_CASE("TrackPresentationButton - seeds a custom draft from the live presentation before the label refreshes")
+  {
+    auto fixture = CustomViewPickerFixture{};
+    auto& popover = fixture.openMenu();
+    auto* const menuButton = findWidget<Gtk::MenuButton>(*fixture.pickerPtr);
+    REQUIRE(menuButton != nullptr);
+    auto const renderedSpec = fixture.runtime.views().trackListState(fixture.activeViewId).presentation;
+    auto const* const albums = rt::builtinTrackPresentationPreset("albums");
+    REQUIRE(albums != nullptr);
+    auto liveSpec = albums->spec;
+    REQUIRE_FALSE(liveSpec.sortBy.empty());
+    // The catalog supplies the label, but even its Albums spec is not the live one.
+    liveSpec.sortBy.front().ascending = !liveSpec.sortBy.front().ascending;
+    REQUIRE(liveSpec.sortBy != renderedSpec.sortBy);
+
+    REQUIRE(fixture.runtime.workspace().setActivePresentation(liveSpec));
+    REQUIRE(fixture.runtime.workspace().snapshot().activeViewId == fixture.activeViewId);
+    REQUIRE(fixture.runtime.views().trackListState(fixture.activeViewId).presentation == liveSpec);
+    REQUIRE(menuButton->get_label() == "Library");
+
+    // Click the already-open menu before dispatching the presentation notification.
+    auto& editor = fixture.openEditor(popover);
+    clickSave(editor);
+    drainGtkEvents();
+
+    auto const presets = fixture.catalog.customPresentations();
+    REQUIRE(presets.size() == 1);
+    CHECK(presets.front().label == "Albums Copy");
+    CHECK(presets.front().spec.groupBy == liveSpec.groupBy);
+    CHECK(presets.front().spec.sortBy == liveSpec.sortBy);
+    CHECK(presets.front().spec.visibleFields == liveSpec.visibleFields);
+  }
+
+  TEST_CASE("TrackPresentationButton - revokes a queued custom Save when the editor session ends")
+  {
+    auto fixture = CustomViewPickerFixture{};
+    auto const initialSpec = fixture.runtime.views().trackListState(fixture.activeViewId).presentation;
+    clickSave(fixture.openEditor());
+    auto* const pendingEditor = findCustomViewEditor();
+    REQUIRE(pendingEditor != nullptr);
+
+    SECTION("Cancel action")
+    {
+      auto* const cancelButton = findButtonByLabel(*pendingEditor, "Cancel");
+      REQUIRE(cancelButton != nullptr);
+      emitClicked(*cancelButton);
+    }
+
+    SECTION("native close request")
+    {
+      pendingEditor->close();
+    }
+
+    SECTION("picker removal followed by reattachment to the same window before the idle")
+    {
+      auto& picker = *fixture.pickerPtr;
+      REQUIRE(picker.get_mapped());
+      fixture.window.unset_child();
+      REQUIRE(picker.get_root() == nullptr);
+      fixture.window.set_child(picker);
+      REQUIRE(picker.get_root() == &fixture.window);
+    }
+
+    SECTION("parent window hide even if the picker is already hidden")
+    {
+      fixture.hidePicker();
+      fixture.window.hide();
+    }
+
+    sendOkIfEditorStillLive();
+    drainGtkEvents();
+
+    CHECK(findCustomViewEditor() == nullptr);
+    CHECK(fixture.catalog.customPresentations().empty());
+    CHECK(fixture.runtime.views().trackListState(fixture.activeViewId).presentation == initialSpec);
+    CHECK_FALSE(fixture.listPresentations.presentationIdForList(rt::kAllTracksListId).has_value());
+  }
+
+  TEST_CASE("TrackPresentationButton - abandons the custom draft when the editor session ends")
+  {
+    auto fixture = CustomViewPickerFixture{};
+    auto& editor = fixture.openEditor();
+    auto* const nameEntry = findWidget<Gtk::Entry>(editor);
+    REQUIRE(nameEntry != nullptr);
+    nameEntry->set_text("Unsubmitted Review");
+
+    SECTION("Cancel action")
+    {
+      auto* const cancelButton = findButtonByLabel(editor, "Cancel");
+      REQUIRE(cancelButton != nullptr);
+      emitClicked(*cancelButton);
+    }
+
+    SECTION("native close request")
+    {
+      editor.close();
+    }
+
+    SECTION("editor hide revokes a late OK")
+    {
+      editor.hide();
+      sendOkIfEditorStillLive();
+    }
+
+    SECTION("picker destruction")
+    {
+      fixture.window.unset_child();
+      fixture.pickerPtr.reset();
+    }
+
+    drainGtkEvents();
+    CHECK(findCustomViewEditor() == nullptr);
+    CHECK(fixture.catalog.customPresentations().empty());
+    CHECK(fixture.runtime.views().trackListState(fixture.activeViewId).presentation.id ==
+          rt::kDefaultTrackPresentationId);
+  }
+
+  TEST_CASE("TrackPresentationButton - rebinding services revokes the custom editor and queued Save")
+  {
+    // Use independent workspace storage so a draft crossing the service
+    // boundary is observable in the replacement catalog as well as the old one.
+    auto replacementRuntimeFixture = GtkRuntimeFixture{};
+    auto& replacementRuntime = replacementRuntimeFixture.runtime();
+    auto replacementCatalog =
+      uimodel::TrackPresentationCatalog{replacementRuntime.workspace(), ao::test::englishMessageCatalog()};
+    auto replacementPreferences =
+      uimodel::ListPresentations{replacementCatalog, replacementRuntime.library().changes()};
+    auto fixture = CustomViewPickerFixture{};
+    auto& editor = fixture.openEditor();
+    auto* const nameEntry = findWidget<Gtk::Entry>(editor);
+    REQUIRE(nameEntry != nullptr);
+    nameEntry->set_text("Outgoing Draft");
+
+    auto const rebind = [&]
+    {
+      fixture.pickerPtr->setPresentationServices(
+        &replacementCatalog, &replacementPreferences, &fixture.themeCoordinator);
+    };
+
+    SECTION("while the editor awaits a response")
+    {
+      rebind();
+      sendOkIfEditorStillLive();
+    }
+
+    SECTION("after Save is clicked and before the idle runs")
+    {
+      clickSave(editor);
+      rebind();
+    }
+
+    drainGtkEvents();
+    CHECK(findCustomViewEditor() == nullptr);
+    CHECK(fixture.catalog.customPresentations().empty());
+    CHECK(replacementCatalog.customPresentations().empty());
+  }
+
+  TEST_CASE("TrackPresentationButton - drops a queued custom Save when focus changes")
+  {
+    auto fixture = CustomViewPickerFixture{};
+    auto& runtime = fixture.runtime;
+    auto const secondListId = ao::test::requireValue(
+      runGtkTask(runtime, runtime.library().commands().createListAsync(rt::ListDraft{.name = "Other"})));
+    auto& editor = fixture.openEditor();
+    clickSave(editor);
+
+    // Move focus after Save queues the draft but before the idle can commit it.
+    auto const secondViewId = ao::test::requireValue(runtime.workspace().navigate({.target = secondListId}));
+    REQUIRE(secondViewId != fixture.activeViewId);
+    auto const secondPresentationId = runtime.views().trackListState(secondViewId).presentation.id;
+    drainGtkEvents();
+
+    CHECK(findCustomViewEditor() == nullptr);
+    CHECK(fixture.catalog.customPresentations().empty());
+    CHECK(runtime.views().trackListState(fixture.activeViewId).presentation.id == rt::kDefaultTrackPresentationId);
+    CHECK(runtime.views().trackListState(secondViewId).presentation.id == secondPresentationId);
+    CHECK_FALSE(fixture.listPresentations.presentationIdForList(rt::kAllTracksListId).has_value());
+    CHECK_FALSE(fixture.listPresentations.presentationIdForList(secondListId).has_value());
   }
 
   TEST_CASE("TrackPresentationButton - rebinding services drops the pending apply")

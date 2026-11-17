@@ -7,9 +7,11 @@
 #include "app/ThemeCoordinator.h"
 #include "i18n/GtkText.h"
 #include "track/TrackCustomViewDialog.h"
+#include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackPresentation.h>
+#include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/uimodel/library/presentation/ListPresentations.h>
@@ -23,7 +25,9 @@
 #include <gtkmm/object.h>
 #include <gtkmm/separator.h>
 #include <gtkmm/window.h>
+#include <sigc++/scoped_connection.h>
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -33,6 +37,27 @@
 namespace ao::gtk
 {
   using i18n::MessageId;
+
+  struct TrackPresentationButton::CustomViewEditor final
+  {
+    CustomViewEditor(Gtk::Window& parent,
+                     i18n::MessageCatalog const& textCatalog,
+                     rt::TrackPresentationSpec const& spec,
+                     std::string_view label,
+                     rt::ViewId viewId)
+      : dialog{parent, textCatalog, spec, label}, targetViewId{viewId}
+    {
+    }
+
+    TrackCustomViewDialog dialog;
+    rt::ViewId targetViewId;
+    ThemeRegistrationToken theme;
+    sigc::scoped_connection response;
+    sigc::scoped_connection hide;
+    sigc::scoped_connection pickerRoot;
+    sigc::scoped_connection parentUnmap;
+    sigc::scoped_connection finish;
+  };
 
   TrackPresentationButton::TrackPresentationButton(rt::ViewService& views,
                                                    rt::WorkspaceService& workspace,
@@ -66,6 +91,8 @@ namespace ao::gtk
     // connected it would apply a stale selection to the runtime and then hand
     // the outgoing list id to whatever preference store is bound by then.
     _applyPresentationConn.disconnect();
+    _optBindingCallbacks.reset();
+    _customViewEditorPtr.reset();
 
     _catalog = catalog;
     _themeCoordinator = themeCoordinator;
@@ -77,6 +104,7 @@ namespace ao::gtk
       return;
     }
 
+    _optBindingCallbacks.emplace();
     _viewModelPtr = std::make_unique<uimodel::TrackPresentationPickerViewModel>(
       _views,
       _workspace,
@@ -162,27 +190,39 @@ namespace ao::gtk
     _applyPresentationConn = Glib::signal_idle().connect(
       [this, selection = std::move(*optSelection)]
       {
-        if (_workspace.snapshot().activeViewId != selection.targetViewId)
-        {
-          auto const message = gtkText(_textCatalog, MessageId::GtkPresentationViewInactive);
-          APP_LOG_ERROR("Failed to apply track presentation: {}", message);
-          showPresentationError(message);
-          return false;
-        }
+        applyPresentation(selection);
+        return false;
+      });
+  }
 
-        if (auto const res = _workspace.setActivePresentation(selection.spec); !res)
+  void TrackPresentationButton::applyPresentation(uimodel::TrackPresentationSelection const& selection)
+  {
+    if (!_optBindingCallbacks)
+    {
+      return;
+    }
+
+    if (_workspace.snapshot().activeViewId != selection.targetViewId)
+    {
+      auto const message = gtkText(_textCatalog, MessageId::GtkPresentationViewInactive);
+      APP_LOG_ERROR("Failed to apply track presentation: {}", message);
+      showPresentationError(message);
+      return;
+    }
+
+    auto finish = _optBindingCallbacks->guard(
+      [this, &selection](Result<> const& res)
+      {
+        if (!res)
         {
           APP_LOG_ERROR("Failed to apply track presentation: {}", res.error().message);
           showPresentationError(res.error().message);
-          return false;
+          return;
         }
 
-        // Rebinding disconnects this idle callback before replacing the view
-        // model, so the accepted selection belongs to the current session.
         _viewModelPtr->completeSelection(selection);
-
-        return false;
       });
+    finish(_workspace.setActivePresentation(selection.spec));
   }
 
   void TrackPresentationButton::showPresentationError(std::string_view message)
@@ -214,7 +254,7 @@ namespace ao::gtk
   {
     _popover.popdown();
 
-    if (!_state.enabled || _catalog == nullptr || _viewModelPtr == nullptr)
+    if (_customViewEditorPtr || !_state.enabled || _viewModelPtr == nullptr)
     {
       return;
     }
@@ -228,29 +268,82 @@ namespace ao::gtk
 
     // _state is a cached render snapshot, so its view id can be stale by the
     // time the user clicks.
-    auto const foundRes = _views.findTrackListState(_state.activeViewId);
+    auto const targetViewId = _workspace.snapshot().activeViewId;
+    auto const foundRes = _views.findTrackListState(targetViewId);
 
-    if (!foundRes)
+    if (!foundRes || targetViewId != _state.activeViewId)
     {
       return;
     }
 
     auto const& spec = foundRes->presentation;
 
-    auto const labelText = std::string{_button.get_label()};
+    auto const labelText = _catalog->labelForId(spec.id);
     auto const label = i18n::requiredFormat(_textCatalog, MessageId::GtkPresentationCopyLabel, {{"label", labelText}});
-    auto dialog = TrackCustomViewDialog{*parentWindow, _textCatalog, spec, label};
-    auto optToken = std::optional<ThemeRegistrationToken>{};
+    _customViewEditorPtr = std::make_unique<CustomViewEditor>(*parentWindow, _textCatalog, spec, label, targetViewId);
+    auto& editor = *_customViewEditorPtr;
 
     if (_themeCoordinator != nullptr)
     {
-      optToken = _themeCoordinator->registerToplevel(dialog);
+      editor.theme = _themeCoordinator->registerToplevel(editor.dialog);
     }
 
-    if (auto const optPreset = dialog.runDialog(); optPreset)
+    editor.response = editor.dialog.signal_response().connect([this](std::int32_t id)
+                                                              { queueCustomViewFinish(id == Gtk::ResponseType::OK); });
+    editor.hide = editor.dialog.signal_hide().connect([this] { queueCustomViewFinish(false); });
+    // The modal dialog belongs to this window, not to the picker's visibility.
+    editor.pickerRoot = property_root().signal_changed().connect([this] { queueCustomViewFinish(false); });
+    editor.parentUnmap = parentWindow->signal_unmap().connect([this] { queueCustomViewFinish(false); });
+    editor.dialog.present();
+  }
+
+  void TrackPresentationButton::queueCustomViewFinish(bool const save)
+  {
+    auto& editor = *_customViewEditorPtr;
+
+    if (save && editor.finish.connected())
     {
-      _catalog->addCustomPresentation(*optPreset);
-      handlePresentationSelected(optPreset->spec.id);
+      // The first Save owns the draft, but Cancel may still revoke it before the idle commits.
+      return;
     }
+
+    if (!save)
+    {
+      editor.response.disconnect();
+    }
+
+    editor.finish.disconnect();
+    auto optPreset = save ? std::optional{editor.dialog.collectState()} : std::nullopt;
+
+    // Never destroy the dialog on its own response/hide stack.
+    editor.finish = Glib::signal_idle().connect(
+      [this, optPreset = std::move(optPreset)]
+      {
+        auto retiringPtr = std::move(_customViewEditorPtr);
+        retiringPtr->response.disconnect();
+        retiringPtr->hide.disconnect();
+        retiringPtr->pickerRoot.disconnect();
+        retiringPtr->parentUnmap.disconnect();
+
+        if (auto const targetViewId = retiringPtr->targetViewId;
+            optPreset && _optBindingCallbacks && _workspace.snapshot().activeViewId == targetViewId)
+        {
+          // A stale draft is discarded before publish. Once it is published,
+          // a change of binding or view may skip selection but does not undo the preset.
+          auto selectIfCurrent = _optBindingCallbacks->guard(
+            [this, targetViewId](std::string_view id)
+            {
+              if (auto const optSelection = _viewModelPtr->selectPresentation(id);
+                  optSelection && optSelection->targetViewId == targetViewId)
+              {
+                applyPresentation(*optSelection);
+              }
+            });
+          _catalog->addCustomPresentation(*optPreset);
+          selectIfCurrent(optPreset->spec.id);
+        }
+
+        return false;
+      });
   }
 } // namespace ao::gtk

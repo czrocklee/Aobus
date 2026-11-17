@@ -12,7 +12,6 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/uimodel/library/presentation/CustomPresentationEditorModel.h>
 
-#include <glibmm/main.h>
 #include <glibmm/refptr.h>
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
@@ -29,7 +28,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <format>
-#include <optional>
 #include <random>
 #include <span>
 #include <string>
@@ -126,6 +124,7 @@ namespace ao::gtk
   {
     set_title(gtkText(_textCatalog, MessageId::GtkCustomViewTitle));
     configureForParent(parent);
+    setCloseResponse(Gtk::ResponseType::CANCEL);
 
     set_default_size(-1, -1);
 
@@ -370,30 +369,5 @@ namespace ao::gtk
   {
     _model.setLabel(_nameEntry.get_text().raw());
     return _model.collectState(generateId());
-  }
-
-  std::optional<rt::CustomTrackPresentationPreset> TrackCustomViewDialog::runDialog()
-  {
-    show();
-
-    auto loopPtr = Glib::MainLoop::create(false);
-    auto response = Gtk::ResponseType::CANCEL;
-
-    signal_response().connect(
-      [&loopPtr, &response](std::int32_t resp)
-      {
-        response = static_cast<Gtk::ResponseType>(resp);
-        loopPtr->quit();
-      });
-
-    loopPtr->run();
-    hide();
-
-    if (response == Gtk::ResponseType::OK)
-    {
-      return collectState();
-    }
-
-    return std::nullopt;
   }
 } // namespace ao::gtk
