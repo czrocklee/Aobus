@@ -199,7 +199,15 @@ namespace ao::async
         [this](auto handler)
         {
           using Dispatch = CallbackDispatch<CallbackState, std::decay_t<decltype(handler)>>;
-          callbackExecutor().dispatch(Dispatch{_callbackStatePtr, std::move(handler)});
+          // Asio initiates the hop after suspension, outside the awaiting coroutine's catch.
+          try
+          {
+            callbackExecutor().dispatch(Dispatch{_callbackStatePtr, std::move(handler)});
+          }
+          catch (...)
+          {
+            AO_FATAL_EXCEPTION(std::current_exception(), "Runtime callback hop dispatch");
+          }
         },
         boost::asio::use_awaitable);
     }

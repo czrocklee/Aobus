@@ -114,6 +114,8 @@ immediately. A cancelled or superseded operation must still be rejected before
 it can publish.
 
 A callback-executor hop checks cancellation before dispatch and after resume.
+If submitting the hop throws, the Runtime reports the original exception at
+that dispatch boundary and aborts. This is not a task result or cancellation.
 During runtime shutdown, callback admission closes first. A queued hop that
 observes the closure drops its Asio handler without resuming the coroutine.
 Dropping the handler can post frame cleanup back to its executor. The queued

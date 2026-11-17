@@ -82,9 +82,9 @@ namespace ao::rt::test
     // Each registered scenario runs from its own case below, so a new registry
     // entry needs a matching case and an updated count here.
 #ifdef _WIN32
-    constexpr std::size_t kFatalScenarioCount = 41;
+    constexpr std::size_t kFatalScenarioCount = 42;
 #else
-    constexpr std::size_t kFatalScenarioCount = 39;
+    constexpr std::size_t kFatalScenarioCount = 40;
 #endif
     CHECK(runtimeFatalProbeExpectations().size() == kFatalScenarioCount);
     CHECK(runtimeCleanProbeScenarios().size() == 2);
@@ -149,6 +149,17 @@ namespace ao::rt::test
   TEST_CASE("Runtime fatal roots - cancellation cannot rethrow an empty exception")
   {
     requireFatalScenario("operation-cancelled-empty-rethrow");
+  }
+
+  TEST_CASE("Runtime fatal roots - callback hop dispatch exceptions abort")
+  {
+    using namespace std::string_view_literals;
+    constexpr auto kDiagnosticPrefix = "AOBUS_FATAL category="sv;
+    constexpr auto kSinkMarker = "AOBUS_TEST sink=accepted"sv;
+    auto const result = requireFatalScenario("runtime-callback-hop-dispatch-exception");
+    REQUIRE(result.standardError.contains("AOBUS_FATAL category=unhandled-exception "));
+    CHECK(result.standardError.find(kDiagnosticPrefix) == result.standardError.rfind(kDiagnosticPrefix));
+    CHECK(result.standardError.find(kSinkMarker) == result.standardError.rfind(kSinkMarker));
   }
 
   TEST_CASE("Runtime fatal roots - logged task exceptions abort")
