@@ -4,6 +4,7 @@
 #include "CliRuntime.h"
 
 #include "CommandError.h"
+#include <ao/Contract.h>
 #include <ao/async/Executor.h>
 #include <ao/async/LoopExecutor.h>
 #include <ao/async/Runtime.h>
@@ -14,9 +15,8 @@
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/utility/PlatformDirectories.h>
 
-#include <gsl-lite/gsl-lite.hpp>
-
 #include <cstdint>
+#include <exception>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -35,16 +35,49 @@ namespace ao::cli
   {
     struct TaskCompletionState final
     {
+      async::Executor& executor;
       bool completed = false;
     };
 
-    async::Task<void> publishTaskCompletionAsync(async::Executor* executor,
-                                                 async::Task<void> task,
-                                                 std::shared_ptr<TaskCompletionState> completionStatePtr)
+    class [[nodiscard]] TaskCompletionGuard final
     {
-      auto notifyCompletion =
-        gsl_lite::finally([executor, completionStatePtr = std::move(completionStatePtr)]
-                          { executor->dispatch([completionStatePtr] { completionStatePtr->completed = true; }); });
+    public:
+      explicit TaskCompletionGuard(std::weak_ptr<TaskCompletionState> statePtr) noexcept
+        : _statePtr{std::move(statePtr)}
+      {
+      }
+
+      TaskCompletionGuard(TaskCompletionGuard const&) = delete;
+      TaskCompletionGuard& operator=(TaskCompletionGuard const&) = delete;
+      // Moving the weak token disarms the source guard.
+      TaskCompletionGuard(TaskCompletionGuard&&) noexcept = default;
+      TaskCompletionGuard& operator=(TaskCompletionGuard&&) = delete;
+
+      ~TaskCompletionGuard() noexcept
+      {
+        // Late frame cleanup must not touch the executor after runTask exits.
+        if (auto statePtr = _statePtr.lock(); statePtr != nullptr)
+        {
+          try
+          {
+            auto& executor = statePtr->executor;
+            executor.dispatch([statePtr = std::move(statePtr)] { statePtr->completed = true; });
+          }
+          catch (...)
+          {
+            // Without this notification the owner loop cannot finish runTask.
+            AO_FATAL_EXCEPTION(std::current_exception(), "CLI task completion dispatch");
+          }
+        }
+      }
+
+    private:
+      std::weak_ptr<TaskCompletionState> _statePtr;
+    };
+
+    async::Task<void> publishTaskCompletionAsync(async::Task<void> task,
+                                                 [[maybe_unused]] TaskCompletionGuard notifyCompletion)
+    {
       co_await std::move(task);
     }
   } // namespace
@@ -133,9 +166,10 @@ namespace ao::cli
   void CliRuntime::runTask(async::Task<void> task)
   {
     auto& asyncRuntime = core().async();
-    auto completionStatePtr = std::make_shared<TaskCompletionState>();
-    auto completionFuture = asyncRuntime.spawn(
-      publishTaskCompletionAsync(&asyncRuntime.callbackExecutor(), std::move(task), completionStatePtr));
+    auto const completionStatePtr = std::make_shared<TaskCompletionState>(asyncRuntime.callbackExecutor());
+    // Arm the guard in the coroutine frame before spawn can reject the unstarted wrapper.
+    auto completionFuture =
+      asyncRuntime.spawn(publishTaskCompletionAsync(std::move(task), TaskCompletionGuard{completionStatePtr}));
 
     while (!completionStatePtr->completed)
     {

@@ -14,6 +14,7 @@
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/TaskFuture.h>
 #include <ao/library/FileManifestStore.h>
@@ -46,7 +47,6 @@
 #include <expected>
 #include <filesystem>
 #include <fstream>
-#include <future>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -119,7 +119,7 @@ namespace ao::rt::test
     REQUIRE_THROWS_AS(run(), std::runtime_error);
     REQUIRE(completedPtr->load());
     REQUIRE(optFuture);
-    CHECK_THROWS_AS(optFuture->get(), std::future_error);
+    CHECK_THROWS_AS(optFuture->get(), async::OperationCancelled);
     auto reopened = library::test::makeTestMusicLibrary(temp.path(), temp.path());
     CHECK(Library::prepare(reopened));
   }

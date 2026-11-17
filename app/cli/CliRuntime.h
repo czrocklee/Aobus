@@ -41,6 +41,9 @@ namespace ao::cli
     std::ostream& err;
   };
 
+  // Confined to the CLI invocation thread. Composition-root shutdown is
+  // serialized with commands; do not stop the underlying runtime during an
+  // accepted runTask(), including from within the command.
   class CliRuntime final
   {
   public:
@@ -65,6 +68,7 @@ namespace ao::cli
     library::MusicLibrary const& musicLibrary();
     rt::Library& library();
 
+    // Pumps the owner loop; a task submitted after stop is rejected with async::OperationCancelled.
     void runTask(async::Task<void> task);
 
     template<typename T>

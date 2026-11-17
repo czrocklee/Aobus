@@ -7,15 +7,17 @@
 #include "TaskFuture.h"
 #include <ao/utility/ScopedRegistration.h>
 
+#include <boost/asio/bind_executor.hpp>
 #include <boost/asio/co_spawn.hpp>
+#include <boost/asio/system_executor.hpp>
 #include <boost/asio/thread_pool.hpp>
-#include <boost/asio/use_future.hpp>
 
 #include <chrono>
 #include <cstddef>
 #include <exception>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <stop_token>
 #include <string_view>
 #include <type_traits>
@@ -48,8 +50,10 @@ namespace ao::async
     std::size_t workerCount() const noexcept;
 
     // Terminally closes callback-executor resumption admission and stops the
-    // worker pool. The Runtime cannot be restarted afterward.
+    // worker pool. Outstanding spawn() futures are settled before return.
     void requestStop() noexcept;
+    // Without a preceding stop, let work finish normally. Joining waits for
+    // worker threads, not destruction of abandoned coroutine frames.
     void join();
 
     Task<void> resumeOnCallbackExecutorAsync(std::stop_token stopToken = {});
@@ -73,21 +77,40 @@ namespace ao::async
     void spawnLogged(Task<void> task, std::string_view fatalContext = "root coroutine");
     TaskHandle spawnCancellable(CancellableTask task, std::string_view fatalContext = "cancellable coroutine");
 
+    // Stop settles pending futures without waiting for their tasks or frames.
     template<typename T>
     TaskFuture<T> spawn(Task<T> task)
     {
+      using Payload = std::conditional_t<std::is_void_v<T>, void, detail::TaskFuturePayload<T>>;
+      auto const stopToken = _futureStopSource.get_token();
+      auto statePtr = std::make_unique<detail::TaskFutureState<Payload>>(stopToken);
+      auto future = TaskFuture{statePtr->getFuture()};
+
+      if (stopToken.stop_requested())
+      {
+        return future;
+      }
+
+      // Dispatch settlement inline on the finishing turn, including a callback
+      // turn. Reading an already finished task must not need a free worker.
+      auto complete = boost::asio::bind_executor(
+        boost::asio::system_executor{},
+        [statePtr = std::move(statePtr)](std::exception_ptr const& exceptionPtr, auto&&... payload)
+        { statePtr->finish(exceptionPtr, std::forward<decltype(payload)>(payload)...); });
+
       if constexpr (std::is_void_v<T>)
       {
-        return TaskFuture<void>{boost::asio::co_spawn(workerPool(), std::move(task), boost::asio::use_future)};
+        boost::asio::co_spawn(workerPool(), std::move(task), std::move(complete));
       }
       else
       {
-        // Boost.Asio supplies an empty payload to its completion token when
-        // the source fails, while use_future preserves the source exception.
-        auto transport = [](Task<T> source) -> Task<detail::TaskFuturePayload<T>>
-        { co_return detail::TaskFuturePayload{co_await std::move(source)}; }(std::move(task));
-        return TaskFuture{boost::asio::co_spawn(workerPool(), std::move(transport), boost::asio::use_future)};
+        // Asio requires a default payload on failure; T need not have one.
+        auto transport = [](Task<T> source) -> Task<Payload>
+        { co_return Payload{co_await std::move(source)}; }(std::move(task));
+        boost::asio::co_spawn(workerPool(), std::move(transport), std::move(complete));
       }
+
+      return future;
     }
 
     void spawnWithLifetime(LifetimeScope& scope,
@@ -103,9 +126,12 @@ namespace ao::async
                           std::function<void(std::exception_ptr)> completion);
 
     boost::asio::thread_pool& workerPool() noexcept;
+    void closeTaskFutures() noexcept;
 
     Executor& _callbackExecutor;
     std::shared_ptr<CallbackState> _callbackStatePtr;
     Sleeper* _sleeper;
+    std::stop_source _futureStopSource;
+    std::once_flag _closeTaskFuturesOnce;
   };
 } // namespace ao::async

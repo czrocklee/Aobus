@@ -30,6 +30,7 @@
 #include <exception>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -62,10 +63,8 @@ namespace ao::async
         {
           std::move(handler)();
         }
-        // Dropping the Asio awaitable handler is the cancellation path after
-        // Runtime teardown. Its destructor unwinds the suspended coroutine on
-        // the handler executor; statePtr keeps that worker pool alive through
-        // this object's reverse member destruction.
+        // A rejected hop never resumes the body. Asio may post frame cleanup
+        // to the handler executor when the handler is destroyed.
       }
 
       // Destruction is reversed, so the handler releases its Asio executor
@@ -167,17 +166,27 @@ namespace ao::async
     // deferred until member destruction. Composite owners call requestStop()
     // while their callback targets are still alive.
     _callbackStatePtr->acceptsCallbacks.store(false, std::memory_order_release);
+    closeTaskFutures();
     _callbackStatePtr->workerPool.stop();
   }
 
   void Runtime::join()
   {
     _callbackStatePtr->workerPool.join();
+    // A join without an explicit stop lets admitted work finish normally.
+    closeTaskFutures();
   }
 
   boost::asio::thread_pool& Runtime::workerPool() noexcept
   {
     return _callbackStatePtr->workerPool;
+  }
+
+  void Runtime::closeTaskFutures() noexcept
+  {
+    // request_stop alone permits a second caller to return while the first
+    // is still notifying pending futures. All callers need the same boundary.
+    std::call_once(_closeTaskFuturesOnce, [this] { std::ignore = _futureStopSource.request_stop(); });
   }
 
   Task<void> Runtime::resumeOnCallbackExecutorAsync(std::stop_token const stopToken)

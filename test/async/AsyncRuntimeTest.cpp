@@ -4,20 +4,25 @@
 #include "test/runtime/AsyncTestSupport.h"
 #include "test/runtime/ExecutorTestSupport.h"
 #include <ao/async/LoopExecutor.h>
+#include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
+#include <ao/async/TaskFuture.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <exception>
+#include <future>
 #include <memory>
 #include <stdexcept>
 #include <stop_token>
 #include <string_view>
 #include <thread>
+#include <tuple>
 #include <type_traits>
 #include <utility>
 
@@ -56,6 +61,13 @@ namespace ao::rt::test
     {
       co_await runtime->resumeOnCallbackExecutorAsync();
       resumed.set(true);
+    }
+
+    Task<std::int32_t> callbackResultAsync(Runtime* runtime, AsyncTestState<bool> ranOnOwner)
+    {
+      co_await runtime->resumeOnCallbackExecutorAsync();
+      ranOnOwner.set(runtime->callbackExecutor().isCurrent());
+      co_return 42;
     }
 
     Task<void> failingTaskAsync(Runtime* runtime)
@@ -99,6 +111,64 @@ namespace ao::rt::test
     private:
       std::int32_t _value = 0;
     };
+
+    constexpr auto kFutureTimeout = std::chrono::seconds{5};
+
+    // TaskFuture has no nonblocking readiness query. Keep the blocking read
+    // off the test thread and destroy the producer before the reader on failure.
+    template<typename T>
+    std::future<std::exception_ptr> readFutureException(TaskFuture<T> future)
+    {
+      return std::async(
+        std::launch::async, [future = std::move(future)] mutable { return captureTaskFutureException(future); });
+    }
+
+    template<typename T>
+    Task<T> markSpawnStartedAsync(AsyncTestState<bool> started)
+    {
+      started.set(true);
+
+      if constexpr (std::is_void_v<T>)
+      {
+        co_return;
+      }
+      else
+      {
+        co_return T{42};
+      }
+    }
+
+    Task<NonDefaultTaskResult> suspendedResultAsync(Runtime* runtime,
+                                                    AsyncTestState<bool> resumed,
+                                                    std::shared_ptr<void> lifetimePtr)
+    {
+      co_await callbackAfterRuntimeShutdownAsync(runtime, resumed, std::move(lifetimePtr));
+      co_return NonDefaultTaskResult{42};
+    }
+
+    Task<void> holdWorkerAsync(AsyncTestState<bool> started, AsyncTestState<bool> release, AsyncTestState<bool> exited)
+    {
+      started.set(true);
+      // An additional guard in case requestStop incorrectly waits for this worker.
+      std::ignore = release.tryWaitUntil(true, std::chrono::seconds{30});
+      exited.set(true);
+      co_return;
+    }
+
+    struct SpawnTestFailure final : std::exception
+    {};
+
+    Task<void> failImmediatelyAsync()
+    {
+      throw SpawnTestFailure{};
+      co_return;
+    }
+
+    Task<void> reachWorkerFenceAsync(Runtime* runtime, AsyncTestState<bool> reached)
+    {
+      co_await runtime->resumeOnWorkerAsync();
+      reached.set(true);
+    }
 
     Task<NonDefaultTaskResult> nonDefaultResultTaskAsync(Runtime* runtime)
     {
@@ -160,6 +230,15 @@ namespace ao::rt::test
     private:
       AsyncTestState<std::uint32_t> _exitCount;
     };
+
+    Task<void> sleepUntilPoolTeardownAsync(Runtime* runtime,
+                                           AsyncTestState<bool> resumed,
+                                           AsyncTestState<std::uint32_t> exitCount)
+    {
+      auto const exitRecorder = TaskExitRecorder{exitCount};
+      co_await runtime->sleepForAsync(std::chrono::hours{1});
+      resumed.set(true);
+    }
 
     Task<void> timedCancellationRaceAsync(Runtime* runtime,
                                           AsyncTestState<std::uint32_t> startedCount,
@@ -244,6 +323,171 @@ namespace ao::rt::test
     CHECK_FALSE(resumed.load());
     runtimePtr.reset();
     CHECK(weakLifetimePtr.expired());
+  }
+
+  TEST_CASE("AsyncRuntime - pool destruction unwinds a timer-suspended frame after stop and join", "[concurrency]")
+  {
+    auto executor = QueuedExecutor{};
+    auto resumed = AsyncTestState<bool>::create(false);
+    auto exitCount = AsyncTestState<std::uint32_t>::create(0);
+    auto reached = AsyncTestState<bool>::create(false);
+
+    {
+      auto runtime = Runtime{executor, 1};
+      runtime.spawnLogged(sleepUntilPoolTeardownAsync(&runtime, resumed, exitCount));
+      // A later turn on the sole worker fences registration of the default timer.
+      runtime.spawnLogged(reachWorkerFenceAsync(&runtime, reached));
+      REQUIRE(reached.tryWaitUntil(true));
+      CHECK_FALSE(resumed.load());
+      CHECK(exitCount.load() == 0);
+
+      runtime.requestStop();
+      runtime.join();
+      CHECK_FALSE(resumed.load());
+      CHECK(exitCount.load() == 0);
+    }
+
+    // Unlike a callback-executor hop, this frame needs no external drain.
+    CHECK_FALSE(resumed.load());
+    CHECK(exitCount.load() == 1);
+  }
+
+  TEST_CASE("AsyncRuntime - explicit stop cancels unresolved spawn futures before teardown", "[concurrency]")
+  {
+    // On failure, release the worker and destroy both the Runtime and queued
+    // callbacks before the asynchronous readers are joined.
+    auto suspendedResult = std::future<std::exception_ptr>{};
+    auto runningResult = std::future<std::exception_ptr>{};
+    auto queuedResult = std::future<std::exception_ptr>{};
+    auto executor = QueuedExecutor{};
+    auto resumed = AsyncTestState<bool>::create(false);
+    auto queuedStarted = AsyncTestState<bool>::create(false);
+    auto workerStarted = AsyncTestState<bool>::create(false);
+    auto releaseWorker = AsyncTestState<bool>::create(false);
+    auto workerExited = AsyncTestState<bool>::create(false);
+    auto lifetimePtr = std::make_shared<std::uint8_t>(0);
+    auto const weakLifetimePtr = std::weak_ptr<void>{lifetimePtr};
+    auto runtime = Runtime{executor, 1};
+    auto cleanup = gsl_lite::finally([&releaseWorker] { releaseWorker.set(true); });
+
+    auto suspended = runtime.spawn(suspendedResultAsync(&runtime, resumed, std::move(lifetimePtr)));
+    executor.checkQueued();
+    auto running = runtime.spawn(holdWorkerAsync(workerStarted, releaseWorker, workerExited));
+    REQUIRE(workerStarted.tryWaitUntil(true));
+    auto queued = runtime.spawn(markSpawnStartedAsync<void>(queuedStarted));
+
+    runtime.requestStop();
+    suspendedResult = readFutureException(std::move(suspended));
+    runningResult = readFutureException(std::move(running));
+    queuedResult = readFutureException(std::move(queued));
+
+    REQUIRE(suspendedResult.wait_for(kFutureTimeout) == std::future_status::ready);
+    REQUIRE(runningResult.wait_for(kFutureTimeout) == std::future_status::ready);
+    REQUIRE(queuedResult.wait_for(kFutureTimeout) == std::future_status::ready);
+    CHECK(isOperationCancelled(suspendedResult.get()));
+    CHECK(isOperationCancelled(runningResult.get()));
+    CHECK(isOperationCancelled(queuedResult.get()));
+    CHECK_FALSE(weakLifetimePtr.expired());
+    CHECK_FALSE(workerExited.load());
+    CHECK_FALSE(resumed.load());
+    CHECK_FALSE(queuedStarted.load());
+
+    releaseWorker.set(true);
+    runtime.join();
+    executor.drain();
+    CHECK(workerExited.load());
+    CHECK_FALSE(resumed.load());
+    CHECK_FALSE(queuedStarted.load());
+  }
+
+  TEST_CASE("AsyncRuntime - callback completion readies spawn value while worker is blocked", "[concurrency]")
+  {
+    // Release the worker and destroy the producer before joining a blocked reader.
+    auto result = std::future<std::int32_t>{};
+    auto executor = QueuedExecutor{};
+    auto ranOnOwner = AsyncTestState<bool>::create(false);
+    auto workerStarted = AsyncTestState<bool>::create(false);
+    auto releaseWorker = AsyncTestState<bool>::create(false);
+    auto workerExited = AsyncTestState<bool>::create(false);
+    auto runtime = Runtime{executor, 1};
+    auto cleanup = gsl_lite::finally([&releaseWorker] { releaseWorker.set(true); });
+
+    auto value = runtime.spawn(callbackResultAsync(&runtime, ranOnOwner));
+    REQUIRE(executor.tryWaitUntilQueued());
+    runtime.spawnLogged(holdWorkerAsync(workerStarted, releaseWorker, workerExited));
+    REQUIRE(workerStarted.tryWaitUntil(true));
+
+    executor.drain();
+    CHECK(ranOnOwner.load());
+    result = std::async(std::launch::async, [value = std::move(value)] mutable { return value.get(); });
+    REQUIRE(result.wait_for(kFutureTimeout) == std::future_status::ready);
+    CHECK(result.get() == 42);
+    CHECK_FALSE(workerExited.load());
+
+    releaseWorker.set(true);
+    runtime.join();
+    CHECK(workerExited.load());
+  }
+
+  TEST_CASE("AsyncRuntime - explicit stop preserves a settled spawn value and error", "[concurrency]")
+  {
+    auto valueResult = std::future<NonDefaultTaskResult>{};
+    auto errorResult = std::future<std::exception_ptr>{};
+    auto executor = QueuedExecutor{};
+    auto reached = AsyncTestState<bool>::create(false);
+    auto runtime = Runtime{executor, 1};
+
+    auto value = runtime.spawn(makeReadyTaskAsync(NonDefaultTaskResult{42}));
+    auto error = runtime.spawn(failImmediatelyAsync());
+    // The preceding tasks do not suspend. Give their completion handlers a
+    // worker turn before stopping, but leave both results unread.
+    runtime.spawnLogged(reachWorkerFenceAsync(&runtime, reached));
+    REQUIRE(reached.tryWaitUntil(true));
+
+    runtime.requestStop();
+    valueResult = std::async(std::launch::async, [value = std::move(value)] mutable { return value.get(); });
+    errorResult = readFutureException(std::move(error));
+
+    REQUIRE(valueResult.wait_for(kFutureTimeout) == std::future_status::ready);
+    CHECK(valueResult.get().value() == 42);
+    REQUIRE(errorResult.wait_for(kFutureTimeout) == std::future_status::ready);
+    auto const failure = errorResult.get();
+    REQUIRE(failure);
+    CHECK_THROWS_AS(std::rethrow_exception(failure), SpawnTestFailure);
+  }
+
+  TEST_CASE("AsyncRuntime - spawn rejects submissions after terminal shutdown", "[concurrency]")
+  {
+    auto voidResult = std::future<std::exception_ptr>{};
+    auto valueResult = std::future<std::exception_ptr>{};
+    auto executor = QueuedExecutor{};
+    auto voidStarted = AsyncTestState<bool>::create(false);
+    auto valueStarted = AsyncTestState<bool>::create(false);
+    auto runtime = Runtime{executor, 1};
+
+    SECTION("After an explicit stop")
+    {
+      runtime.requestStop();
+    }
+
+    SECTION("After a successful natural join")
+    {
+      auto started = AsyncTestState<bool>::create(false);
+      runtime.spawnLogged(markSpawnStartedAsync<void>(started));
+      runtime.join();
+      REQUIRE(started.load());
+    }
+
+    voidResult = readFutureException(runtime.spawn(markSpawnStartedAsync<void>(voidStarted)));
+    valueResult = readFutureException(runtime.spawn(markSpawnStartedAsync<NonDefaultTaskResult>(valueStarted)));
+
+    REQUIRE(voidResult.wait_for(kFutureTimeout) == std::future_status::ready);
+    REQUIRE(valueResult.wait_for(kFutureTimeout) == std::future_status::ready);
+    CHECK(isOperationCancelled(voidResult.get()));
+    CHECK(isOperationCancelled(valueResult.get()));
+    runtime.join();
+    CHECK_FALSE(voidStarted.load());
+    CHECK_FALSE(valueStarted.load());
   }
 
   TEST_CASE("AsyncRuntime - future task failure remains caller-owned")

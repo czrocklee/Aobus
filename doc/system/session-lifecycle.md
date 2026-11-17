@@ -185,9 +185,12 @@ all separate admission from destruction.
 quiesces audio callbacks before its first-member `CoreRuntime` shuts down.
 `CoreRuntime::shutdown()` seals library mutation/publication admission, then
 closes callback resumption, stops and joins workers while library and
-notification collaborators remain alive. A queued callback that has lost
-runtime admission is discarded and its suspended frame unwinds without entering
-retired application state.
+notification collaborators remain alive. A queued hop that observes closed
+admission does not resume the coroutine body. Its frame's local destructors can
+still run later, even after `Runtime` destruction if an external queue retains
+the hop. They must own their cleanup state or use an owner-specific lifetime
+guarantee. For example, the library write lane retires requests and waits for
+owner leases **before** stopping the workers that release them.
 
 The required destruction direction is:
 
@@ -203,8 +206,9 @@ The required destruction direction is:
 
 A callback gate or weak token prevents new entry but does not prove quiescence.
 A stop request is cooperative and does not prove that a blocking decoder or
-foreign call has returned. Owner-last destruction therefore depends on join and,
-where specified, a final owner-thread drain.
+foreign call has returned. Joining the workers does not drain an external
+callback executor or release every frame. A frontend's final drain covers only
+the work that frontend explicitly admits.
 
 ## Structural constraints
 
