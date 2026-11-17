@@ -6,7 +6,7 @@ import unittest
 
 import test_bazel_deps as adapter_tests
 
-from ao.core import bazel_deps as g
+from ao.portal import bazel_deps as g
 
 
 class BazelSharedHeadersTest(unittest.TestCase):

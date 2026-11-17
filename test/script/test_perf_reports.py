@@ -12,9 +12,10 @@ from unittest import mock
 from workflow_support import executable_artifact
 
 from ao.__main__ import make_parser
-from ao.command import perf
-from ao.core import builddir
+from ao.command import measure
 from ao.core.bazel_native import BazelWorkspaceError
+from ao.portal import build_dir
+from ao.portal import performance_review as perf
 
 
 class PerformanceReportTest(unittest.TestCase):
@@ -25,10 +26,12 @@ class PerformanceReportTest(unittest.TestCase):
         self.artifact = executable_artifact(
             self.root, target=perf.TARGET_LABEL, config="release", compiler="test-compiler"
         )
-        self.enterContext(mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE))
+        self.enterContext(mock.patch.object(build_dir, "platform_profile", return_value=build_dir.LINUX_PROFILE))
         self.output = self.root / "review.json"
         self.baseline = self.root / "报告-baseline.json"
-        self.args = make_parser().parse_args(["perf", "--no-build", "-p", str(self.root), "--output", str(self.output)])
+        self.args = make_parser().parse_args(
+            ["measure", "performance", "--no-build", "-p", str(self.root), "--output", str(self.output)]
+        )
         environment = mock.patch.dict(os.environ, {"AOBUS_PERF_BASELINE_JSON": str(self.baseline)})
         environment.start()
         self.addCleanup(environment.stop)
@@ -71,8 +74,11 @@ class PerformanceReportTest(unittest.TestCase):
         }
 
     def run_with(self, child):
-        with mock.patch.object(perf, "run", side_effect=child), contextlib.redirect_stdout(io.StringIO()) as output:
-            status = perf.run_command(self.args)
+        with (
+            mock.patch.object(perf, "run_process", side_effect=child),
+            contextlib.redirect_stdout(io.StringIO()) as output,
+        ):
+            status = measure.run_command(self.args)
         return status, output.getvalue()
 
     def test_success_refreshes_and_validates_both_requested_reports(self):
@@ -122,13 +128,13 @@ class PerformanceReportTest(unittest.TestCase):
         self.output.write_bytes(b"existing evidence")
         for alias in (self.output, self.root / "." / self.output.name):
             with self.subTest(alias=alias), mock.patch.dict(os.environ, {"AOBUS_PERF_BASELINE_JSON": str(alias)}):
-                with mock.patch.object(perf, "run") as child, self.assertRaises(SystemExit):
-                    perf.run_command(self.args)
+                with mock.patch.object(perf, "run_process") as child, self.assertRaises(SystemExit):
+                    measure.run_command(self.args)
                 child.assert_not_called()
                 self.assertEqual(self.output.read_bytes(), b"existing evidence")
         os.link(self.output, self.baseline)
-        with mock.patch.object(perf, "run") as child, self.assertRaises(SystemExit):
-            perf.run_command(self.args)
+        with mock.patch.object(perf, "run_process") as child, self.assertRaises(SystemExit):
+            measure.run_command(self.args)
         child.assert_not_called()
         self.assertEqual(self.output.read_bytes(), b"existing evidence")
         self.assertEqual(self.baseline.read_bytes(), b"existing evidence")
@@ -154,8 +160,8 @@ class PerformanceReportTest(unittest.TestCase):
         with mock.patch.object(
             perf.bazel_workflows, "prepare_artifact", side_effect=BazelWorkspaceError("SDK admission failed")
         ):
-            with mock.patch.object(perf, "run") as child, self.assertRaises(SystemExit):
-                perf.run_command(self.args)
+            with mock.patch.object(perf, "run_process") as child, self.assertRaises(SystemExit):
+                measure.run_command(self.args)
         child.assert_not_called()
         self.assertEqual(self.output.read_bytes(), b"v2 sentinel")
         self.assertEqual(self.baseline.read_bytes(), b"v1 sentinel")

@@ -71,6 +71,7 @@ def materialize_host_tools(ctx, data):
         "resource_executable": resource_executable,
         "resource_inputs": resource_inputs,
         "dbus_inputs": dbus_inputs,
+        "python": data["python"],
     }), executable = False)
     ctx.file("manifest.json", json.encode({
         "tool": gperf["identity"],

@@ -4,8 +4,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ao.core.bazel_lint import QueryGraph, Rule
-from ao.core.bazel_test_ownership import (
+from ao.portal.bazel_lint import QueryGraph, Rule
+from ao.portal.bazel_test_ownership import (
     ConfiguredTarget,
     discover_registration_sources,
     extract_compatibility,

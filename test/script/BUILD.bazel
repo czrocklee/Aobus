@@ -1,0 +1,682 @@
+# Tooling unit tests and repository checks, one target per module: Bazel
+# owns isolation and parallelism, so no target runs the complete suite or
+# invokes ao check/tidy. Every unit target runs exactly one module through the
+# shared standard-library entry ao.graph.bazel_unittest, which fails a target
+# whose module collects no tests.
+#
+# Categories come from the per-module input audit (static import analysis plus
+# an empirical trace of every module's real file opens and process spawns):
+#
+# - declared unit targets: the module's only inputs are its declared sources,
+#   its imported support modules, and its library dependencies; they cache.
+# - declared-data unit targets: like the above, plus a short explicit list of
+#   repository files read through PROJECT_ROOT; the data labels keep the
+#   cache key honest on POSIX symlink runfiles and provide the files in a
+#   Windows copied tree.
+# - host-backed unit targets: the audit observed host-process spawns, physical
+#   git-state reads, or dynamic/whole-tree scans. "local" keeps them
+#   unsandboxed and "external" forces a real run, so no cached result can
+#   stand in for the checkout or tools they use. The runtime is the installed
+#   native py_runtime and tools come from the inherited PATH: that is an
+#   honest non-hermetic tool closure, not a sandbox claim.
+#
+# Host-backed targets pass the declared VERSION.txt anchor as --live-checkout.
+# On both operating systems the entry then always re-execs itself from the
+# physical checkout: Windows copies runfiles, and even on POSIX the already
+# loaded runfiles ao packages would shadow the physical checkout. The child
+# receives the plain arguments without the flag, which is the loop guard; no
+# loaded package is patched. Cacheable targets never pass the flag and run
+# straight from their declared runfiles.
+#
+# The repository checks at the bottom read the live physical checkout through
+# the declared VERSION.txt anchor resolved by the official rules_python
+# runfiles library.
+
+load("@rules_python//python:defs.bzl", "py_test")
+load("//bazel:python_libraries.bzl", "aobus_assert_unit_modules", "portal_initializer_runfiles_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# The macOS tooling suite has no native host coverage; only the explicit CI
+# remote-cache self-test is selected there.
+_MACOS_SELF_TEST = "test_bazel_remote_cache"
+
+_UNIT_ENTRY = "ao.graph.bazel_unittest"
+
+# Role labels from bazel/python_libraries.bzl; the shared unittest entry is
+# added once in the target rule below, not repeated per module.
+_ENTRY = "//:ao_python_unittest_entry"
+
+_FOUNDATIONS = "//:ao_python_foundations"
+
+_POLICY = "//:ao_python_policy"
+
+_GRAPH = "//:ao_python_graph"
+
+_PORTAL = "//:ao_python_portal"
+
+_VALIDATION = "//:ao_python_validation"
+
+_COMMANDS = "//:ao_python_commands"
+
+_CHECK_ENTRIES = "//:ao_python_check_entries"
+
+_NATIVE_SUPPORT = "//:ao_native_test_support"
+
+_LINT_RESULT = "//:ao_lint_result_support"
+
+_LIVE_CHECKOUT = "//:ao_python_live_checkout"
+
+# Recurring audited role combinations, so every deps entry stays one line.
+_CHECK_ENTRIES_AND_LIVE = [
+    _CHECK_ENTRIES,
+    _LIVE_CHECKOUT,
+]
+
+_GRAPH_AND_LIVE = [
+    _GRAPH,
+    _LIVE_CHECKOUT,
+]
+
+_NATIVE_AND_PORTAL = [
+    _NATIVE_SUPPORT,
+    _PORTAL,
+]
+
+# Audited category membership; the reasons are the input audit above.
+_UNIT_MODULES = [
+    "test_appkit_scenarios",
+    "test_architecture_audit",
+    "test_audit_root_guards",
+    "test_bazel_ci_summary",
+    "test_bazel_headers",
+    "test_bazel_library",
+    "test_bazel_lint_reports",
+    "test_bazel_lint_result",
+    "test_bazel_live_checkout",
+    "test_bazel_macos_toolchain",
+    "test_bazel_path_probes",
+    "test_bazel_profiles",
+    "test_bazel_remote_cache",
+    "test_bazel_shared_headers",
+    "test_bazel_unittest",
+    "test_dedup",
+    "test_doc_check",
+    "test_doc_check_boundaries",
+    "test_doc_check_markdown",
+    "test_jobs",
+    "test_name_audit",
+    "test_paths",
+    "test_r2_credentials",
+    "test_tidy_path_filters",
+    "test_tidy_config",
+    "test_uimodel_organization",
+]
+
+_DATA_MODULES = [
+    "test_ao_package_boundaries",
+    "test_bazel_appkit_deps",
+    "test_bazel_audio_deps",
+    "test_bazel_catalog",
+    "test_bazel_frontend_deps",
+    "test_bazel_gtk_deps",
+    "test_bazel_windows_linkage",
+    "test_bazel_winui_deps",
+    "test_ci_cache_gates",
+    "test_dependency_policy",
+    "test_nix_output_metadata",
+]
+
+# Host-tool modules stay local and non-cacheable: the audit observed real
+# host-process spawns (git, compilers, bash, Python children) found through
+# the inherited PATH, which is not a hermetic tool closure.
+_HOST_TOOL_MODULES = [
+    "test_appkit_process",
+    "test_bazel",
+    "test_bazel_appkit",
+    "test_bazel_bootstrap",
+    "test_bazel_compile_contract",
+    "test_bazel_contract_runner",
+    "test_bazel_deps",
+    "test_bazel_graph_lint",
+    "test_bazel_lint",
+    "test_bazel_lint_action",
+    "test_bazel_lint_fixture",
+    "test_bazel_lint_sdk",
+    "test_bazel_native",
+    "test_bazel_remote_cache_wsl_process",
+    "test_bazel_test_runner",
+    "test_bazel_test_services",
+    "test_bazel_verify",
+    "test_bazel_windows_manifest",
+    "test_buildifier_commands",
+    "test_build_lock",
+    "test_ci_parallelism",
+    "test_cli",
+    "test_concept_report",
+    "test_format_text",
+    "test_git_files",
+    "test_gtk_test_services",
+    "test_guardrails",
+    "test_hygiene",
+    "test_nix_portal",
+    "test_perf_identity",
+    "test_phases",
+    "test_proc",
+    "test_python_env",
+    "test_validation_scopes",
+    "test_vcpkg_binary_cache",
+    "test_windows_llvm_sdk",
+    "test_worker_phases",
+    "test_workflow_hygiene",
+]
+
+# Checkout-state modules stay local and non-cacheable: the audit observed
+# physical git-state reads or dynamic/whole-tree scans that no short data
+# list can declare.
+_CHECKOUT_MODULES = [
+    "test_analyze",
+    "test_bazel_check",
+    "test_bazel_concepts",
+    "test_bazel_coverage",
+    "test_bazel_environment",
+    "test_bazel_hardening",
+    "test_bazel_host",
+    "test_bazel_host_tools",
+    "test_bazel_host_tools_projection",
+    "test_bazel_lint_parameters",
+    "test_bazel_provision",
+    "test_bazel_repository",
+    "test_bazel_repository_checks",
+    "test_bazel_sanitizer_cli",
+    "test_bazel_sanitizers",
+    "test_bazel_server_policy",
+    "test_bazel_test_ownership",
+    "test_bazel_toolchain_projection",
+    "test_bazel_validation",
+    "test_bazel_windows_toolchain",
+    "test_bazel_winui_codegen",
+    "test_bazel_winui_ready_cache",
+    "test_bazel_winui_sdk",
+    "test_build_dir",
+    "test_build_env",
+    "test_buildifier",
+    "test_ci_phases",
+    "test_classify",
+    "test_deps_concepts",
+    "test_docs_format",
+    "test_lint_test",
+    "test_naming_doc",
+    "test_native_default_commands",
+    "test_native_deps_report",
+    "test_perf_reports",
+    "test_policy_source_scope",
+    "test_prettier",
+    "test_python_check",
+    "test_setup",
+    "test_test_audit",
+    "test_tidy_inventory",
+    "test_tidy_engine",
+    "test_windows_portal",
+    "test_windows_prerequisites",
+    "test_windows_runtime_workflows",
+    "test_winui",
+    "test_workflow_artifacts",
+]
+
+# Audited narrow library deps per module, never the umbrella. Modules absent
+# from the map need only the shared entry.
+_DEPS = {
+    "test_analyze": [_PORTAL],
+    "test_ao_package_boundaries": [_FOUNDATIONS],
+    "test_appkit_scenarios": [_GRAPH],
+    "test_appkit_process": [_GRAPH],
+    "test_architecture_audit": [_PORTAL],
+    "test_audit_root_guards": [_PORTAL],
+    "test_bazel": [_PORTAL],
+    "test_bazel_appkit": [_PORTAL],
+    "test_bazel_appkit_deps": [_PORTAL],
+    "test_bazel_audio_deps": [_PORTAL],
+    "test_bazel_bootstrap": [_COMMANDS],
+    "test_bazel_catalog": [_FOUNDATIONS],
+    "test_bazel_check": [_COMMANDS],
+    "test_bazel_ci_summary": [_PORTAL],
+    "test_bazel_compile_contract": [_VALIDATION],
+    "test_bazel_concepts": [_PORTAL],
+    "test_bazel_contract_runner": [_VALIDATION],
+    "test_bazel_coverage": [_COMMANDS],
+    "test_bazel_deps": [_PORTAL],
+    "test_bazel_environment": [_PORTAL],
+    "test_bazel_frontend_deps": [_PORTAL],
+    "test_bazel_graph_lint": [_GRAPH],
+    "test_bazel_gtk_deps": [_PORTAL],
+    "test_bazel_hardening": [_VALIDATION],
+    "test_bazel_headers": [_PORTAL],
+    "test_bazel_host": [_PORTAL],
+    "test_bazel_host_tools": [_PORTAL],
+    "test_bazel_host_tools_projection": [_PORTAL],
+    "test_bazel_library": [_PORTAL],
+    "test_bazel_lint": [_COMMANDS],
+    "test_bazel_lint_action": [_GRAPH],
+    "test_bazel_lint_fixture": [_PORTAL],
+    "test_bazel_lint_parameters": [_PORTAL],
+    "test_bazel_lint_reports": [_LINT_RESULT],
+    "test_bazel_lint_result": [_LINT_RESULT],
+    "test_bazel_lint_sdk": [_PORTAL],
+    "test_bazel_live_checkout": [_LIVE_CHECKOUT],
+    "test_bazel_macos_toolchain": [_PORTAL],
+    "test_bazel_native": [_PORTAL],
+    "test_bazel_path_probes": [_NATIVE_SUPPORT],
+    "test_bazel_profiles": [_PORTAL],
+    "test_bazel_provision": [_PORTAL],
+    "test_bazel_remote_cache": [_PORTAL],
+    "test_bazel_remote_cache_wsl_process": [_PORTAL],
+    "test_bazel_repository": [_PORTAL],
+    "test_bazel_repository_checks": _CHECK_ENTRIES_AND_LIVE,
+    "test_bazel_sanitizer_cli": [_COMMANDS],
+    "test_bazel_sanitizers": _NATIVE_AND_PORTAL,
+    "test_bazel_server_policy": [_PORTAL],
+    "test_bazel_shared_headers": [_PORTAL],
+    "test_bazel_test_ownership": [_PORTAL],
+    # The runner test also imports the portal smoke entry and winui admission,
+    # which the narrow native support label deliberately does not own.
+    "test_bazel_test_runner": _NATIVE_AND_PORTAL,
+    "test_bazel_test_services": [_NATIVE_SUPPORT],
+    "test_bazel_toolchain_projection": [_PORTAL],
+    "test_bazel_unittest": _GRAPH_AND_LIVE,
+    "test_bazel_validation": [_VALIDATION],
+    "test_bazel_verify": [_COMMANDS],
+    "test_bazel_windows_linkage": [_PORTAL],
+    "test_bazel_windows_manifest": [_FOUNDATIONS],
+    "test_bazel_windows_toolchain": [_PORTAL],
+    "test_bazel_winui_codegen": [_FOUNDATIONS],
+    "test_bazel_winui_deps": [_PORTAL],
+    "test_bazel_winui_ready_cache": [_PORTAL],
+    "test_bazel_winui_sdk": [_PORTAL],
+    "test_build_dir": [_PORTAL],
+    "test_build_env": [_COMMANDS],
+    "test_buildifier": [_PORTAL],
+    "test_buildifier_commands": [_PORTAL],
+    "test_build_lock": [_FOUNDATIONS],
+    "test_ci_cache_gates": [_FOUNDATIONS],
+    "test_ci_parallelism": [_FOUNDATIONS],
+    "test_ci_phases": [_COMMANDS],
+    "test_classify": [_PORTAL],
+    "test_cli": [_COMMANDS],
+    "test_concept_report": [_PORTAL],
+    "test_dedup": [_POLICY],
+    "test_dependency_policy": [_POLICY],
+    "test_deps_concepts": [_COMMANDS],
+    "test_doc_check": [_PORTAL],
+    "test_doc_check_boundaries": [_PORTAL],
+    "test_doc_check_markdown": [_PORTAL],
+    "test_docs_format": [_COMMANDS],
+    "test_format_text": [_PORTAL],
+    "test_git_files": [_PORTAL],
+    "test_gtk_test_services": [_NATIVE_SUPPORT],
+    "test_guardrails": [_PORTAL],
+    "test_hygiene": [_PORTAL],
+    "test_jobs": [_FOUNDATIONS],
+    "test_lint_test": [_PORTAL],
+    "test_name_audit": [_PORTAL],
+    "test_naming_doc": [_PORTAL],
+    "test_native_default_commands": [_COMMANDS],
+    "test_native_deps_report": [_COMMANDS],
+    "test_nix_output_metadata": [],
+    "test_nix_portal": [],
+    "test_paths": [_GRAPH],
+    "test_perf_identity": [_COMMANDS],
+    "test_perf_reports": [_COMMANDS],
+    "test_phases": [_COMMANDS],
+    "test_policy_source_scope": [_GRAPH],
+    "test_prettier": [_PORTAL],
+    "test_proc": [],
+    "test_python_check": [_PORTAL],
+    "test_python_env": [_PORTAL],
+    "test_r2_credentials": [_PORTAL],
+    "test_setup": [_COMMANDS],
+    "test_test_audit": [_PORTAL],
+    "test_tidy_inventory": [_PORTAL],
+    "test_tidy_path_filters": [_GRAPH],
+    "test_tidy_config": [_POLICY],
+    "test_tidy_engine": [_PORTAL],
+    "test_uimodel_organization": [_PORTAL],
+    "test_validation_scopes": [_COMMANDS],
+    "test_vcpkg_binary_cache": [_PORTAL],
+    "test_windows_llvm_sdk": [_PORTAL],
+    "test_windows_portal": [_COMMANDS],
+    "test_windows_prerequisites": [],
+    "test_windows_runtime_workflows": [_PORTAL],
+    "test_winui": [_PORTAL],
+    "test_worker_phases": [_FOUNDATIONS],
+    "test_workflow_artifacts": [_COMMANDS],
+    "test_workflow_hygiene": [_PORTAL],
+}
+
+# Imported support and cross-test sources, only where the audit found them.
+_SUPPORT = {
+    "test_bazel": ["test_bazel_windows_linkage.py"],
+    "test_bazel_audio_deps": ["test_bazel_windows_linkage.py"],
+    "test_bazel_frontend_deps": ["test_bazel_windows_linkage.py"],
+    "test_bazel_shared_headers": ["test_bazel_deps.py"],
+    "test_bazel_winui_deps": ["test_bazel_windows_linkage.py"],
+    "test_doc_check": ["doc_check_support.py"],
+    "test_doc_check_markdown": ["doc_check_support.py"],
+    "test_lint_test": ["phase_support.py"],
+    "test_perf_identity": ["workflow_support.py"],
+    "test_perf_reports": ["workflow_support.py"],
+    "test_workflow_artifacts": ["workflow_support.py"],
+}
+
+# Declared repository data, only where the audit found the reads. The four
+# dependency/vcpkg contract files recur together.
+_CONTRACT_DATA = [
+    "//:config/bazel/dependencies.json",
+    "//:dependency-contract.json",
+    "//:vcpkg-configuration.json",
+    "//:vcpkg.json",
+]
+
+_REPO_DATA = {
+    "test_ao_package_boundaries": ["//:ao_python_sources"],
+    "test_bazel_appkit_deps": _CONTRACT_DATA,
+    "test_bazel_audio_deps": _CONTRACT_DATA,
+    "test_bazel_catalog": ["//tool/catalog:build_catalog.py"],
+    "test_bazel_frontend_deps": [
+        "//:VERSION.txt",
+        "//:cmake/vcpkg-ports/stb/vcpkg.json",
+        "//:config/bazel/dependencies.json",
+        "//:dependency-contract.json",
+        "//:nixpkgs.json",
+    ],
+    "test_bazel_gtk_deps": [
+        "//:config/bazel/dependencies.json",
+        "//:dependency-contract.json",
+        "//:nixpkgs.json",
+    ],
+    "test_bazel_windows_linkage": _CONTRACT_DATA,
+    "test_bazel_windows_manifest": ["//bazel:verify_windows_utf8_manifest.ps1"],
+    "test_bazel_winui_deps": _CONTRACT_DATA,
+    "test_ci_cache_gates": ["//:.github/workflows/ci.yml"],
+    "test_dependency_policy": [
+        "//:dependency-contract.json",
+        "//:vcpkg.json",
+    ],
+    "test_nix_output_metadata": ["//:shell.nix"],
+}
+
+# The glob is the authority: a new test module must be added to exactly one
+# category list above with its audited deps; the helper fails analysis
+# instead of silently skipping or double-declaring it.
+_ALL_UNIT_MODULES = _UNIT_MODULES + _DATA_MODULES + _HOST_TOOL_MODULES + _CHECKOUT_MODULES
+
+aobus_assert_unit_modules(_ALL_UNIT_MODULES)
+
+_HOST_BACKED_TAGS = [
+    "external",
+    "local",
+]
+
+_HOST_BACKED_MODULES = _HOST_TOOL_MODULES + _CHECKOUT_MODULES
+
+# Host-backed targets declare the anchor file and the official runfiles
+# library: the entry resolves the anchor and always re-execs the physical
+# checkout, on both operating systems.
+_LIVE_CHECKOUT_ARGS = [
+    "--live-checkout",
+    "$(rlocationpath //:VERSION.txt)",
+]
+
+_LIVE_CHECKOUT_DATA = ["//:VERSION.txt"]
+
+_LIVE_CHECKOUT_DEPS = ["@rules_python//python/runfiles"]
+
+# These host-backed modules repeatedly start Windows shells/interpreters. Both
+# reached the 60s short deadline alongside cold native CI actions. Give only
+# these targets 300s without changing their scheduling size.
+_WINDOWS_PROCESS_MODULES = [
+    "test_windows_portal",
+    "test_windows_prerequisites",
+]
+
+[
+    py_test(
+        name = module,
+        size = "small",
+        timeout = "moderate" if module in _WINDOWS_PROCESS_MODULES else "short",
+        srcs = [module + ".py"] + _SUPPORT.get(module, []),
+        args = [module] + (_LIVE_CHECKOUT_ARGS if module in _HOST_BACKED_MODULES else []),
+        data = _REPO_DATA.get(module, []) + (_LIVE_CHECKOUT_DATA if module in _HOST_BACKED_MODULES else []),
+        # The native portal fixture checks reuse of the installed base Python,
+        # including the Windows default when AOBUS_STATE_ROOT is unset.
+        env_inherit = select({
+            "@platforms//os:windows": ["LOCALAPPDATA"] if module == "test_windows_portal" else [],
+            "//conditions:default": [],
+        }),
+        imports = ["."],
+        main_module = _UNIT_ENTRY,
+        precompile = "disabled",
+        tags = _HOST_BACKED_TAGS if module in _HOST_BACKED_MODULES else [],
+        target_compatible_with = select({
+            "@platforms//os:macos": [] if module == _MACOS_SELF_TEST else ["@platforms//:incompatible"],
+            "//conditions:default": [],
+        }),
+        deps = [_ENTRY] + _DEPS.get(module, []) + (_LIVE_CHECKOUT_DEPS if module in _HOST_BACKED_MODULES else []),
+    )
+    for module in _ALL_UNIT_MODULES
+]
+
+# ---------------------------------------------------------------------------
+# Repository checks over the live physical checkout. Each target passes the
+# declared VERSION.txt anchor: the entry always re-execs the physical script
+# before importing any command module, on both operating systems; the child
+# gets the plain command arguments without the flag, which is the loop guard.
+# The checks spawn host tools through the inherited PATH, which is not a
+# hermetic closure, so every target stays local and non-cacheable.
+
+_CHECK_ENTRY = "ao.portal.bazel_repository_checks"
+
+_CHECK_DEPS = [
+    "//:ao_python_check_entries",
+    "@rules_python//python/runfiles",
+]
+
+# Ruff and mypy reuse the existing command builders and never provision a
+# tool. The declared data enumerates the governed source scopes from
+# python_check.DEFAULT_TARGETS plus the configuration and toolchain pins, so
+# the boundary is explicit even though the tool closure cannot be: caching
+# stays off until the tools themselves can be declared.
+_PYTHON_CHECK_DATA = [
+    "//:VERSION.txt",
+    "//:ao_python_sources",
+    "//app/cli:generate_test_library.py",
+    "//bazel/coverage:collect.py",
+    "//:pyproject.toml",
+    "//:script/ao/toolchain.json",
+    "//:script/ao/windows-requirements.txt",
+    "//:script/ao/macos-requirements.txt",
+]
+
+py_test(
+    name = "ruff",
+    size = "medium",
+    args = [
+        "--live-checkout",
+        "$(rlocationpath //:VERSION.txt)",
+        "ruff",
+    ],
+    data = _PYTHON_CHECK_DATA + glob(["*.py"]),
+    main_module = _CHECK_ENTRY,
+    tags = _HOST_BACKED_TAGS,
+    deps = _CHECK_DEPS,
+)
+
+py_test(
+    name = "mypy",
+    size = "medium",
+    args = [
+        "--live-checkout",
+        "$(rlocationpath //:VERSION.txt)",
+        "mypy",
+    ],
+    data = _PYTHON_CHECK_DATA,
+    main_module = _CHECK_ENTRY,
+    tags = _HOST_BACKED_TAGS,
+    deps = _CHECK_DEPS,
+)
+
+# Live documentation integrity; the plain check does not need Prettier.
+py_test(
+    name = "docs",
+    size = "medium",
+    args = [
+        "--live-checkout",
+        "$(rlocationpath //:VERSION.txt)",
+        "docs",
+    ],
+    data = ["//:VERSION.txt"],
+    main_module = _CHECK_ENTRY,
+    tags = _HOST_BACKED_TAGS,
+    deps = _CHECK_DEPS,
+)
+
+# Pure lexical source audits; the receipt goes to TEST_UNDECLARED_OUTPUTS_DIR.
+py_test(
+    name = "guardrails",
+    size = "medium",
+    args = [
+        "--live-checkout",
+        "$(rlocationpath //:VERSION.txt)",
+        "guardrails",
+    ],
+    data = ["//:VERSION.txt"],
+    main_module = _CHECK_ENTRY,
+    tags = _HOST_BACKED_TAGS,
+    deps = _CHECK_DEPS,
+)
+
+# Full-scope formatter check without a Git diff selection. Linux selects the
+# pinned Nix tools through the inherited variables; other hosts need their
+# native clang-format/buildifier/Prettier prerequisites ready before the run.
+py_test(
+    name = "format",
+    size = "large",
+    args = [
+        "--live-checkout",
+        "$(rlocationpath //:VERSION.txt)",
+        "format",
+    ],
+    data = ["//:VERSION.txt"],
+    env_inherit = ["PATH"] + select({
+        "@platforms//os:linux": [
+            "AO_NIX_BUILDIFIER",
+            "AO_NIX_PRETTIER",
+        ],
+        # Bare Windows Bazel can use the ready SDK in %LOCALAPPDATA%\\Aobus
+        # without either an explicit SDK selection or a portal state override.
+        "@platforms//os:windows": [
+            "AOBUS_LLVM_SDK_CACHE_ROOT",
+            "AOBUS_LLVM_SDK_ROOT",
+            "LOCALAPPDATA",
+        ],
+        "//conditions:default": [],
+    }),
+    main_module = _CHECK_ENTRY,
+    tags = _HOST_BACKED_TAGS,
+    deps = _CHECK_DEPS,
+)
+
+# Buildifier lint is independent of the formatter pass: the complete graph can
+# format cleanly while a naming or API convention finding remains. The helper
+# selects the full Bazel/Starlark inventory and never provisions a tool.
+py_test(
+    name = "bazel_lint",
+    size = "medium",
+    args = [
+        "--live-checkout",
+        "$(rlocationpath //:VERSION.txt)",
+        "bazel-lint",
+    ],
+    data = ["//:VERSION.txt"],
+    env_inherit = select({
+        "@platforms//os:linux": ["AO_NIX_BUILDIFIER"],
+        "@platforms//os:windows": ["LOCALAPPDATA"],
+        "//conditions:default": [],
+    }),
+    main_module = _CHECK_ENTRY,
+    tags = _HOST_BACKED_TAGS,
+    deps = _CHECK_DEPS,
+)
+
+# Source conventions and workflow syntax are independent Bazel verdicts.
+py_test(
+    name = "test_audit",
+    args = [
+        "--live-checkout",
+        "$(rlocationpath //:VERSION.txt)",
+        "test-audit",
+    ],
+    data = ["//:VERSION.txt"],
+    main_module = _CHECK_ENTRY,
+    tags = _HOST_BACKED_TAGS,
+    deps = _CHECK_DEPS,
+)
+
+py_test(
+    name = "name_audit",
+    args = [
+        "--live-checkout",
+        "$(rlocationpath //:VERSION.txt)",
+        "name-audit",
+    ],
+    data = ["//:VERSION.txt"],
+    main_module = _CHECK_ENTRY,
+    tags = _HOST_BACKED_TAGS,
+    deps = _CHECK_DEPS,
+)
+
+py_test(
+    name = "workflows",
+    args = [
+        "--live-checkout",
+        "$(rlocationpath //:VERSION.txt)",
+        "workflow-lint",
+    ],
+    data = ["//:VERSION.txt"],
+    env_inherit = ["AO_NIX_ACTIONLINT"],
+    main_module = _CHECK_ENTRY,
+    tags = _HOST_BACKED_TAGS,
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = _CHECK_DEPS,
+)
+
+# This data-only source inventory carries Portal modules without a Portal
+# library dependency. Keep the real package initializer in its runfiles.
+portal_initializer_runfiles_test(
+    name = "test_package_boundary_runfiles",
+    size = "small",
+    initializer = "//:script/ao/portal/__init__.py",
+    subject = ":test_ao_package_boundaries",
+)
+
+# Suites are convenient focused selections; //... discovers the same tests.
+test_suite(
+    name = "tooling_tests",
+    tests = [":" + module for module in _ALL_UNIT_MODULES] + [":test_package_boundary_runfiles"],
+)
+
+# Completion requires passing summaries for this suite's members on their supported hosts.
+test_suite(
+    name = "repository_checks",
+    tests = [
+        ":bazel_lint",
+        ":docs",
+        ":format",
+        ":guardrails",
+        ":mypy",
+        ":name_audit",
+        ":ruff",
+        ":test_audit",
+        ":workflows",
+    ],
+)

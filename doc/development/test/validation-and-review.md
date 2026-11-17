@@ -19,8 +19,8 @@ When creating a new test file:
 Registrations live only
 in `*Test.cpp`/`*Test.mm` files (`*Benchmark.cpp` for benchmark cases);
 [naming and assertions](naming-and-assertion.md#tags) owns the discovery and
-placement contract. Standalone `test-audit` and hygiene's source audit do not
-require a build tree or check ownership. The completion gate's ownership check
+placement contract. The source audit in scoped `check lint` does not require
+a build tree or check ownership; other applicable lint stages may need native tools. The completion gate's ownership check
 joins registration discovery with the Bazel graph — a declaring `cc_test` the
 gate executes, or a `cc_binary` it builds — so an unowned or never-run test
 source fails the gate; keep throwaway tests outside the checkout. When moving tests between binaries, compare
@@ -40,7 +40,7 @@ the helpers needed to explain its assertions. Names and keyword searches
 are triage only. Judge scope and `[concurrency]` from the asserted contract, not
 from the fixture's threads or binary. For an exhaustive review, keep a per-case
 record of reviewed and pending cases outside the repository and report gaps; a
-clean `test-audit` or passing run does not show the review is complete.
+clean test audit or passing run does not show the review is complete.
 
 ## Large test files
 
@@ -72,9 +72,9 @@ combine routes when a change spans several rows.
 | Change or task                                                      | Completion evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Read-only review or diagnosis                                       | Source evidence and the relevant existing validator or focused reproducer. No build is required solely to finish a review.                                                                                                                                                                                                                                                                                                                                                                           |
-| Documentation or agent instructions                                 | `./ao docs check --format`, agreement with the owning code/policy, and representative task routing when skill behavior changes. Changes to skill scripts also take the tooling row.                                                                                                                                                                                                                                                                                                                  |
-| Python portal or automation scripts                                 | `./ao check` on Linux, `ao.bat check` on Windows for affected Windows behavior; these include tooling and hygiene. Use the [standalone tooling runner](test-suite.md#tooling-and-lint-fixtures) while iterating. Exercise changed shell/bootstrap/process boundaries on their native hosts. macOS has no tooling suite; use native portal probes and scoped hygiene there.                                                                                                                           |
-| C++ implementation, headers, or tests                               | One full native `check`, including its full C++ lint coverage and scoped hygiene. Add affected native hosts when their implementation, toolchain, or frontend is involved.                                                                                                                                                                                                                                                                                                                           |
+| Documentation or agent instructions                                 | `./ao check docs` and `./ao check format --docs`, agreement with the owning code/policy, and representative task routing when skill behavior changes. Changes to skill scripts also take the tooling row.                                                                                                                                                                                                                                                                                            |
+| Python portal or automation scripts                                 | `./ao check` on Linux, `ao.bat check` on Windows for affected Windows behavior; these include the tooling targets. Use the [standalone tooling suite](test-suite.md#tooling-and-lint-fixtures) while iterating. Exercise changed shell/bootstrap/process boundaries on their native hosts. macOS selects only the remote-cache self-test module from the tooling graph; use native portal probes and scoped `check lint` there.                                                                      |
+| C++ implementation, headers, or tests                               | One full native `check`, including its declared whole-graph lint test. Add affected native hosts when their implementation, toolchain, or frontend is involved.                                                                                                                                                                                                                                                                                                                                      |
 | Build configuration, dependencies, native test orchestration, or CI | Tooling checks plus the affected native build/test matrix. Include Release or sanitizers when the changed configuration or behavior requires them.                                                                                                                                                                                                                                                                                                                                                   |
 | Catalog-only wording in an existing maintained locale               | Build affected frontends to regenerate catalogs, run the catalog suite (`bazel test //test:i18n_test`) and any affected message-specific tests identified by the [text-catalog reference](../../system/presentation/text-catalog.md#compatibility-and-test-authority), and inspect the changed UI at normal and constrained widths. Native Windows UI evidence is needed when WinUI consumes the changed text; unchanged projection rules do not independently require the full Windows parity gate. |
 | UI, localization, or audio behavior                                 | The applicable implementation route plus focused visual, catalog, or audible evidence for the changed user-facing behavior. New locales or changes to locale selection, signatures, or WinUI projection rules include native Windows parity validation.                                                                                                                                                                                                                                              |
@@ -88,54 +88,55 @@ For changes requiring complete native validation, run:
 
 ```bash
 ./ao check
-# To choose an explicit hygiene comparison base:
-./ao check --commit origin/main
+# CI supplies its own configuration:
+./ao check --ci
 ```
 
-`check` combines live documentation validation, tooling on Linux/Windows,
-native completion, optional sanitizer validation, and hygiene
-([completion gate](../bazel.md#completion-gate)). Hygiene's formatting, audit,
-Python, Bazel and workflow stages stay diff-scoped, while the gate's C++ lint
-stage covers the complete native project graph regardless of `--commit` or
-local changes; standalone `ao hygiene` and `ao tidy` remain scoped.
-`--commit BASE` chooses only the hygiene diff base; it never narrows native
-completion or the C++ lint stage. Default local changed-scope hygiene behavior
-is unchanged. An explicitly invoked `./ao check` is complete for every change,
-including documentation-only edits: the full C++ graph lint and authored-source
-ownership audits run regardless of the diff, and a cold cache pays that
-analysis cost — cache reuse never makes the gate free. Docs-only local
-validation has the fast `./ao docs check --format` entry, while docs-only CI events
-route to the documentation job ([continuous integration](#continuous-integration)).
-CI uses the same full command for native changes, and its separate
-documentation job remains responsible for docs-only routing.
-The tooling suite also tests the document checker against isolated fixtures.
+`check` prepares the ready native environment and runs one `bazel test //...`
+([completion gate](../bazel.md#completion-gate)), so the graph itself owns live
+documentation, formatting, lexical source guardrails, test and class naming
+audits, workflow lint, Ruff/mypy, one target per tooling module, native tests
+and the whole-graph lint test. `--ci` adds the repository CI configuration;
+`check` has no `--commit` selector and always checks the complete source
+snapshot. After Bazel succeeds, `check` verifies BEP passing summaries for its
+required platform-selected checks; cached passes are accepted unless `--fresh`
+is selected, and optional test semantics are unchanged. Standalone `ao check docs`,
+`ao check format`, and `ao check lint` remain task-specific entries; the docs semantics check is always global. An explicitly invoked `./ao check` is complete for every change,
+including documentation-only edits: the whole-graph lint test runs regardless of
+the diff, and a cold cache pays that analysis cost — cache reuse never makes the
+gate free. Docs-only local validation uses `./ao check docs` plus
+`./ao check format --docs`, while docs-only CI events route to the documentation job
+([continuous integration](#continuous-integration)). CI uses the same command
+for native changes, and its separate documentation job remains responsible for
+docs-only routing. The tooling targets also test the document checker against
+isolated fixtures.
 
-`hygiene` remains a useful standalone check-only entry and uses the same
-implementation invoked by `check`: formatting, source audits and Python checks
-for files in scope, plus native clang-tidy coverage for selected C++ files and
-the Linux-owned workflow-lint stage over direct `.github/workflows` YAML
-([workflow lint](../linting.md#github-actions-workflow-lint)). Standalone
-`hygiene` keeps its C++ stage diff-scoped; only `check` widens it to the
-complete project C++ graph
+`check lint` remains a useful standalone semantic check: source audits and
+Python checks for files in scope, plus native clang-tidy coverage for selected
+C++ files and the Linux-owned workflow-lint stage over direct `.github/workflows` YAML
+([workflow lint](../linting.md#github-actions-workflow-lint)). Its C++ stage
+stays diff-scoped; `check` does not invoke it, and the gate's whole-graph lint
+coverage is the declared `//:production_lint` test
 ([lint reports](../bazel.md#lint-reports)).
 It never rewrites source. Sanitizer execution remains separate from the normal
 lint configuration; a sanitizer result cannot stand in for native lint.
 
 `./ao check` is the completion route
-([completion gate](../bazel.md#completion-gate)): it builds the
-platform products and the manual GUI/performance harnesses without running
-them, executes the `//:check_tests` aggregate plus the configured
-`//:check_native_tests` backend selection — portable default tests, Linux
-headless GTK, the backend suite and lint fixtures — plus the
-two unattended native WinUI console probes, and gates the shared
-completion audits and test ownership; on Linux and Windows it also
-runs the repository tooling suite. By
-default it admits passing test summaries from Bazel's result cache or new
-executions under the same strict label, configuration and BEP membership;
-`--fresh` forces `--nocache_test_results` and rejects any cached result
+([completion gate](../bazel.md#completion-gate)): it builds the platform
+products and the manual GUI/performance harnesses without running them, runs
+the portable suites, the native process tests, the GTK, backend and lint-fixture
+tests listed by `//:check_tests`, the root `//:native_policy` audit, and on
+Linux the `//:native_driver_policy` diagnostic and
+[instrumentation analysis tests](../bazel.md#native-instrumentation-tests). On
+Windows it runs the two unattended native console probes plus, under
+`--config=ci`, the declared WinUI automation test. By default it admits passing test summaries from Bazel's
+result cache or new executions; `--fresh` adds `--nocache_test_results` so every
+selected test executes again
 ([test-result cache admission](../bazel.md#test-result-cache-admission)).
-Documentation and hygiene are included; standalone `docs check` and
-`hygiene` remain available for focused validation.
+Documentation, formatting, source and naming audits, workflow lint, the native
+policy tests and the tooling targets are graph tests inside the same check;
+standalone `check docs`, `check format`, and `check lint` remain available for
+task-specific validation.
 
 C++ concurrency-sensitive changes additionally follow
 [concurrency and sanitizer validation](concurrency-and-sanitizer.md) and run:
@@ -149,7 +150,10 @@ bazel test //test:async_test --test_filter='[concurrency]~[.]'
 `./ao check --asan` and `./ao check --tsan` run the full normal fastbuild
 completion first, then a separate managed sanitizer profile in the same
 selected tree; a Debug result is never relabeled as a sanitized
-one ([sanitizer profiles](../bazel.md#sanitizer-profiles)). Both admit cached
+one ([sanitizer profiles](../bazel.md#sanitizer-profiles)). The normal
+completion already includes the Linux-only instrumentation analysis tests,
+which prove configured flags and providers rather than executing a sanitizer
+suite. Both admit cached
 test results unless `--fresh` requires new executions; a memory-safety or
 concurrency fix asks for `--fresh`, because rerunning an unchanged binary is
 what samples another interleaving.
@@ -165,8 +169,11 @@ bazel test //test:uimodel_test --test_filter='Component - behavior'
 ```
 
 Use the actual owning executable: a selected binary with no matching case
-fails. Explicit GTK/backend labels require caller-prepared native prerequisites;
-`ao check` owns the private display, bus, and audio services for completion.
+fails. On Linux, GTK and backend tests declare their own context, and the declared
+context-specific wrapper starts only the private fixtures that context
+requests — display, session bus, GTK environment profile and private audio
+for `gtk`; a private session bus with private PipeWire services and no display
+for `audio` — so an explicit label needs only the ready native tools and SDK.
 Focused results do not replace a full gate required by the table.
 Reuse a successful check when the relevant source, tests, dependencies,
 configuration, platform, and selected scope are unchanged.
@@ -175,23 +182,24 @@ created, or unrelated prose changes.
 Re-run affected checks after corrections; broaden only when new evidence shows
 another execution boundary is involved.
 
-`hygiene` is check-only, resolves its source scope once, skips empty stage
-subsets, and stops after a formatting failure before running audits or tidy.
-Explicit file and directory scopes for `format`, `hygiene`, `test-audit`, and
-`name-audit` must exist; a missing path fails even when an audit is advisory.
+`check lint` is read-only, resolves its source scope once, and skips empty stage
+subsets. It performs no formatting or global documentation check; use
+`check format` and `check docs` separately.
+Explicit file and directory scopes for `format`, `check format`, `check lint`,
+and `check analyzer` must exist; a missing path fails even with `--report-only`.
 Existing empty directories and scopes with no applicable files remain valid.
 Use an explicit scope or `--commit <base>` when validating a subset of a larger
-branch. `--all` requests whole-source hygiene; the full `check` independently
-owns repository-wide guardrails and the complete C++ lint graph.
+branch. `--all` requests whole-source lint; `check` independently owns the
+repository-wide `guardrails` target and the `//:production_lint` test.
 
-Required `hygiene`, the Ruff/mypy checks bundled with tooling tests, and scoped
+Required `check lint`, the graph's Ruff/mypy targets, and scoped
 formatting corrections needed to complete an authorized edit do not require a
 separate lint request. Review any formatting diff and preserve unrelated work.
 Standalone lint campaigns or cleanup beyond the authorized change require an
 explicit request. Such a request uses:
 
 ```bash
-./ao tidy
+./ao check lint
 ```
 
 If the task is explicitly about coverage percentage or missing lines, use `coverage-workflow.md` instead of guessing from source files.
@@ -203,8 +211,9 @@ checks. Run formatting as a separate step, review its diff, and re-read rewritte
 files before relying on earlier file text. Do not chain source-rewriting format
 with builds or tests, or repeat it merely because another build or test starts.
 For a route requiring full validation, the order is source edits and formatting,
-then `./ao check`, which includes check-only hygiene. Standalone scoped
-`./ao hygiene` can be used while iterating without repeating native completion.
+then `./ao check`, whose graph includes the formatting and guardrail targets.
+Standalone scoped `./ao check format` and `./ao check lint` can be used while
+iterating without repeating native completion.
 
 If a later correction rewrites validated inputs, rerun the affected checks under
 the reuse rules above. A passing check from before that rewrite is not evidence
@@ -214,7 +223,8 @@ for the new inputs.
 
 The existing Linux, macOS Intel/ARM64, and Windows check identities are
 retained. A separate unconditional documentation job resolves the event's
-verified comparison base once, then runs `ao docs check --format` for
+verified comparison base once, then runs `ao check docs` and
+`ao check format --docs` for
 documentation-only, code-only, and mixed changes before native build work.
 A successful, nonempty Markdown-only change in the recognized root-document,
 `doc/`, `.agents/skills/`, `tool/`, `app/`, or `asset/` paths skips native jobs.
@@ -227,8 +237,9 @@ The documentation job prepares the Python version from
 `script/ao/docs-requirements.txt` with `--require-hashes`,
 `--only-binary=:all:`, and `--no-deps`, then prepares the hash-pinned Node/Prettier
 closure with `python -m ao setup prettier`. It invokes
-`python -m ao docs check --format` with `PYTHONPATH=script`; neither step enters
-the C++ Nix development environment.
+`python -m ao check docs` and `python -m ao check format --docs` with
+`PYTHONPATH=script`; setup and both checks use host Python, outside Nix and
+without preparing a native SDK.
 Unknown paths, script or workflow changes, empty comparisons, and manual
 `workflow_dispatch` runs select the full native matrix.
 Renames are compared as deletion plus addition so moving code into a Markdown
@@ -237,18 +248,17 @@ If classification or documentation validation fails, the existing native jobs
 are still scheduled and run a failing prerequisite step before native setup or
 compilation, rather than appearing successfully skipped.
 This changes workflow routing without changing repository branch-protection rules.
-The native jobs run the complete `ao check` in fastbuild, including live
-documentation, tooling on Linux/Windows, native completion, and the local
-hygiene implementation whose C++ lint stage covers the complete project C++
-graph; `--commit BASE` scopes only the diff-driven hygiene stages, not native
-C++ lint. Ordinary CI admits matching passing Bazel
-test results from cache; use `--fresh` when new executions are required for
-diagnosis. CI supplies its verified comparison base with `--commit BASE` ([CI product
-gates](../bazel.md#ci-product-gates-and-r2-validation)). Linux also runs the
-[instrumentation smoke](../bazel.md#ci-instrumentation-smoke) after
-its Nix/cache preparation and before product completion. Those checks require
-the native SDK; they do not expand the documentation job or certify sanitizer
-or coverage runtime execution. CI runs the same Bazel completion route as the
+The native jobs run `ao check --ci` in fastbuild: the same graph covers live
+documentation, tooling on Linux/Windows, native tests, the native-policy audits
+and the whole-graph lint test. Ordinary CI admits matching passing Bazel test
+results from cache; use
+`--fresh` when new executions are required for diagnosis ([CI product
+gates](../bazel.md#ci-product-gates-and-r2-validation)). Daily CI is fastbuild
+only. Linux adds a separate bounded bare Bazel entry without duplicating the
+whole-graph lint check. Release verification is deferred to its own job. The Linux job's graph includes the
+[instrumentation tests](../bazel.md#native-instrumentation-tests) inside the same
+check. Those tests require the native SDK; they do not expand the documentation
+job or certify sanitizer or coverage runtime execution. CI runs the same Bazel completion route as the
 local commands above.
 
 ## Common smells to fix while writing tests

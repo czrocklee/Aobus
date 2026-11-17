@@ -7,11 +7,11 @@ import sys
 from dataclasses import asdict
 from pathlib import Path
 
-# CMake executes this file directly; Bazel and the portal can import the API.
+# Direct script execution needs the same package root as module invocation.
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).absolute().parent.parent))
 
-from ao.core import guardrails
+from ao.portal import guardrails
 
 
 def _regex(args: argparse.Namespace, name: str) -> str | None:

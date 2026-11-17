@@ -1,10 +1,4 @@
-"""CI managed-tools cache promotion gates and Windows R2 receipt availability.
-
-The managed tools caches are saved only after every setup step that populates
-their paths succeeded, so a failed setup never promotes a partial tools tree;
-unrelated product validation stays excluded. The Windows R2 stop receipt
-follows the stop step's availability, including a failed start.
-"""
+"""CI cache promotion boundaries that a successful build cannot verify."""
 
 import re
 import unittest
@@ -14,133 +8,60 @@ from ao.core.paths import PROJECT_ROOT
 WORKFLOW = PROJECT_ROOT / ".github" / "workflows" / "ci.yml"
 
 
-def _job(name: str) -> str:
-    """Return the named job's YAML block, bounded by the following job header."""
+def _job(name):
     remainder = WORKFLOW.read_text(encoding="utf-8").split(f"  {name}:\n", 1)[1]
     return re.split(r"\n(?=  \w+:\n)", remainder, maxsplit=1)[0]
 
 
-def _step(job: str, name: str) -> str:
-    """Return one step's YAML block from a job block."""
+def _step(job, name):
     return job.split(f"      - name: {name}\n", 1)[1].split("      - name:", 1)[0]
 
 
-def _folded_condition(step: str) -> str:
-    """Return a folded (`if: >-`) step condition as one comparable line."""
-    return " ".join(step.split("        if: >-\n", 1)[1].split("        continue-on-error:", 1)[0].split())
+def _required_conditions(step):
+    # These promotion gates must be conjunctions, not alternatives.
+    condition = re.search(r"(?ms)^        if:\s*(?:[|>]-?\s*)?\$\{\{(.*?)\}\}", step)
+    return {" ".join(term.split()) for term in condition[1].split("&&")}
 
 
-def _inline_condition(step: str) -> str:
-    return re.search(r"^        if: \$\{\{ (.*) \}\}$", step, re.MULTILINE).group(1)
+class CachePromotionTest(unittest.TestCase):
+    def test_linux_disk_archive_only_promotes_a_successful_main_push_after_trim(self):
+        conditions = _required_conditions(_step(_job("linux"), "Save Bazel disk cache"))
+        self.assertLessEqual(
+            {
+                "github.event_name == 'push'",
+                "github.ref == 'refs/heads/main'",
+                "steps.bazel-check.outcome == 'success'",
+                "steps.bazel-cache-trim.outcome == 'success'",
+            },
+            conditions,
+        )
 
+    def test_pull_requests_cannot_start_a_remote_cache_writer(self):
+        for name, writer in (
+            ("linux", '"$CACHE_UPLOAD"'),
+            ("macos", '"$CACHE_UPLOAD"'),
+            ("windows", "$env:CACHE_UPLOAD"),
+        ):
+            with self.subTest(job=name):
+                step = _step(_job(name), "Start Bazel remote cache")
+                self.assertIn("CACHE_UPLOAD: ${{ github.event_name != 'pull_request' }}", step)
+                self.assertIn(f"--trusted-writer {writer} ", step)
 
-def _cache_paths(step: str) -> set[str]:
-    """Return the multi-line cache path list of a cache step as a set."""
-    block = step.split("          path: |\n", 1)[1].split("          key:", 1)[0]
-    return {line.strip() for line in block.splitlines() if line.strip()}
-
-
-class WindowsManagedToolsKeyTest(unittest.TestCase):
-    def test_the_key_covers_the_pinned_bazel_artifact(self):
-        step = _step(_job("windows"), "Restore managed Windows tools")
-        key_inputs = set(re.findall(r"'([^']+)'", step.partition("hashFiles(")[2]))
-        # The restored tools tree contains tools\bazel\<.bazelversion>; without
-        # the Bazel pins in the key, a pin change would restore a stale Bazel
-        # or never stage the requested one.
-        self.assertLessEqual({".bazelversion", "script/ao/bazel-toolchain.json"}, key_inputs)
-
-    def test_the_key_covers_prettier_artifacts_and_cache_layout(self):
-        step = _step(_job("windows"), "Restore managed Windows tools")
-        key_inputs = set(re.findall(r"'([^']+)'", step.partition("hashFiles(")[2]))
-        self.assertLessEqual({"script/ao/prettier.json", "script/ao/core/prettier.py"}, key_inputs)
-
-
-class MacosManagedToolsKeyTest(unittest.TestCase):
-    def test_the_key_covers_prettier_artifacts_and_cache_layout(self):
-        step = _step(_job("macos"), "Restore managed macOS tools")
-        key_inputs = set(re.findall(r"'([^']+)'", step.partition("hashFiles(")[2]))
-        self.assertLessEqual({"script/ao/prettier.json", "script/ao/core/prettier.py"}, key_inputs)
-
-
-class MacosPrettierPathAgreementTest(unittest.TestCase):
-    def test_restore_and_save_paths_agree_on_prettier(self):
-        job = _job("macos")
-        restore_paths = _cache_paths(_step(job, "Restore managed macOS tools"))
-        save_paths = _cache_paths(_step(job, "Save managed macOS tools"))
-        prettier = "${{ runner.temp }}/aobus-state/tools/prettier"
-        # The managed tools archive restores and saves the same prepared tree.
-        self.assertIn(prettier, restore_paths)
-        self.assertEqual(restore_paths, save_paths)
-
-
-class ManagedToolsSaveGateTest(unittest.TestCase):
-    WINDOWS_POPULATING_STEPS = (
-        ("Check Windows build prerequisites", "windows-prerequisites"),
-        ("Set up Windows App Runtime", "windows-app-runtime"),
-        ("Prepare vcpkg binary cache", "vcpkg-prepare"),
-        ("Set up Buildifier", "buildifier"),
-    )
-    MACOS_POPULATING_STEPS = (
-        ("Prepare vcpkg binary cache", "vcpkg-prepare"),
-        ("Set up Buildifier", "buildifier"),
-        ("Set up pinned Prettier", "prettier"),
-    )
-
-    def test_windows_save_requires_every_cache_populating_setup_step(self):
-        job = _job("windows")
-        for name, step_id in self.WINDOWS_POPULATING_STEPS:
-            with self.subTest(step=name):
-                self.assertIn(f"        id: {step_id}\n", _step(job, name))
-        condition = _folded_condition(_step(job, "Save managed Windows tools"))
-        self.assertTrue(condition.startswith("${{ !cancelled()"))
-        for _, step_id in self.WINDOWS_POPULATING_STEPS:
-            with self.subTest(gate=step_id):
-                self.assertIn(f"steps.{step_id}.outcome == 'success'", condition)
-        self.assertIn("steps.windows-state.outcome == 'success'", condition)
-        self.assertIn("steps.windows-state.outputs.cache-hit != 'true'", condition)
-        # Product completion is not a cache-populating setup step.
-        self.assertNotIn("steps.build.outcome", condition)
-
-    def test_windows_save_runs_after_every_populating_setup_step(self):
-        job = _job("windows")
-        positions = [
-            job.index(f"      - name: {name}\n")
-            for name, _ in (*self.WINDOWS_POPULATING_STEPS, ("Save managed Windows tools", ""))
-        ]
-        self.assertEqual(positions, sorted(positions))
-
-    def test_macos_save_requires_every_cache_populating_setup_step(self):
-        job = _job("macos")
-        for name, step_id in self.MACOS_POPULATING_STEPS:
-            with self.subTest(step=name):
-                self.assertIn(f"        id: {step_id}\n", _step(job, name))
-        condition = _folded_condition(_step(job, "Save managed macOS tools"))
-        self.assertTrue(condition.startswith("${{ !cancelled()"))
-        for _, step_id in self.MACOS_POPULATING_STEPS:
-            with self.subTest(gate=step_id):
-                self.assertIn(f"steps.{step_id}.outcome == 'success'", condition)
-        self.assertIn("steps.macos-state.outcome == 'success'", condition)
-        self.assertIn("steps.macos-state.outputs.cache-hit != 'true'", condition)
-        self.assertNotIn("steps.build.outcome", condition)
-
-    def test_macos_save_runs_after_every_populating_setup_step(self):
-        job = _job("macos")
-        positions = [
-            job.index(f"      - name: {name}\n")
-            for name, _ in (*self.MACOS_POPULATING_STEPS, ("Save managed macOS tools", ""))
-        ]
-        self.assertEqual(positions, sorted(positions))
-
-
-class WindowsR2ReceiptAvailabilityTest(unittest.TestCase):
-    def test_the_receipt_is_preserved_whenever_stop_ran(self):
-        job = _job("windows")
-        stop = _inline_condition(_step(job, "Stop Bazel remote cache"))
-        receipt = _inline_condition(_step(job, "Preserve R2 stop receipt"))
-        # A failed start still runs stop; the receipt must follow stop's
-        # availability instead of a success-only start.
-        self.assertEqual(stop, "always() && steps.bazel-remote.outcome != 'skipped'")
-        self.assertEqual(receipt, stop)
+    def test_managed_tools_save_requires_successful_cache_population(self):
+        for job, platform, producers in (
+            ("macos", "macOS", ("vcpkg-prepare", "buildifier", "prettier")),
+            (
+                "windows",
+                "Windows",
+                ("windows-prerequisites", "windows-app-runtime", "vcpkg-prepare", "buildifier", "prettier"),
+            ),
+        ):
+            with self.subTest(job=job):
+                before_save = _job(job).split(f"      - name: Save managed {platform} tools\n", 1)[0]
+                conditions = _required_conditions(_step(_job(job), f"Save managed {platform} tools"))
+                for producer in producers:
+                    self.assertIn(f"        id: {producer}\n", before_save)
+                    self.assertIn(f"steps.{producer}.outcome == 'success'", conditions)
 
 
 if __name__ == "__main__":

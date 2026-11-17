@@ -1,39 +1,37 @@
-"""Tests for the combined project hygiene commands."""
+"""Source-operation contracts formerly exposed by the combined hygiene route."""
 
-import argparse
 import contextlib
 import io
-import os
-import sys
 import tempfile
 import unittest
-from argparse import Namespace
 from pathlib import Path
-from types import SimpleNamespace
 from unittest import mock
 
-from ao.__main__ import make_parser
-from ao.command import format as format_command
-from ao.command import hygiene, tidy
-from ao.core import bazel_native as native
-from ao.core import compiler_policy
-from ao.core.paths import PROJECT_ROOT
+from ao.policy import compiler_policy
+from ao.portal import build_dir, buildifier, compiler_rc, source_format, source_lint, source_scope
+from ao.portal.source_lint import LintRequest
+from ao.portal.source_scope import SourceScope
 
 
-class FormatCommandTest(unittest.TestCase):
-    def test_dispatches_cpp_and_python_files_to_their_formatters(self):
-        args = Namespace(files=["lib/Foo.cpp", "script/foo.py"], all=False, commit=None, check=True)
+class FormatServiceTest(unittest.TestCase):
+    def test_cpp_python_and_bazel_sources_reach_independent_ready_only_formatters(self):
+        scope = SourceScope(("lib/Foo.cpp", "script/foo.py", "BUILD"))
+        for check in (False, True):
+            with (
+                self.subTest(check=check),
+                mock.patch.object(source_scope, "require_files"),
+                mock.patch.object(source_format, "run_clang_format", return_value=0) as clang,
+                mock.patch.object(source_format, "run_ruff_format", return_value=0) as ruff,
+                mock.patch.object(buildifier, "run", return_value=0) as bazel,
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                run = source_format.check if check else source_format.rewrite
+                self.assertEqual(run(scope), 0)
+            clang.assert_called_once_with(["lib/Foo.cpp"], check=check, clang_format=None)
+            ruff.assert_called_once_with(["script/foo.py"], check=check, python=None)
+            bazel.assert_called_once_with(["BUILD"], check=check, provision=False)
 
-        with mock.patch.object(format_command, "_file_exists", return_value=True):
-            with mock.patch.object(format_command, "run_clang_format", return_value=0) as clang:
-                with mock.patch.object(format_command, "run_ruff_format", return_value=0) as ruff:
-                    with contextlib.redirect_stdout(io.StringIO()):
-                        self.assertEqual(format_command.run_command(args), 0)
-
-        clang.assert_called_once_with(["lib/Foo.cpp"], check=True, build_dir=None, clang_format=None)
-        ruff.assert_called_once_with(["script/foo.py"], check=True, python=None)
-
-    def test_msvc_rc_projection_check_never_rewrites_and_format_preserves_other_options(self):
+    def test_msvc_projection_check_never_rewrites_and_rewrite_preserves_unrelated_options(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             policy = root / "bazel/msvc_policy.bzl"
@@ -50,654 +48,204 @@ class FormatCommandTest(unittest.TestCase):
                 "test --test_output=errors\n"
             )
             path.write_text(original, encoding="utf-8")
-            args = Namespace(files=[".bazelrc"], all=False, folder=[], commit=None, check=True)
             with (
-                mock.patch.object(format_command, "PROJECT_ROOT", root),
-                mock.patch.object(format_command.gitfiles, "PROJECT_ROOT", root),
+                mock.patch.object(source_scope, "PROJECT_ROOT", root),
                 mock.patch.object(compiler_policy, "PROJECT_ROOT", root),
+                mock.patch.object(compiler_rc, "PROJECT_ROOT", root),
                 contextlib.redirect_stdout(io.StringIO()),
                 contextlib.redirect_stderr(io.StringIO()),
             ):
-                self.assertEqual(format_command.run_command(args), 1)
+                scope = SourceScope((".bazelrc",))
+                self.assertEqual(source_format.check(scope), 1)
                 self.assertEqual(path.read_text(encoding="utf-8"), original)
-                args.check = False
-                self.assertEqual(format_command.run_command(args), 0)
+                self.assertEqual(source_format.rewrite(scope), 0)
                 self.assertEqual(
-                    path.read_text(encoding="utf-8"),
-                    "build --compilation_mode=dbg\n"
-                    "# BEGIN GENERATED MSVC FLAGS: bazel/msvc_policy.bzl\n"
-                    "build:windows --repo_env=BAZEL_CXXOPTS=/std%:c++latest:/utf-8\n"
-                    "# END GENERATED MSVC FLAGS\n"
-                    "test --test_output=errors\n",
+                    path.read_text(encoding="utf-8"), original.replace("/std%:c++17", "/std%:c++latest:/utf-8")
                 )
-                args.check = True
-                self.assertEqual(format_command.run_command(args), 0)
-                # Native rc also accepts a split option; it must not silently
-                # override the generated view while check-only formatting passes.
+                self.assertEqual(source_format.check(scope), 0)
                 with path.open("a", encoding="utf-8") as stream:
                     stream.write("build:windows --repo_env BAZEL_CXXOPTS=/std%:c++17\n")
                 with self.assertRaises(ValueError):
-                    compiler_policy.format_msvc_rc(check=True)
+                    compiler_rc.format_msvc_rc(check=True)
 
-    def test_bazel_coverage_collector_stays_in_changed_and_all_format_scopes(self):
-        collector = "bazel/coverage/collect.py"
-        changed_args = Namespace(files=[], all=False, folder=[], commit=None)
-        all_args = Namespace(files=[], all=True, folder=[], commit=None)
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            collector_file = root / "bazel" / "coverage" / "collect.py"
-            collector_file.parent.mkdir(parents=True)
-            collector_file.write_text("# coverage collector\n", encoding="utf-8")
-            generated = root / "bazel" / "coverage" / "__pycache__" / "collect.cpython-314.pyc"
-            generated.parent.mkdir()
-            generated.write_bytes(b"generated")
-            foreign = root / "sdk-cache" / "Cache.cpp"
-            foreign.parent.mkdir(parents=True)
-            foreign.write_text("// foreign SDK cache tree\n", encoding="utf-8")
-
+    def test_windows_clang_format_uses_the_ready_pinned_sdk_or_an_explicit_tool(self):
+        sdk = Path("ready-sdk")
+        for explicit in (None, "explicit-clang-format"):
             with (
-                mock.patch.object(format_command, "PROJECT_ROOT", root),
-                mock.patch.object(format_command.gitfiles, "PROJECT_ROOT", root),
+                self.subTest(explicit=explicit),
+                mock.patch.object(build_dir, "platform_profile", return_value=build_dir.WINDOWS_PROFILE),
+                mock.patch.object(source_format.windows_llvm_sdk, "read_manifest"),
+                mock.patch.object(source_format.windows_llvm_sdk, "ready_root", return_value=(sdk, True)) as ready,
+                mock.patch.object(source_format.subprocess, "run", return_value=mock.Mock(returncode=0)) as process,
+                contextlib.redirect_stdout(io.StringIO()),
             ):
-                with mock.patch.object(
-                    format_command.gitfiles,
-                    "changed_paths",
-                    return_value=[collector, "sdk-cache/Cache.cpp"],
-                ) as changed:
-                    self.assertEqual(format_command.resolve_files(changed_args), [collector])
-                changed.assert_called_once_with(None)
-
-                # The --all scan walks the real folder selection: the tracked collector
-                # is selected while the generated __pycache__ artifact and the foreign
-                # SDK cache tree stay out of the scope.
-                self.assertEqual(format_command.resolve_files(all_args), [collector])
-
-    def test_ruff_format_uses_shared_cache_commands_and_preserves_tool_failures(self):
-        # Mocked platform argv is not proof of a native filesystem or cache write.
-        process_python_state = (sys.platform, sys.executable, sys.prefix)
-        prefix = str(Path("managed tool env").absolute())
-        files = ["script/a file.py", "script/other.py"]
-        native_command = (
-            "managed-python",
-            "-I",
-            "-m",
-            "ruff",
-            "format",
-            "--cache-dir",
-            prefix + os.sep + ".ruff_cache",
-        )
-        for platform, command in (
-            ("linux", ("managed-python", "-m", "ruff", "format")),
-            ("win32", native_command),
-            ("darwin", native_command),
-        ):
-            for check in (False, True):
-                for code in (0, 1, 2):
-                    with (
-                        self.subTest(platform=platform, check=check, code=code),
-                        mock.patch.object(format_command.pythoncheck, "os", SimpleNamespace(name="posix")),
-                        mock.patch.object(
-                            format_command.pythoncheck, "tool_versions", return_value={"python": "3.14.10"}
-                        ),
-                        mock.patch.object(
-                            format_command.pythoncheck,
-                            "sys",
-                            SimpleNamespace(platform=platform, prefix=prefix, executable="managed-python"),
-                        ),
-                        mock.patch.object(
-                            format_command.subprocess, "run", return_value=mock.Mock(returncode=code)
-                        ) as run,
-                        contextlib.redirect_stdout(io.StringIO()),
-                    ):
-                        self.assertEqual(format_command.run_ruff_format(files, check=check), int(code != 0))
-                        self.assertEqual((sys.platform, sys.executable, sys.prefix), process_python_state)
-                        mode = ("--check",) if check else ()
-                        run.assert_called_once_with(
-                            (*command, "--target-version", "py314", *mode, *files), cwd=format_command.PROJECT_ROOT
-                        )
-
-    def test_empty_python_format_scope_does_not_start_ruff(self):
-        with mock.patch.object(format_command.subprocess, "run") as run:
-            self.assertEqual(format_command.run_ruff_format([], check=True), 0)
-        run.assert_not_called()
-
-    def test_windows_clang_format_uses_the_ready_pinned_sdk_tool(self):
-        sdk = Path(r"C:\state\llvm\toolchains\llvm-22.1.8-x86_64-windows-msvc")
-        manifest = mock.Mock()
-
-        with (
-            mock.patch.object(
-                format_command.builddir, "platform_profile", return_value=format_command.builddir.WINDOWS_PROFILE
-            ),
-            mock.patch.object(format_command.windows_llvm_sdk, "read_manifest", return_value=manifest) as read,
-            mock.patch.object(format_command.windows_llvm_sdk, "ready_root", return_value=(sdk, True)),
-            mock.patch.object(format_command.subprocess, "run", return_value=mock.Mock(returncode=0)) as run,
-            contextlib.redirect_stdout(io.StringIO()),
-        ):
-            self.assertEqual(format_command.run_clang_format(["lib/Foo.cpp"], check=True), 0)
-
-        read.assert_called_once_with(format_command.windows_llvm_sdk.MANIFEST)
-        run.assert_called_once_with(
-            [str(sdk / "bin" / "clang-format.exe"), "--dry-run", "-Werror", "lib/Foo.cpp"],
-            cwd=format_command.PROJECT_ROOT,
-        )
-
-    def test_explicit_clang_format_replaces_the_sdk_selection(self):
-        explicit = r"C:\sdk\bin\clang-format.exe"
-        with (
-            mock.patch.object(
-                format_command.builddir, "platform_profile", return_value=format_command.builddir.WINDOWS_PROFILE
-            ),
-            mock.patch.object(
-                format_command.windows_llvm_sdk, "read_manifest", side_effect=AssertionError("no SDK discovery")
-            ),
-            mock.patch.object(format_command.subprocess, "run", return_value=mock.Mock(returncode=0)) as run,
-            contextlib.redirect_stdout(io.StringIO()),
-        ):
-            self.assertEqual(format_command.run_clang_format(["lib/Foo.cpp"], check=False, clang_format=explicit), 0)
-        run.assert_called_once_with([explicit, "-i", "lib/Foo.cpp"], cwd=format_command.PROJECT_ROOT)
-
-    def test_clang_format_batches_include_fragments_with_cpp_sources(self):
-        with mock.patch.object(
-            format_command.builddir,
-            "platform_profile",
-            return_value=format_command.builddir.LINUX_PROFILE,
-        ):
-            with mock.patch.object(
-                format_command.subprocess,
-                "run",
-                return_value=mock.Mock(returncode=0),
-            ) as run:
                 self.assertEqual(
-                    format_command.run_clang_format(
-                        ["lib/Foo.cpp", "app/include/ao/i18n/MessageInventory.def"], check=True
+                    source_format.run_clang_format(
+                        ["lib/Foo.cpp", "include/Inventory.def"], check=True, clang_format=explicit
                     ),
                     0,
                 )
-
-        run.assert_called_once_with(
-            [
-                "clang-format",
-                "--dry-run",
-                "-Werror",
-                "lib/Foo.cpp",
-                "app/include/ao/i18n/MessageInventory.def",
-            ],
-            cwd=format_command.PROJECT_ROOT,
-        )
-
-
-class TidyDiagnosticRoutingTest(unittest.TestCase):
-    def test_mixed_scope_preserves_native_python_and_buildifier_diagnostics_in_one_report(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            files = ["lib/Example.cpp", "script/example.py", "BUILD.bazel"]
-            for name in files:
-                path = root / name
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.touch()
-            report = root / "diagnostics.txt"
-            args = Namespace(
-                check=None,
-                output=str(report),
-                config="debug",
-                path=None,
-                vcpkg_prefix=None,
-                jobs=1,
-                remote_cache=None,
+            process.assert_called_once_with(
+                [
+                    explicit or str(sdk / "bin/clang-format.exe"),
+                    "--dry-run",
+                    "-Werror",
+                    "lib/Foo.cpp",
+                    "include/Inventory.def",
+                ],
+                cwd=source_format.PROJECT_ROOT,
             )
+            self.assertEqual(ready.call_count, int(explicit is None))
 
-            def native(arguments):
-                self.assertEqual(arguments._resolved_sources, ["lib/Example.cpp"])
-                Path(arguments.output).write_text("native diagnostic\n", encoding="utf-8")
-                return 1
-
-            def python(paths, *, python, sink):
-                self.assertEqual(paths, ["script/example.py"])
-                sink.write("Python diagnostic\n")
-                return 1
-
-            def bazel(paths, *, check, lint, sink):
-                self.assertEqual(paths, ["BUILD.bazel"])
-                self.assertTrue(check and lint)
-                sink.write("Buildifier diagnostic\n")
-                return 1
-
+    def test_ruff_formatter_preserves_check_mode_and_tool_failure(self):
+        for check, code, arguments, expected in (
+            (False, 0, ["format", "script/file.py"], 0),
+            (True, 2, ["format", "--check", "script/file.py"], 1),
+        ):
             with (
-                mock.patch.object(tidy, "PROJECT_ROOT", root),
-                mock.patch.object(tidy.bazel_lint, "run", side_effect=native),
-                mock.patch.object(tidy.pythoncheck, "run_paths", side_effect=python),
-                mock.patch.object(tidy.buildifier, "run", side_effect=bazel),
+                self.subTest(check=check),
+                mock.patch.object(
+                    source_format.python_check, "ruff_command", return_value=("python", "-m", "ruff")
+                ) as command,
+                mock.patch.object(source_format.subprocess, "run", return_value=mock.Mock(returncode=code)),
                 contextlib.redirect_stdout(io.StringIO()),
             ):
-                self.assertEqual(tidy.run_lint_stages(args, files, True), 1)
-            self.assertEqual(
-                report.read_text(encoding="utf-8"), "native diagnostic\nPython diagnostic\nBuildifier diagnostic\n"
-            )
-
-    def test_cpp_check_selector_skips_unrelated_language_checks(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            files = ["example.py", "BUILD.bazel"]
-            for name in files:
-                (root / name).touch()
-            with (
-                mock.patch.object(tidy, "PROJECT_ROOT", root),
-                mock.patch.object(tidy.pythoncheck, "run_paths") as python,
-                mock.patch.object(tidy.buildifier, "run") as bazel,
-            ):
-                self.assertEqual(tidy.run_lint_stages(Namespace(check="aobus-example", output=None), files, True), 0)
-            python.assert_not_called()
-            bazel.assert_not_called()
+                self.assertEqual(
+                    source_format.run_ruff_format(["script/file.py"], check=check, python=Path("managed")), expected
+                )
+            command.assert_called_once_with(*arguments, python=Path("managed"))
 
 
-def _hygiene_args(**overrides):
-    defaults = {"files": [], "all": False, "folder": [], "commit": None, "path": None, "jobs": 1}
-    defaults.update(overrides)
-    return Namespace(**defaults)
-
-
-class HygieneCommandTest(unittest.TestCase):
+class SourceLintTest(unittest.TestCase):
     def setUp(self):
-        self.stack = contextlib.ExitStack()
-        self.addCleanup(self.stack.close)
-        self.files = [
-            "test/audio/FooTest.cpp",
-            "test/audio/FooTestSupport.h",
-            "test/tui/TrackTableBenchmark.cpp",
-            "lib/audio/Foo.h",
-            "script/foo.py",
-        ]
-        self.test_tree_files = self.files[:3]
-        self.resolve = self.stack.enter_context(
-            mock.patch.object(hygiene.format_command, "resolve_files", return_value=self.files)
-        )
-        self.stack.enter_context(mock.patch.object(hygiene.format_command, "_file_exists", return_value=True))
-        self.format = self.stack.enter_context(mock.patch.object(hygiene.format_command, "run_command", return_value=0))
-        self.test_audit = self.stack.enter_context(mock.patch.object(hygiene.test_audit, "run_command", return_value=0))
-        self.name_audit = self.stack.enter_context(mock.patch.object(hygiene.name_audit, "run_command", return_value=0))
-        self.lint = self.stack.enter_context(mock.patch.object(tidy, "run_lint_stages", return_value=0))
-        self.native_gate = self.stack.enter_context(mock.patch.object(hygiene, "_run_native", return_value=0))
-        self.stderr = self.stack.enter_context(contextlib.redirect_stderr(io.StringIO()))
-        self.stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
+        self.root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        for module in (source_lint, source_scope):
+            self.enterContext(mock.patch.object(module, "PROJECT_ROOT", self.root))
+        self.enterContext(contextlib.redirect_stdout(io.StringIO()))
+        self.enterContext(contextlib.redirect_stderr(io.StringIO()))
+        self.native = self.enterContext(mock.patch.object(source_lint.bazel_lint, "run", return_value=0))
+        self.tests = self.enterContext(mock.patch.object(source_lint, "audit_tests", return_value=0))
+        self.names = self.enterContext(mock.patch.object(source_lint, "audit_names", return_value=0))
+        self.python = self.enterContext(mock.patch.object(source_lint.python_check, "run_paths", return_value=0))
+        self.bazel = self.enterContext(mock.patch.object(buildifier, "lint_paths", return_value=0))
+        self.workflows = self.enterContext(mock.patch.object(source_lint, "check_workflows", return_value=0))
 
-    def test_the_default_route_delegates_to_the_governed_native_hygiene(self):
-        args = _hygiene_args()
-        self.native_gate.return_value = 3
-        self.assertEqual(hygiene.run_command(args), 3)
-        self.native_gate.assert_called_once_with(args, project_lint=False)
-        self.format.assert_not_called()
-        self.lint.assert_not_called()
+    def scope(self, *files, explicit=()):
+        for name in files:
+            path = self.root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.touch()
+        return SourceScope(files, explicit)
 
-    def test_explicit_tree_reaches_formatting_and_the_lint_stage(self):
-        selected = str(Path("/custom/builds/tidy"))
-        self.assertEqual(hygiene.run_command(_hygiene_args(path=selected), lint=("tidy", self.lint)), 0)
-        self.assertEqual(self.format.call_args.kwargs["build_dir"], Path(selected))
-        self.lint.assert_called_once_with(self.files, False)
+    def test_mixed_scope_appends_all_diagnostics_after_native_report(self):
+        scope = self.scope("lib/Example.cpp", "script/example.py", "BUILD.bazel")
+        report = self.root / "diagnostics.txt"
 
-    def test_resolves_once_and_preserves_implicit_scope_for_the_lint_stage(self):
-        self.assertEqual(hygiene.run_command(_hygiene_args(), lint=("tidy", self.lint)), 0)
-        self.resolve.assert_called_once()
-        self.assertTrue(self.format.call_args.args[0].check)
-        self.assertEqual(self.format.call_args.kwargs["files"], self.files)
-        # Content discovery, not the registration filename convention: the
-        # header and the benchmark source reach the test audit alongside the
-        # registration file, while lib/ and Python files do not.
-        self.assertEqual(self.test_audit.call_args.args[0].paths, self.test_tree_files)
-        self.assertEqual(self.name_audit.call_args.args[0].paths, self.files[:4])
-        self.assertTrue(self.test_audit.call_args.args[0].fail_on_issue)
-        self.lint.assert_called_once_with(self.files, False)
+        def native(request):
+            self.assertEqual(request._resolved_sources, ("lib/Example.cpp",))
+            self.assertIsInstance(request, LintRequest)
+            Path(request.output).write_text("native diagnostic\n", encoding="utf-8")
+            return 1
 
-    def test_python_scope_skips_cpp_audits_and_preserves_explicit_selection(self):
-        self.resolve.return_value = ["script/foo.py"]
-        self.assertEqual(hygiene.run_command(_hygiene_args(files=["script/foo.py"]), lint=("tidy", self.lint)), 0)
-        self.test_audit.assert_not_called()
-        self.name_audit.assert_not_called()
-        self.lint.assert_called_once_with(["script/foo.py"], True)
+        def python(paths, *, python, sink):
+            self.assertEqual(paths, ["script/example.py"])
+            sink.write("Python diagnostic\n")
+            return 1
 
-    def test_objective_cpp_tests_reach_the_test_audit(self):
-        self.resolve.return_value = ["test/media/FooTest.mm"]
-        self.assertEqual(hygiene.run_command(_hygiene_args(), lint=("tidy", self.lint)), 0)
-        self.assertEqual(self.test_audit.call_args.args[0].paths, ["test/media/FooTest.mm"])
-        self.assertTrue(self.test_audit.call_args.args[0].fail_on_issue)
+        def bazel(paths, *, sink, provision):
+            self.assertEqual(paths, ["BUILD.bazel"])
+            self.assertFalse(provision)
+            sink.write("Buildifier diagnostic\n")
+            return 1
 
-    def test_registration_in_a_support_file_fails_hygiene(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            path = root / "test" / "query" / "FooSupport.cpp"
-            path.parent.mkdir(parents=True)
-            path.write_text('TEST_CASE("Foo - preserves the contract") {}\n', encoding="utf-8")
-            self.resolve.return_value = [str(path)]
-            self.test_audit.side_effect = lambda args: int(
-                bool(hygiene.test_audit.testaudit.audit_paths(args.paths, root))
-            )
-            is_candidate = hygiene.testaudit.is_audit_candidate
-            with mock.patch.object(
-                hygiene.testaudit, "is_audit_candidate", side_effect=lambda name: is_candidate(name, root)
-            ):
-                self.assertEqual(hygiene.run_command(_hygiene_args(), lint=("tidy", self.lint)), 1)
-        self.assertTrue(self.test_audit.call_args.args[0].fail_on_issue)
-        self.name_audit.assert_called_once()
-        self.lint.assert_called_once()
-
-    def test_lint_fixtures_never_reach_the_test_audit(self):
-        self.resolve.return_value = ["test/lint/fixture/aobus-check/BasicTest.cpp"]
-        self.assertEqual(hygiene.run_command(_hygiene_args(), lint=("tidy", self.lint)), 0)
-        self.test_audit.assert_not_called()
-        self.assertEqual(self.name_audit.call_args.args[0].paths, self.resolve.return_value)
-
-    def test_empty_scope_does_not_expand_to_a_repository_scan(self):
-        self.resolve.return_value = []
-        self.assertEqual(hygiene.run_command(_hygiene_args(), lint=("tidy", self.lint)), 0)
-        for stage in (self.format, self.test_audit, self.name_audit, self.lint):
-            stage.assert_not_called()
-
-    def test_complete_native_lint_is_not_skipped_by_an_empty_source_diff(self):
-        self.resolve.return_value = []
-        self.lint.return_value = 1
-        self.assertEqual(hygiene.run_command(_hygiene_args(), lint=("bazel lint", self.lint), project_lint=True), 1)
-        self.lint.assert_called_once_with([], False)
-        for stage in (self.format, self.test_audit, self.name_audit):
-            stage.assert_not_called()
-
-    def test_format_failure_stops_before_audits_and_the_lint_stage(self):
-        self.format.return_value = 1
-        self.assertEqual(hygiene.run_command(_hygiene_args(), lint=("tidy", self.lint)), 1)
-        self.test_audit.assert_not_called()
-        self.name_audit.assert_not_called()
-        self.lint.assert_not_called()
-        self.assertIn("check-only", self.stderr.getvalue())
-        self.assertIn("./ao format", self.stderr.getvalue())
-
-    def test_audit_failures_propagate_without_claiming_lint_failed(self):
-        for stage, label in ((self.test_audit, "Test names/tags"), (self.name_audit, "Class/file names")):
-            with self.subTest(label=label):
-                stage.return_value = 1
-                self.assertEqual(hygiene.run_command(_hygiene_args(), lint=("tidy", self.lint)), 1)
-                self.assertIn(label, self.stderr.getvalue())
-                self.assertNotIn("Lint findings", self.stderr.getvalue())
-                stage.return_value = 0
-
-    def test_caller_lint_stage_replaces_tidy_with_the_same_scope_and_failure_report(self):
-        stage = mock.Mock(return_value=1)
-        args = _hygiene_args(files=list(self.files))
-        managed = Path("managed tool env") / "bin" / "python"
+        self.native.side_effect = native
+        self.python.side_effect = python
+        self.bazel.side_effect = bazel
+        self.assertEqual(source_lint.run(scope, LintRequest(output=str(report))), 1)
         self.assertEqual(
-            hygiene.run_command(args, clang_format="sdk-clang-format", python=managed, lint=("bazel lint", stage)), 1
+            report.read_text(encoding="utf-8"), "native diagnostic\nPython diagnostic\nBuildifier diagnostic\n"
         )
-        self.assertEqual(self.format.call_args.kwargs["clang_format"], "sdk-clang-format")
-        self.assertEqual(self.format.call_args.kwargs["python"], managed)
-        stage.assert_called_once_with(self.files, True)
-        self.native_gate.assert_not_called()
-        self.assertIn("Lint findings", self.stderr.getvalue())
 
-    def test_subcommand_args_use_the_real_parser_defaults(self):
-        args = _hygiene_args(jobs=4)
-        for register_command, name, build in (
-            (format_command.register, "format", lambda _: hygiene._format_args()),
-            (hygiene.test_audit.register, "test-audit", lambda _: hygiene._test_audit_args([])),
-            (hygiene.name_audit.register, "name-audit", lambda _: hygiene._name_audit_args([])),
+    def test_named_native_check_skips_all_unrelated_languages_audits_and_formatters(self):
+        scope = self.scope("lib/Example.cpp", "script/example.py", "BUILD.bazel")
+        with mock.patch.object(source_format, "check", side_effect=AssertionError("no formatter")):
+            self.assertEqual(source_lint.run(scope, LintRequest(tidy_check="aobus-no-c-assert")), 0)
+        self.native.assert_called_once()
+        for stage in (self.tests, self.names, self.python, self.bazel, self.workflows):
+            stage.assert_not_called()
+
+    def test_cpp_test_and_objective_cpp_support_files_reach_audits_without_production_files(self):
+        scope = self.scope("test/audio/FooTest.cpp", "test/audio/FooSupport.h", "test/media/FooTest.mm", "lib/Foo.h")
+        self.assertEqual(source_lint.run(scope, LintRequest()), 0)
+        self.tests.assert_called_once_with(list(scope.files[:3]), report_only=False, sink=None)
+        self.names.assert_called_once_with(scope.files, report_only=False, sink=None)
+
+    def test_mixed_file_and_directory_provenance_does_not_promote_scanned_fixtures(self):
+        explicit = "test/lint/fixture/aobus-no-c-assert/Explicit.cpp"
+        scanned = "test/lint/fixture/aobus-no-c-assert/Scanned.cpp"
+        scope = self.scope("lib/Foo.cpp", explicit, scanned, explicit=(explicit,))
+        self.assertEqual(source_lint.run(scope, LintRequest()), 0)
+        request = self.native.call_args.args[0]
+        self.assertEqual(request._resolved_sources, ("lib/Foo.cpp", explicit))
+        self.assertEqual(request.files, (explicit,))
+        self.tests.assert_not_called()
+
+    def test_empty_scope_and_missing_prepared_path_do_not_expand_or_prepare_native_context(self):
+        self.assertEqual(source_lint.run(SourceScope(), LintRequest()), 0)
+        with self.assertRaisesRegex(ValueError, "does not exist"):
+            source_lint.run(SourceScope(("lib/Missing.cpp",)), LintRequest())
+        for stage in (self.native, self.tests, self.names, self.python, self.bazel, self.workflows):
+            stage.assert_not_called()
+
+    def test_report_only_suppresses_findings_but_preserves_python_and_buildifier_tool_errors(self):
+        scope = self.scope("script/example.py", "BUILD.bazel")
+        self.python.return_value = self.bazel.return_value = 1
+        self.assertEqual(source_lint.run(scope, LintRequest(report_only=True)), 0)
+        self.python.return_value = 2
+        self.assertEqual(source_lint.run(scope, LintRequest(report_only=True)), 2)
+        self.python.return_value = 1
+        self.bazel.side_effect = buildifier.BuildifierError("broken tool protocol")
+        self.assertEqual(source_lint.run(scope, LintRequest(report_only=True)), 2)
+
+    def test_audit_failures_propagate_and_report_only_is_explicit(self):
+        scope = self.scope("test/audio/FooTest.cpp")
+        for stage in (self.tests, self.names):
+            stage.return_value = 1
+            self.assertEqual(source_lint.run(scope, LintRequest()), 1)
+            stage.return_value = 0
+        self.assertEqual(source_lint.run(scope, LintRequest(report_only=True)), 0)
+        self.tests.assert_called_with(["test/audio/FooTest.cpp"], report_only=True, sink=None)
+        self.names.assert_called_with(("test/audio/FooTest.cpp",), report_only=True, sink=None)
+
+    def test_explicit_owner_request_uses_native_engine_without_source_discovery(self):
+        request = LintRequest(owner_targets=("//lib:audio",), config="debug", jobs=3)
+        with mock.patch.object(source_scope, "resolve", side_effect=AssertionError("no discovery")):
+            self.assertEqual(source_lint.run(None, request), 0)
+        selected = self.native.call_args.args[0]
+        self.assertEqual((selected.owner_targets, selected.config, selected.jobs), (("//lib:audio",), "debug", 3))
+
+
+class SourceAuditTest(unittest.TestCase):
+    def test_audit_findings_are_gated_by_default_and_remain_visible_in_report_only(self):
+        for engine, run in (
+            (source_lint.test_audit, source_lint.audit_tests),
+            (source_lint.name_audit, source_lint.audit_names),
         ):
-            parser = argparse.ArgumentParser()
-            register_command(parser.add_subparsers())
-            self.assertEqual(vars(build(args)).keys(), vars(parser.parse_args([name])).keys(), name)
-
-
-class NativeHygieneSelectionTest(unittest.TestCase):
-    """The flat gate's native-tools selection and staged lint callback."""
-
-    STATE = str(Path(tempfile.gettempdir()) / "aobus-native-hygiene-state")
-    TOOLS = Path(tempfile.gettempdir()) / "aobus-native-hygiene-tools" / "bin" / "python"
-
-    def gate(self, arguments, host="linux", environment=None, files=None, project_lint=False):
-        """Run the flat gate with its shared stages faked; return the gate's selections."""
-        if files is None:
-            files = ["script/ao/command/hygiene.py", "lib/utility/Base64.cpp"]
-        args = make_parser().parse_args(["hygiene", *arguments])
-        run_command = hygiene.run_command
-        with (
-            mock.patch.object(native, "native_platform", return_value=host),
-            mock.patch.dict(os.environ, {"AOBUS_STATE_ROOT": self.STATE, **(environment or {})}),
-            mock.patch("ao.core.gitfiles.changed_paths", return_value=files),
-            mock.patch("ao.core.pythonenv.ensure_environment", return_value=self.TOOLS) as tools,
-            mock.patch.object(hygiene, "run_command", return_value=0) as gate,
-        ):
-            self.assertEqual(run_command(args, project_lint=project_lint), 0)
-        gate.assert_called_once()
-        self.assertIs(gate.call_args.args[0], args)
-        self.assertEqual(gate.call_args.kwargs["project_lint"], project_lint)
-        # The Nix shell's interpreter already carries Ruff and mypy.
-        if host == "linux" or not any(name.endswith(".py") for name in files):
-            tools.assert_not_called()
-            self.assertIsNone(gate.call_args.kwargs["python"])
-        else:
-            tools.assert_called_once_with(PROJECT_ROOT, Path(self.STATE), platform_name=host)
-            self.assertEqual(gate.call_args.kwargs["python"], self.TOOLS)
-        # The changed-path scope is resolved as a sorted selection.
-        self.assertEqual(args._resolved_sources, sorted(files))
-        return gate.call_args.kwargs
-
-    def test_complete_lint_uses_the_project_graph_instead_of_repeating_scoped_native_lint(self):
-        for files in ([], ["lib/utility/Base64.cpp"]):
-            with self.subTest(files=files):
-                stage = self.gate([], files=files, project_lint=True)
-                _, lint = stage["lint"]
+            issue = engine.Issue(Path("test/audio/FooSupport.cpp"), 4, "fixture-finding", "invalid source convention")
+            for report_only in (False, True):
                 with (
-                    mock.patch("ao.core.bazel_lint.run_project", return_value=1) as project,
-                    mock.patch("ao.core.bazel_lint.run") as scoped,
+                    self.subTest(engine=engine.__name__, report_only=report_only),
+                    mock.patch.object(engine, "audit_paths", return_value=[issue]) as audit,
                     contextlib.redirect_stdout(io.StringIO()),
+                    contextlib.redirect_stderr(io.StringIO()) as stderr,
                 ):
-                    self.assertEqual(lint(files, False), 1)
-                project.assert_called_once()
-                scoped.assert_not_called()
-
-    def test_lint_stage_routes_python_to_its_checks_and_cpp_to_bazel_lint_in_the_gate_tree(self):
-        tree = str(Path(tempfile.gettempdir()) / "aobus-native-hygiene")
-        stage = self.gate(
-            [
-                *("--config", "release", "--path", tree, "--vcpkg-prefix", "/vcpkg", "-j", "6"),
-                *("--remote-cache", "https://cache.example"),
-            ]
-        )
-        self.assertIsNone(stage["clang_format"])
-        label, lint = stage["lint"]
-        self.assertEqual(label, "bazel lint")
-        files = ["script/ao/command/hygiene.py", "lib/utility/Base64.cpp", "lib/utility/Missing.cpp"]
-        # The lint stage parses tidy's own registration for its defaults.
-        parser = argparse.ArgumentParser()
-        tidy.register(parser.add_subparsers())
-        defaults = vars(parser.parse_args(["tidy"]))
-        for explicit in (True, False):
-            with (
-                self.subTest(explicit=explicit),
-                mock.patch("ao.core.pythoncheck.run_paths", return_value=0) as python,
-                mock.patch("ao.core.bazel_lint.run", return_value=1) as native_lint,
-                contextlib.redirect_stdout(io.StringIO()),
-            ):
-                self.assertEqual(lint(files, explicit), 1)
-            python.assert_called_once_with(["script/ao/command/hygiene.py"], python=None, sink=None)
-            selected = vars(native_lint.call_args.args[0])
-            self.assertEqual(selected.pop("_resolved_sources"), ["lib/utility/Base64.cpp"])
-            expected = {
-                **defaults,
-                "config": "release",
-                "path": tree,
-                "vcpkg_prefix": "/vcpkg",
-                "jobs": 6,
-                "remote_cache": "https://cache.example",
-                "files": ["lib/utility/Base64.cpp"] if explicit else [],
-            }
-            self.assertEqual(selected, expected)
-
-    def test_python_failure_fails_the_stage_without_starting_bazel_for_no_cpp_scope(self):
-        _, lint = self.gate([])["lint"]
-        with (
-            mock.patch("ao.core.pythoncheck.run_paths", return_value=1),
-            mock.patch("ao.core.bazel_lint.run", side_effect=AssertionError("no C++ scope")),
-            contextlib.redirect_stdout(io.StringIO()),
-        ):
-            self.assertEqual(lint(["script/ao/command/hygiene.py"], True), 1)
-
-    def test_native_hosts_run_only_ruff_and_mypy_in_the_managed_tool_environment(self):
-        # Both native hosts take the same non-Linux branch in the native gate; one
-        # representative host proves the managed-tool environment is used.
-        with mock.patch("ao.core.windows_llvm_sdk.ready_root", return_value=(Path("sdk"), True)):
-            _, lint = self.gate([], host="macos")["lint"]
-            with (
-                mock.patch("ao.core.pythoncheck.run_paths", return_value=0) as python,
-                contextlib.redirect_stdout(io.StringIO()),
-            ):
-                self.assertEqual(lint(["script/ao/command/hygiene.py"], True), 0)
-            python.assert_called_once_with(["script/ao/command/hygiene.py"], python=self.TOOLS, sink=None)
-
-    def test_empty_scope_skips_native_tool_requirements(self):
-        for host in ("windows", "macos"):
-            args = make_parser().parse_args(["hygiene"])
-            with (
-                self.subTest(host=host),
-                mock.patch.object(native, "native_platform", return_value=host),
-                mock.patch("ao.core.gitfiles.changed_paths", return_value=[]) as changed,
-                mock.patch("ao.core.windows_llvm_sdk.ready_root", side_effect=AssertionError("no SDK for empty scope")),
-                mock.patch(
-                    "ao.core.pythonenv.ensure_environment", side_effect=AssertionError("no empty tooling stage")
-                ),
-                mock.patch("ao.command.format.run_command", side_effect=AssertionError("no formatting stage")),
-                contextlib.redirect_stdout(io.StringIO()) as stdout,
-            ):
-                self.assertEqual(hygiene.run_command(args), 0)
-            changed.assert_called_once()
-            self.assertEqual(args._resolved_sources, [])
-            self.assertIn("No files to check.", stdout.getvalue())
-
-    def test_python_only_windows_scope_needs_no_llvm_sdk(self):
-        source = "script/ao/core/pythoncheck.py"
-        args = make_parser().parse_args(["hygiene", source])
-        with (
-            mock.patch.object(native, "native_platform", return_value="windows"),
-            mock.patch.dict(os.environ, {"AOBUS_STATE_ROOT": self.STATE}),
-            mock.patch("ao.core.windows_llvm_sdk.ready_root", side_effect=AssertionError("SDK not provisioned")),
-            mock.patch("ao.core.pythonenv.ensure_environment", return_value=self.TOOLS) as tools,
-            mock.patch("ao.command.format.run_ruff_format", return_value=0) as formatting,
-            mock.patch("ao.core.pythoncheck.run_paths", return_value=0) as python,
-            mock.patch("ao.core.bazel_lint.run", side_effect=AssertionError("no C++ stage")),
-            contextlib.redirect_stdout(io.StringIO()),
-        ):
-            self.assertEqual(hygiene.run_command(args), 0)
-        tools.assert_called_once_with(PROJECT_ROOT, Path(self.STATE), platform_name="windows")
-        formatting.assert_called_once_with([source], check=True, python=self.TOOLS)
-        python.assert_called_once_with([source], python=self.TOOLS, sink=None)
-
-    def test_cpp_only_native_scope_does_not_prepare_python_tools(self):
-        source = "lib/utility/Base64.cpp"
-        for host in ("windows", "macos"):
-            args = make_parser().parse_args(["hygiene", source])
-            with (
-                self.subTest(host=host),
-                mock.patch.object(native, "native_platform", return_value=host),
-                mock.patch("ao.core.windows_llvm_sdk.ready_root", return_value=(Path("sdk"), True)) as sdk,
-                mock.patch("ao.core.pythonenv.ensure_environment", side_effect=AssertionError("no Python scope")),
-                mock.patch("ao.command.format.run_clang_format", return_value=0) as formatting,
-                mock.patch("ao.command.name_audit.run_command", return_value=0),
-                mock.patch("ao.core.pythoncheck.run_paths", side_effect=AssertionError("no Python stage")),
-                mock.patch("ao.core.bazel_lint.run", return_value=0) as native_lint,
-                contextlib.redirect_stdout(io.StringIO()),
-            ):
-                self.assertEqual(hygiene.run_command(args), 0)
-            formatting.assert_called_once_with(
-                [source],
-                check=True,
-                build_dir=None,
-                clang_format=str(Path("sdk/bin/clang-format.exe")) if host == "windows" else None,
-            )
-            self.assertEqual(native_lint.call_args.args[0]._resolved_sources, [source])
-            if host == "windows":
-                sdk.assert_called_once()
-            else:
-                sdk.assert_not_called()
-
-    def test_scope_is_reused_and_managed_tools_leave_bazel_on_the_portal_interpreter(self):
-        sources = ["script/ao/core/pythoncheck.py", "lib/utility/Base64.cpp"]
-        args = make_parser().parse_args(["hygiene"])
-        portal_python = sys.executable
-
-        def lint(selected):
-            self.assertEqual(selected._resolved_sources, [sources[1]])
-            self.assertEqual(sys.executable, portal_python)
-            return 0
-
-        with (
-            mock.patch.object(native, "native_platform", return_value="windows"),
-            mock.patch.dict(os.environ, {"AOBUS_STATE_ROOT": self.STATE}),
-            mock.patch("ao.core.gitfiles.changed_paths", return_value=sources) as changed,
-            mock.patch("ao.core.windows_llvm_sdk.ready_root", return_value=(Path("sdk"), True)),
-            mock.patch("ao.core.pythonenv.ensure_environment", return_value=self.TOOLS) as tools,
-            mock.patch("ao.command.format.run_clang_format", return_value=0),
-            mock.patch("ao.command.format.run_ruff_format", return_value=0) as formatting,
-            mock.patch("ao.command.name_audit.run_command", return_value=0),
-            mock.patch("ao.core.pythoncheck.run_paths", return_value=0) as python,
-            mock.patch("ao.core.bazel_lint.run", side_effect=lint) as native_lint,
-            contextlib.redirect_stdout(io.StringIO()),
-        ):
-            self.assertEqual(hygiene.run_command(args), 0)
-        changed.assert_called_once()
-        tools.assert_called_once_with(PROJECT_ROOT, Path(self.STATE), platform_name="windows")
-        formatting.assert_called_once_with([sources[0]], check=True, python=self.TOOLS)
-        python.assert_called_once_with([sources[0]], python=self.TOOLS, sink=None)
-        native_lint.assert_called_once()
-        self.assertEqual(sys.executable, portal_python)
-
-    def test_tool_environment_failure_stops_before_any_stage(self):
-        args = make_parser().parse_args(["hygiene", "script/ao/command/hygiene.py"])
-        run_command = hygiene.run_command
-        with (
-            mock.patch.object(native, "native_platform", return_value="macos"),
-            mock.patch.dict(os.environ, {"AOBUS_STATE_ROOT": self.STATE}),
-            mock.patch("ao.core.pythonenv.ensure_environment", side_effect=RuntimeError("no locked wheel")),
-            mock.patch.object(hygiene, "run_command", side_effect=AssertionError("no gate without tools")),
-            contextlib.redirect_stderr(io.StringIO()) as stderr,
-            self.assertRaises(SystemExit),
-        ):
-            run_command(args)
-        self.assertIn("Python tooling bootstrap failed: no locked wheel", stderr.getvalue())
-
-    def test_windows_formats_with_the_provisioned_sdk_or_names_provisioning(self):
-        from ao.core import windows_llvm_sdk
-
-        with tempfile.TemporaryDirectory(prefix="aobus-native-hygiene-sdk-") as temporary:
-            root = Path(temporary)
-            for relative in windows_llvm_sdk.read_manifest(windows_llvm_sdk.MANIFEST).required_files:
-                (root / relative).parent.mkdir(parents=True, exist_ok=True)
-                (root / relative).write_bytes(b"")
-            stage = self.gate(
-                [], host="windows", environment={"AOBUS_LLVM_SDK_ROOT": temporary}, files=["lib/utility/Base64.cpp"]
-            )
-            self.assertEqual(stage["clang_format"], str(root / "bin/clang-format.exe"))
-            (root / "bin/clang-format.exe").unlink()
-            args = make_parser().parse_args(["hygiene", "lib/utility/Base64.cpp"])
-            run_command = hygiene.run_command
-            with (
-                mock.patch.object(native, "native_platform", return_value="windows"),
-                mock.patch.dict(os.environ, {"AOBUS_LLVM_SDK_ROOT": temporary}),
-                mock.patch.object(hygiene, "run_command", side_effect=AssertionError("no gate without an SDK")),
-                contextlib.redirect_stderr(io.StringIO()) as stderr,
-                self.assertRaises(SystemExit),
-            ):
-                run_command(args)
-        self.assertIn("ao deps provision", stderr.getvalue())
-
-
-class OrdinaryNativeDefaultTest(unittest.TestCase):
-    """The ordinary gate and its lint stage compile in the fastbuild context."""
-
-    def test_hygiene_and_tidy_default_to_fastbuild_and_keep_explicit_choices(self):
-        parser = make_parser()
-        self.assertEqual(parser.parse_args(["hygiene"]).config, "fastbuild")
-        self.assertEqual(parser.parse_args(["tidy"]).config, "fastbuild")
-        for config in ("debug", "release"):
-            with self.subTest(config=config):
-                self.assertEqual(parser.parse_args(["hygiene", "--config", config]).config, config)
-                self.assertEqual(parser.parse_args(["tidy", "--config", config]).config, config)
+                    sink = io.StringIO()
+                    self.assertEqual(
+                        run(("test/audio/FooSupport.cpp",), report_only=report_only, sink=sink), int(not report_only)
+                    )
+                audit.assert_called_once_with(["test/audio/FooSupport.cpp"])
+                self.assertIn("fixture-finding: invalid source convention", sink.getvalue())
+                self.assertEqual(stderr.getvalue(), "")
 
 
 if __name__ == "__main__":

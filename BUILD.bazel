@@ -1,36 +1,59 @@
 # Primary native product graph; the portal and explicit Bazel commands share it.
-load("//bazel/lint:action_sources.bzl", "LINT_ACTION_SOURCES")
+load("@rules_python//python:defs.bzl", "py_binary")
+load("//bazel:instrumentation_tests.bzl", "instrumentation_tests")
+load("//bazel:python_libraries.bzl", "aobus_python_libraries")
+load("//bazel:validation.bzl", "native_validation_tests")
+load("//bazel/lint:action_sources.bzl", "LINT_ACTION_SOURCES", "LINT_FIXTURE_SOURCES")
 
 package(default_visibility = ["//visibility:public"])
 
 exports_files([
     ".bazelrc",
+    ".github/workflows/ci.yml",
     "VERSION.txt",
+    "cmake/vcpkg-ports/stb/vcpkg.json",
     "config/bazel/dependencies.json",
     "dependency-contract.json",
     "nixpkgs.json",
+    "pyproject.toml",
     "vcpkg.json",
     "vcpkg-configuration.json",
-    "script/ao/core/bazel_resolver.py",
-    "script/ao/core/bazel_environment.py",
+    "script/ao/portal/bazel_resolver.py",
+    "script/ao/portal/bazel_environment.py",
     "script/ao/__init__.py",
     "script/ao/core/__init__.py",
-    "script/ao/core/bazel_lint_sdk.py",
-    "script/ao/core/compiler_policy.py",
+    "script/ao/portal/__init__.py",
+    "script/ao/portal/bazel_lint_sdk.py",
+    "script/ao/policy/__init__.py",
+    "script/ao/policy/compiler_policy.py",
     "script/ao/core/paths.py",
-    "script/ao/core/windows_llvm_sdk.py",
-    "script/ao/core/bazel_lint_action.py",
-    "script/ao/core/bazel_lint_fixture.py",
-    "script/ao/core/appkitprocess.py",
+    "script/ao/policy/windows_llvm_sdk.py",
+    "script/ao/graph/__init__.py",
+    "script/ao/graph/bazel_lint_action.py",
+    "script/ao/graph/bazel_lint_fixture.py",
+    "script/ao/graph/bazel_graph_lint.py",
+    "script/ao/graph/bazel_graph_lint_gate.py",
+    "script/ao/portal/bazel_native_smoke.py",
+    "script/ao/graph/bazel_test_runner.py",
+    "script/ao/graph/appkit_process.py",
     "script/ao/windows-llvm-sdk.json",
     "shell.nix",
     "script/ao/macos-toolchain.json",
 ])
 
-# Runtime module inputs for the lint fixture suite, which replays ao tidy.
+# Declared Python inventory for tooling audits; native actions use narrow inputs.
 filegroup(
     name = "ao_python_sources",
     srcs = glob(["script/ao/**/*.py"]) + ["//bazel:compiler_policy.bzl"],
+)
+
+# Narrow role and execution libraries share the admitted native Python runtime.
+aobus_python_libraries()
+
+py_binary(
+    name = "native_test_runner",
+    main_module = "ao.graph.bazel_test_runner",
+    deps = [":ao_native_test_support"],
 )
 
 # The cacheable lint verification and analysis actions import only these
@@ -42,9 +65,22 @@ filegroup(
     srcs = LINT_ACTION_SOURCES,
 )
 
-# The launcher selects one aggregate, not a second Python inventory. Native
-# GUI/backend/manual harnesses remain explicitly selected by their own labels.
-# test_suite.tests is non-configurable; platform compatibility belongs to its tests.
+# The fixture runner takes verified tools and imports no portal preparation.
+filegroup(
+    name = "ao_lint_fixture_sources",
+    srcs = LINT_FIXTURE_SOURCES,
+)
+
+# Existing Linux compile-only sanitizer canaries and coverage analysis. These
+# do not run sanitizer suites or collect a coverage report.
+instrumentation_tests()
+
+# Project-specific native oracles consume folded aspect facts, never runtime Bazel.
+native_validation_tests(python = "ao_python_validation")
+
+# Focused test selection; //... also discovers repository checks and native
+# process tests. test_suite.tests is non-configurable, so compatibility belongs
+# to its members.
 test_suite(
     name = "tests",
     tests = [
@@ -57,6 +93,7 @@ test_suite(
         "//test:library_test",
         "//test:media_fixture_test",
         "//test:media_test",
+        "//test:native_process_tests",
         "//test:query_test",
         "//test:runtime_test",
         "//test:systemmedia_test",
@@ -223,28 +260,27 @@ test_suite(
     ],
 )
 
-# Completion is a separate aggregate: ordinary test/build keep their bounded,
-# lazy-SDK defaults. Explicit suite members include the manual-tagged harnesses
-# that can run unattended with the portal's owned native service context.
+# Explicit suite members retain the unattended native harnesses in wildcard
+# validation, including tests whose standalone labels are manual.
 test_suite(
     name = "check_tests",
     tests = [
         ":tests",
+        "//test:backend_test",
         "//test:gtk_test",
         "//test:lint_test",
     ],
 )
 
-# The native backend suite runs unattended on every host, so a case without a
-# [.manual] marker can never be built without running. Its hidden hardware cases
-# stay opt-in. The portal reads this filegroup with cquery, not a Python list.
+# Native backend ownership root for lint and explicit instrumentation tools.
+# Its hidden hardware cases remain opt-in.
 filegroup(
     name = "check_native_tests",
     testonly = True,
     srcs = ["//test:backend_test"],
 )
 
-# These executables are built, never run, by the completion gate.
+# Build-only benchmark coverage; no timing acceptance is implied.
 filegroup(
     name = "check_benchmarks",
     testonly = True,
@@ -271,8 +307,7 @@ filegroup(
     }),
 )
 
-# The two native WinUI console contracts are safe for unattended execution.
-# cquery labels(srcs, ...) selects them without a parallel Python inventory.
+# Existing WinUI console executables reused by the native process tests.
 filegroup(
     name = "check_runs",
     testonly = True,
@@ -283,6 +318,34 @@ filegroup(
         ],
         "//conditions:default": [],
     }),
+)
+
+# Unlike test-suite expansion, ordinary dependency edges propagate incompatible
+# members. Reuse the portable suites and select the native optional tests here.
+filegroup(
+    name = "check_cpp_tests",
+    testonly = True,
+    srcs = [
+        ":application_tests",
+        ":core_tests",
+        "//test:backend_test",
+        "//test:cli_test",
+        "//test:lint_test",
+        "//test:tui_test",
+    ] + select({
+        "//bazel:linux_gtk_enabled": ["//test:gtk_test"],
+        "//conditions:default": [],
+    }) + select({
+        "//bazel:linux_system_media_enabled": ["//test:systemmedia_test"],
+        "//conditions:default": [],
+    }),
+)
+
+# Keep the analysis SDK lazy for bounded product builds. The test package owns
+# the lint rule; this public selection alias does not load it until requested.
+alias(
+    name = "production_lint",
+    actual = "//test/lint:production_lint",
 )
 
 filegroup(

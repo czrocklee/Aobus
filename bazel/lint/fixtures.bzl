@@ -103,11 +103,11 @@ lint_fixture_test = rule(
     implementation = _fixture_impl,
     test = True,
     attrs = {
-        "_helper": attr.label(default = Label("//:script/ao/core/bazel_lint_fixture.py"), allow_single_file = True),
+        "_helper": attr.label(default = Label("//:script/ao/graph/bazel_lint_fixture.py"), allow_single_file = True),
         "_verification": attr.label(default = Label("//tool/lint:verification")),
         "_fixtures": attr.label(default = Label("//test/lint:fixtures")),
         "_project_headers": attr.label(default = Label("//include:common_headers")),
-        "_modules": attr.label(default = Label("//:ao_python_sources")),
+        "_modules": attr.label(default = Label("//:ao_lint_fixture_sources")),
     },
     fragments = ["cpp"],
     toolchains = use_cc_toolchain(),

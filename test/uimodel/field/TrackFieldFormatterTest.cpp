@@ -36,7 +36,12 @@
 #if __cpp_lib_chrono >= 201907L
 #include <stdexcept>
 #else
+#include <stdlib.h> // NOLINT(modernize-deprecated-headers) -- POSIX setenv/unsetenv require this header.
+#include <time.h>   // NOLINT(modernize-deprecated-headers) -- POSIX tzset requires this header.
+
+#include <cstdlib>
 #include <ctime>
+#include <tuple>
 #endif
 
 namespace ao::uimodel::test
@@ -52,6 +57,53 @@ namespace ao::uimodel::test
       return TrackDetailSnapshot{};
     }
 
+#if __cpp_lib_chrono < 201907L
+    // The date library substitutes for the missing standard time-zone database
+    // and reads the operating system's zoneinfo file, while the C library
+    // follows the process TZ, which the test runner pins to UTC. Point the C
+    // library at that same file for one lookup and restore the runner's value
+    // afterwards, so no other case observes the override.
+    class [[nodiscard]] ScopedOperatingSystemZone final
+    {
+    public:
+      ScopedOperatingSystemZone()
+      {
+        if (auto const* const previous = std::getenv("TZ"); previous != nullptr)
+        {
+          _optPrevious = previous;
+        }
+
+        // A leading ':' marks the value as the path of a compiled zone file.
+        REQUIRE(::setenv("TZ", ":/etc/localtime", 1) == 0); // NOLINT(misc-include-cleaner)
+        // NOLINTNEXTLINE(misc-include-cleaner) -- Darwin time.h reexports tzset from private _time.h.
+        ::tzset();
+      }
+
+      ~ScopedOperatingSystemZone() noexcept
+      {
+        if (_optPrevious)
+        {
+          std::ignore = ::setenv("TZ", _optPrevious->c_str(), 1); // NOLINT(misc-include-cleaner)
+        }
+        else
+        {
+          std::ignore = ::unsetenv("TZ"); // NOLINT(misc-include-cleaner)
+        }
+
+        // NOLINTNEXTLINE(misc-include-cleaner) -- Darwin time.h reexports tzset from private _time.h.
+        ::tzset();
+      }
+
+      ScopedOperatingSystemZone(ScopedOperatingSystemZone const&) = delete;
+      ScopedOperatingSystemZone& operator=(ScopedOperatingSystemZone const&) = delete;
+      ScopedOperatingSystemZone(ScopedOperatingSystemZone&&) = delete;
+      ScopedOperatingSystemZone& operator=(ScopedOperatingSystemZone&&) = delete;
+
+    private:
+      std::optional<std::string> _optPrevious;
+    };
+#endif
+
     std::string expectedLocalTime(std::chrono::sys_seconds const time)
     {
 #if __cpp_lib_chrono >= 201907L
@@ -64,8 +116,9 @@ namespace ao::uimodel::test
         return std::format("{:%Y-%m-%d %H:%M}", time);
       }
 #else
-      // The C library reads the host zone independently of the date library
-      // that substitutes for the missing standard time-zone database.
+      // The C library stays the independent oracle for the zone the formatter
+      // resolves, once the guard aligns both with the host zoneinfo file.
+      auto const zoneGuard = ScopedOperatingSystemZone{};
       auto const seconds = static_cast<std::time_t>(time.time_since_epoch().count());
       auto local = std::tm{};
       REQUIRE(::localtime_r(&seconds, &local) != nullptr);

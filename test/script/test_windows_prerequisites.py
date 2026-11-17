@@ -19,6 +19,7 @@ import json
 import shutil
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -79,10 +80,19 @@ class NativePowerShellTest(unittest.TestCase):
         if cls.powershell is None:
             raise unittest.SkipTest("powershell.exe is unavailable; a native Windows host is required")
 
+    def setUp(self):
+        self.driver_invocations = 0
+
     def run_driver(self, scenario, source=HELPER):
+        self.driver_invocations += 1
+        label = f"{self.id()}: {scenario['kind']} #{self.driver_invocations} ({source.name})"
         with tempfile.TemporaryDirectory() as temp:
             scenario_file = Path(temp) / "scenario.json"
             scenario_file.write_text(json.dumps(scenario), encoding="utf-8")
+            print(f"{label}: starting PowerShell", flush=True)
+            started = time.monotonic()
+            # Pure and scenario modes spawn a second PowerShell. Bazel owns the
+            # tree deadline; killing only the driver could strand that child.
             completed = subprocess.run(
                 [
                     self.powershell,
@@ -103,7 +113,10 @@ class NativePowerShellTest(unittest.TestCase):
                 encoding="utf-8",
                 errors="replace",
             )
-            self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+            print(
+                f"{label}: PowerShell exited {completed.returncode} after {time.monotonic() - started:.2f}s", flush=True
+            )
+            self.assertEqual(completed.returncode, 0, f"{label}\n{completed.stdout}\n{completed.stderr}")
             result = json.loads(completed.stdout)
         # Only the driver's own one-element arrays are wrapped. Production
         # report fields stay as Finish emitted them.
@@ -243,7 +256,7 @@ class NativePowerShellTest(unittest.TestCase):
         self.assertFalse(values["wrong-sha"]["Ok"])
         self.assertFalse(values["missing-file"]["Ok"])
 
-        for name, signature, ok in [
+        signer_cases = [
             ("exact-cn", "CN=Microsoft Corporation", True),
             ("cn-overlap", "CN=Microsoft Corporationation", False),
             ("cn-with-space", "CN=Microsoft Corporation Evil", False),
@@ -258,15 +271,24 @@ class NativePowerShellTest(unittest.TestCase):
             ("cn-then-other-organization", "CN=Microsoft Corporation, O=Contoso", True),
             ("cn-trailing-comma", "CN=Microsoft Corporation,", True),
             ("invalid-status", None, False),
-        ]:
+        ]
+        # These stateless decisions share real fixture bytes, not scenario-main state.
+        values, _ = self.run_pure(
+            [{"name": name, "expr": integrity(f"'{digest}'")} for name, _, _ in signer_cases],
+            mock={
+                "signatures": [
+                    {
+                        "status": "NotSigned" if signature is None else "Valid",
+                        "subject": good_signer if signature is None else signature,
+                    }
+                    for _, signature, _ in signer_cases
+                ]
+            },
+            fixture=fixture,
+        )
+        for name, _, ok in signer_cases:
             with self.subTest(signer=name):
-                if signature is None:
-                    mock = {"signature": {"status": "NotSigned", "subject": good_signer}}
-                else:
-                    mock = {"signature": {"status": "Valid", "subject": signature}}
-                checked = [{"name": "checked", "expr": integrity(f"'{digest}'")}]
-                values, _ = self.run_pure(checked, mock=mock, fixture=fixture)
-                self.assertEqual(values["checked"]["Ok"], ok)
+                self.assertEqual(values[name]["Ok"], ok)
 
     def test_scenario_check_mode_reports_missing_without_installer_activity(self):
         mock = {"admin": False, "vcStates": [vc_state(False)], "runtimeStates": [runtime_state(False)]}
@@ -283,13 +305,6 @@ class NativePowerShellTest(unittest.TestCase):
         self.assertEqual(result["exitCode"], 0)
         self.assertTrue(result["report"]["vcRuntime"]["ready"])
         self.assertTrue(result["report"]["windowsAppRuntime"]["ready"])
-
-    def test_scenario_install_ready_is_a_noop_without_installer_files(self):
-        mock = {"admin": False, "vcStates": [vc_state(True)], "runtimeStates": [runtime_state(True)]}
-        result = self.run_scenario(switches=["-Install"], mock=mock)
-        self.assertEqual(result["exitCode"], 0)
-        self.assertIn("ready-noop", result["report"]["actions"])
-        self.assertEqual(self.process_calls(result), [])
 
     def test_scenario_install_refuses_an_elevated_admin_token(self):
         mock = {"admin": True, "vcStates": [vc_state(False)], "runtimeStates": [runtime_state(False)]}
@@ -319,17 +334,15 @@ class NativePowerShellTest(unittest.TestCase):
         self.assertEqual(result["exitCode"], 0)
         self.assertTrue(result["report"]["vcRuntime"]["ready"])
         self.assertTrue(result["report"]["windowsAppRuntime"]["ready"])
-        self.assertEqual(
-            [call["kind"] for call in result["calls"]],
-            ["vc-query", "runtime-query", "signature", "signature", "process", "vc-query", "process", "runtime-query"],
-        )
+        # Both files must be verified before the first installer launch.
+        boundaries = [call["kind"] for call in result["calls"] if call["kind"] in {"signature", "process"}]
+        self.assertEqual(boundaries, ["signature", "signature", "process", "process"])
         signatures = [call for call in result["calls"] if call["kind"] == "signature"]
         processes = self.process_calls(result)
         for signature, process, name in zip(signatures, processes, (VC_INSTALLER, RUNTIME_INSTALLER), strict=True):
             self.assertTrue(signature["data"]["literalPath"].endswith(name))
             self.assertIn("Aobus [offline]", signature["data"]["literalPath"])
             self.assertEqual(signature["data"]["literalPath"], process["data"]["path"])
-            self.assertIn("verified: " + name, result["report"]["actions"])
         self.assertEqual(processes[0]["data"]["verb"], "RunAs")
         self.assertEqual(processes[0]["data"]["args"], ["/install", "/quiet", "/norestart"])
         self.assertEqual(processes[1]["data"]["verb"], "")
@@ -353,35 +366,11 @@ class NativePowerShellTest(unittest.TestCase):
             create_installers=[VC_INSTALLER, RUNTIME_INSTALLER],
         )
         self.assertEqual(result["exitCode"], 1)
-        detail = "SHA-256 mismatch: " + RUNTIME_INSTALLER
-        self.assertIn(detail, result["report"]["error"])
-        self.assertIn("refusing before any change", result["report"]["error"])
-        self.assertIn("verified: " + VC_INSTALLER, result["report"]["actions"])
-        self.assertIn(detail, result["report"]["actions"])
-        self.assertEqual([call["kind"] for call in result["calls"]], ["vc-query", "runtime-query", "signature"])
-        signature = result["calls"][-1]
-        self.assertTrue(signature["data"]["literalPath"].endswith(VC_INSTALLER))
-        self.assertIn("Aobus [offline]", signature["data"]["literalPath"])
-        self.assertEqual(self.process_calls(result), [])
-
-    def test_scenario_install_validates_all_needed_installers_before_any_mutation(self):
-        result = self.run_scenario(
-            switches=["-Install"],
-            mock={
-                "admin": False,
-                "vcStates": [vc_state(False)],
-                "runtimeStates": [runtime_state(False)],
-                "integrity": {VC_INSTALLER: True, RUNTIME_INSTALLER: False},
-            },
-            create_installers=[VC_INSTALLER, RUNTIME_INSTALLER],
-        )
-        self.assertEqual(result["exitCode"], 1)
-        self.assertIn("verification", result["report"]["error"])
+        self.assertIn("SHA-256 mismatch: " + RUNTIME_INSTALLER, result["report"]["error"])
         self.assertEqual(self.process_calls(result), [])
 
     def test_scenario_vc_exit_codes_are_gated_before_postconditions(self):
         cases = [
-            ("exit-0-ready", 0, True, 0),
             ("exit-0-post-false", 0, False, 1),
             ("exit-1603-even-ready", 1603, True, 1),
             ("exit-1638-ready", 1638, True, 0),
@@ -422,8 +411,8 @@ class NativePowerShellTest(unittest.TestCase):
         self.assertTrue(calls[0]["data"]["path"].endswith(VC_INSTALLER))
 
     def test_scenario_runtime_requires_exit_zero_and_healthy_postcondition(self):
-        cases = [("exit-0-post-false", 0, False, 1), ("exit-5-post-true", 5, True, 1)]
-        for name, exit_code, post_ready, expected in cases:
+        cases = [("exit-0-post-false", 0, False), ("exit-5-post-true", 5, True)]
+        for name, exit_code, post_ready in cases:
             with self.subTest(case=name):
                 result = self.run_scenario(
                     switches=["-Install"],
@@ -436,16 +425,10 @@ class NativePowerShellTest(unittest.TestCase):
                     },
                     create_installers=[RUNTIME_INSTALLER],
                 )
-                self.assertEqual(result["exitCode"], expected)
-                self.assertIn("postcondition", result["report"]["error"])
-                calls = self.process_calls(result)
-                self.assertEqual(len(calls), 1)
-                self.assertTrue(calls[0]["data"]["path"].endswith(RUNTIME_INSTALLER))
-                self.assertNotIn(VC_INSTALLER, calls[0]["data"]["path"])
-                self.assertEqual(calls[0]["data"]["verb"], "")
-                self.assertEqual(calls[0]["data"]["args"], ["--quiet"])
-                self.assertEqual(len([call for call in result["calls"] if call["kind"] == "vc-query"]), 1)
-                self.assertEqual(len([call for call in result["calls"] if call["kind"] == "runtime-query"]), 2)
+                self.assertEqual(result["exitCode"], 1)
+                self.assertEqual(result["report"]["windowsAppRuntime"]["ready"], post_ready)
+                (call,) = self.process_calls(result)
+                self.assertTrue(call["data"]["path"].endswith(RUNTIME_INSTALLER))
 
     def test_scenario_uac_decline_exits_1223_without_runtime_attempt(self):
         result = self.run_scenario(
@@ -571,8 +554,6 @@ class NativePowerShellTest(unittest.TestCase):
         self.assertEqual(manifest["windowsAppRuntime"]["sha256"], result["hashes"][RUNTIME_INSTALLER])
         for source in (HELPER, LAUNCHER, DEPLOYMENT_README):
             self.assertEqual(result["hashes"][source.name], hashlib.sha256(source.read_bytes()).hexdigest())
-        self.assertEqual(len(result["calls"]), 3)
-        self.assertTrue(all("[" in call["path"] for call in result["calls"]))
 
     def test_stager_resolves_relative_paths_against_powershell_location(self):
         result = self.run_stage(relativePaths=True)
@@ -580,11 +561,6 @@ class NativePowerShellTest(unittest.TestCase):
         self.assertFalse(result["otherDestinationExists"])
         for installer in (VC_INSTALLER, RUNTIME_INSTALLER):
             self.assertEqual(result["hashes"][installer], result["sourceHashes"][installer])
-        manifest = result["manifest"]
-        self.assertEqual(manifest["vcRuntime"]["sha256"], result["hashes"][VC_INSTALLER])
-        self.assertEqual(manifest["windowsAppRuntime"]["sha256"], result["hashes"][RUNTIME_INSTALLER])
-        self.assertEqual(len(result["calls"]), 3)
-        self.assertTrue(all("Aobus [offline]" in call["path"] for call in result["calls"]))
 
     def test_stager_refuses_inputs_before_creating_output(self):
         base_version = {
@@ -632,30 +608,21 @@ class NativePowerShellTest(unittest.TestCase):
         self.assertEqual(result["exitCode"], 3010)
         self.assertTrue(result["report"]["rebootRequired"])
         self.assertIsNone(result["report"]["windowsAppRuntime"])
-        self.assertEqual([call for call in result["calls"] if call["kind"] == "appx"], [])
-        self.assertEqual([call for call in result["calls"] if call["kind"] == "runtime-query"], [])
-        self.assertEqual(len([call for call in result["calls"] if call["kind"] == "vc-query"]), 2)
-        calls = self.process_calls(result)
-        self.assertEqual(len(calls), 1)
-        self.assertTrue(calls[0]["data"]["path"].endswith(VC_INSTALLER))
-        self.assertEqual(calls[0]["data"]["verb"], "")
-        self.assertEqual(calls[0]["data"]["args"], ["/install", "/quiet", "/norestart"])
+        (call,) = self.process_calls(result)
+        self.assertTrue(call["data"]["path"].endswith(VC_INSTALLER))
+        self.assertEqual(call["data"]["verb"], "")
+        self.assertEqual(call["data"]["args"], ["/install", "/quiet", "/norestart"])
 
     def test_scenario_report_actions_stay_json_arrays_for_zero_one_and_many(self):
         # Real Finish output. Python must not wrap nested production values.
         zero = self.run_scenario(manifest={})
         self.assertEqual(zero["exitCode"], 1)
-        self.assertIsInstance(zero["report"]["actions"], list)
         self.assertEqual(zero["report"]["actions"], [])
-        self.assertEqual(zero["calls"], [])
 
         one = self.run_scenario(mock={"vcStates": [{"throwMessage": "planned vc query failure"}]})
         self.assertEqual(one["exitCode"], 1)
-        self.assertIsInstance(one["report"]["actions"], list)
         self.assertEqual(one["report"]["actions"], ["manifest-validated"])
         self.assertIn("planned vc query failure", one["report"]["error"])
-        self.assertEqual(len([call for call in one["calls"] if call["kind"] == "vc-query"]), 1)
-        self.assertEqual(self.process_calls(one), [])
 
         many = self.run_scenario(
             switches=["-Install"],

@@ -9,7 +9,7 @@ literal shared identity: no rename, no discovery, no other bucket.
 
 import unittest
 
-from ao.core import r2_credentials
+from ao.portal import r2_credentials
 
 COMPLETE = {
     "R2_ENDPOINT": "https://account.r2.cloudflarestorage.com",

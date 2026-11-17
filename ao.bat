@@ -60,7 +60,7 @@ goto finished
 :launch_explicit
 set "_AOBUS_ORIGINAL_PS_MODULE_PATH="
 set "_AOBUS_ORIGINAL_PS_EXECUTION_POLICY="
-"%AOBUS_PYTHON%" -m ao.core.pythonenv --project-root "%ROOT%." --state-root "%AOBUS_STATE_ARGUMENT%" --launch-windows-portal -- %*
+"%AOBUS_PYTHON%" -m ao.portal.python_env --project-root "%ROOT%." --state-root "%AOBUS_STATE_ARGUMENT%" --launch-windows-portal -- %*
 set "STATUS=%ERRORLEVEL%"
 
 :finished

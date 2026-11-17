@@ -10,9 +10,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from ao.core import bazel_host_tools as tools
 from ao.core import bazel_native as native
-from ao.core import dependency_policy
+from ao.policy import dependency_policy
+from ao.portal import bazel_host_tools as tools
 
 
 class HostToolsFactsTest(unittest.TestCase):

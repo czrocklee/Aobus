@@ -10,9 +10,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ao.core import bazel_environment as bootstrap
 from ao.core import bazel_native as native
-from ao.core import builddir
+from ao.portal import bazel_environment as bootstrap
+from ao.portal import build_dir
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -179,6 +179,7 @@ class EnvironmentDiscoveryTests(unittest.TestCase):
                 "AOBUS_LINT_CLANGXX": "/selected/clang++",
                 "NIXPKGS_CMAKE_PREFIX_PATH": "/selected/metadata",
                 "AOBUS_LLVM_SDK_ROOT": "/ready/lazy/sdk",
+                "AOBUS_CHECKOUT_ID": "same-tooling-checkout",
                 "BAZEL_SH": "/selected/bash",
                 "SECRET_TOKEN": "private",
                 "CXXFLAGS": "-unreviewed",
@@ -191,7 +192,13 @@ class EnvironmentDiscoveryTests(unittest.TestCase):
         self.assertNotIn("config", first)
         self.assertIsNone(first["prefix"])
         self.assertEqual(first["source"], str(self.source))
-        for key in ("AOBUS_LINT_CLANGXX", "NIXPKGS_CMAKE_PREFIX_PATH", "AOBUS_LLVM_SDK_ROOT", "BAZEL_SH"):
+        for key in (
+            "AOBUS_LINT_CLANGXX",
+            "NIXPKGS_CMAKE_PREFIX_PATH",
+            "AOBUS_LLVM_SDK_ROOT",
+            "AOBUS_CHECKOUT_ID",
+            "BAZEL_SH",
+        ):
             self.assertEqual(first["environment"][key], self.environment[key])
         for key in ("SECRET_TOKEN", "CXXFLAGS", "PYTHONPATH"):
             self.assertNotIn(key, first["environment"])
@@ -473,7 +480,7 @@ class WindowsCompilerSelectionTests(unittest.TestCase):
 
 class NativePlatformDiscoveryTests(unittest.TestCase):
     def test_native_platform_does_not_select_portal_build_trees_or_checkout_state(self):
-        with patch.object(builddir, "platform_profile", side_effect=AssertionError("portal profile selection")):
+        with patch.object(build_dir, "platform_profile", side_effect=AssertionError("portal profile selection")):
             for platform, expected in (("linux", "linux"), ("darwin", "macos"), ("win32", "windows")):
                 with self.subTest(platform=platform), patch.object(native.sys, "platform", platform):
                     self.assertEqual(native.native_platform(), expected)

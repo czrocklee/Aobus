@@ -12,8 +12,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from ao.core import bazel_remote_cache as remote
-from ao.core import r2_credentials
+from ao.portal import bazel_remote_cache as remote
+from ao.portal import r2_credentials
 
 CREDENTIALS = {
     "R2_ENDPOINT": "https://account.r2.cloudflarestorage.com",

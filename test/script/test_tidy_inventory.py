@@ -8,9 +8,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from ao.command import tidy
-from ao.core import bazel_lint_action as action
-from ao.core import lintfixtures
+from ao.graph import bazel_lint_action as action
+from ao.policy import lint_fixtures
 
 
 class TidyInventoryTest(unittest.TestCase):
@@ -20,7 +19,7 @@ class TidyInventoryTest(unittest.TestCase):
         self.root = Path(temporary.name)
         self.fixtures = self.root / "test/lint/fixture"
         self.fixtures.mkdir(parents=True)
-        self.enterContext(mock.patch.object(lintfixtures, "FIXTURE_DIR", self.fixtures))
+        self.enterContext(mock.patch.object(lint_fixtures, "FIXTURE_DIR", self.fixtures))
 
     def fixture(self, name, source="// POSITIVE\nint value;\n"):
         path = self.fixtures / name
@@ -45,7 +44,7 @@ class TidyInventoryTest(unittest.TestCase):
         self.fixture("aobus-clean/Basic.h", "// SPDX-License-Identifier: MIT\n")
         (self.fixtures / "aobus-empty-directory").mkdir()
         self.assertEqual(
-            tidy.expected_aobus_checks(),
+            lint_fixtures.expected_aobus_checks(),
             frozenset({"aobus-first", "aobus-header", "aobus-darwin", "aobus-Legacy_Alias", "aobus-clean"}),
         )
 

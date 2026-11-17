@@ -130,7 +130,7 @@ _governed_repository = repository_rule(
     attrs = {
         "group": attr.string(mandatory = True, values = ["native", "test", "tools", "toolchain", "winui"]),
         "_environment": ENVIRONMENT_ATTRIBUTE,
-        "resolver": attr.label(default = Label("//:script/ao/core/bazel_resolver.py"), allow_single_file = True),
+        "resolver": attr.label(default = Label("//:script/ao/portal/bazel_resolver.py"), allow_single_file = True),
         "policy": attr.label_list(allow_files = True, default = [
             _DEPENDENCY_POLICY,
             Label("//:dependency-contract.json"),

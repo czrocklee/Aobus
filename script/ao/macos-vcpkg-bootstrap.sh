@@ -130,7 +130,7 @@ aobus_macos_prepare_python_tools() {
     local project_root="$1"
     local result_file managed_python
     result_file="$(mktemp "${TMPDIR:-/tmp}/aobus-python-env.XXXXXX")"
-    if ! "$AOBUS_PYTHON" -m ao.core.pythonenv \
+    if ! "$AOBUS_PYTHON" -m ao.portal.python_env \
         --project-root "$project_root" \
         --state-root "$AOBUS_STATE_ROOT" \
         --result-file "$result_file" \

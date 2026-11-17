@@ -1,4 +1,4 @@
-"""CLI boundaries of the dedicated native compile-contract verify command."""
+"""CLI boundaries of native compile-contract checking."""
 
 import io
 import json
@@ -11,15 +11,16 @@ from pathlib import Path
 from unittest.mock import patch
 
 from ao.__main__ import make_parser
-from ao.command import verify as verify_command
-from ao.core import bazel_contract, jobs
+from ao.command import check as verify_command
 from ao.core import bazel_native as native
-from ao.core import bazel_workspace as workspace
+from ao.core import jobs
+from ao.portal import bazel_verify, contract_checks
+from ao.portal import bazel_workspace as workspace
 
 
 class VerifyParserTests(unittest.TestCase):
     def test_verify_defaults_to_fastbuild_analysis_with_default_workers_and_no_forwarded_scope(self):
-        args = make_parser().parse_args(["verify"])
+        args = make_parser().parse_args(["check", "contracts"])
         self.assertIs(args.func, verify_command.run_command)
         self.assertTrue(verify_command.requires_build_environment(args))
         self.assertEqual(args.config, "fastbuild")
@@ -31,7 +32,8 @@ class VerifyParserTests(unittest.TestCase):
     def test_verify_accepts_explicit_config_path_prefix_and_positive_jobs(self):
         args = make_parser().parse_args(
             [
-                "verify",
+                "check",
+                "contracts",
                 "--config",
                 "release",
                 "--path",
@@ -46,11 +48,8 @@ class VerifyParserTests(unittest.TestCase):
         self.assertEqual(args.path, "/tmp/bazel-verify")
         self.assertEqual(args.jobs, 3)
         self.assertEqual(args.vcpkg_prefix, "/tmp/installed-prefix")
-        self.assertEqual(make_parser().parse_args(["verify", "--config", "fastbuild"]).config, "fastbuild")
-        self.assertEqual(make_parser().parse_args(["verify", "--config", "debug"]).config, "debug")
-        self.assertEqual(make_parser().parse_args(["verify", "--config", "profile"]).config, "profile")
-        self.assertEqual(make_parser().parse_args(["verify", "--config", "asan"]).config, "asan")
-        self.assertEqual(make_parser().parse_args(["verify", "--config", "tsan"]).config, "tsan")
+        for config in ("fastbuild", "debug", "profile", "asan", "tsan"):
+            self.assertEqual(make_parser().parse_args(["check", "contracts", "--config", config]).config, config)
 
     def test_verify_rejects_targets_forwarded_options_and_remote_cache(self):
         for arguments in (
@@ -65,7 +64,7 @@ class VerifyParserTests(unittest.TestCase):
             ["--jobs", "many"],
         ):
             with self.subTest(arguments=arguments), patch("sys.stderr"), self.assertRaises(SystemExit) as exited:
-                make_parser().parse_args(["verify", *arguments])
+                make_parser().parse_args(["check", "contracts", *arguments])
             self.assertEqual(exited.exception.code, 2)
 
 
@@ -115,15 +114,17 @@ class VerifyDispatchTests(unittest.TestCase):
                 return 7
 
             output, diagnostics = io.StringIO(), io.StringIO()
-            args = make_parser().parse_args(["verify", "--config", config, "--path", str(tree), "--jobs", "3"])
+            args = make_parser().parse_args(
+                ["check", "contracts", "--config", config, "--path", str(tree), "--jobs", "3"]
+            )
             with (
                 patch.object(native, "native_platform", return_value=host),
                 patch.object(workspace, "workspace_path", return_value=tree) as select,
-                patch.object(verify_command, "build_tree_lock", side_effect=lock),
+                patch.object(contract_checks, "build_tree_lock", side_effect=lock),
                 patch.object(workspace, "prepare_workspace", side_effect=prepare),
                 patch.object(workspace, "bazel_executable", side_effect=lookup),
                 patch.object(workspace, "execute") as execute,
-                patch.object(bazel_contract, "verify", side_effect=verify) as analyze,
+                patch.object(bazel_verify, "verify", side_effect=verify) as analyze,
                 patch("sys.stdout", output),
                 patch("sys.stderr", diagnostics),
             ):
@@ -137,13 +138,13 @@ class VerifyDispatchTests(unittest.TestCase):
 
     def test_preparation_failure_prevents_verify_and_tool_lookup(self):
         with tempfile.TemporaryDirectory(prefix="aobus-verify-cli-") as temporary:
-            args = make_parser().parse_args(["verify", "--path", temporary])
+            args = make_parser().parse_args(["check", "contracts", "--path", temporary])
             with (
                 patch.object(native, "native_platform", return_value="linux"),
                 patch.object(workspace, "prepare_workspace", side_effect=native.BazelWorkspaceError("stale input")),
                 patch.object(workspace, "bazel_executable") as executable,
                 patch.object(workspace, "execute") as execute,
-                patch.object(bazel_contract, "verify") as analyze,
+                patch.object(bazel_verify, "verify") as analyze,
                 patch("sys.stderr", new_callable=io.StringIO) as diagnostics,
                 self.assertRaises(SystemExit),
             ):
@@ -166,12 +167,12 @@ class BazelVerifyCaptureTests(unittest.TestCase):
             child.write_text(
                 "import json, pathlib, sys\n"
                 "root = pathlib.Path(__file__).parent\n"
-                "assert sys.argv[2] == 'query' and '--output=label' in sys.argv\n"
+                "assert sys.argv[2] == 'build' and '//:native_policy_inputs' in sys.argv\n"
                 "assert pathlib.Path.cwd() == root\n"
                 "receipt = next((root / 'tree/contracts/debug').glob('verify-*/receipt.json'))\n"
-                "selection = json.loads(receipt.read_text(encoding='utf-8'))['selection']\n"
-                "assert selection['status'] == 'running' and selection['exit'] is None\n"
-                "sys.stdout.buffer.write(b'\\x00selection\\xff\\n')\n"
+                "facts = json.loads(receipt.read_text(encoding='utf-8'))['facts']\n"
+                "assert facts['status'] == 'running' and facts['exit'] is None\n"
+                "sys.stdout.buffer.write(b'\\x00facts\\xff\\n')\n"
                 "sys.stderr.buffer.write(b'\\x00diagnostic\\xfe\\n')\n"
                 "sys.exit(23)\n",
                 encoding="utf-8",
@@ -185,27 +186,24 @@ class BazelVerifyCaptureTests(unittest.TestCase):
                 return run([sys.executable, str(child), *argv[1:]], **kwargs)
 
             with (
-                patch.object(bazel_contract, "PROJECT_ROOT", root),
+                patch.object(bazel_verify, "PROJECT_ROOT", root),
                 patch.object(native, "PROJECT_ROOT", root),
-                patch.object(
-                    bazel_contract,
-                    "_expected_hardening_environment",
-                    return_value={"NIX_HARDENING_ENABLE_fixture": "stackprotector"},
-                ),
-                patch.object(bazel_contract.subprocess, "run", side_effect=launch) as process,
+                patch.object(bazel_verify.subprocess, "run", side_effect=launch) as process,
                 patch("sys.stdout", new_callable=io.StringIO) as output,
                 patch("sys.stderr", new_callable=io.StringIO),
             ):
-                self.assertEqual(bazel_contract.verify(child, tree, prepared, "debug"), 23)
+                self.assertEqual(bazel_verify.verify(child, tree, prepared, "debug"), 23)
             process.assert_called_once()
             receipt_path = next((tree / "contracts/debug").glob("verify-*/receipt.json"))
             receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
-            self.assertEqual((receipt["status"], receipt["exit"]), ("selection failed", 23))
-            selection = receipt["selection"]
-            self.assertEqual((selection["status"], selection["exit"]), ("exited", 23))
-            self.assertEqual(Path(selection["stdout"]).read_bytes(), b"\x00selection\xff\n")
-            self.assertEqual(Path(selection["stderr"]).read_bytes(), b"\x00diagnostic\xfe\n")
-            self.assertTrue(all(query["status"] == "unrun" and query["exit"] is None for query in receipt["queries"]))
+            self.assertEqual((receipt["status"], receipt["exit"]), ("facts build failed", 23))
+            facts = receipt["facts"]
+            self.assertEqual((facts["status"], facts["exit"]), ("failed", 23))
+            self.assertEqual(Path(facts["stdout"]).read_bytes(), b"\x00facts\xff\n")
+            self.assertEqual(Path(facts["stderr"]).read_bytes(), b"\x00diagnostic\xfe\n")
+            for stage in (receipt["files"], receipt["execution_root"], receipt["driver"]):
+                self.assertIn(stage["status"], {"unrun", "not applicable"})
+                self.assertIsNone(stage["exit"])
             self.assertEqual(output.getvalue(), "")
 
 

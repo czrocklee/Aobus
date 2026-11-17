@@ -9,10 +9,10 @@ Checker internals, fixture design, AST proof, and native replay mechanics are in
 
 Use project commands as the public entry points:
 
-- `./ao tidy` runs C++ clang-tidy, Python Ruff/mypy, and Bazel Buildifier checks for files in scope; the C++ stage consumes the Bazel lint report actions.
-- `./ao hygiene` is a scoped check-only entry: format check, source audits, workflow lint, then tidy. `ao check` invokes the same implementation for those diff-scoped stages, while the gate's C++ lint stage covers the complete native project graph; standalone `hygiene` and `tidy` stay scoped.
+- `./ao check lint` runs C++ clang-tidy, Python Ruff/mypy, Buildifier semantic lint, naming/test audits, and workflow lint for one source scope. It performs no formatting or global documentation check. The C++ stage consumes the Bazel lint report actions; full `ao check` gates the complete native project graph separately.
+- `./ao check analyzer` runs path-sensitive analysis; findings fail by default. Use `--report-only` for advisory lint or analyzer output; tool and admission failures still fail.
 - `bazel test //test/lint:lint_test --nocache_test_results` runs fresh assertions on the Aobus clang-tidy fixture result; it is not the Python lint command.
-- `./ao format` formats native, Python, Bazel, Markdown, JSON, YAML, and CSS sources; `--check` checks the same scope without rewriting it.
+- `./ao format` rewrites native, Python, Bazel, Markdown, JSON, YAML, and CSS sources; `./ao check format` verifies the same scope without rewriting it.
 
 Use the corresponding `ao.bat` commands on native Windows.
 Do not call clang-tidy, Ruff, mypy, or Buildifier directly during normal repository work.
@@ -25,19 +25,19 @@ With no explicit scope, the portal compares the topic to its merge base with loc
 On `main`, or when local `main` is unavailable, it uses `HEAD~1`.
 An explicit `--commit <rev>` compares the endpoint against that revision.
 
-Hygiene resolves source scope once for formatting, applicable naming and test audits, workflow lint, and tidy.
-Empty subsets are skipped, a formatting failure stops later stages, and repository-wide guardrails remain part of `check`.
-`ao check` keeps those hygiene stages diff-scoped but does not diff-scope C++ lint: its C++ stage lints the complete native project graph on the current host regardless of `--commit` or local changes, so a documentation-only edit still validates every applicable translation unit. Explicit `ao tidy` and `ao hygiene` scopes are unchanged.
+`check lint` resolves source scope once for applicable naming and test audits, workflow lint, and language lint.
+Paths accept files or directories; missing paths fail before source discovery or native preparation. Empty subsets are skipped.
+`ao check` does not diff-scope anything: the graph's format, audit, workflow and lint targets check the complete source snapshot on the current host regardless of local changes, so a documentation-only edit still validates every applicable translation unit. Explicit `ao check lint` scopes do not narrow completion.
 
 - `STRICT` applies to production C++ under `lib/`, `app/`, `include/`, and `tool/`.
 - `RELAXED` applies to C++ under `test/` with the same baseline but disables test-noisy checks: unchecked optional access, discarded return values, designated initializers for positional expected-data tables, cognitive complexity, identifier length, magic numbers, C arrays, C varargs, and test-only casts.
 - Non-fixture C++ files under `test/lint/` are ignored by normal tidy runs.
 - C++ fixtures under `test/lint/fixture/` are skipped in batch scans, and naming one explicitly fails with `no native lint owner covers selected path(s)` because fixtures have no `cc_*` compile owner; the native lint fixture test owns their diagnostics.
-- Python files in scope are checked against `pyproject.toml` by Ruff and mypy through `./ao tidy`.
+- Python files in scope are checked against `pyproject.toml` by Ruff and mypy through `./ao check lint`.
 
 ### Frontend adjustments
 
-The [shared frontend policy](../../script/ao/core/tidypolicy.py) follows the
+The [shared frontend policy](../../script/ao/policy/tidy_policy.py) follows the
 compilation context. GTK contexts disable `cppcoreguidelines-owning-memory` and
 nonliteral-format warnings: widget trees own their children and use printf-style
 APIs. WinUI contexts scope warnings to the selected source/header rather than the
@@ -47,19 +47,19 @@ is accepted without nonportable-include-path warnings.
 
 ### Bazel-backed reports
 
-The C++ stage's Bazel lint report route has bounded native Debug evidence on Linux, macOS and Windows. The Linux workflow contains a representative lint step; the native CI check jobs gate the complete project C++ graph through `ao check`.
-It accepts the file/`--folder`/`--commit`/`--all` selectors plus repeatable `--target`; `--target` alone covers every actual translation unit and paired header main in those owners, not unpaired declared headers.
+The C++ stage's Bazel lint report route has bounded native Debug evidence on Linux, macOS and Windows. The native CI check jobs gate the complete project C++ graph through the graph's `//:production_lint` test inside `ao check`; there is no separate CI lint step.
+It accepts file/directory paths and the `--commit`/`--all` selectors plus repeatable `--target`; `--target` alone covers every actual translation unit and paired header main in those owners, not unpaired declared headers.
 Without `--target`, scope maps through actual Bazel `srcs` owners (including filegroups and aliases), not a dependency closure; with `--target`, those owners restrict the request and the selected scope gates the reports.
 A header without a same-component companion, or an include fragment, is analyzed in the native context of a translation unit whose report recorded including it. Fragment warnings are scoped to its normalized file identity; consumer compiler errors and unlocated diagnostics remain, and scoping cannot hide an incomplete attempt.
-Deferral is limited to platform-incompatible files; a compatible header or fragment that no analyzed translation unit includes, or a compatible selected path with no owner, fails rather than producing a partial pass.
+Scoped lint defers discovered platform-incompatible files. With `--gtk off` it also defers discovered GTK files only if the configured graph proves every candidate owner incompatible. Explicit files still require reports; a compatible header or fragment that no analyzed translation unit includes, or a compatible path with no owner, fails rather than producing a partial pass.
 `--all` selects the project C++ scope with the same rules.
 
-The completion gate's C++ stage derives the complete project scope from the Bazel query alone, without a diff selector, so `--commit` never narrows it: every compile owner's declared `srcs`, `hdrs`, `textual_hdrs` and additional compiler inputs that classify STRICT or RELAXED are gated — authored sources only, so external and generated inputs stay out — with unpaired headers and fragments covered through actual include-consumer passes. The gate also rejects an authored C++ source or header outside the declared graph, and defers only recognized foreign-native-platform paths ([report contracts](bazel.md#lint-reports)). Full coverage reuses the existing report graph, action cache and BEP completeness contract, with no new rule set, filename classifier or separate CI job, and it is not full fresh execution: a warm cache replays existing reports while a cold cache pays the complete analysis cost once.
+The completion gate's C++ stage is the declared `//test/lint:production_lint` test, which applies the report aspect to the declared completion roots without a diff selector, so `--commit` never narrows it: every compile owner's declared `srcs`, `hdrs`, `textual_hdrs` and additional compiler inputs that classify STRICT or RELAXED are gated — authored sources only, so external and generated inputs stay out — with unpaired headers and fragments covered through replay actions that select a real consumer from the baseline reports' include evidence. Deferral is still limited to recognized foreign-native-platform paths ([report contracts](bazel.md#lint-reports)). Full coverage reuses the existing report graph and action cache, with no new rule set, filename classifier or separate CI job, and it is not full fresh execution: a warm cache replays existing reports while a cold cache pays the complete analysis cost once. The independent authored-source ownership scan is the root `//:native_policy` test ([test ownership](bazel.md#test-ownership)). The lint test filters generated-only owners from authored policy, matching the former portal scope, so GLib-generated C and catalog arrays are not linted as project source while their real compile build remains in the normal graph.
 
 Reports are cached from actual native compile contexts and gated from the current BEP: 0 clean, 1 findings, 2 incomplete.
 Cached warnings still fail.
-`--check` and `--header-filter` are analysis-keyed; scope is not.
-`--check` skips Python lint and still applies the file's mode disables, so a check disabled in `RELAXED` mode produces no diagnostics on `test/` files.
+`--tidy-check` and `--header-filter` are analysis-keyed; scope is not.
+`--tidy-check <name>` runs only the requested C++ diagnostics, skipping unrelated language lint and audits. It still applies the file's mode disables, so a check disabled in `RELAXED` mode produces no diagnostics on `test/` files.
 `--tidy-arg` accepts only the documented diagnostic-only allowlist, and other raw options are rejected before preparation.
 The existing ownership/suppression policy, including stale `NOLINT` detection, applies; the route never exports or applies fixes.
 Windows Clang replay excludes MSVC `/WX` warning promotion alongside audited code-generation flags: Clang-only compatibility warnings must not become MSVC hard errors. Unix replay appends `-Wno-error` for the same reason. Native product compilation keeps its warning promotion; the linter's configured checks and genuine compiler-error failures are unchanged.
@@ -79,8 +79,8 @@ The curated baseline adds `objc-avoid-nserror-init`, `objc-dealloc-in-category`,
 These checks complement the C++ rules rather than imposing a foreign naming style.
 Checker regressions must distinguish Objective-C methods and ivars from C++ methods and record fields; a clean unmatched AST is not coverage.
 
-`./ao analyze` includes stable `clang-analyzer-osx.*` checks for Cocoa and Core Foundation path analysis.
-It is report-only unless `--fail-on-diagnostics` is selected; tool failures always fail.
+`./ao check analyzer` includes stable `clang-analyzer-osx.*` checks for Cocoa and Core Foundation path analysis.
+Findings fail by default; `--report-only` makes findings advisory, but tool and admission failures always fail.
 It runs a distinct ANALYZER profile over the same Bazel compile actions — a
 minimal `clang-analyzer-*` check group set, with the alpha, check, and test
 group leak policies owned by the analyzer configuration — and never reuses the
@@ -93,7 +93,7 @@ The `.mm` suffix selects a language, not a platform owner, so add a new native t
 For the native media adapter, select the tree containing its compile action:
 
 ```bash
-./ao analyze app/macos-appkit/MediaPlayerAdapter.mm --path /path/to/native/build --fail-on-diagnostics
+./ao check analyzer app/macos-appkit/MediaPlayerAdapter.mm --path /path/to/native/build
 ```
 
 The [LLVM check catalog](https://releases.llvm.org/22.1.0/tools/clang/tools/extra/docs/clang-tidy/checks/list.html) and [analyzer catalog](https://clang.llvm.org/docs/analyzer/checkers.html) define upstream checks.
@@ -102,7 +102,7 @@ Runtime evidence and Main Thread Checker remain separate; see [macOS development
 ## Platform coverage
 
 Clang-format is source-based and may run on any native host.
-Linux obtains it from Nix, macOS from the portal-selected `llvm@22`, and Windows from the LLVM SDK pinned in [`script/ao/windows-llvm-sdk.json`](../../script/ao/windows-llvm-sdk.json), which `ao.bat deps provision` installs and validates.
+Linux obtains it from Nix, macOS from the portal-selected `llvm@22`, and Windows from the LLVM SDK pinned in [`script/ao/windows-llvm-sdk.json`](../../script/ao/windows-llvm-sdk.json), which `ao.bat setup deps` installs and validates.
 Clang-tidy must replay a real native compile command with its flags, defines, generated headers, and SDK.
 The tidy engine stays the pinned LLVM 22 clang-tidy on every host, independent
 of the selected Linux product target compiler; reports replay the actual
@@ -118,13 +118,13 @@ Changed-file, folder, and `--all` scopes may defer only files incompatible with 
 A declared path that no admitted configuration selects fails rather than silently passing.
 An explicitly selected uncovered file always fails.
 If a compatible project file lacks an exact translation-unit command or a proved header consumer, the whole requested scope fails before a partial tidy pass.
-Check the selected owner and native prerequisites, then retry through `ao tidy`.
+Check the selected owner and native prerequisites, then retry through `ao check lint`.
 The report actions derive their own real Bazel compile contexts; no exported
 workspace compilation database or prerequisite whole-project build is needed.
 Header consumer selection, WinUI command merging, and Windows flag replay are specified in [native replay and header diagnostics](lint/checker-development.md#native-replay-and-header-diagnostics).
 
 The managed macOS environment pins Ruff and mypy but accepts the contracted Homebrew Python major/minor rather than an exact patch.
-It checks changed Python during hygiene without claiming the full tooling contract.
+It checks changed Python during `check lint` without claiming the full tooling contract.
 The `tooling` suite on Linux and Windows owns the version and behavior gate.
 
 ## Policy-specific diagnostics
@@ -140,7 +140,7 @@ The coding and product contracts remain authoritative when a custom check report
 | Filesystem path text              | Use `pathToUtf8()`, `pathToGenericUtf8()`, `pathFromUtf8()`, `pathFromNative()`, or `path::native()` at the appropriate boundary. | [Filesystem path text boundaries](lint/checker-development.md#filesystem-path-text-boundaries)   |
 
 The raw contract lexical guard remains an early failure for common spellings; AST checks own symbol resolution and narrow implementation-marker exceptions.
-New guardrail policy is owned by the shared Python inventory and rules in [`guardrails.py`](../../script/ao/core/guardrails.py), which the completion gate consumes directly.
+New guardrail policy is owned by the shared Python inventory and rules in [`guardrails.py`](../../script/ao/portal/guardrails.py), which the completion gate consumes directly.
 The completion `./ao check` runs the shared audits; ordinary incremental product builds do not rerun repository-wide scans.
 
 ## Triage
@@ -169,7 +169,7 @@ Use `NOLINT` only for an external API shape, a clear false positive, or a test-o
 
 Acceptable cases include GTKmm ownership handoff such as `Glib::make_refptr_for_instance(new T)`, GLib or GTK macros, C varargs or arrays at an API boundary, unavoidable test `reinterpret_cast`, framework-required method names, and genuine template or framework false positives.
 
-`./ao tidy` rejects a named `NOLINT` when that check is disabled for the file's `STRICT` or `RELAXED` mode, and a complete `ao check` runs the same stale-suppression scan over the whole project C++ set, not only changed files.
+`./ao check lint` rejects a named `NOLINT` when that check is disabled for the file's `STRICT` or `RELAXED` mode, and a complete `ao check` runs the same stale-suppression scan over the whole project C++ set, not only changed files.
 Because it cannot suppress a diagnostic, such a directive is stale.
 Remove local suppressions in the same change that disables a check or removes it from a mode.
 
@@ -241,8 +241,8 @@ Both supported tooling environments must match exact versions in `script/ao/tool
 
 `./ao format` formats `.bzl`, `.bazel`, and exactly named `BUILD`/`WORKSPACE`
 files with the [governed Buildifier](dependency-governance.md#repository-tooling).
-`--check` never rewrites them. `./ao tidy` and `./ao hygiene`
-check both formatting and lint; required product CI uses the hygiene gate. The existing changed-file, explicit-file, folder and `--all`
+`./ao check format` never rewrites them. `./ao check lint` checks semantic lint
+only; full completion gates formatting and lint through separate graph tests. The existing changed-file, explicit-file, folder and `--all`
 selectors apply, including root module/repository files and `asset/BUILD.bazel`.
 `.bazelrc`, `.bazelversion`, lockfiles and templates are not Starlark inputs.
 Bazel-only scopes do not prepare a C++ compiler, compile database or lint plugin.
@@ -265,8 +265,8 @@ are never filtered by category. C++ and Python lint policies are unchanged.
 
 `./ao format` applies pinned Prettier to `.md`, `.json`, `.yaml`, `.yml`, and
 `.css` files in scope, including root documents and `.agents/skills/`.
-Explicit files, `--folder`, `--commit`, and `--all` use the same selectors as
-other formatters. `./ao hygiene` checks that formatting before later lint stages.
+Explicit files or directories, `--commit`, and `--all` use the same selectors as
+other formatters. `./ao check format` verifies formatting separately from lint.
 For default and `--commit` scopes, a change to `.prettierrc.json`,
 `.prettierignore`, `.gitignore`, or `script/ao/prettier.json` expands the
 Prettier subset to all authored text in the format roots. Other formatters keep
@@ -282,7 +282,7 @@ Release-frozen compatibility documents also follow the
 [YAML compatibility policy](../reference/library/format/yaml.md#test-authority).
 
 `./ao setup prettier` prepares only the formatter and its pinned Node runtime;
-formatting also prepares a missing managed tool when applicable. Linux uses the
+`format` and `check format` require ready tools and do not install a missing SDK or formatter. Linux uses the
 Nix formatter; native hosts and lightweight documentation CI use hash-verified
 managed artifacts ([tool ownership](dependency-governance.md#repository-tooling)).
 An existing damaged cache fails rather than silently repairing itself or choosing
@@ -290,37 +290,41 @@ an ambient Node or npm installation. Provisioning discards the download archives
 after verification; decoded content and the provenance receipt are sufficient
 for offline reuse. Existing caches may retain their original download archives.
 
-`./ao docs check --format` combines documentation integrity with check-only
-formatting of the discovered Markdown set. Plain `./ao docs check` remains the
-links, metadata, and navigation checker.
+`./ao check docs` checks global documentation semantics: links, metadata, and
+navigation only. Run `./ao check format --docs` separately to verify the global
+discovered Markdown inventory; `--docs` cannot combine with paths, `--all`, or
+`--commit`. Both checks support host-Python documentation CI without a native SDK.
 
 ## GitHub Actions workflow lint
 
-`./ao hygiene` and `./ao check` include a check-only workflow-lint stage as
-repository source hygiene; it is not a C++ or Python test stage and has no
-standalone command. Scope is only direct `.github/workflows/*.yml` and
-`*.yaml` files: the changed-file, explicit-file, `--folder`, and `--all`
+`./ao check lint` and the graph's `workflows` target run a check-only workflow-lint
+stage as repository source hygiene; in the graph it is an independent Bazel
+verdict rather than a C++ or Python test stage, and it has no standalone `ao`
+command. Scope is only direct `.github/workflows/*.yml` and
+`*.yaml` files: the changed-file, explicit-file/directory, and `--all`
 selectors apply to that directory and never to arbitrary YAML. Prettier formats
 workflow YAML through `./ao format`; actionlint remains check-only. An empty
 workflow-lint scope is skipped without resolving actionlint.
 
 On Linux the stage runs the actionlint pinned by
 [`nixpkgs.json`](../../nixpkgs.json), including the packaged ShellCheck and
-Pyflakes; `shell.nix` exports `AO_NIX_ACTIONLINT`. The Nixpkgs pin is the
+Pyflakes; `shell.nix` exports `AO_NIX_ACTIONLINT`, and the `workflows` test
+inherits it without changing the environment of unrelated tests. The Nixpkgs pin is the
 sole version authority — there is no separate manifest, native installer, or
-setup command. macOS and Windows print an explicit skip for this Linux-owned stage;
-Linux CI supplies the enforcement pass, while source discovery itself is
-platform-independent. A YAML-only hygiene scope must not initialize the C++
+setup command. The `workflows` target is Linux-only, so macOS and Windows mark it
+host-incompatible; Linux CI supplies the enforcement pass, while source
+discovery itself is platform-independent. A YAML-only lint scope must not initialize the C++
 SDK or a managed Ruff/mypy environment; the base portal Python remains
 required. See the [version authority table](dependency-governance.md#find-the-source-of-truth).
 
 Fix findings in the workflow source. After editing `.github/workflows` files,
-rerun `./ao hygiene` over the changed files.
+rerun `./ao check lint` over the changed files, or run the graph's `workflows`
+target.
 
 ## Diagnostic-only runs
 
-`./ao tidy` and `./ao analyze` are diagnostic-only: the portal never exports or applies replacements, even when an upstream or custom diagnostic carries hint ranges.
-A shared validator in `script/ao/core/tidyconfig.py` enforces the same boundary for these commands; the report routes additionally restrict raw arguments to their documented allowlist.
+`./ao check lint` and `./ao check analyzer` are diagnostic-only: the portal never exports or applies replacements, even when an upstream or custom diagnostic carries hint ranges.
+A shared validator in `script/ao/policy/tidy_config.py` enforces the same boundary for these commands; the report routes additionally restrict raw arguments to their documented allowlist.
 The retired `--no-build` option is not accepted: actual reports require real compile actions.
 Raw clang-tidy arguments that request fixes are rejected: `-fix`, `-fix-errors`, `-fix-notes`, and `-export-fixes` in their single-dash, double-dash, and `=`-joined forms.
 A standalone `@responsefile` argument is rejected as well because a response file can hide those flags; the portal fails closed rather than expanding it.
@@ -334,12 +338,13 @@ Prefer hand edits for ownership, public API, behavior, naming, readability trade
 
 ## Verification
 
-After C++ lint edits, rerun the narrowest `./ao tidy` scope covering modified C++ files.
-After Python hygiene edits, rerun `./ao tidy` for modified Python and the
+After C++ lint edits, rerun the narrowest `./ao check lint` scope covering modified C++ files.
+After Python hygiene edits, rerun `./ao check lint` for modified Python and the
 [tooling runner](test/test-suite.md#tooling-and-lint-fixtures) when tooling
-behavior changed; complete `ao check` includes both tooling and hygiene.
-After workflow edits, rerun `./ao hygiene` over the changed
-`.github/workflows` files.
+behavior changed; complete `ao check` includes both the tooling targets and the
+graph's format and audit targets.
+After workflow edits, rerun `./ao check lint` over the changed
+`.github/workflows` files, or run the graph's `workflows` target.
 Run focused build or test validation when a lint fix changes behavior, ownership, public API, or test semantics.
 
 Platform-specific C++ requires its native tidy pass.

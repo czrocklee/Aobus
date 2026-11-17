@@ -68,7 +68,7 @@ Known direct-library migration seams are documented in the [presentation archite
 ## Validation
 
 Run the narrow tests for the changed owner and adapter, then the repository validation required by [validation and review](test/validation-and-review.md).
-The `./ao check` stage runs the shared completion-audit backend directly; the application architecture rules are declared in [`guardrails.py`](../../script/ao/core/guardrails.py).
+The `./ao check` stage runs the shared completion-audit backend directly; the application architecture rules are declared in [`guardrails.py`](../../script/ao/portal/guardrails.py).
 Ordinary application builds leave those repository-wide scans to that stage; complete the remaining validation selected by the policy above.
 
 Review evidence should identify:

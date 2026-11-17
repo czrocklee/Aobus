@@ -2,9 +2,37 @@
 
 Run from the repository root. Use the pinned native `bazel build`, `bazel test`,
 and `bazel run` for ordinary development. Project-specific operations use `./ao`
-on Linux/macOS or `ao.bat` on Windows; use `./ao help` for their command options.
+on Linux/macOS or `ao.bat` on Windows; use `./ao --help` for their command options.
+The four public commands are `setup` (explicit preparation), `format` (rewriting),
+`check` (read-only validation), and `measure` (coverage, performance, and concepts).
 The [Bazel build system](bazel.md) owns the graph, toolchain, profile, and cache
 contracts, including [native executable and SDK setup](bazel.md#direct-bazel-without-the-portal).
+
+## Project commands
+
+| Command                     | Role                                                                                                                                                            |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `setup <component>`         | Explicit preparation: `bazel`, `deps`, `llvm-sdk`, `winui-runtime`, `buildifier`, `prettier`, or `git-hooks`; each component exposes only its relevant options. |
+| `format [paths...]`         | Source rewriting only; paths accept files or directories.                                                                                                       |
+| `check`                     | Full native `bazel test //...` completion; select a mode with `--config`, not a positional flavor.                                                              |
+| `check format [paths...]`   | Read-only formatting; `--docs` selects the global Markdown inventory instead of paths, `--all`, or `--commit`.                                                  |
+| `check lint [paths...]`     | Scoped semantic lint and source audits, without formatting or global documentation semantics.                                                                   |
+| `check analyzer [paths...]` | Path-sensitive analysis; findings fail unless `--report-only` is explicit.                                                                                      |
+| `check docs`                | Global document semantics only; no paths, commit scope, formatting, or native SDK options.                                                                      |
+| `check contracts`           | Compile-contract analysis, not product or sanitizer runtime execution.                                                                                          |
+| `check deps`                | SDK admission, digest validation, and dependency reporting; optional JSON output.                                                                               |
+| `check winui`               | Read-only WinUI prerequisites; `--build-only` omits runtime prerequisites.                                                                                      |
+| `check instrumentation`     | Linux Debug instrumentation analysis only; no measurement or test execution.                                                                                    |
+| `measure coverage`          | Actual Linux Debug coverage collection; select suites with `--suite`.                                                                                           |
+| `measure performance`       | Performance review, defaulting to Release; select other supported modes with `--config`.                                                                        |
+| `measure concepts`          | Dependency concept metrics with SDK verification and provenance.                                                                                                |
+
+Scoped source commands accept `--all` or `--commit REV` instead of paths.
+Missing paths and invalid selections fail before discovery or native preparation.
+`format` and `check format` require ready tools; use explicit `setup` when a tool
+is absent. `--compiler gcc|clang` selects the Linux product compiler where
+supported. Use each command's `--help` for its own options rather than passing
+native build, sanitizer, or SDK switches to unrelated checks or measurements.
 
 ## Linux
 
@@ -21,16 +49,16 @@ bazel test //:tests
 
 Bazel builds incrementally and defaults to fastbuild. Linux targets compile with
 pinned GCC by default: `--compiler=gcc|clang` on `bazel build`/`test`/`run`
-selects the actual target compiler, and the project `check`, `perf` and
-`verify` commands accept the same selection (`--clang` remains the Clang
-alias). An unknown compiler value fails resolution; there is no silent
+selects the actual target compiler. Project `check`, `measure performance`, and
+`check contracts` accept `--compiler gcc|clang`; there is no `--clang` alias. An unknown compiler value fails resolution; there is no silent
 fallback. `//:tests` is the ordinary
-test selection, not the completion gate. `check` combines documentation,
-supported-host tooling, native products/tests and shared audits, optional
-sanitizers, and hygiene — complete native C++ lint plus scoped remaining stages;
-see the [completion gate](bazel.md#completion-gate).
-Standalone `./ao hygiene` uses that same check-only implementation for a selected
-source scope. Choose completion checks from
+test selection, not the completion gate. `check` prepares the ready native environment and
+runs one `bazel test //...`, so the graph owns documentation, supported-host
+tooling, native products/tests, the shared audits, the native-policy audits, the
+Linux-only instrumentation analysis tests and the whole-graph lint test; see the
+[completion gate](bazel.md#completion-gate).
+Standalone `./ao check lint` validates source semantics in a selected scope;
+`./ao check format` verifies formatting separately. Choose completion checks from
 [validation and review](test/validation-and-review.md).
 
 For project commands, the portal enters the pinned `nix-shell` automatically.
@@ -78,7 +106,8 @@ Preserve failing outputs and logs when diagnosing a problem.
 
 ### Managed validation trees
 
-Project commands such as `check`, `verify`, `tidy`, and `coverage` use managed
+Project commands such as `check`, `check contracts`, `check lint`, and
+`measure coverage` use managed
 Bazel trees under the platform build root — `/tmp/build/<project-directory>`
 on Linux and macOS, using the checkout directory's final name.
 Without an explicit selection, each configuration gets its own default tree named
@@ -111,7 +140,7 @@ with Core Audio. Bare native commands require an explicitly selected provisioned
 SDK; Windows additionally needs an initialized x64 Visual Studio environment
 and all three [standard compiler selectors](bazel.md#direct-bazel-without-the-portal).
 Project commands use `ao.bat` to initialize Visual Studio and pinned Python tooling.
-SDK installation is explicit: `ao deps provision`, and `ao setup llvm-sdk` for
+SDK installation is explicit: `ao setup deps`, and `ao setup llvm-sdk` for
 the Windows LLVM SDK, are the provisioning actions; ordinary build, lint and
 format commands never install an SDK and consume a ready installed one.
 
@@ -121,13 +150,15 @@ Native Bazel owns its build/test scheduling; use `--jobs=N` and the native
 Bazel test scheduling options when needed. It has no project shard-count
 environment override.
 
-Project check, tidy, and tooling defaults share the worker baseline in
+Project completion, lint, and tooling defaults share the worker baseline in
 `script/ao/core/jobs.py`: use available logical cores, reserving one locally but
 none on GitHub Actions, with a minimum of one. Discovery respects process
 affinity where available; explicit job overrides take precedence. For `ao check`,
-`--jobs` also limits the concurrent tooling test modules. Native lint fixture
-actions declare their own worker/resource count in the graph. Coverage is the
-exception: its `-j` default is a fixed two jobs, not the shared worker baseline.
+`--jobs` is Bazel's job count, so it also bounds the concurrently executing
+tooling targets. Native lint fixture
+actions declare their own worker/resource count in the graph. Coverage and
+instrumentation use the same baseline for `-j`; coverage collection retains
+its separate memory-specific limits.
 
 CI's stdlib-only bootstrap helper computes the same affinity-aware worker count
 before native work; an unknown or nonpositive count fails before exports are
@@ -144,7 +175,7 @@ AOBUS_PHASE_LOG_DIR=/tmp/aobus-phases ./ao check
 ```
 
 Each process writes its own JSONL file. This opt-in capture remains a local
-tool. CI summarizes its existing completion receipts, BEP files and available
+tool. CI summarizes its existing check BEP files and available
 cache stop accounting without enabling these measurements; the immutable raw
 artifacts remain available ([CI product
 gates](bazel.md#ci-product-gates-and-r2-validation)). Validate collected
@@ -192,8 +223,8 @@ explicitly rejected with a diagnostic, and no private capture is created.
 
 ## Dependencies and optional setup
 
-- [Dependency governance](dependency-governance.md) explains resolver ownership; `./ao deps report` shows governed versions and native identities from the actual installed native and test SDK manifests and hash inputs.
-- [Bazel build system](bazel.md): the graph, toolchains, profiles, lint, completion, coverage, and caching contracts behind the native workflow and complete `ao check`, including its full C++ lint stage and scoped remaining hygiene.
+- [Dependency governance](dependency-governance.md) explains resolver ownership; `./ao check deps` validates and shows governed versions and native identities from the actual installed native and test SDK manifests and hash inputs.
+- [Bazel build system](bazel.md): the graph, toolchains, profiles, lint, completion, coverage, and caching contracts behind the native workflow and complete `ao check`, including its whole-graph lint test.
 - [Dependency upgrade](dependency-upgrade.md) owns pin changes, including C++, Python, Ruff, and mypy.
-- [Concept metrics](concept-metrics.md) owns `./ao deps report --concepts` and its interpretation.
+- [Concept metrics](concept-metrics.md) owns `./ao measure concepts` and its interpretation.
 - [Contributor workflow](../../CONTRIBUTING.md) explains optional Git hooks and preparing a review.

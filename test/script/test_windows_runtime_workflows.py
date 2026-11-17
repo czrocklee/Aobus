@@ -11,7 +11,7 @@ from pathlib import Path
 from unittest import mock
 
 from ao.core import bazel_native as native
-from ao.core import bazel_workflows as workflows
+from ao.portal import bazel_workflows as workflows
 
 
 def _path_key(path):

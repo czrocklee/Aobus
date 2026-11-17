@@ -152,13 +152,8 @@ function Record-Call {
     param([string]$Kind, $Data)
     [pscustomobject]@{ kind = $Kind; data = $Data } | ConvertTo-Json -Compress -Depth 6 | Add-Content -LiteralPath $CallsPath
 }
-'@
-$scenarioOverrides = @'
-# Test-only overrides; Start-Process cannot spawn a real process.
 # Record the attempt before reading a plan. Missing, empty, and exhausted
-# plans record an independent fixture-violation, then throw. A planned
-# throwMessage is an intentional query failure, not a fixture violation.
-$script:VcIndex = 0; $script:RuntimeIndex = 0; $script:ProcessIndex = 0
+# plans record an independent fixture-violation, then throw.
 function Get-FixturePlan {
     param([string]$Kind, $Plans, [bool]$HasPlans, [int]$Index, $CallData)
     Record-Call $Kind $CallData
@@ -174,6 +169,11 @@ function Get-FixturePlan {
     }
     return $entries[$Index]
 }
+'@
+$scenarioOverrides = @'
+# Test-only overrides; Start-Process cannot spawn a real process.
+# A planned throwMessage is an intentional query failure, not a fixture violation.
+$script:VcIndex = 0; $script:RuntimeIndex = 0; $script:ProcessIndex = 0
 function Test-ElevatedAdministrator { return $Mock.admin }
 function Get-VcRuntimeState {
     param([string]$RequiredVersion)
@@ -230,14 +230,21 @@ function Test-InstallerIntegrity {
 }
 '@
 }
-if ($mockProperties -contains 'signature') {
+if ($mockProperties -contains 'signature' -or $mockProperties -contains 'signatures') {
     $extras += @'
+$script:SignatureIndex = 0
 function Get-AuthenticodeSignature {
     param([string]$LiteralPath)
-    Record-Call 'signature' @{ literalPath = $LiteralPath }
+    if ($null -ne $Mock.PSObject.Properties['signatures']) {
+        $signature = Get-FixturePlan -Kind 'signature' -Plans $Mock.signatures -HasPlans $true -Index $script:SignatureIndex -CallData @{ literalPath = $LiteralPath }
+        $script:SignatureIndex++
+    } else {
+        Record-Call 'signature' @{ literalPath = $LiteralPath }
+        $signature = $Mock.signature
+    }
     $certificate = $null
-    if ($Mock.signature.subject) { $certificate = [pscustomobject]@{ Subject = $Mock.signature.subject } }
-    return [pscustomobject]@{ Status = $Mock.signature.status; SignerCertificate = $certificate }
+    if ($signature.subject) { $certificate = [pscustomobject]@{ Subject = $signature.subject } }
+    return [pscustomobject]@{ Status = $signature.status; SignerCertificate = $certificate }
 }
 '@
 }

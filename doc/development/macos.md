@@ -39,7 +39,7 @@ use `./ao` for project-specific commands. Explicit setup is:
 
 ```bash
 ./ao setup bazel
-./ao deps provision --path /tmp/build/aobus-native-sdk
+./ao setup deps --path /tmp/build/aobus-native-sdk
 ```
 
 Use the pinned executable printed by setup (or a Bazelisk pinned to
@@ -75,20 +75,23 @@ bazel run //app/macos-appkit:aobus-appkit
 bazel test //:tests           # ordinary default selection
 bazel test //test/lint:lint_test --nocache_test_results  # fresh result assertions
 ./ao check                    # complete native fastbuild gate
-./ao check release            # complete native Release gate
+./ao check --config release   # complete native Release gate
 ./ao check --asan             # supported suites with ASan/UBSan
 ./ao check --tsan             # TSan-safe core, application, and backend suites
-./ao hygiene                  # standalone scoped check-only entry
+./ao check lint               # scoped semantic lint
+./ao check format             # scoped read-only formatting
 ./ao setup prettier           # pinned formatter/Node bundle only
-./ao deps report
-./ao deps verify
+./ao check deps
 ```
 
-`./ao check` includes live documentation validation, complete native C++ lint,
-and scoped remaining hygiene, but does not run fixture-dependent AppKit GUI
-scenarios. macOS has no repository
-Python tooling suite. Ordinary `//:tests` excludes GUI smoke, backend service
-checks, and lint fixtures; completion owns the broader native selection.
+`./ao check` runs the same wildcard `bazel test //...` graph as every host, so
+it includes live documentation, formatting, source guardrails, the native-policy
+audit and the whole-graph lint test, but it does not run fixture-dependent
+AppKit GUI scenarios. macOS selects only the remote-cache self-test module from the
+per-module tooling tests; the other unit-test modules are host-incompatible
+there, so macOS has no full repository Python unit-test suite. Workflow lint and
+the representative compiler driver diagnostic are Linux-only. Ordinary `//:tests` excludes GUI smoke, backend service checks, and
+lint fixtures; the wildcard graph is broader.
 `./ao check --tsan` runs the full normal fastbuild completion first — which builds
 the completion products, including the AppKit product bundle (built, never
 run) — then a separate
@@ -100,7 +103,8 @@ an explicitly configured native smoke target with `--config=tsan` when an
 AppKit scenario needs TSan; that raw run and its runtime are caller-owned.
 
 The portal starts with Homebrew Python and selects the managed environment
-on demand for check/docs and Python format/tidy/hygiene scopes. Other commands can use the base
+on demand for completion, documentation semantics, and Python formatting/lint scopes.
+Other commands can use the base
 interpreter; `/usr/bin/python3` only reads initial bootstrap JSON fields.
 The managed environment matches Ruff and mypy pins, but macOS does not claim
 exact Python patch parity or expose a standalone tooling suite. Full `check`
@@ -156,7 +160,7 @@ Both use the same fail-closed transform over the selected LLVM header.
 
 `AOBUS_STATE_ROOT` replaces that base. `VCPKG_ROOT` is a diagnostic override for
 a complete pre-bootstrapped checkout; registry and manifest locks still apply.
-`./ao deps provision` installs the selected tree's vcpkg manifest.
+`./ao setup deps` installs the selected tree's vcpkg manifest.
 
 Keep build trees, vcpkg state, managed Python environments, tools and SDK
 caches on host-local storage, independently of the source location. The portal
@@ -182,15 +186,15 @@ the normalized absolute checkout path supplied to the native bootstrap and an
 ID stored in its private Git directory. macOS does not canonicalize every path
 alias for this key; a different symlink or path spelling can select another
 environment. If no stored ID can be read or created, commands such as
-`./ao hygiene` cannot initialize the environment.
+`./ao check lint` cannot initialize the environment.
 Set one stable, unique `AOBUS_CHECKOUT_ID` for that checkout, per invocation or
 in a directory-scoped environment.
 
 An unconditional shell-profile export also overrides native clones' stored
 IDs and can select different managed Python environments for them.
 The override does not repair Git linkage. Default Git-based scope discovery
-can fail during preflight, before managed-tool setup. Select explicit files,
-`--folder <dir>`, or `--all` for format/tidy/hygiene to avoid that discovery;
+can fail during preflight, before managed-tool setup. Select explicit files or
+directories, or `--all` for `format`, `check format`, or `check lint` to avoid that discovery;
 these scopes still need a usable managed-tool identity. `--commit` remains
 Git-dependent. For alternate metadata, use the separate binding below.
 
@@ -201,12 +205,12 @@ intended private Git directory and the portal's actual source root per invocatio
 
 ```bash
 AOBUS_GIT_DIR="$HOME/local-metadata/worktrees/aobus" \
-AOBUS_GIT_WORK_TREE="/Volumes/source/aobus" ./ao format --check
+AOBUS_GIT_WORK_TREE="/Volumes/source/aobus" ./ao check format
 ```
 
 These are example paths, not metadata to create or copy. Both variables must be
 present, nonempty native absolute paths; malformed pairs fail when Git-backed
-source discovery runs. Explicit files, `--folder`, and `--all` bypass this
+source discovery runs. Explicit files or directories and `--all` bypass this
 discovery and its binding validation. A complete pair for another normalized
 root is ignored; a discovery failure reports the mismatch. Use the root
 spelling seen by the portal, rather than assuming aliases will match.
@@ -235,7 +239,7 @@ Neither the binding nor these discovery options prove a write-free checkout.
 
 The explicit `//app/macos-appkit:aobus-appkit` target builds the existing
 incremental AppKit product as `Aobus.app`; it is outside Bazel's default test
-aggregate. After `./ao deps provision` installs the tree's vcpkg manifest, build
+aggregate. After `./ao setup deps` installs the tree's vcpkg manifest, build
 and run from the repository root:
 
 ```bash
@@ -281,7 +285,7 @@ state directory. The two paths must not equal or contain one another. The
 native smoke main rejects unsafe roots and prepares deterministic media fixtures
 before creating the application. The bundle launcher retains the process
 supervisor and library-successor launch bridge for the `desktop` scenario;
-`script/ao/core/appkitprocess.py` owns that process policy.
+`script/ao/graph/appkit_process.py` owns that process policy.
 
 ```bash
 bazel run //app/macos-appkit:ao_appkit_smoke -- --scenario desktop \
@@ -305,7 +309,7 @@ before the application-argument `--`; raw sanitizer runtime options remain
 caller-owned, not managed sanitizer-gate evidence. For native lifecycle or
 authoring work, run applicable scenarios in Debug, Release, and TSan; add ASan
 for memory-sensitive changes. Include both `app/macos-appkit` and
-`test/macos-appkit` in scoped hygiene.
+`test/macos-appkit` in scoped `check lint` and `check format`.
 
 Treat each scenario only as evidence for the surface it drives:
 
@@ -352,10 +356,10 @@ from static analysis, clang-tidy, and sanitizers.
 
 Choose completion scope from
 [validation and review](test/validation-and-review.md). A macOS C++ change
-normally runs `./ao check`, which includes complete native C++ lint, scoped
-remaining hygiene, and documentation. Changes to Release
+normally runs `./ao check`, which includes the whole-graph lint test and
+documentation. Changes to Release
 configuration, dependencies, or optimizer-sensitive code also run
-`./ao check release`. Concurrency and memory work follows
+`./ao check --config release`. Concurrency and memory work follows
 [concurrency and sanitizer validation](test/concurrency-and-sanitizer.md).
 
 The CI native matrix currently covers Intel and Apple Silicon. Native AppKit GUI
@@ -378,7 +382,7 @@ Set `testOutputUid` from native device enumeration and select that exact UID
 for the test process:
 
 ```bash
-AOBUS_TEST_COREAUDIO_DEVICE_UID="$testOutputUid" ./ao check release
+AOBUS_TEST_COREAUDIO_DEVICE_UID="$testOutputUid" ./ao check --config release
 AOBUS_TEST_COREAUDIO_DEVICE_UID="$testOutputUid" bazel run //app/macos-appkit:ao_appkit_smoke -- --scenario presentation \
   --state-root /tmp/aobus-presentation-state --library /tmp/aobus-presentation-music
 ```

@@ -15,8 +15,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ao.core import bazel_lint_action as action
 from ao.core.paths import PROJECT_ROOT
+from ao.graph import bazel_lint_action as action
 
 # The native compile action's argv[0] under the patched apple_support toolchain.
 _APPLE_ENTRY = "bazel-out/darwin_arm64-opt-exec/bin/external/+dependencies+aobus_toolchain/entry/wrapped_clang_pp"
@@ -198,7 +198,7 @@ class LintActionTest(unittest.TestCase):
         # Execute the action script's imports exactly as Bazel starts it.
         probe = (
             "import pathlib, runpy, sys\n"
-            "runpy.run_path('script/ao/core/bazel_lint_action.py', run_name='lint_probe')\n"
+            "runpy.run_path('script/ao/graph/bazel_lint_action.py', run_name='lint_probe')\n"
             "root = pathlib.Path('script').absolute()\n"
             "for module in list(sys.modules.values()):\n"
             "    path = pathlib.Path(getattr(module, '__file__', None) or '/')\n"
@@ -209,7 +209,7 @@ class LintActionTest(unittest.TestCase):
             [sys.executable, "-I", "-S", "-B", "-c", probe], cwd=PROJECT_ROOT, capture_output=True, text=True
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        imported = set(result.stdout.split()) - {"script/ao/core/bazel_lint_action.py"}
+        imported = set(result.stdout.split()) - {"script/ao/graph/bazel_lint_action.py"}
         self.assertEqual(imported, declared)
 
     def test_policy_preparation_imports_only_the_watched_module_closure(self):
@@ -221,12 +221,12 @@ class LintActionTest(unittest.TestCase):
         declared = set(re.findall(r'"(script/ao/[^"]+\.py)"', action_sources[1] + preparation_sources[1]))
         probe = (
             "import argparse, pathlib, runpy, sys\n"
-            "helper = runpy.run_path('script/ao/core/bazel_lint_action.py', run_name='lint_probe')\n"
+            "helper = runpy.run_path('script/ao/graph/bazel_lint_action.py', run_name='lint_probe')\n"
             "helper['prepare'](argparse.Namespace(\n"
             f"configuration=pathlib.Path({str(self.root / 'configuration.json')!r}),\n"
             f"output=pathlib.Path({str(self.root / 'rendered.json')!r})))\n"
             "root = pathlib.Path('script').absolute()\n"
-            "print('script/ao/core/bazel_lint_action.py')\n"
+            "print('script/ao/graph/bazel_lint_action.py')\n"
             "for module in list(sys.modules.values()):\n"
             "    path = pathlib.Path(getattr(module, '__file__', None) or '/')\n"
             "    if path.is_relative_to(root):\n"
@@ -505,8 +505,8 @@ class LintActionTest(unittest.TestCase):
         checkout = self.root / "windows-checkout"
         windows_os = types.SimpleNamespace(name="nt")
         for tail in (
-            ("SCRIPT", "AO", "CORE", "BAZEL_LINT_ACTION.PY"),
-            ("ScRiPt", "Ao", "CoRe", "Bazel_Lint_Action.py"),
+            ("SCRIPT", "AO", "GRAPH", "BAZEL_LINT_ACTION.PY"),
+            ("ScRiPt", "Ao", "GrApH", "Bazel_Lint_Action.py"),
         ):
             with self.subTest(tail=tail):
                 helper = checkout.joinpath(*tail)
@@ -515,7 +515,7 @@ class LintActionTest(unittest.TestCase):
                 with patch.object(action, "__file__", str(helper)), patch.object(action, "os", windows_os):
                     self.assertEqual(action._runtime_roots(), (Path.cwd(), checkout))
         for wrong in (
-            ("SCRIPT", "AO", "CORE", "BAZEL_LINT_ACTION.PYC"),
+            ("SCRIPT", "AO", "GRAPH", "BAZEL_LINT_ACTION.PYC"),
             ("SCRIPT", "AO", "FOREIGN", "BAZEL_LINT_ACTION.PY"),
         ):
             with self.subTest(wrong=wrong):
@@ -1683,7 +1683,7 @@ class LintActionTest(unittest.TestCase):
             encoding="utf-8",
         )
         self.host.chmod(0o700)
-        base = [sys.executable, str(PROJECT_ROOT / "script/ao/core/bazel_lint_action.py")]
+        base = [sys.executable, str(PROJECT_ROOT / "script/ao/graph/bazel_lint_action.py")]
         common = [
             "--policy",
             "policy.json",

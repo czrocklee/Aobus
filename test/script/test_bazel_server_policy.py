@@ -8,8 +8,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from ao.core import bazel_native as native
-from ao.core import bazel_providers as providers
-from ao.core import bazel_workspace as workspace
+from ao.portal import bazel_providers as providers
+from ao.portal import bazel_workspace as workspace
 
 
 class BazelServerPolicyTest(unittest.TestCase):
@@ -32,7 +32,7 @@ class BazelServerPolicyTest(unittest.TestCase):
             patch.object(native, "native_platform", return_value=host),
             patch.object(providers, "vcpkg_prefix", return_value=self.root / "provider"),
             patch.object(workspace.Path, "home", return_value=self.root / "home"),
-            patch.object(workspace.builddir, "windows_state_root", return_value=self.root / "windows-state"),
+            patch.object(workspace.build_dir, "windows_state_root", return_value=self.root / "windows-state"),
         ):
             prepared = workspace.prepare_workspace(tree, config)
         return [

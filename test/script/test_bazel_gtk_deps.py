@@ -8,10 +8,10 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
 
-from ao.core import bazel_dependencies as dependencies
-from ao.core import bazel_host_tools as host_tools
 from ao.core import bazel_native as native
-from ao.core import bazel_providers as providers
+from ao.portal import bazel_dependencies as dependencies
+from ao.portal import bazel_host_tools as host_tools
+from ao.portal import bazel_providers as providers
 
 
 class GtkSdkPolicyTest(unittest.TestCase):

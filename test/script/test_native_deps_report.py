@@ -13,9 +13,12 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
-from ao.command import deps
+from ao.__main__ import make_parser
+from ao.command import check
 from ao.core import bazel_native as native
+from ao.portal import dependency_checks as deps
 
 # Independent literal canonical repository names that really satisfy the
 # declared-source contract: the canonical name must end with "+" + the target
@@ -66,8 +69,8 @@ class ManifestFileFixture(unittest.TestCase):
 
         return implementation
 
-    def manifest_file(self, target, query, *, config="release", workers=7):
-        return deps._manifest_file(target, config, workers, query)
+    def manifest_file(self, target, query, *, workers=7):
+        return deps._manifest_file(target, workers, query)
 
 
 class ManifestFileSourceResolutionTest(ManifestFileFixture):
@@ -119,6 +122,32 @@ class ManifestFileSourceResolutionTest(ManifestFileFixture):
                     [f"'{owner}'", "--output=location", "--lockfile_mode=error"],
                 ),
             ],
+        )
+
+
+class DependencyCheckDispatchTest(unittest.TestCase):
+    def test_check_deps_forwards_selection_and_json_to_single_verification_service(self):
+        args = make_parser().parse_args(
+            [
+                "check",
+                "deps",
+                "--config",
+                "release",
+                "--path",
+                "/selected/tree",
+                "--jobs",
+                "3",
+                "--vcpkg-prefix",
+                "/sdk",
+                "--json",
+                "/reports/deps.json",
+            ]
+        )
+        with mock.patch.object(deps, "check", return_value=7) as verify:
+            self.assertEqual(check.run_command(args), 7)
+        verify.assert_called_once_with(
+            deps.Request(config="release", path="/selected/tree", jobs=3, vcpkg_prefix="/sdk"),
+            json_output=Path("/reports/deps.json"),
         )
 
 

@@ -8,8 +8,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
 
-from ao.core import bazel_compiler_probe as compiler_probe
 from ao.core import bazel_native as native
+from ao.portal import bazel_compiler_probe as compiler_probe
 
 
 class MacosToolchainIdentityTest(unittest.TestCase):

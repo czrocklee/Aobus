@@ -1,4 +1,4 @@
-"""Tests for ao.core.dedup — diagnostic block de-duplication."""
+"""Tests for ao.policy.dedup — diagnostic block de-duplication."""
 
 import io
 import os
@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ao.core.dedup import deduplicate
+from ao.policy.dedup import deduplicate
 
 ROOT = Path("/repo")
 

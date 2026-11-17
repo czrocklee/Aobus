@@ -143,5 +143,5 @@ implementations under [`app/uimodel/`](../../../app/uimodel). Runtime interfaces
 are under [`app/include/ao/rt/`](../../../app/include/ao/rt). GTK, TUI, WinUI,
 and AppKit adapters live in their respective application directories.
 [`app/uimodel/BUILD.bazel`](../../../app/uimodel/BUILD.bazel) and the shared
-[architecture audit](../../../script/ao/core/guardrails.py) enforce
+[architecture audit](../../../script/ao/portal/guardrails.py) enforce
 important dependency and vocabulary boundaries.

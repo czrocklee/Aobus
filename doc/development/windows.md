@@ -63,7 +63,7 @@ Run from the repository root. Prepare the pinned executable and SDK explicitly:
 
 ```bat
 ao.bat setup bazel
-ao.bat deps provision
+ao.bat setup deps
 ```
 
 Use the pinned executable printed by setup (or a Bazelisk pinned to
@@ -83,15 +83,13 @@ bazel run //app/cli:aobus -- --help
 bazel run //app/tui:aobus-tui
 bazel test //:tests
 ao.bat check
-ao.bat check release
+ao.bat check --config release
 ao.bat check --asan
 ao.bat setup llvm-sdk
 ao.bat setup prettier
-ao.bat format --check
-ao.bat tidy
-ao.bat hygiene
-ao.bat deps report
-ao.bat deps verify
+ao.bat check format
+ao.bat check lint
+ao.bat check deps
 ```
 
 Use
@@ -109,9 +107,12 @@ Running an existing binary directly is diagnostic reuse, not proof of source
 provenance, SDK/DLL freshness, or post-build integrity.
 
 The Windows bootstrap launches the selected interpreter directly; it does not
-return interpreter paths through temporary files. The selected Python process
-parses once, retains any resolved source scope, and dispatches the same invocation.
-Visual Studio's batch setup runs separately with no application arguments; its
+return interpreter paths through temporary files. Base Python parses the invocation
+for tool admission and transfers any resolved source scope, including individual-file
+provenance, through a private temporary record. The foreground selected interpreter
+parses the same arguments and consumes that frozen scope rather than scanning again;
+the bootstrap retains the record until the child exits. Ambient scope records are
+not adopted. Visual Studio's batch setup runs separately with no application arguments; its
 environment returns through a private in-memory channel. Argument forwarding does
 not use `CALL`. Parsing keeps the caller's working directory, while command
 execution uses the repository root; UNC roots retain a `pushd` mapping until the
@@ -121,9 +122,9 @@ foreground portal exits. This does not replace build-tree or provisioning locks.
 the same Visual Studio environment. It preserves an explicit `VCPKG_ROOT` and
 otherwise selects Visual Studio's bundled vcpkg.
 
-`ao.bat check` includes documentation, Windows tooling, native completion,
-shared audits, and hygiene using the standalone `ao.bat hygiene`
-implementation — complete native C++ lint plus scoped remaining stages
+`ao.bat check` prepares the ready native environment and runs one
+`bazel test //...`, so the graph includes documentation, Windows tooling, native
+tests, the shared and naming audits and the whole-graph lint test
 ([completion gate](bazel.md#completion-gate)). Ordinary native Bazel builds/runs
 do not repeat repository-wide source scans.
 
@@ -137,7 +138,7 @@ Debug, `/MD` in Release and fastbuild, supplied by the native toolchain. Windows
 Windows App SDK/runtime and build-tool executables remain separate boundaries;
 this is a dynamic development SDK, not a fully static executable.
 
-Let `ao.bat deps provision` install the reviewed SDK closure into the
+Let `ao.bat setup deps` install the reviewed SDK closure into the
 selected tree; do not rename old import libraries, mix installations from
 different triplets, or copy old caches into it. A stale
 `x64-windows-static-md` installation is not this SDK. The build consumes that
@@ -273,7 +274,7 @@ A linked worktree created on another host may have a `.git` pointer that native
 Git cannot use. For Git-backed source discovery, pass `AOBUS_GIT_DIR` (the
 intended private Git directory) and `AOBUS_GIT_WORK_TREE` (the source root) to
 the portal process. Both must be present, nonempty native absolute paths;
-malformed pairs fail when discovery runs. Explicit files, `--folder`, and
+malformed pairs fail when discovery runs. Explicit files or directories and
 `--all` bypass this discovery and its binding validation. A complete pair for
 another normalized root is ignored; a discovery failure reports the mismatch.
 
@@ -293,7 +294,7 @@ $previousWorkTree = $env:AOBUS_GIT_WORK_TREE
 try {
     $env:AOBUS_GIT_DIR = $verifiedPrivateGitDir
     $env:AOBUS_GIT_WORK_TREE = $verifiedPortalRoot
-    .\ao.bat format --check
+    .\ao.bat check format
 } finally {
     $env:AOBUS_GIT_DIR = $previousGitDir
     $env:AOBUS_GIT_WORK_TREE = $previousWorkTree
@@ -326,8 +327,8 @@ checkout is write-free.
 Check prerequisites and install the governed runtime explicitly when needed:
 
 ```bat
-ao.bat doctor winui
-ao.bat doctor winui --build-only
+ao.bat check winui
+ao.bat check winui --build-only
 ao.bat setup winui-runtime
 ```
 
@@ -369,7 +370,7 @@ It never launches GUI probes. The configured graph owns the boundary that
 neither the shipping nor default build transitively depends on probes, and the
 completion selection includes the application and every configured probe.
 
-`ao.bat check release` validates the managed Release IPO graph — MSVC `/GL` and
+`ao.bat check --config release` validates the managed Release IPO graph — MSVC `/GL` and
 `/LTCG` with the exact MainWindow per-file exception — and the same WinUI
 validation in Release.
 
@@ -385,7 +386,7 @@ facades.
 ### Bazel product details
 
 The [WinUI target](bazel.md#winui-product) stages the real
-product as `//app/windows-winui:aobus-winui`. `ao.bat deps provision` installs
+product as `//app/windows-winui:aobus-winui`. `ao.bat setup deps` installs
 the tree's vcpkg manifest and restores the locked NuGet closure into the managed
 cache; the existing `packages.config`, dependency
 policy and Windows SDK selection remain the version authorities, and builds
@@ -473,7 +474,7 @@ text, HelpText, availability, owner-window resize, and teardown against shared
 Now Playing presentation.
 These are native-property observations, not an opened tooltip's wrapping,
 clipping, pixels, or physical speaker-routing evidence. Keep the state directory
-as evidence and close the probe before another build or hygiene refresh.
+as evidence and close the probe before another build or lint refresh.
 
 Input rejection runs before WinRT/XAML startup and can be checked without a
 desktop. Invoke the same executable with invalid arguments and require exit
@@ -549,7 +550,7 @@ certify physical input, shipping-template paint, live shipping theme changes or
 audible playback. Inspect the actual shipping window separately for those
 claims. The shipping executable has no probe switches; probe application
 metadata stays outside its WinMD/PRI dependency closure. Close the application
-and probes before another portal build or hygiene refresh can relink them.
+and probes before another portal build or lint refresh can relink them.
 
 ### UI Automation naming gate
 
@@ -562,10 +563,12 @@ bazel run //app/windows-winui:ao_winui_automation_probe
 
 This builds the probe and declared resources before launching it. The shipping
 application target does not build or refresh probes. `ao.bat check` builds the
-WinUI validation graph but never executes GUI probes, and `//:tests` does not
-include this explicit desktop run.
+WinUI validation graph but executes no GUI probe by default: the automation
+probe is `//test:winui_uia_test`, which wildcard discovery selects only under
+`--config=ci` (`--//bazel:desktop_tests=true`), and `//:tests` does not include
+this explicit desktop run.
 
-The probe requires an authenticated interactive console: it exits with a diagnostic instead of starting a GUI whenever the process is not in the active console session (no session 0, no silent skip, no fallback), so an unattended host fails rather than reports false success. CI runs the same real probe as a separate required Windows gate after its completion check, through Bazel, with the same runtime and interactive-console admission; the runner must provide that session. The gate does not provision or bypass desktop login.
+The probe requires an authenticated interactive console: it exits with a diagnostic instead of starting a GUI whenever the process is not in the active console session (no session 0, no silent skip, no fallback), so an unattended host fails rather than reports false success. CI runs the same real probe inside its `ao check --ci` completion, through Bazel, with the same runtime and interactive-console admission; the runner must provide that session. The gate does not provision or bypass desktop login.
 
 The probe loads the real `MainWindow` against an isolated `LibrarySession` with two metadata-only tracks in one album (a disposable scratch root, no playback or personal saved settings). It drives the true Modern and Classic shells, flat and album-grouped rows, a narrowed Classic window, and the volume and overflow popups. It walks the automation tree — peers and their children, including disabled controls — and requires a nonblank final `AutomationPeer.Name` from the audited interactive and item roles; an attached property or id stamp alone is never accepted as a name. Decorative (`Raw` view), text, and layout roles are out of scope, and `ScrollBar` template internals are explicitly excluded.
 
@@ -576,12 +579,19 @@ Name presence is not semantic correctness: dialogs the probe never opens, rows i
 ## Native tests and sanitizers
 
 The ordinary `bazel test //:tests` selection covers Core, application, TUI,
-and CLI contracts. `ao.bat check` adds tooling, lint fixtures, native completion,
-documentation, and hygiene with complete native C++ lint coverage. It runs
-`//test:backend_test` as on every
-host, but both current Windows cases are hidden `[.manual]`; the unattended
-executable permits an empty selection. A passing empty selection is not hardware
-evidence ([completion gate](bazel.md#completion-gate)). Choose the exact case
+and CLI contracts, including the native process tests. Context-bearing Windows
+tests use the same per-test wrapper as every native OS; off Linux it passes the
+test through unchanged and starts no services: the native process smoke
+resolves its own runfiles, and
+the UIA probe checks the Windows App Runtime and interactive session itself.
+`ao.bat check` adds
+tooling, documentation, the shared and naming audits, workflow lint, the
+native-policy audit (the driver diagnostic is Linux-only) and the whole-graph
+lint test. The native backend suite carries `manual` but the
+non-manual `//:check_tests` suite lists it, so completion runs it; both current
+Windows cases are hidden `[.manual]`, and the unattended executable permits an
+empty selection. A passing empty selection is not hardware evidence
+([completion gate](bazel.md#completion-gate)). Choose the exact case
 whose prerequisites you prepared; `[.manual]` selects both probes, not just the
 provider example below. Concurrency filters should exclude hidden probes.
 
@@ -590,7 +600,7 @@ assertions for fixtures produced with the governed LLVM SDK and Visual Studio
 includes; the unchanged Clang fixture producer may be action-cached.
 Compiler errors in those diagnostic invocations fail the fixtures; there is no second syntax-only pass.
 Objective-C++ fixtures are explicitly deferred, not counted as Windows coverage.
-Use `ao.bat tidy` for native source findings and `ao.bat format --check` for
+Use `ao.bat check lint` for native source findings and `ao.bat check format` for
 formatting. The managed environment owns Ruff and mypy; ambient tools are not used.
 
 `ao.bat check --asan` runs the full normal fastbuild completion first, then a
@@ -599,7 +609,7 @@ tree.
 Third-party vcpkg libraries are not instrumented, so cross-boundary STL
 container annotations are disabled. MSVC provides neither UBSan nor TSan, and
 resumable coroutine instrumentation is incomplete; Linux ASan/UBSan and TSan
-remain complementary. Windows `--tsan` and application `--clang` selections
+remain complementary. Windows `--tsan` and application `--compiler clang` selections
 fail before tree or SDK work.
 
 Source inspection and portal tests do not certify native builds, GUI behavior,
@@ -620,17 +630,17 @@ of acceptance. Record the checks performed and remaining limits with the change.
 
 ## LLVM SDK and native lint tools
 
-Windows format/tidy uses the official LLVM development archive pinned by
+Windows formatting and C++ lint use the official LLVM development archive pinned by
 [`script/ao/windows-llvm-sdk.json`](../../script/ao/windows-llvm-sdk.json);
 explicit provisioning installs it into the shared
-verified cache used by lint and its [hygiene
-gate](bazel.md#hygiene-gate): `ao.bat deps provision` and
+verified cache used by the [scoped lint
+check](bazel.md#scoped-lint-and-tool-selection): `ao.bat setup deps` and
 `ao.bat setup llvm-sdk` call the same native installer. Ordinary ready-only
 build, lint and format commands never install it. The portal reads the manifest
 lazily when Windows SDK code needs it, not while registering commands.
-Hygiene checks for a ready LLVM SDK only when its resolved scope contains
+`check lint` checks for a ready LLVM SDK only when its resolved scope contains
 C++ files; Python-only and empty scopes do not require it. Managed Python tooling
-is prepared only for Python files; see the [gate's tool-selection contract](bazel.md#hygiene-gate).
+is prepared only for Python files; see the [tool-selection contract](bazel.md#scoped-lint-and-tool-selection).
 Required-file entries use portable forward-slash-separated components containing
 ASCII letters, digits, `_`, `.`, `+`, or `-`; `.` and `..` components are rejected.
 This keeps the same relative-path interpretation on every host.
@@ -676,18 +686,18 @@ command to create fresh local state. Do not copy build trees,
 `vcpkg_installed`, or Python virtual environments; they contain absolute or
 checkout-specific paths.
 
-Validate a build or hygiene
+Validate a build or scoped lint
 run from new state before manually removing old files.
 
 ## Troubleshooting
 
 - **LLVM SDK provisioning failure**: `llvm-<version>.lock` is a coordination
-  file used by `ao.bat deps provision`,
+  file used by `ao.bat setup deps`,
   not an existence-based stale-lock marker. If lock acquisition times out, check
   whether another provisioning process is still installing the SDK. Do not delete lock or cache files while
   a writer may be active. After interruption, wait for the portal's installer
   to settle before starting another writer, then rerun
-  `ao.bat deps provision` as appropriate: it validates the SDK and completion
+  `ao.bat setup deps` as appropriate: it validates the SDK and completion
   marker and re-extracts an invalid automatic cache. For offline
   provisioning, use the complete extracted SDK and `AOBUS_LLVM_SDK_ROOT`
   procedure under [offline SDK setup](#offline-sdk-setup).

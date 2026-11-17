@@ -16,11 +16,11 @@ from unittest.mock import Mock, patch
 
 from test_bazel_windows_linkage import static_archive
 
-from ao.core import bazel_dependencies as dependencies
-from ao.core import bazel_host_tools as host_tools
 from ao.core import bazel_native as native
-from ao.core import bazel_providers as providers
-from ao.core import bazel_workspace as workspace
+from ao.portal import bazel_dependencies as dependencies
+from ao.portal import bazel_host_tools as host_tools
+from ao.portal import bazel_providers as providers
+from ao.portal import bazel_workspace as workspace
 
 
 class NixDependencyMetadataTests(unittest.TestCase):
@@ -123,6 +123,30 @@ class BazelWorkspaceTests(unittest.TestCase):
     def test_build_dir_override_is_exact_and_external(self):
         with patch.dict(os.environ, {"BUILD_DIR": str(self.root)}):
             self.assertEqual(workspace.workspace_path(None, "release"), self.root)
+
+    def test_state_root_selection_never_consults_the_host_profile(self):
+        # An explicit selection must resolve without the user profile lookup that
+        # an eagerly evaluated dict.get default would still have performed.
+        with (
+            patch.object(native, "native_platform", return_value="linux"),
+            patch.dict(os.environ, {"AOBUS_STATE_ROOT": "/chosen", "XDG_CACHE_HOME": "/xdg"}, clear=True),
+            patch.object(Path, "home", side_effect=RuntimeError("host home must stay unused")),
+        ):
+            self.assertEqual(workspace.state_root(), Path("/chosen"))
+        with (
+            patch.object(native, "native_platform", return_value="linux"),
+            patch.dict(os.environ, {"XDG_CACHE_HOME": "/xdg"}, clear=True),
+            patch.object(Path, "home", side_effect=RuntimeError("host home must stay unused")),
+        ):
+            self.assertEqual(workspace.state_root(), Path("/xdg/Aobus"))
+
+    def test_state_root_falls_back_to_the_host_cache_only_when_absent(self):
+        with (
+            patch.object(native, "native_platform", return_value="linux"),
+            patch.dict(os.environ, {}, clear=True),
+            patch.object(Path, "home", return_value=Path("/host/home")),
+        ):
+            self.assertEqual(workspace.state_root(), Path("/host/home/.cache/Aobus"))
 
     def test_child_environment_drops_all_target_role_flags_not_compiler_identity(self):
         source = {
@@ -502,7 +526,7 @@ class BazelWorkspaceTests(unittest.TestCase):
         # The adjacent CMake tree is never consulted: the Bazel tree selects
         # its own provisioned triplet and reads no CMake metadata.
         with patch.object(native, "native_platform", return_value="windows"):
-            with self.assertRaisesRegex(native.BazelWorkspaceError, "run `ao deps provision`"):
+            with self.assertRaisesRegex(native.BazelWorkspaceError, "run `ao setup deps`"):
                 providers.vcpkg_prefix(None, tree)
             tree.mkdir()
             prefix.parent.rename(tree / "vcpkg_installed")
@@ -783,6 +807,8 @@ class BazelWorkspaceTests(unittest.TestCase):
             "stdlib.py",
             "dbus-report.json",
             "catalog-sdk.json",
+            "bin/python3",
+            "toolchain.json",
             "debug/libicuuc.a",
             "debug/status",
             "release/libicuuc.a",
@@ -803,10 +829,10 @@ class BazelWorkspaceTests(unittest.TestCase):
             from pathlib import Path
             from unittest.mock import patch
             sys.path.insert(0, sys.argv.pop(1))
-            from ao.core import bazel_resolver
             from ao.core import bazel_native as native
-            from ao.core import bazel_dependencies as dependencies
-            from ao.core import bazel_host_tools as host_tools
+            from ao.portal import bazel_resolver
+            from ao.portal import bazel_dependencies as dependencies
+            from ao.portal import bazel_host_tools as host_tools
             selection = ({'version': '3.3'}, Path(sys.argv.pop(1)),
                          [Path(p) for p in sys.argv.pop(1).split('|') if p], [Path(sys.argv.pop(1))])
             fixtures = Path(sys.argv.pop(1))
@@ -834,6 +860,14 @@ class BazelWorkspaceTests(unittest.TestCase):
                     [fixtures / 'lib/libdbus-1.so'], [fixtures / 'dbus-report.json'])
             resource = ({'provider': 'fixture', 'outputs': [str(fixtures)]}, fixtures / 'bin/glib-compile-resources',
                         [fixtures / 'lib/libglib-2.0.so'], [fixtures / 'glib-report.json'])
+            python_runtime = (
+                {'provider': 'fixture', 'version': '9.9.9', 'implementation': 'cpython',
+                 'executable': str(fixtures / 'bin/python3'), 'base_prefix': str(fixtures),
+                 'tooling_python': str(fixtures / 'bin/python3'),
+                 'runtime_contract': 'fixture interpreter; declared location only'},
+                [fixtures / 'bin/python3', fixtures / 'toolchain.json'],
+                [fixtures / 'toolchain.json'],
+            )
             with (
                 patch.object(native, 'native_platform', return_value='linux'),
                 patch.object(host_tools, '_linux_gperf', return_value=selection),
@@ -841,6 +875,7 @@ class BazelWorkspaceTests(unittest.TestCase):
                 patch.object(host_tools, '_catalog_sdk', return_value=sdk),
                 patch.object(host_tools, '_linux_dbus', return_value=dbus),
                 patch.object(host_tools, '_linux_gresource', return_value=resource),
+                patch.object(host_tools, '_python_runtime', return_value=python_runtime),
                 patch.object(host_tools, '_app_version', return_value='1.2.3'),
             ):
                 status = bazel_resolver.main()
@@ -922,7 +957,13 @@ class BazelWorkspaceTests(unittest.TestCase):
             {
                 "dbus_daemon": str(fixtures / "bin/dbus-daemon"),
                 "dbus_daemon_directory": str(fixtures / "bin"),
+                "tooling_python": str(fixtures / "bin/python3"),
             },
+        )
+        self.assertEqual(facts["python"]["executable"], str(fixtures / "bin/python3"))
+        self.assertLessEqual(
+            {str(fixtures / "bin/python3"), str(fixtures / "toolchain.json")},
+            set(plan["watch_files"]),
         )
         self.assertFalse((self.root / "repository/bin").exists())
         status, plan = self.resolve_gperf(executable, [], report)
@@ -944,10 +985,12 @@ class BazelWorkspaceTests(unittest.TestCase):
             patch.object(native, "native_platform", return_value="linux"),
             patch.object(sys, "executable", str(redirector)),
             patch.object(sys, "_base_executable", str(base), create=True),
+            patch.dict(os.environ, {"AOBUS_CHECKOUT_ID": "selected-native-checkout"}),
         ):
             prepared = workspace.prepare_workspace(self.root / "tree", "debug")
         rc = (prepared / "aobus.bazelrc").read_text(encoding="utf-8")
         self.assertIn("--repo_env=AOBUS_BAZEL_PYTHON=" + base.as_posix(), rc)
+        self.assertIn("--repo_env=AOBUS_CHECKOUT_ID=selected-native-checkout", rc)
         self.assertNotIn(str(redirector), rc)
 
     def test_launch_rc_requires_an_available_base_interpreter(self):

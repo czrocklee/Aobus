@@ -8,14 +8,14 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ao.core import bazel_compiler_probe as compiler_probe
-from ao.core import bazel_dependencies as dependencies
-from ao.core import bazel_deps as deps
 from ao.core import bazel_native as native
-from ao.core import bazel_providers as providers
-from ao.core import bazel_resolver
-from ao.core import bazel_workspace as workspace
-from ao.core.bazel_resolver import _audit_executable, _external_input
+from ao.portal import bazel_compiler_probe as compiler_probe
+from ao.portal import bazel_dependencies as dependencies
+from ao.portal import bazel_deps as deps
+from ao.portal import bazel_providers as providers
+from ao.portal import bazel_resolver
+from ao.portal import bazel_workspace as workspace
+from ao.portal.bazel_resolver import _audit_executable, _external_input
 
 
 class RepositoryPlanTest(unittest.TestCase):
@@ -307,7 +307,7 @@ class LaunchConfigurationTest(unittest.TestCase):
                 patch.dict(workspace.os.environ, environment, clear=True),
                 patch.object(native, "native_platform", return_value="windows"),
                 patch.object(providers, "vcpkg_prefix", return_value=root / "provider"),
-                patch.object(workspace.builddir, "windows_state_root", return_value=root / "state"),
+                patch.object(workspace.build_dir, "windows_state_root", return_value=root / "state"),
             ):
                 prepared = workspace.prepare_workspace(root / "build", "debug", prefix=str(root / "provider"))
             rc = (prepared / "aobus.bazelrc").read_text()

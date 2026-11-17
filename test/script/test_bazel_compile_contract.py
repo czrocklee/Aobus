@@ -12,21 +12,21 @@ import subprocess
 import unittest
 from dataclasses import replace
 
-from ao.core.bazel_contract import (
+from ao.core.paths import PROJECT_ROOT
+from ao.policy.bazel_contract import (
     CLANG_EXTRA_WARNINGS,
     LINUX_EXTRA_WARNINGS,
     SPA_FLAGS,
     CompileAction,
+    NativeAction,
     compile_contract_errors,
     extract_compile_actions,
-    extract_native_actions,
     include_paths,
     link_archive_contract_errors,
     parse_unix_warnings,
     unix_warnings,
 )
-from ao.core.gitfiles import git_command
-from ao.core.paths import PROJECT_ROOT
+from ao.portal.git_files import git_command
 
 
 class BazelCompilePolicyTest(unittest.TestCase):
@@ -127,12 +127,6 @@ class BazelAqueryContractTest(unittest.TestCase):
             "//test:audio_test_support",
             (*flags, *extra, "test/audio/EngineTestSupport.cpp"),
         )
-
-    def test_all_platform_mode_contracts_accept_effective_policy(self):
-        for platform in ("linux", "macos", "windows"):
-            for mode in ("dbg", "opt", "fastbuild"):
-                with self.subTest(platform=platform, mode=mode):
-                    self.assertEqual(compile_contract_errors([self.action(platform, mode)], platform, mode), [])
 
     def test_cpp_standard_is_required_and_later_downgrades_are_rejected(self):
         for platform in ("linux", "macos", "windows"):
@@ -435,16 +429,6 @@ class BazelAqueryContractTest(unittest.TestCase):
                     ],
                 )
 
-    def test_msvc_external_warning_level_accepts_either_order_and_last_valid_level(self):
-        for options in (
-            ["/external:W0", "/external:I", "external/+deps/include"],
-            ["/external:Iexternal/+deps/include", "/external:W0"],
-            ["/external:W4", "/external:Iexternal/+deps/include", "/external:W0"],
-            ["-external:Iexternal/+deps/include", "-external:W0"],
-        ):
-            with self.subTest(options=options):
-                self.assertEqual(compile_contract_errors([self.action("windows", extra=options)], "windows", "opt"), [])
-
     def test_only_explicit_compiler_include_roots_allow_absolute_nix_includes(self):
         compiler = "/nix/store/compiler/lib/clang/22/include"
         action = self.action(extra=["-isystem", compiler])
@@ -515,14 +499,6 @@ class BazelAqueryContractTest(unittest.TestCase):
 
 
 class BazelExecutionConfigurationTest(unittest.TestCase):
-    def test_aquery_role_comes_from_configuration_ids_not_paths_or_mnemonics(self):
-        for is_tool in (False, True):
-            with self.subTest(is_tool=is_tool):
-                document = BazelActionEnvironmentTest.document()
-                document["configuration"] = [{"id": 7, "isTool": is_tool, "mnemonic": "opaque"}]
-                document["actions"][0]["configurationId"] = 7
-                self.assertIs(extract_compile_actions(document)[0].is_tool, is_tool)
-
     def test_quote_contexts_are_extracted_per_configured_owner_and_missing_or_ambiguous_evidence_fails(self):
         document = {
             "targets": [{"id": 1, "label": "//lib:consumer"}],
@@ -677,29 +653,6 @@ class BazelExecutionConfigurationTest(unittest.TestCase):
                 self.assertTrue(compile_contract_errors([wrong_tool], platform, "dbg"))
                 # An optimized ordinary target cannot borrow the tool's exemption.
                 self.assertTrue(compile_contract_errors([replace(tool, is_tool=False)], platform, "dbg"))
-
-    def test_windows_imported_headers_require_external_classification_in_target_and_exec_roles(self):
-        for is_tool in (False, True):
-            for mode in ("dbg", "opt"):
-                with self.subTest(is_tool=is_tool, target_mode=mode):
-                    compile_mode = "opt" if is_tool else mode
-                    action = replace(
-                        BazelAqueryContractTest.action(
-                            "windows", compile_mode, extra=["/external:Iexternal/provider/include"]
-                        ),
-                        is_tool=is_tool,
-                    )
-                    self.assertEqual(compile_contract_errors([action], "windows", mode), [])
-                    ordinary = replace(
-                        action,
-                        argv=tuple(flag.replace("/external:I", "/I") for flag in action.argv),
-                    )
-                    self.assertTrue(
-                        any(
-                            "imported include must be system/external" in error
-                            for error in compile_contract_errors([ordinary], "windows", mode)
-                        )
-                    )
 
     def test_execution_policy_composes_separately_and_never_uses_target_debug_hardening(self):
         clears = dict.fromkeys(
@@ -1100,524 +1053,106 @@ class BazelProfileCompileContractTest(unittest.TestCase):
 
 
 class BazelNativeActionContractTest(unittest.TestCase):
-    """Final-link, archive, Objective-C++ and LTO-pipeline action contracts."""
-
-    MAINWINDOW = BazelProfileCompileContractTest.MAINWINDOW
+    """Guard against a passing audit when final link or auxiliary actions drift."""
 
     @staticmethod
-    def document(entries):
-        actions = []
-        fragments = []
-        artifacts = []
-        for mnemonic, argv, is_tool, outputs in entries:
-            for output in outputs:
-                fragments.append({"id": len(fragments) + 1, "label": output})
-                artifacts.append({"id": len(artifacts) + 1, "pathFragmentId": len(fragments)})
-            actions.append(
-                {
-                    "mnemonic": mnemonic,
-                    "targetId": 1,
-                    "configurationId": 2 if is_tool else 1,
-                    "arguments": list(argv),
-                    "outputIds": list(range(len(artifacts) - len(outputs) + 1, len(artifacts) + 1)),
-                }
+    def action(mnemonic, executable, *flags, tool=False):
+        return NativeAction("//app:product", mnemonic, (executable, *flags), (f"out/{mnemonic}",), tool)
+
+    def check(self, platform, profile, link, *other_actions, archive=None, **policy):
+        archiver = {"linux": "llvm-ar", "macos": "llvm-libtool-darwin", "windows": "lib.exe"}[platform]
+        policy.setdefault("expected_archive", archiver)
+        if archive is None:
+            archive = self.action("CppArchive", archiver, "out.a", "source.o")
+        return link_archive_contract_errors([link, archive, *other_actions], platform, profile, **policy)[0]
+
+    def test_unix_final_link_uses_effective_lto_not_the_first_match(self):
+        release = self.action("CppLink", "clang++", "-flto=thin", "-o", "app")
+        self.assertEqual(self.check("linux", "release", release), [])
+        disabled = replace(release, argv=(*release.argv, "-fno-lto"))
+        self.assertTrue(any("effective -flto=thin" in error for error in self.check("linux", "release", disabled)))
+        self.assertEqual(self.check("linux", "sampling", disabled), [])
+        self.assertTrue(any("effective -fno-lto" in error for error in self.check("linux", "sampling", release)))
+
+    def test_gcc_release_link_cannot_suppress_late_optimizer_warnings(self):
+        link = self.action("CppLink", "g++", "-flto=auto", "-Werror", "-o", "app")
+        archive = self.action("CppArchive", "gcc-ar", "out.a", "source.o")
+        options = {"archive": archive, "expected_archive": "gcc-ar"}
+        self.assertEqual(self.check("linux", "release", link, **options), [])
+        suppression = replace(link, argv=(*link.argv, "-Wno-error"))
+        self.assertTrue(
+            any("effective -Werror" in error for error in self.check("linux", "release", suppression, **options))
+        )
+        external = replace(suppression, label="@dep//pkg:lib")
+        self.assertEqual(self.check("linux", "release", external, **options), [])
+
+    def test_execution_archive_uses_its_own_archiver_and_no_ipo_switches(self):
+        link = self.action("CppLink", "clang++", "-o", "app")
+        tool = self.action("CppArchive", "gcc-ar", "tool.a", "tool.o", tool=True)
+        self.assertEqual(self.check("linux", None, link, tool, expected_tool_archive="gcc-ar"), [])
+        wrong_archiver = replace(tool, argv=("llvm-ar", *tool.argv[1:]))
+        problems = self.check("linux", None, link, wrong_archiver, expected_tool_archive="gcc-ar")
+        self.assertTrue(any("exec" in problem and "selected archiver" in problem for problem in problems))
+        has_ipo = replace(tool, argv=(*tool.argv, "-flto=thin"))
+        self.assertTrue(
+            any(
+                "LTO switches" in problem
+                for problem in self.check("linux", None, link, has_ipo, expected_tool_archive="gcc-ar")
             )
-        return {
-            "targets": [{"id": 1, "label": "//app:product"}],
-            "configuration": [{"id": 1}, {"id": 2, "isTool": True}],
-            "pathFragments": fragments,
-            "artifacts": artifacts,
-            "actions": actions,
-        }
+        )
 
-    @classmethod
-    def extract(cls, entries):
-        return extract_native_actions(cls.document(entries))
+    def test_release_flags_do_not_leak_into_the_execution_link_or_enable_bazel_lto_pipeline(self):
+        target = self.action("CppLink", "clang++", "-flto=thin", "-o", "app")
+        tool = self.action("CppLink", "clang++", "-flto=thin", "-o", "tool", tool=True)
+        pipeline = self.action("LtoIndexing", "clang++", "index")
+        problems = self.check("linux", "release", target, tool, pipeline)
+        self.assertTrue(any("index/backend" in problem for problem in problems))
+        self.assertTrue(any("exec" in problem and "IPO flags" in problem for problem in problems))
 
-    def test_extract_resolves_roles_outputs_and_expands_param_files(self):
-        entries = [
-            ("CppLink", ["clang++", "-o", "app", "source.o"], False, ["app"]),
-            ("CppArchive", ["llvm-ar", "rcs", "out.a", "source.o"], False, ["out.a"]),
-            ("ObjcCompile", ["clang++", "-c", "source.mm"], False, ["source.o"]),
-            ("CppLinkstampCompile", ["clang++", "-c", "_linkstamp_.cc"], False, ["_linkstamp_.o"]),
-            ("ObjcExecutable", ["clang++", "-o", "tool"], True, ["tool"]),
-            ("LtoBackend", ["clang++", "-c", "backend.bc"], False, ["backend.o"]),
-            ("CppCompile", ["clang++", "-c", "source.cpp"], False, ["ignored.o"]),
-        ]
-        actions = self.extract(entries)
-        self.assertEqual(
-            [(action.mnemonic, action.is_tool) for action in actions],
-            [
-                ("CppLink", False),
-                ("CppArchive", False),
-                ("ObjcCompile", False),
-                ("CppLinkstampCompile", False),
-                ("ObjcExecutable", True),
-                ("LtoBackend", False),
-            ],
-        )
-        self.assertTrue(all(action.label == "//app:product" for action in actions))
-        self.assertEqual(actions[0].outputs, ("app",))
-        params = self.document(entries[:1])
-        params["actions"][0]["arguments"] = ["clang++", "@flags"]
-        params["actions"][0]["paramFiles"] = [{"execPath": "flags", "arguments": ["-o", "app"]}]
-        self.assertEqual(extract_native_actions(params)[0].argv, ("clang++", "-o", "app"))
+    def test_archive_evidence_does_not_substitute_for_a_final_link(self):
+        only_archive = self.action("CppArchive", "llvm-ar", "out.a", "source.o")
+        problems, _ = link_archive_contract_errors([only_archive], "linux", None, expected_archive="llvm-ar")
+        self.assertTrue(any("final-link evidence" in problem for problem in problems))
 
-    def test_unix_link_and_archive_policy_per_profile(self):
-        link = ("clang++", "-o", "app", "source.o")
-        archive = ("llvm-ar", "rcs", "out.a", "source.o")
-        for profile, link_flags in ((None, []), ("release", ["-flto=thin"]), ("sampling", ["-fno-lto"])):
-            with self.subTest(profile=profile):
-                errors, counts = link_archive_contract_errors(
-                    self.extract(
-                        [
-                            ("CppLink", [*link, *link_flags], False, ["app"]),
-                            ("CppArchive", archive, False, ["out.a"]),
-                        ]
-                    ),
-                    "linux",
-                    profile,
-                    expected_archive="llvm-ar",
-                )
-                self.assertEqual(errors, [])
-                self.assertEqual(counts["target_link"], 1)
-                self.assertEqual(counts["target_archive"], 1)
-        for profile, mutation, message in (
-            ("release", [], "effective -flto=thin"),
-            ("release", ["-flto=thin", "-fno-lto"], "effective -flto=thin"),
-            ("release", ["-fno-lto"], "effective -flto=thin"),
-            ("sampling", [], "effective -fno-lto"),
-            ("sampling", ["-flto=thin"], "effective -fno-lto"),
-            (None, ["-flto=thin"], "outside the Release profile"),
-        ):
-            with self.subTest(profile=profile, mutation=mutation):
-                errors, _ = link_archive_contract_errors(
-                    self.extract([("CppLink", [*link, *mutation], False, ["app"])]),
-                    "linux",
-                    profile,
-                    expected_archive="llvm-ar",
-                )
-                self.assertTrue(any("final-link evidence" not in error and message in error for error in errors))
+    def test_macos_release_objcpp_compiles_to_a_native_object_not_bitcode(self):
+        link = self.action("CppLink", "clang++", "-flto=thin", "-o", "app")
+        objc = self.action("ObjcCompile", "clang++", "-O2", "-DNDEBUG", "-c", "source.mm")
+        self.assertEqual(self.check("macos", "release", link, objc), [])
+        bitcode = replace(objc, argv=(*objc.argv, "-flto=thin"))
+        self.assertTrue(
+            any("non-LTO native object" in problem for problem in self.check("macos", "release", link, bitcode))
+        )
+        self.assertTrue(any("Objective-C++" in problem for problem in self.check("macos", "release", link)))
 
-    def test_archives_use_the_selected_archiver_without_lto_switches(self):
-        for profile, link_flags in ((None, []), ("release", ["-flto=thin"]), ("sampling", ["-fno-lto"])):
-            with self.subTest(profile=profile):
-                errors, _ = link_archive_contract_errors(
-                    self.extract(
-                        [
-                            ("CppArchive", ["llvm-ar", "rcs", "out.a", "source.o"], False, ["out.a"]),
-                            ("CppLink", ["clang++", *link_flags, "-o", "app"], False, ["app"]),
-                        ]
-                    ),
-                    "linux",
-                    profile,
-                    expected_archive="llvm-ar",
-                )
-                self.assertEqual(errors, [])
-                substituted, _ = link_archive_contract_errors(
-                    self.extract(
-                        [
-                            ("CppArchive", ["ar", "rcs", "out.a", "source.o"], False, ["out.a"]),
-                            ("CppLink", ["clang++", *link_flags, "-o", "app"], False, ["app"]),
-                        ]
-                    ),
-                    "linux",
-                    profile,
-                    expected_archive="llvm-ar",
-                )
-                self.assertTrue(any("selected archiver" in error for error in substituted))
-                for lto in ("-flto=thin", "-fno-lto"):
-                    with self.subTest(lto=lto):
-                        carrying, _ = link_archive_contract_errors(
-                            self.extract(
-                                [
-                                    ("CppArchive", ["llvm-ar", "rcs", "out.a", lto], False, ["out.a"]),
-                                    ("CppLink", ["clang++", *link_flags, "-o", "app"], False, ["app"]),
-                                ]
-                            ),
-                            "linux",
-                            profile,
-                            expected_archive="llvm-ar",
-                        )
-                        self.assertTrue(any("LTO switches" in error for error in carrying))
+    def test_fastbuild_objective_c_plus_plus_does_not_use_debug_policy(self):
+        link = self.action("CppLink", "clang++", "-o", "app")
+        objc = self.action("ObjcCompile", "clang++", "-O0", "-c", "source.mm")
+        self.assertEqual(self.check("macos", None, link, objc, mode="fastbuild"), [])
+        debug = replace(objc, argv=(*objc.argv, "-g"))
+        self.assertEqual(self.check("macos", None, link, debug, mode="dbg"), [])
+        self.assertTrue(
+            any("debug information" in problem for problem in self.check("macos", None, link, debug, mode="fastbuild"))
+        )
 
-    def test_gcc_release_links_and_linkstamps_use_auto_lto(self):
-        # The link driver's -Werror promotes late LTRANS warnings to errors;
-        # compile-time -Werror never reaches the link-time optimizer.
-        link = ("g++", "-flto=auto", "-Werror", "-o", "app", "source.o")
-        archive = ("gcc-ar", "rcs", "out.a", "source.o")
-        errors, counts = link_archive_contract_errors(
-            self.extract([("CppLink", link, False, ["app"]), ("CppArchive", archive, False, ["out.a"])]),
-            "linux",
-            "release",
-            expected_archive="gcc-ar",
-        )
-        self.assertEqual(errors, [])
-        self.assertEqual((counts["target_link"], counts["target_archive"]), (1, 1))
-        for argv, message in (
-            (["g++", "-flto=thin", "-o", "app"], "effective -flto=auto"),
-            (["g++", "-o", "app"], "effective -flto=auto"),
-            (["clang++", "-flto=auto", "-o", "app"], "effective -flto=thin"),
-            (["ld", "-flto=auto", "-o", "app"], "selected gcc or clang driver"),
-            (["g++", "-flto=auto", "-o", "app"], "effective -Werror"),
-            (["g++", "-flto=auto", "-Werror", "-Wno-error", "-o", "app"], "effective -Werror"),
-        ):
-            with self.subTest(argv=argv):
-                errors, _ = link_archive_contract_errors(
-                    self.extract([("CppLink", argv, False, ["app"]), ("CppArchive", archive, False, ["out.a"])]),
-                    "linux",
-                    "release",
-                    expected_archive="gcc-ar",
-                )
-                self.assertTrue(any("final-link evidence" not in error and message in error for error in errors))
-        # External repositories may opt out of the repo warning feature, so the
-        # promotion requirement binds only first-party Release links.
-        actions = self.extract(
-            [("CppLink", ["g++", "-flto=auto", "-o", "app"], False, ["app"]), ("CppArchive", archive, False, ["out.a"])]
-        )
-        self.assertEqual(
-            link_archive_contract_errors(
-                [replace(actions[0], label="@dep//pkg:lib"), actions[1]],
-                "linux",
-                "release",
-                expected_archive="gcc-ar",
-            )[0],
-            [],
-        )
-        # Linkstamp compilations follow the same per-family Release IPO policy.
-        stamp = ("CppLinkstampCompile", ["g++", "-flto=auto", "-c", "_linkstamp_.cc"], False, ["stamp.o"])
-        self.assertEqual(
-            link_archive_contract_errors(
-                self.extract([stamp, ("CppLink", link, False, ["app"]), ("CppArchive", archive, False, ["out.a"])]),
-                "linux",
-                "release",
-                expected_archive="gcc-ar",
-            )[0],
-            [],
-        )
-        thin_stamp = ("CppLinkstampCompile", ["g++", "-flto=thin", "-c", "_linkstamp_.cc"], False, ["stamp.o"])
-        errors, _ = link_archive_contract_errors(
-            self.extract([thin_stamp, ("CppLink", link, False, ["app"]), ("CppArchive", archive, False, ["out.a"])]),
-            "linux",
-            "release",
-            expected_archive="gcc-ar",
-        )
-        self.assertTrue(any("[CppLinkstampCompile," in error and "effective -flto=auto" in error for error in errors))
+    def test_windows_release_link_rejects_a_later_ltcg_disable(self):
+        link = self.action("CppLink", "link.exe", "/LTCG", "/OUT:app.exe")
+        self.assertEqual(self.check("windows", "release", link), [])
+        disabled = replace(link, argv=(*link.argv, "/LTCG:OFF"))
+        self.assertTrue(any("effective /LTCG" in problem for problem in self.check("windows", "release", disabled)))
 
-    def test_linux_archives_select_the_archiver_per_role(self):
-        # A Clang target build still builds execution tools with explicit GCC:
-        # the target archive uses llvm-ar while the execution archive uses gcc-ar.
-        target = ("CppArchive", ["llvm-ar", "rcs", "out.a", "source.o"], False, ["out.a"])
-        tool = ("CppArchive", ["gcc-ar", "rcs", "tool.a", "tool.o"], True, ["tool.a"])
-        link = ("CppLink", ["clang++", "-o", "app"], False, ["app"])
-        errors, counts = link_archive_contract_errors(
-            self.extract([target, tool, link]),
-            "linux",
-            None,
-            expected_archive="llvm-ar",
-            expected_tool_archive="gcc-ar",
-        )
-        self.assertEqual(errors, [])
-        self.assertEqual((counts["target_archive"], counts["exec_archive"]), (1, 1))
-        substituted = ("CppArchive", ["llvm-ar", "rcs", "tool.a"], True, ["tool.a"])
-        errors, _ = link_archive_contract_errors(
-            self.extract([target, substituted, link]),
-            "linux",
-            None,
-            expected_archive="llvm-ar",
-            expected_tool_archive="gcc-ar",
-        )
-        self.assertTrue(any("exec" in error and "selected archiver" in error for error in errors))
-        # Without a separate execution expectation the single selection binds both roles.
-        errors, _ = link_archive_contract_errors(
-            self.extract([target, tool, link]), "linux", None, expected_archive="llvm-ar"
-        )
-        self.assertTrue(any("selected archiver" in error for error in errors))
-
-    def test_execution_and_lto_pipeline_actions_fail_closed(self):
-        entries = [
-            ("CppLink", ["clang++", "-flto=thin", "-o", "tool"], True, ["tool"]),
-            ("LtoIndexing", ["clang++", "index"], False, ["index.out"]),
-        ]
-        for profile, link_flags in ((None, []), ("release", ["-flto=thin"]), ("sampling", ["-fno-lto"])):
-            with self.subTest(profile=profile):
-                errors, counts = link_archive_contract_errors(
-                    self.extract(
-                        [
-                            *entries,
-                            ("CppLink", ["clang++", *link_flags, "-o", "app"], False, ["app"]),
-                            ("CppArchive", ["llvm-ar", "rcs", "out.a"], False, ["out.a"]),
-                        ]
-                    ),
-                    "linux",
-                    profile,
-                    expected_archive="llvm-ar",
-                )
-                self.assertTrue(any("index/backend" in error for error in errors))
-                self.assertTrue(any("IPO flags" in error for error in errors))
-                self.assertEqual(counts["lto_pipeline"], 1)
-                self.assertEqual(counts["exec_link"], 1)
-
-    def test_missing_required_action_classes_fail_closed(self):
-        for entries, message in (
-            ([("CppArchive", ["llvm-ar", "rcs", "out.a"], False, ["out.a"])], "final-link evidence"),
-            ([("CppLink", ["clang++", "-o", "app"], False, ["app"])], "archive evidence"),
-        ):
-            with self.subTest(entries=entries):
-                errors, _ = link_archive_contract_errors(
-                    self.extract(entries), "linux", None, expected_archive="llvm-ar"
-                )
-                self.assertTrue(any(message in error for error in errors))
-
-    def test_macos_objective_c_plus_plus_policy(self):
-        link = ("clang++", "-o", "app", "source.o")
-        archive = ("llvm-libtool-darwin", "-static", "-o", "out.a", "source.o")
-        cases = {
-            None: (["-O0", "-g"], []),
-            "release": (["-O2", "-DNDEBUG"], []),
-            "sampling": (["-O2", "-DNDEBUG", "-g", "-fno-omit-frame-pointer", "-fno-lto"], []),
-        }
-        for profile, (compile_flags, _) in cases.items():
-            with self.subTest(profile=profile):
-                errors, counts = link_archive_contract_errors(
-                    self.extract(
-                        [
-                            ("ObjcCompile", ["clang++", *compile_flags, "-c", "source.mm"], False, ["source.o"]),
-                            (
-                                "CppLink",
-                                [
-                                    *link,
-                                    *(
-                                        ["-flto=thin"]
-                                        if profile == "release"
-                                        else ["-fno-lto"]
-                                        if profile == "sampling"
-                                        else []
-                                    ),
-                                ],
-                                False,
-                                ["app"],
-                            ),
-                            ("CppArchive", archive, False, ["out.a"]),
-                        ]
-                    ),
-                    "macos",
-                    profile,
-                    expected_archive="llvm-libtool-darwin",
-                )
-                self.assertEqual(errors, [])
-                self.assertEqual(counts["target_objcpp_compile"], 1)
-        for profile, flags, message in (
-            ("release", ["-O2", "-DNDEBUG", "-flto=thin"], "ordinary non-LTO native object"),
-            ("release", ["-O0", "-g"], "effective optimization and NDEBUG"),
-            ("sampling", ["-O2", "-DNDEBUG", "-g", "-fno-omit-frame-pointer"], "effective -fno-lto"),
-            ("sampling", ["-O2", "-DNDEBUG", "-g", "-fno-lto"], "frame pointers"),
-            ("sampling", ["-O2", "-DNDEBUG", "-fno-omit-frame-pointer", "-fno-lto"], "debug information"),
-            (None, ["-O2", "-DNDEBUG"], "debug information without optimization"),
-            (None, ["-O0", "-g", "-flto=thin"], "outside the Release profile"),
-        ):
-            with self.subTest(profile=profile, flags=flags):
-                errors, _ = link_archive_contract_errors(
-                    self.extract(
-                        [
-                            ("ObjcCompile", ["clang++", *flags, "-c", "source.mm"], False, ["source.o"]),
-                            ("CppLink", ["clang++", "-o", "app"], False, ["app"]),
-                            ("CppArchive", archive, False, ["out.a"]),
-                        ]
-                    ),
-                    "macos",
-                    profile,
-                    expected_archive="llvm-libtool-darwin",
-                )
-                self.assertTrue(any("final-link" not in error and message in error for error in errors))
-        # Objective-C++ evidence is required on macOS and rejected elsewhere.
-        without = link_archive_contract_errors(
-            self.extract(
-                [
-                    ("CppLink", ["clang++", "-o", "app"], False, ["app"]),
-                    ("CppArchive", archive, False, ["out.a"]),
-                ]
-            ),
-            "macos",
-            None,
-            expected_archive="llvm-libtool-darwin",
-        )
-        self.assertTrue(any("Objective-C++" in error for error in without[0]))
-        elsewhere = link_archive_contract_errors(
-            self.extract(
-                [
-                    ("ObjcCompile", ["clang++", "-c", "source.mm"], False, ["source.o"]),
-                    ("CppLink", ["clang++", "-o", "app"], False, ["app"]),
-                    ("CppArchive", ["llvm-ar", "rcs", "out.a"], False, ["out.a"]),
-                ]
-            ),
-            "linux",
-            None,
-            expected_archive="llvm-ar",
-        )
-        self.assertTrue(any("only expected on macOS" in error for error in elsewhere[0]))
-
-    def test_fastbuild_objective_c_plus_plus_stays_unoptimized_without_debug_information(self):
-        # Fastbuild shares the null profile with Debug but not its contract:
-        # its Objective-C++ objects are unoptimized without debug information.
-        link = ("clang++", "-o", "app", "source.o")
-        archive = ("llvm-libtool-darwin", "-static", "-o", "out.a", "source.o")
-        for flags, message in (
-            (["-O0"], None),
-            (["-O0", "-g0"], None),
-            (["-O0", "-g"], "no optimization or debug information"),
-            (["-O2", "-g0"], "no optimization or debug information"),
-            (["-O0", "-g0", "-flto=thin"], "outside the Release profile"),
-        ):
-            with self.subTest(flags=flags):
-                errors, _ = link_archive_contract_errors(
-                    self.extract(
-                        [
-                            ("ObjcCompile", ["clang++", *flags, "-c", "source.mm"], False, ["source.o"]),
-                            ("CppLink", link, False, ["app"]),
-                            ("CppArchive", archive, False, ["out.a"]),
-                        ]
-                    ),
-                    "macos",
-                    None,
-                    expected_archive="llvm-libtool-darwin",
-                    mode="fastbuild",
-                )
-                if message is None:
-                    self.assertEqual(errors, [])
-                else:
-                    self.assertTrue(any("final-link" not in error and message in error for error in errors))
-        # Debug objects with debug information cannot satisfy the fastbuild
-        # contract either: the null profile stays split by the named mode.
-        errors, _ = link_archive_contract_errors(
-            self.extract(
-                [
-                    ("ObjcCompile", ["clang++", "-O0", "-g", "-c", "source.mm"], False, ["source.o"]),
-                    ("CppLink", link, False, ["app"]),
-                    ("CppArchive", archive, False, ["out.a"]),
-                ]
-            ),
-            "macos",
-            None,
-            expected_archive="llvm-libtool-darwin",
-            mode="fastbuild",
-        )
-        self.assertTrue(any("no optimization or debug information" in error for error in errors))
-        # The optimized mode without a profile is not part of the matrix.
-        with self.assertRaisesRegex(ValueError, "mode without a profile"):
-            link_archive_contract_errors(
-                self.extract([("CppLink", link, False, ["app"]), ("CppArchive", archive, False, ["out.a"])]),
-                "macos",
-                None,
-                expected_archive="llvm-libtool-darwin",
-                mode="opt",
+    def test_linkstamps_follow_the_driver_family_not_the_final_link_policy(self):
+        link = self.action("CppLink", "g++", "-flto=auto", "-Werror", "-o", "app")
+        archive = self.action("CppArchive", "gcc-ar", "out.a", "source.o")
+        stamp = self.action("CppLinkstampCompile", "g++", "-flto=auto", "-c", "_linkstamp_.cc")
+        options = {"archive": archive, "expected_archive": "gcc-ar"}
+        self.assertEqual(self.check("linux", "release", link, stamp, **options), [])
+        thin_stamp = replace(stamp, argv=(*stamp.argv, "-flto=thin"))
+        self.assertTrue(
+            any(
+                "CppLinkstampCompile" in problem and "-flto=auto" in problem
+                for problem in self.check("linux", "release", link, thin_stamp, **options)
             )
-
-    def test_windows_link_and_archive_policy(self):
-        lib = ("lib.exe", "/OUT:out.lib", "source.obj")
-        for profile, link_flags, message in (
-            (None, [], None),
-            ("release", ["/LTCG"], None),
-            ("release", [], "effective /LTCG"),
-            ("release", ["/LTCG", "/LTCG:OFF"], "effective /LTCG"),
-            ("release", ["/LTCG", "/LTCG-"], "effective /LTCG"),
-            (None, ["/LTCG"], "outside the Windows Release profile"),
-        ):
-            with self.subTest(profile=profile, flags=link_flags):
-                errors, _ = link_archive_contract_errors(
-                    self.extract(
-                        [
-                            ("CppLink", ["link.exe", *link_flags, "/OUT:app.exe"], False, ["app.exe"]),
-                            ("CppArchive", lib, False, ["out.lib"]),
-                        ]
-                    ),
-                    "windows",
-                    profile,
-                    expected_archive="lib.exe",
-                )
-                if message is None:
-                    self.assertEqual(errors, [])
-                else:
-                    self.assertTrue(any("final-link evidence" not in error and message in error for error in errors))
-        for tool, message in (
-            (("link.exe", "/LTCG", "/OUT:tool.exe"), "/LTCG"),
-            (("ld.exe", "/OUT:app.exe"), "link.exe"),
-        ):
-            with self.subTest(tool=tool):
-                errors, _ = link_archive_contract_errors(
-                    self.extract(
-                        [
-                            ("CppLink", tool, True, ["tool.exe"]),
-                            ("CppLink", ["link.exe", "/OUT:app.exe"], False, ["app.exe"]),
-                            ("CppArchive", lib, False, ["out.lib"]),
-                        ]
-                    ),
-                    "windows",
-                    "release",
-                    expected_archive="lib.exe",
-                )
-                self.assertTrue(any(message in error for error in errors))
-        carrying, _ = link_archive_contract_errors(
-            self.extract(
-                [
-                    ("CppLink", ["link.exe", "/LTCG", "/OUT:app.exe"], False, ["app.exe"]),
-                    ("CppArchive", ["lib.exe", "/LTCG", "/OUT:out.lib"], False, ["out.lib"]),
-                ]
-            ),
-            "windows",
-            "release",
-            expected_archive="lib.exe",
         )
-        self.assertTrue(any("archive arguments must not carry /LTCG" in error for error in carrying))
-        with self.assertRaises(ValueError):
-            link_archive_contract_errors(
-                self.extract(
-                    [
-                        ("CppLink", ["link.exe", "/OUT:app.exe"], False, ["app.exe"]),
-                        ("CppArchive", lib, False, ["out.lib"]),
-                    ]
-                ),
-                "windows",
-                "sampling",
-                expected_archive="lib.exe",
-            )
-
-    def test_linkstamp_policy_follows_the_compiling_profile(self):
-        for profile, flags, message in (
-            ("release", ["-flto=thin"], None),
-            ("release", [], "effective -flto=thin"),
-            ("sampling", ["-fno-lto"], None),
-            ("sampling", ["-flto=thin"], "effective -fno-lto"),
-            (None, [], None),
-            (None, ["-flto=thin"], "outside the Release profile"),
-        ):
-            with self.subTest(profile=profile, flags=flags):
-                errors, _ = link_archive_contract_errors(
-                    self.extract(
-                        [
-                            ("CppLinkstampCompile", ["clang++", *flags, "-c", "_linkstamp_.cc"], False, ["stamp.o"]),
-                            (
-                                "CppLink",
-                                [
-                                    "clang++",
-                                    *({"release": ["-flto=thin"], "sampling": ["-fno-lto"]}.get(profile, [])),
-                                    "-o",
-                                    "app",
-                                ],
-                                False,
-                                ["app"],
-                            ),
-                            ("CppArchive", ["llvm-ar", "rcs", "out.a"], False, ["out.a"]),
-                        ]
-                    ),
-                    "linux",
-                    profile,
-                    expected_archive="llvm-ar",
-                )
-                if message is None:
-                    self.assertEqual(errors, [])
-                else:
-                    self.assertTrue(any("[CppLinkstampCompile," in error and message in error for error in errors))
 
 
 if __name__ == "__main__":

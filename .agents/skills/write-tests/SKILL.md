@@ -1,6 +1,6 @@
 ---
 name: write-tests
-description: Write, restructure, or review Aobus C++/Objective-C++ and Python tests, or measure C++ coverage with ./ao coverage. Do not load merely to run existing test targets or diagnose a failing test.
+description: Write, restructure, or review Aobus C++/Objective-C++ and Python tests, or measure C++ coverage with ./ao measure coverage. Do not load merely to run existing test targets or diagnose a failing test.
 ---
 
 # Write and review Aobus tests
@@ -18,7 +18,7 @@ Test review or coverage measurement is read-only unless test edits are requested
   [concurrency and sanitizer validation](../../../doc/development/test/concurrency-and-sanitizer.md),
   and Linux Debug coverage through
   [coverage workflow](../../../doc/development/test/coverage-workflow.md).
-- Silent `./ao coverage` traps
+- Silent `./ao measure coverage` traps
   ([generating and inspecting coverage](../../../doc/development/test/coverage-workflow.md#generating-and-inspecting-coverage)):
   ambient `LLVM_PROFILE_FILE` / `GCOV_PREFIX*` variables are stripped without
   warning, and `--scope <prefix>` narrows only the reported denominator, never

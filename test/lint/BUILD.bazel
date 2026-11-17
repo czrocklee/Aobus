@@ -1,8 +1,15 @@
 load("@rules_cc//cc:defs.bzl", "cc_library")
 load("//bazel/lint:canary.bzl", "lint_cache_canaries")
 load("//bazel/lint:fixtures.bzl", "lint_fixture_test")
+load("//bazel/lint:graph.bzl", "lint_graph_test")
 
 package(default_visibility = ["//visibility:public"])
+
+lint_graph_test(
+    name = "production_lint",
+    size = "large",
+    tags = ["aobus-lint-sdk-host"],
+)
 
 filegroup(
     name = "fixtures",

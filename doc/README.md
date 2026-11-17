@@ -29,5 +29,5 @@ For the reasons behind consequential choices, use [decisions](decision/README.md
 
 ## Maintain these documents
 
-[Writing and maintaining documentation](development/documentation.md) explains file boundaries, evidence, proposals, and `./ao docs check`.
+[Writing and maintaining documentation](development/documentation.md) explains file boundaries, evidence, proposals, and `./ao check docs`.
 You do not need to read it before using the guides above.

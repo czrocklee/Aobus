@@ -4,6 +4,11 @@ load(":link_closure.bzl", "link_closure_guard")
 
 package(default_visibility = ["//visibility:private"])
 
+exports_files(
+    ["generate_test_library.py"],
+    visibility = ["//test/script:__pkg__"],
+)
+
 cc_library(
     name = "cli",
     srcs = [

@@ -1,7 +1,5 @@
 """Shared Windows SDK manifest, cache and marker contracts, without downloading an SDK."""
 
-import contextlib
-import io
 import json
 import os
 import re
@@ -13,9 +11,10 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from ao.command import format as format_command
-from ao.core import builddir, tidyengine, windows_llvm_sdk, winui
 from ao.core.paths import PROJECT_ROOT
+from ao.policy import windows_llvm_sdk
+from ao.portal import build_dir, tidy_engine, winui
+from ao.portal import source_format as format_command
 
 
 class WindowsLlvmSdkManifestTest(unittest.TestCase):
@@ -27,9 +26,9 @@ class WindowsLlvmSdkManifestTest(unittest.TestCase):
         self.manifest.parent.mkdir(parents=True)
         self.base = json.loads((PROJECT_ROOT / "script/ao/windows-llvm-sdk.json").read_text(encoding="utf-8"))
         self.manifest.write_text(json.dumps(self.base), encoding="utf-8")
-        self.enterContext(mock.patch.object(tidyengine, "LLVM_SDK_MANIFEST", self.manifest))
-        tidyengine.windows_llvm_sdk_manifest.cache_clear()
-        self.addCleanup(tidyengine.windows_llvm_sdk_manifest.cache_clear)
+        self.enterContext(mock.patch.object(tidy_engine, "LLVM_SDK_MANIFEST", self.manifest))
+        tidy_engine.windows_llvm_sdk_manifest.cache_clear()
+        self.addCleanup(tidy_engine.windows_llvm_sdk_manifest.cache_clear)
 
     def test_help_startup_does_not_depend_on_a_windows_manifest(self):
         # Use a fresh dispatch process: importing a module already loaded by this
@@ -61,7 +60,7 @@ class WindowsFormatReadySdkTest(unittest.TestCase):
             root = Path(temporary)
             manifest = windows_llvm_sdk.Manifest("31.2.3", "b" * 64, ("bin/clang-format.exe",))
             with (
-                mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
+                mock.patch.object(build_dir, "platform_profile", return_value=build_dir.WINDOWS_PROFILE),
                 mock.patch.object(windows_llvm_sdk, "read_manifest", return_value=manifest),
                 mock.patch.object(windows_llvm_sdk, "ready_root", return_value=(root, False)) as ready,
                 mock.patch.object(winui, "visual_studio_installation", side_effect=AssertionError("unexpected VS")),
@@ -77,19 +76,17 @@ class WindowsFormatReadySdkTest(unittest.TestCase):
 
     def test_missing_ready_sdk_fails_without_launching_a_setup_or_formatter_process(self):
         with (
-            mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
+            mock.patch.object(build_dir, "platform_profile", return_value=build_dir.WINDOWS_PROFILE),
             mock.patch.object(windows_llvm_sdk, "read_manifest", return_value=object()),
             mock.patch.object(
                 windows_llvm_sdk, "ready_root", side_effect=windows_llvm_sdk.WindowsLlvmSdkError("absent")
             ),
             mock.patch.object(winui, "visual_studio_installation", side_effect=AssertionError("unexpected VS")),
             mock.patch.object(format_command.subprocess, "run") as run,
-            contextlib.redirect_stderr(io.StringIO()) as stderr,
-            self.assertRaises(SystemExit),
+            self.assertRaisesRegex(ValueError, "run ao setup llvm-sdk explicitly"),
         ):
             format_command.run_clang_format(["lib/Foo.cpp"], check=False)
         run.assert_not_called()
-        self.assertIn("run ao setup llvm-sdk explicitly", stderr.getvalue())
 
 
 class ReadySdkRootTest(unittest.TestCase):

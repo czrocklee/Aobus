@@ -5,7 +5,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from ao.core import bazel_lint_action, paths
+from ao.core import paths
+from ao.graph import bazel_lint_action
 
 
 class AbsolutePathTest(unittest.TestCase):

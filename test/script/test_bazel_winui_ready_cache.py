@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest import mock
 
 from ao.core import bazel_native as native
-from ao.core import bazel_provision, bazel_winui
+from ao.portal import bazel_provision, bazel_winui
 
 
 class SelectedPackages(Exception):

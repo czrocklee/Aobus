@@ -12,7 +12,7 @@ This page records only what repository automation proves and where review must t
 
 Naming rules have four enforcement levels.
 
-**1. `./ao name-audit`** enforces mechanical file and placement rules:
+**1. The naming audit in `./ao check lint`** enforces mechanical file and placement rules:
 
 - Banned catch-all file name suffixes: `Utils`, `Util`, `Utility`, `Types`.
 - Singular `*Helper` file names are banned; plural support collections belong

@@ -20,13 +20,18 @@ known-first-party = ["ao"]
 
 [tool.ruff.lint.per-file-ignores]
 # Pure clang-tidy configuration data; option values cannot be wrapped.
-"script/ao/core/tidyconfig.py" = ["E501"]
+"script/ao/policy/tidy_config.py" = ["E501"]
 
 [tool.mypy]
 strict = true
 exclude = [
     '^test/script/'
 ]
+
+[[tool.mypy.overrides]]
+# rules_python supplies this library as a Bazel dependency, not a host wheel.
+module = "python.runfiles.*"
+ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 # Optional dependency of the test-library generator; not part of the dev shell.

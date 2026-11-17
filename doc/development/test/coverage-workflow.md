@@ -11,8 +11,13 @@ over the Bazel graph. Do not blindly guess which lines are uncovered, and do
 not manually run the collector or build tools. Run the coverage command:
 
 ```bash
-./ao coverage
+./ao measure coverage
 ```
+
+Coverage and instrumentation default to the shared affinity-aware local/CI
+worker baseline described in [default parallelism](../build.md#default-parallelism).
+Use `-j` to override it; coverage collection retains its separate memory-specific
+limits.
 
 GCC is the default target compiler; use `--compiler=clang` to select Clang.
 The same selection governs configured analysis, compilation and the coverage
@@ -22,9 +27,10 @@ The launcher strips ambient `LLVM_PROFILE_FILE`, `GCOV_PREFIX`,
 environments without warning so external profile settings cannot divert or mask
 collection.
 
-Select `--core`, `--application`, `--backend`, `--cli`, `--tui`, or `--gtk` for
-a single suite; the default runs core, application, and backend, and `--all`
-adds TUI, CLI, and GTK. The system-media, perf, tooling, and lint suites are
+Select `--suite core`, `--suite application`, `--suite backend`, `--suite cli`,
+`--suite tui`, or `--suite gtk` for a single suite. `--suite default` (also the
+implicit default) runs core, application, and backend; `--suite all` adds TUI,
+CLI, and GTK. The system-media, perf, tooling, and lint suites are
 excluded from coverage runs. Use repeatable `--scope <repository-relative-prefix>`
 options to limit the reported source set — the denominator is the only thing
 `--scope` changes; it never narrows instrumentation or the tests run. An
@@ -94,8 +100,12 @@ green coverage result. Failed extraction, missing executable project data, or
 any explicitly requested scope without measurable lines also fails the
 command. An unavailable measurement is never reported as 100% coverage.
 
-The route reports line coverage only, applies no percentage threshold, and
-claims no function or branch metrics. Attempt receipts and the LCOV report live
+For instrumentation analysis without measurement, use `./ao check instrumentation`
+with canonical `--suite` selection, not report-only `--scope`. It performs no compilation, test execution,
+or coverage collection; it cannot establish runtime acceptance or measured percentages.
+
+The measurement route reports line coverage only, applies no percentage threshold,
+and claims no function or branch metrics. Attempt receipts and the LCOV report live
 under `<tree>/coverage/run-*/`. [Bazel development](../bazel.md#sanitizer-and-coverage-instrumentation)
 records the command surface and profile boundaries.
 
@@ -158,8 +168,8 @@ Update functions may branch on `ids.size() == 1` vs `ids.size() > 1`. Write expl
 
 When tasked to reach 95% coverage for a file or module:
 
-1. **Locate and inspect**: run `./ao coverage` to get missing lines with context.
+1. **Locate and inspect**: run `./ao measure coverage` to get missing lines with context.
 2. **Analyze**: read the context to understand the logical condition required to reach them.
 3. **Test**: add a new `SECTION("...")` or `TEST_CASE` in the corresponding Catch2 test file.
-4. **Verify**: re-run `./ao coverage`. Confirm the missing lines disappear and the percentage increases.
+4. **Verify**: re-run `./ao measure coverage`. Confirm the missing lines disappear and the percentage increases.
 5. **Repeat** file-by-file until the module exceeds 95%.

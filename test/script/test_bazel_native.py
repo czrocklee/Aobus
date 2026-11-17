@@ -8,8 +8,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from ao.core import bazel_check, bazel_workspace
 from ao.core import bazel_native as native
+from ao.portal import bazel_attempt, bazel_workspace
 
 
 class IsolatedClientEnvironmentTests(unittest.TestCase):
@@ -40,7 +40,7 @@ class IsolatedClientEnvironmentTests(unittest.TestCase):
                 "if k.casefold() == 'bazelrc' or k == 'AOBUS_RC_TEST_SENTINEL'}))"
             )
             value = f"{valid},{missing}"
-            attempt = bazel_check._Check(root / "tree", "debug", "windows", 1)
+            attempt = bazel_attempt._Check(root / "tree", "debug", "windows", 1)
             with (
                 mock.patch.dict(os.environ, {"BAZELRC": value, "AOBUS_RC_TEST_SENTINEL": "retained"}),
                 mock.patch.object(

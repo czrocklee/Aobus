@@ -20,4 +20,4 @@ Implementation-private headers remain under `app/`; focused tests may include th
 These are application interfaces, not an installed or independently versioned Core SDK.
 Core headers remain under `include/ao/`; application dependencies must not leak back into Core.
 
-[`BUILD.bazel`](BUILD.bazel) owns sources and target visibility; the shared [architecture audit](../../script/ao/core/guardrails.py) checks layer boundaries across sources and tests.
+[`BUILD.bazel`](BUILD.bazel) owns sources and target visibility; the shared [architecture audit](../../script/ao/portal/guardrails.py) checks layer boundaries across sources and tests.

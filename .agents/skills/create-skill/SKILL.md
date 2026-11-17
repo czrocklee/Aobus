@@ -43,7 +43,7 @@ description: Create, audit, or refactor Agent Skills and AGENTS.md repository in
 ## Frontmatter and Aobus validation
 
 - Keep `<verb>-<noun>` directory/`name` parity and closed `---` delimiters.
-  `./ao docs check` strips skill frontmatter without parsing YAML. Omit client UI
+  `./ao check docs` strips skill frontmatter without parsing YAML. Omit client UI
   sidecars such as `agents/openai.yaml`. Use `disable-model-invocation: true` only
   when explicit invocation or a mandatory root route preserves discoverability.
 - Front-load concrete user vocabulary in `description`, with near-miss exclusions
@@ -53,5 +53,5 @@ description: Create, audit, or refactor Agent Skills and AGENTS.md repository in
   Non-`.md` skill changes exit CI's `docs-only` path and take the tooling route in
   [validation and review](../../../doc/development/test/validation-and-review.md#validation).
 - Keep a temporary fact/link ledger outside the checkout during consolidations.
-  Validate links with `./ao docs check`, parse skill YAML, verify live claims,
+  Validate links with `./ao check docs`, parse skill YAML, verify live claims,
   and check representative task routing, including near misses and retired routes.

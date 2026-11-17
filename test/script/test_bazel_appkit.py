@@ -11,8 +11,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ao.core import bazel_lint
 from ao.core.paths import PROJECT_ROOT
+from ao.portal import bazel_lint
 
 APPKIT_PACKAGE = PROJECT_ROOT / "app/macos-appkit"
 
@@ -37,7 +37,7 @@ class BazelAppkitGraphTest(unittest.TestCase):
         build = (APPKIT_PACKAGE / "BUILD.bazel").read_text(encoding="utf-8")
         smoke = re.search(r'aobus_appkit_bundle\(\s*name = "ao_appkit_smoke".*?\n\)', build, re.DOTALL)
         self.assertIsNotNone(smoke)
-        self.assertIn('supervisor = "//:script/ao/core/appkitprocess.py"', smoke.group(0))
+        self.assertIn('supervisor = "//:script/ao/graph/appkit_process.py"', smoke.group(0))
         shipping = re.search(r'aobus_appkit_bundle\(\s*name = "aobus-appkit".*?\n\)', build, re.DOTALL)
         self.assertIsNotNone(shipping)
         self.assertNotIn("supervisor", shipping.group(0))
@@ -184,7 +184,7 @@ class BazelAppkitBundleHelperTest(unittest.TestCase):
         return python
 
     def test_supervisor_bundle_copies_the_real_supervisor_and_bridges_the_launcher(self):
-        supervisor = PROJECT_ROOT / "script/ao/core/appkitprocess.py"
+        supervisor = PROJECT_ROOT / "script/ao/graph/appkit_process.py"
         python = self.stub_python("python's stub")
         app = self.root / "ao_appkit_smoke.app"
         launcher = self.root / "ao_appkit_smoke"
@@ -198,12 +198,12 @@ class BazelAppkitBundleHelperTest(unittest.TestCase):
                 python=python,
             )
         )
-        copied = app / "Contents/Resources/appkitprocess.py"
+        copied = app / "Contents/Resources/appkit_process.py"
         self.assertEqual(copied.read_bytes(), supervisor.read_bytes())
         text = launcher.read_text(encoding="utf-8")
         self.assertIn(shlex.quote(str(python)), text)
         self.assertIn("-I -S -B -X utf8", text)
-        self.assertIn("ao_appkit_smoke.app/Contents/Resources/appkitprocess.py", text)
+        self.assertIn("ao_appkit_smoke.app/Contents/Resources/appkit_process.py", text)
         self.assertIn("ao_appkit_smoke.app/Contents/MacOS/ao_appkit_smoke", text)
         if os.name == "posix":
             result = subprocess.run([str(launcher), *forwarded], capture_output=True, text=True)
@@ -234,7 +234,7 @@ class BazelAppkitBundleHelperTest(unittest.TestCase):
         self.assertNotIn("-I", text)
 
     def test_supervisor_without_the_admitted_interpreter_fails_without_writing_outputs(self):
-        supervisor = self.root / "appkitprocess.py"
+        supervisor = self.root / "appkit_process.py"
         supervisor.write_text("standalone supervisor fixture\n", encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "supervisor requires the admitted python"):
             build_bundle.run(self.options(supervisor=supervisor))

@@ -56,7 +56,7 @@ Recognition for ingestion and decoder selection are therefore independent capabi
 - Runtime may compose `ao_media` and `ao_library`; UIModel and frontends do not parse containers or retain mapped-media views.
 - Container primitives expose validated structure and borrowed ranges, not product policy.
 
-The shared [architecture audit](../../../script/ao/core/guardrails.py) protects the principal forbidden directions at every completion gate.
+The shared [architecture audit](../../../script/ao/portal/guardrails.py) protects the principal forbidden directions at every completion gate.
 The [system architecture](../overview.md) owns the top-level layer model.
 
 ## Ownership and lifetime

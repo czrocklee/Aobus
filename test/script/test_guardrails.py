@@ -9,8 +9,8 @@ import unittest
 from pathlib import Path, PureWindowsPath
 from unittest.mock import patch
 
-from ao.core import guardrails
 from ao.core.paths import PROJECT_ROOT
+from ao.portal import guardrails
 
 
 class ForbiddenScanTest(unittest.TestCase):

@@ -12,13 +12,38 @@ HeaderOriginInfo = provider(
     fields = {"origins": "depset of newline-joined virtual and original exec paths"},
 )
 
+# Whole-graph lint artifacts propagated by lint_graph_aspect. One record is a
+# JSON string per project compile owner; the root test decodes them to wire
+# replay and gate actions without a second target inventory.
+LintGraphInfo = provider(
+    doc = "Per-owner lint artifacts and uncovered-header closure of one configured target.",
+    fields = [
+        "records",
+        "closure_items",
+        "uncovered_files",
+        "indices",
+        "reports",
+        "logs",
+        "contexts",
+        # Map of "owner|configuration" to that owner's declared compile inputs
+        # (compile action inputs plus header closure), so replay actions can
+        # stage exactly the candidate consumers' native dependency context.
+        "owner_inputs",
+    ],
+)
+
 _SOURCE_SUFFIXES = ["c", "cc", "cpp", "cxx", "mm"]
 _HEADER_SUFFIXES = ["h", "hh", "hpp", "hxx"]
 _COMPILE_MNEMONICS = ["CppCompile", "ObjcCompile"]
 
 # Only profiles whose producer inputs are known here are admitted. The portal
 # does not forward arbitrary feature/copt overrides through its lint interface.
-_SUPPORTED_FEATURES = ["aobus_warnings", "aobus_test_warnings", "treat_warnings_as_errors", "external_include_paths", "static_link_msvcrt", "dynamic_link_msvcrt", "default_compile_flags", "default_cpp_std", "default_exception_handling", "aobus_release_ipo", "aobus_sampling"]
+# The sanctioned sanitizer profiles (asan/ubsan/tsan, injected as target
+# platform flags by bazel/sanitizers.bzl) are admitted: they produce only
+# compile/link flags and no environment entries, so the diagnostic action
+# environment is unchanged, and the prebuilt LLVM host runs in the exec
+# configuration and keeps its uninstrumented ABI (sanitizer_admission guard).
+_SUPPORTED_FEATURES = ["aobus_warnings", "aobus_test_warnings", "treat_warnings_as_errors", "external_include_paths", "static_link_msvcrt", "dynamic_link_msvcrt", "default_compile_flags", "default_cpp_std", "default_exception_handling", "aobus_release_ipo", "aobus_sampling", "asan", "ubsan", "tsan"]
 
 def native_environment(ctx, action = None, language = "c++", portal = False):
     """Use the pinned producer's feature inputs and native environment precedence.
@@ -114,7 +139,7 @@ def _verification_impl(ctx):
 lint_verification = rule(
     implementation = _verification_impl,
     attrs = {
-        "_helper": attr.label(default = Label("//:script/ao/core/bazel_lint_action.py"), allow_single_file = True),
+        "_helper": attr.label(default = Label("//:script/ao/graph/bazel_lint_action.py"), allow_single_file = True),
         "_policy": attr.label(default = Label("@aobus_lint_policy//:policy.json"), allow_single_file = True),
         "_sdk": attr.label(default = Label("@aobus_lint_sdk//:metadata.json"), allow_single_file = True),
         "_host": attr.label(default = Label("//tool/lint:host"), cfg = "exec"),
@@ -151,8 +176,8 @@ def _header_inputs(target, ctx):
 
 def _component(file):
     # Map a file's directory to its owning component for header pairing.
-    # Keep this mapping in sync with tidyengine.component_parts in
-    # script/ao/core/tidyengine.py.
+    # Keep this mapping in sync with tidy_engine.component_parts in
+    # script/ao/portal/tidy_engine.py.
     parts = file.short_path.split("/")[:-1]
     if parts[:2] == ["include", "ao"]:
         return "/".join(["lib"] + parts[2:])
@@ -261,10 +286,28 @@ def _output_stem(identity):
     # invalidate unchanged reports. Keep the bare hash short for Windows paths.
     return "%x" % (hash(json.encode(identity)) & 0xffffffff)
 
-def _lint_impl(target, ctx, profile = "lint"):
+def _native_compile_actions(target):
+    """Return the target's native compile actions in a stable order."""
+    return sorted([a for a in target.actions if a.mnemonic in _COMPILE_MNEMONICS], key = _action_key)
+
+def _declares_eligible_sources(ctx):
+    """Return whether srcs declares translation-unit sources.
+
+    Only a native compiler owner may turn eligible sources into lint mains:
+    a rule that declares them without compiling them (a code generator that
+    consumes them as action inputs) is not their owner; the real owner
+    compiles them and stays in the graph.
+    """
+    for file in getattr(ctx.rule.files, "srcs", []):
+        if file.extension in _SOURCE_SUFFIXES:
+            return True
+    return False
+
+def _lint_owner(target, ctx, profile = "lint"):
+    """Declare one configured owner's report actions and describe them for gates."""
     if ctx.label.repo_name:
         fail("Lint roots must be project owners, not external SDK targets")
-    actions = sorted([a for a in target.actions if a.mnemonic in _COMPILE_MNEMONICS], key = _action_key)
+    actions = _native_compile_actions(target)
     expected = {f.path: f for f in getattr(ctx.rule.files, "srcs", []) if f.extension in _SOURCE_SUFFIXES}
     native = []
     found = {}
@@ -295,7 +338,9 @@ def _lint_impl(target, ctx, profile = "lint"):
         else:
             uncovered.append({"path": path, "reason": "no unambiguous same-component native header companion"})
 
-    consumers = _consumer_mains(ctx.label, _decode_consumers(ctx.attr.aobus_lint_consumers).get(str(ctx.label), []), found, headers, pairs)
+    # The CLI aspects expose a public consumer parameter; the graph aspect
+    # omits it, so replay coverage comes only from declared actions.
+    consumers = _consumer_mains(ctx.label, _decode_consumers(getattr(ctx.attr, "aobus_lint_consumers", "{}")).get(str(ctx.label), []), found, headers, pairs)
     uncovered = [item for item in uncovered if item["path"] not in consumers]
     verification = ctx.attr._verification[LintVerificationInfo]
     index = ctx.actions.declare_file(ctx.label.name + ".aobus-lint.index.json")
@@ -303,12 +348,20 @@ def _lint_impl(target, ctx, profile = "lint"):
     entries = []
     capture = []
     stems = {}
+
+    # One graph entry per compile action: the main==source report is the
+    # replay candidate for uncovered headers and include fragments.
+    tus = []
+    report_files = []
+    log_files = []
+    context_files = []
     for action, source in native:
         mains = [source] + [header for path, header in sorted(own_headers.items()) if pairs.get(path) == source.path]
         mains.extend([main for _, (consumer, main) in sorted(consumers.items()) if consumer == source.path])
         language = "objc++" if source.extension == "mm" else "c" if source.extension == "c" else "c++"
         environment = native_environment(ctx, action, language)
         capture.append({"source": source.path, "argv": action.argv, "raw_env": action.env, "effective_env": environment, "outputs": [f.path for f in action.outputs.to_list()]})
+        source_entry = None
         for main in mains:
             identity = {
                 "owner": str(ctx.label),
@@ -347,17 +400,60 @@ def _lint_impl(target, ctx, profile = "lint"):
             )
             entries.append({"identity": identity, "report": report.path, "log": log.path})
             artifacts.extend([report, log])
+            context_files.append(context)
+            report_files.append(report)
+            log_files.append(log)
+            if main == source:
+                source_entry = {"source": source.path, "context": context.path, "report": report.path, "log": log.path, "env": environment}
+        if source_entry == None:
+            fail("Native lint capture lost the source main of " + str(ctx.label))
+        tus.append(source_entry)
+    sources = sorted({path: None for path in found.keys() + own_headers.keys() + consumers.keys()}.keys())
+
+    # Authored mains only: the native is_source fact, mirroring the CLI's
+    # authored-main selection. Generated translation units still produce
+    # reports (consumer/include evidence for header replays), but the gate
+    # holds findings and coverage to authored mains exactly like the portal.
+    authored_paths = [
+        source.path
+        for source in found.values()
+        if source.is_source
+    ] + own_headers.keys() + consumers.keys()
+    authored = sorted({path: None for path in authored_paths}.keys())
+
+    # The exact declared dependency context the baseline report actions use:
+    # compile action inputs plus the owner's header closure. Replays of an
+    # uncovered header through one of this owner's translation units need the
+    # same inputs, including the compiler wrapper and native SDK on every host.
+    compile_inputs = depset(transitive = [action.inputs for action, _ in native] + [headers])
     ctx.actions.write(index, json.encode({
         "schema": 1,
         "owner": str(ctx.label),
         "configuration": ctx.bin_dir.path,
-        "sources": sorted({path: None for path in found.keys() + own_headers.keys() + consumers.keys()}.keys()),
+        "sources": sources,
+        "authored": authored,
         "uncovered": uncovered,
         "reports": entries,
     }))
     metadata = ctx.actions.declare_file(ctx.label.name + ".aobus-lint.capture.json")
     ctx.actions.write(metadata, json.encode({"schema": 1, "owner": str(ctx.label), "actions": capture}))
-    return [OutputGroupInfo(aobus_lint = depset(artifacts), aobus_lint_contexts = depset([metadata]))]
+    return struct(
+        output_groups = [OutputGroupInfo(aobus_lint = depset(artifacts), aobus_lint_contexts = depset([metadata]))],
+        index = index,
+        entries = entries,
+        sources = sources,
+        authored = authored,
+        uncovered = uncovered,
+        uncovered_files = [own_headers[item["path"]] for item in uncovered],
+        tus = tus,
+        compile_inputs = compile_inputs,
+        reports = report_files,
+        logs = log_files,
+        contexts = context_files,
+    )
+
+def _lint_impl(target, ctx, profile = "lint"):
+    return _lint_owner(target, ctx, profile).output_groups
 
 def _identity_mode(main, profile):
     if profile == "analyzer":
@@ -372,7 +468,7 @@ lint_aspect = aspect(
         # The portal names real consumers per run through --aspects_parameters;
         # the selection stays out of the policy every report action reads.
         "aobus_lint_consumers": attr.string(default = "{}"),
-        "_helper": attr.label(default = Label("//:script/ao/core/bazel_lint_action.py"), allow_single_file = True),
+        "_helper": attr.label(default = Label("//:script/ao/graph/bazel_lint_action.py"), allow_single_file = True),
         "_verification": attr.label(default = Label("//tool/lint:verification")),
     },
     fragments = ["cpp"],
@@ -390,7 +486,139 @@ analyzer_aspect = aspect(
     requires = [header_origin_aspect],
     attrs = {
         "aobus_lint_consumers": attr.string(default = "{}"),
-        "_helper": attr.label(default = Label("//:script/ao/core/bazel_lint_action.py"), allow_single_file = True),
+        "_helper": attr.label(default = Label("//:script/ao/graph/bazel_lint_action.py"), allow_single_file = True),
+        "_verification": attr.label(default = Label("//tool/lint:verification")),
+    },
+    fragments = ["cpp"],
+    toolchains = use_cc_toolchain(),
+)
+
+def _graph_dep_infos(ctx):
+    """Merge the propagated graph providers of every attribute value.
+
+    attr_aspects = "*" propagates along all attributes, including the implicit
+    tool dependencies such as _verification, so the checker plugin sources are
+    reached. dir() enumerates the attribute names without a per-rule list that
+    could silently drop a future dependency edge.
+    """
+    records = []
+    closure = []
+    uncovered = []
+    indices = []
+    reports = []
+    logs = []
+    contexts = []
+    owner_input_maps = []
+    for name in dir(ctx.rule.attr):
+        value = getattr(ctx.rule.attr, name)
+        for item in (value if type(value) == "list" else [value]):
+            # Source files and plain values carry no aspect application.
+            if type(item) == "Target" and LintGraphInfo in item:
+                info = item[LintGraphInfo]
+                records.append(info.records)
+                closure.append(info.closure_items)
+                uncovered.append(info.uncovered_files)
+                indices.append(info.indices)
+                reports.append(info.reports)
+                logs.append(info.logs)
+                contexts.append(info.contexts)
+                owner_input_maps.append(info.owner_inputs)
+    return (records, closure, uncovered, indices, reports, logs, contexts, owner_input_maps)
+
+def _empty_graph_info():
+    return LintGraphInfo(
+        records = depset(),
+        closure_items = depset(),
+        uncovered_files = depset(),
+        indices = depset(),
+        reports = depset(),
+        logs = depset(),
+        contexts = depset(),
+        owner_inputs = {},
+    )
+
+def _has_authored_lint_input(ctx):
+    # Match the portal's authored-source owner scope. Generated-only catalogs
+    # and GLib resource owners still build normally, but are not authored lint
+    # mains; their generated style is not project source policy.
+    for attribute in ["srcs", "hdrs", "textual_hdrs", "additional_compiler_inputs"]:
+        for file in getattr(ctx.rule.files, attribute, []):
+            if file.is_source and not file.path.startswith("external/") and file.extension in _SOURCE_SUFFIXES + _HEADER_SUFFIXES + ["def"]:
+                return True
+    return False
+
+def _lint_graph_impl(target, ctx):
+    if ctx.label.repo_name:
+        # External SDK targets are never lint owners; nothing below them is one.
+        return [_empty_graph_info()]
+    records, closure, uncovered, indices, reports, logs, contexts, owner_input_maps = _graph_dep_infos(ctx)
+    dep_closure = depset(transitive = closure)
+
+    # Small bounded maps: one entry per compile owner/configuration, merged by
+    # dict update along the propagation DAG.
+    merged_owner_inputs = {}
+    for mapping in owner_input_maps:
+        merged_owner_inputs.update(mapping)
+    own_record = None
+    own_uncovered_files = []
+    own_indices = []
+    own_reports = []
+    own_logs = []
+    own_contexts = []
+    own_closure = []
+
+    # Native compiler ownership: a rule that declares eligible sources but
+    # compiles none of them (a code generator consuming them as action
+    # inputs) is not their owner; the real owners compile these sources and
+    # stay in this aspect's reach, so the fail-loud coverage contract is
+    # preserved. Header-only interface owners keep their inventory below.
+    owns_native_sources = _native_compile_actions(target) or not _declares_eligible_sources(ctx)
+    if CcInfo in target and _has_authored_lint_input(ctx) and owns_native_sources:
+        owner = _lint_owner(target, ctx)
+        own_indices = [owner.index]
+        own_reports = owner.reports
+        own_logs = owner.logs
+        own_contexts = owner.contexts
+        own_uncovered_files = owner.uncovered_files
+        own_closure = [item["path"] for item in owner.uncovered]
+        if owner.sources:
+            # The record's closure items are the uncovered paths this owner and
+            # its dependencies declare; a consumer of an unpaired header always
+            # depends on its owner, so this is the candidate set for replay.
+            own_record = json.encode({
+                "schema": 1,
+                "owner": str(ctx.label),
+                "configuration": ctx.bin_dir.path,
+                "index": owner.index.path,
+                "sources": owner.sources,
+                "uncovered": owner.uncovered,
+                "closure_items": sorted({path: None for path in own_closure + dep_closure.to_list()}),
+                "tus": owner.tus,
+            })
+            merged_owner_inputs[str(ctx.label) + "|" + ctx.bin_dir.path] = owner.compile_inputs
+    return [LintGraphInfo(
+        records = depset([own_record] if own_record else [], transitive = records),
+        closure_items = depset(own_closure, transitive = closure),
+        uncovered_files = depset(own_uncovered_files, transitive = uncovered),
+        indices = depset(own_indices, transitive = indices),
+        reports = depset(own_reports, transitive = reports),
+        logs = depset(own_logs, transitive = logs),
+        contexts = depset(own_contexts, transitive = contexts),
+        owner_inputs = merged_owner_inputs,
+    )]
+
+lint_graph_aspect = aspect(
+    implementation = _lint_graph_impl,
+    # "*" must be the only entry: propagate along every attribute, including
+    # implicit tool dependencies, so no project compile owner is skipped.
+    attr_aspects = ["*"],
+    requires = [header_origin_aspect],
+    apply_to_generating_rules = True,
+    attrs = {
+        # No public parameter attribute: a rule-applied aspect may not carry an
+        # unrestricted string parameter, and the graph's consumer replays are
+        # declared actions, never a command-line selection.
+        "_helper": attr.label(default = Label("//:script/ao/graph/bazel_lint_action.py"), allow_single_file = True),
         "_verification": attr.label(default = Label("//tool/lint:verification")),
     },
     fragments = ["cpp"],

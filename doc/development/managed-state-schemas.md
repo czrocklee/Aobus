@@ -91,15 +91,15 @@ Keep the guardrail source scopes aligned when adding a new application subtree.
 
 Run focused owner tests while developing, then complete the C++ validation gate from the root.
 A managed-state change must update its current contract or exact format
-reference. Complete `check` includes live documentation validation and scoped
-hygiene:
+reference. Complete `check` includes live documentation validation and the
+graph's lint, formatting, and audit tests:
 
 ```bash
 ./ao check
 ```
 
-Standalone `ao docs check` and `ao hygiene` remain available for focused work.
-`hygiene` is check-only; it does not authorize a standalone lint campaign or unrelated cleanup.
+Standalone `ao check docs`, `ao check format`, and `ao check lint` remain available for focused work.
+These checks never rewrite sources; they do not authorize a standalone lint campaign or unrelated cleanup.
 Do not run formatting or lint-fix commands merely as part of this workflow; follow the repository's explicit formatting and linting policy.
 Useful review searches are:
 

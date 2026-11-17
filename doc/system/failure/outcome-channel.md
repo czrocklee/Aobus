@@ -185,7 +185,7 @@ It is not converted into generic presentation followed by continued execution.
 
 - [`ErrorTest.cpp`](../../../test/core/ErrorTest.cpp) protects recoverable value and diagnostic-location behavior.
 - Fatal tests under [`test/core/`](../../../test/core) and the dedicated `ao_fatal_probe` under [`test/fatal/`](../../../test/fatal) protect lazy conditions, registration, emergency fallback, reentrancy, source context, and process death.
-- The shared completion-audit backend in [`guardrails.py`](../../../script/ao/core/guardrails.py) rejects production C assertions, raw gsl-lite contract spellings, unconditional false AO contracts, and production `std::unreachable()` at every completion gate; the completion gate consumes it.
+- The shared completion-audit backend in [`guardrails.py`](../../../script/ao/portal/guardrails.py) rejects production C assertions, raw gsl-lite contract spellings, unconditional false AO contracts, and production `std::unreachable()` at every completion gate; the completion gate consumes it.
 - [`AsyncRuntimeTest.cpp`](../../../test/async/AsyncRuntimeTest.cpp) protects future single ownership, non-default-constructible value transport, and cancellation exclusion.
 - [`LifetimeScopeTest.cpp`](../../../test/async/LifetimeScopeTest.cpp) plus runtime fatal subprocess scenarios protect task retirement before fatal entry.
 - [`LibraryJobsTest.cpp`](../../../test/runtime/library/LibraryJobsTest.cpp) protects callback-affine failure cleanup before exception propagation.

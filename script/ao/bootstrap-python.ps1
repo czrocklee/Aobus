@@ -141,7 +141,7 @@ $env:PSExecutionPolicyPreference = $env:_AOBUS_ORIGINAL_PS_EXECUTION_POLICY
 $env:_AOBUS_ORIGINAL_PS_MODULE_PATH = $null
 $env:_AOBUS_ORIGINAL_PS_EXECUTION_POLICY = $null
 $env:PYTHONPATH = Join-Path $projectRoot "script"
-$launchArguments = @("-m", "ao.core.pythonenv", "--project-root", $projectRoot,
+$launchArguments = @("-m", "ao.portal.python_env", "--project-root", $projectRoot,
     "--state-root", $StateRoot, "--launch-windows-portal", "--") + $portalArguments
 $start = New-Object Diagnostics.ProcessStartInfo
 $start.FileName = $python

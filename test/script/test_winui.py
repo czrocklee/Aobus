@@ -10,7 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from ao.core import winui
+from ao.portal import winui
 
 
 class WinUiTest(unittest.TestCase):

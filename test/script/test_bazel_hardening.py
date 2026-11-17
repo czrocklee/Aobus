@@ -6,10 +6,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ao.core import bazel_compiler_probe as compiler_probe
-from ao.core import bazel_contract as contract
 from ao.core import bazel_native as native
-from ao.core import bazel_workspace as workspace
+from ao.portal import bazel_compiler_probe as compiler_probe
+from ao.portal import bazel_verify
+from ao.portal import bazel_workspace as workspace
 
 
 class LinuxHardeningTest(unittest.TestCase):
@@ -98,17 +98,17 @@ class LinuxHardeningTest(unittest.TestCase):
     def test_unknown_verifier_configuration_is_not_treated_as_an_optimized_profile(self):
         # "fast" is not an alias: only the exact fastbuild name is admitted.
         with self.assertRaisesRegex(ValueError, "configuration"):
-            contract._expected_hardening_environment("fast")
+            bazel_verify._expected_hardening_environment("fast")
 
     def test_fastbuild_hardening_keeps_the_unoptimized_policy(self):
         # Fastbuild owns its unoptimized mode: fortify and fortify3 require
         # optimization and stay excluded exactly as for Debug, never Release.
-        expected = contract._expected_hardening_environment("fastbuild")
-        self.assertEqual(expected, contract._expected_hardening_environment("debug"))
+        expected = bazel_verify._expected_hardening_environment("fastbuild")
+        self.assertEqual(expected, bazel_verify._expected_hardening_environment("debug"))
         self.assertEqual(
             next(iter(expected.values())).split(), ["stackprotector", "strictoverflow", "relro", "bindnow"]
         )
-        release = contract._expected_hardening_environment("release")
+        release = bazel_verify._expected_hardening_environment("release")
         self.assertEqual(next(iter(release.values())).split(), self.policy)
 
     def test_prepared_rc_selects_configuration_without_implementing_toolchain_modes(self):

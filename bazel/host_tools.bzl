@@ -1,5 +1,7 @@
 """The fixed public interface of the admitted native host-tool SDK."""
 
+load("@aobus//bazel:python.bzl", "python_runtime_toolchain")
+
 def host_tools(data):
     """Declare tools and their action inputs without provider selection logic.
 
@@ -22,6 +24,10 @@ def host_tools(data):
     native.filegroup(name = "glib_compile_resources_runtime", srcs = data["resource_inputs"])
     native.filegroup(name = "dbus_daemon", srcs = data["dbus_inputs"])
     native.filegroup(name = "catalog_tools", srcs = data["catalog_inputs"])
+
+    # The official Python toolchain wraps the admitted native interpreter; its
+    # platform runtime keeps the installed SDK location instead of a download.
+    python_runtime_toolchain(data["python"])
     native.config_setting(name = "_catalog_debug", values = {"compilation_mode": "dbg"})
     native.config_setting(name = "_catalog_fastbuild", values = {"compilation_mode": "fastbuild"})
     native.config_setting(name = "_catalog_release", values = {"compilation_mode": "opt"})

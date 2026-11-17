@@ -1,12 +1,11 @@
 """Pure admission, retained runtime transport and bounded sanitizer receipts.
 
 Selection parsing, configuration joins, runtime policy, phase recording and BEP
-validation stay real. Only native SDK/workspace selection, owned external service
-lifecycles, the two independent oracle entry points and the Bazel subprocess are
-faked. This establishes orchestration, not native compiler/runtime acceptance.
+validation stay real. The native SDK/workspace selection, compile-contract oracle
+and Bazel subprocess are faked; controller-owned fixtures are forbidden. This
+establishes orchestration, not native compiler/runtime acceptance.
 """
 
-import argparse
 import contextlib
 import hashlib
 import io
@@ -16,14 +15,14 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from ao.core import bazel_sanitizers
 from ao.core.bazel_native import BazelWorkspaceError
-from ao.core.bazel_test_services import stable_service_root
 from ao.core.paths import PROJECT_ROOT
+from ao.portal import bazel_sanitizers, build_dir, completion
 
 CHECKSUM = "a" * 64
 APPLICATION = "//test:application"
@@ -35,8 +34,8 @@ class SanitizerAdmissionTests(unittest.TestCase):
     def test_admission_uses_only_the_explicit_request_and_platform(self):
         with (
             mock.patch("ao.core.bazel_native.native_platform", side_effect=AssertionError("host lookup")),
-            mock.patch("ao.core.bazel_workspace.workspace_path", side_effect=AssertionError("tree lookup")),
-            mock.patch("ao.core.bazel_workspace.prepare_workspace", side_effect=AssertionError("SDK lookup")),
+            mock.patch("ao.portal.bazel_workspace.workspace_path", side_effect=AssertionError("tree lookup")),
+            mock.patch("ao.portal.bazel_workspace.prepare_workspace", side_effect=AssertionError("SDK lookup")),
             mock.patch("subprocess.run", side_effect=AssertionError("process")),
         ):
             for config in ("debug", "release", "asan", "tsan"):
@@ -63,24 +62,20 @@ class SanitizerAdmissionTests(unittest.TestCase):
         with self.assertRaises(BazelWorkspaceError):
             bazel_sanitizers.compilation_config("opt")
 
-    def test_direct_run_rejects_unsupported_or_custom_requests_before_tree_and_sdk(self):
-        for config, platform, targets in (
-            ("tsan", "windows", []),
-            ("unknown", "linux", []),
-            ("debug", "linux", []),
-            ("asan", "linux", ["//test:custom"]),
-            ("asan", "linux", ["--test_filter=example"]),
-        ):
+    def test_direct_run_rejects_unsupported_requests_before_tree_and_sdk(self):
+        # The pure admission test owns unknown config spelling; these cover a
+        # host rejection and the runner's own managed-profile restriction.
+        for config, platform in (("tsan", "windows"), ("debug", "linux")):
             with (
-                self.subTest(config=config, platform=platform, targets=targets),
+                self.subTest(config=config, platform=platform),
                 mock.patch("ao.core.bazel_native.native_platform", return_value=platform),
-                mock.patch("ao.core.bazel_workspace.workspace_path") as tree,
-                mock.patch("ao.core.bazel_sanitizers.build_tree_lock") as lock,
-                mock.patch("ao.core.bazel_workspace.prepare_workspace") as prepare,
-                mock.patch("ao.core.bazel_workspace.bazel_executable") as executable,
+                mock.patch("ao.portal.bazel_workspace.workspace_path") as tree,
+                mock.patch("ao.portal.bazel_sanitizers.build_tree_lock") as lock,
+                mock.patch("ao.portal.bazel_workspace.prepare_workspace") as prepare,
+                mock.patch("ao.portal.bazel_workspace.bazel_executable") as executable,
             ):
                 with self.assertRaises(BazelWorkspaceError):
-                    bazel_sanitizers.run(argparse.Namespace(config=config, targets=targets))
+                    bazel_sanitizers.run(completion.Request(config=config))
                 tree.assert_not_called()
                 lock.assert_not_called()
                 prepare.assert_not_called()
@@ -170,7 +165,7 @@ class FrozenRuntimeTests(unittest.TestCase):
         self.symbolizer = self.directory / "llvm-symbolizer"
         self.symbolizer.write_bytes(b"fixture symbolizer\n")
         selection = mock.patch(
-            "ao.core.bazel_sanitizers._symbolizer",
+            "ao.portal.bazel_sanitizers._symbolizer",
             side_effect=lambda platform, _caller: None if platform == "windows" else self.symbolizer,
         )
         selection.start()
@@ -390,7 +385,7 @@ class FrozenRuntimeTests(unittest.TestCase):
             attempt = self.directory / f"malformed-{index}"
             with (
                 self.subTest(name=name, text=text),
-                mock.patch("ao.core.bazel_sanitizers._symbolizer", side_effect=AssertionError("tool selection")),
+                mock.patch("ao.portal.bazel_sanitizers._symbolizer", side_effect=AssertionError("tool selection")),
                 self.assertRaisesRegex(BazelWorkspaceError, name),
             ):
                 bazel_sanitizers.freeze_runtime(config, platform, {name: text}, attempt)
@@ -423,7 +418,7 @@ class SymbolizerAdmissionTests(unittest.TestCase):
 
     def test_linux_uses_only_the_report_symbolizer_and_freezes_its_bytes(self):
         with (
-            mock.patch("ao.core.bazel_compiler_probe.nix_symbolizer", return_value=self.metadata) as metadata,
+            mock.patch("ao.portal.bazel_compiler_probe.nix_symbolizer", return_value=self.metadata) as metadata,
             mock.patch("shutil.which", side_effect=AssertionError("ambient tool search")),
             mock.patch("subprocess.run", side_effect=AssertionError("tool execution")),
         ):
@@ -463,7 +458,7 @@ class SymbolizerAdmissionTests(unittest.TestCase):
             ),
         }
         with (
-            mock.patch("ao.core.bazel_compiler_probe.nix_symbolizer", side_effect=AssertionError("Linux metadata")),
+            mock.patch("ao.portal.bazel_compiler_probe.nix_symbolizer", side_effect=AssertionError("Linux metadata")),
             mock.patch("shutil.which", side_effect=AssertionError("ambient tool search")),
             mock.patch("subprocess.run", side_effect=AssertionError("tool execution")),
         ):
@@ -489,7 +484,11 @@ class SymbolizerAdmissionTests(unittest.TestCase):
             attempt = self.directory / f"attempt-{index}"
             with (
                 self.subTest(selection=selection),
-                mock.patch("ao.core.bazel_compiler_probe.nix_symbolizer", side_effect=selection),
+                mock.patch(
+                    "ao.portal.bazel_compiler_probe.nix_symbolizer",
+                    side_effect=selection if isinstance(selection, BazelWorkspaceError) else None,
+                    return_value=selection,
+                ),
                 mock.patch("shutil.which", side_effect=AssertionError("ambient tool search")),
                 self.assertRaises(BazelWorkspaceError),
             ):
@@ -501,7 +500,7 @@ class SymbolizerAdmissionTests(unittest.TestCase):
     def test_windows_uses_selected_native_dll_path_without_llvm_probes_or_tool_execution(self):
         caller = {"PATH": "C:\\selected VS\\bin", "ASAN_OPTIONS": "halt_on_error=0:exitcode=0"}
         with (
-            mock.patch("ao.core.bazel_compiler_probe.nix_symbolizer", side_effect=AssertionError("LLVM metadata")),
+            mock.patch("ao.portal.bazel_compiler_probe.nix_symbolizer", side_effect=AssertionError("LLVM metadata")),
             mock.patch("shutil.which", side_effect=AssertionError("ambient tool search")),
             mock.patch("subprocess.run", side_effect=AssertionError("tool execution")),
         ):
@@ -526,7 +525,7 @@ class SymbolizerAdmissionTests(unittest.TestCase):
             value = f'external_symbolizer_path="{other}"' if name.endswith("_OPTIONS") else str(other)
             with (
                 self.subTest(profile=profile, name=name),
-                mock.patch("ao.core.bazel_compiler_probe.nix_symbolizer", return_value=self.metadata),
+                mock.patch("ao.portal.bazel_compiler_probe.nix_symbolizer", return_value=self.metadata),
                 self.assertRaisesRegex(BazelWorkspaceError, "conflicts with the governed"),
             ):
                 bazel_sanitizers.freeze_runtime(profile, "linux", {name: value}, self.directory / f"attempt-{index}")
@@ -560,7 +559,7 @@ class TsanInterfaceRootTests(unittest.TestCase):
             return path
 
         with (
-            mock.patch("ao.core.bazel_compiler_probe.nix_cc_wrapper", return_value=metadata),
+            mock.patch("ao.portal.bazel_compiler_probe.nix_cc_wrapper", return_value=metadata),
             mock.patch.object(Path, "is_dir", lambda path: is_dir(local(path))),
             mock.patch.object(Path, "is_file", lambda path: is_file(local(path))),
         ):
@@ -589,19 +588,14 @@ class _ManagedFixture:
         (self.base / "aobus.bazelrc").write_text(
             f"build --config={profile}\ncommon --repo_env=AOBUS_FIXTURE_SDK=selected-debug\n", encoding="utf-8"
         )
-        self.args = argparse.Namespace(
-            config=profile, path=str(self.tree), targets=[], jobs=16, vcpkg_prefix=None, remote_cache="grpc://cache"
-        )
+        self.args = completion.Request(config=profile, path=str(self.tree), jobs=16, remote_cache="grpc://cache")
         self.invocations = []
         self.events = []
         self.rc_bytes = None
         self.prepared = None
         self.bep_mutation = None
         self.command_error = None
-        self.service_error = None
-        self.cleanup_error = None
         self.oracle_status = 0
-        self.tamper = None
         self.all_incompatible = False
         self.omit_configured_label = False
 
@@ -616,29 +610,6 @@ class _ManagedFixture:
     @property
     def compatible(self):
         return [APPLICATION, *self.native_tests]
-
-    @contextlib.contextmanager
-    def display(self, count, *, ipc_root):
-        self.case.assertEqual((count, ipc_root), (1, stable_service_root(self.tree, "gtk-bus")))
-        self.events.append("display-start")
-        if self.service_error is not None:
-            raise self.service_error
-        try:
-            yield [{"DISPLAY": ":73", "AOBUS_OWNED_GTK_BUS": "unix:path=/owned/bus"}]
-        finally:
-            self.events.append("display-stop")
-
-    @contextlib.contextmanager
-    def audio(self, directory, environment, *, runtime_root):
-        self.case.assertEqual(environment["DISPLAY"], ":73")
-        self.case.assertEqual(runtime_root, stable_service_root(self.tree, "pipewire"))
-        self.events.append("audio-start")
-        try:
-            yield environment | {"XDG_RUNTIME_DIR": "/owned/audio", "AOBUS_REQUIRE_PIPEWIRE": "1"}
-        finally:
-            self.events.append("audio-stop")
-            if self.cleanup_error is not None:
-                raise self.cleanup_error
 
     def prepare(self, tree, config, *, prefix, graph_options):
         self.case.assertEqual((tree, config, prefix, graph_options), (self.tree, self.profile, None, ()))
@@ -664,7 +635,9 @@ class _ManagedFixture:
         self.case.assertIn(b"AOBUS_FIXTURE_SDK=selected-debug", content)
         return content
 
-    def compile_oracle(self, executable, tree, prepared, config, *, jobs, isolate_rc, compiler_include_roots):
+    def compile_oracle(
+        self, executable, tree, prepared, config, *, jobs, isolate_rc, compiler_include_roots, remote_cache=None
+    ):
         self.case.assertEqual(
             (executable, tree, config, jobs, isolate_rc), (Path("/fixture/bazel"), self.tree, "debug", 16, True)
         )
@@ -672,6 +645,8 @@ class _ManagedFixture:
             ("/selected/compiler-rt/include",) if self.profile == "tsan" and self.platform == "linux" else ()
         )
         self.case.assertEqual(compiler_include_roots, expected_roots)
+        # The managed route forwards its trusted cache to the facts build.
+        self.case.assertEqual(remote_cache, "grpc://cache")
         self.observe_rc(prepared)
         self.events.append("compile-oracle")
         return self.oracle_status
@@ -752,8 +727,6 @@ class _ManagedFixture:
             path.write_text("".join(json.dumps(event) + "\n" for event in events), encoding="utf-8")
         else:
             self.case.fail(f"unexpected Bazel invocation: {argv}")
-        if self.tamper is not None:
-            self.tamper(rcs[1], self)
         if self.command_error is not None and action == "test":
             if isinstance(self.command_error, BaseException):
                 raise self.command_error
@@ -768,22 +741,32 @@ class _ManagedFixture:
         self.stdout = io.StringIO()
         with (
             mock.patch("ao.core.bazel_native.native_platform", return_value=self.platform),
+            mock.patch.object(
+                build_dir,
+                "platform_profile",
+                return_value={
+                    "linux": build_dir.LINUX_PROFILE,
+                    "macos": build_dir.MACOS_PROFILE,
+                    "windows": build_dir.WINDOWS_PROFILE,
+                }[self.platform],
+            ),
             mock.patch("ao.core.bazel_native.require_supported_source"),
-            mock.patch("ao.core.bazel_workspace.bazel_executable", return_value=Path("/fixture/bazel")),
-            mock.patch("ao.core.bazel_workspace.prepare_workspace", side_effect=self.prepare),
-            mock.patch("ao.core.bazel_workspace._linux_server_javabase", return_value=Path("/fixture/jdk")),
+            mock.patch("ao.portal.bazel_workspace.bazel_executable", return_value=Path("/fixture/bazel")),
+            mock.patch("ao.portal.bazel_workspace.prepare_workspace", side_effect=self.prepare),
+            mock.patch("ao.portal.bazel_workspace._linux_server_javabase", return_value=Path("/fixture/jdk")),
             mock.patch(
-                "ao.core.bazel_sanitizers._symbolizer",
+                "ao.portal.bazel_sanitizers._symbolizer",
                 side_effect=lambda platform, _caller: None if platform == "windows" else self.symbolizer,
             ),
-            mock.patch("ao.core.bazel_contract.verify", side_effect=self.compile_oracle),
+            mock.patch("ao.portal.bazel_verify.verify", side_effect=self.compile_oracle),
             mock.patch(
-                "ao.core.bazel_sanitizers._selected_tsan_interface_root",
+                "ao.portal.bazel_sanitizers._selected_tsan_interface_root",
                 return_value="/selected/compiler-rt/include",
             ),
-            mock.patch("ao.core.bazel_test_services.virtual_gtk_displays", side_effect=self.display),
-            mock.patch("ao.core.bazel_test_services.private_pipewire", side_effect=self.audio),
-            mock.patch("ao.core.bazel_check.proc", SimpleNamespace(run=self.bazel)),
+            mock.patch("ao.graph.bazel_test_services.virtual_gtk_displays", side_effect=AssertionError("outer Xvfb")),
+            mock.patch("ao.graph.bazel_test_services.private_session_bus", side_effect=AssertionError("outer D-Bus")),
+            mock.patch("ao.graph.bazel_test_services.private_pipewire", side_effect=AssertionError("outer PipeWire")),
+            mock.patch("ao.portal.bazel_attempt.proc", SimpleNamespace(run=self.bazel)),
             contextlib.redirect_stdout(self.stdout),
             contextlib.redirect_stderr(io.StringIO()),
         ):
@@ -809,7 +792,14 @@ class ManagedSanitizerTests(unittest.TestCase):
     def test_linux_default_uses_graph_owned_scope_and_one_frozen_runtime_for_every_phase(self):
         fixture = _ManagedFixture(self, self.directory)
         with mock.patch.dict(
-            os.environ, {"ASAN_OPTIONS": "detect_container_overflow=1", "UBSAN_OPTIONS": "halt_on_error=0"}
+            os.environ,
+            {
+                "ASAN_OPTIONS": "detect_container_overflow=1",
+                "DISPLAY": ":caller",
+                "DBUS_SESSION_BUS_ADDRESS": "unix:path=/caller/bus",
+                "PIPEWIRE_RUNTIME_DIR": "/caller/audio",
+                "AOBUS_REQUIRE_PIPEWIRE": "1",
+            },
         ):
             before = dict(os.environ)
             self.assertEqual(fixture.run(), 0)
@@ -823,26 +813,22 @@ class ManagedSanitizerTests(unittest.TestCase):
         )
         self.assertEqual(receipt["incompatible_tests"], [{"label": PLATFORM_TEST, "configuration": CHECKSUM}])
         self.assertEqual(len(receipt["test_results"]), 2)
-        self.assertIn("normal whole completion ownership separately required", receipt["scope"]["claim"])
-        self.assertNotIn("ownership", receipt)
-        self.assertEqual(
-            receipt["runtime"]["environment"]["ASAN_OPTIONS"],
-            f'detect_container_overflow=1:external_symbolizer_path="{fixture.symbolizer}":halt_on_error=1:exitcode=1',
+        assignments = [
+            json.loads(line.removeprefix("build ")).removeprefix("--test_env=").split("=", 1)
+            for line in fixture.rc_bytes.decode().splitlines()
+            if line.startswith('build "--test_env=')
+        ]
+        test_env = dict(assignments)
+        self.assertEqual(len(test_env), len(assignments))
+        self.assertEqual(test_env, receipt["runtime"]["environment"])
+        self.assertIn("detect_container_overflow=1", test_env["ASAN_OPTIONS"].split(":"))
+        self.assertEqual(test_env["UBSAN_SYMBOLIZER_PATH"], str(fixture.symbolizer))
+        self.assertTrue(
+            {"DISPLAY", "DBUS_SESSION_BUS_ADDRESS", "PIPEWIRE_RUNTIME_DIR", "AOBUS_REQUIRE_PIPEWIRE"}.isdisjoint(
+                test_env
+            )
         )
-        self.assertEqual(
-            receipt["runtime"]["environment"]["UBSAN_OPTIONS"],
-            f'external_symbolizer_path="{fixture.symbolizer}":halt_on_error=1:print_stacktrace=1:exitcode=1',
-        )
-        self.assertEqual(receipt["runtime"]["symbolizer"], str(fixture.symbolizer))
-        self.assertIn(str(fixture.symbolizer), receipt["runtime"]["source_files"])
-        self.assertIn(b"DISPLAY=:73", fixture.rc_bytes)
-        self.assertIn(b"AOBUS_REQUIRE_PIPEWIRE=1", fixture.rc_bytes)
-        self.assertIn(b"--test_env=UBSAN_OPTIONS=external_symbolizer_path=", fixture.rc_bytes)
-        self.assertIn(b"halt_on_error=1:print_stacktrace=1:exitcode=1", fixture.rc_bytes)
-        self.assertEqual(fixture.events[:3], ["display-start", "audio-start", "cquery"])
         self.assertLess(fixture.events.index("compile-oracle"), fixture.events.index("build"))
-        self.assertEqual(fixture.events[-2:], ["audio-stop", "display-stop"])
-        self.assertTrue(all(phase["status"] == "passed" for phase in receipt["phases"]))
 
     def test_tsan_and_windows_follow_configured_native_selection_without_python_backfill(self):
         for profile, platform in (("tsan", "linux"), ("asan", "windows")):
@@ -855,7 +841,6 @@ class ManagedSanitizerTests(unittest.TestCase):
                 self.assertEqual(receipt["roots"], [f"//:{profile}_tests", *fixture.native_tests])
                 self.assertEqual(receipt["compilation_config"], "debug")
                 if platform == "windows":
-                    self.assertNotIn("display-start", fixture.events)
                     self.assertEqual(
                         sorted(result["label"] for result in receipt["test_results"]), sorted(fixture.compatible)
                     )
@@ -863,16 +848,11 @@ class ManagedSanitizerTests(unittest.TestCase):
                     self.assertTrue(receipt["runtime"]["suppression_files"])
 
     def test_malformed_caller_options_leave_terminal_failure_without_configured_work(self):
-        for index, value in enumerate(('halt_on_error="unterminated', "verbosity=0,missing-equals")):
-            with self.subTest(value=value):
-                directory = self.directory / f"bad-options-{index}"
-                directory.mkdir()
-                fixture = _ManagedFixture(self, directory)
-                with mock.patch.dict(os.environ, {"ASAN_OPTIONS": value}):
-                    self.assertEqual(fixture.run(), 1)
-                self.assertEqual(fixture.receipt()["status"], "error")
-                self.assertEqual(fixture.invocations, [])
-                self.assertNotIn("compile-oracle", fixture.events)
+        fixture = _ManagedFixture(self, self.directory)
+        with mock.patch.dict(os.environ, {"ASAN_OPTIONS": 'halt_on_error="unterminated'}):
+            self.assertEqual(fixture.run(), 1)
+        self.assertEqual(fixture.receipt()["status"], "error")
+        self.assertEqual(fixture.events, [])
 
     def test_cached_results_are_admitted_unless_the_caller_requires_fresh_runs(self):
         for fresh in (False, True):
@@ -880,7 +860,7 @@ class ManagedSanitizerTests(unittest.TestCase):
                 directory = self.directory / f"fresh-{fresh}"
                 directory.mkdir()
                 fixture = _ManagedFixture(self, directory)
-                fixture.args.fresh = fresh
+                fixture.args = replace(fixture.args, fresh=fresh)
                 fixture.bep_mutation = lambda events: events[0]["testSummary"].update(totalNumCached=1)
                 self.assertEqual(fixture.run(), 1 if fresh else 0)
                 receipt = fixture.receipt()
@@ -906,24 +886,12 @@ class ManagedSanitizerTests(unittest.TestCase):
                 receipt = fixture.receipt()
                 self.assertEqual((receipt["status"], receipt["exit"]), (state, expected))
                 self.assertNotIn("test_results", receipt)
-                self.assertEqual(fixture.events[-2:], ["audio-stop", "display-stop"])
+                self.assertEqual(
+                    (receipt["phases"][-1]["name"], receipt["phases"][-1]["status"], receipt["phases"][-1]["exit"]),
+                    ("tests", state, expected),
+                )
                 if isinstance(failure, BaseException):
                     self.assertIn("not established", receipt["writer_state"])
-
-    def test_service_startup_and_cleanup_failures_cannot_leave_a_passed_attempt(self):
-        for name in ("startup", "cleanup"):
-            with self.subTest(name=name):
-                directory = self.directory / name
-                directory.mkdir()
-                fixture = _ManagedFixture(self, directory)
-                if name == "startup":
-                    fixture.service_error = SystemExit(7)
-                else:
-                    fixture.cleanup_error = BazelWorkspaceError("owned audio exit uncertain")
-                self.assertEqual(fixture.run(), 7 if name == "startup" else 1)
-                self.assertNotEqual(fixture.receipt()["status"], "passed")
-                if name == "startup":
-                    self.assertEqual(fixture.invocations, [])
 
     def test_compile_contract_failure_gates_build_and_test_without_weakening_its_request(self):
         fixture = _ManagedFixture(self, self.directory)

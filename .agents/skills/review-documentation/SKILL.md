@@ -7,7 +7,7 @@ description: Audit Aobus Markdown docs for factual freshness, reader-question fi
 
 Review is read-only unless fixes are requested. Route directory boundaries,
 evidence, decisions, migration rules, and
-[`./ao docs check` discovery limits](../../../doc/development/documentation.md#validation)
+[`./ao check docs` discovery limits](../../../doc/development/documentation.md#validation)
 through [documentation maintenance](../../../doc/development/documentation.md),
 and code-layer boundaries through [system overview](../../../doc/system/overview.md).
 
@@ -23,6 +23,6 @@ and code-layer boundaries through [system overview](../../../doc/system/overview
 - For an explicitly exhaustive audit, maintain a temporary ledger outside the
   checkout covering every in-scope page (never substitute sampling or
   unchanged-body skips, and list unreviewed pages).
-- Remember `./ao docs check` skips Markdown under `lib/`, `test/`, `bazel/`,
+- Remember `./ao check docs` skips Markdown under `lib/`, `test/`, `bazel/`,
   and `script/` and never link-validates inline-code paths
   ([validation](../../../doc/development/documentation.md#validation)).
