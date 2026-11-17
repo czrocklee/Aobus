@@ -5,7 +5,6 @@
 
 #include "Task.h"
 #include "TaskFuture.h"
-#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/utility/ScopedRegistration.h>
 
 #include <boost/asio/co_spawn.hpp>
@@ -97,8 +96,9 @@ namespace ao::async
     struct CallbackState;
     static void finishFireAndForget(std::exception_ptr exceptionPtr, std::string_view context) noexcept;
 
-    compat::MoveOnlyFunction<void()> startCancellable(CancellableTask task,
-                                                      std::function<void(std::exception_ptr)> completion);
+    void startCancellable(CancellableTask task,
+                          std::stop_token stopToken,
+                          std::function<void(std::exception_ptr)> completion);
 
     boost::asio::thread_pool& workerPool() noexcept;
 

@@ -8,7 +8,6 @@
 #include <ao/async/OperationCancelled.h>
 #include <ao/async/Sleeper.h>
 #include <ao/async/Task.h>
-#include <ao/compat/MoveOnlyFunction.h>
 
 #include <boost/asio/async_result.hpp>
 #include <boost/asio/awaitable.hpp>
@@ -33,6 +32,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <tuple>
 #include <type_traits>
 #include <utility>
 
@@ -238,20 +238,25 @@ namespace ao::async
                           { finishFireAndForget(std::move(exceptionPtr), fatalContext); });
   }
 
-  compat::MoveOnlyFunction<void()> Runtime::startCancellable(CancellableTask task,
-                                                             std::function<void(std::exception_ptr)> completion)
+  void Runtime::startCancellable(CancellableTask task,
+                                 std::stop_token stopToken,
+                                 std::function<void(std::exception_ptr)> completion)
   {
-    auto stopSourcePtr = std::make_shared<std::stop_source>();
-    boost::asio::co_spawn(workerPool(),
-                          runCancellableAsync(std::move(task), stopSourcePtr->get_token()),
-                          [completion = std::move(completion)](std::exception_ptr exPtr) { completion(exPtr); });
-    return [stopSourcePtr] { std::ignore = stopSourcePtr->request_stop(); };
+    boost::asio::co_spawn(
+      workerPool(), runCancellableAsync(std::move(task), std::move(stopToken)), std::move(completion));
   }
 
   TaskHandle Runtime::spawnCancellable(CancellableTask task, std::string_view const fatalContext)
   {
-    return TaskHandle{startCancellable(std::move(task),
-                                       [fatalContext = std::string{fatalContext}](std::exception_ptr exceptionPtr)
-                                       { finishFireAndForget(std::move(exceptionPtr), fatalContext); })};
+    auto stopSource = std::stop_source{};
+    auto stopToken = stopSource.get_token();
+    // Arm cancellation before submission so unwinding also stops any work already started.
+    auto handle =
+      TaskHandle{[stopSource = std::move(stopSource)]() mutable { std::ignore = stopSource.request_stop(); }};
+    startCancellable(std::move(task),
+                     std::move(stopToken),
+                     [fatalContext = std::string{fatalContext}](std::exception_ptr exceptionPtr)
+                     { finishFireAndForget(std::move(exceptionPtr), fatalContext); });
+    return handle;
   }
 } // namespace ao::async

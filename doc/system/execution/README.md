@@ -104,6 +104,9 @@ The detailed queue, generation, and realtime rules belong to
 
 `Runtime::spawnCancellable` owns a stop source through its returned registration;
 `LifetimeScope` extends that ownership to all work belonging to an object.
+`LifetimeScope::cancelAll()` permanently closes admission and requests stop for
+admitted tasks without waiting for them to finish. `Runtime::spawnWithLifetime()`
+does not submit work or invoke the task factory if the scope is already closed.
 Cancellation is cooperative. Executor switches, timers, and subsystem work
 provide checkpoints, but a blocking third-party or codec call need not return
 immediately. A cancelled or superseded operation must still be rejected before

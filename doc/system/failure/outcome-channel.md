@@ -150,7 +150,7 @@ When a root, cancellable, or lifetime-bound coroutine completes, the runtime fol
 The fatal entry runs synchronously at the terminal boundary and may be reached concurrently by different worker threads.
 It does not acknowledge a command, recover domain state, publish a user-facing outcome, or continue the process.
 
-For a `LifetimeScope` task, retirement means marking the task complete and removing it from the scope before fatal entry.
+For a `LifetimeScope` task, the completion handler removes its registration from the scope, if still present, before fatal entry.
 The subprocess test observes that bookkeeping through an independent marker before process death.
 
 `Runtime::spawn` returns a caller-owned `TaskFuture<T>` and retains an escaping task exception there instead of invoking the diagnostic handler.
