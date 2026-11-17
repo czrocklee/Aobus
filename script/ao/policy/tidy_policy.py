@@ -183,7 +183,7 @@ def platform_incompatible(path: str, platform: str) -> bool:
         parts[:2] == ("app", "linux-gtk")
         or parts[:5] == ("app", "include", "ao", "systemmedia", "linux")
         or parts[:3] == ("app", "systemmedia", "linux")
-        or parts[:2] == ("test", "linux-gtk")
+        or parts[:2] in {("test", "linux"), ("test", "linux-gtk")}
         or parts[:3] == ("test", "systemmedia", "linux")
         or "alsa" in joined
         or "pipewire" in joined

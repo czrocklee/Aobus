@@ -89,6 +89,7 @@ test_suite(
         "//test:audio_test",
         "//test:cli_test",
         "//test:desktop_test",
+        "//test:dictionary_publication_test",
         "//test:i18n_test",
         "//test:library_test",
         "//test:media_fixture_test",
@@ -106,7 +107,7 @@ test_suite(
 
 # These groups describe executable ownership, not another source-file inventory.
 test_suite(
-    name = "core_tests",
+    name = "portable_core_tests",
     tests = [
         "//test:async_test",
         "//test:audio_platform_test",
@@ -115,6 +116,14 @@ test_suite(
         "//test:media_test",
         "//test:query_test",
         "//test:utility_test",
+    ],
+)
+
+test_suite(
+    name = "core_tests",
+    tests = [
+        ":portable_core_tests",
+        "//test:dictionary_publication_test",
     ],
 )
 
@@ -211,7 +220,10 @@ test_suite(
 
 test_suite(
     name = "library_tests",
-    tests = ["//test:library_test"],
+    tests = [
+        "//test:dictionary_publication_test",
+        "//test:library_test",
+    ],
 )
 
 test_suite(
@@ -327,12 +339,15 @@ filegroup(
     testonly = True,
     srcs = [
         ":application_tests",
-        ":core_tests",
+        ":portable_core_tests",
         "//test:backend_test",
         "//test:cli_test",
         "//test:lint_test",
         "//test:tui_test",
     ] + select({
+        "@platforms//os:linux": ["//test:dictionary_publication_test"],
+        "//conditions:default": [],
+    }) + select({
         "//bazel:linux_gtk_enabled": ["//test:gtk_test"],
         "//conditions:default": [],
     }) + select({

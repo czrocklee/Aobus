@@ -250,8 +250,8 @@ The current non-nested model provides whole-root rollback only, so a multi-item 
 
 No command publishes a change for a failed, previewed, or no-op transaction.
 Scan cancellation and a prepared scan with no committable work are `Unchanged` outcomes, so both intentionally roll back staged work without advancing revision.
-When commit fails, staged dictionary mappings are rolled back before readers resume, and allocated ids and prepared resources are not observable as successful command results.
-The deterministic commit-result test seam is data-only: it terminates the native transaction and supplies an error without invoking application callbacks while writer and dictionary locks are held.
+When commit fails, staged dictionary mappings are discarded without ever becoming readable, and allocated ids and prepared resources are not observable as successful command results.
+The deterministic commit-result test seam is data-only: it terminates the native transaction and supplies an error without invoking application callbacks during commit.
 
 `Busy`, `Stale`, `Unavailable`, `NoOp`, and `Applied` are semantic metadata, tag, and combined Properties authoring outcomes.
 `Busy` retains the authoring session and permits an explicit retry; it triggers neither automatic replay nor an availability notification.

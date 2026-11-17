@@ -8,27 +8,21 @@
 #include "test/library/WritableLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/library/FileManifestStore.h>
-#include <ao/library/ListStore.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/library/ResourceStore.h>
-#include <ao/library/TrackStore.h>
 #include <ao/library/WriteTransaction.h>
 #include <ao/utility/ScopedRegistration.h>
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <algorithm>
 #include <array>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
-#include <filesystem>
 #include <latch>
-#include <span>
 #include <string>
 #include <string_view>
 #include <thread>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -52,25 +46,40 @@ namespace ao::library::test
     auto const temp = ao::test::TempDir{};
     auto library = openTestLibrary(temp);
     auto const& dictionary = library.dictionary();
+    auto seed = writeTransaction(library);
+    auto const originalId = requireIntern(seed, "Bach");
+    REQUIRE(seed.commit());
     auto const initialGeneration = dictionary.generation();
-    auto transaction = writeTransaction(library);
-    auto trackWriter = physicalWriter(library.tracks(), transaction);
-    auto listWriter = physicalWriter(library.lists(), transaction);
-    auto resourceWriter = physicalWriter(library.resources(), transaction);
-    auto manifestWriter = physicalWriter(library.manifest(), transaction);
-    auto const id = requireIntern(transaction, "Bach");
 
-    CHECK(id == DictionaryId{1});
-    CHECK_FALSE(dictionary.findId("Bach"));
-    CHECK(dictionary.size() == 0);
+    auto transaction = writeTransaction(library);
+    auto const firstId = requireIntern(transaction, "Haydn");
+    auto const secondId = requireIntern(transaction, "Mozart");
+    auto const context = DictionaryReadContext{dictionary};
+    auto const symbols = std::array<std::string, 4>{"Bach", "Haydn", "Mozart", "missing"};
+    auto ids = std::array{originalId, originalId, originalId, originalId};
+
+    CHECK(firstId == DictionaryId{2});
+    CHECK(secondId == DictionaryId{3});
+    CHECK(dictionary.size() == 1);
     CHECK(dictionary.generation() == initialGeneration);
+    CHECK(dictionary.get(originalId) == "Bach");
+    CHECK_FALSE(dictionary.findId("Haydn"));
+    CHECK_FALSE(dictionary.findId("Mozart"));
+    CHECK(dictionary.getOrDefault(firstId, "fallback") == "fallback");
+    CHECK(dictionary.getOrDefault(secondId, "fallback") == "fallback");
+    CHECK(context.bind(symbols, ids) == initialGeneration);
+    CHECK(ids == std::array{originalId, kInvalidDictionaryId, kInvalidDictionaryId, kInvalidDictionaryId});
 
     REQUIRE(transaction.commit());
 
-    CHECK(dictionary.get(id) == "Bach");
-    CHECK(dictionary.findId("Bach") == id);
-    CHECK(dictionary.size() == 1);
+    CHECK(dictionary.size() == 3);
     CHECK(dictionary.generation() == initialGeneration + 1);
+    CHECK(dictionary.findId("Haydn") == firstId);
+    CHECK(dictionary.findId("Mozart") == secondId);
+    CHECK(dictionary.getOrDefault(firstId, "fallback") == "Haydn");
+    CHECK(dictionary.getOrDefault(secondId, "fallback") == "Mozart");
+    CHECK(context.bind(symbols, ids) == initialGeneration + 1);
+    CHECK(ids == std::array{originalId, firstId, secondId, kInvalidDictionaryId});
   }
 
   TEST_CASE("DictionaryStore - canonicalizes Unicode identity before interning")
@@ -118,21 +127,31 @@ namespace ao::library::test
     auto const temp = ao::test::TempDir{};
     auto library = openTestLibrary(temp);
     auto const& dictionary = library.dictionary();
+    auto const initialGeneration = dictionary.generation();
+    auto preview = writeTransaction(library);
+    auto const provisionalId = requireIntern(preview, "preview-only");
 
+    SECTION("aborting explicitly")
     {
-      auto preview = writeTransaction(library);
-      CHECK(requireIntern(preview, "preview-only") == DictionaryId{1});
-      CHECK(requireIntern(preview, "preview-only") == DictionaryId{1});
+      preview.abort();
+    }
+
+    SECTION("dropping the active transaction")
+    {
+      auto discarded = std::move(preview);
     }
 
     CHECK_FALSE(dictionary.findId("preview-only"));
+    CHECK(dictionary.getOrDefault(provisionalId, "fallback") == "fallback");
     CHECK(dictionary.size() == 0);
+    CHECK(dictionary.generation() == initialGeneration);
 
     auto committed = writeTransaction(library);
     auto const id = requireIntern(committed, "committed");
-    CHECK(id == DictionaryId{1});
+    CHECK(id == provisionalId);
     REQUIRE(committed.commit());
-    CHECK(dictionary.get(id) == "committed");
+    CHECK(dictionary.getOrDefault(id) == "committed");
+    CHECK_FALSE(dictionary.findId("preview-only"));
   }
 
   TEST_CASE("DictionaryStore - rolls back prepared publication when commit fails")
@@ -140,29 +159,48 @@ namespace ao::library::test
     auto const temp = ao::test::TempDir{};
     auto library = openTestLibrary(temp);
     auto const& dictionary = library.dictionary();
+    auto seed = writeTransaction(library);
+    auto const originalId = requireIntern(seed, "stable prefix");
+    REQUIRE(seed.commit());
+    auto const original = dictionary.get(originalId);
     auto const initialGeneration = dictionary.generation();
     auto transaction = writeTransaction(
       library,
       WriteTransaction::Options{
         .optInjectedCommitFailure = Error{.code = Error::Code::IoError, .message = "injected commit failure"},
       });
-    auto trackWriter = physicalWriter(library.tracks(), transaction);
-    auto listWriter = physicalWriter(library.lists(), transaction);
-    auto resourceWriter = physicalWriter(library.resources(), transaction);
-    auto manifestWriter = physicalWriter(library.manifest(), transaction);
+    auto const firstId = requireIntern(transaction, "failed first");
+    auto const secondId = requireIntern(transaction, "failed second");
 
-    auto const failedId = requireIntern(transaction, "failed");
-    auto res = transaction.commit();
+    auto const res = transaction.commit();
+
     REQUIRE_FALSE(res);
     CHECK(res.error().message == "injected commit failure");
-    CHECK_FALSE(dictionary.findId("failed"));
-    CHECK(dictionary.size() == 0);
+    CHECK(dictionary.size() == 1);
     CHECK(dictionary.generation() == initialGeneration);
+    CHECK_FALSE(dictionary.findId("failed first"));
+    CHECK_FALSE(dictionary.findId("failed second"));
+    CHECK(dictionary.getOrDefault(firstId, "fallback") == "fallback");
+    CHECK(dictionary.getOrDefault(secondId, "fallback") == "fallback");
+    auto const context = DictionaryReadContext{dictionary};
+    auto const symbols = std::array<std::string, 3>{"stable prefix", "failed first", "failed second"};
+    auto ids = std::array{originalId, firstId, secondId};
+    CHECK(context.bind(symbols, ids) == initialGeneration);
+    CHECK(ids == std::array{originalId, kInvalidDictionaryId, kInvalidDictionaryId});
 
     auto retry = writeTransaction(library);
-    CHECK(requireIntern(retry, "retry") == failedId);
+    CHECK(requireIntern(retry, "retry first") == firstId);
+    CHECK(requireIntern(retry, "retry second") == secondId);
     REQUIRE(retry.commit());
-    CHECK(dictionary.get(failedId) == "retry");
+    CHECK(dictionary.generation() == initialGeneration + 1);
+    CHECK(dictionary.getOrDefault(firstId) == "retry first");
+    CHECK(dictionary.getOrDefault(secondId) == "retry second");
+    CHECK(dictionary.findId("retry first") == firstId);
+    CHECK(dictionary.findId("retry second") == secondId);
+    CHECK_FALSE(dictionary.findId("failed first"));
+    CHECK_FALSE(dictionary.findId("failed second"));
+    CHECK(original == "stable prefix");
+    CHECK(dictionary.getOrDefault(originalId).data() == original.data());
   }
 
   TEST_CASE("DictionaryStore - commits repeated and distinct transaction symbols exactly once")
@@ -231,6 +269,7 @@ namespace ao::library::test
 
     REQUIRE(growth.commit());
     CHECK(stableView == "stable");
+    CHECK(library.dictionary().get(stableId).data() == stableView.data());
     CHECK(library.dictionary().findId("stable") == stableId);
   }
 
@@ -282,6 +321,10 @@ namespace ao::library::test
     auto const stableId = requireIntern(seed, "stable");
     REQUIRE(seed.commit());
 
+    auto const seedGeneration = library.dictionary().generation();
+    constexpr std::uint32_t kBatchCount = 128;
+    constexpr std::uint32_t kBatchSize = 8;
+    constexpr std::size_t kFinalSize = 1 + (kBatchCount * kBatchSize);
     constexpr std::ptrdiff_t kWorkerCount = 4;
     auto ready = std::latch{kWorkerCount};
     auto start = std::latch{1};
@@ -293,7 +336,7 @@ namespace ao::library::test
       ready.count_down();
       start.wait();
       auto context = DictionaryReadContext{library.dictionary()};
-      std::int32_t probeBatch = 0;
+      std::uint32_t probeBatch = 0;
 
       while (true)
       {
@@ -302,31 +345,37 @@ namespace ao::library::test
           failed.store(true, std::memory_order_relaxed);
         }
 
-        auto const size = library.dictionary().size();
-
-        if (auto const generation = library.dictionary().generation(); size < 1 || generation < 2)
+        if (auto const size = library.dictionary().size();
+            size < 1 || size > kFinalSize || (size - 1) % kBatchSize != 0)
         {
           failed.store(true, std::memory_order_relaxed);
         }
 
-        auto symbols = std::array<std::string, 8>{};
-        auto ids = std::array<DictionaryId, 8>{};
+        auto symbols = std::array<std::string, kBatchSize>{};
+        auto ids = std::array<DictionaryId, kBatchSize>{};
 
-        for (std::int32_t index = 0; index < 8; ++index)
+        for (std::uint32_t index = 0; index < kBatchSize; ++index)
         {
-          symbols[static_cast<std::size_t>(index)] =
-            "batch_" + std::to_string(probeBatch) + "_" + std::to_string(index);
+          symbols[index] = "batch_" + std::to_string(probeBatch) + "_" + std::to_string(index);
         }
 
-        std::ignore = context.bind(symbols, ids);
-        auto const resolved = std::ranges::count_if(ids, [](DictionaryId id) { return id != kInvalidDictionaryId; });
+        // Unlike separate calls to findId() and generation(), bind() must
+        // resolve the whole batch at the generation it returns.
+        auto const generation = context.bind(symbols, ids);
+        auto const published = generation > seedGeneration + probeBatch;
 
-        if (resolved != 0 && std::cmp_not_equal(resolved, ids.size()))
+        for (std::uint32_t index = 0; index < kBatchSize; ++index)
         {
-          failed.store(true, std::memory_order_relaxed);
+          auto const expectedId =
+            published ? DictionaryId{2 + (probeBatch * kBatchSize) + index} : kInvalidDictionaryId;
+
+          if (ids[index] != expectedId)
+          {
+            failed.store(true, std::memory_order_relaxed);
+          }
         }
 
-        probeBatch = (probeBatch + 1) % 128;
+        probeBatch = (probeBatch + 1) % kBatchCount;
 
         if (writerDone.load(std::memory_order_acquire) || failed.load(std::memory_order_relaxed))
         {
@@ -349,11 +398,11 @@ namespace ao::library::test
         ready.count_down();
         start.wait();
 
-        for (std::int32_t batch = 0; batch < 128; ++batch)
+        for (std::uint32_t batch = 0; batch < kBatchCount; ++batch)
         {
           auto transaction = writeTransaction(library);
 
-          for (std::int32_t index = 0; index < 8; ++index)
+          for (std::uint32_t index = 0; index < kBatchSize; ++index)
           {
             auto const res =
               physicalDictionary(transaction).intern("batch_" + std::to_string(batch) + "_" + std::to_string(index));
@@ -385,6 +434,7 @@ namespace ao::library::test
     reader2.join();
     reader3.join();
     CHECK_FALSE(failed.load(std::memory_order_relaxed));
-    CHECK(library.dictionary().size() == 1025);
+    CHECK(library.dictionary().size() == kFinalSize);
+    CHECK(library.dictionary().generation() == seedGeneration + kBatchCount);
   }
 } // namespace ao::library::test

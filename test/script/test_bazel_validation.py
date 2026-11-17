@@ -74,6 +74,23 @@ class NativeSourceAuditTest(unittest.TestCase):
         self.assertIn(gtk, errors[0])
         self.assertEqual(set(deferred), {media})
 
+    def test_linux_regression_requires_an_owner_even_without_frontends(self):
+        source = self.registration("test/linux/library/DictionaryPublicationTest.cpp")
+        for platform in ("linux", "macos", "windows"):
+            with self.subTest(platform=platform):
+                document = _document(platform=platform, gtk=False, system_media=False)
+                errors, deferred = validation.registration_audit([document], self.root)
+                orphans, skipped = validation.authored_cpp_audit([document], [source])
+                if platform == "linux":
+                    self.assertEqual(len(errors), 1, errors)
+                    self.assertIn(source, errors[0])
+                    self.assertEqual(orphans, [source])
+                    self.assertFalse(deferred or skipped)
+                else:
+                    self.assertFalse(errors or orphans)
+                    self.assertEqual(set(deferred), {source})
+                    self.assertEqual(set(skipped), {source})
+
     def test_orphans_follow_the_configured_universe_not_the_running_host(self):
         winui = "app/windows-winui/App.cpp"
         gtk = "app/linux-gtk/Shell.cpp"
