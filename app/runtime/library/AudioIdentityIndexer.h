@@ -56,10 +56,10 @@ namespace ao::rt
 
   struct AudioIdentityIndexOptions final
   {
-    /// Concurrent fingerprint workers per batch. 0 selects the default,
-    /// clamp(hardware_concurrency / 2, 2, 4): fingerprinting is disk-bound
-    /// on large files and shares the worker pool with UI tasks, so it must
-    /// not saturate either.
+    /// Requested concurrent fingerprint workers per batch. 0 selects the
+    /// disk-bound default, clamp(hardware_concurrency / 2, 2, 4). Both explicit
+    /// and default requests are capped at the Runtime worker count minus one
+    /// (minimum one) to leave capacity for unrelated work where possible.
     std::size_t maxConcurrency = 0;
     /// Test seam; defaults to library::readAudioIdentity.
     AudioIdentityFingerprintFunction fingerprint{};
@@ -82,8 +82,10 @@ namespace ao::rt
     /// snapshotted in bounded batches without any lock, fingerprinted
     /// concurrently, then written back serially in one transaction per batch;
     /// every row is revalidated against the live manifest before its identity
-    /// is committed. Cancellation flushes rows already hashed in the current
-    /// batch and then propagates OperationCancelled.
+    /// is committed. On cooperative caller cancellation, completed hash
+    /// candidates in the current batch are submitted for revalidation while
+    /// the runtime and write lane remain live. A write error takes precedence
+    /// over OperationCancelled. Terminal shutdown need not flush uncommitted work.
     async::Task<Result<AudioIdentityIndexResult>> indexPendingAsync(
       CommitBatchCallback commitBatchCallback,
       Options options = {},

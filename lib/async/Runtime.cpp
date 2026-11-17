@@ -14,7 +14,9 @@
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/dispatch.hpp>
 #include <boost/asio/error.hpp>
+#include <boost/asio/execution/occupancy.hpp>
 #include <boost/asio/post.hpp>
+#include <boost/asio/query.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/strand.hpp>
 #include <boost/asio/this_coro.hpp>
@@ -154,6 +156,11 @@ namespace ao::async
     return _callbackExecutor;
   }
 
+  std::size_t Runtime::workerCount() const noexcept
+  {
+    return boost::asio::query(_callbackStatePtr->workerPool.get_executor(), boost::asio::execution::occupancy);
+  }
+
   void Runtime::requestStop() noexcept
   {
     // Closing callback admission is part of the terminal stop boundary, not
@@ -251,8 +258,7 @@ namespace ao::async
     auto stopSource = std::stop_source{};
     auto stopToken = stopSource.get_token();
     // Arm cancellation before submission so unwinding also stops any work already started.
-    auto handle =
-      TaskHandle{[stopSource = std::move(stopSource)]() mutable { std::ignore = stopSource.request_stop(); }};
+    auto handle = TaskHandle{[stopSource = std::move(stopSource)] mutable { std::ignore = stopSource.request_stop(); }};
     startCancellable(std::move(task),
                      std::move(stopToken),
                      [fatalContext = std::string{fatalContext}](std::exception_ptr exceptionPtr)

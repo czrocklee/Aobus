@@ -45,6 +45,7 @@ namespace ao::async
     Runtime& operator=(Runtime&&) = delete;
 
     Executor& callbackExecutor() noexcept;
+    std::size_t workerCount() const noexcept;
 
     // Terminally closes callback-executor resumption admission and stops the
     // worker pool. The Runtime cannot be restarted afterward.
@@ -52,6 +53,7 @@ namespace ao::async
     void join();
 
     Task<void> resumeOnCallbackExecutorAsync(std::stop_token stopToken = {});
+    // Posts a new worker turn even if the caller is already on a worker.
     Task<void> resumeOnWorkerAsync(std::stop_token stopToken = {});
     Task<void> sleepForAsync(std::chrono::milliseconds delay, std::stop_token stopToken = {});
 
@@ -60,11 +62,11 @@ namespace ao::async
      * once every task has finished.
      *
      * The awaiting coroutine is suspended while the tasks run and holds no
-     * worker thread, so `whenAllAsync` cannot starve the pool: with a pool of one
-     * thread the tasks simply run sequentially. If any task exits with an
-     * exception, the first one in task order is rethrown after all tasks have
-     * completed. Cancellation of the awaiting coroutine is forwarded to the
-     * spawned tasks.
+     * worker thread. Each child has a queued start, not an inline call into the
+     * child from task submission. With one worker, tasks can interleave only at
+     * suspension points. If any task exits with an exception, the first one in
+     * task order is rethrown after all tasks have completed. Cancellation of the
+     * awaiting coroutine is forwarded to the spawned tasks.
      */
     Task<> whenAllAsync(std::vector<Task<>> tasks);
 

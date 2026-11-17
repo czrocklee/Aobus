@@ -152,15 +152,16 @@ namespace ao::rt
       return count;
     }
 
-    std::size_t effectiveConcurrency(std::size_t requested)
+    std::size_t effectiveConcurrency(std::size_t requested, std::size_t workerCount)
     {
-      if (requested != 0)
+      auto const capacity = workerCount > 1 ? workerCount - 1 : std::size_t{1};
+
+      if (requested == 0)
       {
-        return requested;
+        requested = std::clamp<std::size_t>(std::thread::hardware_concurrency() / 2, 2, 4);
       }
 
-      auto const hardware = static_cast<std::size_t>(std::thread::hardware_concurrency());
-      return std::clamp<std::size_t>(hardware / 2, 2, 4);
+      return std::min(requested, capacity);
     }
 
     Result<std::optional<library::AudioIdentity>> fingerprintAudioFile(std::filesystem::path const& path,
@@ -324,7 +325,7 @@ namespace ao::rt
       return RowSlot{.status = RowStatus::Hashed, .identity = **identityRes};
     }
 
-    async::Task<> fingerprintWorkerAsync(FingerprintBatch* batch)
+    async::Task<> fingerprintWorkerAsync(async::Runtime* runtime, FingerprintBatch* batch)
     {
       while (!batch->stopToken.stop_requested())
       {
@@ -343,6 +344,14 @@ namespace ao::rt
         }
 
         batch->slots[index] = slot;
+
+        if (batch->cursor.load(std::memory_order_relaxed) < batch->rows.size() && !batch->stopToken.stop_requested())
+        {
+          // Yield before claiming another row, even on a single-worker pool.
+          // Check caller stop in the loop instead of throwing from the hop so
+          // the join finishes normally and the coordinator flushes hashed rows.
+          co_await runtime->resumeOnWorkerAsync();
+        }
       }
 
       co_return;
@@ -391,7 +400,7 @@ namespace ao::rt
     auto result = AudioIdentityIndexResult{};
     auto const fingerprint =
       options.fingerprint ? std::move(options.fingerprint) : FingerprintFunction{fingerprintAudioFile};
-    auto const concurrency = effectiveConcurrency(options.maxConcurrency);
+    auto const concurrency = effectiveConcurrency(options.maxConcurrency, _asyncRuntime.workerCount());
     auto const totalCount = countPendingRows(_library);
     auto processedCount = std::atomic<std::int32_t>{0};
     auto callbackMutex = std::mutex{};
@@ -438,7 +447,7 @@ namespace ao::rt
 
       for (std::size_t worker = 0; worker < workerCount; ++worker)
       {
-        workers.push_back(fingerprintWorkerAsync(&batch));
+        workers.push_back(fingerprintWorkerAsync(&_asyncRuntime, &batch));
       }
 
       co_await _asyncRuntime.whenAllAsync(std::move(workers));
