@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <memory>
 #include <span>
+#include <stop_token>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -95,7 +96,7 @@ namespace ao::audio::test
     auto errors = std::atomic<std::int32_t>{0};
     auto sourcePtr = makeParkedPartialWriteSource();
     REQUIRE(sourcePtr->prepare());
-    sourcePtr->activate([&](Error const&) { ++errors; });
+    sourcePtr->activate([&](Error const&, std::stop_token) { ++errors; });
     waitUntilRingFull(*sourcePtr);
 
     auto const expected = expectedStream();
@@ -134,7 +135,7 @@ namespace ao::audio::test
     auto errors = std::atomic<std::int32_t>{0};
     auto sourcePtr = makeParkedPartialWriteSource();
     REQUIRE(sourcePtr->prepare());
-    sourcePtr->activate([&](Error const&) { ++errors; });
+    sourcePtr->activate([&](Error const&, std::stop_token) { ++errors; });
     waitUntilRingFull(*sourcePtr);
 
     auto timeline = detail::RenderTimeline{};

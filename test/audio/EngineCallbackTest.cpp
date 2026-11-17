@@ -25,13 +25,17 @@
 #include <condition_variable>
 #include <cstddef>
 #include <expected>
+#include <functional>
 #include <future>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <semaphore>
+#include <span>
 #include <string_view>
 #include <thread>
 #include <utility>
+#include <vector>
 
 namespace ao::audio::test
 {
@@ -48,8 +52,9 @@ namespace ao::audio::test
     {
     public:
       explicit FakeBlockingStopBackend(
-        std::shared_ptr<BackendLifecycleCounts> lifecycleCountsPtr = std::make_shared<BackendLifecycleCounts>())
-        : _lifecycleCountsPtr{std::move(lifecycleCountsPtr)}
+        std::shared_ptr<BackendLifecycleCounts> lifecycleCountsPtr = std::make_shared<BackendLifecycleCounts>(),
+        std::function<void()> beforeStopReturns = {})
+        : _lifecycleCountsPtr{std::move(lifecycleCountsPtr)}, _beforeStopReturns{std::move(beforeStopReturns)}
       {
       }
 
@@ -68,17 +73,22 @@ namespace ao::audio::test
 
       void stop() override
       {
-        auto lock = std::unique_lock{_mutex};
-        _lifecycleCountsPtr->stop.fetch_add(1, std::memory_order_relaxed);
-
-        if (!_blockStop)
         {
-          return;
+          auto lock = std::unique_lock{_mutex};
+          _lifecycleCountsPtr->stop.fetch_add(1, std::memory_order_relaxed);
+
+          if (_blockStop)
+          {
+            _stopEntered = true;
+            _cv.notify_all();
+            _cv.wait(lock, [this] { return _releaseStop; });
+          }
         }
 
-        _stopEntered = true;
-        _cv.notify_all();
-        _cv.wait(lock, [this] { return _releaseStop; });
+        if (_beforeStopReturns)
+        {
+          _beforeStopReturns();
+        }
       }
 
       void close() override
@@ -143,6 +153,24 @@ namespace ao::audio::test
         return _target;
       }
 
+      // The caller keeps stop() blocked until all admitted renders return.
+      std::optional<RenderPcmResult> tryRenderBeforeBlockedStop(std::span<std::byte> output)
+      {
+        auto* target = static_cast<RenderTarget*>(nullptr);
+        {
+          auto const lock = std::scoped_lock{_mutex};
+
+          if (!_blockStop || _stopEntered || _releaseStop || _target == nullptr)
+          {
+            return std::nullopt;
+          }
+
+          target = _target;
+        }
+
+        return target->renderPcm(output);
+      }
+
       void emitRouteReady(std::string_view routeAnchor)
       {
         auto* target = static_cast<RenderTarget*>(nullptr);
@@ -161,6 +189,7 @@ namespace ao::audio::test
       mutable std::mutex _mutex;
       std::condition_variable _cv;
       std::shared_ptr<BackendLifecycleCounts> _lifecycleCountsPtr;
+      std::function<void()> _beforeStopReturns;
       RenderTarget* _target = nullptr;
       PcmFormat _format{};
       bool _blockStop = false;
@@ -423,6 +452,96 @@ namespace ao::audio::test
     CHECK(lifecycleCountsPtr->stop.load(std::memory_order_relaxed) == 1);
     CHECK(lifecycleCountsPtr->close.load(std::memory_order_relaxed) == 1);
     CHECK(lifecycleCountsPtr->setProperty.load(std::memory_order_relaxed) == 0);
+  }
+
+  TEST_CASE("Engine - shutdown retains both gapless decoders until backend stop", "[concurrency]")
+  {
+    constexpr std::size_t kTrackBytes = 100;
+    auto const lifecycleCountsPtr = std::make_shared<BackendLifecycleCounts>();
+    auto const decoderCountsPtr = std::make_shared<DecoderLifeCounters>();
+    std::size_t liveAtStop = 0;
+    bool closedAtStop = true;
+    auto backendPtr = std::make_unique<FakeBlockingStopBackend>(
+      lifecycleCountsPtr,
+      [&]
+      {
+        liveAtStop = decoderCountsPtr->live();
+        closedAtStop = lifecycleCountsPtr->close.load(std::memory_order_relaxed) != 0;
+      });
+    auto* const backendRaw = backendPtr.get();
+    auto const format = makeEngineTestFormat();
+    auto const info = makeScriptedStreamInfo(format);
+    auto const data = std::vector<std::byte>(kTrackBytes, std::byte{0});
+    auto workerEntered = std::binary_semaphore{0};
+    auto workerRelease = std::binary_semaphore{0};
+    auto engine = Engine{std::move(backendPtr),
+                         makeEngineTestDevice(),
+                         makeCountingDecoderFactory(
+                           {
+                             {.path = "current.flac", .info = info, .data = data},
+                             {.path = "next.flac", .info = info, .data = data},
+                           },
+                           decoderCountsPtr)};
+
+    engine.play(makePlaybackItem("current.flac"));
+    auto const preparedRes = engine.setNext(makePlaybackItem("next.flac"));
+    REQUIRE(preparedRes);
+    REQUIRE(preparedRes->transition == Engine::PreparedTransitionMode::Gapless);
+    REQUIRE(decoderCountsPtr->live() == 2);
+
+    SECTION("armed successor")
+    {
+      engine.shutdown();
+    }
+
+    SECTION("claimed successor with a splice queued")
+    {
+      constexpr auto kTimeout = std::chrono::seconds{5};
+      // Unwind both gates before the future or Engine can join the event worker.
+      auto shutdownFuture = std::future<void>{};
+      auto releaseWorker = SemaphoreReleaseGuard{workerRelease};
+      auto releaseStop = utility::ScopedRegistration{[backendRaw] { backendRaw->releaseStop(); }};
+      backendRaw->blockStop();
+      engine.defer(
+        [&]
+        {
+          workerEntered.release();
+          workerRelease.acquire();
+        });
+      REQUIRE(workerEntered.try_acquire_for(kTimeout));
+
+      auto output = std::array<std::byte, 2 * kTrackBytes>{};
+      auto const optCrossing = backendRaw->tryRenderBeforeBlockedStop(output);
+      REQUIRE(optCrossing);
+      REQUIRE_FALSE(optCrossing->drained);
+      REQUIRE(optCrossing->bytesWritten == output.size());
+      REQUIRE(optCrossing->positionFrameOffset == kTrackBytes / frameBytes(format));
+
+      shutdownFuture = std::async(std::launch::async, [&engine] { engine.shutdown(); });
+      // An empty render reports drained only once shutdown retires the target.
+      auto const deadline = std::chrono::steady_clock::now() + kTimeout;
+      auto optProbe = backendRaw->tryRenderBeforeBlockedStop({});
+
+      while (optProbe && !optProbe->drained && std::chrono::steady_clock::now() < deadline)
+      {
+        std::this_thread::yield();
+        optProbe = backendRaw->tryRenderBeforeBlockedStop({});
+      }
+
+      REQUIRE(optProbe);
+      REQUIRE(optProbe->drained);
+
+      releaseStop.reset();
+      releaseWorker.release();
+      REQUIRE(shutdownFuture.wait_for(kTimeout) == std::future_status::ready);
+      shutdownFuture.get();
+    }
+
+    CHECK(liveAtStop == 2);
+    CHECK_FALSE(closedAtStop);
+    CHECK(lifecycleCountsPtr->stop.load(std::memory_order_relaxed) == 1);
+    CHECK(lifecycleCountsPtr->close.load(std::memory_order_relaxed) == 1);
+    CHECK(decoderCountsPtr->live() == 0);
   }
 
   TEST_CASE("Engine - queued render event from retired session is ignored", "[concurrency]")

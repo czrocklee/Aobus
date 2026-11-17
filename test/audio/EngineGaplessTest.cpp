@@ -1024,6 +1024,155 @@ namespace ao::audio::test
     CHECK_FALSE(engine.clearNext());
   }
 
+  TEST_CASE("Engine - a claimed successor advances before its queued source failure", "[concurrency]")
+  {
+    auto const format = PcmFormat{.sampleRate = 44100, .channels = 2, .encoding = SampleEncoding::Signed16Le};
+    auto decodeExited = std::promise<void>{};
+    auto decodeExitFuture = decodeExited.get_future();
+    auto workerEntered = std::binary_semaphore{0};
+    auto workerRelease = std::binary_semaphore{0};
+    auto ended = CallbackLatch{};
+    auto advancedId = Engine::PlaybackItemId{};
+    auto failedId = Engine::PlaybackItemId{};
+    bool advancedBeforeFailure = false;
+    bool currentWhenAdvanced = false;
+    bool replaceOnAdvance = false;
+    bool seekOnAdvance = false;
+    bool seekAccepted = false;
+    auto const replacement = makePlaybackItem("replacement.flac");
+    auto rechecked = CallbackLatch{};
+    bool earlierCallbackRan = false;
+    bool earlierCallbackPrecededAdvance = false;
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
+    auto* const backend = backendPtr.get();
+    auto engine =
+      Engine{std::move(backendPtr),
+             makeEngineTestDevice(),
+             [&](std::filesystem::path const& path, std::optional<SampleEncoding> optEncoding)
+             {
+               auto info = makeScriptedStreamInfo(format);
+               info.outputFormat = pcmFormat(info.sourceFormat, optEncoding.value_or(format.encoding));
+               auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
+
+               if (path == "successor.flac")
+               {
+                 decoderPtr->setReadScript({{.data = std::vector<std::byte>(100000)},
+                                            {.res = makeError(Error::Code::IoError, "successor decode failed")}});
+                 decoderPtr->setSeekReadScript({{.data = std::vector<std::byte>(4)}, {.endOfStream = true}});
+                 decoderPtr->setReadObserver(
+                   [&](std::size_t count)
+                   {
+                     if (count == 2)
+                     {
+                       // The decode thread exits only after publishing its source error.
+                       decodeExited.set_value_at_thread_exit();
+                     }
+                   });
+               }
+               else
+               {
+                 decoderPtr->setReadScript({{.data = std::vector<std::byte>(4)}, {.endOfStream = true}});
+               }
+
+               return decoderPtr;
+             }};
+    auto releaseGuard = WorkerReleaseGuard{workerRelease};
+    engine.setOnTrackAdvanced(
+      [&](Engine::TrackAdvanced const& event)
+      {
+        advancedId = event.itemId;
+        currentWhenAdvanced = engine.isCurrentPlaybackItem(event.itemId) && engine.transport() == Transport::Playing;
+        earlierCallbackPrecededAdvance = earlierCallbackRan;
+
+        if (replaceOnAdvance)
+        {
+          engine.play(replacement);
+          engine.defer([&] { rechecked.notify(); });
+        }
+        else if (seekOnAdvance)
+        {
+          seekAccepted = engine.trySeek(event.itemId, std::chrono::milliseconds{0});
+          engine.defer([&] { rechecked.notify(); });
+        }
+      });
+    engine.setOnPlaybackFailure(
+      [&](Engine::PlaybackFailure const& failure)
+      {
+        failedId = failure.itemId;
+        advancedBeforeFailure = advancedId == failure.itemId;
+      });
+    engine.setOnTrackEnded([&](Engine::TrackEnded const&) { ended.notify(); });
+    engine.play(makePlaybackItem("current.flac"));
+    engine.defer(
+      [&]
+      {
+        workerEntered.release();
+        workerRelease.acquire();
+      });
+    REQUIRE(workerEntered.try_acquire_for(std::chrono::seconds{5}));
+
+    auto const successor = makePlaybackItem("successor.flac");
+    REQUIRE(engine.setNext(successor));
+    REQUIRE(decodeExitFuture.wait_for(std::chrono::seconds{5}) == std::future_status::ready);
+    engine.defer([&] { earlierCallbackRan = true; });
+    auto output = std::array<std::byte, 8>{};
+    REQUIRE(backend->target() != nullptr);
+    REQUIRE(backend->target()->renderPcm(output).bytesWritten == output.size());
+
+    bool settledByControl = false;
+
+    SECTION("an intervening control command settles the splice")
+    {
+      REQUIRE(engine.isCurrentPlaybackItem(successor.id));
+      settledByControl = true;
+    }
+
+    SECTION("the event worker settles the splice")
+    {
+      // No control entry before releasing the worker.
+    }
+
+    SECTION("a replacement started by the advance callback supersedes the failure")
+    {
+      REQUIRE(engine.isCurrentPlaybackItem(successor.id));
+      replaceOnAdvance = true;
+      settledByControl = true;
+    }
+
+    SECTION("a new decode attempt started by the advance callback supersedes the old error")
+    {
+      REQUIRE(engine.isCurrentPlaybackItem(successor.id));
+      seekOnAdvance = true;
+      settledByControl = true;
+    }
+
+    releaseGuard.release();
+
+    if (replaceOnAdvance || seekOnAdvance)
+    {
+      REQUIRE(rechecked.tryWaitForCount(1));
+      CHECK(ended.count() == 0);
+      CHECK(failedId == Engine::PlaybackItemId{});
+      CHECK(engine.isCurrentPlaybackItem(replaceOnAdvance ? replacement.id : successor.id));
+      CHECK(engine.transport() == Transport::Playing);
+      CHECK(seekAccepted == seekOnAdvance);
+    }
+    else
+    {
+      REQUIRE(ended.tryWaitForCount(1));
+      CHECK(advancedBeforeFailure);
+      CHECK(failedId == successor.id);
+      CHECK(engine.transport() == Transport::Error);
+    }
+
+    if (settledByControl)
+    {
+      CHECK(earlierCallbackPrecededAdvance);
+    }
+
+    CHECK(currentWhenAdvanced);
+  }
+
   namespace
   {
     DecodedStreamInfo scriptedInfoFor(PcmFormat const& format)

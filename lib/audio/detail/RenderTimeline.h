@@ -38,7 +38,9 @@ namespace ao::audio::detail
 
     Node* disarmLookahead() noexcept { return _lookahead.exchange(nullptr, std::memory_order_acq_rel); }
 
-    Node* consumeLookaheadForRender() noexcept { return _lookahead.exchange(nullptr, std::memory_order_acquire); }
+    // Publish RT's handoff-in-progress flag to the control-side disarm that
+    // observes this claim, as well as acquiring the node published at arm.
+    Node* consumeLookaheadForRender() noexcept { return _lookahead.exchange(nullptr, std::memory_order_acq_rel); }
 
     std::uint64_t activeSourceGeneration() const noexcept;
 

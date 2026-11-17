@@ -5,6 +5,7 @@
 
 #include "AudioTime.h"
 #include "PcmSource.h"
+#include "StreamingSource.h"
 #include "detail/DecoderOutput.h"
 #include "detail/EngineEventQueueInvariants.h"
 #include "detail/EngineRtSignalRing.h"
@@ -95,6 +96,7 @@ namespace ao::audio
     {
       std::uint64_t sourceGeneration = 0;
       std::uint64_t playbackGeneration = 0;
+      std::stop_token decodeAttempt;
       Error error;
     };
 
@@ -147,13 +149,11 @@ namespace ao::audio
       std::uint64_t playbackGeneration = 0;
     };
 
-    // Notifications already materialized by a control thread that settled a
-    // splice signal at command entry (see lockControl). The event worker just
-    // runs them, so user callbacks keep originating from the worker thread in
-    // application order.
+    // Already materialized by a control command, or work queued with defer().
     struct DeferredNotifications final
     {
       std::vector<std::function<void()>> notifications;
+      std::uint64_t spliceSourceGeneration = 0;
     };
 
     using PlaybackEvent = std::variant<BackendErrorEvent,
@@ -264,6 +264,29 @@ namespace ao::audio
         _eventSignal.release();
       }
 
+      // Called by the sole event worker with control serialized. Only delay
+      // a raw decoder error if its own advance is still awaiting delivery.
+      // Earlier materialized callbacks keep their FIFO order, and a reentrant
+      // control from the advance can supersede the error before it is retried.
+      bool tryPostponeBehindSplice(SourceErrorEvent const& error)
+      {
+        auto const lock = std::scoped_lock{_playbackEventMutex};
+
+        for (auto it = _playbackEvents.begin(); it != _playbackEvents.end(); ++it)
+        {
+          if (auto const* batch = std::get_if<DeferredNotifications>(&*it);
+              batch != nullptr && batch->spliceSourceGeneration == error.sourceGeneration)
+          {
+            // There is at most one failure per live decode attempt. Do not
+            // let later, unrelated FIFO entries overtake the retry.
+            _playbackEvents.emplace(it + 1, error);
+            return true;
+          }
+        }
+
+        return false;
+      }
+
       void enqueueRtSignal(RtSignal const& signal) noexcept
       {
         _rtSignalRing.push(signal);
@@ -285,8 +308,7 @@ namespace ao::audio
         }
       }
 
-      template<typename RtSignalConsumer>
-      void stop(RtSignalConsumer discardSignal) noexcept
+      void stop() noexcept
       {
         if (_eventThread.joinable())
         {
@@ -296,12 +318,10 @@ namespace ao::audio
           _eventThread.join();
         }
 
-        {
-          auto const lock = std::scoped_lock{_playbackEventMutex};
-          _playbackEvents.clear();
-        }
-
-        drainRtSignals(discardSignal);
+        auto const lock = std::scoped_lock{_playbackEventMutex};
+        _playbackEvents.clear();
+        // The backend can still be rendering. Its non-owning RT signals and
+        // their timeline owners are retired together after backend quiescence.
       }
 
     private:
@@ -573,59 +593,53 @@ namespace ao::audio
     void shutdown() noexcept
     {
       AO_EXPECTS(!eventQueue.isCurrentThread());
-      runOrAbort(
-        "audio engine shutdown",
-        [this]
-        {
-          {
-            auto lock = std::unique_lock{controlMutex};
+      runOrAbort("audio engine shutdown",
+                 [this]
+                 {
+                   {
+                     auto lock = std::unique_lock{controlMutex};
 
-            if (lifecycleState == LifecycleState::Shutdown)
-            {
-              lock.unlock();
-              eventQueue.waitForExit();
-              return;
-            }
+                     if (lifecycleState == LifecycleState::Shutdown)
+                     {
+                       lock.unlock();
+                       eventQueue.waitForExit();
+                       return;
+                     }
 
-            if (lifecycleState == LifecycleState::ShuttingDown)
-            {
-              shutdownCv.wait(lock, [this] { return lifecycleState == LifecycleState::Shutdown; });
-              lock.unlock();
-              eventQueue.waitForExit();
-              return;
-            }
+                     if (lifecycleState == LifecycleState::ShuttingDown)
+                     {
+                       shutdownCv.wait(lock, [this] { return lifecycleState == LifecycleState::Shutdown; });
+                       lock.unlock();
+                       eventQueue.waitForExit();
+                       return;
+                     }
 
-            waitForSpliceHandoff();
-            settlePendingRtSignals();
-            lifecycleState = LifecycleState::ShuttingDown;
-            retireSessions();
-          }
+                     lifecycleState = LifecycleState::ShuttingDown;
+                     retireSessions();
+                   }
 
-          eventQueue.stop([this](RtSignal const& signal) { discardSpliceSignalNode(signal.splicedNode); });
+                   eventQueue.stop();
 
-          {
-            auto const lock = std::scoped_lock{controlMutex};
+                   {
+                     auto const lock = std::scoped_lock{controlMutex};
 
-            if (backendPtr && renderTargetPtr)
-            {
-              backendPtr->stop();
-              backendPtr->close();
-              resetRenderTarget();
-            }
+                     if (backendPtr && renderTargetPtr)
+                     {
+                       backendPtr->stop();
+                       backendPtr->close();
+                       resetRenderTarget();
+                     }
 
-            timeline.clear();
+                     // No render callback can still borrow a node or post another
+                     // signal. The ring does not own its payloads; the timeline does.
+                     eventQueue.drainRtSignals([](RtSignal const&) {});
+                     timeline.clear();
+                     backendPtr.reset();
+                     lifecycleState = LifecycleState::Shutdown;
+                   }
 
-            // The render thread is now stopped. Drain the signal ring once more to free
-            // any splice signal it posted after the event queue stopped but before
-            // the backend stopped, then free any armed-but-never-spliced lookahead node.
-            eventQueue.drainRtSignals([this](RtSignal const& signal) { discardSpliceSignalNode(signal.splicedNode); });
-            clearPreparedNext();
-            backendPtr.reset();
-            lifecycleState = LifecycleState::Shutdown;
-          }
-
-          shutdownCv.notify_all();
-        });
+                   shutdownCv.notify_all();
+                 });
     }
 
     Impl(Impl const&) = delete;
@@ -656,8 +670,6 @@ namespace ao::audio
     {
       return (node != nullptr && timeline.activeNode() == node) ? node : nullptr;
     }
-
-    void discardSpliceSignalNode(TrackNode* node) noexcept { timeline.dropDisarmedLookahead(node); }
 
     bool matchesCurrentTransition(std::optional<PcmFormat> const& optBackendFormat,
                                   std::optional<DecodedStreamInfo> const& optStreamInfo) const
@@ -722,26 +734,31 @@ namespace ao::audio
       return optDisarmedItemId;
     }
 
-    std::optional<PlaybackItem> clearPreparedNextForGeneration(std::uint64_t sourceGeneration)
+    std::optional<PlaybackItem> disarmForSourceError(std::uint64_t sourceGeneration)
     {
-      waitForSpliceHandoff();
-      settlePendingRtSignals();
-
-      auto* const session = timeline.lookaheadNode();
-
-      if (session == nullptr || session->sourceGeneration != sourceGeneration)
+      // A stale error must not disarm a different successor. Only control
+      // can arm one, so no new candidate can appear while we hold the lock.
+      if (auto* const armed = timeline.lookaheadNode(); armed != nullptr &&
+                                                        armed->sourceGeneration != sourceGeneration &&
+                                                        timeline.activeSourceGeneration() != sourceGeneration)
       {
         return std::nullopt;
       }
 
-      if (auto* const disarmed = timeline.disarmLookahead(); disarmed == session)
+      // Exchange even when the cursor already looks empty: RT may have
+      // claimed the successor but not yet published its identity or signal.
+      auto* const disarmed = timeline.disarmLookahead();
+      waitForSpliceHandoff();
+      settlePendingRtSignals();
+      auto optItem = std::optional<PlaybackItem>{};
+
+      if (disarmed != nullptr && disarmed->sourceGeneration == sourceGeneration)
       {
-        auto item = session->item;
-        timeline.dropDisarmedLookahead(disarmed);
-        return item;
+        optItem = disarmed->item;
       }
 
-      return std::nullopt;
+      timeline.dropDisarmedLookahead(disarmed);
+      return optItem;
     }
 
     void publishCurrentTransitionState(TrackNode const& session, std::optional<ConfirmedEndpoint> optEndpoint)
@@ -852,7 +869,8 @@ namespace ao::audio
 
           if (auto notifications = processRtSignal(signal); !notifications.empty())
           {
-            enqueuePlaybackEvent(DeferredNotifications{.notifications = std::move(notifications)});
+            enqueuePlaybackEvent(DeferredNotifications{.notifications = std::move(notifications),
+                                                       .spliceSourceGeneration = signal.splicedNode->sourceGeneration});
           }
         });
     }
@@ -1383,7 +1401,19 @@ namespace ao::audio
 
     Notifications processSourceErrorEvent(SourceErrorEvent const& event)
     {
-      if (auto const optPreparedItem = clearPreparedNextForGeneration(event.sourceGeneration); optPreparedItem)
+      if (event.decodeAttempt.stop_requested())
+      {
+        return {}; // A seek has already replaced the decode attempt on this same source.
+      }
+
+      // A previously settled advance can have a new lookahead armed behind
+      // it. Leave that lookahead intact until the failure really takes effect.
+      if (timeline.activeSourceGeneration() == event.sourceGeneration && eventQueue.tryPostponeBehindSplice(event))
+      {
+        return {};
+      }
+
+      if (auto const optPreparedItem = disarmForSourceError(event.sourceGeneration); optPreparedItem)
       {
         auto failureCallback = OnPlaybackFailure{};
         {
@@ -1412,6 +1442,11 @@ namespace ao::audio
         return notifications;
       }
 
+      if (event.sourceGeneration != timeline.activeSourceGeneration() || eventQueue.tryPostponeBehindSplice(event))
+      {
+        return {};
+      }
+
       auto const message = event.error.message.empty() ? std::string{"PCM source failed"} : event.error.message;
       auto endedCallback = OnTrackEnded{};
       auto failureCallback = OnPlaybackFailure{};
@@ -1420,11 +1455,6 @@ namespace ao::audio
 
       {
         auto const lock = std::scoped_lock{stateMutex};
-
-        if (event.sourceGeneration != timeline.activeSourceGeneration())
-        {
-          return {};
-        }
 
         if (status.transport == Transport::Idle)
         {
@@ -1569,13 +1599,15 @@ namespace ao::audio
     }
 
     // ── Track opening ──────────────────────────────────────────────
-    detail::TrackSession::OnSourceErrorFn makeSourceErrorHandler(std::uint64_t const sourceGeneration,
-                                                                 std::uint64_t const playbackGeneration)
+    StreamingSource::OnSourceError makeSourceErrorHandler(std::uint64_t const sourceGeneration,
+                                                          std::uint64_t const playbackGeneration)
     {
-      return [this, sourceGeneration, playbackGeneration](Error const& error)
+      return [this, sourceGeneration, playbackGeneration](Error const& error, std::stop_token decodeAttempt)
       {
-        enqueuePlaybackEvent(SourceErrorEvent{
-          .sourceGeneration = sourceGeneration, .playbackGeneration = playbackGeneration, .error = error});
+        enqueuePlaybackEvent(SourceErrorEvent{.sourceGeneration = sourceGeneration,
+                                              .playbackGeneration = playbackGeneration,
+                                              .decodeAttempt = std::move(decodeAttempt),
+                                              .error = error});
       };
     }
 
