@@ -3,8 +3,8 @@
 
 #include "list/ListTreeModelBuilder.h"
 
-#include "../../TestFixtureSupport.h"
 #include "test/MessageCatalogTestSupport.h"
+#include "test/TestFixtureSupport.h"
 #include "test/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/linux-gtk/GtkRuntimeTestSupport.h"
 #include <ao/rt/AppRuntime.h>
