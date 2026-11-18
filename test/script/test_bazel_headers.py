@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ao.core.bazel_headers import HeaderInventory, HeaderInventoryError, vcpkg_header_inventory
+from ao.portal.bazel_headers import HeaderInventory, HeaderInventoryError, vcpkg_header_inventory
 
 
 class BazelHeaderInventoryTest(unittest.TestCase):

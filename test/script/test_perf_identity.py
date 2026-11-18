@@ -15,7 +15,8 @@ from unittest import mock
 from workflow_support import executable_artifact
 
 from ao.__main__ import make_parser
-from ao.command import perf
+from ao.command import measure
+from ao.portal import performance_review as perf
 
 
 class PerformanceIdentityTest(unittest.TestCase):
@@ -35,10 +36,10 @@ class PerformanceIdentityTest(unittest.TestCase):
         os.environ["GIT_CONFIG_NOSYSTEM"] = "1"
 
     def test_provenance_uses_checkout_scoped_git_commands(self):
-        command = perf.gitfiles.git_command
+        command = perf.git_files.git_command
         options = {"os_name": "posix", "platform_name": "linux", "checkout_uses_smb": False}
         with (
-            mock.patch.object(perf.gitfiles, "git_command", side_effect=partial(command, **options)) as git,
+            mock.patch.object(perf.git_files, "git_command", side_effect=partial(command, **options)) as git,
             mock.patch.object(perf, "capture", side_effect=["revision-id\n", ""]) as capture,
         ):
             self.assertEqual(perf._revision(), "revision-id")
@@ -117,7 +118,7 @@ class PerformanceIdentityTest(unittest.TestCase):
                         self.subTest(dirty=dirty, private=private),
                         mock.patch.dict(os.environ, {"AOBUS_GIT_DIR": private, "AOBUS_GIT_WORK_TREE": str(source)}),
                         mock.patch.object(perf, "PROJECT_ROOT", source),
-                        mock.patch.object(perf.gitfiles, "PROJECT_ROOT", source),
+                        mock.patch.object(perf.git_files, "PROJECT_ROOT", source),
                     ):
                         expected = revisions["source"] + ("+dirty" if dirty else "")
                         self.assertEqual(perf._revision(), expected)
@@ -163,7 +164,7 @@ class PerformanceIdentityTest(unittest.TestCase):
                 with (
                     mock.patch.dict(os.environ, {"GIT_OPTIONAL_LOCKS": "1"}),
                     mock.patch.object(perf, "PROJECT_ROOT", root),
-                    mock.patch.object(perf.gitfiles, "PROJECT_ROOT", root),
+                    mock.patch.object(perf.git_files, "PROJECT_ROOT", root),
                 ):
                     actual = perf._revision()
                 expected = revision + ("" if state.endswith("stat-only") else "+dirty")
@@ -267,14 +268,16 @@ class PerformanceIdentityTest(unittest.TestCase):
                     with (
                         mock.patch.dict(os.environ, {**injection, "GIT_OPTIONAL_LOCKS": "1"}),
                         mock.patch.object(perf, "PROJECT_ROOT", root),
-                        mock.patch.object(perf.gitfiles, "PROJECT_ROOT", root),
+                        mock.patch.object(perf.git_files, "PROJECT_ROOT", root),
                     ):
                         expected = revision + ("+dirty" if state in dirty_states else "")
                         self.assertEqual(perf._revision(), expected)
                     self._assert_pinned_indexes_unchanged(parent_index, child_index, before)
 
     def test_meaningful_worktree_changes_still_mark_the_revision_dirty(self):
-        with mock.patch.object(perf, "capture", side_effect=["revision-id\n", " M script/ao/command/perf.py\n"]):
+        with mock.patch.object(
+            perf, "capture", side_effect=["revision-id\n", " M script/ao/portal/performance_review.py\n"]
+        ):
             self.assertEqual(perf._revision(), "revision-id+dirty")
 
     def test_revision_read_failure_is_not_silently_reported_as_verified(self):
@@ -305,7 +308,9 @@ class PerformanceIdentityTest(unittest.TestCase):
             executable = artifact.executable
             original = executable.read_bytes()
             report_path = directory / "new-parent" / "report.json"
-            args = make_parser().parse_args(["perf", "--no-build", "-p", str(directory), "--output", str(report_path)])
+            args = make_parser().parse_args(
+                ["measure", "performance", "--no-build", "-p", str(directory), "--output", str(report_path)]
+            )
 
             def write_report(_command, *, env, **_kwargs):
                 report = {
@@ -337,17 +342,19 @@ class PerformanceIdentityTest(unittest.TestCase):
                 mock.patch.object(
                     perf.bazel_workflows, "prepare_artifact", return_value=contextlib.nullcontext(artifact)
                 ) as prepare,
-                mock.patch.object(perf, "run", side_effect=write_report),
+                mock.patch.object(perf, "run_process", side_effect=write_report),
                 contextlib.redirect_stdout(output),
             ):
-                self.assertEqual(perf.run_command(args), 0)
+                self.assertEqual(measure.run_command(args), 0)
 
             report = json.loads(report_path.read_text(encoding="utf-8"))
             self.assertEqual(report["metadata"]["revision"], "unverified")
             self.assertIn("Source revision: unverified", output.getvalue())
             self.assertNotIn("new-checkout", output.getvalue())
             self.assertEqual(executable.read_bytes(), original)
-            prepare.assert_called_once_with(args, perf.TARGET_LABEL, no_build=True)
+            prepare.assert_called_once_with(
+                perf.Request(path=str(directory), no_build=True, output=report_path), perf.TARGET_LABEL, no_build=True
+            )
             self.assertEqual(report["metadata"]["compiler"], "unverified configured compiler")
             self.assertEqual(report["metadata"]["build_mode"], "release")
             self.assertEqual(report["metadata"]["bazel"]["source_attribution"], "unverified")

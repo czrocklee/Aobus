@@ -16,6 +16,16 @@ product_flag(
     build_setting_default = True,
 )
 
+product_flag(
+    name = "desktop_tests",
+    build_setting_default = False,
+)
+
+config_setting(
+    name = "desktop_tests_enabled",
+    flag_values = {":desktop_tests": "true"},
+)
+
 config_setting(
     name = "linux_gtk_enabled",
     constraint_values = ["@platforms//os:linux"],
@@ -96,5 +106,6 @@ exports_files([
     "msvc_policy.bzl",
     "rules_cc_coverage_private_headers.patch",
     "rules_cc_msvc_exception_handling.patch",
+    "testing.bzl",
     "verify_windows_utf8_manifest.ps1",
 ])

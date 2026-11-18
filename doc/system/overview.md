@@ -96,7 +96,7 @@ CLI owns arguments and output around `CoreRuntime`, bypassing UIModel when no in
 - Shared signals live in `ao_async`; each event owner still defines payload, executor affinity, and exception containment.
 
 These are executable constraints, not only diagram conventions.
-The shared completion-audit backend's declarative [application architecture audit](../../script/ao/core/guardrails.py) runs across Core, desktop support, runtime, UIModel, frontends, and focused tests; the completion gate consumes it.
+The shared completion-audit backend's declarative [application architecture audit](../../script/ao/portal/guardrails.py) runs across Core, desktop support, runtime, UIModel, frontends, and focused tests; the completion gate consumes it.
 
 ## Data and control flow
 

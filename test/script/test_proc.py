@@ -20,7 +20,8 @@ import socket
 import sys
 from pathlib import Path
 from types import SimpleNamespace
-from ao.core import bazel_provision, buildlock, proc
+from ao.core import build_lock, proc
+from ao.portal import bazel_provision
 
 root, port, scenario = Path(sys.argv[1]), int(sys.argv[2]), sys.argv[3]
 control = socket.create_connection(("127.0.0.1", port), timeout=15)
@@ -162,7 +163,7 @@ installer_python = Path(sys.base_prefix) / "python.exe" if sys.platform == "win3
 assert installer_python.is_file(), "governed base installer interpreter is missing"
 
 try:
-    with buildlock.build_tree_lock(root / "tree"), buildlock.shared_file_lock(root / "restore.lock"):
+    with build_lock.build_tree_lock(root / "tree"), build_lock.shared_file_lock(root / "restore.lock"):
         argv = [str(installer_python), "-c", sys.argv[4], str(port), scenario]
         if scenario == "interrupt":
             bazel_provision._run_logged(argv, root / "install.log")

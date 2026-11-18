@@ -18,8 +18,8 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
-from ao.core import bazel_lint_sdk as sdk
-from ao.core import windows_llvm_sdk
+from ao.policy import windows_llvm_sdk
+from ao.portal import bazel_lint_sdk as sdk
 
 
 def _write(path, text="fixture\n"):
@@ -336,7 +336,7 @@ class RepositoryHelperTest(unittest.TestCase):
         probe = (
             "import pathlib, runpy, sys\n"
             f"root = pathlib.Path({str(root / 'script')!r})\n"
-            "runpy.run_path(str(root / 'ao/core/bazel_lint_sdk.py'), run_name='sdk_probe')\n"
+            "runpy.run_path(str(root / 'ao/portal/bazel_lint_sdk.py'), run_name='sdk_probe')\n"
             "for module in list(sys.modules.values()):\n"
             "    path = pathlib.Path(getattr(module, '__file__', None) or '/')\n"
             "    if path.is_relative_to(root):\n"
@@ -346,7 +346,7 @@ class RepositoryHelperTest(unittest.TestCase):
             [sys.executable, "-I", "-S", "-B", "-X", "utf8", "-c", probe], cwd=root, capture_output=True, text=True
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(set(result.stdout.split()) - {"script/ao/core/bazel_lint_sdk.py"}, declared)
+        self.assertEqual(set(result.stdout.split()) - {"script/ao/portal/bazel_lint_sdk.py"}, declared)
 
 
 if __name__ == "__main__":

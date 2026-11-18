@@ -1,6 +1,7 @@
 load("@aobus_native_tools//:test_tools.bzl", "TEST_TOOLS")
 load("@rules_cc//cc:defs.bzl", "cc_library")
 load("//bazel:compiler_policy.bzl", "GTK_HEADER_SSE_COPTS", "PIPEWIRE_SPA_COPTS", "UNIX_TEST_COPTS")
+load("//bazel:testing.bzl", "native_test")
 load("//bazel:windows_utf8_manifest.bzl", "windows_utf8_manifest_checks")
 load(":executables.bzl", "cc_binary", "cc_test")
 load(":input_files.bzl", "test_input_manifest")
@@ -122,6 +123,70 @@ windows_utf8_manifest_checks(
         ":tui_test",
     ],
     target_compatible_with = ["@platforms//os:windows"],
+)
+
+# Native process smokes reuse the shipping TUI and the existing WinUI probes.
+# The wrappers add execution only; they do not compile product sources twice.
+native_test(
+    name = "tui_help_smoke",
+    size = "small",
+    timeout = "short",
+    args = ["--help"],
+    exe = "//app/tui:aobus-tui",
+)
+
+native_test(
+    name = "winui_localization_probe_test",
+    size = "small",
+    timeout = "short",
+    exe = "//app/windows-winui:ao_winui_localization_probe",
+    tags = [
+        "external",
+        "local",
+    ],
+    target_compatible_with = ["@platforms//os:windows"],
+)
+
+native_test(
+    name = "winui_track_item_probe_test",
+    size = "small",
+    timeout = "short",
+    exe = "//app/windows-winui:ao_winui_track_item_probe",
+    tags = [
+        "external",
+        "local",
+    ],
+    target_compatible_with = ["@platforms//os:windows"],
+)
+
+# The automation probe owns the interactive UIA contract. The desktop flag is
+# false by default, so headless wildcards skip it; Windows desktop CI enables
+# the same graph and fails when the console/desktop is absent.
+native_test(
+    name = "winui_uia_test",
+    size = "large",
+    timeout = "long",
+    context = ["uia"],
+    data = ["//:VERSION.txt"],
+    exe = "//app/windows-winui:ao_winui_automation_probe",
+    tags = [
+        "exclusive",
+        "external",
+        "local",
+    ],
+    target_compatible_with = select({
+        "//bazel:desktop_tests_enabled": ["@platforms//os:windows"],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+)
+
+test_suite(
+    name = "native_process_tests",
+    tests = [
+        ":tui_help_smoke",
+        ":winui_localization_probe_test",
+        ":winui_track_item_probe_test",
+    ],
 )
 
 # Unix ASan profiles also select UBSan; MSVC provides AddressSanitizer only.
@@ -483,12 +548,6 @@ cc_test(
     data = [
         "//test/data/audio:audio_fixtures",
     ],
-    # date::current_zone() uses the OS zone on macOS; the independent C-library
-    # expectation must use that same input rather than the test runner's zone.
-    env = select({
-        "@platforms//os:macos": {"TZ": ":/etc/localtime"},
-        "//conditions:default": {},
-    }),
     deps = [
         ":audio_fixture_support",
         ":common_test_support",
@@ -812,6 +871,7 @@ cc_test(
         "audio/detail/TimeConversionTest.cpp",
         "audio/detail/TrackSessionTest.cpp",
     ],
+    context = ["audio"],
     copts = AUDIO_TEST_COPTS,
     data = [
         ":ao_audio_fatal_probe",
@@ -919,6 +979,7 @@ cc_test(
             "audio/backend/detail/WasapiStringsTest.cpp",
         ],
     }),
+    context = ["audio"],
     copts = AUDIO_TEST_COPTS,
     data = [
         ":ao_audio_fatal_probe",
@@ -1209,6 +1270,7 @@ cc_test(
         "systemmedia/linux/MprisTestSupport.cpp",
         "systemmedia/linux/MprisTestSupport.h",
     ],
+    context = ["audio"],
     copts = AUDIO_TEST_COPTS,
     data = [
         "//app/tui:aobus-tui",
@@ -1483,6 +1545,7 @@ cc_binary(
 cc_test(
     name = "gtk_test",
     srcs = glob(["linux-gtk/**/*Test.cpp"]) + ["linux-gtk/GtkTestMain.cpp"],
+    context = ["gtk"],
     copts = AUDIO_TEST_COPTS + GTK_HEADER_COPTS,
     data = [
         ":ao_gapplication_probe",
@@ -1545,6 +1608,7 @@ cc_test(
         "@platforms//os:windows": ["--allow-running-no-tests"],
         "//conditions:default": [],
     }),
+    context = ["audio"],
     copts = AUDIO_TEST_COPTS,
     data = [
         ":ao_audio_fatal_probe",

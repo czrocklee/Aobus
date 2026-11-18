@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from ao.core import bazel_native as native
-from ao.core import bazel_workspace as workspace
+from ao.portal import bazel_workspace as workspace
 
 
 class BazelHostTests(unittest.TestCase):

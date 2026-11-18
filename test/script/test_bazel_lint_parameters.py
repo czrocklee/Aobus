@@ -12,7 +12,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ao.core import bazel_lint, bazel_lint_reports
+from ao.graph import bazel_lint_reports
+from ao.portal import bazel_lint
 
 OWNER = "@@//lib/util:util"
 SOURCE = "lib/util/Clock.cpp"

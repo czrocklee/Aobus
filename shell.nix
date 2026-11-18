@@ -161,6 +161,14 @@ let
   # version; the Python probe validates the directory exists at admission.
   gccSanitizerIncludeDirectory =
     "${pkgs.gcc.cc}/lib/gcc/${pkgs.stdenv.hostPlatform.config}/${pkgs.gcc.cc.version}/include";
+  # The selected glibc links these kernel UAPI directories into another store
+  # output. Retain the exact SDK entry points, not the entire kernel output.
+  glibcBuiltinRoots = [
+    pkgs.glibc.dev
+    "${pkgs.glibc.dev}/include/linux"
+    "${pkgs.glibc.dev}/include/asm"
+    "${pkgs.glibc.dev}/include/asm-generic"
+  ];
   # Reuse the JDK already selected by this Bazel package. Completion ignores
   # system rc files, including Nixpkgs' otherwise implicit server_javabase.
   bazelJavaInputs = builtins.filter (package: package ? home) pkgs.bazel_9.nativeBuildInputs;
@@ -195,10 +203,7 @@ let
           objcopy = "${pkgs.gcc}/bin/objcopy";
           gcov = "${pkgs.gcc.cc}/bin/gcov";
         };
-        builtinRoots = map toString [
-          pkgs.gcc.cc
-          pkgs.glibc.dev
-        ];
+        builtinRoots = map toString ([ pkgs.gcc.cc ] ++ glibcBuiltinRoots);
         sanitizerIncludeDirectory = gccSanitizerIncludeDirectory;
         # GCC's parallel LTO link re-execs GNU make; the pinned shell already
         # realizes this exact store path. Clang links with lld and needs no
@@ -217,11 +222,13 @@ let
           objcopy = "${pkgs.llvmPackages_22.llvm}/bin/llvm-objcopy";
           gcov = "${pkgs.llvmPackages_22.llvm}/bin/llvm-cov";
         };
-        builtinRoots = map toString [
-          pkgs.llvmPackages_22.clang-unwrapped.lib
-          pkgs.gcc.cc
-          pkgs.glibc.dev
-        ];
+        builtinRoots = map toString (
+          [
+            pkgs.llvmPackages_22.clang-unwrapped.lib
+            pkgs.gcc.cc
+          ]
+          ++ glibcBuiltinRoots
+        );
         sanitizerIncludeDirectory = "${pkgs.llvmPackages_22.compiler-rt.dev}/include";
       };
     };
@@ -330,6 +337,8 @@ pkgs.mkShell {
   passthru.portalShell = pkgs.bashInteractive;
   AOBUS_NIX_DEPENDENCY_REPORT = dependencyReport;
   AOBUS_BAZEL_SERVER_JAVABASE = bazelServerJavabase;
+  # Coverage analysis uses rules_java's declared local runtime from this same JDK.
+  JAVA_HOME = (builtins.head bazelJavaInputs).home;
   AO_NIX_SHELL_FINGERPRINT = portalFingerprint;
   AO_NIX_SHELL_INPUTS = pkgs.lib.concatMapStringsSep " " (
     file: pkgs.lib.removePrefix (toString ./. + "/") (toString file)

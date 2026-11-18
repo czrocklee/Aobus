@@ -152,7 +152,7 @@ see the [test-suite reference](../test/test-suite.md#tooling-and-lint-fixtures).
 For focused diagnosis against an owned product or test translation unit's real compile action (`test/lint/fixture/` files have no `cc_*` compile owner), use:
 
 ```bash
-./ao tidy --check <alias> <owned-source>
+./ao check lint --tidy-check <alias> <owned-source>
 ```
 
 ## Prefix comparisons
@@ -241,7 +241,7 @@ The completion `./ao check` gate builds this target explicitly; ordinary increme
 Production code uses AO macros so category, source location, diagnostic context, and abort behavior remain project-owned.
 `static_assert`, third-party source, and test-source assertions remain outside this lexical rule.
 
-New guardrail policy is owned by the shared Python inventory and rules in [`guardrails.py`](../../../script/ao/core/guardrails.py), which the completion gate runs directly.
+New guardrail policy is owned by the shared Python inventory and rules in [`guardrails.py`](../../../script/ao/portal/guardrails.py), which the completion gate runs directly.
 Conditional frontend targets are discovered only when their owner is enabled.
 The lexical check has no per-file production allowlist; isolate foreign code behind its owning adapter or outside production roots rather than suppressing the rule.
 
@@ -367,7 +367,7 @@ These rules cover main-file-only checks and prevent clang-tidy from falling back
 ### Windows lint host
 
 Windows uses the pinned official LLVM development archive provisioned by
-`ao.bat deps provision`; state and the shared verified SDK cache default below
+`ao.bat setup deps`; state and the shared verified SDK cache default below
 `%LOCALAPPDATA%\Aobus` ([Windows development](../windows.md) owns paths and
 overrides). The checker build statically links `tool/lint/AobusClangTidy.exe`
 with the Aobus checks from that SDK.
@@ -391,6 +391,6 @@ Remove the workaround when the corresponding STL fix enters the required Build T
 
 Run `bazel test //test/lint:lint_test --nocache_test_results` after checker
 or fixture changes.
-Use a focused `./ao tidy --check <alias> <owned-source>` scope only to inspect owned translation units during diagnosis, not on `test/lint/fixture/` files or as a replacement for the integration gate.
+Use a focused `./ao check lint --tidy-check <alias> <owned-source>` scope only to inspect owned translation units during diagnosis, not on `test/lint/fixture/` files or as a replacement for the integration gate.
 Changes to portal orchestration also follow the tooling and native-host matrix in [validation and review](../test/validation-and-review.md).
 A platform-specific checker boundary requires its native fixture pass; an unmatched AST on another host is not coverage.

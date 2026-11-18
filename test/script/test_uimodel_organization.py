@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ao.core import guardrails
+from ao.portal import guardrails
 
 
 class UimodelOrganizationTest(unittest.TestCase):

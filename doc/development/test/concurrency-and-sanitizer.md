@@ -153,11 +153,14 @@ commands are:
 ```bash
 ./ao check --asan
 ./ao check --tsan
-./ao verify --config asan
+./ao check contracts --config asan
 ```
 
-`verify --config asan|tsan` checks only the Debug compile contracts of the
-sanitizer-configured graph. Instrumentation is proven by the [sanitizer
+`check contracts --config asan|tsan` checks only the Debug compile contracts of the
+sanitizer-configured graph. Those contracts are the same Debug policy the graph
+folds into its Linux projection ([in-graph native
+policy](../bazel.md#in-graph-native-policy)); `check contracts` remains the standalone
+sanitizer-configured entry. Instrumentation is proven by the [sanitizer
 profile canary](../../../test/core/SanitizerProfileTest.cpp) in
 `//test:utility_test`: a sanitizer run whose compiler did not instrument it, or
 a normal run that is instrumented, fails to build. It proves one first-party
@@ -167,13 +170,14 @@ independently verified ([sanitizer profiles](../bazel.md#sanitizer-profiles)).
 
 `./ao check --asan/--tsan` runs normal fastbuild completion first, then a fixed
 graph-owned instrumentation scope with no labels, filters, or forwarded Bazel
-arguments. Hygiene retains its normal fastbuild/Release lint configuration;
-`./ao deps provision` does not select instrumentation. Explicit native
+arguments. `check lint` retains its normal fastbuild/Release lint configuration;
+`./ao setup deps` does not select instrumentation. Explicit native
 `bazel build`, `test`, or `run` requests select the profile through the
 repository rc, not a compilation mode:
 `bazel build -c dbg --config=asan //:asan_tests` is correct and `-c asan` is
-invalid. Raw runs get none of the managed runtime admission below; the caller
-owns their services, sanitizer options, suppression freezing, and report status.
+invalid. Raw runs do not get the managed sanitizer options, suppression
+freezing, or report status below; context-bearing tests still start their own
+fixtures.
 
 Scope: `//:asan_tests` covers Core, the application layer, CLI, TUI, Linux GTK
 and Linux system media; `//:tsan_tests` covers Core, the application layer and
@@ -202,16 +206,16 @@ options and values that cannot be quoted without unsupported escaping fail
 before tests run; they are never silently discarded or kept as mutable rule
 references.
 
-Tests run locally against frozen runtime inputs under
-the private Linux display/session-bus/PipeWire context; see
+Tests run locally against frozen runtime inputs. On Linux, each context-bearing
+test starts only its declared private fixtures; see
 [Bazel development](../bazel.md#sanitizer-and-coverage-instrumentation) for the
-frozen-rc, service-context and symbolizer contracts.
+frozen-rc and symbolizer contracts.
 
 The dependency-closure limits above apply unchanged: the Linux GTK closure is
 not TSan-instrumented, and Windows dependencies from the normal vcpkg triplet
 remain uninstrumented. A raw scoped sanitizer run is not whole completion.
-The managed `ao check --asan/--tsan` includes ordinary fastbuild completion,
-documentation, supported-host tooling, and hygiene — complete native C++ lint
-plus scoped remaining stages ([completion gate](../bazel.md#completion-gate)) — in
+The managed `ao check --asan/--tsan` includes the ordinary fastbuild wildcard
+test graph — documentation, supported-host tooling, native tests and the
+whole-graph lint test ([completion gate](../bazel.md#completion-gate)) — in
 addition to its sanitizer phase; Release evidence remains separate when
 required.

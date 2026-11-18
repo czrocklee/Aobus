@@ -8,8 +8,9 @@ description: Run, review, or fix requested lint, static-analysis, or formatting 
 Findings review is read-only unless fixes or formatting changes are requested;
 reserve `--all` for explicitly requested whole-repository runs.
 
-- Enter through `./ao tidy`, `./ao analyze`, or `./ao format`; requested workflow
-  lint runs through `./ao hygiene`. Do not invoke `clang-tidy`, `Ruff`, `mypy`,
+- Enter through `./ao check lint`, `./ao check analyzer`, `./ao check format`,
+  or `./ao format`; requested workflow lint runs through `./ao check lint`.
+  Do not invoke `clang-tidy`, `Ruff`, `mypy`,
   or `Buildifier` directly.
 - Route rules through [linting policy](../../../doc/development/linting.md):
   [triage](../../../doc/development/linting.md#triage),
@@ -18,9 +19,9 @@ reserve `--all` for explicitly requested whole-repository runs.
   [workflow lint](../../../doc/development/linting.md#github-actions-workflow-lint),
   and the [tooling runner](../../../doc/development/test/test-suite.md#tooling-and-lint-fixtures).
   For custom `aobus-*` checker implementation, load `develop-lint-checker`.
-- Silent `--check` traps
+- Silent `--tidy-check` traps
   ([scope behavior](../../../doc/development/linting.md#scope-behavior),
   [Bazel-backed reports](../../../doc/development/linting.md#bazel-backed-reports)):
-  `./ao tidy --check <name>` skips Python lint, exits 0 without diagnostics on
+  `./ao check lint --tidy-check <name>` selects only C++ diagnostics, exits 0 without diagnostics on
   `test/` files when `<name>` is disabled in `RELAXED` mode, and cannot run on
   `test/lint/fixture/` files (no `cc_*` compile owner).

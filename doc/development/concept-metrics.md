@@ -33,8 +33,8 @@ Use the dependency-report command with a ready native SDK and the independently
 admitted Clang analysis SDK:
 
 ```bash
-./ao deps report --concepts --config debug --jobs 16
-ao.bat deps report --concepts --config debug --jobs 16
+./ao measure concepts --config debug --jobs 16
+ao.bat measure concepts --config debug --jobs 16
 ```
 
 Fastbuild is the default; `--config release` measures the Release context. Sampling
@@ -57,14 +57,14 @@ tree. `--json <path>` copies the same document elsewhere. A failed acquisition
 does not replace an earlier canonical report; keep the attempt evidence named
 by its error rather than interpreting an old report as the failed run's result.
 
-**Migration validation boundary:** the Bazel replacement is integrated and has
-focused fixture coverage. Complete native reports and cross-platform parity
-have not yet been accepted. Command wiring or fixture success is not proof of
-that remaining native boundary.
+**Validation boundary:** a complete Linux report has been verified against its
+native compiler receipts. This does not establish complete reports on macOS or
+Windows. A passing `ao check` or a successful single-header probe on either
+platform is not a substitute for its own full measurement.
 
 ## Measurement contract
 
-The denominator is frozen in `script/ao/core/concept_scope.py`:
+The denominator is frozen in `script/ao/policy/concept_scope.py`:
 
 - Core public headers: `include/ao`.
 - Application public headers: `app/include/ao`.
@@ -80,8 +80,10 @@ The denominator is frozen in `script/ao/core/concept_scope.py`:
 - Construction hops are the frozen frontend leaf chains in that module. A phase
   that touches a leaf updates the named chain in the same change.
 
-Clang parses each public header as a self-contained translation unit using one
-selected configured consumer context, not a union of unrelated compile flags.
+Clang parses each public header in C++ header mode using one selected
+configured consumer context, not a union of unrelated compile flags. This
+keeps standalone-header diagnostics from treating a public constant as an
+unused variable in a `.cpp` file.
 Its admitted analysis compiler and arguments are recorded separately from the
 native compiler used for include observations. Include weight is the set of
 project headers in the AST location graph, plus their bytes.
@@ -99,11 +101,15 @@ Inventory and measured passes must agree on their dependency closure. Named
 input/output identities and hashes, configured roots, graph, SDK facts and
 compiler identities are checked around acquisition under the selected tree's
 reentrant lock. The native toolchain guard follows each platform's identity
-contract: Linux guards the recorded Nix ledger digests, while macOS binds the
-small schema-2 selection metadata and trusts the installed-SDK boundary shared
-with Windows, without rehashing installed SDK members. Both keep the actual
-observed-input and cohort guards. This is not a source-wide edit lock; do not edit measured inputs
-while the command owns its foreground children.
+contract. On Linux the command verifies the digests supplied by the selected
+SDK and toolchain manifests. For headers in the selected immutable Nix store
+outputs, it can then bind the full store output path and the path within it
+instead of rehashing the same bytes for each translation unit. Mutable
+execroot aliases must still resolve to the recorded target. This neither
+admits arbitrary `/nix/store` paths nor changes Bazel's declared inputs.
+On macOS the command binds the schema-2 selection metadata and trusts the
+installed-SDK boundary shared with Windows. On all platforms it still records
+what the compiler actually included. Do not edit measured inputs during a run.
 
 The report retains one `headerIncludes` and one `headerFanOut` row per public
 header; printed percentiles are summaries, not the only evidence. A genuine
@@ -161,8 +167,7 @@ complete-report acceptance.
 
 Completing a concept-debloat phase still requires the owning route in
 [validation and review](test/validation-and-review.md), including the applicable
-native `check`, including its scoped check-only hygiene stage; a metric report
-does not replace that validation.
+native `check`; a metric report does not replace that validation.
 
 ## Related documents
 

@@ -11,7 +11,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from ao.core import linttest
+from ao.graph import lint_test
 
 # The smoke fixtures use only a literal '#include "..."' grammar, so a simple
 # regex is enough here; this is deliberately not a general include parser.
@@ -20,7 +20,7 @@ LINE_MARKER_RE = re.compile(r'^\s*#\s*(\d+)\s+"([^"]*)"(.*)$')
 
 
 def posix_tools(plugin):
-    return linttest.FixtureTools("pinned-clang-tidy", (), windows=False, plugin=plugin)
+    return lint_test.FixtureTools("pinned-clang-tidy", (), windows=False, plugin=plugin)
 
 
 class SourcePolicyScopeSmokeTest(unittest.TestCase):
@@ -55,8 +55,8 @@ class SourcePolicyScopeSmokeTest(unittest.TestCase):
     def _command_case(self, command):
         """Identify the source-policy or metadata case a recorded command serves."""
         stems = [unit.stem for unit in self._command_units(command)]
-        names = [name for name, *_ in linttest._source_policy_cases(Path("source-policy"))]
-        names += [name for name, *_ in linttest._source_policy_metadata_cases(Path("source-policy"))]
+        names = [name for name, *_ in lint_test._source_policy_cases(Path("source-policy"))]
+        names += [name for name, *_ in lint_test._source_policy_metadata_cases(Path("source-policy"))]
         matches = {name for name in names if any(stem == name or stem.startswith(f"{name}-") for stem in stems)}
         self.assertTrue(matches, f"unrecognized source-policy fixture for stems {stems}")
         return max(matches, key=len)
@@ -117,7 +117,7 @@ class SourcePolicyScopeSmokeTest(unittest.TestCase):
         if "--dump-config" in command:
             config = json.loads(next(arg.removeprefix("-config=") for arg in command if arg.startswith("-config=")))
             roots = config["CheckOptions"].get("AobusSourceRoots", "[]")
-            config["CheckOptions"] = {f"{alias}.AobusSourceRoots": roots for alias in linttest._SOURCE_POLICY_CHECKS}
+            config["CheckOptions"] = {f"{alias}.AobusSourceRoots": roots for alias in lint_test._SOURCE_POLICY_CHECKS}
             return subprocess.CompletedProcess(command, 0, stdout=json.dumps(config))
         output = ""
         config_text = next(arg.removeprefix("-config=") for arg in command if arg.startswith("-config="))
@@ -143,18 +143,15 @@ class SourcePolicyScopeSmokeTest(unittest.TestCase):
     def test_scope_smoke_passes_only_with_all_required_diagnostics_and_explicit_roots(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            with (
-                mock.patch.object(linttest.tidyengine, "clang_tool", return_value="pinned-clang-tidy"),
-                mock.patch.object(linttest.subprocess, "run", side_effect=self.native_result) as run,
-            ):
-                success, _log = linttest._run_source_policy_smoke(
+            with mock.patch.object(lint_test.subprocess, "run", side_effect=self.native_result) as run:
+                success, _log = lint_test._run_source_policy_smoke(
                     root,
                     root,
                     plugin=root / "tool/lint/libAobusLintPlugin.so",
                     tools=posix_tools(root / "tool/lint/libAobusLintPlugin.so"),
                 )
             self.assertTrue(success)
-            self.assertEqual(run.call_count, linttest._source_policy_case_count(windows=False))
+            self.assertEqual(run.call_count, lint_test._source_policy_case_count(windows=False))
             all_roots = []
             for call in run.call_args_list:
                 command = call.args[0]
@@ -226,10 +223,9 @@ class SourcePolicyScopeSmokeTest(unittest.TestCase):
 
                 with (
                     self.subTest(mode=mode),
-                    mock.patch.object(linttest.tidyengine, "clang_tool", return_value="pinned-clang-tidy"),
-                    mock.patch.object(linttest.subprocess, "run", side_effect=result),
+                    mock.patch.object(lint_test.subprocess, "run", side_effect=result),
                 ):
-                    success, log = linttest._run_source_policy_smoke(
+                    success, log = lint_test._run_source_policy_smoke(
                         root,
                         root,
                         plugin=root / "tool/lint/libAobusLintPlugin.so",
@@ -241,7 +237,7 @@ class SourcePolicyScopeSmokeTest(unittest.TestCase):
     def test_losing_any_one_selected_check_fails_the_smoke(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            for dropped in linttest._SOURCE_POLICY_CHECKS:
+            for dropped in lint_test._SOURCE_POLICY_CHECKS:
 
                 def partial(command, dropped=dropped, **_kwargs):
                     completed = self.native_result(command)
@@ -253,10 +249,9 @@ class SourcePolicyScopeSmokeTest(unittest.TestCase):
 
                 with (
                     self.subTest(dropped=dropped),
-                    mock.patch.object(linttest.tidyengine, "clang_tool", return_value="pinned-clang-tidy"),
-                    mock.patch.object(linttest.subprocess, "run", side_effect=partial),
+                    mock.patch.object(lint_test.subprocess, "run", side_effect=partial),
                 ):
-                    success, log = linttest._run_source_policy_smoke(
+                    success, log = lint_test._run_source_policy_smoke(
                         root,
                         root,
                         plugin=root / "tool/lint/libAobusLintPlugin.so",
@@ -285,12 +280,12 @@ class SourcePolicyScopeSmokeTest(unittest.TestCase):
     def test_windows_smoke_uses_both_path_profiles_and_the_prepared_static_host(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            tools = linttest.FixtureTools("native-static-host", ("--driver-mode=cl", "/EHsc"), windows=True)
-            with mock.patch.object(linttest.subprocess, "run", side_effect=self.native_result) as run:
-                success, _log = linttest._run_source_policy_smoke(root, root, plugin=None, tools=tools)
+            tools = lint_test.FixtureTools("native-static-host", ("--driver-mode=cl", "/EHsc"), windows=True)
+            with mock.patch.object(lint_test.subprocess, "run", side_effect=self.native_result) as run:
+                success, _log = lint_test._run_source_policy_smoke(root, root, plugin=None, tools=tools)
             self.assertTrue(success)
-            self.assertEqual(run.call_count, linttest._source_policy_case_count(windows=True))
-            expected_per_profile = linttest._source_policy_case_count(windows=True) // 2
+            self.assertEqual(run.call_count, lint_test._source_policy_case_count(windows=True))
+            expected_per_profile = lint_test._source_policy_case_count(windows=True) // 2
             profiles = {"native": 0, "forward": 0}
             for call in run.call_args_list:
                 command = call.args[0]
@@ -337,17 +332,17 @@ class SourcePolicyScopeSmokeTest(unittest.TestCase):
             log = root / "failure.log"
             log.write_text("source policy control failed\n", encoding="utf-8")
             with (
-                mock.patch.object(linttest.subprocess, "run", side_effect=AssertionError("unexpected native work")),
+                mock.patch.object(lint_test.subprocess, "run", side_effect=AssertionError("unexpected native work")),
                 mock.patch.object(
-                    linttest, "discover_fixtures", return_value=[linttest.Fixture(source, "aobus-example")]
+                    lint_test, "discover_fixtures", return_value=[lint_test.Fixture(source, "aobus-example")]
                 ),
-                mock.patch.object(linttest, "_run_diagnostic", return_value=(True, log)),
-                mock.patch.object(linttest, "_run_source_policy_smoke", return_value=(False, log)) as smoke,
-                mock.patch.object(linttest, "_run_compiler_error_smoke", return_value=(True, log)),
-                mock.patch.object(linttest.shutil, "rmtree") as cleanup,
+                mock.patch.object(lint_test, "_run_diagnostic", return_value=(True, log)),
+                mock.patch.object(lint_test, "_run_source_policy_smoke", return_value=(False, log)) as smoke,
+                mock.patch.object(lint_test, "_run_compiler_error_smoke", return_value=(True, log)),
+                mock.patch.object(lint_test.shutil, "rmtree") as cleanup,
                 contextlib.redirect_stdout(io.StringIO()),
             ):
-                self.assertEqual(linttest.run(root, tools=posix_tools(plugin), jobs=1), 1)
+                self.assertEqual(lint_test.run(root, tools=posix_tools(plugin), jobs=1), 1)
             smoke.assert_called_once()
             self.assertEqual(smoke.call_args.kwargs["tools"], posix_tools(plugin))
             cleanup.assert_not_called()

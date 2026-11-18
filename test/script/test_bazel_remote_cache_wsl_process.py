@@ -14,7 +14,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from ao.core import bazel_remote_cache as remote
+from ao.portal import bazel_remote_cache as remote
 
 # Local Python stand-in. Native Windows wsl.exe is not invoked.
 SHIM = r"""

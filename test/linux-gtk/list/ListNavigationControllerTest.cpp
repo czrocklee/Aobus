@@ -3,13 +3,13 @@
 
 #include "list/ListNavigationController.h"
 
-#include "../../TestFixtureSupport.h"
 #include "app/AppDialog.h"
 #include "app/ThemeCoordinator.h"
 #include "list/ListNavigationPanel.h"
 #include "list/ListTreeItem.h"
 #include "list/SmartListDialog.h"
 #include "test/MessageCatalogTestSupport.h"
+#include "test/TestFixtureSupport.h"
 #include "test/library/TrackTestSupport.h"
 #include "test/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/linux-gtk/GtkRuntimeTestSupport.h"

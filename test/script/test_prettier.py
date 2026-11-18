@@ -20,7 +20,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from ao.core import prettier
+from ao.portal import prettier
 
 RECEIPT = ".aobus-prettier-receipt.json"
 
@@ -350,6 +350,7 @@ class PrettierProvisionTest(unittest.TestCase):
         self.version_status = 0
         self.version_stderr = ""
         self.locked = False
+        self.expect_lock = True
         stack.enter_context(mock.patch.object(prettier, "MANIFEST_PATH", self.manifest))
         stack.enter_context(mock.patch.object(prettier, "sys", self.host))
         stack.enter_context(mock.patch.object(prettier, "platform", self.machine))
@@ -410,7 +411,7 @@ class PrettierProvisionTest(unittest.TestCase):
     def _process(self, argv, **kwargs):
         # The probe runs against the staged pair before publication and the
         # published pair afterwards; both must be consistent local closures.
-        self.assertTrue(self.locked)
+        self.assertEqual(self.locked, self.expect_lock)
         self.assertEqual(len(argv), 3)
         self.assertEqual(argv[2], "--version")
         node = Path(argv[0])
@@ -466,6 +467,35 @@ class PrettierProvisionTest(unittest.TestCase):
         self.assertEqual(receipt["packageArchiveSha256"], self.document["package"]["sha256"])
         self.assertEqual(receipt["packageTreeSha256"], self.document["packageTreeSha256"])
         self.assertEqual(list(self._cache().parent.glob(".prettier-stage-*")), [])
+
+    def test_ready_only_missing_cache_fails_before_download_or_state_creation(self):
+        with self.assertRaisesRegex(prettier.PrettierError, "ao setup prettier"):
+            prettier.command(provision=False)
+        self.assertFalse(self.state.exists())
+        self.download.assert_not_called()
+        self.process.assert_not_called()
+
+    def test_ready_only_existing_cache_is_verified_without_lock_or_download(self):
+        expected = (str(self._node()), str(self._cache() / "package/bin/prettier.cjs"))
+        self.assertEqual(prettier.command(), expected)
+        self.download.reset_mock()
+        self.process.reset_mock()
+        self.expect_lock = False
+        self.assertEqual(prettier.command(provision=False), expected)
+        self.download.assert_not_called()
+        self.process.assert_called_once()
+
+    def test_ready_only_damaged_cache_fails_without_repair(self):
+        expected = (str(self._node()), str(self._cache() / "package/bin/prettier.cjs"))
+        self.assertEqual(prettier.command(), expected)
+        self.download.reset_mock()
+        self.process.reset_mock()
+        self.expect_lock = False
+        (self._cache() / "node").write_bytes(b"damaged")
+        with self.assertRaisesRegex(prettier.PrettierError, "damaged"):
+            prettier.command(provision=False)
+        self.download.assert_not_called()
+        self.process.assert_not_called()
 
     def test_existing_cache_is_reverified_and_reused_without_any_download(self):
         expected = (str(self._node()), str(self._cache() / "package/bin/prettier.cjs"))

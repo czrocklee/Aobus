@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ao.core import bazel_dependencies as dependencies
+from ao.portal import bazel_dependencies as dependencies
 
 
 class BazelCompileInterfacePatchTest(unittest.TestCase):

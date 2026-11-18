@@ -186,7 +186,7 @@ aobus_appkit_bundle(
     # The smoke launcher bridges through the standalone process supervisor,
     # whose bytes are copied into the bundle Resources; the shipping launcher
     # stays a plain native exec without this input.
-    supervisor = "//:script/ao/core/appkitprocess.py",
+    supervisor = "//:script/ao/graph/appkit_process.py",
     target_compatible_with = ["@platforms//os:macos"],
     tree_name = "ao_appkit_smoke.app",
     visibility = ["//visibility:public"],

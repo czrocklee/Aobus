@@ -8,7 +8,9 @@ from unittest import mock
 
 from ao.__main__ import make_parser, parse_arguments
 from ao.command import setup
-from ao.core import bazel_native, bazel_provision, bazel_workspace, builddir, buildenv, windows_llvm_sdk
+from ao.core import bazel_native
+from ao.policy import windows_llvm_sdk
+from ao.portal import bazel_provision, bazel_workspace, build_dir, build_env, setup_actions
 
 
 class SetupCommandTest(unittest.TestCase):
@@ -32,7 +34,7 @@ class SetupCommandTest(unittest.TestCase):
 
     def test_prettier_setup_only_prepares_the_formatter_command(self):
         with (
-            mock.patch("ao.core.prettier.command", return_value=("node", "prettier.cjs")) as command,
+            mock.patch("ao.portal.prettier.command", return_value=("node", "prettier.cjs")) as command,
             mock.patch.object(bazel_workspace, "prepare_workspace") as prepare,
             contextlib.redirect_stdout(io.StringIO()) as stdout,
         ):
@@ -47,20 +49,32 @@ class SetupCommandTest(unittest.TestCase):
             with contextlib.redirect_stderr(io.StringIO()):
                 self.parse(["setup", "not-a-component"])
 
+    def test_only_deps_accepts_tree_and_configuration_selection(self):
+        args = self.parse(["setup", "deps", "--path", "/selected/tree", "--config", "release"])
+        with mock.patch.object(setup_actions, "setup", return_value=7) as action:
+            self.assertEqual(setup.run_command(args), 7)
+        action.assert_called_once_with("deps", path="/selected/tree", config="release")
+        for component in ("bazel", "llvm-sdk", "winui-runtime", "buildifier", "prettier", "git-hooks"):
+            for selection in (["--path", "/selected/tree"], ["--config", "release"]):
+                with self.subTest(component=component, selection=selection):
+                    with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as exited:
+                        self.parse(["setup", component, *selection])
+                    self.assertEqual(exited.exception.code, 2)
+
     def test_setup_never_requires_the_native_build_environment(self):
         # requires_build_environment is an unconditional False that never
         # consults the profile; one component proves the constant.
-        self.assertFalse(buildenv.requires_build_env("setup", ["llvm-sdk"]))
+        self.assertFalse(build_env.requires_build_env("setup", ["llvm-sdk"]))
 
     def test_setup_help_needs_no_build_environment(self):
-        self.assertFalse(buildenv.requires_build_env("setup", ["--help"]))
-        self.assertFalse(buildenv.requires_build_env("setup", ["llvm-sdk", "--help"]))
+        self.assertFalse(build_env.requires_build_env("setup", ["--help"]))
+        self.assertFalse(build_env.requires_build_env("setup", ["llvm-sdk", "--help"]))
 
     def test_llvm_sdk_fails_clearly_on_other_hosts_without_provisioning(self):
-        for profile in (builddir.LINUX_PROFILE, builddir.MACOS_PROFILE):
+        for profile in (build_dir.LINUX_PROFILE, build_dir.MACOS_PROFILE):
             with (
                 self.subTest(profile=profile.name),
-                mock.patch.object(builddir, "platform_profile", return_value=profile),
+                mock.patch.object(build_dir, "platform_profile", return_value=profile),
                 mock.patch.object(bazel_provision, "install_llvm_sdk") as install,
             ):
                 with contextlib.redirect_stderr(io.StringIO()) as stderr:
@@ -73,7 +87,7 @@ class SetupCommandTest(unittest.TestCase):
         manifest = mock.Mock()
         manifest.version = "31.2.3"
         with (
-            mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
+            mock.patch.object(build_dir, "platform_profile", return_value=build_dir.WINDOWS_PROFILE),
             mock.patch.object(bazel_provision, "install_llvm_sdk", return_value="C:/state/llvm") as install,
             mock.patch.object(windows_llvm_sdk, "read_manifest", return_value=manifest) as read_manifest,
         ):
@@ -94,7 +108,7 @@ class SetupCommandTest(unittest.TestCase):
         for error in errors:
             with (
                 self.subTest(error=error),
-                mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
+                mock.patch.object(build_dir, "platform_profile", return_value=build_dir.WINDOWS_PROFILE),
                 mock.patch.object(bazel_provision, "install_llvm_sdk", side_effect=error),
             ):
                 with contextlib.redirect_stderr(io.StringIO()) as stderr:
@@ -104,8 +118,8 @@ class SetupCommandTest(unittest.TestCase):
 
     def test_other_components_still_dispatch_their_own_actions(self):
         with (
-            mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
-            mock.patch.object(setup.winui, "setup_runtime") as setup_runtime,
+            mock.patch.object(build_dir, "platform_profile", return_value=build_dir.WINDOWS_PROFILE),
+            mock.patch.object(setup_actions.winui, "setup_runtime") as setup_runtime,
             mock.patch.object(bazel_provision, "install_llvm_sdk") as install,
         ):
             installed = mock.Mock(version="1.0", architecture="x64")

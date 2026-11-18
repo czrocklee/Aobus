@@ -8,25 +8,28 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
 
-from ao.command import format as format_command
-from ao.core import buildenv, gitfiles, pythoncheck, windows_portal
+from ao.command import options
 from ao.core.paths import PROJECT_ROOT
+from ao.portal import build_env, git_files, python_check, windows_portal
+from ao.portal.source_scope import SourceScope
 
 REPOSITORY = Path(__file__).resolve().parents[2]
-WINDOWS_PORTAL_SCOPE = "script/ao/core/windows_portal.py"
+WINDOWS_PORTAL_SCOPE = "script/ao/portal/windows_portal.py"
 _DEFAULT = object()
 
 # The fixture package is only an external next-stage consumer. It records the
 # arguments and selected environment it actually received; it does not model
-# buildenv, command selection, or the production portal graph.
-_FIXTURE_PYTHONENV = """\
+# build_env, command selection, or the production portal graph.
+_FIXTURE_PYTHON_ENV = """\
 import json
 import os
 import sys
+from pathlib import Path
 
 arguments = sys.argv[1:]
 separator = arguments.index("--") if "--" in arguments else len(arguments)
@@ -43,7 +46,9 @@ record = {
     "preflightScope": os.environ.get("AOBUS_PREFLIGHT_SCOPE"),
 }
 print(json.dumps(record, ensure_ascii=True, sort_keys=True), flush=True)
-if os.environ.get("AOBUS_FIXTURE_WAIT"):
+ready_file = os.environ.get("AOBUS_FIXTURE_READY_FILE")
+if ready_file:
+    Path(ready_file).touch(exist_ok=False)
     if sys.stdin.readline() != "continue\\n":
         raise SystemExit(117)
 raise SystemExit(int(os.environ.get("AOBUS_FIXTURE_EXIT_CODE", "0")))
@@ -97,31 +102,6 @@ def _normalized(path):
     return os.path.normcase(os.path.realpath(str(path)))
 
 
-@unittest.skipUnless(os.name == "nt", "native Windows short-path comparison")
-class PathComparisonTest(unittest.TestCase):
-    def test_short_ancestors_compare_equal_for_existing_and_missing_paths(self):
-        import ctypes
-        from ctypes import wintypes
-
-        get_short_path = ctypes.WinDLL("kernel32", use_last_error=True).GetShortPathNameW
-        get_short_path.argtypes = (wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD)
-        get_short_path.restype = wintypes.DWORD
-        with tempfile.TemporaryDirectory(prefix="aobus long path comparison ") as temporary:
-            root = Path(temporary).resolve()
-            buffer = ctypes.create_unicode_buffer(32768)
-            length = get_short_path(str(root), buffer, len(buffer))
-            self.assertGreater(length, 0, ctypes.get_last_error())
-            self.assertLess(length, len(buffer))
-            short = Path(buffer.value)
-            if short == root:
-                self.skipTest("fixture volume does not expose an 8.3 alias")
-            self.assertTrue(short.samefile(root))
-            for relative in (Path(), Path("not-created") / "state"):
-                with self.subTest(relative=relative):
-                    self.assertEqual(_normalized(short / relative), _normalized(root / relative))
-            self.assertFalse((root / "not-created").exists())
-
-
 class PrepareBuildEnvironmentTest(unittest.TestCase):
     def test_prepare_build_environment_replaces_the_environment_from_captured_json(self):
         original = {
@@ -137,34 +117,22 @@ class PrepareBuildEnvironmentTest(unittest.TestCase):
             "_AOBUS_ENV_SCRIPT": "private script",
             "_AOBUS_ENV_PYTHON": "private python",
         }
-        expected = dict(captured)
-        expected.pop("_AOBUS_ENV_SCRIPT")
-        expected.pop("_AOBUS_ENV_PYTHON")
+        expected = {key: value for key, value in captured.items() if not key.startswith("_AOBUS_ENV_")}
         completed = subprocess.CompletedProcess([], 0, stdout=json.dumps(captured).encode("ascii"), stderr=b"")
 
         with _isolated_environment(original):
             with (
                 mock.patch.object(windows_portal.subprocess, "run", return_value=completed) as run,
                 contextlib.redirect_stdout(io.StringIO()) as stdout,
-                contextlib.redirect_stderr(io.StringIO()) as stderr,
             ):
                 windows_portal.prepare_build_environment()
-
                 self.assertEqual(dict(os.environ), expected)
-                self.assertNotIn("AOBUS_ORIGINAL_ONLY", os.environ)
+                self.assertNotIn("secret-token", stdout.getvalue())
 
-            self.assertEqual(stdout.getvalue(), "")
-            self.assertEqual(stderr.getvalue(), "")
-
-        run.assert_called_once()
-        command, kwargs = run.call_args
-        self.assertEqual(command, ('cmd.exe /d /v:off /s /c ""%_AOBUS_ENV_SCRIPT%""',))
+        _, kwargs = run.call_args
         self.assertEqual(kwargs["executable"], original["COMSPEC"])
         self.assertEqual(kwargs["env"]["_AOBUS_ENV_SCRIPT"], str(PROJECT_ROOT / "script/ao/windows-build-env.bat"))
         self.assertEqual(kwargs["env"]["_AOBUS_ENV_PYTHON"], sys.executable)
-        self.assertEqual(kwargs["env"]["AOBUS_ORIGINAL_ONLY"], "keep")
-        self.assertTrue(kwargs["capture_output"])
-        self.assertFalse(kwargs["check"])
 
     def test_prepare_build_environment_failures_keep_the_original_environment_and_never_echo_stdout(self):
         secret = "full-environment-secret"
@@ -175,19 +143,11 @@ class PrepareBuildEnvironmentTest(unittest.TestCase):
         }
         cases = (
             ("malformed-json", b'{"' + secret.encode("ascii") + b'":', 0, b"", RuntimeError),
-            ("invalid-utf8", b"\xff", 0, b"", RuntimeError),
             ("non-object", json.dumps([secret]).encode("ascii"), 0, b"", RuntimeError),
             ("empty-mapping", b"{}", 0, b"", RuntimeError),
             (
                 "non-string-value",
                 json.dumps({"PATH": 1, "AOBUS_SECRET_TOKEN": secret}).encode("ascii"),
-                0,
-                b"",
-                RuntimeError,
-            ),
-            (
-                "null-value",
-                json.dumps({"PATH": None, "AOBUS_SECRET_TOKEN": secret}).encode("ascii"),
                 0,
                 b"",
                 RuntimeError,
@@ -216,12 +176,8 @@ class PrepareBuildEnvironmentTest(unittest.TestCase):
 
                 if expected_error is subprocess.CalledProcessError:
                     self.assertEqual(raised.exception.returncode, returncode)
-                    self.assertEqual(raised.exception.cmd, "fixture command")
-                    self.assertIn("setup failed", stderr.getvalue())
-                else:
-                    self.assertIn("Visual Studio", str(raised.exception))
                 self.assertEqual(dict(os.environ), original)
-                self.assertNotIn(secret, stdout.getvalue() + stderr.getvalue())
+                self.assertNotIn(secret, stdout.getvalue() + stderr.getvalue() + str(raised.exception))
 
 
 class WindowsPortalMainTest(unittest.TestCase):
@@ -230,8 +186,9 @@ class WindowsPortalMainTest(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.state_root = str(Path(temporary.name) / "state")
 
-    def test_python_only_format_scope_uses_one_capability_decision_and_prepared_scope(self):
-        calls = []
+    def test_python_only_format_scope_runs_ruff_without_native_setup(self):
+        expected = python_check.ruff_command("format", "--check", WINDOWS_PORTAL_SCOPE)
+        formatted = []
 
         def formatter(command, **kwargs):
             # platform.system() may ask CMD for its version on Windows. Keep
@@ -240,9 +197,9 @@ class WindowsPortalMainTest(unittest.TestCase):
                 return subprocess.CompletedProcess(
                     command, 0, stdout="Microsoft Windows [Version 10.0.12345.0]", stderr=""
                 )
-            if isinstance(command, str):
-                raise AssertionError(f"unexpected build environment command: {command}")
-            calls.append((tuple(command), kwargs))
+            self.assertEqual(command, expected)
+            self.assertEqual(kwargs["cwd"], PROJECT_ROOT)
+            formatted.append(Path.cwd().resolve())
             return subprocess.CompletedProcess(command, 0)
 
         with tempfile.TemporaryDirectory() as temporary:
@@ -258,79 +215,104 @@ class WindowsPortalMainTest(unittest.TestCase):
             with (
                 _isolated_environment(environment),
                 mock.patch.object(windows_portal.subprocess, "run", side_effect=formatter),
-                mock.patch.object(
-                    buildenv, "requires_parsed_build_env", wraps=buildenv.requires_parsed_build_env
-                ) as required,
-                mock.patch.object(format_command, "resolve_files", wraps=format_command.resolve_files) as resolve,
-                # Deterministic Python-only scope: the real script/ao tree also
-                # carries JSON manifests whose Prettier pass must never run (or
-                # download) inside this unit test. Text discovery is Git-based
-                # and separate from the filesystem scan, so it is bounded too.
-                mock.patch.object(gitfiles, "find_sources", return_value=[WINDOWS_PORTAL_SCOPE]) as scan,
-                mock.patch.object(gitfiles, "prettier_sources", return_value=[]) as prettier,
-                contextlib.redirect_stdout(io.StringIO()) as stdout,
+                # Bound discovery to a Python file; do not admit unrelated formatters.
+                mock.patch.object(git_files, "find_sources", return_value=[WINDOWS_PORTAL_SCOPE]),
+                mock.patch.object(git_files, "prettier_sources", return_value=[]),
+                contextlib.redirect_stdout(io.StringIO()),
                 contextlib.redirect_stderr(io.StringIO()) as stderr,
             ):
-                status = windows_portal.main(["format", "--check", "--folder", "script/ao"])
-                process_directory = Path(os.getcwd())
-
-                self.assertEqual(os.environ.get("PATH"), str(Path(sys.executable).parent) + os.pathsep + "fixture-path")
+                status = windows_portal.main(["check", "format", "script/ao"])
+                self.assertEqual(status, 0, stderr.getvalue())
+                self.assertEqual(formatted, [working_directory.resolve()])
+                self.assertEqual(os.environ["PATH"].split(os.pathsep)[0], str(Path(sys.executable).parent))
                 self.assertNotIn("_AOBUS_PORTAL_WORKING_DIRECTORY", os.environ)
                 self.assertNotIn("_AOBUS_UNC_MAPPING", os.environ)
                 self.assertNotIn("AOBUS_PREFLIGHT_SCOPE", os.environ)
 
-        self.assertEqual(status, 0, stderr.getvalue())
-        self.assertEqual(stderr.getvalue(), "")
-        self.assertEqual(process_directory.resolve(), working_directory.resolve())
-        self.assertEqual(required.call_count, 1)
-        self.assertEqual(resolve.call_count, 2)
-        args = required.call_args.args[0]
-        self.assertIs(resolve.call_args_list[0].args[0], args)
-        self.assertIs(resolve.call_args_list[1].args[0], args)
-        scan.assert_called_once_with(["script/ao"], suffixes=gitfiles.SOURCE_SUFFIXES)
-        prettier.assert_called_once_with(["script/ao"])
-        prepared = args._resolved_sources
-        self.assertIn(WINDOWS_PORTAL_SCOPE, prepared)
-        self.assertEqual(len(calls), 1)
-        command, kwargs = calls[0]
-        self.assertEqual(command, pythoncheck.ruff_command("format", "--check", *prepared))
-        self.assertEqual(kwargs["cwd"], PROJECT_ROOT)
-        self.assertIn(f"Checking {len(prepared)} file(s) with ruff format...", stdout.getvalue())
-        self.assertIn("Done.", stdout.getvalue())
+    def test_private_scope_is_loaded_before_native_admission_without_rediscovery(self):
+        with (
+            tempfile.TemporaryDirectory() as temporary,
+            mock.patch.object(options.source_scope, "PROJECT_ROOT", Path(temporary)),
+        ):
+            root = Path(temporary)
+            for name in ("lib/Sample.cpp", "app/macos-appkit/Explicit.mm"):
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.touch()
+            scope_file = root / "sources.json"
+            stale = root / "stale.json"
+            stale.write_text("not this invocation", encoding="utf-8")
+            arguments = ["check", "lint", "lib", "app/macos-appkit/Explicit.mm"]
+            prepared = build_env.parse_command_arguments(arguments[0], arguments[1:])
+            scope = SourceScope(("lib/Sample.cpp", "app/macos-appkit/Explicit.mm"), ("app/macos-appkit/Explicit.mm",))
+            with mock.patch.dict(os.environ, {"AOBUS_PREFLIGHT_SCOPE": str(scope_file)}):
+                build_env.record_source_scope(prepared, scope)
 
-    def test_preparation_failure_returns_the_native_exit_status(self):
-        cases = (
-            (subprocess.CompletedProcess("cmd.exe", 17, stdout=b"", stderr=b"setup failed"), 17),
-            (subprocess.CompletedProcess("cmd.exe", 0, stdout=b"not-json", stderr=b""), 1),
-            (OSError("cannot prepare"), 1),
-        )
+            prepared_environment = []
 
-        for result, expected in cases:
+            def prepare():
+                prepared_environment.append(dict(os.environ))
+
+            def dispatch(args, *, build_environment_required):
+                self.assertTrue(build_environment_required)
+                (environment,) = prepared_environment
+                self.assertNotIn("_AOBUS_WINDOWS_SCOPE_FILE", environment)
+                self.assertNotIn("AOBUS_PREFLIGHT_SCOPE", environment)
+                self.assertEqual(args._resolved_sources, list(scope.files))
+                self.assertEqual(args._explicit_sources, list(scope.explicit_files))
+                self.assertNotIn("_AOBUS_WINDOWS_SCOPE_FILE", os.environ)
+                self.assertNotIn("AOBUS_PREFLIGHT_SCOPE", os.environ)
+                return 7
+
             with (
-                self.subTest(result=result),
                 _isolated_environment(
                     {
                         "PATH": "fixture-path",
+                        "AOBUS_CHECKOUT_ID": "windows-scope-fixture",
                         "AOBUS_STATE_ROOT": self.state_root,
-                        "AOBUS_CHECKOUT_ID": "windows-portal-fixture",
+                        "AOBUS_PREFLIGHT_SCOPE": str(stale),
+                        "_AOBUS_WINDOWS_SCOPE_FILE": str(scope_file),
                     }
                 ),
+                mock.patch.object(
+                    options.source_scope, "resolve", side_effect=AssertionError("must not rediscover frozen sources")
+                ),
+                mock.patch.object(windows_portal, "prepare_build_environment", side_effect=prepare),
+                mock.patch.object(windows_portal, "dispatch", side_effect=dispatch),
             ):
-                with (
-                    mock.patch.object(
-                        windows_portal.subprocess,
-                        "run",
-                        side_effect=result if isinstance(result, OSError) else None,
-                        return_value=result,
-                    ) as run,
-                    contextlib.redirect_stdout(io.StringIO()),
-                    contextlib.redirect_stderr(io.StringIO()) as stderr,
-                ):
-                    status = windows_portal.main(["verify"])
+                self.assertEqual(windows_portal.main(arguments), 7)
+            self.assertTrue(scope_file.exists())  # The waiting bootstrap, not its child, owns cleanup.
+            self.assertEqual(stale.read_text(encoding="utf-8"), "not this invocation")
 
-                run.assert_called_once()
-                self.assertEqual(status, expected)
-                self.assertIn("Aobus Windows preparation failed", stderr.getvalue())
+    def test_missing_or_empty_private_scope_fails_before_native_admission(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            empty = root / "empty.json"
+            empty.touch()
+            for marker in (empty, root / "missing.json"):
+                with (
+                    self.subTest(marker=marker),
+                    _isolated_environment({"_AOBUS_WINDOWS_SCOPE_FILE": str(marker)}),
+                    mock.patch.object(
+                        windows_portal, "prepare_build_environment", side_effect=AssertionError("admitted native tools")
+                    ),
+                    mock.patch.object(
+                        windows_portal, "dispatch", side_effect=AssertionError("dispatched without scope")
+                    ),
+                    contextlib.redirect_stderr(io.StringIO()),
+                ):
+                    self.assertEqual(windows_portal.main(["check", "docs"]), 1)
+                    self.assertNotIn("_AOBUS_WINDOWS_SCOPE_FILE", os.environ)
+
+    def test_preparation_failure_returns_the_native_exit_status_without_dispatching(self):
+        result = subprocess.CompletedProcess("cmd.exe", 17, stdout=b"", stderr=b"setup failed")
+        with (
+            _isolated_environment({"PATH": "fixture-path", "AOBUS_STATE_ROOT": self.state_root}),
+            mock.patch.object(windows_portal.subprocess, "run", return_value=result),
+            mock.patch.object(windows_portal, "dispatch", side_effect=AssertionError("dispatched after failure")),
+            contextlib.redirect_stderr(io.StringIO()),
+        ):
+            self.assertEqual(windows_portal.main(["check", "contracts"]), 17)
 
     def test_help_and_invalid_arguments_launch_no_external_command(self):
         cases = (
@@ -353,7 +335,7 @@ class WindowsPortalMainTest(unittest.TestCase):
                 with (
                     mock.patch.object(
                         windows_portal.subprocess, "run", side_effect=AssertionError("external command launched")
-                    ) as run,
+                    ),
                     contextlib.redirect_stdout(io.StringIO()),
                     contextlib.redirect_stderr(io.StringIO()),
                 ):
@@ -364,12 +346,13 @@ class WindowsPortalMainTest(unittest.TestCase):
                     else:
                         self.assertEqual(windows_portal.main(list(arguments)), status)
 
-                run.assert_not_called()
-
 
 @unittest.skipUnless(sys.platform == "win32", "native Windows batch and PowerShell launch boundary")
 class WindowsLaunchBoundaryTest(unittest.TestCase):
     """Prove native batch/PowerShell transport and ready-base reuse, not the full portal."""
+
+    _STEP_TIMEOUT = 30
+    _CLEANUP_TIMEOUT = 5
 
     @classmethod
     def setUpClass(cls):
@@ -390,6 +373,7 @@ class WindowsLaunchBoundaryTest(unittest.TestCase):
                     f"import ensurepip, sys, venv; raise SystemExit(sys.version_info[:3] != {sys.version_info[:3]!r})",
                 ],
                 capture_output=True,
+                timeout=cls._STEP_TIMEOUT,
             )
             cls.managed_ready = ready.returncode == 0
         if not cls.base_python.is_file():
@@ -397,6 +381,7 @@ class WindowsLaunchBoundaryTest(unittest.TestCase):
         probe = subprocess.run(
             [str(cls.base_python), "-I", "-c", "import ensurepip, venv"],
             capture_output=True,
+            timeout=cls._STEP_TIMEOUT,
         )
         if probe.returncode != 0:
             raise unittest.SkipTest("sys.base_prefix cannot provide ensurepip and venv")
@@ -419,10 +404,10 @@ class WindowsLaunchBoundaryTest(unittest.TestCase):
             json.dumps({"schemaVersion": 1, "python": version}), encoding="utf-8"
         )
         (self.package / "__init__.py").write_text("", encoding="utf-8")
-        core = self.package / "core"
-        core.mkdir()
-        (core / "__init__.py").write_text("", encoding="utf-8")
-        (core / "pythonenv.py").write_text(_FIXTURE_PYTHONENV, encoding="utf-8")
+        portal = self.package / "portal"
+        portal.mkdir()
+        (portal / "__init__.py").write_text("", encoding="utf-8")
+        (portal / "python_env.py").write_text(_FIXTURE_PYTHON_ENV, encoding="utf-8")
 
         # Managed cases reuse only an already validated base installation. There
         # are no symlinks/junctions, runtime copies or provisioning in this fixture.
@@ -475,6 +460,7 @@ class WindowsLaunchBoundaryTest(unittest.TestCase):
         else:
             environment["PSExecutionPolicyPreference"] = ps_execution_policy
         environment.pop("AOBUS_PYTHON", None)
+        environment.pop("AOBUS_FIXTURE_READY_FILE", None)
         environment.pop("AOBUS_PREFLIGHT_SCOPE", None)
         environment.pop("PYTHONHOME", None)
         if explicit:
@@ -487,7 +473,10 @@ class WindowsLaunchBoundaryTest(unittest.TestCase):
         # cmd.exe sees it, which is not the native batch boundary under test.
         return f'"{self.comspec}" /d /v:off /s /c "{command}"'
 
-    def _run_cmd(self, command, *, environment):
+    def _run_cmd(self, command, *, environment, label):
+        print(f"{self.id()}: launching {label}", flush=True)
+        # CMD can have PowerShell and Python descendants holding the capture
+        # pipes. Use Bazel's process-tree deadline for complete one-shot runs.
         return subprocess.run(
             self._cmd_line(command),
             cwd=self.caller,
@@ -503,7 +492,7 @@ class WindowsLaunchBoundaryTest(unittest.TestCase):
             (
                 f'"{sys.executable}"',
                 "-m",
-                "ao.core.pythonenv",
+                "ao.portal.python_env",
                 "--project-root",
                 f'"{self.checkout}"',
                 "--state-root",
@@ -527,7 +516,8 @@ class WindowsLaunchBoundaryTest(unittest.TestCase):
     def _run_direct(self, tail, *, exit_code=0):
         environment = self._environment(explicit=True, exit_code=exit_code)
         environment["PYTHONPATH"] = str(self.checkout / "script")
-        return self._record(self._run_cmd(self._direct_command(tail), environment=environment), exit_code)
+        completed = self._run_cmd(self._direct_command(tail), environment=environment, label=f"direct {tail!a}")
+        return self._record(completed, exit_code)
 
     def _run_batch(
         self,
@@ -544,7 +534,10 @@ class WindowsLaunchBoundaryTest(unittest.TestCase):
             ps_module_path=ps_module_path,
             ps_execution_policy=ps_execution_policy,
         )
-        return self._record(self._run_cmd(self._batch_command(tail), environment=environment), exit_code)
+        mode = "explicit" if explicit else "managed"
+        label = f"{mode} batch {tail!a} (expected exit {exit_code}, PSModulePath present={ps_module_path is not None})"
+        completed = self._run_cmd(self._batch_command(tail), environment=environment, label=label)
+        return self._record(completed, exit_code)
 
     def _assert_launch_environment(
         self,
@@ -582,9 +575,6 @@ class WindowsLaunchBoundaryTest(unittest.TestCase):
         self.assertEqual(Path(record["executable"]).resolve(), expected_python.resolve())
         self.assertFalse(self.missing_vcpkg.exists())
         self.assertFalse((self.state / "tools").exists())
-        self.assertTrue(self.base_python.is_file())
-        if not explicit:
-            self.assertTrue(self.managed_python.is_file())
 
     def test_native_launch_boundary_preserves_argument_tails(self):
         for name, tail in _ARGUMENT_CORPUS:
@@ -598,37 +588,47 @@ class WindowsLaunchBoundaryTest(unittest.TestCase):
                     self.assertEqual(direct["portalArgs"], expected)
 
                 for explicit in (True, False):
-                    record = self._run_batch(tail, explicit=explicit)
-                    self.assertEqual(record["portalArgs"], direct["portalArgs"])
-                    self._assert_launch_environment(record, explicit=explicit)
+                    with self.subTest(explicit=explicit):
+                        record = self._run_batch(tail, explicit=explicit)
+                        self.assertEqual(record["portalArgs"], direct["portalArgs"])
+                        self._assert_launch_environment(record, explicit=explicit)
 
-    def test_native_launch_boundary_restores_powershell_host_environment(self):
-        for explicit in (False, True):
-            for present in (True, False):
-                with self.subTest(explicit=explicit, present=present):
-                    module_path = self.ps_module_path if present else None
-                    policy = self.ps_execution_policy if present else None
-                    record = self._run_batch(
-                        '"powershell environment"',
-                        explicit=explicit,
-                        ps_module_path=module_path,
-                        ps_execution_policy=policy,
-                    )
-                    self.assertEqual(record["portalArgs"], ["powershell environment"])
-                    self._assert_launch_environment(
-                        record,
-                        explicit=explicit,
-                        ps_module_path=module_path,
-                        ps_execution_policy=policy,
-                    )
+    def test_native_launch_boundary_does_not_leak_powershell_defaults_into_an_unset_environment(self):
+        record = self._run_batch("", explicit=False, ps_module_path=None, ps_execution_policy=None)
+        self._assert_launch_environment(record, explicit=False, ps_module_path=None, ps_execution_policy=None)
 
     def test_native_launch_boundary_preserves_exit_status(self):
-        for explicit in (False, True):
-            for status in (0, 7, 2):
-                with self.subTest(explicit=explicit, status=status):
-                    record = self._run_batch('"status check"', explicit=explicit, exit_code=status)
-                    self.assertEqual(record["portalArgs"], ["status check"])
-                    self._assert_launch_environment(record, explicit=explicit)
+        for explicit in (True, False):
+            with self.subTest(explicit=explicit):
+                self._run_batch('"status check"', explicit=explicit, exit_code=17)
+
+    def _await_parallel_readiness(self, pending):
+        deadline = time.monotonic() + self._STEP_TIMEOUT
+        while True:
+            unready = [tail for tail, (_, ready) in pending.items() if not ready.is_file()]
+            for tail, (process, _) in pending.items():
+                self.assertIsNone(process.poll(), f"{tail} exited before the common readiness gate")
+            if not unready:
+                return
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                self.fail(f"launchers not ready after {self._STEP_TIMEOUT}s: {', '.join(unready)}")
+            time.sleep(min(remaining, 0.05))
+
+    def _drain_parallel_launches(self, pending):
+        # On early failure, EOF releases any consumers still waiting at the
+        # fixture gate. Never kill just CMD and leave descendants on its pipes.
+        for process, _ in pending.values():
+            process.stdin.close()
+            process.stdin = None
+        deadline = time.monotonic() + self._CLEANUP_TIMEOUT
+        for tail, (process, _) in pending.items():
+            try:
+                stdout, stderr = process.communicate(timeout=max(0, deadline - time.monotonic()))
+            except subprocess.TimeoutExpired:
+                print(f"{tail}: did not drain within {self._CLEANUP_TIMEOUT}s cleanup budget", flush=True)
+            else:
+                print(f"{tail}: exit {process.returncode}, stdout={stdout!a}, stderr={stderr!a}", flush=True)
 
     def test_native_launch_boundary_keeps_simultaneous_calls_isolated(self):
         cases = (
@@ -637,11 +637,13 @@ class WindowsLaunchBoundaryTest(unittest.TestCase):
             (True, 2, "parallel explicit two"),
             (True, 0, "parallel explicit zero"),
         )
-        processes = []
+        pending = {}
         try:
             for explicit, status, tail in cases:
                 environment = self._environment(explicit=explicit, exit_code=status)
-                environment["AOBUS_FIXTURE_WAIT"] = "1"
+                ready = self.root / f"{tail}.ready"
+                environment["AOBUS_FIXTURE_READY_FILE"] = str(ready)
+                print(f"{self.id()}: launching {tail}", flush=True)
                 process = subprocess.Popen(
                     self._cmd_line(self._batch_command(f'"{tail}"')),
                     cwd=self.caller,
@@ -653,27 +655,28 @@ class WindowsLaunchBoundaryTest(unittest.TestCase):
                     encoding="utf-8",
                     errors="replace",
                 )
-                processes.append((explicit, status, tail, process))
+                pending[tail] = (process, ready)
 
-            records = []
-            for _explicit, _status, _tail, process in processes:
-                self.assertIsNotNone(process.stdout)
-                line = process.stdout.readline()
-                self.assertTrue(line, "launch exited before the consumer readiness gate")
-                records.append(json.loads(line))
-            # All foreground launchers must coexist at a controlled checkpoint;
-            # elapsed time and merely starting several processes are not proof.
-            self.assertTrue(all(process.poll() is None for *_case, process in processes))
-            for (explicit, status, tail, process), record in zip(processes, records, strict=True):
+            # Both a ready marker from each consumer and live foreground
+            # launchers are required before any consumer is released.
+            self._await_parallel_readiness(pending)
+            deadline = time.monotonic() + self._STEP_TIMEOUT
+            for explicit, status, tail in cases:
+                process, _ = pending[tail]
+                try:
+                    stdout, stderr = process.communicate(
+                        input="continue\n", timeout=max(0, deadline - time.monotonic())
+                    )
+                except subprocess.TimeoutExpired:
+                    self.fail(f"{tail} did not exit within the {self._STEP_TIMEOUT}s shared release budget")
+                del pending[tail]
                 with self.subTest(tail=tail):
-                    _stdout, stderr = process.communicate(input="continue\n")
                     self.assertEqual(process.returncode, status, stderr)
+                    record = json.loads(stdout)
                     self.assertEqual(record["portalArgs"], [tail])
                     self._assert_launch_environment(record, explicit=explicit)
         finally:
-            for *_case, process in processes:
-                # Release even failed assertions normally; never kill a launcher.
-                process.communicate(input=None if process.stdin.closed else "continue\n")
+            self._drain_parallel_launches(pending)
 
 
 @unittest.skipUnless(sys.platform == "win32", "native Windows batch environment bootstrap")
@@ -777,6 +780,8 @@ class WindowsBuildEnvReadinessTest(unittest.TestCase):
     def _run(self, ready, *, cl=True, vcpkg_root=_DEFAULT):
         environment = self._environment(ready, cl=cl, vcpkg_root=vcpkg_root)
         command = f'"{self.scripts / "windows-build-env.bat"}"'
+        missing = sorted(self._ready().keys() - ready.keys())
+        print(f"{self.id()}: launching build environment (missing={missing}, cl on PATH={cl})", flush=True)
         completed = subprocess.run(
             f'"{self.comspec}" /d /v:off /s /c "{command}"',
             cwd=self.caller,

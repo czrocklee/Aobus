@@ -8,8 +8,8 @@ from pathlib import Path, PureWindowsPath
 from unittest.mock import patch
 
 from ao.core import bazel_native as native
-from ao.core import bazel_providers as providers
-from ao.core import bazel_workspace as workspace
+from ao.portal import bazel_providers as providers
+from ao.portal import bazel_workspace as workspace
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -59,7 +59,7 @@ class WindowsToolchainPreparationTest(unittest.TestCase):
             patch.dict(os.environ, environment, clear=True),
             patch.object(native, "native_platform", return_value="windows"),
             patch.object(providers, "vcpkg_prefix", return_value=self.root / "provider"),
-            patch.object(workspace.builddir, "windows_state_root", return_value=self.root / "state"),
+            patch.object(workspace.build_dir, "windows_state_root", return_value=self.root / "state"),
         ):
             return workspace.prepare_workspace(self.build, "debug")
 

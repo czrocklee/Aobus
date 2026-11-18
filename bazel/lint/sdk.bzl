@@ -258,15 +258,16 @@ lint_sdk_repository = repository_rule(
     implementation = _lint_sdk_impl,
     attrs = {
         "_environment": ENVIRONMENT_ATTRIBUTE,
-        "helper": attr.label(default = Label("//:script/ao/core/bazel_lint_sdk.py"), allow_single_file = True),
+        "helper": attr.label(default = Label("//:script/ao/portal/bazel_lint_sdk.py"), allow_single_file = True),
         # The helper's package imports; test_bazel_lint_sdk compares them with its real imports.
         "modules": attr.label_list(
             default = [
                 Label("//:script/ao/__init__.py"),
                 Label("//:script/ao/core/__init__.py"),
-                Label("//:script/ao/core/compiler_policy.py"),
+                Label("//:script/ao/policy/__init__.py"),
+                Label("//:script/ao/policy/compiler_policy.py"),
                 Label("//:script/ao/core/paths.py"),
-                Label("//:script/ao/core/windows_llvm_sdk.py"),
+                Label("//:script/ao/policy/windows_llvm_sdk.py"),
             ],
             allow_files = True,
         ),

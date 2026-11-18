@@ -1,6 +1,6 @@
 """Tests for the declarative application architecture audit.
 
-The policy oracle is the shared Python backend (ao.core.guardrails); these
+The policy oracle is the shared Python backend (ao.portal.guardrails); these
 cases prove rule adjudication over a governed fixture tree, the generic
 forbidden-include adapter, and UIModel frontend neutrality.
 """
@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ao.core import guardrails
+from ao.portal import guardrails
 
 
 class ArchitectureAuditTest(unittest.TestCase):

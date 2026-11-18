@@ -20,10 +20,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 from ao.core import bazel_native as native
-from ao.core import bazel_providers as providers
-from ao.core import bazel_provision as provision
-from ao.core import bazel_workspace as workspace
-from ao.core import dependency_policy, windows_llvm_sdk
+from ao.policy import dependency_policy, windows_llvm_sdk
+from ao.portal import bazel_providers as providers
+from ao.portal import bazel_provision as provision
+from ao.portal import bazel_workspace as workspace
 
 LOCKED = dependency_policy._packages_config(provision.NUGET_LOCK)
 DIGEST = hashlib.sha256(provision.NUGET_LOCK.read_bytes()).hexdigest()
@@ -113,7 +113,7 @@ class VcpkgProvisionTest(unittest.TestCase):
         with (
             patch.object(native, "native_platform", return_value="macos"),
             patch.dict(os.environ, {"AOBUS_VCPKG_TRIPLET": "x64-aobus-osx"}),
-            self.assertRaisesRegex(native.BazelWorkspaceError, "run `ao deps provision`"),
+            self.assertRaisesRegex(native.BazelWorkspaceError, "run `ao setup deps`"),
         ):
             providers.vcpkg_prefix(None, self.tree)
 

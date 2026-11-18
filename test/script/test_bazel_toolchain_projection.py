@@ -9,9 +9,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ao.core import bazel_compiler_probe as compiler_probe
 from ao.core import bazel_native as native
-from ao.core import bazel_providers as providers
+from ao.portal import bazel_compiler_probe as compiler_probe
+from ao.portal import bazel_providers as providers
 
 
 class ToolchainObservationTest(unittest.TestCase):

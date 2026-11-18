@@ -9,7 +9,7 @@ import textwrap
 import unittest
 from pathlib import Path
 
-from ao.core import vcpkg_binary_cache
+from ao.portal import vcpkg_binary_cache
 
 ABI_A = "a" * 64
 ABI_B = "b" * 64
@@ -152,9 +152,9 @@ class NativeWorkflowStorageTest(unittest.TestCase):
                 save = source.split("      - name: Save vcpkg binary cache\n", 1)[1].split("      - name:", 1)[0]
                 self.assertIn("        id: vcpkg-prepare\n", prepare)
                 self.assertNotIn("continue-on-error:", prepare)
-                self.assertLess(prepare.index("setup bazel"), prepare.index("deps provision"))
+                self.assertLess(prepare.index("setup bazel"), prepare.index("setup deps"))
                 # Seal the tree actually provisioned, independent of its drive or root name.
-                provisioned = re.search(r"deps provision --path ([^\r\n]+)", prepare)[1].strip()
+                provisioned = re.search(r"setup deps --path ([^\r\n]+)", prepare)[1].strip()
                 sealed = re.search(r"--build-root ([^\r\n]+)", seal)[1].strip()
                 self.assertEqual(sealed, provisioned)
                 self.assertIn("        id: vcpkg-cache-ready\n", seal)
@@ -295,7 +295,7 @@ class SealCommandTest(unittest.TestCase):
         process = subprocess.run(
             [
                 sys.executable,
-                "script/ao/core/vcpkg_binary_cache.py",
+                "script/ao/portal/vcpkg_binary_cache.py",
                 "seal",
                 "--cache-dir",
                 str(root / "cache"),

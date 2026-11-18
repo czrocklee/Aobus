@@ -1,9 +1,4 @@
-"""The analyze command resolves its scope and delegates to the Bazel analyzer.
-
-These tests fake the portal boundary (``bazel_lint.run_analyzer``), never a
-Bazel graph or a clang-tidy process: the analyzer's native-context contracts
-live with the action and report modules.
-"""
+"""Path-sensitive analysis resolves a frozen scope and propagates native verdicts."""
 
 import contextlib
 import io
@@ -12,109 +7,77 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from ao.__main__ import make_parser
-from ao.command import analyze
+from ao.portal import source_analyzer as analyze
+from ao.portal import source_scope
+from ao.portal.source_analyzer import AnalyzerRequest
+from ao.portal.source_scope import SourceScope
 
 
-class AnalyzeCommandTest(unittest.TestCase):
+class AnalyzerServiceTest(unittest.TestCase):
     def setUp(self):
-        self.stack = contextlib.ExitStack()
-        self.addCleanup(self.stack.close)
-        self.root = Path(self.stack.enter_context(tempfile.TemporaryDirectory()))
-        self.stack.enter_context(mock.patch.object(analyze, "PROJECT_ROOT", self.root))
-        self.candidates: list[str] = []
-        self.explicit = False
-        self.scope = self.stack.enter_context(
-            mock.patch.object(
-                analyze.tidyengine,
-                "resolve_scope",
-                side_effect=lambda args, folders, label: (list(self.candidates), self.explicit),
-            )
-        )
-        self.runner = self.stack.enter_context(mock.patch.object(analyze.bazel_lint, "run_analyzer", return_value=0))
-        self.stdout = self.stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
-        self.stderr = self.stack.enter_context(contextlib.redirect_stderr(io.StringIO()))
+        self.root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        for module in (analyze, source_scope):
+            self.enterContext(mock.patch.object(module, "PROJECT_ROOT", self.root))
+        self.runner = self.enterContext(mock.patch.object(analyze.bazel_lint, "run_analyzer", return_value=0))
+        self.enterContext(contextlib.redirect_stdout(io.StringIO()))
+        self.enterContext(contextlib.redirect_stderr(io.StringIO()))
 
     def source(self, relative):
         path = self.root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("// probe\n", encoding="utf-8")
-        return path
+        return str(path)
 
-    def parse(self, *options):
-        return make_parser().parse_args(["analyze", *options])
-
-    def run_command(self, *options):
-        return analyze.run_command(self.parse(*options))
-
-    def test_explicit_files_delegate_with_the_canonical_scope_and_flag(self):
+    def test_explicit_files_are_canonicalized_and_deduplicated_before_delegation(self):
         probe = self.source("lib/sample/Sample.cpp")
-        self.source("lib/sample/Other.cpp")
-        # A repeated candidate is analyzed once.
-        self.candidates = [str(probe), "lib/sample/Other.cpp", "lib/sample/Other.cpp"]
-        self.explicit = True
-        args = self.parse()
-        self.assertEqual(analyze.run_command(args), 0)
-        self.runner.assert_called_once()
-        delegated_args, files = self.runner.call_args.args
-        self.assertIs(delegated_args, args)
-        self.assertEqual(files, [str(probe), str(self.root / "lib/sample/Other.cpp")])
-        self.assertTrue(self.runner.call_args.kwargs["explicit"])
+        other = self.source("lib/sample/Other.cpp")
+        scope = SourceScope((probe, "lib/sample/Other.cpp", "lib/sample/Other.cpp"), (probe,))
+        request = AnalyzerRequest()
+        self.assertEqual(analyze.run(scope, request), 0)
+        self.runner.assert_called_once_with(request, (probe, other), explicit_files=(probe,))
 
-    def test_batch_scopes_delegate_without_the_explicit_flag(self):
-        self.source("lib/sample/Sample.cpp")
-        self.candidates = ["lib/sample/Sample.cpp"]
-        self.explicit = False
-        self.assertEqual(self.run_command("--all"), 0)
-        self.assertFalse(self.runner.call_args.kwargs["explicit"])
+    def test_batch_scope_delegates_without_explicit_files(self):
+        probe = self.source("lib/sample/Sample.cpp")
+        request = AnalyzerRequest()
+        self.assertEqual(analyze.run(SourceScope(("lib/sample/Sample.cpp",)), request), 0)
+        self.runner.assert_called_once_with(request, (probe,), explicit_files=())
 
-    def test_checkout_lint_fixtures_are_excluded_from_every_scope(self):
+    def test_checkout_lint_fixtures_and_infrastructure_are_excluded_even_when_explicit(self):
         kept = self.source("lib/sample/Sample.cpp")
         fixture = self.source("test/lint/fixture/StyleCase.cpp")
         infrastructure = self.source("test/lint/Runner.cpp")
-        self.candidates = [str(kept), str(fixture), str(infrastructure)]
-        self.explicit = True
-        self.assertEqual(self.run_command(), 0)
-        delegated = self.runner.call_args.args[1]
-        self.assertEqual(delegated, [str(kept)])
+        request = AnalyzerRequest()
+        self.assertEqual(analyze.run(SourceScope((kept, fixture, infrastructure), (fixture,)), request), 0)
+        self.runner.assert_called_once_with(request, (kept,), explicit_files=())
 
     def test_empty_or_non_cpp_scope_does_not_prepare_a_native_context(self):
         document = self.source("README.md")
-        for candidates in ([], [str(document)]):
-            with self.subTest(candidates=candidates):
-                self.candidates = candidates
-                self.explicit = True
-                self.assertEqual(self.run_command(), 0)
+        for scope in (SourceScope(), SourceScope((document,), (document,))):
+            with self.subTest(scope=scope):
+                self.assertEqual(analyze.run(scope, AnalyzerRequest()), 0)
         self.runner.assert_not_called()
 
-    def test_an_explicit_missing_path_fails_before_native_preparation(self):
-        self.candidates = [str(self.root / "lib/sample/Missing.cpp")]
-        self.explicit = True
-        with self.assertRaises(SystemExit) as failure:
-            self.run_command()
-        self.assertEqual(failure.exception.code, 1)
-        self.assertIn("explicitly selected analyzer path", self.stderr.getvalue())
+    def test_missing_selected_path_fails_before_native_preparation(self):
+        with self.assertRaisesRegex(ValueError, "does not exist"):
+            analyze.run(SourceScope(("lib/Missing.cpp",)), AnalyzerRequest())
         self.runner.assert_not_called()
 
-    def test_fix_export_and_response_arguments_fail_before_scope_resolution(self):
-        # Argparse rejects option-shaped values with the "=" spelling; the
-        # command guard remains for a programmatic Namespace without it.
+    def test_invalid_diagnostic_arguments_fail_before_source_resolution(self):
         for argument in ("--fix", "--export-fixes=fixes.yaml", "@responses.txt"):
-            with self.subTest(argument=argument):
-                with self.assertRaises(SystemExit):
-                    self.parse("--tidy-arg=" + argument)
-                args = self.parse()
-                args.tidy_arg = [argument]
-                self.assertEqual(analyze.run_command(args), 1)
-        self.scope.assert_not_called()
+            with self.subTest(argument=argument), mock.patch.object(analyze, "analyzable_scope") as scope:
+                with self.assertRaises(ValueError):
+                    analyze.run(SourceScope(), AnalyzerRequest(tidy_args=(argument,)))
+            scope.assert_not_called()
         self.runner.assert_not_called()
-        self.assertEqual(self.stderr.getvalue().count("ERROR:"), 3)
 
-    def test_delegation_propagates_the_public_gate_status(self):
-        self.source("lib/sample/Sample.cpp")
-        self.candidates = ["lib/sample/Sample.cpp"]
-        self.runner.return_value = 1
-        self.assertEqual(self.run_command("--fail-on-diagnostics"), 1)
+    def test_findings_are_gated_by_default_and_report_only_does_not_rewrite_engine_status(self):
+        source = self.source("lib/Sample.cpp")
+        for advisory, status in ((False, 0), (False, 1), (True, 1), (True, 2)):
+            with self.subTest(advisory=advisory, status=status):
+                self.runner.return_value = status
+                request = AnalyzerRequest(report_only=advisory)
+                self.assertEqual(request.fail_on_diagnostics, not advisory)
+                self.assertEqual(analyze.run(SourceScope((source,)), request), status)
 
 
 if __name__ == "__main__":

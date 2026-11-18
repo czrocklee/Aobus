@@ -29,7 +29,7 @@ Translate it before it becomes project-owned API.
 ## Enforcement
 
 Contributors choose semantic roles and vocabulary through review.
-`./ao name-audit`, Aobus clang-tidy checks, and built-in `readability-identifier-naming` cover the mechanical and type-aware subset.
+`./ao check lint` naming audits, Aobus clang-tidy checks, and built-in `readability-identifier-naming` cover the mechanical and type-aware subset.
 See [naming checks](lint/naming-checks.md#enforcement) for the exact audit inventory, checker names, framework proof, and template boundaries.
 Do not turn semantic inference into a regex with exception churn.
 
@@ -141,6 +141,8 @@ Do not merge unrelated declarations merely to reduce header count.
 Name a file after its capsule or principal public contract.
 Implementation files may partition a capsule by algorithm or platform without manufacturing a public header for every partition.
 Tests are organized by behavior and need not mirror each implementation file.
+
+Use lowercase `snake_case` for Python module and script filenames: separate words (`build_env.py`), keep established tool or framework names together (`appkit_process.py`), and prefix test modules in `test/script/` with `test_`.
 
 Use singular feature directories.
 Public UIModel declarations keep the flat `ao::uimodel` namespace; folder context does not excuse ambiguous public names.

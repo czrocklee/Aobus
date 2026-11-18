@@ -1,6 +1,6 @@
 ---
 name: develop-lint-checker
-description: Create, debug, or extend custom Aobus Clang-Tidy checkers in tool/lint/ and their integration fixtures in test/lint/fixture/. Do not load for running ./ao tidy on product code or triaging ordinary lint findings.
+description: Create, debug, or extend custom Aobus Clang-Tidy checkers in tool/lint/ and their integration fixtures in test/lint/fixture/. Do not load for running ./ao check lint on product code or triaging ordinary lint findings.
 ---
 
 # Develop an Aobus lint checker
@@ -23,6 +23,6 @@ implementation request authorizes the required lint runs.
   supported files under [`test/lint/fixture/`](../../../test/lint/fixture) must
   match 1:1; validate fixtures with
   `bazel test //test/lint:lint_test --nocache_test_results` (excluded from
-  `//:tests` and batch `ao tidy`), and keep
-  `./ao tidy --check <alias> <owned-source>` to compile-owned TUs where
+  `//:tests` and batch `ao check lint`), and keep
+  `./ao check lint --tidy-check <alias> <owned-source>` to compile-owned TUs where
   `<alias>` is not `RELAXED`-disabled.

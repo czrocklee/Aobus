@@ -5,7 +5,7 @@ These tests pin the two boundaries that propagation must not cross: a reused
 worker thread never leaks one task's context into the next, and a bare pool
 worker started outside any phase stays unparented. Phase attribution through
 the native tidy runner and the lint fixture stage is owned by the workflow
-owner's linttest suite and the Bazel lint pipeline's own tests.
+owner's lint_test suite and the Bazel lint pipeline's own tests.
 """
 
 import concurrent.futures

@@ -83,8 +83,8 @@ registration invocation that itself contains a splice — in the macro name,
 between the macro and its parenthesis, or in an argument — fails the audit
 as unsupported syntax instead of being silently missed.
 
-`./ao test-audit` discovers registrations with one content detector shared by
-default, directory, explicit-file, and hygiene scopes. It scans the governed
+The test audit in `./ao check lint` discovers registrations with one content detector
+shared by default, directory, and explicit-file scopes. It scans the governed
 test sources (the exact lowercase suffixes `.cpp`, `.mm`, `.h`, `.hpp`, and
 `.def` under `test/`, excluding the lint checker fixtures under `test/lint/`);
 this is the same case-sensitive suffix contract used by the other source tools,
@@ -100,19 +100,19 @@ lexical detection — continued comments stay comments, and raw string bodies
 keep their original spelling, so a splice cannot forge a closing delimiter. Registrations must live in `*Test.cpp`, `*Test.mm`, or
 `*Benchmark.cpp` files. The source audit rejects registrations in headers,
 include fragments, and other discovered filenames such as `FooSupport.cpp`.
-`./ao test-audit` and the source audit in `./ao hygiene` check
-registration syntax, names, markers, and placement without requiring a build
-tree. Before it compiles, `./ao check` joins whole-project discovery with the
-configured graph: each registered source must belong to a `cc_test` the gate
-executes, or to a `cc_binary`, such as a benchmark, that the gate builds, unless
-that owner is incompatible with this host
-([test ownership](../bazel.md#test-ownership)). Hidden cases inside
-an executed test stay skipped. Only that configured check establishes ownership
-completeness; standalone source audits do not detect a missing owner.
+`./ao check lint` and the graph's `test_audit` target check registration syntax,
+names, markers, and placement without
+requiring a build tree. The root `//:native_policy` test joins whole-project
+discovery with the configured graph: each registered source must belong to an
+executed `cc_test`, or to a `cc_binary`, such as a benchmark, that the selected
+test closure reaches, unless that owner is deferred by the platform policy or an
+explicitly reported disabled frontend
+([test ownership](../bazel.md#test-ownership)). Hidden cases inside an executed
+test stay skipped. Standalone source audits still do not detect a missing owner.
 
 ```bash
-./ao test-audit test/query
-./ao test-audit --fail-on-issue test/query/ParserTest.cpp
+./ao check lint test/query
+./ao check lint test/query/ParserTest.cpp
 ```
 
 ## Test structure

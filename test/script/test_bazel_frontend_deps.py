@@ -13,11 +13,12 @@ from unittest.mock import patch
 
 from test_bazel_windows_linkage import pe_image, static_archive
 
-from ao.core import bazel_dependencies as dependencies
-from ao.core import bazel_deps, dependency_policy
-from ao.core import bazel_host_tools as host_tools
 from ao.core import bazel_native as native
-from ao.core import bazel_providers as providers
+from ao.policy import dependency_policy
+from ao.portal import bazel_dependencies as dependencies
+from ao.portal import bazel_deps
+from ao.portal import bazel_host_tools as host_tools
+from ao.portal import bazel_providers as providers
 
 
 class FrontendDependencyPolicyTest(unittest.TestCase):

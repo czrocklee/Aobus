@@ -10,15 +10,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ao.core import bazel_lint_reports
-from ao.core.bazel_lint_reports import (
-    Uncovered,
-    gate_analyzer_reports,
-    gate_reports,
-    lint_aspect_id,
-    read_reports,
-)
 from ao.core.paths import PROJECT_ROOT, absolute_path
+from ao.graph import bazel_lint_reports
+from ao.graph.bazel_lint_reports import Uncovered, gate_analyzer_reports, gate_reports, lint_aspect_id, read_reports
 
 
 class ReportsTestCase(unittest.TestCase):

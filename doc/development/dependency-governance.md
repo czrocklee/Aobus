@@ -47,7 +47,7 @@ Use the owner for the question being asked:
 | WinUI NuGet closure and trusted source                                                            | `app/windows-winui/packages.config`, `app/windows-winui/NuGet.Config`                                       |
 | Python, Ruff, mypy, and documentation-parser policy                                               | `script/ao/toolchain.json`                                                                                  |
 | Accepted Python tooling and documentation-parser artifacts                                        | `script/ao/docs-requirements.txt`, `script/ao/windows-requirements.txt`, `script/ao/macos-requirements.txt` |
-| Installed native and test SDK manifests and hash inputs                                           | verified by `./ao deps report` or `./ao deps verify`                                                        |
+| Installed native and test SDK manifests and hash inputs                                           | validated and reported by `./ao check deps`                                                                 |
 
 Do not copy a current version from this guide. Read the owning file or a verified
 build report.
@@ -76,7 +76,7 @@ actually consumed the dependency. A native VM may own the provider even when
 the source is mounted from another host.
 
 1. Inspect the selected tree's provisioned SDK, the dependency report, and
-   `build.log`. `./ao deps report` verifies and reports the actual installed
+   `build.log`. `./ao check deps` verifies and reports the actual installed
    native and test SDK manifests and their hash inputs; it does not install
    anything or search the host.
 2. Identify the resolver in the table above and inspect the relevant resolver
@@ -122,7 +122,7 @@ and formatter Node pins. One package set supplies both the native dependencies a
 so the native pin and the exact tool contracts are coupled: a package-set
 change that moves a tool version must update the corresponding contract in
 the same change, and a tool upgrade needs a package set that supplies it.
-The hygiene workflow-lint stage selects pinned actionlint — with the packaged
+The `check lint` workflow stage selects pinned actionlint — with the packaged
 ShellCheck and Pyflakes — through `AO_NIX_ACTIONLINT`; `nixpkgs.json` is its
 sole version authority, with no separate manifest, native installer, or setup
 command.
@@ -257,11 +257,12 @@ pins the exact markdown-it-py and mdurl versions, and
 The native requirement locks include that file with a pip `-r` line, so the
 native bootstrap installs the same accepted parser wheels, and the CI
 documentation job installs the shared lock directly before
-`python -m ao docs check`. The managed-environment fingerprint covers the
+`python -m ao check docs`. The managed-environment fingerprint covers the
 included lock, so a changed or missing parser pin rebuilds the native
-environment instead of reusing a stale one. Runtime identity uses the base
-installation (`sys.base_prefix`) and actual Python version, not the current
-venv executable, so bootstrap and managed callers reuse the same environment.
+environment instead of reusing a stale one. Runtime identity uses the canonical
+base installation path (`realpath(sys.base_prefix)`) and actual Python version,
+not the current venv executable, so bootstrap and managed callers reuse the same
+environment even when Homebrew exposes the installation through a symlink.
 
 ## Enforcement
 
@@ -271,7 +272,7 @@ The normal enforcement path is:
 2. the Bazel repository rules admit the installed providers against
    `dependency-contract.json`, rejecting expired exceptions and checking
    versions, interfaces, and capabilities;
-3. `./ao deps verify` checks the installed native and test SDK manifests and
+3. `./ao check deps` checks the installed native and test SDK manifests and
    hash inputs against current source inputs; and
 4. `./ao check` gates configured dependency admission as part of completion.
 

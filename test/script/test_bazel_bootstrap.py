@@ -353,7 +353,7 @@ class BazelPortalEnvironmentTests(unittest.TestCase):
         # native command witnesses that no implicit build-env or platform
         # inventory sneaks in before the command's own run.
         with (
-            patch.object(portal.buildenv, "requires_parsed_build_env", side_effect=AssertionError("CMake lookup")),
+            patch.object(portal.build_env, "requires_parsed_build_env", side_effect=AssertionError("CMake lookup")),
             patch.object(platform, "system", side_effect=AssertionError("no OS inventory")),
             patch.object(platform, "uname", side_effect=AssertionError("no OS inventory")),
             patch.object(platform, "machine", side_effect=AssertionError("no implicit ISA inventory")),

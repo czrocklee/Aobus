@@ -32,7 +32,7 @@ Capture the current state before editing:
 
 ```bash
 ./ao check
-./ao deps report --json /tmp/aobus-dependencies-before.json
+./ao check deps --json /tmp/aobus-dependencies-before.json
 ```
 
 Run that sequence on each affected native host. Keep platform reports distinct,
@@ -43,7 +43,7 @@ On Windows:
 
 ```bat
 ao.bat check
-ao.bat deps report --json %TEMP%\aobus-dependencies-before.json
+ao.bat check deps --json %TEMP%\aobus-dependencies-before.json
 ```
 
 The report embeds the native and test SDK manifests: each records the admission
@@ -71,7 +71,7 @@ nix-prefetch-url --unpack \
 
 ```bash
 ./ao check --clean
-./ao deps report --json /tmp/aobus-dependencies-after.json
+./ao check deps --json /tmp/aobus-dependencies-after.json
 ```
 
 6. Run the clean build, dependency report, and gate on Linux.
@@ -157,7 +157,7 @@ shasum -a 256 "$AOBUS_VCPKG_AUDIT/vcpkg.tar.gz"
 Only after the tree comparison succeeds may the archive SHA-256 change without
 changing the pinned revision. Preserve the old cached archive as review
 evidence, explain why the upstream bytes changed, then run clean macOS Debug
-and Release gates plus `./ao deps verify`. A project-controlled immutable
+and Release gates plus `./ao check deps`. A project-controlled immutable
 release asset may replace the generated URL in a later change, but an unhashed
 Git clone is not an equivalent supply-chain check.
 
@@ -191,7 +191,7 @@ For Windows App SDK or C++/WinRT upgrades:
    repository signer fingerprints and source mapping.
 4. Update the Windows App Runtime identity, installer URL, and SHA-256 in the
    contract when the SDK requires a new runtime.
-5. Run `ao.bat doctor winui`, explicitly reprovision the selected SDK, then
+5. Run `ao.bat check winui`, explicitly reprovision the selected SDK, then
    `ao.bat check --clean`, dependency verification for the configured trees,
    and an interactive RDP smoke launch of
    `bazel run //app/windows-winui:aobus-winui`. The clean build exercises the application
@@ -270,7 +270,7 @@ Keep `script-transliteration` declared in `dependency-contract.json`, and exerci
    parser lock with a pip `-r` line, so a parser change updates that shared
    file rather than duplicating its hashes.
 5. Rebuild `script/ao/macos-requirements.txt` with hashes for the x86_64 and
-   arm64 wheels used by macOS docs, format, tidy, and hygiene commands, with
+   arm64 wheels used by macOS documentation, formatting, and lint checks, with
    the same shared `-r` include.
 6. Ensure the pinned Linux Nixpkgs set — or a targeted Nix derivation —
    supplies the same exact versions. Because one package set feeds the native
@@ -278,7 +278,7 @@ Keep `script-transliteration` declared in `dependency-contract.json`, and exerci
    which then follows the [Nixpkgs update](#updating-nixpkgs) validation.
    macOS must match Ruff and mypy but remains outside the exact Python
    patch-level contract.
-7. Run the complete check on Linux and Windows, including tooling and hygiene:
+7. Run the complete check on Linux and Windows, including the tooling tests:
 
 ```bash
 ./ao check
@@ -320,7 +320,7 @@ Choose one explicit outcome:
 A platform exception in `dependency-contract.json` must include a unique ID,
 the dependency and platform, allowed version, reason, owner, issue, creation
 date, expiry, and exit condition. Normal availability exceptions expire within
-30 days. Expired exceptions fail `./ao deps verify`.
+30 days. Expired exceptions fail `./ao check deps`.
 
 ## Security updates
 
@@ -346,29 +346,26 @@ Linux:
 
 ```bash
 ./ao check --clean
-./ao check release --clean
-./ao deps verify
-./ao deps report --json /tmp/aobus-dependencies-linux.json
+./ao check --config release --clean
+./ao check deps --json /tmp/aobus-dependencies-linux.json
 ```
 
 macOS, using host-local build state:
 
 ```bash
-./ao deps provision
+./ao setup deps
 ./ao check --clean
-./ao check release --clean
-./ao deps verify
-./ao deps report --json /tmp/aobus-dependencies-macos.json
+./ao check --config release --clean
+./ao check deps --json /tmp/aobus-dependencies-macos.json
 ```
 
 Windows, in a new build directory or CI cache generation:
 
 ```bat
-ao.bat deps provision
+ao.bat setup deps
 ao.bat check --clean
-ao.bat check release --clean
-ao.bat deps verify
-ao.bat deps report --json %TEMP%\aobus-dependencies-windows.json
+ao.bat check --config release --clean
+ao.bat check deps --json %TEMP%\aobus-dependencies-windows.json
 ```
 
 Confirm in the report:

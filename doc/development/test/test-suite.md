@@ -67,24 +67,32 @@ source provenance or prepared runtime.
 
 ## Complete validation and native prerequisites
 
-`./ao check` (`ao.bat check` on Windows) is complete local and CI validation:
-documentation, tooling on Linux/Windows, native completion, optional sanitizer,
-and the same scoped check-only hygiene implementation exposed by `ao hygiene`.
-`--commit BASE` selects hygiene's diff base, not a smaller native test graph.
-See the [completion gate](../bazel.md#completion-gate).
+`./ao check` (`ao.bat check` on Windows) is complete local and CI validation: it
+prepares the ready native environment and runs one `bazel test //...` over the
+selected tree, so the graph also owns documentation, formatting, source
+guardrails, Ruff/mypy, one target per tooling module, the native-policy audits
+and the whole-graph lint test. `--ci` adds the repository CI configuration;
+`check` has no `--commit` selector and always checks the complete source
+snapshot. See the [completion gate](../bazel.md#completion-gate).
 
-Completion runs `//:check_tests` and the configured `//:check_native_tests`
-backend roots. It builds platform products and manual GUI/performance harnesses
-without launching those harnesses; Windows also executes the two unattended
-native console probes. It gates shared audits and test-source ownership.
-Ordinary `bazel test //:tests` does not provide these guarantees.
+Wildcard discovery selects every non-`manual` test and then expands the selected
+test suites. The GTK, native-backend and lint-fixture tests carry `manual`, so a
+bare label wildcard does not pick them up, but the non-manual `//:check_tests`
+suite lists them and completion's wildcard expansion runs them. The wildcard
+builds platform products and manual GUI/performance harnesses without launching
+them; Windows runs the two unattended native console probes and, under
+`--config=ci`, the declared WinUI automation test. Ordinary `bazel test //:tests`
+remains the portable default selection.
 
 Explicit native targets retain native prerequisites:
 
-- Linux `//test:gtk_test` needs the owned headless display, private no-activation
-  session bus, and GTK environment profile. `ao check` prepares these; a direct
-  invocation does not automatically create that context. Never set ownership
-  markers on personal desktop endpoints. See [GTK process isolation](uimodel-and-gtk.md#process-isolation-and-diagnostics).
+- Linux `//test:gtk_test` declares the `gtk` context; the declared
+  context-specific wrapper starts only the fixtures that context requests —
+  here the owned headless display, private no-activation session bus, GTK
+  environment profile and private audio stack. An explicit label therefore
+  needs only the ready native tools and SDK, not a hand-started display or
+  session bus. Never set ownership markers on personal desktop endpoints. See
+  [GTK process isolation](uimodel-and-gtk.md#process-isolation-and-diagnostics).
 - `//test:backend_test` owns live endpoint/service contracts and PipeWire
   admission cases with five link-interposed stream calls. Hardware and
   channel-map probes marked `[.manual]` stay opt-in. A build does not authorize
@@ -95,6 +103,14 @@ Explicit native targets retain native prerequisites:
   see [macOS](../macos.md#appkit-smoke-scenarios) and
   [Windows](../windows.md#ui-automation-naming-gate). No test aggregate proves
   an interactive desktop session, physical input, or audible output.
+
+`//:instrumentation_tests` is the Linux-only graph suite for the sanitizer
+compile/link canaries and coverage analysis; it never executes a sanitizer suite
+or produces a coverage report
+([native instrumentation tests](../bazel.md#native-instrumentation-tests)).
+`//:native_policy` runs the folded native-policy audit on every native host, and
+the Linux-only `//:native_driver_policy` runs the representative compiler `-###`
+diagnostic ([in-graph native policy](../bazel.md#in-graph-native-policy)).
 
 Missing or malformed repository fixtures fail. Only a genuinely optional host
 capability may `SKIP()` with a reason; `WARN()` or `SUCCEED()` followed by
@@ -110,23 +126,43 @@ Homebrew Python patch parity.
 
 ## Tooling and lint fixtures
 
-`ao check` runs repository tooling on Linux and Windows. For a standalone Linux
-run in the pinned environment:
+The graph runs repository tooling as ordinary `py_test` targets: one unit
+module per module under `test/script`, plus the live repository checks
+`docs`, `format`, `guardrails`, `test_audit`, `name_audit`, `workflows`,
+`bazel_lint`, `ruff` and `mypy`. Bazel owns their
+scheduling and parallelism, each target runs exactly one module through the
+shared standard-library entry, and none installs
+or repairs a tool: `bazel_lint` and `format` select ready Buildifier/Prettier only and fail
+when one is missing. A per-module input audit classifies each unit target:
+modules whose only inputs are declared sources, imported support modules and
+library dependencies — plus a short explicit data list where a module reads
+repository files — are cacheable over those declared inputs, with no
+checkout-root graft; modules whose audit observed host-process spawns,
+physical Git-state reads or dynamic whole-tree scans stay tagged `local` and
+`external`, because no cached result can stand in for the checkout or tools
+they use. Live unit and check targets pass a declared `VERSION.txt` anchor and
+always re-execute from the physical checkout on every OS; the child receives
+its arguments without the anchor flag, which is what closes the re-execution
+loop. Their host tools come from the inherited PATH and the installed native
+`py_runtime` — an honest non-hermetic tool closure, not a sandbox claim.
+`workflows` is Linux-only and consumes the pinned actionlint through
+`AO_NIX_ACTIONLINT`. Do not substitute ambient Python, Ruff, or mypy.
+
+A standalone tooling run uses the declared Bazel suite in the ready pinned
+native environment; no separate portal command orchestrates it:
 
 ```bash
-nix-shell --run 'PYTHONPATH=script python -m ao.core.tooltest'
+bazel test //test/script:tooling_tests
 ```
 
-On Windows the same module requires the already prepared governed Python
-and managed tooling environment; use `ao.bat check` unless preparing that
-environment explicitly. Do not substitute ambient Python, Ruff, or mypy.
-Tooling validates pinned versions and the Windows hash lock, and tests the
-document checker against isolated fixtures. The full check also validates the
-live documentation tree; `ao docs check` remains its standalone entry.
+Tooling validates pinned versions and the Windows hash
+lock, and tests the document checker against isolated fixtures. The `docs`
+target validates the live documentation tree; `ao check docs` remains its
+standalone entry.
 
 Tooling's real LLVM diagnostic-filter controls supplement, not replace, the
 custom-checker fixtures. Prepare the Windows LLVM SDK explicitly with
-`ao.bat deps provision` or `ao.bat setup llvm-sdk`. Missing optional local tools
+`ao.bat setup deps` or `ao.bat setup llvm-sdk`. Missing optional local tools
 may skip controls outside CI; under `CI=true`, missing required tools fail.
 Configured-tool and version failures never become skips. POSIX controls require
 the native LLVM compiler and checker to report the same release version.
@@ -137,7 +173,9 @@ Run the lint fixture gate explicitly with:
 bazel test //test/lint:lint_test --nocache_test_results
 ```
 
-It stays outside `//:tests` but joins completion. Fresh test-result assertions
+It stays outside `//:tests` and is tagged `manual`, but `//:check_tests` lists
+it, so completion's wildcard test expansion runs it; the completion lint test
+consumes the same checker verification action. Fresh test-result assertions
 check the native fixture producer's completed report. That producer checks
 `POSITIVE`/`NEGATIVE` markers, optional message assertions, source-policy smokes,
 and compiler-error canaries. Clang parses original fixtures; compiler
@@ -152,10 +190,10 @@ are ignored; unused nonexistent entries do not invalidate remaining providers,
 but missing required headers fail. Objective-C++ fixtures are explicitly
 platform-incompatible on Windows, not counted as tested. Unix uses the governed
 plugin/host and macOS SDK/deployment/shim context. Fixture implementation lives
-in `script/ao/core/linttest.py` and `script/ao/core/bazel_lint_fixture.py`.
+in `script/ao/graph/lint_test.py` and `script/ao/graph/bazel_lint_fixture.py`.
 See [fixture authoring](../lint/checker-development.md#fixture-contract).
 
-Coverage remains the separate project-specific `ao coverage` route, with its
+Coverage remains the separate project-specific `ao measure coverage` route, with its
 own suite selection and unsharded counter collection; see [coverage workflow](coverage-workflow.md).
 
 ## Sharded Catch2 execution

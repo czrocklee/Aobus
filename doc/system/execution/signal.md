@@ -87,7 +87,7 @@ Destroying a signal before a posted callback runs turns that callback into a suc
 - [`Subscription.h`](../../../include/ao/async/Subscription.h) defines the shared async lifetime name over `utility::ScopedRegistration`.
 - [`ScopedRegistration.h`](../../../include/ao/utility/ScopedRegistration.h) implements reset, destruction, and move-assignment release behavior.
 - [`lib/async/BUILD.bazel`](../../../lib/async/BUILD.bazel) records the public `ao_async -> ao_utility` dependency.
-- The shared [architecture audit](../../../script/ao/core/guardrails.py) prevents generic signal primitives from returning to application-owned headers and namespaces.
+- The shared [architecture audit](../../../script/ao/portal/guardrails.py) prevents generic signal primitives from returning to application-owned headers and namespaces.
 
 ## Test map
 

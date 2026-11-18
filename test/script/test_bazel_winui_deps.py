@@ -7,9 +7,9 @@ from unittest.mock import patch
 
 from test_bazel_windows_linkage import import_archive, pe_image
 
-from ao.core import bazel_dependencies as dependencies
 from ao.core import bazel_native as native
-from ao.core import bazel_providers as providers
+from ao.portal import bazel_dependencies as dependencies
+from ao.portal import bazel_providers as providers
 
 
 def _archive_member(name: bytes, payload: bytes) -> bytes:

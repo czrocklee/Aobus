@@ -37,5 +37,5 @@ TUI and CLI do not link it.
 - [`app/systemmedia/BUILD.bazel`](../../../app/systemmedia/BUILD.bazel) and [`app/desktop/BUILD.bazel`](../../../app/desktop/BUILD.bazel) define shared Linux system media and shared desktop support.
 - [`app/windows-winui/BUILD.bazel`](../../../app/windows-winui/BUILD.bazel) defines the WinUI implementation and executable boundary.
 - [`app/macos-appkit/BUILD.bazel`](../../../app/macos-appkit/BUILD.bazel) defines the AppKit bundle and native test composition.
-- The shared [architecture audit](../../../script/ao/core/guardrails.py) enforces the application-layer dependency and capability constraints.
+- The shared [architecture audit](../../../script/ao/portal/guardrails.py) enforces the application-layer dependency and capability constraints.
 - [Validation and native host selection](../../development/test/validation-and-review.md) and [test suites](../../development/test/test-suite.md) explain how to verify a change at these boundaries.

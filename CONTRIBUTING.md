@@ -2,8 +2,11 @@
 
 Work from the repository root. Use pinned native `bazel build`, `bazel test`,
 and `bazel run` for ordinary development; start tests with `bazel test //:tests`.
-Use `./ao check` (`ao.bat check` on Windows) for complete local and CI validation,
-including hygiene; `ao hygiene` also remains a scoped check-only entry.
+Use `./ao check` (`ao.bat check` on Windows) for complete local and CI validation:
+it runs the repository's `bazel test //...` graph, including documentation,
+formatting, source and naming audits, workflow lint, the native-policy audits
+and the whole-graph lint test. `ao check lint` remains a scoped semantic check;
+use `ao check format` for read-only formatting verification.
 Start with [build and setup](doc/development/build.md); read the [macOS](doc/development/macos.md) or [Windows](doc/development/windows.md) guide before native work.
 
 ## Make a change

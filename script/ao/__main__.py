@@ -8,8 +8,10 @@ import argparse
 import os
 import sys
 
+from ao.core import phases
+from ao.portal import build_env
+
 from .command import COMMAND_MODULES
-from .core import buildenv, phases
 
 
 def make_parser() -> argparse.ArgumentParser:
@@ -24,7 +26,12 @@ def make_parser() -> argparse.ArgumentParser:
 
 
 def parse_arguments(parser: argparse.ArgumentParser, arguments: list[str]) -> argparse.Namespace:
-    return parser.parse_args(arguments)
+    args = parser.parse_args(arguments)
+    if args.command == "check":
+        from ao.command import check
+
+        check.validate_syntax(args, arguments, parser)
+    return args
 
 
 def parse_invocation(arguments: list[str]) -> argparse.Namespace | None:
@@ -53,7 +60,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_invocation(list(sys.argv[1:] if argv is None else argv))
     if args is None:
         return 0
-    buildenv.load_source_scope(args, os.environ.pop("AOBUS_PREFLIGHT_SCOPE", None))
+    build_env.load_source_scope(args, os.environ.pop("AOBUS_PREFLIGHT_SCOPE", None))
     return dispatch(args)
 
 

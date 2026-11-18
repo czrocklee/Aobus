@@ -163,8 +163,9 @@ The native mouse tests do not establish Wayland, touch, or grab-transfer behavio
 
 Managed `ao check` gives GTK a private Xvfb and a private session bus without
 service activation, so tests never touch the desktop session or compete for
-MPRIS names. Direct explicit GTK targets need caller-prepared owned services;
-separately sharded processes need separate displays and buses. It marks them with
+MPRIS names. The declared context-specific wrapper starts those fixtures for an
+explicit GTK or backend label too, so the caller needs only the ready native
+tools and SDK; separately sharded processes need separate displays and buses. It marks them with
 `AOBUS_OWNED_GTK_DISPLAY` and `AOBUS_OWNED_GTK_BUS` and keeps both daemons alive
 until the process exits.
 

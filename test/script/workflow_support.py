@@ -3,7 +3,7 @@
 import os
 from pathlib import Path
 
-from ao.core.bazel_workflows import ExecutableArtifact
+from ao.portal.bazel_workflows import ExecutableArtifact
 
 
 def executable_artifact(

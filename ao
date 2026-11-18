@@ -31,9 +31,9 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
     NEEDS_PYTHON_TOOLS=0
     NEEDS_PROVIDER_TOOLS=0
     if [[ $# -gt 0 ]]; then
-        NEEDS_BUILD_ENV="$("$AOBUS_PYTHON" -m ao.core.buildenv "$@")"
-        NEEDS_PYTHON_TOOLS="$("$AOBUS_PYTHON" -m ao.core.buildenv --python-tools "$@")"
-        NEEDS_PROVIDER_TOOLS="$("$AOBUS_PYTHON" -m ao.core.buildenv --provider-tools "$@")"
+        NEEDS_BUILD_ENV="$("$AOBUS_PYTHON" -m ao.portal.build_env "$@")"
+        NEEDS_PYTHON_TOOLS="$("$AOBUS_PYTHON" -m ao.portal.build_env --python-tools "$@")"
+        NEEDS_PROVIDER_TOOLS="$("$AOBUS_PYTHON" -m ao.portal.build_env --provider-tools "$@")"
     fi
     if [[ "$NEEDS_PYTHON_TOOLS" == "1" ]]; then
         aobus_macos_prepare_python_tools "$ROOT" || exit $?

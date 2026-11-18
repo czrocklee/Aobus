@@ -489,11 +489,11 @@ class PhaseReportTest(RecordFixture, unittest.TestCase):
     def test_summary_separates_records_from_processed_items(self):
         with tempfile.TemporaryDirectory() as temporary:
             self.enable_logging(temporary)
-            with phases.measure("analysis", command="tidy", tree="tidy", count=500):
+            with phases.measure("analysis", command="check", tree="tidy", count=500):
                 pass
             result = run_cli(temporary)
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn("| tidy | analysis | tidy | - | 1 | 500 | 0 |", result.stdout)
+            self.assertIn("| check | analysis | tidy | - | 1 | 500 | 0 |", result.stdout)
             records = [
                 json.loads(line.removeprefix("AO_PHASE_RECORD "))
                 for line in result.stdout.splitlines()
@@ -505,14 +505,14 @@ class PhaseReportTest(RecordFixture, unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             self.enable_logging(temporary)
             for count in (3, None):
-                with phases.measure("analysis", command="tidy", count=count):
+                with phases.measure("analysis", command="check", count=count):
                     pass
-            with phases.measure("generated-headers", command="tidy", count=0):
+            with phases.measure("generated-headers", command="check", count=0):
                 pass
             result = run_cli(temporary)
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn("| tidy | analysis | - | - | 2 | - | 0 |", result.stdout)
-            self.assertIn("| tidy | generated-headers | - | - | 1 | 0 | 0 |", result.stdout)
+            self.assertIn("| check | analysis | - | - | 2 | - | 0 |", result.stdout)
+            self.assertIn("| check | generated-headers | - | - | 1 | 0 | 0 |", result.stdout)
 
     def test_summary_lists_slowest_analysis_items_by_source_id(self):
         durations_ns = (20_000_000, 60_000_000, 120_000_000)

@@ -1,43 +1,43 @@
-"""Configured cohort, exact native observations and concept consumer boundaries."""
+"""Configured concept cohorts and the reports built from compiler observations."""
 
 from __future__ import annotations
 
-import argparse
-import gc
 import hashlib
 import json
 import os
 import tempfile
 import unittest
-import weakref
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from ao.core import bazel_concepts as concepts
-from ao.core import concept_scope
+from ao.policy import concept_scope
+from ao.portal import bazel_concepts as concepts
+from ao.portal.dependency_checks import Request
 
 CHECKSUM = "a" * 64
-TOOL_CHECKSUM = "b" * 64
 
 
 def _sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _write(root: Path, name: str, text: str) -> Path:
+    path = root / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
 def _make_word(value: str) -> str:
     return value.replace("$", "$$").replace("#", "\\#").replace(" ", "\\ ")
 
 
-def _compile(
-    *,
-    source="lib/Use.cpp",
-    output="bazel-out/target/bin/Use.o",
-    owner="//lib:consumer",
-    checksum=CHECKSUM,
-    tool=False,
-    inputs=(),
-):
+def _action(owner, mnemonic, inputs, outputs, **fields):
+    return dict(owner=owner, mnemonic=mnemonic, inputs=inputs, outputs=outputs, **fields)
+
+
+def _compile(*, source="lib/Use.cpp", output="bazel-out/target/bin/Use.o", owner="//lib:consumer", inputs=(), **fields):
     argv = [
         "clang++",
         "-Iinclude",
@@ -53,81 +53,56 @@ def _compile(
         "-o",
         output,
     ]
-    return dict(
-        owner=owner,
-        checksum=checksum,
-        tool=tool,
-        mnemonic="CppCompile",
-        source=source,
-        argv=argv,
-        inputs=[source, *inputs],
-        outputs=[output, output + ".d"],
-    )
+    return _action(owner, "CppCompile", [source, *inputs], [output, output + ".d"], **({"arguments": argv} | fields))
 
 
-def _document(specifications):
-    """Encode tiny hand-authored action fixtures, not expected measurement results."""
+def _document(actions, *, tree_artifacts=()):
+    """Encode small hand-authored actions in Bazel's aquery transport."""
     document = {
         name: [] for name in ("targets", "configuration", "pathFragments", "artifacts", "depSetOfFiles", "actions")
     }
-    fragments, artifacts, targets, configurations = {}, {}, {}, {}
+    paths, fragments, targets, configurations = {}, {}, {}, {}
 
-    def artifact(path):
-        if path in artifacts:
-            return artifacts[path]
-        parent = None
-        prefix = ""
-        for component in path.split("/"):
-            prefix = prefix + "/" + component if prefix else component
-            if prefix not in fragments:
-                identifier = str(len(fragments) + 1)
-                row = {"id": identifier, "label": component}
-                if parent is not None:
-                    row["parentId"] = parent
-                fragments[prefix] = identifier
-                document["pathFragments"].append(row)
-            parent = fragments[prefix]
-        identifier = str(len(artifacts) + 1)
-        artifacts[path] = identifier
-        document["artifacts"].append({"id": identifier, "pathFragmentId": parent})
+    def add(table, **row):
+        identifier = len(document[table]) + 1
+        document[table].append(dict(id=identifier, **row))
         return identifier
 
-    for specification in specifications:
-        owner = specification["owner"]
+    def fragment(path):
+        if path not in fragments:
+            parent, _, name = path.rpartition("/")
+            fragments[path] = add("pathFragments", label=name, parentId=fragment(parent) if parent else 0)
+        return fragments[path]
+
+    def artifact(path):
+        if path not in paths:
+            paths[path] = add("artifacts", pathFragmentId=fragment(path), isTreeArtifact=path in tree_artifacts)
+        return paths[path]
+
+    for specification in actions:
+        row = dict(specification)
+        owner = row.pop("owner")
+        tool = row.pop("tool", False)
         if owner not in targets:
-            targets[owner] = str(len(targets) + 1)
-            document["targets"].append({"id": targets[owner], "label": owner})
-        checksum, tool = specification.get("checksum", CHECKSUM), specification.get("tool", False)
-        if (checksum, tool) not in configurations:
-            identifier = str(len(configurations) + 1)
-            configurations[checksum, tool] = identifier
-            document["configuration"].append({"id": identifier, "checksum": checksum, "isTool": tool})
-        depset = str(len(document["depSetOfFiles"]) + 1)
-        document["depSetOfFiles"].append(
-            {"id": depset, "directArtifactIds": [artifact(path) for path in specification["inputs"]]}
+            targets[owner] = add("targets", label=owner)
+        if tool not in configurations:
+            configurations[tool] = add("configuration", checksum="b" * 64 if tool else CHECKSUM, isTool=tool)
+        depset = add("depSetOfFiles", directArtifactIds=[artifact(path) for path in row.pop("inputs")])
+        outputs = [artifact(path) for path in row.pop("outputs")]
+        document["actions"].append(
+            dict(
+                targetId=targets[owner],
+                configurationId=configurations[tool],
+                inputDepSetIds=[depset],
+                outputIds=outputs,
+                **row,
+            )
         )
-        row = {
-            "targetId": targets[owner],
-            "configurationId": configurations[checksum, tool],
-            "mnemonic": specification["mnemonic"],
-            "inputDepSetIds": [depset],
-            "outputIds": [artifact(path) for path in specification["outputs"]],
-            "arguments": specification.get("argv", ["fixture-tool"]),
-            "actionKey": "fixture-key",
-        }
-        for name in ("paramFiles", "fileContents"):
-            if name in specification:
-                row[name] = specification[name]
-        row["environmentVariables"] = [
-            {"key": key, "value": value}
-            for key, value in specification.get("environment", {"POLICY": "native"}).items()
-        ]
-        document["actions"].append(row)
     return document
 
 
-def _action(argv=None, environment=()):
-    specification = _compile()
+def _standalone_compile(argv=None, *, environment=()):
+    action = _compile()
     return concepts.CompileAction(
         "//lib:consumer",
         CHECKSUM,
@@ -135,224 +110,205 @@ def _action(argv=None, environment=()):
         "CppCompile",
         "lib/Use.cpp",
         "lib/Use.cpp",
-        tuple(argv or specification["argv"]),
+        tuple(argv if argv is not None else action["arguments"]),
         tuple(environment),
-        frozenset(specification["inputs"]),
-        tuple(specification["outputs"]),
+        frozenset(action["inputs"]),
+        tuple(action["outputs"]),
     )
 
 
 class ConfiguredConceptCohortTest(unittest.TestCase):
-    def test_default_output_reachability_excludes_unused_pic_and_retains_exec_identity(self):
-        native = _compile(inputs=("bazel-out/exec/bin/generator", "include/ao/Used.h"))
+    def test_default_output_reaches_only_the_linked_variant_and_retains_tool_identity(self):
+        builder = _compile(
+            source="tool/Generate.cpp", output="bazel-out/exec/Generate.o", owner="//tool:generator", tool=True
+        )
+        native = _compile(inputs=(builder["outputs"][0],))
         pic = _compile(output="bazel-out/target/bin/Use.pic.o", inputs=("include/ao/Unused.h",))
-        tool = _compile(
-            source="tool/Generate.cpp",
-            output="bazel-out/exec/bin/Generate.o",
-            owner="//tool:generator",
-            checksum=TOOL_CHECKSUM,
-            tool=True,
-        )
-        tool_link = dict(
-            owner="//tool:generator",
-            checksum=TOOL_CHECKSUM,
-            tool=True,
-            mnemonic="CppLink",
-            inputs=[tool["outputs"][0]],
-            outputs=["bazel-out/exec/bin/generator"],
-        )
-        link = dict(
-            owner="//app:product",
-            mnemonic="CppLink",
-            inputs=[native["outputs"][0]],
-            outputs=["bazel-out/target/bin/product"],
-        )
-        graph = concepts.ActionGraph(_document([native, pic, tool, tool_link, link]), "linux")
-        selected = graph.reachable(["bazel-out/target/bin/product"])
+        link = _action("//app:product", "CppLink", native["outputs"][:1], ["bazel-out/target/bin/product"])
+        graph = concepts.ActionGraph(_document([native, pic, builder, link]), "linux")
+        selected = graph.reachable(link["outputs"])
         self.assertEqual(
-            [(action.owner, action.configuration, action.is_tool) for action in selected],
-            [
-                ("//lib:consumer", CHECKSUM, False),
-                ("//tool:generator", TOOL_CHECKSUM, True),
-            ],
+            [(action.outputs[0], action.is_tool) for action in selected],
+            [(native["outputs"][0], False), (builder["outputs"][0], True)],
         )
-        self.assertEqual(selected[0].outputs, ("bazel-out/target/bin/Use.o", "bazel-out/target/bin/Use.o.d"))
         self.assertNotIn("include/ao/Unused.h", graph.required_inputs)
 
-    def test_inline_response_expands_without_reading_native_param_file(self):
-        specification = _compile()
-        expanded = specification["argv"]
-        specification["argv"] = ["clang++", "@native.params"]
-        specification["paramFiles"] = [{"execPath": "native.params", "arguments": expanded[1:]}]
-        graph = concepts.ActionGraph(_document([specification]), "linux")
-        self.assertEqual(graph.reachable([specification["outputs"][0]])[0].argv, tuple(expanded))
+    def test_shared_python_bytecode_does_not_drop_the_native_consumer(self):
+        # rules_python legitimately emits identical precompilation actions under two owners.
+        native = _compile()
+        bytecode = _action(
+            "//py:first",
+            "PyCompile",
+            native["outputs"][:1],
+            ["bazel-out/target/bin/shared.pyc"],
+            actionKey="c" * 64,
+            executionPlatform="@@platforms//host:host",
+        )
+        graph = concepts.ActionGraph(_document([native, bytecode, {**bytecode, "owner": "//py:second"}]), "linux")
+        self.assertEqual([action.source for action in graph.reachable(bytecode["outputs"])], ["lib/Use.cpp"])
 
-    def test_missing_generated_producer_is_not_an_unbuilt_zero_observation(self):
-        graph = concepts.ActionGraph(_document([_compile(inputs=("bazel-out/target/bin/Missing.h",))]), "linux")
-        with self.assertRaisesRegex(ValueError, "no declared producer"):
-            graph.reachable(["bazel-out/target/bin/Use.o"])
+    def test_tree_child_reaches_the_declared_tree_producer(self):
+        native = _compile()
+        tree = "bazel-out/target/bin/generated"
+        generate = _action("//lib:tree", "GenerateTree", native["outputs"][:1], [tree])
+        graph = concepts.ActionGraph(_document([native, generate], tree_artifacts=(tree,)), "linux")
+        self.assertEqual([action.source for action in graph.reachable([tree + "/nested/config.h"])], ["lib/Use.cpp"])
+
+    def test_inline_response_arguments_recover_the_compile_source(self):
+        action = _compile()
+        arguments = action["arguments"]
+        action["arguments"] = ["clang++", "@native.params"]
+        action["paramFiles"] = [{"execPath": "native.params", "arguments": arguments[1:]}]
+        graph = concepts.ActionGraph(_document([action]), "linux")
+        self.assertEqual(graph.reachable(action["outputs"])[0].argv, tuple(arguments))
+
+
+class ConceptGraphQueryTest(unittest.TestCase):
+    def test_windows_opaque_response_uses_the_scoped_compile_context_write(self):
+        # Bazel 9.2 fails when the broad query asks for all FileWrite bytes.
+        native = _compile(arguments=["cl.exe", "@opaque.params"])
+        expanded = ["cl.exe", "/Iinclude", "/c", "lib/Use.cpp", "/Fo" + native["outputs"][0]]
+        context = _action(
+            native["owner"], "FileWrite", [], ["bazel-out/target/bin/consumer.aobus-compile-context.json"]
+        )
+        write = {
+            **context,
+            "fileContents": json.dumps(
+                {"quote_includes": ["include"], "compile_argv": [{"outputs": native["outputs"], "argv": expanded}]}
+            ),
+        }
+        expression = 'deps(set("//lib:consumer"))'
+
+        def query(action, arguments):
+            self.assertEqual(action, "aquery")
+            if arguments[0] == expression:
+                self.assertNotIn("--include_file_write_contents", arguments)
+                return json.dumps(_document([native, context]))
+            self.assertEqual(arguments[0], f'mnemonic("FileWrite", {expression})')
+            self.assertIn("--include_file_write_contents", arguments)
+            return json.dumps(_document([write]))
+
+        attempt = object.__new__(concepts._Attempt)
+        attempt.invoke = query
+        graph = attempt.graph(["//lib:consumer"], "windows")
+        self.assertEqual(graph.reachable(native["outputs"])[0].argv, tuple(expanded))
 
 
 class NativeDependencyTransportTest(unittest.TestCase):
-    def test_clang_transform_preserves_diagnostics_lto_order_and_source(self):
-        original = _action()
-        attempt = Path("/attempt")
-        argv, outputs = concepts.dependency_command(original, "linux", attempt)
-        self.assertEqual(
-            argv,
+    def test_native_gcc_redirects_preprocessing_without_changing_compile_semantics(self):
+        output = "bazel-out/target/bin/Use.o"
+        native = _standalone_compile(
             [
-                "clang++",
+                "g++",
                 "-Iinclude",
-                "-Iapp/include",
-                "-std=c++26",
                 "-Werror",
-                "-flto=thin",
+                "-flto=auto",
+                "-fno-canonical-system-headers",
                 "-MD",
                 "-MF",
-                str(attempt / "dependencies.d"),
-                "-E",
+                output + ".d",
+                "-c",
                 "lib/Use.cpp",
                 "-o",
-                str(attempt / "preprocessed.ii"),
-            ],
+                output,
+            ]
         )
-        self.assertEqual(outputs, ["bazel-out/target/bin/Use.o", "bazel-out/target/bin/Use.o.d"])
-        self.assertNotIn("-w", argv)
-        self.assertEqual(original.argv[-1], "bazel-out/target/bin/Use.o")
+        directory = Path("/attempt space$hash#")
+        argv, outputs = concepts.dependency_command(native, "linux", directory)
+        preprocessed = str(directory / "preprocessed.ii")
+        self.assertEqual(argv[0], "g++")
+        self.assertIn("-E", argv)
+        self.assertNotIn("-c", argv)
+        self.assertIn("-Werror", argv)
+        self.assertIn("-flto=auto", argv)
+        self.assertIn("-fno-canonical-system-headers", argv)
+        self.assertEqual(argv[argv.index("-o") + 1], preprocessed)
+        self.assertEqual(argv[argv.index("-MQ") + 1], preprocessed)
+        self.assertEqual(argv[argv.index("-MF") + 1], str(directory / "dependencies.d"))
+        self.assertEqual(outputs, [output, output + ".d"])
 
-    def test_gcc_native_context_projects_gcc_only_flags_for_the_selected_clang_ast(self):
-        native = [
-            "external/+dependencies+aobus_toolchain/gcc/tools/g++",
-            "-fno-canonical-system-headers",
-            "-Iinclude",
-            "-std=c++26",
-            "-DBOOST_PFR_USE_CPP26=0",
-            "-O2",
-            "-DNDEBUG",
-            "-flto=auto",
-            "-fno-fat-lto-objects",
-            "-MD",
-            "-MF",
-            "bazel-out/target/bin/Use.o.d",
-            "-c",
-            "lib/Use.cpp",
-            "-o",
-            "bazel-out/target/bin/Use.o",
-        ]
-        action = _action(native)
+    def test_clang_ast_keeps_gcc_context_defines_but_not_gcc_only_flags(self):
+        original = _compile()["arguments"]
+        native = _standalone_compile(
+            [
+                "g++",
+                "-DBOOST_PFR_USE_CPP26=0",
+                "-fno-canonical-system-headers",
+                "-fno-fat-lto-objects",
+                *[arg for arg in original[1:] if arg != "-flto=thin"],
+                "-flto=auto",
+            ]
+        )
         metadata = {
             "clang": "/selected/sdk/clang++",
             "system_arguments": ["-isystem/nix/store/include"],
-            "analysis_arguments": ["-resource-dir=/selected/resource"],
+            "analysis_arguments": [],
         }
-        argv = concepts._ast_command(action, "linux", metadata, Path("/main/Used.h"), Path("/work/ast.d"))
-        self.assertEqual(
-            argv,
+        header, depfile = Path("/main/Used.h"), Path("/work/ast.d")
+        argv = concepts._ast_command(native, "linux", metadata, header, depfile)
+        self.assertEqual(argv[0], metadata["clang"])
+        self.assertIn("-DBOOST_PFR_USE_CPP26=0", argv)
+        self.assertIn("-Iinclude", argv)
+        self.assertIn("-isystem/nix/store/include", argv)
+        self.assertTrue(
+            {"-flto=auto", "-fno-fat-lto-objects", "-fno-canonical-system-headers", "lib/Use.cpp"}.isdisjoint(argv)
+        )
+        self.assertEqual(argv[-1], str(header))
+
+    def test_windows_preprocessing_keeps_the_forced_include_not_the_object_output(self):
+        native = _standalone_compile(
             [
-                "/selected/sdk/clang++",
-                "-isystem/nix/store/include",
-                "-resource-dir=/selected/resource",
-                "-Iinclude",
-                "-std=c++26",
-                "-DBOOST_PFR_USE_CPP26=0",
-                "-O2",
-                "-DNDEBUG",
-                "-x",
-                "c++",
-                "-fsyntax-only",
-                "-Xclang",
-                "-ast-dump=json",
-                "-Xclang",
-                "-ast-dump-filter=ao",
-                "-Wno-pragma-once-outside-header",
-                "-Wno-unused-command-line-argument",
-                "-Qunused-arguments",
-                "-MD",
-                "-MF",
-                str(Path("/work/ast.d")),
-                str(Path("/main/Used.h")),
+                "cl.exe",
+                "/c",
+                "lib/Use.cpp",
+                "/WX",
+                "/GL",
+                "/FIpch.h",
+                "/Fooriginal.obj",
+                "/Fd",
+                "original.pdb",
+                "/showIncludes",
             ],
+            environment=(("VSLANG", "1033"),),
         )
-        # The native dependency observation stays the selected GCC unchanged,
-        # keeping the dependency-path flag GCC needs for reproducible -MD.
-        dependency, _ = concepts.dependency_command(action, "linux", Path("/attempt"))
-        self.assertEqual(dependency[0], "external/+dependencies+aobus_toolchain/gcc/tools/g++")
-        self.assertIn("-flto=auto", dependency)
-        self.assertIn("-fno-fat-lto-objects", dependency)
-        self.assertIn("-fno-canonical-system-headers", dependency)
-        self.assertEqual(action.argv, tuple(native))
-
-    def test_native_dependency_method_names_the_selected_compiler_family(self):
-        clang = _action()
-        self.assertEqual(concepts._native_dependency_method([clang], "linux"), "Clang -E/-MD")
-        gcc = _action(["external/+dependencies+aobus_toolchain/gcc/tools/g++"])
-        self.assertEqual(concepts._native_dependency_method([gcc], "linux"), "GNU -E/-MD")
-        self.assertEqual(
-            concepts._native_dependency_method([clang], "windows"),
-            "MSVC /P plus sourceDependencies Version 1.2 JSON",
-        )
-        with self.assertRaisesRegex(ValueError, "unsupported native compiler entry"):
-            concepts._native_dependency_method([_action(["oolong++"])], "linux")
-        with self.assertRaisesRegex(ValueError, "mix compiler families"):
-            concepts._native_dependency_method([clang, gcc], "linux")
-
-    def test_msvc_keeps_forced_include_distinct_from_preprocess_output(self):
-        native = [
-            "cl.exe",
-            "/c",
-            "lib/Use.cpp",
-            "/W4",
-            "/WX",
-            "/GL",
-            "/Z7",
-            "/FIpch.h",
-            "/fp:precise",
-            "/Fooriginal.obj",
-            "/Fd",
-            "original.pdb",
-            "/showIncludes",
-        ]
-        action = _action(
-            native, (("VSLANG", "1033"), ("INCLUDE", "selected-native-sdk"), ("SYSTEMROOT", "C:/captured/Windows"))
-        )
-        argv, outputs = concepts.dependency_command(action, "windows", Path("/attempt"))
+        root = Path("/attempt")
+        argv, outputs = concepts.dependency_command(native, "windows", root)
         self.assertIn("/FIpch.h", argv)
-        self.assertIn("/fp:precise", argv)
-        self.assertIn("/GL", argv)
-        self.assertIn("/WX", argv)
-        self.assertIn("/P", argv)
-        self.assertIn("/Fi" + str(Path("/attempt") / "preprocessed.i"), argv)
-        self.assertNotIn("original.obj", " ".join(argv))
+        self.assertIn("/Fi" + str(root / "preprocessed.i"), argv)
+        self.assertNotIn("/Fooriginal.obj", argv)
         self.assertNotIn("original.pdb", argv)
         self.assertEqual(outputs, ["original.obj", "original.pdb"])
-        self.assertEqual(
-            action.environment,
-            (("VSLANG", "1033"), ("INCLUDE", "selected-native-sdk"), ("SYSTEMROOT", "C:/captured/Windows")),
-        )
 
-    def test_windows_completion_uses_only_same_client_pinned_fields(self):
-        declared = (
-            ("VSLANG", "1033"),
-            ("TMP", "old-repository-temp"),
-            ("TEMP", "old-temp"),
-            ("SystemRoot", "C:/declared/Windows"),
-            ("PATH", "declared-tools"),
+    def test_clang_cl_ast_addresses_a_header_with_spaces_as_one_argument(self):
+        native = _standalone_compile(
+            ["cl.exe", "/c", "lib/Use.cpp", "/WX", "/FIpch.h", "/Fooriginal.obj", "/showIncludes"],
+            environment=(("VSLANG", "1033"),),
         )
-        action = _action(environment=declared)
+        metadata = {"clang": "clang-cl", "system_arguments": [], "analysis_arguments": []}
+        header, depfile = Path("main header.h").absolute(), Path("work/ast.d").absolute()
+        argv = concepts._ast_command(native, "windows", metadata, header, depfile)
+        self.assertEqual(argv[argv.index("/clang:-x") + 1], "/clang:c++-header")
+        self.assertEqual(argv[-4:], ["/clang:-MD", "/clang:-MF", "/clang:" + str(depfile), "/clang:" + str(header)])
+
+    def test_windows_observation_uses_captured_temp_and_keeps_declared_tools(self):
+        action = _standalone_compile(
+            environment=(
+                ("TMP", "old-repository-temp"),
+                ("SystemRoot", "C:/declared/Windows"),
+                ("PATH", "declared-tools"),
+            )
+        )
         client = {
             "SYSTEMROOT": "C:/client/Windows",
             "SYSTEMDRIVE": "C:",
             "TMP": "C:/client/tmp",
             "TEMP": "C:/other/tmp",
-            "COMSPEC": "must-not-merge",
             "USERPROFILE": "must-not-merge",
             "PATH": "must-not-merge",
         }
-        environment = concepts.observation_environment(action, "windows", client)
         self.assertEqual(
-            environment,
+            concepts.observation_environment(action, "windows", client),
             {
-                "VSLANG": "1033",
                 "TMP": "C:\\client\\tmp",
                 "TEMP": "C:\\client\\tmp",
                 "SystemRoot": "C:/declared/Windows",
@@ -360,262 +316,78 @@ class NativeDependencyTransportTest(unittest.TestCase):
                 "PATH": "declared-tools",
             },
         )
-        self.assertEqual(action.environment, declared)
 
-    def test_missing_windows_client_temp_or_system_fields_never_uses_ambient_fallback(self):
-        action = _action(environment=(("VSLANG", "1033"),))
-        for client in (None, {"SYSTEMROOT": "C:/Windows", "SYSTEMDRIVE": "C:"}, {"TMP": "C:/tmp"}):
-            with (
-                self.subTest(client=client),
-                patch.dict(os.environ, {"SYSTEMROOT": "C:/ambient/Windows", "TMP": "C:/ambient/tmp"}),
-                self.assertRaises(ValueError),
-            ):
-                concepts.observation_environment(action, "windows", client)
-
-    def test_make_escaping_is_not_shell_quoting(self):
-        text = "out\\ file.o: source.cpp path\\ with\\ space.h hash\\#name.h cash$$name.h \\\n C:\\sdk\\Header.h\n"
+    def test_make_depfile_preserves_make_escapes_and_unicode_in_paths(self):
+        text = (
+            "out\\ file.o: lib/Source.cpp path\\ with\\ space.h hash\\#name.h cash$$name.h \\\n"
+            " include/ao/No\u2028Break.h\n"
+        )
         target, dependencies = concepts.parse_dependencies(text)
         self.assertEqual(target, ["out file.o"])
         self.assertEqual(
-            dependencies, ["source.cpp", "path with space.h", "hash#name.h", "cash$name.h", "C:\\sdk\\Header.h"]
+            dependencies,
+            ["lib/Source.cpp", "path with space.h", "hash#name.h", "cash$name.h", "include/ao/No\u2028Break.h"],
         )
-
-    def test_unicode_separators_inside_make_names_are_not_ascii_whitespace(self):
-        target, dependencies = concepts.parse_dependencies(
-            "out\u00a0dir.ii: lib/Source.cpp include/ao/No\u2028Break.h\n"
-        )
-        self.assertEqual(target, ["out\u00a0dir.ii"])
-        self.assertEqual(dependencies, ["lib/Source.cpp", "include/ao/No\u2028Break.h"])
-
-
-class NativeObservationTest(unittest.TestCase):
-    def setUp(self):
-        temporary = tempfile.TemporaryDirectory()
-        self.addCleanup(temporary.cleanup)
-        self.base = Path(temporary.name)
-        self.root = self.base / "source"
-        for name, contents in (
-            ("lib/Use.cpp", b"#include <ao/Used.h>\n"),
-            ("include/ao/Used.h", b"// used\n"),
-            ("include/ao/Unused.h", b"// unused\n"),
-            ("include/ao/MandatoryUnused.h", b"// declared only\n"),
-            ("clang++", b"fixture compiler"),
-            ("bazel-out/target/bin/Use.o", b"original-object"),
-            ("bazel-out/target/bin/Use.o.d", b"original-dependencies"),
-        ):
-            path = self.root / name
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(contents)
-        self.locations = concepts._Locations(self.root, self.root, {})
-        self.action = _action(environment=(("ONLY_DECLARED", "kept"),))
-        self.guard = concepts._Guard()
-        for name in ("include/ao/Used.h", "lib/Use.cpp", "clang++"):
-            self.guard.add(self.root / name)
-        self.calls = []
-
-    def process(self, argv, *, cwd, environment, stdout, stderr):
-        self.assertEqual(cwd, self.root)
-        self.assertEqual(environment, {"ONLY_DECLARED": "kept"})
-        self.assertEqual(argv[0], "clang++")
-        self.assertIn("-Werror", argv)
-        self.calls.append(list(argv))
-        preprocessed = Path(argv[argv.index("-o") + 1])
-        dependency = Path(argv[argv.index("-MF") + 1])
-        preprocessed.write_bytes(b"// preprocessed\n")
-        dependency.write_text(
-            _make_word(str(preprocessed)) + ": lib/Use.cpp include/ao/Used.h include/ao/Used.h\n", encoding="utf-8"
-        )
-        stdout.write_bytes(b"")
-        stderr.write_bytes(b"")
-        return 0
-
-    def test_fresh_native_observation_excludes_declared_but_unincluded_headers(self):
-        with patch.object(concepts, "_process", side_effect=self.process):
-            observed = concepts._native_observation(
-                self.action, "linux", self.base / "attempt", self.root, self.locations, self.guard
-            )
-        self.assertEqual(observed, {"include/ao/Used.h"})
-        self.assertEqual(len(self.calls), 2)
-        self.assertEqual((self.root / "bazel-out/target/bin/Use.o").read_bytes(), b"original-object")
-        self.assertEqual((self.root / "bazel-out/target/bin/Use.o.d").read_bytes(), b"original-dependencies")
-        self.guard.verify()
-        for phase in ("read-inventory", "measurement"):
-            receipt = json.loads((self.base / "attempt" / phase / "receipt.json").read_text(encoding="utf-8"))
-            body = receipt["preprocessed"]
-            self.assertFalse(body["retained"])
-            self.assertEqual(body["bytes"], len(b"// preprocessed\n"))
-            self.assertEqual(body["sha256"], hashlib.sha256(b"// preprocessed\n").hexdigest())
-            self.assertFalse(Path(body["path"]).exists())
-            self.assertTrue((self.base / "attempt" / phase / "dependencies.d").is_file())
-
-    def test_nonzero_second_pass_does_not_publish_partial_observations(self):
-        def failing(*args, **kwargs):
-            status = self.process(*args, **kwargs)
-            return status if len(self.calls) == 1 else 9
-
-        with (
-            patch.object(concepts, "_process", side_effect=failing),
-            self.assertRaisesRegex(ValueError, "native dependency pass failed"),
-        ):
-            concepts._native_observation(
-                self.action, "linux", self.base / "attempt", self.root, self.locations, self.guard
-            )
-        self.assertTrue((self.base / "attempt/read-inventory/preprocessed.ii").is_file())
-        self.assertTrue((self.base / "attempt/measurement/preprocessed.ii").is_file())
-
-
-class ConceptSourceAndLifecycleTest(unittest.TestCase):
-    def test_location_cache_does_not_retain_an_ended_report(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            header = root / "Header.h"
-            header.write_bytes(b"// observed input\n")
-            locations = concepts._Locations(root, root, {})
-            self.assertEqual(locations.physical(str(header)), header.resolve())
-            reference = weakref.ref(locations)
-            del locations
-            gc.collect()
-            self.assertIsNone(reference())
-
-    def test_metadata_source_location_does_not_require_execroot_external_link(self):
-        with tempfile.TemporaryDirectory() as directory:
-            tree = Path(directory) / "tree"
-            physical = tree / "state/output/external/+dependencies+aobus_test_deps/release/manifest.json"
-            physical.parent.mkdir(parents=True)
-            physical.write_bytes(b"{}")
-            owner = "@@+dependencies+aobus_test_deps//release:manifest.json"
-            record = {
-                "owner": owner,
-                "path": "external/+dependencies+aobus_test_deps/release/manifest.json",
-                "source": True,
-                "root": "",
-            }
-            attempt = object.__new__(concepts._Attempt)
-            attempt.tree, attempt.guard = tree, concepts._Guard()
-            attempt.invoke = Mock(return_value=f"{physical}:1:1: source file @aobus_test_deps//release:manifest.json\n")
-            path = attempt.source_file(record, "@aobus_test_deps//:manifest.json")
-            self.assertEqual(path, physical)
-            self.assertFalse((tree / "state/output/execroot/_main/external").exists())
-            attempt.invoke.assert_called_once_with("query", [json.dumps(owner), "--output=location"])
-
-    def test_kill_failure_does_not_skip_child_wait(self):
-        events = []
-        child = Mock()
-        waits = iter((KeyboardInterrupt(), 0))
-
-        def wait():
-            events.append("wait")
-            value = next(waits)
-            if isinstance(value, BaseException):
-                raise value
-            return value
-
-        def kill():
-            events.append("kill")
-            raise OSError("kill denied")
-
-        child.wait.side_effect, child.kill.side_effect = wait, kill
-        with tempfile.TemporaryDirectory() as directory, patch.object(concepts.subprocess, "Popen", return_value=child):
-            with self.assertRaises(BaseExceptionGroup) as raised:
-                concepts._process(
-                    ["native"],
-                    cwd=Path(directory),
-                    environment={},
-                    stdout=Path(directory) / "out",
-                    stderr=Path(directory) / "err",
-                )
-        self.assertEqual(events, ["wait", "kill", "wait"])
-        self.assertIn("reaped", str(raised.exception))
 
 
 class ConceptConsumerTest(unittest.TestCase):
-    """Keep selection/metrics/validation real; fake only subprocess and portal setup I/O."""
+    """Run the real cohort, dependency, AST and report consumers over a tiny graph."""
+
+    source = "lib/Use.cpp"
+    core = "include/ao/Used.h"
+    application = "app/include/ao/Unused.h"
+    script = "script/smoke.py"
+    wrapper = "bazel-out/target/bin/wrapper"
+    inner = "bazel-out/target/bin/fixture.native"
+    compiler_relative = "external/+dependencies+aobus_toolchain/clang/tools/clang++"
+    test_label = "//test:fixture"
 
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
-        self.base = Path(temporary.name)
-        self.platform = "linux"
+        self.base = Path(temporary.name).resolve()
         self.root, self.tree = self.base / "source", self.base / "tree"
         self.output_base = self.tree / "state/output"
         self.execution_root = self.output_base / "execroot/_main"
-        self.source = "lib/Use.cpp"
-        self.core, self.application = "include/ao/Used.h", "app/include/ao/Unused.h"
-        self.binary = "bazel-out/target/bin/fixture"
-        # The two compiler child packages publish their selected tools; the
-        # Clang AST SDK metadata names the analysis compiler separately.
-        self.compiler_relative = "external/+dependencies+aobus_toolchain/clang/tools/clang++"
-        self.compiler = self.output_base / "external/+dependencies+aobus_toolchain/clang/tools/clang++"
-        self.compiler.parent.mkdir(parents=True)
-        self.compiler.write_bytes(b"fixture compiler, never executed")
+        self.compiler = _write(self.output_base, self.compiler_relative, "fixture compiler")
         self.resource = self.base / "resource"
-        self.resource.mkdir()
-        for name in (
-            "MODULE.bazel",
-            "REPO.bazel",
-            ".bazelrc",
-            ".bazelversion",
-            "BUILD.bazel",
-            "script/ao/bazel-toolchain.json",
-            self.source,
-            self.core,
-            self.application,
-        ):
-            path = self.root / name
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(b"// fixture input\n")
-        (self.root / self.core).write_bytes(b"namespace ao { struct A {}; }\n")
-        (self.root / self.application).write_bytes(b"#include <ao/Used.h>\nnamespace ao { struct B { A value; }; }\n")
-        (self.root / self.source).write_bytes(b"#include <ao/Used.h>\nint main() { return 0; }\n")
-        (self.root / ".bazelversion").write_bytes(b"9.2.0\n")
-        self.bazel = self.base / "bazel"
-        self.bazel.write_bytes(b"fixture Bazel, never executed")
-        self.metadata = dict(
-            schema=1,
-            platform=self.platform,
-            version="22.1.8",
-            clang=str(self.compiler),
-            resource_dir=str(self.resource),
-            system_arguments=[],
-            analysis_arguments=[],
-        )
-        self.declarations, self.metadata_paths = {}, {}
-        # The requested consumer configuration; fastbuild still consumes the
-        # existing Release SDK manifest fixture below.
-        self.config = "release"
-        self.sdk_facts = dict(schema=1, platform=self.platform, config=self.config, tree=str(self.tree), manifests=[])
-        provider_input = self.base / "provider.h"
-        provider_input.write_bytes(b"// provider\n")
+        (self.resource / "include").mkdir(parents=True)
+        for path in ("MODULE.bazel", "REPO.bazel", ".bazelrc", "script/ao/bazel-toolchain.json"):
+            _write(self.root, path, "# fixture\n")
+        _write(self.root, ".bazelversion", "9.2.0\n")
+        _write(self.root, self.core, "namespace ao { struct A {}; }\n")
+        _write(self.root, self.application, "#include <ao/Used.h>\nnamespace ao { struct B { A value; }; }\n")
+        _write(self.root, self.source, "#include <ao/Used.h>\nint main() { return 0; }\n")
+        _write(self.root, self.script, "# wrapper's direct source, not a compiler input\n")
+        self.bazel = _write(self.base, "bazel", "fixture Bazel")
+        self.prepared = self.base / "prepared"
+        _write(self.prepared, "aobus.bazelrc", "# fixture\n")
+        _write(self.prepared, "request.json", json.dumps({"host": "linux", "source": str(self.root)}))
+        self.metadata = {}
+        self.ast_sdk_dependency = None
+        manifests = []
+        provider = _write(self.base, "provider.h", "// provider\n")
         for repository in ("aobus_native_deps", "aobus_test_deps"):
-            canonical = "+dependencies+" + repository
-            owner = "@@" + canonical + "//release:manifest.json"
-            target = "@" + repository + "//:manifest.json"
-            path = self.output_base / "external" / canonical / "release/manifest.json"
-            path.parent.mkdir(parents=True)
             facts = {
                 "generator": "aobus-bazel-artifact-adapter-v1",
-                "configuration": {"platform": self.platform, "config": "Release"},
-                "packages": [{"name": "fixture"}],
-                "inputs": [{"path": str(provider_input), "sha256": _sha(provider_input), "roles": ["header"]}],
+                "configuration": {"platform": "linux", "config": "Debug"},
+                "inputs": [{"path": str(provider), "sha256": _sha(provider), "roles": ["header"]}],
             }
-            path.write_text(json.dumps(facts), encoding="utf-8")
-            record = {"owner": owner, "path": f"external/{canonical}/release/manifest.json", "source": True}
-            self.sdk_facts["manifests"].append(
-                dict(target=target, path=str(path), declared_source=record, sha256=_sha(path), facts=facts)
+            target = f"@{repository}//:manifest.json"
+            record, path = self.add_metadata(target, "+dependencies+" + repository, "debug:manifest.json", facts)
+            declaration = {key: record[key] for key in ("owner", "path", "source")}
+            manifests.append(
+                dict(target=target, path=str(path), declared_source=declaration, sha256=_sha(path), facts=facts)
             )
-            self.declarations[target], self.metadata_paths[target] = record, path
-        self._metadata_source(
-            "@aobus_lint_sdk//:metadata.json", "+lint_sdk+aobus_lint_sdk", "metadata.json", self.metadata
-        )
-        self._metadata_source(
+        self.sdk = dict(schema=1, platform="linux", config="debug", tree=str(self.tree), manifests=manifests)
+        self.add_metadata(
             "@aobus_toolchain//clang:identity.json",
             "+dependencies+aobus_toolchain",
-            "clang/identity.json",
+            "clang:identity.json",
             {
                 "schema": 1,
                 "context": {
                     "platform": "linux",
-                    "machine": "x86_64",
                     "compiler": "clang",
                     "version": "22.1.8",
                     "builtin_roots": json.dumps([str(self.compiler.parent)]),
@@ -623,182 +395,105 @@ class ConceptConsumerTest(unittest.TestCase):
                 "files": [{"path": str(self.compiler), "sha256": _sha(self.compiler)}],
             },
         )
-        specification = _compile(inputs=(self.core, self.application, self.compiler_relative))
-        specification["argv"][0] = self.compiler_relative
-        specification["environment"] = {"ONLY_DECLARED": "native"}
-        link = dict(
-            owner="//test:fixture", mnemonic="CppLink", inputs=[specification["outputs"][0]], outputs=[self.binary]
-        )
-        self.graph = _document([specification, link])
-        self.labels = ["//:check_products", "//:check_native_tests", "//:check_runs", "//test:fixture"]
-        self.depth, self.native_calls = 0, []
-        self.fail_native = False
-        self.mutate_on_build = None
-        self.chain = concept_scope.ConstructionChain("fixture", self.source, ("construct A", "construct B"))
-
-    def _metadata_source(self, target, canonical, filename, facts):
-        path = self.output_base / "external" / canonical / filename
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(facts), encoding="utf-8")
-        self.declarations[target] = {
-            "owner": "@@" + canonical + "//:" + filename,
-            "path": "external/" + canonical + "/" + filename,
-            "source": True,
-        }
-        self.metadata_paths[target] = path
-
-    @contextmanager
-    def lock(self, tree):
-        self.assertEqual(tree, self.tree)
-        self.depth += 1
-        try:
-            yield
-        finally:
-            self.depth -= 1
-
-    def prepare(self, tree, config, *, prefix, graph_options=()):
-        self.assertGreater(self.depth, 0)
-        self.assertEqual(config, self.config)
-        self.assertEqual(graph_options, ())
-        path = tree / "configuration"
-        path.mkdir(parents=True, exist_ok=True)
-        (path / "aobus.bazelrc").write_text("# frozen\n", encoding="utf-8")
-        (path / "request.json").write_text(
-            json.dumps({"host": self.platform, "source": str(self.root)}), encoding="utf-8"
-        )
-        return path
-
-    def provider(self, label, files):
-        return {"label": label, "incompatible": False, "files": files}
-
-    def root_files(self):
-        return [
-            {
-                "path": self.binary,
-                "root": "bazel-out/target/bin",
-                "source": False,
-                "directory": False,
-                "owner": "//test:fixture",
-            }
-        ]
-
-    def process(self, argv, *, cwd, environment, stdout, stderr):
-        self.assertGreater(self.depth, 0)
-        if argv[0] == "BAZEL":
-            action = argv[1]
-            expression = next((arg for arg in argv[2:] if not arg.startswith("--")), "")
-            if action == "build":
-                self.build(self.bazel, self.tree, None, "build", self.config, argv[2:], jobs=2, isolate_rc=True)
-                stdout.write_bytes(b"fixture governed build\n")
-                stderr.write_bytes(b"")
-                return 0
-            if action == "cquery" and expression in self.declarations:
-                record = {**self.declarations[expression], "root": "", "directory": False}
-                payload = json.dumps(self.provider(expression, [record])) + "\n"
-            elif action == "query" and "--output=location" in argv:
-                owner = json.loads(expression)
-                selected = next(target for target, record in self.declarations.items() if record["owner"] == owner)
-                payload = f"{self.metadata_paths[selected]}:1:1: source file {owner}\n"
-            elif action == "query" and expression.startswith("buildfiles("):
-                payload = '<query><source-file name="//:BUILD.bazel"/></query>'
-            elif action == "cquery" and "tests(//:check_tests)" in expression:
-                payload = json.dumps(self.provider("//test:fixture", self.root_files())) + "\n"
-            elif action == "cquery" and "--output=jsonproto" in argv:
-                payload = json.dumps(
-                    {
-                        "configurations": [{"id": 1, "checksum": CHECKSUM}],
-                        "results": [
-                            {
-                                "configurationId": 1,
-                                "target": {"type": "RULE", "rule": {"name": label, "ruleClass": "filegroup"}},
-                            }
-                            for label in self.labels
-                        ],
-                    }
-                )
-            elif action == "cquery" and expression.startswith("config(set("):
-                payload = "\n".join(
-                    json.dumps(
-                        self.provider(
-                            label, self.root_files() if label in {"//:check_products", "//test:fixture"} else []
-                        )
-                    )
-                    for label in self.labels
-                )
-            elif action == "aquery" and expression.startswith("deps(set("):
-                payload = json.dumps(self.graph)
-            elif action == "info" and expression == "execution_root":
-                payload = str(self.execution_root) + "\n"
-            else:
-                raise AssertionError(f"unexpected governed query: {argv}")
-            stdout.write_text(payload, encoding="utf-8")
-            stderr.write_bytes(b"")
-            return 0
-        self.assertEqual(cwd, self.execution_root)
-        self.assertEqual(environment, {"ONLY_DECLARED": "native"})
-        stdout.write_bytes(b"")
-        stderr.write_bytes(b"")
-        if "-E" in argv:
-            self.assertEqual(argv[0], self.compiler_relative)
-            self.assertIn(self.source, argv)
-            self.assertIn("-Werror", argv)
-            self.native_calls.append(list(argv))
-            if self.fail_native:
-                return 8
-            output = Path(argv[argv.index("-o") + 1])
-            dependency = Path(argv[argv.index("-MF") + 1])
-            output.write_bytes(b"// fresh preprocess\n")
-            dependency.write_text(
-                _make_word(str(output)) + ": " + self.source + " " + self.core + "\n", encoding="utf-8"
-            )
-            return 0
-        self.assertEqual(argv[0], str(self.compiler))
-        self.assertIn("-fsyntax-only", argv)
-        header = next(
-            Path(arg) for arg in argv if arg in {str(self.root / self.core), str(self.root / self.application)}
-        )
-        application = header == self.root / self.application
-        main_record = {
-            "kind": "CXXRecordDecl",
-            "tagUsed": "struct",
-            "name": "B" if application else "A",
-            "completeDefinition": True,
-            "loc": {"file": str(header), "line": 1},
-        }
-        inner = [main_record]
-        if application:
-            main_record["inner"] = [
-                {"kind": "FieldDecl", "name": "value", "type": {"qualType": "ao::A"}, "loc": {"file": str(header)}}
+        self.set_ast_metadata([])
+        self.compile = _compile(inputs=(self.core, self.application, self.compiler_relative))
+        self.compile["arguments"][0] = self.compiler_relative
+        self.compile["environmentVariables"] = [{"key": "ONLY_DECLARED", "value": "native"}]
+        self.graph = _document(
+            [
+                self.compile,
+                _action(self.test_label, "CppLink", self.compile["outputs"][:1], [self.inner]),
+                _action(self.test_label, "TemplateExpand", [], [self.wrapper]),
             ]
-            inner.append({"kind": "CXXRecordDecl", "name": "A", "loc": {"file": str(self.root / self.core)}})
-        if "-ast-dump=json" in argv:
-            stdout.write_text(
-                json.dumps({"kind": "NamespaceDecl", "name": "ao", "loc": {"file": str(header)}, "inner": inner}),
-                encoding="utf-8",
-            )
-        dependency = Path(argv[argv.index("-MF") + 1])
-        names = [str(header), *([str(self.root / self.core)] if application else [])]
-        dependency.write_text("ast.o: " + " ".join(_make_word(name) for name in names) + "\n", encoding="utf-8")
-        return 0
+        )
+        self.labels = [*concepts._ROOTS, self.test_label]
+        self.fail_native = False
 
-    def build(self, executable, tree, prepared, action, config, arguments, *, jobs, isolate_rc):
-        self.assertGreater(self.depth, 0)
-        self.assertEqual(action, "build")
-        self.assertTrue(isolate_rc)
-        self.assertIn("--remote_download_outputs=all", arguments)
-        if self.mutate_on_build is not None:
-            self.mutate_on_build()
-        for name in (self.source, self.core, self.application):
-            path = self.execution_root / name
-            path.parent.mkdir(parents=True, exist_ok=True)
-            os.link(self.root / name, path)
-        compiler_view = self.execution_root / self.compiler_relative
-        compiler_view.parent.mkdir(parents=True, exist_ok=True)
-        os.link(self.compiler, compiler_view)
-        for name in (self.binary, "bazel-out/target/bin/Use.o", "bazel-out/target/bin/Use.o.d"):
-            path = self.execution_root / name
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(b"original native output")
+    def add_metadata(self, target, canonical, file_label, facts):
+        relative = f"external/{canonical}/" + file_label.replace(":", "/").lstrip("/")
+        path = _write(self.output_base, relative, json.dumps(facts))
+        record = dict(owner=f"@@{canonical}//{file_label}", path=relative, source=True, root="", directory=False)
+        self.metadata[target] = record, path
+        return record, path
+
+    def set_ast_metadata(self, system_arguments):
+        self.add_metadata(
+            "@aobus_lint_sdk//:metadata.json",
+            "+lint_sdk+aobus_lint_sdk",
+            ":metadata.json",
+            dict(
+                schema=1,
+                platform="linux",
+                version="22.1.8",
+                clang=str(self.compiler),
+                resource_dir=str(self.resource),
+                system_arguments=system_arguments,
+                analysis_arguments=[],
+            ),
+        )
+
+    @staticmethod
+    def provider(label, files):
+        return json.dumps(dict(label=label, incompatible=False, files=files))
+
+    def bazel_result(self, action, arguments):
+        expression = arguments[0]
+        labels = " ".join(json.dumps(label) for label in self.labels)
+        compatible = " ".join(json.dumps(label) for label in sorted(self.labels))
+        if action == "cquery" and "--output=starlark" in arguments:
+            if expression in self.metadata:
+                return self.provider(expression, [self.metadata[expression][0]])
+            files = [
+                dict(path=name, directory=False, root="bazel-out/target/bin", source=False, owner=self.test_label)
+                for name in (self.wrapper, self.inner)
+            ] + [dict(path=self.script, directory=False, root="", source=True, owner="@@//:" + self.script)]
+            if expression == "config(tests(//:check_tests), target)":
+                return self.provider(self.test_label, files)
+            if expression == f"config(set({labels}), target)":
+                return "\n".join(
+                    self.provider(label, files if label == self.test_label else []) for label in self.labels
+                )
+        if action == "cquery" and arguments == [f"config(set({labels}), target)", "--output=jsonproto"]:
+            return json.dumps(
+                {
+                    "configurations": [{"id": 1, "checksum": CHECKSUM}],
+                    "results": [
+                        {
+                            "configurationId": 1,
+                            "target": {"type": "RULE", "rule": {"name": label, "ruleClass": "filegroup"}},
+                        }
+                        for label in self.labels
+                    ],
+                }
+            )
+        if action == "query" and arguments[1:] == ["--output=location"]:
+            owner = json.loads(expression)
+            candidates = [path for record, path in self.metadata.values() if record["owner"] == owner]
+            self.assertEqual(len(candidates), 1)
+            return f"{candidates[0]}:1:1: source file {owner}\n"
+        if action == "query" and arguments == [
+            f"buildfiles(deps(set({' '.join(sorted(self.labels))})))",
+            "--output=xml",
+        ]:
+            return "<query/>"
+        if action == "aquery" and expression == f"deps(set({compatible}))":
+            return json.dumps(self.graph)
+        if action == "info" and arguments == ["execution_root"]:
+            return str(self.execution_root)
+        if action == "build":
+            self.assertEqual(arguments[: len(self.labels)], sorted(self.labels))
+            self.materialize(arguments)
+            return ""
+        raise AssertionError(f"unexpected Bazel command: {action} {arguments}")
+
+    def materialize(self, arguments):
+        for name in (self.source, self.core, self.application, self.script, self.compiler_relative):
+            original = self.compiler if name == self.compiler_relative else self.root / name
+            alias = self.execution_root / name
+            alias.parent.mkdir(parents=True, exist_ok=True)
+            os.link(original, alias)
+        for name in (self.wrapper, self.inner, *self.compile["outputs"]):
+            _write(self.execution_root, name, "original native output")
         bep = Path(next(arg.partition("=")[2] for arg in arguments if arg.startswith("--build_event_json_file=")))
         events = [
             {
@@ -809,44 +504,92 @@ class ConceptConsumerTest(unittest.TestCase):
         ]
         events.append({"finished": {"exitCode": {"name": "SUCCESS"}}, "lastMessage": True})
         bep.write_text("\n".join(json.dumps(event) for event in events), encoding="utf-8")
-        (tree / "build.log").write_bytes(b"fixture build, no native process executed")
-        return 0
+
+    def process(self, argv, *, cwd, environment, stdout, stderr):
+        stdout.write_bytes(b"")
+        stderr.write_bytes(b"")
+        if argv[0] == str(self.bazel):
+            action, *arguments = argv[1:]
+            stdout.write_text(
+                self.bazel_result(action, [value for value in arguments if not value.startswith("--jobs=")]),
+                encoding="utf-8",
+            )
+            return 0
+        self.assertEqual(cwd, self.execution_root)
+        self.assertEqual(environment, {"ONLY_DECLARED": "native"})
+        if "-E" in argv:
+            self.assertEqual(argv[0], self.compiler_relative)
+            self.assertEqual(argv[argv.index("-E") + 1], self.source)
+            output = Path(argv[argv.index("-o") + 1])
+            output.write_bytes(b"// fresh preprocess\n")
+            dependency_text = f"{_make_word(str(output))}: {self.source} {self.core}\n"
+        else:
+            self.assertEqual(argv[0], str(self.compiler))
+            self.assertIn("-fsyntax-only", argv)
+            header = Path(argv[-1])
+            self.assertIn(header, (self.root / self.core, self.root / self.application))
+            application = header == self.root / self.application
+            record = {
+                "kind": "CXXRecordDecl",
+                "tagUsed": "struct",
+                "name": "B" if application else "A",
+                "completeDefinition": True,
+                "loc": {"file": str(header), "line": 1},
+            }
+            declarations = [record]
+            names = [str(header)]
+            if application:
+                record["inner"] = [
+                    {"kind": "FieldDecl", "name": "value", "type": {"qualType": "ao::A"}, "loc": {"file": str(header)}}
+                ]
+                core = str(self.root / self.core)
+                declarations.append({"kind": "CXXRecordDecl", "name": "A", "loc": {"file": core}})
+                names.append(core)
+            if self.ast_sdk_dependency is not None:
+                self.assertIn(f"-isystem{self.resource / 'include'}", argv)
+                sdk = str(self.ast_sdk_dependency)
+                declarations.append({"kind": "TypedefDecl", "name": "int32_t", "loc": {"file": sdk}})
+                names.append(sdk)
+            if "-ast-dump=json" in argv:
+                stdout.write_text(
+                    json.dumps(
+                        {"kind": "NamespaceDecl", "name": "ao", "loc": {"file": str(header)}, "inner": declarations}
+                    ),
+                    encoding="utf-8",
+                )
+            dependency_text = "ast.o: " + " ".join(_make_word(name) for name in names) + "\n"
+        Path(argv[argv.index("-MF") + 1]).write_text(dependency_text, encoding="utf-8")
+        return 8 if self.fail_native and "-E" in argv and stdout.parent.name == "measurement" else 0
 
     def run_consumer(self):
-        args = argparse.Namespace(config=self.config, path=str(self.tree), jobs=2, vcpkg_prefix=None)
         with ExitStack() as stack:
             if os.name == "nt":
-                # Emulate the native source-forest path resolution at the I/O
-                # boundary without requiring Windows symlink privileges.
+                # Model the Windows source forest's canonical names without symlink privilege.
                 realpath = os.path.realpath
                 aliases = {
-                    os.path.normcase(os.path.abspath(self.execution_root / name)): self.root / name
-                    for name in (self.source, self.core, self.application)
+                    os.path.normcase(str(self.execution_root / name)): self.root / name
+                    for name in (self.source, self.core, self.application, self.script)
                 }
 
-                def resolve(value, *positional, **keywords):
-                    selected = aliases.get(os.path.normcase(os.path.abspath(value)), value)
-                    return realpath(selected, *positional, **keywords)
+                def resolve(path, *args, **kwargs):
+                    return realpath(aliases.get(os.path.normcase(os.path.abspath(path)), path), *args, **kwargs)
 
                 stack.enter_context(patch.object(os.path, "realpath", side_effect=resolve))
-            stack.enter_context(patch.object(concepts, "build_tree_lock", self.lock))
-            stack.enter_context(patch.object(concepts.native, "native_platform", return_value=self.platform))
+            stack.enter_context(patch.object(concepts.native, "native_platform", return_value="linux"))
             stack.enter_context(patch.object(concepts.native, "require_supported_source"))
-            stack.enter_context(patch.object(concepts.bazel_workspace, "workspace_path", return_value=self.tree))
             stack.enter_context(patch.object(concepts.bazel_workspace, "bazel_executable", return_value=self.bazel))
-            stack.enter_context(patch.object(concepts.bazel_workspace, "prepare_workspace", side_effect=self.prepare))
+            stack.enter_context(patch.object(concepts.bazel_workspace, "prepare_workspace", return_value=self.prepared))
+            stack.enter_context(patch.object(concepts.bazel_workspace, "invocation", return_value=[str(self.bazel)]))
             stack.enter_context(patch.object(concepts.bazel_workflows, "selected_compiler", return_value="clang"))
-            stack.enter_context(patch.object(concepts.bazel_workspace, "invocation", return_value=["BAZEL"]))
-            stack.enter_context(patch.object(concepts.bazel_workspace, "execute", side_effect=self.build))
             stack.enter_context(patch.object(concepts, "_process", side_effect=self.process))
-            stack.enter_context(patch.object(concept_scope, "CONSTRUCTION_CHAINS", (self.chain,)))
-            return concepts.write_bazel_report(args, sdk_facts=self.sdk_facts, root=self.root)
+            chain = concept_scope.ConstructionChain("fixture", self.source, ("construct A", "construct B"))
+            stack.enter_context(patch.object(concept_scope, "CONSTRUCTION_CHAINS", (chain,)))
+            return concepts.write_bazel_report(
+                Request(config="debug", path=str(self.tree), jobs=1), sdk_facts=self.sdk, root=self.root
+            )
 
-    def test_public_consumer_writes_real_complete_metric_report_and_preserves_unused_header(self):
+    def test_wrapped_cpp_output_counts_actual_includes_and_retains_the_unused_public_header(self):
         report = self.run_consumer()
-        self.assertEqual(self.depth, 0)
-        self.assertEqual(len(self.native_calls), 2)
-        self.assertEqual(report["schemaVersion"], 4)
         self.assertEqual(report["primary"]["core"]["declarations"], 1)
         self.assertEqual(report["primary"]["application"]["declarations"], 1)
         self.assertEqual(report["primary"]["application"]["dependencyEdges"], 1)
@@ -859,75 +602,39 @@ class ConceptConsumerTest(unittest.TestCase):
             ],
         )
         self.assertEqual(json.loads((self.tree / "concept-report.json").read_text(encoding="utf-8")), report)
-        self.assertEqual((self.execution_root / "bazel-out/target/bin/Use.o").read_bytes(), b"original native output")
+        self.assertEqual(
+            (self.execution_root / self.compile["outputs"][0]).read_text(encoding="utf-8"), "original native output"
+        )
 
-    def test_fastbuild_consumer_reports_fastbuild_and_consumes_the_release_sdk_manifest(self):
-        self.config = "fastbuild"
-        self.sdk_facts["config"] = "fastbuild"
-        report = self.run_consumer()
-        self.assertEqual(self.depth, 0)
-        self.assertEqual(report["measurement"]["config"], "fastbuild")
-        receipts = list((self.tree / "concepts").glob("report-*/receipt.json"))
-        self.assertEqual(len(receipts), 1)
-        receipt = json.loads(receipts[0].read_text(encoding="utf-8"))
-        self.assertEqual(receipt["config"], "fastbuild")
-        # The admitted SDK manifest stays the existing Release one; there is no
-        # Fastbuild dependency configuration to expect or report.
-        for manifest in self.sdk_facts["manifests"]:
-            self.assertEqual(manifest["facts"]["configuration"]["config"], "Release")
-            self.assertTrue(manifest["declared_source"]["owner"].endswith("//release:manifest.json"))
+    @unittest.skipIf(os.name == "nt", "Nix resource directory links are a POSIX SDK layout")
+    def test_clang_resource_include_symlink_does_not_become_project_include_weight(self):
+        include = self.resource / "include"
+        sdk = _write(self.base, "store/" + "b" * 32 + "-clang-lib/include/stdint.h", "// Clang SDK header\n")
+        include.rmdir()
+        include.symlink_to(sdk.parent, target_is_directory=True)
+        self.set_ast_metadata([f"-isystem{include}"])
+        self.ast_sdk_dependency = include / sdk.name
+        with patch.object(concepts, "_NIX_STORE", self.base / "store"):
+            report = self.run_consumer()
+        self.assertEqual(report["primary"]["core"]["includeWeight"]["medianHeaders"], 1)
+        self.assertEqual(report["primary"]["application"]["includeWeight"]["medianHeaders"], 2)
 
-    def test_native_failure_keeps_old_report_historical_and_does_not_publish_zero_success(self):
-        self.tree.mkdir(parents=True, exist_ok=True)
-        previous = self.tree / "concept-report.json"
-        previous.write_bytes(b"historical-report")
+    def test_failed_compiler_observation_preserves_the_last_report(self):
+        previous = _write(self.tree, "concept-report.json", "historical-report")
         self.fail_native = True
-        with self.assertRaisesRegex(concepts.native.BazelWorkspaceError, "native dependency pass failed"):
+        with self.assertRaises(concepts.native.BazelWorkspaceError):
             self.run_consumer()
-        self.assertEqual(previous.read_bytes(), b"historical-report")
-        self.assertEqual(self.depth, 0)
+        self.assertEqual(previous.read_text(encoding="utf-8"), "historical-report")
 
-    def _macos_identity(self, **overrides):
-        """Only the report consumer's selection contract, not a compiler fixture."""
-        facts = {
-            "schema": 2,
-            "platform": "macos",
-            "sdk": {
-                "sdk": str(self.base / "MacOS.sdk"),
-                "sdk_version": "26.5",
-                "sdk_build_version": "25F70",
-            },
-        }
-        facts.update(overrides)
-        return facts
 
-    def _admit_macos(self, identity=None):
-        """Rebind every declared fixture selection to a macOS host before the run."""
-        self.platform = "macos"
-        self.metadata["platform"] = "macos"
-        self._metadata_source(
-            "@aobus_lint_sdk//:metadata.json", "+lint_sdk+aobus_lint_sdk", "metadata.json", self.metadata
-        )
-        self.sdk_facts["platform"] = "macos"
-        for manifest in self.sdk_facts["manifests"]:
-            manifest["facts"]["configuration"]["platform"] = "macos"
-            path = Path(manifest["path"])
-            path.write_text(json.dumps(manifest["facts"]), encoding="utf-8")
-            manifest["sha256"] = _sha(path)
-        self._metadata_source(
-            "@aobus_toolchain//:identity.json",
-            "+dependencies+aobus_toolchain",
-            "identity.json",
-            self._macos_identity() if identity is None else identity,
-        )
-
-    def test_macos_schema_two_identity_metadata_is_admitted_without_files_ledger(self):
-        self._admit_macos()
-        report = self.run_consumer()
-        self.assertEqual(self.depth, 0)
-        self.assertEqual(report["schemaVersion"], 4)
-        identity = self.metadata_paths["@aobus_toolchain//:identity.json"]
-        receipts = list((self.tree / "concepts").glob("report-*/receipt.json"))
-        self.assertEqual(len(receipts), 1)
-        receipt = json.loads(receipts[0].read_text(encoding="utf-8"))
-        self.assertEqual(receipt["nativeToolchain"], {"path": str(identity), "sha256": _sha(identity)})
+class ConceptProcessTest(unittest.TestCase):
+    def test_failed_kill_still_reaps_the_compiler(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            child = Mock()
+            child.wait.side_effect = [KeyboardInterrupt(), 0]
+            child.kill.side_effect = OSError("kill denied")
+            with patch.object(concepts.subprocess, "Popen", return_value=child), self.assertRaises(BaseExceptionGroup):
+                concepts._process(["native"], cwd=root, environment={}, stdout=root / "out", stderr=root / "err")
+            child.kill.assert_called_once()
+            self.assertEqual(child.wait.call_count, 2)

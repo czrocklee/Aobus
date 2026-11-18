@@ -21,6 +21,8 @@ _SELECTORS = [
     "PROCESSOR_ARCHITECTURE",
     "PROCESSOR_ARCHITEW6432",
     "AOBUS_STATE_ROOT",
+    # Python tooling uses the same checkout identity as the outer bootstrap.
+    "AOBUS_CHECKOUT_ID",
     "XDG_CACHE_HOME",
     "AOBUS_BAZEL_VCPKG_PREFIX",
     "AOBUS_LLVM_ROOT",
@@ -225,7 +227,7 @@ environment_repository = repository_rule(
     implementation = _environment_impl,
     attrs = {
         "root": attr.label(default = Label("//:MODULE.bazel"), allow_single_file = True),
-        "helper": attr.label(default = Label("//:script/ao/core/bazel_environment.py"), allow_single_file = True),
+        "helper": attr.label(default = Label("//:script/ao/portal/bazel_environment.py"), allow_single_file = True),
     },
     configure = True,
 )

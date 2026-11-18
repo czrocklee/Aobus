@@ -16,7 +16,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from ao.core import buildifier
+from ao.portal import buildifier
 
 
 class BuildifierRunTest(unittest.TestCase):
@@ -83,11 +83,51 @@ class BuildifierRunTest(unittest.TestCase):
         self.assertTrue(all(Path(filename).is_absolute() for filename in files))
         return subprocess.CompletedProcess(argv, self.returncode, payload, self.stderr)
 
-    def _run(self, files=None, *, check=True, lint=False, sink=None):
+    def _run(self, files=None, *, check=True, lint=False, sink=None, provision=True):
         output = io.StringIO()
         with contextlib.redirect_stderr(output):
-            code = buildifier.run(["BUILD.bazel"] if files is None else files, check=check, lint=lint, sink=sink)
+            code = buildifier.run(
+                ["BUILD.bazel"] if files is None else files,
+                check=check,
+                lint=lint,
+                sink=sink,
+                provision=provision,
+            )
         return code, output.getvalue()
+
+    def test_semantic_lint_ignores_format_only_metadata_without_rewriting_sources(self):
+        self.payload = json.dumps({"success": False, "files": [self._record(formatted=False)]})
+        self.returncode = 4
+        with contextlib.redirect_stderr(io.StringIO()) as diagnostics:
+            self.assertEqual(buildifier.lint_paths(["BUILD.bazel"]), 0)
+        self.assertEqual(diagnostics.getvalue(), "")
+        self.assertEqual(self.first.read_bytes(), b"x=1\n")
+        self.selection.assert_called_once_with(provision=False)
+        self.assertIn("-lint=warn", self.process.call_args.args[0])
+
+    def test_semantic_lint_reports_syntax_and_warning_findings_to_the_selected_sink(self):
+        for code, record, message in (
+            (1, self._record(valid=False, formatted=False), "Buildifier syntax error"),
+            (0, self._record(warnings=[self._warning()]), "unused-variable"),
+        ):
+            with self.subTest(message=message), contextlib.redirect_stderr(io.StringIO()) as stderr:
+                self.returncode = code
+                self.payload = json.dumps({"success": False, "files": [record]})
+                sink = io.StringIO()
+                self.assertEqual(buildifier.lint_paths(["BUILD.bazel"], sink=sink), 1)
+            self.assertIn(message, sink.getvalue())
+            self.assertEqual(stderr.getvalue(), "")
+            self.assertEqual(self.first.read_bytes(), b"x=1\n")
+
+    def test_semantic_lint_does_not_pass_when_a_requested_file_was_not_checked(self):
+        self.payload = json.dumps({"success": True, "files": [self._record()]})
+        with self.assertRaises(buildifier.BuildifierError):
+            buildifier.lint_paths(["BUILD.bazel", "skipped.bzl"])
+
+    def test_semantic_lint_cannot_classify_tool_failure_as_findings(self):
+        self.returncode = 2
+        with self.assertRaises(buildifier.BuildifierError):
+            buildifier.lint_paths(["BUILD.bazel"])
 
     def test_empty_selection_does_not_select_or_execute_any_tool(self):
         for check in (False, True):
@@ -104,7 +144,8 @@ class BuildifierRunTest(unittest.TestCase):
         )
 
     def test_format_only_check_disables_lint_and_requires_structured_output(self):
-        self.assertEqual(self._run(), (0, ""))
+        self.assertEqual(self._run(provision=False), (0, ""))
+        self.selection.assert_called_once_with(provision=False)
         self.assertEqual(self.process.call_args.args[0][2], "-lint=off")
         self.payload = ""
         with self.assertRaisesRegex(buildifier.BuildifierError, "JSON"):
@@ -335,13 +376,14 @@ class BuildifierProvisionTest(unittest.TestCase):
         self.version_output = "buildifier version: 10.1.0\nbuildifier scm revision: 0123456789abcdef\n"
         self.version_status = 0
         self.locked = False
+        self.expect_lock = True
         stack.enter_context(mock.patch.object(buildifier, "MANIFEST_PATH", self.manifest))
         stack.enter_context(mock.patch.object(buildifier, "PROJECT_ROOT", self.root))
         stack.enter_context(mock.patch.object(buildifier, "sys", self.host))
         stack.enter_context(mock.patch.object(buildifier, "platform", self.machine))
         stack.enter_context(mock.patch.dict(os.environ, {"AOBUS_STATE_ROOT": str(self.state)}))
         self.windows_state = stack.enter_context(
-            mock.patch.object(buildifier.builddir, "windows_state_root", return_value=self.state)
+            mock.patch.object(buildifier.build_dir, "windows_state_root", return_value=self.state)
         )
         self.download = stack.enter_context(mock.patch.object(buildifier, "_download", side_effect=self._download))
         self.process = stack.enter_context(mock.patch.object(buildifier.subprocess, "run", side_effect=self._process))
@@ -382,7 +424,7 @@ class BuildifierProvisionTest(unittest.TestCase):
         self.assertEqual(argv[1:], ["-version", "-config=off"])
         self.assertEqual(kwargs["cwd"], self.root)
         self.assertNotIn("BUILDIFIER_CONFIG", {key.upper() for key in kwargs["env"]})
-        self.assertTrue(self.locked)
+        self.assertEqual(self.locked, self.expect_lock)
         path = Path(argv[0])
         self.assertTrue(path.is_relative_to(self.state))
         if self.host.platform == "win32":
@@ -411,6 +453,33 @@ class BuildifierProvisionTest(unittest.TestCase):
         self.assertEqual(list(self._tool().parent.glob(".buildifier-stage-*")), [])
         self.download.assert_called_once()
         self.windows_state.assert_not_called()
+
+    def test_ready_only_missing_tool_fails_before_download_or_state_creation(self):
+        with self.assertRaisesRegex(buildifier.BuildifierError, "ao setup buildifier"):
+            buildifier.executable(provision=False)
+        self.assertFalse(self.state.exists())
+        self.download.assert_not_called()
+        self.process.assert_not_called()
+
+    def test_ready_only_existing_tool_is_verified_without_lock_or_download(self):
+        tool = self._tool()
+        tool.parent.mkdir(parents=True)
+        tool.write_bytes(self.payload)
+        self.expect_lock = False
+        self.assertEqual(buildifier.executable(provision=False), tool)
+        self.download.assert_not_called()
+        self.process.assert_called_once()
+
+    def test_ready_only_damaged_tool_fails_without_repair(self):
+        tool = self._tool()
+        tool.parent.mkdir(parents=True)
+        tool.write_bytes(b"damaged")
+        self.expect_lock = False
+        with self.assertRaises(buildifier.BuildifierError):
+            buildifier.executable(provision=False)
+        self.assertEqual(tool.read_bytes(), b"damaged")
+        self.download.assert_not_called()
+        self.process.assert_not_called()
 
     def test_native_selection_ignores_ambient_executable_overrides(self):
         with mock.patch.dict(

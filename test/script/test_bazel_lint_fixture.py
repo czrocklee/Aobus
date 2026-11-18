@@ -13,25 +13,27 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from ao.core import bazel_lint_action, bazel_lint_fixture, builddir, linttest, tidyconfig, tidyengine
 from ao.core.paths import PROJECT_ROOT
+from ao.graph import bazel_lint_action, bazel_lint_fixture, lint_test
+from ao.policy import tidy_config, windows_llvm_sdk
+from ao.portal import build_dir
 
 
 class DirectFixtureToolsTest(unittest.TestCase):
     def test_fixed_database_has_posix_language_flags_before_its_implicit_input(self):
-        tools = linttest.FixtureTools("verified-host", ("-isystem/native",), windows=False)
+        tools = lint_test.FixtureTools("verified-host", ("-isystem/native",), windows=False)
         for suffix, language in ((".h", "c++"), (".cpp", "c++"), (".mm", "objective-c++")):
             with self.subTest(suffix=suffix):
-                fixture = linttest.Fixture(Path("Fixture" + suffix), "aobus-example")
-                command = linttest._tidy_command(fixture, Path("unused-build"), tools=tools)
+                fixture = lint_test.Fixture(Path("Fixture" + suffix), "aobus-example")
+                command = lint_test._tidy_command(fixture, Path("unused-build"), tools=tools)
                 separator = command.index("--")
                 self.assertEqual(command[separator - 1], str(fixture.path))
                 # The fixed database puts this compiler argv fragment BEFORE
                 # the input; an --extra-arg=-x would be placed AFTER it.
                 self.assertEqual(command[separator + 1 :], ["-isystem/native", "-x", language])
-        windows = linttest.FixtureTools("verified-host", ("--driver-mode=cl", "/TP"), windows=True)
-        command = linttest._tidy_command(
-            linttest.Fixture(Path("Fixture.h"), "aobus-example"), Path("unused-build"), tools=windows
+        windows = lint_test.FixtureTools("verified-host", ("--driver-mode=cl", "/TP"), windows=True)
+        command = lint_test._tidy_command(
+            lint_test.Fixture(Path("Fixture.h"), "aobus-example"), Path("unused-build"), tools=windows
         )
         self.assertEqual(command[command.index("--") + 1 :], list(windows.flags))
 
@@ -42,13 +44,13 @@ class DirectFixtureToolsTest(unittest.TestCase):
             header = root / "Context.h"
             main.write_text('#import "Context.h"\nint good; // NEGATIVE\n', encoding="utf-8")
             header.write_text("int bad; // POSITIVE | required explanation\n", encoding="utf-8")
-            tools = linttest.FixtureTools("verified-tidy", ("-isystem/sdk",), windows=False, plugin=root / "plugin.so")
-            fixture = linttest.Fixture(main, "aobus-example")
+            tools = lint_test.FixtureTools("verified-tidy", ("-isystem/sdk",), windows=False, plugin=root / "plugin.so")
+            fixture = lint_test.Fixture(main, "aobus-example")
             before = {path: path.read_bytes() for path in (main, header)}
 
             def invoke(command, **kwargs):
                 self.assertEqual(command[0], tools.tidy)
-                self.assertEqual(kwargs["cwd"], linttest.PROJECT_ROOT)
+                self.assertEqual(kwargs["cwd"], lint_test.PROJECT_ROOT)
                 self.assertEqual(command[command.index("--") - 1], str(main))
                 self.assertIn(f"-load={tools.plugin}", command)
                 self.assertEqual(command[command.index("--") + 1 :], [*tools.flags, "-x", "objective-c++"])
@@ -58,24 +60,24 @@ class DirectFixtureToolsTest(unittest.TestCase):
                 self.assertNotIn("--extra-arg=/W0", command)
                 self.assertNotIn("--no-build", command)
                 self.assertIn(
-                    f"-config={tidyconfig.config_for(tidyconfig.checks_for('STRICT', fixture.check))}", command
+                    f"-config={tidy_config.config_for(tidy_config.checks_for('STRICT', fixture.check))}", command
                 )
                 return subprocess.CompletedProcess(
                     command, 0, stdout=f"{header}:1:1: warning: required explanation [aobus-example]\n"
                 )
 
-            with mock.patch.object(linttest.subprocess, "run", side_effect=invoke):
-                success, log = linttest._run_diagnostic(fixture, root, root, tools=tools)
+            with mock.patch.object(lint_test.subprocess, "run", side_effect=invoke):
+                success, log = lint_test._run_diagnostic(fixture, root, root, tools=tools)
             self.assertTrue(success, log.read_text(encoding="utf-8"))
             self.assertEqual({path: path.read_bytes() for path in before}, before)
 
-            with mock.patch.object(linttest.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "")):
-                success, log = linttest._run_diagnostic(fixture, root, root, tools=tools)
+            with mock.patch.object(lint_test.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "")):
+                success, log = lint_test._run_diagnostic(fixture, root, root, tools=tools)
             self.assertFalse(success)
             self.assertIn(f"missing expected diagnostic on line {header.resolve()}:1", log.read_text(encoding="utf-8"))
 
     def test_direct_preflight_validates_deferred_mm_and_its_local_headers_before_any_tool(self):
-        discover = linttest.discover_fixtures
+        discover = lint_test.discover_fixtures
         for windows in (False, True):
             with self.subTest(windows=windows), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
@@ -87,18 +89,18 @@ class DirectFixtureToolsTest(unittest.TestCase):
                 header = check / "nested" / "Context.h"
                 header.parent.mkdir()
                 header.write_text("// POSITIVE\nint bad; // NEGATIVE\n", encoding="utf-8")
-                tools = linttest.FixtureTools(
+                tools = lint_test.FixtureTools(
                     "verified-host", (), windows=windows, plugin=None if windows else root / "plugin"
                 )
                 with (
                     mock.patch.object(
-                        linttest, "discover_fixtures", side_effect=lambda root=root: discover(root / "fixture")
+                        lint_test, "discover_fixtures", side_effect=lambda root=root: discover(root / "fixture")
                     ),
-                    mock.patch.object(linttest.subprocess, "run") as invoke,
-                    mock.patch.object(builddir, "platform_profile", side_effect=AssertionError("ambient platform")),
+                    mock.patch.object(lint_test.subprocess, "run") as invoke,
+                    mock.patch.object(build_dir, "platform_profile", side_effect=AssertionError("ambient platform")),
                     contextlib.redirect_stdout(io.StringIO()) as output,
                 ):
-                    self.assertEqual(linttest.run(root / "no-cmake", tools=tools, work=root / "work", jobs=1), 1)
+                    self.assertEqual(lint_test.run(root / "no-cmake", tools=tools, work=root / "work", jobs=1), 1)
                 invoke.assert_not_called()
                 self.assertIn(f"{main.resolve()}:2: empty explicit diagnostic text", output.getvalue())
                 self.assertIn(f"{header.resolve()}:2: conflicting POSITIVE and NEGATIVE", output.getvalue())
@@ -106,7 +108,7 @@ class DirectFixtureToolsTest(unittest.TestCase):
                 self.assertFalse((root / "work").exists())
 
     def test_only_windows_defers_mm_and_direct_work_is_contained_without_a_compile_database(self):
-        discover = linttest.discover_fixtures
+        discover = lint_test.discover_fixtures
         for windows in (False, True):
             with self.subTest(windows=windows), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
@@ -118,7 +120,7 @@ class DirectFixtureToolsTest(unittest.TestCase):
                 work.mkdir()
                 prior = work / "prior-run.txt"
                 prior.write_text("keep", encoding="utf-8")
-                tools = linttest.FixtureTools(
+                tools = lint_test.FixtureTools(
                     "verified-host", (), windows=windows, plugin=None if windows else root / "plugin"
                 )
 
@@ -130,13 +132,13 @@ class DirectFixtureToolsTest(unittest.TestCase):
 
                 with (
                     mock.patch.object(
-                        linttest, "discover_fixtures", side_effect=lambda root=root: discover(root / "fixture")
+                        lint_test, "discover_fixtures", side_effect=lambda root=root: discover(root / "fixture")
                     ),
-                    mock.patch.object(linttest.subprocess, "run", side_effect=stop_at_native_boundary),
+                    mock.patch.object(lint_test.subprocess, "run", side_effect=stop_at_native_boundary),
                     contextlib.redirect_stdout(io.StringIO()) as output,
                     self.assertRaisesRegex(OSError, "intentional native boundary stop"),
                 ):
-                    linttest.run(root / "no-cmake", tools=tools, work=work, jobs=1)
+                    lint_test.run(root / "no-cmake", tools=tools, work=work, jobs=1)
                 self.assertEqual("[DEFER] aobus-example/First.mm" in output.getvalue(), windows)
                 self.assertEqual(prior.read_text(encoding="utf-8"), "keep")
                 # Caller-owned action outputs contain stages directly; another
@@ -148,7 +150,7 @@ class DirectFixtureToolsTest(unittest.TestCase):
         for windows in (False, True):
             with self.subTest(windows=windows), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
-                tools = linttest.FixtureTools(
+                tools = lint_test.FixtureTools(
                     "verified-host", (), windows=windows, plugin=None if windows else root / "plugin"
                 )
                 seen = set()
@@ -169,15 +171,15 @@ class DirectFixtureToolsTest(unittest.TestCase):
                         command, 1, f"{path}:1:1: error: rejected canary [clang-diagnostic-error]\n"
                     )
 
-                with mock.patch.object(linttest.subprocess, "run", side_effect=invoke):
-                    success, log = linttest._run_compiler_error_smoke(root, root, tools=tools)
+                with mock.patch.object(lint_test.subprocess, "run", side_effect=invoke):
+                    success, log = lint_test._run_compiler_error_smoke(root, root, tools=tools)
                 self.assertTrue(success, log.read_text(encoding="utf-8"))
                 self.assertEqual(seen, {"missing-include", "syntax-error", "unknown-type", "unused-code"})
 
     def test_posix_source_policy_materializes_real_sources_with_direct_sdk_flags(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            tools = linttest.FixtureTools(
+            tools = lint_test.FixtureTools(
                 "verified-host", ("-resource-dir=/sdk/resource", "-isystem/sdk/include"), False, root / "plugin"
             )
 
@@ -197,16 +199,36 @@ class DirectFixtureToolsTest(unittest.TestCase):
                 self.assertIn("throw 1", source)
                 self.assertIn("std::filesystem::path", source)
                 self.assertEqual(
-                    len(linttest.parse_expectations(source, linttest._SOURCE_POLICY_CHECKS[0]).expected), 3
+                    len(lint_test.parse_expectations(source, lint_test._SOURCE_POLICY_CHECKS[0]).expected), 3
                 )
                 raise OSError("stop before real native acceptance")
 
             with (
-                mock.patch.object(linttest.tidyengine, "clang_tool", side_effect=AssertionError("CMake discovery")),
-                mock.patch.object(linttest.subprocess, "run", side_effect=stop_after_generation),
+                mock.patch.object(lint_test.subprocess, "run", side_effect=stop_after_generation),
                 self.assertRaisesRegex(OSError, "stop before real native acceptance"),
             ):
-                linttest._run_source_policy_smoke(root, root, plugin=None, tools=tools)
+                lint_test._run_source_policy_smoke(root, root, plugin=None, tools=tools)
+
+
+class DeclaredFixtureClosureTest(unittest.TestCase):
+    def test_helper_import_closure_excludes_portal(self):
+        # Execute the helper exactly as Bazel starts it, then read its closure.
+        probe = (
+            "import pathlib, runpy, sys\n"
+            "runpy.run_path('script/ao/graph/bazel_lint_fixture.py', run_name='fixture_probe')\n"
+            "root = pathlib.Path('script').absolute()\n"
+            "for module in list(sys.modules.values()):\n"
+            "    path = pathlib.Path(getattr(module, '__file__', None) or '/')\n"
+            "    if path.is_relative_to(root):\n"
+            "        print(path.relative_to(root.parent).as_posix())\n"
+        )
+        result = subprocess.run(
+            [sys.executable, "-I", "-S", "-B", "-c", probe], cwd=PROJECT_ROOT, capture_output=True, text=True
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        imported = set(result.stdout.split())
+        self.assertIn("script/ao/graph/lint_test.py", imported)
+        self.assertEqual(sorted(path for path in imported if path.startswith("script/ao/portal/")), [])
 
 
 class BazelFixtureTransportTest(unittest.TestCase):
@@ -286,13 +308,13 @@ class BazelFixtureTransportTest(unittest.TestCase):
         return result
 
     def test_real_grammar_failure_is_a_completed_cacheable_result_without_reverification(self):
-        discover = linttest.discover_fixtures
+        discover = lint_test.discover_fixtures
         self.args.work.mkdir()
         prior = self.args.work / "prior.log"
         prior.write_text("retain", encoding="utf-8")
         with (
-            mock.patch.object(linttest, "discover_fixtures", side_effect=lambda: discover(self.fixture_dir)),
-            mock.patch.object(linttest.subprocess, "run", side_effect=AssertionError("must not reverify or analyze")),
+            mock.patch.object(lint_test, "discover_fixtures", side_effect=lambda: discover(self.fixture_dir)),
+            mock.patch.object(lint_test.subprocess, "run", side_effect=AssertionError("must not reverify or analyze")),
             contextlib.redirect_stdout(io.StringIO()),
         ):
             self.assertEqual(bazel_lint_fixture.main(self.argv()), 0)
@@ -329,7 +351,7 @@ class BazelFixtureTransportTest(unittest.TestCase):
                     self.args.jobs = 0
                 self.args.report.write_text('{"schema":1,"status":0}', encoding="utf-8")
                 with (
-                    mock.patch.object(linttest.subprocess, "run", side_effect=AssertionError("must not start host")),
+                    mock.patch.object(lint_test.subprocess, "run", side_effect=AssertionError("must not start host")),
                     contextlib.redirect_stderr(io.StringIO()),
                 ):
                     self.assertNotEqual(bazel_lint_fixture.main(self.argv()), 0)
@@ -337,8 +359,8 @@ class BazelFixtureTransportTest(unittest.TestCase):
 
     def test_missing_declared_fixtures_are_an_infrastructure_failure_not_a_cached_suite_result(self):
         with (
-            mock.patch.object(linttest, "discover_fixtures", return_value=[]),
-            mock.patch.object(linttest.subprocess, "run", side_effect=AssertionError("must not start host")),
+            mock.patch.object(lint_test, "discover_fixtures", return_value=[]),
+            mock.patch.object(lint_test.subprocess, "run", side_effect=AssertionError("must not start host")),
             contextlib.redirect_stderr(io.StringIO()),
         ):
             self.assertEqual(bazel_lint_fixture.main(self.argv()), 2)
@@ -368,7 +390,7 @@ class BazelFixtureTransportTest(unittest.TestCase):
             bazel_lint_fixture._fixture_tools(self.args, macos, str(self.tidy))
 
     def test_windows_profile_reuses_verified_sdk_manifest_and_native_include_without_cmake(self):
-        _version, _checksum, required = tidyengine.windows_llvm_sdk_manifest()
+        _version, _checksum, required = windows_llvm_sdk.read_manifest(windows_llvm_sdk.MANIFEST)
         sdk_root = self.root / "native-sdk"
         for relative in required:
             path = sdk_root / relative

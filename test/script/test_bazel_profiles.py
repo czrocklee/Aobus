@@ -4,8 +4,8 @@ import unittest
 from unittest.mock import patch
 
 from ao.core import bazel_native as native
-from ao.core import bazel_profiles
 from ao.core.bazel_native import BazelWorkspaceError
+from ao.portal import bazel_profiles
 
 
 class ProfilePreflightTest(unittest.TestCase):

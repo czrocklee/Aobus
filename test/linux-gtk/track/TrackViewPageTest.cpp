@@ -3,12 +3,12 @@
 
 #include "track/TrackViewPage.h"
 
-#include "../../TestFixtureSupport.h"
 #include "image/CoverArtView.h"
 #include "image/ImageCache.h"
 #include "image/ResourceImageLoader.h"
 #include "layout/LayoutConstants.h"
 #include "test/MessageCatalogTestSupport.h"
+#include "test/TestFixtureSupport.h"
 #include "test/library/TrackTestSupport.h"
 #include "test/library/WritableLibraryTestSupport.h"
 #include "test/linux-gtk/GtkApplicationTestSupport.h"

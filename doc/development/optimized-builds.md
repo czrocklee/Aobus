@@ -93,10 +93,9 @@ on each host. Bare Bazel defaults to fastbuild; `--config=release` and
 `--config=profile` select the named optimized profiles, not merely `-c opt`.
 Imported provider interfaces follow each consumer's actual compilation mode.
 
-For project commands such as `check`, `verify`, and `perf`, `--path`/`-p`
+For project commands such as `check`, `check contracts`, and `measure performance`, `--path`/`-p`
 and `BUILD_DIR` select one exact mode-neutral managed tree, and the Linux
-target compiler is selected with `--compiler=gcc|clang` (GCC by default;
-`--clang` remains the Clang alias). Bare Bazel uses
+target compiler is selected with `--compiler=gcc|clang` (GCC by default). Bare Bazel uses
 standard startup output selection instead; it does not interpret those portal
 selectors. Do not reuse a prepared rc from another checkout. Sanitizer profiles
 require Debug and cannot be combined with Release or sampling.
@@ -106,10 +105,10 @@ require Debug and cannot be combined with Release or sampling.
 A Release completion gate is the direct IPO evidence:
 
 ```bash
-./ao check release
+./ao check --config release
 ```
 
-Run that complete check, including scoped hygiene, on every affected native platform. On macOS,
+Run that complete check, including its graph-owned lint and formatting tests, on every affected native platform. On macOS,
 AppKit GUI scenarios remain separate from `check`; run the applicable scenario
 from the Release configuration when native UI behavior changed.
 

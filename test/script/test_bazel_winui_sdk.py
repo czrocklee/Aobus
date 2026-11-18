@@ -26,7 +26,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from ao.core import bazel_winui, dependency_policy
+from ao.policy import dependency_policy
+from ao.portal import bazel_winui
 
 SDK = bazel_winui.WINDOWS_SDK_VERSION
 VC_VERSION = "14.44.35207"

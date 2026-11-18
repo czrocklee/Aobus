@@ -10,8 +10,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from ao.core import bazel_dependencies as dependencies
-from ao.core import bazel_deps as g
+from ao.portal import bazel_dependencies as dependencies
+from ao.portal import bazel_deps as g
 
 
 class BazelDependencyTest(unittest.TestCase):

@@ -45,7 +45,7 @@ lint_policy_repository = repository_rule(
     attrs = {
         "_environment": ENVIRONMENT_ATTRIBUTE,
         "root": attr.label(default = Label("//:MODULE.bazel"), allow_single_file = True),
-        "helper": attr.label(default = Label("//:script/ao/core/bazel_lint_action.py"), allow_single_file = True),
+        "helper": attr.label(default = Label("//:script/ao/graph/bazel_lint_action.py"), allow_single_file = True),
     },
     configure = True,
 )

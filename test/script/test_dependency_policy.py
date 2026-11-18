@@ -8,7 +8,7 @@ import zipfile
 from datetime import date
 from pathlib import Path
 
-from ao.core import dependency_policy
+from ao.policy import dependency_policy
 
 
 class DependencyPolicyTest(unittest.TestCase):

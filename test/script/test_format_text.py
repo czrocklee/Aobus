@@ -1,199 +1,86 @@
-"""Authored-text scope and dispatch for the shared format/hygiene entry."""
+"""Authored-text selection and independent formatter failures."""
 
 import contextlib
 import io
 import tempfile
 import unittest
-from argparse import Namespace
 from pathlib import Path
 from unittest import mock
 
-from ao.command import format as format_command
-from ao.command import hygiene
-from ao.core import buildenv, gitfiles, prettier
-
-TEXT_FILES = (
-    "AGENTS.md",
-    ".prettierrc.json",
-    "script/ao/prettier.json",
-    "doc/guide.md",
-    "app/ui.css",
-    ".github/workflows/ci.yml",
-    "config/bazel/dependencies.json",
-    "cmake/ports/example/vcpkg.json",
-    ".agents/skills/example/SKILL.md",
-)
-NATIVE_FILES = ("lib/Foo.cpp", "script/tool.py", "BUILD", "test/lint/Case.cpp")
-
-
-def _checkout(root: Path, names) -> None:
-    for name in names:
-        path = root / name
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("fixture\n", encoding="utf-8")
+from ao.portal import git_files, prettier, source_format, source_scope
+from ao.portal.source_scope import Selection, SourceScope
 
 
 class TextFormatTest(unittest.TestCase):
-    def args(self):
-        return Namespace(files=[], all=False, folder=[], commit=None, check=True)
+    def setUp(self):
+        self.root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        for module in (git_files, source_format, source_scope):
+            self.enterContext(mock.patch.object(module, "PROJECT_ROOT", self.root))
+        self.enterContext(contextlib.redirect_stdout(io.StringIO()))
+        self.diagnostics = self.enterContext(contextlib.redirect_stderr(io.StringIO()))
 
-    def test_text_only_scope_dispatches_to_prettier_without_native_or_python_formatters(self):
-        files = ["AGENTS.md", ".agents/skills/example/SKILL.md", "config/input.json", "app/layout.yaml", "app/ui.css"]
-        args = Namespace(files=files, all=False, folder=[], commit=None, check=True)
+    def checkout(self, *names):
+        for name in names:
+            path = self.root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("fixture\n", encoding="utf-8")
+
+    def test_text_only_check_propagates_prettier_findings_without_starting_native_tools(self):
+        self.checkout("README.md", ".github/workflows/ci.yml")
+        scope = SourceScope(("README.md", ".github/workflows/ci.yml"))
         with (
-            mock.patch.object(format_command, "_file_exists", return_value=True),
-            mock.patch.object(prettier, "run", return_value=0) as text,
-            mock.patch.object(format_command, "run_clang_format", return_value=0) as clang,
-            mock.patch.object(format_command, "run_ruff_format", return_value=0) as ruff,
-            contextlib.redirect_stdout(io.StringIO()),
+            mock.patch.object(source_format.subprocess, "run", side_effect=AssertionError("unexpected native tool")),
+            mock.patch.object(prettier, "run", return_value=1) as text,
         ):
-            self.assertEqual(format_command.run_command(args), 0)
-        text.assert_called_once_with(files, check=True)
-        clang.assert_called_once_with([], check=True, build_dir=None, clang_format=None)
-        ruff.assert_called_once_with([], check=True, python=None)
+            self.assertEqual(source_format.check(scope), 1)
+        text.assert_called_once_with(list(scope.files), check=True, provision=False)
 
-    def test_prettier_failures_cannot_produce_a_clean_format_result(self):
-        args = Namespace(files=["README.md"], all=False, folder=[], commit=None, check=True)
+    def test_broken_native_formatter_does_not_hide_text_findings_or_become_an_ordinary_finding(self):
+        self.checkout("lib/Foo.cpp", "README.md")
+
+        def unavailable(argv, *, cwd):
+            self.assertEqual(argv, ["fixture-clang-format", "--dry-run", "-Werror", "lib/Foo.cpp"])
+            self.assertEqual(cwd, self.root)
+            raise OSError("fixture-clang-format is unavailable")
+
         with (
-            mock.patch.object(format_command, "_file_exists", return_value=True),
-            mock.patch.object(prettier, "run", return_value=1),
-            contextlib.redirect_stdout(io.StringIO()),
-            contextlib.redirect_stderr(io.StringIO()),
+            mock.patch.object(source_format.subprocess, "run", side_effect=unavailable),
+            mock.patch.object(prettier, "run", return_value=1) as text,
         ):
-            self.assertEqual(format_command.run_command(args), 1)
+            self.assertEqual(
+                source_format.check(SourceScope(("lib/Foo.cpp", "README.md")), clang_format="fixture-clang-format"), 2
+            )
+        text.assert_called_once_with(["README.md"], check=True, provision=False)
+        self.assertIn("fixture-clang-format is unavailable", self.diagnostics.getvalue())
+
+    def test_broken_prettier_does_not_hide_later_bazel_rc_diagnostics(self):
+        self.checkout("README.md", ".bazelrc")
         with (
-            mock.patch.object(format_command, "_file_exists", return_value=True),
-            mock.patch.object(prettier, "run", side_effect=prettier.PrettierError("invalid formatter cache")),
-            contextlib.redirect_stderr(io.StringIO()) as stderr,
-            self.assertRaises(SystemExit),
+            mock.patch.object(prettier, "run", side_effect=prettier.PrettierError("formatter cache is invalid")),
+            mock.patch.object(source_format.compiler_rc, "format_msvc_rc", return_value=1) as msvc,
         ):
-            format_command.run_command(args)
-        self.assertIn("invalid formatter cache", stderr.getvalue())
+            self.assertEqual(source_format.check(SourceScope(("README.md", ".bazelrc"))), 2)
+        msvc.assert_called_once_with(check=True)
+        self.assertIn("formatter cache is invalid", self.diagnostics.getvalue())
 
-    def test_changed_and_all_scopes_include_root_docs_hidden_skills_and_text_assets(self):
-        files = [
-            "AGENTS.md",
-            ".prettierrc.json",
-            ".agents/skills/example/SKILL.md",
-            "doc/guide.md",
-            ".github/pull_request_template.md",
-            "app/ui.css",
-            "cmake/ports/example/vcpkg.json",
-            "config/bazel/dependencies.json",
-        ]
-        # A control edit widens the diff scope, so keep it out of the changed set
-        # to prove the plain changed-file selection on its own.
-        changed = [name for name in files if name not in format_command.PRETTIER_CONTROL_FILES]
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            _checkout(root, files)
-            with (
-                mock.patch.object(format_command, "PROJECT_ROOT", root),
-                mock.patch.object(gitfiles, "PROJECT_ROOT", root),
-                mock.patch.object(gitfiles, "changed_paths", return_value=[*changed, "foreign/README.md"]),
-            ):
-                self.assertEqual(sorted(format_command.resolve_files(self.args())), sorted(changed))
-                all_args = self.args()
-                all_args.all = True
-                self.assertEqual(format_command.resolve_files(all_args), sorted(files))
-                folder_args = self.args()
-                folder_args.folder = [".agents/skills"]
-                self.assertEqual(format_command.resolve_files(folder_args), [".agents/skills/example/SKILL.md"])
+    def test_deleted_prettier_control_file_expands_text_without_selecting_unchanged_native_sources(self):
+        self.checkout("AGENTS.md", ".agents/skills/example/SKILL.md", "lib/Foo.cpp")
+        with mock.patch.object(git_files, "changed_paths", return_value=[".prettierignore"]):
+            self.assertEqual(source_scope.resolve(Selection()).files, (".agents/skills/example/SKILL.md", "AGENTS.md"))
 
-    def test_a_control_change_expands_the_owned_text_family_only(self):
-        for control in format_command.PRETTIER_CONTROL_FILES:
-            with self.subTest(control=control), tempfile.TemporaryDirectory() as temporary:
-                root = Path(temporary)
-                _checkout(root, (*TEXT_FILES, *NATIVE_FILES))
-                with (
-                    mock.patch.object(format_command, "PROJECT_ROOT", root),
-                    mock.patch.object(gitfiles, "PROJECT_ROOT", root),
-                    mock.patch.object(gitfiles, "changed_paths", return_value=[control]),
-                ):
-                    self.assertEqual(format_command.resolve_files(self.args()), sorted(TEXT_FILES))
+    def test_normal_change_does_not_expand_text_scope_or_include_foreign_sources(self):
+        self.checkout("AGENTS.md", "doc/guide.md", "bazel/coverage/collect.py", "sdk-cache/Generated.cpp")
+        changed = ["doc/guide.md", "bazel/coverage/collect.py", "sdk-cache/Generated.cpp"]
+        with mock.patch.object(git_files, "changed_paths", return_value=changed):
+            self.assertEqual(source_scope.resolve(Selection()).files, ("bazel/coverage/collect.py", "doc/guide.md"))
 
-    def test_a_deleted_control_file_still_expands_the_text_scope(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            _checkout(root, ("doc/guide.md", "lib/Foo.cpp"))
-            with (
-                mock.patch.object(format_command, "PROJECT_ROOT", root),
-                mock.patch.object(gitfiles, "PROJECT_ROOT", root),
-                mock.patch.object(gitfiles, "changed_paths", return_value=[".prettierrc.json"]),
-            ):
-                self.assertFalse((root / ".prettierrc.json").exists())
-                self.assertEqual(format_command.resolve_files(self.args()), ["doc/guide.md"])
-
-    def test_non_control_changes_never_expand_the_text_scope(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            _checkout(root, (*TEXT_FILES, *NATIVE_FILES))
-            with (
-                mock.patch.object(format_command, "PROJECT_ROOT", root),
-                mock.patch.object(gitfiles, "PROJECT_ROOT", root),
-                mock.patch.object(
-                    gitfiles, "changed_paths", return_value=[".gitattributes", "doc/guide.md", "lib/Foo.cpp"]
-                ),
-                mock.patch.object(gitfiles, "prettier_sources", side_effect=AssertionError("scope widened")),
-            ):
-                self.assertEqual(format_command.resolve_files(self.args()), ["doc/guide.md", "lib/Foo.cpp"])
-
-    def test_explicit_and_folder_selections_never_expand_on_a_control_change(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            _checkout(root, ("README.md", "doc/guide.md"))
-            with (
-                mock.patch.object(format_command, "PROJECT_ROOT", root),
-                mock.patch.object(gitfiles, "PROJECT_ROOT", root),
-                mock.patch.object(gitfiles, "changed_paths", side_effect=AssertionError("rescanned")) as changed,
-            ):
-                explicit = self.args()
-                explicit.files = ["README.md"]
-                self.assertEqual(format_command.resolve_files(explicit), ["README.md"])
-                folder = self.args()
-                folder.folder = ["doc"]
-                self.assertEqual(format_command.resolve_files(folder), ["doc/guide.md"])
-            changed.assert_not_called()
-
-    def test_whole_tree_and_folder_scopes_take_text_from_git_and_native_from_the_scan(self):
-        scanned = ["lib/Foo.cpp", "doc/guide.md", "doc/ignored.md"]
-        with (
-            mock.patch.object(gitfiles, "find_sources", return_value=scanned) as scan,
-            mock.patch.object(gitfiles, "root_bazel_files", return_value=["BUILD"]),
-            mock.patch.object(gitfiles, "prettier_sources", return_value=["doc/guide.md"]) as text,
-        ):
-            all_args = self.args()
-            all_args.all = True
-            # The scan's text portion is dropped: only Git-enumerated text remains.
-            self.assertEqual(format_command.resolve_files(all_args), ["BUILD", "doc/guide.md", "lib/Foo.cpp"])
-        scan.assert_called_once_with(list(format_command.FORMAT_TOP_DIRS), suffixes=gitfiles.SOURCE_SUFFIXES)
-        text.assert_called_once_with(list(format_command.FORMAT_TOP_DIRS), include_root=True)
-        with (
-            mock.patch.object(gitfiles, "find_sources", return_value=["doc/guide.md", "doc/ignored.md"]),
-            mock.patch.object(gitfiles, "prettier_sources", return_value=["doc/guide.md"]) as text,
-        ):
-            folder_args = self.args()
-            folder_args.folder = ["doc"]
-            self.assertEqual(format_command.resolve_files(folder_args), ["doc/guide.md"])
-        text.assert_called_once_with(["doc"])
-
-    def test_text_only_native_preflight_needs_neither_compiler_nor_managed_python_tools(self):
-        for command in ("format", "hygiene"):
-            with self.subTest(command=command):
-                self.assertFalse(buildenv.requires_build_env(command, ["README.md"]))
-                self.assertFalse(buildenv.requires_python_tools(command, ["README.md"]))
-
-    def test_hygiene_requests_check_only_prettier_for_a_text_scope(self):
-        files = ["README.md"]
-        args = Namespace(files=files, all=False, folder=[], commit=None, path=None, jobs=1)
-        with (
-            mock.patch.object(hygiene.format_command, "resolve_files", return_value=files),
-            mock.patch.object(format_command, "_file_exists", return_value=True),
-            mock.patch.object(prettier, "run", return_value=0) as text,
-            contextlib.redirect_stdout(io.StringIO()),
-        ):
-            self.assertEqual(hygiene.run_command(args, lint=("fixture", lambda files, explicit: 0)), 0)
-        text.assert_called_once_with(files, check=True)
+    def test_all_scope_uses_git_selection_for_text_but_keeps_owned_native_files(self):
+        self.checkout("doc/guide.md", "doc/ignored.md", "lib/Foo.cpp", "bazel/coverage/collect.py")
+        with mock.patch.object(git_files, "prettier_sources", return_value=["doc/guide.md"]):
+            self.assertEqual(
+                source_scope.resolve(Selection(all=True)).files,
+                ("bazel/coverage/collect.py", "doc/guide.md", "lib/Foo.cpp"),
+            )
 
 
 if __name__ == "__main__":

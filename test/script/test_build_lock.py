@@ -1,0 +1,243 @@
+"""Tests for native build-tree process serialization."""
+
+import errno
+import io
+import queue
+import shutil
+import subprocess
+import sys
+import tempfile
+import threading
+import unittest
+from contextlib import redirect_stderr, redirect_stdout
+from pathlib import Path
+from unittest import mock
+
+from ao.core import build_lock
+
+_CONTENDER_SCRIPT = """
+import sys
+from pathlib import Path
+from ao.core.build_lock import build_tree_lock
+
+build_dir, started, acquired = map(Path, sys.argv[1:])
+started.write_text("started", encoding="utf-8")
+with build_tree_lock(build_dir):
+    acquired.write_text("acquired", encoding="utf-8")
+"""
+
+
+class BuildTreeLockTest(unittest.TestCase):
+    def test_lock_file_is_outside_build_tree(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_dir = Path(temp_dir) / "debug"
+
+            self.assertEqual(build_lock.lock_path(build_dir), Path(temp_dir).resolve() / ".debug.ao-build.lock")
+
+    def test_same_build_tree_reports_wait_before_active_process_releases(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            build_dir = root / "debug"
+            started = root / "started"
+            acquired = root / "acquired"
+            build_dir.mkdir()
+            child: subprocess.Popen[str] | None = None
+            try:
+                with build_lock.build_tree_lock(build_dir):
+                    shutil.rmtree(build_dir)
+                    child = subprocess.Popen(
+                        [sys.executable, "-c", _CONTENDER_SCRIPT, str(build_dir), str(started), str(acquired)],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        text=True,
+                    )
+                    assert child.stdout is not None
+                    lines: queue.Queue[str] = queue.Queue()
+                    reader = threading.Thread(target=lambda: lines.put(child.stdout.readline()), daemon=True)
+                    reader.start()
+                    waiting_line = lines.get(timeout=5)
+
+                    self.assertTrue(started.exists())
+                    self.assertFalse(acquired.exists())
+                    self.assertIn("Waiting for active build", waiting_line)
+                    self.assertTrue(build_lock.lock_path(build_dir).is_file())
+
+                output, _ = child.communicate(timeout=5)
+                self.assertEqual(child.returncode, 0, output)
+                self.assertTrue(acquired.exists())
+            finally:
+                if child is not None and child.poll() is None:
+                    child.kill()
+                    child.wait()
+
+    def test_different_build_trees_do_not_wait(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            first = root / "debug"
+            second = root / "debug-asan"
+
+            with build_lock.build_tree_lock(first):
+                with build_lock.build_tree_lock(second):
+                    self.assertNotEqual(build_lock.lock_path(first), build_lock.lock_path(second))
+
+    def test_same_thread_can_reenter_the_same_build_tree(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_dir = Path(temp_dir) / "debug"
+
+            with build_lock.build_tree_lock(build_dir):
+                with build_lock.build_tree_lock(build_dir):
+                    pass
+
+            with build_lock.build_tree_lock(build_dir):
+                pass
+
+    def test_other_thread_waits_for_the_same_build_tree(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_dir = Path(temp_dir) / "debug"
+            started = threading.Event()
+            acquired = threading.Event()
+
+            def acquire() -> None:
+                started.set()
+                with build_lock.build_tree_lock(build_dir):
+                    acquired.set()
+
+            worker = threading.Thread(target=acquire)
+            with build_lock.build_tree_lock(build_dir):
+                worker.start()
+                self.assertTrue(started.wait(timeout=5))
+                self.assertFalse(acquired.wait(timeout=0.1))
+
+            worker.join(timeout=5)
+            self.assertFalse(worker.is_alive())
+            self.assertTrue(acquired.is_set())
+
+    def test_body_exception_releases_the_build_tree(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_dir = Path(temp_dir) / "debug"
+
+            with self.assertRaisesRegex(RuntimeError, "body failed"):
+                with build_lock.build_tree_lock(build_dir):
+                    raise RuntimeError("body failed")
+
+            with build_lock.build_tree_lock(build_dir):
+                pass
+
+    def test_uncontended_build_tree_does_not_report_waiting(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = io.StringIO()
+
+            with redirect_stdout(output), build_lock.build_tree_lock(Path(temp_dir) / "debug"):
+                pass
+
+            self.assertEqual(output.getvalue(), "")
+
+    def test_contended_build_tree_reports_waiting_only_on_stderr(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_dir = Path(temp_dir) / "debug"
+            output, diagnostics = io.StringIO(), io.StringIO()
+            with (
+                redirect_stdout(output),
+                redirect_stderr(diagnostics),
+                mock.patch.object(build_lock, "_try_lock", return_value=False),
+                mock.patch.object(build_lock, "_lock") as acquire,
+                mock.patch.object(build_lock, "_unlock") as release,
+                build_lock.build_tree_lock(build_dir),
+            ):
+                acquire.assert_called_once()
+                release.assert_not_called()
+
+            self.assertEqual(output.getvalue(), "")
+            self.assertEqual(diagnostics.getvalue(), f"Waiting for active build in {build_dir}...\n")
+            release.assert_called_once_with(acquire.call_args.args[0])
+
+    def test_windows_nonblocking_lock_only_waits_for_contention(self):
+        host_os = mock.Mock()
+        host_os.name = "nt"
+
+        with tempfile.TemporaryFile("w+b") as stream:
+            locking = mock.Mock(LK_NBLCK=1)
+            locking.locking.side_effect = PermissionError(errno.EACCES, "locked")
+            with (
+                mock.patch("ao.core.build_lock.os", host_os),
+                mock.patch("ao.core.build_lock._windows_locking", return_value=locking),
+            ):
+                self.assertFalse(build_lock._try_lock(stream))
+
+            locking.locking.side_effect = OSError(errno.EIO, "I/O failure")
+            with (
+                mock.patch("ao.core.build_lock.os", host_os),
+                mock.patch("ao.core.build_lock._windows_locking", return_value=locking),
+                self.assertRaises(OSError) as caught,
+            ):
+                build_lock._try_lock(stream)
+
+            self.assertEqual(caught.exception.errno, errno.EIO)
+
+    def test_windows_lock_retries_contention_and_unlocks_the_same_byte(self):
+        host_os = mock.Mock()
+        host_os.name = "nt"
+        locking = mock.Mock(LK_NBLCK=1, LK_UNLCK=2)
+        locking.locking.side_effect = [PermissionError(errno.EACCES, "locked"), None, None]
+
+        with (
+            tempfile.TemporaryFile("w+b") as stream,
+            mock.patch("ao.core.build_lock.os", host_os),
+            mock.patch("ao.core.build_lock._windows_locking", return_value=locking),
+            mock.patch("time.sleep") as sleep,
+        ):
+            file_descriptor = stream.fileno()
+            build_lock._lock(stream)
+            build_lock._unlock(stream)
+
+        self.assertEqual(
+            locking.locking.call_args_list,
+            [
+                mock.call(file_descriptor, locking.LK_NBLCK, 1),
+                mock.call(file_descriptor, locking.LK_NBLCK, 1),
+                mock.call(file_descriptor, locking.LK_UNLCK, 1),
+            ],
+        )
+        sleep.assert_called_once_with(0.1)
+
+
+class SharedFileLockTest(unittest.TestCase):
+    def test_cache_file_lock_excludes_another_process_until_released(self):
+        # Buildifier publication and native package restore share this primitive.
+        # Probe the OS lock independently, including POSIX record-lock semantics.
+        probe = """
+import errno
+import os
+import sys
+with open(sys.argv[1], "a+b") as stream:
+    try:
+        if os.name == "nt":
+            import msvcrt
+            msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.lockf(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError as error:
+        if error.errno not in (errno.EACCES, errno.EAGAIN):
+            raise
+        print("excluded")
+    else:
+        print("acquired")
+"""
+        with tempfile.TemporaryDirectory(prefix="aobus-shared-lock-") as temporary:
+            lock = Path(temporary) / "cache/restore.lock"
+
+            def contender():
+                result = subprocess.run(
+                    [sys.executable, "-c", probe, str(lock)], capture_output=True, text=True, timeout=5
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                return result.stdout.strip()
+
+            with build_lock.shared_file_lock(lock):
+                self.assertEqual(contender(), "excluded")
+            self.assertEqual(contender(), "acquired")
+
+
+if __name__ == "__main__":
+    unittest.main()
