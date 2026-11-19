@@ -1,12 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <windows.h>
+
+// Keep the Win32 macro out of the XAML projections.
+#undef GetCurrentTime
+
 #include "MainWindow.xaml.h"
 #include "app/LibrarySession.h"
 #include "layout/ShellBuilder.h"
 #include "library/LibraryTransferCoordinator.h"
-#include "pch.h"
+#include "platform/StringResourceFormat.h"
 #include "platform/StringResources.h"
+#include "platform/WinRtStringResources.h"
 #include "theme/SurfaceBrushes.h"
 #include "theme/ThemeCoordinator.h"
 #include <ao/Contract.h>
@@ -26,6 +32,7 @@
 #include <winrt/Microsoft.UI.Xaml.Media.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 #include <winrt/Microsoft.Windows.Storage.Pickers.h>
+#include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Graphics.h>
 #include <winrt/Windows.UI.h>

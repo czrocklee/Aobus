@@ -1,18 +1,24 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "app/LibraryWindowSession.h"
+// Select native IUnknown support before the session header loads C++/WinRT.
+#include <unknwn.h>
+#undef GetCurrentTime
 
 #include "MainWindow.xaml.h"
 #include "app/LibrarySession.h"
-#include "pch.h"
+#include "app/LibraryWindowSession.h"
 #include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/desktop/LibrarySwitch.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/Log.h>
 
+#include <winrt/Aobus.h>
+#include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Microsoft.UI.Xaml.h>
+#include <winrt/Windows.Foundation.h>
+#include <winrt/base.h>
 
 #include <exception>
 #include <expected>

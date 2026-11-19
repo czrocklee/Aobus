@@ -3,7 +3,9 @@
 
 #include "track/TrackListController.h"
 
+#include "platform/StringResourceFormat.h"
 #include "platform/StringResources.h"
+#include "platform/WinRtStringResources.h"
 #include "track/TrackCellItem.h"
 #include "track/TrackItemView.h"
 #include "track/TrackRowItem.h"
@@ -46,6 +48,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <tuple>
 #include <utility>
 #include <variant>

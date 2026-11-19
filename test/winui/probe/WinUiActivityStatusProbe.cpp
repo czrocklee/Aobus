@@ -15,7 +15,7 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "platform/StringResources.h"
+#include "platform/ResourceLanguage.h"
 #include "theme/SurfaceBrushes.h"
 #include "track/TrackListController.h"
 #include <ao/Error.h>

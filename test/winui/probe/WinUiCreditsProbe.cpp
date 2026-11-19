@@ -7,7 +7,7 @@
 // MainWindow modal-admission coverage is claimed.
 #include "XamlMetaDataProvider.h"
 #include "app/DispatcherQueueExecutor.h"
-#include "platform/StringResources.h"
+#include "platform/ResourceLanguage.h"
 #include "track/TrackCreditsEditorControl.h"
 #include "track/TrackDetailControl.h"
 #include "track/TrackPropertiesCoordinator.h"

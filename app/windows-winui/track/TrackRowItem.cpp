@@ -3,8 +3,7 @@
 
 #include "track/TrackRowItem.h"
 
-#include "pch.h"
-#include "platform/StringResources.h"
+#include "platform/StringResourceFormat.h"
 #include "track/TrackCellItem.h"
 #include <ao/i18n/MessageCatalog.h>
 

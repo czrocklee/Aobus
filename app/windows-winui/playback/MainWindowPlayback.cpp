@@ -1,12 +1,20 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+// Native COM declarations must precede the C++/WinRT headers for IWindowNative interop.
+#include <microsoft.ui.xaml.window.h>
+#include <unknwn.h>
+#include <windows.h>
+
+// The SDK macro conflicts with XAML's GetCurrentTime method.
+#undef GetCurrentTime
+
 #include "MainWindow.xaml.h"
 #include "app/LibrarySession.h"
 #include "layout/ShellBuilder.h"
-#include "pch.h"
 #include "platform/SmtcBridge.h"
-#include "platform/StringResources.h"
+#include "platform/StringResourceFormat.h"
+#include "platform/WinRtStringResources.h"
 #include "playback/AobusSoulControl.h"
 #include "playback/OutputDeviceControl.h"
 #include <ao/rt/AppRuntime.h>
@@ -14,14 +22,14 @@
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/transport/TransportViewModel.h>
 
-#include <microsoft.ui.xaml.window.h>
+#include <winrt/Aobus.h>
 #include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Microsoft.UI.Windowing.h>
-#include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
-#include <winrt/Microsoft.UI.Xaml.Input.h>
 #include <winrt/Microsoft.UI.Xaml.h>
+#include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
+#include <winrt/base.h>
 
 #include <memory>
 

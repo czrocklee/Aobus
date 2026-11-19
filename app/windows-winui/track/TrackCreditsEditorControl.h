@@ -4,10 +4,8 @@
 #pragma once
 
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/uimodel/library/detail/TrackCredits.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
-#include <winrt/Microsoft.UI.Xaml.Input.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 
 #include <cstddef>
@@ -17,6 +15,12 @@
 namespace ao::rt
 {
   class CompletionService;
+}
+
+namespace ao::uimodel
+{
+  class TrackCreditsEditorModel;
+  struct TrackCreditValidationError;
 }
 
 namespace ao::winui

@@ -1,11 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <unknwn.h>
+
+// get_unknown uses native IUnknown; the SDK macro conflicts with XAML's GetCurrentTime method.
+#undef GetCurrentTime
+
 #include "MainWindow.xaml.h"
 #include "app/LibrarySession.h"
 #include "image/CoverArtPresenter.h"
 #include "layout/ShellBuilder.h"
-#include "pch.h"
+#include "platform/StringResourceFormat.h"
 #include "platform/StringResources.h"
 #include "track/TrackListController.h"
 #include "track/TrackPropertiesCoordinator.h"
@@ -15,14 +20,19 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/ViewService.h>
+#include <ao/rt/ViewState.h>
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/library/presentation/TrackPresentationText.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 #include <ao/winui/track/TrackPropertiesAdapter.h>
 
+#include <winrt/Aobus.h>
+#include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.Input.h>
+#include <winrt/Microsoft.UI.Xaml.h>
+#include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
 
 #include <bitset>

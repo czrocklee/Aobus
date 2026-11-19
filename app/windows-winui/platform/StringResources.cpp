@@ -3,11 +3,13 @@
 
 #include "platform/StringResources.h"
 
+#include "platform/ResourceLanguage.h"
+#include "platform/WinRtStringResources.h"
 #include <ao/Error.h>
-#include <ao/utility/String.h>
 
 #include <winrt/Microsoft.Windows.ApplicationModel.Resources.h>
 #include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/base.h>
 
 #include <memory>
 #include <mutex>
@@ -135,20 +137,5 @@ namespace ao::winui
   {
     auto const value = lookup(winrt::to_hstring(resourceId));
     return value.empty() ? std::string{fallback} : winrt::to_string(value);
-  }
-
-  std::string stableResourceString(std::string_view const prefix,
-                                   std::string_view const stableId,
-                                   std::string_view const fallback)
-  {
-    auto key = std::string{prefix};
-    key.reserve(prefix.size() + stableId.size());
-
-    for (auto const character : stableId)
-    {
-      key.push_back(utility::isAsciiAlphaNumeric(character) ? character : '_');
-    }
-
-    return resourceStringOr(key, fallback);
   }
 } // namespace ao::winui

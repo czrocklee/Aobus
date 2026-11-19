@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include "track/TrackRowItem.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Signal.h>
@@ -41,6 +40,8 @@ namespace ao::rt
 
 namespace ao::winui
 {
+  struct TrackColumnCellSpec;
+
   /// Stable presentation id stamped when a column-header sort replaces the active
   /// presentation; the presentation label resolves it to localized copy.
   inline constexpr std::string_view kColumnSortPresentationId = "windows-column-sort";

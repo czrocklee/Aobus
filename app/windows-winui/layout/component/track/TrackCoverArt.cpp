@@ -7,7 +7,6 @@
 #include "layout/runtime/FocusedDetail.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "pch.h"
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Subscription.h>
@@ -23,6 +22,8 @@
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.Media.h>
 #include <winrt/Microsoft.UI.Xaml.h>
+#include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/base.h>
 
 #include <array>
 #include <memory>

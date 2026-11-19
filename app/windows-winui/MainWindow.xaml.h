@@ -3,6 +3,11 @@
 
 #pragma once
 
+// MainWindow.g.h loads projections before MainWindow.xaml.g.h sets up native
+// IUnknown support and clears the Win32 macro that collides with XAML.
+#include <unknwn.h>
+#undef GetCurrentTime
+
 #include "MainWindow.g.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -10,12 +15,13 @@
 #include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/Credits.h>
 #include <ao/utility/ScopedRegistration.h>
-
-#include <bitset>
 // The loaded theme override is held here, so its type is part of the frame.
 #include <ao/winui/Theme.h>
 #include <ao/winui/layout/ShellState.h>
 
+#include <winrt/Microsoft.UI.Windowing.h>
+
+#include <bitset>
 #include <cstdint>
 #include <filesystem>
 #include <memory>

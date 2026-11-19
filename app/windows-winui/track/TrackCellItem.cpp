@@ -3,8 +3,6 @@
 
 #include "track/TrackCellItem.h"
 
-#include "pch.h"
-
 #if __has_include("TrackCellItem.g.cpp")
 #include "TrackCellItem.g.cpp"
 #endif

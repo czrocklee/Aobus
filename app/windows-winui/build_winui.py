@@ -284,7 +284,9 @@ def generate(options: argparse.Namespace, sdk: dict[str, Any]) -> None:
     )
     _element(compile_options, "LanguageStandard", language_standard)
     _element(compile_options, "PrecompiledHeader", "NotUsing")
-    _element(compile_options, "PrecompiledHeaderFile", "pch.h")
+    # Clear the VC default: C++/WinRT emits a nonempty filename as an include
+    # in XamlMetaDataProvider.cpp even when PrecompiledHeader is NotUsing.
+    _element(compile_options, "PrecompiledHeaderFile", "")
     items = _element(project, "ItemGroup")
     item = _element(items, "Midl", Include=_native(idl))
     _element(item, "OutputDirectory", "$(ProjectDir)")
@@ -337,7 +339,7 @@ def generate(options: argparse.Namespace, sdk: dict[str, Any]) -> None:
             raise ValueError(f"Unsafe generated C++ include path: {include}")
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(
-            f'// Generated WinUI translation-unit owner. Do not edit.\n#include "pch.h"\n#include "{include}"\n',
+            f'// Generated WinUI translation-unit owner. Do not edit.\n#include "{include}"\n',
             encoding="utf-8",
             newline="\n",
         )

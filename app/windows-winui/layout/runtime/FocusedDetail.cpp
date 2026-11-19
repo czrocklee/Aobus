@@ -3,7 +3,6 @@
 
 #include "layout/runtime/FocusedDetail.h"
 
-#include "pch.h"
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
 

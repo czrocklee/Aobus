@@ -3,8 +3,6 @@
 
 #include "layout/runtime/ActionRegistry.h"
 
-#include "pch.h"
-
 #include <string>
 #include <string_view>
 #include <utility>

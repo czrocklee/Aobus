@@ -8,15 +8,16 @@
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/ResourceLookup.h"
-#include "pch.h"
 #include "platform/NamedControl.h"
 #include "platform/StringResources.h"
+#include "platform/WinRtStringResources.h"
 #include "playback/OutputDeviceControl.h"
 #include "playback/PlaybackTimeControl.h"
 #include "playback/SeekControl.h"
 #include "playback/TransportButton.h"
 #include "playback/VolumeControl.h"
 #include <ao/Error.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
@@ -27,9 +28,13 @@
 #include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
+#include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.UI.Text.h>
+#include <winrt/base.h>
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>

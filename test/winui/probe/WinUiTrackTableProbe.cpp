@@ -23,7 +23,7 @@
 #include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutHost.h"
 #include "layout/runtime/ResourceLookup.h"
-#include "platform/StringResources.h"
+#include "platform/ResourceLanguage.h"
 #include "theme/SurfaceBrushes.h"
 #include "theme/ThemeCoordinator.h"
 #include "track/TrackListController.h"

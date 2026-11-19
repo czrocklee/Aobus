@@ -8,8 +8,12 @@
 #include <ao/desktop/LibrarySwitch.h>
 #include <ao/i18n/MessageCatalog.h>
 
+// Native Windows headers can define a macro that collides with XAML's method.
+#pragma push_macro("GetCurrentTime")
+#undef GetCurrentTime
 #include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Microsoft.UI.Xaml.h>
+#pragma pop_macro("GetCurrentTime")
 
 #include <filesystem>
 #include <memory>

@@ -4,18 +4,20 @@
 #include "track/TrackQuickFilterControl.h"
 
 #include "platform/ScopedBooleanFlag.h"
-#include <ao/rt/ViewService.h>
-#include <ao/rt/WorkspaceService.h>
-#include <ao/rt/completion/CompletionService.h>
+#include <ao/rt/completion/CompletionResult.h>
 #include <ao/uimodel/library/track/TrackFilter.h>
 #include <ao/uimodel/library/track/TrackFilterView.h>
 #include <ao/winui/track/QuickFilterCompletionAdapter.h>
 
+#include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.Input.h>
 #include <winrt/Microsoft.UI.Xaml.Media.h>
+#include <winrt/Microsoft.UI.Xaml.h>
 #include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.System.h>
+#include <winrt/base.h>
 
 #include <algorithm>
 #include <chrono>
@@ -25,6 +27,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <tuple>
 #include <utility>
 
 namespace ao::winui

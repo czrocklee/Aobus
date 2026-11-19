@@ -5,7 +5,7 @@ load("@aobus_native_tools//:test_tools.bzl", "TEST_TOOLS")
 load("@rules_cc//cc:defs.bzl", "cc_binary")
 load("@rules_cc//cc/common:cc_common.bzl", "cc_common")
 load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
-load("//bazel:msvc_policy.bzl", "MSVC_WINUI_PROBE_COPTS")
+load("//bazel:msvc_policy.bzl", "MSVC_WINUI_COPTS")
 load("//bazel:windows_utf8_manifest.bzl", "WINDOWS_UTF8_LINKER_INPUTS", "WINDOWS_UTF8_LINKOPTS")
 
 _WinuiGeneratedInfo = provider(doc = "Compiled XAML outputs consumed by WinUI resource assembly.", fields = ["xbf"])
@@ -239,7 +239,7 @@ winui_app = rule(
     },
 )
 
-def winui_probe(name, srcs, console = False, checkout_root = False, copts = [], linkopts = [], deps = []):
+def winui_probe(name, srcs, console = False, checkout_root = False, linkopts = [], deps = []):
     """Link and stage one of the eight independently entered WinUI probes.
 
     Args:
@@ -247,7 +247,6 @@ def winui_probe(name, srcs, console = False, checkout_root = False, copts = [], 
         srcs: Probe sources passed to the linked C++ binary.
         console: Select the console subsystem instead of the Windows subsystem.
         checkout_root: Define the quality probe's original checkout root from native tools.
-        copts: Additional compiler options after the probe's MSVC policy options.
         linkopts: Additional linker options after the shared manifest and probe entry options.
         deps: Additional dependencies after the WinUI library and SDK bootstrap.
     """
@@ -263,7 +262,7 @@ def winui_probe(name, srcs, console = False, checkout_root = False, copts = [], 
         name = name + "_binary",
         srcs = srcs,
         additional_linker_inputs = WINDOWS_UTF8_LINKER_INPUTS,
-        copts = MSVC_WINUI_PROBE_COPTS + copts,
+        copts = MSVC_WINUI_COPTS,
         local_defines = local_defines,
         linkopts = WINDOWS_UTF8_LINKOPTS + [
             # App.xaml contributes the shipping wWinMain object; each probe

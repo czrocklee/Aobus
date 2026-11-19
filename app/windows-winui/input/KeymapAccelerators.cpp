@@ -3,7 +3,6 @@
 
 #include "input/KeymapAccelerators.h"
 
-#include "pch.h"
 #include <ao/Contract.h>
 #include <ao/rt/Log.h>
 #include <ao/winui/input/KeyChordAccelerator.h>
@@ -11,7 +10,9 @@
 
 #include <winrt/Microsoft.UI.Xaml.Input.h>
 #include <winrt/Microsoft.UI.Xaml.h>
+#include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.System.h>
+#include <winrt/base.h>
 
 #include <span>
 #include <string>

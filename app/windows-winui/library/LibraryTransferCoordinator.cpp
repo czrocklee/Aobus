@@ -3,7 +3,6 @@
 
 #include "library/LibraryTransferCoordinator.h"
 
-#include "pch.h"
 #include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/async/LifetimeScope.h>
@@ -22,11 +21,18 @@
 #include <ao/winui/WinUiErrorBoundary.h>
 #include <ao/winui/library/LibraryTransferAdapter.h>
 
+// Asio can introduce the Win32 macro before the XAML projections are parsed.
+#pragma push_macro("GetCurrentTime")
+#undef GetCurrentTime
+#include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
+#pragma pop_macro("GetCurrentTime")
+#include <winrt/Microsoft.UI.h>
 #include <winrt/Microsoft.Windows.Storage.Pickers.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
+#include <winrt/base.h>
 
 #include <cstdint>
 #include <exception>

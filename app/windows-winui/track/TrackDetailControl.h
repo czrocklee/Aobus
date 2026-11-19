@@ -7,9 +7,7 @@
 #include <ao/async/Subscription.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/library/Credits.h>
-#include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
-#include <ao/uimodel/library/detail/TrackCredits.h>
 #include <ao/uimodel/library/detail/TrackFieldGrid.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
@@ -20,6 +18,11 @@
 #include <memory>
 #include <string_view>
 #include <vector>
+
+namespace ao::rt
+{
+  class TrackDetailProjection;
+}
 
 namespace ao::winui
 {

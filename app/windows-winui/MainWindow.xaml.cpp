@@ -3,25 +3,24 @@
 
 #include "MainWindow.xaml.h"
 
+// Keep the Win32 macro out of subsequently included XAML projections.
+#undef GetCurrentTime
+
 #include "app/LibrarySession.h"
 // The window's own destructor destroys the group-cover presenters it retains.
 #include "image/CoverArtPresenter.h" // NOLINT(misc-include-cleaner)
 #include "layout/ShellBuilder.h"
 #include "library/LibraryTransferCoordinator.h"
 #include "list/ListAuthoringCoordinator.h"
-#include "pch.h"
 // MainWindow's out-of-line destructor destroys the retained SMTC bridge.
 #include "platform/SmtcBridge.h" // NOLINT(misc-include-cleaner)
+#include "platform/StringResourceFormat.h"
 #include "platform/StringResources.h"
+#include "platform/WinRtStringResources.h"
 #include "playback/OutputDeviceControl.h"
 #include "theme/ThemeCoordinator.h"
 #include "track/TrackListController.h"
 #include "track/TrackPropertiesCoordinator.h"
-
-#if __has_include("MainWindow.g.cpp")
-#include "MainWindow.g.cpp"
-#endif
-
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/audio/OutputDeviceSelection.h>
@@ -36,8 +35,8 @@
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/library/list/ListOrder.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
-#include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h> // NOLINT(misc-include-cleaner)
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
+#include <ao/uimodel/playback/transport/TransportViewModel.h>
 #include <ao/winui/WinUiErrorBoundary.h>
 #include <ao/winui/list/ListAuthoringAdapter.h>
 
@@ -62,6 +61,10 @@
 #include <string_view>
 #include <utility>
 #include <vector>
+
+#if __has_include("MainWindow.g.cpp")
+#include "MainWindow.g.cpp"
+#endif
 
 namespace winrt::Aobus::implementation
 {

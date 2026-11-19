@@ -1,11 +1,17 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "App.xaml.h"
+#include <windows.h>
 
+// Keep the Win32 macro out of subsequently included XAML projections.
+#undef GetCurrentTime
+
+#include "App.xaml.h"
 #include "app/LibraryWindowSession.h"
 #include "platform/ProcessLauncher.h"
-#include "platform/StringResources.h"
+#include "platform/ResourceLanguage.h"
+#include "platform/StringResourceFormat.h"
+#include "platform/WinRtStringResources.h"
 #include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/desktop/LibrarySwitch.h>
@@ -17,7 +23,6 @@
 #include <ao/winui/WinUiErrorBoundary.h>
 #include <ao/winui/app/DestructiveLibraryRestart.h>
 
-#include <windows.h>
 #include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 

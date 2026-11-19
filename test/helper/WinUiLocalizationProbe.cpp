@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include "platform/ResourceLanguage.h"
+#include "platform/StringResourceFormat.h"
 #include "platform/StringResources.h"
 #include <ao/i18n/MessageCatalog.h>
 

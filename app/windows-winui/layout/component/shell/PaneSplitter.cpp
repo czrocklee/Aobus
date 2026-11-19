@@ -3,11 +3,14 @@
 
 #include "layout/component/shell/PaneSplitter.h"
 
-#include "pch.h"
 #include "platform/NamedControl.h"
 
+#include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
+#include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.Media.h>
+#include <winrt/Microsoft.UI.Xaml.h>
 #include <winrt/Windows.UI.h>
+#include <winrt/base.h>
 
 #include <functional>
 #include <utility>

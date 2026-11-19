@@ -4,9 +4,9 @@ The macro applies lint_graph_aspect to the existing completion roots, so the
 per-translation-unit AobusLint report actions, their native compile
 contexts and the checker verification are the only analysis producers. The
 gate rule adds no target inventory: every uncovered header and include
-fragment receives one declared replay action that selects its real consumer
-from the baseline reports' include evidence at execution time, and one gate
-action consumes the graph's declared report files. The ordinary py_test
+fragment without a direct main receives one replay action that selects its real
+consumer from the baseline reports' include evidence at execution time. One
+gate action consumes the graph's declared report files. The ordinary py_test
 consumer only reads the gate's completed result and log from runfiles
 through the official python.runfiles library; no generated launcher script
 and no test runs Bazel or an ao command.
@@ -60,11 +60,15 @@ def _lint_graph_gate_impl(ctx):
     for root in ctx.attr.roots:
         owner_inputs.update(root[LintGraphInfo].owner_inputs)
 
-    # Every unpaired header and include fragment of every owner, deduplicated
-    # by checkout path: one replay action per path, replayed through the real
-    # consumer that the baseline reports prove.
+    # Match the gate's path-wide coverage: a source not uncovered by its own
+    # owner has a declared direct report. The gate still validates that report.
+    direct_mains = {}
     items = {}
     for record in ordered:
+        owner_uncovered = {item["path"]: None for item in record["uncovered"]}
+        for path in record["sources"]:
+            if path not in owner_uncovered:
+                direct_mains[path] = None
         for item in record["uncovered"]:
             entry = items.setdefault(item["path"], {"reason": item["reason"], "owners": []})
             if entry["reason"] != item["reason"]:
@@ -75,12 +79,13 @@ def _lint_graph_gate_impl(ctx):
     replay_entries = []
     replay_files = []
 
-    # The sorted unique items give each replay a stable unique ordinal; a
-    # string hash stem could collide (Starlark hashes are deterministic but
-    # not collision-free) and miswire two replay actions onto one output.
+    # Enumerate before skipping direct mains so retained replays keep their
+    # output paths and cache keys. String hashes are not collision-free.
     for ordinal, path in enumerate(sorted(items)):
         if path not in uncovered_files:
             fail("Uncovered lint item has no declared file: " + path)
+        if path in direct_mains:
+            continue
         candidates = []
         seen = {}
         for record in ordered:

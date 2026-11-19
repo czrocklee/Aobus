@@ -397,6 +397,20 @@ owns compilation and executable-local staging. A successful build or bounded
 startup does not replace the interactive GUI gates below or establish complete
 WinUI GUI acceptance.
 
+WinUI code that only needs plain resource lookup includes `StringResources.h`.
+Formatting, MRT language configuration, and `winrt::hstring` lookup use
+`StringResourceFormat.h`, `ResourceLanguage.h`, and `WinRtStringResources.h`,
+respectively. Handwritten WinUI components and probes have no forced include
+or shared `pch.h`. Include the C++/WinRT projection that **defines** a method
+(e.g. `Controls.Primitives` for `ButtonBase::Click`), not just the namespace
+of the derived control. Keep implementation-only dependencies out of public
+headers. Where Win32 and XAML meet, resolve conflicting SDK macros at that
+boundary rather than relying on a global include order.
+
+The four generated translation units compile the SDK's emitted C++ directly.
+Authored implementations still include their own generated fragments; do not
+compile those fragments as separate objects.
+
 ### Stage offline prerequisites
 
 For offline deployment without target-side SDKs, Python, or network access, use

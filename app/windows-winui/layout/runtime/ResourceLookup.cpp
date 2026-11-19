@@ -3,7 +3,10 @@
 
 #include "layout/runtime/ResourceLookup.h"
 
-#include "pch.h"
+#include <winrt/Microsoft.UI.Xaml.h>
+#include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.Foundation.h>
+#include <winrt/base.h>
 
 #include <string_view>
 

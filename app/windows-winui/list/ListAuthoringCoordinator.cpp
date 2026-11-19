@@ -3,11 +3,11 @@
 
 #include "list/ListAuthoringCoordinator.h"
 
-#include "pch.h"
 #include "track/TrackListController.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/Runtime.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Serializer.h>
@@ -18,6 +18,7 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibrarySnapshot.h>
+#include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/rt/source/TrackSourceLease.h>
 #include <ao/uimodel/library/list/ListAuthoring.h>
@@ -30,10 +31,17 @@
 #include <ao/winui/WinUiErrorBoundary.h>
 #include <ao/winui/list/ListAuthoringAdapter.h>
 
+// Asio can introduce the Win32 macro before the XAML projections are parsed.
+#pragma push_macro("GetCurrentTime")
+#undef GetCurrentTime
+#include <winrt/Microsoft.UI.Dispatching.h>
+#include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
+#pragma pop_macro("GetCurrentTime")
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
+#include <winrt/base.h>
 
 #include <algorithm>
 #include <chrono>

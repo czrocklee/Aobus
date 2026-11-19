@@ -4,6 +4,7 @@
 #include "app/LibrarySession.h"
 
 #include "app/DispatcherQueueExecutor.h"
+#include "platform/StringResourceFormat.h"
 #include "platform/StringResources.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
@@ -54,6 +55,8 @@
 #include <ao/winui/app/SettingsPersistence.h>
 #include <ao/winui/app/StartupWarnings.h>
 
+#include <winrt/Microsoft.UI.Dispatching.h>
+
 #include <cstdint>
 #include <exception>
 #include <expected>
@@ -66,6 +69,7 @@
 #include <stop_token>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <tuple>
 #include <utility>
 // std::get on NotificationRequest::message needs the variant overload; tuple separately provides std::ignore.

@@ -7,6 +7,8 @@
 #include <ao/Error.h>
 #include <ao/desktop/LibrarySwitch.h>
 
+#include <winrt/Microsoft.UI.Dispatching.h>
+
 #include <cstdint>
 #include <filesystem>
 #include <memory>

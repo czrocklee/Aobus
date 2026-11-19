@@ -2,14 +2,18 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "layout/runtime/ComponentRegistrations.h"
+
+// Asio's Win32 headers define GetCurrentTime(); XAML declares a method with that name.
+#undef GetCurrentTime
+
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/ResourceLookup.h"
 #include "layout/runtime/UiSubscription.h"
-#include "pch.h"
 #include "platform/NamedControl.h"
 #include "platform/StringResources.h"
+#include "platform/WinRtStringResources.h"
 #include "status/ActivityStatusControl.h"
 #include "track/TrackListController.h"
 #include <ao/Error.h>
@@ -21,8 +25,12 @@
 #include <ao/winui/layout/LayoutSchema.h>
 #include <ao/winui/layout/ShellState.h>
 
+#include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
+#include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.Foundation.h>
+#include <winrt/base.h>
 
 #include <cstddef>
 #include <cstdint>

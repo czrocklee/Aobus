@@ -148,7 +148,7 @@ class GenerationActionTest(unittest.TestCase):
         self.wrapper_root = self.root / "generated/src"
         self.source = self.root / "authored"
         self.source.mkdir()
-        for name in ("Project.idl", "App.xaml", "MainWindow.xaml", "App.xaml.cpp", "pch.h"):
+        for name in ("Project.idl", "App.xaml", "MainWindow.xaml", "App.xaml.cpp", "Control.h"):
             (self.source / name).write_text("authored fixture", encoding="utf-8")
         self.calls = []
         self.mutate_query = lambda query: None
@@ -175,7 +175,7 @@ class GenerationActionTest(unittest.TestCase):
                 "--source",
                 str(self.source / "App.xaml.cpp"),
                 "--header",
-                str(self.source / "pch.h"),
+                str(self.source / "Control.h"),
                 "--xaml",
                 str(self.source / "App.xaml"),
                 "--xaml",
@@ -249,15 +249,22 @@ class GenerationActionTest(unittest.TestCase):
     def test_generation_publishes_four_wrappers_without_compiling_include_fragments(self):
         with mock.patch.dict(os.environ, {"PATH": "ambient must not leak", "TEMP": "ambient temp"}):
             self.generate()
-        types = (self.wrapper_root / "types.cpp").read_text(encoding="utf-8")
-        self.assertIn('#include "pch.h"\n', types)
-        self.assertIn('#include "../headers/XamlTypeInfo.g.cpp"', types)
-        metadata = (self.wrapper_root / "metadata.cpp").read_text(encoding="utf-8")
-        self.assertIn('#include "../headers/XamlMetaDataProvider.cpp"', metadata)
-        self.assertNotIn('#include "../headers/XamlMetaDataProvider.g.cpp"', metadata)
+        # A missing override would restore the VC default in the SDK's metadata TU.
         self.assertEqual(
-            sorted(path.name for path in self.wrapper_root.iterdir()),
-            ["metadata.cpp", "module.cpp", "types.cpp", "types_impl.cpp"],
+            self.calls[0].findtext("m:ItemDefinitionGroup/m:ClCompile/m:PrecompiledHeaderFile", namespaces=_NS), ""
+        )
+        includes = {
+            path.name: [line for line in path.read_text(encoding="utf-8").splitlines() if line.startswith("#include")]
+            for path in self.wrapper_root.iterdir()
+        }
+        self.assertEqual(
+            includes,
+            {
+                "module.cpp": ['#include "../headers/module.g.cpp"'],
+                "metadata.cpp": ['#include "../headers/XamlMetaDataProvider.cpp"'],
+                "types.cpp": ['#include "../headers/XamlTypeInfo.g.cpp"'],
+                "types_impl.cpp": ['#include "../headers/XamlTypeInfo.Impl.g.cpp"'],
+            },
         )
         self.assertTrue((self.generated / "postgeneration.json").is_file())
         self.assertEqual((self.payload / "winrt/Windows.Foundation.h").read_bytes(), b"SDK platform projection")
@@ -328,7 +335,7 @@ class GenerationActionTest(unittest.TestCase):
         # partial-class includes, including the generated application entry.
         self.assertEqual(headers["App.xaml.h"].find("m:DependentUpon", _NS).text, "App.xaml")
         self.assertEqual(headers["MainWindow.xaml.h"].find("m:DependentUpon", _NS).text, "MainWindow.xaml")
-        self.assertIsNone(headers["pch.h"].find("m:DependentUpon", _NS))
+        self.assertIsNone(headers["Control.h"].find("m:DependentUpon", _NS))
 
     def test_template_restores_native_xaml_wiring_before_default_props_and_guards_product_targets(self):
         self.generate()

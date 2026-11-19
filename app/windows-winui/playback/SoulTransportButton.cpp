@@ -8,7 +8,11 @@
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/transport/TransportViewModel.h>
 
+#include <winrt/Aobus.h>
 #include <winrt/Microsoft.UI.Xaml.Automation.h>
+#include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
+#include <winrt/Microsoft.UI.Xaml.h>
+#include <winrt/Windows.Foundation.h>
 
 #include <memory>
 #include <utility>

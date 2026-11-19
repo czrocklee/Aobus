@@ -4,6 +4,7 @@
 #pragma once
 
 #include "layout/runtime/CommonLayoutProps.h"
+#include <ao/winui/Theme.h>
 
 #include <winrt/Microsoft.UI.Xaml.Media.h>
 
@@ -12,8 +13,6 @@
 
 namespace ao::winui
 {
-  struct Theme;
-
   /// Brush for an `#RRGGBB` or `#AARRGGBB` theme token.
   winrt::Microsoft::UI::Xaml::Media::SolidColorBrush themeColorBrush(std::string_view token);
 

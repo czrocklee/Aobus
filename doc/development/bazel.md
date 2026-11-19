@@ -1643,9 +1643,9 @@ Large maps stay out of the Windows client argv. This uses the normal
 Bazel server mode: batch mode can re-expand rc options into an oversized Java
 command line and is not supported for large maps. Each pass records its literal
 parameter and exact parameterized aspect identity in the receipt. Naming a new
-consumer adds its reports without changing existing report actions. The declared replay actions cover unpaired public headers and include fragments
-without a portal-written consumer parameter, so the former separate CI
-production-lint step is gone.
+consumer adds its reports without changing existing report actions. The
+completion gate declares its own fallback replay actions without a portal-written
+consumer parameter, so the former separate CI production-lint step is gone.
 
 Scoped lint defers unreported, discovered paths that are incompatible with the
 current platform. With `--gtk off` on Linux it also defers discovered GTK paths
@@ -1660,9 +1660,12 @@ The completion gate's C++ stage is the declared `//test/lint:production_lint`
 test ([graph.bzl](../../bazel/lint/graph.bzl)), published as the root
 `//:production_lint` alias so bounded product builds do not load the analysis
 SDK until it is requested. It applies the report aspect to the
-completion roots, adds one replay action per uncovered header or include
-fragment, and gates the graph's declared reports in one action, independently
-of Git diffs or rule-change filename lists. No test runs Bazel or an `ao`
+completion roots and gates the graph's declared reports in one action,
+independently of Git diffs or rule-change filename lists. A direct report with
+the path as its main file from any configured owner in the gate satisfies coverage
+for that path, even when another owner lists it as uncovered. All declared direct
+reports are still validated. Only a header or include fragment with no direct main
+gets a replay action, deduplicated by path. No test runs Bazel or an `ao`
 command; the launcher only reads the completed gate result. The portal keeps its
 scoped [bazel_lint.run](../../script/ao/portal/bazel_lint.py) path for `ao check lint`;
 the former project-wide `run_project` route is retired, and scoped `ao check lint`
@@ -1674,10 +1677,10 @@ inventories. Those inventories identify inactive `select()` inputs, while the
 stage preserves `check`'s compiler and graph-feature selections. Declared header
 closures can include other platforms' headers through broad globs, so the
 existing native ownership policy still defers unreported platform-specific
-headers. Unpaired headers and include fragments require observed include
-consumers; a configured portable declaration with no consumer fails. The stale
-`NOLINT` scan covers the complete candidate set. The independent authored-source
-ownership scan is the root `//:native_policy` test
+headers. Fallback replay still requires an observed include consumer; a
+configured portable declaration with neither a direct main nor a consumer fails.
+The stale `NOLINT` scan covers the complete candidate set. The independent
+authored-source ownership scan is the root `//:native_policy` test
 ([test ownership](#test-ownership)). The lint test filters generated-only owners
 from authored policy, matching the former portal scope, so GLib-generated C and
 catalog arrays are not linted as project source while their real compile build
@@ -1697,7 +1700,7 @@ The report aspect is nonpropagating; its required provider-only aspect follows
 dependencies solely to map virtual include headers. It captures actual native
 argv and declared inputs, adds reports for paired headers analyzed as main
 files, and retains
-AppKit Objective-C++/ARC and WinUI generated-header/forced-include semantics.
+AppKit Objective-C++/ARC and WinUI generated-header dependencies.
 Unsupported compiler views, modules, PCH/header-unit contexts and unresolved
 response files fail rather than being stripped. The portal reads only the
 current invocation's BEP and local report artifacts, binding each owner to the
@@ -1806,11 +1809,10 @@ that reserved mode is rejected. There is no wrapper, VFS overlay, remapped file
 or rewritten source buffer: main-file-sensitive checks and suppression scans
 must see the original header.
 
-A producer such as WinUI `pch.h` may use the reserved mode to retain framework
-includes and macro cleanup while skipping implementation-header aggregation.
-This is a framework-only header-analysis prefix, **not identical full native
-preinclude semantics**. Normal product compilation does not enable the mode;
-Bazel's `/FIpch.h` remains text inclusion, not a compiled PCH speedup.
+Normal product compilation does not enable the reserved header-main mode.
+[WinUI components and probes](windows.md#bazel-product-details) include their
+own projections; neither native compilation nor lint supplies a shared XAML
+prefix.
 
 Default source filters admit project headers under the context's STRICT or
 RELAXED folders, including native execution-relative, absolute and virtual
