@@ -46,6 +46,9 @@ namespace ao::rt
 
 namespace ao::winui::layout
 {
+  struct MenuComposer;
+  struct PaneSettingsAccess;
+
   /// Window-owned List workflows exposed to generation components as narrow callbacks.
   struct ShellListCommands final
   {

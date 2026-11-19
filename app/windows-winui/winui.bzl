@@ -48,22 +48,37 @@ def _run(ctx, arguments, inputs, outputs, mnemonic, sdk = True):
 
 def _codegen_impl(ctx):
     # Full-CLR MSBuild appends long GUID-based batch paths under this tree.
-    # Keep the private component compact; public headers/src/xbf stay stable.
+    # Keep the private component compact; it is not a C++ include root.
     private = ctx.actions.declare_directory(ctx.label.name + "/p")
     headers = ctx.actions.declare_directory(ctx.label.name + "/headers")
+    sdk_headers = ctx.actions.declare_directory(ctx.label.name + "/sdk_headers")
     wrappers = [ctx.actions.declare_file(ctx.label.name + "/src/" + role + ".cpp") for role in _WRAPPERS]
     xbf = [ctx.actions.declare_file(ctx.label.name + "/xbf/" + name) for name in ["App.xbf", "MainWindow.xbf"]]
     arguments = _arguments(ctx, "generate")
     arguments.add("--sdk", ctx.file._sdk)
     arguments.add("--private", private.path)
     arguments.add("--headers", headers.path)
+    arguments.add("--sdk-headers", sdk_headers.path)
     for file in xbf:
         arguments.add("--xbf", file)
     arguments.add("--configuration", _configuration(ctx))
     arguments.add("--language-standard", ctx.attr.language_standard)
     arguments.add("--idl", ctx.file.idl)
+
+    # MSBuild checks the complete ClCompile inventory, but only XAML's
+    # code-behind belongs to generation as file content. The native cc_*
+    # owners still compile the actual files from this same source list.
+    codebehind_paths = {page.path + ".cpp": True for page in ctx.files.xaml}
+    codebehind = []
+    package_prefix = ctx.file.idl.dirname + "/"
     for file in ctx.files.srcs:
-        arguments.add("--source", file)
+        if file.path in codebehind_paths:
+            codebehind.append(file)
+            arguments.add("--source", file)
+        elif file.is_source and file.path.startswith(package_prefix):
+            arguments.add("--source-name=" + file.path[len(package_prefix):])
+        else:
+            fail("WinUI source inventory requires package-local authored files: " + file.path)
     for file in ctx.files.hdrs:
         arguments.add("--header", file)
     for file in ctx.files.xaml:
@@ -74,17 +89,18 @@ def _codegen_impl(ctx):
     _run(
         ctx,
         arguments,
-        [ctx.file._sdk, ctx.file._project, ctx.file.idl] + ctx.files.srcs + ctx.files.hdrs + ctx.files.xaml,
-        [private, headers] + wrappers + xbf,
+        [ctx.file._sdk, ctx.file._project, ctx.file.idl] + codebehind + ctx.files.hdrs + ctx.files.xaml,
+        [private, headers, sdk_headers] + wrappers + xbf,
         "AobusWinuiGenerate",
     )
     return [
-        DefaultInfo(files = depset([headers] + xbf)),
+        DefaultInfo(files = depset([headers, sdk_headers] + xbf)),
         OutputGroupInfo(cpp = depset(wrappers), diagnostics = depset([private])),
         _WinuiGeneratedInfo(xbf = xbf),
         CcInfo(compilation_context = cc_common.create_compilation_context(
-            headers = depset([headers]),
+            headers = depset([headers, sdk_headers]),
             includes = depset([headers.path]),
+            external_includes = depset([sdk_headers.path]),
         )),
     ]
 

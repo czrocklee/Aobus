@@ -23,14 +23,15 @@ single_version_override(
     patches = ["//bazel:apple_support_llvm.patch"],
 )
 
-# Local rules_cc deltas retain private coverage header mappings and make the
-# default MSVC exception flag selectable for the SDK-linked lint host. Retire
-# each patch when upstream provides the corresponding behavior.
+# Retire these deltas when upstream preserves private coverage mappings,
+# exposes external include roots to code generators, and lets the SDK-linked
+# lint host select its MSVC exception ABI without changing other flags.
 single_version_override(
     module_name = "rules_cc",
     patch_strip = 1,
     patches = [
         "//bazel:rules_cc_coverage_private_headers.patch",
+        "//bazel:rules_cc_external_includes.patch",
         "//bazel:rules_cc_msvc_exception_handling.patch",
     ],
 )

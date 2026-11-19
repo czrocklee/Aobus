@@ -3,7 +3,7 @@
 
 #include "theme/SurfaceBrushes.h"
 
-#include "layout/runtime/CommonLayoutProps.h"
+#include "layout/runtime/SurfaceBrushResolver.h"
 #include <ao/winui/Theme.h>
 #include <ao/winui/layout/ThemeSurface.h>
 

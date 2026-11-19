@@ -4,16 +4,14 @@
 #pragma once
 
 #include "layout/runtime/LayoutComponent.h"
+#include "layout/runtime/SurfaceBrushResolver.h"
 #include <ao/Error.h>
 #include <ao/winui/layout/ElementKind.h>
 #include <ao/winui/layout/PlacementPlan.h>
-#include <ao/winui/layout/ThemeSurface.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
-#include <winrt/Microsoft.UI.Xaml.Media.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 
-#include <functional>
 #include <span>
 
 namespace ao::uimodel
@@ -23,16 +21,6 @@ namespace ao::uimodel
 
 namespace ao::winui::layout
 {
-  /**
-   * @brief Brush the frame paints a themed surface with.
-   *
-   * The shell owns both halves a component must not know: whether a theme
-   * override is loaded at all, and what the stock brush for a slot is when it
-   * is not. A null brush means the element keeps whatever background it built
-   * itself with.
-   */
-  using SurfaceBrushResolver = std::function<winrt::Microsoft::UI::Xaml::Media::Brush(ThemeSurface)>;
-
   /**
    * @brief Apply the child-local half of @p plan, any authored `styleKey`, and any authored `surface` to @p element.
    *

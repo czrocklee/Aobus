@@ -8,25 +8,25 @@
 
 #include "app/LibrarySession.h"
 #include "app/LibraryWindowSession.h"
-// The window's own destructor destroys the group-cover presenters it retains.
-#include "image/CoverArtPresenter.h" // NOLINT(misc-include-cleaner)
+#include "image/GroupCoverPresenters.h"
 #include "layout/ShellBuilder.h"
 #include "library/LibraryTransferCoordinator.h"
 #include "list/ListAuthoringCoordinator.h"
+#include "platform/AppWindowActivity.h"
 // MainWindow's out-of-line destructor destroys the retained SMTC bridge.
 #include "platform/SmtcBridge.h" // NOLINT(misc-include-cleaner)
 #include "platform/StringResourceFormat.h"
 #include "platform/StringResources.h"
 #include "platform/WinRtStringResources.h"
+#include "playback/FullscreenSoulWindow.h"
 #include "playback/OutputDeviceControl.h"
 #include "theme/ThemeCoordinator.h"
 #include "track/TrackListController.h"
-#include "track/TrackPropertiesCoordinator.h"
+#include "track/TrackPropertiesPresenter.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/audio/OutputDeviceSelection.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/library/Credits.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
@@ -57,7 +57,6 @@
 #include <winrt/Windows.UI.h>
 #include <winrt/base.h>
 
-#include <bitset>
 #include <format>
 #include <memory>
 #include <string>
@@ -79,36 +78,20 @@ namespace winrt::Aobus::implementation
     ao::winui::runOptionalWinRt(
       "enabling the Mica backdrop", [this] { SystemBackdrop(Microsoft::UI::Xaml::Media::MicaBackdrop{}); });
 
-    _appWindowChangedSub = subscribeAppWindowChanges(AppWindow(), &MainWindow::updateSoulWindowActivity);
+    _appWindowChangedSub = ao::winui::observeWindowActivityChanges(AppWindow(),
+                                                                   [weak = get_weak()]
+                                                                   {
+                                                                     if (auto self = weak.get(); self)
+                                                                     {
+                                                                       self->updateSoulWindowActivity();
+                                                                     }
+                                                                   });
     updateSoulWindowActivity();
   }
 
   MainWindow::~MainWindow()
   {
     shutdown();
-  }
-
-  ao::utility::ScopedRegistration MainWindow::subscribeAppWindowChanges(Microsoft::UI::Windowing::AppWindow window,
-                                                                        void (MainWindow::* const updateActivity)())
-  {
-    auto const weak = get_weak();
-    auto const token = window.Changed(
-      [weak, updateActivity](
-        Microsoft::UI::Windowing::AppWindow const&, Microsoft::UI::Windowing::AppWindowChangedEventArgs const& args)
-      {
-        if (args.DidVisibilityChange() || args.DidPresenterChange())
-        {
-          if (auto self = weak.get(); self)
-          {
-            ((*self).*updateActivity)();
-          }
-        }
-      });
-
-    // AppWindow does not implement IWeakReferenceSource, so its auto_revoke
-    // overload crashes while constructing the revoker. Keep the source alive
-    // in the cleanup closure and use its noexcept event removal overload.
-    return ao::utility::ScopedRegistration{[window = std::move(window), token] noexcept { window.Changed(token); }};
   }
 
   void MainWindow::initialize(ao::winui::LibrarySession& session, RestartLibraryCallback requestRestart)
@@ -121,9 +104,12 @@ namespace winrt::Aobus::implementation
     // The window's own runtime consumers. They outlive every shell generation
     // and every dialog the window opens, which is why the window owns them
     // rather than borrowing them from a layer above or below it.
+    _fullscreenSoulWindowPtr = std::make_unique<ao::winui::FullscreenSoulWindow>(runtime.playback());
     _trackListPtr = std::make_unique<ao::winui::TrackListController>(
       runtime.views(), runtime.workspace(), runtime.library(), session.columnLayouts(), session.textCatalog());
     _themePtr = std::make_unique<ao::winui::ThemeCoordinator>(session.stateRoot() / "windows-theme.yaml");
+    _groupCoverPresentersPtr =
+      std::make_unique<ao::winui::GroupCoverPresenters>(runtime.async(), runtime.resourceBytes(), *_themePtr);
 
     // A reveal request reaches the track list the window owns, not the list a
     // generation happens to be showing, so it survives every shell rebuild.
@@ -145,17 +131,26 @@ namespace winrt::Aobus::implementation
         }
       });
 
-    // The window is the session's one status sink: it reports on into whichever
-    // shell generation is live, and `shutdown` clears this before releasing it.
-    session.setCallbacks({
-      .onStatus =
-        [weak](std::string status)
+    auto const currentRoot = [weak]
+    {
+      if (auto self = weak.get(); self)
       {
-        if (auto self = weak.get(); self)
-        {
-          self->updateStatus(status);
-        }
-      },
+        return self->RootGrid().XamlRoot();
+      }
+
+      return Microsoft::UI::Xaml::XamlRoot{nullptr};
+    };
+    auto const reportStatus = [weak](std::string status)
+    {
+      if (auto self = weak.get(); self)
+      {
+        self->updateStatus(status);
+      }
+    };
+
+    // The window reports into whichever shell generation is live.
+    session.setCallbacks({
+      .onStatus = reportStatus,
       .onFailure =
         [weak](ao::Error const& error)
       {
@@ -166,18 +161,19 @@ namespace winrt::Aobus::implementation
       },
     });
 
+    _trackPropertiesPtr =
+      std::make_unique<ao::winui::TrackPropertiesPresenter>(ao::winui::TrackPropertiesPresenterConfig{
+        .xamlRoot = currentRoot,
+        .asyncRuntime = runtime.async(),
+        .library = runtime.library(),
+        .workspace = runtime.workspace(),
+        .completion = runtime.completion(),
+        .textCatalog = session.textCatalog(),
+        .reportStatus = reportStatus,
+      });
     _listAuthoringCoordinatorPtr =
       std::make_unique<ao::winui::ListAuthoringCoordinator>(ao::winui::ListAuthoringCoordinatorConfig{
-        .xamlRoot =
-          [weak]
-        {
-          if (auto self = weak.get(); self)
-          {
-            return self->RootGrid().XamlRoot();
-          }
-
-          return Microsoft::UI::Xaml::XamlRoot{nullptr};
-        },
+        .xamlRoot = currentRoot,
         .asyncRuntime = runtime.async(),
         .library = runtime.library(),
         .views = runtime.views(),
@@ -187,40 +183,17 @@ namespace winrt::Aobus::implementation
         .listPresentations = session.listPresentations(),
         .textOrderingPolicy = runtime.textOrderingPolicy(),
         .textCatalog = session.textCatalog(),
-        .reportStatus =
-          [weak](std::string status)
-        {
-          if (auto self = weak.get(); self)
-          {
-            self->updateStatus(status);
-          }
-        },
+        .reportStatus = reportStatus,
       });
     _libraryTransferCoordinatorPtr =
       std::make_unique<ao::winui::LibraryTransferCoordinator>(ao::winui::LibraryTransferCoordinatorConfig{
-        .xamlRoot =
-          [weak]
-        {
-          if (auto self = weak.get(); self)
-          {
-            return self->RootGrid().XamlRoot();
-          }
-
-          return Microsoft::UI::Xaml::XamlRoot{nullptr};
-        },
+        .xamlRoot = currentRoot,
         .windowId = AppWindow().Id(),
         .asyncRuntime = runtime.async(),
         .jobs = runtime.library().jobs(),
         .notifications = runtime.notifications(),
         .textCatalog = session.textCatalog(),
-        .reportStatus =
-          [weak](std::string status)
-        {
-          if (auto self = weak.get(); self)
-          {
-            self->updateStatus(std::move(status));
-          }
-        },
+        .reportStatus = reportStatus,
       });
 
     if (auto themeRes = _themePtr->reload(); themeRes)
@@ -279,7 +252,15 @@ namespace winrt::Aobus::implementation
   {
     return (_listAuthoringCoordinatorPtr && _listAuthoringCoordinatorPtr->isDialogActive()) ||
            (_libraryTransferCoordinatorPtr && _libraryTransferCoordinatorPtr->isActive()) ||
-           (_trackPropertiesCoordinatorPtr && _trackPropertiesCoordinatorPtr->isActive());
+           (_trackPropertiesPtr && _trackPropertiesPtr->isActive());
+  }
+
+  void MainWindow::presentTrackProperties()
+  {
+    if (_sessionPhase != SessionPhase::Retired && _trackPropertiesPtr && _trackListPtr && !isModalWorkflowActive())
+    {
+      _trackPropertiesPtr->presentSelection(_trackListPtr->selection());
+    }
   }
 
   void MainWindow::navigateHistory(bool const forward)
@@ -480,11 +461,11 @@ namespace winrt::Aobus::implementation
             }
           },
         },
-        .editCredits = [weak](std::vector<ao::TrackId> ids, std::bitset<ao::library::kCreditKindCount> scope)
+        .editCredits = [weak](auto ids, auto scope)
         {
-          if (auto self = weak.get(); self)
+          if (auto self = weak.get(); self && self->_sessionPhase != SessionPhase::Retired && self->_trackPropertiesPtr && !self->isModalWorkflowActive())
           {
-            self->presentCapturedTrackProperties(std::move(ids), scope);
+            self->_trackPropertiesPtr->editCredits(std::move(ids), scope);
           }
         },
       });
@@ -505,11 +486,11 @@ namespace winrt::Aobus::implementation
     _requestRestart = {};
 
     _appWindowChangedSub.reset();
-    clearGroupCoverPresenters();
+    _groupCoverPresentersPtr.reset();
 
     // Cancel authoring and close its transient native tree before releasing
     // either the shell selection that opened it or the runtime it submits to.
-    _trackPropertiesCoordinatorPtr.reset();
+    _trackPropertiesPtr.reset();
 
     // Generation callbacks and all generation-owned runtime borrowers go away
     // before the window's own consumers are released. Releasing the owner is
@@ -519,8 +500,9 @@ namespace winrt::Aobus::implementation
     _libraryTransferCoordinatorPtr.reset();
     _listAuthoringCoordinatorPtr.reset();
 
-    // SMTC and fullscreen playback adapters must stop observing the runtime
-    // before the window releases its track service.
+    // Close the secondary window and detach the frame's playback adapters
+    // while the borrowed playback service is still live.
+    _fullscreenSoulWindowPtr.reset();
     unbindPlayback();
 
     // The window's own retirement, run as named steps rather than left to
@@ -536,16 +518,6 @@ namespace winrt::Aobus::implementation
     _themePtr.reset();
     _trackListPtr.reset();
 
-    _soulWindowChangedSub.reset();
-
-    if (_soulWindow)
-    {
-      _soulWindow.Close();
-
-      _soulWindow = nullptr;
-    }
-
-    _fullscreenSoul = nullptr;
     _shellOutputDevicePtr.reset();
     _smtcPtr.reset();
     _session = nullptr;

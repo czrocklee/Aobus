@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "layout/runtime/CommonLayoutProps.h"
+#include "layout/runtime/SurfaceBrushResolver.h"
 #include <ao/winui/Theme.h>
 
 #include <winrt/Microsoft.UI.Xaml.Media.h>

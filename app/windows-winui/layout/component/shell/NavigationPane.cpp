@@ -6,6 +6,7 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
+#include "layout/runtime/PaneSettingsAccess.h"
 #include "layout/runtime/UiSubscription.h"
 #include "platform/ScopedBooleanFlag.h"
 #include "platform/StringResourceFormat.h"

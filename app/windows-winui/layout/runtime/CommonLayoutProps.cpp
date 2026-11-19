@@ -4,6 +4,7 @@
 #include "layout/runtime/CommonLayoutProps.h"
 
 #include "layout/runtime/LayoutComponent.h"
+#include "layout/runtime/SurfaceBrushResolver.h"
 #include <ao/Error.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/winui/layout/ElementKind.h>

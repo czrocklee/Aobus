@@ -12,23 +12,19 @@
 #include "MainWindow.xaml.h"
 #include "app/LibrarySession.h"
 #include "layout/ShellBuilder.h"
+#include "platform/AppWindowActivity.h"
 #include "platform/SmtcBridge.h"
 #include "platform/StringResourceFormat.h"
-#include "platform/WinRtStringResources.h"
-#include "playback/AobusSoulControl.h"
+#include "playback/FullscreenSoulWindow.h"
 #include "playback/OutputDeviceControl.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/transport/TransportViewModel.h>
 
-#include <winrt/Aobus.h>
 #include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Microsoft.UI.Windowing.h>
-#include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
-#include <winrt/Windows.Foundation.Collections.h>
-#include <winrt/Windows.Foundation.h>
 #include <winrt/base.h>
 
 #include <memory>
@@ -37,24 +33,12 @@ namespace winrt::Aobus::implementation
 {
   namespace
   {
-    constexpr double kFullscreenSoulPadding = 48.0;
-
     HWND nativeWindow(Microsoft::UI::Xaml::Window const& window)
     {
       auto windowNative = window.as<::IWindowNative>();
       HWND handle = nullptr;
       check_hresult(windowNative->get_WindowHandle(&handle));
       return handle;
-    }
-
-    bool isMinimized(Microsoft::UI::Windowing::AppWindow const& window)
-    {
-      if (auto presenter = window.Presenter().try_as<Microsoft::UI::Windowing::OverlappedPresenter>(); presenter)
-      {
-        return presenter.State() == Microsoft::UI::Windowing::OverlappedPresenterState::Minimized;
-      }
-
-      return false;
     }
   } // namespace
 
@@ -67,11 +51,6 @@ namespace winrt::Aobus::implementation
     if (_shellOutputDevicePtr)
     {
       _shellOutputDevicePtr->unbind();
-    }
-
-    if (_fullscreenSoul)
-    {
-      get_self<AobusSoulControl>(_fullscreenSoul)->unbind();
     }
   }
 
@@ -100,11 +79,6 @@ namespace winrt::Aobus::implementation
     _stopPtr = std::make_unique<ao::uimodel::TransportViewModel>(
       playback, commands, _session->textCatalog(), ao::uimodel::PlaybackCommand::Stop, false, [](auto const&) {});
 
-    if (_fullscreenSoul)
-    {
-      get_self<AobusSoulControl>(_fullscreenSoul)->bind(playback);
-    }
-
     try
     {
       _smtcPtr =
@@ -127,7 +101,7 @@ namespace winrt::Aobus::implementation
     // reaches is the live generation's.
     if (auto const window = AppWindow(); _shellBuilderPtr)
     {
-      _shellBuilderPtr->applyWindowActivity(window.IsVisible(), isMinimized(window));
+      _shellBuilderPtr->applyWindowActivity(window.IsVisible(), ao::winui::isWindowMinimized(window));
     }
   }
 
@@ -155,72 +129,12 @@ namespace winrt::Aobus::implementation
     }
   }
 
-  void MainWindow::updateFullscreenSoulWindowActivity()
-  {
-    if (!_soulWindow || !_fullscreenSoul)
-    {
-      return;
-    }
-
-    auto const window = _soulWindow.AppWindow();
-    get_self<AobusSoulControl>(_fullscreenSoul)->setWindowActivity(window.IsVisible(), isMinimized(window));
-  }
-
   void MainWindow::showFullscreenSoul()
   {
-    if (_soulWindow)
+    if (_fullscreenSoulWindowPtr)
     {
-      _soulWindow.Activate();
-      return;
+      _fullscreenSoulWindowPtr->show();
     }
-
-    _soulWindow = Microsoft::UI::Xaml::Window{};
-    _soulWindow.Title(ao::winui::resourceHstring(L"SoulWindowTitle"));
-    _fullscreenSoul = Aobus::AobusSoulControl{};
-    get_self<AobusSoulControl>(_fullscreenSoul)->setTransportIcon(ao::uimodel::TransportIcon::None);
-
-    if (_session != nullptr)
-    {
-      get_self<AobusSoulControl>(_fullscreenSoul)->bind(_session->runtime().playback());
-    }
-
-    auto root = Microsoft::UI::Xaml::Controls::Grid{};
-    root.Padding({
-      .Left = kFullscreenSoulPadding,
-      .Top = kFullscreenSoulPadding,
-      .Right = kFullscreenSoulPadding,
-      .Bottom = kFullscreenSoulPadding,
-    });
-    root.Children().Append(_fullscreenSoul);
-    _soulWindow.Content(root);
-    auto weak = get_weak();
-    _soulWindowChangedSub =
-      subscribeAppWindowChanges(_soulWindow.AppWindow(), &MainWindow::updateFullscreenSoulWindowActivity);
-    _soulWindow.Closed(
-      [weak](Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::WindowEventArgs const&)
-      {
-        if (auto self = weak.get(); self)
-        {
-          self->_soulWindowChangedSub.reset();
-
-          if (self->_fullscreenSoul)
-          {
-            get_self<AobusSoulControl>(self->_fullscreenSoul)->unbind();
-          }
-
-          self->_fullscreenSoul = nullptr;
-          self->_soulWindow = nullptr;
-        }
-      });
-
-    if (auto presenter = _soulWindow.AppWindow().Presenter().try_as<Microsoft::UI::Windowing::OverlappedPresenter>();
-        presenter)
-    {
-      presenter.Maximize();
-    }
-
-    _soulWindow.Activate();
-    updateFullscreenSoulWindowActivity();
   }
 
   void MainWindow::showSystemMenu()

@@ -447,14 +447,31 @@ inputs.
 
 Native SDK MSBuild owns metadata, MIDL, C++/WinRT, XAML and PRI generation only;
 ordinary Bazel MSVC actions compile all C++, create archives and perform the PE
-link. SDK actions keep their private `TEMP`/`TMP` at a short path inside the
+link. Generation takes the XAML pages and their C++ code-behind, IDL and authored
+headers as file inputs. Other authored `.cpp` files are passed by package-relative
+name only: MSBuild lists them under an unmaterialized private project path, not
+in the checkout. The SDK's post-generation `ClCompile` inventory must still match
+all authored names, SDK initializers and the four standalone generated units.
+Adding or renaming a unit changes the generation request; editing an ordinary
+implementation only invalidates consumers of its contents, not XAML generation.
+SDK actions keep their private `TEMP`/`TMP` at a short path inside the
 action's compact `p` tree because full-CLR MSBuild `Exec` appends GUID-named paths
-against the legacy Windows path limit; the public headers/src/XBF paths are
-unchanged. The selected tree-path geometry remains
-a constraint, and no automatic long-path fallback is provided. Generated C++
-text has its own consumer tree; XBFs are separate declared outputs. MSBuild
-projects, logs and intermediate metadata stay in the private diagnostics output
-group, outside the compilation context and PRI inputs. SDK import
+against the legacy Windows path limit. The selected tree-path geometry remains
+a constraint, and no automatic long-path fallback is provided. Bazel publishes
+the SDK's `Microsoft.*` and `Windows.*` C++/WinRT projections and its runtime
+support headers under `sdk_headers/` as system includes. `headers/` remains an
+ordinary include root for Aobus projections, XAML and other generated C++.
+Only complete SDK namespace families (the public header and its three `impl/`
+layers) and the known runtime headers qualify; unfamiliar layouts stay normal.
+Both roots preserve include spellings and each file has exactly one generated
+provider. Compilation and lint consume the same native include roots. The narrow
+[rules_cc API patch](../../bazel/rules_cc_external_includes.patch) exposes the
+existing `external_includes` field to code generators: on the pinned MSVC
+toolchain it emits `/external:I`, whereas `system_includes` emits ordinary `/I`.
+It does not change the toolchain flags for other roots. XBFs are separate
+declared outputs. MSBuild projects, logs and intermediate metadata
+stay in the private diagnostics output group, outside the compilation context
+and PRI inputs. SDK import
 libraries remain DLL-interface imports beside the reviewed dynamic vcpkg
 dependencies, so this is not a DLL-free executable. The default completion and
 GUI-scenario orchestration are owned by the Bazel completion gate and the

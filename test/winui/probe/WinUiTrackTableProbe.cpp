@@ -22,6 +22,7 @@
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutHost.h"
+#include "layout/runtime/PaneSettingsAccess.h"
 #include "layout/runtime/ResourceLookup.h"
 #include "platform/ResourceLanguage.h"
 #include "theme/SurfaceBrushes.h"
@@ -2065,7 +2066,7 @@ namespace
         {},
         {},
         std::move(*catalogRes),
-        {},
+        ao::winui::layout::PaneSettingsAccess{},
         _shellStateChanged,
         [this](std::string message) { _statusMessages.push_back(std::move(message)); });
 

@@ -1,8 +1,8 @@
 """WinUI action mechanisms; actual SDK compilation/link/startup are native gates.
 
 Each action fixture stays its narrow declared contract: parameter files parse
-without an SDK, generation fakes one SDK query over one authored source and the
-two XAML pages, resources declare only the two generated XBF fixtures, a small
+without an SDK, generation fakes one SDK query over the two authored code-behind
+sources and XAML pages, resources declare only the two generated XBF fixtures, a small
 catalog, and the required shipping assets, and staging consumes only the PRI
 payload tree with its executable and runtime files. Selection and validation
 stay real; the external MSBuild fake discriminates the SDK executable, action
@@ -45,6 +45,23 @@ _GENERATED_HEADERS = (
     "XamlMetaDataProvider.g.cpp",
     "XamlBindingInfo.xaml.g.h",
     "XamlBindingInfo.xaml.g.hpp",
+)
+_SDK_NAMESPACES = ("Windows.Foundation", "Microsoft.UI.Xaml")
+_SDK_PROJECTIONS = (
+    *(f"winrt/{namespace}.h" for namespace in _SDK_NAMESPACES),
+    *(f"winrt/impl/{namespace}.{depth}.h" for namespace in _SDK_NAMESPACES for depth in range(3)),
+    "winrt/base.h",
+    "winrt/base_macros.h",
+    "winrt/fast_forward.h",
+)
+_NORMAL_PROJECTIONS = (
+    "winrt/Aobus.h",
+    "winrt/impl/Aobus.1.h",
+    "winrt/Unknown.Namespace.h",
+    "winrt/Windows.Foundation.g.h",
+    "winrt/impl/Windows.Foundation.3.h",
+    "winrt/Windows.Orphan.h",
+    "winrt/impl/Windows.Orphan.0.h",
 )
 # The executable-local shipping assets the resource and stage actions require;
 # external consumer contract inputs, not a test-owned registry.
@@ -144,11 +161,12 @@ class GenerationActionTest(unittest.TestCase):
         self.sdk, self.sdk_data = _install_sdk(self.root)
         self.generated = self.root / "generated/private"
         self.payload = self.root / "generated/headers"
+        self.sdk_headers = self.root / "generated/sdk_headers"
         self.xbf_root = self.root / "generated/xbf"
         self.wrapper_root = self.root / "generated/src"
         self.source = self.root / "authored"
         self.source.mkdir()
-        for name in ("Project.idl", "App.xaml", "MainWindow.xaml", "App.xaml.cpp", "Control.h"):
+        for name in ("Project.idl", "App.xaml", "MainWindow.xaml", "App.xaml.cpp", "MainWindow.xaml.cpp", "Control.h"):
             (self.source / name).write_text("authored fixture", encoding="utf-8")
         self.calls = []
         self.mutate_query = lambda query: None
@@ -164,6 +182,8 @@ class GenerationActionTest(unittest.TestCase):
                 str(self.generated),
                 "--headers",
                 str(self.payload),
+                "--sdk-headers",
+                str(self.sdk_headers),
                 "--xbf",
                 str(self.xbf_root / "App.xbf"),
                 "--xbf",
@@ -174,6 +194,8 @@ class GenerationActionTest(unittest.TestCase):
                 str(self.source / "Project.idl"),
                 "--source",
                 str(self.source / "App.xaml.cpp"),
+                "--source",
+                str(self.source / "MainWindow.xaml.cpp"),
                 "--header",
                 str(self.source / "Control.h"),
                 "--xaml",
@@ -213,9 +235,10 @@ class GenerationActionTest(unittest.TestCase):
         headers.mkdir(parents=True, exist_ok=True)
         for name in (*_GENERATED_UNITS, *_GENERATED_HEADERS):
             (headers / name).write_text("SDK-generated " + name, encoding="utf-8")
-        projection = headers / "winrt/Windows.Foundation.h"
-        projection.parent.mkdir(exist_ok=True)
-        projection.write_text("SDK platform projection", encoding="utf-8")
+        for name in (*_SDK_PROJECTIONS, *_NORMAL_PROJECTIONS):
+            projection = headers / name
+            projection.parent.mkdir(parents=True, exist_ok=True)
+            projection.write_text("projection " + name, encoding="utf-8")
         # The echo answers exactly the compile inputs the project declared.
         source_paths = [
             _project_path(item.attrib["Include"], private)
@@ -267,7 +290,14 @@ class GenerationActionTest(unittest.TestCase):
             },
         )
         self.assertTrue((self.generated / "postgeneration.json").is_file())
-        self.assertEqual((self.payload / "winrt/Windows.Foundation.h").read_bytes(), b"SDK platform projection")
+        for names, destination, other in (
+            (_SDK_PROJECTIONS, self.sdk_headers, self.payload),
+            (_NORMAL_PROJECTIONS, self.payload, self.sdk_headers),
+            (("App.xaml.g.h", "module.g.cpp"), self.payload, self.sdk_headers),
+        ):
+            for name in names:
+                self.assertEqual((destination / name).read_bytes(), (self.generated / "headers" / name).read_bytes())
+                self.assertFalse((other / name).exists(), name)
         for name in ("App.xbf", "MainWindow.xbf"):
             self.assertEqual((self.xbf_root / name).read_bytes(), (self.generated / "headers" / name).read_bytes())
             self.assertFalse((self.payload / name).exists())
@@ -295,7 +325,7 @@ class GenerationActionTest(unittest.TestCase):
         receipt = (self.generated / "postgeneration.json").read_bytes()
         published = {
             path.relative_to(self.generated.parent): path.read_bytes()
-            for root in (self.payload, self.wrapper_root, self.xbf_root)
+            for root in (self.payload, self.sdk_headers, self.wrapper_root, self.xbf_root)
             for path in root.rglob("*")
             if path.is_file()
         }
@@ -313,12 +343,46 @@ class GenerationActionTest(unittest.TestCase):
         self.assertEqual(
             {
                 path.relative_to(self.generated.parent): path.read_bytes()
-                for root in (self.payload, self.wrapper_root, self.xbf_root)
+                for root in (self.payload, self.sdk_headers, self.wrapper_root, self.xbf_root)
                 for path in root.rglob("*")
                 if path.is_file()
             },
             published,
         )
+
+    def test_sdk_headers_output_cannot_overlap_normal_headers(self):
+        with mock.patch.object(winui.subprocess, "run") as execute:
+            with self.assertRaises(ValueError):
+                winui.run(self.generation_options("--sdk-headers", str(self.payload)))
+        execute.assert_not_called()
+
+    def test_ordinary_source_identities_preserve_directories_and_missing_sdk_item_fails(self):
+        names = ("track/Feature.cpp", "library/Feature.cpp", "-Feature.cpp")
+        arguments = [f"--source-name={name}" for name in names]
+        self.generate(*arguments)
+        items = {
+            _project_path(item.attrib["Include"], self.generated): item
+            for item in self.calls[0].findall("m:ItemGroup/m:ClCompile", _NS)
+            if not item.attrib["Include"].startswith("$(GeneratedFilesDir)")
+        }
+        for name in names:
+            identity = self.generated / "i" / name
+            self.assertIn(identity, items)
+            self.assertFalse(identity.exists())
+            self.assertNotIn(self.source / name, items)
+        for name in ("App.xaml.cpp", "MainWindow.xaml.cpp"):
+            item = items[self.source / name]
+            self.assertEqual(item.find("m:DependentUpon", _NS).text, name.removesuffix(".cpp"))
+
+        def drop_one(query):
+            omitted = self.generated / "i" / names[0]
+            query["Items"]["ClCompile"] = [
+                item for item in query["Items"]["ClCompile"] if Path(item["FullPath"]) != omitted
+            ]
+
+        self.mutate_query = drop_one
+        with self.assertRaisesRegex(ValueError, "compile membership changed"):
+            self.generate(*arguments)
 
     def test_xaml_headers_retain_their_partial_class_relationships(self):
         arguments = []

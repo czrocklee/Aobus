@@ -1,57 +1,38 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <unknwn.h>
-
-// get_unknown uses native IUnknown; the SDK macro conflicts with XAML's GetCurrentTime method.
-#undef GetCurrentTime
-
 #include "MainWindow.xaml.h"
 #include "app/LibrarySession.h"
-#include "image/CoverArtPresenter.h"
+#include "image/GroupCoverPresenters.h"
 #include "layout/ShellBuilder.h"
 #include "platform/StringResourceFormat.h"
 #include "platform/StringResources.h"
 #include "track/TrackListController.h"
-#include "track/TrackPropertiesCoordinator.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
-#include <ao/library/Credits.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/TrackField.h>
-#include <ao/rt/ViewService.h>
-#include <ao/rt/ViewState.h>
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/library/presentation/TrackPresentationText.h>
-#include <ao/uimodel/presentation/CoverArtPlaceholder.h>
-#include <ao/winui/track/TrackPropertiesAdapter.h>
 
-#include <winrt/Aobus.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.Input.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
+#include <winrt/base.h>
 
-#include <bitset>
 #include <cmath>
 #include <cstdint>
-#include <exception>
-#include <memory>
 #include <optional>
 #include <string>
-#include <string_view>
-#include <utility>
-#include <vector>
 
 namespace winrt::Aobus::implementation
 {
   namespace
   {
-    using ProjectedTrackRowItem = ::winrt::Aobus::TrackRowItem;
-
     std::string requiredColumnFieldId(Windows::Foundation::IInspectable const& sender)
     {
       // These tags are supplied by the shipped template or by showColumnsMenu;
@@ -105,171 +86,31 @@ namespace winrt::Aobus::implementation
     args.Handled(_shellBuilderPtr && _shellBuilderPtr->tryInvokeAction("track.presentProperties"));
   }
 
-  void MainWindow::presentTrackProperties()
-  {
-    if (_session == nullptr || _trackListPtr == nullptr || isModalWorkflowActive())
-    {
-      return;
-    }
-
-    _trackPropertiesCoordinatorPtr.reset();
-    auto& runtime = _session->runtime();
-    auto stateRes = runtime.views().findTrackListState(_trackListPtr->viewId());
-
-    if (!stateRes || !ao::winui::canPresentTrackProperties(stateRes->selection))
-    {
-      return;
-    }
-
-    presentCapturedTrackProperties(std::move(stateRes->selection), std::nullopt);
-  }
-
-  void MainWindow::presentCapturedTrackProperties(std::vector<ao::TrackId> trackIds,
-                                                  std::optional<std::bitset<ao::library::kCreditKindCount>> optScope)
-  {
-    if (_session == nullptr || isModalWorkflowActive() || trackIds.empty())
-    {
-      return;
-    }
-
-    _trackPropertiesCoordinatorPtr.reset();
-    auto& runtime = _session->runtime();
-
-    try
-    {
-      auto dialogPtr =
-        std::make_unique<ao::winui::TrackPropertiesCoordinator>(ao::winui::TrackPropertiesCoordinatorConfig{
-          .xamlRoot = RootGrid().XamlRoot(),
-          .asyncRuntime = runtime.async(),
-          .library = runtime.library(),
-          .workspace = runtime.workspace(),
-          .completion = runtime.completion(),
-          .textCatalog = _session->textCatalog(),
-          .trackIds = std::move(trackIds),
-          .optCreditsScope = optScope,
-        });
-
-      if (auto presentedRes = dialogPtr->present(); !presentedRes)
-      {
-        updateStatus(ao::winui::formatResource("winui_error", presentedRes.error().message));
-        return;
-      }
-
-      _trackPropertiesCoordinatorPtr = std::move(dialogPtr);
-    }
-    catch (winrt::hresult_error const& error)
-    {
-      updateStatus(ao::winui::formatResource("winui_error", winrt::to_string(error.message())));
-    }
-    catch (...)
-    {
-      AO_FATAL_EXCEPTION(std::current_exception(), "WinUI track-properties presentation");
-    }
-  }
-
   void MainWindow::handleGroupCoverLoaded(Windows::Foundation::IInspectable const& sender,
                                           Microsoft::UI::Xaml::RoutedEventArgs const& /*args*/)
   {
-    refreshGroupCoverPresenter(sender);
+    if (_groupCoverPresentersPtr && _sessionPhase != SessionPhase::Retired)
+    {
+      _groupCoverPresentersPtr->refresh(sender);
+    }
   }
 
   void MainWindow::handleGroupCoverDataContextChanged(Microsoft::UI::Xaml::FrameworkElement const& sender,
                                                       Microsoft::UI::Xaml::DataContextChangedEventArgs const& /*args*/)
   {
-    refreshGroupCoverPresenter(sender);
-  }
-
-  void MainWindow::refreshGroupCoverPresenter(Windows::Foundation::IInspectable const& sender)
-  {
-    auto const tile = sender.try_as<Microsoft::UI::Xaml::Controls::Grid>();
-
-    if (!tile)
+    if (_groupCoverPresentersPtr && _sessionPhase != SessionPhase::Retired)
     {
-      return;
+      _groupCoverPresentersPtr->refresh(sender);
     }
-
-    auto const* key = static_cast<void const*>(winrt::get_unknown(tile));
-    auto presenterIt = _groupCoverPresenters.find(key);
-
-    if (presenterIt != _groupCoverPresenters.end())
-    {
-      if (auto const retainedTile = presenterIt->second.tile.get();
-          !retainedTile || winrt::get_unknown(retainedTile) != winrt::get_unknown(tile))
-      {
-        _groupCoverPresenters.erase(presenterIt);
-        presenterIt = _groupCoverPresenters.end();
-      }
-    }
-
-    auto const row = tile.DataContext().try_as<ProjectedTrackRowItem>();
-
-    if (!row || !row.IsGroupHeader() || _themePtr == nullptr || _session == nullptr || tile.Children().Size() < 2)
-    {
-      if (presenterIt != _groupCoverPresenters.end())
-      {
-        presenterIt->second.presenterPtr->select(
-          ao::kInvalidResourceId, ao::uimodel::CoverArtPlaceholderIdentity{}, false);
-      }
-
-      return;
-    }
-
-    auto const placeholder = tile.Children().GetAt(0).try_as<Microsoft::UI::Xaml::Controls::Grid>();
-    auto const image = tile.Children().GetAt(1).try_as<Microsoft::UI::Xaml::Controls::Image>();
-
-    if (!placeholder || !image)
-    {
-      if (presenterIt != _groupCoverPresenters.end())
-      {
-        presenterIt->second.presenterPtr->select(
-          ao::kInvalidResourceId, ao::uimodel::CoverArtPlaceholderIdentity{}, false);
-      }
-
-      return;
-    }
-
-    if (presenterIt == _groupCoverPresenters.end())
-    {
-      auto presenterPtr = std::make_unique<ao::winui::CoverArtPresenter>(
-        image,
-        placeholder,
-        _session->runtime().async(),
-        _session->runtime().resourceBytes(),
-        *_themePtr,
-        ao::uimodel::defaultCoverArtPlaceholderStyle(ao::uimodel::CoverArtPlaceholderSlot::GroupHeading));
-      presenterIt = _groupCoverPresenters
-                      .emplace(key,
-                               GroupCoverPresenterEntry{
-                                 .tile = winrt::make_weak(tile),
-                                 .presenterPtr = std::move(presenterPtr),
-                               })
-                      .first;
-    }
-
-    auto identity = ao::uimodel::CoverArtPlaceholderIdentity{
-      .primaryText = winrt::to_string(row.Title()),
-    };
-
-    if (auto monogram = winrt::to_string(row.CoverArtMonogram()); !monogram.empty())
-    {
-      identity.optMonogram = std::move(monogram);
-    }
-
-    presenterIt->second.presenterPtr->select(ao::ResourceId{row.CoverArtId()}, std::move(identity), true);
   }
 
   void MainWindow::handleGroupCoverUnloaded(Windows::Foundation::IInspectable const& sender,
                                             Microsoft::UI::Xaml::RoutedEventArgs const& /*args*/)
   {
-    if (auto const tile = sender.try_as<Microsoft::UI::Xaml::Controls::Grid>(); tile)
+    if (_groupCoverPresentersPtr && _sessionPhase != SessionPhase::Retired)
     {
-      _groupCoverPresenters.erase(static_cast<void const*>(winrt::get_unknown(tile)));
+      _groupCoverPresentersPtr->unload(sender);
     }
-  }
-
-  void MainWindow::clearGroupCoverPresenters() noexcept
-  {
-    _groupCoverPresenters.clear();
   }
 
   void MainWindow::toggleInspector()

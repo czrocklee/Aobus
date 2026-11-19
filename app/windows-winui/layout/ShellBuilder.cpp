@@ -12,6 +12,8 @@
 #include "layout/runtime/FocusedDetail.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutHost.h"
+#include "layout/runtime/MenuComposer.h"
+#include "layout/runtime/PaneSettingsAccess.h"
 #include "platform/StringResourceFormat.h"
 #include "platform/StringResources.h"
 #include "theme/SurfaceBrushes.h"

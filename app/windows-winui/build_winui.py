@@ -3,8 +3,8 @@
 """Run WinUI SDK generation, PRI-only generation, or executable-local assembly.
 
 The local Starlark rules supply declared paths, not a copied checkout or a second
-SDK registry. Generate publishes C++ text through --headers, XBFs through --xbf,
-and --cpp ROLE PATH wrappers for module, metadata, types and types_impl; --private
+SDK registry. Generate publishes project C++ text through --headers, external
+C++/WinRT projections through --sdk-headers, XBFs through --xbf, and --cpp ROLE PATH wrappers for module, metadata, types and types_impl; --private
 retains the SDK diagnostics and intermediates; --language-standard forwards the
 Bzl MSVC policy's LanguageStandard into the generated project. Stage selects executable/PRI
 basenames with --identity (Aobus by default) and takes --runtime SOURCE
@@ -15,13 +15,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import ntpath
 import os
 import re
 import shutil
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from types import ModuleType
 from typing import Any, cast
 
@@ -40,6 +41,7 @@ _ASSETS = {
     "windows_modern_layout.yaml": "Assets/Layout/windows_modern_layout.yaml",
     "windows_classic_layout.yaml": "Assets/Layout/windows_classic_layout.yaml",
 }
+_SDK_PROJECTION = re.compile(r"winrt/((?:Microsoft|Windows)(?:\.[A-Za-z_][A-Za-z0-9_]*)+)\.h")
 _XBF = ("App.xbf", "MainWindow.xbf")
 _LOCALE = re.compile(r"[A-Za-z]{2,8}(?:-[A-Za-z0-9]{2,8})*\Z", re.ASCII)
 _FORBIDDEN_TARGETS = "ClCompile;_ClCompile;Lib;_Lib;Link;_Link;Build;Restore;Rebuild;Clean;XamlPreCompile"
@@ -238,9 +240,52 @@ def validate_generated(private: Path, sources: list[Path], sdk: dict[str, Any], 
         raise ValueError("WinUI SDK IntDir must remain private and relative")
 
 
+def _source_inventory(private: Path, codebehind: list[Path], pages: list[Path], names: list[str]) -> list[Path]:
+    expected = {_key(page.with_suffix(".xaml.cpp")) for page in pages}
+    if len(codebehind) != len(expected) or {_key(path) for path in codebehind} != expected:
+        raise ValueError("WinUI generation requires the matching XAML code-behind sources")
+    # Plain ClCompile items are inventory, not files the SDK should read or
+    # stat in an unsandboxed checkout. Keep their package-relative identities
+    # under an unmaterialized namespace of this action's private project.
+    inventory_root = private / "i"
+    if inventory_root.exists() or inventory_root.is_symlink():
+        raise ValueError("WinUI source inventory namespace must remain unmaterialized")
+    identities = {path.name.casefold() for path in codebehind}
+    sources = list(codebehind)
+    for name in names:
+        relative = PureWindowsPath(name)
+        if (
+            relative.anchor
+            or relative.as_posix() != name
+            or relative.suffix != ".cpp"
+            or ".." in relative.parts
+            or ntpath.isreserved(name)
+            or name.casefold() in identities
+        ):
+            raise ValueError(f"Invalid or duplicate WinUI source inventory name: {name!r}")
+        identities.add(name.casefold())
+        sources.append(inventory_root.joinpath(*relative.parts))
+    return sources
+
+
+def _sdk_projection_headers(files: set[str]) -> set[str]:
+    # Project.idl and SDK metadata share the winrt/ output directory. Only
+    # externalize complete SDK namespace families and C++/WinRT's own support
+    # headers. Unknown shapes remain normal inputs to compiler diagnostics.
+    sdk = files & {"winrt/base.h", "winrt/base_macros.h", "winrt/fast_forward.h"}
+    for name in files:
+        if match := _SDK_PROJECTION.fullmatch(name):
+            layers = {f"winrt/impl/{match[1]}.{level}.h" for level in range(3)}
+            if layers <= files:
+                sdk.add(name)
+                sdk.update(layers)
+    return sdk
+
+
 def generate(options: argparse.Namespace, sdk: dict[str, Any]) -> None:
     private = _required(options, "private")
     payload = _required(options, "headers")
+    sdk_headers = _required(options, "sdk_headers")
     # The Bzl policy owns the language standard; the helper only forwards it.
     language_standard = options.language_standard
     if not isinstance(language_standard, str) or not language_standard:
@@ -248,13 +293,12 @@ def generate(options: argparse.Namespace, sdk: dict[str, Any]) -> None:
     xbf = options.xbf
     _native(private)
     idl = _required(options, "idl")
-    sources = list(options.source)
+    codebehind = list(options.source)
     headers = list(options.header)
     xaml = list(options.xaml)
-    if not sources or len({_key(path) for path in sources}) != len(sources):
-        raise ValueError("WinUI generation requires unique authored sources")
     if sorted(path.name for path in xaml) != ["App.xaml", "MainWindow.xaml"]:
         raise ValueError("WinUI generation requires the authored App and MainWindow XAML")
+    sources = _source_inventory(private, codebehind, xaml, options.source_name)
     wrappers: dict[str, Path] = {}
     for role, spelling in options.cpp:
         if role not in _UNITS or role in wrappers:
@@ -263,8 +307,8 @@ def generate(options: argparse.Namespace, sdk: dict[str, Any]) -> None:
     if set(wrappers) != set(_UNITS):
         raise ValueError("WinUI generation requires four separate wrapper outputs")
     validate_outputs(
-        [private, payload, *wrappers.values(), *xbf],
-        [options.sdk, idl, *sources, *headers, *xaml, *_sdk_inputs(sdk)],
+        [private, payload, sdk_headers, *wrappers.values(), *xbf],
+        [options.sdk, idl, *codebehind, *headers, *xaml, *_sdk_inputs(sdk)],
     )
     project = project_template(sdk, options.configuration, generate=True)
     definitions = _element(project, "ItemDefinitionGroup")
@@ -295,7 +339,7 @@ def generate(options: argparse.Namespace, sdk: dict[str, Any]) -> None:
         _element(item, "Link", path.name)
     for path in sources:
         item = _element(items, "ClCompile", Include=_native(path))
-        if path.name in {"App.xaml.cpp", "MainWindow.xaml.cpp"}:
+        if path in codebehind:
             _element(item, "DependentUpon", path.name.removesuffix(".cpp"))
     _element(items, "ClCompile", Include="$(GeneratedFilesDir)module.g.cpp")
     for path in headers:
@@ -322,12 +366,17 @@ def generate(options: argparse.Namespace, sdk: dict[str, Any]) -> None:
     validate_generated(private, sources, sdk, query)
     (private / "postgeneration.json").write_text(json.dumps(query, indent=2) + "\n", encoding="utf-8")
     # Only generated C++ text belongs to the compilation context. Keep the
-    # SDK's logs, caches, metadata and XBFs out of that consumer tree.
+    # SDK's logs, caches, metadata and XBFs out of both include roots. Keep
+    # each include spelling and file contents intact, with a single provider.
     generated = private / "headers"
-    copies = []
-    for path in sorted(generated.rglob("*")):
-        if path.is_file() and path.suffix in {".h", ".hpp", ".cpp"}:
-            copies.append((path, payload / path.relative_to(generated)))
+    sdk_headers.mkdir(parents=True, exist_ok=True)
+    files = {
+        path.relative_to(generated).as_posix()
+        for path in generated.rglob("*")
+        if path.suffix in {".h", ".hpp", ".cpp"} and path.is_file()
+    }
+    sdk_files = _sdk_projection_headers(files)
+    copies = [(generated / name, (sdk_headers if name in sdk_files else payload) / name) for name in sorted(files)]
     copies.extend((private / ("headers/" + output.name), output) for output in xbf)
     for source, output in copies:
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -483,6 +532,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "sdk",
         "private",
         "headers",
+        "sdk_headers",
         "idl",
         "catalog",
         "exe",
@@ -496,6 +546,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.add_argument("--" + name.replace("_", "-"), dest=name, type=absolute)
     for name in ("source", "header", "xaml", "asset", "xbf"):
         parser.add_argument("--" + name, action="append", default=[], type=absolute)
+    parser.add_argument("--source-name", action="append", default=[], help="package-relative inventory-only C++ item")
     parser.add_argument("--cpp", nargs=2, action="append", default=[], metavar=("ROLE", "OUTPUT"))
     parser.add_argument("--runtime", nargs=2, action="append", default=[], metavar=("SOURCE", "OUTPUT"))
     return parser.parse_args(argv)

@@ -9,8 +9,8 @@ STRING_RESOURCE_SOURCES = [
     "platform/StringResources.cpp",
 ]
 
-# One authored inventory feeds the native compilation owners and XAML code
-# generation. Portable model units remain independently owned below.
+# One inventory supplies native compile owners and the SDK's post-generation
+# membership check. Ordinary .cpp files are names only to the generator.
 WINUI_SOURCES = [
     "App.xaml.cpp",
     "app/DestructiveLibraryRestart.cpp",
@@ -25,6 +25,7 @@ WINUI_SOURCES = [
     "app/StartupWarnings.cpp",
     "image/CoverArtPresenter.cpp",
     "image/CoverArtPlaceholderRenderer.cpp",
+    "image/GroupCoverPresenters.cpp",
     "input/KeyChordAccelerator.cpp",
     "input/KeymapAcceleratorPlan.cpp",
     "input/KeymapAccelerators.cpp",
@@ -64,12 +65,14 @@ WINUI_SOURCES = [
     "layout/runtime/ResourceLookup.cpp",
     "layout/ShellBuilder.cpp",
     "layout/ShellPresetSource.cpp",
+    "platform/AppWindowActivity.cpp",
     "platform/ScopedBooleanFlag.cpp",
     "platform/ProcessLauncher.cpp",
     "platform/SmtcBridge.cpp",
     "platform/WinUiErrorBoundary.cpp",
     "playback/AobusSoulControl.cpp",
     "playback/AudioPipelineToolTip.cpp",
+    "playback/FullscreenSoulWindow.cpp",
     "playback/MainWindowPlayback.cpp",
     "playback/OutputDeviceControl.cpp",
     "playback/PlaybackTimeControl.cpp",
@@ -92,6 +95,7 @@ WINUI_SOURCES = [
     "track/TrackListController.cpp",
     "track/TrackPropertiesAdapter.cpp",
     "track/TrackPropertiesCoordinator.cpp",
+    "track/TrackPropertiesPresenter.cpp",
     "track/TrackQuickFilterControl.cpp",
     "track/TrackRevealAdapter.cpp",
     "track/TrackRowItem.cpp",
@@ -213,9 +217,8 @@ filegroup(
     visibility = ["//test:__pkg__"],
 )
 
-# WinUI code generation: the XAML compiler, MIDL projection, and the generated
-# header tree. The rule's default outputs and CcInfo expose the generated
-# headers; the "cpp" output group supplies the standalone generated
+# XAML and C++/WinRT generation. CcInfo keeps project-generated headers
+# distinct from external SDK projections. The "cpp" output group supplies
 # wrappers for the SDK's four standalone generated translation units.
 winui_codegen(
     name = "generated",

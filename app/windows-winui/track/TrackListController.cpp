@@ -693,8 +693,8 @@ namespace ao::winui
       return {};
     }
 
-    auto const stateRes = _views.findTrackListState(_viewId);
-    return stateRes ? stateRes->selection : std::vector<TrackId>{};
+    auto stateRes = _views.findTrackListState(_viewId);
+    return stateRes ? std::move(stateRes->selection) : std::vector<TrackId>{};
   }
 
   std::optional<std::size_t> TrackListController::displayIndexOfTrack(TrackId const trackId) const noexcept

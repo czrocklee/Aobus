@@ -7,8 +7,8 @@
 #undef GetCurrentTime
 
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
+#include "layout/runtime/MenuComposer.h"
 #include "platform/StringResources.h"
 #include <ao/Error.h>
 #include <ao/uimodel/layout/component/LayoutSchema.h>
