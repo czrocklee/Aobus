@@ -261,7 +261,7 @@
     },
     "//bazel/lint:sdk.bzl%lint_sdk": {
       "general": {
-        "bzlTransitiveDigest": "Nh1N82CsPbFDiZnQmXkYJIYsGuaVfY3jDVw1vGJL9wY=",
+        "bzlTransitiveDigest": "gs9IZl3uAwKz24M2+sDRm9mGgKWIdHjSXWJf3qzyMcI=",
         "usagesDigest": "4Oi/yYx1qHfRWvvXoW6P8bD3uLQefL1QbxMhi0ezvLM=",
         "recordedInputs": [
           "REPO_MAPPING:,aobus_environment +dependencies+aobus_environment"

@@ -698,7 +698,12 @@ required path and fails.
 The official `clang-tidy.exe` cannot load Aobus's out-of-tree C++ plugin.
 Therefore the project builds `tool/lint/AobusClangTidy.exe`, statically linking
 upstream and `aobus-*` checks from the same SDK. The portal verifies registration
-and never falls back to Visual Studio or `PATH`.
+and never falls back to Visual Studio or `PATH`. In LLVM 22.1.8, `Diagnostic.h`
+returns a `unique_ptr<DiagnosticConsumer>` before the consumer type is complete;
+MSVC 14.52 rejects the inline `takeClient()` definition. The Bazel SDK projection
+moves only that definition below `DiagnosticConsumer`, without changing the
+installed header, the LLVM libraries, or the checker flags. Retire the patch
+when the unmodified pinned header builds with the supported MSVC toolset.
 
 Windows tidy replays exact Windows compile actions, including WinUI generated
 contexts when needed. Tidy reports and defers platform-incompatible files
