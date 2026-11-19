@@ -360,6 +360,8 @@ def validate_native_policy(
         windows_per_file_sources=_windows_per_file_sources(platform, profile, tools_version=windows_tools_version),
         gcc_version=gcc_version,
     )
+    # The per-action root join needs at least one governed record. Keep a
+    # separate product-graph guard against losing target metadata altogether.
     if platform == "windows" and not any(action.winui_projections for action in first_party if not action.is_tool):
         errors.append("no native WinUI projection consumer in the configured Windows product graph")
     native_errors, _counts = bazel_contract.link_archive_contract_errors(

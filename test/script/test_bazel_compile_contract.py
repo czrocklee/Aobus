@@ -399,6 +399,29 @@ class BazelAqueryContractTest(unittest.TestCase):
                 self.assertEqual(len(errors), 1, errors)
                 self.assertIn(bad_root, errors[0])
 
+    def test_using_known_winui_roots_requires_metadata_on_each_compile_owner(self):
+        project, sdk = "out/winui/headers", "out/winui/sdk_headers"
+        governed = replace(
+            self.action("windows", extra=["/I" + project, "/external:I" + sdk]),
+            label="//app:governed",
+            winui_projections=((project, sdk),),
+        )
+        unrelated = self.action("windows", extra=["/I" + sdk + "_other"])
+        self.assertEqual(compile_contract_errors([unrelated, governed], "windows", "opt"), [])
+
+        for sdk_switch in ("/external:I", "/I"):
+            with self.subTest(sdk_switch=sdk_switch):
+                # A second owner keeps the independent root evidence. Swapping
+                # the SDK flag must not let this owner opt out of the join.
+                owner = self.action("windows", extra=["/I" + project, sdk_switch, r"OUT\WinUI\sdk_headers\."])
+                errors = compile_contract_errors([owner, governed], "windows", "opt")
+                self.assertEqual(len(errors), 2, errors)
+                for root in (project, sdk):
+                    self.assertTrue(
+                        any(owner.label in error and root in error and "metadata" in error for error in errors),
+                        errors,
+                    )
+
     def test_msvc_quote_context_accepts_only_exact_declared_roots(self):
         roots = ("", "external/+deps", "bazel-out/x64_windows-opt/bin/external/+deps")
         flags = ["/I.", "/Iexternal/+deps", "/Ibazel-out/x64_windows-opt/bin/external/+deps"]

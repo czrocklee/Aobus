@@ -601,22 +601,6 @@ def resolve_host_tools(tree: Path, prefix: Path | None, host: str, *, source: ob
     result["python"] = python_identity
     result["test_tools"]["tooling_python"] = python_identity["tooling_python"]
     files.update(path.absolute() for path in python_inputs)
-    # The rules_python replay launcher uses the toolchain's lexical executable
-    # (a redirector for a prepared native venv), not the direct actions' base
-    # path. The venv configuration is loaded beside the interpreter even under
-    # -S. Do not key base-only actions on the venv or its pinned parser wheels.
-    replay_executable = Path(python_identity["executable"])
-    replay_inputs = []
-    if python_identity["provider"] == "tooling-venv":
-        configuration = replay_executable.parent.parent / "pyvenv.cfg"
-        directories.add(configuration.parent)
-        if configuration.is_file():
-            replay_inputs.append(configuration)
-    if replay_executable.resolve() not in {path.resolve() for path in python_artifacts}:
-        replay_inputs.append(replay_executable)
-    for path in replay_inputs:
-        files.update({path.absolute(), path.resolve()})
-    result["python_replay"] = {"identity": python_identity, "artifacts": _paths(replay_inputs)}
     # The WinUI quality probe embeds the original checkout, not an execution root.
     if source is not None:
         if not isinstance(source, str) or not source or not Path(source).is_absolute() or not Path(source).is_dir():

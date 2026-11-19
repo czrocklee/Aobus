@@ -250,7 +250,9 @@ _DEPS = {
     "test_bazel_contract_runner": [_VALIDATION],
     "test_bazel_coverage": [_COMMANDS],
     "test_bazel_deps": [_PORTAL],
-    "test_bazel_environment": [_PORTAL],
+    # Module-level import of ao.command.check. commands owns that package and
+    # already depends on portal; portal's sources do not.
+    "test_bazel_environment": [_COMMANDS],
     "test_bazel_frontend_deps": [_PORTAL],
     "test_bazel_graph_lint": [_GRAPH],
     "test_bazel_gtk_deps": [_PORTAL],

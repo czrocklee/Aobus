@@ -405,6 +405,10 @@ def _defines(arguments: Iterable[str]) -> dict[str, str]:
     return result
 
 
+def _normalized_include_path(path: str) -> str:
+    return posixpath.normpath(path.replace("\\", "/"))
+
+
 def include_paths(arguments: Iterable[str], *, msvc_only: bool = False) -> Iterator[tuple[str, str]]:
     """Return search-path kind/path pairs without shell splitting Windows paths."""
     prefixes: tuple[tuple[str, str], ...] = (
@@ -422,7 +426,7 @@ def include_paths(arguments: Iterable[str], *, msvc_only: bool = False) -> Itera
                 value = argument[len(prefix) :] if argument != prefix else next(iterator, None)
                 if value is None:
                     raise ValueError("missing include path: " + argument)
-                yield kind, posixpath.normpath(value.replace("\\", "/"))
+                yield kind, _normalized_include_path(value)
                 break
 
 
@@ -436,6 +440,10 @@ def _first_party(action: CompileAction) -> bool:
 
 def _consumes_spa(action: CompileAction) -> bool:
     return any(re.search(r"(?:^|/)(?:spa|spa-0\.2)/.*\.h$", path) for path in action.inputs)
+
+
+def _winui_projection_roots(projections: Iterable[tuple[str, str]]) -> set[str]:
+    return {_normalized_include_path(root).casefold() for pair in projections for root in pair}
 
 
 def compile_contract_errors(
@@ -462,7 +470,10 @@ def compile_contract_errors(
     None (Debug/fastbuild), "release" or "sampling": target actions carry the governed
     effective IPO or sampling switches, execution actions never inherit them,
     and Windows admits only the exact authored per-file exception sources. No roots are
-    inferred from path prefixes. Callers own platform/tool/source receipts.
+    inferred from path prefixes. On Windows, use of a known WinUI projection
+    root requires per-owner compile-interface metadata. Roots are known from
+    the supplied first-party actions' metadata, not from their include flags.
+    Callers own platform/tool/source receipts.
     When expected_environment is supplied, Linux target and exec actions must
     omit LIBRARY_PATH entirely; remaining target channels must be explicitly
     empty, and strict exec actions may omit them. Neither may carry ambient
@@ -499,6 +510,10 @@ def compile_contract_errors(
     if any(root in {"/", "/nix", "/nix/store"} for root in roots):
         raise ValueError("compiler include allowlist must not admit application-dependency roots")
     first_party = [action for action in actions if _first_party(action)]
+    windows = platform == "windows"
+    known_winui_roots: set[str] = set()
+    if windows:
+        known_winui_roots = _winui_projection_roots(pair for action in first_party for pair in action.winui_projections)
     errors = [] if first_party else ["no first-party CppCompile actions matched"]
     spa_count = 0
     for action in first_party:
@@ -533,7 +548,6 @@ def compile_contract_errors(
                 if value and key.startswith(("NIX_CFLAGS_", "NIX_LDFLAGS")) and key not in _CLEARED_CHANNELS:
                     problems.append("ambient include/link channel must be cleared: " + key)
         defines = _defines(argv)
-        windows = platform == "windows"
         family = None if windows else _driver_family(argv)
         if family is None and not windows:
             problems.append(
@@ -653,8 +667,9 @@ def compile_contract_errors(
                     problems.append("first-party warning policy requires " + required)
         if any(flag in {"-w", "/w", "-Wno-everything"} for flag in argv):
             problems.append("first-party warnings must not be suppressed wholesale")
-        quote_includes = {posixpath.normpath(path.replace("\\", "/")) for path in action.quote_includes}
-        for kind, path in include_paths(argv):
+        quote_includes = {_normalized_include_path(path) for path in action.quote_includes}
+        includes = list(include_paths(argv))
+        for kind, path in includes:
             declared_quote = windows and kind == "ordinary" and path in quote_includes
             if kind != "quote" and path == "." and not declared_quote:
                 problems.append("empty/repository-root include search path")
@@ -664,6 +679,13 @@ def compile_contract_errors(
                 problems.append("ambient Nix dependency include: " + path)
             if (path.startswith("external/") or "/external/" in path) and kind == "ordinary" and not declared_quote:
                 problems.append("imported include must be system/external: " + path)
+        if known_winui_roots:
+            # Find ungoverned uses, without taking the observed switch to be
+            # the expected class. Losing both metadata and argv use is not
+            # observable in this join.
+            used_roots = {path.casefold() for _, path in includes} & known_winui_roots
+            for root in sorted(used_roots - _winui_projection_roots(action.winui_projections)):
+                problems.append(f"WinUI generated include root has no compile-interface metadata: {root}")
         if windows and action.winui_projections:
             # cl.exe does not use Clang's -isystem or /imsvc for external headers.
             kinds: dict[str, set[str]] = {}
@@ -671,7 +693,7 @@ def compile_contract_errors(
                 kinds.setdefault(path.casefold(), set()).add(kind)
             for project, sdk in action.winui_projections:
                 for root, kind, flag in ((project, "ordinary", "/I"), (sdk, "system", "/external:I")):
-                    if kinds.get(root.casefold()) != {kind}:
+                    if kinds.get(_normalized_include_path(root).casefold()) != {kind}:
                         problems.append(f"WinUI generated include root requires exclusively {flag}: {root}")
         if _consumes_spa(action):
             spa_count += 1

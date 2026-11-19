@@ -65,19 +65,6 @@ filegroup(
     srcs = LINT_ACTION_SOURCES,
 )
 
-# An expanded action requires an executable target, not a host path string.
-# Keep the replay launcher on the admitted interpreter and its narrow modules.
-py_binary(
-    name = "lint_graph_replay",
-    srcs = LINT_ACTION_SOURCES + [
-        "script/ao/graph/bazel_graph_lint.py",
-        "script/ao/graph/bazel_lint_action.py",
-    ],
-    imports = ["script"],
-    main_module = "ao.graph.bazel_graph_lint",
-    visibility = ["//bazel/lint:__pkg__"],
-)
-
 # The fixture runner takes verified tools and imports no portal preparation.
 filegroup(
     name = "ao_lint_fixture_sources",

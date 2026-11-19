@@ -1,13 +1,13 @@
 """Native SDK generation and executable-local resource assembly for WinUI."""
 
-load("@aobus_native_tools//:catalog_tools.bzl", "CATALOG_TOOLS")
+load("@aobus_native_tools//:python_action_tools.bzl", "PYTHON_ACTION_TOOLS")
 load("@aobus_native_tools//:test_tools.bzl", "TEST_TOOLS")
 load("@rules_cc//cc:defs.bzl", "cc_binary")
 load("@rules_cc//cc/common:cc_common.bzl", "cc_common")
 load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
 load("//bazel:msvc_policy.bzl", "MSVC_WINUI_COPTS")
 load("//bazel:windows_utf8_manifest.bzl", "WINDOWS_UTF8_LINKER_INPUTS", "WINDOWS_UTF8_LINKOPTS")
-load(":outputs.bzl", "WinuiGeneratedInfo")
+load("//bazel:winui_outputs.bzl", "WinuiGeneratedInfo")
 
 _WinuiResourcesInfo = provider(doc = "Declared payload staged alongside a WinUI executable.", fields = ["pri", "xbf", "assets"])
 _WRAPPERS = ["module", "metadata", "types", "types_impl"]
@@ -29,11 +29,13 @@ def _arguments(ctx, action):
     return arguments
 
 def _run(ctx, arguments, inputs, outputs, mnemonic, sdk = True):
+    # Scalars and the python_action_tools payload are one descriptor. Catalog
+    # scalars can diverge and would reload this file when ICU inputs change.
     environment = {"PYTHONUTF8": "1", "PYTHONDONTWRITEBYTECODE": "1"}
-    if "SystemRoot" in CATALOG_TOOLS:
-        environment["SYSTEMROOT"] = CATALOG_TOOLS["SystemRoot"]
+    if "SystemRoot" in PYTHON_ACTION_TOOLS:
+        environment["SYSTEMROOT"] = PYTHON_ACTION_TOOLS["SystemRoot"]
     ctx.actions.run(
-        executable = CATALOG_TOOLS["python"],
+        executable = PYTHON_ACTION_TOOLS["python"],
         # Python must receive its startup flags and script on real argv; only
         # the helper's potentially large declared-input lists use a param file.
         arguments = ["-I", "-S", "-B", "-X", "utf8", ctx.file._helper.path, arguments],
@@ -65,33 +67,8 @@ def _codegen_impl(ctx):
     arguments.add("--language-standard", ctx.attr.language_standard)
     arguments.add("--idl", ctx.file.idl)
 
-    # MSBuild checks the complete ClCompile inventory, but only XAML's
-    # code-behind belongs to generation as file content. The native cc_*
-    # owners still compile the actual files from this same source list.
-    codebehind_paths = {page.path + ".cpp": True for page in ctx.files.xaml}
-    codebehind = []
-    package_prefix = ctx.file.idl.dirname + "/"
-    for file in ctx.files.srcs:
-        if file.path in codebehind_paths:
-            codebehind.append(file)
-            arguments.add("--source", file)
-        elif file.is_source and file.path.startswith(package_prefix):
-            arguments.add("--source-name=" + file.path[len(package_prefix):])
-        else:
-            fail("WinUI source inventory requires package-local authored files: " + file.path)
-
-    # XAML code-behind headers still supply content and DependentUpon. Other
-    # ClInclude entries preserve their names without becoming generator inputs.
-    xaml_header_paths = {page.path + ".h": True for page in ctx.files.xaml}
-    generation_headers = []
-    for file in ctx.files.hdrs:
-        if not file.is_source or not file.path.startswith(package_prefix):
-            fail("WinUI header inventory requires package-local authored files: " + file.path)
-        if file.path in xaml_header_paths:
-            generation_headers.append(file)
-            arguments.add("--header", file)
-        else:
-            arguments.add("--header-name=" + file.path[len(package_prefix):])
+    for file in ctx.files.codebehind_hdrs:
+        arguments.add("--header", file)
     for file in ctx.files.xaml:
         arguments.add("--xaml", file)
     for role, file in zip(_WRAPPERS, wrappers):
@@ -100,7 +77,7 @@ def _codegen_impl(ctx):
     _run(
         ctx,
         arguments,
-        [ctx.file._sdk, ctx.file._project, ctx.file.idl] + codebehind + generation_headers + ctx.files.xaml,
+        [ctx.file._sdk, ctx.file._project, ctx.file.idl] + ctx.files.codebehind_hdrs + ctx.files.xaml,
         [private, headers, sdk_headers] + wrappers + xbf,
         "AobusWinuiGenerate",
     )
@@ -118,8 +95,7 @@ def _codegen_impl(ctx):
 winui_codegen = rule(
     implementation = _codegen_impl,
     attrs = {
-        "srcs": attr.label_list(allow_files = [".cpp"], mandatory = True),
-        "hdrs": attr.label_list(allow_files = [".h"], mandatory = True),
+        "codebehind_hdrs": attr.label_list(allow_files = [".h"], mandatory = True),
         "xaml": attr.label_list(allow_files = [".xaml"], mandatory = True),
         "idl": attr.label(allow_single_file = [".idl"], mandatory = True),
         "language_standard": attr.string(mandatory = True),

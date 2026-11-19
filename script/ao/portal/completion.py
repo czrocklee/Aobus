@@ -62,15 +62,20 @@ def _selection(platform: str, request: Request) -> _CheckSelection:
     )
     optional = set()
     windows_probes = {"//test:winui_localization_probe_test", "//test:winui_track_item_probe_test"}
+    # Independent of suite expansion: a Windows-only analysis test must not
+    # disappear from the evidence gate if discovery stops listing it.
+    winui_projection = "//test/winui/projection:winui_projection_test"
     if platform == "windows":
         required.update(windows_probes)
+        required.add(winui_projection)
         if request.ci:
             required.add("//test:winui_uia_test")
     else:
         optional.update(windows_probes)
+        optional.add(winui_projection)
     if platform == "linux":
         suites.add("//:instrumentation_tests")
-        required.update(("//:native_driver_policy", "//test/script:workflows"))
+        required.update(("//:native_driver_policy", "//bazel/header_share:selector_test", "//test/script:workflows"))
         required.update(
             "//:instrumentation_tests_" + case
             for case in ("coverage", "asan_build", "asan_compile", "tsan_build", "tsan_compile")

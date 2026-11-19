@@ -106,7 +106,7 @@ class ReplayDriverTest(GraphWorkspace):
     )
     _OUTPUTS = ("--report", "out/report.json", "--log", "out/replay.log")
 
-    def consumer(self, name, identity, *, includes=(_HEADER,)):
+    def consumer(self, name, identity, *, route="000000ab", includes=(_HEADER,)):
         self.write_report(f"{name}.report", identity, includes)
         context = self.write_context(f"{name}.context", identity)
         return {
@@ -114,6 +114,7 @@ class ReplayDriverTest(GraphWorkspace):
             "context": context,
             "report": f"{name}.report",
             "env": {"PATH": f"native/{name}", "SDKROOT": f"sdk/{name}"},
+            "route": route,
         }
 
     def write_report(self, path, identity, includes=()):
@@ -126,15 +127,22 @@ class ReplayDriverTest(GraphWorkspace):
             path, {"schema": 1, **identity, "argv": ["compiler", identity["source"]], "virtual_headers": {}}
         )
 
-    def select(self, *candidates, route, routes="routes", item=_HEADER):
+    def run_select(self, candidates, item, routes):
         manifest = self.write_json(
             "candidates.json", {"schema": 1, "item": item, "platform": "linux", "candidates": candidates}
         )
-        self.assertEqual(bazel_graph_lint.main(["select", "--candidates", manifest, "--routes", routes]), 0)
+        return bazel_graph_lint.main(["select", "--candidates", manifest, "--routes", routes])
+
+    def select(self, *candidates, selected=None, routes="routes", item=_HEADER):
+        self.assertEqual(self.run_select(candidates, item, routes), 0)
+        route = "none" if selected is None else selected["route"]
         marker = f"{routes}/{route}"
         self.assertEqual(list(Path(routes).iterdir()), [Path(marker)])
-        consumer = None if route == "none" else {k: v for k, v in candidates[int(route)].items() if k != "report"}
-        self.assertEqual(self.read_json(marker), {"schema": 1, "item": item, "platform": "linux", "consumer": consumer})
+        consumer = None if selected is None else {k: v for k, v in selected.items() if k not in ("report", "route")}
+        self.assertEqual(
+            self.read_json(marker),
+            {"schema": 1, "item": item, "platform": "linux", "consumer": consumer, "route": route},
+        )
         return marker
 
     def replay(self, marker, context=None):
@@ -145,16 +153,29 @@ class ReplayDriverTest(GraphWorkspace):
             ["replay", "--selection", marker, *options, *self._OUTPUTS, "--replay", "out/replay.json"]
         )
 
-    def test_route_uses_original_index_and_changes_when_include_evidence_changes(self):
-        other = self.consumer("other", _identity("app/example/Main.cpp", owner="@@//app/example:example"))
+    def test_route_survives_inserting_an_earlier_candidate_but_changes_for_a_new_consumer(self):
+        other = self.consumer(
+            "other", _identity("app/example/Main.cpp", owner="@@//app/example:example"), route="f0000080"
+        )
         local = self.consumer("local", _identity(_SOURCE))
-        self.select(other, local, route="1")
+        initial = self.select(local, selected=local)
+        inserted = self.select(other, local, selected=local, routes="inserted")
+        self.assertEqual(Path(initial).name, Path(inserted).name)
+        self.assertEqual(Path(initial).read_bytes(), Path(inserted).read_bytes())
         self.write_report(local["report"], _identity(_SOURCE))
-        self.select(other, local, route="0", routes="updated")
+        self.select(other, local, selected=other, routes="rerouted")
+
+    def test_selector_rejects_ambiguous_or_reserved_route_ids_without_writing_a_marker(self):
+        local = self.consumer("local", _identity(_SOURCE))
+        other = self.consumer("other", _identity("app/example/Main.cpp", owner="@@//app/example:example"))
+        for route in (local["route"], "none"):
+            with self.subTest(route=route), redirect_stderr(io.StringIO()):
+                self.assertEqual(self.run_select([local, {**other, "route": route}], _HEADER, "routes"), 2)
+                self.assertFalse(Path("routes").exists())
 
     def test_no_consumer_preserves_the_three_outputs_without_launching_analysis(self):
         candidate = self.consumer("local", _identity(_SOURCE))
-        marker = self.select(candidate, route="none", item=_FOREIGN)
+        marker = self.select(candidate, item=_FOREIGN)
         with patch.object(bazel_graph_lint.subprocess, "run") as run:
             self.assertEqual(self.replay(marker), 0)
         run.assert_not_called()
@@ -172,10 +193,17 @@ class ReplayDriverTest(GraphWorkspace):
             },
         )
 
-    def test_replay_rejects_a_marker_from_another_route_even_with_matching_identity(self):
+    def test_replay_rejects_a_renamed_marker_before_launching_analysis(self):
         local = self.consumer("local", _identity(_SOURCE))
-        foreign = self.consumer("foreign", _identity(_SOURCE))
-        marker = self.select(foreign, route="0")
+        marker = Path(self.select(local, selected=local)).rename("routes/f0000080")
+        with patch.object(bazel_graph_lint.subprocess, "run") as run, redirect_stderr(io.StringIO()):
+            self.assertEqual(self.replay(str(marker), local["context"]), 2)
+        run.assert_not_called()
+
+    def test_replay_rejects_a_different_context_even_with_matching_identity(self):
+        local = self.consumer("local", _identity(_SOURCE))
+        foreign = self.consumer("foreign", _identity(_SOURCE), route="f0000080")
+        marker = self.select(foreign, selected=foreign)
         with patch.object(bazel_graph_lint.subprocess, "run") as run, redirect_stderr(io.StringIO()) as errors:
             self.assertEqual(self.replay(marker, local["context"]), 2)
         run.assert_not_called()
@@ -183,7 +211,7 @@ class ReplayDriverTest(GraphWorkspace):
 
     def test_analysis_rejects_context_identity_mismatches_before_invoking_analyzer(self):
         consumer = self.consumer("local", _identity(_SOURCE))
-        marker = self.select(consumer, route="0")
+        marker = self.select(consumer, selected=consumer)
         for field, identity in (
             ("owner", _identity(_SOURCE, owner="@@//lib/foreign:foreign")),
             ("configuration", _identity(_SOURCE, configuration="bazel-out/k8-opt/bin")),
@@ -218,7 +246,7 @@ class ReplayDriverTest(GraphWorkspace):
         consumer = self.consumer("local", _identity(_SOURCE))
         item = "test/sample/Detail.h"
         self.write_report(consumer["report"], _identity(_SOURCE), (item,))
-        marker = self.select(consumer, route="0", item=item)
+        marker = self.select(consumer, selected=consumer, item=item)
 
         def run(command, *, env, **_kwargs):
             self.assertEqual(env, consumer["env"])

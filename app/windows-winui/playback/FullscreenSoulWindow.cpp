@@ -10,9 +10,11 @@
 #include "platform/AppWindowActivity.h"
 #include "platform/WinRtStringResources.h"
 #include "playback/AobusSoulControl.h"
+#include <ao/Contract.h>
 #include <ao/uimodel/playback/transport/TransportViewModel.h>
 #include <ao/utility/ScopedRegistration.h>
 
+#include <winerror.h>
 #include <winrt/Aobus.h>
 #include <winrt/Microsoft.UI.Windowing.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
@@ -22,6 +24,7 @@
 #include <winrt/base.h>
 
 #include <cstdint>
+#include <exception>
 #include <memory>
 #include <utility>
 
@@ -38,6 +41,33 @@ namespace ao::winui
     using SoulControl = winrt::Aobus::implementation::AobusSoulControl;
 
     constexpr double kFullscreenSoulPadding = 48.0;
+
+    // C++/WinRT v3.0.260715.1 winrt/base.h report_failed_invoke treats the RPC codes as a
+    // disconnected callee. RO_E_CLOSED is the Windows Runtime closed-object code. The projection
+    // does not document Window.Close(); any other HRESULT is still a native-runtime fault.
+    bool isClosedOrDisconnectedWindow(winrt::hresult_error const& error) noexcept
+    {
+      auto const code = error.code().value;
+
+      return code == RO_E_CLOSED || code == RPC_E_DISCONNECTED ||
+             code == static_cast<std::int32_t>(::HRESULT_FROM_WIN32(RPC_S_SERVER_UNAVAILABLE));
+    }
+
+    void closeNativeSoulWindow(Window const& window)
+    {
+      try
+      {
+        window.Close();
+      }
+      catch (winrt::hresult_error const& error)
+      {
+        // The native window is already gone, so this close adds no lifetime obligation.
+        if (!isClosedOrDisconnectedWindow(error))
+        {
+          throw;
+        }
+      }
+    }
   } // namespace
 
   // Each opening has its own state. An in-flight call can pin it across re-entry without
@@ -202,7 +232,15 @@ namespace ao::winui
 
     if (closeNative && window)
     {
-      window.Close();
+      try
+      {
+        closeNativeSoulWindow(window);
+      }
+      catch (...)
+      {
+        // Local owners are already dropped. A still-live window that refused close is not recoverable.
+        AO_FATAL_EXCEPTION(std::current_exception(), "WinUI Soul window close");
+      }
     }
   }
 
@@ -260,7 +298,9 @@ namespace ao::winui
     }
     catch (...)
     {
-      // Never retire a replacement that was opened during a native call above.
+      // Retire this opening only. A replacement opened by a re-entrant show() stays in _statePtr.
+      // An already-closed or disconnected native close returns, so this rethrow keeps the original
+      // failure. Any other close failure is fatal inside retire() and does not return here.
       statePtr->retire(true);
       throw;
     }

@@ -451,13 +451,16 @@ inputs.
 
 Native SDK MSBuild owns metadata, MIDL, C++/WinRT, XAML and PRI generation only;
 ordinary Bazel MSVC actions compile all C++, create archives and perform the PE
-link. Generation reads the IDL, XAML pages and their paired `.xaml.cpp` and
-`.xaml.h` files from a private project input directory. Other authored C++
-sources and headers are project members by package-relative name, not file
-inputs. The post-generation `ClInclude` inventory must still match the authored
-headers, and `ClCompile` must match the authored sources, SDK initializers and
-four standalone generated units. Adding or renaming a member changes the
-generation request; editing an ordinary implementation or header does not.
+link. The private generation project receives the IDL, both XAML pages and
+their adjacent `.xaml.h` files. It keeps each paired `.xaml.cpp` as a logical
+`ClCompile` item with `DependentUpon`, without copying the implementation or
+creating a placeholder. Ordinary C++ sources and headers belong to the native
+rules, not this project. The post-generation item check admits only the paired
+sources and headers, SDK initializers and four standalone generated units.
+Editing code-behind bodies or changing the ordinary C++ inventory therefore
+does not invalidate XAML generation. A newly activated local XAML class may
+require its implementation header in the generated type-info owner; a search
+path or a name in `ClInclude` does not provide a C++ declaration.
 SDK actions keep their private `TEMP`/`TMP` at a short path inside the
 action's compact `p` tree because full-CLR MSBuild `Exec` appends GUID-named paths
 against the legacy Windows path limit. The selected tree-path geometry remains
@@ -471,6 +474,9 @@ Both roots preserve include spellings and each file has exactly one generated
 provider. Compilation and lint consume the same native include roots. The Windows
 native policy test checks each consumer's expanded MSVC arguments against those
 two producer-owned directories, including consumers reached through private dependencies.
+An action using another record's known projection root without declaring that
+projection also fails. This comparison does not infer a missing dependency
+when both its metadata and its include paths disappear.
 The narrow
 [rules_cc API patch](../../bazel/rules_cc_external_includes.patch) exposes the
 existing `external_includes` field to code generators: on the pinned MSVC
@@ -1700,7 +1706,9 @@ for that path, even when another owner lists it as uncovered. All declared direc
 reports are still validated. Only a header or include fragment with no direct main
 gets a replay, deduplicated by path. `AobusLintSelect` reads the candidate TUs'
 include reports, not their source bytes. Its output selects one native compile
-context or records that no consumer included the path. Bazel then expands an
+context or records that no consumer included the path. The item and selected
+context have collision-checked, path-derived names: an unrelated insertion in
+either inventory does not renumber the surviving replay. Bazel then expands an
 `AobusLintGraphReplay` action with that context's actual compiler inputs and
 header closure. The other contexts remain available during template expansion,
 but their unrelated source edits cannot by themselves invalidate the selected
@@ -1844,7 +1852,9 @@ launches no detached lint workers and does not mutate source-checkout links.
 A paired header borrows its actual companion command but remains the physical
 main file. Derivation replaces only the native source argument, adds the explicit
 header language and reserved `AOBUS_LINT_HEADER_MAIN=1` definition, and preserves
-semantic forced includes, ARC and SDK settings. A native argument referencing
+semantic forced includes, ARC and SDK settings. On Windows a relative `/FI`
+that resolves to the physical header main itself is omitted for that replay;
+other forced includes remain. A native argument referencing
 that reserved mode is rejected. There is no wrapper, VFS overlay, remapped file
 or rewritten source buffer: main-file-sensitive checks and suppression scans
 must see the original header.
@@ -2040,9 +2050,11 @@ A filegroup would only build them. On Linux the
 [context-specific wrapper](../../bazel/testing.bzl) around each context-bearing
 test starts that test's owned private fixtures from its declared context.
 On Windows the wildcard adds the two unattended native console probes (track
-item and localization) through `//test:native_process_tests`, and
-`--config=ci` additionally enables `//test:winui_uia_test`, the real automation
-probe with the existing runtime and interactive-console admission. The other
+item and localization) through `//test:native_process_tests`. Windows completion
+also independently requires `//test/winui/projection:winui_projection_test`; that
+requirement is not applied on other hosts. `--config=ci` additionally enables
+`//test:winui_uia_test`, the real automation probe with the existing runtime and
+interactive-console admission. The other
 GUI probes and performance harnesses are never executed by a wildcard build.
 Interactive GUI scenarios, physical playback and hardware admission stay outside
 the gate.
@@ -2198,10 +2210,12 @@ prebuilt project tool or pre-generated resource is consumed. Common-data
 packaging does not compile C, and this does not establish C/Objective-C support.
 The action launches Python at its selected host-absolute path; the interpreter
 bytes and selected runtime files are declared through `python_action_tools`,
-which `catalog_tools` combines with the ICU tool payload. Lint and platform
-packaging use the Python inputs without inheriting ICU tools. The lint graph's
-selector and gate also key on that runtime; mapped header replay additionally
-keys on its configured Python launcher.
+which `catalog_tools` combines with the ICU tool payload. Lint, the Linux
+coverage collector and platform packaging use the Python inputs without
+inheriting ICU tools. An expanded lint action requires an executable artifact:
+the native replay launcher runs the same installed base interpreter with
+`-I -S -B -X utf8` before loading any replay code. Its inputs do not select the
+tooling venv or its site packages.
 This is a native SDK boundary, not a relocatable/hermetic Python toolchain.
 Switching to a repository-local executable requires separate native validation
 of DLL and standard-library lookup, particularly on Windows.

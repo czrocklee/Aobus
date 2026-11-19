@@ -27,6 +27,14 @@ def _artifact_map(ctx, field):
             mapping[artifact.path] = artifact
     return mapping
 
+def _replay_id(path, used, kind):
+    # A short, deterministic basename, never an ordinal or a raw exec path.
+    key = ("0000000%x" % (hash(path) & 0xffffffff))[-8:]
+    if key in used:
+        fail("Lint replay %s ID %s is shared by %s and %s" % (kind, key, used[key], path))
+    used[key] = path
+    return key
+
 def _expand_replay(template_ctx, *, input_directories, output_directories, additional_inputs, tools, additional_params):
     # The selector publishes exactly one marker. Its name binds the analysis
     # to a declared native action; its contents bind the same context in Python.
@@ -40,7 +48,9 @@ def _expand_replay(template_ctx, *, input_directories, output_directories, addit
     report = template_ctx.declare_file("report.json", directory = directory)
     log = template_ctx.declare_file("log", directory = directory)
     args = template_ctx.args()
-    args.add_all(["replay", "--selection", marker])
+
+    # Start the outer replay with the same isolated base interpreter as Select.
+    args.add_all([additional_params["python"], "-I", "-S", "-B", "-X", "utf8", additional_inputs["driver"], "replay", "--selection", marker])
     args.add_all(["--replay", replay, "--report", report, "--log", log])
     inputs = [additional_inputs["python_modules"], additional_inputs["python_runtime"]]
     if route != "none":
@@ -106,19 +116,18 @@ def _lint_graph_gate_impl(ctx):
 
     modules = depset([ctx.file._helper], transitive = [ctx.attr._modules[DefaultInfo].files])
     python = ctx.attr._python_tools[DefaultInfo].files
-    replay_python = ctx.attr._replay_python_tools[DefaultInfo].files
     environment = native_environment(ctx)
     replay_entries = []
     replay_files = []
 
-    # Enumerate before skipping direct mains so retained paths are stable.
-    # String hashes are not collision-free.
-    for ordinal, path in enumerate(sorted(items)):
+    item_ids = {}
+    for path in sorted(items):
         if path not in uncovered_files:
             fail("Uncovered lint item has no declared file: " + path)
         if path in direct_mains:
             continue
         candidates = []
+        route_ids = {}
         seen = {}
         for record in ordered:
             if path not in record["closure_items"]:
@@ -135,9 +144,13 @@ def _lint_graph_gate_impl(ctx):
                     "context": unit["context"],
                     "report": unit["report"],
                     "env": unit["env"],
+                    "route": _replay_id(unit["context"], route_ids, "consumer context"),
                 })
-        stem = "%x" % ordinal
-        prefix = ctx.label.name + ".aobus-lint-graph/" + stem
+        stem = _replay_id(path, item_ids, "item")
+
+        # Offset both eight-character IDs with a short parent directory so
+        # even the selected marker path is no longer on Windows than before.
+        prefix = ctx.label.name + ".lr/" + stem
         candidates_file = ctx.actions.declare_file(prefix + ".candidates.json")
         ctx.actions.write(candidates_file, json.encode({
             "schema": 1,
@@ -150,7 +163,7 @@ def _lint_graph_gate_impl(ctx):
         available = {
             "driver": ctx.file._driver,
             "python_modules": modules,
-            "python_runtime": replay_python,
+            "python_runtime": python,
             "analysis": depset([uncovered_files[path], verification.result], transitive = [verification.inputs]),
             "policy": verification.policy,
             "sdk": verification.sdk,
@@ -160,10 +173,11 @@ def _lint_graph_gate_impl(ctx):
         if verification.plugin:
             available["plugin"] = verification.plugin
         candidate_reports = []
-        for i, candidate in enumerate(candidates):
+        for candidate in candidates:
             context = candidate["context"]
-            available["context_" + str(i)] = contexts[context]
-            available["native_" + str(i)] = compile_inputs[context]
+            key = candidate["route"]
+            available["context_" + key] = contexts[context]
+            available["native_" + key] = compile_inputs[context]
             candidate_reports.append(reports[candidate["report"]])
         args = ctx.actions.args()
         args.add_all(["-I", "-S", "-B", "-X", "utf8", ctx.file._driver, "select", "--candidates", candidates_file, "--routes", route.path])
@@ -181,7 +195,7 @@ def _lint_graph_gate_impl(ctx):
             output_directories = {"result": result_dir},
             additional_inputs = available,
             tools = {"runner": ctx.attr._replay_tool[DefaultInfo].files_to_run},
-            additional_params = {"item": path},
+            additional_params = {"item": path, "python": PYTHON_ACTION_TOOLS["python"]},
             implementation = _expand_replay,
             env = environment,
             mnemonic = "AobusLintGraphReplay",
@@ -248,12 +262,11 @@ lint_graph_gate = rule(
             ],
         ),
         "_driver": attr.label(default = Label("//:script/ao/graph/bazel_graph_lint.py"), allow_single_file = True),
-        "_replay_tool": attr.label(default = Label("//:lint_graph_replay"), executable = True, cfg = "exec"),
+        "_replay_tool": attr.label(default = Label("//tool/lint:replay_launcher"), executable = True, cfg = "exec"),
         "_gate": attr.label(default = Label("//:script/ao/graph/bazel_graph_lint_gate.py"), allow_single_file = True),
         "_helper": attr.label(default = Label("//:script/ao/graph/bazel_lint_action.py"), allow_single_file = True),
         "_modules": attr.label(default = Label("//:ao_lint_action_sources")),
         "_python_tools": attr.label(default = Label("@aobus_native_tools//:python_action_tools"), cfg = "exec"),
-        "_replay_python_tools": attr.label(default = Label("@aobus_native_tools//:python_replay_tools"), cfg = "exec"),
         "_verification": attr.label(default = Label("//tool/lint:verification")),
     },
     fragments = ["cpp"],

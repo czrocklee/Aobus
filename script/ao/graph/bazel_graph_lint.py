@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -89,17 +90,30 @@ def _consumer(data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _route_id(value: object) -> str:
+    # The analysis rule assigns these IDs so both the manifest and the
+    # template map name the same native context without duplicating a hash.
+    if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{8}", value) is None:
+        raise ValueError("consumer route must be an eight-digit lowercase hexadecimal ID")
+    return value
+
+
 def load_candidates(path: Path) -> dict[str, Any]:
     """Load and validate one item's candidate manifest."""
     data = load_json(path)
     if set(data) != {"schema", "item", "platform", "candidates"}:
         raise ValueError("candidates must contain exactly the replay selection fields")
     candidates = []
+    routes = set()
     for candidate in _array(data["candidates"], "candidates"):
         candidate = _object(candidate, "candidate")
-        if set(candidate) != _CONSUMER_FIELDS | {"report"}:
-            raise ValueError("candidate must contain exactly the consumer fields and report")
-        candidates.append({**_consumer(candidate), "report": exec_path(candidate["report"])})
+        if set(candidate) != _CONSUMER_FIELDS | {"report", "route"}:
+            raise ValueError("candidate must contain exactly the consumer fields, report and route")
+        route = _route_id(candidate["route"])
+        if route in routes:
+            raise ValueError(f"duplicate consumer route: {route}")
+        routes.add(route)
+        candidates.append({**_consumer(candidate), "report": exec_path(candidate["report"]), "route": route})
     return {
         "schema": SCHEMA,
         "item": exec_path(data["item"]),
@@ -161,19 +175,20 @@ def replay_wrapper(item: str, consumer: dict[str, Any], report: PurePath, log: P
 
 
 def select(args: argparse.Namespace) -> int:
-    """Write the sole route marker, named by its index in the original manifest."""
+    """Write the sole marker for the selected native context (or none)."""
     manifest = load_candidates(args.candidates)
     candidates = manifest["candidates"]
     item = manifest["item"]
     reports = {candidate["report"]: load_candidate_report(Path(candidate["report"])) for candidate in candidates}
     consumer = select_consumer(item, candidates, reports)
-    route = "none" if consumer is None else str(candidates.index(consumer))
+    route = "none" if consumer is None else consumer["route"]
     _write_json(
         args.routes / route,
         {
             "schema": SCHEMA,
             "item": item,
             "platform": manifest["platform"],
+            "route": route,
             "consumer": None if consumer is None else _consumer(consumer),
         },
     )
@@ -182,16 +197,17 @@ def select(args: argparse.Namespace) -> int:
 
 def _load_selection(path: Path, context: Path | None) -> tuple[str, str, dict[str, Any] | None]:
     marker = load_json(path)
-    if set(marker) != {"schema", "item", "platform", "consumer"}:
+    if set(marker) != {"schema", "item", "platform", "consumer", "route"}:
         raise ValueError("selection marker must contain exactly the replay fields")
+    if marker["route"] != path.name:
+        raise ValueError("selection marker name differs from its route")
     item = exec_path(marker["item"])
     platform = _text(marker["platform"], "platform")
     if path.name == "none":
         if marker["consumer"] is not None or context is not None:
             raise ValueError("no-consumer route must not carry a consumer or context")
         return item, platform, None
-    if not path.name.isascii() or not path.name.isdecimal() or (path.name.startswith("0") and path.name != "0"):
-        raise ValueError("consumer route must be a decimal index")
+    _route_id(path.name)
     consumer = _object(marker["consumer"], "selected consumer")
     if set(consumer) != _CONSUMER_FIELDS:
         raise ValueError("selection marker must contain exactly the consumer fields")

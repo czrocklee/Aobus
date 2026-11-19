@@ -129,7 +129,8 @@ tests listed by `//:check_tests`, the root `//:native_policy` audit, and on
 Linux the `//:native_driver_policy` diagnostic and
 [instrumentation analysis tests](../bazel.md#native-instrumentation-tests). On
 Windows it runs the two unattended native console probes plus, under
-`--config=ci`, the declared WinUI automation test. By default it admits passing test summaries from Bazel's
+`--config=ci`, the declared WinUI automation test, and independently requires
+`//test/winui/projection:winui_projection_test` on Windows only. By default it admits passing test summaries from Bazel's
 result cache or new executions; `--fresh` adds `--nocache_test_results` so every
 selected test executes again
 ([test-result cache admission](../bazel.md#test-result-cache-admission)).

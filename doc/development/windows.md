@@ -407,9 +407,23 @@ of the derived control. Keep implementation-only dependencies out of public
 headers. Where Win32 and XAML meet, resolve conflicting SDK macros at that
 boundary rather than relying on a global include order.
 
+MSBuild generates from `Project.idl`, `App.xaml`, `MainWindow.xaml`, and the
+paired `.xaml.h` headers next to the private project. The paired `.xaml.cpp`
+items identify the code-behind relationships without supplying files; Bazel
+compiles the real sources. Add ordinary C++ members to their native Bazel owners,
+not to the SDK project.
+
 The four generated translation units compile the SDK's emitted C++ directly.
 Authored implementations still include their own generated fragments; do not
-compile those fragments as separate objects.
+compile those fragments as separate objects. If a page starts activating an
+in-project control in XAML, check that the generated types unit can see the
+control's **implementation** declaration, not just its WinRT projection. For
+example, a native probe adding `local:AobusSoulControl` to `MainWindow.xaml`
+required `#include "playback/AobusSoulControl.h"` alongside the local class
+includes in the `XamlTypeInfo.g.cpp` translation unit, after its SDK preamble.
+Supply the specific include at the types-unit integration point if needed;
+adding an include search path or listing all native headers in MSBuild did not
+supply that declaration. Do not edit generated files by hand.
 
 ### Stage offline prerequisites
 

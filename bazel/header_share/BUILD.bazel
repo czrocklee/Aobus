@@ -1,0 +1,8 @@
+load(":selector.bzl", "header_share_selector_test")
+
+header_share_selector_test(
+    name = "selector_test",
+    size = "small",
+    target_compatible_with = ["@platforms//os:linux"],
+    visibility = ["//:__pkg__"],
+)

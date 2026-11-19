@@ -1,11 +1,10 @@
 """WinUI action mechanisms; actual SDK compilation/link/startup are native gates.
 
-Each action fixture stays its narrow declared contract: parameter files parse
-without an SDK, generation fakes one SDK query over the two authored code-behind
-sources and XAML pages, resources declare only the two generated XBF fixtures, a small
-catalog, and the required shipping assets, and staging consumes only the PRI,
-original content, executable and runtime files. Selection and validation
-stay real; the external MSBuild fake discriminates the SDK executable, action
+Each fixture uses the action's declared inputs. Generation fakes one SDK
+query over the XAML pages, paired headers and IDL, with logical code-behind
+sources. Resources use the XBF fixtures, a small catalog and shipping assets;
+staging uses the PRI, original content, executable and runtime files. Validation
+stays real; the external MSBuild fake discriminates the SDK executable, action
 target and declared project items rather than answering arbitrary commands.
 The stage-independence case separately injects a missing source-file read.
 """
@@ -117,8 +116,7 @@ class ParameterFileTest(unittest.TestCase):
     def test_multiline_parameter_file_preserves_spaces_and_literal_quotes_per_argument(self):
         with tempfile.TemporaryDirectory(prefix="aobus winui arguments with spaces-") as temporary:
             root = Path(temporary).resolve()
-            source = root / "authored folder/source \"literal\" and 'single' 音楽.cpp"
-            header = root / "header folder/declared header.h"
+            header = root / "header folder/header \"literal\" and 'single' 音楽.h"
             wrapper = root / 'output folder/module "literal".cpp'
             runtime_source = root / 'SDK folder/runtime "literal".dll'
             runtime_output = root / 'output folder/runtime "literal".dll'
@@ -128,11 +126,8 @@ class ParameterFileTest(unittest.TestCase):
                     [
                         "--action",
                         "generate",
-                        "--source",
-                        str(source),
                         "--header",
                         str(header),
-                        "--header-name=-Leading hyphen.h",
                         "--cpp",
                         "module",
                         str(wrapper),
@@ -148,9 +143,7 @@ class ParameterFileTest(unittest.TestCase):
             options = winui.parse_args(["@" + str(parameters)])
 
             self.assertEqual(options.action, "generate")
-            self.assertEqual(options.source, [source])
             self.assertEqual(options.header, [header])
-            self.assertEqual(options.header_name, ["-Leading hyphen.h"])
             self.assertEqual(options.cpp, [["module", str(wrapper)]])
             self.assertEqual(options.runtime, [[str(runtime_source), str(runtime_output)]])
 
@@ -172,11 +165,8 @@ class GenerationActionTest(unittest.TestCase):
             "Project.idl",
             "App.xaml",
             "MainWindow.xaml",
-            "App.xaml.cpp",
-            "MainWindow.xaml.cpp",
             "App.xaml.h",
             "MainWindow.xaml.h",
-            "Control.h",
         ):
             (self.source / name).write_text("authored " + name, encoding="utf-8")
         self.calls = []
@@ -203,15 +193,10 @@ class GenerationActionTest(unittest.TestCase):
                 "stdcpplatest",
                 "--idl",
                 str(self.source / "Project.idl"),
-                "--source",
-                str(self.source / "App.xaml.cpp"),
-                "--source",
-                str(self.source / "MainWindow.xaml.cpp"),
                 "--header",
                 str(self.source / "App.xaml.h"),
                 "--header",
                 str(self.source / "MainWindow.xaml.h"),
-                "--header-name=Control.h",
                 "--xaml",
                 str(self.source / "App.xaml"),
                 "--xaml",
@@ -253,12 +238,17 @@ class GenerationActionTest(unittest.TestCase):
             projection = headers / name
             projection.parent.mkdir(parents=True, exist_ok=True)
             projection.write_text("projection " + name, encoding="utf-8")
-        # Echo the declared inventory and the SDK's standalone compile units.
-        source_paths = [
-            _project_path(item.attrib["Include"], private)
-            for item in document.findall("m:ItemGroup/m:ClCompile", _NS)
-            if not item.attrib["Include"].startswith("$(GeneratedFilesDir)")
-        ]
+
+        def codebehind_items(kind):
+            return [
+                {
+                    "FullPath": str(_project_path(item.attrib["Include"], private)),
+                    "DependentUpon": item.findtext("m:DependentUpon", default="", namespaces=_NS),
+                }
+                for item in document.findall(f"m:ItemGroup/m:{kind}", _NS)
+                if not item.attrib["Include"].startswith("$(GeneratedFilesDir)")
+            ]
+
         query = {
             "Properties": {
                 "GeneratedFilesDir": str(headers),
@@ -267,20 +257,11 @@ class GenerationActionTest(unittest.TestCase):
             },
             "Items": {
                 "ClCompile": [
-                    {"FullPath": str(path)}
-                    for path in (
-                        *source_paths,
-                        *self.sdk_data["initializer_sources"],
-                        *(headers / name for name in _GENERATED_UNITS),
-                    )
+                    *codebehind_items("ClCompile"),
+                    *({"FullPath": path} for path in self.sdk_data["initializer_sources"]),
+                    *({"FullPath": str(headers / name)} for name in _GENERATED_UNITS),
                 ],
-                "ClInclude": [
-                    {
-                        "FullPath": str(_project_path(item.attrib["Include"], private)),
-                        "DependentUpon": item.findtext("m:DependentUpon", default="", namespaces=_NS),
-                    }
-                    for item in document.findall("m:ItemGroup/m:ClInclude", _NS)
-                ],
+                "ClInclude": codebehind_items("ClInclude"),
             },
         }
         self.mutate_query(query)
@@ -377,131 +358,81 @@ class GenerationActionTest(unittest.TestCase):
                 winui.run(self.generation_options("--sdk-headers", str(self.payload)))
         execute.assert_not_called()
 
-    def test_ordinary_source_identities_preserve_directories_and_missing_sdk_item_fails(self):
-        names = ("track/Feature.cpp", "library/Feature.cpp", "-Feature.cpp")
-        arguments = [f"--source-name={name}" for name in names]
-        self.generate(*arguments)
-        items = {
-            _project_path(item.attrib["Include"], self.generated): item
-            for item in self.calls[0].findall("m:ItemGroup/m:ClCompile", _NS)
-            if not item.attrib["Include"].startswith("$(GeneratedFilesDir)")
-        }
-        for name in names:
-            identity = self.generated / "i" / name
-            self.assertIn(identity, items)
-            self.assertFalse(identity.exists())
-            self.assertNotIn(self.source / name, items)
-        for name in ("App.xaml.cpp", "MainWindow.xaml.cpp"):
-            item = items[self.generated / name]
-            self.assertEqual(item.find("m:DependentUpon", _NS).text, name.removesuffix(".cpp"))
-
-        def drop_one(query):
-            omitted = self.generated / "i" / names[0]
-            query["Items"]["ClCompile"] = [
-                item for item in query["Items"]["ClCompile"] if Path(item["FullPath"]) != omitted
-            ]
-
-        self.mutate_query = drop_one
-        shutil.rmtree(self.generated.parent)
-        with self.assertRaisesRegex(ValueError, "compile membership changed"):
-            self.generate(*arguments)
-
-    def test_ordinary_headers_preserve_same_basenames_without_staging_bytes(self):
-        names = ("track/Control.h", "layout/Control.h", "nested/App.xaml.h", "-Extra header.h")
-        self.generate(*(f"--header-name={name}" for name in names))
+    def test_generator_has_only_local_idl_xaml_and_paired_codebehind_items(self):
+        self.generate()
         document = self.calls[0]
-        headers = {
-            _project_path(item.attrib["Include"], self.generated): item
-            for item in document.findall("m:ItemGroup/m:ClInclude", _NS)
-        }
-        authored = self.generated  # XAML emits these project-relative header names in generated C++.
-        inventory = self.generated / "i"
-        self.assertEqual(
-            set(headers),
-            {authored / "App.xaml.h", authored / "MainWindow.xaml.h"}
-            | {inventory / name for name in ("Control.h", *names)},
-        )
-        self.assertFalse(inventory.exists())
-        for name in ("Control.h", *names):
-            self.assertIsNone(headers[inventory / name].find("m:DependentUpon", _NS))
-        # Only this relationship owns the generated partial-class includes.
-        for page in ("App.xaml", "MainWindow.xaml"):
-            self.assertEqual(headers[authored / (page + ".h")].findtext("m:DependentUpon", namespaces=_NS), page)
+        for kind, name in (("Midl", "Project.idl"), ("ApplicationDefinition", "App.xaml"), ("Page", "MainWindow.xaml")):
+            self.assertEqual(
+                [
+                    _project_path(item.attrib["Include"], self.generated)
+                    for item in document.findall(f"m:ItemGroup/m:{kind}", _NS)
+                ],
+                [self.generated / name],
+            )
+        pages = ("App.xaml", "MainWindow.xaml")
+        for kind, suffix in (("ClInclude", ".h"), ("ClCompile", ".cpp")):
+            expected = {self.generated / (page + suffix): page for page in pages}
+            items = document.findall(f"m:ItemGroup/m:{kind}", _NS)
+            if kind == "ClCompile":
+                (module,) = [item for item in items if item.attrib["Include"] == "$(GeneratedFilesDir)module.g.cpp"]
+                items.remove(module)
+            self.assertEqual(len(items), len(expected))
+            self.assertEqual(
+                {
+                    _project_path(item.attrib["Include"], self.generated): item.findtext(
+                        "m:DependentUpon", namespaces=_NS
+                    )
+                    for item in items
+                },
+                expected,
+            )
         for source in self.source.iterdir():
-            destination = authored / source.name
-            if source.name == "Control.h":
-                self.assertFalse(destination.exists())
-            else:
-                self.assertEqual(destination.read_bytes(), source.read_bytes())
-        for kind in ("Midl", "ApplicationDefinition", "Page"):
-            item = document.find(f"m:ItemGroup/m:{kind}", _NS)
-            self.assertEqual(_project_path(item.attrib["Include"], self.generated).parent, authored)
-        includes = document.findtext("m:ItemDefinitionGroup/m:ClCompile/m:AdditionalIncludeDirectories", namespaces=_NS)
-        self.assertEqual(
-            [_project_path(value, self.generated) for value in includes.split(";")[:-1]],
-            [authored, authored / "include"],
-        )
+            self.assertEqual((self.generated / source.name).read_bytes(), source.read_bytes())
+        self.assertEqual(list(self.generated.glob("*.cpp")), [])
 
-    def test_unsafe_or_case_colliding_header_names_fail_before_msbuild(self):
-        for name in (
-            "",
-            "/Control.h",
-            "C:/Control.h",
-            "dir\\Control.h",
-            "dir//Control.h",
-            "dir/./Control.h",
-            "../Control.h",
-            "NUL.h",
-            "COM1/Control.h",
-            "dir./Control.h",
-            "dir /Control.h",
-            "$(Root)/Control.h",
-            "dir;other/Control.h",
-            "dir%2fControl.h",
-            "*.h",
-            "not-a-header.hpp",
-            "control.h",
-            "app.xaml.h",
-        ):
-            with self.subTest(name=name), mock.patch.object(winui.subprocess, "run") as execute:
-                with self.assertRaisesRegex(ValueError, "header inventory name"):
-                    winui.run(self.generation_options(f"--header-name={name}"))
-                execute.assert_not_called()
-
-    def test_codebehind_header_cannot_be_supplied_as_a_name_only(self):
-        options = self.generation_options("--header-name=App.xaml.h")
+    def test_generation_requires_both_paired_header_contents(self):
+        options = self.generation_options()
         options.header.remove(self.source / "App.xaml.h")
         with mock.patch.object(winui.subprocess, "run") as execute:
             with self.assertRaisesRegex(ValueError, "code-behind headers as content"):
                 winui.run(options)
         execute.assert_not_called()
 
-    def test_sdk_header_query_rejects_missing_duplicate_repointed_or_changed_items(self):
-        for failure in ("missing ordinary", "missing selected", "duplicate", "checkout", "dependent", "excluded"):
-            with self.subTest(failure=failure):
+    def test_sdk_query_rejects_changed_membership_or_pairing_before_publication(self):
+        for kind, name, failure in (
+            ("ClCompile", "module.g.cpp", "missing"),
+            ("ClCompile", "bootstrap.cpp", "missing"),
+            ("ClCompile", "XamlMetaDataProvider.g.cpp", "unexpected"),
+            ("ClCompile", "App.xaml.cpp", "dependent"),
+            ("ClInclude", "App.xaml.h", "missing"),
+            ("ClInclude", "App.xaml.h", "duplicate"),
+            ("ClInclude", "App.xaml.h", "checkout"),
+            ("ClInclude", "App.xaml.h", "dependent"),
+            ("ClInclude", "App.xaml.h", "excluded"),
+        ):
+            with self.subTest(kind=kind, name=name, failure=failure):
 
-                def alter(query, failure=failure):
-                    headers = query["Items"]["ClInclude"]
-                    selected = next(item for item in headers if Path(item["FullPath"]).name == "App.xaml.h")
-                    ordinary = next(item for item in headers if Path(item["FullPath"]).name == "Control.h")
-                    if failure == "missing ordinary":
-                        headers.remove(ordinary)
-                    elif failure == "missing selected":
-                        headers.remove(selected)
+                def alter(query, kind=kind, name=name, failure=failure):
+                    items = query["Items"][kind]
+                    if failure == "unexpected":
+                        items.append({"FullPath": str(self.generated / "headers" / name)})
+                        return
+                    item = next(item for item in items if Path(item["FullPath"]).name == name)
+                    if failure == "missing":
+                        items.remove(item)
                     elif failure == "duplicate":
-                        headers.append({**ordinary, "FullPath": str(Path(ordinary["FullPath"]).with_name("control.h"))})
+                        items.append(item.copy())
                     elif failure == "checkout":
-                        ordinary["FullPath"] = str(self.source / "Control.h")
+                        item["FullPath"] = str(self.source / name)
                     elif failure == "dependent":
-                        selected.pop("DependentUpon")
+                        item.pop("DependentUpon")
                     else:
-                        ordinary["ExcludedFromBuild"] = "true"
+                        item["ExcludedFromBuild"] = "true"
 
                 self.mutate_query = alter
-                with self.assertRaisesRegex(ValueError, "WinUI .*header"):
+                with self.assertRaisesRegex(ValueError, f"WinUI {kind}"):
                     self.generate()
                 self.assertFalse(self.payload.exists())
-                # A separate Bazel action execution starts with fresh outputs.
                 shutil.rmtree(self.generated.parent)
 
     def test_template_restores_native_xaml_wiring_before_default_props_and_guards_product_targets(self):
@@ -521,19 +452,6 @@ class GenerationActionTest(unittest.TestCase):
         self.assertEqual(document.find("m:PropertyGroup/m:PlatformToolset", _NS).text, "fixture-toolset")
         self.assertEqual(
             document.find("m:PropertyGroup/m:WindowsTargetPlatformVersion", _NS).text, "fixture-sdk-version"
-        )
-        # The authored XAML pages are declared to the SDK compiler.
-        self.assertTrue(
-            any(
-                item.attrib["Include"].endswith("App.xaml")
-                for item in document.findall("m:ItemGroup/m:ApplicationDefinition", _NS)
-            )
-        )
-        self.assertTrue(
-            any(
-                item.attrib["Include"].endswith("MainWindow.xaml")
-                for item in document.findall("m:ItemGroup/m:Page", _NS)
-            )
         )
         # No product compile/link/build target may run from this project.
         guard = document.find("m:Target[@Name='AobusNoProductBuild']", _NS)

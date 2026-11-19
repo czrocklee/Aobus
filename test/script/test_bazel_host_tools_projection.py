@@ -120,11 +120,10 @@ class HostToolsFactsTest(unittest.TestCase):
         self.assertIn(str(self.root / "resolution/catalog-sdk.json"), result["catalog"]["artifacts"])
         json.dumps(result)  # The repository subprocess publishes facts without Path objects.
 
-    def test_replay_keys_the_toolchain_redirector_without_keying_base_actions_on_the_venv(self):
+    def test_selecting_a_test_venv_does_not_change_the_action_runtime(self):
         redirector = self.file("venv/bin/python")
-        configuration = self.file("venv/pyvenv.cfg", f"home = {self.python.parent}\n")
-        # The tooling-runtime tests already check when the parser/venv probe
-        # admits this executable; here replay must consume that exact choice.
+        self.file("venv/pyvenv.cfg", f"home = {self.python.parent}\n")
+        base_action = self.resolve()["python_action"]
         runtime = {"provider": "tooling-venv", "executable": str(redirector), "tooling_python": str(redirector)}
         with (
             mock.patch.object(sys, "executable", str(redirector)),
@@ -132,13 +131,9 @@ class HostToolsFactsTest(unittest.TestCase):
         ):
             result = self.resolve()
         self.assertEqual(result["catalog"]["tools"]["python"], str(self.python))
-        self.assertIn(str(self.python), result["python_action"]["artifacts"])
-        replay = result["python_replay"]
-        self.assertEqual(replay["identity"]["executable"], str(redirector))
-        self.assertEqual(set(replay["artifacts"]), {str(redirector), str(configuration)})
-        self.assertTrue(set(replay["artifacts"]).isdisjoint(result["python_action"]["artifacts"]))
-        self.assertTrue(set(replay["artifacts"]).isdisjoint(result["catalog"]["artifacts"]))
-        self.assertLessEqual(set(replay["artifacts"]), set(result["watch_files"]))
+        self.assertEqual(result["python_action"], base_action)
+        self.assertEqual(result["test_tools"]["tooling_python"], str(redirector))
+        self.assertIn(str(redirector), result["watch_files"])
 
     def test_catalog_python_falls_back_to_the_selected_interpreter_without_a_base_redirect(self):
         # Without an active redirect, sys._base_executable is unavailable and the

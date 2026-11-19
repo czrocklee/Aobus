@@ -5,6 +5,8 @@
 
 // MainWindow.g.h loads projections before MainWindow.xaml.g.h sets up native
 // IUnknown support and clears the Win32 macro that collides with XAML.
+// Leave the macro undefined: those projections are already parsed, the generated
+// header also leaves it undefined, and no includer calls the Win32 macro afterward.
 #include <unknwn.h>
 #undef GetCurrentTime
 

@@ -49,13 +49,6 @@ def materialize_host_tools(ctx, data):
     ctx.file("python-sdk.json", json.encode(python["identity"]) + "\n", executable = False)
     python_inputs.append("python-sdk.json")
 
-    replay = data["python_replay"]
-    replay_inputs = []
-    for index, source in enumerate(replay["artifacts"]):
-        replay_inputs.append(_link(ctx, source, "python-replay/%s/" % index + _basename(source), links))
-    ctx.file("python-replay.json", json.encode(replay["identity"]) + "\n", executable = False)
-    replay_inputs.append("python-replay.json")
-
     resource = data.get("resource")
     resource_executable = ""
     resource_inputs = []
@@ -84,7 +77,6 @@ def materialize_host_tools(ctx, data):
         "windows_manifest_inputs": manifest_inputs,
         "catalog_inputs": catalog_inputs,
         "python_inputs": python_inputs,
-        "replay_inputs": replay_inputs,
         "resource_executable": resource_executable,
         "resource_inputs": resource_inputs,
         "dbus_inputs": dbus_inputs,

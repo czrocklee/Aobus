@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-// Native IUnknown must be available before the first C++/WinRT projection for get_unknown.
+// Select the pinned C++/WinRT classic-COM branch before the first projection.
+// get_unknown is unconditional and returns the borrowed ABI pointer; this include
+// is not what completes IUnknown for the map key.
 #include <unknwn.h>
 
 // Win32's GetCurrentTime macro collides with the XAML projection.

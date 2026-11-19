@@ -7,19 +7,26 @@ def _xml_text(text):
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
 
 def _gresource_c_impl(ctx):
-    # Pair each label with its alias. ctx.files.srcs would flatten filegroups,
-    # so a multi-file label and an empty one could offset and still match a
-    # length check.
+    # Distinct labels, then the ordered alias inventory. A label_list cannot
+    # repeat a label, and ctx.files.srcs would flatten filegroups, so a
+    # multi-file label and an empty one could offset and still match a length
+    # check. The same File may be referenced by more than one alias.
     targets = ctx.attr.srcs
     aliases = ctx.attr.aliases
-    if len(targets) != len(aliases):
-        fail("GResource srcs (%d) and aliases (%d) differ in length" % (len(targets), len(aliases)))
-    files = []
-    for target, alias in zip(targets, aliases):
+    source_index = ctx.attr.source_index
+    if len(source_index) != len(aliases):
+        fail("GResource references (%d) and aliases (%d) differ in length" % (len(source_index), len(aliases)))
+    files_by_source = []
+    for target in targets:
         members = target[DefaultInfo].files.to_list()
         if len(members) != 1:
             fail("GResource source %s must be exactly one file, got %d" % (target.label, len(members)))
-        files.append(members[0])
+        files_by_source.append(members[0])
+    files = []
+    for index in source_index:
+        if index < 0 or index >= len(files_by_source):
+            fail("GResource source index %d is outside the distinct source list" % index)
+        files.append(files_by_source[index])
 
     # Generated XML is the only specification GLib reads. Each body is the
     # declared File.path, not a second relative lookup, so an unsandboxed
@@ -65,6 +72,7 @@ _gresource_c = rule(
     attrs = {
         "aliases": attr.string_list(mandatory = True),
         "out": attr.output(mandatory = True),
+        "source_index": attr.int_list(mandatory = True),
         "srcs": attr.label_list(allow_files = True, mandatory = True),
         "_glib_compile_resources": attr.label(
             default = Label("@aobus_native_tools//:glib_compile_resources"),
@@ -82,21 +90,34 @@ _gresource_c = rule(
 def gresource_c(name, resources, out, **kwargs):
     """Compile resources from an ordered (label, alias) sequence.
 
+    The same source may be listed under several aliases. Those aliases stay in
+    inventory order. The rule receives each canonical label once, because a
+    label list rejects duplicates; it does not glob a package or add a search
+    root.
+
     Args:
         name: Target name.
-        resources: Ordered (source label, public alias) pairs. srcs and aliases
-            are derived together from this sequence.
+        resources: Ordered (source label, public alias) pairs.
         out: Generated C source.
         **kwargs: Forwarded rule attributes, such as target compatibility.
     """
     srcs = []
+    seen = {}
+    source_index = []
     aliases = []
     for label, alias in resources:
-        srcs.append(label)
+        key = str(native.package_relative_label(label))
+        index = seen.get(key)
+        if index == None:
+            index = len(srcs)
+            seen[key] = index
+            srcs.append(label)
+        source_index.append(index)
         aliases.append(alias)
     _gresource_c(
         name = name,
         srcs = srcs,
+        source_index = source_index,
         aliases = aliases,
         out = out,
         **kwargs

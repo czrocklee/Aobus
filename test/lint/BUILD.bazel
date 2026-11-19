@@ -2,6 +2,7 @@ load("@rules_cc//cc:defs.bzl", "cc_library")
 load("//bazel/lint:canary.bzl", "lint_cache_canaries")
 load("//bazel/lint:fixtures.bzl", "lint_fixture_test")
 load("//bazel/lint:graph.bzl", "lint_graph_test")
+load(":replay_launcher_test.bzl", "replay_launcher_py_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -102,6 +103,18 @@ cc_library(
     hdrs = ["WerrorReplay.h"],
     tags = ["manual"],
     deps = ["//bazel:compile_contract"],
+)
+
+# The actual native action launcher is data: this test starts it, and the
+# lint graph reaches its C++ compile main through the same edge.
+replay_launcher_py_test(
+    name = "replay_launcher_test",
+    size = "small",
+    srcs = ["replay_launcher_test.py"],
+    args = ["$(rlocationpath //tool/lint:replay_launcher)"],
+    data = ["//tool/lint:replay_launcher"],
+    tags = ["manual"],
+    deps = ["@rules_python//python/runfiles"],
 )
 
 # Explicit until each native checker/fixture profile is admitted; raw report

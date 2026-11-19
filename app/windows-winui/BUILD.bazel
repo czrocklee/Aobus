@@ -20,8 +20,7 @@ LAYOUT_RUNTIME_SOURCES = [
 
 LAYOUT_RUNTIME_HEADERS = [src.removesuffix(".cpp") + ".h" for src in LAYOUT_RUNTIME_SOURCES] + ["layout/runtime/LayoutComponent.h"]
 
-# One inventory supplies native compile owners and the SDK's post-generation
-# membership check. Ordinary .cpp files are names only to the generator.
+# Authored sources are partitioned among native compilation owners below.
 WINUI_SOURCES = [
     "App.xaml.cpp",
     "app/DestructiveLibraryRestart.cpp",
@@ -108,8 +107,6 @@ WINUI_SOURCES = [
     "MainWindow.xaml.cpp",
 ] + STRING_RESOURCE_SOURCES + LAYOUT_RUNTIME_SOURCES
 
-# Keep the full authored inventory for SDK generation, independently of the
-# ordinary C++ compilation owners below.
 WINUI_HEADERS = glob(["**/*.h"])
 
 STRING_RESOURCE_HEADERS = [
@@ -225,17 +222,23 @@ filegroup(
 
 # XAML and C++/WinRT generation. CcInfo keeps project-generated headers
 # distinct from external SDK projections. The "cpp" output group supplies
-# wrappers for the SDK's four standalone generated translation units.
+# wrappers for the SDK's four standalone generated translation units. Only the
+# XAML, paired headers and IDL are authored inputs to the generator.
 winui_codegen(
     name = "generated",
-    srcs = WINUI_SOURCES,
-    hdrs = WINUI_HEADERS,
+    codebehind_hdrs = [
+        "App.xaml.h",
+        "MainWindow.xaml.h",
+    ],
     idl = "Project.idl",
     language_standard = MSVC_MSBUILD_LANGUAGE_STANDARD,
     target_compatible_with = ["@platforms//os:windows"],
     # The stream adapter shares this product's locked C++/WinRT projection.
-    # This grants generated headers only, never a frontend binary dependency.
-    visibility = ["//app/windows:__pkg__"],
+    # The analysis test reads the declared roots without building the generator.
+    visibility = [
+        "//app/windows:__pkg__",
+        "//test/winui/projection:__pkg__",
+    ],
     xaml = [
         "App.xaml",
         "MainWindow.xaml",
@@ -260,6 +263,7 @@ cc_library(
     linkopts = ["runtimeobject.lib"],
     linkstatic = True,
     target_compatible_with = ["@platforms//os:windows"],
+    visibility = ["//test/winui/projection:__pkg__"],
     deps = [
         ":generated",
         "//include:utility_headers",
@@ -288,6 +292,7 @@ cc_library(
     includes = ["."],
     linkstatic = True,
     target_compatible_with = ["@platforms//os:windows"],
+    visibility = ["//test/winui/projection:__pkg__"],
     deps = [":model"],
 )
 

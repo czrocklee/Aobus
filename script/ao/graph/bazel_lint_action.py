@@ -283,8 +283,9 @@ def _compile_arguments(identity: Identity, argv: list[str]) -> list[str]:
         if argument == identity.source:
             if header:
                 language = "objective-c++-header" if identity.source.endswith(".mm") else "c++-header"
-                # PCH producers may keep their framework/macro prefix while
-                # leaving the selected implementation header to this main file.
+                # Keep the remaining native arguments, including a textual forced
+                # include. That preamble is not a binary PCH. The selected
+                # implementation header is this analysis main file.
                 rewritten.extend(["-DAOBUS_LINT_HEADER_MAIN=1", "-x", language])
                 rewritten.append(str(Path(identity.main).absolute()))
             else:
