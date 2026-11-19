@@ -62,21 +62,34 @@ def _selection(platform: str, request: Request) -> _CheckSelection:
     )
     optional = set()
     windows_probes = {"//test:winui_localization_probe_test", "//test:winui_track_item_probe_test"}
+    # Independent of suite expansion: a Windows-only analysis test must not
+    # disappear from the evidence gate if discovery stops listing it.
+    winui_projection = "//test/winui/projection:winui_projection_test"
     if platform == "windows":
         required.update(windows_probes)
+        required.add(winui_projection)
         if request.ci:
             required.add("//test:winui_uia_test")
     else:
         optional.update(windows_probes)
+        optional.add(winui_projection)
     if platform == "linux":
         suites.add("//:instrumentation_tests")
-        required.update(("//:native_driver_policy", "//test/script:workflows"))
+        required.update(("//:native_driver_policy", "//bazel/header_share:selector_test", "//test/script:workflows"))
         required.update(
             "//:instrumentation_tests_" + case
             for case in ("coverage", "asan_build", "asan_compile", "tsan_build", "tsan_compile")
         )
     else:
         optional.add("//test/script:workflows")
+    if platform == "macos":
+        required.update(
+            (
+                "//test/script:test_bazel_appkit_deps",
+                "//test/script:test_bazel_environment",
+                "//test/script:test_bazel_remote_cache",
+            )
+        )
     for feature, label in (("gtk", "//test:gtk_test"), ("system_media", "//test:systemmedia_test")):
         if platform == "linux" and bazel_workflows.feature_enabled(getattr(request, feature), feature):
             required.add(label)
@@ -93,6 +106,7 @@ def _main_label(label: str) -> str:
 def _verify_required_checks(path: Path, selection: _CheckSelection, *, fresh: bool) -> None:
     required = selection.required.copy()
     summaries: dict[str, list[dict[str, Any]]] = {}
+    skipped: dict[str, set[str]] = {}
     expanded: set[str] = set()
     finished = last = False
     try:
@@ -117,13 +131,36 @@ def _verify_required_checks(path: Path, selection: _CheckSelection, *, fresh: bo
                 if "testSummary" in identity:
                     label = _main_label(identity["testSummary"]["label"])
                     summaries.setdefault(label, []).append(event)
+                completed = identity.get("targetCompleted")
+                aborted = event.get("aborted")
+                # Aspect completions are not the test label's own result.
+                if (
+                    isinstance(completed, dict)
+                    and not completed.get("aspect")
+                    and isinstance(aborted, dict)
+                    and aborted.get("reason") == "SKIPPED"
+                ):
+                    label = _main_label(completed["label"])
+                    detail = f"{label} [{completed['configuration']['id']}]"
+                    if isinstance(aborted.get("description"), str) and aborted["description"]:
+                        detail += f": {aborted['description']}"
+                    skipped.setdefault(label, set()).add(detail)
         if not (finished and last):
             raise ValueError("incomplete event stream (missing build finish or lastMessage)")
-        if missing := selection.suites - expanded:
-            raise ValueError("missing required test suites: " + ", ".join(sorted(missing)))
+        if missing_suites := selection.suites - expanded:
+            raise ValueError("missing required test suites: " + ", ".join(sorted(missing_suites)))
         required -= selection.optional
-        if missing := required - summaries.keys():
-            raise ValueError("missing required passing checks: " + ", ".join(sorted(missing)))
+        unsummarized = required - summaries.keys()
+        skipped_labels = unsummarized & skipped.keys()
+        missing = unsummarized - skipped_labels
+        if unsummarized:
+            clauses = []
+            if missing:
+                clauses.append("missing required passing checks: " + ", ".join(sorted(missing)))
+            if skipped_labels:
+                details = [detail for label in sorted(skipped_labels) for detail in sorted(skipped[label])]
+                clauses.append("skipped required checks: " + "; ".join(details))
+            raise ValueError("; ".join(clauses))
         for label in sorted(required):
             events = summaries[label]
             if len(events) != 1 or not events[0]["id"]["testSummary"].get("configuration", {}).get("id"):

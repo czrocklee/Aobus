@@ -40,10 +40,11 @@ Paths accept files or directories; missing paths fail before source discovery or
 The [shared frontend policy](../../script/ao/policy/tidy_policy.py) follows the
 compilation context. GTK contexts disable `cppcoreguidelines-owning-memory` and
 nonliteral-format warnings: widget trees own their children and use printf-style
-APIs. WinUI contexts scope warnings to the selected source/header rather than the
-implementation headers gathered by the forced include; changed headers receive
-their own header-main analysis. On Windows, generated C++/WinRT include spelling
-is accepted without nonportable-include-path warnings.
+APIs. WinUI contexts scope warnings to the selected source or header rather than
+to included implementation headers, whether or not the compile command uses a
+forced include. Selected headers receive their own header-main analysis. On
+Windows, generated C++/WinRT include spelling is accepted without
+nonportable-include-path warnings.
 
 ### Bazel-backed reports
 
@@ -54,7 +55,10 @@ A header without a same-component companion, or an include fragment, is analyzed
 Scoped lint defers discovered platform-incompatible files. With `--gtk off` it also defers discovered GTK files only if the configured graph proves every candidate owner incompatible. Explicit files still require reports; a compatible header or fragment that no analyzed translation unit includes, or a compatible path with no owner, fails rather than producing a partial pass.
 `--all` selects the project C++ scope with the same rules.
 
-The completion gate's C++ stage is the declared `//test/lint:production_lint` test, which applies the report aspect to the declared completion roots without a diff selector, so `--commit` never narrows it: every compile owner's declared `srcs`, `hdrs`, `textual_hdrs` and additional compiler inputs that classify STRICT or RELAXED are gated — authored sources only, so external and generated inputs stay out — with unpaired headers and fragments covered through replay actions that select a real consumer from the baseline reports' include evidence. Deferral is still limited to recognized foreign-native-platform paths ([report contracts](bazel.md#lint-reports)). Full coverage reuses the existing report graph and action cache, with no new rule set, filename classifier or separate CI job, and it is not full fresh execution: a warm cache replays existing reports while a cold cache pays the complete analysis cost once. The independent authored-source ownership scan is the root `//:native_policy` test ([test ownership](bazel.md#test-ownership)). The lint test filters generated-only owners from authored policy, matching the former portal scope, so GLib-generated C and catalog arrays are not linted as project source while their real compile build remains in the normal graph.
+The completion gate's C++ stage is the declared `//test/lint:production_lint` test, which applies the report aspect to the declared completion roots without a diff selector, so `--commit` never narrows it: every compile owner's declared `srcs`, `hdrs`, `textual_hdrs` and additional compiler inputs that classify STRICT or RELAXED are gated — authored sources only, so external and generated inputs stay out — and all direct reports are validated.
+A direct main report from any configured owner in the gate makes replay unnecessary for that path.
+Headers and fragments without a direct main still replay through a real consumer selected from the baseline reports' include evidence.
+Deferral is still limited to recognized foreign-native-platform paths ([report contracts](bazel.md#lint-reports)). Full coverage reuses the existing report graph and action cache, with no new rule set, filename classifier or separate CI job, and it is not full fresh execution: a warm cache replays existing reports while a cold cache pays the complete analysis cost once. The independent authored-source ownership scan is the root `//:native_policy` test ([test ownership](bazel.md#test-ownership)). The lint test filters generated-only owners from authored policy, matching the former portal scope, so GLib-generated C and catalog arrays are not linted as project source while their real compile build remains in the normal graph.
 
 Reports are cached from actual native compile contexts and gated from the current BEP: 0 clean, 1 findings, 2 incomplete.
 Cached warnings still fail.

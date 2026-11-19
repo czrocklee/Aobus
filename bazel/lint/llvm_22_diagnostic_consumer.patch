@@ -1,0 +1,14 @@
+--- include/0/clang/Basic/Diagnostic.h
++++ include/0/clang/Basic/Diagnostic.h
+@@ -613,3 +613,3 @@
+   /// Return the current diagnostic client along with ownership of that
+   /// client.
+-  std::unique_ptr<DiagnosticConsumer> takeClient() { return std::move(Owner); }
++  std::unique_ptr<DiagnosticConsumer> takeClient();
+@@ -1793,2 +1793,6 @@
++inline std::unique_ptr<DiagnosticConsumer> DiagnosticsEngine::takeClient() {
++  return std::move(Owner);
++}
++
+ /// A diagnostic client that ignores all diagnostics.
+ class IgnoringDiagConsumer : public DiagnosticConsumer {

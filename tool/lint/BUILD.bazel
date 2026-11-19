@@ -1,3 +1,5 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("//bazel:windows_utf8_manifest.bzl", "WINDOWS_UTF8_LINKER_INPUTS", "WINDOWS_UTF8_LINKOPTS")
 load("//bazel/lint:lint.bzl", "lint_verification")
 load(":build.bzl", "lint_checker")
 
@@ -9,6 +11,19 @@ lint_verification(
         "aobus-lint-sdk-host",
         "manual",
     ],
+)
+
+# Template actions accept a File or FilesToRunProvider, not a host path string.
+cc_binary(
+    name = "replay_launcher",
+    srcs = ["ReplayLauncher.cpp"],
+    additional_linker_inputs = WINDOWS_UTF8_LINKER_INPUTS,
+    linkopts = WINDOWS_UTF8_LINKOPTS,
+    visibility = [
+        "//bazel/lint:__pkg__",
+        "//test/lint:__pkg__",
+    ],
+    deps = ["//bazel:compile_contract"],
 )
 
 # Custom Aobus clang-tidy checker plugin sources and registration entry point.

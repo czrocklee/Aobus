@@ -3,7 +3,7 @@
 
 #include "theme/ThemeCoordinator.h"
 
-#include "platform/StringResources.h"
+#include "platform/StringResourceFormat.h"
 #include <ao/Error.h>
 #include <ao/utility/Path.h>
 #include <ao/winui/Theme.h>

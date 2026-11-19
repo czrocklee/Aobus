@@ -14,7 +14,7 @@
 #include "XamlMetaDataProvider.h"
 #include "app/DispatcherQueueExecutor.h"
 #include "lib/audio/NullBackend.h"
-#include "platform/StringResources.h"
+#include "platform/ResourceLanguage.h"
 #include "playback/AudioPipelineToolTip.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>

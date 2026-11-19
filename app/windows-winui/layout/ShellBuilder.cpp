@@ -12,12 +12,18 @@
 #include "layout/runtime/FocusedDetail.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutHost.h"
-#include "pch.h"
+#include "layout/runtime/MenuComposer.h"
+#include "layout/runtime/PaneSettingsAccess.h"
+#include "layout/runtime/WindowActivityState.h"
+#include "platform/StringResourceFormat.h"
 #include "platform/StringResources.h"
 #include "theme/SurfaceBrushes.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/Signal.h>
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/compat/MoveOnlyFunction.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackPresentation.h>
@@ -25,11 +31,14 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibrarySnapshot.h>
+#include <ao/uimodel/layout/document/LayoutPreparation.h>
 #include <ao/uimodel/library/list/ListTreeProjection.h>
+#include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/playback/command/PlaybackActions.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/winui/DesktopSettingsYamlSchema.h>
+#include <ao/winui/Theme.h>
 #include <ao/winui/input/KeymapAcceleratorPlan.h>
 #include <ao/winui/layout/LayoutSchema.h>
 #include <ao/winui/layout/ShellCommands.h>
@@ -40,6 +49,8 @@
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 #include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.Foundation.h>
+#include <winrt/base.h>
 
 #include <algorithm>
 #include <expected>

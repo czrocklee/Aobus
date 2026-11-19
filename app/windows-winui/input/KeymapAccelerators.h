@@ -5,6 +5,10 @@
 
 #include <ao/winui/input/KeymapAcceleratorPlan.h>
 
+#pragma push_macro("GetCurrentTime")
+#include <unknwn.h>
+#pragma pop_macro("GetCurrentTime")
+
 #include <winrt/Microsoft.UI.Xaml.h>
 
 #include <functional>

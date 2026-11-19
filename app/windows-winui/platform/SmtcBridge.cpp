@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+// clang-format off: the interop factory requires native IUnknown before C++/WinRT.
+#include <unknwn.h>
+// clang-format on
 #include "platform/SmtcBridge.h"
 
 #include <ao/CoreIds.h>
+#include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/Log.h>
@@ -14,6 +18,7 @@
 #include <ao/rt/resource/ResourceBytes.h>
 #include <ao/uimodel/playback/command/PlaybackActions.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
+#include <ao/utility/ScopedRegistration.h>
 #include <ao/winui/MemoryRandomAccessStream.h>
 #include <ao/winui/WinUiErrorBoundary.h>
 
@@ -21,6 +26,8 @@
 #include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Media.h>
+#include <winrt/Windows.Storage.Streams.h>
+#include <winrt/base.h>
 
 #include <memory>
 #include <optional>

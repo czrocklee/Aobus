@@ -8,6 +8,8 @@
 #include <ao/async/QueuedExecutorBase.h>
 #include <ao/compat/MoveOnlyFunction.h>
 
+#include <winrt/Microsoft.UI.Dispatching.h>
+
 #include <exception>
 #include <memory>
 #include <utility>

@@ -1,15 +1,16 @@
 """Declared coverage runtimes and a public label run-under strict collector."""
 
-load("@aobus_native_tools//:catalog_tools.bzl", "CATALOG_TOOLS")
+load("@aobus_native_tools//:python_action_tools.bzl", "PYTHON_ACTION_TOOLS")
 
 def _quote(value):
     return "'" + value.replace("'", "'\\''") + "'"
 
 def _support_impl(ctx):
-    # The stock runner's ROOT anchors the declared collector artifact. Its
-    # selected Python payload already belongs to the admitted catalog SDK.
+    # The stock runner's ROOT anchors the declared collector artifact. The
+    # launcher embeds the admitted Python path; runfiles carry that same
+    # python_action_tools payload, not the catalog filegroup's ICU inputs.
     runner = ctx.actions.declare_file("collect_coverage.sh")
-    command = "#!/bin/sh\nexec " + _quote(CATALOG_TOOLS["python"])
+    command = "#!/bin/sh\nexec " + _quote(PYTHON_ACTION_TOOLS["python"])
     command += " -I -S -B -X utf8 \"${ROOT:?}/\"" + _quote(ctx.file.collector.path) + " \"$@\"\n"
     ctx.actions.write(runner, command, is_executable = True)
     files = [runner, ctx.file.collector]
@@ -24,7 +25,7 @@ coverage_support = rule(
     implementation = _support_impl,
     attrs = {
         "collector": attr.label(allow_single_file = [".py"], mandatory = True),
-        "_python_runtime": attr.label(default = Label("@aobus_native_tools//:catalog_tools"), cfg = "exec"),
+        "_python_runtime": attr.label(default = Label("@aobus_native_tools//:python_action_tools"), cfg = "exec"),
     },
     executable = True,
 )

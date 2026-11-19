@@ -98,8 +98,15 @@ class HostToolsFactsTest(unittest.TestCase):
         self.assertNotIn(str(self.root / "CMakeLists.txt"), result["watch_files"])
         self.assertEqual(result["test_tools"]["source_root"], str(self.root))
         self.assertEqual(result["catalog"]["tools"]["python"], str(self.python))
-        self.assertIn(str(self.extension), result["catalog"]["artifacts"])
-        self.assertIn(str(self.framework), result["catalog"]["artifacts"])
+        python_action = result["python_action"]
+        self.assertEqual(python_action["tools"], {"python": str(self.python)})
+        self.assertEqual(python_action["identity"]["stdlib"], str(self.stdlib))
+        self.assertEqual(
+            set(python_action["artifacts"]),
+            {str(path) for path in (self.python, self.stdlib / "json/__init__.py", self.extension, self.framework)},
+        )
+        self.assertTrue(set(python_action["artifacts"]).isdisjoint(result["catalog"]["artifacts"]))
+        self.assertIn(str(self.genrb), result["catalog"]["artifacts"])
         self.assertIn(str(self.stdlib / "json/__init__.py"), result["watch_files"])
         self.assertIn(str(self.stdlib / "json"), result["watch_directories"])
         self.assertIn(str(self.gperf.parent), result["watch_directories"])
@@ -113,14 +120,20 @@ class HostToolsFactsTest(unittest.TestCase):
         self.assertIn(str(self.root / "resolution/catalog-sdk.json"), result["catalog"]["artifacts"])
         json.dumps(result)  # The repository subprocess publishes facts without Path objects.
 
-    def test_catalog_python_selects_the_base_interpreter_behind_a_venv_redirector(self):
+    def test_selecting_a_test_venv_does_not_change_the_action_runtime(self):
         redirector = self.file("venv/bin/python")
-        with mock.patch.object(sys, "executable", str(redirector)):
+        self.file("venv/pyvenv.cfg", f"home = {self.python.parent}\n")
+        base_action = self.resolve()["python_action"]
+        runtime = {"provider": "tooling-venv", "executable": str(redirector), "tooling_python": str(redirector)}
+        with (
+            mock.patch.object(sys, "executable", str(redirector)),
+            mock.patch.object(tools, "_python_runtime", return_value=(runtime, [redirector], [])),
+        ):
             result = self.resolve()
         self.assertEqual(result["catalog"]["tools"]["python"], str(self.python))
-        self.assertIn(str(self.python), result["catalog"]["artifacts"])
-        self.assertNotIn(str(redirector), result["catalog"]["artifacts"])
-        self.assertNotIn(str(redirector), result["watch_files"])
+        self.assertEqual(result["python_action"], base_action)
+        self.assertEqual(result["test_tools"]["tooling_python"], str(redirector))
+        self.assertIn(str(redirector), result["watch_files"])
 
     def test_catalog_python_falls_back_to_the_selected_interpreter_without_a_base_redirect(self):
         # Without an active redirect, sys._base_executable is unavailable and the

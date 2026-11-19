@@ -3,33 +3,39 @@
 
 #include "track/TrackPropertiesCoordinator.h"
 
-#include "pch.h"
 #include "track/TrackCreditsEditorControl.h"
 #include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
+#include <ao/async/Task.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionService.h>
 #include <ao/rt/completion/MetadataValueCompleter.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
+#include <ao/uimodel/library/detail/TrackCredits.h>
 #include <ao/uimodel/library/detail/TrackCustomMetadata.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 #include <ao/utility/String.h>
+#include <ao/winui/CallbackAdmissionGate.h>
 #include <ao/winui/WinUiErrorBoundary.h>
 #include <ao/winui/track/TrackPropertiesAdapter.h>
 
+#include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
+#include <winrt/base.h>
 
 #include <algorithm>
 #include <cstddef>

@@ -5,6 +5,7 @@
 
 #include "platform/NamedControl.h"
 #include "platform/StringResources.h"
+#include "platform/WinRtStringResources.h"
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/library/LibraryJobs.h>
@@ -15,6 +16,7 @@
 #include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
+#include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.UI.Text.h>
 

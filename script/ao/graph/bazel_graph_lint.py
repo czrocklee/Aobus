@@ -1,9 +1,9 @@
 """Graph-native lint replay driver for declared Bazel actions.
 
-This module runs inside the replay actions, never as a Bazel or ao client:
-``replay`` selects the real consumer of one uncovered header or include
-fragment from the baseline reports' include evidence and re-runs the
-existing analyze helper in the consumer's native environment. The gate
+This module runs inside the graph actions, never as a Bazel or ao client:
+``select`` routes an uncovered header or include fragment to a consumer using
+baseline include evidence. ``replay`` re-runs the existing analyze helper
+with only that consumer's native inputs and environment. The gate
 entrypoint lives in ``bazel_graph_lint_gate.py`` so gate-only changes never
 invalidate cached replay actions. The consumer ranking and platform policy
 are the shared ownership policy in ``tidy_policy.py``, so the replay action
@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -35,6 +36,8 @@ from ao.policy.tidy_policy import consumer_rank
 SCHEMA = 1
 REPLAY_STATUSES = ("analyzed", "no_consumer")
 ITEM_STATUSES = ("covered", "deferred", "uncovered")
+_CONSUMER_FIELDS = {"owner", "configuration", "source", "context", "env"}
+_ANALYSIS_TOOLS = ("policy", "sdk", "verification", "tidy")
 
 
 def _object(value: object, label: str) -> dict[str, Any]:
@@ -72,32 +75,51 @@ def replay_mode(path: str) -> str:
     return "RELAXED" if path.startswith("test/") and not path.startswith("test/lint/fixture/") else "STRICT"
 
 
+def _consumer(data: dict[str, Any]) -> dict[str, Any]:
+    environment = _object(data["env"], "consumer environment")
+    if any(not isinstance(key, str) or not isinstance(value, str) for key, value in environment.items()):
+        raise ValueError("consumer environment must map strings to strings")
+    owner = _text(data["owner"], "consumer owner")
+    canonical_owner(owner)
+    return {
+        "owner": owner,
+        "configuration": exec_path(data["configuration"]),
+        "source": exec_path(data["source"]),
+        "context": exec_path(data["context"]),
+        "env": environment,
+    }
+
+
+def _route_id(value: object) -> str:
+    # The analysis rule assigns these IDs so both the manifest and the
+    # template map name the same native context without duplicating a hash.
+    if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{8}", value) is None:
+        raise ValueError("consumer route must be an eight-digit lowercase hexadecimal ID")
+    return value
+
+
 def load_candidates(path: Path) -> dict[str, Any]:
-    """Load and validate one replay action's candidate selection."""
+    """Load and validate one item's candidate manifest."""
     data = load_json(path)
     if set(data) != {"schema", "item", "platform", "candidates"}:
         raise ValueError("candidates must contain exactly the replay selection fields")
-    item = exec_path(data["item"])
     candidates = []
+    routes = set()
     for candidate in _array(data["candidates"], "candidates"):
         candidate = _object(candidate, "candidate")
-        if set(candidate) != {"owner", "configuration", "source", "context", "report", "env"}:
-            raise ValueError("candidate must contain exactly the consumer fields")
-        environment = _object(candidate["env"], "candidate environment")
-        if any(not isinstance(key, str) or not isinstance(value, str) for key, value in environment.items()):
-            raise ValueError("candidate environment must map strings to strings")
-        configuration = exec_path(candidate["configuration"])
-        candidates.append(
-            {
-                "owner": _text(candidate["owner"], "candidate owner"),
-                "configuration": configuration,
-                "source": exec_path(candidate["source"]),
-                "context": exec_path(candidate["context"]),
-                "report": exec_path(candidate["report"]),
-                "env": environment,
-            }
-        )
-    return {"schema": SCHEMA, "item": item, "platform": _text(data["platform"], "platform"), "candidates": candidates}
+        if set(candidate) != _CONSUMER_FIELDS | {"report", "route"}:
+            raise ValueError("candidate must contain exactly the consumer fields, report and route")
+        route = _route_id(candidate["route"])
+        if route in routes:
+            raise ValueError(f"duplicate consumer route: {route}")
+        routes.add(route)
+        candidates.append({**_consumer(candidate), "report": exec_path(candidate["report"]), "route": route})
+    return {
+        "schema": SCHEMA,
+        "item": exec_path(data["item"]),
+        "platform": _text(data["platform"], "platform"),
+        "candidates": candidates,
+    }
 
 
 def load_candidate_report(path: Path) -> dict[str, Any]:
@@ -152,17 +174,74 @@ def replay_wrapper(item: str, consumer: dict[str, Any], report: PurePath, log: P
     }
 
 
+def select(args: argparse.Namespace) -> int:
+    """Write the sole marker for the selected native context (or none)."""
+    manifest = load_candidates(args.candidates)
+    candidates = manifest["candidates"]
+    item = manifest["item"]
+    reports = {candidate["report"]: load_candidate_report(Path(candidate["report"])) for candidate in candidates}
+    consumer = select_consumer(item, candidates, reports)
+    route = "none" if consumer is None else consumer["route"]
+    _write_json(
+        args.routes / route,
+        {
+            "schema": SCHEMA,
+            "item": item,
+            "platform": manifest["platform"],
+            "route": route,
+            "consumer": None if consumer is None else _consumer(consumer),
+        },
+    )
+    return 0
+
+
+def _load_selection(path: Path, context: Path | None) -> tuple[str, str, dict[str, Any] | None]:
+    marker = load_json(path)
+    if set(marker) != {"schema", "item", "platform", "consumer", "route"}:
+        raise ValueError("selection marker must contain exactly the replay fields")
+    if marker["route"] != path.name:
+        raise ValueError("selection marker name differs from its route")
+    item = exec_path(marker["item"])
+    platform = _text(marker["platform"], "platform")
+    if path.name == "none":
+        if marker["consumer"] is not None or context is not None:
+            raise ValueError("no-consumer route must not carry a consumer or context")
+        return item, platform, None
+    _route_id(path.name)
+    consumer = _object(marker["consumer"], "selected consumer")
+    if set(consumer) != _CONSUMER_FIELDS:
+        raise ValueError("selection marker must contain exactly the consumer fields")
+    consumer = _consumer(consumer)
+    if context is None or context.as_posix() != consumer["context"]:
+        raise ValueError("routed context path differs from the selected consumer")
+    return item, platform, consumer
+
+
+def _analysis_options(args: argparse.Namespace) -> list[str]:
+    missing = [f"--{name}" for name in _ANALYSIS_TOOLS if getattr(args, name) is None]
+    if missing:
+        raise ValueError("selected replay requires " + ", ".join(missing))
+    options: list[str] = []
+    for name in (*_ANALYSIS_TOOLS, "plugin", "report", "log"):
+        value = getattr(args, name)
+        if value is not None:
+            options.extend((f"--{name}", os.fspath(value)))
+    return options
+
+
+def _validate_identity(identity: Identity, expected: dict[str, str], artifact: str) -> None:
+    for key, value in expected.items():
+        if getattr(identity, key) != value:
+            raise ValueError(f"{artifact} {key} differs from the selected consumer: {getattr(identity, key)}")
+
+
 def replay(args: argparse.Namespace) -> int:
-    """Select the real consumer at execution, then analyze under its environment."""
-    selection = load_candidates(args.candidates)
-    item = selection["item"]
-    reports = {
-        candidate["report"]: load_candidate_report(Path(candidate["report"])) for candidate in selection["candidates"]
-    }
-    consumer = select_consumer(item, selection["candidates"], reports)
+    """Replay the selected route inside its native producer environment."""
+    item, platform, consumer = _load_selection(args.selection, args.context)
     if consumer is None:
         # Coverage of this item is the gate's decision: a platform-owned path
         # defers there, a compatible path without evidence fails there.
+        args.log.parent.mkdir(parents=True, exist_ok=True)
         args.log.write_text("", encoding="utf-8")
         _write_json(args.report, {"schema": SCHEMA, "item": item, "outcome": "no_consumer"})
         _write_json(
@@ -177,71 +256,49 @@ def replay(args: argparse.Namespace) -> int:
             },
         )
         return 0
-    with tempfile.TemporaryDirectory(prefix=".replay-", dir=args.report.parent) as temporary:
-        work = Path(temporary)
-        chosen = work / "consumer.json"
-        _write_json(
-            chosen,
-            {
-                "schema": SCHEMA,
-                "item": item,
-                "owner": consumer["owner"],
-                "source": consumer["source"],
-                "context": consumer["context"],
-            },
-        )
-        command = [
-            sys.executable,
-            "-I",
-            "-S",
-            "-B",
-            "-X",
-            "utf8",
-            os.fspath(Path(__file__).absolute()),
-            "replay-analyze",
-            "--consumer",
-            os.fspath(chosen),
-            "--policy",
-            os.fspath(args.policy),
-            "--sdk",
-            os.fspath(args.sdk),
-            "--verification",
-            os.fspath(args.verification),
-            "--tidy",
-            os.fspath(args.tidy),
-            "--helper",
-            os.fspath(args.helper),
-            "--report",
-            os.fspath(args.report),
-            "--log",
-            os.fspath(args.log),
-        ]
-        if args.plugin is not None:
-            command[command.index("--tidy") + 2 : command.index("--tidy") + 2] = ["--plugin", os.fspath(args.plugin)]
-        result = subprocess.run(
-            command,
-            env=consumer["env"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            encoding="utf-8",
-        )
-        if result.returncode != 0:
-            sys.stderr.write(result.stdout)
-            print(f"lint graph replay analysis failed with exit {result.returncode}", file=sys.stderr)
-            return 2
-    report = load_json(args.report)
-    identity = Identity.from_json(report["identity"])
-    expected = {
-        "owner": canonical_owner(consumer["owner"]),
-        "source": consumer["source"],
-        "main": item,
-        "mode": replay_mode(item),
-        "platform": selection["platform"],
-    }
-    for key, value in expected.items():
-        if getattr(identity, key) != value:
-            raise ValueError(f"replayed report {key} differs from the selected consumer: {getattr(identity, key)}")
+    if args.driver is None:
+        raise ValueError("selected replay requires the declared driver source")
+    # Expanded actions share a template environment. Spawn the helper under
+    # the exact producer environment, including Python's startup settings.
+    command = [
+        sys.executable,
+        "-I",
+        "-S",
+        "-B",
+        "-X",
+        "utf8",
+        os.fspath(args.driver.absolute()),
+        "replay-analyze",
+        "--consumer",
+        os.fspath(args.selection),
+        "--context",
+        os.fspath(args.context),
+        *_analysis_options(args),
+    ]
+    result = subprocess.run(
+        command,
+        env=consumer["env"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        encoding="utf-8",
+    )
+    if result.returncode != 0:
+        sys.stderr.write(result.stdout)
+        print(f"lint graph replay analysis failed with exit {result.returncode}", file=sys.stderr)
+        return 2
+    _validate_identity(
+        Identity.from_json(load_json(args.report)["identity"]),
+        {
+            "owner": canonical_owner(consumer["owner"]),
+            "configuration": consumer["configuration"],
+            "source": consumer["source"],
+            "main": item,
+            "mode": replay_mode(item),
+            "platform": platform,
+        },
+        "replayed report",
+    )
     _write_json(
         args.replay,
         replay_wrapper(
@@ -256,12 +313,10 @@ def replay(args: argparse.Namespace) -> int:
 
 def replay_analyze(args: argparse.Namespace) -> int:
     """Analyze one replayed main inside its consumer's native environment."""
-    chosen = load_json(args.consumer)
-    if set(chosen) != {"schema", "item", "owner", "source", "context"}:
-        raise ValueError("consumer selection must contain exactly the replay fields")
-    item = exec_path(chosen["item"])
-    source = exec_path(chosen["source"])
-    context = load_json(Path(chosen["context"]))
+    item, platform, consumer = _load_selection(args.consumer, args.context)
+    if consumer is None:
+        raise ValueError("analysis requires a selected consumer")
+    context = load_json(args.context)
     # The analyze helper's context is flat: the identity fields sit beside
     # schema/argv/virtual_headers, exactly as the aspect writes them.
     if "argv" not in context or "virtual_headers" not in context:
@@ -269,71 +324,47 @@ def replay_analyze(args: argparse.Namespace) -> int:
     identity = Identity.from_json(
         {key: value for key, value in context.items() if key not in ("schema", "argv", "virtual_headers")}
     )
-    if identity.owner != canonical_owner(chosen["owner"]) or identity.source != source:
-        raise ValueError("consumer context differs from the selected consumer")
-    sdk = bazel_lint_action.load_verified_tools(args)[1]
-    replayed = {
-        "owner": identity.owner,
-        "configuration": identity.configuration,
-        "source": source,
-        "main": item,
-        "outputs": list(identity.outputs),
-        "mode": replay_mode(item),
-        "platform": sdk["platform"],
-    }
-    if identity.platform != sdk["platform"]:
-        raise ValueError("consumer context platform differs from the verified SDK")
+    _validate_identity(
+        identity,
+        {
+            "owner": canonical_owner(consumer["owner"]),
+            "configuration": consumer["configuration"],
+            "source": consumer["source"],
+            "main": consumer["source"],
+            "platform": platform,
+        },
+        "consumer context",
+    )
+    # The analyze helper still verifies that the platform matches the SDK.
+    args.report.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=".context-", dir=args.report.parent) as temporary:
         replayed_context = Path(temporary) / "context.json"
-        _write_json(
-            replayed_context,
-            {
-                **replayed,
-                "schema": SCHEMA,
-                "argv": context["argv"],
-                "virtual_headers": context["virtual_headers"],
-            },
-        )
-        command = [
-            "analyze",
-            "--context",
-            os.fspath(replayed_context),
-            "--policy",
-            os.fspath(args.policy),
-            "--sdk",
-            os.fspath(args.sdk),
-            "--verification",
-            os.fspath(args.verification),
-            "--tidy",
-            os.fspath(args.tidy),
-            "--report",
-            os.fspath(args.report),
-            "--log",
-            os.fspath(args.log),
-        ]
-        if args.plugin is not None:
-            command[command.index("--tidy") + 2 : command.index("--tidy") + 2] = ["--plugin", os.fspath(args.plugin)]
-        return bazel_lint_action.main(command)
+        _write_json(replayed_context, {**context, "main": item, "mode": replay_mode(item)})
+        return bazel_lint_action.main(["analyze", "--context", os.fspath(replayed_context), *_analysis_options(args)])
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
+    select_command = commands.add_parser("select")
+    select_command.add_argument("--candidates", type=Path, required=True)
+    select_command.add_argument("--routes", type=Path, required=True)
+    select_command.set_defaults(run=select)
     replay_command = commands.add_parser("replay")
     analyze_command = commands.add_parser("replay-analyze")
     for command in (replay_command, analyze_command):
-        for name in ("policy", "sdk", "verification", "tidy"):
+        for name in _ANALYSIS_TOOLS:
+            command.add_argument(f"--{name}", type=Path, required=command is analyze_command)
+        for name in ("report", "log"):
             command.add_argument(f"--{name}", type=Path, required=True)
         command.add_argument("--plugin", type=Path)
-    for name in ("report", "log"):
-        replay_command.add_argument(f"--{name}", type=Path, required=True)
-        analyze_command.add_argument(f"--{name}", type=Path, required=True)
-    replay_command.add_argument("--candidates", type=Path, required=True)
-    replay_command.add_argument("--helper", type=Path, required=True)
+    replay_command.add_argument("--selection", type=Path, required=True)
+    replay_command.add_argument("--driver", type=Path)
+    replay_command.add_argument("--context", type=Path)
     replay_command.add_argument("--replay", type=Path, required=True)
-    analyze_command.add_argument("--consumer", type=Path, required=True)
-    analyze_command.add_argument("--helper", type=Path, required=True)
     replay_command.set_defaults(run=replay)
+    analyze_command.add_argument("--consumer", type=Path, required=True)
+    analyze_command.add_argument("--context", type=Path, required=True)
     analyze_command.set_defaults(run=replay_analyze)
     args = parser.parse_args(argv)
     try:

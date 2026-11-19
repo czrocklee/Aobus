@@ -3,15 +3,24 @@
 
 #pragma once
 
+#pragma push_macro("GetCurrentTime")
+#include <unknwn.h>
+#pragma pop_macro("GetCurrentTime")
+
 #include "TrackRowItem.g.h"
-#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
 
 #include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.Foundation.h>
 
 #include <cstdint>
 #include <span>
 #include <string>
+
+namespace ao::i18n
+{
+  class MessageCatalog;
+}
 
 namespace ao::rt
 {

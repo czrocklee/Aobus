@@ -3,8 +3,10 @@
 
 #include "input/SystemCharacterKey.h"
 
-#include "pch.h"
 #include <ao/winui/input/KeyChordAccelerator.h>
+
+#include <windows.h>
+#include <winuser.h>
 
 #include <cstdint>
 #include <optional>

@@ -3,18 +3,20 @@
 """Run WinUI SDK generation, PRI-only generation, or executable-local assembly.
 
 The local Starlark rules supply declared paths, not a copied checkout or a second
-SDK registry. Generate publishes C++ text through --headers, XBFs through --xbf,
-and --cpp ROLE PATH wrappers for module, metadata, types and types_impl; --private
-retains the SDK diagnostics and intermediates; --language-standard forwards the
-Bzl MSVC policy's LanguageStandard into the generated project. Stage selects executable/PRI
-basenames with --identity (Aobus by default) and takes --runtime SOURCE
-DESTINATION for each SDK payload file.
+SDK registry. Generate publishes project C++ text through --headers, external
+C++/WinRT projections through --sdk-headers, XBFs through --xbf, and wrappers
+through --cpp ROLE PATH; --private retains the SDK diagnostics and intermediates.
+--language-standard forwards the Bzl MSVC policy into the generated project. Resources publishes
+--output-pri separately from its private MSBuild tree. Stage consumes that --pri
+and the original --xbf/--asset files, selects basenames with --identity (Aobus by
+default), and takes --runtime SOURCE DESTINATION for each runtime file.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import ntpath
 import os
 import re
 import shutil
@@ -40,6 +42,7 @@ _ASSETS = {
     "windows_modern_layout.yaml": "Assets/Layout/windows_modern_layout.yaml",
     "windows_classic_layout.yaml": "Assets/Layout/windows_classic_layout.yaml",
 }
+_SDK_PROJECTION = re.compile(r"winrt/((?:Microsoft|Windows)(?:\.[A-Za-z_][A-Za-z0-9_]*)+)\.h")
 _XBF = ("App.xbf", "MainWindow.xbf")
 _LOCALE = re.compile(r"[A-Za-z]{2,8}(?:-[A-Za-z0-9]{2,8})*\Z", re.ASCII)
 _FORBIDDEN_TARGETS = "ClCompile;_ClCompile;Lib;_Lib;Link;_Link;Build;Restore;Rebuild;Clean;XamlPreCompile"
@@ -188,7 +191,7 @@ def _execute(sdk: dict[str, Any], private: Path, configuration: str, target: str
     if query:
         arguments.extend(
             [
-                "/getItem:ClCompile",
+                "/getItem:ClCompile,ClInclude",
                 "/getProperty:GeneratedFilesDir,IntDir,OutDir",
             ]
         )
@@ -209,52 +212,70 @@ def _query_json(text: str) -> dict[str, Any]:
             continue
         if isinstance(document, dict) and "Items" in document and "Properties" in document:
             return document
-    raise ValueError("WinUI SDK generation returned no postgeneration compile metadata")
+    raise ValueError("WinUI SDK generation returned no postgeneration item metadata")
 
 
-def validate_generated(private: Path, sources: list[Path], sdk: dict[str, Any], query: dict[str, Any]) -> None:
-    expected = [*sources, *(absolute(value) for value in sdk["initializer_sources"])]
-    expected.extend(private / ("headers/" + name) for name in _UNITS.values())
-    expected_keys = {_key(path) for path in expected}
-    if len(expected_keys) != len(expected):
-        raise ValueError("Duplicate authored, SDK initializer or generated compile input")
-    actual: set[str] = set()
-    for item in query.get("Items", {}).get("ClCompile", []):
+def _validate_items(private: Path, kind: str, items: list[tuple[Path, str]], query: dict[str, Any]) -> None:
+    expected = {_key(path): dependent_upon for path, dependent_upon in items}
+    if len(expected) != len(items):
+        raise ValueError(f"Duplicate expected WinUI {kind} item")
+    for item in query["Items"].get(kind, []):
         value = item.get("FullPath", item.get("Identity"))
         if not isinstance(value, str) or item.get("ExcludedFromBuild", "").lower() == "true":
-            raise ValueError("Invalid or excluded WinUI postgeneration compile input")
+            raise ValueError(f"Invalid or excluded WinUI {kind} item")
         path = _item_path(value, private)
         key = _key(path)
-        if key in actual or key not in expected_keys:
-            raise ValueError(f"Unexpected or duplicate standalone WinUI compile input: {path}")
-        actual.add(key)
-    if actual != expected_keys:
-        raise ValueError("WinUI standalone/SDK initializer compile membership changed")
-    int_dir = query.get("Properties", {}).get("IntDir")
-    if not isinstance(int_dir, str):
-        raise ValueError("WinUI SDK omitted its private IntDir")
-    intermediate = Path(int_dir.replace("\\", os.sep))
-    if intermediate.is_absolute() or not (private / intermediate).resolve().is_relative_to(private.resolve()):
-        raise ValueError("WinUI SDK IntDir must remain private and relative")
+        if key not in expected:
+            raise ValueError(f"Unexpected or duplicate WinUI {kind} item: {path}")
+        if item.get("DependentUpon", "") != expected.pop(key):
+            raise ValueError(f"WinUI {kind} DependentUpon changed: {path}")
+    if expected:
+        raise ValueError(f"Missing WinUI {kind} items: {', '.join(sorted(expected))}")
+
+
+def _sdk_projection_headers(files: set[str]) -> set[str]:
+    # Project.idl and SDK metadata share the winrt/ output directory. Only
+    # externalize complete SDK namespace families and C++/WinRT's own support
+    # headers. Unknown shapes remain normal inputs to compiler diagnostics.
+    sdk = files & {"winrt/base.h", "winrt/base_macros.h", "winrt/fast_forward.h"}
+    for name in files:
+        if match := _SDK_PROJECTION.fullmatch(name):
+            layers = {f"winrt/impl/{match[1]}.{level}.h" for level in range(3)}
+            if layers <= files:
+                sdk.add(name)
+                sdk.update(layers)
+    return sdk
 
 
 def generate(options: argparse.Namespace, sdk: dict[str, Any]) -> None:
     private = _required(options, "private")
     payload = _required(options, "headers")
+    sdk_headers = _required(options, "sdk_headers")
     # The Bzl policy owns the language standard; the helper only forwards it.
     language_standard = options.language_standard
     if not isinstance(language_standard, str) or not language_standard:
         raise ValueError("WinUI generate requires --language-standard")
     xbf = options.xbf
     _native(private)
-    idl = _required(options, "idl")
-    sources = list(options.source)
-    headers = list(options.header)
-    xaml = list(options.xaml)
-    if not sources or len({_key(path) for path in sources}) != len(sources):
-        raise ValueError("WinUI generation requires unique authored sources")
-    if sorted(path.name for path in xaml) != ["App.xaml", "MainWindow.xaml"]:
+    idl_input = _required(options, "idl")
+    xaml_inputs = options.xaml
+    if sorted(path.name for path in xaml_inputs) != ["App.xaml", "MainWindow.xaml"]:
         raise ValueError("WinUI generation requires the authored App and MainWindow XAML")
+    if sorted(path.name for path in options.header) != sorted(page.name + ".h" for page in xaml_inputs):
+        raise ValueError("WinUI generation requires the matching XAML code-behind headers as content")
+    if idl_input.name != "Project.idl" or any(
+        path.parent != idl_input.parent for path in [*xaml_inputs, *options.header]
+    ):
+        raise ValueError("WinUI generation requires Project.idl beside the XAML and code-behind headers")
+    # Keep SDK local lookup off the checkout. XamlTypeInfo.g.cpp names each
+    # paired header relative to the project, so stage it next to the project.
+    project_inputs = {path: private / path.name for path in [idl_input, *xaml_inputs, *options.header]}
+    idl = project_inputs[idl_input]
+    xaml = [project_inputs[path] for path in xaml_inputs]
+    # The pinned SDK needs the code-behind relationships but does not read
+    # the .xaml.cpp bodies. These ClCompile paths have no files in this tree.
+    sources = [(page.with_suffix(".xaml.cpp"), page.name) for page in xaml]
+    headers = [(page.with_suffix(".xaml.h"), page.name) for page in xaml]
     wrappers: dict[str, Path] = {}
     for role, spelling in options.cpp:
         if role not in _UNITS or role in wrappers:
@@ -263,9 +284,14 @@ def generate(options: argparse.Namespace, sdk: dict[str, Any]) -> None:
     if set(wrappers) != set(_UNITS):
         raise ValueError("WinUI generation requires four separate wrapper outputs")
     validate_outputs(
-        [private, payload, *wrappers.values(), *xbf],
-        [options.sdk, idl, *sources, *headers, *xaml, *_sdk_inputs(sdk)],
+        [private, payload, sdk_headers, *wrappers.values(), *xbf],
+        [options.sdk, *project_inputs, *_sdk_inputs(sdk)],
     )
+    if private.exists() and any(private.iterdir()):
+        raise ValueError(f"WinUI generation requires a fresh private project directory: {private}")
+    for source, destination in project_inputs.items():
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, destination)
     project = project_template(sdk, options.configuration, generate=True)
     definitions = _element(project, "ItemDefinitionGroup")
     midl = _element(definitions, "Midl")
@@ -284,24 +310,20 @@ def generate(options: argparse.Namespace, sdk: dict[str, Any]) -> None:
     )
     _element(compile_options, "LanguageStandard", language_standard)
     _element(compile_options, "PrecompiledHeader", "NotUsing")
-    _element(compile_options, "PrecompiledHeaderFile", "pch.h")
+    # Clear the VC default: C++/WinRT emits a nonempty filename as an include
+    # in XamlMetaDataProvider.cpp even when PrecompiledHeader is NotUsing.
+    _element(compile_options, "PrecompiledHeaderFile", "")
     items = _element(project, "ItemGroup")
     item = _element(items, "Midl", Include=_native(idl))
     _element(item, "OutputDirectory", "$(ProjectDir)")
     for path in xaml:
         item = _element(items, "ApplicationDefinition" if path.name == "App.xaml" else "Page", Include=_native(path))
         _element(item, "Link", path.name)
-    for path in sources:
-        item = _element(items, "ClCompile", Include=_native(path))
-        if path.name in {"App.xaml.cpp", "MainWindow.xaml.cpp"}:
-            _element(item, "DependentUpon", path.name.removesuffix(".cpp"))
+    for kind, pairs in (("ClCompile", sources), ("ClInclude", headers)):
+        for path, page_name in pairs:
+            item = _element(items, kind, Include=_native(path))
+            _element(item, "DependentUpon", page_name)
     _element(items, "ClCompile", Include="$(GeneratedFilesDir)module.g.cpp")
-    for path in headers:
-        item = _element(items, "ClInclude", Include=_native(path))
-        # The XAML compiler uses the header relationship, not just the C++
-        # source relationship, to emit partial-class and application includes.
-        if path.name in {"App.xaml.h", "MainWindow.xaml.h"}:
-            _element(item, "DependentUpon", path.name.removesuffix(".h"))
     _finish_project(project, sdk)
     normalize = _element(project, "Target", Name="AobusNormalizeMidl", BeforeTargets="Midl;GetCppWinRTMdMergeInputs")
     update = _element(_element(normalize, "ItemGroup"), "Midl", Update="@(Midl)")
@@ -317,15 +339,32 @@ def generate(options: argparse.Namespace, sdk: dict[str, Any]) -> None:
     )
     _write_project(project, private)
     query = _query_json(_execute(sdk, private, options.configuration, "AobusGenerate", query=True))
-    validate_generated(private, sources, sdk, query)
+    generated = private / "headers"
+    compile_items = [
+        *sources,
+        *((generated / name, "") for name in _UNITS.values()),
+        *((absolute(value), "") for value in sdk["initializer_sources"]),
+    ]
+    _validate_items(private, "ClCompile", compile_items, query)
+    _validate_items(private, "ClInclude", headers, query)
+    int_dir = query["Properties"].get("IntDir")
+    if not isinstance(int_dir, str):
+        raise ValueError("WinUI SDK omitted its private IntDir")
+    intermediate = Path(int_dir.replace("\\", os.sep))
+    if intermediate.is_absolute() or not (private / intermediate).resolve().is_relative_to(private.resolve()):
+        raise ValueError("WinUI SDK IntDir must remain private and relative")
     (private / "postgeneration.json").write_text(json.dumps(query, indent=2) + "\n", encoding="utf-8")
     # Only generated C++ text belongs to the compilation context. Keep the
-    # SDK's logs, caches, metadata and XBFs out of that consumer tree.
-    generated = private / "headers"
-    copies = []
-    for path in sorted(generated.rglob("*")):
-        if path.is_file() and path.suffix in {".h", ".hpp", ".cpp"}:
-            copies.append((path, payload / path.relative_to(generated)))
+    # SDK's logs, caches, metadata and XBFs out of both include roots. Keep
+    # each include spelling and file contents intact, with a single provider.
+    sdk_headers.mkdir(parents=True, exist_ok=True)
+    files = {
+        path.relative_to(generated).as_posix()
+        for path in generated.rglob("*")
+        if path.suffix in {".h", ".hpp", ".cpp"} and path.is_file()
+    }
+    sdk_files = _sdk_projection_headers(files)
+    copies = [(generated / name, (sdk_headers if name in sdk_files else payload) / name) for name in sorted(files)]
     copies.extend((private / ("headers/" + output.name), output) for output in xbf)
     for source, output in copies:
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -336,36 +375,53 @@ def generate(options: argparse.Namespace, sdk: dict[str, Any]) -> None:
         if '"' in include or "\n" in include:
             raise ValueError(f"Unsafe generated C++ include path: {include}")
         output.parent.mkdir(parents=True, exist_ok=True)
+        # The other three SDK fragments select native IUnknown themselves.
+        prefix = "#include <unknwn.h>\n" if role == "module" else ""
         output.write_text(
-            f'// Generated WinUI translation-unit owner. Do not edit.\n#include "pch.h"\n#include "{include}"\n',
+            f'// Generated WinUI translation-unit owner. Do not edit.\n{prefix}#include "{include}"\n',
             encoding="utf-8",
             newline="\n",
         )
 
 
-def resource_aliases(paths: list[Path]) -> dict[str, Path]:
-    result: dict[str, Path] = {}
-    for path in paths:
-        result[path.name] = path
-    if set(result) != set(_ASSETS):
-        raise ValueError("Missing declared WinUI content asset")
-    return {_ASSETS[name]: result[name] for name in _ASSETS}
+def _require_resource_file(path: Path) -> None:
+    if not path.is_file() or not path.stat().st_size:
+        raise ValueError(f"Missing, empty or non-file WinUI payload: {path}")
+
+
+def _content_aliases(options: argparse.Namespace) -> dict[str, Path]:
+    assets = {path.name: path for path in options.asset}
+    if len(assets) != len(options.asset) or assets.keys() != _ASSETS.keys():
+        raise ValueError("Missing, duplicate or unexpected WinUI content asset")
+    xbf = {path.name: path for path in options.xbf}
+    if len(xbf) != len(options.xbf) or xbf.keys() != set(_XBF):
+        raise ValueError("WinUI content requires exactly App.xbf and MainWindow.xbf")
+    return {_ASSETS[name]: assets[name] for name in _ASSETS} | xbf
 
 
 def catalog_resources(catalog: Path) -> list[tuple[str, Path]]:
-    """The catalog action's intermediates tree already is its private directory."""
-    root = catalog / "resw"
-    if not root.is_dir() or not root.resolve().is_relative_to(catalog.resolve()):
-        raise ValueError(f"Missing or escaped catalog RESW tree: {root}")
+    if not catalog.is_dir():
+        raise ValueError(f"Missing catalog RESW tree: {catalog}")
     result: list[tuple[str, Path]] = []
     tags: set[str] = set()
-    for directory in sorted(root.iterdir()):
+    for directory in sorted(catalog.iterdir()):
         tag = directory.name
-        if not directory.is_dir() or not _LOCALE.fullmatch(tag) or tag.casefold() in tags:
+        if (
+            not _LOCALE.fullmatch(tag)
+            or ntpath.isreserved(tag)
+            or tag.casefold() in tags
+            or not directory.is_dir()
+            or directory.is_symlink()
+            or directory.is_junction()
+        ):
             raise ValueError(f"Unsafe or duplicate catalog RESW locale: {tag}")
+        path = directory / "Resources.resw"
+        if {member.name for member in directory.iterdir()} != {path.name} or path.is_symlink():
+            raise ValueError(f"Unexpected catalog RESW layout: {directory}")
+        _require_resource_file(path)
         tags.add(tag.casefold())
-        result.append((tag, catalog / f"resw/{tag}/Resources.resw"))
-    if "en" not in tags:
+        result.append((tag, path))
+    if not any(tag == "en" for tag, _ in result):
         raise ValueError("WinUI PRI requires its English default RESW")
     return result
 
@@ -373,12 +429,15 @@ def catalog_resources(catalog: Path) -> list[tuple[str, Path]]:
 def resources(options: argparse.Namespace, sdk: dict[str, Any]) -> None:
     private = _required(options, "private")
     _native(private)
-    xbf = options.xbf
     catalog = _required(options, "catalog")
-    aliases = resource_aliases(options.asset)
-    aliases.update({path.name: path for path in xbf})
+    pri = _required(options, "output_pri")
+    if pri.name != "Aobus.pri":
+        raise ValueError("WinUI resources must publish Aobus.pri")
+    aliases = _content_aliases(options)
     resw = catalog_resources(catalog)
-    validate_outputs([private], [options.sdk, catalog, *xbf, *options.asset, *_sdk_inputs(sdk)])
+    validate_outputs([private, pri], [options.sdk, catalog, *aliases.values(), *_sdk_inputs(sdk)])
+    for path in aliases.values():
+        _require_resource_file(path)
     project = project_template(sdk, options.configuration, generate=False)
     _finish_project(project, sdk)
     items = _element(project, "ItemGroup")
@@ -405,6 +464,8 @@ def resources(options: argparse.Namespace, sdk: dict[str, Any]) -> None:
     _element(item, "TargetPath", "%(Content.TargetPath)")
     _element(item, "OutputGroup", "ContentFilesProjectOutputGroup")
     _element(item, "ProjectName", "$(ProjectName)")
+    # MakePRI indexes these relative paths in the private OutDir. This Copy
+    # does not transform content, so app staging uses the same original files.
     _element(stage, "Copy", SourceFiles="@(Content)", DestinationFiles="@(Content->'$(OutDir)%(TargetPath)')")
     _element(
         project,
@@ -414,11 +475,25 @@ def resources(options: argparse.Namespace, sdk: dict[str, Any]) -> None:
     )
     _write_project(project, private)
     _execute(sdk, private, options.configuration, "AobusPri")
+    payload = private / "out"
+    actual_assets = {path.relative_to(payload).as_posix() for path in (payload / "Assets").rglob("*") if path.is_file()}
+    if actual_assets != aliases.keys() - set(_XBF):
+        raise ValueError("Unexpected WinUI resource asset layout")
+    native_pri = payload / "Aobus.pri"
+    for path in [native_pri, *(payload / alias for alias in _XBF)]:
+        _require_resource_file(path)
+        if path.is_symlink():
+            raise ValueError(f"Unexpected WinUI SDK payload link: {path}")
+    pri.parent.mkdir(parents=True, exist_ok=True)
+    native_pri.replace(pri)
 
 
 def stage(options: argparse.Namespace) -> None:
     executable = _required(options, "exe")
-    resource_tree = _required(options, "resources")
+    pri = _required(options, "pri")
+    if pri.name != "Aobus.pri":
+        raise ValueError("WinUI stage requires the published Aobus.pri")
+    aliases = _content_aliases(options)
     destinations = [
         _required(options, name)
         for name in (
@@ -429,36 +504,35 @@ def stage(options: argparse.Namespace) -> None:
             "output_assets",
         )
     ]
+    identity = options.identity
+    if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_-]*", identity) or ntpath.isreserved(identity):
+        raise ValueError(f"Unsupported WinUI executable identity: {identity}")
+    if [path.name for path in destinations] != [identity + ".exe", identity + ".pri", *_XBF, "Assets"]:
+        raise ValueError("Unexpected WinUI executable-local output names")
     if len({_key(path.parent) for path in destinations}) != 1:
         raise ValueError("WinUI executable and resources must have adjacent output paths")
-    payload = resource_tree / "out"
-    files = [executable, *[resource_tree / ("out/" + name) for name in ("Aobus.pri", *_XBF)]]
-    assets = {alias.removeprefix("Assets/"): resource_tree / ("out/" + alias) for alias in _ASSETS.values()}
-    actual_assets = {
-        path.relative_to(payload / "Assets").as_posix() for path in (payload / "Assets").rglob("*") if path.is_file()
-    }
-    if actual_assets != set(assets):
-        raise ValueError("Unexpected WinUI resource asset layout")
+    assets = destinations[4]
+    if assets.exists() and (not assets.is_dir() or any(assets.iterdir())):
+        raise ValueError(f"WinUI staging requires a fresh Assets tree: {assets}")
+    files = [executable, pri, *(aliases[name] for name in _XBF)]
     copies = list(zip(files, destinations[:4], strict=True))
     names = {path.name.casefold() for path in destinations}
+    runtime_outputs = []
     for source_value, output_value in options.runtime:
         source, output = absolute(source_value), absolute(output_value)
         if output.parent != destinations[0].parent or source.name != output.name or output.name.casefold() in names:
             raise ValueError(f"Colliding or misplaced WinUI runtime output: {output}")
         names.add(output.name.casefold())
+        runtime_outputs.append(output)
         copies.append((source, output))
-    validate_outputs(
-        [*destinations, *[output for _, output in copies[4:]]],
-        [resource_tree, *[source for source, _ in copies]],
-    )
+    copies.extend((aliases[alias], assets / alias.removeprefix("Assets/")) for alias in _ASSETS.values())
+    validate_outputs([*destinations, *runtime_outputs], [source for source, _ in copies])
+    for source, _ in copies:
+        _require_resource_file(source)
     for source, output in copies:
         output.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, output)
     destinations[0].chmod(0o755)
-    for relative, source in assets.items():
-        output = destinations[4] / relative
-        output.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(source, output)
 
 
 def _required(options: argparse.Namespace, name: str) -> Path:
@@ -481,10 +555,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "sdk",
         "private",
         "headers",
+        "sdk_headers",
         "idl",
         "catalog",
         "exe",
-        "resources",
+        "pri",
         "output_exe",
         "output_pri",
         "output_app_xbf",
@@ -492,7 +567,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "output_assets",
     ):
         parser.add_argument("--" + name.replace("_", "-"), dest=name, type=absolute)
-    for name in ("source", "header", "xaml", "asset", "xbf"):
+    for name in ("header", "xaml", "asset", "xbf"):
         parser.add_argument("--" + name, action="append", default=[], type=absolute)
     parser.add_argument("--cpp", nargs=2, action="append", default=[], metavar=("ROLE", "OUTPUT"))
     parser.add_argument("--runtime", nargs=2, action="append", default=[], metavar=("SOURCE", "OUTPUT"))

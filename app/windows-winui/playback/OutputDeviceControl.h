@@ -7,6 +7,10 @@
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 
+#pragma push_macro("GetCurrentTime")
+#include <unknwn.h>
+#pragma pop_macro("GetCurrentTime")
+
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 

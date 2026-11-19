@@ -8,8 +8,12 @@
 #include <ao/desktop/LibrarySwitch.h>
 #include <ao/i18n/MessageCatalog.h>
 
+// Native Windows headers can define a macro that collides with XAML's method.
+#pragma push_macro("GetCurrentTime")
+#undef GetCurrentTime
 #include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Microsoft.UI.Xaml.h>
+#pragma pop_macro("GetCurrentTime")
 
 #include <filesystem>
 #include <memory>
@@ -66,6 +70,12 @@ namespace ao::winui
     void retire() noexcept;
 
   private:
+    // Defined in MainWindow.xaml.cpp to keep the concrete XAML frame out of this session's translation unit.
+    void createAndInitializeMainWindow(RestartRequest&& requestRestart);
+    Result<> activateMainWindowAdapters();
+    Result<> prepareMainWindowForLibraryRestart();
+    static void retireMainWindow(winrt::Microsoft::UI::Xaml::Window const& window);
+
     void installClosedHandler(winrt::Microsoft::UI::Xaml::Window const& window);
     void handleClosed() noexcept;
     /// Retire and release the native window while retaining the session owner.

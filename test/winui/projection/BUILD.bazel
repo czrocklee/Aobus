@@ -1,0 +1,34 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load(":winui_projection.bzl", "WINDOWS", "downstream_source", "winui_projection_test")
+
+package(
+    default_testonly = True,
+    default_visibility = ["//visibility:private"],
+)
+
+# A generated marker supplies a real compile action without becoming an
+# authored source or requiring WinUI headers to be materialized.
+downstream_source(
+    name = "projection_marker",
+    tags = ["manual"],
+    target_compatible_with = WINDOWS,
+)
+
+cc_library(
+    name = "projection_downstream",
+    srcs = [":projection_marker"],
+    tags = ["manual"],
+    target_compatible_with = WINDOWS,
+    deps = ["//app/windows-winui:theme_coordinator"],
+)
+
+winui_projection_test(
+    name = "winui_projection_test",
+    size = "small",
+    downstream = ":projection_downstream",
+    exec_compatible_with = WINDOWS,
+    generated = "//app/windows-winui:generated",
+    private_consumer = "//app/windows-winui:theme_coordinator",
+    public_consumer = "//app/windows-winui:string_resources",
+    target_compatible_with = WINDOWS,
+)

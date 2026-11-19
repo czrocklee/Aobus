@@ -5,6 +5,10 @@
 
 #include <ao/Error.h>
 
+#pragma push_macro("GetCurrentTime")
+#include <unknwn.h>
+#pragma pop_macro("GetCurrentTime")
+
 #include <winrt/Microsoft.UI.Xaml.h>
 
 namespace ao::uimodel

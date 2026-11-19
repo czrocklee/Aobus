@@ -3,15 +3,18 @@
 
 #pragma once
 
+// MainWindow.g.h loads projections before MainWindow.xaml.g.h sets up native
+// IUnknown support and clears the Win32 macro that collides with XAML.
+// Leave the macro undefined: those projections are already parsed, the generated
+// header also leaves it undefined, and no includer calls the Win32 macro afterward.
+#include <unknwn.h>
+#undef GetCurrentTime
+
 #include "MainWindow.g.h"
-#include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Subscription.h>
 #include <ao/compat/MoveOnlyFunction.h>
-#include <ao/library/Credits.h>
 #include <ao/utility/ScopedRegistration.h>
-
-#include <bitset>
 // The loaded theme override is held here, so its type is part of the frame.
 #include <ao/winui/Theme.h>
 #include <ao/winui/layout/ShellState.h>
@@ -21,8 +24,6 @@
 #include <memory>
 #include <optional>
 #include <string>
-#include <unordered_map>
-#include <vector>
 
 namespace ao::uimodel
 {
@@ -31,14 +32,15 @@ namespace ao::uimodel
 
 namespace ao::winui
 {
-  class CoverArtPresenter;
+  class FullscreenSoulWindow;
+  class GroupCoverPresenters;
   class LibrarySession;
   class LibraryTransferCoordinator;
   class ListAuthoringCoordinator;
   class OutputDeviceControl;
   class SmtcBridge;
   class TrackListController;
-  class TrackPropertiesCoordinator;
+  class TrackPropertiesPresenter;
   class ThemeCoordinator;
 } // namespace ao::winui
 
@@ -103,18 +105,10 @@ namespace winrt::Aobus::implementation
                                   Microsoft::UI::Xaml::RoutedEventArgs const&);
 
   private:
-    struct GroupCoverPresenterEntry final
-    {
-      weak_ref<Microsoft::UI::Xaml::Controls::Grid> tile;
-      std::unique_ptr<ao::winui::CoverArtPresenter> presenterPtr;
-    };
-
     void shutdown() noexcept;
     /// Stand up the document-built shell and hand it the frame's own commands.
     void createShellBuilder();
     void reconcileLibrary();
-    void refreshGroupCoverPresenter(Windows::Foundation::IInspectable const& sender);
-    void clearGroupCoverPresenters() noexcept;
     void unbindPlayback() noexcept;
     void bindPlayback();
     bool tryApplyShellState(double width, std::optional<ao::winui::ShellMode> optCandidateMode = std::nullopt);
@@ -124,10 +118,7 @@ namespace winrt::Aobus::implementation
     void applySystemTheme();
     void rebuildForTheme();
     void updateStatus(std::string const& status);
-    ao::utility::ScopedRegistration subscribeAppWindowChanges(Microsoft::UI::Windowing::AppWindow window,
-                                                              void (MainWindow::*updateActivity)());
     void updateSoulWindowActivity();
-    void updateFullscreenSoulWindowActivity();
     void showFullscreenSoul();
     void showSystemMenu();
     bool isModalWorkflowActive() const noexcept;
@@ -148,8 +139,6 @@ namespace winrt::Aobus::implementation
     void stopPlayback();
     void revealCurrentTrack();
     void presentTrackProperties();
-    void presentCapturedTrackProperties(std::vector<ao::TrackId> trackIds,
-                                        std::optional<std::bitset<ao::library::kCreditKindCount>> optScope);
     void toggleInspector();
     void toggleShellMode();
     void reloadTheme();
@@ -175,6 +164,8 @@ namespace winrt::Aobus::implementation
      */
     std::unique_ptr<ao::winui::TrackListController> _trackListPtr;
     std::unique_ptr<ao::winui::ThemeCoordinator> _themePtr;
+    /// Borrows the theme and session services; retired before either is released.
+    std::unique_ptr<ao::winui::GroupCoverPresenters> _groupCoverPresentersPtr;
     /// Routes the runtime's reveal requests to this window's track list.
     ao::async::Subscription _revealTrackSub;
     /// @}
@@ -182,8 +173,7 @@ namespace winrt::Aobus::implementation
     std::unique_ptr<ao::winui::layout::ShellBuilder> _shellBuilderPtr;
     /// The selector a document's soul or output button raises, which no generation owns.
     std::unique_ptr<ao::winui::OutputDeviceControl> _shellOutputDevicePtr;
-    /// At most one revision-bound authoring dialog belongs to the window.
-    std::unique_ptr<ao::winui::TrackPropertiesCoordinator> _trackPropertiesCoordinatorPtr;
+    std::unique_ptr<ao::winui::TrackPropertiesPresenter> _trackPropertiesPtr;
     /// Window-lifetime owner of native List, Playlist-membership, and order workflows.
     std::unique_ptr<ao::winui::ListAuthoringCoordinator> _listAuthoringCoordinatorPtr;
     /// Window-lifetime owner of native YAML transfer dialogs, pickers, and tasks.
@@ -194,11 +184,8 @@ namespace winrt::Aobus::implementation
     /// The two transport commands a preset's menu can name but no menu item can drive.
     std::unique_ptr<ao::uimodel::TransportViewModel> _playPausePtr;
     std::unique_ptr<ao::uimodel::TransportViewModel> _stopPtr;
-    Microsoft::UI::Xaml::Window _soulWindow{nullptr};
-    // Keep the projected handle distinct from the same-named implementation class in every include order.
-    ::winrt::Aobus::AobusSoulControl _fullscreenSoul{nullptr};
+    std::unique_ptr<ao::winui::FullscreenSoulWindow> _fullscreenSoulWindowPtr;
     ao::utility::ScopedRegistration _appWindowChangedSub;
-    ao::utility::ScopedRegistration _soulWindowChangedSub;
     /**
      * @brief What the user last asked of the inspector, if anything.
      *
@@ -208,7 +195,6 @@ namespace winrt::Aobus::implementation
      * deliberately not persisted: it is a reveal, not a setting.
      */
     std::optional<bool> _optInspectorRequest;
-    std::unordered_map<void const*, GroupCoverPresenterEntry> _groupCoverPresenters;
     SessionPhase _sessionPhase = SessionPhase::Constructed;
   };
 } // namespace winrt::Aobus::implementation

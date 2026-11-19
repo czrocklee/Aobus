@@ -3,6 +3,8 @@
 
 #include "track/TrackItemView.h"
 
+#include <winerror.h>
+#include <winrt/Aobus.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
 

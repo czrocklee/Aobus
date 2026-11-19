@@ -5,7 +5,6 @@
 
 #include "layout/runtime/ActionRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
-#include "pch.h"
 #include <ao/Error.h>
 #include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -15,6 +14,7 @@
 #include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Microsoft.UI.Xaml.Input.h>
 #include <winrt/Microsoft.UI.Xaml.h>
+#include <winrt/Windows.Foundation.h>
 
 #include <array>
 #include <format>

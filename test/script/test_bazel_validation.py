@@ -147,6 +147,7 @@ class FoldedActionSelectionTest(unittest.TestCase):
             "label": "//app:resources",
             "is_tool": False,
             "quote_includes": [],
+            "winui_projections": [],
             "compiles": [{"argv": argv, "env": {}, "spa_inputs": []} for argv in captured],
         }
         self.assertEqual(

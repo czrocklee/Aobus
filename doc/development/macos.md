@@ -87,11 +87,11 @@ bazel test //test/lint:lint_test --nocache_test_results  # fresh result assertio
 `./ao check` runs the same wildcard `bazel test //...` graph as every host, so
 it includes live documentation, formatting, source guardrails, the native-policy
 audit and the whole-graph lint test, but it does not run fixture-dependent
-AppKit GUI scenarios. macOS selects only the remote-cache self-test module from the
-per-module tooling tests; the other unit-test modules are host-incompatible
-there, so macOS has no full repository Python unit-test suite. Workflow lint and
-the representative compiler driver diagnostic are Linux-only. Ordinary `//:tests` excludes GUI smoke, backend service checks, and
-lint fixtures; the wildcard graph is broader.
+AppKit GUI scenarios. The macOS tooling selection covers AppKit SDK imports
+(`test_bazel_appkit_deps`), native environment selection (`test_bazel_environment`),
+and the remote-cache helper (`test_bazel_remote_cache`). Workflow lint and the
+representative compiler driver diagnostic are Linux-only. Ordinary `//:tests` excludes GUI smoke, backend service checks,
+and lint fixtures; the wildcard graph is broader.
 `./ao check --tsan` runs the full normal fastbuild completion first — which builds
 the completion products, including the AppKit product bundle (built, never
 run) — then a separate
@@ -107,7 +107,7 @@ on demand for completion, documentation semantics, and Python formatting/lint sc
 Other commands can use the base
 interpreter; `/usr/bin/python3` only reads initial bootstrap JSON fields.
 The managed environment matches Ruff and mypy pins, but macOS does not claim
-exact Python patch parity or expose a standalone tooling suite. Full `check`
+exact Python patch parity. Full `check`
 requires the managed Python tools, including documentation parser dependencies.
 Markdown/JSON/YAML/CSS-only formatting instead uses the governed Prettier/Node
 bundle without a C++ SDK, managed Python tools, or a system Node installation;

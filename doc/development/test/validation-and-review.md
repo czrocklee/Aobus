@@ -73,7 +73,7 @@ combine routes when a change spans several rows.
 | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Read-only review or diagnosis                                       | Source evidence and the relevant existing validator or focused reproducer. No build is required solely to finish a review.                                                                                                                                                                                                                                                                                                                                                                           |
 | Documentation or agent instructions                                 | `./ao check docs` and `./ao check format --docs`, agreement with the owning code/policy, and representative task routing when skill behavior changes. Changes to skill scripts also take the tooling row.                                                                                                                                                                                                                                                                                            |
-| Python portal or automation scripts                                 | `./ao check` on Linux, `ao.bat check` on Windows for affected Windows behavior; these include the tooling targets. Use the [standalone tooling suite](test-suite.md#tooling-and-lint-fixtures) while iterating. Exercise changed shell/bootstrap/process boundaries on their native hosts. macOS selects only the remote-cache self-test module from the tooling graph; use native portal probes and scoped `check lint` there.                                                                      |
+| Python portal or automation scripts                                 | `./ao check` on Linux, `ao.bat check` on Windows for affected Windows behavior; these include the tooling targets. Use the [standalone tooling suite](test-suite.md#tooling-and-lint-fixtures) while iterating. Exercise changed shell/bootstrap/process boundaries on their native hosts. macOS runs its SDK selection and remote-cache modules; use native portal probes and scoped `check lint` for other host-specific behavior.                                                                 |
 | C++ implementation, headers, or tests                               | One full native `check`, including its declared whole-graph lint test. Add affected native hosts when their implementation, toolchain, or frontend is involved.                                                                                                                                                                                                                                                                                                                                      |
 | Build configuration, dependencies, native test orchestration, or CI | Tooling checks plus the affected native build/test matrix. Include Release or sanitizers when the changed configuration or behavior requires them.                                                                                                                                                                                                                                                                                                                                                   |
 | Catalog-only wording in an existing maintained locale               | Build affected frontends to regenerate catalogs, run the catalog suite (`bazel test //test:i18n_test`) and any affected message-specific tests identified by the [text-catalog reference](../../system/presentation/text-catalog.md#compatibility-and-test-authority), and inspect the changed UI at normal and constrained widths. Native Windows UI evidence is needed when WinUI consumes the changed text; unchanged projection rules do not independently require the full Windows parity gate. |
@@ -129,7 +129,8 @@ tests listed by `//:check_tests`, the root `//:native_policy` audit, and on
 Linux the `//:native_driver_policy` diagnostic and
 [instrumentation analysis tests](../bazel.md#native-instrumentation-tests). On
 Windows it runs the two unattended native console probes plus, under
-`--config=ci`, the declared WinUI automation test. By default it admits passing test summaries from Bazel's
+`--config=ci`, the declared WinUI automation test, and independently requires
+`//test/winui/projection:winui_projection_test` on Windows only. By default it admits passing test summaries from Bazel's
 result cache or new executions; `--fresh` adds `--nocache_test_results` so every
 selected test executes again
 ([test-result cache admission](../bazel.md#test-result-cache-admission)).
@@ -249,8 +250,14 @@ are still scheduled and run a failing prerequisite step before native setup or
 compilation, rather than appearing successfully skipped.
 This changes workflow routing without changing repository branch-protection rules.
 The native jobs run `ao check --ci` in fastbuild: the same graph covers live
-documentation, tooling on Linux/Windows, native tests, the native-policy audits
-and the whole-graph lint test. Ordinary CI admits matching passing Bazel test
+documentation, host-compatible tooling, native tests, the native-policy audits
+and the whole-graph lint test. Linux and Windows run the full tooling suite. macOS
+uses the existing jobs and `bazel test //...`, not ordinary `//:tests` and not a
+new job. From the tooling modules it selects `test_bazel_remote_cache`,
+`test_bazel_appkit_deps`, and `test_bazel_environment` only.
+`test_bazel_appkit_deps` reads real host contract
+runfiles and projects a fixture SDK; that is not a native Debug build. macOS does
+not test exact Homebrew Python patch parity or the full tooling suite. Ordinary CI admits matching passing Bazel test
 results from cache; use
 `--fresh` when new executions are required for diagnosis ([CI product
 gates](../bazel.md#ci-product-gates-and-r2-validation)). Daily CI is fastbuild

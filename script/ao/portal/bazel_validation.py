@@ -63,7 +63,17 @@ _DOCUMENT_KEYS = frozenset(
     }
 )
 _RECORD_KEYS = frozenset(
-    {"label", "kind", "is_tool", "configuration", "quote_includes", "declared", "compiles", "native_actions"}
+    {
+        "label",
+        "kind",
+        "is_tool",
+        "configuration",
+        "quote_includes",
+        "winui_projections",
+        "declared",
+        "compiles",
+        "native_actions",
+    }
 )
 _COMPILE_KEYS = frozenset({"argv", "env", "spa_inputs"})
 _NATIVE_KEYS = frozenset({"mnemonic", "argv", "outputs"})
@@ -125,6 +135,12 @@ def _record_entry(entry: dict[str, Any], text: str) -> None:
         raise ValueError("folded records require a boolean role and configuration path: " + text)
     _strings(entry["quote_includes"], "quote_includes")
     _strings(entry["declared"], "declared")
+    projections = entry["winui_projections"]
+    if not isinstance(projections, list) or any(
+        len(_strings(pair, "winui_projections")) != 2 or not all(pair) or pair[0].casefold() == pair[1].casefold()
+        for pair in projections
+    ):
+        raise ValueError("expected distinct project and SDK WinUI projection roots: " + text)
     for compile in entry["compiles"]:
         if not isinstance(compile, dict) or set(compile) != _COMPILE_KEYS:
             raise ValueError("folded compile keys drifted: " + text)
@@ -243,6 +259,7 @@ def _compile_actions(records: Sequence[dict[str, Any]]) -> list[bazel_contract.C
                     argv=tuple(compile["argv"]),
                     inputs=frozenset(compile["spa_inputs"]),
                     quote_includes=frozenset(record["quote_includes"]),
+                    winui_projections=tuple((project, sdk) for project, sdk in record["winui_projections"]),
                     environment=tuple(sorted(compile["env"].items())),
                     is_tool=record["is_tool"],
                 )
@@ -343,6 +360,10 @@ def validate_native_policy(
         windows_per_file_sources=_windows_per_file_sources(platform, profile, tools_version=windows_tools_version),
         gcc_version=gcc_version,
     )
+    # The per-action root join needs at least one governed record. Keep a
+    # separate product-graph guard against losing target metadata altogether.
+    if platform == "windows" and not any(action.winui_projections for action in first_party if not action.is_tool):
+        errors.append("no native WinUI projection consumer in the configured Windows product graph")
     native_errors, _counts = bazel_contract.link_archive_contract_errors(
         _native_actions(document["records"]),
         platform,

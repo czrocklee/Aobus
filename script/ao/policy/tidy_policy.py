@@ -216,10 +216,10 @@ class FrontendPolicy:
 def frontend_policy(compile_source: str, *, winui: bool, windows: bool) -> FrontendPolicy:
     """Return check and clang-tidy argument adjustments for one compile context.
 
-    GTK widget trees own their children and use printf-style APIs. WinUI's
-    forced precompiled header includes hand-authored projection headers, so a
-    source reports only its own diagnostics; changed headers receive their own
-    header-main analysis. Generated C++/WinRT headers keep schema spelling
+    GTK widget trees own their children and use printf-style APIs. WinUI
+    reports diagnostics only for the selected source or header, whether or not
+    the compile command uses a forced include; changed headers receive their
+    own header-main analysis. Generated C++/WinRT headers keep schema spelling
     while Windows resolves include paths case-insensitively.
     """
     check_suffix = ""

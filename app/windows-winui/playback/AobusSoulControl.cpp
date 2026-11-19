@@ -1,22 +1,32 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+// Keep native IUnknown support in the generated component implementation.
+#include <unknwn.h>
+
+#undef GetCurrentTime
+
 #include "playback/AobusSoulControl.h"
-
-#include "pch.h"
-
-#if __has_include("AobusSoulControl.g.cpp")
-#include "AobusSoulControl.g.cpp"
-#endif
-
 #include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 #include <ao/uimodel/playback/transport/TransportViewModel.h>
+
+#include <winrt/Microsoft.UI.Xaml.Controls.h>
+#include <winrt/Microsoft.UI.Xaml.Media.h>
+#include <winrt/Microsoft.UI.Xaml.Shapes.h>
+#include <winrt/Microsoft.UI.Xaml.h>
+#include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.UI.h>
 
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <memory>
+
+#if __has_include("AobusSoulControl.g.cpp")
+#include "AobusSoulControl.g.cpp"
+#endif
 
 namespace winrt::Aobus::implementation
 {

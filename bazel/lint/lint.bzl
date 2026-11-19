@@ -1,7 +1,7 @@
 """Native compile contexts and cacheable diagnostic-only reports, without product builds."""
 
 load("@aobus_lint_sdk//:flags.bzl", "LINT_SDK_HOST")
-load("@aobus_native_tools//:catalog_tools.bzl", "CATALOG_TOOLS")
+load("@aobus_native_tools//:python_action_tools.bzl", "PYTHON_ACTION_TOOLS")
 load("@rules_cc//cc:find_cc_toolchain.bzl", "find_cc_toolchain", "use_cc_toolchain")
 load("@rules_cc//cc/common:cc_common.bzl", "cc_common")
 load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
@@ -25,10 +25,8 @@ LintGraphInfo = provider(
         "reports",
         "logs",
         "contexts",
-        # Map of "owner|configuration" to that owner's declared compile inputs
-        # (compile action inputs plus header closure), so replay actions can
-        # stage exactly the candidate consumers' native dependency context.
-        "owner_inputs",
+        # Source context artifact path -> exact native action and header closure.
+        "compile_inputs",
     ],
 )
 
@@ -90,9 +88,9 @@ def native_environment(ctx, action = None, language = "c++", portal = False):
     if LINT_SDK_HOST == "windows" and portal:
         # Portal modules resolve compatibility profile paths when imported.
         # Use the selected Python SDK's observed profile, not ambient inheritance.
-        if not CATALOG_TOOLS.get("UserProfile"):
+        if not PYTHON_ACTION_TOOLS.get("UserProfile"):
             fail("Native lint Python requires the selected Windows USERPROFILE")
-        environment["USERPROFILE"] = CATALOG_TOOLS["UserProfile"]
+        environment["USERPROFILE"] = PYTHON_ACTION_TOOLS["UserProfile"]
     elif LINT_SDK_HOST == "windows":
         environment.pop("USERPROFILE", None)
     if LINT_SDK_HOST != "windows":
@@ -123,7 +121,7 @@ def _verification_impl(ctx):
         args.add_all(["--plugin", plugin])
     args.add_all(["--output", result, "--log", log])
     ctx.actions.run(
-        executable = CATALOG_TOOLS["python"],
+        executable = PYTHON_ACTION_TOOLS["python"],
         arguments = [args],
         inputs = inputs,
         outputs = [result, log],
@@ -146,7 +144,7 @@ lint_verification = rule(
         "_plugin": attr.label(default = Label("//tool/lint:plugin"), cfg = "exec"),
         "_tools": attr.label(default = Label("//tool/lint:tools"), cfg = "exec"),
         "_modules": attr.label(default = Label("//:ao_lint_action_sources")),
-        "_native_tools": attr.label(default = Label("@aobus_native_tools//:catalog_tools"), cfg = "exec"),
+        "_native_tools": attr.label(default = Label("@aobus_native_tools//:python_action_tools"), cfg = "exec"),
     },
     fragments = ["cpp"],
     toolchains = use_cc_toolchain(),
@@ -355,6 +353,7 @@ def _lint_owner(target, ctx, profile = "lint"):
     report_files = []
     log_files = []
     context_files = []
+    compile_inputs = {}
     for action, source in native:
         mains = [source] + [header for path, header in sorted(own_headers.items()) if pairs.get(path) == source.path]
         mains.extend([main for _, (consumer, main) in sorted(consumers.items()) if consumer == source.path])
@@ -390,7 +389,7 @@ def _lint_owner(target, ctx, profile = "lint"):
                 args.add_all(["--plugin", verification.plugin])
             args.add_all(["--report", report, "--log", log])
             ctx.actions.run(
-                executable = CATALOG_TOOLS["python"],
+                executable = PYTHON_ACTION_TOOLS["python"],
                 arguments = [args],
                 inputs = depset([context, main, verification.result], transitive = [action.inputs, headers, verification.inputs]),
                 outputs = [report, log],
@@ -404,6 +403,7 @@ def _lint_owner(target, ctx, profile = "lint"):
             report_files.append(report)
             log_files.append(log)
             if main == source:
+                compile_inputs[context.path] = depset([context], transitive = [action.inputs, headers])
                 source_entry = {"source": source.path, "context": context.path, "report": report.path, "log": log.path, "env": environment}
         if source_entry == None:
             fail("Native lint capture lost the source main of " + str(ctx.label))
@@ -421,11 +421,6 @@ def _lint_owner(target, ctx, profile = "lint"):
     ] + own_headers.keys() + consumers.keys()
     authored = sorted({path: None for path in authored_paths}.keys())
 
-    # The exact declared dependency context the baseline report actions use:
-    # compile action inputs plus the owner's header closure. Replays of an
-    # uncovered header through one of this owner's translation units need the
-    # same inputs, including the compiler wrapper and native SDK on every host.
-    compile_inputs = depset(transitive = [action.inputs for action, _ in native] + [headers])
     ctx.actions.write(index, json.encode({
         "schema": 1,
         "owner": str(ctx.label),
@@ -508,7 +503,7 @@ def _graph_dep_infos(ctx):
     reports = []
     logs = []
     contexts = []
-    owner_input_maps = []
+    compile_input_maps = []
     for name in dir(ctx.rule.attr):
         value = getattr(ctx.rule.attr, name)
         for item in (value if type(value) == "list" else [value]):
@@ -522,8 +517,8 @@ def _graph_dep_infos(ctx):
                 reports.append(info.reports)
                 logs.append(info.logs)
                 contexts.append(info.contexts)
-                owner_input_maps.append(info.owner_inputs)
-    return (records, closure, uncovered, indices, reports, logs, contexts, owner_input_maps)
+                compile_input_maps.append(info.compile_inputs)
+    return (records, closure, uncovered, indices, reports, logs, contexts, compile_input_maps)
 
 def _empty_graph_info():
     return LintGraphInfo(
@@ -534,7 +529,7 @@ def _empty_graph_info():
         reports = depset(),
         logs = depset(),
         contexts = depset(),
-        owner_inputs = {},
+        compile_inputs = {},
     )
 
 def _has_authored_lint_input(ctx):
@@ -551,14 +546,11 @@ def _lint_graph_impl(target, ctx):
     if ctx.label.repo_name:
         # External SDK targets are never lint owners; nothing below them is one.
         return [_empty_graph_info()]
-    records, closure, uncovered, indices, reports, logs, contexts, owner_input_maps = _graph_dep_infos(ctx)
+    records, closure, uncovered, indices, reports, logs, contexts, compile_input_maps = _graph_dep_infos(ctx)
     dep_closure = depset(transitive = closure)
-
-    # Small bounded maps: one entry per compile owner/configuration, merged by
-    # dict update along the propagation DAG.
-    merged_owner_inputs = {}
-    for mapping in owner_input_maps:
-        merged_owner_inputs.update(mapping)
+    compile_inputs = {}
+    for mapping in compile_input_maps:
+        compile_inputs.update(mapping)
     own_record = None
     own_uncovered_files = []
     own_indices = []
@@ -595,7 +587,7 @@ def _lint_graph_impl(target, ctx):
                 "closure_items": sorted({path: None for path in own_closure + dep_closure.to_list()}),
                 "tus": owner.tus,
             })
-            merged_owner_inputs[str(ctx.label) + "|" + ctx.bin_dir.path] = owner.compile_inputs
+            compile_inputs.update(owner.compile_inputs)
     return [LintGraphInfo(
         records = depset([own_record] if own_record else [], transitive = records),
         closure_items = depset(own_closure, transitive = closure),
@@ -604,7 +596,7 @@ def _lint_graph_impl(target, ctx):
         reports = depset(own_reports, transitive = reports),
         logs = depset(own_logs, transitive = logs),
         contexts = depset(own_contexts, transitive = contexts),
-        owner_inputs = merged_owner_inputs,
+        compile_inputs = compile_inputs,
     )]
 
 lint_graph_aspect = aspect(

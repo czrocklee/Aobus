@@ -3,17 +3,14 @@
 
 #pragma once
 
-#include "layout/runtime/CommonLayoutProps.h"
+#include "layout/runtime/SurfaceBrushResolver.h"
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/winui/layout/ShellState.h>
 
-#include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 
-#include <functional>
 #include <memory>
 #include <string>
-#include <string_view>
 
 namespace ao::uimodel
 {
@@ -23,50 +20,7 @@ namespace ao::uimodel
 namespace ao::winui::layout
 {
   class FocusedDetail;
-
-  /// Whether the native window currently permits UI work such as animation.
-  struct WindowActivityState final
-  {
-    bool visible = true;
-    bool minimized = false;
-
-    friend bool operator==(WindowActivityState const&, WindowActivityState const&) = default;
-  };
-
-  /**
-   * @brief Persistent Windows pane sizes a shell component reads and writes.
-   *
-   * Navigation and inspector boundaries belong to `DesktopSettings`,
-   * which atomically owns them together with window, shell, and track-view
-   * state. Components receive that authority through these accessors instead of
-   * mapping it into the generic component-state store, which cannot express
-   * participation in the shared settings candidate.
-   */
-  struct PaneSettingsAccess final
-  {
-    std::function<double()> navigationWidth;
-    std::function<void(double)> setNavigationWidth;
-    std::function<double()> inspectorWidth;
-    std::function<void(double)> setInspectorWidth;
-    /// Persist the current settings candidate after a completed drag.
-    std::function<void()> commit;
-  };
-
-  /**
-   * @brief The shell's menu composition, borrowed by the components that present it.
-   *
-   * Menus belong to the shell, which owns the commands their items invoke; a
-   * component only presents what it is handed. A missing composer means the
-   * shell offers no menus and therefore rejects a document that asks for one.
-   */
-  struct MenuComposer final
-  {
-    /// The flyout a `menuButton` presents, keyed by its authored `menuId`.
-    std::function<winrt::Microsoft::UI::Xaml::Controls::MenuFlyout(std::string_view)> flyout;
-
-    /// Fills the application menu bar the Classic shell shows.
-    std::function<void(winrt::Microsoft::UI::Xaml::Controls::MenuBar const&)> composeMenuBar;
-  };
+  struct WindowActivityState;
 
   /**
    * @brief Everything one Windows component build may borrow.

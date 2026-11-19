@@ -3,6 +3,7 @@
 load("@rules_cc//cc:find_cc_toolchain.bzl", "find_cc_toolchain", "use_cc_toolchain")
 load("@rules_cc//cc/common:cc_common.bzl", "cc_common")
 load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
+load(":winui_outputs.bzl", "WinuiGeneratedInfo")
 
 def _compile_context_impl(target, ctx):
     if CcInfo not in target:
@@ -61,6 +62,7 @@ ValidationFactsInfo = provider(
         "closure",
         "kind",
         "compilers",
+        "winui_projections",
     ],
 )
 
@@ -162,6 +164,8 @@ def _validation_facts_impl(target, ctx):
     dep_executables = []
     dep_compilers = []
     folded_closures = []
+    public_projections = []
+    private_projections = []
     kind = ""
     if ctx.rule:
         kind = ctx.rule.kind
@@ -173,6 +177,11 @@ def _validation_facts_impl(target, ctx):
                 dep_records.append(info.records)
                 dep_executables.append(info.executables)
                 dep_compilers.append(info.compilers)
+                if CcInfo in target and CcInfo in item:
+                    if name == "deps":
+                        public_projections.append(info.winui_projections)
+                    elif name == "implementation_deps":
+                        private_projections.append(info.winui_projections)
 
                 # The owned-source closure folds through the same dependency
                 # attributes the retired declared-graph audit used, and never
@@ -264,6 +273,13 @@ def _validation_facts_impl(target, ctx):
                     }.keys()),
                 })
 
+    # Follow the compile interface, not the emitted /I switches we are testing.
+    # Private deps apply to this owner's compiles, not its downstream consumers.
+    projection = target[WinuiGeneratedInfo] if WinuiGeneratedInfo in target else None
+    exported = depset(
+        [(projection.headers.path, projection.sdk_headers.path)] if projection != None else [],
+        transitive = public_projections,
+    )
     record = None
     if ctx.rule and (compiles or native_actions or declared or quote_includes):
         record = json.encode({
@@ -272,6 +288,7 @@ def _validation_facts_impl(target, ctx):
             "is_tool": is_tool,
             "configuration": ctx.bin_dir.path,
             "quote_includes": quote_includes,
+            "winui_projections": depset(transitive = [exported] + private_projections).to_list() if compiles else [],
             "declared": declared,
             "compiles": compiles,
             "native_actions": native_actions,
@@ -293,6 +310,7 @@ def _validation_facts_impl(target, ctx):
         executables = depset([executable] if executable else [], transitive = dep_executables),
         closure = depset(own_sources, transitive = folded_closures),
         compilers = depset(compilers, transitive = dep_compilers),
+        winui_projections = exported,
     )]
 
 validation_facts_aspect = aspect(

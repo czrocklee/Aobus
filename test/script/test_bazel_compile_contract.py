@@ -380,6 +380,48 @@ class BazelAqueryContractTest(unittest.TestCase):
             errors = compile_contract_errors([self.action(platform, extra=includes)], platform, "opt")
             self.assertTrue(any("imported include" in error for error in errors))
 
+    def test_winui_consumers_keep_generated_project_and_sdk_warnings_distinct(self):
+        project, sdk = "out/Project Headers", "out/SDK"
+
+        def validate(flags):
+            action = replace(self.action("windows", extra=flags), winui_projections=((project, sdk),))
+            return compile_contract_errors([action], "windows", "opt")
+
+        self.assertEqual(validate(["/I", project, r"/external:Iout\sdk"]), [])
+        for flags, bad_root in (
+            (["/I" + project, "/I" + sdk], sdk),
+            (["/external:I" + project, "/external:I" + sdk], project),
+            (["/I" + project, "/external:I" + sdk, "/I" + sdk], sdk),
+            (["/I" + project], sdk),
+        ):
+            with self.subTest(flags=flags):
+                errors = validate(flags)
+                self.assertEqual(len(errors), 1, errors)
+                self.assertIn(bad_root, errors[0])
+
+    def test_using_known_winui_roots_requires_metadata_on_each_compile_owner(self):
+        project, sdk = "out/winui/headers", "out/winui/sdk_headers"
+        governed = replace(
+            self.action("windows", extra=["/I" + project, "/external:I" + sdk]),
+            label="//app:governed",
+            winui_projections=((project, sdk),),
+        )
+        unrelated = self.action("windows", extra=["/I" + sdk + "_other"])
+        self.assertEqual(compile_contract_errors([unrelated, governed], "windows", "opt"), [])
+
+        for sdk_switch in ("/external:I", "/I"):
+            with self.subTest(sdk_switch=sdk_switch):
+                # A second owner keeps the independent root evidence. Swapping
+                # the SDK flag must not let this owner opt out of the join.
+                owner = self.action("windows", extra=["/I" + project, sdk_switch, r"OUT\WinUI\sdk_headers\."])
+                errors = compile_contract_errors([owner, governed], "windows", "opt")
+                self.assertEqual(len(errors), 2, errors)
+                for root in (project, sdk):
+                    self.assertTrue(
+                        any(owner.label in error and root in error and "metadata" in error for error in errors),
+                        errors,
+                    )
+
     def test_msvc_quote_context_accepts_only_exact_declared_roots(self):
         roots = ("", "external/+deps", "bazel-out/x64_windows-opt/bin/external/+deps")
         flags = ["/I.", "/Iexternal/+deps", "/Ibazel-out/x64_windows-opt/bin/external/+deps"]
@@ -660,7 +702,6 @@ class BazelExecutionConfigurationTest(unittest.TestCase):
                 "CPLUS_INCLUDE_PATH",
                 "C_INCLUDE_PATH",
                 "CPATH",
-                "LIBRARY_PATH",
                 "LD_LIBRARY_PATH",
                 "NIX_CFLAGS_COMPILE",
                 "NIX_CFLAGS_COMPILE_FOR_TARGET",
@@ -761,14 +802,13 @@ class BazelActionEnvironmentTest(unittest.TestCase):
             ],
         )
 
-    def test_expected_policy_and_cleared_channels_apply_to_every_first_party_action(self):
-        policy = {"NIX_HARDENING_ENABLE_test_salt": "captured-policy"}
-        cleared = dict.fromkeys(
+    @staticmethod
+    def cleared_channels():
+        return dict.fromkeys(
             (
                 "CPATH",
                 "C_INCLUDE_PATH",
                 "CPLUS_INCLUDE_PATH",
-                "LIBRARY_PATH",
                 "LD_LIBRARY_PATH",
                 "NIX_CFLAGS_COMPILE",
                 "NIX_CFLAGS_COMPILE_FOR_TARGET",
@@ -777,6 +817,10 @@ class BazelActionEnvironmentTest(unittest.TestCase):
             ),
             "",
         )
+
+    def test_expected_policy_and_cleared_channels_apply_to_every_first_party_action(self):
+        policy = {"NIX_HARDENING_ENABLE_test_salt": "captured-policy"}
+        cleared = self.cleared_channels()
         good = replace(BazelAqueryContractTest.action(), environment=tuple((cleared | policy).items()))
         bad = replace(good, label="//test:other", environment=tuple(cleared.items()))
         external = CompileAction("@@external+//:helper", ("clang++", "-w"))
@@ -800,6 +844,43 @@ class BazelActionEnvironmentTest(unittest.TestCase):
         self.assertEqual(
             len(compile_contract_errors([missing], "linux", "opt", expected_environment=policy)), len(cleared)
         )
+
+    def test_linux_target_and_execution_actions_require_library_path_absent(self):
+        for is_tool in (False, True):
+            action = replace(
+                BazelAqueryContractTest.gcc_action(),
+                environment=() if is_tool else tuple(self.cleared_channels().items()),
+                is_tool=is_tool,
+            )
+
+            def errors(action):
+                return compile_contract_errors(
+                    [action],
+                    "linux",
+                    "opt",
+                    expected_environment={},
+                    expected_tool_environment={},
+                    gcc_version="16.2.0",
+                )
+
+            self.assertEqual(errors(action), [])
+            for value in ("", "/ambient/lib"):
+                with self.subTest(is_tool=is_tool, value=value):
+                    present = replace(action, environment=(*action.environment, ("LIBRARY_PATH", value)))
+                    self.assertEqual(len(problems := errors(present)), 1)
+                    self.assertIn("must be absent: LIBRARY_PATH", problems[0])
+
+    def test_other_platforms_keep_the_explicitly_empty_target_library_path(self):
+        for platform in ("macos", "windows"):
+            with self.subTest(platform=platform):
+                action = replace(
+                    BazelAqueryContractTest.action(platform), environment=tuple(self.cleared_channels().items())
+                )
+                problems = compile_contract_errors([action], platform, "opt", expected_environment={})
+                self.assertEqual(len(problems), 1)
+                self.assertIn("must be explicitly cleared: LIBRARY_PATH", problems[0])
+                cleared = replace(action, environment=(*action.environment, ("LIBRARY_PATH", "")))
+                self.assertEqual(compile_contract_errors([cleared], platform, "opt", expected_environment={}), [])
 
 
 class BazelProfileCompileContractTest(unittest.TestCase):

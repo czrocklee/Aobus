@@ -127,10 +127,11 @@ ClangTidyMain.cpp.obj:
             return subprocess.CompletedProcess(command, 0, output, "")
 
         with patch.object(sdk.subprocess, "run", side_effect=query):
-            systems, extra = sdk._windows_system_libraries(
+            systems, extra, reported = sdk._windows_system_libraries(
                 ["advapi32.lib", "xml2s.lib"], [root], selected, root / "bin/llvm-nm.exe"
             )
         self.assertCountEqual(inspected, selected)
+        self.assertEqual(reported, inspected)
         self.assertEqual(systems, ["advapi32.lib"])
         self.assertEqual(extra, [])
 
@@ -161,6 +162,73 @@ ClangTidyMain.cpp.obj:
                 "windows", {"AOBUS_LLVM_SDK_CACHE_ROOT": str(base)}, manifest, self.root / "unused-macos.json"
             )
         self.assertNotIsInstance(caught.exception, windows_llvm_sdk.WindowsLlvmSdkSelectedFileMissing)
+
+    def test_scanned_archive_and_bin_membership_changes_are_watched(self):
+        # Synthetic tool text only. Not a Windows link or installed-SDK acceptance.
+        root = self.module_sdk()
+        version = "31.2.3"
+        manifest = _write(
+            self.root / "windows.json",
+            json.dumps({"version": version, "archiveSha256": "b" * 64, "requiredFiles": ["bin/llvm-config.exe"]}),
+        )
+        for name in ("llvm-config", "clang-tidy", "clang-cl"):
+            _write(root / f"bin/{name}.exe")
+        _write(root / "include/clang-tidy/ClangTidy.h")
+        _write(root / "include/llvm/Config/llvm-config.h", f'#define LLVM_VERSION_STRING "{version}"\n')
+        _write(root / "include/llvm/Config/abi-breaking.h")
+        _write(root / "include/clang/Basic/Version.inc", f'#define CLANG_VERSION_STRING "{version}"\n')
+        _write(root / "lib/clang/31/include/stddef.h")
+        for name in sdk._WINDOWS_CLANG_LIBRARIES:
+            library = root / "lib" / f"{name}.lib"
+            if not library.is_file():
+                _write(library)
+        support = _write(root / "lib/LLVMSupport.lib", "malloc U 0 0\n")
+        xml = _write(root / "lib/xml2s.lib")
+        unread = _write(root / "lib/not-selected.lib")
+        tidy_main = root / "lib/clangTidyMain.lib"
+
+        def run(executable, *arguments, input_text=None):
+            name = Path(executable).name
+            if name == "llvm-nm.exe":
+                text = Path(arguments[-1]).read_text(encoding="utf-8")
+            elif name == "llvm-config.exe" and arguments[:2] == ("--link-static", "--libfiles"):
+                text = str(support)
+            elif name == "llvm-config.exe" and arguments[:2] == ("--link-static", "--system-libs"):
+                text = "xml2s.lib"
+            elif arguments == ("--version",):
+                text = version if name == "llvm-config.exe" else f"clang version {version}"
+            else:
+                text = {
+                    ("--prefix",): str(root),
+                    ("--includedir",): str(root / "include"),
+                    ("--libdir",): str(root / "lib"),
+                    ("/clang:-print-resource-dir",): str(root / "lib/clang/31"),
+                    ("--cxxflags",): "",
+                    ("--has-rtti",): "NO",
+                    ("--assertion-mode",): "OFF",
+                }[arguments]
+            return subprocess.CompletedProcess(arguments, 0, text if text.endswith("\n") else text + "\n", "")
+
+        def discover():
+            with patch.object(sdk, "_run", side_effect=run):
+                return sdk.discover_sdk(
+                    "windows", {"AOBUS_LLVM_SDK_ROOT": str(root)}, manifest, self.root / "unused-macos.json"
+                )
+
+        before = discover()
+        self.assertIn(tidy_main, before.watch_files)
+        self.assertIn(support, before.watch_files)
+        self.assertIn(root / "bin", before.watch_directories)
+        self.assertNotIn(unread, before.watch_files)
+        self.assertNotIn(xml, before.libraries)
+        support.write_text("xmlReadFile U 0 0\n", encoding="utf-8", newline="\n")
+        self.assertIn(xml, discover().libraries)
+        dll = _write(root / "bin/added.dll")
+        support.write_text("malloc U 0 0\n", encoding="utf-8", newline="\n")
+        projected = discover()
+        self.assertIn(dll, projected.runtime)
+        self.assertNotIn(dll, projected.watch_files)
+        self.assertNotIn(xml, projected.libraries)
 
 
 class PosixSdkProjectionTest(unittest.TestCase):

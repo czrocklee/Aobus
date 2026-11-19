@@ -3,11 +3,12 @@
 
 #include "layout/ShellPresetSource.h"
 
-#include "pch.h"
 #include <ao/Error.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
 #include <ao/utility/Path.h>
 #include <ao/winui/layout/ShellDocument.h>
+
+#include <windows.h>
 
 #include <expected>
 #include <filesystem>

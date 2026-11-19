@@ -8,11 +8,12 @@
 #include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/ResourceLookup.h"
 #include "layout/runtime/UiSubscription.h"
-#include "pch.h"
+#include "platform/StringResourceFormat.h"
 #include "platform/StringResources.h"
 #include "track/TrackListController.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/Subscription.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Serializer.h>
@@ -24,11 +25,16 @@
 #include <ao/winui/list/ListAuthoringAdapter.h>
 
 #include <gsl-lite/gsl-lite.hpp>
+#include <winrt/Aobus.h>
+#include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.Input.h>
 #include <winrt/Microsoft.UI.Xaml.Markup.h>
 #include <winrt/Microsoft.UI.Xaml.Media.h>
 #include <winrt/Microsoft.UI.Xaml.h>
+#include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.Foundation.h>
+#include <winrt/base.h>
 
 #include <algorithm>
 #include <cstddef>

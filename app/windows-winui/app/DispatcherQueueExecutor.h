@@ -7,6 +7,10 @@
 #include <ao/async/QueuedExecutorBase.h>
 #include <ao/compat/MoveOnlyFunction.h>
 
+#pragma push_macro("GetCurrentTime")
+#include <unknwn.h>
+#pragma pop_macro("GetCurrentTime")
+
 #include <winrt/Microsoft.UI.Dispatching.h>
 
 #include <atomic>

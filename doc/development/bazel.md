@@ -74,7 +74,10 @@ same lock and completion marker. Linux needs no
 provisioning. Other actions use the tree's provisioned triplet; a ready
 installed SDK is consumed, never installed implicitly, and
 `--vcpkg-prefix <installed/triplet>` replaces the provisioned prefix with an
-existing installed target-triplet prefix. Rerun `./ao setup deps` after changing the vcpkg
+existing installed target-triplet prefix. A prepared portal request owns that selection;
+`AOBUS_BAZEL_VCPKG_PREFIX` is the selector for bare Bazel commands. Debug library
+and runtime directories must not resolve into the Release installation.
+Rerun `./ao setup deps` after changing the vcpkg
 manifest, configuration or overlays: Bazel itself never restores missing ports
 or substitutes an ambient installation. An interrupted `./ao setup deps` waits for
 the running installer process to exit before propagating the interruption and
@@ -330,9 +333,10 @@ bazel run //app/linux-gtk:aobus-gtk
 
 The Linux GTK library owns the existing frontend implementations and links the
 regular desktop-launch, runtime, UIModel, catalog and Linux MPRIS owners.
-The [resource action](../../app/linux-gtk/gresource.bzl) compiles the existing
-[GResource XML](../../app/linux-gtk/aobus.gresource.xml), preserving its CSS,
-layout, image and license aliases with declared inputs. The generated C bundle
+The [GTK resource inventory](../../app/linux-gtk/BUILD.bazel) pairs each public
+resource alias with its source file. The [resource rule](../../app/linux-gtk/gresource.bzl)
+generates the GLib XML from those same declared files, so there is no second
+search root where an undeclared file can shadow an asset. The generated C bundle
 has its own standard library target and retained resource anchor; it is not a
 source-tree runtime lookup. GTKmm, Boost.Process and the resource compiler come
 from the pinned Nix provider, not a second installer. Cairo FT/FC metadata supplies
@@ -447,14 +451,42 @@ inputs.
 
 Native SDK MSBuild owns metadata, MIDL, C++/WinRT, XAML and PRI generation only;
 ordinary Bazel MSVC actions compile all C++, create archives and perform the PE
-link. SDK actions keep their private `TEMP`/`TMP` at a short path inside the
+link. The private generation project receives the IDL, both XAML pages and
+their adjacent `.xaml.h` files. It keeps each paired `.xaml.cpp` as a logical
+`ClCompile` item with `DependentUpon`, without copying the implementation or
+creating a placeholder. Ordinary C++ sources and headers belong to the native
+rules, not this project. The post-generation item check admits only the paired
+sources and headers, SDK initializers and four standalone generated units.
+Editing code-behind bodies or changing the ordinary C++ inventory therefore
+does not invalidate XAML generation. A newly activated local XAML class may
+require its implementation header in the generated type-info owner; a search
+path or a name in `ClInclude` does not provide a C++ declaration.
+SDK actions keep their private `TEMP`/`TMP` at a short path inside the
 action's compact `p` tree because full-CLR MSBuild `Exec` appends GUID-named paths
-against the legacy Windows path limit; the public headers/src/XBF paths are
-unchanged. The selected tree-path geometry remains
-a constraint, and no automatic long-path fallback is provided. Generated C++
-text has its own consumer tree; XBFs are separate declared outputs. MSBuild
-projects, logs and intermediate metadata stay in the private diagnostics output
-group, outside the compilation context and PRI inputs. SDK import
+against the legacy Windows path limit. The selected tree-path geometry remains
+a constraint, and no automatic long-path fallback is provided. Bazel publishes
+the SDK's `Microsoft.*` and `Windows.*` C++/WinRT projections and its runtime
+support headers under `sdk_headers/` as system includes. `headers/` remains an
+ordinary include root for Aobus projections, XAML and other generated C++.
+Only complete SDK namespace families (the public header and its three `impl/`
+layers) and the known runtime headers qualify; unfamiliar layouts stay normal.
+Both roots preserve include spellings and each file has exactly one generated
+provider. Compilation and lint consume the same native include roots. The Windows
+native policy test checks each consumer's expanded MSVC arguments against those
+two producer-owned directories, including consumers reached through private dependencies.
+An action using another record's known projection root without declaring that
+projection also fails. This comparison does not infer a missing dependency
+when both its metadata and its include paths disappear.
+The narrow
+[rules_cc API patch](../../bazel/rules_cc_external_includes.patch) exposes the
+existing `external_includes` field to code generators: on the pinned MSVC
+toolchain it emits `/external:I`, whereas `system_includes` emits ordinary `/I`.
+It does not change the toolchain flags for other roots. XBFs are separate
+declared outputs. MSBuild projects, logs and intermediate metadata
+stay in private diagnostics, outside the compilation context and the staged
+application. PRI generation consumes the catalog's RESW output, not ICU's
+private build files. Staging consumes the finished PRI, the two XBFs and the
+content assets directly, not the MSBuild log or temporary project. SDK import
 libraries remain DLL-interface imports beside the reviewed dynamic vcpkg
 dependencies, so this is not a DLL-free executable. The default completion and
 GUI-scenario orchestration are owned by the Bazel completion gate and the
@@ -677,7 +709,12 @@ observations keyed by configuration, not by Bazel package paths. Starlark owns
 native/test subpackages, the catalog SDK's package layout and root mode aliases;
 it requires both configurations before materialization. Fixed single-mode root
 SDK repositories are not supported. Per-variant native queries still receive
-their own Debug or Release configuration.
+their own Debug or Release configuration. On Linux, if both observations for a
+package have identical header records (including source paths) and ordered include
+roots, both modes use one header-only target in the release subpackage. Libraries,
+consumer defines, manifests and mode guards remain separate. Different headers or
+include ordering keep separate projections. This comparison does not read or hash
+header contents.
 WinUI remains independent and lazy, using the same Starlark mode selection.
 The resolver returns no generated-file, destination-link or alias program.
 
@@ -839,7 +876,9 @@ only through the upstream auto-configuration inlets of
 [Windows compiler configuration](#windows-compiler-configuration).
 Launch/server/cache configuration belongs to the launcher.
 Repository clearing is separate from action clearing: `--repo_env==CPLUS_INCLUDE_PATH`
-unsets the variable, rather than assigning an empty path entry.
+unsets the variable, rather than assigning an empty path entry. Linux target and
+execution actions also leave `LIBRARY_PATH` unset: GCC interprets an empty value
+as a request to search the working directory when linking.
 
 The rc sets the upstream repository guards
 `BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1` and `BAZEL_NO_APPLE_CPP_TOOLCHAIN=1` through
@@ -1643,9 +1682,9 @@ Large maps stay out of the Windows client argv. This uses the normal
 Bazel server mode: batch mode can re-expand rc options into an oversized Java
 command line and is not supported for large maps. Each pass records its literal
 parameter and exact parameterized aspect identity in the receipt. Naming a new
-consumer adds its reports without changing existing report actions. The declared replay actions cover unpaired public headers and include fragments
-without a portal-written consumer parameter, so the former separate CI
-production-lint step is gone.
+consumer adds its reports without changing existing report actions. The
+completion gate declares its own fallback replay actions without a portal-written
+consumer parameter, so the former separate CI production-lint step is gone.
 
 Scoped lint defers unreported, discovered paths that are incompatible with the
 current platform. With `--gtk off` on Linux it also defers discovered GTK paths
@@ -1660,10 +1699,22 @@ The completion gate's C++ stage is the declared `//test/lint:production_lint`
 test ([graph.bzl](../../bazel/lint/graph.bzl)), published as the root
 `//:production_lint` alias so bounded product builds do not load the analysis
 SDK until it is requested. It applies the report aspect to the
-completion roots, adds one replay action per uncovered header or include
-fragment, and gates the graph's declared reports in one action, independently
-of Git diffs or rule-change filename lists. No test runs Bazel or an `ao`
-command; the launcher only reads the completed gate result. The portal keeps its
+completion roots and gates the graph's declared reports in one action,
+independently of Git diffs or rule-change filename lists. A direct report with
+the path as its main file from any configured owner in the gate satisfies coverage
+for that path, even when another owner lists it as uncovered. All declared direct
+reports are still validated. Only a header or include fragment with no direct main
+gets a replay, deduplicated by path. `AobusLintSelect` reads the candidate TUs'
+include reports, not their source bytes. Its output selects one native compile
+context or records that no consumer included the path. The item and selected
+context have collision-checked, path-derived names: an unrelated insertion in
+either inventory does not renumber the surviving replay. Bazel then expands an
+`AobusLintGraphReplay` action with that context's actual compiler inputs and
+header closure. The other contexts remain available during template expansion,
+but their unrelated source edits cannot by themselves invalidate the selected
+diagnostic. The header is the main file; a `.def` fragment instead retains the
+consumer TU as its main. No test runs Bazel or an `ao` command; the launcher
+only reads the completed gate result. The portal keeps its
 scoped [bazel_lint.run](../../script/ao/portal/bazel_lint.py) path for `ao check lint`;
 the former project-wide `run_project` route is retired, and scoped `ao check lint`
 and `ao check analyzer` are the CLI diagnostic entries. Bazel source-file targets distinguish
@@ -1674,10 +1725,10 @@ inventories. Those inventories identify inactive `select()` inputs, while the
 stage preserves `check`'s compiler and graph-feature selections. Declared header
 closures can include other platforms' headers through broad globs, so the
 existing native ownership policy still defers unreported platform-specific
-headers. Unpaired headers and include fragments require observed include
-consumers; a configured portable declaration with no consumer fails. The stale
-`NOLINT` scan covers the complete candidate set. The independent authored-source
-ownership scan is the root `//:native_policy` test
+headers. Fallback replay still requires an observed include consumer; a
+configured portable declaration with neither a direct main nor a consumer fails.
+The stale `NOLINT` scan covers the complete candidate set. The independent
+authored-source ownership scan is the root `//:native_policy` test
 ([test ownership](#test-ownership)). The lint test filters generated-only owners
 from authored policy, matching the former portal scope, so GLib-generated C and
 catalog arrays are not linted as project source while their real compile build
@@ -1697,7 +1748,7 @@ The report aspect is nonpropagating; its required provider-only aspect follows
 dependencies solely to map virtual include headers. It captures actual native
 argv and declared inputs, adds reports for paired headers analyzed as main
 files, and retains
-AppKit Objective-C++/ARC and WinUI generated-header/forced-include semantics.
+AppKit Objective-C++/ARC and WinUI generated-header dependencies.
 Unsupported compiler views, modules, PCH/header-unit contexts and unresolved
 response files fail rather than being stripped. The portal reads only the
 current invocation's BEP and local report artifacts, binding each owner to the
@@ -1801,16 +1852,17 @@ launches no detached lint workers and does not mutate source-checkout links.
 A paired header borrows its actual companion command but remains the physical
 main file. Derivation replaces only the native source argument, adds the explicit
 header language and reserved `AOBUS_LINT_HEADER_MAIN=1` definition, and preserves
-semantic forced includes, ARC and SDK settings. A native argument referencing
+semantic forced includes, ARC and SDK settings. On Windows a relative `/FI`
+that resolves to the physical header main itself is omitted for that replay;
+other forced includes remain. A native argument referencing
 that reserved mode is rejected. There is no wrapper, VFS overlay, remapped file
 or rewritten source buffer: main-file-sensitive checks and suppression scans
 must see the original header.
 
-A producer such as WinUI `pch.h` may use the reserved mode to retain framework
-includes and macro cleanup while skipping implementation-header aggregation.
-This is a framework-only header-analysis prefix, **not identical full native
-preinclude semantics**. Normal product compilation does not enable the mode;
-Bazel's `/FIpch.h` remains text inclusion, not a compiled PCH speedup.
+Normal product compilation does not enable the reserved header-main mode.
+[WinUI components and probes](windows.md#bazel-product-details) include their
+own projections; neither native compilation nor lint supplies a shared XAML
+prefix.
 
 Default source filters admit project headers under the context's STRICT or
 RELAXED folders, including native execution-relative, absolute and virtual
@@ -1998,9 +2050,11 @@ A filegroup would only build them. On Linux the
 [context-specific wrapper](../../bazel/testing.bzl) around each context-bearing
 test starts that test's owned private fixtures from its declared context.
 On Windows the wildcard adds the two unattended native console probes (track
-item and localization) through `//test:native_process_tests`, and
-`--config=ci` additionally enables `//test:winui_uia_test`, the real automation
-probe with the existing runtime and interactive-console admission. The other
+item and localization) through `//test:native_process_tests`. Windows completion
+also independently requires `//test/winui/projection:winui_projection_test`; that
+requirement is not applied on other hosts. `--config=ci` additionally enables
+`//test:winui_uia_test`, the real automation probe with the existing runtime and
+interactive-console admission. The other
 GUI probes and performance harnesses are never executed by a wildcard build.
 Interactive GUI scenarios, physical playback and hardware admission stay outside
 the gate.
@@ -2044,7 +2098,10 @@ uses the same invocation's BEP suite expansions to require a passing summary
 for every applicable member of `//:check_tests`, `//test/script:repository_checks`
 and, on Linux, `//:instrumentation_tests`. In particular, dropping the manual
 backend or enabled Linux GTK test from discovery does not turn the build green.
-Linux system-media is required when enabled; Windows UIA is required in CI.
+A required label with no passing summary still fails: a same-label non-aspect
+`targetCompleted` `SKIPPED` abort is reported with its configuration, and every
+other absence stays missing. Linux system-media is required when enabled; Windows UIA
+is required in CI.
 AppKit GUI smoke remains build-only. Cached passes count unless `--fresh` is
 selected. No second `cquery` or test invocation is needed.
 
@@ -2155,7 +2212,13 @@ side outputs; package.lst remains the sole locale inventory. No external configu
 prebuilt project tool or pre-generated resource is consumed. Common-data
 packaging does not compile C, and this does not establish C/Objective-C support.
 The action launches Python at its selected host-absolute path; the interpreter
-bytes and selected runtime files are already declared through `catalog_tools`.
+bytes and selected runtime files are declared through `python_action_tools`,
+which `catalog_tools` combines with the ICU tool payload. Lint, the Linux
+coverage collector and platform packaging use the Python inputs without
+inheriting ICU tools. An expanded lint action requires an executable artifact:
+the native replay launcher runs the same installed base interpreter with
+`-I -S -B -X utf8` before loading any replay code. Its inputs do not select the
+tooling venv or its site packages.
 This is a native SDK boundary, not a relocatable/hermetic Python toolchain.
 Switching to a repository-local executable requires separate native validation
 of DLL and standard-library lookup, particularly on Windows.
@@ -2322,7 +2385,7 @@ A separate unconditional documentation job runs `ao check docs` and
 `ao check format --docs` with host Python outside Nix/SDK setup, preserving the
 docs-only routing and the failed-prerequisite behavior. Each native job runs
 `ao check --ci` in fastbuild; the graph covers live documentation,
-Linux/Windows tooling, native tests, the native-policy audits and the
+host-compatible tooling, native tests, the native-policy audits and the
 whole-graph lint test ([lint reports](#lint-reports)). Matching passing test results may be cached,
 and the CI summary reports the BEP test summaries of the attempt. Daily CI is
 fastbuild only. Linux also exercises a bounded bare Bazel entry without the

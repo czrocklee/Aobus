@@ -15,6 +15,7 @@ def host_tools(data):
     native.exports_files([
         "windows_manifest_tools.bzl",
         "catalog_tools.bzl",
+        "python_action_tools.bzl",
         "app_version.bzl",
         "test_tools.bzl",
     ])
@@ -23,7 +24,8 @@ def host_tools(data):
         native.alias(name = "glib_compile_resources", actual = data["resource_executable"])
     native.filegroup(name = "glib_compile_resources_runtime", srcs = data["resource_inputs"])
     native.filegroup(name = "dbus_daemon", srcs = data["dbus_inputs"])
-    native.filegroup(name = "catalog_tools", srcs = data["catalog_inputs"])
+    native.filegroup(name = "python_action_tools", srcs = data["python_inputs"])
+    native.filegroup(name = "catalog_tools", srcs = [":python_action_tools"] + data["catalog_inputs"])
 
     # The official Python toolchain wraps the admitted native interpreter; its
     # platform runtime keeps the installed SDK location instead of a download.

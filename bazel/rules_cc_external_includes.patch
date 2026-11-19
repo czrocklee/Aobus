@@ -1,0 +1,12 @@
+diff --git a/cc/private/cc_common.bzl b/cc/private/cc_common.bzl
+--- a/cc/private/cc_common.bzl
++++ b/cc/private/cc_common.bzl
+@@ -272,6 +272,7 @@ def _create_compilation_context(
+         add_public_headers_to_modular_headers = _UNBOUND):
++    # Let code generators describe external SDK roots in their public CcInfo.
++    # On MSVC, system_includes emits /I; external_includes emits /external:I.
+     if module_map != _UNBOUND or \
+-       external_includes != _UNBOUND or \
+        virtual_to_original_headers != _UNBOUND or \
+        dependent_cc_compilation_contexts != _UNBOUND or \
+        non_code_inputs != _UNBOUND or \

@@ -1,5 +1,6 @@
 """Ready-only host discovery, independent of target compilation mode."""
 
+import argparse
 import contextlib
 import io
 import json
@@ -8,10 +9,13 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
+from ao.command import check
 from ao.core import bazel_native as native
 from ao.portal import bazel_environment as bootstrap
+from ao.portal import bazel_workspace as workspace
 from ao.portal import build_dir
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -340,6 +344,42 @@ class EnvironmentDiscoveryTests(unittest.TestCase):
         self.environment["AOBUS_BAZEL_VCPKG_PREFIX"] = "relative-invalid"
         with self.assertRaisesRegex(bootstrap.EnvironmentError, "absolute"):
             self.discover(request=self.request(prefix=str(self.prefix), compiler_environment=self.compiler))
+
+    def test_prepared_launch_selects_cli_prefix_over_a_second_valid_ambient_prefix(self):
+        self.windows()
+        alternate = self.root / "alternate/x64-windows"
+        (alternate / "include").mkdir(parents=True)
+        self.file("alternate/vcpkg/status")
+        tree = self.root / "managed"
+        parser = argparse.ArgumentParser()
+        check.register(parser.add_subparsers())
+        argv = ["check", "--path", str(tree), "--vcpkg-prefix", str(alternate)]
+        with (
+            patch.dict(os.environ, {**self.environment, "AOBUS_STATE_ROOT": str(self.root / "state")}, clear=True),
+            patch.object(workspace.build_dir, "platform_profile", return_value=SimpleNamespace(name="windows")),
+            patch.object(native, "native_platform", return_value="windows"),
+            patch.object(native.sys, "_base_executable", str(self.python), create=True),
+        ):
+            args = parser.parse_args(argv)
+            check.validate_syntax(args, argv, parser)
+            check._admit(args)
+            request = check._completion_request(args)
+            self.assertEqual(request.vcpkg_prefix, str(alternate))
+            prepared = workspace.prepare_workspace(tree, "fastbuild", prefix=request.vcpkg_prefix)
+            launched = workspace.launch_environment(isolate_rc=True)
+        recorded = json.loads((prepared / "request.json").read_text(encoding="utf-8"))["prefix"]
+        rc = (prepared / "aobus.bazelrc").read_text(encoding="utf-8")
+        self.assertEqual(recorded, str(alternate))
+        selected = [json.loads(line.removeprefix("common ")) for line in rc.splitlines() if line.startswith('common "')]
+        self.assertEqual(
+            [option for option in selected if option.startswith("--repo_env=AOBUS_BAZEL_VCPKG_PREFIX=")],
+            ["--repo_env=AOBUS_BAZEL_VCPKG_PREFIX=" + recorded],
+        )
+        self.assertFalse(any(key.casefold() == "aobus_bazel_vcpkg_prefix" for key in launched))
+        chosen = self.discover(request=prepared / "request.json", environment=launched)["prefix"]
+        bare = self.discover()["prefix"]
+        self.assertEqual(chosen, str(alternate))
+        self.assertEqual(bare, str(self.prefix))
 
     def test_permission_errors_are_not_reported_as_missing_sdk(self):
         self.macos()

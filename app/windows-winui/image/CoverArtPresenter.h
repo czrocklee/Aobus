@@ -10,7 +10,13 @@
 #include <ao/rt/resource/ResourceBytes.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
+// Asio brings in the Win32 GetCurrentTime macro, which collides with XAML.
+#pragma push_macro("GetCurrentTime")
+#include <unknwn.h>
+#undef GetCurrentTime
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
+#include <winrt/Microsoft.UI.Xaml.h>
+#pragma pop_macro("GetCurrentTime")
 
 #include <cstdint>
 #include <memory>

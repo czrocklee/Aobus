@@ -2,7 +2,7 @@
 
 load("//bazel:environment.bzl", "ENVIRONMENT_ATTRIBUTE", "environment_repository", "repository_environment")
 load("//bazel:host_tools_repository.bzl", "materialize_host_tools")
-load("//bazel:import_repository.bzl", "materialize_aliases", "materialize_imports")
+load("//bazel:import_repository.bzl", "materialize_aliases", "materialize_imports", "shared_linux_header_packages")
 load("//bazel:msvc_policy.bzl", "validate_msvc_rc")
 load("//bazel:toolchain_repository.bzl", "materialize_toolchain")
 load("//bazel:winui_repository.bzl", "materialize_winui")
@@ -93,6 +93,7 @@ def _governed_repository_impl(ctx):
         imports = resolved.get("imports", {})
         if sorted(imports.keys()) != ["debug", "release"]:
             fail("Dependency imports require Debug and Release observations")
+        shared_headers = shared_linux_header_packages(imports)
         for config, projection in imports.items():
             subpackage = "catalog-" + config if ctx.attr.group == "tools" else config
             interfaces[subpackage] = materialize_imports(
@@ -101,6 +102,7 @@ def _governed_repository_impl(ctx):
                 config,
                 projection["packages"],
                 projection["manifest"],
+                shared_headers,
             )
     if ctx.attr.group == "winui":
         observed = resolved.get("winui", {})

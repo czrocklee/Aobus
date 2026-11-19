@@ -8,9 +8,9 @@
 #include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/ResourceLookup.h"
 #include "layout/runtime/UiSubscription.h"
-#include "pch.h"
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
+#include <ao/async/Subscription.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -21,7 +21,9 @@
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.Media.h>
 #include <winrt/Microsoft.UI.Xaml.h>
+#include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.UI.Text.h>
+#include <winrt/base.h>
 
 #include <memory>
 #include <string_view>

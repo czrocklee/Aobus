@@ -3,14 +3,21 @@
 
 #include "platform/ProcessLauncher.h"
 
-#include "pch.h"
 #include <ao/Error.h>
 #include <ao/desktop/DetachedProcessLauncher.h>
 #include <ao/desktop/LibrarySuccessorProtocol.h>
 #include <ao/desktop/LibrarySwitch.h>
 
 #include <gsl-lite/gsl-lite.hpp>
+#include <windows.h>
+
+// The leaf headers use types established by the Win32 SDK entry point.
+#include <errhandlingapi.h>
+#include <libloaderapi.h>
+#include <processenv.h>
 #include <shellapi.h>
+#include <stringapiset.h>
+#include <winbase.h>
 
 #include <cstddef>
 #include <cstdint>

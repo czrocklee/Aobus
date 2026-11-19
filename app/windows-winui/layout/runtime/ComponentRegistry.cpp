@@ -8,7 +8,6 @@
 #include "layout/runtime/CommonLayoutProps.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "pch.h"
 #include <ao/Error.h>
 #include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -16,6 +15,8 @@
 #include <ao/winui/layout/PlacementPlan.h>
 
 #include <winrt/Microsoft.UI.Xaml.Automation.h>
+#include <winrt/Microsoft.UI.Xaml.h>
+#include <winrt/base.h>
 
 #include <expected>
 #include <format>

@@ -3,7 +3,9 @@
 
 #include "track/TrackListController.h"
 
+#include "platform/StringResourceFormat.h"
 #include "platform/StringResources.h"
+#include "platform/WinRtStringResources.h"
 #include "track/TrackCellItem.h"
 #include "track/TrackItemView.h"
 #include "track/TrackRowItem.h"
@@ -46,6 +48,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <tuple>
 #include <utility>
 #include <variant>
@@ -690,8 +693,8 @@ namespace ao::winui
       return {};
     }
 
-    auto const stateRes = _views.findTrackListState(_viewId);
-    return stateRes ? stateRes->selection : std::vector<TrackId>{};
+    auto stateRes = _views.findTrackListState(_viewId);
+    return stateRes ? std::move(stateRes->selection) : std::vector<TrackId>{};
   }
 
   std::optional<std::size_t> TrackListController::displayIndexOfTrack(TrackId const trackId) const noexcept

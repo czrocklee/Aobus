@@ -3,12 +3,14 @@
 
 #include "theme/SurfaceBrushes.h"
 
-#include "layout/runtime/CommonLayoutProps.h"
-#include "pch.h"
+#include "layout/runtime/SurfaceBrushResolver.h"
 #include <ao/winui/Theme.h>
 #include <ao/winui/layout/ThemeSurface.h>
 
+#include <winrt/Microsoft.UI.Xaml.Media.h>
 #include <winrt/Microsoft.UI.Xaml.h>
+#include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.UI.h>
 
 #include <cstddef>

@@ -69,6 +69,18 @@ def _absolute_wire_path(path):
         return True
     return len(path) > 3 and path[1:3] == ":/" and path[0] in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 
+def _project_windows_llvm_headers(ctx, root, destination):
+    # Preserve one include tree for both quoted and angle includes. Link siblings
+    # wholesale; only Diagnostic.h is a private copy, never patch the installed SDK.
+    for name in ["clang", "Basic", "Diagnostic.h"]:
+        for child in root.readdir(watch = "yes"):
+            if child.basename != name:
+                ctx.symlink(child, destination + "/" + child.basename)
+        root = root.get_child(name)
+        destination += "/" + name
+    ctx.file(destination, ctx.read(root), executable = False)
+    ctx.patch(ctx.path(Label("//bazel/lint:llvm_22_diagnostic_consumer.patch")))
+
 def _project_sdk(ctx, host, facts):
     """Materialize admitted native files and write the repository's graph data.
 
@@ -79,7 +91,10 @@ def _project_sdk(ctx, host, facts):
     includes = []
     for index, source in enumerate(facts["includes"]):
         destination = "include/%d" % index
-        ctx.symlink(ctx.path(source), destination)
+        if windows and index == 0:
+            _project_windows_llvm_headers(ctx, ctx.path(source), destination)
+        else:
+            ctx.symlink(ctx.path(source), destination)
         includes.append(destination)
     tidy = "bin/clang-tidy" + (".exe" if windows else "")
     ctx.symlink(ctx.path(facts["clang_tidy"]), tidy)

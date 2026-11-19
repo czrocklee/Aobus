@@ -3,9 +3,12 @@
 
 #pragma once
 
+#pragma push_macro("GetCurrentTime")
+#include <unknwn.h>
+#pragma pop_macro("GetCurrentTime")
+
 #include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
-#include <winrt/Microsoft.UI.Xaml.h>
-#include <winrt/Windows.Foundation.h>
+#include <winrt/base.h>
 
 #include <cstdint>
 #include <functional>

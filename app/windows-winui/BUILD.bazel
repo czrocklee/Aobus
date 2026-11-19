@@ -1,11 +1,26 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
-load("//bazel:msvc_policy.bzl", "MSVC_MSBUILD_LANGUAGE_STANDARD", "MSVC_WINUI_AUTOMATION_COPTS", "MSVC_WINUI_COPTS")
+load("//bazel:msvc_policy.bzl", "MSVC_MSBUILD_LANGUAGE_STANDARD", "MSVC_WINUI_COPTS")
 load(":winui.bzl", "winui_app", "winui_codegen", "winui_probe", "winui_resources")
 
 package(default_visibility = ["//visibility:private"])
 
-# One authored inventory feeds the native compilation owners and XAML code
-# generation. Portable model units remain independently owned below.
+STRING_RESOURCE_SOURCES = [
+    "platform/StableResourceString.cpp",
+    "platform/StringResources.cpp",
+]
+
+# Runtime services operate on built elements, not the factory's per-build context.
+LAYOUT_RUNTIME_SOURCES = [
+    "layout/runtime/ActionRegistry.cpp",
+    "layout/runtime/CommonLayoutProps.cpp",
+    "layout/runtime/FocusedDetail.cpp",
+    "layout/runtime/LayoutHost.cpp",
+    "layout/runtime/ResourceLookup.cpp",
+]
+
+LAYOUT_RUNTIME_HEADERS = [src.removesuffix(".cpp") + ".h" for src in LAYOUT_RUNTIME_SOURCES] + ["layout/runtime/LayoutComponent.h"]
+
+# Authored sources are partitioned among native compilation owners below.
 WINUI_SOURCES = [
     "App.xaml.cpp",
     "app/DestructiveLibraryRestart.cpp",
@@ -20,6 +35,7 @@ WINUI_SOURCES = [
     "app/StartupWarnings.cpp",
     "image/CoverArtPresenter.cpp",
     "image/CoverArtPlaceholderRenderer.cpp",
+    "image/GroupCoverPresenters.cpp",
     "input/KeyChordAccelerator.cpp",
     "input/KeymapAcceleratorPlan.cpp",
     "input/KeymapAccelerators.cpp",
@@ -51,21 +67,17 @@ WINUI_SOURCES = [
     "layout/component/track/TrackComponents.cpp",
     "layout/component/track/TrackTable.cpp",
     "layout/runtime/ActionBinder.cpp",
-    "layout/runtime/ActionRegistry.cpp",
-    "layout/runtime/CommonLayoutProps.cpp",
     "layout/runtime/ComponentRegistry.cpp",
-    "layout/runtime/FocusedDetail.cpp",
-    "layout/runtime/LayoutHost.cpp",
-    "layout/runtime/ResourceLookup.cpp",
     "layout/ShellBuilder.cpp",
     "layout/ShellPresetSource.cpp",
+    "platform/AppWindowActivity.cpp",
     "platform/ScopedBooleanFlag.cpp",
     "platform/ProcessLauncher.cpp",
     "platform/SmtcBridge.cpp",
-    "platform/StringResources.cpp",
     "platform/WinUiErrorBoundary.cpp",
     "playback/AobusSoulControl.cpp",
     "playback/AudioPipelineToolTip.cpp",
+    "playback/FullscreenSoulWindow.cpp",
     "playback/MainWindowPlayback.cpp",
     "playback/OutputDeviceControl.cpp",
     "playback/PlaybackTimeControl.cpp",
@@ -88,18 +100,23 @@ WINUI_SOURCES = [
     "track/TrackListController.cpp",
     "track/TrackPropertiesAdapter.cpp",
     "track/TrackPropertiesCoordinator.cpp",
+    "track/TrackPropertiesPresenter.cpp",
     "track/TrackQuickFilterControl.cpp",
     "track/TrackRevealAdapter.cpp",
     "track/TrackRowItem.cpp",
     "MainWindow.xaml.cpp",
-]
+] + STRING_RESOURCE_SOURCES + LAYOUT_RUNTIME_SOURCES
 
-# Keep the full authored inventory for SDK generation, independently of the
-# ordinary C++ compilation owners below.
 WINUI_HEADERS = glob(["**/*.h"])
 
-# These portable model rules compile on every host: none needs WinRT,
-# the WinUI SDK, generated XAML or the native frontend's forced include.
+STRING_RESOURCE_HEADERS = [
+    "platform/ResourceLanguage.h",
+    "platform/StringResourceFormat.h",
+    "platform/StringResources.h",
+    "platform/WinRtStringResources.h",
+]
+
+# These portable model rules compile on every host without WinRT or generated XAML.
 MODEL_SOURCES = [
     "app/DesktopOutputSelection.cpp",
     "app/DesktopSettingsYamlSchema.cpp",
@@ -203,20 +220,25 @@ filegroup(
     visibility = ["//test:__pkg__"],
 )
 
-# WinUI code generation: the XAML compiler, MIDL projection, and the generated
-# header tree. The rule's default outputs and CcInfo expose the generated
-# headers; the "cpp" output group supplies the standalone generated
-# wrappers for the SDK's four standalone generated translation units.
+# XAML and C++/WinRT generation. CcInfo keeps project-generated headers
+# distinct from external SDK projections. The "cpp" output group supplies
+# wrappers for the SDK's four standalone generated translation units. Only the
+# XAML, paired headers and IDL are authored inputs to the generator.
 winui_codegen(
     name = "generated",
-    srcs = WINUI_SOURCES,
-    hdrs = WINUI_HEADERS,
+    codebehind_hdrs = [
+        "App.xaml.h",
+        "MainWindow.xaml.h",
+    ],
     idl = "Project.idl",
     language_standard = MSVC_MSBUILD_LANGUAGE_STANDARD,
     target_compatible_with = ["@platforms//os:windows"],
     # The stream adapter shares this product's locked C++/WinRT projection.
-    # This grants generated headers only, never a frontend binary dependency.
-    visibility = ["//app/windows:__pkg__"],
+    # The analysis test reads the declared roots without building the generator.
+    visibility = [
+        "//app/windows:__pkg__",
+        "//test/winui/projection:__pkg__",
+    ],
     xaml = [
         "App.xaml",
         "MainWindow.xaml",
@@ -232,14 +254,142 @@ filegroup(
     output_group = "cpp",
 )
 
+# MRT lookup uses the generated resource projection, not the UI implementation.
+cc_library(
+    name = "string_resources",
+    srcs = STRING_RESOURCE_SOURCES,
+    hdrs = STRING_RESOURCE_HEADERS,
+    includes = ["."],
+    linkopts = ["runtimeobject.lib"],
+    linkstatic = True,
+    target_compatible_with = ["@platforms//os:windows"],
+    visibility = ["//test/winui/projection:__pkg__"],
+    deps = [
+        ":generated",
+        "//include:utility_headers",
+    ],
+)
+
+cc_library(
+    name = "scoped_boolean_flag",
+    srcs = ["platform/ScopedBooleanFlag.cpp"],
+    hdrs = ["platform/ScopedBooleanFlag.h"],
+    includes = ["."],
+    linkstatic = True,
+    target_compatible_with = ["@platforms//os:windows"],
+    deps = ["//bazel:compile_contract"],
+)
+
+cc_library(
+    name = "theme_coordinator",
+    srcs = ["theme/ThemeCoordinator.cpp"],
+    hdrs = ["theme/ThemeCoordinator.h"],
+    implementation_deps = [
+        ":string_resources",
+        "//include:yaml_headers",
+        "//lib/utility:path",
+    ],
+    includes = ["."],
+    linkstatic = True,
+    target_compatible_with = ["@platforms//os:windows"],
+    visibility = ["//test/winui/projection:__pkg__"],
+    deps = [":model"],
+)
+
+# The output selector uses the SDK controls projection, not XAML implementation
+# types. Both the window and the authored playback component consume it.
+cc_library(
+    name = "output_device_control",
+    srcs = ["playback/OutputDeviceControl.cpp"],
+    hdrs = ["playback/OutputDeviceControl.h"],
+    copts = MSVC_WINUI_COPTS,
+    implementation_deps = [":string_resources"],
+    includes = ["."],
+    linkstatic = True,
+    target_compatible_with = ["@platforms//os:windows"],
+    deps = [
+        ":generated",
+        "//app/i18n",
+        "//app/uimodel",
+    ],
+)
+
+# Remaining native sources are partitioned into the layout, track and XAML archives.
+XAML_SOURCES = [
+    source
+    for source in WINUI_SOURCES
+    if source not in MODEL_SOURCES + STRING_RESOURCE_SOURCES + LAYOUT_RUNTIME_SOURCES + [
+        "platform/ScopedBooleanFlag.cpp",
+        "platform/WinUiErrorBoundary.cpp",
+        "playback/OutputDeviceControl.cpp",
+        "theme/ThemeCoordinator.cpp",
+    ]
+]
+
+# Values shared by the shell and its components, without the factory's full
+# per-build context. Neither the shell interface nor the theme needs that context.
+LAYOUT_SHELL_INPUTS = [
+    "layout/runtime/SurfaceBrushResolver.h",
+    "layout/runtime/WindowActivityState.h",
+]
+
+cc_library(
+    name = "layout_shell_inputs",
+    hdrs = LAYOUT_SHELL_INPUTS,
+    includes = ["."],
+    target_compatible_with = ["@platforms//os:windows"],
+    deps = [
+        ":generated",
+        ":model",
+    ],
+)
+
+cc_library(
+    name = "layout_runtime",
+    srcs = LAYOUT_RUNTIME_SOURCES,
+    hdrs = LAYOUT_RUNTIME_HEADERS,
+    copts = MSVC_WINUI_COPTS,
+    implementation_deps = ["//app/runtime"],
+    includes = ["."],
+    linkstatic = True,
+    target_compatible_with = ["@platforms//os:windows"],
+    deps = [
+        ":generated",
+        ":layout_shell_inputs",
+        ":model",
+        "//app/uimodel",
+        "//include:utility_headers",
+        "@aobus_native_deps//:boost",
+    ],
+)
+
+LAYOUT_BUILD_CONTEXT = "layout/runtime/LayoutBuildContext.h"
+
+cc_library(
+    name = "layout_build_context",
+    hdrs = [LAYOUT_BUILD_CONTEXT],
+    includes = ["."],
+    target_compatible_with = ["@platforms//os:windows"],
+    deps = [
+        ":generated",
+        ":layout_shell_inputs",
+        ":model",
+        "//app/uimodel",
+    ],
+)
+
 # Shared native declarations and SDK context for the implementation archives.
 # Keep layout and track as their existing responsibilities: one /GL archive
 # containing the entire frontend exceeds MSVC's COFF archive size limit.
 cc_library(
     name = "winui_headers",
-    hdrs = [header for header in WINUI_HEADERS if header not in MODEL_HEADERS + [
+    hdrs = [header for header in WINUI_HEADERS if header not in MODEL_HEADERS + STRING_RESOURCE_HEADERS + LAYOUT_SHELL_INPUTS + LAYOUT_RUNTIME_HEADERS + [
+        LAYOUT_BUILD_CONTEXT,
         "app/DispatcherQueueAdmission.h",
         "include/ao/winui/WinUiErrorBoundary.h",
+        "platform/ScopedBooleanFlag.h",
+        "playback/OutputDeviceControl.h",
+        "theme/ThemeCoordinator.h",
     ]],
     includes = [
         ".",
@@ -254,6 +404,8 @@ cc_library(
     deps = [
         ":error_boundary",
         ":generated",
+        ":layout_runtime",
+        ":layout_shell_inputs",
         ":model",
         "//app/desktop:desktop_launch",
         "//app/runtime",
@@ -268,54 +420,14 @@ cc_library(
     name = "winui_layout",
     srcs = [
         source
-        for source in WINUI_SOURCES
-        if source not in MODEL_SOURCES + ["platform/WinUiErrorBoundary.cpp"]
+        for source in XAML_SOURCES
         if source.startswith("layout/")
     ],
-    # Preserve textual framework/generated declarations, not a second PCH cache.
     copts = MSVC_WINUI_COPTS,
     implementation_deps = [
-        "//app/i18n",
-        "//app/i18n:completion",
-        "//app/i18n:ordering",
-        "//lib/utility:unicode_text",
-    ],
-    linkstatic = True,
-    target_compatible_with = ["@platforms//os:windows"],
-    deps = [":winui_headers"],
-)
-
-cc_library(
-    name = "winui_track",
-    srcs = [
-        source
-        for source in WINUI_SOURCES
-        if source not in MODEL_SOURCES + ["platform/WinUiErrorBoundary.cpp"]
-        if source.startswith("track/")
-    ],
-    copts = MSVC_WINUI_COPTS,
-    implementation_deps = [
-        "//app/i18n",
-        "//app/i18n:completion",
-        "//app/i18n:ordering",
-        "//lib/utility:unicode_text",
-    ],
-    linkstatic = True,
-    target_compatible_with = ["@platforms//os:windows"],
-    deps = [":winui_headers"],
-)
-
-cc_library(
-    name = "winui",
-    srcs = [
-        source
-        for source in WINUI_SOURCES
-        if source not in MODEL_SOURCES + ["platform/WinUiErrorBoundary.cpp"]
-        if not source.startswith("layout/")
-        if not source.startswith("track/")
-    ] + [":generated_cpp"],
-    copts = MSVC_WINUI_COPTS,
-    implementation_deps = [
+        ":layout_build_context",
+        ":output_device_control",
+        ":scoped_boolean_flag",
         "//app/i18n",
         "//app/i18n:completion",
         "//app/i18n:ordering",
@@ -324,14 +436,64 @@ cc_library(
     linkstatic = True,
     target_compatible_with = ["@platforms//os:windows"],
     deps = [
+        ":string_resources",
+        ":winui_headers",
+    ],
+)
+
+cc_library(
+    name = "winui_track",
+    srcs = [
+        source
+        for source in XAML_SOURCES
+        if source.startswith("track/")
+    ],
+    copts = MSVC_WINUI_COPTS,
+    implementation_deps = [
+        ":scoped_boolean_flag",
+        "//app/i18n",
+        "//app/i18n:completion",
+        "//app/i18n:ordering",
+        "//lib/utility:unicode_text",
+    ],
+    linkstatic = True,
+    target_compatible_with = ["@platforms//os:windows"],
+    deps = [
+        ":string_resources",
+        ":winui_headers",
+    ],
+)
+
+cc_library(
+    name = "winui",
+    srcs = [
+        source
+        for source in XAML_SOURCES
+        if not source.startswith("layout/")
+        if not source.startswith("track/")
+    ] + [":generated_cpp"],
+    copts = MSVC_WINUI_COPTS,
+    implementation_deps = [
+        ":output_device_control",
+        "//app/i18n",
+        "//app/i18n:completion",
+        "//app/i18n:ordering",
+        "//lib/utility:unicode_text",
+    ],
+    linkstatic = True,
+    target_compatible_with = ["@platforms//os:windows"],
+    deps = [
+        ":scoped_boolean_flag",
+        ":string_resources",
+        ":theme_coordinator",
         ":winui_headers",
         ":winui_layout",
         ":winui_track",
     ],
 )
 
-# Deployed WinUI resources: compiled XAML (App.xbf, MainWindow.xbf), the merged
-# Aobus.pri, the catalog resw intermediates, and the packaged content assets.
+# The merged PRI indexes compiled XAML, localized RESW, and the packaged assets.
+# Only the PRI, XBFs, and content assets are staged alongside the executable.
 # The assets attr carries the brand and no-cover artwork; the shell layout
 # YAML files are owned by this package and declared explicitly.
 winui_resources(
@@ -341,7 +503,7 @@ winui_resources(
         "layout/windows_modern_layout.yaml",
     ],
     assets = ["//asset:winui_assets"],
-    catalog = "//app/i18n:catalog_intermediates",
+    catalog = "//app/i18n:catalog_resw",
     generated = ":generated",
     target_compatible_with = ["@platforms//os:windows"],
 )
@@ -373,8 +535,8 @@ cc_binary(
 
 # Independently entered native probes, never switches on the shipping app.
 # All reuse the actual archives, generated projection and catalog/PRI owner.
-# In particular localization pulls StringResources from :winui, not a second
-# compilation of that product unit. GUI probes remain explicitly manual.
+# Localization reaches :string_resources through :winui, not a second
+# compilation of the product unit. GUI probes remain explicitly manual.
 winui_probe(
     name = "ao_winui_localization_probe",
     srcs = ["//test:helper/WinUiLocalizationProbe.cpp"],
@@ -405,6 +567,7 @@ winui_probe(
         "//test:winui/probe/WinUiTrackTableProbe.cpp",
     ],
     deps = [
+        ":layout_build_context",
         "//app/i18n",
         "//app/i18n:completion",
         "//app/i18n:ordering",
@@ -433,7 +596,6 @@ winui_probe(
         "//test:winui/probe/WinUiSilentAudio.cpp",
         "//test:winui/probe/WinUiSilentAudio.h",
     ],
-    copts = MSVC_WINUI_AUTOMATION_COPTS,
     linkopts = ["comctl32.lib"],
     deps = [
         "//app/i18n",
@@ -449,6 +611,7 @@ winui_probe(
     name = "ao_winui_activity_status_probe",
     srcs = ["//test:winui/probe/WinUiActivityStatusProbe.cpp"],
     deps = [
+        ":layout_build_context",
         "//app/i18n",
         "//lib/utility:unicode_text",
     ],

@@ -6,6 +6,10 @@
 #include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/utility/TransparentStringHash.h>
 
+#pragma push_macro("GetCurrentTime")
+#include <unknwn.h>
+#pragma pop_macro("GetCurrentTime")
+
 #include <boost/unordered/unordered_flat_map.hpp>
 #include <winrt/Microsoft.UI.Xaml.h>
 

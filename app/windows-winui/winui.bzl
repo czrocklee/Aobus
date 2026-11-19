@@ -1,15 +1,15 @@
 """Native SDK generation and executable-local resource assembly for WinUI."""
 
-load("@aobus_native_tools//:catalog_tools.bzl", "CATALOG_TOOLS")
+load("@aobus_native_tools//:python_action_tools.bzl", "PYTHON_ACTION_TOOLS")
 load("@aobus_native_tools//:test_tools.bzl", "TEST_TOOLS")
 load("@rules_cc//cc:defs.bzl", "cc_binary")
 load("@rules_cc//cc/common:cc_common.bzl", "cc_common")
 load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
-load("//bazel:msvc_policy.bzl", "MSVC_WINUI_PROBE_COPTS")
+load("//bazel:msvc_policy.bzl", "MSVC_WINUI_COPTS")
 load("//bazel:windows_utf8_manifest.bzl", "WINDOWS_UTF8_LINKER_INPUTS", "WINDOWS_UTF8_LINKOPTS")
+load("//bazel:winui_outputs.bzl", "WinuiGeneratedInfo")
 
-_WinuiGeneratedInfo = provider(doc = "Compiled XAML outputs consumed by WinUI resource assembly.", fields = ["xbf"])
-_WinuiResourcesInfo = provider(doc = "Private resource tree staged alongside a WinUI executable.", fields = ["private"])
+_WinuiResourcesInfo = provider(doc = "Declared payload staged alongside a WinUI executable.", fields = ["pri", "xbf", "assets"])
 _WRAPPERS = ["module", "metadata", "types", "types_impl"]
 
 def _configuration(ctx):
@@ -29,11 +29,13 @@ def _arguments(ctx, action):
     return arguments
 
 def _run(ctx, arguments, inputs, outputs, mnemonic, sdk = True):
+    # Scalars and the python_action_tools payload are one descriptor. Catalog
+    # scalars can diverge and would reload this file when ICU inputs change.
     environment = {"PYTHONUTF8": "1", "PYTHONDONTWRITEBYTECODE": "1"}
-    if "SystemRoot" in CATALOG_TOOLS:
-        environment["SYSTEMROOT"] = CATALOG_TOOLS["SystemRoot"]
+    if "SystemRoot" in PYTHON_ACTION_TOOLS:
+        environment["SYSTEMROOT"] = PYTHON_ACTION_TOOLS["SystemRoot"]
     ctx.actions.run(
-        executable = CATALOG_TOOLS["python"],
+        executable = PYTHON_ACTION_TOOLS["python"],
         # Python must receive its startup flags and script on real argv; only
         # the helper's potentially large declared-input lists use a param file.
         arguments = ["-I", "-S", "-B", "-X", "utf8", ctx.file._helper.path, arguments],
@@ -48,23 +50,24 @@ def _run(ctx, arguments, inputs, outputs, mnemonic, sdk = True):
 
 def _codegen_impl(ctx):
     # Full-CLR MSBuild appends long GUID-based batch paths under this tree.
-    # Keep the private component compact; public headers/src/xbf stay stable.
+    # Keep the private component compact; it is not a C++ include root.
     private = ctx.actions.declare_directory(ctx.label.name + "/p")
     headers = ctx.actions.declare_directory(ctx.label.name + "/headers")
+    sdk_headers = ctx.actions.declare_directory(ctx.label.name + "/sdk_headers")
     wrappers = [ctx.actions.declare_file(ctx.label.name + "/src/" + role + ".cpp") for role in _WRAPPERS]
     xbf = [ctx.actions.declare_file(ctx.label.name + "/xbf/" + name) for name in ["App.xbf", "MainWindow.xbf"]]
     arguments = _arguments(ctx, "generate")
     arguments.add("--sdk", ctx.file._sdk)
     arguments.add("--private", private.path)
     arguments.add("--headers", headers.path)
+    arguments.add("--sdk-headers", sdk_headers.path)
     for file in xbf:
         arguments.add("--xbf", file)
     arguments.add("--configuration", _configuration(ctx))
     arguments.add("--language-standard", ctx.attr.language_standard)
     arguments.add("--idl", ctx.file.idl)
-    for file in ctx.files.srcs:
-        arguments.add("--source", file)
-    for file in ctx.files.hdrs:
+
+    for file in ctx.files.codebehind_hdrs:
         arguments.add("--header", file)
     for file in ctx.files.xaml:
         arguments.add("--xaml", file)
@@ -74,25 +77,25 @@ def _codegen_impl(ctx):
     _run(
         ctx,
         arguments,
-        [ctx.file._sdk, ctx.file._project, ctx.file.idl] + ctx.files.srcs + ctx.files.hdrs + ctx.files.xaml,
-        [private, headers] + wrappers + xbf,
+        [ctx.file._sdk, ctx.file._project, ctx.file.idl] + ctx.files.codebehind_hdrs + ctx.files.xaml,
+        [private, headers, sdk_headers] + wrappers + xbf,
         "AobusWinuiGenerate",
     )
     return [
-        DefaultInfo(files = depset([headers] + xbf)),
+        DefaultInfo(files = depset([headers, sdk_headers] + xbf)),
         OutputGroupInfo(cpp = depset(wrappers), diagnostics = depset([private])),
-        _WinuiGeneratedInfo(xbf = xbf),
+        WinuiGeneratedInfo(xbf = xbf, headers = headers, sdk_headers = sdk_headers),
         CcInfo(compilation_context = cc_common.create_compilation_context(
-            headers = depset([headers]),
+            headers = depset([headers, sdk_headers]),
             includes = depset([headers.path]),
+            external_includes = depset([sdk_headers.path]),
         )),
     ]
 
 winui_codegen = rule(
     implementation = _codegen_impl,
     attrs = {
-        "srcs": attr.label_list(allow_files = [".cpp"], mandatory = True),
-        "hdrs": attr.label_list(allow_files = [".h"], mandatory = True),
+        "codebehind_hdrs": attr.label_list(allow_files = [".h"], mandatory = True),
         "xaml": attr.label_list(allow_files = [".xaml"], mandatory = True),
         "idl": attr.label(allow_single_file = [".idl"], mandatory = True),
         "language_standard": attr.string(mandatory = True),
@@ -100,41 +103,51 @@ winui_codegen = rule(
         "_helper": attr.label(default = Label(":build_winui.py"), allow_single_file = True),
         "_sdk": attr.label(default = Label("@aobus_winui_sdk//:sdk.json"), allow_single_file = True),
         "_sdk_tools": attr.label(default = Label("@aobus_winui_sdk//:tools"), cfg = "exec"),
-        "_native_tools": attr.label(default = Label("@aobus_native_tools//:catalog_tools"), cfg = "exec"),
+        "_native_tools": attr.label(default = Label("@aobus_native_tools//:python_action_tools"), cfg = "exec"),
     },
-    provides = [CcInfo, _WinuiGeneratedInfo],
+    provides = [CcInfo, WinuiGeneratedInfo],
 )
 
+def _add_content(arguments, xbf, assets):
+    for file in xbf:
+        arguments.add("--xbf", file)
+    for file in assets:
+        arguments.add("--asset", file)
+
 def _resources_impl(ctx):
-    xbf = ctx.attr.generated[_WinuiGeneratedInfo].xbf
+    xbf = ctx.attr.generated[WinuiGeneratedInfo].xbf
+    assets = ctx.files.assets + ctx.files.srcs
     catalogs = ctx.files.catalog
     if len(catalogs) != 1 or not catalogs[0].is_directory:
-        fail("WinUI resources require the catalog's one intermediates tree")
+        fail("WinUI resources require the catalog's one RESW tree")
 
     # PRI generation uses the same Full-CLR temporary batch path convention.
     private = ctx.actions.declare_directory(ctx.label.name + "/p")
+    pri = ctx.actions.declare_file(ctx.label.name + "/Aobus.pri")
     arguments = _arguments(ctx, "resources")
     arguments.add("--sdk", ctx.file._sdk)
     arguments.add("--private", private.path)
     arguments.add("--configuration", _configuration(ctx))
-    for file in xbf:
-        arguments.add("--xbf", file)
     arguments.add("--catalog", catalogs[0].path)
-    for file in ctx.files.assets + ctx.files.srcs:
-        arguments.add("--asset", file)
+    arguments.add("--output-pri", pri)
+    _add_content(arguments, xbf, assets)
     _run(
         ctx,
         arguments,
-        [ctx.file._sdk, ctx.file._project] + xbf + catalogs + ctx.files.assets + ctx.files.srcs,
-        [private],
+        [ctx.file._sdk, ctx.file._project] + xbf + catalogs + assets,
+        [private, pri],
         "AobusWinuiResources",
     )
-    return [DefaultInfo(files = depset([private])), _WinuiResourcesInfo(private = private)]
+    return [
+        DefaultInfo(files = depset([pri])),
+        OutputGroupInfo(diagnostics = depset([private])),
+        _WinuiResourcesInfo(pri = pri, xbf = xbf, assets = assets),
+    ]
 
 winui_resources = rule(
     implementation = _resources_impl,
     attrs = {
-        "generated": attr.label(providers = [_WinuiGeneratedInfo], mandatory = True),
+        "generated": attr.label(providers = [WinuiGeneratedInfo], mandatory = True),
         "catalog": attr.label(mandatory = True),
         "assets": attr.label_list(allow_files = True, mandatory = True),
         "srcs": attr.label_list(allow_files = [".yaml"], mandatory = True),
@@ -142,7 +155,7 @@ winui_resources = rule(
         "_helper": attr.label(default = Label(":build_winui.py"), allow_single_file = True),
         "_sdk": attr.label(default = Label("@aobus_winui_sdk//:sdk.json"), allow_single_file = True),
         "_sdk_tools": attr.label(default = Label("@aobus_winui_sdk//:tools"), cfg = "exec"),
-        "_native_tools": attr.label(default = Label("@aobus_native_tools//:catalog_tools"), cfg = "exec"),
+        "_native_tools": attr.label(default = Label("@aobus_native_tools//:python_action_tools"), cfg = "exec"),
     },
     provides = [_WinuiResourcesInfo],
 )
@@ -172,7 +185,7 @@ def _app_impl(ctx):
     executable = binary[DefaultInfo].files_to_run.executable
     if executable == None:
         fail("WinUI application dependency is not an executable")
-    resources = ctx.attr.resources[_WinuiResourcesInfo].private
+    resources = ctx.attr.resources[_WinuiResourcesInfo]
     identity = ctx.attr.identity
     if not identity or identity[0] not in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_":
         fail("WinUI executable identity must start with an ASCII letter, digit or underscore")
@@ -187,7 +200,8 @@ def _app_impl(ctx):
     arguments = _arguments(ctx, "stage")
     arguments.add("--identity", identity)
     arguments.add("--exe", executable)
-    arguments.add("--resources", resources.path)
+    arguments.add("--pri", resources.pri)
+    _add_content(arguments, resources.xbf, resources.assets)
     for option, file in [
         ("--output-exe", exe),
         ("--output-pri", pri),
@@ -213,7 +227,7 @@ def _app_impl(ctx):
     _run(
         ctx,
         arguments,
-        [executable, resources] + runtime,
+        [executable, resources.pri] + resources.xbf + resources.assets + runtime,
         outputs,
         "AobusWinuiApp",
         sdk = False,
@@ -235,11 +249,11 @@ winui_app = rule(
         "resources": attr.label(providers = [_WinuiResourcesInfo], mandatory = True),
         "runtime": attr.label(allow_files = True, mandatory = True),
         "_helper": attr.label(default = Label(":build_winui.py"), allow_single_file = True),
-        "_native_tools": attr.label(default = Label("@aobus_native_tools//:catalog_tools"), cfg = "exec"),
+        "_native_tools": attr.label(default = Label("@aobus_native_tools//:python_action_tools"), cfg = "exec"),
     },
 )
 
-def winui_probe(name, srcs, console = False, checkout_root = False, copts = [], linkopts = [], deps = []):
+def winui_probe(name, srcs, console = False, checkout_root = False, linkopts = [], deps = []):
     """Link and stage one of the eight independently entered WinUI probes.
 
     Args:
@@ -247,7 +261,6 @@ def winui_probe(name, srcs, console = False, checkout_root = False, copts = [], 
         srcs: Probe sources passed to the linked C++ binary.
         console: Select the console subsystem instead of the Windows subsystem.
         checkout_root: Define the quality probe's original checkout root from native tools.
-        copts: Additional compiler options after the probe's MSVC policy options.
         linkopts: Additional linker options after the shared manifest and probe entry options.
         deps: Additional dependencies after the WinUI library and SDK bootstrap.
     """
@@ -263,7 +276,7 @@ def winui_probe(name, srcs, console = False, checkout_root = False, copts = [], 
         name = name + "_binary",
         srcs = srcs,
         additional_linker_inputs = WINDOWS_UTF8_LINKER_INPUTS,
-        copts = MSVC_WINUI_PROBE_COPTS + copts,
+        copts = MSVC_WINUI_COPTS,
         local_defines = local_defines,
         linkopts = WINDOWS_UTF8_LINKOPTS + [
             # App.xaml contributes the shipping wWinMain object; each probe

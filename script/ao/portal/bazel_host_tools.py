@@ -164,9 +164,16 @@ def _linux_gresource() -> tuple[dict[str, Any], Path, list[Path], list[Path]]:
 
 
 def _catalog_sdk(
-    tree: Path, prefix: Path | None, host: str, *, watch_directories: set[Path] | None = None
+    tree: Path,
+    prefix: Path | None,
+    host: str,
+    *,
+    python: dict[str, Any] | None = None,
+    watch_directories: set[Path] | None = None,
 ) -> tuple[dict[str, str], list[Path], list[Path]]:
     """Installed tool locations plus explicit SDK bytes, not a hermetic runtime claim."""
+    if watch_directories is None:
+        watch_directories = set()
     evidence = [native.PROJECT_ROOT / "dependency-contract.json"]
     parsed_windows_inputs: dict[str, str] = {}
     if prefix is None:
@@ -213,17 +220,17 @@ def _catalog_sdk(
         macros.append("U_ICU_VERSION_PATCHLEVEL_NUM")
     native.verify_header_version(header, version, macros)
     evidence.append(header)
-    python = native.governed_base_executable()
-    tools = {"python": str(python)}
-    artifacts = [python]
-    watched_directories = watch_directories if watch_directories is not None else set()
+    if python is None:
+        python = _python_action_sdk(host, watch_directories)
+    tools = dict(python["tools"])
+    artifacts = list(python["artifacts"])
     for name in ("genrb", "pkgdata"):
         candidates = (
             [root / "bin" / name for root in outputs]
             if prefix is None
             else [prefix / "tools/icu/bin" / (name + (".exe" if host == "windows" else ""))]
         )
-        watched_directories.update(path.parent for path in candidates)
+        watch_directories.update(path.parent for path in candidates)
         matches = {path.resolve(): path for path in candidates if native.probe(path).is_file()}
         if len(matches) != 1:
             raise native.BazelWorkspaceError(f"missing/ambiguous selected ICU tool: {name}")
@@ -238,7 +245,7 @@ def _catalog_sdk(
     # Original installed paths retain native loader adjacency/RPATH. Declare
     # the selected ICU runtime bytes as inputs without copying a whole prefix.
     directories = [root / "lib" for root in outputs] if prefix is None else [prefix / "tools/icu/bin"]
-    watched_directories.update(directories)
+    watch_directories.update(directories)
     for directory in directories:
         if not native.probe(directory).is_dir():
             continue
@@ -292,6 +299,26 @@ def _catalog_sdk(
     reported = re.findall(r"\bICU version ([^\s)]+)", version_query.stdout + version_query.stderr)
     if reported != [version]:
         raise native.BazelWorkspaceError(f"genrb executable does not report ICU version {version}")
+    identity_path = tree / "catalog-sdk.json"
+    native.write_json(
+        identity_path,
+        {
+            **python["identity"],
+            "icu_version": version,
+            "tools": {name: value for name, value in tools.items() if name != "UserProfile"},
+            **({"windows_binary_inputs": parsed_windows_inputs} if host == "windows" else {}),
+        },
+    )
+    artifacts.append(identity_path)
+    return tools, sorted(set(artifacts)), evidence
+
+
+def _python_action_sdk(host: str, watch_directories: set[Path]) -> dict[str, Any]:
+    """Observe the original base interpreter used by isolated stdlib actions."""
+    executable = native.governed_base_executable()
+    tools = {"python": str(executable)}
+    artifacts = [executable]
+    watch_directories.add(executable.parent)
     stdlib = Path(sysconfig.get_path("stdlib"))
     extension_root = sysconfig.get_config_var("DESTSHARED")
     if extension_root is not None and not isinstance(extension_root, str):
@@ -306,7 +333,7 @@ def _catalog_sdk(
         if directory.resolve() in seen:
             raise native.BazelWorkspaceError(f"Python standard library directory alias/cycle: {directory}")
         seen.add(directory.resolve())
-        watched_directories.add(directory)
+        watch_directories.add(directory)
         for path in sorted(directory.iterdir()):
             if path.name in {"site-packages", "dist-packages", "__pycache__"}:
                 continue
@@ -314,13 +341,13 @@ def _catalog_sdk(
                 pending.append(path)
             elif path.suffix == ".py":
                 artifacts.append(path)
-    watched_directories.add(extensions)
+    watch_directories.add(extensions)
     if extensions.is_dir():
         artifacts.extend(
             path for path in sorted(extensions.iterdir()) if path.is_file() and path.suffix in {".so", ".pyd", ".dll"}
         )
     if host == "windows":
-        watched_directories.add(Path(sys.base_prefix))
+        watch_directories.add(Path(sys.base_prefix))
         artifacts.extend(path for path in sorted(Path(sys.base_prefix).glob("*.dll")) if path.is_file())
         system_root = os.environ.get("SYSTEMROOT") or os.environ.get("SystemRoot")
         if not system_root or not Path(system_root).is_absolute():
@@ -348,28 +375,22 @@ def _catalog_sdk(
             if not framework.is_file():
                 raise native.BazelWorkspaceError(f"selected Python framework runtime is missing: {framework}")
             artifacts.append(framework)
-    identity_path = tree / "catalog-sdk.json"
-    # catalog-sdk.json is the cache-keyed input of catalog, verification and report
-    # actions. Only the full-portal lint fixture consumes the observed Windows
-    # profile, through catalog_tools.bzl, so the serialized identity omits that
-    # profile; tool locations, payload and SystemRoot stay identity fields.
-    native.write_json(
-        identity_path,
-        {
-            "icu_version": version,
+    return {
+        "tools": tools,
+        "artifacts": sorted(set(artifacts)),
+        "identity": {
+            # Only the full-portal lint fixture consumes the Windows profile;
+            # it belongs to that action's environment, not other action keys.
             "tools": {name: value for name, value in tools.items() if name != "UserProfile"},
             "python_version": sys.version,
             "python_base_prefix": sys.base_prefix,
             "stdlib": str(stdlib),
             "extensions": str(extensions),
-            **({"windows_binary_inputs": parsed_windows_inputs} if host == "windows" else {}),
             "runtime_contract": (
                 "Installed native SDK locations; declared payload bytes, not full OS/runtime hermeticity"
             ),
         },
-    )
-    artifacts.append(identity_path)
-    return tools, sorted(set(artifacts)), evidence
+    }
 
 
 def _lock_graph(requirements: Path) -> list[Path]:
@@ -532,7 +553,7 @@ def resolve_host_tools(tree: Path, prefix: Path | None, host: str, *, source: ob
     """Return native SDK facts and read inventory, never BUILD or .bzl programs.
 
     Catalog Debug/Release library imports are resolved separately by the caller.
-    The only generated SDK file is catalog-sdk.json, a diagnostic action input.
+    The generated catalog and Python identities key their respective actions.
     """
     identity, executable, runtime, evidence = _linux_gperf() if prefix is None else _native_gperf(prefix, host)
     version = subprocess.run(
@@ -563,15 +584,23 @@ def resolve_host_tools(tree: Path, prefix: Path | None, host: str, *, source: ob
         for name, tool in {"mt": _windows_mt(), "powershell": powershell}.items():
             result["manifest_tools"][name] = tool.resolve().as_posix()
             files.update({tool.absolute(), tool.resolve()})
-    tools, artifacts, sdk_evidence = _catalog_sdk(tree, prefix, host, watch_directories=directories)
-    result["catalog"] = {"tools": tools, "artifacts": _paths(artifacts), "evidence": _paths(sdk_evidence)}
-    files.update(path.absolute() for path in [*artifacts, *sdk_evidence])
-    files.update(path.resolve() for path in artifacts)
-    directories.update(Path(tools[name]).parent for name in ("python", "genrb", "pkgdata"))
-    python_identity, python_inputs, python_evidence = _python_runtime(host)
+    python = _python_action_sdk(host, directories)
+    result["python_action"] = {**python, "artifacts": _paths(python["artifacts"])}
+    tools, artifacts, sdk_evidence = _catalog_sdk(tree, prefix, host, python=python, watch_directories=directories)
+    python_artifacts = set(python["artifacts"])
+    result["catalog"] = {
+        "tools": tools,
+        "artifacts": _paths([path for path in artifacts if path not in python_artifacts]),
+        "evidence": _paths(sdk_evidence),
+    }
+    for path in artifacts:
+        files.update({path.absolute(), path.resolve()})
+    files.update(path.absolute() for path in sdk_evidence)
+    directories.update(Path(tools[name]).parent for name in ("genrb", "pkgdata"))
+    python_identity, python_inputs, _ = _python_runtime(host)
     result["python"] = python_identity
     result["test_tools"]["tooling_python"] = python_identity["tooling_python"]
-    files.update(path.absolute() for path in [*python_inputs, *python_evidence])
+    files.update(path.absolute() for path in python_inputs)
     # The WinUI quality probe embeds the original checkout, not an execution root.
     if source is not None:
         if not isinstance(source, str) or not source or not Path(source).is_absolute() or not Path(source).is_dir():

@@ -3,13 +3,18 @@
 
 // Audit resolved native UIA names on the loaded shipping shells, not spelling
 // of SetName calls. Canary controls prove that bypassing makeNamed is detected.
+#include <windows.h>
+
+// Keep the Win32 macro out of the XAML projections.
+#undef GetCurrentTime
+
 #include "MainWindow.xaml.h"
 #include "WinUiSilentAudio.h"
 #include "XamlMetaDataProvider.h"
 #include "app/LibrarySession.h"
-#include "pch.h"
 #include "platform/NamedControl.h"
-#include "platform/StringResources.h"
+#include "platform/ResourceLanguage.h"
+#include "platform/WinRtStringResources.h"
 #include <ao/Error.h>
 #include <ao/desktop/LibrarySwitch.h>
 #include <ao/i18n/IcuCompletionAliases.h>
@@ -36,15 +41,20 @@
 #include <microsoft.ui.xaml.window.h>
 #include <unicode/uchar.h>
 #include <unicode/umachine.h>
+#include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Microsoft.UI.Windowing.h>
 #include <winrt/Microsoft.UI.Xaml.Automation.Peers.h>
 #include <winrt/Microsoft.UI.Xaml.Automation.Provider.h>
 #include <winrt/Microsoft.UI.Xaml.Automation.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
+#include <winrt/Microsoft.UI.Xaml.Controls.h>
+#include <winrt/Microsoft.UI.Xaml.Markup.h>
 #include <winrt/Microsoft.UI.Xaml.Media.h>
+#include <winrt/Microsoft.UI.Xaml.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Graphics.h>
+#include <winrt/Windows.UI.Xaml.Interop.h>
 
 #include <algorithm>
 #include <chrono>

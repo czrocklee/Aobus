@@ -118,17 +118,42 @@ class RequiredScopeTest(unittest.TestCase):
             self.assertIn(disabled, scope.optional)
         self.assertIn("//test:gtk_test", completion._selection("linux", completion.Request()).required)
 
+    def test_header_sharing_is_a_linux_only_evidence_requirement(self):
+        selector = "//bazel/header_share:selector_test"
+        for platform in ("linux", "macos", "windows"):
+            with self.subTest(platform=platform):
+                selection = completion._selection(platform, completion.Request(ci=True))
+                self.assertEqual(selector in selection.required - selection.optional, platform == "linux")
+
     def test_only_windows_ci_requires_the_interactive_probe(self):
         uia = "//test:winui_uia_test"
         self.assertIn(uia, completion._selection("windows", completion.Request(ci=True)).required)
         self.assertNotIn(uia, completion._selection("windows", completion.Request()).required)
         self.assertNotIn(uia, completion._selection("linux", completion.Request(ci=True)).required)
 
+    def test_winui_projection_is_required_only_on_windows(self):
+        label = "//test/winui/projection:winui_projection_test"
+        for platform in ("linux", "macos", "windows"):
+            for ci in (False, True):
+                with self.subTest(platform=platform, ci=ci):
+                    selection = completion._selection(platform, completion.Request(ci=ci))
+                    self.assertEqual(label in selection.required - selection.optional, platform == "windows")
+
 
 def _summary(label=UNIT_TEST, *, status="PASSED", cached=0, config=CHECKSUM):
     return {
         "id": {"testSummary": {"label": label, "configuration": {"id": config}}},
         "testSummary": {"overallStatus": status, "totalRunCount": 1, "totalNumCached": cached},
+    }
+
+
+def _skipped(label, config, *, aspect=None):
+    completed = {"label": label, "configuration": {"id": config}}
+    if aspect:
+        completed["aspect"] = aspect
+    return {
+        "id": {"targetCompleted": completed},
+        "aborted": {"reason": "SKIPPED", "description": f"Target {label} build was skipped."},
     }
 
 
@@ -166,6 +191,45 @@ class CompletionEvidenceTest(unittest.TestCase):
         ):
             with self.subTest(missing=missing), self.assertRaises(bazel_native.BazelWorkspaceError):
                 self.verify(events[:index] + events[index + 1 :])
+
+    def test_missing_and_skipped_required_checks_are_distinguished(self):
+        skipped, missing = "//:native_policy", "//test:absent"
+        self.scope = completion._CheckSelection(
+            suites={"//:suite"}, required={"//:gate", UNIT_TEST, skipped, missing}, optional={"//test:foreign"}
+        )
+        events = [
+            self.expansion,
+            _summary(),
+            _summary("//:gate"),
+            _skipped(skipped, "skip-cfg"),
+            _skipped("//test:unrelated", "other"),
+            _skipped(UNIT_TEST, "other-cfg"),
+            _skipped(missing, "aspect-cfg", aspect="//aspect"),
+            {"id": {"started": {}}, "started": {"description": f"Target {missing} build was skipped."}},
+            self.finish,
+            self.last,
+        ]
+        with self.assertRaises(bazel_native.BazelWorkspaceError) as caught:
+            self.verify(events)
+        message = str(caught.exception)
+        self.assertIn("missing required passing checks: //test:absent", message)
+        self.assertIn("skipped required checks: //:native_policy [skip-cfg]", message)
+        self.assertNotIn("//test:unrelated", message)
+        self.assertNotIn(UNIT_TEST, message)
+        self.scope = completion._CheckSelection(suites={"//:suite"}, required={"//:gate"}, optional={"//test:foreign"})
+        failed = [
+            self.expansion,
+            _summary(status="FAILED"),
+            _skipped(UNIT_TEST, "other-cfg"),
+            _summary("//:gate"),
+            self.finish,
+            self.last,
+        ]
+        with self.assertRaises(bazel_native.BazelWorkspaceError) as caught:
+            self.verify(failed)
+        message = str(caught.exception)
+        self.assertIn("required check did not pass: //test:unit", message)
+        self.assertNotIn("skipped required checks", message)
 
     def test_a_required_member_must_have_one_unambiguous_pass(self):
         for summaries in (

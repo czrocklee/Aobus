@@ -11,7 +11,6 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/library/Credits.h>
 #include <ao/rt/TrackField.h>
-#include <ao/rt/TrackMutation.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
@@ -19,9 +18,14 @@
 #include <ao/winui/CallbackAdmissionGate.h>
 #include <ao/winui/track/TrackPropertiesAdapter.h>
 
+// Asio's Win32 headers define GetCurrentTime(); XAML declares a method with that name.
+#pragma push_macro("GetCurrentTime")
+#include <unknwn.h>
+#undef GetCurrentTime
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 #include <winrt/Windows.Foundation.h>
+#pragma pop_macro("GetCurrentTime")
 
 #include <bitset>
 #include <cstddef>
@@ -42,11 +46,7 @@ namespace ao::rt
   class CompletionService;
   class Library;
   class WorkspaceService;
-}
-
-namespace ao::uimodel
-{
-  struct TrackPropertiesFormRow;
+  struct MetadataPatch;
 }
 
 namespace ao::winui

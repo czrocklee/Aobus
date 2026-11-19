@@ -3,7 +3,7 @@
 
 #include "layout/runtime/LayoutHost.h"
 
-#include "pch.h"
+#include "layout/runtime/LayoutComponent.h"
 #include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/rt/Log.h>
@@ -11,6 +11,7 @@
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
+#include <winrt/base.h>
 
 #include <exception>
 #include <expected>

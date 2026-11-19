@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include "track/TrackRowItem.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Signal.h>
@@ -15,6 +14,10 @@
 #include <ao/uimodel/library/presentation/TrackColumnWidthSolver.h>
 #include <ao/uimodel/library/track/TrackDisplayIndex.h>
 #include <ao/winui/track/TrackRevealAdapter.h>
+
+#pragma push_macro("GetCurrentTime")
+#include <unknwn.h>
+#pragma pop_macro("GetCurrentTime")
 
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
@@ -41,6 +44,8 @@ namespace ao::rt
 
 namespace ao::winui
 {
+  struct TrackColumnCellSpec;
+
   /// Stable presentation id stamped when a column-header sort replaces the active
   /// presentation; the presentation label resolves it to localized copy.
   inline constexpr std::string_view kColumnSortPresentationId = "windows-column-sort";

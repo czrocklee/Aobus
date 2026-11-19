@@ -36,6 +36,8 @@ def import_targets(packages):
     for package in packages:
         _claim_target(names, package["name"])
         public.append(package["name"])
+        if "header_package" in package:
+            _claim_target(names, "_shared_headers_" + package["name"])
         for item in package["runtime"]:
             if "name" not in item:
                 continue
@@ -116,7 +118,26 @@ def _project_runtime(ctx, subpackage, path, source, projected, windows, runtime_
         runtime_sources[identity] = path
     return path
 
-def materialize_imports(ctx, subpackage, config, packages, manifest):
+def shared_linux_header_packages(imports):
+    """Find packages with identical Linux header providers and ordered include roots.
+
+    Args:
+        imports: Independently admitted debug and release resolver observations.
+
+    Returns:
+        Names eligible to share a header-only interface, never binaries or defines.
+    """
+    if any([entry["manifest"]["configuration"]["platform"] != "linux" for entry in imports.values()]):
+        return {}
+    release = {p["name"]: p for p in imports["release"]["packages"]}
+    shared = {}
+    for p in imports["debug"]["packages"]:
+        other = release.get(p["name"])
+        if other != None and p["headers"] and p["headers"] == other["headers"] and p["includes"] == other["includes"]:
+            shared[p["name"]] = True
+    return shared
+
+def materialize_imports(ctx, subpackage, config, packages, manifest, shared_headers = {}):
     """Write sparse SDK files and data; return the graph's public target names.
 
     Python owns native admission. Header trees carry their lexical file paths
@@ -130,6 +151,7 @@ def materialize_imports(ctx, subpackage, config, packages, manifest):
         config: Admitted dependency configuration, either debug or release.
         packages: Admitted package interfaces with original artifact paths and header anchors.
         manifest: Admission metadata whose configuration identifies the native platform.
+        shared_headers: Linux packages whose header-only interface is materialized in the release subpackage.
 
     Returns:
         Sorted public target names for the materialized SDK subpackage.
@@ -152,16 +174,23 @@ def materialize_imports(ctx, subpackage, config, packages, manifest):
         name = package["name"]
         headers = []
         prefixes = []
+        header_package = subpackage.removesuffix(config) + "release" if name in shared_headers else None
+        local_headers = header_package == None or subpackage == header_package
         for tree in package["headers"]:
             identity = name + "_" + str(tree["index"])
+            header_name = "_headers_" + identity
+            if not local_headers:
+                # Keep the mode-local filegroup label, not a second copy of every file.
+                headers.append({"name": header_name, "files": ["//" + header_package + ":" + header_name]})
+                continue
             prefix = "artifacts/_headers/" + identity
             prefixes.append(prefix)
             files = []
             for file in tree["files"]:
                 files.append(_project_file(ctx, subpackage, prefix + "/" + _relative_path(file["path"]), file["source"], "header", projected, windows))
-            headers.append({"name": "_headers_" + identity, "files": files})
+            headers.append({"name": header_name, "files": files})
         includes = []
-        for include in package["includes"]:
+        for include in (package["includes"] if local_headers else []):
             path = _relative_path(include["path"], allow_root = True)
             includes.append(prefixes[include["tree"]] + ("/" + path if path else ""))
 
@@ -201,7 +230,7 @@ def materialize_imports(ctx, subpackage, config, packages, manifest):
                     runtime.append(record)
             else:
                 runtime.append({"file": path})
-        result.append({
+        interface = {
             "name": name,
             "headers": headers,
             "includes": includes,
@@ -209,7 +238,10 @@ def materialize_imports(ctx, subpackage, config, packages, manifest):
             "linkopts": package["linkopts"],
             "libraries": libraries,
             "runtime": runtime,
-        })
+        }
+        if header_package != None:
+            interface["header_package"] = header_package
+        result.append(interface)
     targets = import_targets(result)
     prefix = subpackage + "/"
     ctx.file(

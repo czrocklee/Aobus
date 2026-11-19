@@ -3,16 +3,25 @@
 
 #include "track/TrackCreditsEditorControl.h"
 #include "track/TrackPropertiesCoordinator.h"
+#include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/library/Credits.h>
 #include <ao/uimodel/library/detail/TrackCredits.h>
+#include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
+#include <ao/uimodel/library/track/TrackAuthoringSessions.h>
+
+#include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
+#include <winrt/Microsoft.UI.Xaml.Controls.h>
+#include <winrt/Microsoft.UI.Xaml.h>
+#include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.Foundation.h>
+#include <winrt/base.h>
 
 #include <bitset>
 #include <cstddef>
 #include <memory>
 #include <string_view>
 #include <tuple>
-#include <utility>
 
 namespace ao::winui
 {

@@ -32,7 +32,10 @@ exports_files(
 test_suite(
     name = "lint_test",
     tags = ["manual"],
-    tests = ["//test/lint:lint_test"],
+    tests = [
+        "//test/lint:lint_test",
+        "//test/lint:replay_launcher_test",
+    ],
 )
 
 filegroup(

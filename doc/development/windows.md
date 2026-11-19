@@ -397,6 +397,43 @@ owns compilation and executable-local staging. A successful build or bounded
 startup does not replace the interactive GUI gates below or establish complete
 WinUI GUI acceptance.
 
+WinUI code that only needs plain resource lookup includes `StringResources.h`.
+Formatting, MRT language configuration, and `winrt::hstring` lookup use
+`StringResourceFormat.h`, `ResourceLanguage.h`, and `WinRtStringResources.h`,
+respectively. Handwritten WinUI components and probes have no forced include
+or shared `pch.h`. Include the C++/WinRT projection that **defines** a method
+(e.g. `Controls.Primitives` for `ButtonBase::Click`), not just the namespace
+of the derived control. Keep implementation-only dependencies out of public
+headers. Where Win32 and XAML meet, resolve conflicting SDK macros at that
+boundary rather than relying on a global include order.
+
+The frontend uses classic COM for SMTC. Every translation unit linked with it
+must see the real `<unknwn.h>` before its first C++/WinRT projection, including
+before a generated `.g.h` that reads `winrt/base_macros.h` directly. Otherwise
+the pinned projection defines different types and templates in the same program;
+link success does not detect this. Keep this ordering at the owning include
+boundary (and in the generated module wrapper), not in a forced prefix. When
+changing the projection, check the first parse in the linked objects, not just
+the macros still defined at the end of a source file.
+
+MSBuild generates from `Project.idl`, `App.xaml`, `MainWindow.xaml`, and the
+paired `.xaml.h` headers next to the private project. The paired `.xaml.cpp`
+items identify the code-behind relationships without supplying files; Bazel
+compiles the real sources. Add ordinary C++ members to their native Bazel owners,
+not to the SDK project.
+
+The four generated translation units compile the SDK's emitted C++ directly.
+Authored implementations still include their own generated fragments; do not
+compile those fragments as separate objects. If a page starts activating an
+in-project control in XAML, check that the generated types unit can see the
+control's **implementation** declaration, not just its WinRT projection. For
+example, a native probe adding `local:AobusSoulControl` to `MainWindow.xaml`
+required `#include "playback/AobusSoulControl.h"` alongside the local class
+includes in the `XamlTypeInfo.g.cpp` translation unit, after its SDK preamble.
+Supply the specific include at the types-unit integration point if needed;
+adding an include search path or listing all native headers in MSBuild did not
+supply that declaration. Do not edit generated files by hand.
+
 ### Stage offline prerequisites
 
 For offline deployment without target-side SDKs, Python, or network access, use
@@ -670,7 +707,12 @@ required path and fails.
 The official `clang-tidy.exe` cannot load Aobus's out-of-tree C++ plugin.
 Therefore the project builds `tool/lint/AobusClangTidy.exe`, statically linking
 upstream and `aobus-*` checks from the same SDK. The portal verifies registration
-and never falls back to Visual Studio or `PATH`.
+and never falls back to Visual Studio or `PATH`. In LLVM 22.1.8, `Diagnostic.h`
+returns a `unique_ptr<DiagnosticConsumer>` before the consumer type is complete;
+MSVC 14.52 rejects the inline `takeClient()` definition. The Bazel SDK projection
+moves only that definition below `DiagnosticConsumer`, without changing the
+installed header, the LLVM libraries, or the checker flags. Retire the patch
+when the unmodified pinned header builds with the supported MSVC toolset.
 
 Windows tidy replays exact Windows compile actions, including WinUI generated
 contexts when needed. Tidy reports and defers platform-incompatible files

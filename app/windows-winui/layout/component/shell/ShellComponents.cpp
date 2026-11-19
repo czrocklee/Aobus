@@ -6,10 +6,12 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
+#include "layout/runtime/MenuComposer.h"
+#include "layout/runtime/PaneSettingsAccess.h"
 #include "layout/runtime/UiSubscription.h"
-#include "pch.h"
-#include "platform/StringResources.h"
+#include "platform/WinRtStringResources.h"
 #include <ao/Error.h>
+#include <ao/async/Subscription.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/shell/ShellGenerationSequence.h>
 #include <ao/utility/Path.h>
@@ -20,7 +22,9 @@
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.Media.h>
 #include <winrt/Microsoft.UI.Xaml.h>
+#include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
+#include <winrt/base.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -28,6 +32,7 @@
 #include <format>
 #include <memory>
 #include <optional>
+#include <string_view>
 #include <utility>
 #include <vector>
 

@@ -1,7 +1,7 @@
 """Run the existing fixture assertions in an owned cacheable native action."""
 
 load("@aobus_lint_sdk//:flags.bzl", "LINT_SDK_HOST")
-load("@aobus_native_tools//:catalog_tools.bzl", "CATALOG_TOOLS")
+load("@aobus_native_tools//:python_action_tools.bzl", "PYTHON_ACTION_TOOLS")
 load("@rules_cc//cc:find_cc_toolchain.bzl", "use_cc_toolchain")
 load(":lint.bzl", "LintVerificationInfo", "native_environment")
 
@@ -66,7 +66,7 @@ def _fixture_impl(ctx):
     args.add_all(["--report", report, "--log", log, "--work", work], expand_directories = False)
     args.add_all(["--jobs", str(_FIXTURE_JOBS)])
     ctx.actions.run(
-        executable = CATALOG_TOOLS["python"],
+        executable = PYTHON_ACTION_TOOLS["python"],
         arguments = [args],
         inputs = depset(
             [ctx.file._helper, verification.result],
@@ -80,6 +80,7 @@ def _fixture_impl(ctx):
     )
     program = _TEST_PROGRAM.replace("REPORT_KEY", _python_string(ctx.workspace_name + "/" + report.short_path)).replace("LOG_KEY", _python_string(ctx.workspace_name + "/" + log.short_path)).replace("PLATFORM_KEY", _python_string(LINT_SDK_HOST))
     command = "exec(" + _python_string(program) + ")"
+    python = PYTHON_ACTION_TOOLS["python"]
     if LINT_SDK_HOST == "windows":
         launcher = ctx.actions.declare_file(ctx.label.name + ".bat")
 
@@ -87,16 +88,16 @@ def _fixture_impl(ctx):
         # command quotes are reparsed by CMD. Percent signs remain batch literals.
         if '"' in command:
             fail("Unexpected double quote in the native fixture launcher")
-        content = '@echo off\r\n"%s" -I -S -B -X utf8 -c "%s"\r\nexit /b %%errorlevel%%\r\n' % (CATALOG_TOOLS["python"].replace("%", "%%"), command.replace("%", "%%"))
+        content = '@echo off\r\n"%s" -I -S -B -X utf8 -c "%s"\r\nexit /b %%errorlevel%%\r\n' % (python.replace("%", "%%"), command.replace("%", "%%"))
     else:
         launcher = ctx.actions.declare_file(ctx.label.name)
         shell_command = "'" + command.replace("'", "'\\''") + "'"
-        python = "'" + CATALOG_TOOLS["python"].replace("'", "'\\''") + "'"
+        python = "'" + python.replace("'", "'\\''") + "'"
         content = "#!/bin/sh\nexec " + python + " -I -S -B -X utf8 -c " + shell_command + "\n"
     ctx.actions.write(launcher, content, is_executable = True)
     return [DefaultInfo(
         executable = launcher,
-        runfiles = ctx.runfiles(files = [report, log]),
+        runfiles = ctx.runfiles(files = [report, log], transitive_files = ctx.attr._python_tools[DefaultInfo].files),
     )]
 
 lint_fixture_test = rule(
@@ -108,6 +109,7 @@ lint_fixture_test = rule(
         "_fixtures": attr.label(default = Label("//test/lint:fixtures")),
         "_project_headers": attr.label(default = Label("//include:common_headers")),
         "_modules": attr.label(default = Label("//:ao_lint_fixture_sources")),
+        "_python_tools": attr.label(default = Label("@aobus_native_tools//:python_action_tools"), cfg = config.exec("test")),
     },
     fragments = ["cpp"],
     toolchains = use_cc_toolchain(),

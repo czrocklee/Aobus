@@ -856,6 +856,11 @@ class BazelWorkspaceTests(unittest.TestCase):
                  fixtures / 'bin/pkgdata', fixtures / 'catalog-sdk.json'],
                 [fixtures / 'catalog-sdk.json'],
             )
+            python_action = {
+                'tools': {'python': sys.executable},
+                'artifacts': [Path(sys.executable), fixtures / 'stdlib.py'],
+                'identity': {'tools': {'python': sys.executable}},
+            }
             dbus = ({'provider': 'fixture', 'outputs': [str(fixtures)]}, fixtures / 'bin/dbus-daemon',
                     [fixtures / 'lib/libdbus-1.so'], [fixtures / 'dbus-report.json'])
             resource = ({'provider': 'fixture', 'outputs': [str(fixtures)]}, fixtures / 'bin/glib-compile-resources',
@@ -873,6 +878,7 @@ class BazelWorkspaceTests(unittest.TestCase):
                 patch.object(host_tools, '_linux_gperf', return_value=selection),
                 patch.object(dependencies, 'resolve_dependencies', side_effect=catalog) as imports,
                 patch.object(host_tools, '_catalog_sdk', return_value=sdk),
+                patch.object(host_tools, '_python_action_sdk', return_value=python_action),
                 patch.object(host_tools, '_linux_dbus', return_value=dbus),
                 patch.object(host_tools, '_linux_gresource', return_value=resource),
                 patch.object(host_tools, '_python_runtime', return_value=python_runtime),
@@ -942,10 +948,8 @@ class BazelWorkspaceTests(unittest.TestCase):
                 admitted["manifest"],
                 {"config": config, "package": "icu"},
             )
-        self.assertLessEqual(
-            {str(fixtures / "stdlib.py"), str(fixtures / "catalog-sdk.json")},
-            set(facts["catalog"]["artifacts"]),
-        )
+        self.assertIn(str(fixtures / "stdlib.py"), facts["python_action"]["artifacts"])
+        self.assertIn(str(fixtures / "catalog-sdk.json"), facts["catalog"]["artifacts"])
         self.assertEqual(facts["catalog"]["evidence"], [str(fixtures / "catalog-sdk.json")])
         self.assertEqual(
             set(facts["dbus"]["artifacts"]),

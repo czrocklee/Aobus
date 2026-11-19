@@ -3,8 +3,12 @@
 
 #include "playback/OutputDeviceControl.h"
 
-#include "platform/StringResources.h"
+#include "platform/WinRtStringResources.h"
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
+
+#include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
+#include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.Foundation.h>
 
 #include <format>
 #include <memory>

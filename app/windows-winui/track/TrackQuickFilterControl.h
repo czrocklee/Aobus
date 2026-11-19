@@ -7,6 +7,10 @@
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/winui/track/QuickFilterCompletionAdapter.h>
 
+#pragma push_macro("GetCurrentTime")
+#include <unknwn.h>
+#pragma pop_macro("GetCurrentTime")
+
 #include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.Input.h>

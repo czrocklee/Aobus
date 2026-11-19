@@ -1,11 +1,16 @@
 """Selection and verdicts owned by whole-graph lint."""
 
+import io
 import json
 import os
+import subprocess
 import tempfile
 import unittest
+from contextlib import redirect_stderr
 from pathlib import Path, PureWindowsPath
+from unittest.mock import patch
 
+from ao.graph import bazel_graph_lint
 from ao.graph.bazel_graph_lint import replay_wrapper, select_consumer
 from ao.graph.bazel_graph_lint_gate import load_replay_result
 from ao.graph.bazel_graph_lint_gate import main as gate_main
@@ -19,15 +24,15 @@ _FOREIGN = "app/windows-winui/View.h"
 _GENERATED = f"{_CONFIGURATION}/lib/sample/generated.cpp"
 
 
-def _identity(source, *, main=None, owner=_OWNER):
+def _identity(source, *, main=None, owner=_OWNER, configuration=_CONFIGURATION, platform="linux"):
     return {
         "owner": owner,
-        "configuration": _CONFIGURATION,
+        "configuration": configuration,
         "source": source,
         "main": main or source,
-        "outputs": [f"{_CONFIGURATION}/{source}.o"],
+        "outputs": [f"{configuration}/{source}.o"],
         "mode": "STRICT",
-        "platform": "linux",
+        "platform": platform,
     }
 
 
@@ -69,9 +74,9 @@ class ReplaySelectionTest(unittest.TestCase):
         self.assertEqual(select_consumer(_HEADER, candidates, reports)["report"], "local.json")
 
 
-class GraphGateTest(unittest.TestCase):
+class GraphWorkspace(unittest.TestCase):
     def setUp(self):
-        temporary = tempfile.TemporaryDirectory(prefix="ao-graph-gate-")
+        temporary = tempfile.TemporaryDirectory(prefix="ao-graph-lint-")
         self.addCleanup(temporary.cleanup)
         self.addCleanup(os.chdir, os.getcwd())
         os.chdir(temporary.name)
@@ -82,6 +87,211 @@ class GraphGateTest(unittest.TestCase):
         path.write_text(json.dumps(document), encoding="utf-8")
         return name
 
+    def read_json(self, name):
+        return json.loads(Path(name).read_text(encoding="utf-8"))
+
+
+class ReplayDriverTest(GraphWorkspace):
+    _TOOLS = (
+        "--policy",
+        "policy.json",
+        "--sdk",
+        "sdk.json",
+        "--verification",
+        "verified.json",
+        "--tidy",
+        "tidy",
+        "--plugin",
+        "plugin",
+    )
+    _OUTPUTS = ("--report", "out/report.json", "--log", "out/replay.log")
+
+    def consumer(self, name, identity, *, route="000000ab", includes=(_HEADER,)):
+        self.write_report(f"{name}.report", identity, includes)
+        context = self.write_context(f"{name}.context", identity)
+        return {
+            **{field: identity[field] for field in ("owner", "configuration", "source")},
+            "context": context,
+            "report": f"{name}.report",
+            "env": {"PATH": f"native/{name}", "SDKROOT": f"sdk/{name}"},
+            "route": route,
+        }
+
+    def write_report(self, path, identity, includes=()):
+        self.write_json(
+            path, {"schema": 1, "identity": identity, "outcome": "clean", "tool_exit": 0, "includes": includes}
+        )
+
+    def write_context(self, path, identity):
+        return self.write_json(
+            path, {"schema": 1, **identity, "argv": ["compiler", identity["source"]], "virtual_headers": {}}
+        )
+
+    def run_select(self, candidates, item, routes):
+        manifest = self.write_json(
+            "candidates.json", {"schema": 1, "item": item, "platform": "linux", "candidates": candidates}
+        )
+        return bazel_graph_lint.main(["select", "--candidates", manifest, "--routes", routes])
+
+    def select(self, *candidates, selected=None, routes="routes", item=_HEADER):
+        self.assertEqual(self.run_select(candidates, item, routes), 0)
+        route = "none" if selected is None else selected["route"]
+        marker = f"{routes}/{route}"
+        self.assertEqual(list(Path(routes).iterdir()), [Path(marker)])
+        consumer = None if selected is None else {k: v for k, v in selected.items() if k not in ("report", "route")}
+        self.assertEqual(
+            self.read_json(marker),
+            {"schema": 1, "item": item, "platform": "linux", "consumer": consumer, "route": route},
+        )
+        return marker
+
+    def replay(self, marker, context=None):
+        options = (
+            ["--context", context, "--driver", bazel_graph_lint.__file__, *self._TOOLS] if context is not None else []
+        )
+        return bazel_graph_lint.main(
+            ["replay", "--selection", marker, *options, *self._OUTPUTS, "--replay", "out/replay.json"]
+        )
+
+    def test_route_survives_inserting_an_earlier_candidate_but_changes_for_a_new_consumer(self):
+        other = self.consumer(
+            "other", _identity("app/example/Main.cpp", owner="@@//app/example:example"), route="f0000080"
+        )
+        local = self.consumer("local", _identity(_SOURCE))
+        initial = self.select(local, selected=local)
+        inserted = self.select(other, local, selected=local, routes="inserted")
+        self.assertEqual(Path(initial).name, Path(inserted).name)
+        self.assertEqual(Path(initial).read_bytes(), Path(inserted).read_bytes())
+        self.write_report(local["report"], _identity(_SOURCE))
+        self.select(other, local, selected=other, routes="rerouted")
+
+    def test_selector_rejects_ambiguous_or_reserved_route_ids_without_writing_a_marker(self):
+        local = self.consumer("local", _identity(_SOURCE))
+        other = self.consumer("other", _identity("app/example/Main.cpp", owner="@@//app/example:example"))
+        for route in (local["route"], "none"):
+            with self.subTest(route=route), redirect_stderr(io.StringIO()):
+                self.assertEqual(self.run_select([local, {**other, "route": route}], _HEADER, "routes"), 2)
+                self.assertFalse(Path("routes").exists())
+
+    def test_no_consumer_preserves_the_three_outputs_without_launching_analysis(self):
+        candidate = self.consumer("local", _identity(_SOURCE))
+        marker = self.select(candidate, item=_FOREIGN)
+        with patch.object(bazel_graph_lint.subprocess, "run") as run:
+            self.assertEqual(self.replay(marker), 0)
+        run.assert_not_called()
+        self.assertEqual(Path("out/replay.log").read_bytes(), b"")
+        self.assertEqual(self.read_json("out/report.json"), {"schema": 1, "item": _FOREIGN, "outcome": "no_consumer"})
+        self.assertEqual(
+            self.read_json("out/replay.json"),
+            {
+                "schema": 1,
+                "item": _FOREIGN,
+                "status": "no_consumer",
+                "consumer": None,
+                "report": None,
+                "log": None,
+            },
+        )
+
+    def test_replay_rejects_a_renamed_marker_before_launching_analysis(self):
+        local = self.consumer("local", _identity(_SOURCE))
+        marker = Path(self.select(local, selected=local)).rename("routes/f0000080")
+        with patch.object(bazel_graph_lint.subprocess, "run") as run, redirect_stderr(io.StringIO()):
+            self.assertEqual(self.replay(str(marker), local["context"]), 2)
+        run.assert_not_called()
+
+    def test_replay_rejects_a_different_context_even_with_matching_identity(self):
+        local = self.consumer("local", _identity(_SOURCE))
+        foreign = self.consumer("foreign", _identity(_SOURCE), route="f0000080")
+        marker = self.select(foreign, selected=foreign)
+        with patch.object(bazel_graph_lint.subprocess, "run") as run, redirect_stderr(io.StringIO()) as errors:
+            self.assertEqual(self.replay(marker, local["context"]), 2)
+        run.assert_not_called()
+        self.assertIn("routed context path differs", errors.getvalue())
+
+    def test_analysis_rejects_context_identity_mismatches_before_invoking_analyzer(self):
+        consumer = self.consumer("local", _identity(_SOURCE))
+        marker = self.select(consumer, selected=consumer)
+        for field, identity in (
+            ("owner", _identity(_SOURCE, owner="@@//lib/foreign:foreign")),
+            ("configuration", _identity(_SOURCE, configuration="bazel-out/k8-opt/bin")),
+            ("source", _identity("lib/sample/Other.cpp", main=_SOURCE)),
+            ("main", _identity(_SOURCE, main=_HEADER)),
+            ("platform", _identity(_SOURCE, platform="windows")),
+        ):
+            with self.subTest(field=field):
+                self.write_context(consumer["context"], identity)
+                with (
+                    patch.object(bazel_graph_lint.bazel_lint_action, "main") as analyze,
+                    redirect_stderr(io.StringIO()) as errors,
+                ):
+                    self.assertEqual(
+                        bazel_graph_lint.main(
+                            [
+                                "replay-analyze",
+                                "--consumer",
+                                marker,
+                                "--context",
+                                consumer["context"],
+                                *self._TOOLS,
+                                *self._OUTPUTS,
+                            ]
+                        ),
+                        2,
+                    )
+                analyze.assert_not_called()
+                self.assertIn(f"consumer context {field} differs", errors.getvalue())
+
+    def test_replay_uses_the_native_environment_and_rejects_a_foreign_report_configuration(self):
+        consumer = self.consumer("local", _identity(_SOURCE))
+        item = "test/sample/Detail.h"
+        self.write_report(consumer["report"], _identity(_SOURCE), (item,))
+        marker = self.select(consumer, selected=consumer, item=item)
+
+        def run(command, *, env, **_kwargs):
+            self.assertEqual(env, consumer["env"])
+            status = bazel_graph_lint.main(command[command.index("replay-analyze") :])
+            return subprocess.CompletedProcess(command, status, "")
+
+        def analyze(command):
+            self.assertEqual(command[0], "analyze")
+            context = self.read_json(command[2])
+            self.assertEqual(context, {**self.read_json(consumer["context"]), "main": item, "mode": "RELAXED"})
+            self.write_report(
+                command[command.index("--report") + 1],
+                {**_identity(_SOURCE, main=item, configuration=configuration), "mode": "RELAXED"},
+            )
+            Path(command[command.index("--log") + 1]).touch()
+            return 0
+
+        for configuration in ("bazel-out/k8-opt/bin", _CONFIGURATION):
+            with (
+                self.subTest(configuration=configuration),
+                patch.object(bazel_graph_lint.subprocess, "run", side_effect=run),
+                patch.object(bazel_graph_lint.bazel_lint_action, "main", side_effect=analyze),
+                redirect_stderr(io.StringIO()) as errors,
+            ):
+                status = self.replay(marker, consumer["context"])
+                if configuration != _CONFIGURATION:
+                    self.assertEqual(status, 2)
+                    self.assertIn("replayed report configuration differs", errors.getvalue())
+                    self.assertFalse(Path("out/replay.json").exists())
+                else:
+                    self.assertEqual(status, 0)
+                    self.assertEqual(
+                        self.read_json("out/replay.json"),
+                        {
+                            "schema": 1,
+                            "item": item,
+                            "status": "analyzed",
+                            "consumer": {"owner": _OWNER, "source": _SOURCE},
+                            "report": "out/report.json",
+                            "log": "out/replay.log",
+                        },
+                    )
+
+
+class GraphGateTest(GraphWorkspace):
     def report(self, name, identity, *, finding=False):
         report = self.write_json(
             f"{name}.report.json",

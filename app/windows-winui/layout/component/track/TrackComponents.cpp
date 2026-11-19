@@ -7,7 +7,7 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "pch.h"
+#include "platform/StringResourceFormat.h"
 #include "platform/StringResources.h"
 #include "track/TrackListController.h"
 #include "track/TrackQuickFilterControl.h"
@@ -24,8 +24,12 @@
 #include <ao/uimodel/library/track/TrackFilterView.h>
 
 #include <winrt/Microsoft.UI.Xaml.Automation.h>
+#include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
+#include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.Foundation.h>
+#include <winrt/base.h>
 
 #include <algorithm>
 #include <bitset>

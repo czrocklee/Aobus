@@ -6,8 +6,13 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
+#pragma push_macro("GetCurrentTime")
+#include <unknwn.h>
+#pragma pop_macro("GetCurrentTime")
+
 #include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
+#include <winrt/Microsoft.UI.Xaml.h>
 
 #include <cstdint>
 #include <memory>
