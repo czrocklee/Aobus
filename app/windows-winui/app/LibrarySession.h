@@ -15,6 +15,10 @@
 #include <ao/uimodel/library/task/LibraryScanOutcome.h>
 #include <ao/winui/DesktopSettingsYamlSchema.h>
 
+#pragma push_macro("GetCurrentTime")
+#include <unknwn.h>
+#pragma pop_macro("GetCurrentTime")
+
 #include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Windows.Foundation.h>
 

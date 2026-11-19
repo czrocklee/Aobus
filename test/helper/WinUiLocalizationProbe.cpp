@@ -6,6 +6,7 @@
 #include "platform/StringResources.h"
 #include <ao/i18n/MessageCatalog.h>
 
+#include <unknwn.h>
 #include <winrt/base.h>
 
 #include <array>

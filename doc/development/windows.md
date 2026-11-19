@@ -407,6 +407,15 @@ of the derived control. Keep implementation-only dependencies out of public
 headers. Where Win32 and XAML meet, resolve conflicting SDK macros at that
 boundary rather than relying on a global include order.
 
+The frontend uses classic COM for SMTC. Every translation unit linked with it
+must see the real `<unknwn.h>` before its first C++/WinRT projection, including
+before a generated `.g.h` that reads `winrt/base_macros.h` directly. Otherwise
+the pinned projection defines different types and templates in the same program;
+link success does not detect this. Keep this ordering at the owning include
+boundary (and in the generated module wrapper), not in a forced prefix. When
+changing the projection, check the first parse in the linked objects, not just
+the macros still defined at the end of a source file.
+
 MSBuild generates from `Project.idl`, `App.xaml`, `MainWindow.xaml`, and the
 paired `.xaml.h` headers next to the private project. The paired `.xaml.cpp`
 items identify the code-behind relationships without supplying files; Bazel

@@ -3,6 +3,10 @@
 
 #pragma once
 
+#pragma push_macro("GetCurrentTime")
+#include <unknwn.h>
+#pragma pop_macro("GetCurrentTime")
+
 #include "TrackCellItem.g.h"
 
 #include <winrt/Microsoft.UI.Xaml.h>

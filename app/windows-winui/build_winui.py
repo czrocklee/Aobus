@@ -375,8 +375,10 @@ def generate(options: argparse.Namespace, sdk: dict[str, Any]) -> None:
         if '"' in include or "\n" in include:
             raise ValueError(f"Unsafe generated C++ include path: {include}")
         output.parent.mkdir(parents=True, exist_ok=True)
+        # The other three SDK fragments select native IUnknown themselves.
+        prefix = "#include <unknwn.h>\n" if role == "module" else ""
         output.write_text(
-            f'// Generated WinUI translation-unit owner. Do not edit.\n#include "{include}"\n',
+            f'// Generated WinUI translation-unit owner. Do not edit.\n{prefix}#include "{include}"\n',
             encoding="utf-8",
             newline="\n",
         )

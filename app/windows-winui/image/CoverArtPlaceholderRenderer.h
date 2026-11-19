@@ -5,6 +5,10 @@
 
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
+#pragma push_macro("GetCurrentTime")
+#include <unknwn.h>
+#pragma pop_macro("GetCurrentTime")
+
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 
 #include <string_view>

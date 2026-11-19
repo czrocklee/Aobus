@@ -20,6 +20,7 @@
 
 // Asio's Win32 headers define a macro that collides with XAML's method.
 #pragma push_macro("GetCurrentTime")
+#include <unknwn.h>
 #undef GetCurrentTime
 #include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>

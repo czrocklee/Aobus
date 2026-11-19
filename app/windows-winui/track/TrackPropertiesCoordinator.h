@@ -20,6 +20,7 @@
 
 // Asio's Win32 headers define GetCurrentTime(); XAML declares a method with that name.
 #pragma push_macro("GetCurrentTime")
+#include <unknwn.h>
 #undef GetCurrentTime
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>

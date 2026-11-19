@@ -5,6 +5,10 @@
 
 #include <ao/winui/layout/ThemeSurface.h>
 
+#pragma push_macro("GetCurrentTime")
+#include <unknwn.h>
+#pragma pop_macro("GetCurrentTime")
+
 #include <winrt/Microsoft.UI.Xaml.Media.h>
 
 #include <functional>

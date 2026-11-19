@@ -285,7 +285,7 @@ class GenerationActionTest(unittest.TestCase):
         self.assertEqual(
             includes,
             {
-                "module.cpp": ['#include "../headers/module.g.cpp"'],
+                "module.cpp": ["#include <unknwn.h>", '#include "../headers/module.g.cpp"'],
                 "metadata.cpp": ['#include "../headers/XamlMetaDataProvider.cpp"'],
                 "types.cpp": ['#include "../headers/XamlTypeInfo.g.cpp"'],
                 "types_impl.cpp": ['#include "../headers/XamlTypeInfo.Impl.g.cpp"'],

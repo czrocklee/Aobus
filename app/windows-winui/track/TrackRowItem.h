@@ -3,6 +3,10 @@
 
 #pragma once
 
+#pragma push_macro("GetCurrentTime")
+#include <unknwn.h>
+#pragma pop_macro("GetCurrentTime")
+
 #include "TrackRowItem.g.h"
 #include <ao/rt/TrackField.h>
 

@@ -6,6 +6,10 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/playback/output/VolumeViewModel.h>
 
+#pragma push_macro("GetCurrentTime")
+#include <unknwn.h>
+#pragma pop_macro("GetCurrentTime")
+
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 
 #include <memory>
