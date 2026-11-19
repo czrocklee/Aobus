@@ -1665,8 +1665,15 @@ independently of Git diffs or rule-change filename lists. A direct report with
 the path as its main file from any configured owner in the gate satisfies coverage
 for that path, even when another owner lists it as uncovered. All declared direct
 reports are still validated. Only a header or include fragment with no direct main
-gets a replay action, deduplicated by path. No test runs Bazel or an `ao`
-command; the launcher only reads the completed gate result. The portal keeps its
+gets a replay, deduplicated by path. `AobusLintSelect` reads the candidate TUs'
+include reports, not their source bytes. Its output selects one native compile
+context or records that no consumer included the path. Bazel then expands an
+`AobusLintGraphReplay` action with that context's actual compiler inputs and
+header closure. The other contexts remain available during template expansion,
+but their unrelated source edits cannot by themselves invalidate the selected
+diagnostic. The header is the main file; a `.def` fragment instead retains the
+consumer TU as its main. No test runs Bazel or an `ao` command; the launcher
+only reads the completed gate result. The portal keeps its
 scoped [bazel_lint.run](../../script/ao/portal/bazel_lint.py) path for `ao check lint`;
 the former project-wide `run_project` route is retired, and scoped `ao check lint`
 and `ao check analyzer` are the CLI diagnostic entries. Bazel source-file targets distinguish

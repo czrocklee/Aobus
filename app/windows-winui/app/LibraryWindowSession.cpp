@@ -5,7 +5,6 @@
 #include <unknwn.h>
 #undef GetCurrentTime
 
-#include "MainWindow.xaml.h"
 #include "app/LibrarySession.h"
 #include "app/LibraryWindowSession.h"
 #include <ao/Contract.h>
@@ -14,7 +13,6 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/Log.h>
 
-#include <winrt/Aobus.h>
 #include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 #include <winrt/Windows.Foundation.h>
@@ -35,7 +33,6 @@ namespace ao::winui
   namespace
   {
     using Window = winrt::Microsoft::UI::Xaml::Window;
-    using MainWindow = winrt::Aobus::implementation::MainWindow;
 
     Error hresultError(std::string_view const operation, winrt::hresult_error const& error)
     {
@@ -98,21 +95,18 @@ namespace ao::winui
       }
 
       _sessionPtr = std::move(*sessionRes);
-      _window = winrt::make<MainWindow>();
-      auto* implementation = winrt::get_self<MainWindow>(_window.as<winrt::Aobus::MainWindow>());
-      implementation->initialize(*_sessionPtr, std::move(requestRestart));
+      createAndInitializeMainWindow(std::move(requestRestart));
       installClosedHandler(_window);
       _window.Activate();
 
+      // Activate can deliver Closed synchronously; recheck ownership before resolving the frame again.
       if (!_window || !_sessionPtr)
       {
         retire();
         return makeError(Error::Code::InvalidState, "The WinUI library window closed during startup");
       }
 
-      implementation = winrt::get_self<MainWindow>(_window.as<winrt::Aobus::MainWindow>());
-
-      if (auto activatedRes = implementation->activate(); !activatedRes)
+      if (auto activatedRes = activateMainWindowAdapters(); !activatedRes)
       {
         retire();
         return activatedRes;
@@ -168,8 +162,7 @@ namespace ao::winui
       return makeError(Error::Code::InvalidState, "The WinUI library window session is only partially retired");
     }
 
-    auto* const implementation = winrt::get_self<MainWindow>(_window.as<winrt::Aobus::MainWindow>());
-    return implementation->prepareLibraryRestart();
+    return prepareMainWindowForLibraryRestart();
   }
 
   void LibraryWindowSession::retireWindow() noexcept
@@ -182,8 +175,7 @@ namespace ao::winui
     auto window = std::move(_window);
     _windowClosedRevoker.revoke();
 
-    auto* const implementation = winrt::get_self<MainWindow>(window.as<winrt::Aobus::MainWindow>());
-    implementation->retire();
+    retireMainWindow(window);
     window.Close();
 
     window = nullptr;
@@ -216,8 +208,7 @@ namespace ao::winui
       _windowClosedRevoker.revoke();
       auto closedWindow = std::move(_window);
 
-      auto* const implementation = winrt::get_self<MainWindow>(closedWindow.as<winrt::Aobus::MainWindow>());
-      implementation->retire();
+      retireMainWindow(closedWindow);
 
       closedWindow = nullptr;
       releaseSession();

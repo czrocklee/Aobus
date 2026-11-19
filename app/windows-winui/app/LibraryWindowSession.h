@@ -70,6 +70,12 @@ namespace ao::winui
     void retire() noexcept;
 
   private:
+    // Defined in MainWindow.xaml.cpp to keep the concrete XAML frame out of this session's translation unit.
+    void createAndInitializeMainWindow(RestartRequest&& requestRestart);
+    Result<> activateMainWindowAdapters();
+    Result<> prepareMainWindowForLibraryRestart();
+    static void retireMainWindow(winrt::Microsoft::UI::Xaml::Window const& window);
+
     void installClosedHandler(winrt::Microsoft::UI::Xaml::Window const& window);
     void handleClosed() noexcept;
     /// Retire and release the native window while retaining the session owner.

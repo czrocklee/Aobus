@@ -7,6 +7,7 @@
 #undef GetCurrentTime
 
 #include "app/LibrarySession.h"
+#include "app/LibraryWindowSession.h"
 // The window's own destructor destroys the group-cover presenters it retains.
 #include "image/CoverArtPresenter.h" // NOLINT(misc-include-cleaner)
 #include "layout/ShellBuilder.h"
@@ -40,6 +41,7 @@
 #include <ao/winui/WinUiErrorBoundary.h>
 #include <ao/winui/list/ListAuthoringAdapter.h>
 
+#include <winrt/Aobus.h>
 #include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Microsoft.UI.Input.h>
 #include <winrt/Microsoft.UI.Windowing.h>
@@ -53,6 +55,7 @@
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Graphics.h>
 #include <winrt/Windows.UI.h>
+#include <winrt/base.h>
 
 #include <bitset>
 #include <format>
@@ -576,3 +579,41 @@ namespace winrt::Aobus::implementation
     shutdown();
   }
 } // namespace winrt::Aobus::implementation
+
+namespace ao::winui
+{
+  namespace
+  {
+    using Window = winrt::Microsoft::UI::Xaml::Window;
+    using MainWindow = winrt::Aobus::implementation::MainWindow;
+
+    MainWindow& mainWindowImplementation(Window const& window)
+    {
+      // Drop the temporary query reference before calling any frame command.
+      return *winrt::get_self<MainWindow>(window.as<winrt::Aobus::MainWindow>());
+    }
+  } // namespace
+
+  void LibraryWindowSession::createAndInitializeMainWindow(RestartRequest&& requestRestart)
+  {
+    // Store the window first so the session can retire it if initialization fails.
+    _window = winrt::make<MainWindow>();
+    auto& frame = mainWindowImplementation(_window);
+    frame.initialize(*_sessionPtr, std::move(requestRestart));
+  }
+
+  Result<> LibraryWindowSession::activateMainWindowAdapters()
+  {
+    return mainWindowImplementation(_window).activate();
+  }
+
+  Result<> LibraryWindowSession::prepareMainWindowForLibraryRestart()
+  {
+    return mainWindowImplementation(_window).prepareLibraryRestart();
+  }
+
+  void LibraryWindowSession::retireMainWindow(Window const& window)
+  {
+    mainWindowImplementation(window).retire();
+  }
+} // namespace ao::winui
