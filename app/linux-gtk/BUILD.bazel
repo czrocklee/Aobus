@@ -22,18 +22,27 @@ GTK_HEADER_COPTS = select({
     "//conditions:default": [],
 })
 
-# GResource bundle: the committed XML stays the single authority for membership
-# and aliases. The declared inputs overapproximate the referenced CSS, YAML, SVG,
-# and license files with package-local globs and a bounded asset filegroup.
+# Ordered (source file, public alias) inventory. The resource rule derives its
+# inputs and generated GLib XML from this sequence alone.
 gresource_c(
     name = "generated_resources",
-    srcs = ["app.css"] + glob([
-        "css/*.css",
-        "layout/*.yaml",
-    ]) + ["//asset:gresource_files"],
     out = "resources.c",
+    resources = [
+        ("app.css", "app.css"),
+        ("css/_variables.css", "css/_variables.css"),
+        ("css/_utilities.css", "css/_utilities.css"),
+        ("css/_common.css", "css/_common.css"),
+        ("css/_classic.css", "css/_classic.css"),
+        ("css/_modern.css", "css/_modern.css"),
+        ("layout/default_layout.yaml", "layout/default_layout.yaml"),
+        ("layout/modern_layout.yaml", "layout/modern_layout.yaml"),
+        ("//asset:ui/no-cover/note.svg", "image/no-cover/note.svg"),
+        ("//asset:ui/no-cover/vinyl.svg", "image/no-cover/vinyl.svg"),
+        ("//asset:ui/no-cover/equalizer.svg", "image/no-cover/equalizer.svg"),
+        ("//asset:brand/SoulMark.svg", "image/no-cover/soul.svg"),
+        ("//asset:brand/LICENSE.txt", "brand/LICENSE.txt"),
+    ],
     target_compatible_with = GTK_COMPATIBILITY,
-    xml = "aobus.gresource.xml",
 )
 
 # Standard C compilation of the generated bundle, kept separate so only the

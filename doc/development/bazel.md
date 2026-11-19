@@ -333,9 +333,10 @@ bazel run //app/linux-gtk:aobus-gtk
 
 The Linux GTK library owns the existing frontend implementations and links the
 regular desktop-launch, runtime, UIModel, catalog and Linux MPRIS owners.
-The [resource action](../../app/linux-gtk/gresource.bzl) compiles the existing
-[GResource XML](../../app/linux-gtk/aobus.gresource.xml), preserving its CSS,
-layout, image and license aliases with declared inputs. The generated C bundle
+The [GTK resource inventory](../../app/linux-gtk/BUILD.bazel) pairs each public
+resource alias with its source file. The [resource rule](../../app/linux-gtk/gresource.bzl)
+generates the GLib XML from those same declared files, so there is no second
+search root where an undeclared file can shadow an asset. The generated C bundle
 has its own standard library target and retained resource anchor; it is not a
 source-tree runtime lookup. GTKmm, Boost.Process and the resource compiler come
 from the pinned Nix provider, not a second installer. Cairo FT/FC metadata supplies
@@ -702,7 +703,12 @@ observations keyed by configuration, not by Bazel package paths. Starlark owns
 native/test subpackages, the catalog SDK's package layout and root mode aliases;
 it requires both configurations before materialization. Fixed single-mode root
 SDK repositories are not supported. Per-variant native queries still receive
-their own Debug or Release configuration.
+their own Debug or Release configuration. On Linux, if both observations for a
+package have identical header records (including source paths) and ordered include
+roots, both modes use one header-only target in the release subpackage. Libraries,
+consumer defines, manifests and mode guards remain separate. Different headers or
+include ordering keep separate projections. This comparison does not read or hash
+header contents.
 WinUI remains independent and lazy, using the same Starlark mode selection.
 The resolver returns no generated-file, destination-link or alias program.
 

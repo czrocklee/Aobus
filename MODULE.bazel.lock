@@ -200,7 +200,7 @@
   "moduleExtensions": {
     "//bazel:dependencies.bzl%dependencies": {
       "general": {
-        "bzlTransitiveDigest": "xGm+PnJokkD5VWgk/FiO6Mkr6k0ORCkVdCiyzox/n9w=",
+        "bzlTransitiveDigest": "YABTMpoJzsbKl7tj9xp1qa4Fj6SeCMZe5Sr3DW/X+DE=",
         "usagesDigest": "xq8tDLFxkt99+Cam7irGlY+r5AqIF1Jz2wKQMKyaC90=",
         "recordedInputs": [
           "REPO_MAPPING:,aobus_environment +dependencies+aobus_environment",

@@ -51,6 +51,24 @@ def sdk_imports(config, packages, platform):
                 name = header["name"],
                 srcs = header["files"],
             )
+        hdrs = [":" + header["name"] for header in package["headers"]]
+        includes = package["includes"]
+        header_deps = []
+        header_package = package.get("header_package")
+        if header_package != None:
+            # Only paths are shared; defines, libraries, runtime, and mode guards
+            # stay on the original configured package. Preserve fastbuild include spellings.
+            header_target = "_shared_headers_" + package["name"]
+            if config == "release":
+                cc_library(
+                    name = header_target,
+                    hdrs = hdrs,
+                    includes = includes,
+                    visibility = ["//" + header_package.removesuffix("release") + "debug:__pkg__"],
+                )
+            header_deps = ["//" + header_package + ":" + header_target]
+            hdrs = []
+            includes = []
         deps = []
         for library in package["libraries"]:
             name = library["name"]
@@ -91,11 +109,11 @@ def sdk_imports(config, packages, platform):
                 )
         cc_library(
             name = package["name"],
-            hdrs = [":" + header["name"] for header in package["headers"]],
-            includes = package["includes"],
+            hdrs = hdrs,
+            includes = includes,
             defines = package["defines"],
             linkopts = package["linkopts"],
-            deps = _prepared(config, deps),
+            deps = header_deps + _prepared(config, deps),
         )
 
 def _unavailable_dependency_impl(ctx):
