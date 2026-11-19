@@ -147,6 +147,16 @@ def _summary(label=UNIT_TEST, *, status="PASSED", cached=0, config=CHECKSUM):
     }
 
 
+def _skipped(label, config, *, aspect=None):
+    completed = {"label": label, "configuration": {"id": config}}
+    if aspect:
+        completed["aspect"] = aspect
+    return {
+        "id": {"targetCompleted": completed},
+        "aborted": {"reason": "SKIPPED", "description": f"Target {label} build was skipped."},
+    }
+
+
 class CompletionEvidenceTest(unittest.TestCase):
     """One expanded suite, one permitted skip and one independently required test."""
 
@@ -181,6 +191,45 @@ class CompletionEvidenceTest(unittest.TestCase):
         ):
             with self.subTest(missing=missing), self.assertRaises(bazel_native.BazelWorkspaceError):
                 self.verify(events[:index] + events[index + 1 :])
+
+    def test_missing_and_skipped_required_checks_are_distinguished(self):
+        skipped, missing = "//:native_policy", "//test:absent"
+        self.scope = completion._CheckSelection(
+            suites={"//:suite"}, required={"//:gate", UNIT_TEST, skipped, missing}, optional={"//test:foreign"}
+        )
+        events = [
+            self.expansion,
+            _summary(),
+            _summary("//:gate"),
+            _skipped(skipped, "skip-cfg"),
+            _skipped("//test:unrelated", "other"),
+            _skipped(UNIT_TEST, "other-cfg"),
+            _skipped(missing, "aspect-cfg", aspect="//aspect"),
+            {"id": {"started": {}}, "started": {"description": f"Target {missing} build was skipped."}},
+            self.finish,
+            self.last,
+        ]
+        with self.assertRaises(bazel_native.BazelWorkspaceError) as caught:
+            self.verify(events)
+        message = str(caught.exception)
+        self.assertIn("missing required passing checks: //test:absent", message)
+        self.assertIn("skipped required checks: //:native_policy [skip-cfg]", message)
+        self.assertNotIn("//test:unrelated", message)
+        self.assertNotIn(UNIT_TEST, message)
+        self.scope = completion._CheckSelection(suites={"//:suite"}, required={"//:gate"}, optional={"//test:foreign"})
+        failed = [
+            self.expansion,
+            _summary(status="FAILED"),
+            _skipped(UNIT_TEST, "other-cfg"),
+            _summary("//:gate"),
+            self.finish,
+            self.last,
+        ]
+        with self.assertRaises(bazel_native.BazelWorkspaceError) as caught:
+            self.verify(failed)
+        message = str(caught.exception)
+        self.assertIn("required check did not pass: //test:unit", message)
+        self.assertNotIn("skipped required checks", message)
 
     def test_a_required_member_must_have_one_unambiguous_pass(self):
         for summaries in (

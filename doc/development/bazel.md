@@ -2098,7 +2098,10 @@ uses the same invocation's BEP suite expansions to require a passing summary
 for every applicable member of `//:check_tests`, `//test/script:repository_checks`
 and, on Linux, `//:instrumentation_tests`. In particular, dropping the manual
 backend or enabled Linux GTK test from discovery does not turn the build green.
-Linux system-media is required when enabled; Windows UIA is required in CI.
+A required label with no passing summary still fails: a same-label non-aspect
+`targetCompleted` `SKIPPED` abort is reported with its configuration, and every
+other absence stays missing. Linux system-media is required when enabled; Windows UIA
+is required in CI.
 AppKit GUI smoke remains build-only. Cached passes count unless `--fresh` is
 selected. No second `cquery` or test invocation is needed.
 
