@@ -13,7 +13,7 @@ and no test runs Bazel or an ao command.
 """
 
 load("@aobus_lint_sdk//:flags.bzl", "LINT_SDK_HOST")
-load("@aobus_native_tools//:catalog_tools.bzl", "CATALOG_TOOLS")
+load("@aobus_native_tools//:python_action_tools.bzl", "PYTHON_ACTION_TOOLS")
 load("@rules_cc//cc:find_cc_toolchain.bzl", "use_cc_toolchain")
 load("@rules_python//python:defs.bzl", "py_test")
 load("//bazel/lint:lint.bzl", "LintGraphInfo", "LintVerificationInfo", "lint_graph_aspect", "native_environment")
@@ -42,7 +42,7 @@ def _expand_replay(template_ctx, *, input_directories, output_directories, addit
     args = template_ctx.args()
     args.add_all(["replay", "--selection", marker])
     args.add_all(["--replay", replay, "--report", report, "--log", log])
-    inputs = [additional_inputs["python_modules"]]
+    inputs = [additional_inputs["python_modules"], additional_inputs["python_runtime"]]
     if route != "none":
         key = "native_" + route
         if key not in additional_inputs:
@@ -105,6 +105,8 @@ def _lint_graph_gate_impl(ctx):
             entry["owners"].append(record["owner"])
 
     modules = depset([ctx.file._helper], transitive = [ctx.attr._modules[DefaultInfo].files])
+    python = ctx.attr._python_tools[DefaultInfo].files
+    replay_python = ctx.attr._replay_python_tools[DefaultInfo].files
     environment = native_environment(ctx)
     replay_entries = []
     replay_files = []
@@ -148,6 +150,7 @@ def _lint_graph_gate_impl(ctx):
         available = {
             "driver": ctx.file._driver,
             "python_modules": modules,
+            "python_runtime": replay_python,
             "analysis": depset([uncovered_files[path], verification.result], transitive = [verification.inputs]),
             "policy": verification.policy,
             "sdk": verification.sdk,
@@ -165,9 +168,9 @@ def _lint_graph_gate_impl(ctx):
         args = ctx.actions.args()
         args.add_all(["-I", "-S", "-B", "-X", "utf8", ctx.file._driver, "select", "--candidates", candidates_file, "--routes", route.path])
         ctx.actions.run(
-            executable = CATALOG_TOOLS["python"],
+            executable = PYTHON_ACTION_TOOLS["python"],
             arguments = [args],
-            inputs = depset([candidates_file, ctx.file._driver] + candidate_reports, transitive = [modules]),
+            inputs = depset([candidates_file, ctx.file._driver] + candidate_reports, transitive = [modules, python]),
             outputs = [route],
             env = environment,
             mnemonic = "AobusLintSelect",
@@ -210,11 +213,12 @@ def _lint_graph_gate_impl(ctx):
         [inventory, ctx.file._gate, ctx.file._driver, ctx.file._helper],
         transitive = [
             modules,
+            python,
             depset(list(indices.values()) + list(reports.values()) + list(logs.values()) + replay_files),
         ],
     )
     ctx.actions.run(
-        executable = CATALOG_TOOLS["python"],
+        executable = PYTHON_ACTION_TOOLS["python"],
         arguments = [args],
         inputs = gate_inputs,
         outputs = [result, gate_log, coverage],
@@ -248,6 +252,8 @@ lint_graph_gate = rule(
         "_gate": attr.label(default = Label("//:script/ao/graph/bazel_graph_lint_gate.py"), allow_single_file = True),
         "_helper": attr.label(default = Label("//:script/ao/graph/bazel_lint_action.py"), allow_single_file = True),
         "_modules": attr.label(default = Label("//:ao_lint_action_sources")),
+        "_python_tools": attr.label(default = Label("@aobus_native_tools//:python_action_tools"), cfg = "exec"),
+        "_replay_python_tools": attr.label(default = Label("@aobus_native_tools//:python_replay_tools"), cfg = "exec"),
         "_verification": attr.label(default = Label("//tool/lint:verification")),
     },
     fragments = ["cpp"],

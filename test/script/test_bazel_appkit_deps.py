@@ -1,5 +1,8 @@
 """macOS AppKit Boost.Process v2 static SDK import and its refresh projection."""
 
+import os
+import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -188,6 +191,58 @@ class AppKitBoostProcessRefreshTest(unittest.TestCase):
                         )
                     },
                 )
+
+    def link_directory(self, link: Path, target: Path) -> None:
+        """Use a junction on Windows without requiring symlink privileges."""
+        if os.name == "nt":
+            subprocess.run(["cmd", "/d", "/c", "mklink", "/J", str(link), str(target)], check=True)
+        else:
+            link.symlink_to(os.path.relpath(target, link.parent), target_is_directory=True)
+
+    def library_files(self, repository):
+        return [
+            Path(item["file"]).relative_to(self.prefix).as_posix()
+            for item in self.package(repository, "boost_process")["resolved_libraries"]
+        ]
+
+    def test_debug_refresh_keeps_its_archives_and_rejects_a_release_root_alias(self):
+        control = self.refresh("debug", "control")
+        self.assertEqual(
+            self.library_files(control),
+            ["debug/lib/libboost_process.a", "debug/lib/libboost_filesystem.a"],
+        )
+        # A real macOS static install has no Debug bin; that absence is not an escape.
+        self.assertFalse((self.prefix / "debug/bin").exists())
+        aliased = self.prefix / "debug/lib"
+        shutil.rmtree(aliased)
+        self.link_directory(aliased, self.prefix / "lib")
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "escapes its configuration"):
+            self.refresh("debug", "aliased")
+
+    def test_release_refresh_rejects_a_debug_library_root_alias(self):
+        release_lib = self.prefix / "lib"
+        shutil.rmtree(release_lib)
+        self.link_directory(release_lib, self.prefix / "debug/lib")
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "escapes its configuration"):
+            self.refresh("release", "release-aliased")
+
+    def test_debug_library_root_alias_inside_the_mode_keeps_debug_archives(self):
+        source = self.prefix / "debug/lib"
+        moved = self.prefix / "debug/lib-real"
+        source.rename(moved)
+        self.link_directory(source, moved)
+        repository = self.refresh("debug", "internal")
+        self.assertEqual(
+            self.library_files(repository),
+            ["debug/lib-real/libboost_process.a", "debug/lib-real/libboost_filesystem.a"],
+        )
+
+    def test_debug_runtime_root_symlink_into_release_is_rejected(self):
+        release = self.prefix / "bin"
+        release.mkdir()
+        self.link_directory(self.prefix / "debug/bin", release)
+        with self.assertRaisesRegex(native.BazelWorkspaceError, "escapes its configuration"):
+            self.refresh("debug", "aliased-runtime")
 
     def test_discovered_process_metadata_is_rejected_not_consumed_as_ambient(self):
         (self.prefix / "lib/pkgconfig/boost_process.pc").write_text(

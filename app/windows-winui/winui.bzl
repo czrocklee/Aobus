@@ -7,8 +7,8 @@ load("@rules_cc//cc/common:cc_common.bzl", "cc_common")
 load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
 load("//bazel:msvc_policy.bzl", "MSVC_WINUI_COPTS")
 load("//bazel:windows_utf8_manifest.bzl", "WINDOWS_UTF8_LINKER_INPUTS", "WINDOWS_UTF8_LINKOPTS")
+load(":outputs.bzl", "WinuiGeneratedInfo")
 
-_WinuiGeneratedInfo = provider(doc = "Compiled XAML outputs consumed by WinUI resource assembly.", fields = ["xbf"])
 _WinuiResourcesInfo = provider(doc = "Private resource tree staged alongside a WinUI executable.", fields = ["private"])
 _WRAPPERS = ["module", "metadata", "types", "types_impl"]
 
@@ -96,7 +96,7 @@ def _codegen_impl(ctx):
     return [
         DefaultInfo(files = depset([headers, sdk_headers] + xbf)),
         OutputGroupInfo(cpp = depset(wrappers), diagnostics = depset([private])),
-        _WinuiGeneratedInfo(xbf = xbf),
+        WinuiGeneratedInfo(xbf = xbf, headers = headers, sdk_headers = sdk_headers),
         CcInfo(compilation_context = cc_common.create_compilation_context(
             headers = depset([headers, sdk_headers]),
             includes = depset([headers.path]),
@@ -116,13 +116,13 @@ winui_codegen = rule(
         "_helper": attr.label(default = Label(":build_winui.py"), allow_single_file = True),
         "_sdk": attr.label(default = Label("@aobus_winui_sdk//:sdk.json"), allow_single_file = True),
         "_sdk_tools": attr.label(default = Label("@aobus_winui_sdk//:tools"), cfg = "exec"),
-        "_native_tools": attr.label(default = Label("@aobus_native_tools//:catalog_tools"), cfg = "exec"),
+        "_native_tools": attr.label(default = Label("@aobus_native_tools//:python_action_tools"), cfg = "exec"),
     },
-    provides = [CcInfo, _WinuiGeneratedInfo],
+    provides = [CcInfo, WinuiGeneratedInfo],
 )
 
 def _resources_impl(ctx):
-    xbf = ctx.attr.generated[_WinuiGeneratedInfo].xbf
+    xbf = ctx.attr.generated[WinuiGeneratedInfo].xbf
     catalogs = ctx.files.catalog
     if len(catalogs) != 1 or not catalogs[0].is_directory:
         fail("WinUI resources require the catalog's one intermediates tree")
@@ -150,7 +150,7 @@ def _resources_impl(ctx):
 winui_resources = rule(
     implementation = _resources_impl,
     attrs = {
-        "generated": attr.label(providers = [_WinuiGeneratedInfo], mandatory = True),
+        "generated": attr.label(providers = [WinuiGeneratedInfo], mandatory = True),
         "catalog": attr.label(mandatory = True),
         "assets": attr.label_list(allow_files = True, mandatory = True),
         "srcs": attr.label_list(allow_files = [".yaml"], mandatory = True),
@@ -158,7 +158,7 @@ winui_resources = rule(
         "_helper": attr.label(default = Label(":build_winui.py"), allow_single_file = True),
         "_sdk": attr.label(default = Label("@aobus_winui_sdk//:sdk.json"), allow_single_file = True),
         "_sdk_tools": attr.label(default = Label("@aobus_winui_sdk//:tools"), cfg = "exec"),
-        "_native_tools": attr.label(default = Label("@aobus_native_tools//:catalog_tools"), cfg = "exec"),
+        "_native_tools": attr.label(default = Label("@aobus_native_tools//:python_action_tools"), cfg = "exec"),
     },
     provides = [_WinuiResourcesInfo],
 )
@@ -251,7 +251,7 @@ winui_app = rule(
         "resources": attr.label(providers = [_WinuiResourcesInfo], mandatory = True),
         "runtime": attr.label(allow_files = True, mandatory = True),
         "_helper": attr.label(default = Label(":build_winui.py"), allow_single_file = True),
-        "_native_tools": attr.label(default = Label("@aobus_native_tools//:catalog_tools"), cfg = "exec"),
+        "_native_tools": attr.label(default = Label("@aobus_native_tools//:python_action_tools"), cfg = "exec"),
     },
 )
 

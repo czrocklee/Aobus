@@ -51,7 +51,6 @@ build --action_env=NIX_LDFLAGS_FOR_TARGET=
 build --action_env=CPLUS_INCLUDE_PATH=
 build --action_env=C_INCLUDE_PATH=
 build --action_env=CPATH=
-build --action_env=LIBRARY_PATH=
 build --action_env=LD_LIBRARY_PATH=
 
 # Bare commands default to fastbuild: fast ordinary compilation and test
@@ -98,6 +97,10 @@ build:linux --compiler=gcc
 build:linux --extra_toolchains=@aobus_toolchain//:registered_nix_gcc,@aobus_toolchain//:registered_nix_clang
 build:linux --features=-treat_warnings_as_errors
 build:linux --host_features=-treat_warnings_as_errors
+# GCC treats even an empty LIBRARY_PATH as -L.; unset it in both configurations.
+build:linux --action_env==LIBRARY_PATH
+build:linux --host_action_env==LIBRARY_PATH
+build:macos --action_env=LIBRARY_PATH=
 build:macos --extra_toolchains=@aobus_toolchain//:registered_llvm22
 build:macos --features=-treat_warnings_as_errors
 build:macos --host_features=-treat_warnings_as_errors
@@ -110,6 +113,7 @@ build:macos --platforms=@aobus_environment//:native_platform
 # rules_cc owns MSVC discovery, CRT, response files and debug/link defaults.
 # Its toolchain-wide option inlets also cover optimized execution tools.
 # A literal colon inside BAZEL_CXXOPTS is %-escaped; colons separate options.
+build:windows --action_env=LIBRARY_PATH=
 build:windows --repo_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=0
 build:windows --repo_env=USE_CLANG_CL=0
 build:windows --repo_env==CL

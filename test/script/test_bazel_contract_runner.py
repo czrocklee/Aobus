@@ -87,6 +87,7 @@ if action == fixture['failed_action']:
                         "is_tool": is_tool,
                         "configuration": "bazel-out/k8-dbg/bin",
                         "quote_includes": [],
+                        "winui_projections": [],
                         "declared": [],
                         "compiles": [{"argv": argv, "env": {"CAPTURED_DRIVER": "present"}, "spa_inputs": []}],
                         "native_actions": [],

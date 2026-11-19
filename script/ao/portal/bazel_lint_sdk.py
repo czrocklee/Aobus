@@ -299,17 +299,25 @@ def _llvm_link_interface(
 
 def _windows_system_libraries(
     systems: Sequence[str], roots: Sequence[Path], libraries: Sequence[Path], llvm_nm: Path
-) -> tuple[list[str], list[Path]]:
+) -> tuple[list[str], list[Path], list[Path]]:
+    """Return system tokens, extra libraries, and archives whose symbols were read.
+
+    The third list is the precise content input of this decision. Archives skipped
+    after xml evidence, and archives never opened, are not inputs.
+    """
     if not any(value.casefold() == "xml2s.lib" for value in systems):
-        return list(systems), []
+        return list(systems), [], []
     # This SDK's llvm-config reports a global xml2s.lib even for Support alone.
     # LLVMWindowsManifest is not part of clang-tidy's target initializer closure.
     # Repair that token only with evidence from the actual selected archives.
     needs_xml = any(path.stem.casefold().removeprefix("lib") == "llvmwindowsmanifest" for path in libraries)
+    inspected: list[Path] = []
     for library in libraries:
         if needs_xml:
             break
-        symbols = _run(llvm_nm, "--undefined-only", "--format=posix", str(_file(library))).stdout
+        archive = _file(library)
+        inspected.append(archive)
+        symbols = _run(llvm_nm, "--undefined-only", "--format=posix", str(archive)).stdout
         for line in symbols.splitlines():
             fields = line.split()
             if len(fields) < 2 or fields[1] != "U":
@@ -330,7 +338,7 @@ def _windows_system_libraries(
         if needs_xml
         else []
     )
-    return [value for value in systems if value.casefold() != "xml2s.lib"], extra
+    return [value for value in systems if value.casefold() != "xml2s.lib"], extra, inspected
 
 
 def discover_sdk(
@@ -404,6 +412,8 @@ def discover_sdk(
         host,
     )
     target_components: list[str] = []
+    # Content watches are the archives llvm-nm opened, at the caller's path.
+    inspected_archives: list[Path] = []
     if host == "windows":
         clang_libraries = {name: _one_library(roots, [name + ".lib"], name) for name in _WINDOWS_CLANG_LIBRARIES}
         llvm_nm = _file((root or prefix) / "bin/llvm-nm.exe")
@@ -411,13 +421,17 @@ def discover_sdk(
         modules, target_components = _tidy_main_requirements(roots, clang_libraries["clangTidyMain"], llvm_nm)
         libraries = [*clang_libraries.values(), *modules]
         policy.extend([force_linker, llvm_nm])
+        inspected_archives.append(clang_libraries["clangTidyMain"])
     llvm_libraries, systems = _llvm_link_interface(llvm_config, host, target_components)
     system_arguments: list[str] = []
     if host == "windows":
         systems = [
             value.removeprefix("-l") + ".lib" if value.startswith("-l") else value.strip('"') for value in systems
         ]
-        systems, xml_libraries = _windows_system_libraries(systems, roots, [*libraries, *llvm_libraries], llvm_nm)
+        systems, xml_libraries, xml_archives = _windows_system_libraries(
+            systems, roots, [*libraries, *llvm_libraries], llvm_nm
+        )
+        inspected_archives.extend(xml_archives)
         # clangDriver's MSVC discovery uses the Windows version APIs; llvm-config
         # describes LLVM's system interface, not this Clang dependency.
         systems.append("version.lib")
@@ -431,7 +445,9 @@ def discover_sdk(
             libraries.append(dia)
         analysis_arguments = [f"-resource-dir={resource_dir}", "-D_USE_STD_VECTOR_ALGORITHMS=0"]
         system_arguments = []
-        runtime = sorted((root / "bin").glob("*.dll")) if root else []
+        # Enumerate bin even when it currently has no DLLs: membership, not a
+        # hash of each runtime file, is what admits a newly added DLL.
+        runtime = sorted((root / "bin").glob("*.dll")) if root is not None else []
     else:
         libraries = [
             _one_library(roots, [f"lib{name}.a"], name)
@@ -501,8 +517,14 @@ def discover_sdk(
             llvm_header,
             clang_header,
             llvm_include / "llvm/Config/abi-breaking.h",
+            # Precise content inputs of the derived Windows link closure.
+            *dict.fromkeys(inspected_archives),
         ],
-        watch_directories=[*(candidate / "lib" for candidate in roots), *includes],
+        watch_directories=[
+            *(candidate / "lib" for candidate in roots),
+            *includes,
+            *([root / "bin"] if host == "windows" and root is not None else []),
+        ],
         runtime=runtime,
     )
 

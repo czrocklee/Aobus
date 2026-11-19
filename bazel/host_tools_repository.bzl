@@ -42,6 +42,20 @@ def materialize_host_tools(ctx, data):
     for index, source in enumerate(catalog["artifacts"]):
         catalog_inputs.append(_link(ctx, source, "catalog-sdk/%s/" % index + _basename(source), links))
 
+    python = data["python_action"]
+    python_inputs = []
+    for index, source in enumerate(python["artifacts"]):
+        python_inputs.append(_link(ctx, source, "python-sdk/%s/" % index + _basename(source), links))
+    ctx.file("python-sdk.json", json.encode(python["identity"]) + "\n", executable = False)
+    python_inputs.append("python-sdk.json")
+
+    replay = data["python_replay"]
+    replay_inputs = []
+    for index, source in enumerate(replay["artifacts"]):
+        replay_inputs.append(_link(ctx, source, "python-replay/%s/" % index + _basename(source), links))
+    ctx.file("python-replay.json", json.encode(replay["identity"]) + "\n", executable = False)
+    replay_inputs.append("python-replay.json")
+
     resource = data.get("resource")
     resource_executable = ""
     resource_inputs = []
@@ -61,6 +75,7 @@ def materialize_host_tools(ctx, data):
 
     ctx.file("windows_manifest_tools.bzl", "WINDOWS_MANIFEST_TOOLS = %s\n" % repr(data["manifest_tools"]), executable = False)
     ctx.file("catalog_tools.bzl", "CATALOG_TOOLS = %s\n" % repr(catalog["tools"]), executable = False)
+    ctx.file("python_action_tools.bzl", "PYTHON_ACTION_TOOLS = %s\n" % repr(python["tools"]), executable = False)
     ctx.file("test_tools.bzl", "TEST_TOOLS = %s\n" % repr(data["test_tools"]), executable = False)
     ctx.file("app_version.bzl", "APP_VERSION = %s\n" % repr(data["app_version"]), executable = False)
     ctx.file("host_tools_data.bzl", "HOST_TOOLS = %s\n" % repr({
@@ -68,6 +83,8 @@ def materialize_host_tools(ctx, data):
         "gperf_runtime": runtime,
         "windows_manifest_inputs": manifest_inputs,
         "catalog_inputs": catalog_inputs,
+        "python_inputs": python_inputs,
+        "replay_inputs": replay_inputs,
         "resource_executable": resource_executable,
         "resource_inputs": resource_inputs,
         "dbus_inputs": dbus_inputs,

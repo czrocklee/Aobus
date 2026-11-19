@@ -1,7 +1,7 @@
 """Assemble the declared AppKit bundle tree and its run launcher."""
 
 load("@aobus_native_tools//:app_version.bzl", "APP_VERSION")
-load("@aobus_native_tools//:catalog_tools.bzl", "CATALOG_TOOLS")
+load("@aobus_native_tools//:python_action_tools.bzl", "PYTHON_ACTION_TOOLS")
 
 def _aobus_appkit_bundle_impl(ctx):
     # The tree artifact name is the bundle contract; the launcher output keeps
@@ -26,16 +26,16 @@ def _aobus_appkit_bundle_impl(ctx):
 
     # An optional supervisor turns the launcher into a bridge over the copied
     # supervisor and the bundled binary; the shipping bundle keeps its plain
-    # native exec. The admitted interpreter is the same catalog authority the
-    # action itself uses, so the bridge performs no runtime lookup.
+    # native exec. The bridge uses the same admitted interpreter as the
+    # bundle action, without a runtime lookup.
     if ctx.file.supervisor:
         arguments.add("--supervisor", ctx.file.supervisor)
-        arguments.add("--python", CATALOG_TOOLS["python"])
+        arguments.add("--python", PYTHON_ACTION_TOOLS["python"])
     arguments.add("--app", app.path)
     arguments.add("--launcher", launcher)
     env = {"LC_ALL": "C", "PYTHONUTF8": "1", "PYTHONDONTWRITEBYTECODE": "1"}
-    if "SystemRoot" in CATALOG_TOOLS:
-        env["SYSTEMROOT"] = CATALOG_TOOLS["SystemRoot"]
+    if "SystemRoot" in PYTHON_ACTION_TOOLS:
+        env["SYSTEMROOT"] = PYTHON_ACTION_TOOLS["SystemRoot"]
     inputs = [
         ctx.file.exe,
         ctx.file.plist,
@@ -48,7 +48,7 @@ def _aobus_appkit_bundle_impl(ctx):
     if ctx.file.supervisor:
         inputs.append(ctx.file.supervisor)
     ctx.actions.run(
-        executable = CATALOG_TOOLS["python"],
+        executable = PYTHON_ACTION_TOOLS["python"],
         arguments = [arguments],
         inputs = depset(inputs),
         tools = ctx.files._native_tools,
@@ -94,6 +94,6 @@ aobus_appkit_bundle = rule(
         # launcher bridges through it instead of exec-ing the binary directly.
         "supervisor": attr.label(allow_single_file = True, default = None),
         "_helper": attr.label(default = Label(":build_bundle.py"), allow_single_file = True),
-        "_native_tools": attr.label(default = Label("@aobus_native_tools//:catalog_tools"), cfg = "exec"),
+        "_native_tools": attr.label(default = Label("@aobus_native_tools//:python_action_tools"), cfg = "exec"),
     },
 )

@@ -193,11 +193,19 @@ def vcpkg_prefix(explicit: str | None, tree: Path | None) -> Path:
 
 
 def native_config_directories(prefix: Path, config: str) -> tuple[Path, Path]:
-    selected = prefix.resolve() / "debug" if config == "debug" else prefix.resolve()
-    # Do not resolve the intended roots: a Debug directory alias to Release
-    # must fail before the adapter canonicalizes its allowed-root inventory.
+    """Return lexical library and runtime roots for one vcpkg configuration."""
+    resolved = prefix.resolve()
+    debug = resolved / "debug"
+    selected = debug if config == "debug" else resolved
     library_dir, runtime_dir = selected / "lib", selected / "bin"
-    return native.native_path(library_dir), native.native_path(runtime_dir)
+    for directory in (library_dir, runtime_dir):
+        # Resolve even an absent optional bin: its parent may be a junction.
+        canonical = native.native_path(directory)
+        if not canonical.is_relative_to(selected) or (config != "debug" and canonical.is_relative_to(debug)):
+            raise native.BazelWorkspaceError(
+                f"selected {config} library/runtime root escapes its configuration: {directory}"
+            )
+    return library_dir, runtime_dir
 
 
 def native_provider(

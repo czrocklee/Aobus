@@ -167,6 +167,7 @@ class CompileAction:
     quote_includes: frozenset[str] = frozenset()
     environment: tuple[tuple[str, str], ...] = ()
     is_tool: bool = False
+    winui_projections: tuple[tuple[str, str], ...] = ()
 
 
 def _unique_pairs[T](pairs: Iterable[tuple[str, T]]) -> dict[str, T]:
@@ -404,18 +405,16 @@ def _defines(arguments: Iterable[str]) -> dict[str, str]:
     return result
 
 
-def include_paths(arguments: Iterable[str]) -> Iterator[tuple[str, str]]:
+def include_paths(arguments: Iterable[str], *, msvc_only: bool = False) -> Iterator[tuple[str, str]]:
     """Return search-path kind/path pairs without shell splitting Windows paths."""
-    prefixes = (
+    prefixes: tuple[tuple[str, str], ...] = (
         ("/external:I", "system"),
         ("-external:I", "system"),
-        ("-isystem", "system"),
-        ("-idirafter", "system"),
-        ("-iquote", "quote"),
-        ("/imsvc", "system"),
         ("-I", "ordinary"),
         ("/I", "ordinary"),
     )
+    if not msvc_only:
+        prefixes += (("-isystem", "system"), ("-idirafter", "system"), ("-iquote", "quote"), ("/imsvc", "system"))
     iterator = iter(arguments)
     for argument in iterator:
         for prefix, kind in prefixes:
@@ -464,10 +463,11 @@ def compile_contract_errors(
     effective IPO or sampling switches, execution actions never inherit them,
     and Windows admits only the exact authored per-file exception sources. No roots are
     inferred from path prefixes. Callers own platform/tool/source receipts.
-    When expected_environment is supplied, target channels must be explicitly
-    empty; strict exec actions may omit them. Neither may carry ambient flags.
-    Aquery omits inherited-only settings: callers still own strict action/launch
-    configuration, not just this check of captured fixed environment values.
+    When expected_environment is supplied, Linux target and exec actions must
+    omit LIBRARY_PATH entirely; remaining target channels must be explicitly
+    empty, and strict exec actions may omit them. Neither may carry ambient
+    flags. Aquery omits inherited-only settings: callers still own strict
+    action/launch configuration, not just this check of captured fixed values.
     Tool configurations use Bazel's opt execution transition and, on Linux, a
     separately supplied Nix hardening policy, never the target Debug policy.
     Language defaults cover the current C++ graph, not C/ObjC. Windows checks
@@ -519,8 +519,12 @@ def compile_contract_errors(
                 if environment.get(key) != value:
                     problems.append("action environment must set " + key + "=" + value)
             for key in sorted(_CLEARED_CHANNELS):
-                # The strict exec transition has no default host_action_env.
-                # An absent variable is not a leak or a missing empty marker.
+                if platform == "linux" and key == "LIBRARY_PATH":
+                    # Even an empty value makes GCC add -L. to its link search.
+                    if key in environment:
+                        problems.append("ambient include/link channel must be absent: " + key)
+                    continue
+                # Strict exec actions may omit the other cleared channels.
                 ambient_value = environment.get(key, "") if action.is_tool else environment.get(key)
                 if ambient_value != "":
                     requirement = "absent or empty" if action.is_tool else "explicitly cleared"
@@ -660,6 +664,15 @@ def compile_contract_errors(
                 problems.append("ambient Nix dependency include: " + path)
             if (path.startswith("external/") or "/external/" in path) and kind == "ordinary" and not declared_quote:
                 problems.append("imported include must be system/external: " + path)
+        if windows and action.winui_projections:
+            # cl.exe does not use Clang's -isystem or /imsvc for external headers.
+            kinds: dict[str, set[str]] = {}
+            for kind, path in include_paths(argv, msvc_only=True):
+                kinds.setdefault(path.casefold(), set()).add(kind)
+            for project, sdk in action.winui_projections:
+                for root, kind, flag in ((project, "ordinary", "/I"), (sdk, "system", "/external:I")):
+                    if kinds.get(root.casefold()) != {kind}:
+                        problems.append(f"WinUI generated include root requires exclusively {flag}: {root}")
         if _consumes_spa(action):
             spa_count += 1
             for required in SPA_FLAGS:

@@ -238,10 +238,11 @@ def prepare_workspace(
     host = native.native_platform()
     prepared = tree / "configuration"
     prepared.mkdir(parents=True, exist_ok=True)
+    selected_prefix = None if host == "linux" else str(providers.vcpkg_prefix(prefix, tree))
     request = {
         "schema": 1,
         "host": host,
-        "prefix": None if host == "linux" else str(providers.vcpkg_prefix(prefix, tree)),
+        "prefix": selected_prefix,
         # The WinUI quality probe needs the original checkout, not Bazel's execution root or a compiler view.
         "source": native.source_root(),
     }
@@ -284,6 +285,9 @@ def prepare_workspace(
     # child_environment intentionally keeps it out of action execution.
     if roots := os.environ.get("NIXPKGS_CMAKE_PREFIX_PATH"):
         selected["NIXPKGS_CMAKE_PREFIX_PATH"] = roots
+    if selected_prefix is not None:
+        # Bare Bazel honors the ambient prefix; a portal launch owns its selection.
+        selected["AOBUS_BAZEL_VCPKG_PREFIX"] = selected_prefix
     if lint_configuration is not None:
         selected["AOBUS_BAZEL_LINT_CONFIGURATION"] = lint_configuration.absolute().as_posix()
     state = state_root()
@@ -343,7 +347,12 @@ def invocation(executable: Path, generated: Path, *, isolate_rc: bool = False) -
 def launch_environment(*, isolate_rc: bool = False) -> dict[str, str]:
     """Keep ambient selectors out of the configuration owned by a prepared launch."""
     environment = native.child_environment(isolate_rc=isolate_rc)
-    for name in ("AOBUS_BAZEL_CONFIGURATION", "AOBUS_BAZEL_PYTHON", "AOBUS_BAZEL_LINT_CONFIGURATION"):
+    for name in (
+        "AOBUS_BAZEL_CONFIGURATION",
+        "AOBUS_BAZEL_PYTHON",
+        "AOBUS_BAZEL_LINT_CONFIGURATION",
+        "AOBUS_BAZEL_VCPKG_PREFIX",
+    ):
         environment.pop(name, None)
     environment["AOBUS_STATE_ROOT"] = str(state_root())
     return environment

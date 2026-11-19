@@ -1,7 +1,7 @@
 """Native compile contexts and cacheable diagnostic-only reports, without product builds."""
 
 load("@aobus_lint_sdk//:flags.bzl", "LINT_SDK_HOST")
-load("@aobus_native_tools//:catalog_tools.bzl", "CATALOG_TOOLS")
+load("@aobus_native_tools//:python_action_tools.bzl", "PYTHON_ACTION_TOOLS")
 load("@rules_cc//cc:find_cc_toolchain.bzl", "find_cc_toolchain", "use_cc_toolchain")
 load("@rules_cc//cc/common:cc_common.bzl", "cc_common")
 load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
@@ -88,9 +88,9 @@ def native_environment(ctx, action = None, language = "c++", portal = False):
     if LINT_SDK_HOST == "windows" and portal:
         # Portal modules resolve compatibility profile paths when imported.
         # Use the selected Python SDK's observed profile, not ambient inheritance.
-        if not CATALOG_TOOLS.get("UserProfile"):
+        if not PYTHON_ACTION_TOOLS.get("UserProfile"):
             fail("Native lint Python requires the selected Windows USERPROFILE")
-        environment["USERPROFILE"] = CATALOG_TOOLS["UserProfile"]
+        environment["USERPROFILE"] = PYTHON_ACTION_TOOLS["UserProfile"]
     elif LINT_SDK_HOST == "windows":
         environment.pop("USERPROFILE", None)
     if LINT_SDK_HOST != "windows":
@@ -121,7 +121,7 @@ def _verification_impl(ctx):
         args.add_all(["--plugin", plugin])
     args.add_all(["--output", result, "--log", log])
     ctx.actions.run(
-        executable = CATALOG_TOOLS["python"],
+        executable = PYTHON_ACTION_TOOLS["python"],
         arguments = [args],
         inputs = inputs,
         outputs = [result, log],
@@ -144,7 +144,7 @@ lint_verification = rule(
         "_plugin": attr.label(default = Label("//tool/lint:plugin"), cfg = "exec"),
         "_tools": attr.label(default = Label("//tool/lint:tools"), cfg = "exec"),
         "_modules": attr.label(default = Label("//:ao_lint_action_sources")),
-        "_native_tools": attr.label(default = Label("@aobus_native_tools//:catalog_tools"), cfg = "exec"),
+        "_native_tools": attr.label(default = Label("@aobus_native_tools//:python_action_tools"), cfg = "exec"),
     },
     fragments = ["cpp"],
     toolchains = use_cc_toolchain(),
@@ -389,7 +389,7 @@ def _lint_owner(target, ctx, profile = "lint"):
                 args.add_all(["--plugin", verification.plugin])
             args.add_all(["--report", report, "--log", log])
             ctx.actions.run(
-                executable = CATALOG_TOOLS["python"],
+                executable = PYTHON_ACTION_TOOLS["python"],
                 arguments = [args],
                 inputs = depset([context, main, verification.result], transitive = [action.inputs, headers, verification.inputs]),
                 outputs = [report, log],

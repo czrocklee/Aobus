@@ -74,7 +74,10 @@ same lock and completion marker. Linux needs no
 provisioning. Other actions use the tree's provisioned triplet; a ready
 installed SDK is consumed, never installed implicitly, and
 `--vcpkg-prefix <installed/triplet>` replaces the provisioned prefix with an
-existing installed target-triplet prefix. Rerun `./ao setup deps` after changing the vcpkg
+existing installed target-triplet prefix. A prepared portal request owns that selection;
+`AOBUS_BAZEL_VCPKG_PREFIX` is the selector for bare Bazel commands. Debug library
+and runtime directories must not resolve into the Release installation.
+Rerun `./ao setup deps` after changing the vcpkg
 manifest, configuration or overlays: Bazel itself never restores missing ports
 or substitutes an ambient installation. An interrupted `./ao setup deps` waits for
 the running installer process to exit before propagating the interruption and
@@ -464,7 +467,10 @@ ordinary include root for Aobus projections, XAML and other generated C++.
 Only complete SDK namespace families (the public header and its three `impl/`
 layers) and the known runtime headers qualify; unfamiliar layouts stay normal.
 Both roots preserve include spellings and each file has exactly one generated
-provider. Compilation and lint consume the same native include roots. The narrow
+provider. Compilation and lint consume the same native include roots. The Windows
+native policy test checks each consumer's expanded MSVC arguments against those
+two producer-owned directories, including consumers reached through private dependencies.
+The narrow
 [rules_cc API patch](../../bazel/rules_cc_external_includes.patch) exposes the
 existing `external_includes` field to code generators: on the pinned MSVC
 toolchain it emits `/external:I`, whereas `system_includes` emits ordinary `/I`.
@@ -856,7 +862,9 @@ only through the upstream auto-configuration inlets of
 [Windows compiler configuration](#windows-compiler-configuration).
 Launch/server/cache configuration belongs to the launcher.
 Repository clearing is separate from action clearing: `--repo_env==CPLUS_INCLUDE_PATH`
-unsets the variable, rather than assigning an empty path entry.
+unsets the variable, rather than assigning an empty path entry. Linux target and
+execution actions also leave `LIBRARY_PATH` unset: GCC interprets an empty value
+as a request to search the working directory when linking.
 
 The rc sets the upstream repository guards
 `BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1` and `BAZEL_NO_APPLE_CPP_TOOLCHAIN=1` through
@@ -2181,7 +2189,11 @@ side outputs; package.lst remains the sole locale inventory. No external configu
 prebuilt project tool or pre-generated resource is consumed. Common-data
 packaging does not compile C, and this does not establish C/Objective-C support.
 The action launches Python at its selected host-absolute path; the interpreter
-bytes and selected runtime files are already declared through `catalog_tools`.
+bytes and selected runtime files are declared through `python_action_tools`,
+which `catalog_tools` combines with the ICU tool payload. Lint and platform
+packaging use the Python inputs without inheriting ICU tools. The lint graph's
+selector and gate also key on that runtime; mapped header replay additionally
+keys on its configured Python launcher.
 This is a native SDK boundary, not a relocatable/hermetic Python toolchain.
 Switching to a repository-local executable requires separate native validation
 of DLL and standard-library lookup, particularly on Windows.
