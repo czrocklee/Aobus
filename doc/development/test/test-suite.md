@@ -121,8 +121,7 @@ The device-free cases remain in Core.
 
 On macOS, Core Audio coverage requires a logged-in console user even over SSH.
 The portal neither creates a login nor changes power policy; CI checks that
-prerequisite. Native macOS has no Python tooling suite and does not claim exact
-Homebrew Python patch parity.
+prerequisite. Native macOS does not claim exact Homebrew Python patch parity.
 
 ## Tooling and lint fixtures
 
@@ -146,7 +145,8 @@ its arguments without the anchor flag, which is what closes the re-execution
 loop. Their host tools come from the inherited PATH and the installed native
 `py_runtime` — an honest non-hermetic tool closure, not a sandbox claim.
 `workflows` is Linux-only and consumes the pinned actionlint through
-`AO_NIX_ACTIONLINT`. Do not substitute ambient Python, Ruff, or mypy.
+`AO_NIX_ACTIONLINT`. Do not substitute ambient Python, Ruff, or mypy. On macOS,
+only the [SDK selection and remote-cache modules](../macos.md) run.
 
 A standalone tooling run uses the declared Bazel suite in the ready pinned
 native environment; no separate portal command orchestrates it:

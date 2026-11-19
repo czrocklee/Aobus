@@ -6,6 +6,7 @@
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/UiSubscription.h"
+#include "layout/runtime/WindowActivityState.h"
 #include "platform/WinRtStringResources.h"
 #include "playback/AobusSoulControl.h"
 #include "playback/AudioPipelineToolTip.h"

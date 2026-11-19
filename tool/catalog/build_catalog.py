@@ -109,7 +109,7 @@ def absolute(path: str) -> Path:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    for option in ("inventory", "template", "compiler", "genrb", "pkgdata", "private", "cpp", "header", "dat"):
+    for option in ("inventory", "template", "compiler", "genrb", "pkgdata", "private", "resw", "cpp", "header", "dat"):
         parser.add_argument("--" + option, required=True, type=absolute)
     parser.add_argument("--source", action="append", default=[], type=absolute)
     parser.add_argument("--systemroot")
@@ -123,7 +123,7 @@ def run(options: argparse.Namespace) -> None:
             raise ValueError(f"Missing declared catalog tool: {tool}")
     if os.name == "nt" and not options.systemroot:
         raise ValueError("Windows catalog generation requires declared SYSTEMROOT")
-    outputs = [options.cpp, options.header, options.dat, options.private]
+    outputs = [options.cpp, options.header, options.dat, options.private, options.resw]
     if [path.name for path in outputs[:3]] != ["EmbeddedCatalogData.cpp", "CatalogLocaleTags.h", "aobus_messages.dat"]:
         raise ValueError("Unexpected fixed catalog output names")
     inputs = [options.inventory, options.template, *options.source, options.compiler, options.genrb, options.pkgdata]
@@ -135,7 +135,7 @@ def run(options: argparse.Namespace) -> None:
                 raise ValueError(f"Overlapping catalog paths: {output}, {other}")
 
     resources = options.private / "res"
-    resw = options.private / "resw"
+    resw = options.resw
     temp = options.private / "temp"
     for directory in (resources, temp, options.private / "pycache", *(resw / tag for _, tag in locales)):
         directory.mkdir(parents=True, exist_ok=True)
@@ -184,6 +184,10 @@ def run(options: argparse.Namespace) -> None:
         if locale not in {"root", "qps_Ploc"}:
             compiler.extend(["--translation", resources / (locale + ".res"), resw / tag / "Resources.resw"])
     execute(compiler)
+    for _, tag in locales:
+        output = resw / tag / "Resources.resw"
+        if not output.is_file() or not output.stat().st_size:
+            raise ValueError(f"Missing or empty catalog RESW: {output}")
     execute([options.genrb, *strict, "--sourcedir", resources, "--destdir", resources, "qps_Ploc.txt"])
     execute(
         [

@@ -84,6 +84,13 @@ filegroup(
 )
 
 filegroup(
+    name = "catalog_resw",
+    srcs = [":catalog_codegen"],
+    output_group = "resw",
+    visibility = ["//app/windows-winui:__pkg__"],
+)
+
+filegroup(
     name = "catalog_intermediates",
     srcs = [":catalog_codegen"],
     output_group = "intermediates",

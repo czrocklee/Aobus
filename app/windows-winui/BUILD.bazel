@@ -9,6 +9,17 @@ STRING_RESOURCE_SOURCES = [
     "platform/StringResources.cpp",
 ]
 
+# Runtime services operate on built elements, not the factory's per-build context.
+LAYOUT_RUNTIME_SOURCES = [
+    "layout/runtime/ActionRegistry.cpp",
+    "layout/runtime/CommonLayoutProps.cpp",
+    "layout/runtime/FocusedDetail.cpp",
+    "layout/runtime/LayoutHost.cpp",
+    "layout/runtime/ResourceLookup.cpp",
+]
+
+LAYOUT_RUNTIME_HEADERS = [src.removesuffix(".cpp") + ".h" for src in LAYOUT_RUNTIME_SOURCES] + ["layout/runtime/LayoutComponent.h"]
+
 # One inventory supplies native compile owners and the SDK's post-generation
 # membership check. Ordinary .cpp files are names only to the generator.
 WINUI_SOURCES = [
@@ -57,12 +68,7 @@ WINUI_SOURCES = [
     "layout/component/track/TrackComponents.cpp",
     "layout/component/track/TrackTable.cpp",
     "layout/runtime/ActionBinder.cpp",
-    "layout/runtime/ActionRegistry.cpp",
-    "layout/runtime/CommonLayoutProps.cpp",
     "layout/runtime/ComponentRegistry.cpp",
-    "layout/runtime/FocusedDetail.cpp",
-    "layout/runtime/LayoutHost.cpp",
-    "layout/runtime/ResourceLookup.cpp",
     "layout/ShellBuilder.cpp",
     "layout/ShellPresetSource.cpp",
     "platform/AppWindowActivity.cpp",
@@ -100,7 +106,7 @@ WINUI_SOURCES = [
     "track/TrackRevealAdapter.cpp",
     "track/TrackRowItem.cpp",
     "MainWindow.xaml.cpp",
-] + STRING_RESOURCE_SOURCES
+] + STRING_RESOURCE_SOURCES + LAYOUT_RUNTIME_SOURCES
 
 # Keep the full authored inventory for SDK generation, independently of the
 # ordinary C++ compilation owners below.
@@ -307,7 +313,7 @@ cc_library(
 XAML_SOURCES = [
     source
     for source in WINUI_SOURCES
-    if source not in MODEL_SOURCES + STRING_RESOURCE_SOURCES + [
+    if source not in MODEL_SOURCES + STRING_RESOURCE_SOURCES + LAYOUT_RUNTIME_SOURCES + [
         "platform/ScopedBooleanFlag.cpp",
         "platform/WinUiErrorBoundary.cpp",
         "playback/OutputDeviceControl.cpp",
@@ -315,12 +321,65 @@ XAML_SOURCES = [
     ]
 ]
 
+# Values shared by the shell and its components, without the factory's full
+# per-build context. Neither the shell interface nor the theme needs that context.
+LAYOUT_SHELL_INPUTS = [
+    "layout/runtime/SurfaceBrushResolver.h",
+    "layout/runtime/WindowActivityState.h",
+]
+
+cc_library(
+    name = "layout_shell_inputs",
+    hdrs = LAYOUT_SHELL_INPUTS,
+    includes = ["."],
+    target_compatible_with = ["@platforms//os:windows"],
+    deps = [
+        ":generated",
+        ":model",
+    ],
+)
+
+cc_library(
+    name = "layout_runtime",
+    srcs = LAYOUT_RUNTIME_SOURCES,
+    hdrs = LAYOUT_RUNTIME_HEADERS,
+    copts = MSVC_WINUI_COPTS,
+    implementation_deps = ["//app/runtime"],
+    includes = ["."],
+    linkstatic = True,
+    target_compatible_with = ["@platforms//os:windows"],
+    deps = [
+        ":generated",
+        ":layout_shell_inputs",
+        ":model",
+        "//app/uimodel",
+        "//include:utility_headers",
+        "@aobus_native_deps//:boost",
+    ],
+)
+
+LAYOUT_BUILD_CONTEXT = "layout/runtime/LayoutBuildContext.h"
+
+cc_library(
+    name = "layout_build_context",
+    hdrs = [LAYOUT_BUILD_CONTEXT],
+    includes = ["."],
+    target_compatible_with = ["@platforms//os:windows"],
+    deps = [
+        ":generated",
+        ":layout_shell_inputs",
+        ":model",
+        "//app/uimodel",
+    ],
+)
+
 # Shared native declarations and SDK context for the implementation archives.
 # Keep layout and track as their existing responsibilities: one /GL archive
 # containing the entire frontend exceeds MSVC's COFF archive size limit.
 cc_library(
     name = "winui_headers",
-    hdrs = [header for header in WINUI_HEADERS if header not in MODEL_HEADERS + STRING_RESOURCE_HEADERS + [
+    hdrs = [header for header in WINUI_HEADERS if header not in MODEL_HEADERS + STRING_RESOURCE_HEADERS + LAYOUT_SHELL_INPUTS + LAYOUT_RUNTIME_HEADERS + [
+        LAYOUT_BUILD_CONTEXT,
         "app/DispatcherQueueAdmission.h",
         "include/ao/winui/WinUiErrorBoundary.h",
         "platform/ScopedBooleanFlag.h",
@@ -340,6 +399,8 @@ cc_library(
     deps = [
         ":error_boundary",
         ":generated",
+        ":layout_runtime",
+        ":layout_shell_inputs",
         ":model",
         "//app/desktop:desktop_launch",
         "//app/runtime",
@@ -359,6 +420,7 @@ cc_library(
     ],
     copts = MSVC_WINUI_COPTS,
     implementation_deps = [
+        ":layout_build_context",
         ":output_device_control",
         ":scoped_boolean_flag",
         "//app/i18n",
@@ -425,8 +487,8 @@ cc_library(
     ],
 )
 
-# Deployed WinUI resources: compiled XAML (App.xbf, MainWindow.xbf), the merged
-# Aobus.pri, the catalog resw intermediates, and the packaged content assets.
+# The merged PRI indexes compiled XAML, localized RESW, and the packaged assets.
+# Only the PRI, XBFs, and content assets are staged alongside the executable.
 # The assets attr carries the brand and no-cover artwork; the shell layout
 # YAML files are owned by this package and declared explicitly.
 winui_resources(
@@ -436,7 +498,7 @@ winui_resources(
         "layout/windows_modern_layout.yaml",
     ],
     assets = ["//asset:winui_assets"],
-    catalog = "//app/i18n:catalog_intermediates",
+    catalog = "//app/i18n:catalog_resw",
     generated = ":generated",
     target_compatible_with = ["@platforms//os:windows"],
 )
@@ -500,6 +562,7 @@ winui_probe(
         "//test:winui/probe/WinUiTrackTableProbe.cpp",
     ],
     deps = [
+        ":layout_build_context",
         "//app/i18n",
         "//app/i18n:completion",
         "//app/i18n:ordering",
@@ -543,6 +606,7 @@ winui_probe(
     name = "ao_winui_activity_status_probe",
     srcs = ["//test:winui/probe/WinUiActivityStatusProbe.cpp"],
     deps = [
+        ":layout_build_context",
         "//app/i18n",
         "//lib/utility:unicode_text",
     ],

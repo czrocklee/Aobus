@@ -9,7 +9,7 @@ load("//bazel:msvc_policy.bzl", "MSVC_WINUI_COPTS")
 load("//bazel:windows_utf8_manifest.bzl", "WINDOWS_UTF8_LINKER_INPUTS", "WINDOWS_UTF8_LINKOPTS")
 load(":outputs.bzl", "WinuiGeneratedInfo")
 
-_WinuiResourcesInfo = provider(doc = "Private resource tree staged alongside a WinUI executable.", fields = ["private"])
+_WinuiResourcesInfo = provider(doc = "Declared payload staged alongside a WinUI executable.", fields = ["pri", "xbf", "assets"])
 _WRAPPERS = ["module", "metadata", "types", "types_impl"]
 
 def _configuration(ctx):
@@ -79,8 +79,19 @@ def _codegen_impl(ctx):
             arguments.add("--source-name=" + file.path[len(package_prefix):])
         else:
             fail("WinUI source inventory requires package-local authored files: " + file.path)
+
+    # XAML code-behind headers still supply content and DependentUpon. Other
+    # ClInclude entries preserve their names without becoming generator inputs.
+    xaml_header_paths = {page.path + ".h": True for page in ctx.files.xaml}
+    generation_headers = []
     for file in ctx.files.hdrs:
-        arguments.add("--header", file)
+        if not file.is_source or not file.path.startswith(package_prefix):
+            fail("WinUI header inventory requires package-local authored files: " + file.path)
+        if file.path in xaml_header_paths:
+            generation_headers.append(file)
+            arguments.add("--header", file)
+        else:
+            arguments.add("--header-name=" + file.path[len(package_prefix):])
     for file in ctx.files.xaml:
         arguments.add("--xaml", file)
     for role, file in zip(_WRAPPERS, wrappers):
@@ -89,7 +100,7 @@ def _codegen_impl(ctx):
     _run(
         ctx,
         arguments,
-        [ctx.file._sdk, ctx.file._project, ctx.file.idl] + codebehind + ctx.files.hdrs + ctx.files.xaml,
+        [ctx.file._sdk, ctx.file._project, ctx.file.idl] + codebehind + generation_headers + ctx.files.xaml,
         [private, headers, sdk_headers] + wrappers + xbf,
         "AobusWinuiGenerate",
     )
@@ -121,31 +132,41 @@ winui_codegen = rule(
     provides = [CcInfo, WinuiGeneratedInfo],
 )
 
+def _add_content(arguments, xbf, assets):
+    for file in xbf:
+        arguments.add("--xbf", file)
+    for file in assets:
+        arguments.add("--asset", file)
+
 def _resources_impl(ctx):
     xbf = ctx.attr.generated[WinuiGeneratedInfo].xbf
+    assets = ctx.files.assets + ctx.files.srcs
     catalogs = ctx.files.catalog
     if len(catalogs) != 1 or not catalogs[0].is_directory:
-        fail("WinUI resources require the catalog's one intermediates tree")
+        fail("WinUI resources require the catalog's one RESW tree")
 
     # PRI generation uses the same Full-CLR temporary batch path convention.
     private = ctx.actions.declare_directory(ctx.label.name + "/p")
+    pri = ctx.actions.declare_file(ctx.label.name + "/Aobus.pri")
     arguments = _arguments(ctx, "resources")
     arguments.add("--sdk", ctx.file._sdk)
     arguments.add("--private", private.path)
     arguments.add("--configuration", _configuration(ctx))
-    for file in xbf:
-        arguments.add("--xbf", file)
     arguments.add("--catalog", catalogs[0].path)
-    for file in ctx.files.assets + ctx.files.srcs:
-        arguments.add("--asset", file)
+    arguments.add("--output-pri", pri)
+    _add_content(arguments, xbf, assets)
     _run(
         ctx,
         arguments,
-        [ctx.file._sdk, ctx.file._project] + xbf + catalogs + ctx.files.assets + ctx.files.srcs,
-        [private],
+        [ctx.file._sdk, ctx.file._project] + xbf + catalogs + assets,
+        [private, pri],
         "AobusWinuiResources",
     )
-    return [DefaultInfo(files = depset([private])), _WinuiResourcesInfo(private = private)]
+    return [
+        DefaultInfo(files = depset([pri])),
+        OutputGroupInfo(diagnostics = depset([private])),
+        _WinuiResourcesInfo(pri = pri, xbf = xbf, assets = assets),
+    ]
 
 winui_resources = rule(
     implementation = _resources_impl,
@@ -188,7 +209,7 @@ def _app_impl(ctx):
     executable = binary[DefaultInfo].files_to_run.executable
     if executable == None:
         fail("WinUI application dependency is not an executable")
-    resources = ctx.attr.resources[_WinuiResourcesInfo].private
+    resources = ctx.attr.resources[_WinuiResourcesInfo]
     identity = ctx.attr.identity
     if not identity or identity[0] not in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_":
         fail("WinUI executable identity must start with an ASCII letter, digit or underscore")
@@ -203,7 +224,8 @@ def _app_impl(ctx):
     arguments = _arguments(ctx, "stage")
     arguments.add("--identity", identity)
     arguments.add("--exe", executable)
-    arguments.add("--resources", resources.path)
+    arguments.add("--pri", resources.pri)
+    _add_content(arguments, resources.xbf, resources.assets)
     for option, file in [
         ("--output-exe", exe),
         ("--output-pri", pri),
@@ -229,7 +251,7 @@ def _app_impl(ctx):
     _run(
         ctx,
         arguments,
-        [executable, resources] + runtime,
+        [executable, resources.pri] + resources.xbf + resources.assets + runtime,
         outputs,
         "AobusWinuiApp",
         sdk = False,

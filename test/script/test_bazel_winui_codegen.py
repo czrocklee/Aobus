@@ -3,8 +3,8 @@
 Each action fixture stays its narrow declared contract: parameter files parse
 without an SDK, generation fakes one SDK query over the two authored code-behind
 sources and XAML pages, resources declare only the two generated XBF fixtures, a small
-catalog, and the required shipping assets, and staging consumes only the PRI
-payload tree with its executable and runtime files. Selection and validation
+catalog, and the required shipping assets, and staging consumes only the PRI,
+original content, executable and runtime files. Selection and validation
 stay real; the external MSBuild fake discriminates the SDK executable, action
 target and declared project items rather than answering arbitrary commands.
 The stage-independence case separately injects a missing source-file read.
@@ -132,6 +132,7 @@ class ParameterFileTest(unittest.TestCase):
                         str(source),
                         "--header",
                         str(header),
+                        "--header-name=-Leading hyphen.h",
                         "--cpp",
                         "module",
                         str(wrapper),
@@ -149,6 +150,7 @@ class ParameterFileTest(unittest.TestCase):
             self.assertEqual(options.action, "generate")
             self.assertEqual(options.source, [source])
             self.assertEqual(options.header, [header])
+            self.assertEqual(options.header_name, ["-Leading hyphen.h"])
             self.assertEqual(options.cpp, [["module", str(wrapper)]])
             self.assertEqual(options.runtime, [[str(runtime_source), str(runtime_output)]])
 
@@ -166,8 +168,17 @@ class GenerationActionTest(unittest.TestCase):
         self.wrapper_root = self.root / "generated/src"
         self.source = self.root / "authored"
         self.source.mkdir()
-        for name in ("Project.idl", "App.xaml", "MainWindow.xaml", "App.xaml.cpp", "MainWindow.xaml.cpp", "Control.h"):
-            (self.source / name).write_text("authored fixture", encoding="utf-8")
+        for name in (
+            "Project.idl",
+            "App.xaml",
+            "MainWindow.xaml",
+            "App.xaml.cpp",
+            "MainWindow.xaml.cpp",
+            "App.xaml.h",
+            "MainWindow.xaml.h",
+            "Control.h",
+        ):
+            (self.source / name).write_text("authored " + name, encoding="utf-8")
         self.calls = []
         self.mutate_query = lambda query: None
 
@@ -197,7 +208,10 @@ class GenerationActionTest(unittest.TestCase):
                 "--source",
                 str(self.source / "MainWindow.xaml.cpp"),
                 "--header",
-                str(self.source / "Control.h"),
+                str(self.source / "App.xaml.h"),
+                "--header",
+                str(self.source / "MainWindow.xaml.h"),
+                "--header-name=Control.h",
                 "--xaml",
                 str(self.source / "App.xaml"),
                 "--xaml",
@@ -216,7 +230,7 @@ class GenerationActionTest(unittest.TestCase):
         self.assertEqual(arguments[0], self.sdk_data["msbuild"])
         self.assertEqual(Path(arguments[1]).name, "Aobus.vcxproj")
         self.assertEqual(next(argument for argument in arguments if argument.startswith("/t:")), "/t:AobusGenerate")
-        self.assertIn("/getItem:ClCompile", arguments)
+        self.assertIn("/getItem:ClCompile,ClInclude", arguments)
         self.assertIs(kwargs["check"], False)
         self.assertIs(kwargs["capture_output"], True)
         self.assertNotIn("shell", kwargs)
@@ -239,7 +253,7 @@ class GenerationActionTest(unittest.TestCase):
             projection = headers / name
             projection.parent.mkdir(parents=True, exist_ok=True)
             projection.write_text("projection " + name, encoding="utf-8")
-        # The echo answers exactly the compile inputs the project declared.
+        # Echo the declared inventory and the SDK's standalone compile units.
         source_paths = [
             _project_path(item.attrib["Include"], private)
             for item in document.findall("m:ItemGroup/m:ClCompile", _NS)
@@ -259,7 +273,14 @@ class GenerationActionTest(unittest.TestCase):
                         *self.sdk_data["initializer_sources"],
                         *(headers / name for name in _GENERATED_UNITS),
                     )
-                ]
+                ],
+                "ClInclude": [
+                    {
+                        "FullPath": str(_project_path(item.attrib["Include"], private)),
+                        "DependentUpon": item.findtext("m:DependentUpon", default="", namespaces=_NS),
+                    }
+                    for item in document.findall("m:ItemGroup/m:ClInclude", _NS)
+                ],
             },
         }
         self.mutate_query(query)
@@ -371,7 +392,7 @@ class GenerationActionTest(unittest.TestCase):
             self.assertFalse(identity.exists())
             self.assertNotIn(self.source / name, items)
         for name in ("App.xaml.cpp", "MainWindow.xaml.cpp"):
-            item = items[self.source / name]
+            item = items[self.generated / name]
             self.assertEqual(item.find("m:DependentUpon", _NS).text, name.removesuffix(".cpp"))
 
         def drop_one(query):
@@ -381,25 +402,107 @@ class GenerationActionTest(unittest.TestCase):
             ]
 
         self.mutate_query = drop_one
+        shutil.rmtree(self.generated.parent)
         with self.assertRaisesRegex(ValueError, "compile membership changed"):
             self.generate(*arguments)
 
-    def test_xaml_headers_retain_their_partial_class_relationships(self):
-        arguments = []
-        for name in ("App.xaml.h", "MainWindow.xaml.h"):
-            header = self.source / name
-            header.write_text("authored XAML header fixture", encoding="utf-8")
-            arguments.extend(["--header", str(header)])
-        self.generate(*arguments)
+    def test_ordinary_headers_preserve_same_basenames_without_staging_bytes(self):
+        names = ("track/Control.h", "layout/Control.h", "nested/App.xaml.h", "-Extra header.h")
+        self.generate(*(f"--header-name={name}" for name in names))
+        document = self.calls[0]
         headers = {
-            _project_path(item.attrib["Include"], self.generated).name: item
-            for item in self.calls[0].findall("m:ItemGroup/m:ClInclude", _NS)
+            _project_path(item.attrib["Include"], self.generated): item
+            for item in document.findall("m:ItemGroup/m:ClInclude", _NS)
         }
-        # This native SDK relationship owns emission of the corresponding
-        # partial-class includes, including the generated application entry.
-        self.assertEqual(headers["App.xaml.h"].find("m:DependentUpon", _NS).text, "App.xaml")
-        self.assertEqual(headers["MainWindow.xaml.h"].find("m:DependentUpon", _NS).text, "MainWindow.xaml")
-        self.assertIsNone(headers["Control.h"].find("m:DependentUpon", _NS))
+        authored = self.generated  # XAML emits these project-relative header names in generated C++.
+        inventory = self.generated / "i"
+        self.assertEqual(
+            set(headers),
+            {authored / "App.xaml.h", authored / "MainWindow.xaml.h"}
+            | {inventory / name for name in ("Control.h", *names)},
+        )
+        self.assertFalse(inventory.exists())
+        for name in ("Control.h", *names):
+            self.assertIsNone(headers[inventory / name].find("m:DependentUpon", _NS))
+        # Only this relationship owns the generated partial-class includes.
+        for page in ("App.xaml", "MainWindow.xaml"):
+            self.assertEqual(headers[authored / (page + ".h")].findtext("m:DependentUpon", namespaces=_NS), page)
+        for source in self.source.iterdir():
+            destination = authored / source.name
+            if source.name == "Control.h":
+                self.assertFalse(destination.exists())
+            else:
+                self.assertEqual(destination.read_bytes(), source.read_bytes())
+        for kind in ("Midl", "ApplicationDefinition", "Page"):
+            item = document.find(f"m:ItemGroup/m:{kind}", _NS)
+            self.assertEqual(_project_path(item.attrib["Include"], self.generated).parent, authored)
+        includes = document.findtext("m:ItemDefinitionGroup/m:ClCompile/m:AdditionalIncludeDirectories", namespaces=_NS)
+        self.assertEqual(
+            [_project_path(value, self.generated) for value in includes.split(";")[:-1]],
+            [authored, authored / "include"],
+        )
+
+    def test_unsafe_or_case_colliding_header_names_fail_before_msbuild(self):
+        for name in (
+            "",
+            "/Control.h",
+            "C:/Control.h",
+            "dir\\Control.h",
+            "dir//Control.h",
+            "dir/./Control.h",
+            "../Control.h",
+            "NUL.h",
+            "COM1/Control.h",
+            "dir./Control.h",
+            "dir /Control.h",
+            "$(Root)/Control.h",
+            "dir;other/Control.h",
+            "dir%2fControl.h",
+            "*.h",
+            "not-a-header.hpp",
+            "control.h",
+            "app.xaml.h",
+        ):
+            with self.subTest(name=name), mock.patch.object(winui.subprocess, "run") as execute:
+                with self.assertRaisesRegex(ValueError, "header inventory name"):
+                    winui.run(self.generation_options(f"--header-name={name}"))
+                execute.assert_not_called()
+
+    def test_codebehind_header_cannot_be_supplied_as_a_name_only(self):
+        options = self.generation_options("--header-name=App.xaml.h")
+        options.header.remove(self.source / "App.xaml.h")
+        with mock.patch.object(winui.subprocess, "run") as execute:
+            with self.assertRaisesRegex(ValueError, "code-behind headers as content"):
+                winui.run(options)
+        execute.assert_not_called()
+
+    def test_sdk_header_query_rejects_missing_duplicate_repointed_or_changed_items(self):
+        for failure in ("missing ordinary", "missing selected", "duplicate", "checkout", "dependent", "excluded"):
+            with self.subTest(failure=failure):
+
+                def alter(query, failure=failure):
+                    headers = query["Items"]["ClInclude"]
+                    selected = next(item for item in headers if Path(item["FullPath"]).name == "App.xaml.h")
+                    ordinary = next(item for item in headers if Path(item["FullPath"]).name == "Control.h")
+                    if failure == "missing ordinary":
+                        headers.remove(ordinary)
+                    elif failure == "missing selected":
+                        headers.remove(selected)
+                    elif failure == "duplicate":
+                        headers.append({**ordinary, "FullPath": str(Path(ordinary["FullPath"]).with_name("control.h"))})
+                    elif failure == "checkout":
+                        ordinary["FullPath"] = str(self.source / "Control.h")
+                    elif failure == "dependent":
+                        selected.pop("DependentUpon")
+                    else:
+                        ordinary["ExcludedFromBuild"] = "true"
+
+                self.mutate_query = alter
+                with self.assertRaisesRegex(ValueError, "WinUI .*header"):
+                    self.generate()
+                self.assertFalse(self.payload.exists())
+                # A separate Bazel action execution starts with fresh outputs.
+                shutil.rmtree(self.generated.parent)
 
     def test_template_restores_native_xaml_wiring_before_default_props_and_guards_product_targets(self):
         self.generate()
@@ -476,13 +579,14 @@ class ResourcesActionTest(unittest.TestCase):
         self.root = Path(temporary.name).resolve()
         self.sdk, self.sdk_data = _install_sdk(self.root)
         self.generated = self.root / "generated/xbf"
-        self.resource_tree = self.root / "resources/private"
-        self.catalog = self.root / "catalog/private"
+        self.resource_tree = self.root / "resources/p"
+        self.pri = self.resource_tree.parent / "Aobus.pri"
+        self.catalog = self.root / "catalog/resw"
         self.generated.mkdir(parents=True)
         for name in ("App.xbf", "MainWindow.xbf"):
             (self.generated / name).write_text("generated " + name, encoding="utf-8")
         for tag in ("en", "fr-CA"):
-            path = self.catalog / "resw" / tag / "Resources.resw"
+            path = self.catalog / tag / "Resources.resw"
             path.parent.mkdir(parents=True)
             path.write_text("catalog " + tag, encoding="utf-8")
         self.assets = []
@@ -502,6 +606,8 @@ class ResourcesActionTest(unittest.TestCase):
                 str(self.sdk),
                 "--private",
                 str(self.resource_tree),
+                "--output-pri",
+                str(self.pri),
                 "--xbf",
                 str(self.generated / "App.xbf"),
                 "--xbf",
@@ -521,9 +627,15 @@ class ResourcesActionTest(unittest.TestCase):
         self.assertIs(kwargs["check"], False)
         private = Path(kwargs["cwd"])
         self.assertEqual(kwargs["env"]["PATH"], self.sdk_data["environment"]["PATH"])
+        for name in ("TEMP", "TMP", "TMPDIR"):
+            self.assertEqual(Path(kwargs["env"][name]), private / "t")
         document = ET.parse(arguments[1]).getroot()
         self.calls.append(document)
-        # The official PRI tool stages the declared content into its output tree.
+        copy = document.find("m:Target[@Name='AobusStageResources']/m:Copy", _NS)
+        self.assertEqual(
+            copy.attrib, {"SourceFiles": "@(Content)", "DestinationFiles": "@(Content->'$(OutDir)%(TargetPath)')"}
+        )
+        # The project stages its original Content verbatim for MakePRI.
         for item in document.findall("m:ItemGroup/m:Content", _NS):
             if "Include" not in item.attrib:
                 continue
@@ -548,10 +660,38 @@ class ResourcesActionTest(unittest.TestCase):
         self.assertEqual(contents["MainWindow.xbf"], self.generated / "MainWindow.xbf")
         self.assertEqual(contents["Assets\\Brand\\SoulMark.svg"], self.root / "assets/SoulMark.svg")
         self.assertIn("Assets\\Layout\\windows_classic_layout.yaml", contents)
-        resw_links = [item.find("m:Link", _NS).text for item in document.findall("m:ItemGroup/m:PRIResource", _NS)]
-        self.assertCountEqual(resw_links, ["Resources\\en\\Resources.resw", "Resources\\fr-CA\\Resources.resw"])
-        # The staged copy lands byte-identical from the declared XBF input.
-        self.assertEqual((self.resource_tree / "out/App.xbf").read_bytes(), (self.generated / "App.xbf").read_bytes())
+        self.assertEqual(
+            {
+                item.find("m:Link", _NS).text: _project_path(item.attrib["Include"], self.resource_tree)
+                for item in document.findall("m:ItemGroup/m:PRIResource", _NS)
+            },
+            {f"Resources\\{tag}\\Resources.resw": self.catalog / tag / "Resources.resw" for tag in ("en", "fr-CA")},
+        )
+        self.assertEqual(self.pri.read_bytes(), b"official PRI fixture")
+        self.assertFalse((self.resource_tree / "out/Aobus.pri").exists())
+        self.assertTrue((self.resource_tree / "msbuild.stdout.txt").is_file())
+
+    def test_pri_rejects_duplicate_assets_and_malformed_resw_before_msbuild(self):
+        options = self.resource_options()
+        options.asset.append(self.root / "other/SoulMark.svg")
+        with mock.patch.object(winui.subprocess, "run") as execute:
+            with self.assertRaisesRegex(ValueError, "duplicate"):
+                winui.run(options)
+            (self.catalog / "fr-CA/Resources.resw").unlink()
+            with self.assertRaisesRegex(ValueError, "RESW layout"):
+                winui.run(self.resource_options())
+        execute.assert_not_called()
+
+    def test_pri_does_not_publish_an_empty_sdk_output(self):
+        def empty_pri(arguments, **kwargs):
+            result = self.fake_pri(arguments, **kwargs)
+            (self.resource_tree / "out/Aobus.pri").write_bytes(b"")
+            return result
+
+        with mock.patch.object(winui.subprocess, "run", side_effect=empty_pri):
+            with self.assertRaisesRegex(ValueError, "empty.*Aobus.pri"):
+                winui.run(self.resource_options())
+        self.assertFalse(self.pri.exists())
 
 
 class StageActionTest(unittest.TestCase):
@@ -559,16 +699,19 @@ class StageActionTest(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory(prefix="aobus winui stage with spaces-")
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name).resolve()
-        self.resource_tree = self.root / "resources/private"
-        payload = self.resource_tree / "out"
-        payload.mkdir(parents=True)
-        (payload / "Aobus.pri").write_bytes(b"official PRI fixture")
-        for name in ("App.xbf", "MainWindow.xbf"):
-            (payload / name).write_text("payload " + name, encoding="utf-8")
-        for alias in _PAYLOAD_ASSETS:
-            path = payload / "Assets" / alias
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text("payload asset " + alias, encoding="utf-8")
+        self.pri = self.root / "resources/Aobus.pri"
+        self.pri.parent.mkdir()
+        self.pri.write_bytes(b"official PRI fixture")
+        xbf = self.root / "generated/xbf"
+        xbf.mkdir(parents=True)
+        self.xbf = [xbf / name for name in ("App.xbf", "MainWindow.xbf")]
+        for path in self.xbf:
+            path.write_text("payload " + path.name, encoding="utf-8")
+        assets = self.root / "authored"
+        assets.mkdir()
+        self.assets = [assets / name for name in _SHIPPING_ASSETS]
+        for path in self.assets:
+            path.write_text("payload asset " + path.name, encoding="utf-8")
         self.executable = self.root / "linked/Aobus.exe"
         self.executable.parent.mkdir()
         self.executable.write_bytes(b"real linked executable fixture")
@@ -582,8 +725,10 @@ class StageActionTest(unittest.TestCase):
             "stage",
             "--exe",
             str(executable),
-            "--resources",
-            str(self.resource_tree),
+            "--pri",
+            str(self.pri),
+            *[argument for path in self.xbf for argument in ("--xbf", str(path))],
+            *[argument for path in self.assets for argument in ("--asset", str(path))],
             "--output-exe",
             str(directory / (name + ".exe")),
             "--output-pri",
@@ -609,14 +754,20 @@ class StageActionTest(unittest.TestCase):
         with mock.patch.object(winui.subprocess, "run") as execute:
             winui.run(options)
         execute.assert_not_called()
-        self.assertEqual(options.output_exe.read_bytes(), self.executable.read_bytes())
-        self.assertEqual(options.output_pri.read_bytes(), b"official PRI fixture")
+        app = options.output_exe.parent
         self.assertEqual(
-            (options.output_assets / "Brand/SoulMark.svg").read_bytes(),
-            (self.resource_tree / "out/Assets/Brand/SoulMark.svg").read_bytes(),
+            {path.relative_to(app).as_posix(): path.read_bytes() for path in app.rglob("*") if path.is_file()},
+            {
+                "Aobus.exe": self.executable.read_bytes(),
+                "Aobus.pri": self.pri.read_bytes(),
+                runtime.name: runtime.read_bytes(),
+                **{path.name: path.read_bytes() for path in self.xbf},
+                **{
+                    f"Assets/{alias}": (self.root / "authored" / Path(alias).name).read_bytes()
+                    for alias in _PAYLOAD_ASSETS
+                },
+            },
         )
-        self.assertEqual((options.output_exe.parent / runtime.name).read_bytes(), runtime.read_bytes())
-        self.assertFalse(list(options.output_exe.parent.glob("*.cmd")))
 
     def test_stage_copies_linked_indirect_and_sdk_runtime_pairs_without_sdk_lookup(self):
         runtime = [
@@ -662,7 +813,7 @@ class StageActionTest(unittest.TestCase):
         execute.assert_not_called()
         self.assertEqual(default.output_exe.name, "Aobus.exe")
         self.assertEqual(default.output_pri.name, "Aobus.pri")
-        self.assertEqual(default.output_pri.read_bytes(), (self.resource_tree / "out/Aobus.pri").read_bytes())
+        self.assertEqual(default.output_pri.read_bytes(), self.pri.read_bytes())
 
         identity = "ao_winui_soul_probe"
         executable = self.root / "linked" / (identity + ".exe")
@@ -683,18 +834,12 @@ class StageActionTest(unittest.TestCase):
         self.assertEqual(probe.output_exe.name, identity + ".exe")
         self.assertEqual(probe.output_pri.name, identity + ".pri")
         self.assertEqual(probe.output_exe.read_bytes(), executable.read_bytes())
-        self.assertEqual(probe.output_pri.read_bytes(), (self.resource_tree / "out/Aobus.pri").read_bytes())
-        self.assertEqual(
-            (probe.output_exe.parent / "App.xbf").read_bytes(),
-            (self.resource_tree / "out/App.xbf").read_bytes(),
-        )
-        self.assertEqual(
-            (probe.output_exe.parent / "MainWindow.xbf").read_bytes(),
-            (self.resource_tree / "out/MainWindow.xbf").read_bytes(),
-        )
+        self.assertEqual(probe.output_pri.read_bytes(), self.pri.read_bytes())
+        for source in self.xbf:
+            self.assertEqual((probe.output_exe.parent / source.name).read_bytes(), source.read_bytes())
         self.assertEqual(
             (probe.output_assets / "Brand/SoulMark.svg").read_bytes(),
-            (self.resource_tree / "out/Assets/Brand/SoulMark.svg").read_bytes(),
+            (self.root / "authored/SoulMark.svg").read_bytes(),
         )
         self.assertEqual((probe.output_exe.parent / runtime.name).read_bytes(), runtime.read_bytes())
 
@@ -719,10 +864,21 @@ class StageActionTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Colliding"):
             winui.run(options)
         self.assertFalse(options.output_exe.exists())
-        options = self.stage_options(directory=self.resource_tree / "out")
+        options = self.stage_options(directory=self.pri.parent)
         with self.assertRaisesRegex(ValueError, "Overlapping"):
             winui.run(options)
         self.assertFalse(options.output_exe.exists())
+
+    def test_stage_rejects_wrong_output_names_and_missing_content_before_copying(self):
+        options = self.stage_options()
+        options.output_pri = options.output_pri.with_name("Wrong.pri")
+        with self.assertRaisesRegex(ValueError, "executable-local output names"):
+            winui.run(options)
+        self.assets[0].unlink()
+        options = self.stage_options()
+        with self.assertRaisesRegex(ValueError, "Missing.*SoulMark.svg"):
+            winui.run(options)
+        self.assertFalse(options.output_exe.parent.exists())
 
 
 if __name__ == "__main__":

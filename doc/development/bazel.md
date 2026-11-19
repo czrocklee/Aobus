@@ -450,13 +450,13 @@ inputs.
 
 Native SDK MSBuild owns metadata, MIDL, C++/WinRT, XAML and PRI generation only;
 ordinary Bazel MSVC actions compile all C++, create archives and perform the PE
-link. Generation takes the XAML pages and their C++ code-behind, IDL and authored
-headers as file inputs. Other authored `.cpp` files are passed by package-relative
-name only: MSBuild lists them under an unmaterialized private project path, not
-in the checkout. The SDK's post-generation `ClCompile` inventory must still match
-all authored names, SDK initializers and the four standalone generated units.
-Adding or renaming a unit changes the generation request; editing an ordinary
-implementation only invalidates consumers of its contents, not XAML generation.
+link. Generation reads the IDL, XAML pages and their paired `.xaml.cpp` and
+`.xaml.h` files from a private project input directory. Other authored C++
+sources and headers are project members by package-relative name, not file
+inputs. The post-generation `ClInclude` inventory must still match the authored
+headers, and `ClCompile` must match the authored sources, SDK initializers and
+four standalone generated units. Adding or renaming a member changes the
+generation request; editing an ordinary implementation or header does not.
 SDK actions keep their private `TEMP`/`TMP` at a short path inside the
 action's compact `p` tree because full-CLR MSBuild `Exec` appends GUID-named paths
 against the legacy Windows path limit. The selected tree-path geometry remains
@@ -476,8 +476,10 @@ existing `external_includes` field to code generators: on the pinned MSVC
 toolchain it emits `/external:I`, whereas `system_includes` emits ordinary `/I`.
 It does not change the toolchain flags for other roots. XBFs are separate
 declared outputs. MSBuild projects, logs and intermediate metadata
-stay in the private diagnostics output group, outside the compilation context
-and PRI inputs. SDK import
+stay in private diagnostics, outside the compilation context and the staged
+application. PRI generation consumes the catalog's RESW output, not ICU's
+private build files. Staging consumes the finished PRI, the two XBFs and the
+content assets directly, not the MSBuild log or temporary project. SDK import
 libraries remain DLL-interface imports beside the reviewed dynamic vcpkg
 dependencies, so this is not a DLL-free executable. The default completion and
 GUI-scenario orchestration are owned by the Bazel completion gate and the
@@ -2360,7 +2362,7 @@ A separate unconditional documentation job runs `ao check docs` and
 `ao check format --docs` with host Python outside Nix/SDK setup, preserving the
 docs-only routing and the failed-prerequisite behavior. Each native job runs
 `ao check --ci` in fastbuild; the graph covers live documentation,
-Linux/Windows tooling, native tests, the native-policy audits and the
+host-compatible tooling, native tests, the native-policy audits and the
 whole-graph lint test ([lint reports](#lint-reports)). Matching passing test results may be cached,
 and the CI summary reports the BEP test summaries of the attempt. Daily CI is
 fastbuild only. Linux also exercises a bounded bare Bazel entry without the

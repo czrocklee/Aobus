@@ -20,15 +20,7 @@ namespace ao::uimodel
 namespace ao::winui::layout
 {
   class FocusedDetail;
-
-  /// Whether the native window currently permits UI work such as animation.
-  struct WindowActivityState final
-  {
-    bool visible = true;
-    bool minimized = false;
-
-    friend bool operator==(WindowActivityState const&, WindowActivityState const&) = default;
-  };
+  struct WindowActivityState;
 
   /**
    * @brief Everything one Windows component build may borrow.

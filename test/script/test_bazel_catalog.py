@@ -47,6 +47,8 @@ class BazelCatalogGenerationTest(unittest.TestCase):
                 str(self.tools / "pkgdata"),
                 "--private",
                 str(output / "private"),
+                "--resw",
+                str(output / "resw"),
                 "--cpp",
                 str(output / "EmbeddedCatalogData.cpp"),
                 "--header",
@@ -174,6 +176,22 @@ class BazelCatalogGenerationTest(unittest.TestCase):
         for args in calls:
             self.assertTrue(Path(args[0]).is_absolute())
         self.assertEqual(self.options.dat.read_bytes(), bytes(range(19)))
+        self.assertEqual(
+            {
+                path.relative_to(self.options.resw).as_posix(): path.read_bytes()
+                for path in self.options.resw.rglob("*")
+                if path.is_file()
+            },
+            {
+                "en/Resources.resw": b"generated",
+                "qps-ploc/Resources.resw": b"generated",
+                "de/Resources.resw": b"translation",
+                "fr-CA/Resources.resw": b"translation",
+                "zh-Hant/Resources.resw": b"translation",
+            },
+        )
+        self.assertFalse(list(self.options.private.rglob("*.resw")))
+        self.assertTrue((self.options.private / "res/root.res").is_file())
         cpp = self.options.cpp.read_text(encoding="utf-8")
         self.assertIn('#include "app/i18n/EmbeddedCatalogData.h"', cpp)
         self.assertIn("alignas(16) constexpr std::byte kEmbeddedCatalogData[]", cpp)
@@ -204,7 +222,7 @@ class BazelCatalogGenerationTest(unittest.TestCase):
         empty.touch()
         with self.assertRaisesRegex(ValueError, "empty"):
             catalog.embed_data(empty, self.options.cpp)
-        self.options.private = self.options.cpp.parent
+        self.options.resw = self.options.private / "resw"
         with mock.patch.object(catalog.subprocess, "run") as execute:
             with self.assertRaisesRegex(ValueError, "Overlapping"):
                 catalog.run(self.options)

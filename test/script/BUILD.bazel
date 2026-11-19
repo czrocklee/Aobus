@@ -37,9 +37,13 @@ load("//bazel:python_libraries.bzl", "aobus_assert_unit_modules", "portal_initia
 
 package(default_visibility = ["//visibility:public"])
 
-# The macOS tooling suite has no native host coverage; only the explicit CI
-# remote-cache self-test is selected there.
-_MACOS_SELF_TEST = "test_bazel_remote_cache"
+# Exercise native SDK selection and the cache helper without selecting the full
+# repository tooling suite on macOS.
+_MACOS_TOOLING_MODULES = [
+    "test_bazel_appkit_deps",
+    "test_bazel_environment",
+    "test_bazel_remote_cache",
+]
 
 _UNIT_ENTRY = "ao.graph.bazel_unittest"
 
@@ -458,7 +462,7 @@ _WINDOWS_PROCESS_MODULES = [
         precompile = "disabled",
         tags = _HOST_BACKED_TAGS if module in _HOST_BACKED_MODULES else [],
         target_compatible_with = select({
-            "@platforms//os:macos": [] if module == _MACOS_SELF_TEST else ["@platforms//:incompatible"],
+            "@platforms//os:macos": [] if module in _MACOS_TOOLING_MODULES else ["@platforms//:incompatible"],
             "//conditions:default": [],
         }),
         deps = [_ENTRY] + _DEPS.get(module, []) + (_LIVE_CHECKOUT_DEPS if module in _HOST_BACKED_MODULES else []),

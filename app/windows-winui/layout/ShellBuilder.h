@@ -5,8 +5,8 @@
 
 #include "layout/runtime/ActionRegistry.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutHost.h"
+#include "layout/runtime/WindowActivityState.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Signal.h>

@@ -14,6 +14,7 @@
 #include "layout/runtime/LayoutHost.h"
 #include "layout/runtime/MenuComposer.h"
 #include "layout/runtime/PaneSettingsAccess.h"
+#include "layout/runtime/WindowActivityState.h"
 #include "platform/StringResourceFormat.h"
 #include "platform/StringResources.h"
 #include "theme/SurfaceBrushes.h"

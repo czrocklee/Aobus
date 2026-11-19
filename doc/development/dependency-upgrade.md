@@ -278,7 +278,7 @@ Keep `script-transliteration` declared in `dependency-contract.json`, and exerci
    which then follows the [Nixpkgs update](#updating-nixpkgs) validation.
    macOS must match Ruff and mypy but remains outside the exact Python
    patch-level contract.
-7. Run the complete check on Linux and Windows, including the tooling tests:
+7. Run the complete check, including each host's compatible tooling tests:
 
 ```bash
 ./ao check
@@ -289,8 +289,8 @@ ao.bat check
 ```
 
 Use the [standalone tooling runner](test/test-suite.md#tooling-and-lint-fixtures)
-while iterating. macOS has no repository tooling suite; its managed checks,
-governed C++ dependencies, and native gate remain independent.
+while iterating. On macOS the suite runs only the native SDK selection and
+remote-cache modules.
 
 8. Review new Ruff diagnostics and mypy behavior as policy changes. Keep the
    pin change and any large mechanical cleanup in distinct, understandable

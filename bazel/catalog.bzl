@@ -9,6 +9,7 @@ def _catalog_impl(ctx):
     if not compiler.executable:
         fail("catalog tools must contain the compiled catalog compiler")
     private = ctx.actions.declare_directory(ctx.label.name + "/private")
+    resw = ctx.actions.declare_directory(ctx.label.name + "/resw")
     cpp = ctx.actions.declare_file(ctx.label.name + "/EmbeddedCatalogData.cpp")
     header = ctx.actions.declare_file(ctx.label.name + "/CatalogLocaleTags.h")
     data = ctx.actions.declare_file(ctx.label.name + "/aobus_messages.dat")
@@ -21,6 +22,7 @@ def _catalog_impl(ctx):
     arguments.add("--genrb", CATALOG_TOOLS["genrb"])
     arguments.add("--pkgdata", CATALOG_TOOLS["pkgdata"])
     arguments.add("--private", private.path)
+    arguments.add("--resw", resw.path)
     arguments.add("--cpp", cpp)
     arguments.add("--header", header)
     arguments.add("--dat", data)
@@ -35,7 +37,7 @@ def _catalog_impl(ctx):
         arguments = [arguments],
         inputs = depset([ctx.file.inventory, ctx.file.locale_template, ctx.file._helper] + ctx.files.srcs),
         tools = [compiler] + ctx.files._native_tools,
-        outputs = [cpp, header, data, private],
+        outputs = [cpp, header, data, resw, private],
         env = env,
         use_default_shell_env = False,
         mnemonic = "AobusCatalog",
@@ -43,7 +45,13 @@ def _catalog_impl(ctx):
     )
     return [
         DefaultInfo(files = depset([cpp, header])),
-        OutputGroupInfo(cpp = depset([cpp]), header = depset([header]), dat = depset([data]), intermediates = depset([private])),
+        OutputGroupInfo(
+            cpp = depset([cpp]),
+            header = depset([header]),
+            dat = depset([data]),
+            resw = depset([resw]),
+            intermediates = depset([private]),
+        ),
     ]
 
 catalog = rule(
