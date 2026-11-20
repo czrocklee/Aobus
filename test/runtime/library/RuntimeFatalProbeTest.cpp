@@ -153,9 +153,8 @@ namespace ao::rt::test
 
   TEST_CASE("Runtime fatal roots - callback hop dispatch exceptions abort")
   {
-    using namespace std::string_view_literals;
-    constexpr auto kDiagnosticPrefix = "AOBUS_FATAL category="sv;
-    constexpr auto kSinkMarker = "AOBUS_TEST sink=accepted"sv;
+    constexpr auto kDiagnosticPrefix = std::string_view{"AOBUS_FATAL category="};
+    constexpr auto kSinkMarker = std::string_view{"AOBUS_TEST sink=accepted"};
     auto const result = requireFatalScenario("runtime-callback-hop-dispatch-exception");
     REQUIRE(result.standardError.contains("AOBUS_FATAL category=unhandled-exception "));
     CHECK(result.standardError.find(kDiagnosticPrefix) == result.standardError.rfind(kDiagnosticPrefix));

@@ -5,6 +5,7 @@ load("//bazel:testing.bzl", "native_test")
 load("//bazel:windows_utf8_manifest.bzl", "windows_utf8_manifest_checks")
 load(":executables.bzl", "cc_binary", "cc_test")
 load(":input_files.bzl", "test_input_manifest")
+load(":windows_native_context_runfiles.bzl", "WINDOWS", "windows_native_context_runfiles_test")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -1027,6 +1028,15 @@ cc_test(
         "@platforms//os:macos": [":coreaudio_test_support"],
         "//conditions:default": [],
     }),
+)
+
+# Analysis only: the adjacent launcher program must be a Windows test runfile.
+windows_native_context_runfiles_test(
+    name = "windows_native_context_runfiles_test",
+    size = "small",
+    exec_compatible_with = WINDOWS,
+    target_compatible_with = WINDOWS,
+    wrapper = ":audio_platform_test",
 )
 
 # Library/runtime integration cases stay distinct from pure encoded-media tests.

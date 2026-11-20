@@ -1533,11 +1533,10 @@ def resolve_dependencies(tree: Path, config: str, *, group: str, prefix: str | N
                         raise native.BazelWorkspaceError(f"reviewed child include is unsupported for {name}")
                     include = native.header_root(roots, reviewed.get("header", package["header"]))
                     child = include / reviewed["include"]
-                    if host == "linux":
-                        parent, resolved = include.resolve(), child.resolve()
-                        if resolved == parent or not resolved.is_relative_to(parent):
-                            raise native.BazelWorkspaceError(f"invalid reviewed child include for {name}: {child}")
-                        child_includes[name] = child
+                    parent, resolved = include.resolve(), child.resolve()
+                    if resolved == parent or not resolved.is_relative_to(parent):
+                        raise native.BazelWorkspaceError(f"invalid reviewed child include for {name}: {child}")
+                    child_includes[name] = child
                     interface = {"header_dirs": [str(child)]}
                 else:
                     if version_marker is None:
@@ -1762,9 +1761,10 @@ def resolve_dependencies(tree: Path, config: str, *, group: str, prefix: str | N
         adapter = _Adapter(spec, {"schema": 1, "patches": patches})
         adapter.prepare()
         for name, prepared_interface, _ in adapter.packages:
-            if host == "linux" and name in child_includes:
+            if name in child_includes:
                 child = adapter.path(str(child_includes[name]), directory=True)
-                # An additive compile patch must not leave a broader metadata include root in place.
+                # A port can own sibling integrations too. Reject broader metadata roots
+                # before selecting individual files, even when a vcpkg .list is available.
                 header_dirs = [adapter.path(path, directory=True) for path in prepared_interface.header_dirs]
                 if header_dirs != [child]:
                     raise native.BazelWorkspaceError(

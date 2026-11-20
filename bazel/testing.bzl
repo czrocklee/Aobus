@@ -18,8 +18,8 @@ forwards ``CcInfo`` itself.
 
 On Windows, Bazel's official Python launcher derives its program path from its
 own executable path, so the wrapper aliases the official runner's adjacent
-program artifact (the ``.zip`` program, or the extensionless bootstrap under
-``--nobuild_python_zip``) beside the wrapper executable under the wrapper's
+program artifact (the ``.zip`` program, or the extensionless bootstrap when
+zip output is disabled) beside the wrapper executable under the wrapper's
 basename. The aliases forward the runner's own ``DefaultInfo`` artifacts; no
 launcher script or zip is ever rewritten here.
 """
@@ -89,7 +89,7 @@ def _native_context_test_impl(ctx):
     # Bazel's official Windows Python launcher (``python_launcher.cc``) derives
     # its program path from its own launcher path: the ``.zip`` program beside
     # the executable (the Windows default) or the extensionless bootstrap
-    # (``--nobuild_python_zip``). The wrapper executable therefore needs the
+    # when zip output is disabled. The wrapper executable therefore needs the
     # official runner program aliased beside itself under the wrapper's
     # basename. The aliases forward the runner's own ``DefaultInfo`` program
     # artifacts; nothing is repackaged or rewritten. Extensionless launchers
@@ -113,9 +113,10 @@ def _native_context_test_impl(ctx):
     # The wrapper's runfiles carry everything the runner and the wrapped test
     # need at execution: both executables themselves, the runner's and inner
     # target files, plain-file data dependencies, and every default runfiles
-    # tree. The wrapped binary must be resolvable from runfiles by key.
+    # tree. On Windows the launcher opens its adjacent alias, not the original
+    # runner program. Default outputs alone do not order it before TestRunner.
     runfiles = ctx.runfiles(
-        files = [executable, runner_executable, inner_executable],
+        files = [executable, runner_executable, inner_executable] + program_aliases,
         transitive_files = depset(transitive = [runner.files, inner_default.files] + [
             dep[DefaultInfo].files
             for dep in ctx.attr.data + ctx.attr.deps
