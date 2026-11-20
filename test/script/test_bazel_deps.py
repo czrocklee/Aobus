@@ -5,6 +5,7 @@ import hashlib
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -19,7 +20,8 @@ class BazelDependencyTest(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory(prefix="aobus-bazel-test-")
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name).resolve()
-        self.provider = self.root / "provider"
+        self.store = self.root / "nix/store"
+        self.provider = self.store / f"{'0' * 32}-fixture-dev"
         for directory in ("include", "lib/pkgconfig", "bin", "share"):
             (self.provider / directory).mkdir(parents=True, exist_ok=True)
         self.header = self.provider / "include/foo.h"
@@ -189,6 +191,19 @@ class BazelDependencyTest(unittest.TestCase):
             source.symlink_to(target, target_is_directory=directory)
         except OSError as exc:
             self.skipTest(f"host lacks symlink privileges: {exc}")
+
+    def test_allowed_root_membership_includes_file_roots_and_excludes_siblings(self):
+        sibling = self.lib.parent.with_name(self.lib.parent.name + "-sibling")
+        sibling.mkdir()
+        outside = sibling / "outside.h"
+        outside.write_bytes(b"outside")
+        self.spec["allowed_roots"] = [str(self.header), str(self.lib.parent)]
+        self.spec.pop("pkg_config")
+        adapter = g._Adapter(self.spec, self.patches)
+        self.assertEqual(adapter.path(str(self.header)), self.header)
+        self.assertEqual(adapter.path(str(self.lib)), self.lib)
+        with self.assertRaisesRegex(g.BazelDependencyError, "outside allowed provider roots"):
+            adapter.path(str(outside))
 
     def test_pc_projection_declares_headers_imports_macros_and_no_broad_flags(self):
         manifest = self.generate()
@@ -981,6 +996,365 @@ class BazelDependencyTest(unittest.TestCase):
         self.symlink(extra / "cycle", self.header.parent, directory=True)
         with self.assertRaisesRegex(g.BazelDependencyError, "symlink cycle"):
             self.generate()
+
+    def resolve_nix_headers(self):
+        self.spec["provider"]["name"] = "nix"
+        with mock.patch.object(g, "_NIX_STORE", self.store):
+            adapter = g._Adapter(self.spec, self.patches)
+            adapter.prepare()
+            self.resolution = adapter.resolve()
+        return adapter, self.resolution["manifest"]
+
+    def test_is_nix_store_directory_validates_nix32_store_paths_and_rejects_traversal(self):
+        valid_hash = "0123456789abcdfghijklmnpqrsvwxyz"
+        for path in (
+            Path(f"/nix/store/{valid_hash}-foo"),
+            Path(f"/nix/store/{'0' * 32}-libfoo+1.2_3?a=b-dev/include/nested"),
+        ):
+            with self.subTest(valid=path):
+                self.assertTrue(g._is_nix_store_directory(path))
+        for path in (
+            Path(f"/nix/store/{'e' * 32}-foo"),
+            Path(f"/nix/store/{'o' * 32}-foo"),
+            Path(f"/nix/store/{'t' * 32}-foo"),
+            Path(f"/nix/store/{'u' * 32}-foo"),
+            Path(f"/nix/store/{'A' * 32}-foo"),
+            Path(f"/nix/store/{'0' * 31}-foo"),
+            Path(f"/nix/store/{'0' * 33}-foo"),
+            Path(f"/nix/store/{'0' * 32}"),
+            Path(f"/nix/store/{'0' * 32}-"),
+            Path(f"/tmp/nix/store/{valid_hash}-foo"),
+            Path("/tmp/provider/include"),
+            Path(f"/nix/store/{valid_hash}-foo/.."),
+            Path(f"/nix/store/{valid_hash}-foo/include/../other"),
+        ):
+            with self.subTest(invalid=path):
+                self.assertFalse(g._is_nix_store_directory(path))
+        self.shared()
+        self.spec["provider"]["name"] = "nix"
+        for bad_dir in (f"/nix/store/{valid_hash}-foo/.", f"/nix/store/{valid_hash}-foo/..", "/tmp/outside"):
+            self.dynamic = f"0x000 (RUNPATH) Library runpath: [{bad_dir}]"
+            with (
+                self.subTest(runpath=bad_dir),
+                self.assertRaisesRegex(g.BazelDependencyError, "invalid Nix ELF runtime search directory"),
+            ):
+                self.generate_with_runtime_directories(bad_dir)
+
+    def test_nix_header_records_use_component_order_and_retain_hash_and_other_input_roles(self):
+        include = self.header.parent
+        (include / "a").mkdir()
+        for relative in ("a-extra.h", "a.inl", "a/x (β)@+,.h"):
+            (include / relative).write_bytes(relative.encode())
+        digest = hashlib.sha256(self.header.read_bytes()).hexdigest()
+        self.spec["provider"]["evidence"] = [{"path": str(self.header), "sha256": digest}]
+        _adapter, manifest = self.resolve_nix_headers()
+        paths = ["a/x (β)@+,.h", "a-extra.h", "a.inl", "foo.h"]
+        self.assertEqual(
+            self.package()["headers"],
+            [{"root": str(include), "index": 0, "files": [{"source": str(include / p), "path": p} for p in paths]}],
+        )
+        self.assertEqual(manifest["packages"][0]["declared_headers"], len(paths))
+        self.assertIn(
+            {"path": str(self.header), "roles": ["header", "provider_evidence"], "sha256": digest}, manifest["inputs"]
+        )
+
+    def test_nix_nested_roots_preserve_order_and_reject_empty_nested(self):
+        include = self.header.parent
+        nested = include / "ryml"
+        nested.mkdir()
+        (include / "c4").mkdir()
+        (include / "c4/dep.h").write_bytes(b"// dep\n")
+        (nested / "ryml.hpp").write_bytes(b"// ryml\n")
+        empty_nested = include / "empty_sub"
+        empty_nested.mkdir()
+        linked_empty = include / "linked_empty"
+        self.symlink(linked_empty, Path("empty_sub"), directory=True)
+        for nested_first in (False, True):
+            with self.subTest(nested_first=nested_first):
+                roots = [nested, include] if nested_first else [include, nested]
+                self.cflags = " ".join(f'-I"{root}"' for root in roots)
+                self.write_pc()
+                _adapter, manifest = self.resolve_nix_headers()
+                self.assertEqual(
+                    self.package()["includes"],
+                    [{"tree": 0, "path": "ryml"}, {"tree": 0, "path": "."}]
+                    if nested_first
+                    else [{"tree": 0, "path": "."}, {"tree": 0, "path": "ryml"}],
+                )
+                self.assertEqual(self.package()["headers"][0]["index"], roots.index(include))
+                self.assertEqual(
+                    [f["path"] for f in self.package()["headers"][0]["files"]], ["c4/dep.h", "foo.h", "ryml/ryml.hpp"]
+                )
+                self.assertEqual(manifest["packages"][0]["declared_headers"], 3)
+        for empty_root in (empty_nested, linked_empty):
+            with self.subTest(empty_root=empty_root):
+                self.cflags = f'-I"{include}" -I"{empty_root}"'
+                self.write_pc()
+                with self.assertRaisesRegex(g.BazelDependencyError, "empty header directory"):
+                    self.resolve_nix_headers()
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "requires Linux byte filenames")
+    def test_nix_rejects_unrepresentable_emitted_names_including_ancestors_and_links(self):
+        include = self.header.parent
+        empty = include / "empty:name"
+        empty.mkdir()
+        self.resolve_nix_headers()  # Empty directories aren't projected.
+        for name, kind in (
+            ("bad:name", "ancestor"),
+            ("bad\\name", "file"),
+            ("bad\x01name", "symlink"),
+            ("bad\x7fname", "file"),
+            (os.fsdecode(b"bad\xffname"), "file"),
+        ):
+            with self.subTest(name=name, kind=kind):
+                path = include / name
+                if kind == "ancestor":
+                    path.mkdir()
+                    (path / "valid.h").write_bytes(b"nested")
+                elif kind == "symlink":
+                    self.symlink(path, self.header)
+                else:
+                    path.write_bytes(b"header")
+                with self.assertRaisesRegex(g.BazelDependencyError, "invalid Bazel header path"):
+                    self.resolve_nix_headers()
+                if kind == "ancestor":
+                    shutil.rmtree(path)
+                else:
+                    path.unlink()
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "requires Linux byte filenames")
+    def test_nix_header_alias_requires_a_json_representable_source_not_a_label(self):
+        alias = self.header.parent / "alias.h"
+        for basename in ("actual:name", os.fsdecode(b"actual\xffname")):
+            with self.subTest(basename=basename):
+                source = self.provider / "share" / basename
+                source.write_bytes(b"// header\n")
+                self.symlink(alias, source)
+                if basename == "actual:name":
+                    self.resolve_nix_headers()
+                    self.assertIn({"source": str(source), "path": "alias.h"}, self.package()["headers"][0]["files"])
+                else:
+                    with self.assertRaisesRegex(g.BazelDependencyError, "non-UTF-8 header source"):
+                        self.resolve_nix_headers()
+                alias.unlink()
+
+    def test_nix_rejects_bazel_boundary_files_and_symlinks(self):
+        include = self.header.parent
+        nested = include / "nested"
+        nested.mkdir()
+        (nested / "nested.h").write_bytes(b"// nested\n")
+        for boundary in ("BUILD", "BUILD.bazel"):
+            for location, creator in (
+                (include / boundary, lambda path: path.write_bytes(b"# boundary\n")),
+                (nested / boundary, lambda path: path.write_bytes(b"# nested boundary\n")),
+                (include / boundary, lambda path: self.symlink(path, self.header)),
+            ):
+                with self.subTest(boundary=boundary, location=location):
+                    creator(location)
+                    try:
+                        with self.assertRaisesRegex(g.BazelDependencyError, "Bazel package boundary file"):
+                            self.resolve_nix_headers()
+                    finally:
+                        location.unlink()
+
+    def test_nix_accepts_non_boundary_names_in_sparse_file_labels(self):
+        include = self.header.parent
+        self.header.unlink()
+        (include / "BUILD").mkdir()
+        (include / "BUILD.bazel").mkdir()
+        paths = ["BUILD/WORKSPACE", "BUILD.bazel/WORKSPACE.bazel", "MODULE.bazel", "REPO.bazel"]
+        for path in paths:
+            (include / path).write_bytes(b"header")
+        self.resolve_nix_headers()
+        self.assertEqual([f["path"] for f in self.package()["headers"][0]["files"]], paths)
+
+    def test_nix_rejects_empty_dangling_escaping_and_cyclic_entries(self):
+        include = self.header.parent
+        outside_file = self.root / "outside.h"
+        outside_file.write_bytes(b"// outside\n")
+        outside_dir = self.root / "outside_dir"
+        outside_dir.mkdir()
+        (outside_dir / "escape.h").write_bytes(b"// escape\n")
+        for label, setup, pattern in (
+            ("dangling", lambda: self.symlink(include / "dangling.h", include / "missing.h"), "missing file"),
+            ("escape-file", lambda: self.symlink(include / "escape.h", outside_file), "outside allowed provider roots"),
+            (
+                "escape-dir",
+                lambda: self.symlink(include / "escape_dir", outside_dir, directory=True),
+                "outside allowed provider roots",
+            ),
+            (
+                "cycle",
+                lambda: (
+                    (include / "sub").mkdir(),
+                    self.symlink(include / "sub/loop", Path(".."), directory=True),
+                ),
+                "symlink cycle",
+            ),
+            (
+                "mutual-cycle",
+                lambda: (
+                    self.symlink(include / "a", include / "b", directory=True),
+                    self.symlink(include / "b", include / "a", directory=True),
+                ),
+                "symlink cycle",
+            ),
+        ):
+            with self.subTest(label=label):
+                setup()
+                try:
+                    with self.assertRaisesRegex(g.BazelDependencyError, pattern):
+                        self.resolve_nix_headers()
+                finally:
+                    for item in list(include.iterdir()):
+                        if item != self.header:
+                            if item.is_symlink() or item.is_file():
+                                item.unlink()
+                            else:
+                                shutil.rmtree(item)
+        self.header.unlink()
+        with self.assertRaisesRegex(g.BazelDependencyError, "empty header directory"):
+            self.resolve_nix_headers()
+
+    def test_nix_rejects_symlinks_to_admitted_mutable_evidence(self):
+        evidence = self.root / "provider.json"
+        evidence.write_bytes(b"{}\n")
+        self.spec["allowed_roots"].append(str(evidence))
+        self.spec["provider"]["evidence"] = [{"path": str(evidence), "sha256": hashlib.sha256(b"{}\n").hexdigest()}]
+        self.symlink(self.header.parent / "evidence.h", evidence)
+        with self.assertRaisesRegex(g.BazelDependencyError, "leaves admitted Nix outputs"):
+            self.resolve_nix_headers()
+
+    @unittest.skipIf(os.name == "nt", "requires POSIX symlink and parent traversal")
+    def test_nix_accepts_parent_segments_in_pkg_config_includes_and_relative_link_targets(self):
+        include = self.header.parent
+        self.cflags = f'-I"{self.pcfile.parent}/../../include"'
+        self.symlink(self.provider / "pcdir", Path("lib/pkgconfig"), directory=True)
+        # '..' follows the symlink's actual target, not the lexical location of pcdir.
+        self.symlink(include / "alias.h", Path("../pcdir/../../include/foo.h"))
+        _adapter, manifest = self.resolve_nix_headers()
+        self.assertEqual(self.include_root(), include)
+        self.assertEqual(
+            self.package()["headers"][0]["files"],
+            [
+                {"source": str(self.header), "path": "alias.h"},
+                {"source": str(self.header), "path": "foo.h"},
+            ],
+        )
+        self.assertEqual(manifest["packages"][0]["declared_headers"], 2)
+
+    @unittest.skipIf(os.name == "nt", "Nix uses POSIX absolute symlink targets")
+    def test_nix_rejects_links_through_mutable_intermediates(self):
+        host_alias = self.root / "host-include"
+        self.symlink(host_alias, self.header.parent, directory=True)
+        # The bridge is outside the scanned include tree; it is only reached
+        # as a directory component of another link's target.
+        bridge = self.provider / "share/bridge"
+        self.symlink(bridge, host_alias, directory=True)
+        header = self.header.parent / "linked.h"
+        # Lexically collapsing bridge/.. would conceal the disallowed hop.
+        self.symlink(bridge.parent / "include", self.header.parent, directory=True)
+        for target in (host_alias / self.header.name, bridge / self.header.name, bridge / "../include/foo.h"):
+            with self.subTest(target=target):
+                self.symlink(header, target)
+                try:
+                    self.assertEqual(header.resolve(strict=True), self.header)
+                    with self.assertRaisesRegex(g.BazelDependencyError, "leaves admitted Nix outputs"):
+                        self.resolve_nix_headers()
+                finally:
+                    header.unlink()
+        # An include root alias must not bypass the hop checks by being
+        # canonicalized during --cflags processing before the tree is scanned.
+        for candidate in (bridge, bridge / "../include"):
+            with self.subTest(candidate=candidate):
+                self.assertEqual(candidate.resolve(strict=True), self.header.parent)
+                self.cflags = f'-I"{candidate}"'
+                with self.assertRaisesRegex(g.BazelDependencyError, "leaves admitted Nix outputs"):
+                    self.resolve_nix_headers()
+
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "requires os.mkfifo")
+    def test_nix_rejects_non_regular_files_and_symlinks_to_them(self):
+        include = self.header.parent
+        fifo = include / "pipe.h"
+        os.mkfifo(fifo)
+        with self.assertRaisesRegex(g.BazelDependencyError, "unsupported non-file header entry"):
+            self.resolve_nix_headers()
+        fifo.unlink()
+        outside_fifo = self.provider / "share/pipe.h"
+        os.mkfifo(outside_fifo)
+        self.symlink(include / "pipe_link.h", outside_fifo)
+        with self.assertRaisesRegex(g.BazelDependencyError, "unsupported non-file header entry"):
+            self.resolve_nix_headers()
+
+    def test_nix_internal_symlinks_count_lexical_entries_and_record_aliases(self):
+        include = self.header.parent
+        self.header.unlink()
+        ft2 = include / "freetype2"
+        ft = ft2 / "freetype"
+        ft.mkdir(parents=True)
+        (ft2 / "ft2build.h").write_bytes(b"// ft2build\n")
+        (ft / "freetype.h").write_bytes(b"// freetype\n")
+        ft2build_alias = include / "ft2build.h"
+        ft_alias = include / "freetype"
+        self.symlink(ft2build_alias, Path("freetype2/ft2build.h"))
+        self.symlink(ft_alias, Path("freetype2/freetype"), directory=True)
+        for flags, expected_paths in (
+            (f'-I"{include}"', ["."]),
+            (f'-I"{include}" -I"{ft_alias}"', [".", "freetype2/freetype"]),
+        ):
+            with self.subTest(flags=flags):
+                self.cflags = flags
+                self.write_pc()
+                adapter, manifest = self.resolve_nix_headers()
+                self.assertEqual(manifest["packages"][0]["declared_headers"], 4)
+                self.assertTrue({ft2build_alias, ft_alias, ft_alias / "freetype.h"} <= adapter.aliases)
+                self.assertEqual(
+                    self.package()["headers"][0]["files"],
+                    [
+                        {"source": str(ft / "freetype.h"), "path": "freetype/freetype.h"},
+                        {"source": str(ft / "freetype.h"), "path": "freetype2/freetype/freetype.h"},
+                        {"source": str(ft2 / "ft2build.h"), "path": "freetype2/ft2build.h"},
+                        {"source": str(ft2 / "ft2build.h"), "path": "ft2build.h"},
+                    ],
+                )
+                self.assertEqual(
+                    self.package()["includes"],
+                    [{"tree": 0, "path": path} for path in expected_paths],
+                )
+
+    @unittest.skipIf(os.name == "nt", "Nix uses POSIX absolute symlink targets")
+    def test_nix_accepts_cross_output_links_and_safe_chains(self):
+        include = self.header.parent
+        other = self.store / f"{'1' * 32}-other-dev"
+        target = other / "extra headers/other header.h"
+        target.parent.mkdir(parents=True)
+        target.write_bytes(b"// other header\n")
+        self.spec["allowed_roots"].append(str(other))
+        self.symlink(include / "direct.h", target)
+        self.symlink(other / "header alias", Path("extra headers"), directory=True)
+        self.symlink(include / "chain.h", Path("../..") / other.name / "header alias" / target.name)
+        _adapter, manifest = self.resolve_nix_headers()
+        self.assertEqual(manifest["packages"][0]["declared_headers"], 3)
+        self.assertEqual(
+            self.package()["headers"][0]["files"],
+            [
+                {"source": str(target), "path": "chain.h"},
+                {"source": str(target), "path": "direct.h"},
+                {"source": str(self.header), "path": "foo.h"},
+            ],
+        )
+
+    def test_owned_windows_headers_exclude_unlisted_siblings(self):
+        self.spec["platform"] = "windows"
+        (self.lib.parent / "foo.lib").write_bytes(b"import library")
+        self.header.with_name("unowned.h").write_bytes(b"unowned")
+        adapter = g._Adapter(self.spec, self.patches)
+        adapter.prepare()
+        adapter.header_files["foo"] = [self.header]
+        self.resolution = adapter.resolve()
+        self.assertEqual(self.package()["headers"][0]["files"], [{"source": str(self.header), "path": "foo.h"}])
+        inputs = self.resolution["manifest"]["inputs"]
+        self.assertEqual([item["path"] for item in inputs if "header" in item["roles"]], [str(self.header)])
 
     def test_resolution_never_writes_metadata_or_materializes_provider_links(self):
         with (

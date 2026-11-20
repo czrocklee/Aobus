@@ -783,10 +783,16 @@ labels fail if selected for build analysis; they provide no empty SDK and never
 silently mark a consumer incompatible. Only the policy's platform exclusions
 produce these labels: a missing required SDK still fails resolution.
 
-[Header ownership](../../script/ao/portal/bazel_headers.py) comes from installed
-per-port vcpkg `.list` files. Sparse imports project only reviewed owned closures,
-preserving include order and topology such as RapidYaml's `../c4` wrappers.
-FakeIt's child-only interface excludes standalone/sibling integrations. No whole-triplet include directory is linked.
+On Linux, the resolver inventories each distinct immutable Nix include root once
+per configuration. It checks symlink hops against the admitted outputs and keeps
+the lexical include spelling, canonical source, and per-file digest. Only the
+inventory is reused across packages: the generated include directories contain
+individual file links, not links to provider directories. This preserves nested
+includes such as RapidYaml's `../c4` without exposing provider siblings via `..`
+in local builds. FakeIt's reviewed Catch-only interface excludes its standalone
+integration. On macOS and Windows, [vcpkg header ownership](../../script/ao/portal/bazel_headers.py)
+comes from the installed per-port `.list` files; no whole-triplet include
+directory is linked.
 Header and library labels omit absolute provider prefixes for action-path stability,
 not guaranteed cache hits. Linux shared Nix imports retain linker-only search hints
 from their declared ELF runtime search directories. Indirect dependency lookup

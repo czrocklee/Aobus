@@ -1,3 +1,4 @@
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
 load(":selector.bzl", "header_share_selector_test")
 
 header_share_selector_test(
@@ -5,4 +6,24 @@ header_share_selector_test(
     size = "small",
     target_compatible_with = ["@platforms//os:linux"],
     visibility = ["//:__pkg__"],
+)
+
+cc_test(
+    name = "sparse_headers_test",
+    size = "small",
+    srcs = ["SparseHeadersLinux.cpp"],
+    # A sandbox exposes only declared inputs and can hide a projected directory
+    # symlink. Exercise the same lookup as an unsandboxed consumer.
+    tags = ["local"],
+    target_compatible_with = ["@platforms//os:linux"],
+    visibility = ["//:__pkg__"],
+    deps = select({
+        "@platforms//os:linux": [
+            "//bazel:compile_contract",
+            "@aobus_native_deps//:lmdb",
+            "@aobus_native_deps//:opus",
+            "@aobus_test_deps//:fakeit",
+        ],
+        "//conditions:default": [],
+    }),
 )
