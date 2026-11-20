@@ -128,6 +128,14 @@ class RequiredScopeTest(unittest.TestCase):
                 # //:check_tests expands the consumer even on hosts that skip it.
                 self.assertEqual(sparse_headers in selection.optional, platform != "linux")
 
+    def test_windows_header_interfaces_require_evidence_only_on_windows(self):
+        label = "//bazel/windows_header_share:mode_interfaces_test"
+        for platform in ("linux", "macos", "windows"):
+            with self.subTest(platform=platform):
+                selection = completion._selection(platform, completion.Request())
+                self.assertEqual(label in selection.required, platform == "windows")
+                self.assertEqual(label in selection.optional, platform != "windows")
+
     def test_only_windows_ci_requires_the_interactive_probe(self):
         uia = "//test:winui_uia_test"
         self.assertIn(uia, completion._selection("windows", completion.Request(ci=True)).required)

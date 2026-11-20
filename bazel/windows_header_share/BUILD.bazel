@@ -1,0 +1,20 @@
+load(":mode_interfaces.bzl", "windows_header_mode_test")
+
+config_setting(
+    name = "windows",
+    constraint_values = ["@platforms//os:windows"],
+)
+
+_WINDOWS_IMPORT = select({
+    ":windows": "@aobus_native_deps//:rapidyaml",
+    "//conditions:default": None,
+})
+
+windows_header_mode_test(
+    name = "mode_interfaces_test",
+    size = "small",
+    debug = _WINDOWS_IMPORT,
+    fastbuild = _WINDOWS_IMPORT,
+    release = _WINDOWS_IMPORT,
+    target_compatible_with = ["@platforms//os:windows"],
+)

@@ -709,12 +709,15 @@ observations keyed by configuration, not by Bazel package paths. Starlark owns
 native/test subpackages, the catalog SDK's package layout and root mode aliases;
 it requires both configurations before materialization. Fixed single-mode root
 SDK repositories are not supported. Per-variant native queries still receive
-their own Debug or Release configuration. On Linux, if both observations for a
-package have identical header records (including source paths) and ordered include
-roots, both modes use one header-only target in the release subpackage. Libraries,
-consumer defines, manifests and mode guards remain separate. Different headers or
-include ordering keep separate projections. This comparison does not read or hash
-header contents.
+their own Debug or Release configuration. On Linux and on Windows with vcpkg,
+Debug and Release share a sparse header projection for the same package only
+when the complete, nonempty header records (including source paths) and ordered
+include roots match. A mismatch keeps the two projections separate. macOS does
+not share them. The shared files keep their existing Release paths under
+`artifacts/_headers/` in `release/` (or `catalog-release/` for the catalog SDK).
+On Windows only Debug uses the Release header-only target; Release and fastbuild
+keep their original compile interfaces. Libraries, defines, manifests and mode
+guards are never shared by this comparison. It does not rehash header contents.
 WinUI remains independent and lazy, using the same Starlark mode selection.
 The resolver returns no generated-file, destination-link or alias program.
 
@@ -2057,8 +2060,11 @@ A filegroup would only build them. On Linux the
 test starts that test's owned private fixtures from its declared context.
 On Windows the wildcard adds the two unattended native console probes (track
 item and localization) through `//test:native_process_tests`. Windows completion
-also independently requires `//test/winui/projection:winui_projection_test`; that
-requirement is not applied on other hosts. `--config=ci` additionally enables
+also independently requires `//test/winui/projection:winui_projection_test` and
+`//bazel/windows_header_share:mode_interfaces_test`. The latter analyzes the
+public RapidYAML import in all three modes and verifies that only Debug depends
+on the Release header helper. These requirements do not apply on other hosts.
+`--config=ci` additionally enables
 `//test:winui_uia_test`, the real automation probe with the existing runtime and
 interactive-console admission. The other
 GUI probes and performance harnesses are never executed by a wildcard build.
