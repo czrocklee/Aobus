@@ -66,9 +66,13 @@ def sdk_imports(config, packages, platform):
                     includes = includes,
                     visibility = ["//" + header_package.removesuffix("release") + "debug:__pkg__"],
                 )
-            header_deps = ["//" + header_package + ":" + header_target]
-            hdrs = []
-            includes = []
+
+            # Windows Release/fastbuild retain their existing compile contexts;
+            # only Debug needs to reach across subpackages for these files.
+            if not windows or config == "debug":
+                header_deps = ["//" + header_package + ":" + header_target]
+                hdrs = []
+                includes = []
         deps = []
         for library in package["libraries"]:
             name = library["name"]
