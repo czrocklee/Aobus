@@ -20,7 +20,8 @@ LAYOUT_RUNTIME_SOURCES = [
 
 LAYOUT_RUNTIME_HEADERS = [src.removesuffix(".cpp") + ".h" for src in LAYOUT_RUNTIME_SOURCES] + ["layout/runtime/LayoutComponent.h"]
 
-# Authored sources are partitioned among native compilation owners below.
+# Sources partitioned among the model, layout, track and XAML archives below.
+# Independent native libraries declare their own sources at their rules.
 WINUI_SOURCES = [
     "App.xaml.cpp",
     "app/DestructiveLibraryRestart.cpp",
@@ -39,7 +40,6 @@ WINUI_SOURCES = [
     "input/KeyChordAccelerator.cpp",
     "input/KeymapAcceleratorPlan.cpp",
     "input/KeymapAccelerators.cpp",
-    "input/SystemCharacterKey.cpp",
     "library/LibraryTransferAdapter.cpp",
     "library/LibraryTransferCoordinator.cpp",
     "list/ListAuthoringAdapter.cpp",
@@ -59,7 +59,6 @@ WINUI_SOURCES = [
     "layout/component/playback/PlaybackComponents.cpp",
     "layout/component/playback/SoulButton.cpp",
     "layout/component/shell/NavigationPane.cpp",
-    "layout/component/shell/PaneSplitter.cpp",
     "layout/component/shell/ShellComponents.cpp",
     "layout/component/status/StatusComponents.cpp",
     "layout/component/track/TrackCoverArt.cpp",
@@ -69,27 +68,19 @@ WINUI_SOURCES = [
     "layout/runtime/ActionBinder.cpp",
     "layout/runtime/ComponentRegistry.cpp",
     "layout/ShellBuilder.cpp",
-    "layout/ShellPresetSource.cpp",
     "platform/AppWindowActivity.cpp",
-    "platform/ScopedBooleanFlag.cpp",
     "platform/ProcessLauncher.cpp",
-    "platform/SmtcBridge.cpp",
-    "platform/WinUiErrorBoundary.cpp",
     "playback/AobusSoulControl.cpp",
     "playback/AudioPipelineToolTip.cpp",
     "playback/FullscreenSoulWindow.cpp",
-    "playback/MainWindowPlayback.cpp",
-    "playback/OutputDeviceControl.cpp",
     "playback/PlaybackTimeControl.cpp",
     "playback/SeekControl.cpp",
     "playback/SoulTransportButton.cpp",
     "playback/TransportButton.cpp",
     "playback/VolumeControl.cpp",
-    "shell/MainWindowShell.cpp",
     "status/ActivityStatusControl.cpp",
     "theme/Theme.cpp",
     "theme/SurfaceBrushes.cpp",
-    "theme/ThemeCoordinator.cpp",
     "track/MainWindowTrack.cpp",
     "track/TrackCellItem.cpp",
     "track/TrackCreditsEditorControl.cpp",
@@ -144,9 +135,22 @@ MODEL_SOURCES = [
     "list/ListAuthoringAdapter.cpp",
 ]
 
+WINDOW_PLACEMENT_HEADER = "include/ao/winui/WindowPlacement.h"
+
 MODEL_HEADERS = glob(
     ["include/ao/winui/**/*.h"],
-    exclude = ["include/ao/winui/WinUiErrorBoundary.h"],
+    exclude = [
+        WINDOW_PLACEMENT_HEADER,
+        "include/ao/winui/WinUiErrorBoundary.h",
+    ],
+)
+
+# Native window operations share the geometry type, not its persistence schema.
+cc_library(
+    name = "window_placement",
+    hdrs = [WINDOW_PLACEMENT_HEADER],
+    includes = ["include"],
+    visibility = ["//test:__pkg__"],
 )
 
 # Preserve the source-private include used by the admission tests without
@@ -173,6 +177,7 @@ cc_library(
     visibility = ["//test:__pkg__"],
     deps = [
         ":admission_headers",
+        ":window_placement",
         "//app/uimodel",
         "@aobus_native_deps//:rapidyaml",
     ],
@@ -314,16 +319,111 @@ cc_library(
     ],
 )
 
+# The frame owns this adapter by value. Its C++/WinRT projections and native
+# media bridge stay implementation-only.
+cc_library(
+    name = "main_window_playback",
+    srcs = [
+        "platform/SmtcBridge.cpp",
+        "platform/SmtcBridge.h",
+        "playback/MainWindowPlayback.cpp",
+    ],
+    hdrs = ["playback/MainWindowPlayback.h"],
+    copts = MSVC_WINUI_COPTS,
+    implementation_deps = [
+        ":error_boundary",
+        ":generated",
+        "//app/i18n",
+        "//app/runtime",
+        "//app/uimodel",
+        "//app/windows:windows_platform",
+    ],
+    includes = ["."],
+    linkstatic = True,
+    target_compatible_with = ["@platforms//os:windows"],
+)
+
+# HWND operations use the SDK projection in the implementation only. The
+# interface forward-declares the projected window and uses model placement.
+cc_library(
+    name = "native_window",
+    srcs = ["platform/NativeWindow.cpp"],
+    hdrs = ["platform/NativeWindow.h"],
+    copts = MSVC_WINUI_COPTS,
+    implementation_deps = [
+        ":generated",
+        "//app/runtime",
+        "@aobus_winui_sdk//:headers",
+    ],
+    includes = ["."],
+    linkopts = ["user32.lib"],
+    linkstatic = True,
+    target_compatible_with = ["@platforms//os:windows"],
+    deps = [":window_placement"],
+)
+
+# Reading the packaged shell document uses Win32 file location and the model,
+# not the generated XAML projection or the factory's borrowed build context.
+cc_library(
+    name = "shell_preset_source",
+    srcs = ["layout/ShellPresetSource.cpp"],
+    hdrs = ["layout/ShellPresetSource.h"],
+    copts = MSVC_WINUI_COPTS,
+    implementation_deps = ["//lib/utility:path"],
+    includes = ["."],
+    linkstatic = True,
+    target_compatible_with = ["@platforms//os:windows"],
+    deps = [
+        ":model",
+        "//app/uimodel",
+        "//include:utility_headers",
+    ],
+)
+
+cc_library(
+    name = "named_control",
+    hdrs = ["platform/NamedControl.h"],
+    includes = ["."],
+    target_compatible_with = ["@platforms//os:windows"],
+    deps = [
+        ":generated",
+        "//include:utility_headers",
+    ],
+)
+
+# Navigation and inspector components use this control through callbacks; only
+# their factories need the per-build context. The control exposes SDK types.
+cc_library(
+    name = "pane_splitter",
+    srcs = ["layout/component/shell/PaneSplitter.cpp"],
+    hdrs = ["layout/component/shell/PaneSplitter.h"],
+    copts = MSVC_WINUI_COPTS,
+    implementation_deps = [":named_control"],
+    includes = ["."],
+    linkstatic = True,
+    target_compatible_with = ["@platforms//os:windows"],
+    deps = [":generated"],
+)
+
+# The shell resolves characters through Win32 before installing WinRT accelerators.
+# The resolver only needs the portable model contract, not generated projections.
+cc_library(
+    name = "system_character_key",
+    srcs = ["input/SystemCharacterKey.cpp"],
+    hdrs = ["input/SystemCharacterKey.h"],
+    copts = MSVC_WINUI_COPTS,
+    includes = ["."],
+    linkopts = ["user32.lib"],
+    linkstatic = True,
+    target_compatible_with = ["@platforms//os:windows"],
+    deps = [":model"],
+)
+
 # Remaining native sources are partitioned into the layout, track and XAML archives.
 XAML_SOURCES = [
     source
     for source in WINUI_SOURCES
-    if source not in MODEL_SOURCES + STRING_RESOURCE_SOURCES + LAYOUT_RUNTIME_SOURCES + [
-        "platform/ScopedBooleanFlag.cpp",
-        "platform/WinUiErrorBoundary.cpp",
-        "playback/OutputDeviceControl.cpp",
-        "theme/ThemeCoordinator.cpp",
-    ]
+    if source not in MODEL_SOURCES + STRING_RESOURCE_SOURCES + LAYOUT_RUNTIME_SOURCES
 ]
 
 # Values shared by the shell and its components, without the factory's full
@@ -385,9 +485,17 @@ cc_library(
     name = "winui_headers",
     hdrs = [header for header in WINUI_HEADERS if header not in MODEL_HEADERS + STRING_RESOURCE_HEADERS + LAYOUT_SHELL_INPUTS + LAYOUT_RUNTIME_HEADERS + [
         LAYOUT_BUILD_CONTEXT,
+        WINDOW_PLACEMENT_HEADER,
         "app/DispatcherQueueAdmission.h",
         "include/ao/winui/WinUiErrorBoundary.h",
+        "input/SystemCharacterKey.h",
+        "layout/ShellPresetSource.h",
+        "layout/component/shell/PaneSplitter.h",
+        "platform/NamedControl.h",
+        "platform/NativeWindow.h",
         "platform/ScopedBooleanFlag.h",
+        "platform/SmtcBridge.h",
+        "playback/MainWindowPlayback.h",
         "playback/OutputDeviceControl.h",
         "theme/ThemeCoordinator.h",
     ]],
@@ -406,6 +514,7 @@ cc_library(
         ":generated",
         ":layout_runtime",
         ":layout_shell_inputs",
+        ":main_window_playback",
         ":model",
         "//app/desktop:desktop_launch",
         "//app/runtime",
@@ -426,8 +535,12 @@ cc_library(
     copts = MSVC_WINUI_COPTS,
     implementation_deps = [
         ":layout_build_context",
+        ":named_control",
         ":output_device_control",
+        ":pane_splitter",
         ":scoped_boolean_flag",
+        ":shell_preset_source",
+        ":system_character_key",
         "//app/i18n",
         "//app/i18n:completion",
         "//app/i18n:ordering",
@@ -474,6 +587,8 @@ cc_library(
     ] + [":generated_cpp"],
     copts = MSVC_WINUI_COPTS,
     implementation_deps = [
+        ":named_control",
+        ":native_window",
         ":output_device_control",
         "//app/i18n",
         "//app/i18n:completion",
@@ -598,6 +713,7 @@ winui_probe(
     ],
     linkopts = ["comctl32.lib"],
     deps = [
+        ":named_control",
         "//app/i18n",
         "//app/i18n:completion",
         "//app/i18n:ordering",

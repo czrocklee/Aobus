@@ -4,6 +4,7 @@
 #include <ao/winui/DesktopSettingsYamlSchema.h>
 
 #include <ao/Error.h>
+#include <ao/winui/WindowPlacement.h>
 #include <ao/winui/layout/ShellState.h>
 #include <ao/yaml/Serialization.h>
 

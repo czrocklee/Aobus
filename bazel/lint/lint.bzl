@@ -301,7 +301,15 @@ def _declares_eligible_sources(ctx):
             return True
     return False
 
-def _lint_owner(target, ctx, profile = "lint"):
+def _main_output_group(path):
+    # Match the portal's selector codec over the report identity's main path.
+    if not all([c in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_./-" for c in path.elems()]):
+        return None
+    if LINT_SDK_HOST == "windows":
+        path = path.lower()
+    return "aobus_lint_main_" + path.replace("_", "__").replace("/", "_s").replace(".", "_d").replace("-", "_h")
+
+def _lint_owner(target, ctx, profile = "lint", cli_groups = False):
     """Declare one configured owner's report actions and describe them for gates."""
     if ctx.label.repo_name:
         fail("Lint roots must be project owners, not external SDK targets")
@@ -343,6 +351,7 @@ def _lint_owner(target, ctx, profile = "lint"):
     verification = ctx.attr._verification[LintVerificationInfo]
     index = ctx.actions.declare_file(ctx.label.name + ".aobus-lint.index.json")
     artifacts = [index]
+    selection_groups = {"aobus_lint_index": [index], "aobus_lint_sources": []} if cli_groups else None
     entries = []
     capture = []
     stems = {}
@@ -402,7 +411,13 @@ def _lint_owner(target, ctx, profile = "lint"):
             context_files.append(context)
             report_files.append(report)
             log_files.append(log)
+            if selection_groups != None:
+                group = _main_output_group(main.path)
+                if group != None:
+                    selection_groups.setdefault(group, []).extend([report, log])
             if main == source:
+                if selection_groups != None:
+                    selection_groups["aobus_lint_sources"].extend([report, log])
                 compile_inputs[context.path] = depset([context], transitive = [action.inputs, headers])
                 source_entry = {"source": source.path, "context": context.path, "report": report.path, "log": log.path, "env": environment}
         if source_entry == None:
@@ -433,7 +448,9 @@ def _lint_owner(target, ctx, profile = "lint"):
     metadata = ctx.actions.declare_file(ctx.label.name + ".aobus-lint.capture.json")
     ctx.actions.write(metadata, json.encode({"schema": 1, "owner": str(ctx.label), "actions": capture}))
     return struct(
-        output_groups = [OutputGroupInfo(aobus_lint = depset(artifacts), aobus_lint_contexts = depset([metadata]))],
+        artifacts = artifacts,
+        metadata = metadata,
+        selection_groups = selection_groups,
         index = index,
         entries = entries,
         sources = sources,
@@ -448,7 +465,11 @@ def _lint_owner(target, ctx, profile = "lint"):
     )
 
 def _lint_impl(target, ctx, profile = "lint"):
-    return _lint_owner(target, ctx, profile).output_groups
+    owner = _lint_owner(target, ctx, profile, cli_groups = profile == "lint")
+    groups = {"aobus_lint": depset(owner.artifacts), "aobus_lint_contexts": depset([owner.metadata])}
+    if owner.selection_groups != None:
+        groups.update({name: depset(files) for name, files in owner.selection_groups.items()})
+    return [OutputGroupInfo(**groups)]
 
 def _identity_mode(main, profile):
     if profile == "analyzer":

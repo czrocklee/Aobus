@@ -5,7 +5,6 @@
 
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/desktop/LibrarySwitch.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/ViewIds.h>
@@ -13,7 +12,6 @@
 #include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/library/task/LibraryScanOutcome.h>
-#include <ao/winui/DesktopSettingsYamlSchema.h>
 
 #pragma push_macro("GetCurrentTime")
 #include <unknwn.h>
@@ -27,6 +25,11 @@
 #include <memory>
 #include <optional>
 #include <string>
+
+namespace ao::audio
+{
+  struct OutputDeviceSelection;
+}
 
 namespace ao::rt
 {
@@ -46,6 +49,7 @@ namespace ao::uimodel
 namespace ao::winui
 {
   class DispatcherQueueExecutor;
+  struct DesktopSettings;
 
   struct LibrarySessionCallbacks final
   {

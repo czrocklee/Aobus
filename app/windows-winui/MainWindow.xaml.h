@@ -11,6 +11,7 @@
 #undef GetCurrentTime
 
 #include "MainWindow.g.h"
+#include "playback/MainWindowPlayback.h"
 #include <ao/Error.h>
 #include <ao/async/Subscription.h>
 #include <ao/compat/MoveOnlyFunction.h>
@@ -25,11 +26,6 @@
 #include <optional>
 #include <string>
 
-namespace ao::uimodel
-{
-  class TransportViewModel;
-}
-
 namespace ao::winui
 {
   class FullscreenSoulWindow;
@@ -38,7 +34,6 @@ namespace ao::winui
   class LibraryTransferCoordinator;
   class ListAuthoringCoordinator;
   class OutputDeviceControl;
-  class SmtcBridge;
   class TrackListController;
   class TrackPropertiesPresenter;
   class ThemeCoordinator;
@@ -112,7 +107,6 @@ namespace winrt::Aobus::implementation
     void unbindPlayback() noexcept;
     void bindPlayback();
     bool tryApplyShellState(double width, std::optional<ao::winui::ShellMode> optCandidateMode = std::nullopt);
-    void restoreWindowPlacement();
     void saveWindowState() noexcept;
     void applyTheme(ao::winui::Theme const& theme);
     void applySystemTheme();
@@ -180,10 +174,7 @@ namespace winrt::Aobus::implementation
     std::unique_ptr<ao::winui::LibraryTransferCoordinator> _libraryTransferCoordinatorPtr;
     /// The loaded theme override, or nothing while Windows' own appearance is in force.
     std::optional<ao::winui::Theme> _optThemeOverride;
-    std::unique_ptr<ao::winui::SmtcBridge> _smtcPtr;
-    /// The two transport commands a preset's menu can name but no menu item can drive.
-    std::unique_ptr<ao::uimodel::TransportViewModel> _playPausePtr;
-    std::unique_ptr<ao::uimodel::TransportViewModel> _stopPtr;
+    ao::winui::MainWindowPlayback _playback;
     std::unique_ptr<ao::winui::FullscreenSoulWindow> _fullscreenSoulWindowPtr;
     ao::utility::ScopedRegistration _appWindowChangedSub;
     /**

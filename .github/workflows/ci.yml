@@ -196,7 +196,7 @@ jobs:
           # shellcheck disable=SC2016
           nix-shell --run 'python3 script/ao/portal/bazel_remote_cache.py stop --state "$RUNNER_TEMP/aobus-bazel-remote" --report "$RUNNER_TEMP/bazel-r2-stop.json"'
 
-      # Exercise native bootstrap with one Core test, not another check graph.
+      # Exercise native bootstrap and one CLI-aspect report, not another check graph.
       # Resolve only the pinned prerequisites in Nix; run Bazel on the host so
       # its repository rule must discover Nix itself. No R2 binding or portal rc.
       - name: Test direct Bazel entry
@@ -206,17 +206,18 @@ jobs:
           unset AOBUS_BAZEL_CONFIGURATION AOBUS_BAZEL_PYTHON AOBUS_BAZEL_LINT_CONFIGURATION \
             AOBUS_NIX_DEPENDENCY_REPORT AO_NIX_PORTAL_PYTHON AOBUS_BAZEL_REMOTE_CACHE
           # shellcheck disable=SC2016
-          tools="$(nix-shell --pure --run 'set -eu; bazel="$(command -v bazel)"; printf "%s\t%s\n" "$bazel" "$AOBUS_BAZEL_SERVER_JAVABASE"')"
-          IFS=$'\t' read -r bazel server_javabase <<< "$tools"
+          tools="$(nix-shell --pure --run 'set -eu; printf "%s\t%s\t%s\n" "$(command -v bazel)" "$AOBUS_BAZEL_SERVER_JAVABASE" "$(command -v python3)"')"
+          IFS=$'\t' read -r bazel server_javabase python <<< "$tools"
           bare="$RUNNER_TEMP/aobus-bare"
           mkdir -p "$bare"
-          "$bazel" --nosystem_rc --nohome_rc --server_javabase="$server_javabase" \
-            --output_user_root="$AOBUS_STATE_ROOT/bazel" --output_base="$bare/state/output" \
-            test --jobs="$CMAKE_BUILD_PARALLEL_LEVEL" --lockfile_mode=error \
-            --disk_cache="$AOBUS_STATE_ROOT/cache/bazel" --symlink_prefix="$bare/bazel-" \
-            --build_event_json_file="$bare/fastbuild-test.bep.json" \
-            --experimental_build_event_upload_strategy=local \
-            //test:utility_test 2>&1 | tee "$bare/build.log"
+          native=("$bazel" --nosystem_rc --nohome_rc --server_javabase="$server_javabase"
+            --output_user_root="$AOBUS_STATE_ROOT/bazel" --output_base="$bare/state/output")
+          flags=(--jobs="$CMAKE_BUILD_PARALLEL_LEVEL" --lockfile_mode=error
+            --disk_cache="$AOBUS_STATE_ROOT/cache/bazel" --symlink_prefix="$bare/bazel-")
+          "${native[@]}" test "${flags[@]}" --build_event_json_file="$bare/fastbuild-test.bep.json" \
+            --experimental_build_event_upload_strategy=local //test:utility_test 2>&1 | tee "$bare/build.log"
+          PYTHONPATH=script "$python" test/lint/check_scoped_reports.py "$bare/scoped-lint.bep.json" \
+            "${native[@]}" build "${flags[@]}" 2>&1 | tee "$bare/scoped-lint.log"
 
       - name: Summarize native validation
         if: ${{ always() }}
@@ -297,6 +298,8 @@ jobs:
             ${{ runner.temp }}/aobus-bazel-fastbuild/state/output/execroot/_main/bazel-out/*/testlogs/**
             ${{ runner.temp }}/aobus-bare/build.log
             ${{ runner.temp }}/aobus-bare/fastbuild-test.bep.json
+            ${{ runner.temp }}/aobus-bare/scoped-lint.bep.json
+            ${{ runner.temp }}/aobus-bare/scoped-lint.log
             ${{ runner.temp }}/aobus-bare/state/output/execroot/_main/bazel-out/*/testlogs/**
             ${{ runner.temp }}/bazel-r2-stop.json
           if-no-files-found: warn

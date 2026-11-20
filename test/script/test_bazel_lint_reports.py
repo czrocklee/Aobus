@@ -404,6 +404,145 @@ class CurrentReportsTest(ReportsTestCase):
         self.assertEqual(self.quiet_gate(inventories, {self.identity["main"]}), 2)
 
 
+class ScopedReportsTest(ReportsTestCase):
+    INDEX = "aobus_lint_index"
+    SOURCES = "aobus_lint_sources"
+    MAIN = "aobus_lint_main_lib_ssample_sSample_dcpp"
+    HEADER = "aobus_lint_main_include_sao_ssample_sSample_dh"
+
+    def setUp(self):
+        super().setUp()
+        self.header = "include/ao/sample/Sample.h"
+        self.add_report({**self.identity, "main": self.header})
+        self.groups = [{"name": self.INDEX, "inlineFiles": [self.file_entry(self.index_name)]}]
+        self.events[4]["completed"]["outputGroup"] = self.groups
+
+    def deliver(self, group, *rows):
+        files = [self.file_entry(self.index["reports"][row][key]) for row in rows for key in ("report", "log")]
+        delivery = {"name": group, "inlineFiles": files}
+        self.groups.append(delivery)
+        return delivery
+
+    def scoped(self, *groups, profile="lint"):
+        self.save()
+        return read_reports(self.bep, [self.owner], profile=profile, output_groups=(self.INDEX, *groups))[0]
+
+    def test_main_group_escapes_punctuation_and_folds_ascii_case_only_on_windows(self):
+        group = bazel_lint_reports.main_output_group
+        path = "A_1/B-2.h"
+        self.assertEqual(group(path, windows=False), "aobus_lint_main_A__1_sB_h2_dh")
+        self.assertEqual(group(path, windows=True), "aobus_lint_main_a__1_sb_h2_dh")
+        for path in ("lib/A B.cpp", "lib/\N{KELVIN SIGN}.cpp"):
+            with self.subTest(path=path):
+                self.assertIsNone(group(path, windows=True))
+
+    def test_header_selection_keeps_owner_inventory_without_reading_native_pair(self):
+        self.deliver(self.HEADER, 1)
+        for key in ("report", "log"):
+            (self.root / "execroot/_main" / self.index["reports"][0][key]).unlink()
+        inventory = self.scoped(self.HEADER, "aobus_lint_main_Other_dcpp")
+        self.assertEqual([r.identity.main for r in inventory.reports], [self.header])
+        self.assertEqual(inventory.sources, (self.identity["source"], self.header))
+        self.assertTrue(inventory.has_native_tu)
+        self.assertEqual(self.quiet_gate((inventory,), {self.header}), 0)
+
+    def test_owner_without_a_translation_unit_keeps_its_uncovered_header(self):
+        self.index.update(
+            sources=[self.header], reports=[], uncovered=[{"path": self.header, "reason": "no companion"}]
+        )
+        self.deliver(self.SOURCES)  # A requested group with no matching rows may also be empty.
+        inventory = self.scoped(self.HEADER, self.SOURCES)
+        self.assertFalse(inventory.has_native_tu)
+        self.assertEqual(inventory.uncovered, (Uncovered(self.header, "no companion"),))
+        self.assertEqual(self.quiet_gate((inventory,), {self.header}), 2)
+
+    def test_donor_discovery_requires_a_shared_execution_root_across_owners(self):
+        self.deliver(self.SOURCES, 0)
+        other = "@@//lib/sample:other"
+        name = self.configuration + "/lib/sample/other.aobus-lint.index.json"
+        index = self.materialize(name, json.dumps({**self.index, "owner": other, "sources": [], "reports": []}))
+        entry = self.file_entry(name)
+        target = {**self.events[4]["id"]["targetCompleted"], "label": other}
+        groups = [{"name": self.INDEX, "inlineFiles": [entry]}]
+        self.events.insert(
+            5, {"id": {"targetCompleted": target}, "completed": {"success": True, "outputGroup": groups}}
+        )
+        self.events[0]["children"].append({"targetCompleted": target})
+
+        def discover():
+            self.save()
+            return read_reports(self.bep, [self.owner, other], output_groups=(self.INDEX, self.SOURCES))
+
+        self.assertEqual([inventory.owner for inventory in discover()], [self.owner, other])
+        # Change only the second owner's root; both completions remain individually valid.
+        foreign = self.root / "other-execroot" / name
+        foreign.parent.mkdir(parents=True)
+        entry["uri"] = index.rename(foreign).as_uri()
+        with self.assertRaises(ValueError):
+            discover()
+
+    def test_sources_and_selected_groups_must_each_deliver_every_matching_context(self):
+        pic = self.configuration + "/lib/sample/_objs/sample/Sample.pic.o"
+        self.add_report({**self.identity, "outputs": [pic]})
+        self.deliver(self.SOURCES, 0, 2)
+        main = self.deliver(self.MAIN, 0, 2)
+        reports = self.scoped(self.MAIN, self.SOURCES).reports
+        self.assertEqual([r.identity.outputs for r in reports], [tuple(self.identity["outputs"]), (pic,)])
+        # A valid overlapping sources group and retained outputs on disk cannot
+        # substitute for an incomplete or absent main group in this invocation.
+        main["inlineFiles"].pop()
+        with self.assertRaises(ValueError):
+            self.scoped(self.MAIN, self.SOURCES)
+        self.groups.remove(main)
+        with self.assertRaises(ValueError):
+            self.scoped(self.MAIN, self.SOURCES)
+
+    def test_group_membership_is_bound_to_the_current_owner_completion_and_configuration(self):
+        for fault in ("extra-group", "cross-delivered", "incomplete", "missing-config"):
+            with self.subTest(fault=fault):
+                del self.groups[1:]
+                header = self.deliver(self.HEADER, 1)
+                config = self.events[4]["id"]["targetCompleted"]["configuration"]
+                config["id"] = self.config_id
+                if fault == "extra-group":
+                    self.deliver(self.MAIN, 0)
+                elif fault == "cross-delivered":
+                    header["inlineFiles"].extend(self.files[:2])
+                elif fault == "incomplete":
+                    header["incomplete"] = True
+                else:
+                    config["id"] = "another-configuration"
+                with self.assertRaises(ValueError):
+                    self.scoped(self.HEADER)
+
+    def test_index_only_selection_still_checks_omitted_contexts_and_source_accounting(self):
+        original = copy.deepcopy(self.index)
+        for fault in ("foreign-context", "duplicate-identity", "foreign-path", "shared-log", "unaccounted"):
+            with self.subTest(fault=fault):
+                self.index = copy.deepcopy(original)
+                source, header = self.index["reports"]
+                if fault == "foreign-context":
+                    header["identity"]["owner"] = "@@//lib/sample:other"
+                elif fault == "duplicate-identity":
+                    header["identity"] = source["identity"]
+                    self.index["sources"].remove(self.header)
+                elif fault == "foreign-path":
+                    header["report"] = self.configuration + "/lib/other/0.report.json"
+                elif fault == "shared-log":
+                    header["log"] = source["log"]
+                else:
+                    self.index["sources"].append("lib/sample/Extra.cpp")
+                with self.assertRaises(ValueError):
+                    self.scoped()
+
+    def test_scoped_groups_are_not_an_analyzer_interface(self):
+        self.events[4]["id"]["targetCompleted"]["aspect"] = lint_aspect_id(profile="analyzer")
+        for entry in self.index["reports"]:
+            entry["identity"]["mode"] = "ANALYZER"
+        with self.assertRaises(ValueError):
+            self.scoped(profile="analyzer")
+
+
 class AnalyzerProfileTest(ReportsTestCase):
     """The explicit analyzer profile binds only its own aspect and mode set."""
 

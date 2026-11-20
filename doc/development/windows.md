@@ -371,7 +371,8 @@ neither the shipping nor default build transitively depends on probes, and the
 completion selection includes the application and every configured probe.
 
 `ao.bat check --config release` validates the managed Release IPO graph — MSVC `/GL` and
-`/LTCG` with the exact MainWindow per-file exception — and the same WinUI
+`/LTCG`, with `/GL-` only for the authored `app/windows-winui/MainWindow.xaml.cpp`
+translation unit when the selected MSVC toolset is `14.51.*` — and the same WinUI
 validation in Release.
 
 The [shared worker baseline](build.md#default-parallelism) leaves one available

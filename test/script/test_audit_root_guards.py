@@ -89,6 +89,10 @@ class FrontendContentTest(unittest.TestCase):
             "playback/TransportButton.cpp": "void build(ao::winui::LibrarySession& session);\n",
             "platform/MediaBridge.h": "void bind(ao::rt::AppRuntime& runtime);\n",
             "platform/Leaf.h": "/**\n * doc\n */ void bind(ao::winui::LibrarySession& session);\n",
+            "platform/NativeWindow.cpp": "void restore(ao::winui::LibrarySession& session);\n",
+            "platform/NativeWindow.h": "void bind(ao::rt::AppRuntime& runtime);\n",
+            # The old frame split is no longer a composition root.
+            "shell/MainWindowShell.cpp": "void compose(ao::winui::LibrarySession& session);\n",
         }
         for relative in rejected:
             with self.subTest(relative=relative):
@@ -126,7 +130,6 @@ class FrontendContentTest(unittest.TestCase):
                 ),
                 "app/LibrarySession.h": "class LibrarySession;\n",
                 "layout/ShellBuilder.cpp": "void build(ao::rt::AppRuntime& runtime);\n",
-                "shell/MainWindowShell.cpp": "void compose(ao::winui::LibrarySession& session);\n",
                 "platform/MediaBridge.h": "void bind(ao::rt::PlaybackService& playback);\n",
                 "playback/TransportButton.cpp": "void build(ao::rt::PlaybackService& playback);\n",
             }

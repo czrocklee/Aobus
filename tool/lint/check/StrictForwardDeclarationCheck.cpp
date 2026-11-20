@@ -16,6 +16,7 @@
 #include <clang/ASTMatchers/ASTMatchFinder.h>
 #include <clang/ASTMatchers/ASTMatchers.h>
 #include <clang/Basic/Diagnostic.h>
+#include <clang/Basic/FileEntry.h>
 #include <clang/Basic/LLVM.h>
 #include <clang/Basic/SourceLocation.h>
 #include <clang/Basic/SourceManager.h>
@@ -124,11 +125,16 @@ namespace clang::tidy::aobus
         pointee = pt->getPointeeType();
       }
 
-      std::string const typeName = pointee.getAsString();
-      bool const isSmartPtr = typeName.contains("unique_ptr") || typeName.contains("shared_ptr") ||
-                              typeName.contains("weak_ptr") || typeName.contains("RefPtr");
+      auto const* record = pointee->getAs<RecordType>();
 
-      if (isSmartPtr)
+      if (record == nullptr && pointee->getAs<TemplateSpecializationType>() == nullptr)
+      {
+        return nullptr;
+      }
+
+      if (std::string const typeName = pointee.getAsString();
+          typeName.contains("unique_ptr") || typeName.contains("shared_ptr") || typeName.contains("weak_ptr") ||
+          typeName.contains("RefPtr"))
       {
         if (auto const* res = handleSmartPtrType(pointee); res != nullptr)
         {
@@ -136,15 +142,61 @@ namespace clang::tidy::aobus
         }
       }
 
-      if (auto const* rt = pointee->getAs<RecordType>(); rt != nullptr)
+      if (record != nullptr)
       {
-        if (auto const* crd = dyn_cast<CXXRecordDecl>(rt->getDecl()); crd != nullptr)
+        if (auto const* crd = dyn_cast<CXXRecordDecl>(record->getDecl()); crd != nullptr)
         {
           return dyn_cast<CXXRecordDecl>(crd->getCanonicalDecl());
         }
       }
 
       return nullptr;
+    }
+
+    bool isHeaderName(StringRef name)
+    {
+      return name.ends_with(".h") || name.ends_with(".hpp");
+    }
+
+    // A diagnostic needs both a header spelling and a main-file expansion. A
+    // plain implementation file can only supply that combination through a
+    // macro. Check source provenance, not the shapes seen by MatchFinder: it
+    // can skip a system declaration that encloses user-written parameters.
+    bool canHaveWeakRefs(SourceManager const& sm)
+    {
+      // The native clang-tidy frontend can install an idle ASTReader. Actual
+      // serialized inputs reserve source-location entries before the TU match.
+      if (sm.loaded_sloc_entry_size() != 0 || isHeaderName(sm.getFilename(sm.getLocForStartOfFile(sm.getMainFileID()))))
+      {
+        return true;
+      }
+
+      for (std::uint32_t i = 1; i < sm.local_sloc_entry_size(); ++i)
+      {
+        if (auto const& entry = sm.getLocalSLocEntry(i); entry.isFile())
+        {
+          // isInMainFile can also accept a detached file with no includer.
+          auto const& file = entry.getFile();
+
+          if (auto const& original = file.getContentCache().OrigEntry;
+              file.getIncludeLoc().isInvalid() && original && isHeaderName(original->getName()))
+          {
+            return true;
+          }
+        }
+        else
+        {
+          // Nested expansions lead to an outer entry at a physical location.
+          auto const start = entry.getExpansion().getExpansionLocStart();
+
+          if (start.isValid() && start.isFileID() && sm.isInMainFile(start))
+          {
+            return true;
+          }
+        }
+      }
+
+      return false;
     }
 
     // RecursiveASTVisitor customization points intentionally shadow its CRTP defaults.
@@ -169,8 +221,7 @@ namespace clang::tidy::aobus
           return false;
         }
 
-        StringRef const fileName = sm->getFilename(spellLoc);
-        return fileName.ends_with(".h") || fileName.ends_with(".hpp");
+        return isHeaderName(sm->getFilename(spellLoc));
       }
 
       // Record the file of a non-forward-declarable declaration as a strong dependency.
@@ -285,6 +336,14 @@ namespace clang::tidy::aobus
         return true;
       }
 
+      void recordWeakRef(DeclaratorDecl const* decl)
+      {
+        if (sm->isInMainFile(sm->getExpansionLoc(decl->getLocation())))
+        {
+          weakRefs.push_back(decl);
+        }
+      }
+
       bool VisitFieldDecl(FieldDecl* decl)
       {
         if (!isHeader(decl->getLocation()))
@@ -292,11 +351,18 @@ namespace clang::tidy::aobus
           return true;
         }
 
-        if (QualType const qt = decl->getType();
-            qt->isPointerType() || qt->isReferenceType() || qt.getAsString().contains("unique_ptr") ||
-            qt.getAsString().contains("shared_ptr") || qt.getAsString().contains("RefPtr"))
+        QualType const qt = decl->getType();
+
+        if (qt->isPointerType() || qt->isReferenceType())
         {
-          weakRefs.push_back(decl);
+          recordWeakRef(decl);
+          return true;
+        }
+
+        if (auto const name = qt.getAsString();
+            name.contains("unique_ptr") || name.contains("shared_ptr") || name.contains("RefPtr"))
+        {
+          recordWeakRef(decl);
         }
         else
         {
@@ -315,7 +381,7 @@ namespace clang::tidy::aobus
 
         if (QualType const qt = decl->getType(); qt->isPointerType() || qt->isReferenceType())
         {
-          weakRefs.push_back(decl);
+          recordWeakRef(decl);
         }
         else
         {
@@ -468,20 +534,7 @@ namespace clang::tidy::aobus
                           StrictForwardDeclarationCheck* checker,
                           MatchFinder::MatchResult const& result) const
       {
-        auto qt = QualType{};
-
-        if (auto const* fd = dyn_cast<FieldDecl>(weak); fd != nullptr)
-        {
-          qt = fd->getType();
-        }
-        else if (auto const* vd = dyn_cast<VarDecl>(weak); vd != nullptr)
-        {
-          qt = vd->getType();
-        }
-        else if (auto const* pd = dyn_cast<ParmVarDecl>(weak); pd != nullptr)
-        {
-          qt = pd->getType();
-        }
+        QualType const qt = weak->getType();
 
         if (qt.isNull())
         {
@@ -508,11 +561,6 @@ namespace clang::tidy::aobus
         if (auto const* crd = getRecordDeclFromType(qt); crd != nullptr)
         {
           if (crd->getLocation().isValid() && result.SourceManager->isInSystemHeader(crd->getLocation()))
-          {
-            return;
-          }
-
-          if (!result.SourceManager->isInMainFile(result.SourceManager->getExpansionLoc(weak->getLocation())))
           {
             return;
           }
@@ -550,9 +598,19 @@ namespace clang::tidy::aobus
 
   void StrictForwardDeclarationCheck::check(MatchFinder::MatchResult const& result)
   {
+    if (!canHaveWeakRefs(*result.SourceManager))
+    {
+      return;
+    }
+
     auto visitor = FwdDeclVisitor{};
     visitor.sm = result.SourceManager;
     visitor.TraverseAST(*result.Context);
+
+    if (visitor.weakRefs.empty())
+    {
+      return;
+    }
 
     visitor.populateStrongFileIDs();
 

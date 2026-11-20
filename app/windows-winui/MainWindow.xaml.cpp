@@ -13,18 +13,20 @@
 #include "library/LibraryTransferCoordinator.h"
 #include "list/ListAuthoringCoordinator.h"
 #include "platform/AppWindowActivity.h"
-// MainWindow's out-of-line destructor destroys the retained SMTC bridge.
-#include "platform/SmtcBridge.h" // NOLINT(misc-include-cleaner)
+#include "platform/NativeWindow.h"
 #include "platform/StringResourceFormat.h"
 #include "platform/StringResources.h"
 #include "platform/WinRtStringResources.h"
 #include "playback/FullscreenSoulWindow.h"
 #include "playback/OutputDeviceControl.h"
+#include "theme/SurfaceBrushes.h"
 #include "theme/ThemeCoordinator.h"
 #include "track/TrackListController.h"
 #include "track/TrackPropertiesPresenter.h"
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/OperationCancelled.h>
 #include <ao/audio/OutputDeviceSelection.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
@@ -37,8 +39,11 @@
 #include <ao/uimodel/library/list/ListOrder.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
-#include <ao/uimodel/playback/transport/TransportViewModel.h>
+#include <ao/utility/Path.h>
+#include <ao/winui/DesktopSettingsYamlSchema.h>
+#include <ao/winui/Theme.h>
 #include <ao/winui/WinUiErrorBoundary.h>
+#include <ao/winui/layout/ShellState.h>
 #include <ao/winui/list/ListAuthoringAdapter.h>
 
 #include <winrt/Aobus.h>
@@ -57,8 +62,11 @@
 #include <winrt/Windows.UI.h>
 #include <winrt/base.h>
 
+#include <exception>
+#include <filesystem>
 #include <format>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -215,7 +223,7 @@ namespace winrt::Aobus::implementation
     createShellBuilder();
     updateSoulWindowActivity();
     reconcileLibrary();
-    restoreWindowPlacement();
+    ao::winui::restoreWindowPlacement(*this, session.settings().window);
     tryApplyShellState(RootGrid().ActualWidth());
 
     // The shell built above is the first to show a status, so the startup
@@ -245,6 +253,82 @@ namespace winrt::Aobus::implementation
       return ao::makeError(
         ao::Error::Code::InitFailed,
         std::format("Failed to activate WinUI playback adapters: {}", winrt::to_string(error.message())));
+    }
+  }
+
+  void MainWindow::bindPlayback()
+  {
+    if (_session == nullptr)
+    {
+      return;
+    }
+
+    unbindPlayback();
+    auto& runtime = _session->runtime();
+    auto& playback = runtime.playback();
+    auto& actions = _session->playbackActions();
+
+    if (_shellOutputDevicePtr)
+    {
+      _shellOutputDevicePtr->bind(playback);
+    }
+
+    _playback.bindTransport(playback, actions, _session->textCatalog());
+
+    // System media controls are optional; a failure here must not disable the shell's transport commands.
+    try
+    {
+      _playback.bindSystemMediaControls(
+        ao::winui::nativeWindowHandle(*this), playback, actions, runtime.resourceBytes(), runtime.async());
+    }
+    catch (hresult_error const& error)
+    {
+      updateStatus(ao::winui::formatResource("winui_smtc_unavailable", to_string(error.message())));
+    }
+  }
+
+  void MainWindow::unbindPlayback() noexcept
+  {
+    _playback.unbind();
+
+    if (_shellOutputDevicePtr)
+    {
+      _shellOutputDevicePtr->unbind();
+    }
+  }
+
+  void MainWindow::updateSoulWindowActivity()
+  {
+    // The frame supplies visibility; the live shell generation owns the souls it applies to.
+    if (auto const window = AppWindow(); _shellBuilderPtr)
+    {
+      _shellBuilderPtr->applyWindowActivity(window.IsVisible(), ao::winui::isWindowMinimized(window));
+    }
+  }
+
+  void MainWindow::playPause()
+  {
+    _playback.playPause();
+  }
+
+  void MainWindow::stopPlayback()
+  {
+    _playback.stop();
+  }
+
+  void MainWindow::showOutputDeviceSelector(Microsoft::UI::Xaml::FrameworkElement const& anchor)
+  {
+    if (_shellOutputDevicePtr)
+    {
+      _shellOutputDevicePtr->showAt(anchor);
+    }
+  }
+
+  void MainWindow::showFullscreenSoul()
+  {
+    if (_fullscreenSoulWindowPtr)
+    {
+      _fullscreenSoulWindowPtr->show();
     }
   }
 
@@ -471,6 +555,230 @@ namespace winrt::Aobus::implementation
       });
   }
 
+  void MainWindow::handleRootSizeChanged(Windows::Foundation::IInspectable const& /*sender*/,
+                                         Microsoft::UI::Xaml::SizeChangedEventArgs const& args)
+  {
+    tryApplyShellState(args.NewSize().Width);
+  }
+
+  void MainWindow::showSystemMenu()
+  {
+    ao::winui::showNativeSystemMenu(*this);
+  }
+
+  bool MainWindow::tryApplyShellState(double const width, std::optional<ao::winui::ShellMode> const optCandidateMode)
+  {
+    // The window is sized before it has a session to build a shell from, so the
+    // first resolved policy is the one `initialize` asks for.
+    if (!_shellBuilderPtr)
+    {
+      return false;
+    }
+
+    auto const mode =
+      optCandidateMode.value_or(_session != nullptr ? _session->settings().shellMode : ao::winui::ShellMode::Modern);
+    auto appliedRes = _shellBuilderPtr->applyShellState(mode, width, _optInspectorRequest);
+
+    if (!appliedRes)
+    {
+      // The generation that was already live stays live, which is the whole
+      // point of building the candidate before publishing it.
+      updateStatus(ao::winui::formatResource("winui_shell_layout_failed", appliedRes.error().message));
+      return false;
+    }
+
+    auto const& state = *appliedRes;
+
+    if (state.mode != mode)
+    {
+      return false;
+    }
+
+    ao::winui::runOptionalWinRt(
+      "applying the WinUI title bar",
+      [this, &state]
+      {
+        ExtendsContentIntoTitleBar(state.integratedTitleBar);
+        SetTitleBar(state.integratedTitleBar ? _shellBuilderPtr->titleBar() : Microsoft::UI::Xaml::UIElement{nullptr});
+      });
+    return true;
+  }
+
+  void MainWindow::saveWindowState() noexcept
+  {
+    try
+    {
+      if (_session == nullptr)
+      {
+        return;
+      }
+
+      if (auto const optPlacement = ao::winui::readWindowPlacement(*this); optPlacement)
+      {
+        ao::winui::rememberDesktopWindowPlacement(_session->settings(), *optPlacement);
+      }
+
+      if (auto const savedRes = _session->saveSettings(); !savedRes)
+      {
+        updateStatus(ao::winui::formatResource("winui_save_settings_failed", savedRes.error().message));
+      }
+    }
+    catch (...)
+    {
+      AO_FATAL_EXCEPTION(std::current_exception(), "WinUI window-state checkpoint");
+    }
+  }
+
+  winrt::fire_and_forget MainWindow::pickLibrary()
+  {
+    auto lifetime = get_strong();
+    auto exceptionPtr = std::exception_ptr{};
+
+    try
+    {
+      auto picker = Microsoft::Windows::Storage::Pickers::FolderPicker{AppWindow().Id()};
+      picker.SuggestedStartLocation(Microsoft::Windows::Storage::Pickers::PickerLocationId::MusicLibrary);
+      picker.CommitButtonText(ao::winui::resourceHstring(L"winui_open_library_picker"));
+
+      if (auto result = co_await picker.PickSingleFolderAsync();
+          result && !result.Path().empty() && _session != nullptr &&
+          (_sessionPhase == SessionPhase::Prepared || _sessionPhase == SessionPhase::Active) && _requestRestart)
+      {
+        // The callback only queues an App-owned restart. Its dispatcher turn
+        // runs after this coroutine returns and releases its strong window ref.
+        if (auto const requestedRes = _requestRestart(std::filesystem::path{result.Path().c_str()}); !requestedRes)
+        {
+          updateStatus(ao::winui::formatResource("winui_error", requestedRes.error().message));
+        }
+      }
+    }
+    catch (hresult_error const& error)
+    {
+      updateStatus(ao::winui::formatResource("winui_folder_picker_failed", to_string(error.message())));
+    }
+    catch (...)
+    {
+      exceptionPtr = std::current_exception();
+    }
+
+    if (exceptionPtr && !ao::async::isOperationCancelled(exceptionPtr))
+    {
+      AO_FATAL_EXCEPTION(exceptionPtr, "WinUI library folder picker");
+    }
+  }
+
+  void MainWindow::rescanLibrary()
+  {
+    if (_session != nullptr)
+    {
+      _session->rescan();
+    }
+  }
+
+  void MainWindow::importLibrary()
+  {
+    if (_libraryTransferCoordinatorPtr && !isModalWorkflowActive())
+    {
+      _libraryTransferCoordinatorPtr->importLibrary();
+    }
+  }
+
+  void MainWindow::exportLibrary()
+  {
+    if (_libraryTransferCoordinatorPtr && !isModalWorkflowActive())
+    {
+      _libraryTransferCoordinatorPtr->exportLibrary();
+    }
+  }
+
+  void MainWindow::toggleShellMode()
+  {
+    if (_session == nullptr)
+    {
+      return;
+    }
+
+    auto& settings = _session->settings();
+    auto const candidateMode =
+      settings.shellMode == ao::winui::ShellMode::Modern ? ao::winui::ShellMode::Classic : ao::winui::ShellMode::Modern;
+
+    if (tryApplyShellState(RootGrid().ActualWidth(), candidateMode))
+    {
+      settings.shellMode = candidateMode;
+      saveWindowState();
+    }
+  }
+
+  void MainWindow::reloadTheme()
+  {
+    if (_themePtr == nullptr)
+    {
+      return;
+    }
+
+    auto reloadedRes = _themePtr->reload();
+
+    if (!reloadedRes)
+    {
+      if (reloadedRes.error().code == ao::Error::Code::NotFound)
+      {
+        applySystemTheme();
+        updateStatus(ao::winui::resourceString("winui_theme_override_removed"));
+        return;
+      }
+
+      updateStatus(ao::winui::formatResource("winui_theme_reload_failed", reloadedRes.error().message));
+      return;
+    }
+
+    applyTheme(*reloadedRes);
+    updateStatus(ao::winui::formatResource("winui_theme_reloaded", ao::utility::pathToUtf8(_themePtr->path())));
+  }
+
+  /**
+   * @brief Rebuild the document-built shell against the theme now in force.
+   *
+   * A preset's `surface` slots are painted from the override at construction,
+   * so unlike a `ThemeResource` they do not re-resolve on their own. The whole
+   * generation is rebuilt rather than repainted: that is the one path a preset
+   * change is already known to survive.
+   */
+  void MainWindow::rebuildForTheme()
+  {
+    if (!_shellBuilderPtr)
+    {
+      return;
+    }
+
+    if (auto rebuiltRes = _shellBuilderPtr->rebuild(); !rebuiltRes)
+    {
+      updateStatus(ao::winui::formatResource("winui_shell_layout_failed", rebuiltRes.error().message));
+    }
+  }
+
+  void MainWindow::applyTheme(ao::winui::Theme const& theme)
+  {
+    _optThemeOverride = theme;
+    ao::winui::applyFrameTheme(RootGrid(), theme);
+    rebuildForTheme();
+  }
+
+  void MainWindow::applySystemTheme()
+  {
+    _optThemeOverride.reset();
+    ao::winui::applySystemFrameTheme(RootGrid());
+    rebuildForTheme();
+  }
+
+  void MainWindow::updateStatus(std::string const& status)
+  {
+    // The shell retains the message, so a generation built later still shows it.
+    if (_shellBuilderPtr)
+    {
+      _shellBuilderPtr->reportStatus(status);
+    }
+  }
+
   void MainWindow::shutdown() noexcept
   {
     if (_sessionPhase == SessionPhase::Retired)
@@ -519,7 +827,6 @@ namespace winrt::Aobus::implementation
     _trackListPtr.reset();
 
     _shellOutputDevicePtr.reset();
-    _smtcPtr.reset();
     _session = nullptr;
   }
 
