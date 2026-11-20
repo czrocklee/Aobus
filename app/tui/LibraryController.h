@@ -12,12 +12,14 @@
 #include <ao/Error.h>
 #include <ao/async/Subscription.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/rt/NotificationState.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/uimodel/library/detail/TrackCredits.h>
 
 #include <cstdint>
+#include <expected>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -44,6 +46,14 @@ namespace ao::tui
     TrackListEntry const* track = nullptr;
     ResourceId coverArtId = kInvalidResourceId;
   };
+
+  struct PresentationSelectionError final
+  {
+    std::string message{};
+    rt::NotificationSeverity severity = rt::NotificationSeverity::Info;
+  };
+
+  using PresentationSelectionResult = std::expected<std::string, PresentationSelectionError>;
 
   class LibraryController final
   {
@@ -111,8 +121,8 @@ namespace ao::tui
     Result<> navigateHistory(bool forward);
     Result<> navigateToArtist(std::string_view artist);
     Result<> revealAlbum(TrackId trackId);
-    std::string setPresentation(std::string_view presentationId);
-    std::string selectSelectedPresentation();
+    PresentationSelectionResult setPresentation(std::string_view presentationId);
+    PresentationSelectionResult selectSelectedPresentation();
     Result<bool> openList(ListId id);
     std::vector<LibraryNavEntry> const& libraryEntries() const noexcept { return _libraryEntries; }
     std::vector<std::string> const& libraryLabels() const noexcept { return _libraryLabels; }
@@ -140,7 +150,6 @@ namespace ao::tui
     void focusActiveView();
     void syncSelectedPresentation(std::string_view presentationId);
     void refreshPresentationNavigation();
-    std::vector<TrackPresentationNavEntry> loadPresentationNavigation();
     void refreshFilterError();
     void refreshNavigationTree();
     struct TrackItemsSnapshot final

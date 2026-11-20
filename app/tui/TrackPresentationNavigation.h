@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackPresentation.h>
 
@@ -17,13 +18,15 @@ namespace ao::tui
   {
     std::string id{};
     std::string label{};
-    std::string detail{};
+    std::string detail{}; // Description, or the reason this choice is unavailable.
+    bool enabled = true;
   };
 
   std::string trackPresentationDisplayId(i18n::MessageCatalog const& textCatalog, std::string_view presentationId);
   std::string trackPresentationBadgeLabel(i18n::MessageCatalog const& textCatalog, std::string_view presentationId);
   std::vector<TrackPresentationNavEntry> makeTrackPresentationNavigation(
     i18n::MessageCatalog const& textCatalog,
+    ListId listId,
     std::span<rt::TrackPresentationPreset const> builtinPresets,
     std::span<rt::CustomTrackPresentationPreset const> customPresets);
 } // namespace ao::tui

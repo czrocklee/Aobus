@@ -63,6 +63,8 @@ The parser accepts the Command Palette draft with or without its leading `:`; `/
 
 The parser accepts only known prefixes and exact aliases. The palette also searches localized action names and aliases, showing one row per action; Return activates a highlighted search result. An unmatched draft reports an unknown command without changing the filter.
 
+`:view list-order` selects Manual Order on a saved List. On All Tracks, Views and command completion include `list-order`, but `view`, `preset` and `presentation` reject it without changing the view, workspace history or saved preference. If the reason is clipped, close Views if it is open, then open Notifications (`n` by default or `:notifications`) while the message is active. On narrow terminals the text may still be clipped.
+
 ### Command aliases
 
 | Aliases                                  | Action                                                                                          |

@@ -561,10 +561,16 @@ namespace ao::tui
     closeOverlay();
   }
 
-  void EventController::selectPresentation()
+  void EventController::finishPresentationSelection(PresentationSelectionResult res)
   {
-    _library.selectSelectedPresentation();
-    closeOverlay();
+    if (!res)
+    {
+      postActivityNotification(res.error().severity, std::move(res.error().message));
+    }
+    else if (_shell.overlay() == Overlay::PresentationPanel)
+    {
+      closeOverlay();
+    }
   }
 
   void EventController::revealCurrentTrack()
@@ -801,7 +807,9 @@ namespace ao::tui
       case CommandAction::RevealCurrentTrack: revealCurrentTrack(); break;
       case CommandAction::OpenCurrentArtist: navigateCurrentMetadata(false); break;
       case CommandAction::OpenCurrentAlbum: navigateCurrentMetadata(true); break;
-      case CommandAction::SetPresentation: _library.setPresentation(command.argument); break;
+      case CommandAction::SetPresentation:
+        finishPresentationSelection(_library.setPresentation(command.argument));
+        break;
       case CommandAction::ClearFilter:
         _library.clearFilterDraft();
         applyFilter();
@@ -1669,7 +1677,7 @@ namespace ao::tui
 
     if (_library.trySetSelectedPresentation(hit->rowIndex))
     {
-      selectPresentation();
+      finishPresentationSelection(_library.selectSelectedPresentation());
     }
 
     return true;
@@ -2013,7 +2021,7 @@ namespace ao::tui
         case Overlay::PresentationPanel:
           if (tryMoveOverlaySelection(0))
           {
-            selectPresentation();
+            finishPresentationSelection(_library.selectSelectedPresentation());
           }
 
           return true;

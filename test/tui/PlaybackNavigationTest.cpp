@@ -70,7 +70,7 @@ namespace ao::tui::test
     auto const target = fixture.addTrack(library::test::TrackSpec{.title = "Target", .artist = artist});
     fixture.addTrack(library::test::TrackSpec{.title = "Other", .artist = "Someone else"});
     auto library = fixture.makeLibrary();
-    library.setPresentation("songs");
+    REQUIRE(library.setPresentation("songs"));
     library.setFilterDraft("First");
     REQUIRE(library.applyFilter());
     library.toggleVisualSelection();
@@ -101,7 +101,7 @@ namespace ao::tui::test
     auto fixture = EventControllerFixture{};
     auto const target = fixture.addTrack(library::test::TrackSpec{.title = "Target", .album = "Another album"});
     auto library = fixture.makeLibrary();
-    library.setPresentation("songs");
+    REQUIRE(library.setPresentation("songs"));
     library.setFilterDraft("First");
     REQUIRE(library.applyFilter());
     auto const previousView = library.activeViewId();

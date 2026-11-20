@@ -150,7 +150,7 @@ namespace ao::tui
     void openListAuthoring(ListEditorMode mode);
     void deleteList();
     void selectOutputDevice();
-    void selectPresentation();
+    void finishPresentationSelection(PresentationSelectionResult res);
     void revealCurrentTrack();
     void activateGoTo(CommandAction action);
     bool tryHandleGoToEvent(ftxui::Event const& event);

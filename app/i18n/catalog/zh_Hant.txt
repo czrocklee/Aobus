@@ -646,6 +646,8 @@ zh_Hant:table {
     tui_library_current_track_not_in_view { "無法在音樂庫中定位目前曲目" }
     tui_library_no_active_track_view { "目前沒有曲目檢視" }
     tui_library_no_views_available { "無可用檢視" }
+    tui_library_presentation_view_changed { "曲目檢視已變更。請先開啟所需列表，再選擇檢視。" }
+    tui_library_presentation_apply_failed { "無法套用此檢視。" }
     tui_library_filter_cleared { "篩選已清除" }
     tui_library_filter_applied { "篩選已套用" }
     tui_library_empty_scan { "尚無已索引的曲目。執行 {command} 掃描此音樂庫。" }

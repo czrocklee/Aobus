@@ -54,6 +54,7 @@
 #include <ao/rt/ViewService.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/rt/library/Library.h>
@@ -63,6 +64,7 @@
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/input/KeymapModel.h>
+#include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
@@ -110,6 +112,22 @@ namespace ao::tui::test
       auto const& entries = library.presentationEntries();
       auto const it = std::ranges::find(entries, presentationId, &TrackPresentationNavEntry::id);
       return it == entries.end() ? -1 : static_cast<std::int32_t>(it - entries.begin());
+    }
+
+    void highlightPresentation(EventController& controller,
+                               LibraryController const& library,
+                               std::string_view const presentationId)
+    {
+      auto const target = presentationIndex(library, presentationId);
+      REQUIRE(target >= 0);
+      REQUIRE(controller.tryHandleEvent(ftxui::Event::Home));
+
+      for (std::int32_t index = 0; index < target; ++index)
+      {
+        REQUIRE(controller.tryHandleEvent(ftxui::Event::ArrowDown));
+      }
+
+      REQUIRE(library.selectedPresentation() == target);
     }
 
     void openList(LibraryController& library, ListId const listId)
@@ -204,7 +222,7 @@ namespace ao::tui::test
 
       openList(library, listId);
       REQUIRE(library.trySetSelectedPresentation(presentationIndex(library, rt::kListOrderTrackPresentationId)));
-      library.selectSelectedPresentation();
+      REQUIRE(library.selectSelectedPresentation());
       REQUIRE(library.activePresentationId() == rt::kListOrderTrackPresentationId);
 
       // The projection replacement the presentation switch schedules is queued
@@ -1605,6 +1623,168 @@ namespace ao::tui::test
     CHECK(controller.tryHandleEvent(ftxui::Event::Return));
     CHECK(fixture.shell.overlay() == Overlay::None);
     CHECK(fixture.runtimePtr->views().trackListState(library.activeViewId()).presentation.id == "albums");
+  }
+
+  TEST_CASE("EventController - rejected presentation choices preserve the All Tracks view and pin")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto const textCatalog = ao::test::messageCatalog("zh-Hans");
+    fixture.presentationCatalog.setTextCatalog(textCatalog);
+    fixture.activityStatusViewModel.setTextCatalog(textCatalog);
+    library.setTextCatalog(textCatalog);
+    auto controller = fixture.makeEvents(library);
+    REQUIRE(library.currentListId() == rt::kAllTracksListId);
+
+    // Replaying back leaves an exact active view different from its pin, and
+    // exposes any rejected choice that accidentally truncates forward history.
+    auto& workspace = fixture.runtimePtr->workspace();
+    fixture.listPresentations.setPresentationIdForList(rt::kAllTracksListId, "songs");
+    auto const forwardPresentation = ao::test::requireValue(workspace.setActivePresentation("songs"));
+    REQUIRE(library.navigateHistory(false));
+    fixture.executor->drain();
+    REQUIRE(library.activePresentationId() == "albums");
+    REQUIRE_FALSE(workspace.canGoBack());
+    REQUIRE(workspace.canGoForward());
+    auto const workspaceBefore = workspace.snapshot();
+    auto const presentationBefore = library.activePresentation();
+    auto const reason =
+      i18n::requiredText(textCatalog, i18n::MessageId::TrackPresentationAllTracksManualOrderUnavailable);
+    auto expectedMessage = std::string{reason};
+    auto renderPicker = [&]
+    {
+      constexpr std::int32_t kPanelColumns = 120;
+      auto& hitRegions = fixture.hitRegions;
+      return renderText(mousePanel(presentationPanel(textCatalog,
+                                                     library.presentationEntries(),
+                                                     library.activePresentationId(),
+                                                     library.selectedPresentation(),
+                                                     defaultKeymapPlan(),
+                                                     &hitRegions.presentationRows,
+                                                     kPanelColumns,
+                                                     &fixture.shell.listSearch(),
+                                                     &hitRegions.overlayPanel.navigationBox),
+                                   hitRegions.overlayPanel),
+                        kPanelColumns);
+    };
+
+    SECTION("the command reports the reason in activity status")
+    {
+      enterCommand(controller, "view list-order");
+      CHECK_FALSE(fixture.shell.isInputActive());
+    }
+
+    SECTION("the keyboard picker shows the reason and stays open on confirmation")
+    {
+      REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("p")));
+      REQUIRE(fixture.shell.overlay() == Overlay::PresentationPanel);
+      highlightPresentation(controller, library, rt::kListOrderTrackPresentationId);
+      auto const selectedIndex = library.selectedPresentation();
+      CHECK(renderPicker().contains(reason));
+
+      CHECK(controller.tryHandleEvent(ftxui::Event::Return));
+      CHECK(fixture.shell.overlay() == Overlay::PresentationPanel);
+      CHECK(library.selectedPresentation() == selectedIndex);
+    }
+
+    SECTION("clicking the rendered unavailable row leaves the picker open")
+    {
+      REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("p")));
+      REQUIRE(fixture.shell.overlay() == Overlay::PresentationPanel);
+      std::ignore = renderPicker();
+      auto const& rows = fixture.hitRegions.presentationRows;
+      auto const row =
+        std::ranges::find(rows, rt::kListOrderTrackPresentationId, &PresentationRowHitRegion::presentationId);
+      REQUIRE(row != rows.end());
+
+      CHECK(controller.tryHandleEvent(clickBox(row->box)));
+      CHECK(fixture.shell.overlay() == Overlay::PresentationPanel);
+    }
+
+    SECTION("the command rejects an unknown presentation id")
+    {
+      enterCommand(controller, "view missing-presentation");
+      expectedMessage =
+        i18n::requiredFormat(textCatalog, i18n::MessageId::TuiLibraryUnknownView, {{"id", "missing-presentation"}});
+    }
+
+    CHECK(fixture.activityStatusViewModel.viewState().compact.text == expectedMessage);
+    auto const feed = fixture.runtimePtr->notifications().feed();
+    REQUIRE_FALSE(feed.entries.empty());
+    CHECK(feed.entries.back().severity == rt::NotificationSeverity::Info);
+    CHECK(feed.entries.back().lifetime.kind() == rt::NotificationLifetimeKind::Transient);
+
+    CHECK(library.activeViewId() == workspaceBefore.activeViewId);
+    CHECK(library.activePresentation() == presentationBefore);
+    CHECK(workspace.snapshot() == workspaceBefore);
+    CHECK(fixture.listPresentations.presentationIdForList(rt::kAllTracksListId) == "songs");
+    CHECK_FALSE(workspace.canGoBack());
+    REQUIRE(workspace.canGoForward());
+    REQUIRE(library.navigateHistory(true));
+    CHECK(library.activePresentation() == forwardPresentation);
+  }
+
+  TEST_CASE("EventController - a presentation command for a closed view reports how to recover")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    auto& workspace = fixture.runtimePtr->workspace();
+    REQUIRE(workspace.closeView(library.activeViewId()));
+    auto const closed = workspace.snapshot();
+    REQUIRE(closed.openViews.empty());
+
+    enterCommand(controller, "view list-order");
+
+    auto const feed = fixture.runtimePtr->notifications().feed();
+    REQUIRE_FALSE(feed.entries.empty());
+    auto const& warning = feed.entries.back();
+    CHECK(warning.severity == rt::NotificationSeverity::Warning);
+    CHECK(warning.lifetime.kind() == rt::NotificationLifetimeKind::History);
+    CHECK(std::get<std::string>(warning.message) ==
+          i18n::requiredText(library.textCatalog(), i18n::MessageId::TuiLibraryPresentationViewChanged));
+    CHECK(workspace.snapshot() == closed);
+    CHECK_FALSE(fixture.listPresentations.presentationIdForList(rt::kAllTracksListId));
+  }
+
+  TEST_CASE("EventController - a saved List can select and pin Manual Order")
+  {
+    auto fixture = EventControllerFixture{};
+    auto const listId = fixture.addList("Saved");
+    auto library = fixture.makeLibrary();
+    auto const checkManualOrderEnabled = [&library](bool const enabled)
+    {
+      auto const& entries = library.presentationEntries();
+      auto const entry = std::ranges::find(entries, rt::kListOrderTrackPresentationId, &TrackPresentationNavEntry::id);
+      REQUIRE(entry != entries.end());
+      CHECK(entry->enabled == enabled);
+    };
+    REQUIRE(library.currentListId() == rt::kAllTracksListId);
+    checkManualOrderEnabled(false);
+    openList(library, listId);
+    checkManualOrderEnabled(true);
+    auto controller = fixture.makeEvents(library);
+    REQUIRE(library.activePresentationId() != rt::kListOrderTrackPresentationId);
+    REQUIRE_FALSE(fixture.listPresentations.presentationIdForList(listId));
+
+    SECTION("by command")
+    {
+      enterCommand(controller, "preset list-order");
+      CHECK_FALSE(fixture.shell.isInputActive());
+    }
+
+    SECTION("by keyboard picker")
+    {
+      REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("p")));
+      REQUIRE(fixture.shell.overlay() == Overlay::PresentationPanel);
+      highlightPresentation(controller, library, rt::kListOrderTrackPresentationId);
+      CHECK(controller.tryHandleEvent(ftxui::Event::Return));
+      CHECK(fixture.shell.overlay() == Overlay::None);
+    }
+
+    CHECK(library.currentListId() == listId);
+    CHECK(library.activePresentationId() == rt::kListOrderTrackPresentationId);
+    CHECK(fixture.listPresentations.presentationIdForList(listId) == rt::kListOrderTrackPresentationId);
   }
 
   TEST_CASE("EventController - presentation navigation keys move within views")

@@ -62,7 +62,7 @@ The preference map is a default-selection authority, not a mirror of every activ
 
 Resolve an eligible saved id through the current built-in and custom preset catalog. If the id is absent, unavailable, or ineligible, use the source-aware recommendation without changing the stored id. Recommendation resolves its result through the same catalog and falls back to the first built-in spec if needed.
 
-The eligibility rule excludes only built-in `list-order` (Manual Order) on All Tracks, not a custom flat unsorted spec. The WinUI picker checks eligibility before changing the view, history, or preference. An ineligible id can remain in the map, and replay restores the captured view's exact spec.
+The eligibility rule excludes only built-in `list-order` (Manual Order) on All Tracks, not a custom flat unsorted spec. A picker or preset command checks eligibility before changing the view, history, or preference. The map can still contain an ineligible id, and a captured view can still contain the exact spec: neither reading a default nor replaying a view is a picker action.
 
 Current source-aware recommendation is:
 

@@ -648,6 +648,8 @@ root:table {
     tui_library_current_track_not_in_view { "Could not locate the current track in the library" }
     tui_library_no_active_track_view { "No active track view" }
     tui_library_no_views_available { "No views available" }
+    tui_library_presentation_view_changed { "Track view changed. Open the List you want, then choose a view." }
+    tui_library_presentation_apply_failed { "Could not apply this view." }
     tui_library_filter_cleared { "Filter cleared" }
     tui_library_filter_applied { "Filter applied" }
     tui_library_empty_scan { "No indexed tracks. Run {command} to scan this library." }

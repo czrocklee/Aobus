@@ -34,6 +34,8 @@ aobus -C /music init
 
 The current presentation determines visible and playback order. Up/Down changes table focus; it does not skip the playback sequence unless you press Enter.
 
+**Manual Order** is unavailable in **All Tracks**. To arrange the full library manually, open a saved root List with an empty filter, press `p`, and choose **Manual Order**. With no tracks marked, focus a track and run `:order top` to move it to the top of the List.
+
 ## Filter and run commands
 
 Press `/` to open Quick Filter in the status bar. Typing applies the draft after a short pause.

@@ -5,6 +5,7 @@
 
 #include "test/MessageCatalogTestSupport.h"
 #include <ao/rt/TrackPresentation.h>
+#include <ao/rt/VirtualListIds.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -18,8 +19,8 @@ namespace ao::tui::test
       {.label = "Dense Albums", .basePresetId = "albums", .spec = rt::TrackPresentationSpec{.id = "dense-albums"}},
     };
 
-    auto const items =
-      makeTrackPresentationNavigation(ao::test::englishMessageCatalog(), rt::builtinTrackPresentationPresets(), custom);
+    auto const items = makeTrackPresentationNavigation(
+      ao::test::englishMessageCatalog(), rt::kAllTracksListId, rt::builtinTrackPresentationPresets(), custom);
 
     REQUIRE(items.size() > custom.size());
     CHECK(items[0].id == "library");
@@ -39,7 +40,8 @@ namespace ao::tui::test
       {.spec = rt::TrackPresentationSpec{.id = "custom-raw"}},
     };
 
-    auto const items = makeTrackPresentationNavigation(ao::test::englishMessageCatalog(), builtin, custom);
+    auto const items =
+      makeTrackPresentationNavigation(ao::test::englishMessageCatalog(), rt::kAllTracksListId, builtin, custom);
 
     REQUIRE(items.size() == 2);
     CHECK(items[0].label == "raw");
@@ -58,7 +60,8 @@ namespace ao::tui::test
       {.label = "Simple", .spec = rt::TrackPresentationSpec{.id = "simple"}},
     };
 
-    auto const items = makeTrackPresentationNavigation(ao::test::englishMessageCatalog(), builtin, custom);
+    auto const items =
+      makeTrackPresentationNavigation(ao::test::englishMessageCatalog(), rt::kAllTracksListId, builtin, custom);
 
     REQUIRE(items.size() == 4);
     CHECK(items[0].id == "raw-first");
@@ -89,7 +92,7 @@ namespace ao::tui::test
       {.label = "Dicht", .basePresetId = "albums", .spec = rt::TrackPresentationSpec{.id = "dense"}},
     };
 
-    auto const items = makeTrackPresentationNavigation(textCatalog, {}, custom);
+    auto const items = makeTrackPresentationNavigation(textCatalog, rt::kAllTracksListId, {}, custom);
 
     REQUIRE(items.size() == 1);
     CHECK(items.front().id == "dense");

@@ -646,6 +646,8 @@ ja:table {
     tui_library_current_track_not_in_view { "ライブラリで現在の曲を見つけられませんでした" }
     tui_library_no_active_track_view { "アクティブな曲表示はありません" }
     tui_library_no_views_available { "利用可能な表示はありません" }
+    tui_library_presentation_view_changed { "曲の表示が変わりました。目的のリストを開いてから表示を選んでください。" }
+    tui_library_presentation_apply_failed { "この表示を適用できませんでした。" }
     tui_library_filter_cleared { "フィルターがクリアされました" }
     tui_library_filter_applied { "フィルターが適用されました" }
     tui_library_empty_scan { "登録済みの曲がありません。{command} でライブラリをスキャンしてください。" }

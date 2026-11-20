@@ -114,6 +114,11 @@ namespace ao::tui
         presentationPanelRowLabel(item) | flex,
       });
 
+      if (!item.enabled)
+      {
+        rowPtr = std::move(rowPtr) | dim;
+      }
+
       auto const selected = std::cmp_equal(index, selectedIndex);
       auto* rowBox = static_cast<ftxui::Box*>(nullptr);
 
