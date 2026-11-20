@@ -3,6 +3,7 @@
 import hashlib
 import os
 import unittest
+from unittest import mock
 
 import test_bazel_deps as adapter_tests
 
@@ -24,6 +25,7 @@ class BazelSharedHeadersTest(unittest.TestCase):
         )
         change["id"] = f"complete-{name}"
         change["when"]["package"] = name
+        change["when"]["provider"] = fixture.spec["provider"]["name"]
 
     def headers(self, name):
         return {file["source"] for tree in self.fixture.package(name)["headers"] for file in tree["files"]}
@@ -75,24 +77,30 @@ class BazelSharedHeadersTest(unittest.TestCase):
         self.assertEqual(fixture.include_root("bar"), other)
         self.assertEqual(self.headers("bar"), {str(other_header)})
 
-    def test_child_only_interface_does_not_gain_another_packages_parent_headers(self):
+    def check_child_only_interface(self, provider):
         fixture = self.fixture
-        child = fixture.header.parent / "child"
+        fixture.spec["provider"]["name"] = provider
+        self.enterContext(mock.patch.object(g, "_NIX_STORE", fixture.store))
+        root = fixture.header.parent
+        child = root / "child"
         child.mkdir()
-        (child / "child.h").write_bytes(b"child header")
+        header = child / "child.h"
+        header.write_bytes(b"child header")
         self.add_package("bar", [child])
         manifest = fixture.generate()
+        self.assertEqual(fixture.include_root("foo"), root)
+        self.assertEqual(fixture.include_root("bar"), child)
         self.assertEqual(
             fixture.package("bar")["headers"],
-            [
-                {
-                    "root": str(child),
-                    "index": 0,
-                    "files": [{"source": str(child / "child.h"), "path": "child.h"}],
-                }
-            ],
+            [{"root": str(child), "index": 0, "files": [{"source": str(header), "path": "child.h"}]}],
         )
         self.assertEqual([package["declared_headers"] for package in manifest["packages"]], [2, 1])
+
+    def test_generic_child_only_interface_stays_narrow(self):
+        self.check_child_only_interface("fixture")
+
+    def test_nix_child_only_interface_stays_narrow(self):
+        self.check_child_only_interface("nix")
 
     def test_nested_root_topology_and_order_preserve_sibling_relative_includes(self):
         fixture = self.fixture
@@ -170,6 +178,57 @@ class BazelSharedHeadersTest(unittest.TestCase):
         with self.assertRaisesRegex(g.BazelDependencyError, "outside allowed provider roots"):
             fixture.generate()
         self.assertFalse(fixture.out.exists())
+
+    def test_nix_shared_anchors_are_scanned_once_and_keep_ordered_sparse_interfaces(self):
+        fixture = self.fixture
+        fixture.spec["provider"]["name"] = "nix"
+        nested = fixture.header.parent / "nested"
+        nested.mkdir()
+        (nested / "nested.h").write_bytes(b"nested header")
+        other = fixture.provider / "other-include"
+        other.mkdir()
+        (other / "other.h").write_bytes(b"other header")
+        fixture.cflags = f'-I"{fixture.header.parent}" -I"{other}" -DFOO_API=1'
+        fixture.write_pc()
+        archive = fixture.lib.with_name("libbar.a")
+        archive.write_bytes(b"bar archive")
+        self.add_package(
+            "bar",
+            [other, fixture.header.parent],
+            defines=["BAR_API=2"],
+            libraries=[{"name": "bar", "kind": "static", "file": str(archive)}],
+        )
+        self.enterContext(mock.patch.object(g, "_NIX_STORE", fixture.store))
+        adapter = g._Adapter(fixture.spec, fixture.patches)
+        adapter.prepare()
+        with mock.patch.object(g.os, "scandir", wraps=os.scandir) as scandir:
+            fixture.resolution = adapter.resolve()
+        manifest = fixture.resolution["manifest"]
+        self.assertCountEqual([call.args[0] for call in scandir.call_args_list], [fixture.header.parent, nested, other])
+        primary_files = [
+            {"source": str(fixture.header), "path": "foo.h"},
+            {"source": str(nested / "nested.h"), "path": "nested/nested.h"},
+        ]
+        other_files = [{"source": str(other / "other.h"), "path": "other.h"}]
+        for name, expected in (("foo", [primary_files, other_files]), ("bar", [other_files, primary_files])):
+            trees = fixture.package(name)["headers"]
+            self.assertEqual([tree["files"] for tree in trees], expected)
+            self.assertEqual([tree["index"] for tree in trees], [0, 1])
+        self.assertEqual([fixture.include_root("foo", index) for index in range(2)], [fixture.header.parent, other])
+        self.assertEqual([fixture.include_root("bar", index) for index in range(2)], [other, fixture.header.parent])
+        self.assertEqual(fixture.package("foo")["defines"], ["FOO_API=1"])
+        self.assertEqual(fixture.package("bar")["defines"], ["BAR_API=2"])
+        self.assertEqual(fixture.package("foo")["libraries"][0]["source"], str(fixture.lib))
+        self.assertEqual(fixture.package("bar")["libraries"][0]["source"], str(archive))
+        self.assertEqual([package["declared_headers"] for package in manifest["packages"]], [3, 3])
+        self.assertEqual(
+            {role for entry in manifest["inputs"] for role in entry["roles"]},
+            {"resolver_tool", "pkg_config_metadata", "library", "header"},
+        )
+        foo_files = fixture.package("foo")["headers"][0]["files"]
+        foo_files[0]["path"] = "modified.h"
+        foo_files.append({"source": "extra", "path": "extra.h"})
+        self.assertEqual(fixture.package("bar")["headers"][1]["files"], primary_files)
 
 
 if __name__ == "__main__":

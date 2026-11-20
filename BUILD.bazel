@@ -84,6 +84,7 @@ native_validation_tests(python = "ao_python_validation")
 test_suite(
     name = "tests",
     tests = [
+        "//bazel/header_share:sparse_headers_test",
         "//test:async_test",
         "//test:audio_platform_test",
         "//test:audio_test",
@@ -345,7 +346,10 @@ filegroup(
         "//test:lint_test",
         "//test:tui_test",
     ] + select({
-        "@platforms//os:linux": ["//test:dictionary_publication_test"],
+        "@platforms//os:linux": [
+            "//bazel/header_share:sparse_headers_test",
+            "//test:dictionary_publication_test",
+        ],
         "//conditions:default": [],
     }) + select({
         "//bazel:linux_gtk_enabled": ["//test:gtk_test"],

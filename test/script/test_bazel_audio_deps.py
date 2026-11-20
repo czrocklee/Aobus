@@ -112,7 +112,7 @@ class BazelAudioSpecTest(unittest.TestCase):
         self.root = Path(temporary.name).resolve()
         self.tree = self.root / "workspace"
         self.tree.mkdir()
-        self.provider = self.root / "provider"
+        self.provider = self.root / f"{'0' * 32}-fixture-dev"
         for marker in ("opus/opus.h", "catch/fakeit.hpp"):
             header = self.provider / "include" / marker
             header.parent.mkdir(parents=True, exist_ok=True)
@@ -128,6 +128,7 @@ class BazelAudioSpecTest(unittest.TestCase):
         self.policy = self.root / "policy.json"
         self.policy.write_text(json.dumps(policy), encoding="utf-8")
         self.versions = {"opus": "1.6.1", "fakeit": "2.5.0"}
+        self.header_cflags = {}
         self.resolver = self.provider / "bin/resolver"
         self.resolver.parent.mkdir()
         self.resolver.touch()
@@ -155,37 +156,31 @@ class BazelAudioSpecTest(unittest.TestCase):
         if "-d" in argv:
             self.assertEqual(argv, [str(self.resolver), "-d", str(self.provider / "lib/libopus.so")])
             return subprocess.CompletedProcess(argv, 0, "(SONAME) [libopus.so]", "")
-        # Linux codecs are shared imports; a --static query would change the set.
-        self.assertNotIn("--static", argv)
-        options = [value for value in argv[1:] if value.startswith("--")]
+        options = [value for value in argv[1:] if value.startswith("--") and value != "--static"]
         self.assertEqual(len(options), 1, argv)
         option, module = options[0], argv[-1]
-        self.assertEqual(module, "opus")
+        self.assertTrue(module == "opus" or module in self.header_cflags, argv)
+        # Linux codecs are shared imports; the test group uses static flag queries.
+        self.assertEqual("--static" in argv, module != "opus" and option in ("--cflags", "--libs"))
         if option == "--modversion":
-            text = self.versions["opus"]
+            text = self.versions[module]
         elif option == "--variable=pcfiledir":
             text = str(self.pc)
         elif option in ("--print-requires", "--print-requires-private"):
             text = ""
         elif option == "--cflags":
-            text = f'-I"{self.provider / "include/opus"}"'
+            text = self.header_cflags.get(module, f'-I"{(self.provider / "include/opus").as_posix()}"')
         elif option == "--libs":
-            text = f'-L"{self.provider / "lib"}" -lopus'
+            text = f'-L"{(self.provider / "lib").as_posix()}" -lopus' if module == "opus" else ""
         else:
             self.fail(f"unexpected pkg-config query: {argv}")
         return subprocess.CompletedProcess(argv, 0, text, "")
 
     def refresh(self):
-        def metadata_flags(spec, option, *, package=None):
-            # Only the opus compile-interface supplement may query metadata here.
-            self.assertEqual((option, package), ("--cflags", "opus"))
-            return ["-I" + str(self.provider / "include/opus")]
-
         with (
             patch.object(native, "native_platform", return_value="linux"),
             patch.object(providers, "POLICY", self.policy),
             patch.object(providers, "linux_provider", side_effect=self.provider_spec),
-            patch.object(dependencies, "_metadata_flags", side_effect=metadata_flags),
             patch.object(providers, "verify_linux_resolution"),
             patch.object(bazel_deps.subprocess, "run", side_effect=self.query),
             patch.object(bazel_deps, "_Adapter", wraps=bazel_deps._Adapter) as adapters,
@@ -219,10 +214,44 @@ class BazelAudioSpecTest(unittest.TestCase):
         self.assertEqual(fallback["expect"]["unmet_requirements"], ["manual_interface"])
         self.assertEqual(fallback["add"], {"header_dirs": [str(self.provider / "include/catch")]})
         self.assertEqual(fallback["expect"]["missing"], fallback["add"])
-        (self.provider / "include/catch/new-header.hpp").touch()
-        self.assertEqual(len(self.refresh()), 2)
-        self.assertIn(str(self.provider / "include/catch/new-header.hpp"), observed_sources(self.resolutions["test"]))
+        include = self.provider / "include"
+        (include / "catch/new-header.hpp").touch()
+        (include / "standalone").mkdir()
+        (include / "standalone/fakeit.hpp").touch()
+        with patch.object(bazel_deps, "_NIX_STORE", self.root):
+            self.refresh()
+        # A directory link would also make ../standalone/fakeit.hpp visible locally.
+        (tree,) = self.resolutions["test"]["packages"][0]["headers"]
+        self.assertEqual(tree["root"], str(include / "catch"))
+        self.assertEqual([entry["path"] for entry in tree["files"]], ["fakeit.hpp", "new-header.hpp"])
         self.assertFalse((self.tree / "generated/test/artifacts").exists())
+
+    def test_reviewed_child_include_controls_projection_and_rejects_broader_metadata(self):
+        name = "fixture_headers"
+        include = self.provider / "include"
+        child = include / "fixture/integration"
+        child.mkdir(parents=True)
+        (child / "fixture.hpp").touch()
+        policy = native.read_json(self.policy)
+        (package,) = policy["packages"]["test"]
+        package.update(name=name, modules=[name], header="fixture/integration/fixture.hpp")
+        policy["header_fallbacks"][name] = {"linux": {"include": "fixture/integration"}}
+        native.write_json(self.policy, policy)
+        self.versions[name] = self.versions.pop("fakeit")
+        (self.pc / f"{name}.pc").touch()
+        self.header_cflags[name] = f'-isystem "{child.as_posix()}"'
+
+        with patch.object(bazel_deps, "_NIX_STORE", self.root):
+            self.refresh()
+            (projected,) = self.resolutions["test"]["packages"]
+            self.assertEqual(projected["name"], name)
+            (tree,) = projected["headers"]
+            self.assertEqual(tree["root"], str(child))
+            self.assertEqual([entry["path"] for entry in tree["files"]], ["fixture.hpp"])
+
+            self.header_cflags[name] += f' -I "{include.as_posix()}"'
+            with self.assertRaisesRegex(native.BazelWorkspaceError, "reviewed child include"):
+                self.refresh()
 
 
 class BazelNativeAudioInterfaceTest(unittest.TestCase):

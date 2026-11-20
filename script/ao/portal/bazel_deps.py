@@ -12,6 +12,7 @@ import hashlib
 import os
 import re
 import shlex
+import stat
 import subprocess
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
@@ -22,6 +23,10 @@ GENERATOR = "aobus-bazel-artifact-adapter-v1"
 _FIELDS = frozenset({"header_dirs", "defines", "copts", "linkopts", "libraries", "runtime"})
 _NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 _MODULE = re.compile(r"[A-Za-z0-9_+.-]+\Z")
+_NIX_STORE = Path("/nix/store")
+_NIX_OUTPUT_NAME = re.compile(r"[0-9abcdfghijklmnpqrsvwxyz]{32}-[A-Za-z0-9+._?=-]+")
+_NIX_STORE_DIRECTORY = re.compile(rf"/nix/store/{_NIX_OUTPUT_NAME.pattern}(?:/[A-Za-z0-9+._?=-]+)*")
+_INVALID_BAZEL_HEADER_PATH = re.compile(r"[:\\\x00-\x1f\x7f\ud800-\udfff]")
 _COMPILER_FLAGS = frozenset(
     {
         "-pthread",
@@ -89,6 +94,39 @@ def _resolve(path: Path, *, strict: bool = True) -> Path:
         return path.resolve(strict=strict)
     except (OSError, RuntimeError) as exc:
         raise BazelDependencyError(f"cannot resolve path (missing file or symlink cycle): {path}: {exc}") from exc
+
+
+def _is_nix_store_directory(path: Path) -> bool:
+    """Check the bounded Nix store directory syntax used for ELF search paths.
+
+    Callers validating raw unparsed strings (such as ELF RUNPATH entries in ``library()``)
+    must check raw ``/`` segments before constructing ``Path``, because ``pathlib.Path``
+    strips trailing and embedded ``.`` segments on construction.
+    """
+    canonical = path.as_posix()
+    return _NIX_STORE_DIRECTORY.fullmatch(canonical) is not None and not {".", ".."}.intersection(path.parts)
+
+
+def _nix_output(path: Path) -> Path | None:
+    """Find the containing store output; only the output name has Nix's naming restrictions."""
+    if path.is_relative_to(_NIX_STORE):
+        parts = path.relative_to(_NIX_STORE).parts
+        if parts and ".." not in parts and _NIX_OUTPUT_NAME.fullmatch(parts[0]):
+            return _NIX_STORE / parts[0]
+    return None
+
+
+def _validate_nix_header_paths(relative: str, source: Path) -> None:
+    if relative.rpartition("/")[2] in {"BUILD", "BUILD.bazel"}:
+        raise BazelDependencyError(f"header contains Bazel package boundary file: {relative!r}")
+    if _INVALID_BAZEL_HEADER_PATH.search(relative):
+        raise BazelDependencyError(f"invalid Bazel header path: {relative!r}")
+    # The source is a filesystem path, not a label, but Bazel must decode its
+    # exact spelling from JSON. An escaped non-UTF-8 byte would link elsewhere.
+    try:
+        str(source).encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise BazelDependencyError(f"non-UTF-8 header source: {str(source)!r}") from exc
 
 
 def _digest(path: Path) -> str:
@@ -267,7 +305,7 @@ class _Adapter:
         _text(provider["name"])
         _text(provider["version"])
         self.spec = spec
-        self.roots = [_resolve(_absolute(p)) for p in _strings(spec["allowed_roots"])]
+        self.roots = frozenset(_resolve(_absolute(p)) for p in _strings(spec["allowed_roots"]))
         _require(
             self.roots and all(p.is_dir() or p.is_file() for p in self.roots),
             "allowed_roots must be existing files/directories",
@@ -281,6 +319,8 @@ class _Adapter:
         self.default_linkage = self.linkage
         self.package_linkages: dict[str, str] = {}
         self.header_files: dict[str, list[Path]] = {}
+        self._nix_header_outputs = frozenset(root for root in self.roots if root == _nix_output(root))
+        self._nix_header_files: dict[Path, tuple[tuple[str, str], ...]] = {}
         self.library_roots = (
             [self.path(p, directory=True) for p in _strings(spec["library_roots"])] if "library_roots" in spec else None
         )
@@ -342,12 +382,15 @@ class _Adapter:
             _strings(expect["unmet_requirements"])
             _strings(patch["satisfy"])
 
+    def _within_roots(self, path: Path) -> bool:
+        return path in self.roots or any(parent in self.roots for parent in path.parents)
+
     def path(self, value: object, *, directory: bool = False) -> Path:
         original = _absolute(value)
         path = _resolve(original)
         if original != path:
             self.aliases.add(original)
-        _require(any(path.is_relative_to(root) for root in self.roots), f"outside allowed provider roots: {path}")
+        _require(self._within_roots(path), f"outside allowed provider roots: {path}")
         _require(
             path.is_dir() if directory else path.is_file(), f"missing {'directory' if directory else 'file'}: {path}"
         )
@@ -487,7 +530,7 @@ class _Adapter:
                 kind = next((p for p in ("-isystem", "-I", "-L", "-D", "-l") if token.startswith(p)), None)
                 value = token[len(kind) :] if kind else token
             if kind in ("-I", "-isystem") and compile_flags:
-                _append(interface.header_dirs, str(self.path(value, directory=True)))
+                _append(interface.header_dirs, str(self._header_root(value)))
             elif kind == "-D" and compile_flags:
                 _append(interface.defines, _text(value))
             elif kind == "-L" and not compile_flags:
@@ -630,9 +673,6 @@ class _Adapter:
                     runpaths = re.findall(r"\(RUNPATH\)([^\n]*)", output)
                     rpaths = re.findall(r"\(RPATH\)([^\n]*)", output)
                     _require(len(runpaths) <= 1 and len(rpaths) <= 1, f"duplicate ELF runtime search path: {file}")
-                    store_directory = re.compile(
-                        r"/nix/store/[0-9abcdfghijklmnpqrsvwxyz]{32}-[A-Za-z0-9+._?=-]+(?:/[A-Za-z0-9+._?=-]+)*"
-                    )
                     # RUNPATH supersedes RPATH when both dynamic tags are present.
                     for entry in runpaths or rpaths:
                         match = re.fullmatch(r"[^\[\]]*\[([^\[\]]+)\]\s*", entry)
@@ -640,16 +680,16 @@ class _Adapter:
                             raise BazelDependencyError(f"invalid ELF runtime search path: {file}")
                         for value in match[1].split(":"):
                             _require(
-                                store_directory.fullmatch(value) and not {".", ".."}.intersection(value.split("/")),
+                                _NIX_STORE_DIRECTORY.fullmatch(value)
+                                and not {".", ".."}.intersection(value.split("/")),
                                 f"invalid Nix ELF runtime search directory: {value}: {file}",
                             )
                             directory = _resolve(Path(value))
-                            canonical = directory.as_posix()
                             _require(
-                                store_directory.fullmatch(canonical) and directory.is_dir(),
+                                _is_nix_store_directory(directory) and directory.is_dir(),
                                 f"invalid Nix ELF runtime search directory: {value}: {file}",
                             )
-                            _append(rpath_link_dirs, canonical)
+                            _append(rpath_link_dirs, directory.as_posix())
         return _Library(name, kind, str(file), runtime, soname, tuple(rpath_link_dirs))
 
     def headers(self, root: Path, ancestors: tuple[Path, ...] = ()) -> Iterator[Path]:
@@ -662,6 +702,130 @@ class _Adapter:
                 self.path(str(path))
                 yield path
 
+    def _header_root(self, value: str) -> Path:
+        root = self.path(value, directory=True)
+        lexical = Path(value)
+        if self.platform == "linux" and self.spec["provider"]["name"] == "nix" and root != lexical:
+            if lexical.is_relative_to(_NIX_STORE):
+                self._validate_nix_header_path(lexical)
+            elif _nix_output(root) in self._nix_header_outputs:
+                raise BazelDependencyError(
+                    f"Nix include root uses an alias outside the store: {lexical}; use the admitted store path: {root}"
+                )
+        return root
+
+    def _validate_nix_header_path(self, path: Path) -> None:
+        """Prove each hop stays in admitted outputs, resolving '..' only after links."""
+        hops = 0
+        escape = f"header symlink leaves admitted Nix outputs: {path}"
+
+        def walk(directory: Path, target: Path) -> Path:
+            nonlocal hops
+            if target.is_absolute():
+                _require(target.is_relative_to(_NIX_STORE), escape)
+                directory, target = _NIX_STORE, target.relative_to(_NIX_STORE)
+            for part in target.parts:
+                if directory == _NIX_STORE:
+                    # Relative links may cross directly between two admitted outputs,
+                    # but never visit a mutable or unadmitted path on their way.
+                    directory /= part
+                    _require(directory in self._nix_header_outputs, escape)
+                elif part == "..":
+                    directory = directory.parent
+                else:
+                    child = directory / part
+                    if stat.S_ISLNK(child.lstat().st_mode):
+                        hops += 1
+                        _require(hops <= 40, f"too many header symlinks: {path}")
+                        directory = walk(directory, child.readlink())
+                    else:
+                        directory = child
+            _require(directory != _NIX_STORE, escape)
+            return directory
+
+        walk(_NIX_STORE, path)
+
+    def _nix_headers(self, anchor: Path) -> tuple[tuple[str, str], ...]:
+        """Cache ordered (relative path, canonical source) pairs, not mutable package records."""
+        if anchor in self._nix_header_files:
+            return self._nix_header_files[anchor]
+        files: list[tuple[str, str]] = []
+
+        def walk(directory: Path, prefix: str, ancestors: tuple[Path, ...], aliased: bool) -> None:
+            # sorted(Path) compares components, not slash-separated strings. A sorted
+            # depth-first walk gives that order even for e.g. a/z.h versus a-extra.h.
+            with os.scandir(directory) as scan:
+                entries = sorted(scan, key=lambda entry: os.path.normcase(entry.name))
+            for entry in entries:
+                relative = prefix + entry.name
+                source = directory / entry.name
+                link = entry.is_symlink()
+                if aliased or link:
+                    self.aliases.add(anchor / relative)
+                if link:
+                    source = _resolve(source)
+                    _require(self._within_roots(source), f"outside allowed provider roots: {source}")
+                    self._validate_nix_header_path(directory / entry.name)
+                if entry.is_dir():
+                    _require(source not in ancestors, f"header directory symlink cycle: {anchor / relative}")
+                    walk(source, relative + "/", (*ancestors, source), aliased or link)
+                elif entry.is_file():
+                    _validate_nix_header_paths(relative, source)
+                    self.record(source, "header")
+                    files.append((relative, str(source)))
+                else:
+                    raise BazelDependencyError(f"unsupported non-file header entry: {anchor / relative}")
+
+        walk(anchor, "", (anchor,), False)
+        self._nix_header_files[anchor] = tuple(files)
+        return self._nix_header_files[anchor]
+
+    def _resolve_headers(self, name: str, header_dirs: list[str]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """Return sparse header trees and ordered include paths."""
+        headers: list[dict[str, Any]] = []
+        includes: list[dict[str, Any]] = []
+        header_trees: dict[Path, int] = {}
+        roots = [self._header_root(directory) for directory in header_dirs]
+        # Choose only this package's declared parents. Sharing a different
+        # package's parent would widen a child-only header interface.
+        # Nested roots retain their tree for wrappers including ../c4.
+        anchors = [
+            min((parent for parent in roots if root.is_relative_to(parent)), key=lambda p: len(p.parts))
+            for root in roots
+        ]
+        nix = self.platform == "linux" and self.spec["provider"]["name"] == "nix"
+        for root, anchor in zip(roots, anchors, strict=True):
+            if anchor not in header_trees:
+                if nix and name not in self.header_files and _nix_output(anchor) in self._nix_header_outputs:
+                    inventory = [{"source": source, "path": path} for path, source in self._nix_headers(anchor)]
+                else:
+                    files = (
+                        sorted(file for file in self.header_files[name] if file.is_relative_to(anchor))
+                        if name in self.header_files
+                        else sorted(self.headers(anchor))
+                    )
+                    inventory = []
+                    for file in files:
+                        relative_file = file.relative_to(anchor).as_posix()
+                        source = self.path(str(file))
+                        if nix:
+                            _validate_nix_header_paths(relative_file, source)
+                        self.record(source, "header")
+                        inventory.append({"source": str(source), "path": relative_file})
+                header_trees[anchor] = len(headers)
+                headers.append({"root": str(anchor), "index": roots.index(anchor), "files": inventory})
+            tree = header_trees[anchor]
+            relative = root.relative_to(anchor)
+            files_in_tree = headers[tree]["files"]
+            non_empty = (
+                bool(files_in_tree)
+                if root == anchor
+                else any(Path(file["path"]).is_relative_to(relative) for file in files_in_tree)
+            )
+            _require(non_empty, f"empty header directory: {root}")
+            includes.append({"tree": tree, "path": relative.as_posix()})
+        return headers, includes
+
     def resolve(self) -> dict[str, Any]:
         """Validate installed interfaces and report facts, never generate Bazel rules."""
         manifests: list[dict[str, Any]] = []
@@ -669,38 +833,10 @@ class _Adapter:
 
         for name, interface, origin in self.packages:
             self.linkage = self.package_linkages[name]
-            headers: list[dict[str, Any]] = []
-            includes: list[dict[str, Any]] = []
-            header_trees: dict[Path, int] = {}
             libraries: list[dict[str, Any]] = []
             runtime: list[str] = []
             resolved: list[dict[str, Any]] = []
-            roots = [self.path(directory, directory=True) for directory in interface.header_dirs]
-            for root in roots:
-                # Choose only this package's declared parents. Sharing a different
-                # package's parent would widen a child-only header interface.
-                # Nested roots retain their tree for wrappers including ../c4.
-                anchor = min((parent for parent in roots if root.is_relative_to(parent)), key=lambda p: len(p.parts))
-                if anchor not in header_trees:
-                    files = (
-                        sorted(file for file in self.header_files[name] if file.is_relative_to(anchor))
-                        if name in self.header_files
-                        else sorted(self.headers(anchor))
-                    )
-                    _require(files, f"empty header directory: {anchor}")
-                    inventory = []
-                    for file in files:
-                        source = self.path(str(file))
-                        self.record(source, "header")
-                        inventory.append({"source": str(source), "path": file.relative_to(anchor).as_posix()})
-                    header_trees[anchor] = len(headers)
-                    headers.append({"root": str(anchor), "index": roots.index(anchor), "files": inventory})
-                tree = header_trees[anchor]
-                _require(
-                    any(Path(file["path"]).is_relative_to(root.relative_to(anchor)) for file in headers[tree]["files"]),
-                    f"empty header directory: {root}",
-                )
-                includes.append({"tree": tree, "path": root.relative_to(anchor).as_posix()})
+            headers, includes = self._resolve_headers(name, interface.header_dirs)
             for value in interface.defines:
                 _require(re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*(?:=.*)?", value), f"invalid define: {value}")
             for value in interface.copts:
