@@ -28,15 +28,12 @@ The Windows frontend keeps its database beneath the selected music root. Network
    For a folder without an Aobus index, the new process activates the folder and
    then runs the initial scan. If scanning fails, the folder stays open; choose
    **More → Rescan Library** in Modern or **File → Rescan** in Classic to retry.
-3. Use **Folders**, **Albums**, **Artists**, **Genres**, or a list below
-   **Playlists** in the navigation pane. Use the presentation button above the
-   table to switch between songs, albums, artists, genres, years, classical
-   views, restored custom presets, and the other available presentations. Grouped presentations add
-   album or category headings without turning those headings into playable
-   rows.
+3. Choose **All Tracks** or a saved List in the navigation pane. Expand a parent List to browse its children.
+   A new view uses the List's preferred presentation, or the recommendation if no preference is available. Returning to an open view keeps its presentation.
+   In Modern, use the presentation button above the table to choose **Songs**, **Albums**, **Artists**, **Genres**, **Years**, a classical view, or a restored custom preset. This choice becomes the List's preference. Group headings are not playable rows.
    Right-click **All Tracks** to create a root List, or right-click a saved List to create a derived child, edit its definition and preferred presentation, or preview and delete it.
    A List with descendants offers **Delete List and Descendants...** and shows the complete subtree before committing; deleting a List never deletes music files.
-   Use the Modern back button, `Alt+Left`/`Alt+Right`, or the mouse back/forward buttons to traverse workspace history.
+   Use the Modern back button, `Alt+Left`/`Alt+Right`, or the mouse back/forward buttons to revisit earlier views without changing the List's preference.
 4. Type in **Filter tracks** to narrow the active view. Select one or more rows
    with ordinary Windows list gestures, use a sortable column header to change
    ordering, and double-click a track row to start playback. Drag a header's

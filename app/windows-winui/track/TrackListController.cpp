@@ -3,7 +3,6 @@
 
 #include "track/TrackListController.h"
 
-#include "platform/StringResourceFormat.h"
 #include "platform/StringResources.h"
 #include "platform/WinRtStringResources.h"
 #include "track/TrackCellItem.h"
@@ -24,11 +23,11 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/projection/TrackListProjection.h>
+#include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackColumnDefaults.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/library/presentation/TrackColumnWidthSolver.h>
 #include <ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h>
-#include <ao/uimodel/library/presentation/TrackPresentationPickerViewModel.h>
 #include <ao/uimodel/library/presentation/TrackPresentationText.h>
 #include <ao/uimodel/library/track/IndexedTrackRowCache.h>
 #include <ao/uimodel/library/track/TrackDisplayIndex.h>
@@ -202,12 +201,14 @@ namespace ao::winui
                                            rt::WorkspaceService& workspace,
                                            rt::Library& library,
                                            uimodel::TrackColumnLayouts& columnLayouts,
+                                           uimodel::ListPresentations const& listPresentations,
                                            i18n::MessageCatalog textCatalog)
     : _textCatalog{std::move(textCatalog)}
     , _views{views}
     , _workspace{workspace}
     , _library{library}
     , _columnLayouts{columnLayouts}
+    , _listPresentations{listPresentations}
     , _items{makeTrackItemView(0, {}, uimodel::IndexedTrackRowCache::kDefaultMaximumEntries)}
     , _headers{winrt::single_threaded_observable_vector<winrt::Windows::Foundation::IInspectable>()}
   {
@@ -258,18 +259,10 @@ namespace ao::winui
       return;
     }
 
-    auto viewRes = _workspace.navigate({.target = rt::GlobalViewKind::AllTracks});
-
-    if (!viewRes)
+    if (auto openedRes = navigateTo(rt::kAllTracksListId); !openedRes)
     {
       _items = makeTrackItemView(0, {}, uimodel::IndexedTrackRowCache::kDefaultMaximumEntries);
       _changed.emit();
-      return;
-    }
-
-    if (_viewId != *viewRes)
-    {
-      adoptWorkspaceView(*viewRes);
     }
   }
 
@@ -741,58 +734,16 @@ namespace ao::winui
     return _views.setPresentation(_viewId, spec);
   }
 
-  Result<> TrackListController::selectPresentation(std::string_view presentationId)
-  {
-    if (_viewId == rt::kInvalidViewId)
-    {
-      return makeError(Error::Code::InvalidState, resourceString("NoTrackViewActive"));
-    }
-
-    if (presentationId == "tracks" || presentationId == "folders" || presentationId == "playlists")
-    {
-      presentationId = rt::kDefaultTrackPresentationId;
-    }
-
-    auto const eligibility = uimodel::trackPresentationEligibility(_textCatalog, activeListId(), presentationId);
-
-    if (!eligibility.enabled)
-    {
-      return makeError(Error::Code::InvalidInput, eligibility.disabledReason);
-    }
-
-    auto const* preset = rt::builtinTrackPresentationPreset(presentationId);
-
-    if (preset == nullptr)
-    {
-      return makeError(Error::Code::NotFound, formatResource("UnknownPresentationFormat", presentationId));
-    }
-
-    return selectPresentation(preset->spec);
-  }
-
-  Result<> TrackListController::selectPresentation(rt::TrackPresentationSpec const& presentation)
-  {
-    if (_viewId == rt::kInvalidViewId)
-    {
-      return makeError(Error::Code::InvalidState, resourceString("NoTrackViewActive"));
-    }
-
-    auto const eligibility = uimodel::trackPresentationEligibility(_textCatalog, activeListId(), presentation.id);
-
-    if (!eligibility.enabled)
-    {
-      return makeError(Error::Code::InvalidInput, eligibility.disabledReason);
-    }
-
-    return _views.setPresentation(_viewId, presentation);
-  }
-
   Result<> TrackListController::navigateTo(ListId const listId)
   {
-    auto request = rt::NavigationRequest{};
-    request.target = listId == rt::kAllTracksListId ? rt::NavigationTarget{rt::GlobalViewKind::AllTracks}
-                                                    : rt::NavigationTarget{listId};
-    auto viewRes = _workspace.navigate(request);
+    return navigateTo(listId,
+                      {.mode = rt::NavigationPresentationMode::NewViewDefault,
+                       .spec = _listPresentations.presentationForList(listId, _library)});
+  }
+
+  Result<> TrackListController::navigateTo(ListId const listId, rt::NavigationPresentation presentation)
+  {
+    auto viewRes = _workspace.navigate({.target = listId, .optPresentation = std::move(presentation)});
 
     if (!viewRes)
     {
@@ -852,17 +803,12 @@ namespace ao::winui
 
       if (targetViewId == rt::kInvalidViewId)
       {
-        auto request = rt::NavigationRequest{};
-        request.target = preferredListId == rt::kAllTracksListId ? rt::NavigationTarget{rt::GlobalViewKind::AllTracks}
-                                                                 : rt::NavigationTarget{preferredListId};
-        auto viewRes = _workspace.navigate(request);
-
-        if (!viewRes)
+        if (auto openedRes = navigateTo(preferredListId); !openedRes)
         {
-          return std::unexpected{viewRes.error()};
+          return openedRes;
         }
 
-        targetViewId = *viewRes;
+        targetViewId = _viewId;
       }
     }
 

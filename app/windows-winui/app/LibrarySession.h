@@ -43,7 +43,6 @@ namespace ao::rt
   class CompletionAliasPolicy;
   class ConfigStore;
   class TextOrderingPolicy;
-  struct TrackPresentationSpec;
 }
 
 namespace ao::uimodel
@@ -95,7 +94,6 @@ namespace ao::winui
     /// The effective keyboard map: the shipped defaults with the user's overrides merged in.
     uimodel::KeymapModel const& keymap() const noexcept;
     std::filesystem::path const& stateRoot() const noexcept;
-    rt::TrackPresentationSpec presentationForList(ListId listId) const;
     Result<> saveSettings();
     void setPreferredOutputSelection(audio::OutputDeviceSelection const& selection) noexcept;
     /// Apply and save an explicit startup root only after native activation.

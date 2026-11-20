@@ -51,6 +51,7 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryPaths.h>
@@ -624,10 +625,15 @@ namespace
       // Publish the borrow only after the runtime owns the executor in final storage.
       _executor = runtimeExecutor;
       _columnLayoutsPtr = std::make_unique<ao::uimodel::TrackColumnLayouts>(_runtimePtr->library().changes());
+      _presentationCatalogPtr =
+        std::make_unique<ao::uimodel::TrackPresentationCatalog>(_runtimePtr->workspace(), *controllerCatalogRes);
+      _listPresentationsPtr =
+        std::make_unique<ao::uimodel::ListPresentations>(*_presentationCatalogPtr, _runtimePtr->library().changes());
       _trackListPtr = std::make_unique<ao::winui::TrackListController>(_runtimePtr->views(),
                                                                        _runtimePtr->workspace(),
                                                                        _runtimePtr->library(),
                                                                        *_columnLayoutsPtr,
+                                                                       *_listPresentationsPtr,
                                                                        std::move(*controllerCatalogRes));
       _selectionSub =
         _runtimePtr->views().onSelectionChanged([this](ao::rt::ViewService::SelectionChanged const& change)
@@ -675,11 +681,10 @@ namespace
 
     void buildAndPublishStep()
     {
-      auto const groupedRes = _trackListPtr->selectPresentation("albums");
-
-      if (!groupedRes)
+      if (_trackListPtr->activeListId() != ao::rt::kAllTracksListId ||
+          _trackListPtr->activePresentationId() != "albums" || !_listPresentationsPtr->snapshot().empty())
       {
-        failSetup(std::format("grouped presentation selection failed: {}", groupedRes.error().message));
+        failSetup("the fresh All Tracks view must open in Albums without writing a pin");
         return;
       }
 
@@ -1349,10 +1354,6 @@ namespace
       }
 
       _themeCoordinatorPtr = std::make_unique<ao::winui::ThemeCoordinator>(_optTempRoot->root() / "probe-theme.yaml");
-      _presentationCatalogPtr =
-        std::make_unique<ao::uimodel::TrackPresentationCatalog>(_runtimePtr->workspace(), *trackCatalogRes);
-      _listPresentationsPtr =
-        std::make_unique<ao::uimodel::ListPresentations>(*_presentationCatalogPtr, _runtimePtr->library().changes());
       _playbackActionsPtr = std::make_unique<ao::uimodel::PlaybackActions>(_runtimePtr->playback(), [] {});
 
       ao::winui::layout::registerTrackComponents(*_registryPtr,
@@ -1400,11 +1401,11 @@ namespace
                     "the table scenarios left the synthetic column-sort presentation id");
       checkPresentationButton("Column sort");
 
-      auto const albumsRes = _trackListPtr->selectPresentation("albums");
+      auto const albumsRes = _runtimePtr->workspace().setActivePresentation("albums", {.recordHistory = false});
 
       if (!albumsRes)
       {
-        failSetup(std::format("selectPresentation(albums) failed: {}", albumsRes.error().message));
+        failSetup(std::format("the Albums baseline failed: {}", albumsRes.error().message));
         return;
       }
 
@@ -1481,11 +1482,11 @@ namespace
       _report.check(_listPresentationsPtr->snapshot() == _presentationsBefore,
                     "the raw service transition changed no per-list presentation preference");
 
-      auto const namedRes = _trackListPtr->selectPresentation("albums");
+      auto const namedRes = _runtimePtr->workspace().setActivePresentation("albums", {.recordHistory = false});
 
       if (!namedRes)
       {
-        failSetup(std::format("the closing selectPresentation(albums) failed: {}", namedRes.error().message));
+        failSetup(std::format("the closing Albums baseline failed: {}", namedRes.error().message));
         return;
       }
 
@@ -1663,8 +1664,7 @@ namespace
           return;
         }
 
-        // The original history point predates the raw Albums selection. Restore
-        // that named presentation without introducing another history entry.
+        // Set up the named baseline for the next scenario without recording history.
         auto const albumsRes = _runtimePtr->workspace().setActivePresentation("albums", {.recordHistory = false});
 
         if (!albumsRes)
@@ -2065,7 +2065,6 @@ namespace
         {},
         {},
         {},
-        {},
         std::move(*catalogRes),
         ao::winui::layout::PaneSettingsAccess{},
         _shellStateChanged,
@@ -2440,13 +2439,13 @@ namespace
         _transportButtonPtr.reset();
         _presentationButtonPtr.reset();
         _playbackActionsPtr.reset();
-        _listPresentationsPtr.reset();
-        _presentationCatalogPtr.reset();
         _themeCoordinatorPtr.reset();
 
         _registryPtr.reset();
         _schemaPtr.reset();
         _trackListPtr.reset();
+        _listPresentationsPtr.reset();
+        _presentationCatalogPtr.reset();
         _columnLayoutsPtr.reset();
         _resources = nullptr;
 
@@ -2539,13 +2538,13 @@ namespace
     // AppRuntime owns this borrow through executor closing and runtime destruction.
     ao::winui::DispatcherQueueExecutor* _executor = nullptr;
     std::unique_ptr<ao::uimodel::TrackColumnLayouts> _columnLayoutsPtr;
+    std::unique_ptr<ao::uimodel::TrackPresentationCatalog> _presentationCatalogPtr;
+    std::unique_ptr<ao::uimodel::ListPresentations> _listPresentationsPtr;
     std::unique_ptr<ao::winui::TrackListController> _trackListPtr;
     ao::async::Subscription _selectionSub;
     std::vector<std::vector<TrackId>> _selectionPublications;
     std::vector<std::string> _statusMessages;
 
-    std::unique_ptr<ao::uimodel::TrackPresentationCatalog> _presentationCatalogPtr;
-    std::unique_ptr<ao::uimodel::ListPresentations> _listPresentationsPtr;
     std::unique_ptr<ao::winui::ThemeCoordinator> _themeCoordinatorPtr;
     std::unique_ptr<ao::uimodel::PlaybackActions> _playbackActionsPtr;
     ao::async::Signal<ao::winui::ShellState> _shellStateChanged;

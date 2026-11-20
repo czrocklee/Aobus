@@ -113,8 +113,12 @@ namespace winrt::Aobus::implementation
     // and every dialog the window opens, which is why the window owns them
     // rather than borrowing them from a layer above or below it.
     _fullscreenSoulWindowPtr = std::make_unique<ao::winui::FullscreenSoulWindow>(runtime.playback());
-    _trackListPtr = std::make_unique<ao::winui::TrackListController>(
-      runtime.views(), runtime.workspace(), runtime.library(), session.columnLayouts(), session.textCatalog());
+    _trackListPtr = std::make_unique<ao::winui::TrackListController>(runtime.views(),
+                                                                     runtime.workspace(),
+                                                                     runtime.library(),
+                                                                     session.columnLayouts(),
+                                                                     session.listPresentations(),
+                                                                     session.textCatalog());
     _themePtr = std::make_unique<ao::winui::ThemeCoordinator>(session.stateRoot() / "windows-theme.yaml");
     _groupCoverPresentersPtr =
       std::make_unique<ao::winui::GroupCoverPresenters>(runtime.async(), runtime.resourceBytes(), *_themePtr);
@@ -222,7 +226,6 @@ namespace winrt::Aobus::implementation
     // Built before the first resolved policy, which is what asks it for a shell.
     createShellBuilder();
     updateSoulWindowActivity();
-    reconcileLibrary();
     ao::winui::restoreWindowPlacement(*this, session.settings().window);
     tryApplyShellState(RootGrid().ActualWidth());
 

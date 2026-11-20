@@ -193,23 +193,10 @@ namespace ao::appkit
       listPresentationsPtr->restore(std::move(preferences), knownListIds);
     }
 
-    // A virtual id, or a saved id whose List is gone, recommends as All Tracks.
     rt::TrackPresentationSpec presentationForList(ListId const listId)
     {
       AO_INVARIANT(optRuntime);
-      auto context = uimodel::ListPresentationContext{.listId = listId};
-
-      if (!rt::isVirtualListId(listId))
-      {
-        if (auto const optNode = optRuntime->library().snapshot().listNode(listId); optNode)
-        {
-          context.sourceKind = uimodel::ListPresentationSourceKind::SavedList;
-          context.listExpression = optNode->expression;
-          return listPresentationsPtr->presentationForList(context);
-        }
-      }
-
-      return listPresentationsPtr->presentationForList(context);
+      return listPresentationsPtr->presentationForList(listId, optRuntime->library());
     }
 
     // Storage stays alive through runtime shutdown and the final executor drain.

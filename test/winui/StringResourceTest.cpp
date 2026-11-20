@@ -345,7 +345,7 @@ namespace ao::winui::test
   TEST_CASE("StringResource - native formatting uses only governed positional resources")
   {
     auto const references = frontendReferences();
-    auto governed = std::set<std::string_view>{"StartupHresultDetailFormat", "UnknownPresentationFormat"};
+    auto governed = std::set<std::string_view>{"StartupHresultDetailFormat"};
 
     for (auto const& positional : i18n::detail::kWinUiPositionalResources)
     {

@@ -30,7 +30,9 @@
 #include <ao/rt/library/LibraryDurability.h>
 #include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
+#include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/winui/Theme.h>
 #include <ao/winui/layout/LayoutSchema.h>
@@ -292,10 +294,15 @@ namespace
       // track controller exists only to satisfy that public registration and
       // is torn down after the strip retires.
       _columnLayoutsPtr = std::make_unique<ao::uimodel::TrackColumnLayouts>(_runtimePtr->library().changes());
+      _presentationCatalogPtr =
+        std::make_unique<ao::uimodel::TrackPresentationCatalog>(_runtimePtr->workspace(), *controllerCatalogRes);
+      _listPresentationsPtr =
+        std::make_unique<ao::uimodel::ListPresentations>(*_presentationCatalogPtr, _runtimePtr->library().changes());
       _trackListPtr = std::make_unique<ao::winui::TrackListController>(_runtimePtr->views(),
                                                                        _runtimePtr->workspace(),
                                                                        _runtimePtr->library(),
                                                                        *_columnLayoutsPtr,
+                                                                       *_listPresentationsPtr,
                                                                        std::move(*controllerCatalogRes));
 
       _schemaPtr = std::make_unique<ao::uimodel::LayoutSchema>(ao::winui::layoutSchema());
@@ -799,6 +806,8 @@ namespace
       // The strip retires before every collaborator it borrows.
       _componentPtr.reset();
       _trackListPtr.reset();
+      _listPresentationsPtr.reset();
+      _presentationCatalogPtr.reset();
       _columnLayoutsPtr.reset();
 
       if (_executor != nullptr)
@@ -874,6 +883,8 @@ namespace
     // Borrowed from the runtime after it reaches final storage.
     ao::winui::DispatcherQueueExecutor* _executor = nullptr;
     std::unique_ptr<ao::uimodel::TrackColumnLayouts> _columnLayoutsPtr;
+    std::unique_ptr<ao::uimodel::TrackPresentationCatalog> _presentationCatalogPtr;
+    std::unique_ptr<ao::uimodel::ListPresentations> _listPresentationsPtr;
     std::unique_ptr<ao::winui::TrackListController> _trackListPtr;
     std::unique_ptr<ao::uimodel::LayoutSchema> _schemaPtr;
     ao::winui::layout::ActionRegistry _actions;

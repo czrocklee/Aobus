@@ -103,7 +103,6 @@ namespace winrt::Aobus::implementation
     void shutdown() noexcept;
     /// Stand up the document-built shell and hand it the frame's own commands.
     void createShellBuilder();
-    void reconcileLibrary();
     void unbindPlayback() noexcept;
     void bindPlayback();
     bool tryApplyShellState(double width, std::optional<ao::winui::ShellMode> optCandidateMode = std::nullopt);

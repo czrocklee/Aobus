@@ -18,6 +18,7 @@
 
 namespace ao::rt
 {
+  class Library;
   class LibraryChanges;
 }
 
@@ -37,6 +38,8 @@ namespace ao::uimodel
     ListPresentationSourceKind sourceKind = ListPresentationSourceKind::AllTracks;
     std::string_view listExpression{};
   };
+
+  bool isTrackPresentationEligibleForList(ListId listId, std::string_view presentationId) noexcept;
 
   rt::TrackPresentationSpec recommendListPresentation(ListPresentationContext const& context,
                                                       std::span<rt::TrackPresentationPreset const> builtinPresets,
@@ -89,6 +92,10 @@ namespace ao::uimodel
     void clearPresentationForList(ListId listId);
 
     rt::TrackPresentationSpec presentationForList(ListPresentationContext const& context) const;
+
+    /// Recommends from the list's local expression, or as All Tracks for a virtual or missing list.
+    /// An available, eligible pin for the requested ID still takes precedence.
+    rt::TrackPresentationSpec presentationForList(ListId listId, rt::Library const& library) const;
 
     async::Signal<ListId>& signalChanged() noexcept { return *_changedPtr; }
 

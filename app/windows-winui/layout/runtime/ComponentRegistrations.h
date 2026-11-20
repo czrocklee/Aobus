@@ -8,7 +8,6 @@
 #include <ao/async/Subscription.h>
 #include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/Credits.h>
-#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/uimodel/library/list/ListOrder.h>
 #include <ao/uimodel/library/list/ListTreeProjection.h>
@@ -18,7 +17,6 @@
 #include <bitset>
 #include <filesystem>
 #include <functional>
-#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -86,7 +84,6 @@ namespace ao::winui::layout
     rt::WorkspaceService& workspace,
     std::function<uimodel::ListTreeProjection()> listTreeProjection,
     std::function<async::Subscription(compat::MoveOnlyFunction<void()>)> subscribeListTreeChanged,
-    std::function<std::optional<rt::TrackPresentationSpec>(ListId)> preferredPresentation,
     std::function<void(ListId, std::string)> createList,
     std::function<void(ListId)> editList,
     std::function<void(ListId, bool)> deleteList,

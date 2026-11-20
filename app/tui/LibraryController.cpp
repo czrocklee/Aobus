@@ -1318,22 +1318,7 @@ namespace ao::tui
 
   rt::TrackPresentationSpec LibraryController::presentationForList(ListId const listId) const
   {
-    auto context = uimodel::ListPresentationContext{
-      .listId = listId,
-      .sourceKind = uimodel::ListPresentationSourceKind::AllTracks,
-    };
-
-    if (!rt::isVirtualListId(listId))
-    {
-      if (auto const optNode = _library.snapshot().listNode(listId); optNode)
-      {
-        context.sourceKind = uimodel::ListPresentationSourceKind::SavedList;
-        context.listExpression = optNode->expression;
-        return _listPresentations.presentationForList(context);
-      }
-    }
-
-    return _listPresentations.presentationForList(context);
+    return _listPresentations.presentationForList(listId, _library);
   }
 
   Result<> LibraryController::navigateToList(ListId const listId)

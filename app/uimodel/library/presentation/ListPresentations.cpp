@@ -5,9 +5,13 @@
 
 #include "RetainKnownLists.h"
 #include <ao/CoreIds.h>
+#include <ao/rt/ListNode.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackPresentation.h>
+#include <ao/rt/VirtualListIds.h>
+#include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 
 #include <map>
@@ -21,6 +25,11 @@
 
 namespace ao::uimodel
 {
+  bool isTrackPresentationEligibleForList(ListId const listId, std::string_view const presentationId) noexcept
+  {
+    return listId != rt::kAllTracksListId || presentationId != rt::kListOrderTrackPresentationId;
+  }
+
   ListPresentations::ListPresentations(TrackPresentationCatalog& catalog, rt::LibraryChanges const& changes)
     : _catalog{catalog}
   {
@@ -124,7 +133,8 @@ namespace ao::uimodel
 
   rt::TrackPresentationSpec ListPresentations::presentationForList(ListPresentationContext const& context) const
   {
-    if (auto const optId = presentationIdForList(context.listId); optId)
+    if (auto const optId = presentationIdForList(context.listId);
+        optId && isTrackPresentationEligibleForList(context.listId, *optId))
     {
       if (auto const optSpec = _catalog.specForId(*optId); optSpec)
       {
@@ -136,5 +146,23 @@ namespace ao::uimodel
     }
 
     return recommendListPresentation(context, _catalog.builtinPresets(), _catalog.customPresentations());
+  }
+
+  rt::TrackPresentationSpec ListPresentations::presentationForList(ListId const listId,
+                                                                   rt::Library const& library) const
+  {
+    if (!rt::isVirtualListId(listId))
+    {
+      if (auto const optNode = library.snapshot().listNode(listId); optNode)
+      {
+        return presentationForList({
+          .listId = listId,
+          .sourceKind = ListPresentationSourceKind::SavedList,
+          .listExpression = optNode->expression,
+        });
+      }
+    }
+
+    return presentationForList({.listId = listId});
   }
 } // namespace ao::uimodel

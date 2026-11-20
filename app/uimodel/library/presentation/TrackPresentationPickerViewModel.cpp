@@ -8,7 +8,6 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
-#include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/uimodel/library/presentation/ListPresentations.h>
@@ -26,7 +25,7 @@ namespace ao::uimodel
                                                             ListId const listId,
                                                             std::string_view const presentationId)
   {
-    if (listId == rt::kAllTracksListId && presentationId == rt::kListOrderTrackPresentationId)
+    if (!isTrackPresentationEligibleForList(listId, presentationId))
     {
       return {
         .enabled = false,
@@ -147,7 +146,7 @@ namespace ao::uimodel
       return {};
     }
 
-    if (!trackPresentationEligibility(_textCatalog, foundStateRes->listId, presentationId).enabled)
+    if (!isTrackPresentationEligibleForList(foundStateRes->listId, presentationId))
     {
       return {};
     }

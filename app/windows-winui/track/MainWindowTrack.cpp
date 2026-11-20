@@ -9,7 +9,6 @@
 #include "platform/StringResources.h"
 #include "track/TrackListController.h"
 #include <ao/Contract.h>
-#include <ao/CoreIds.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/playback/PlaybackCommands.h>
@@ -53,23 +52,6 @@ namespace winrt::Aobus::implementation
       return fieldId;
     }
   } // namespace
-
-  void MainWindow::reconcileLibrary()
-  {
-    if (_session == nullptr || _trackListPtr == nullptr)
-    {
-      return;
-    }
-
-    if (auto const listId = _trackListPtr->activeListId(); _session->listPresentations().presentationIdForList(listId))
-    {
-      if (auto const selectedRes = _trackListPtr->selectPresentation(_session->presentationForList(listId));
-          !selectedRes)
-      {
-        updateStatus(ao::winui::formatResource("winui_presentation_failed", selectedRes.error().message));
-      }
-    }
-  }
 
   void MainWindow::revealCurrentTrack()
   {
