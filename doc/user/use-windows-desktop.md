@@ -26,8 +26,8 @@ The Windows frontend keeps its database beneath the selected music root. Network
    library stops and the replacement has a new window identity.
    Aobus opens an existing index directly.
    For a folder without an Aobus index, the new process activates the folder and
-   then runs the initial scan. If scanning fails, that folder stays open so
-   **More → Rescan Library** in Modern or **File → Rescan** in Classic can retry it.
+   then runs the initial scan. If scanning fails, the folder stays open; choose
+   **More → Rescan Library** in Modern or **File → Rescan** in Classic to retry.
 3. Use **Folders**, **Albums**, **Artists**, **Genres**, or a list below
    **Playlists** in the navigation pane. Use the presentation button above the
    table to switch between songs, albums, artists, genres, years, classical
@@ -67,7 +67,7 @@ The Windows frontend keeps its database beneath the selected music root. Network
 7. Choose **Classic Mode** to use the dense menu, tree, property, status, and GTK-compatible playback layout. Choose **Modern Mode** to return. Playback, the active library, list, and presentation continue across the switch.
 8. In Modern mode, click Soul to play or pause. In Classic mode, click Soul to choose an output device.
    In either mode, right-click Soul for the system menu, hold it for full-screen Soul, or hover it to inspect the audio pipeline. See [interpreting playback quality](play-music.md#inspect-playback-quality) to distinguish source fidelity, pipeline changes, and incomplete evidence.
-9. Choose **More → Rescan Library** in Modern or **File → Rescan** in Classic after files change. A failed scan leaves the active library open and retryable. Another Rescan while one is active starts no new scan; if you switch to a different library, the closing process requests cancellation and waits for its work to settle.
+9. After files change, choose **More → Rescan Library** in Modern or **File → Rescan** in Classic. Wait until the command is available before requesting another scan; a second request isn't queued. If you switch libraries instead, the closing process requests cancellation and waits for its work to finish.
 10. To back up portable library data, choose **More → Export Library Data...** in Modern mode or **File → Export Library Data...** in Classic mode, select Delta, Metadata, Full, or Lists only, and save a `.yaml` file.
     To import one, choose **Import Library Data...** from the same menu. Select **Merge (keep records outside the backup)** or **Restore (replace the backup scope after preview)**, choose **Next**, then select the backup file.
     The restore preview shows the backup version, mode, scope, change counts, and the number of ignored references and invalid List filters kept.
@@ -83,7 +83,7 @@ The status area reports the selected library as ready, rows remain keyboard navi
 
 ## Troubleshooting
 
-- If Aobus restarts but cannot open the folder you chose, it reports **Aobus could not start:** and exits. A normal launch can reopen the previously saved library if it is still available. If only the scan fails, the folder stays open; choose **More → Rescan Library** in Modern or **File → Rescan** in Classic to retry.
+- If Aobus restarts but cannot open the folder you chose, it reports **Aobus could not start:** and exits. A normal launch can reopen the previously saved library if it is still available. A scan failure, unlike an open failure, leaves the selected folder open for retry.
 - If the root is on a network share, switching between a mapped drive letter and UNC spelling does not make it a supported database location. Use local storage; a remote desktop connection to Windows does not itself make that host's local disk a network filesystem.
 - If theme reload fails, correct the reported field, type, or color. The last valid theme remains visible. Removing the file and choosing **Reload Theme** restores the Windows appearance.
 - If the library changes while **Properties** is open, choose **Reload**, then **Discard Changes**, or close and reopen **Properties**. If you see **Library is busy. Try again.**, the dialog keeps your draft so you can retry.

@@ -12,6 +12,8 @@
 #include "app/WindowState.h"
 #include "i18n/GtkText.h"
 #include "list/ListNavigationController.h"
+#include "portal/ImportExportCoordinator.h"
+#include "portal/LibraryImportExportWorkflow.h"
 #include "runtime/PlaybackSessionState.h"
 #include "runtime/PlaybackSessionYamlSchema.h"
 #include "test/MessageCatalogTestSupport.h"
@@ -53,6 +55,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
+#include <giomm/action.h>
 #include <giomm/actiongroup.h>
 #include <giomm/actionmap.h>
 #include <glibmm/ustring.h>
@@ -119,6 +122,58 @@ namespace ao::gtk::test
     CHECK(actionMap->lookup_action("list-edit") != nullptr);
     CHECK(actionMap->lookup_action("list-delete") != nullptr);
     CHECK(actionMap->lookup_action("list-delete-subtree") != nullptr);
+  }
+
+  TEST_CASE("MainWindow - scan action stays disabled until its workflow completes")
+  {
+    [[maybe_unused]] auto const appPtr = ensureRegisteredGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    auto configStorePtr = std::make_shared<AppConfigStore>(fixture.tempDir().path() / "app_config.yaml");
+    auto window = MainWindow{runtime, configStorePtr, nullptr, ao::test::englishMessageCatalog()};
+    auto const scanActionPtr = window.lookup_action("scan-library");
+    REQUIRE(scanActionPtr);
+    REQUIRE(scanActionPtr->get_enabled());
+
+    auto expectedMessage = std::string_view{};
+    auto expectedSeverity = rt::NotificationSeverity::Info;
+    auto expectedLifetime = rt::NotificationLifetimeKind::Transient;
+    bool disabledAtReport = false;
+    auto notificationSub = runtime.notifications().onFeedUpdated(
+      [&](rt::NotificationFeedUpdate const& update)
+      {
+        if (update.mutationKind == rt::NotificationFeedMutationKind::Posted)
+        {
+          auto const& entry = update.feedPtr->entries.back();
+
+          if (auto const* const message = std::get_if<std::string>(&entry.message);
+              entry.severity == expectedSeverity && entry.lifetime.kind() == expectedLifetime && message != nullptr &&
+              message->contains(expectedMessage))
+          {
+            disabledAtReport = !scanActionPtr->get_enabled();
+          }
+        }
+      });
+
+    SECTION("bootstrap keeps the action disabled until indexing reports its result")
+    {
+      expectedMessage = "Audio identity indexing complete";
+      audio::test::installAudioFixture(runtime.musicRoot(), "basic_metadata.flac", "song.flac");
+      window.importExportCoordinator().scanLibrary(portal::ScanRequestMode::FastBootstrap);
+    }
+
+    SECTION("a genuine scan failure is still reported before re-enabling the action")
+    {
+      expectedMessage = "Library root path does not exist";
+      expectedSeverity = rt::NotificationSeverity::Error;
+      expectedLifetime = rt::NotificationLifetimeKind::History;
+      std::filesystem::rename(runtime.musicRoot(), fixture.tempDir().path() / "unavailable-music");
+      scanActionPtr->activate();
+    }
+
+    CHECK_FALSE(scanActionPtr->get_enabled());
+    REQUIRE(tryPumpGtkEventsUntil([&scanActionPtr] { return scanActionPtr->get_enabled(); }));
+    CHECK(disabledAtReport);
   }
 
   TEST_CASE("MainWindow - destruction unexports window actions before retained handlers can run")

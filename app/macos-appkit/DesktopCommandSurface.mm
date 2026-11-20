@@ -702,6 +702,10 @@ namespace
       {
         enabled = static_cast<BOOL>(_window.attachedSheet == nil);
       }
+      else if (action == @selector(rescan:))
+      {
+        enabled = static_cast<BOOL>(!_sessionPtr->state().scanning);
+      }
       else if (action == @selector(transport:))
       {
         enabled = static_cast<BOOL>(_sessionPtr->state().transport.at(static_cast<std::size_t>(item.tag)).enabled);

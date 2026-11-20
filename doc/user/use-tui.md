@@ -59,7 +59,7 @@ You may type commands with or without the leading colon. Command names are case-
 
 Useful aliases include `:lists`, `:detail`, `:quality`, `:output`, `:views`, `:notifications`, `:settings`, `:edit`, `:tags`, `:current`, `:back`, `:forward`, and `:quit`. See the [TUI command reference](../reference/tui/command.md) for the complete aliases, keys, and fixed input protocol.
 
-`:scan` starts an eager scan: it requests audio identification during the scan rather than deferring it. If a scan is already active, another request does not start duplicate work. `:scan cancel` requests cooperative cancellation; wait for its notice before starting another scan.
+`:scan` starts an eager scan: it requests audio identification during the scan rather than deferring it. `:scan cancel` asks the scan to stop. There is no separate notice when cancellation finishes. If `:scan` reports that a scan is running or cancellation is in progress, no restart is queued. Run `:scan` again after the current scan stops.
 
 ## Select and edit tracks
 

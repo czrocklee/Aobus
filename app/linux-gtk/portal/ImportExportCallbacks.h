@@ -19,10 +19,13 @@ namespace ao::gtk::portal
    */
   struct ImportExportCallbacks final
   {
+    using RequestRestoreConfirmation = std::function<void(rt::ImportReport const&, std::function<void(bool)>)>;
+
     std::function<void(std::filesystem::path const&, bool scanAfterOpen)> onOpenNewLibrary = {};
     std::function<void(std::string const&)> onTitleChanged = {};
+    std::function<void(bool active)> onScanActiveChanged = {};
     // The host must invoke this completion on the same GTK main context that
     // requested confirmation; the guarded callback accesses workflow state.
-    std::function<void(rt::ImportReport const&, std::function<void(bool)>)> requestLibraryRestoreConfirmation = {};
+    RequestRestoreConfirmation requestLibraryRestoreConfirmation = {};
   };
 } // namespace ao::gtk::portal

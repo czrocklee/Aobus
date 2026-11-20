@@ -26,6 +26,12 @@
 #include <optional>
 #include <string>
 
+namespace ao::async
+{
+  template<typename... Args>
+  class Signal;
+}
+
 namespace ao::audio
 {
   struct OutputDeviceSelection;
@@ -104,6 +110,8 @@ namespace ao::winui
     Result<> retirePlaybackSessionForLibrarySwitch();
 
     void setCallbacks(LibrarySessionCallbacks callbacks);
+    bool canRescan() const noexcept;
+    async::Signal<>& signalRescanAvailabilityChanged() noexcept;
     void rescan() noexcept;
     Result<> playTrack(rt::ViewId viewId, TrackId trackId);
 

@@ -135,7 +135,7 @@ namespace ao::tui
         _statePtr->stopSource = std::stop_source{};
         _statePtr->runtime.spawnLogged(runScanAsync(_statePtr, _statePtr->stopSource.get_token()), "TUI library scan");
         return;
-      case Phase::Running: _statePtr->postTransient(i18n::MessageId::TuiLibraryScanAlreadyRunning); return;
+      case Phase::Running: _statePtr->postTransient(i18n::MessageId::LibraryScanAlreadyRunning); return;
       case Phase::Cancelling: _statePtr->postTransient(i18n::MessageId::TuiLibraryScanCancelling); return;
       case Phase::Retired: return;
     }

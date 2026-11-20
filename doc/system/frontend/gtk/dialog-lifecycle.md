@@ -40,7 +40,7 @@ No dialog directly replaces `AppRuntime` or mutates a shell layout store outside
 - Open Library selecting the active normalized root reuses and presents the current window; selecting a different valid root requests a destructive successor-process restart.
 - The Open Library dialog does not create an additional independent main-window/library pair.
 - A new library root starts bootstrap scan after successful activation when the open policy requests it.
-- Long-running scan/import progress uses activity and notification surfaces, not a modal progress dialog.
+- Scan and import report progress through activity and notifications, not a modal dialog. The scan action is disabled from admission through settlement, including any bootstrap audio identity backfill. A second request neither starts nor queues another scan. Failure reports the error and releases the action for retry.
 - A scan, backfill, import, export, or preview coroutine captures its stable task-service input and creates one `MainContextCallbackScope`-guarded presentation or confirmation closure before suspension.
 - After awaiting the task, the coroutine invokes only that pre-created closure: it does not dereference the workflow owner, add another executor hop, or refresh committed data outside `LibraryChanges`.
 

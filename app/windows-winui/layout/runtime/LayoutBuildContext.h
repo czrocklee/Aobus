@@ -7,8 +7,10 @@
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/winui/layout/ShellState.h>
 
+#include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 
+#include <functional>
 #include <memory>
 #include <string>
 
@@ -64,5 +66,8 @@ namespace ao::winui::layout
 
     /// Where the preset's title bar, if it authored one, records itself for the frame.
     winrt::Microsoft::UI::Xaml::FrameworkElement& titleBarSlot;
+
+    /// Bind a native Rescan menu item or button to the session for this generation.
+    std::function<void(winrt::Microsoft::UI::Xaml::Controls::Control const&)> bindRescanControl{};
   };
 } // namespace ao::winui::layout

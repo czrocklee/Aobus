@@ -71,6 +71,15 @@ namespace ao::gtk::portal
 
   void LibraryImportExportWorkflow::scan(ScanRequestMode mode)
   {
+    if (_scanActive)
+    {
+      _notifications.post(rt::NotificationSeverity::Info,
+                          gtkText(_textCatalog, i18n::MessageId::LibraryScanAlreadyRunning),
+                          rt::NotificationLifetime::transient());
+      return;
+    }
+
+    setScanActive(true);
     APP_LOG_INFO("Starting library scan...");
 
     spawnUiWorkflow(_asyncRuntime,
@@ -83,15 +92,14 @@ namespace ao::gtk::portal
 
   void LibraryImportExportWorkflow::importFrom(std::filesystem::path path)
   {
-    auto callbacks = _callbacks;
     spawnUiWorkflow(
       _asyncRuntime,
       _tasks,
       *this,
       kImportExceptionContext,
-      [callbacks = std::move(callbacks), importPath = std::move(path)](
+      [requestConfirmation = _callbacks.requestLibraryRestoreConfirmation, importPath = std::move(path)](
         LibraryImportExportWorkflow* self, std::stop_token const stopToken) mutable
-      { return self->prepareImportWorkflowAsync(std::move(callbacks), std::move(importPath), stopToken); });
+      { return self->prepareImportWorkflowAsync(std::move(requestConfirmation), std::move(importPath), stopToken); });
   }
 
   void LibraryImportExportWorkflow::exportTo(std::filesystem::path path, rt::ExportMode mode)
@@ -126,10 +134,8 @@ namespace ao::gtk::portal
           _notifications.post(rt::NotificationSeverity::Warning,
                               gtkText(_textCatalog, i18n::MessageId::LibraryAudioIdentityIndexingFailed),
                               rt::NotificationLifetime::history());
-          return;
         }
-
-        if (failureCount > 0)
+        else if (failureCount > 0)
         {
           _notifications.post(rt::NotificationSeverity::Warning,
                               gtkText(_textCatalog, i18n::MessageId::LibraryAudioIdentityIndexingCompletedWithErrors),
@@ -141,6 +147,8 @@ namespace ao::gtk::portal
                               gtkText(_textCatalog, i18n::MessageId::LibraryAudioIdentityIndexingComplete),
                               rt::NotificationLifetime::transient());
         }
+
+        setScanActive(false);
       });
     auto* const jobs = &_library.jobs();
     auto res = co_await jobs->backfillAudioIdentityAsync(stopToken);
@@ -179,12 +187,13 @@ namespace ao::gtk::portal
     presentResult(std::move(res));
   }
 
-  async::Task<void> LibraryImportExportWorkflow::prepareImportWorkflowAsync(ImportExportCallbacks callbacks,
-                                                                            std::filesystem::path importPath,
-                                                                            std::stop_token const stopToken)
+  async::Task<void> LibraryImportExportWorkflow::prepareImportWorkflowAsync(
+    ImportExportCallbacks::RequestRestoreConfirmation requestConfirmation,
+    std::filesystem::path importPath,
+    std::stop_token const stopToken)
   {
     auto presentResult = _presentationCallbacks.guard(
-      [this, callbacks = std::move(callbacks)](Result<rt::LibraryImportPlan> res) mutable
+      [this, requestConfirmation = std::move(requestConfirmation)](Result<rt::LibraryImportPlan> res) mutable
       {
         if (!res)
         {
@@ -195,7 +204,7 @@ namespace ao::gtk::portal
           return;
         }
 
-        if (!callbacks.requestLibraryRestoreConfirmation)
+        if (!requestConfirmation)
         {
           auto const error =
             Error{.code = Error::Code::InvalidState, .message = "Library restore confirmation is unavailable"};
@@ -204,7 +213,6 @@ namespace ao::gtk::portal
           return;
         }
 
-        auto requestConfirmation = std::move(callbacks.requestLibraryRestoreConfirmation);
         auto const report = res->report();
         auto pendingPlanPtr = std::make_shared<std::optional<rt::LibraryImportPlan>>(std::move(*res));
         requestConfirmation(report,
@@ -277,7 +285,21 @@ namespace ao::gtk::portal
 
     if (outcome.shouldBackfillAudioIdentity)
     {
+      // The bootstrap and its indexer share one admission interval, including the handoff.
       startAudioIdentityIndexing();
+      return;
+    }
+
+    setScanActive(false);
+  }
+
+  void LibraryImportExportWorkflow::setScanActive(bool const active)
+  {
+    _scanActive = active;
+
+    if (_callbacks.onScanActiveChanged)
+    {
+      _callbacks.onScanActiveChanged(active);
     }
   }
 

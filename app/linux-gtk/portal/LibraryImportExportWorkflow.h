@@ -70,7 +70,7 @@ namespace ao::gtk::portal
   private:
     async::Task<void> scanWorkflowAsync(ScanRequestMode mode, std::stop_token stopToken);
     async::Task<void> backfillAudioIdentityWorkflowAsync(std::stop_token stopToken);
-    async::Task<void> prepareImportWorkflowAsync(ImportExportCallbacks callbacks,
+    async::Task<void> prepareImportWorkflowAsync(ImportExportCallbacks::RequestRestoreConfirmation requestConfirmation,
                                                  std::filesystem::path importPath,
                                                  std::stop_token stopToken);
     async::Task<void> applyImportWorkflowAsync(rt::LibraryImportPlan plan, std::stop_token stopToken);
@@ -79,6 +79,7 @@ namespace ao::gtk::portal
                                           rt::ExportMode mode,
                                           std::stop_token stopToken);
 
+    void setScanActive(bool active);
     void startAudioIdentityIndexing();
     void presentScanOutcome(uimodel::LibraryScanOutcome const& outcome);
 
@@ -93,6 +94,7 @@ namespace ao::gtk::portal
     ImportExportCallbacks const& _callbacks;
     i18n::MessageCatalog _textCatalog;
 
+    bool _scanActive = false;
     async::LifetimeScope _tasks;
     MainContextCallbackScope _presentationCallbacks;
   };

@@ -88,9 +88,7 @@ recorded as the startup root: that is a failed selected-root commit, as the
 [desktop library lifecycle](../../system/desktop-library-lifecycle.md#invariants)
 specifies. At startup the session posts one warning to the notification feed
 that says so, in place of the unsaved-library-switch report, and another when the `shortcuts` group in the same file is newer.
-The status line carries both as well, because the Classic shell has no activity
-surface; the [initial scan](../../system/frontend/windows-library-workflows.md#scan)
-gives it back to them.
+The status line also carries the startup warnings because the Classic shell has no activity surface. An [initial scan](../../system/frontend/windows-library-workflows.md#scan) temporarily replaces them with progress; a failed scan takes precedence on the status line, while the warnings remain in the notification feed.
 Version 0 is rejected as well,
 because no document was ever written that way; the value marks a missing or
 malformed marker, and reading it under current field semantics would dress a

@@ -14,6 +14,7 @@
 #include "layout/runtime/LayoutHost.h"
 #include "layout/runtime/MenuComposer.h"
 #include "layout/runtime/PaneSettingsAccess.h"
+#include "layout/runtime/UiSubscription.h"
 #include "layout/runtime/WindowActivityState.h"
 #include "platform/StringResourceFormat.h"
 #include "platform/StringResources.h"
@@ -67,6 +68,7 @@ namespace ao::winui::layout
   {
     using winrt::Microsoft::UI::Xaml::TextWrapping;
     using winrt::Microsoft::UI::Xaml::Thickness;
+    using winrt::Microsoft::UI::Xaml::Controls::Control;
     using winrt::Microsoft::UI::Xaml::Controls::MenuBar;
     using winrt::Microsoft::UI::Xaml::Controls::MenuBarItem;
     using winrt::Microsoft::UI::Xaml::Controls::MenuFlyout;
@@ -84,15 +86,15 @@ namespace ao::winui::layout
     }
 
     /// A menu item that runs @p command, or nothing at all when the frame offers none.
-    void appendItem(winrt::Windows::Foundation::Collections::IVector<
-                      winrt::Microsoft::UI::Xaml::Controls::MenuFlyoutItemBase> const& items,
-                    std::string_view const resourceId,
-                    std::function<void()> const& command,
-                    std::string_view const acceleratorText = {})
+    MenuFlyoutItem appendItem(winrt::Windows::Foundation::Collections::IVector<
+                                winrt::Microsoft::UI::Xaml::Controls::MenuFlyoutItemBase> const& items,
+                              std::string_view const resourceId,
+                              std::function<void()> const& command,
+                              std::string_view const acceleratorText = {})
     {
       if (!command)
       {
-        return;
+        return nullptr;
       }
 
       auto item = MenuFlyoutItem{};
@@ -106,6 +108,7 @@ namespace ao::winui::layout
       item.Click([command](winrt::Windows::Foundation::IInspectable const&,
                            winrt::Microsoft::UI::Xaml::RoutedEventArgs const&) { command(); });
       items.Append(item);
+      return item;
     }
 
     void appendSeparator(
@@ -294,12 +297,18 @@ namespace ao::winui::layout
     };
   }
 
-  MenuFlyout ShellBuilder::modernOverflowFlyout() const
+  MenuFlyout ShellBuilder::modernOverflowFlyout(LayoutBuildContext const& ctx) const
   {
     auto flyout = MenuFlyout{};
     auto const items = flyout.Items();
     appendItem(items, "winui_shell_open_library", _config.commands.openLibrary);
-    appendItem(items, "winui_shell_rescan_library", _config.commands.rescanLibrary);
+
+    if (auto const rescan = appendItem(items, "winui_shell_rescan_library", _config.commands.rescanLibrary);
+        rescan && ctx.bindRescanControl)
+    {
+      ctx.bindRescanControl(rescan);
+    }
+
     appendItem(items, "winui_shell_import_library_data", _config.commands.importLibrary);
     appendItem(items, "winui_shell_export_library_data", _config.commands.exportLibrary);
     appendSeparator(items);
@@ -319,7 +328,7 @@ namespace ao::winui::layout
     return flyout;
   }
 
-  void ShellBuilder::composeMenuBar(MenuBar const& bar) const
+  void ShellBuilder::composeMenuBar(LayoutBuildContext const& ctx, MenuBar const& bar) const
   {
     auto const appendMenu = [&bar](std::string_view const titleResourceId, auto const& fill)
     {
@@ -335,10 +344,16 @@ namespace ao::winui::layout
     };
 
     appendMenu("winui_shell_menu_file",
-               [this](auto const& items)
+               [this, &ctx](auto const& items)
                {
                  appendItem(items, "winui_shell_open_library", _config.commands.openLibrary);
-                 appendItem(items, "winui_shell_rescan", _config.commands.rescanLibrary);
+
+                 if (auto const rescan = appendItem(items, "winui_shell_rescan", _config.commands.rescanLibrary);
+                     rescan && ctx.bindRescanControl)
+                 {
+                   ctx.bindRescanControl(rescan);
+                 }
+
                  appendSeparator(items);
                  appendItem(items, "winui_shell_import_library_data", _config.commands.importLibrary);
                  appendItem(items, "winui_shell_export_library_data", _config.commands.exportLibrary);
@@ -368,11 +383,11 @@ namespace ao::winui::layout
   MenuComposer ShellBuilder::menus()
   {
     return {
-      .flyout = [this](std::string_view const menuId) -> MenuFlyout
+      .flyout = [this](LayoutBuildContext const& ctx, std::string_view const menuId) -> MenuFlyout
       {
         if (menuId == kModernOverflowMenuId)
         {
-          return modernOverflowFlyout();
+          return modernOverflowFlyout(ctx);
         }
 
         if (menuId == kNowPlayingOverflowMenuId)
@@ -382,7 +397,7 @@ namespace ao::winui::layout
 
         return MenuFlyout{nullptr};
       },
-      .composeMenuBar = [this](MenuBar const& bar) { composeMenuBar(bar); },
+      .composeMenuBar = [this](LayoutBuildContext const& ctx, MenuBar const& bar) { composeMenuBar(ctx, bar); },
     };
   }
 
@@ -412,6 +427,21 @@ namespace ao::winui::layout
           [this](audio::OutputDeviceSelection const& selection) { _session.setPreferredOutputSelection(selection); }),
         .focusedDetailPtr = generation.focusedDetailPtr,
         .titleBarSlot = generation.titleBarElement,
+        .bindRescanControl =
+          [this, &generation](Control const& control)
+        {
+          control.IsEnabled(_session.canRescan());
+          generation.rescanAvailabilitySubs.push_back(
+            subscribeUiUpdate(_session.signalRescanAvailabilityChanged(),
+                              "Rescan control",
+                              [weak = winrt::make_weak(control), &session = _session]
+                              {
+                                if (auto const live = weak.get(); live)
+                                {
+                                  live.IsEnabled(session.canRescan());
+                                }
+                              }));
+        },
       };
 
       auto builtRes = _registry.build(context, preparedRes->effectiveRoot());

@@ -64,6 +64,7 @@
 #include <ao/utility/ScopedRegistration.h>
 
 #include <gdkmm/enums.h>
+#include <giomm/simpleaction.h>
 #include <gtkmm/applicationwindow.h>
 #include <gtkmm/dialog.h>
 #include <gtkmm/eventcontroller.h>
@@ -277,6 +278,11 @@ namespace ao::gtk
         .onSaveCurrentPanelSizesAsLayoutDefaults = [this] { saveCurrentPanelSizesAsLayoutDefaults(); },
       });
     _windowActionsRegistration = _windowActionRegistryPtr->install(*this);
+    auto const scanActionPtr =
+      std::dynamic_pointer_cast<Gio::SimpleAction>(lookup_action(WindowActionRegistry::kScanLibrary));
+    AO_EXPECTS(scanActionPtr != nullptr);
+    _implPtr->importExportCoordinator.callbacks().onScanActiveChanged = [scanActionPtr](bool const active)
+    { scanActionPtr->set_enabled(!active); };
     _listNavigationActionsRegistration = _implPtr->listNavigationController.addActionsTo(*this);
     _shellLayout.attachToWindow();
 
@@ -373,6 +379,7 @@ namespace ao::gtk
     // Close window action callbacks before either their producers or the
     // inherited action map can retire. Member order provides the same fallback
     // for constructor unwinding.
+    _implPtr->importExportCoordinator.callbacks().onScanActiveChanged = {};
     _listNavigationActionsRegistration.reset();
     _windowActionsRegistration.reset();
 

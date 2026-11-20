@@ -1256,11 +1256,17 @@ namespace
 
         break;
       case Stage::SwitchWhileScanning:
-        activateMenuItem([self menuItem:@"rescan:"], @"rescan active library");
+      {
+        auto* const rescan = [self menuItem:@"rescan:"];
+        activateMenuItem(rescan, @"rescan active library while idle");
+        // The scan cannot complete on the main executor before this turn returns.
+        [rescan.menu update];
+        AO_INVARIANT(rescan.enabled == NO, "The File menu must disable Rescan while scanning");
         activateMenuItem([self successorItem], @"accept recent library switch while scan is active");
         _completed = YES;
         _stage = Stage::Complete;
         break;
+      }
       case Stage::Complete:
       case Stage::EditSuccessorForQuit:
       case Stage::JoinSuccessorQuit:
