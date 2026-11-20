@@ -36,6 +36,7 @@
 #include <memory>
 #include <optional>
 #include <source_location>
+#include <span>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -509,12 +510,19 @@ namespace ao::rt
     return iter == _implPtr->views.end() ? nullptr : &iter->second.state.presentation;
   }
 
-  std::chrono::milliseconds ViewService::selectionDuration(ViewId viewId) const
+  std::span<TrackId const> ViewService::selectedTrackIds(ViewId const viewId) const noexcept
   {
     _implPtr->ensureOnExecutor();
     auto const it = _implPtr->views.find(viewId);
+    return it == _implPtr->views.end() ? std::span<TrackId const>{}
+                                       : std::span<TrackId const>{it->second.state.selection};
+  }
 
-    if (it == _implPtr->views.end() || it->second.state.selection.empty())
+  std::chrono::milliseconds ViewService::selectionDuration(ViewId viewId) const
+  {
+    auto const selection = selectedTrackIds(viewId);
+
+    if (selection.empty())
     {
       return std::chrono::milliseconds{0};
     }
@@ -523,7 +531,7 @@ namespace ao::rt
     auto const reader = _implPtr->library.tracks().reader(transaction);
     auto totalDuration = std::chrono::milliseconds{0};
 
-    for (auto const trackId : it->second.state.selection)
+    for (auto const trackId : selection)
     {
       if (auto const optView = reader.get(trackId, library::TrackStore::Reader::LoadMode::Cold);
           optView && optView->isColdValid())

@@ -719,6 +719,7 @@ winui_probe(
         "//app/i18n:ordering",
         "//lib/audio:test_headers",
         "//lib/utility:unicode_text",
+        "//test:media_test_support",
         "@aobus_native_deps//:icu_uc",
     ],
 )

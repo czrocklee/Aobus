@@ -2,8 +2,8 @@
 // Copyright (c) 2026 Aobus Contributors
 
 // Audit the loaded shipping shells: resolved UIA names, presentation picker
-// history, list navigation, and the count-only List editor. Canary controls
-// check the naming audit itself.
+// history, list navigation, the selection summary, and the count-only List
+// editor. Canary controls check the naming audit itself.
 #include <windows.h>
 
 // Keep the Win32 macro out of the XAML projections.
@@ -16,6 +16,7 @@
 #include "platform/NamedControl.h"
 #include "platform/ResourceLanguage.h"
 #include "platform/WinRtStringResources.h"
+#include "test/media/wav/TestWav.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/LifetimeScope.h>
@@ -88,6 +89,7 @@
 #include <expected>
 #include <filesystem>
 #include <format>
+#include <fstream>
 #include <iostream>
 #include <memory>
 #include <optional>
@@ -117,7 +119,21 @@ namespace
   using Controls::Primitives::Thumb;
 
   constexpr std::size_t kProbeTrackCount = 12;
+  constexpr auto kExpectedMissing = kProbeTrackCount - 1; // Only the rescan target has a physical file.
+  constexpr std::size_t kRescanTrackIndex = 2;            // Neither named Bach landmark.
+  constexpr auto kRescanUri = "probe/selected.wav";
   constexpr auto kPreviewStatusId = L"list-editor-preview-status";
+  constexpr auto kSelectionSummaryId = L"modern-selection-info";
+  constexpr auto kSelectionDurations =
+    std::array{std::chrono::seconds{123}, std::chrono::seconds{65}, std::chrono::seconds{9}, std::chrono::seconds{0}};
+
+  struct SeededLibrary final
+  {
+    ao::ListId composerListId{};
+    ao::ListId pinnedBachId{};
+    ao::ListId previewParentId{};
+    std::array<ao::TrackId, kSelectionDurations.size()> summaryTracks{};
+  };
 
   struct ListPreviewCheck final
   {
@@ -363,14 +379,7 @@ namespace
     return nullptr;
   }
 
-  struct SeededLists final
-  {
-    ao::ListId bachId{};
-    ao::ListId pinnedBachId{};
-    ao::ListId previewParentId{};
-  };
-
-  ao::Result<SeededLists> seedLibrary(std::filesystem::path const& root)
+  ao::Result<SeededLibrary> seedLibrary(std::filesystem::path const& root)
   {
     auto const databasePath = ao::rt::LibraryPaths{root}.databasePath();
     std::filesystem::create_directories(databasePath);
@@ -390,8 +399,10 @@ namespace
 
     auto transaction = writableRes->writeTransaction();
     auto applyRes = transaction.apply(
-      [](ao::library::LibraryWrite& write) -> ao::Result<SeededLists>
+      [](ao::library::LibraryWrite& write) -> ao::Result<SeededLibrary>
       {
+        auto seed = SeededLibrary{};
+
         for (std::size_t index = 0; index < kProbeTrackCount; ++index)
         {
           constexpr auto kNamedTracks = std::array{"Audit Alpha", "Audit Beta"};
@@ -407,14 +418,25 @@ namespace
             .composer(isNamedTrack ? "Bach" : "Debussy")
             .year(isNamedTrack ? std::uint16_t{2001} : std::uint16_t{2000})
             .trackNumber(static_cast<std::uint16_t>(index + 1));
-          // Both rescans report the absent files, without playing audio or removing tracks.
-          auto const uri = std::format("probe/{}.flac", title);
+          // Only the selected fixture gets a physical file for the two rescan checks.
+          auto const uri = index == kRescanTrackIndex ? std::string{kRescanUri} : std::format("probe/{}.flac", title);
           builder.property().uri(uri);
+
+          if (index < kSelectionDurations.size())
+          {
+            builder.property().duration(kSelectionDurations.at(index));
+          }
+
           auto createRes = write.tracks().create(builder, ao::library::FileManifestBuilder::makeEmpty());
 
           if (!createRes)
           {
             return std::unexpected{createRes.error()};
+          }
+
+          if (index < seed.summaryTracks.size())
+          {
+            seed.summaryTracks.at(index) = *createRes;
           }
         }
 
@@ -444,7 +466,10 @@ namespace
           return std::unexpected{parentRes.error()};
         }
 
-        return SeededLists{.bachId = *bachRes, .pinnedBachId = *pinnedBachRes, .previewParentId = *parentRes};
+        seed.composerListId = *bachRes;
+        seed.pinnedBachId = *pinnedBachRes;
+        seed.previewParentId = *parentRes;
+        return seed;
       });
 
     if (!applyRes)
@@ -507,7 +532,7 @@ namespace
         return;
       }
 
-      _lists = *seedRes;
+      _seed = *seedRes;
       _window = winrt::make<winrt::Aobus::implementation::MainWindow>();
       auto const createSession = [&]
       {
@@ -535,7 +560,7 @@ namespace
 
         _sessionPtr = std::move(*priorRes);
         _sessionPtr->listPresentations().setPresentationIdForList(ao::rt::kAllTracksListId, "artists");
-        _sessionPtr->listPresentations().setPresentationIdForList(_lists.pinnedBachId, "technical");
+        _sessionPtr->listPresentations().setPresentationIdForList(_seed.pinnedBachId, "technical");
         auto viewRes = _sessionPtr->runtime().workspace().navigate({
           .target = ao::rt::GlobalViewKind::AllTracks,
           .optPresentation = ao::rt::NavigationPresentation{.spec = _restoredSpec},
@@ -562,6 +587,22 @@ namespace
 
       _sessionPtr = std::move(*sessionRes);
       ao::winui::test::addSilentAudioOutput(_sessionPtr->runtime());
+
+      if (!_optListPreviewLocale)
+      {
+        // Selection is not restored from storage. Supply a live zero-duration
+        // selection before binding the shipping shell, so no event can initialize its summary.
+        auto& runtime = _sessionPtr->runtime();
+        _allTracksViewId = runtime.workspace().snapshot().activeViewId;
+
+        if (!runtime.views().setSelection(_allTracksViewId, {_seed.summaryTracks.back()}))
+        {
+          fail("could not select the unknown-duration track before binding the shell");
+          finish();
+          return;
+        }
+      }
+
       implementation()->initialize(*_sessionPtr,
                                    [](std::filesystem::path) -> ao::Result<>
                                    { return ao::makeError(ao::Error::Code::NotSupported, "Audit does not restart"); });
@@ -803,6 +844,9 @@ namespace
       check(_sizingMessages != 0, "the native size-limit handler was never reached");
       check(width < ao::winui::kWideShellWidth,
             std::format("the imposed maximum did not constrain the wide request: {} DIP", width));
+      auto const summary = findVisualById<Controls::TextBlock>(_root, kSelectionSummaryId);
+      check(summary && summary.Visibility() == Visibility::Collapsed,
+            "the selection summary did not yield its space to the filter below the wide tier");
       std::cerr << std::format(
         "Window sizing canary: constrained width={} DIP; lifting past the system ceiling\n", width);
       setMaximumClientSize(_beyondSystemClient);
@@ -922,6 +966,58 @@ namespace
       afterFrame(next);
     }
 
+    void checkSelectionSummary(std::string_view const scenario, std::string_view const expected)
+    {
+      auto const summary = findVisualById<Controls::TextBlock>(_root, kSelectionSummaryId);
+
+      if (!summary || summary.Visibility() != Visibility::Visible)
+      {
+        fail(std::format("{}: shipping selection summary is missing or hidden", scenario));
+        return;
+      }
+
+      auto const observed = winrt::to_string(summary.Text());
+      check(observed == expected,
+            std::format("{}: expected selection summary '{}', observed '{}'", scenario, expected, observed));
+    }
+
+    void checkNativeSelectionSummary()
+    {
+      _stage = "Modern selection summary";
+      checkSelectionSummary("live unknown-duration selection at shell binding", "1 item selected");
+      auto const table = findVisualById<Controls::ScrollViewer>(_root, L"modern-track-table");
+      auto const rows =
+        table
+          ? findVisualIf<Controls::ListView>(
+              table, [](auto const& list) { return list.SelectionMode() == Controls::ListViewSelectionMode::Extended; })
+          : nullptr;
+      auto const alpha = rows ? findVisual<Controls::ListViewItem>(rows, L"Audit Alpha") : nullptr;
+      auto const beta = rows ? findVisual<Controls::ListViewItem>(rows, L"Audit Beta") : nullptr;
+
+      if (!alpha || !beta)
+      {
+        fail("the shipping track list did not realize both duration fixtures");
+        return;
+      }
+
+      // Choose actual native items. Their SelectionChanged handler publishes
+      // through the shipping controller; this is not physical pointer/keyboard input.
+      rows.SelectedItem(rows.ItemFromContainer(alpha));
+      check(activeState().selection == std::vector{_seed.summaryTracks.front()},
+            "the runtime did not receive the native single-row selection");
+      checkSelectionSummary("one known duration", "1 item selected (2:03)");
+      rows.SelectedItems().Append(rows.ItemFromContainer(beta));
+      auto const selected = activeState().selection;
+      check(selected.size() == 2 && std::ranges::contains(selected, _seed.summaryTracks.front()) &&
+              std::ranges::contains(selected, _seed.summaryTracks.at(1)),
+            "the runtime did not receive both native rows");
+      checkSelectionSummary("two known durations", "2 items selected (3:08)");
+      rows.SelectedItems().Clear();
+      check(activeState().selection.empty(), "the runtime did not receive the native clear");
+      checkSelectionSummary("native clear", "");
+      rows.SelectedItem(rows.ItemFromContainer(alpha));
+    }
+
     void modern()
     {
       auditShell("Modern restored tracks");
@@ -930,25 +1026,39 @@ namespace
             "binding the window replaced the exact restored view with a default or pin");
       check(_sessionPtr->listPresentations().presentationIdForList(state.listId) == "artists",
             "restoring the workspace rewrote the independent saved pin");
+      checkNativeSelectionSummary();
+      afterFrame(&WinUiAutomationProbe::selectedModern);
+    }
+
+    void selectedModern()
+    {
+      auto const summary = findVisualById<Controls::TextBlock>(_root, kSelectionSummaryId);
+      check(
+        summary && summary.ActualWidth() > 0 && !summary.IsTextTrimmed() && summary.Text() == L"1 item selected (2:03)",
+        "the wide shell did not lay out the full selection duration");
       openListEditor();
     }
 
     void openPinnedComposer()
     {
       _stage = "first sidebar visit to a pinned saved List";
+      auto const before = activeState();
+      check(before.listId == ao::rt::kAllTracksListId && before.selection == std::vector{_seed.summaryTracks.front()},
+            "closing the editor lost the All Tracks selection before navigation");
+      checkSelectionSummary("before leaving All Tracks", "1 item selected (2:03)");
       auto& runtime = _sessionPtr->runtime();
       _viewsBeforePinnedList = runtime.workspace().snapshot().openViews;
 
       if (std::ranges::any_of(_viewsBeforePinnedList,
                               [this, &runtime](ao::rt::ViewId id)
-                              { return runtime.views().trackListState(id).listId == _lists.pinnedBachId; }))
+                              { return runtime.views().trackListState(id).listId == _seed.pinnedBachId; }))
       {
         fail("Pinned Bach already has a workspace view before its first sidebar visit");
         finish();
         return;
       }
 
-      if (_sessionPtr->listPresentations().presentationIdForList(_lists.pinnedBachId) != "technical")
+      if (_sessionPtr->listPresentations().presentationIdForList(_seed.pinnedBachId) != "technical")
       {
         fail("the Technical pin was not restored for the unopened List");
         finish();
@@ -963,7 +1073,7 @@ namespace
       auto const state = activeState();
       auto const* technical = ao::rt::builtinTrackPresentationPreset("technical");
 
-      if (state.listId != _lists.pinnedBachId || !state.filterExpression.empty() ||
+      if (state.listId != _seed.pinnedBachId || !state.filterExpression.empty() ||
           std::ranges::contains(_viewsBeforePinnedList, state.id))
       {
         fail("first sidebar visit did not create a new plain view for Pinned Bach");
@@ -973,7 +1083,8 @@ namespace
 
       check(technical != nullptr && state.presentation == technical->spec,
             "the new view did not use its saved Technical pin instead of the composer recommendation");
-      check(_sessionPtr->listPresentations().presentationIdForList(_lists.pinnedBachId) == "technical",
+      checkSelectionSummary("switch from selected All Tracks to empty Pinned Bach", "");
+      check(_sessionPtr->listPresentations().presentationIdForList(_seed.pinnedBachId) == "technical",
             "first sidebar visit changed the saved pin");
       selectSidebarList(L"Bach", &WinUiAutomationProbe::composerOpened);
     }
@@ -1201,7 +1312,7 @@ namespace
 
       // Unlike the editor, the writer accepts this locally valid predicate.
       runPreviewCommand(_sessionPtr->runtime().library().commands().previewCreateListAsync(
-                          {.parentId = _lists.previewParentId, .name = "Child draft", .expression = "$year = 2000"}),
+                          {.parentId = _seed.previewParentId, .name = "Child draft", .expression = "$year = 2000"}),
                         &WinUiAutomationProbe::repairPreviewParent);
     }
 
@@ -1210,14 +1321,14 @@ namespace
       auto const snapshot = _sessionPtr->runtime().library().snapshot();
       check(snapshot.revision() == _previewRevision &&
               std::ranges::none_of(
-                snapshot.lists(), [this](auto const& row) { return row.parentId == _lists.previewParentId; }),
+                snapshot.lists(), [this](auto const& row) { return row.parentId == _seed.previewParentId; }),
             "rejected Create did not write a child");
       _stage = "committed parent filter updates child without a draft edit";
       _optPreviewStatusToken = _previewStatus.RegisterPropertyChangedCallback(
         Controls::TextBlock::TextProperty(),
         [this](auto const&, auto const&) { enqueue(&WinUiAutomationProbe::checkLiveParent); });
       runPreviewCommand(_sessionPtr->runtime().library().commands().updateListAsync(
-        {.listId = _lists.previewParentId, .name = "Preview parent", .expression = "$composer = 'Debussy'"}));
+        {.listId = _seed.previewParentId, .name = "Preview parent", .expression = "$composer = 'Debussy'"}));
     }
 
     bool hasEditorLabel(std::wstring_view expected) const
@@ -1240,7 +1351,7 @@ namespace
       _optPreviewStatusToken = _previewStatus.RegisterPropertyChangedCallback(
         Controls::TextBlock::TextProperty(),
         [this](auto const&, auto const&) { enqueue(&WinUiAutomationProbe::checkDeletedParent); });
-      runPreviewCommand(_sessionPtr->runtime().library().commands().deleteListAsync(_lists.previewParentId));
+      runPreviewCommand(_sessionPtr->runtime().library().commands().deleteListAsync(_seed.previewParentId));
     }
 
     void checkDeletedParent()
@@ -1332,7 +1443,7 @@ namespace
       _stage = "unpinned composer list opened from Modern sidebar";
       auto const state = activeState();
 
-      if (state.listId != _lists.bachId)
+      if (state.listId != _seed.composerListId)
       {
         fail("sidebar did not switch from Pinned Bach to the unpinned Bach List");
         finish();
@@ -1340,6 +1451,14 @@ namespace
       }
 
       _composerViewId = state.id;
+      checkSelectionSummary("unpinned Bach starts with an empty selection", "");
+      auto& views = _sessionPtr->runtime().views();
+      check(static_cast<bool>(views.setSelection(_allTracksViewId, {_seed.summaryTracks.back()})),
+            "could not select in the inactive All Tracks view");
+      checkSelectionSummary("inactive selection changes do not affect Bach", "");
+      check(static_cast<bool>(views.setSelection(_composerViewId, {_seed.summaryTracks.at(1)})),
+            "could not select in the active Bach view");
+      checkSelectionSummary("one known duration in Bach", "1 item selected (1:05)");
       checkComposerPreset("classical-composers", std::nullopt);
       auto const picker = findVisualById<Button>(_root, L"modern-presentation-button");
 
@@ -1377,12 +1496,12 @@ namespace
     void checkComposerState(ao::rt::TrackPresentationSpec const& expected, std::optional<std::string_view> const optPin)
     {
       auto const state = activeState();
-      check(state.id == _composerViewId && state.listId == _lists.bachId && state.presentation == expected,
+      check(state.id == _composerViewId && state.listId == _seed.composerListId && state.presentation == expected,
             std::format("expected exact '{}' on the original composer view, observed '{}' on view {}",
                         expected.id,
                         state.presentation.id,
                         state.id.raw()));
-      check(_sessionPtr->listPresentations().presentationIdForList(_lists.bachId) == optPin,
+      check(_sessionPtr->listPresentations().presentationIdForList(_seed.composerListId) == optPin,
             std::format("expected composer pin '{}'", optPin.value_or("Auto")));
     }
 
@@ -1460,6 +1579,7 @@ namespace
       auto const state = activeState();
       check(state.listId == ao::rt::kAllTracksListId && state.presentation == _restoredSpec,
             "sidebar navigation did not return to the restored All Tracks presentation");
+      checkSelectionSummary("switch to the existing All Tracks selection", "1 item selected");
       selectSidebarList(L"Bach", &WinUiAutomationProbe::composerReused);
     }
 
@@ -1467,6 +1587,7 @@ namespace
     {
       _stage = "pinned composer list reused after temporary sort";
       checkComposerState(_sortedSpec, "technical");
+      checkSelectionSummary("switch back to the existing Bach selection", "1 item selected (1:05)");
       selectSidebarList(L"All Tracks", &WinUiAutomationProbe::groupModern);
     }
 
@@ -1702,11 +1823,33 @@ namespace
       invoke(more);
     }
 
+    void writeRescanAudio(std::chrono::seconds duration)
+    {
+      auto const path = _sessionPtr->runtime().musicRoot() / kRescanUri;
+      std::filesystem::create_directories(path.parent_path());
+      constexpr std::uint32_t kSampleRate = 8000;
+      auto const samples = static_cast<std::size_t>(duration.count()) * kSampleRate;
+      auto const wav = ao::test::wav::makeWav({.channels = 1,
+                                               .sampleRate = kSampleRate,
+                                               .bitsPerSample = 16,
+                                               .audioData = std::vector<std::uint8_t>(2 * samples)});
+      auto output = std::ofstream{};
+      output.exceptions(std::ios::badbit | std::ios::failbit);
+      output.open(path, std::ios::binary | std::ios::trunc);
+      output.write(reinterpret_cast<char const*>(wav.data()), static_cast<std::streamsize>(wav.size()));
+      output.close();
+    }
+
     void moreOpened()
     {
       auditShell("Modern menu popup");
       auto const rescan = findMenuItem(_flyout.as<Controls::MenuFlyout>().Items(), L"winui_shell_rescan_library");
       check(rescan && rescan.IsEnabled(), "Modern's idle Rescan menu item must be enabled");
+      check(static_cast<bool>(_sessionPtr->runtime().views().setSelection(
+              _allTracksViewId, {_seed.summaryTracks.at(kRescanTrackIndex)})),
+            "could not establish the selected rescan target");
+      checkSelectionSummary("before the committed rescan", "1 item selected (0:09)");
+      writeRescanAudio(std::chrono::seconds{1});
       startRescan(&WinUiAutomationProbe::modernRescanFinished);
       check(rescan && !rescan.IsEnabled(), "Modern's busy Rescan menu item must be disabled");
     }
@@ -1715,6 +1858,10 @@ namespace
     {
       _stage = "Modern Rescan settled";
       checkRescanSettled();
+      auto const state = activeState();
+      check(state.id == _allTracksViewId && state.selection == std::vector{_seed.summaryTracks.at(kRescanTrackIndex)},
+            "the rescan changed the active view or selected IDs");
+      checkSelectionSummary("same selected track after rescan", "1 item selected (0:01)");
       auto const rescan = findMenuItem(_flyout.as<Controls::MenuFlyout>().Items(), L"winui_shell_rescan_library");
       check(rescan && rescan.IsEnabled(), "Modern's settled Rescan menu item must be re-enabled");
       auto classic = Controls::MenuFlyoutItem{nullptr};
@@ -1735,6 +1882,7 @@ namespace
         return;
       }
 
+      _retiredSelectionSummary = findVisualById<Controls::TextBlock>(_root, kSelectionSummaryId);
       invoke(classic);
       afterFrame(&WinUiAutomationProbe::classic);
     }
@@ -1744,6 +1892,22 @@ namespace
       check(_sessionPtr->settings().shellMode == ao::winui::ShellMode::Classic,
             "native menu did not switch the real shell to Classic");
       auditShell("Classic");
+
+      if (_retiredSelectionSummary)
+      {
+        auto const priorText = _retiredSelectionSummary.Text();
+        check(static_cast<bool>(_sessionPtr->runtime().views().setSelection(_allTracksViewId, {})),
+              "could not clear selection after retiring the Modern shell");
+        check(_retiredSelectionSummary.Text() == priorText, "retired Modern summary still observes selection");
+        check(static_cast<bool>(_sessionPtr->runtime().views().setSelection(
+                _allTracksViewId, {_seed.summaryTracks.at(kRescanTrackIndex)})),
+              "could not restore the selected rescan target in Classic");
+      }
+      else
+      {
+        fail("could not retain the Modern summary for the shell handoff check");
+      }
+
       _narrow = true;
       resizeForLayout(640, 640);
       afterFrame(&WinUiAutomationProbe::narrowClassic);
@@ -1769,7 +1933,7 @@ namespace
     {
       _scanStarts = 0;
       auto const expected = ao::i18n::requiredFormat(
-        _sessionPtr->textCatalog(), ao::i18n::MessageId::LibraryScanMissing, {{"count", kProbeTrackCount}});
+        _sessionPtr->textCatalog(), ao::i18n::MessageId::LibraryScanMissing, {{"count", kExpectedMissing}});
       auto const before = _sessionPtr->runtime().notifications().feed();
       auto const previousId = before.entries.empty() ? ao::rt::kInvalidNotificationId : before.entries.back().id;
       _rescanSub = _sessionPtr->signalRescanAvailabilityChanged().connect(
@@ -1829,6 +1993,7 @@ namespace
         _root,
         [](auto const& text) { return AutomationProperties::GetAutomationId(text) == L"classic-status-message"; });
       check(static_cast<bool>(status), "Classic status line missing");
+      writeRescanAudio(std::chrono::seconds{2});
       startRescan(&WinUiAutomationProbe::classicRescanFinished, status);
       checkClassicRescanControls(false);
     }
@@ -1837,6 +2002,11 @@ namespace
     {
       _stage = "Classic Rescan settled";
       checkRescanSettled();
+      check(_sessionPtr->runtime().views().selectionDuration(_allTracksViewId) == std::chrono::seconds{2},
+            "the second rescan did not commit the replacement duration");
+      check(_retiredSelectionSummary && _retiredSelectionSummary.Text() == L"1 item selected (0:01)",
+            "the retired Modern summary changed after a selected-track commit");
+      _retiredSelectionSummary = nullptr;
       checkClassicRescanControls(true);
       finish();
     }
@@ -1922,9 +2092,11 @@ namespace
     std::unique_ptr<ao::winui::LibrarySession> _sessionPtr;
     ao::async::Subscription _rescanSub;
     std::size_t _scanStarts = 0;
-    SeededLists _lists{};
+    SeededLibrary _seed;
     std::vector<ao::rt::ViewId> _viewsBeforePinnedList;
+    ao::rt::ViewId _allTracksViewId{};
     ao::rt::ViewId _composerViewId{};
+    Controls::TextBlock _retiredSelectionSummary{nullptr};
     ao::rt::TrackPresentationSpec const _restoredSpec{
       .id = "windows-column-sort",
       .sortBy = {{.field = ao::rt::TrackSortField::Year, .ascending = false}},

@@ -791,7 +791,6 @@ de:table {
     winui_library_quick_filter_placeholder { "Titel filtern" }
     winui_library_ready { "Bereit" }
     winui_library_rescanning { "Bibliothek wird neu gescannt..." }
-    winui_library_no_selection { "Keine Auswahl" }
     winui_track_move_column_left { "Nach links verschieben" }
     winui_track_move_column_right { "Nach rechts verschieben" }
     winui_track_resize_column { "Breite der Spalte {column} anpassen" }

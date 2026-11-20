@@ -706,7 +706,6 @@ AO_I18N_MESSAGE(WinUiLibraryNavigationPaneResize, "winui_library_navigation_pane
 AO_I18N_MESSAGE(WinUiLibraryQuickFilterPlaceholder, "winui_library_quick_filter_placeholder")
 AO_I18N_MESSAGE(WinUiLibraryReady, "winui_library_ready")
 AO_I18N_MESSAGE(WinUiLibraryRescanning, "winui_library_rescanning")
-AO_I18N_MESSAGE(WinUiLibraryNoSelection, "winui_library_no_selection")
 AO_I18N_MESSAGE(WinUiTrackMoveColumnLeft, "winui_track_move_column_left")
 AO_I18N_MESSAGE(WinUiTrackMoveColumnRight, "winui_track_move_column_right")
 AO_I18N_MESSAGE(WinUiTrackResizeColumn, "winui_track_resize_column")

@@ -16,6 +16,8 @@
 
 namespace ao::rt
 {
+  class LibraryChanges;
+  struct LibraryChangeSet;
   class ViewService;
   class WorkspaceService;
 }
@@ -24,12 +26,14 @@ namespace ao::gtk
 {
   /**
    * SelectionInfoLabel displays "N items selected" with optional total duration.
-   * It self-subscribes to ViewService selection changes.
    */
   class SelectionInfoLabel final
   {
   public:
-    SelectionInfoLabel(rt::ViewService& viewService, rt::WorkspaceService& workspace, i18n::MessageCatalog textCatalog);
+    SelectionInfoLabel(rt::ViewService& viewService,
+                       rt::WorkspaceService& workspace,
+                       rt::LibraryChanges const& changes,
+                       i18n::MessageCatalog textCatalog);
     ~SelectionInfoLabel();
 
     // Not copyable or movable
@@ -41,7 +45,7 @@ namespace ao::gtk
     Gtk::Widget& widget() { return _label; }
 
   private:
-    void refreshActiveView(rt::ViewId activeViewId);
+    void refreshActiveView(rt::ViewId activeViewId, rt::LibraryChangeSet const* changes = nullptr);
     void updateState(std::size_t count, std::optional<std::chrono::milliseconds> optTotalDuration = std::nullopt);
 
     rt::ViewService& _viewService;
@@ -51,5 +55,6 @@ namespace ao::gtk
     rt::ViewId _activeViewId{rt::kInvalidViewId};
     async::Subscription _selectionChangedSub;
     async::Subscription _workspaceChangedSub;
+    async::Subscription _libraryChangedSub;
   };
 } // namespace ao::gtk

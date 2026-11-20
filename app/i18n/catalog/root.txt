@@ -793,7 +793,6 @@ root:table {
     winui_library_quick_filter_placeholder { "Filter tracks" }
     winui_library_ready { "Ready" }
     winui_library_rescanning { "Rescanning library..." }
-    winui_library_no_selection { "No selection" }
     winui_track_move_column_left { "Move left" }
     winui_track_move_column_right { "Move right" }
     winui_track_resize_column { "Resize {column} column" }

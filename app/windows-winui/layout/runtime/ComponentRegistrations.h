@@ -34,7 +34,7 @@ namespace ao::i18n
 namespace ao::rt
 {
   class CompletionService;
-  class LibraryJobs;
+  class Library;
   class NotificationService;
   class PlaybackService;
   class ResourceByteMemoryCache;
@@ -94,7 +94,7 @@ namespace ao::winui::layout
   void registerStatusComponents(ComponentRegistry& registry,
                                 rt::ViewService& views,
                                 rt::NotificationService& notifications,
-                                rt::LibraryJobs& libraryJobs,
+                                rt::Library& library,
                                 TrackListController& trackList,
                                 i18n::MessageCatalog textCatalog,
                                 async::Signal<ShellState>& shellStateChanged,

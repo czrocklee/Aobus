@@ -3,9 +3,12 @@
 
 #pragma once
 
+#include <ao/CoreIds.h>
+
 #include <chrono>
 #include <cstddef>
 #include <optional>
+#include <span>
 #include <string>
 
 namespace ao::i18n
@@ -13,8 +16,16 @@ namespace ao::i18n
   class MessageCatalog;
 }
 
+namespace ao::rt
+{
+  struct LibraryChangeSet;
+}
+
 namespace ao::uimodel
 {
+  /// Whether this publication can change the duration of the stored selection.
+  bool shouldRefreshTrackSelectionSummary(rt::LibraryChangeSet const& changes, std::span<TrackId const> selection);
+
   /**
    * Render the selection status text shown in the status bar.
    *

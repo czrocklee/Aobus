@@ -27,7 +27,7 @@ frontend view state and no GTK or FTXUI type crosses this boundary.
 
 - Projection is synchronous and frontend-neutral.
 - Every accepted feed update is projected from its immutable snapshot and triggers at most one render callback.
-- Active library-task progress owns compact status until its status-free finished pulse.
+- The most recently updated active library task owns compact status. A finished pulse removes only that task and carries no outcome.
 - Without an active task, error notifications outrank warnings. Entries at the selected severity are grouped.
 - A newly posted info notification may use compact status only when no warning or error owns it.
 - Detail contains warnings, errors, pinned notifications, and active library-task progress.
@@ -75,10 +75,10 @@ Projection produces `Processing` compact state and one task detail row without p
 UIModel does not clamp the supplied progress fraction.
 Task and notification wording comes from the [text catalog](text-catalog.md), not from parsing progress subjects.
 
-`LibraryJobs::onProgressFinished()` clears task progress and restores the current notification projection.
+`LibraryJobs::onProgressFinished()` removes the finished task from the projection.
+If that task owned compact status, the next most recently updated active task takes over. Only when no task remains does compact status return to the eligible warnings or errors in the feed; it does not replay a history Info.
 The pulse carries no task outcome, count, or message and never synthesizes success state.
-The awaited workflow caller owns success, warning, Error, and cancellation presentation.
-If a warning or error arrived while progress was active, finishing progress makes that retained notification eligible for compact status.
+The awaited workflow caller owns success, warning, error, and cancellation presentation.
 
 ## Local compact dismissal
 
@@ -91,9 +91,9 @@ The injected clock defaults to `steady_clock::now`.
 `autoDismissCompact()` clears that temporary presentation and reprojects warning/error state; a frontend using it directly must already have waited for the timeout.
 `tryAutoDismissCompactIfDue()` performs the same transition only after the deadline and returns true only when it clears a due presentation.
 `compactAutoDismissRemaining()` exposes the remaining lifetime without changing it, clamps a due deadline to zero, and returns `nullopt` when no local deadline exists.
-Hosts that coalesce renders must schedule from this deadline, since identical final
-presentations can have different deadlines after intermediate transitions. An early
-timer callback retains a future wakeup while a local deadline remains outstanding.
+The model times the compact presentation, not the widget render or the lifetime of a feed entry. An unrelated detail update does not extend the deadline. A replacement that changes the compact presentation gets its own deadline; a replacement with identical compact state can share the existing one.
+
+Hosts schedule from the model's remaining time, not another five seconds after each render. If they coalesce renders, even an identical final presentation can have a different deadline after intermediate transitions. On delivery, a native timer must check whether the current deadline is due, rearm if it woke early and a deadline still exists, and cancel when there is no deadline or the binding is retired. Compact expiry never removes an entry from the runtime feed.
 
 Warning and error compact states have no local timeout.
 Runtime-transient info also has no local timeout because its authoritative service expiry removes it for all consumers.
@@ -121,7 +121,7 @@ They handle expected fallible work locally; an exception that escapes instead is
 - [`ActivityStatusFeedProjectionNotificationTest.cpp`](../../../test/uimodel/status/activity/ActivityStatusFeedProjectionNotificationTest.cpp) protects grouping, expiry, updates, and compact suppression.
 - [`ActivityStatusFeedProjectionDetailTest.cpp`](../../../test/uimodel/status/activity/ActivityStatusFeedProjectionDetailTest.cpp) protects detail eligibility, ordering, and local hiding.
 - [`ActivityStatusViewModelTest.cpp`](../../../test/uimodel/status/activity/ActivityStatusViewModelTest.cpp) protects rendering, deadlines, and subscriptions.
-- [`AppKitActivityExpirationScenario.mm`](../../../test/macos-appkit/AppKitActivityExpirationScenario.mm) controls the model clock and native timer delivery to protect coalesced A-B-A transitions, early wakeup rearming, and cancellation without a playback timer.
+- Frontend timer coverage complements the view-model tests: [GTK's native timeout test](../../../test/linux-gtk/status/ActivityStatusWidgetTest.cpp) controls the model clock, the [WinUI activity probe](../../../test/winui/probe/WinUiActivityStatusProbe.cpp) observes real dispatcher ticks and uses a controlled model clock to check the interval after an unrelated update, and the [AppKit expiration scenario](../../../test/macos-appkit/AppKitActivityExpirationScenario.mm) covers coalesced renders and timer retirement.
 
 ## Related documents
 

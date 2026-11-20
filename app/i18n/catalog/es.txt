@@ -791,7 +791,6 @@ es:table {
     winui_library_quick_filter_placeholder { "Filtrar pistas" }
     winui_library_ready { "Listo" }
     winui_library_rescanning { "Reescaneando biblioteca..." }
-    winui_library_no_selection { "Sin selección" }
     winui_track_move_column_left { "Mover a la izquierda" }
     winui_track_move_column_right { "Mover a la derecha" }
     winui_track_resize_column { "Ajustar el ancho de la columna {column}" }

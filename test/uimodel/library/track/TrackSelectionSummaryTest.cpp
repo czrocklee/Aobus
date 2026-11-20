@@ -4,14 +4,30 @@
 #include <ao/uimodel/library/track/TrackSelectionSummary.h>
 
 #include "test/MessageCatalogTestSupport.h"
+#include <ao/rt/library/LibraryChanges.h>
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <chrono>
 #include <optional>
 
 namespace ao::uimodel::test
 {
+  TEST_CASE("TrackSelectionSummary - only commits affecting stored IDs invalidate duration")
+  {
+    auto const selection = std::array{TrackId{7}, TrackId{2}};
+    auto const reset = rt::LibraryChangeSet{.libraryReset = true};
+    CHECK(shouldRefreshTrackSelectionSummary(reset, selection));
+    CHECK_FALSE(shouldRefreshTrackSelectionSummary(reset, {}));
+    CHECK_FALSE(shouldRefreshTrackSelectionSummary({.listsUpserted = {ListId{7}}}, selection));
+    CHECK_FALSE(
+      shouldRefreshTrackSelectionSummary({.tracksDeleted = {TrackId{5}}, .tracksMutated = {TrackId{1}}}, selection));
+    CHECK(shouldRefreshTrackSelectionSummary({.tracksInserted = {TrackId{2}}}, selection));
+    CHECK(shouldRefreshTrackSelectionSummary({.tracksDeleted = {TrackId{7}}}, selection));
+    CHECK(shouldRefreshTrackSelectionSummary({.tracksMutated = {TrackId{1}, TrackId{2}}}, selection));
+  }
+
   TEST_CASE("trackSelectionSummaryText returns count text")
   {
     auto const& textCatalog = ao::test::englishMessageCatalog();

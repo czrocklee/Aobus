@@ -791,7 +791,6 @@ zh_Hant:table {
     winui_library_quick_filter_placeholder { "篩選曲目" }
     winui_library_ready { "就緒" }
     winui_library_rescanning { "正在重新掃描音樂庫..." }
-    winui_library_no_selection { "無選取項" }
     winui_track_move_column_left { "左移" }
     winui_track_move_column_right { "右移" }
     winui_track_resize_column { "調整欄 {column} 的寬度" }

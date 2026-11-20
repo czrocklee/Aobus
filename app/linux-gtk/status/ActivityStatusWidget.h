@@ -16,9 +16,8 @@
 #include <gtkmm/progressbar.h>
 #include <gtkmm/spinner.h>
 #include <gtkmm/widget.h>
-#include <sigc++/connection.h>
+#include <sigc++/scoped_connection.h>
 
-#include <chrono>
 #include <cstdint>
 
 namespace ao::rt
@@ -56,6 +55,7 @@ namespace ao::gtk
     i18n::MessageCatalog const& textCatalog;
     rt::LibraryJobs const* libraryJobs = nullptr;
     ActivityStatusWidgetOptions options{};
+    uimodel::ActivityStatusClock clock{};
   };
 
   class ActivityStatusWidget final
@@ -83,7 +83,7 @@ namespace ao::gtk
     void renderDetail();
     void appendTaskDetail(uimodel::ActivityTaskDetail const& task);
     void appendNotificationDetail(uimodel::ActivityDetailItem const& item);
-    void startAutoDismissTimer(std::chrono::milliseconds timeout);
+    void syncAutoDismissTimer();
     void clearKindClasses();
     void handleDismissClicked();
     void handleDetailDismissClicked(rt::NotificationId id);
@@ -102,6 +102,6 @@ namespace ao::gtk
 
     i18n::MessageCatalog _textCatalog;
     uimodel::ActivityStatusViewModel _activityStatusViewModel;
-    sigc::connection _autoDismissTimer;
+    sigc::scoped_connection _autoDismissTimer;
   };
 } // namespace ao::gtk

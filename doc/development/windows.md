@@ -615,8 +615,9 @@ console. Outside the active console session, the probe fails with a diagnostic
 rather than skipping. The CI runner must provide that session; the gate does
 not log in for it.
 
-The default English run loads `MainWindow` with a disposable metadata-only
-library and private settings, without playing audio. It exercises both shells,
+The default English run loads `MainWindow` with a disposable library and
+private settings, without playing audio. It rescans a selected track to
+check the summary in the live Modern shell and after retirement. It exercises both shells,
 flat and grouped track rows, a narrowed Classic window, and the volume and
 overflow popups. It also checks the live count and filter validity in New List.
 

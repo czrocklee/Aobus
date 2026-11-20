@@ -791,7 +791,6 @@ ja:table {
     winui_library_quick_filter_placeholder { "曲をフィルター" }
     winui_library_ready { "準備完了" }
     winui_library_rescanning { "ライブラリを再スキャン中..." }
-    winui_library_no_selection { "選択なし" }
     winui_track_move_column_left { "左へ移動" }
     winui_track_move_column_right { "右へ移動" }
     winui_track_resize_column { "列 {column} の幅を調整" }

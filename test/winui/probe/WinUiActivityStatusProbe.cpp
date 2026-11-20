@@ -6,7 +6,9 @@
 // The strip's elements are found by documented structure, its dismiss chrome
 // carries the shipping automation name, and its label and status icon are
 // checked against a live window-local foreground reference across native Light
-// and Dark transitions. No physical input, audio endpoint, or user state.
+// and Dark transitions. The native dispatcher delivers compact expiry without
+// removing runtime history. A separate control checks the native timer's arm
+// with a controlled model clock. No physical input, audio endpoint, or user state.
 
 #include "XamlMetaDataProvider.h"
 #include "app/DispatcherQueueExecutor.h"
@@ -17,6 +19,7 @@
 #include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/WindowActivityState.h"
 #include "platform/ResourceLanguage.h"
+#include "status/ActivityStatusControl.h"
 #include "theme/SurfaceBrushes.h"
 #include "track/TrackListController.h"
 #include <ao/Error.h>
@@ -24,6 +27,7 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
+#include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/library/Library.h>
@@ -34,6 +38,7 @@
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
+#include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 #include <ao/winui/Theme.h>
 #include <ao/winui/layout/LayoutSchema.h>
 #include <ao/winui/layout/ShellState.h>
@@ -55,6 +60,7 @@
 #include <winrt/Windows.UI.Xaml.Interop.h>
 #include <winrt/Windows.UI.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -72,6 +78,7 @@
 namespace
 {
   using namespace winrt::Microsoft::UI::Xaml;
+  using winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer;
   using Item = winrt::Windows::Foundation::IInspectable;
   using Automation::AutomationProperties;
   using Controls::Button;
@@ -89,6 +96,42 @@ namespace
   constexpr auto kReferenceMarkup =
     std::wstring_view{L"<TextBlock xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" "
                       L"Foreground=\"{ThemeResource ButtonForeground}\" />"};
+
+  struct InfoDeadlineObservation final
+  {
+    static constexpr auto kDeadline =
+      std::chrono::steady_clock::time_point{} + ao::uimodel::kActivityStatusDefaultAutoDismissTimeout;
+
+    InfoDeadlineObservation(ao::rt::AppRuntime& runtime,
+                            DispatcherQueueTimer nativeTimer,
+                            ao::i18n::MessageCatalog textCatalog)
+      : notifications{runtime.async()}
+      , timer{std::move(nativeTimer)}
+      , control{{.root = root,
+                 .detailButton = detail,
+                 .spinner = Controls::ProgressRing{},
+                 .statusIcon = Controls::FontIcon{},
+                 .label = label,
+                 .progress = Controls::ProgressBar{},
+                 .dismissButton = Button{},
+                 .textCatalog = std::move(textCatalog),
+                 .clock = [this] { return now; },
+                 .autoDismissTimer = timer},
+                notifications,
+                runtime.library().jobs()}
+    {
+    }
+
+    Grid root{};
+    Button detail{};
+    Controls::TextBlock label{};
+    std::chrono::steady_clock::time_point now{};
+    ao::rt::NotificationService notifications;
+    ao::rt::NotificationReportKey reportKey{"probe.deadline.background"};
+    DispatcherQueueTimer timer;
+    ao::winui::ActivityStatusControl control;
+    DispatcherQueueTimer::Tick_revoker observeTick{};
+  };
 
   class WinUiActivityStatusProbeApplication
     : public ApplicationT<WinUiActivityStatusProbeApplication, Markup::IXamlMetadataProvider>
@@ -310,7 +353,7 @@ namespace
       ao::winui::layout::registerStatusComponents(*_registryPtr,
                                                   _runtimePtr->views(),
                                                   _runtimePtr->notifications(),
-                                                  _runtimePtr->library().jobs(),
+                                                  _runtimePtr->library(),
                                                   *_trackListPtr,
                                                   std::move(*statusCatalogRes),
                                                   _shellStateChanged,
@@ -652,7 +695,7 @@ namespace
       openDetails(&WinUiActivityStatusProbeApplication::warningOpened);
     }
 
-    void checkWarningContent()
+    void checkNotificationContent(std::wstring_view const message)
     {
       check(_flyout.IsOpen(), "automation Invoke opened the detail popup");
       auto const rows = _flyout.Content().as<Controls::ScrollViewer>().Content().as<Controls::StackPanel>();
@@ -664,19 +707,19 @@ namespace
 
         for (auto const& child : rows.Children().GetAt(0).as<Grid>().Children())
         {
-          if (auto const text = child.try_as<Controls::TextBlock>(); text && text.Text() == L"Probe warning")
+          if (auto const text = child.try_as<Controls::TextBlock>(); text && text.Text() == message)
           {
             ++matchingMessages;
           }
         }
 
-        check(matchingMessages == 1, "the popup renders the actual warning message");
+        check(matchingMessages == 1, "the popup renders the actual notification message");
       }
     }
 
     void warningOpened()
     {
-      checkWarningContent();
+      checkNotificationContent(L"Probe warning");
       // Collapsed idle dismiss chrome has no peer. Observe the shipping glyph
       // only after a real notification has made it visible and loaded.
       check(_dismiss.IsLoaded() && _dismiss.Visibility() == Visibility::Visible,
@@ -710,7 +753,7 @@ namespace
 
     void retainedOpened()
     {
-      checkWarningContent();
+      checkNotificationContent(L"Probe warning");
       scenario("hiding the last detail closes and disables the live popup");
       auto const rows = _flyout.Content().as<Controls::ScrollViewer>().Content().as<Controls::StackPanel>();
       auto dismissDetail = Button{nullptr};
@@ -754,22 +797,200 @@ namespace
       check(!_flyout.IsOpen(), "hiding the last detail closes the existing popup");
       check(_runtimePtr->notifications().feed().entries.size() == 2,
             "hiding a detail does not remove runtime notification history");
+      enqueue(&WinUiActivityStatusProbeApplication::startInfoDeadlineObservation);
+    }
+
+    void observeNextInfoDeadlineTick(Step next)
+    {
+      // Inspect after both the control and the probe have handled this Tick.
+      auto& observation = *_infoDeadlinePtr;
+      observation.observeTick = observation.timer.Tick(winrt::auto_revoke,
+                                                       [this, next](auto const&, auto const&)
+                                                       {
+                                                         _infoDeadlinePtr->observeTick.revoke();
+                                                         enqueue(next);
+                                                       });
+    }
+
+    void startInfoDeadlineObservation()
+    {
+      scenario("an unrelated render does not restore the full timeout for the same compact Info");
+      auto textCatalogRes = ao::i18n::MessageCatalog::create("en");
+
+      if (!textCatalogRes)
+      {
+        record(textCatalogRes.error().message);
+        finish();
+        return;
+      }
+
+      _infoDeadlinePtr = std::make_unique<InfoDeadlineObservation>(
+        *_runtimePtr, _window.DispatcherQueue().CreateTimer(), std::move(*textCatalogRes));
+      auto& observation = *_infoDeadlinePtr;
+      observation.notifications.createOrUpdate(
+        observation.reportKey, {.message = "Background started", .lifetime = ao::rt::NotificationLifetime::history()});
+      observation.notifications.post(
+        ao::rt::NotificationSeverity::Info, "Saved playlist", ao::rt::NotificationLifetime::history());
+      check(observation.label.Text() == L"Saved playlist" && !observation.detail.Flyout(),
+            "the compact Info initially has no detail action");
+      check(observation.timer.IsRunning() &&
+              observation.timer.Interval() == ao::uimodel::kActivityStatusDefaultAutoDismissTimeout,
+            "the adapter armed the native timer for the original timeout");
+
+      // Deliver a real early Tick without making a wall-clock assertion. The
+      // probe owns this dedicated timer; leave the control's handler installed.
+      observation.now = InfoDeadlineObservation::kDeadline - std::chrono::seconds{1};
+      observeNextInfoDeadlineTick(&WinUiActivityStatusProbeApplication::updateBeforeInfoDeadline);
+      observation.timer.Stop();
+      observation.timer.Interval(std::chrono::milliseconds{1});
+      observation.timer.Start();
+    }
+
+    void updateBeforeInfoDeadline()
+    {
+      auto& observation = *_infoDeadlinePtr;
+      check(observation.label.Text() == L"Saved playlist", "the early native tick did not dismiss the compact Info");
+      check(observation.timer.IsRunning() && observation.timer.Interval() == std::chrono::seconds{1},
+            "the early native tick rearmed for the remaining second");
+
+      observation.now += std::chrono::milliseconds{500};
+      observation.notifications.createOrUpdate(
+        observation.reportKey, {.message = "Background advanced", .lifetime = ao::rt::NotificationLifetime::pinned()});
+      check(observation.label.Text() == L"Saved playlist" && observation.detail.Flyout(),
+            "the keyed update reached the detail UI without replacing the compact Info");
+      auto const armedInterval = observation.timer.Interval();
+      check(observation.timer.IsRunning() &&
+              (armedInterval == std::chrono::seconds{1} || armedInterval == std::chrono::milliseconds{500}),
+            "the armed interval stayed at one second or shortened to the remainder, not the full timeout");
+
+      observeNextInfoDeadlineTick(&WinUiActivityStatusProbeApplication::checkInfoDeadlineExpired);
+      observation.now = InfoDeadlineObservation::kDeadline;
+    }
+
+    void checkInfoDeadlineExpired()
+    {
+      auto& observation = *_infoDeadlinePtr;
+      check(observation.label.Text().empty() && observation.root.Visibility() == Visibility::Collapsed &&
+              !observation.timer.IsRunning(),
+            "the next native tick dismissed the Info at its original model deadline without rearming");
+      auto const feed = observation.notifications.feed();
+      auto const retained = std::ranges::find(
+        feed.entries, ao::rt::NotificationMessage{std::string{"Saved playlist"}}, &ao::rt::NotificationEntry::message);
+      check(feed.entries.size() == 2 && retained != feed.entries.end() &&
+              retained->lifetime == ao::rt::NotificationLifetime::history(),
+            "compact expiry preserved the original retained Info in the feed");
+      _infoDeadlinePtr.reset();
+      enqueue(&WinUiActivityStatusProbeApplication::observeRetainedInfoExpiry);
+    }
+
+    void updateBackgroundInfo()
+    {
+      _runtimePtr->notifications().createOrUpdate(
+        ao::rt::NotificationReportKey{"probe.background"},
+        {.message = std::format("Background update {}", ++_backgroundUpdateCount),
+         .lifetime = ao::rt::NotificationLifetime::history()});
+    }
+
+    void observeRetainedInfoExpiry()
+    {
+      scenario("replacement history Info expires locally despite recurring unrelated updates");
+      updateBackgroundInfo();
+      checkAdmission(L"Background update 1", false);
+
+      // Give the previous Info its own timer before replacing it; keep sending
+      // unrelated updates so restarting a full timeout on every render starves.
+      _backgroundUpdateTimer = _window.DispatcherQueue().CreateTimer();
+      _backgroundUpdateTimer.Interval(std::chrono::seconds{1});
+      _backgroundUpdateTimer.IsRepeating(true);
+      _backgroundUpdateTick = _backgroundUpdateTimer.Tick(winrt::auto_revoke,
+                                                          [this](auto const&, auto const&)
+                                                          {
+                                                            if (_backgroundUpdateCount == 1)
+                                                            {
+                                                              replaceRetainedInfo();
+                                                            }
+                                                            else
+                                                            {
+                                                              updateBackgroundInfo();
+                                                            }
+                                                          });
+      _backgroundUpdateTimer.Start();
+    }
+
+    void replaceRetainedInfo()
+    {
+      // Only check a lower bound: a delayed native tick is allowed. An old
+      // tick must not dismiss the replacement before its own lifetime ends.
+      auto const earliestExpiry =
+        std::chrono::steady_clock::now() + ao::uimodel::kActivityStatusDefaultAutoDismissTimeout;
       _runtimePtr->notifications().post(
-        ao::rt::NotificationSeverity::Warning, "Probe warning", ao::rt::NotificationLifetime::history());
+        ao::rt::NotificationSeverity::Info, "Replacement history info", ao::rt::NotificationLifetime::history());
+      checkAdmission(L"Replacement history info", false);
+      _optLabelChangedToken = _label.RegisterPropertyChangedCallback(
+        Controls::TextBlock::TextProperty(),
+        [this, earliestExpiry](auto const&, auto const&)
+        {
+          if (_label.Text().empty() && !std::exchange(_infoExpiryObserved, true))
+          {
+            check(std::chrono::steady_clock::now() >= earliestExpiry,
+                  "the replacement Info was not dismissed before its own deadline");
+            enqueue(&WinUiActivityStatusProbeApplication::retainedInfoExpired);
+          }
+        });
+      updateBackgroundInfo();
+      checkAdmission(L"Replacement history info", false);
+    }
+
+    void stopRetainedInfoObservation()
+    {
+      if (_backgroundUpdateTimer)
+      {
+        _backgroundUpdateTimer.Stop();
+      }
+
+      _backgroundUpdateTick.revoke();
+
+      if (_optLabelChangedToken)
+      {
+        _label.UnregisterPropertyChangedCallback(Controls::TextBlock::TextProperty(), *_optLabelChangedToken);
+        _optLabelChangedToken.reset();
+      }
+    }
+
+    void retainedInfoExpired()
+    {
+      stopRetainedInfoObservation();
+      checkAdmission(L"Notifications", false);
+      check(_label.Text().empty() && _dismiss.Visibility() == Visibility::Collapsed,
+            "the native dispatcher cleared the compact Info and its dismiss action");
+      auto const feed = _runtimePtr->notifications().feed();
+      auto const retained = std::ranges::find(feed.entries,
+                                              ao::rt::NotificationMessage{std::string{"Replacement history info"}},
+                                              &ao::rt::NotificationEntry::message);
+      check(feed.entries.size() == 4 && retained != feed.entries.end() &&
+              retained->lifetime == ao::rt::NotificationLifetime::history(),
+            "compact expiry preserves the runtime feed and its replacement history entry");
       enqueue(&WinUiActivityStatusProbeApplication::reopenForRetirement);
     }
 
     void reopenForRetirement()
     {
       scenario("new details restore the action after the last detail was hidden");
-      checkAdmission(L"Probe warning", true);
+      _runtimePtr->notifications().post(
+        ao::rt::NotificationSeverity::Info, "Probe retirement info", ao::rt::NotificationLifetime::pinned());
+      checkAdmission(L"Probe retirement info", true);
       openDetails(&WinUiActivityStatusProbeApplication::retirementOpened);
     }
 
     void retirementOpened()
     {
-      scenario("retiring the adapter closes and detaches its popup");
-      checkWarningContent();
+      scenario("retiring the adapter with compact expiry pending closes and detaches its popup");
+      checkNotificationContent(L"Probe retirement info");
+      // Arm a fresh expiry while the already-open popup remains available
+      // through the pinned detail. Teardown need not race the popup opening.
+      _runtimePtr->notifications().post(
+        ao::rt::NotificationSeverity::Info, "Pending retirement info", ao::rt::NotificationLifetime::history());
+      checkAdmission(L"Pending retirement info", true);
       _closed = _flyout.Closed(winrt::auto_revoke,
                                [this](auto const&, auto const&)
                                {
@@ -798,6 +1019,8 @@ namespace
         _timeout.Stop();
       }
 
+      stopRetainedInfoObservation();
+      _infoDeadlinePtr.reset();
       _loaded.revoke();
       _actualThemeChanged.revoke();
       _rendering.revoke();
@@ -873,6 +1096,12 @@ namespace
     Style _donorIconStyle{nullptr};
     ResourceDictionary _resources{nullptr};
     winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer _timeout{nullptr};
+    winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer _backgroundUpdateTimer{nullptr};
+    winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer::Tick_revoker _backgroundUpdateTick{};
+    std::size_t _backgroundUpdateCount = 0;
+    std::optional<std::int64_t> _optLabelChangedToken;
+    bool _infoExpiryObserved = false;
+    std::unique_ptr<InfoDeadlineObservation> _infoDeadlinePtr;
     Window::Closed_revoker _windowClosed{};
     FrameworkElement::Loaded_revoker _loaded{};
     FrameworkElement::ActualThemeChanged_revoker _actualThemeChanged{};

@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
 #pragma push_macro("GetCurrentTime")
@@ -16,21 +17,12 @@
 
 #include <cstdint>
 #include <memory>
-#include <optional>
 #include <vector>
 
 namespace ao::rt
 {
   class LibraryJobs;
   class NotificationService;
-}
-
-namespace ao::uimodel
-{
-  class ActivityStatusViewModel;
-  struct ActivityDetailItem;
-  struct ActivityStatusViewState;
-  struct ActivityTaskDetail;
 }
 
 namespace ao::winui
@@ -46,6 +38,9 @@ namespace ao::winui
     winrt::Microsoft::UI::Xaml::Controls::Button dismissButton{nullptr};
     bool reserveIdle = false;
     i18n::MessageCatalog textCatalog;
+    uimodel::ActivityStatusClock clock{};
+    // An optional idle timer dedicated to this control on the root's dispatcher.
+    winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer autoDismissTimer{nullptr};
   };
 
   class ActivityStatusControl final
@@ -71,7 +66,7 @@ namespace ao::winui
     void appendTaskDetail(uimodel::ActivityTaskDetail const& task);
     void appendNotificationDetail(uimodel::ActivityDetailItem const& item);
     void clearDetailRows() noexcept;
-    void syncAutoDismissTimer(uimodel::ActivityCompactState const& compact);
+    void syncAutoDismissTimer();
     void cancelAutoDismissTimer() noexcept;
 
     winrt::Microsoft::UI::Xaml::Controls::Grid _root{nullptr};
@@ -89,8 +84,8 @@ namespace ao::winui
     std::vector<winrt::Microsoft::UI::Xaml::Controls::Button::Click_revoker> _detailDismissRevokers;
     i18n::MessageCatalog _textCatalog;
     std::unique_ptr<uimodel::ActivityStatusViewModel> _viewModelPtr;
-    std::optional<uimodel::ActivityCompactState> _optScheduledCompact;
     std::uint64_t _autoDismissGeneration = 0;
+    bool _autoDismissTimerArmed = false;
     bool _reserveIdle = false;
   };
 } // namespace ao::winui

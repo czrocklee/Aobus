@@ -24,8 +24,9 @@ namespace ao::gtk::layout
     public:
       SelectionInfoComponent(rt::ViewService& views,
                              rt::WorkspaceService& workspace,
+                             rt::LibraryChanges const& changes,
                              i18n::MessageCatalog const& textCatalog)
-        : _widget{views, workspace, textCatalog}
+        : _widget{views, workspace, changes, textCatalog}
       {
         _widget.widget().add_css_class("ao-selection-info-modern");
       }
@@ -40,11 +41,12 @@ namespace ao::gtk::layout
   void registerSelectionInfoComponent(ComponentRegistry& registry,
                                       rt::ViewService& views,
                                       rt::WorkspaceService& workspace,
+                                      rt::LibraryChanges const& changes,
                                       i18n::MessageCatalog const& textCatalog)
   {
     registry.registerSharedComponent(
       "status.selectionInfo",
-      [&views, &workspace, textCatalog](LayoutBuildContext const& /*ctx*/, LayoutNode const& /*node*/)
-      { return std::make_unique<SelectionInfoComponent>(views, workspace, textCatalog); });
+      [&views, &workspace, &changes, textCatalog](LayoutBuildContext const& /*ctx*/, LayoutNode const& /*node*/)
+      { return std::make_unique<SelectionInfoComponent>(views, workspace, changes, textCatalog); });
   }
 } // namespace ao::gtk::layout

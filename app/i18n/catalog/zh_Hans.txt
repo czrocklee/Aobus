@@ -792,7 +792,6 @@ zh_Hans:table {
     winui_library_quick_filter_placeholder { "筛选曲目" }
     winui_library_ready { "就绪" }
     winui_library_rescanning { "正在重新扫描音乐库..." }
-    winui_library_no_selection { "无选择项" }
     winui_track_move_column_left { "左移" }
     winui_track_move_column_right { "右移" }
     winui_track_resize_column { "调整列 {column} 的宽度" }
