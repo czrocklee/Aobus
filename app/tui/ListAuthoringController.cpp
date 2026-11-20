@@ -116,49 +116,41 @@ namespace ao::tui
                                    std::string_view const name,
                                    std::string_view const localExpression)
     {
+      auto input = uimodel::SmartListPreviewState{
+        .name = name,
+        .localExpression = localExpression,
+        .optSampleCount = 0,
+        .isAllTracks = rt::isVirtualListId(parentListId),
+      };
       auto const sourceListId = rt::resolveParentSourceId(parentListId);
-      auto sourceRes =
+      auto const sourceRes =
         sources.acquire(rt::SourceSpec{.baseListId = sourceListId, .filterExpression = std::string{localExpression}});
 
       if (!sourceRes)
       {
-        // The parent source itself is gone, so nothing about the draft can be
-        // previewed or safely written; the runtime's own wording says why.
-        auto state = uimodel::SmartListEditorViewState{};
-        state.name = std::string{name};
-        state.localExpression = std::string{localExpression};
-        state.expressionValid = false;
-        state.errorVisible = true;
-        state.errorText =
-          i18n::requiredFormat(textCatalog, MessageId::TrackFilterError, {{"diagnostic", sourceRes.error().message}});
-        return {.viewState = std::move(state), .tracks = {}};
+        input.errorMessage = sourceRes.error().message;
+        return {.viewState = uimodel::makeSmartListEditorViewState(textCatalog, input), .tracks = {}};
       }
 
       auto const& lease = *sourceRes;
       auto const optError = sources.sourceError(lease);
-      auto viewState = uimodel::makeSmartListEditorViewState(
-        textCatalog,
-        uimodel::SmartListPreviewState{.name = name,
-                                       .localExpression = localExpression,
-                                       .hasPreviewSource = true,
-                                       .hasError = optError.has_value(),
-                                       .errorMessage = optError ? optError->message : std::string{},
-                                       .matchCount = lease.source().size(),
-                                       .isAllTracks = rt::isVirtualListId(parentListId)});
-
+      input.hasPreviewSource = true;
+      input.hasError = optError.has_value();
+      input.errorMessage = optError ? std::string_view{optError->message} : std::string_view{};
+      input.matchCount = lease.source().size();
       auto tracks = std::vector<std::string>{};
 
-      if (viewState.previewVisible)
+      if (!uimodel::isSmartListLocalFilterRejected(localExpression, input.hasError))
       {
         // A transient projection samples the draft's membership in source
         // order, as the GTK preview does; the saved List then shows it in its
         // resolved presentation. Only the bounded leading rows are read.
         auto projectionPtr = views.createTransientTrackListProjection(lease, rt::TrackOrderSpec{});
         auto const snapshot = library.snapshot();
-        auto const visibleCount = std::min(projectionPtr->size(), uimodel::kSmartListPreviewLimit);
-        tracks.reserve(visibleCount);
+        auto const sampleLimit = std::min(projectionPtr->size(), uimodel::kSmartListPreviewLimit);
+        tracks.reserve(sampleLimit);
 
-        for (std::size_t index = 0; index < visibleCount; ++index)
+        for (std::size_t index = 0; index < sampleLimit; ++index)
         {
           if (auto const optRow = snapshot.trackRow(projectionPtr->trackIdAt(index)); optRow)
           {
@@ -168,7 +160,8 @@ namespace ao::tui
         }
       }
 
-      return {.viewState = std::move(viewState), .tracks = std::move(tracks)};
+      input.optSampleCount = tracks.size();
+      return {.viewState = uimodel::makeSmartListEditorViewState(textCatalog, input), .tracks = std::move(tracks)};
     }
   } // namespace
 

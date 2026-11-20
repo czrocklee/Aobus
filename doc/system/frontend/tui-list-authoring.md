@@ -31,15 +31,14 @@ Up/Down move field focus, Return advances and wraps, and only the Expression row
 `Esc` closes a clean editor at once and asks one discard question for a dirty draft; `Enter` confirms and `Esc` keeps editing.
 The header `×` follows the same `Esc` protocol, and field rows and candidates are clickable.
 
-Below the fields the editor shows the shared view state: the preview status line, the bounded list of leading matches rendered with the shared track-label formatter, the membership line, and the source's own diagnostic when the expression was rejected.
-The matches are a sample in source order, as in the GTK preview; the saved List then shows them in its resolved presentation.
-On a short terminal the sample is the part that yields: it ends in an ellipsis row, while fields, the completion popup, status, guidance, diagnostic, and footer keep their rows; when not even that row is left, the sample gives way entirely and the status line still states the match count.
+Below the fields the editor shows direct-membership guidance and a leading sample in source order, not the saved List's eventual presentation order. The status distinguishes the number of tracks sampled from the full library, parent-source, or filtered match count.
+On short terminals the sample yields rows to fields, completion, status, guidance, errors, and the footer. An ellipsis replaces the last row when the sample is clipped. Even when no sample row fits, the status still describes the computed sample and total, not the viewport.
 The inherited and effective expressions and each sampled track keep one row, ending in an ellipsis when the value is wider than the modal.
 An invalid expression hides the preview and withholds submission until it parses and evaluates again.
 
 The preview recomputes on the callback executor from a transient projection over a track source acquired for the target's parent and the draft's local expression, so status, diagnostic, and sample rows describe exactly what saving would evaluate.
 Each field edit replaces a pending generation of one 200-millisecond debounce, exactly like the Quick Filter debounce; a superseded generation never lands, and submission or closure cancels the pending one.
-When the parent source cannot be acquired, the editor reports the runtime's diagnostic and withholds submission rather than previewing or writing against a parent that is gone.
+If the parent source cannot be acquired, the editor reports an unavailable preview with the runtime diagnostic and keeps the draft open. This is neither an invalid local expression nor a valid preview with zero matches; Save is unavailable.
 
 ## Submission and outcomes
 

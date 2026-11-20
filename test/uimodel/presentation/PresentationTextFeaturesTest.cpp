@@ -11,6 +11,7 @@
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/library/LibraryTaskEvents.h>
 #include <ao/rt/projection/TrackListProjection.h>
+#include <ao/uimodel/library/list/SmartListEditing.h>
 #include <ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h>
 #include <ao/uimodel/library/presentation/TrackPresentationText.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
@@ -24,6 +25,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -352,9 +354,17 @@ namespace ao::uimodel::test
           R"(Direct membership editing via #"road-trip")");
     CHECK(smartListMembershipEditingText(catalog, false) == "Computed membership — edit tags or the expression");
     CHECK(i18n::requiredText(catalog, MessageId::SmartListExpressionNone) == "(none)");
-    CHECK(smartListPreviewStatus(catalog, true, 4, false, true) == "Showing all tracks from source: 4");
-    CHECK(smartListPreviewStatus(catalog, true, 14, true, false) == "Showing 10 of 14 matches");
-    CHECK(smartListPreviewStatus(catalog, false, 0, false, false) == "Invalid filter");
+    CHECK(smartListPreviewStatus(catalog, true, 4, 4, false, true) == "Showing all tracks from source: 4");
+    CHECK(smartListPreviewStatus(catalog, true, 14, 10, true, false) == "Preview: 10 of 14 matches");
+    CHECK(smartListPreviewStatus(catalog, true, 14, 10, true, true) == "Preview: 10 of 14 library tracks");
+    CHECK(smartListPreviewStatus(catalog, true, 14, 10, false, true) == "Preview: 10 of 14 source tracks");
+    CHECK(smartListPreviewStatus(catalog, true, 1, 0, true, false) == "Preview: 0 of 1 match");
+    CHECK(smartListPreviewStatus(catalog, true, 1, 0, true, true) == "Preview: 0 of 1 library track");
+    CHECK(smartListPreviewStatus(catalog, true, 1, 0, false, true) == "Preview: 0 of 1 source track");
+    CHECK(smartListPreviewStatus(catalog, true, 4, std::nullopt, true, false) == "Matches: 4");
+    CHECK(smartListPreviewStatus(catalog, true, 4, std::nullopt, true, true) == "Library tracks: 4");
+    CHECK(smartListPreviewStatus(catalog, true, 4, std::nullopt, false, true) == "Source tracks: 4");
+    CHECK(smartListPreviewStatus(catalog, false, 0, std::nullopt, false, false) == "Invalid filter");
     CHECK(i18n::requiredText(catalog, MessageId::SmartListUntitledTrack) == "(untitled)");
     CHECK(i18n::requiredText(catalog, MessageId::ListOrderSavedListsOnly) ==
           "Manual ordering is available for saved Lists only.");
@@ -427,7 +437,7 @@ namespace ao::uimodel::test
     CHECK(i18n::requiredFormat(catalog, MessageId::TrackCount, {{"count", 3}}) == "3 Titel");
     CHECK(trackSelectionSummary(catalog, 2, "5:00") == "2 Elemente ausgewählt (5:00)");
     CHECK(i18n::requiredText(catalog, MessageId::SmartListExpressionNone) == "(keiner)");
-    CHECK(smartListPreviewStatus(catalog, true, 4, false, true) == "Alle Titel aus der Quelle werden angezeigt: 4");
+    CHECK(smartListPreviewStatus(catalog, true, 4, 4, false, true) == "Alle Titel aus der Quelle werden angezeigt: 4");
     CHECK(i18n::requiredFormat(catalog, MessageId::ListOrderMoved, {{"count", 2}}) ==
           "2 Titel wurden in der manuellen Reihenfolge verschoben.");
     CHECK(i18n::requiredFormat(catalog, MessageId::LibraryExportFailed, {{"error", "Datenträger voll"}}) ==
@@ -450,101 +460,170 @@ namespace ao::uimodel::test
           "Se descartaron 2 posiciones guardadas ocultas.");
   }
 
-  TEST_CASE("i18n::MessageCatalog - localized previews distinguish complete and partial results")
+  TEST_CASE("i18n::MessageCatalog - localized previews reflect the sample and source availability")
   {
     struct ExpectedStatuses final
     {
       std::string_view locale;
-      std::array<std::string_view, 4> filtered;
-      std::array<std::string_view, 4> library;
-      std::array<std::string_view, 4> source;
+      std::array<std::string_view, 3> filtered;
+      std::array<std::string_view, 3> library;
+      std::array<std::string_view, 3> source;
+      std::string_view partialFiltered;
+      std::string_view partialLibrary;
+      std::string_view partialSource;
+      std::string_view emptySampleFiltered;
+      std::string_view emptySampleLibrary;
+      std::string_view emptySampleSource;
+      std::string_view countOnlyFiltered;
+      std::string_view countOnlyLibrary;
+      std::string_view countOnlySource;
+      std::string_view unavailable;
     };
 
-    static constexpr auto kCounts = std::array<std::size_t, 4>{1, 2, 10, 11};
+    static constexpr auto kCompleteCounts = std::array<std::size_t, 3>{1, 2, 10};
     static constexpr auto kExpected = std::array{
       ExpectedStatuses{
         .locale = "de-DE",
         .filtered = {"Alle Treffer werden angezeigt: 1",
                      "Alle Treffer werden angezeigt: 2",
-                     "Alle Treffer werden angezeigt: 10",
-                     "10 von 11 Treffern werden angezeigt"},
+                     "Alle Treffer werden angezeigt: 10"},
         .library = {"Alle Titel werden angezeigt: 1",
                     "Alle Titel werden angezeigt: 2",
-                    "Alle Titel werden angezeigt: 10",
-                    "Alle Titel werden angezeigt: 11"},
+                    "Alle Titel werden angezeigt: 10"},
         .source = {"Alle Titel aus der Quelle werden angezeigt: 1",
                    "Alle Titel aus der Quelle werden angezeigt: 2",
-                   "Alle Titel aus der Quelle werden angezeigt: 10",
-                   "Alle Titel aus der Quelle werden angezeigt: 11"},
+                   "Alle Titel aus der Quelle werden angezeigt: 10"},
+        .partialFiltered = "Vorschau: 3 von 11 Treffern",
+        .partialLibrary = "Vorschau: 3 von 11 Titeln aus der Bibliothek",
+        .partialSource = "Vorschau: 3 von 11 Titeln aus der Quelle",
+        .emptySampleFiltered = "Vorschau: 0 von 1 Treffer",
+        .emptySampleLibrary = "Vorschau: 0 von 1 Titel aus der Bibliothek",
+        .emptySampleSource = "Vorschau: 0 von 1 Titel aus der Quelle",
+        .countOnlyFiltered = "Treffer: 11",
+        .countOnlyLibrary = "Titel in der Bibliothek: 11",
+        .countOnlySource = "Titel aus der Quelle: 11",
+        .unavailable = "Vorschau nicht verfügbar: missing List #17",
       },
       ExpectedStatuses{
         .locale = "fr-FR",
         .filtered = {"Affichage de toutes les correspondances : 1",
                      "Affichage de toutes les correspondances : 2",
-                     "Affichage de toutes les correspondances : 10",
-                     "Affichage de 10 sur 11 correspondances"},
+                     "Affichage de toutes les correspondances : 10"},
         .library = {"Affichage de tous les morceaux : 1",
                     "Affichage de tous les morceaux : 2",
-                    "Affichage de tous les morceaux : 10",
-                    "Affichage de tous les morceaux : 11"},
+                    "Affichage de tous les morceaux : 10"},
         .source = {"Affichage de tous les morceaux de la source : 1",
                    "Affichage de tous les morceaux de la source : 2",
-                   "Affichage de tous les morceaux de la source : 10",
-                   "Affichage de tous les morceaux de la source : 11"},
+                   "Affichage de tous les morceaux de la source : 10"},
+        .partialFiltered = "Aperçu : 3 sur 11 correspondances",
+        .partialLibrary = "Aperçu : 3 sur 11 morceaux de la bibliothèque",
+        .partialSource = "Aperçu : 3 sur 11 morceaux de la source",
+        .emptySampleFiltered = "Aperçu : 0 sur 1 correspondance",
+        .emptySampleLibrary = "Aperçu : 0 sur 1 morceau de la bibliothèque",
+        .emptySampleSource = "Aperçu : 0 sur 1 morceau de la source",
+        .countOnlyFiltered = "Correspondances : 11",
+        .countOnlyLibrary = "Morceaux de la bibliothèque : 11",
+        .countOnlySource = "Morceaux de la source : 11",
+        .unavailable = "Aperçu indisponible : missing List #17",
       },
       ExpectedStatuses{
         .locale = "es-ES",
         .filtered = {"Mostrando todas las coincidencias: 1",
                      "Mostrando todas las coincidencias: 2",
-                     "Mostrando todas las coincidencias: 10",
-                     "Mostrando 10 de 11 coincidencias"},
-        .library = {"Mostrando todas las pistas: 1",
-                    "Mostrando todas las pistas: 2",
-                    "Mostrando todas las pistas: 10",
-                    "Mostrando todas las pistas: 11"},
+                     "Mostrando todas las coincidencias: 10"},
+        .library = {"Mostrando todas las pistas: 1", "Mostrando todas las pistas: 2", "Mostrando todas las pistas: 10"},
         .source = {"Mostrando todas las pistas del origen: 1",
                    "Mostrando todas las pistas del origen: 2",
-                   "Mostrando todas las pistas del origen: 10",
-                   "Mostrando todas las pistas del origen: 11"},
+                   "Mostrando todas las pistas del origen: 10"},
+        .partialFiltered = "Vista previa: 3 de 11 coincidencias",
+        .partialLibrary = "Vista previa: 3 de 11 pistas de la biblioteca",
+        .partialSource = "Vista previa: 3 de 11 pistas del origen",
+        .emptySampleFiltered = "Vista previa: 0 de 1 coincidencia",
+        .emptySampleLibrary = "Vista previa: 0 de 1 pista de la biblioteca",
+        .emptySampleSource = "Vista previa: 0 de 1 pista del origen",
+        .countOnlyFiltered = "Coincidencias: 11",
+        .countOnlyLibrary = "Pistas de la biblioteca: 11",
+        .countOnlySource = "Pistas del origen: 11",
+        .unavailable = "Vista previa no disponible: missing List #17",
       },
       ExpectedStatuses{
         .locale = "ja-JP",
-        .filtered = {"全1件の一致を表示中", "全2件の一致を表示中", "全10件の一致を表示中", "11件中10件の一致を表示中"},
-        .library = {"全1曲を表示中", "全2曲を表示中", "全10曲を表示中", "全11曲を表示中"},
-        .source = {"ソースから全1曲を表示中",
-                   "ソースから全2曲を表示中",
-                   "ソースから全10曲を表示中",
-                   "ソースから全11曲を表示中"},
+        .filtered = {"全1件の一致を表示中", "全2件の一致を表示中", "全10件の一致を表示中"},
+        .library = {"全1曲を表示中", "全2曲を表示中", "全10曲を表示中"},
+        .source = {"ソースから全1曲を表示中", "ソースから全2曲を表示中", "ソースから全10曲を表示中"},
+        .partialFiltered = "プレビュー: 一致した11件のうち3件",
+        .partialLibrary = "プレビュー: ライブラリの11曲のうち3曲",
+        .partialSource = "プレビュー: ソースの11曲のうち3曲",
+        .emptySampleFiltered = "プレビュー: 一致した1件のうち0件",
+        .emptySampleLibrary = "プレビュー: ライブラリの1曲のうち0曲",
+        .emptySampleSource = "プレビュー: ソースの1曲のうち0曲",
+        .countOnlyFiltered = "一致件数: 11",
+        .countOnlyLibrary = "ライブラリの曲数: 11",
+        .countOnlySource = "ソースの曲数: 11",
+        .unavailable = "プレビューできません: missing List #17",
       },
       ExpectedStatuses{
         .locale = "zh-CN",
-        .filtered =
-          {"显示全部 1 个匹配项", "显示全部 2 个匹配项", "显示全部 10 个匹配项", "显示 11 个匹配项中的前 10 个"},
-        .library = {"显示全部 1 首曲目", "显示全部 2 首曲目", "显示全部 10 首曲目", "显示全部 11 首曲目"},
-        .source =
-          {"从源显示全部 1 首曲目", "从源显示全部 2 首曲目", "从源显示全部 10 首曲目", "从源显示全部 11 首曲目"},
+        .filtered = {"显示全部 1 个匹配项", "显示全部 2 个匹配项", "显示全部 10 个匹配项"},
+        .library = {"显示全部 1 首曲目", "显示全部 2 首曲目", "显示全部 10 首曲目"},
+        .source = {"从源显示全部 1 首曲目", "从源显示全部 2 首曲目", "从源显示全部 10 首曲目"},
+        .partialFiltered = "预览：11 个匹配项中的 3 个",
+        .partialLibrary = "音乐库预览：11 首曲目中的 3 首",
+        .partialSource = "源列表预览：11 首曲目中的 3 首",
+        .emptySampleFiltered = "预览：1 个匹配项中的 0 个",
+        .emptySampleLibrary = "音乐库预览：1 首曲目中的 0 首",
+        .emptySampleSource = "源列表预览：1 首曲目中的 0 首",
+        .countOnlyFiltered = "匹配项数：11",
+        .countOnlyLibrary = "音乐库曲目数：11",
+        .countOnlySource = "源曲目数：11",
+        .unavailable = "无法预览：missing List #17",
       },
       ExpectedStatuses{
         .locale = "zh-TW",
-        .filtered =
-          {"顯示全部 1 個匹配項", "顯示全部 2 個匹配項", "顯示全部 10 個匹配項", "顯示 11 個匹配項中的前 10 個"},
-        .library = {"顯示全部 1 首曲目", "顯示全部 2 首曲目", "顯示全部 10 首曲目", "顯示全部 11 首曲目"},
-        .source =
-          {"從源顯示全部 1 首曲目", "從源顯示全部 2 首曲目", "從源顯示全部 10 首曲目", "從源顯示全部 11 首曲目"},
+        .filtered = {"顯示全部 1 個匹配項", "顯示全部 2 個匹配項", "顯示全部 10 個匹配項"},
+        .library = {"顯示全部 1 首曲目", "顯示全部 2 首曲目", "顯示全部 10 首曲目"},
+        .source = {"從源顯示全部 1 首曲目", "從源顯示全部 2 首曲目", "從源顯示全部 10 首曲目"},
+        .partialFiltered = "預覽：11 個匹配項中的 3 個",
+        .partialLibrary = "音樂庫預覽：11 首曲目中的 3 首",
+        .partialSource = "源列表預覽：11 首曲目中的 3 首",
+        .emptySampleFiltered = "預覽：1 個匹配項中的 0 個",
+        .emptySampleLibrary = "音樂庫預覽：1 首曲目中的 0 首",
+        .emptySampleSource = "源列表預覽：1 首曲目中的 0 首",
+        .countOnlyFiltered = "匹配項數：11",
+        .countOnlyLibrary = "音樂庫曲目數：11",
+        .countOnlySource = "源曲目數：11",
+        .unavailable = "無法預覽：missing List #17",
       },
     };
 
     for (auto const& expected : kExpected)
     {
+      INFO("locale: " << expected.locale);
       auto const catalog = ao::test::messageCatalog(expected.locale);
 
-      for (std::size_t index = 0; index < kCounts.size(); ++index)
+      for (std::size_t index = 0; index < kCompleteCounts.size(); ++index)
       {
-        INFO("locale: " << expected.locale << ", count: " << kCounts[index]);
-        CHECK(smartListPreviewStatus(catalog, true, kCounts[index], true, false) == expected.filtered[index]);
-        CHECK(smartListPreviewStatus(catalog, true, kCounts[index], true, true) == expected.library[index]);
-        CHECK(smartListPreviewStatus(catalog, true, kCounts[index], false, true) == expected.source[index]);
+        auto const count = kCompleteCounts[index];
+        INFO("count: " << count);
+        CHECK(smartListPreviewStatus(catalog, true, count, count, true, false) == expected.filtered[index]);
+        CHECK(smartListPreviewStatus(catalog, true, count, count, true, true) == expected.library[index]);
+        CHECK(smartListPreviewStatus(catalog, true, count, count, false, true) == expected.source[index]);
       }
+
+      CHECK(smartListPreviewStatus(catalog, true, 11, 3, false, false) == expected.partialFiltered);
+      CHECK(smartListPreviewStatus(catalog, true, 11, 3, true, true) == expected.partialLibrary);
+      CHECK(smartListPreviewStatus(catalog, true, 11, 3, false, true) == expected.partialSource);
+      CHECK(smartListPreviewStatus(catalog, true, 1, 0, true, false) == expected.emptySampleFiltered);
+      CHECK(smartListPreviewStatus(catalog, true, 1, 0, true, true) == expected.emptySampleLibrary);
+      CHECK(smartListPreviewStatus(catalog, true, 1, 0, false, true) == expected.emptySampleSource);
+      CHECK(smartListPreviewStatus(catalog, true, 11, std::nullopt, false, false) == expected.countOnlyFiltered);
+      CHECK(smartListPreviewStatus(catalog, true, 11, std::nullopt, true, true) == expected.countOnlyLibrary);
+      CHECK(smartListPreviewStatus(catalog, true, 11, std::nullopt, false, true) == expected.countOnlySource);
+
+      auto const viewState = makeSmartListEditorViewState(
+        catalog,
+        {.name = "Jazz", .localExpression = "#jazz", .hasPreviewSource = false, .errorMessage = "missing List #17"});
+      CHECK(viewState.errorText == expected.unavailable);
     }
   }
 

@@ -2,7 +2,8 @@
 // Copyright (c) 2026 Aobus Contributors
 
 // Audit the loaded shipping shells: resolved UIA names, presentation picker
-// history, and list navigation. Canary controls check the naming audit itself.
+// history, list navigation, and the count-only List editor. Canary controls
+// check the naming audit itself.
 #include <windows.h>
 
 // Keep the Win32 macro out of the XAML projections.
@@ -17,8 +18,11 @@
 #include "platform/WinRtStringResources.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/LifetimeScope.h>
+#include <ao/async/Runtime.h>
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
+#include <ao/async/Task.h>
 #include <ao/desktop/LibrarySwitch.h>
 #include <ao/i18n/IcuCompletionAliases.h>
 #include <ao/i18n/IcuTextOrdering.h>
@@ -33,6 +37,7 @@
 #include <ao/library/WritableMusicLibrary.h>
 #include <ao/library/WriteTransaction.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
@@ -44,7 +49,10 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/completion/CompletionAliasPolicy.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/library/LibraryPaths.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/ordering/TextOrderingPolicy.h>
 #include <ao/utility/ScopedRegistration.h>
 #include <ao/winui/DesktopSettingsYamlSchema.h>
@@ -70,6 +78,7 @@
 #include <winrt/Windows.UI.Xaml.Interop.h>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <concepts>
@@ -82,6 +91,7 @@
 #include <iostream>
 #include <memory>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -103,7 +113,25 @@ namespace
   using Controls::Flyout;
   using Controls::Grid;
   using Controls::Primitives::FlyoutBase;
+  using Controls::Primitives::Popup;
   using Controls::Primitives::Thumb;
+
+  constexpr std::size_t kProbeTrackCount = 12;
+  constexpr auto kPreviewStatusId = L"list-editor-preview-status";
+
+  struct ListPreviewCheck final
+  {
+    wchar_t const* filter;
+    std::string_view status;
+    bool canCreate;
+  };
+
+  // End with invalid input immediately after a nonzero result to catch stale preview text.
+  constexpr auto kListPreviewChecks = std::array{
+    ListPreviewCheck{.filter = L"$artist = \"No Probe Artist\"", .status = "No matches", .canCreate = true},
+    ListPreviewCheck{.filter = L"$artist = \"Audit Artist\"", .status = "Matches: 12", .canCreate = true},
+    ListPreviewCheck{.filter = L"$artist =", .status = "Invalid filter", .canCreate = false},
+  };
 
   static_assert(std::same_as<decltype(ao::winui::makeNamed<Button>(L"Name")), Button>);
   static_assert(std::same_as<decltype(ao::winui::makeNamed<Controls::Slider>(L"Name")), Controls::Slider>);
@@ -339,6 +367,7 @@ namespace
   {
     ao::ListId bachId{};
     ao::ListId pinnedBachId{};
+    ao::ListId previewParentId{};
   };
 
   ao::Result<SeededLists> seedLibrary(std::filesystem::path const& root)
@@ -363,12 +392,22 @@ namespace
     auto applyRes = transaction.apply(
       [](ao::library::LibraryWrite& write) -> ao::Result<SeededLists>
       {
-        for (auto const* title : {"Audit Alpha", "Audit Beta"})
+        for (std::size_t index = 0; index < kProbeTrackCount; ++index)
         {
+          constexpr auto kNamedTracks = std::array{"Audit Alpha", "Audit Beta"};
+          auto const isNamedTrack = index < kNamedTracks.size();
+          auto const title =
+            isNamedTrack ? std::string{kNamedTracks.at(index)} : std::format("Preview Track {}", index);
           auto builder = ao::library::TrackBuilder::makeEmpty();
-          builder.metadata().title(title).artist("Audit Artist").album("Audit Album").composer("Bach");
-          // Both rescans report these two absent files, without playing audio
-          // or removing the tracks the shell displays.
+          // Keep the two existing named landmarks first in both the flat and album views.
+          builder.metadata()
+            .title(title)
+            .artist("Audit Artist")
+            .album("Audit Album")
+            .composer(isNamedTrack ? "Bach" : "Debussy")
+            .year(isNamedTrack ? std::uint16_t{2001} : std::uint16_t{2000})
+            .trackNumber(static_cast<std::uint16_t>(index + 1));
+          // Both rescans report the absent files, without playing audio or removing tracks.
           auto const uri = std::format("probe/{}.flac", title);
           builder.property().uri(uri);
           auto createRes = write.tracks().create(builder, ao::library::FileManifestBuilder::makeEmpty());
@@ -397,7 +436,15 @@ namespace
           return std::unexpected{pinnedBachRes.error()};
         }
 
-        return SeededLists{.bachId = *bachRes, .pinnedBachId = *pinnedBachRes};
+        auto const parentRes =
+          write.lists().create(ao::library::ListBuilder::makeEmpty().name("Preview parent").filter("("));
+
+        if (!parentRes)
+        {
+          return std::unexpected{parentRes.error()};
+        }
+
+        return SeededLists{.bachId = *bachRes, .pinnedBachId = *pinnedBachRes, .previewParentId = *parentRes};
       });
 
     if (!applyRes)
@@ -417,8 +464,8 @@ namespace
   class WinUiAutomationProbe : public ApplicationT<WinUiAutomationProbe, Markup::IXamlMetadataProvider>
   {
   public:
-    explicit WinUiAutomationProbe(std::int32_t& result)
-      : _result{result}
+    WinUiAutomationProbe(std::int32_t& result, std::optional<std::string_view> const optListPreviewLocale)
+      : _result{result}, _optListPreviewLocale{optListPreviewLocale}
     {
       UnhandledException(
         [this](Item const&, UnhandledExceptionEventArgs const& args)
@@ -432,13 +479,15 @@ namespace
 
     void OnLaunched(LaunchActivatedEventArgs const& /*args*/)
     {
-      auto resourceRes = ao::winui::configureResourceLanguage("en");
-      auto catalogRes = ao::i18n::MessageCatalog::create("en");
-      auto orderingRes = ao::i18n::createIcuTextOrderingPolicy("en");
+      auto const locale = _optListPreviewLocale.value_or("en");
+      auto resourceRes = ao::winui::configureResourceLanguage(locale);
+      auto catalogRes = ao::i18n::MessageCatalog::create(locale);
+      auto orderingRes = ao::i18n::createIcuTextOrderingPolicy(locale);
 
       if (!resourceRes || !catalogRes || !orderingRes)
       {
-        fail("English localization setup failed");
+        fail(_optListPreviewLocale ? std::format("{} localization setup failed", locale)
+                                   : "English localization setup failed");
         finish();
         return;
       }
@@ -470,9 +519,11 @@ namespace
           *_aliasesPtr,
           ao::desktop::LibrarySwitchRequest{.libraryRoot = libraryRoot, .scanAfterOpen = false});
       };
-      // Save an exact, flat view distinct from both the pin and the All Tracks recommendation.
-      // Reopen through the shipping session so binding the frame must not replace this restored spec.
+
+      if (!_optListPreviewLocale)
       {
+        // Save an exact, flat view distinct from both the pin and the All Tracks recommendation.
+        // Reopen through the shipping session so binding the frame must not replace this restored spec.
         auto priorRes = createSession();
 
         if (!priorRes)
@@ -529,7 +580,8 @@ namespace
                              [this](auto const&, auto const&)
                              {
                                _loaded.revoke();
-                               afterFrame(&WinUiAutomationProbe::constrainWindow);
+                               afterFrame(_optListPreviewLocale ? &WinUiAutomationProbe::sizeListPreviewWindow
+                                                                : &WinUiAutomationProbe::constrainWindow);
                              });
       _window.Activate();
       // Activation of SMTC/playback adapters is deliberately not requested.
@@ -878,7 +930,11 @@ namespace
             "binding the window replaced the exact restored view with a default or pin");
       check(_sessionPtr->listPresentations().presentationIdForList(state.listId) == "artists",
             "restoring the workspace rewrote the independent saved pin");
+      openListEditor();
+    }
 
+    void openPinnedComposer()
+    {
       _stage = "first sidebar visit to a pinned saved List";
       auto& runtime = _sessionPtr->runtime();
       _viewsBeforePinnedList = runtime.workspace().snapshot().openViews;
@@ -920,6 +976,355 @@ namespace
       check(_sessionPtr->listPresentations().presentationIdForList(_lists.pinnedBachId) == "technical",
             "first sidebar visit changed the saved pin");
       selectSidebarList(L"Bach", &WinUiAutomationProbe::composerOpened);
+    }
+
+    winrt::hstring listEditorText(ao::i18n::MessageId const id) const
+    {
+      return winrt::to_hstring(ao::i18n::requiredText(_sessionPtr->textCatalog(), id));
+    }
+
+    void sizeListPreviewWindow()
+    {
+      _window.AppWindow().ResizeClient(clientPixels(1200, 800));
+      afterFrame(&WinUiAutomationProbe::openListEditor);
+    }
+
+    void openListEditor()
+    {
+      _stage = "open New List from the sidebar";
+      auto const pane = findVisualById<Controls::NavigationView>(_root, L"modern-navigation");
+
+      if ((_optListPreviewLocale || _liveParent) && pane && !pane.IsPaneOpen())
+      {
+        pane.IsPaneOpen(true);
+        afterFrame(&WinUiAutomationProbe::openListEditor);
+        return;
+      }
+
+      auto const parentName =
+        winrt::hstring{_optListPreviewLocale ? L"Bach" : (_liveParent ? L"Preview parent" : L"All Tracks")};
+      auto const row = pane ? findVisual<Controls::NavigationViewItem>(pane, parentName) : nullptr;
+      auto const anchor = row ? row.Content().try_as<FrameworkElement>() : nullptr;
+      _flyout = anchor ? anchor.ContextFlyout() : nullptr;
+
+      if (!_flyout)
+      {
+        fail(std::format("shipping {} context menu is missing", winrt::to_string(parentName)));
+        finish();
+        return;
+      }
+
+      _opened = _flyout.Opened(winrt::auto_revoke,
+                               [this](auto const&, auto const&)
+                               {
+                                 _opened.revoke();
+                                 afterFrame(&WinUiAutomationProbe::chooseNewList);
+                               });
+      _flyout.ShowAt(anchor);
+    }
+
+    void chooseNewList()
+    {
+      auto const label = listEditorText(ao::i18n::MessageId::ListNew);
+
+      for (auto const& item : _flyout.as<Controls::MenuFlyout>().Items())
+      {
+        if (auto const create = item.try_as<Controls::MenuFlyoutItem>(); create && create.Text() == label)
+        {
+          invoke(create);
+          afterFrame(&WinUiAutomationProbe::listEditorOpened);
+          return;
+        }
+      }
+
+      fail("shipping New List command is missing");
+      finish();
+    }
+
+    Popup listEditorPopup() const
+    {
+      for (auto const& popup : Media::VisualTreeHelper::GetOpenPopupsForXamlRoot(_root.XamlRoot()))
+      {
+        if (auto const child = popup.Child(); child && findVisualById<Controls::TextBlock>(child, kPreviewStatusId))
+        {
+          return popup;
+        }
+      }
+
+      return nullptr;
+    }
+
+    void listEditorOpened()
+    {
+      auto const editorPopup = listEditorPopup();
+      auto const popup = editorPopup ? editorPopup.Child() : nullptr;
+
+      if (!popup)
+      {
+        afterFrame(&WinUiAutomationProbe::listEditorOpened);
+        return;
+      }
+
+      auto const inputWithHeader = [&popup](winrt::hstring const& header)
+      {
+        return findVisualIf<Controls::TextBox>(
+          popup,
+          [&header](auto const& field) { return winrt::unbox_value_or<winrt::hstring>(field.Header(), {}) == header; });
+      };
+      auto const name = inputWithHeader(listEditorText(ao::i18n::MessageId::WinUiListName));
+      _previewFilter = inputWithHeader(listEditorText(ao::i18n::MessageId::WinUiListLocalFilter));
+      _previewStatus = findVisualById<Controls::TextBlock>(popup, kPreviewStatusId);
+      _previewCreate = findVisual<Button>(popup, listEditorText(ao::i18n::MessageId::WinUiCommonCreate));
+      auto const cancel = findVisual<Button>(popup, listEditorText(ao::i18n::MessageId::WinUiCommonCancel));
+
+      if (!name || !_previewFilter || !_previewCreate || !cancel || !_previewStatus.IsLoaded())
+      {
+        afterFrame(&WinUiAutomationProbe::listEditorOpened);
+        return;
+      }
+
+      auto const initialStatus = winrt::to_string(_previewStatus.Text());
+
+      if (_optListPreviewLocale)
+      {
+        _listPreviewClosed = editorPopup.Closed(winrt::auto_revoke,
+                                                [this](auto const&, auto const&)
+                                                { enqueue(&WinUiAutomationProbe::localizedPreviewClosed); });
+        auto const expected = ao::i18n::requiredFormat(
+          _sessionPtr->textCatalog(), ao::i18n::MessageId::SmartListMatchCount, {{"scope", "source"}, {"count", 2}});
+
+        if (initialStatus != expected)
+        {
+          fail(std::format("expected count-only List preview '{}', observed '{}'", expected, initialStatus));
+          finish();
+          return;
+        }
+
+        auto options = BringIntoViewOptions{};
+        options.AnimationDesired(false);
+        _previewStatus.StartBringIntoView(options);
+        afterFrame(&WinUiAutomationProbe::localizedPreviewReady);
+        return;
+      }
+
+      if (_liveParent)
+      {
+        check(initialStatus == "No tracks in source", "blank child draft opens on the broken parent");
+        name.Text(L"Child draft");
+        afterFrame(&WinUiAutomationProbe::clickFastCreate);
+        return;
+      }
+
+      check(initialStatus == "Library tracks: 12",
+            std::format("expected count-only unfiltered preview 'Library tracks: 12', observed '{}'", initialStatus));
+      name.Text(L"Count-only preview");
+      _optPreviewStatusToken = _previewStatus.RegisterPropertyChangedCallback(
+        Controls::TextBlock::TextProperty(),
+        [this](auto const&, auto const&) { enqueue(&WinUiAutomationProbe::checkListPreview); });
+      applyListPreviewFilter();
+    }
+
+    void applyListPreviewFilter()
+    {
+      auto const& scenario = kListPreviewChecks.at(_previewStep);
+      _stage = scenario.status;
+      _previewFilter.Text(scenario.filter);
+    }
+
+    void checkListPreview()
+    {
+      auto const& scenario = kListPreviewChecks.at(_previewStep);
+      auto const observed = winrt::to_string(_previewStatus.Text());
+      check(observed == scenario.status,
+            std::format("expected count-only List preview '{}', observed '{}'", scenario.status, observed));
+      check(_previewCreate.IsEnabled() == scenario.canCreate, "List editor Create has the wrong availability");
+
+      if (++_previewStep < kListPreviewChecks.size())
+      {
+        applyListPreviewFilter();
+        return;
+      }
+
+      cancelListEditor();
+    }
+
+    template<typename Reply>
+    static ao::async::Task<void> checkMutationAsync(WinUiAutomationProbe* owner,
+                                                    ao::async::Runtime* runtime,
+                                                    ao::async::Task<ao::Result<Reply>> task,
+                                                    Step next,
+                                                    std::stop_token stopToken)
+    {
+      auto const result = co_await std::move(task);
+      co_await runtime->resumeOnCallbackExecutorAsync(stopToken);
+
+      if (!result && !owner->_finished)
+      {
+        owner->fail(result.error().message);
+        owner->enqueue(&WinUiAutomationProbe::finish);
+      }
+      else if (next && !owner->_finished)
+      {
+        owner->enqueue(next);
+      }
+    }
+
+    template<typename Reply>
+    void runPreviewCommand(ao::async::Task<ao::Result<Reply>> task, Step next = nullptr)
+    {
+      auto& runtime = _sessionPtr->runtime().async();
+      runtime.spawnWithLifetime(
+        _previewTasks,
+        [this, &runtime, task = std::move(task), next](std::stop_token stop) mutable
+        { return checkMutationAsync(this, &runtime, std::move(task), next, stop); },
+        "List preview probe external commit");
+    }
+
+    void clickFastCreate()
+    {
+      if (!_previewCreate.IsEnabled())
+      {
+        afterFrame(&WinUiAutomationProbe::clickFastCreate);
+        return;
+      }
+
+      _stage = "Create with an unsettled child filter";
+      _previewRevision = _sessionPtr->runtime().library().snapshot().revision();
+      _previewFilter.Text(L"$year = 2000");
+      check(_previewCreate.IsEnabled() && _previewStatus.Text() == L"No tracks in source",
+            "editing has not yet replaced the previous blank-draft preview");
+      // Invoke the stock Button's in-process provider on the dispatcher. Its
+      // Click raises PrimaryButtonClick inline; no timer or writer turn intervenes.
+      invoke(_previewCreate);
+      check(!_previewCreate.IsEnabled() && _previewStatus.Text() == L"Invalid filter",
+            "Create synchronously rejects the current filter over a broken parent");
+
+      // Unlike the editor, the writer accepts this locally valid predicate.
+      runPreviewCommand(_sessionPtr->runtime().library().commands().previewCreateListAsync(
+                          {.parentId = _lists.previewParentId, .name = "Child draft", .expression = "$year = 2000"}),
+                        &WinUiAutomationProbe::repairPreviewParent);
+    }
+
+    void repairPreviewParent()
+    {
+      auto const snapshot = _sessionPtr->runtime().library().snapshot();
+      check(snapshot.revision() == _previewRevision &&
+              std::ranges::none_of(
+                snapshot.lists(), [this](auto const& row) { return row.parentId == _lists.previewParentId; }),
+            "rejected Create did not write a child");
+      _stage = "committed parent filter updates child without a draft edit";
+      _optPreviewStatusToken = _previewStatus.RegisterPropertyChangedCallback(
+        Controls::TextBlock::TextProperty(),
+        [this](auto const&, auto const&) { enqueue(&WinUiAutomationProbe::checkLiveParent); });
+      runPreviewCommand(_sessionPtr->runtime().library().commands().updateListAsync(
+        {.listId = _lists.previewParentId, .name = "Preview parent", .expression = "$composer = 'Debussy'"}));
+    }
+
+    bool hasEditorLabel(std::wstring_view expected) const
+    {
+      auto const popup = listEditorPopup();
+      return popup && findVisualIf<Controls::TextBlock>(
+                        popup.Child(), [expected](auto const& text) { return text.Text() == expected; });
+    }
+
+    void checkLiveParent()
+    {
+      check(listEditorPopup() && _previewCreate.IsEnabled(),
+            "the unsubmitted draft remains open and becomes admissible after repair");
+      check(_previewStatus.Text() == L"Matches: 10", "child count follows committed parent filter");
+      check(hasEditorLabel(L"Inherited Filter: $composer = 'Debussy'"), "child shows changed direct parent");
+      check(hasEditorLabel(L"Effective Filter: ($composer = 'Debussy') and ($year = 2000)"),
+            "child shows changed parent combined with local filter");
+      _stage = "deleted parent invalidates open child draft";
+      _previewStatus.UnregisterPropertyChangedCallback(Controls::TextBlock::TextProperty(), *_optPreviewStatusToken);
+      _optPreviewStatusToken = _previewStatus.RegisterPropertyChangedCallback(
+        Controls::TextBlock::TextProperty(),
+        [this](auto const&, auto const&) { enqueue(&WinUiAutomationProbe::checkDeletedParent); });
+      runPreviewCommand(_sessionPtr->runtime().library().commands().deleteListAsync(_lists.previewParentId));
+    }
+
+    void checkDeletedParent()
+    {
+      check(_sessionPtr->runtime().library().snapshot().revision() == _previewRevision + 2,
+            "only the external parent repair and deletion were committed");
+      check(_previewStatus.Text().empty() && !_previewCreate.IsEnabled(), "missing parent is not a zero-match source");
+      check(hasEditorLabel(L"Inherited Filter: This List is no longer available."),
+            "missing parent is not an empty filter");
+      check(hasEditorLabel(L"Effective Filter: This List is no longer available."),
+            "missing parent has no effective filter");
+      cancelListEditor();
+    }
+
+    void cancelListEditor()
+    {
+      revokeListPreviewObserver();
+      auto const popup = listEditorPopup();
+      auto const cancel =
+        popup ? findVisual<Button>(popup.Child(), listEditorText(ao::i18n::MessageId::WinUiCommonCancel)) : nullptr;
+
+      if (!cancel)
+      {
+        fail("shipping List editor Cancel is missing");
+        finish();
+        return;
+      }
+
+      _stage = "closing List editor";
+      invoke(cancel);
+      afterFrame(&WinUiAutomationProbe::listEditorClosed);
+    }
+
+    void listEditorClosed()
+    {
+      if (listEditorPopup())
+      {
+        afterFrame(&WinUiAutomationProbe::listEditorClosed);
+        return;
+      }
+
+      if (!_liveParent)
+      {
+        _liveParent = true;
+        openListEditor();
+        return;
+      }
+
+      openPinnedComposer();
+    }
+
+    void localizedPreviewReady()
+    {
+      if (!listEditorPopup())
+      {
+        fail("the List editor closed before capture readiness");
+        finish();
+        return;
+      }
+
+      _listPreviewReady = true;
+      _stage = "waiting for List preview dismissal";
+      auto const observed = winrt::to_string(_previewStatus.Text());
+      std::cout << std::format("LIST_PREVIEW_READY locale={} status={}\n", *_optListPreviewLocale, observed)
+                << std::flush;
+    }
+
+    void localizedPreviewClosed()
+    {
+      check(_listPreviewReady, "the List editor was dismissed before capture readiness");
+      finish();
+    }
+
+    void revokeListPreviewObserver()
+    {
+      if (_optPreviewStatusToken)
+      {
+        _previewStatus.UnregisterPropertyChangedCallback(Controls::TextBlock::TextProperty(), *_optPreviewStatusToken);
+        _optPreviewStatusToken.reset();
+      }
+
+      _previewStatus = nullptr;
+      _previewFilter = nullptr;
+      _previewCreate = nullptr;
     }
 
     void composerOpened()
@@ -1363,8 +1768,8 @@ namespace
     void startRescan(Step settled, Controls::TextBlock const& classicStatus = nullptr)
     {
       _scanStarts = 0;
-      auto const expected =
-        ao::i18n::requiredFormat(_sessionPtr->textCatalog(), ao::i18n::MessageId::LibraryScanMissing, {{"count", 2}});
+      auto const expected = ao::i18n::requiredFormat(
+        _sessionPtr->textCatalog(), ao::i18n::MessageId::LibraryScanMissing, {{"count", kProbeTrackCount}});
       auto const before = _sessionPtr->runtime().notifications().feed();
       auto const previousId = before.entries.empty() ? ao::rt::kInvalidNotificationId : before.entries.back().id;
       _rescanSub = _sessionPtr->signalRescanAvailabilityChanged().connect(
@@ -1447,6 +1852,8 @@ namespace
       _rendering.revoke();
       _opened.revoke();
       _closed.revoke();
+      _listPreviewClosed.revoke();
+      revokeListPreviewObserver();
 
       if (_timeout)
       {
@@ -1455,6 +1862,7 @@ namespace
 
       _windowSizing.reset();
       _rescanSub.reset();
+      _previewTasks.cancelAll();
 
       if (_window)
       {
@@ -1475,12 +1883,14 @@ namespace
         check(!error, "disposable state cleanup failed");
       }
 
-      std::cerr << std::format("WinUI naming audit: {} failure(s)\n", _failures);
+      std::cerr << std::format(
+        "WinUI {}: {} failure(s)\n", _optListPreviewLocale ? "localized List preview" : "naming audit", _failures);
       _result = _failures == 0 ? 0 : 1;
       Exit();
     }
 
     std::int32_t& _result;
+    std::optional<std::string_view> const _optListPreviewLocale;
     std::size_t _failures = 0;
     bool _finished = false;
     bool _grouped = false;
@@ -1495,6 +1905,16 @@ namespace
     std::size_t _sizingMessages = 0;
     ao::utility::ScopedRegistration _windowSizing;
     Grid _root{nullptr};
+    Controls::TextBox _previewFilter{nullptr};
+    Controls::TextBlock _previewStatus{nullptr};
+    Button _previewCreate{nullptr};
+    std::optional<std::int64_t> _optPreviewStatusToken;
+    std::size_t _previewStep = 0;
+    bool _listPreviewReady = false;
+    bool _liveParent = false;
+    std::uint64_t _previewRevision = 0;
+    ao::async::LifetimeScope _previewTasks;
+    Popup::Closed_revoker _listPreviewClosed{};
     Controls::StackPanel _canaries{nullptr};
     FlyoutBase _flyout{nullptr};
     std::unique_ptr<ao::rt::TextOrderingPolicy> _orderingPtr;
@@ -1519,8 +1939,29 @@ namespace
   };
 } // namespace
 
-int main()
+int main(int argc, char** argv)
 {
+  auto optListPreviewLocale = std::optional<std::string_view>{};
+
+  if (argc != 1)
+  {
+    if (argc == 3 && std::string_view{argv[1]} == "--list-preview")
+    {
+      if (auto const locale = std::string_view{argv[2]};
+          std::ranges::contains(ao::i18n::availableCatalogLocales(), locale, &ao::i18n::CatalogLocale::tag))
+      {
+        optListPreviewLocale = locale;
+      }
+    }
+
+    if (!optListPreviewLocale)
+    {
+      std::cerr << "Usage: ao_winui_automation_probe.exe [--list-preview <packaged locale, e.g. zh-Hans or zh-Hant>]\n"
+                   "The optional mode leaves the dialog open for capture; choose Cancel after LIST_PREVIEW_READY.\n";
+      return 2;
+    }
+  }
+
   if (::DWORD session = 0; ::ProcessIdToSessionId(::GetCurrentProcessId(), &session) == 0 || session == 0 ||
                            session != ::WTSGetActiveConsoleSessionId() || !hasInteractiveUserToken())
   {
@@ -1532,7 +1973,8 @@ int main()
   {
     winrt::init_apartment(winrt::apartment_type::single_threaded);
     std::int32_t result = 1;
-    Application::Start([&result](auto&&) { std::ignore = winrt::make<WinUiAutomationProbe>(result); });
+    Application::Start([&result, optListPreviewLocale](auto&&)
+                       { std::ignore = winrt::make<WinUiAutomationProbe>(result, optListPreviewLocale); });
     return result;
   }
   catch (winrt::hresult_error const& error)

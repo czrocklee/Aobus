@@ -373,13 +373,14 @@ namespace ao::tui::test
   {
     auto editor = makeEditor();
     auto state = uimodel::SmartListEditorViewState{};
-    state.previewStatusText = "Showing 10 of 12 matches";
+    state.matchCount = 12;
+    state.previewStatusText = "Preview: 3 of 12 matches";
     state.expressionValid = true;
     state.canSubmit = true;
     editor.applyPreview(state, {"Only", "Two", "Three"});
 
     auto const rendered = renderElement(editor.renderModal(80, 24), 80, 24);
-    CHECK(findTextCells(rendered.screen, "Showing 10 of 12 matches"));
+    CHECK(findTextCells(rendered.screen, state.previewStatusText));
     CHECK(findTextCells(rendered.screen, "Only"));
 
     // An error the source reported replaces the preview with its diagnostic.
@@ -507,7 +508,8 @@ namespace ao::tui::test
     auto editor = makeEditor(
       ListEditorMode::Edit, rt::ListDraft{.listId = ListId{4}, .name = "Roadsongs", .expression = "#live"}, "#tour");
     auto state = validPreviewState();
-    state.previewStatusText = "Showing first 10 of 40 matches";
+    state.matchCount = 40;
+    state.previewStatusText = "Preview: 10 of 40 matches";
     auto tracks = std::vector<std::string>{};
 
     for (std::int32_t index = 0; index < 10; ++index)
@@ -521,7 +523,7 @@ namespace ao::tui::test
     // not fit 80x24 together, so the sample ends early in an ellipsis while
     // the guidance line and the footer stay visible.
     auto const rendered = renderElement(editor.renderModal(80, 24), 80, 24);
-    CHECK(findTextCells(rendered.screen, "Showing first 10 of 40 matches"));
+    CHECK(findTextCells(rendered.screen, state.previewStatusText));
     CHECK(findTextCells(rendered.screen, "Track 00"));
     CHECK_FALSE(findTextCells(rendered.screen, "Track 09"));
     CHECK(findTextCells(rendered.screen, "\u2026"));

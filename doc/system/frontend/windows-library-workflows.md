@@ -118,12 +118,13 @@ the pin. Modal workflows apply the admission rule above.
 
 ## Create and edit Lists
 
-The native editor captures its target when opened and displays inherited and
-effective expressions, direct-membership capability, a live result preview, and
-the shared presentation catalog. It validates the complete draft before enabling
-Create or Save. Recoverable validation, maintenance, stale-binding, or storage
-failure leaves the draft open with a visible error and does not retarget the
-captured selection or mutate the tree optimistically.
+The native editor captures its target at entry. **Inherited Filter** shows the direct parent's saved local expression; **Effective Filter** combines that expression with the draft's local filter. These labels do not expand the ancestor chain. The preview count, by contrast, uses the parent's actual membership, including all ancestor restrictions. The editor shows no sample rows. It also shows direct-membership capability and presentation choices.
+
+While the draft is open, committed track or List changes that affect the source refresh the count and filter context without requiring a draft edit. If the captured parent disappears, both filter labels report it as unavailable. The unavailable preview is neither an invalid local expression nor a valid zero count.
+
+Create or Save requires a named draft whose current preview allows submission. The button can briefly reflect the previous preview after a filter edit, but activation cancels the pending debounce and refreshes the exact draft before admitting a write.
+A named draft with a blank local expression can still be submitted if its preview source is available, even if that source reports an inherited filter error. With a non-empty local expression, a filter error in the saved parent chain blocks submission and appears in the diagnostic.
+A rejected preview or write leaves the draft open with an error and changes neither the target nor the tree.
 
 Once the List save succeeds, the editor pins the selected named presentation, or clears the pin for Auto or no valid selection. An unavailable stored id opens as Auto: saving in that state clears the pin; merely browsing to the List does not. A failed List save leaves the preference untouched.
 
@@ -202,6 +203,7 @@ remain in the [Windows desktop state reference](../../reference/windows/desktop-
   protects presentation resolution, committed invalidation, expansion,
   ancestor reveal, and fallback; shared List editor, membership, and order tests
   protect semantic authoring.
+- The [native automation probe](../../../test/winui/probe/WinUiAutomationProbe.cpp) checks Create before a filter edit's debounce fires, and the open editor's labels, count, and button after a parent filter change and deletion.
 - [`KeymapAcceleratorPlanTest.cpp`](../../../test/winui/input/KeymapAcceleratorPlanTest.cpp)
   protects native-only order accelerators without extending the layout schema.
 - [`CallbackAdmissionGateTest.cpp`](../../../test/winui/app/CallbackAdmissionGateTest.cpp)

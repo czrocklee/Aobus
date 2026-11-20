@@ -280,8 +280,10 @@ zh_Hant:table {
     smart_list_showing_source { "{source, select, library {顯示全部 {count, plural, one {# 首曲目} other {# 首曲目}}} other {從源顯示全部 {count, plural, one {# 首曲目} other {# 首曲目}}}}" }
     smart_list_invalid_filter { "無效的篩選條件" }
     smart_list_no_matches { "無匹配項" }
+    smart_list_match_count { "{scope, select, library {音樂庫曲目數：{count, number}} source {源曲目數：{count, number}} other {匹配項數：{count, number}}}" }
     smart_list_showing_all_matches { "顯示全部 {count, plural, one {# 個匹配項} other {# 個匹配項}}" }
-    smart_list_showing_first_matches { "顯示 {count} 個匹配項中的前 {visible} 個" }
+    smart_list_showing_first_matches { "{scope, select, library {音樂庫預覽：{count, plural, other {# 首曲目}}中的 {visible} 首} source {源列表預覽：{count, plural, other {# 首曲目}}中的 {visible} 首} other {預覽：{count, plural, other {# 個匹配項}}中的 {visible} 個}}" }
+    smart_list_preview_unavailable { "無法預覽：{diagnostic}" }
     smart_list_untitled_track { "(無標題)" }
     list_order_saved_lists_only { "手動排序僅適用於已儲存的列表。" }
     list_order_library_busy { "音樂庫正忙。維護完成後將提供手動排序。" }
@@ -413,7 +415,6 @@ zh_Hant:table {
     gtk_smart_list_unavailable_presentation { "無法使用：{id}（自動）" }
     gtk_smart_list_presentation { "檢視" }
     gtk_smart_list_preview { "預覽" }
-    gtk_smart_list_waiting_for_filter { "等待輸入篩選條件..." }
     gtk_smart_list_track { "曲目" }
     gtk_smart_list_invalid_source { "(無效源)" }
     gtk_smart_list_choose_membership_tag { "選取一個可見標籤作為播放清單成員資格" }

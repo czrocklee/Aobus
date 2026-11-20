@@ -281,8 +281,10 @@ zh_Hans:table {
     smart_list_showing_source { "{source, select, library {显示全部 {count, plural, one {# 首曲目} other {# 首曲目}}} other {从源显示全部 {count, plural, one {# 首曲目} other {# 首曲目}}}}" }
     smart_list_invalid_filter { "无效的筛选条件" }
     smart_list_no_matches { "无匹配项" }
+    smart_list_match_count { "{scope, select, library {音乐库曲目数：{count, number}} source {源曲目数：{count, number}} other {匹配项数：{count, number}}}" }
     smart_list_showing_all_matches { "显示全部 {count, plural, one {# 个匹配项} other {# 个匹配项}}" }
-    smart_list_showing_first_matches { "显示 {count} 个匹配项中的前 {visible} 个" }
+    smart_list_showing_first_matches { "{scope, select, library {音乐库预览：{count, plural, other {# 首曲目}}中的 {visible} 首} source {源列表预览：{count, plural, other {# 首曲目}}中的 {visible} 首} other {预览：{count, plural, other {# 个匹配项}}中的 {visible} 个}}" }
+    smart_list_preview_unavailable { "无法预览：{diagnostic}" }
     smart_list_untitled_track { "(无标题)" }
     list_order_saved_lists_only { "手动排序仅适用于已保存的列表。" }
     list_order_library_busy { "音乐库正忙。维护完成后将提供手动排序。" }
@@ -414,7 +416,6 @@ zh_Hans:table {
     gtk_smart_list_unavailable_presentation { "不可用：{id}（自动）" }
     gtk_smart_list_presentation { "视图" }
     gtk_smart_list_preview { "预览" }
-    gtk_smart_list_waiting_for_filter { "等待输入筛选条件..." }
     gtk_smart_list_track { "曲目" }
     gtk_smart_list_invalid_source { "(无效源)" }
     gtk_smart_list_choose_membership_tag { "选择一个可见标签作为播放列表成员资格" }

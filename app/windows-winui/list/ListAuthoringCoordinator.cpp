@@ -18,6 +18,7 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
+#include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceCache.h>
@@ -36,6 +37,7 @@
 #pragma push_macro("GetCurrentTime")
 #undef GetCurrentTime
 #include <winrt/Microsoft.UI.Dispatching.h>
+#include <winrt/Microsoft.UI.Xaml.Automation.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
@@ -173,15 +175,6 @@ namespace ao::winui
     _parentListId = parentListId;
     _editListId = editListId;
     _mutationError.clear();
-    _inheritedExpression.clear();
-
-    if (!rt::isVirtualListId(parentListId))
-    {
-      if (auto const optParent = _library.snapshot().listNode(parentListId); optParent)
-      {
-        _inheritedExpression = optParent->expression;
-      }
-    }
 
     buildEditorDialog();
     _nameInput.Text(winrt::to_hstring(name));
@@ -201,7 +194,7 @@ namespace ao::winui
     }
 
     _presentationInput.SelectedIndex(selectedPresentationIndex);
-    updateEditorPreview();
+    tryValidateEditorDraft(editorDraft());
     showDialog();
   }
 
@@ -283,6 +276,7 @@ namespace ao::winui
     previewHeading.FontSize(kPreviewHeadingFontSize);
     content.Children().Append(previewHeading);
     _previewText = makeWrappedText(kSupportingTextOpacity);
+    Automation::AutomationProperties::SetAutomationId(_previewText, L"list-editor-preview-status");
     content.Children().Append(_previewText);
 
     auto scroll = ScrollViewer{};
@@ -296,58 +290,98 @@ namespace ao::winui
     _previewTimer = _filterInput.DispatcherQueue().CreateTimer();
     _previewTimer.Interval(kPreviewDebounceInterval);
     _previewTimer.IsRepeating(false);
+    auto const token = _dialogGenerationGate.token();
     _previewTickRevoker = _previewTimer.Tick(winrt::auto_revoke,
-                                             [this](winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer const&,
-                                                    IInspectable const&) { updateEditorPreview(); });
+                                             [this, token](auto const&, IInspectable const&)
+                                             {
+                                               if (token.accepts() && !_submitting)
+                                               {
+                                                 tryValidateEditorDraft(editorDraft());
+                                               }
+                                             });
+    _previewChanges = _library.changes().onChanged(
+      [this, token](rt::LibraryChangeSet const& change)
+      {
+        if (!token.accepts() || _submitting || _previewTimer.IsRunning())
+        {
+          return;
+        }
+
+        // The replica has applied the commit. Ancestor changes can affect the
+        // count or diagnostic even if the direct parent's definition is unchanged.
+        if (change.libraryReset || !change.tracksInserted.empty() || !change.tracksDeleted.empty() ||
+            !change.tracksMutated.empty() ||
+            (!rt::isVirtualListId(_parentListId) && (!change.listsUpserted.empty() || !change.listsDeleted.empty())))
+        {
+          _previewTimer.Start();
+        }
+      });
     _nameChangedRevoker = _nameInput.TextChanged(winrt::auto_revoke,
-                                                 [this](IInspectable const&, TextChangedEventArgs const&)
+                                                 [this, token](IInspectable const&, TextChangedEventArgs const&)
                                                  {
-                                                   _mutationError.clear();
-                                                   updateEditorPreview();
+                                                   if (token.accepts() && !_submitting)
+                                                   {
+                                                     _mutationError.clear();
+                                                     tryValidateEditorDraft(editorDraft());
+                                                   }
                                                  });
+    _descriptionChangedRevoker =
+      _descriptionInput.TextChanged(winrt::auto_revoke,
+                                    [this, token](IInspectable const&, TextChangedEventArgs const&)
+                                    {
+                                      if (token.accepts() && !_submitting && !_mutationError.empty())
+                                      {
+                                        _mutationError.clear();
+                                        tryValidateEditorDraft(editorDraft());
+                                      }
+                                    });
     _filterChangedRevoker = _filterInput.TextChanged(winrt::auto_revoke,
-                                                     [this](IInspectable const&, TextChangedEventArgs const&)
+                                                     [this, token](IInspectable const&, TextChangedEventArgs const&)
                                                      {
-                                                       _mutationError.clear();
-                                                       scheduleEditorPreview();
+                                                       if (token.accepts() && !_submitting)
+                                                       {
+                                                         _mutationError.clear();
+                                                         _previewTimer.Stop();
+                                                         _previewTimer.Start();
+                                                       }
                                                      });
-    _primaryClickRevoker = _dialog.PrimaryButtonClick(
-      winrt::auto_revoke,
-      [this](ContentDialog const&, ContentDialogButtonClickEventArgs const& args) { handleEditorSave(args); });
-    _closedRevoker = _dialog.Closed(
-      winrt::auto_revoke, [this](ContentDialog const&, ContentDialogClosedEventArgs const&) { handleDialogClosed(); });
+    _primaryClickRevoker =
+      _dialog.PrimaryButtonClick(winrt::auto_revoke,
+                                 [this, token](ContentDialog const&, ContentDialogButtonClickEventArgs const& args)
+                                 {
+                                   if (token.accepts())
+                                   {
+                                     handleEditorSave(args);
+                                   }
+                                 });
+    _closedRevoker = _dialog.Closed(winrt::auto_revoke,
+                                    [this, token](ContentDialog const&, ContentDialogClosedEventArgs const&)
+                                    {
+                                      if (token.accepts())
+                                      {
+                                        handleDialogClosed();
+                                      }
+                                    });
   }
 
-  void ListAuthoringCoordinator::scheduleEditorPreview()
+  rt::ListDraft ListAuthoringCoordinator::editorDraft() const
   {
-    if (!_previewTimer)
-    {
-      return;
-    }
+    return uimodel::makeSmartListDraft(_parentListId,
+                                       _editListId,
+                                       winrt::to_string(_nameInput.Text()),
+                                       winrt::to_string(_descriptionInput.Text()),
+                                       winrt::to_string(_filterInput.Text()));
+  }
 
+  bool ListAuthoringCoordinator::tryValidateEditorDraft(rt::ListDraft const& draft)
+  {
     _previewTimer.Stop();
-    _previewTimer.Interval(kPreviewDebounceInterval);
-    _previewTimer.Start();
-  }
-
-  void ListAuthoringCoordinator::updateEditorPreview()
-  {
-    if (!_dialog || !_nameInput || !_filterInput)
-    {
-      return;
-    }
-
-    if (_previewTimer)
-    {
-      _previewTimer.Stop();
-    }
-
-    auto const expression = winrt::to_string(_filterInput.Text());
-    auto const sourceListId = rt::resolveParentSourceId(_parentListId);
+    auto const& expression = draft.expression;
+    auto const sourceListId = rt::resolveParentSourceId(draft.parentId);
     auto previewRes = _sources.acquire(rt::SourceSpec{.baseListId = sourceListId, .filterExpression = expression});
     auto optPreviewError = std::optional<Error>{};
     auto input = uimodel::SmartListPreviewState{
-      .name = winrt::to_string(_nameInput.Text()),
+      .name = draft.name,
       .localExpression = expression,
       .hasPreviewSource = previewRes.has_value(),
       .isAllTracks = sourceListId == rt::kAllTracksListId,
@@ -361,88 +395,104 @@ namespace ao::winui
       input.hasError = optPreviewError.has_value();
       input.errorMessage = optPreviewError ? std::string_view{optPreviewError->message} : std::string_view{};
       input.matchCount = previewRes->source().size();
+      // The cache holds ad-hoc sources weakly. Keep this expression live so
+      // a track commit updates its membership instead of forcing a new scan.
+      _optPreviewLease.emplace(std::move(*previewRes));
+    }
+    else
+    {
+      _optPreviewLease.reset();
+      input.errorMessage = previewRes.error().message;
     }
 
-    _editorState = uimodel::makeSmartListEditorViewState(_textCatalog, input);
-    auto const inherited = uimodel::formatSmartListExpressionDisplayText(_textCatalog, _inheritedExpression);
-    auto const effective = uimodel::formatSmartListExpressionDisplayText(
-      _textCatalog, uimodel::combineSmartListEffectiveExpression(_inheritedExpression, expression));
+    auto const isRoot = rt::isVirtualListId(draft.parentId);
+    auto const optParent = isRoot ? std::nullopt : _library.snapshot().listNode(draft.parentId);
+    auto const parentExpression = optParent ? std::string_view{optParent->expression} : std::string_view{};
+    auto const missingParent = !isRoot && !optParent;
+    auto const unavailable = i18n::requiredText(_textCatalog, i18n::MessageId::ListOrderListUnavailable);
+
+    if (missingParent && input.hasPreviewSource)
+    {
+      input.hasPreviewSource = false;
+      input.errorMessage = unavailable;
+    }
+
+    auto const editorState = uimodel::makeSmartListEditorViewState(_textCatalog, input);
+    auto const inherited = missingParent
+                             ? std::string{unavailable}
+                             : uimodel::formatSmartListExpressionDisplayText(_textCatalog, parentExpression);
+    auto const effective =
+      missingParent ? std::string{unavailable}
+                    : uimodel::formatSmartListExpressionDisplayText(
+                        _textCatalog, uimodel::combineSmartListEffectiveExpression(parentExpression, expression));
     _inheritedFilterText.Text(winrt::to_hstring(
       labeled(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListInheritedFilter), inherited)));
     _effectiveFilterText.Text(winrt::to_hstring(
       labeled(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListEffectiveFilter), effective)));
     _membershipText.Text(winrt::to_hstring(labeled(
-      i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListMembership), _editorState.membershipEditingText)));
-    _previewText.Text(winrt::to_hstring(_editorState.previewStatusText));
+      i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListMembership), editorState.membershipEditingText)));
+    _previewText.Text(winrt::to_hstring(editorState.previewStatusText));
 
-    auto error = _mutationError;
-
-    if (error.empty() && !previewRes)
-    {
-      error = previewRes.error().message;
-    }
-    else if (error.empty() && _editorState.errorVisible)
-    {
-      error = _editorState.errorText;
-    }
-
-    setDialogError(std::move(error));
-    _dialog.IsPrimaryButtonEnabled(_editorState.canSubmit && !_submitting);
+    setDialogError(uimodel::formatSmartListEditorErrorText(_mutationError, editorState));
+    _dialog.IsPrimaryButtonEnabled(editorState.canSubmit);
+    return editorState.canSubmit;
   }
 
   void ListAuthoringCoordinator::handleEditorSave(ContentDialogButtonClickEventArgs const& args)
   {
     args.Cancel(true);
 
-    if (_submitting || !_editorState.canSubmit || !_optDialogTasks || !_dialogGenerationGate.isOpen())
-    {
-      return;
-    }
-
-    _submitting = true;
-    _mutationError.clear();
-    updateEditorPreview();
-    auto draft = uimodel::makeSmartListDraft(_parentListId,
-                                             _editListId,
-                                             winrt::to_string(_nameInput.Text()),
-                                             winrt::to_string(_descriptionInput.Text()),
-                                             winrt::to_string(_filterInput.Text()));
-    auto submission = uimodel::saveListAsync(&_library, std::move(draft));
-
-    if (!_optDialogTasks || !_dialogGenerationGate.isOpen())
+    if (_submitting || !_optDialogTasks || !_dialogGenerationGate.isOpen())
     {
       return;
     }
 
     auto const token = _dialogGenerationGate.token();
+    _mutationError.clear();
+
+    auto draft = editorDraft();
+    auto const selected = _presentationInput.SelectedIndex();
+
+    if (!tryValidateEditorDraft(draft) || !_optDialogTasks || !token.accepts())
+    {
+      return;
+    }
+
+    _submitting = true;
+    _dialog.IsPrimaryButtonEnabled(false);
+
+    if (!_optDialogTasks || !token.accepts())
+    {
+      return;
+    }
+
+    auto finish = [name = draft.name, expression = draft.expression, selected](
+                    ListAuthoringCoordinator* target, Result<ListId> res)
+    { target->finishEditorSave(std::move(res), name, expression, selected); };
+    auto submission = uimodel::saveListAsync(&_library, std::move(draft));
     _asyncRuntime.spawnWithLifetime(
       *_optDialogTasks,
-      [runtime = &_asyncRuntime, owner = this, token, submission = std::move(submission)](
+      [runtime = &_asyncRuntime, owner = this, token, submission = std::move(submission), finish = std::move(finish)](
         std::stop_token const stopToken) mutable
       {
         return finishOnCallbackExecutorAsync(
-          runtime,
-          owner,
-          token,
-          std::move(submission),
-          [](ListAuthoringCoordinator* target, Result<ListId> res) { target->finishEditorSave(std::move(res)); },
-          stopToken);
+          runtime, owner, token, std::move(submission), std::move(finish), stopToken);
       },
       "Windows List save");
   }
 
-  void ListAuthoringCoordinator::finishEditorSave(Result<ListId> res)
+  void ListAuthoringCoordinator::finishEditorSave(Result<ListId> res,
+                                                  std::string const& name,
+                                                  std::string const& expression,
+                                                  std::int32_t const selected)
   {
-    _submitting = false;
-
     if (!res)
     {
+      _submitting = false;
       _mutationError = res.error().message;
-      updateEditorPreview();
+      tryValidateEditorDraft(editorDraft());
       return;
     }
-
-    auto const selected = _presentationInput ? _presentationInput.SelectedIndex() : -1;
 
     if (selected > 0 && static_cast<std::size_t>(selected) < _presentationIds.size())
     {
@@ -453,8 +503,6 @@ namespace ao::winui
       _listPresentations.clearPresentationForList(*res);
     }
 
-    auto const name = _nameInput ? winrt::to_string(_nameInput.Text()) : std::string{};
-    auto const expression = _filterInput ? winrt::to_string(_filterInput.Text()) : std::string{};
     auto presentation =
       rt::NavigationPresentation{.mode = rt::NavigationPresentationMode::Override,
                                  .spec = resolveListAuthoringPresentation(_listPresentations, *res, expression)};
@@ -989,8 +1037,11 @@ namespace ao::winui
     _primaryClickRevoker.revoke();
     _closedRevoker.revoke();
     _nameChangedRevoker.revoke();
+    _descriptionChangedRevoker.revoke();
     _filterChangedRevoker.revoke();
     _previewTickRevoker.revoke();
+    _previewChanges.reset();
+    _optPreviewLease.reset();
     _showOperation = nullptr;
     _dialog = nullptr;
     _nameInput = nullptr;

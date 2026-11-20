@@ -46,7 +46,8 @@ namespace ao::uimodel
                                              std::string_view expression = {});
   std::string smartListPreviewStatus(i18n::MessageCatalog const& catalog,
                                      bool expressionValid,
-                                     std::size_t count,
+                                     std::size_t matchCount,
+                                     std::optional<std::size_t> optSampleCount,
                                      bool isAllTracks,
                                      bool localEmpty);
   std::string trackChannelText(i18n::MessageCatalog const& catalog, std::uint8_t channels);

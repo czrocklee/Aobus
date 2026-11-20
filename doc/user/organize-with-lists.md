@@ -34,7 +34,7 @@ Nesting is therefore a data dependency, not a folder used only for visual organi
 1. Right-click **All Tracks** or the List that should be the source, then choose **New List...**.
 2. Enter a name and an optional description.
 3. Enter a local filter expression, or leave it empty to inherit every parent member.
-4. Check the inherited filter, effective filter, and preview.
+4. Check the inherited filter, effective filter, and preview. GTK shows up to ten example tracks; use the total, not the number of examples, to judge the size of the List. Windows shows the count without sample rows. A count of zero is a valid result; **Preview unavailable** means Aobus could not check the source.
 5. Choose the initial presentation and select **Create**.
 
 Use the **Based on** source deliberately.

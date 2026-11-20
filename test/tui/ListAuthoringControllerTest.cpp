@@ -13,6 +13,7 @@
 #include "test/tui/RenderTestSupport.h"
 #include "tui/SmartListEditor.h"
 #include <ao/CoreIds.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/ListNode.h>
@@ -25,11 +26,14 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/library/LibrarySnapshot.h>
+#include <ao/rt/source/TrackSourceCache.h>
 #include <ao/uimodel/library/list/SmartListEditing.h>
 #include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <ftxui/component/event.hpp>
 #include <ftxui/component/mouse.hpp>
 
@@ -187,6 +191,54 @@ namespace ao::tui::test
     CHECK(editor->previewTracks().front() == "Roadsongs - Artist (Album)");
   }
 
+  TEST_CASE("ListAuthoringController - a blank expression reports the sample and its source total")
+  {
+    auto const [matchCount, sampleCount, useSavedParent, expectedStatus] =
+      GENERATE(Catch::Generators::table<std::size_t, std::size_t, bool, std::string_view>(
+        {{0, 0, false, "No tracks in library"},
+         {10, 10, false, "Showing all tracks: 10"},
+         {12, 10, false, "Preview: 10 of 12 library tracks"},
+         {12, 10, true, "Preview: 10 of 12 source tracks"}}));
+    CAPTURE(matchCount, useSavedParent);
+    auto fixture = AuthoringFixture{};
+
+    for (std::size_t index = 0; index < matchCount; ++index)
+    {
+      fixture.addTrack({.title = std::format("Sample track {:02}", index),
+                        .uri = std::format("sample-{}.flac", index),
+                        .tags = {"preview"}});
+    }
+
+    auto targetId = rt::kAllTracksListId;
+
+    if (useSavedParent)
+    {
+      fixture.addTrack({.title = "Outside the source", .uri = "outside.flac"});
+      targetId = fixture.addList("Source", "#preview");
+    }
+
+    auto controller = fixture.makeController();
+    REQUIRE(controller.tryOpenNew(targetId));
+    auto const* const editor = controller.activeEditor();
+    REQUIRE(editor != nullptr);
+    CHECK(editor->draft().expression.empty());
+    CHECK(editor->viewState().isAllTracks == !useSavedParent);
+    CHECK(editor->viewState().matchCount == matchCount);
+    REQUIRE(editor->previewTracks().size() == sampleCount);
+
+    auto const rendered = renderElement(controller.activeModal(100, 40), 100, 40);
+    CHECK(editor->viewState().previewStatusText == expectedStatus);
+    CHECK(findTextCells(rendered.screen, expectedStatus));
+
+    for (auto const& label : editor->previewTracks())
+    {
+      CHECK(findTextCells(rendered.screen, label));
+    }
+
+    // A full bounded sample is not a sample clipped by the viewport.
+    CHECK_FALSE(findTextCells(rendered.screen, "\u2026"));
+  }
+
   TEST_CASE("ListAuthoringController - a real target parents the new List and previews its source", "[concurrency]")
   {
     auto fixture = AuthoringFixture{};
@@ -200,6 +252,10 @@ namespace ao::tui::test
     CHECK(editor->parentListId() == parentId);
     CHECK_FALSE(editor->viewState().isAllTracks);
     CHECK(editor->viewState().matchCount == 2);
+    auto const parentStatus = i18n::requiredFormat(
+      ao::test::englishMessageCatalog(), i18n::MessageId::SmartListShowingSource, {{"source", "source"}, {"count", 2}});
+    CHECK(editor->viewState().previewStatusText == parentStatus);
+    CHECK(editor->previewTracks().size() == 2);
 
     // An expression drafts computed membership and narrows the live preview.
     focusField(controller, 2);
@@ -255,9 +311,12 @@ namespace ao::tui::test
     CHECK(controller.activeEditor() == editor);
   }
 
-  TEST_CASE("ListAuthoringController - a nested edit shows the parent's inherited expression")
+  TEST_CASE("ListAuthoringController - a nested edit previews the saved filter within its parent source")
   {
     auto fixture = AuthoringFixture{};
+    fixture.addTrack({.title = "Live tour", .uri = "live-tour.flac", .tags = {"tour", "live"}});
+    fixture.addTrack({.title = "Studio tour", .uri = "studio-tour.flac", .tags = {"tour"}});
+    fixture.addTrack({.title = "Local show", .uri = "local-show.flac", .tags = {"live"}});
     auto const parentId = fixture.addList("Tours", "#tour");
     auto const childId = ao::test::requireValue(
       rt::test::runRuntimeTask(*fixture.runtimePtr,
@@ -266,6 +325,12 @@ namespace ao::tui::test
     auto controller = fixture.makeController();
 
     REQUIRE(controller.tryOpenEdit(childId));
+    auto const* const editor = controller.activeEditor();
+    REQUIRE(editor != nullptr);
+    CHECK(editor->parentListId() == parentId);
+    CHECK(editor->draft().expression == "#live");
+    CHECK(editor->viewState().matchCount == 1);
+    CHECK(editor->previewTracks() == std::vector<std::string>{"Live tour - Artist (Album)"});
 
     auto const rendered = renderElement(controller.activeModal(80, 24), 80, 24);
     CHECK(findTextCells(rendered.screen, "Inherited"));
@@ -457,7 +522,9 @@ namespace ao::tui::test
     typeText(controller, "#rock");
     REQUIRE(fixture.sleeperPtr->tryWaitForPendingDelays({std::chrono::milliseconds{200}}));
     REQUIRE(fixture.sleeperPtr->tryFireNext());
-    REQUIRE(fixture.executor->tryDrainUntil([&] { return editor->viewState().expressionValid; }));
+    REQUIRE(fixture.executor->tryDrainUntil([&] { return editor->viewState().localExpression == "#rock"; }));
+    REQUIRE(editor->previewTracks() == std::vector<std::string>{"First - Artist (Album)"});
+    REQUIRE(editor->canSubmit());
 
     typeText(controller, " (");
     CHECK(controller.tryHandleEvent(ftxui::Event::CtrlS));
@@ -466,11 +533,63 @@ namespace ao::tui::test
     // and the editor shows the draft's own diagnostic instead of the stale
     // validity and preview of the earlier text.
     CHECK_FALSE(controller.hasPendingSubmission());
-    REQUIRE(controller.activeEditor() != nullptr);
-    CHECK_FALSE(controller.activeEditor()->viewState().expressionValid);
-    CHECK(controller.activeEditor()->viewState().errorVisible);
-    CHECK_FALSE(controller.activeEditor()->viewState().errorText.empty());
-    CHECK(controller.activeEditor()->status() == ListEditorStatus::Ready);
+    REQUIRE(controller.activeEditor() == editor);
+    CHECK_FALSE(editor->viewState().expressionValid);
+    CHECK(editor->viewState().queryInvalid);
+    CHECK_FALSE(editor->viewState().previewVisible);
+    CHECK(editor->viewState().errorVisible);
+    CHECK_FALSE(editor->viewState().errorText.empty());
+    CHECK_FALSE(editor->canSubmit());
+    CHECK(editor->previewTracks().empty());
+    CHECK(editor->status() == ListEditorStatus::Ready);
+  }
+
+  TEST_CASE("ListAuthoringController - a removed parent clears the existing preview and prevents saving")
+  {
+    auto fixture = AuthoringFixture{};
+    fixture.addTrack({.title = "First", .uri = "first.flac", .tags = {"rock"}});
+    auto const parentId = fixture.addList("Parent", "#rock");
+    auto controller = fixture.makeController();
+
+    REQUIRE(controller.tryOpenNew(parentId));
+    draftNamedList(controller, "Child");
+    auto const* const editor = controller.activeEditor();
+    REQUIRE(editor != nullptr);
+    REQUIRE(editor->previewTracks() == std::vector<std::string>{"First - Artist (Album)"});
+    REQUIRE(editor->canSubmit());
+
+    focusField(controller, 2);
+    typeText(controller, "#rock");
+    std::ignore = ao::test::requireValue(rt::test::runRuntimeTask(
+      *fixture.runtimePtr,
+      fixture.runtimePtr->library().commands().deleteListAsync(parentId, rt::DeleteListOptions{})));
+    CHECK(controller.tryHandleEvent(ftxui::Event::CtrlS));
+
+    CHECK_FALSE(controller.hasPendingSubmission());
+    REQUIRE(controller.activeEditor() == editor);
+    CHECK(editor->draft().name == "Child");
+    CHECK(editor->draft().expression == "#rock");
+    CHECK_FALSE(editor->canSubmit());
+    CHECK(editor->previewTracks().empty());
+    auto const& state = editor->viewState();
+    CHECK(state.name == "Child");
+    CHECK(state.localExpression == "#rock");
+    CHECK(state.hasDirectMembershipEditing);
+    CHECK_FALSE(state.canSubmit);
+    CHECK_FALSE(state.queryInvalid);
+    CHECK_FALSE(state.previewVisible);
+    CHECK(state.previewStatusText.empty());
+    CHECK(state.errorVisible);
+    auto const sourceRes = fixture.runtimePtr->sources().acquire(parentId);
+    REQUIRE_FALSE(sourceRes);
+    auto const unavailable = i18n::requiredFormat(ao::test::englishMessageCatalog(),
+                                                  i18n::MessageId::SmartListPreviewUnavailable,
+                                                  {{"diagnostic", sourceRes.error().message}});
+    CHECK(state.errorText == unavailable);
+    auto const rendered = renderElement(controller.activeModal(100, 40), 100, 40);
+    CHECK(findTextCells(rendered.screen, unavailable));
+    CHECK_FALSE(findTextCells(rendered.screen, "First - Artist (Album)"));
+    CHECK(fixture.runtimePtr->library().snapshot().lists().empty());
   }
 
   TEST_CASE("ListAuthoringController - a submitted save outlives the editor it came from", "[concurrency]")

@@ -7,13 +7,14 @@
 #include <ao/Error.h>
 #include <ao/async/LifetimeScope.h>
 #include <ao/async/Runtime.h>
+#include <ao/async/Subscription.h>
 #include <ao/async/Task.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/library/LibraryAuthoring.h>
+#include <ao/rt/source/TrackSourceLease.h>
 #include <ao/uimodel/library/list/ListAuthoring.h>
 #include <ao/uimodel/library/list/ListOrder.h>
-#include <ao/uimodel/library/list/SmartListEditing.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 #include <ao/winui/CallbackAdmissionGate.h>
 #include <ao/winui/list/ListAuthoringAdapter.h>
@@ -28,6 +29,7 @@
 #pragma pop_macro("GetCurrentTime")
 #include <winrt/Windows.Foundation.h>
 
+#include <cstdint>
 #include <functional>
 #include <optional>
 #include <stop_token>
@@ -104,10 +106,14 @@ namespace ao::winui
                        std::string description,
                        std::string expression);
     void buildEditorDialog();
-    void scheduleEditorPreview();
-    void updateEditorPreview();
+    rt::ListDraft editorDraft() const;
+    /// Refresh the preview and return whether the draft can be submitted.
+    bool tryValidateEditorDraft(rt::ListDraft const& draft);
     void handleEditorSave(winrt::Microsoft::UI::Xaml::Controls::ContentDialogButtonClickEventArgs const& args);
-    void finishEditorSave(Result<ListId> res);
+    void finishEditorSave(Result<ListId> res,
+                          std::string const& name,
+                          std::string const& expression,
+                          std::int32_t selected);
 
     void finishDeletePreview(ListId listId, bool includeDescendants, Result<rt::DeleteListSubtreeReply> res);
     void buildDeleteDialog(ListId listId, bool includeDescendants, rt::DeleteListSubtreeReply const& preview);
@@ -174,15 +180,16 @@ namespace ao::winui
     winrt::Microsoft::UI::Xaml::Controls::ContentDialog::PrimaryButtonClick_revoker _primaryClickRevoker{};
     winrt::Microsoft::UI::Xaml::Controls::ContentDialog::Closed_revoker _closedRevoker{};
     winrt::Microsoft::UI::Xaml::Controls::TextBox::TextChanged_revoker _nameChangedRevoker{};
+    winrt::Microsoft::UI::Xaml::Controls::TextBox::TextChanged_revoker _descriptionChangedRevoker{};
     winrt::Microsoft::UI::Xaml::Controls::TextBox::TextChanged_revoker _filterChangedRevoker{};
     winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer::Tick_revoker _previewTickRevoker{};
 
     std::vector<std::string> _presentationIds;
-    uimodel::SmartListEditorViewState _editorState;
     ListId _parentListId = kInvalidListId;
     ListId _editListId = kInvalidListId;
     ListId _deleteListId = kInvalidListId;
-    std::string _inheritedExpression;
+    async::Subscription _previewChanges;
+    std::optional<rt::TrackSourceLease> _optPreviewLease;
     std::string _mutationError;
     bool _deleteDescendants = false;
     bool _deleteContainsActive = false;

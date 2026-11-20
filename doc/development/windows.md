@@ -615,9 +615,32 @@ console. Outside the active console session, the probe fails with a diagnostic
 rather than skipping. The CI runner must provide that session; the gate does
 not log in for it.
 
-The probe loads the real `MainWindow` against an isolated `LibrarySession` with two metadata-only tracks in one album (a disposable scratch root, no playback or personal saved settings). It drives the true Modern and Classic shells, flat and album-grouped rows, a narrowed Classic window, and the volume and overflow popups. It walks the automation tree — peers and their children, including disabled controls — and requires a nonblank final `AutomationPeer.Name` from the audited interactive and item roles; an attached property or id stamp alone is never accepted as a name. Decorative (`Raw` view), text, and layout roles are out of scope, and `ScrollBar` template internals are explicitly excluded.
+The default English run loads `MainWindow` with a disposable metadata-only
+library and private settings, without playing audio. It exercises both shells,
+flat and grouped track rows, a narrowed Classic window, and the volume and
+overflow popups. It also checks the live count and filter validity in New List.
 
-Positive landmarks use those same audited observations, not visual existence or a minimum control count. Native roles and authored component scopes identify the on-screen Soul and seek controls, title header and resize grip, both track rows, and the album heading when grouped. Wide layouts additionally require the navigation and inspector resize grips, plus Classic's All Tracks tree item. The probe requests DPI-scaled client sizes, overrides only its own window's native tracking ceiling (including measured chrome), and checks the effective DIP width before applying wide or narrow expectations; intentionally hidden narrow panes are not required. The sizing fixture verifies both a constrained width and a client request beyond the system's default tracking ceiling, without changing the desktop resolution. Visual ancestors supply scope metadata only for already-audited peers. Canaries reject missing or whitespace-only names, wrong-role and wrong-scope landmarks, a named control moved to Raw view, and a removed control; factory-named controls (`makeNamed`), text content, and `LabeledBy` sources pass.
+The audit requires a nonblank final `AutomationPeer.Name` on interactive and
+item peers, including disabled controls. An ID or attached property alone is
+not evidence of a name. The Soul and seek controls, title header and resize
+grip, two named track rows, and grouped album heading must appear as on-screen
+peers with the right roles and component scopes. Wide layouts must also expose
+both pane resize grips and Classic's All Tracks item. The probe adjusts only
+its own window's tracking ceiling and checks the effective client width after
+DPI scaling; it does not change the desktop resolution. Intentionally hidden
+narrow panes, decorative (`Raw`), text and layout roles, and `ScrollBar`
+template internals are outside the audit.
+
+To inspect the localized New List count, run:
+
+```bat
+bazel run //app/windows-winui:ao_winui_automation_probe -- --list-preview zh-Hans
+```
+
+Use `zh-Hant` for Traditional Chinese. This selects the probe's locale, not
+Windows'. After `LIST_PREVIEW_READY`, inspect the count of two source tracks
+under the saved parent `Bach` with a blank local filter, then choose Cancel.
+This mode does not run the English naming audit.
 
 Name presence is not semantic correctness: the probe does not certify dialogs
 it never opens, rows it never materializes, names in other locales, or real

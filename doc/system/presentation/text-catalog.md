@@ -114,10 +114,6 @@ Important formatter semantics include:
 - scan change counts are combined from structured relinked/missing values;
 - Smart List membership distinguishes direct tag-backed from computed membership
   before selecting its message;
-- an empty local Smart List expression previews the inherited source (the library
-  for All Tracks), distinguishing no tracks from showing that source. A nonempty
-  expression instead distinguishes invalid filters, no matches, all matches,
-  and a bounded first-results preview;
 - List-membership results select messages from operation and typed authoring
   status, distinguishing whether stored manual-order positions were forgotten; and
 - muted volume takes precedence over hardware-assisted state when choosing the
@@ -140,6 +136,26 @@ and
 [`ActivityPresentationText.cpp`](../../../app/uimodel/status/activity/ActivityPresentationText.cpp).
 Those sources, not a duplicate table here, own exact enum/message and id/message
 associations.
+
+### Smart List preview text
+
+The preview describes the draft's local expression within its parent source
+(the library for a root List). With an empty local expression, it describes
+library or source tracks, not filter matches. With a nonempty expression, a
+valid zero-result preview says there are no matches; a query error hides the
+sample and presents the diagnostic instead of claiming zero matches.
+
+A count-only host reports the total without claiming to show rows. GTK and TUI
+report the sample actually built from up to ten leading results in source
+order, before viewport clipping. If that sample covers a nonempty result, the
+text says it shows all tracks or matches; otherwise it states the sample size
+and total. For a positive total, a zero-row sample is not a count-only preview.
+
+While the source is still being acquired, there is no result text. If the
+source cannot be acquired, the preview is unavailable, submission is disabled,
+and any acquisition diagnostic is distinct from an invalid local filter. A
+query error returned by an acquired source can include inherited context; a
+source error alone does not mark an empty local expression invalid.
 
 ## Locale-neutral formatting
 

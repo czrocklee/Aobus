@@ -282,8 +282,10 @@ root:table {
     smart_list_showing_source { "{source, select, library {{count, plural, one {Showing all tracks: #} other {Showing all tracks: #}}} other {{count, plural, one {Showing all tracks from source: #} other {Showing all tracks from source: #}}}}" }
     smart_list_invalid_filter { "Invalid filter" }
     smart_list_no_matches { "No matches" }
+    smart_list_match_count { "{scope, select, library {Library tracks: {count, number}} source {Source tracks: {count, number}} other {Matches: {count, number}}}" }
     smart_list_showing_all_matches { "{count, plural, one {Showing all matches: #} other {Showing all matches: #}}" }
-    smart_list_showing_first_matches { "Showing {visible} of {count} matches" }
+    smart_list_showing_first_matches { "Preview: {visible} of {scope, select, library {{count, plural, one {# library track} other {# library tracks}}} source {{count, plural, one {# source track} other {# source tracks}}} other {{count, plural, one {# match} other {# matches}}}}" }
+    smart_list_preview_unavailable { "Preview unavailable: {diagnostic}" }
     smart_list_untitled_track { "(untitled)" }
     list_order_saved_lists_only { "Manual ordering is available for saved Lists only." }
     list_order_library_busy { "Library is busy. Manual ordering will be available when maintenance finishes." }
@@ -415,7 +417,6 @@ root:table {
     gtk_smart_list_unavailable_presentation { "Unavailable: {id} (Auto)" }
     gtk_smart_list_presentation { "Presentation" }
     gtk_smart_list_preview { "Preview" }
-    gtk_smart_list_waiting_for_filter { "Waiting for filter..." }
     gtk_smart_list_track { "Track" }
     gtk_smart_list_invalid_source { "(invalid source)" }
     gtk_smart_list_choose_membership_tag { "Choose a visible tag for Playlist membership" }

@@ -280,8 +280,10 @@ ja:table {
     smart_list_showing_source { "{source, select, library {全{count, plural, one {#曲} other {#曲}}を表示中} other {ソースから全{count, plural, one {#曲} other {#曲}}を表示中}}" }
     smart_list_invalid_filter { "無効なフィルター" }
     smart_list_no_matches { "一致なし" }
+    smart_list_match_count { "{scope, select, library {ライブラリの曲数: {count, number}} source {ソースの曲数: {count, number}} other {一致件数: {count, number}}}" }
     smart_list_showing_all_matches { "全{count, plural, one {#件の一致} other {#件の一致}}を表示中" }
-    smart_list_showing_first_matches { "{count}件中{visible}件の一致を表示中" }
+    smart_list_showing_first_matches { "プレビュー: {scope, select, library {ライブラリの{count, plural, other {#曲}}のうち{visible}曲} source {ソースの{count, plural, other {#曲}}のうち{visible}曲} other {一致した{count, plural, other {#件}}のうち{visible}件}}" }
+    smart_list_preview_unavailable { "プレビューできません: {diagnostic}" }
     smart_list_untitled_track { "(無題)" }
     list_order_saved_lists_only { "手動並べ替えは保存されたリストでのみ利用できます。" }
     list_order_library_busy { "ライブラリがビジー状態です。メンテナンス完了後に手動並べ替えが利用可能になります。" }
@@ -413,7 +415,6 @@ ja:table {
     gtk_smart_list_unavailable_presentation { "利用不可: {id}（自動）" }
     gtk_smart_list_presentation { "表示" }
     gtk_smart_list_preview { "プレビュー" }
-    gtk_smart_list_waiting_for_filter { "フィルターを待機中..." }
     gtk_smart_list_track { "曲" }
     gtk_smart_list_invalid_source { "(無効なソース)" }
     gtk_smart_list_choose_membership_tag { "プレイリストのメンバーシップに使用する表示タグを選択してください" }

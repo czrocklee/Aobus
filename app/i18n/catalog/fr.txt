@@ -280,8 +280,10 @@ fr:table {
     smart_list_showing_source { "{source, select, library {{count, plural, one {Affichage de tous les morceaux : #} other {Affichage de tous les morceaux : #}}} other {{count, plural, one {Affichage de tous les morceaux de la source : #} other {Affichage de tous les morceaux de la source : #}}}}" }
     smart_list_invalid_filter { "Filtre invalide" }
     smart_list_no_matches { "Aucune correspondance" }
+    smart_list_match_count { "{scope, select, library {Morceaux de la bibliothèque : {count, number}} source {Morceaux de la source : {count, number}} other {Correspondances : {count, number}}}" }
     smart_list_showing_all_matches { "{count, plural, one {Affichage de toutes les correspondances : #} other {Affichage de toutes les correspondances : #}}" }
-    smart_list_showing_first_matches { "Affichage de {visible} sur {count} correspondances" }
+    smart_list_showing_first_matches { "Aperçu : {visible} sur {scope, select, library {{count, plural, one {# morceau} other {# morceaux}} de la bibliothèque} source {{count, plural, one {# morceau} other {# morceaux}} de la source} other {{count, plural, one {# correspondance} other {# correspondances}}}}" }
+    smart_list_preview_unavailable { "Aperçu indisponible : {diagnostic}" }
     smart_list_untitled_track { "(sans titre)" }
     list_order_saved_lists_only { "L''ordre manuel n''est disponible que pour les listes enregistrées." }
     list_order_library_busy { "Bibliothèque occupée. L''ordre manuel sera disponible après la maintenance." }
@@ -413,7 +415,6 @@ fr:table {
     gtk_smart_list_unavailable_presentation { "Indisponible : {id} (Automatique)" }
     gtk_smart_list_presentation { "Vue" }
     gtk_smart_list_preview { "Aperçu" }
-    gtk_smart_list_waiting_for_filter { "En attente du filtre..." }
     gtk_smart_list_track { "Morceau" }
     gtk_smart_list_invalid_source { "(source invalide)" }
     gtk_smart_list_choose_membership_tag { "Choisissez un tag visible pour l’appartenance à la liste de lecture" }

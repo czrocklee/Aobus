@@ -85,9 +85,13 @@ Its theme selector is preview-only; theme persistence belongs to Preferences.
 
 Native file-dialog cancellation or dismissal is silent and creates no replacement.
 Other native file-dialog failures are logged and presented in a parent-bound transient message at the initiating window.
-A saved-List preview-source acquisition failure uses the editor's existing error label.
-The saved-List editor evaluates each non-empty local expression through a leased ad-hoc runtime source: a valid expression drives the transient preview projection, a local expression failure hides that preview and shows its diagnostic, and a valid expression over a broken saved-List parent chain shows the propagated contextual parent error.
-Saved-List create or edit rejection retains the draft and editor, while delete rejection presents a parent-bound transient message without changing the tree or selection.
+
+The saved-List dialog shows a leading sample of the bound source and a separate total. Changes beyond the sample limit still update the total.
+The error label keeps a failed write's diagnostic until a List field changes or the user tries again. Choosing a presentation preset does not clear the error: the preference is saved only after the List write succeeds. A background refresh, including a filter debounce scheduled before the failure, does not erase it. If the preview reports a different blocking diagnostic, the label shows it immediately on a separate line below the write error.
+Create or Save clears the previous attempt's error, cancels any pending filter debounce, and refreshes the current draft's preview before admitting a write. Repeated responses while a write is pending do not start another write. A named draft with a blank local expression can still be submitted if its preview source is available, even if that source reports an inherited filter error. A Playlist draft also needs a membership tag.
+A rejected local expression hides the preview and produces a filter diagnostic. For a valid non-empty expression over a broken saved-List parent chain, the filter diagnostic identifies the parent error. If the parent is missing or deleted, the preview diagnostic reports an unavailable source, not an invalid local expression. These preview failures disable Save and leave the draft open.
+A rejected create or edit likewise retains the draft. A rejected deletion presents a parent-bound transient message without changing the tree or selection.
+
 Deferred track-presentation selection retains the target view identity; if focus changes before application or the runtime rejects the change, it leaves the current view unchanged and presents a parent-bound transient message.
 Active-pair terminal-retirement failure presents a parent-bound transient message and leaves the old pair visible.
 After retirement, process-launch or successor-startup failure presents a standalone native diagnostic without reconstructing the old pair, as specified by the active-library lifecycle.
@@ -126,6 +130,7 @@ Messages and confirmations may use `AppDialog::presentMessage` or a native GTK d
 - [`main.cpp`](../../../../app/linux-gtk/main.cpp) owns the active-library restart handoff.
 - [`LayoutEditorDialog.cpp`](../../../../app/linux-gtk/layout/editor/LayoutEditorDialog.cpp) owns editor preview and commit interaction.
 - [`TrackPropertiesDialog.cpp`](../../../../app/linux-gtk/tag/TrackPropertiesDialog.cpp) owns revision-bound metadata Save routing, outcome presentation, and deferred successful close.
+- [`SmartListDialog.cpp`](../../../../app/linux-gtk/list/SmartListDialog.cpp) owns the saved-List preview and submission admission.
 
 ## Test map
 
@@ -136,6 +141,7 @@ Messages and confirmations may use `AppDialog::presentMessage` or a native GTK d
 - Layout-editor tests under [`test/linux-gtk/layout/editor/`](../../../../test/linux-gtk/layout/editor) protect draft, preview, and action behavior.
 - [`TrackPropertiesDialogTest.cpp`](../../../../test/linux-gtk/tag/TrackPropertiesDialogTest.cpp) protects pending-draft freezing, repeated-Save rejection, managed-and-presented Save success, retained failure outcomes, unchanged-Credits close without a discard prompt, and post-publication owner teardown around admitted completion.
 - [`ShellLayoutControllerTest.cpp`](../../../../test/linux-gtk/app/ShellLayoutControllerTest.cpp) protects persistence-failure feedback and editor retention.
+- [`SmartListDialogTest.cpp`](../../../../test/linux-gtk/list/SmartListDialogTest.cpp) covers immediate preview on population and how write and preview diagnostics appear together and change across edits, refreshes, and retry. [`ListNavigationControllerTest.cpp`](../../../../test/linux-gtk/list/ListNavigationControllerTest.cpp) covers Create rejecting a current draft before filter debounce and retrying after a writer rejection without discarding the draft.
 
 ## Related documents
 

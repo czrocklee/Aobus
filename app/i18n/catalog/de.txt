@@ -280,8 +280,10 @@ de:table {
     smart_list_showing_source { "{source, select, library {{count, plural, one {Alle Titel werden angezeigt: #} other {Alle Titel werden angezeigt: #}}} other {{count, plural, one {Alle Titel aus der Quelle werden angezeigt: #} other {Alle Titel aus der Quelle werden angezeigt: #}}}}" }
     smart_list_invalid_filter { "Ungültiger Filter" }
     smart_list_no_matches { "Keine Treffer" }
+    smart_list_match_count { "{scope, select, library {Titel in der Bibliothek: {count, number}} source {Titel aus der Quelle: {count, number}} other {Treffer: {count, number}}}" }
     smart_list_showing_all_matches { "{count, plural, one {Alle Treffer werden angezeigt: #} other {Alle Treffer werden angezeigt: #}}" }
-    smart_list_showing_first_matches { "{visible} von {count} Treffern werden angezeigt" }
+    smart_list_showing_first_matches { "Vorschau: {visible} von {scope, select, library {{count, plural, one {# Titel} other {# Titeln}} aus der Bibliothek} source {{count, plural, one {# Titel} other {# Titeln}} aus der Quelle} other {{count, plural, one {# Treffer} other {# Treffern}}}}" }
+    smart_list_preview_unavailable { "Vorschau nicht verfügbar: {diagnostic}" }
     smart_list_untitled_track { "(ohne Titel)" }
     list_order_saved_lists_only { "Eine manuelle Reihenfolge ist nur für gespeicherte Listen verfügbar." }
     list_order_library_busy { "Die Bibliothek ist beschäftigt. Die manuelle Reihenfolge ist nach Abschluss der Wartung wieder verfügbar." }
@@ -413,7 +415,6 @@ de:table {
     gtk_smart_list_unavailable_presentation { "Nicht verfügbar: {id} (Automatisch)" }
     gtk_smart_list_presentation { "Ansicht" }
     gtk_smart_list_preview { "Vorschau" }
-    gtk_smart_list_waiting_for_filter { "Warten auf Filter..." }
     gtk_smart_list_track { "Titel" }
     gtk_smart_list_invalid_source { "(ungültige Quelle)" }
     gtk_smart_list_choose_membership_tag { "Sichtbares Tag für die Wiedergabelisten-Mitgliedschaft wählen" }

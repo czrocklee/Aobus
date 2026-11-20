@@ -17,13 +17,17 @@
 #include <ao/query/Expression.h>
 #include <ao/query/Serializer.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/library/LibrarySnapshot.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <giomm/listmodel.h>
+#include <glibmm/refptr.h>
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
 #include <gtkmm/columnview.h>
@@ -37,14 +41,37 @@
 #include <gtkmm/window.h>
 #include <pangomm/layout.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <functional>
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 
 namespace ao::gtk::test
 {
+  namespace
+  {
+    Glib::RefPtr<Gio::ListModel> previewRows(SmartListDialog& dialog)
+    {
+      auto* const preview = findWidget<Gtk::ColumnView>(dialog);
+      REQUIRE(preview != nullptr);
+      auto const modelPtr = std::dynamic_pointer_cast<Gio::ListModel>(preview->get_model());
+      REQUIRE(modelPtr);
+      return modelPtr;
+    }
+
+    Gtk::Entry& requireEntryByPlaceholder(SmartListDialog& dialog, std::string_view const placeholder)
+    {
+      auto const entries = collectAll<Gtk::Entry>(dialog);
+      auto const it = std::ranges::find_if(
+        entries, [placeholder](Gtk::Entry const* entry) { return entry->get_placeholder_text().raw() == placeholder; });
+      REQUIRE(it != entries.end());
+      return **it;
+    }
+  } // namespace
+
   TEST_CASE("SmartListDialog - renders the initial smart-list draft")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
@@ -68,6 +95,8 @@ namespace ao::gtk::test
 
     CHECK(dialog.editListId() == kInvalidListId);
     CHECK(dialog.draft().expression.empty());
+    CHECK(previewRows(dialog)->get_n_items() == 0);
+    CHECK(findLabelByText(dialog, "No tracks in library") != nullptr);
 
     bool foundTwoPane = false;
     bool foundConfigPane = false;
@@ -109,15 +138,11 @@ namespace ao::gtk::test
 
     drainGtkEvents();
 
-    bool visibleError = false;
-
-    for (auto* const label : collectAll<Gtk::Label>(dialog))
-    {
-      visibleError = visibleError || (label->get_visible() && label->get_text() == "List 999999 does not exist" &&
-                                      label->has_css_class("ao-layout-error"));
-    }
-
-    CHECK(visibleError);
+    auto* const errorLabel = findWidgetByClass<Gtk::Label>(dialog, "ao-layout-error");
+    REQUIRE(errorLabel != nullptr);
+    CHECK(errorLabel->get_visible());
+    CHECK(errorLabel->get_text() == "Preview unavailable: List 999999 does not exist");
+    CHECK(previewRows(dialog)->get_n_items() == 0);
   }
 
   TEST_CASE("SmartListDialog - valid expression filters the transient preview projection")
@@ -143,16 +168,170 @@ namespace ao::gtk::test
     dialog.setLocalExpression(R"($title = "Needle")");
     drainGtkEvents();
 
-    auto const columnViews = collectAll<Gtk::ColumnView>(dialog);
-    REQUIRE(columnViews.size() == 1);
-    auto const selectionModelPtr = columnViews.front()->get_model();
-    REQUIRE(selectionModelPtr);
-    auto const singleSelectionPtr = std::dynamic_pointer_cast<Gtk::SingleSelection>(selectionModelPtr);
-    REQUIRE(singleSelectionPtr);
-    auto const previewModelPtr = singleSelectionPtr->get_model();
-    REQUIRE(previewModelPtr);
-    CHECK(previewModelPtr->get_n_items() == 1);
+    CHECK(previewRows(dialog)->get_n_items() == 1);
     CHECK(findLabelByText(dialog, "Showing all matches: 1") != nullptr);
+  }
+
+  TEST_CASE("SmartListDialog - populating an Auto edit immediately refreshes its filter preview")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Needle"});
+    auto const listId = ao::test::requireValue(runGtkTask(
+      runtime,
+      runtime.library().commands().createListAsync(rt::ListDraft{.name = "Empty List", .expression = "false"})));
+    auto const optNode = runtime.library().snapshot().listNode(listId);
+    REQUIRE(optNode);
+
+    auto window = Gtk::Window{};
+    auto cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
+    auto dialog = SmartListDialog{window,
+                                  runtime.library(),
+                                  runtime.views(),
+                                  runtime.sources(),
+                                  runtime.completion(),
+                                  runtime.workspace().customPresets(),
+                                  ao::test::englishMessageCatalog(),
+                                  kInvalidListId,
+                                  cache};
+    drainGtkEvents();
+    auto const previewModelPtr = previewRows(dialog);
+    REQUIRE(previewModelPtr->get_n_items() == 1);
+
+    // Auto remains selected, so only population itself can refresh before the timeout.
+    dialog.populate(listId, *optNode, std::nullopt);
+    CHECK(previewModelPtr->get_n_items() == 0);
+    CHECK(findLabelByText(dialog, "No matches") != nullptr);
+  }
+
+  TEST_CASE("SmartListDialog - limits the preview rows without losing the full match count")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+
+    for (std::size_t index = 0; index < 10; ++index)
+    {
+      addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Track " + std::to_string(index)});
+    }
+
+    auto window = Gtk::Window{};
+    auto cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
+    auto dialog = SmartListDialog{window,
+                                  runtime.library(),
+                                  runtime.views(),
+                                  runtime.sources(),
+                                  runtime.completion(),
+                                  runtime.workspace().customPresets(),
+                                  ao::test::englishMessageCatalog(),
+                                  rt::kAllTracksListId,
+                                  cache};
+
+    dialog.setLocalExpression("true");
+    drainGtkEvents();
+
+    auto const previewModelPtr = previewRows(dialog);
+    CHECK(previewModelPtr->get_n_items() == 10);
+    auto* const statusLabel = findLabelByText(dialog, "Showing all matches: 10");
+    REQUIRE(statusLabel != nullptr);
+    CHECK(statusLabel->get_visible());
+    auto* const errorLabel = findWidgetByClass<Gtk::Label>(dialog, "ao-layout-error");
+    REQUIRE(errorLabel != nullptr);
+    CHECK_FALSE(errorLabel->get_visible());
+
+    dialog.showError("Save failed");
+    // Rebuilding the same draft does not count as an edit.
+    dialog.setLocalExpression("true");
+    CHECK(errorLabel->get_visible());
+    CHECK(errorLabel->get_text() == "Save failed");
+
+    // A live append past the slice changes the total, not the sample size or save feedback.
+    addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Track 10"});
+    drainGtkEvents();
+    CHECK(previewModelPtr->get_n_items() == 10);
+    CHECK(statusLabel->get_text() == "Preview: 10 of 11 matches");
+    CHECK(errorLabel->get_visible());
+    CHECK(errorLabel->get_text() == "Save failed");
+
+    dialog.showError({});
+    addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Track 11"});
+    drainGtkEvents();
+    CHECK(previewModelPtr->get_n_items() == 10);
+    CHECK(statusLabel->get_text() == "Preview: 10 of 12 matches");
+    CHECK_FALSE(errorLabel->get_visible());
+
+    dialog.setLocalExpression("");
+    CHECK(previewModelPtr->get_n_items() == 10);
+    CHECK(statusLabel->get_text() == "Preview: 10 of 12 library tracks");
+    CHECK_FALSE(errorLabel->get_visible());
+
+    dialog.setLocalExpression("false");
+    CHECK(previewModelPtr->get_n_items() == 0);
+    CHECK(statusLabel->get_text() == "No matches");
+    CHECK_FALSE(errorLabel->get_visible());
+  }
+
+  TEST_CASE("SmartListDialog - deleting the parent shows the preview blocker alongside the Save error")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Needle"});
+    addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Haystack"});
+    auto& commands = runtime.library().commands();
+    auto const parentListId = ao::test::requireValue(runGtkTask(
+      runtime, commands.createListAsync(rt::ListDraft{.name = "Parent", .expression = R"($title = "Needle")"})));
+
+    auto window = Gtk::Window{};
+    auto cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
+    auto dialog = SmartListDialog{window,
+                                  runtime.library(),
+                                  runtime.views(),
+                                  runtime.sources(),
+                                  runtime.completion(),
+                                  runtime.workspace().customPresets(),
+                                  ao::test::englishMessageCatalog(),
+                                  parentListId,
+                                  cache};
+    drainGtkEvents();
+
+    auto const previewModelPtr = previewRows(dialog);
+    CHECK(previewModelPtr->get_n_items() == 1);
+    auto* const statusLabel = findLabelByText(dialog, "Showing all tracks from source: 1");
+    auto* const errorLabel = findWidgetByClass<Gtk::Label>(dialog, "ao-layout-error");
+    auto* const createButton = findButtonByLabel(dialog, "Create");
+    REQUIRE(statusLabel != nullptr);
+    REQUIRE(errorLabel != nullptr);
+    REQUIRE(createButton != nullptr);
+    requireEntryByPlaceholder(dialog, "List name").set_text("Child draft");
+    REQUIRE(createButton->get_sensitive());
+    dialog.showError("Create list is busy");
+
+    REQUIRE(runGtkTask(runtime, commands.deleteListAsync(parentListId)));
+    drainGtkEvents();
+    CHECK(previewModelPtr->get_n_items() == 0);
+    CHECK(statusLabel->get_text().empty());
+    CHECK_FALSE(createButton->get_sensitive());
+    CHECK(errorLabel->get_visible());
+    auto const unavailable = "Preview unavailable: List " + std::to_string(parentListId.raw()) + " does not exist";
+    auto const expectedError = "Create list is busy\n" + unavailable;
+    REQUIRE(errorLabel->get_text() == expectedError);
+
+    auto const dropDowns = collectAll<Gtk::DropDown>(dialog);
+    REQUIRE(dropDowns.size() == 1);
+    dropDowns.front()->set_selected(1U);
+    REQUIRE_FALSE(dialog.presentationId().empty());
+    CHECK_FALSE(createButton->get_sensitive());
+    CHECK(errorLabel->get_visible());
+    CHECK(errorLabel->get_text() == expectedError);
+
+    // A response still revalidates and drops the old writer error, but isn't needed to see the blocker.
+    CHECK_FALSE(dialog.tryBeginSubmission());
+    CHECK_FALSE(createButton->get_sensitive());
+    CHECK(errorLabel->get_visible());
+    CHECK(errorLabel->get_text() == unavailable);
+    CHECK(dialog.draft().name == "Child draft");
   }
 
   TEST_CASE("SmartListDialog - invalid expression rejects the transient preview")
@@ -174,8 +353,11 @@ namespace ao::gtk::test
                                   cache};
 
     drainGtkEvents();
+    auto const previewModelPtr = previewRows(dialog);
+    REQUIRE(previewModelPtr->get_n_items() == 1);
     dialog.setLocalExpression("(");
     drainGtkEvents();
+    CHECK(previewModelPtr->get_n_items() == 0);
 
     bool invalidEntry = false;
     bool visibleFilterError = false;
@@ -333,6 +515,125 @@ namespace ao::gtk::test
 
     dialog.completeSubmission();
     CHECK(okButton->get_sensitive());
+  }
+
+  TEST_CASE("SmartListDialog - editing draft fields dismisses the previous submission error")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto window = Gtk::Window{};
+    auto& runtime = fixture.runtime();
+    auto cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
+    auto dialog = SmartListDialog{window,
+                                  runtime.library(),
+                                  runtime.views(),
+                                  runtime.sources(),
+                                  runtime.completion(),
+                                  runtime.workspace().customPresets(),
+                                  ao::test::englishMessageCatalog(),
+                                  rt::kAllTracksListId,
+                                  cache};
+    drainGtkEvents();
+
+    auto* const errorLabel = findWidgetByClass<Gtk::Label>(dialog, "ao-layout-error");
+    REQUIRE(errorLabel != nullptr);
+    auto const showFailure = [&]
+    {
+      dialog.showError("Create list is busy");
+      REQUIRE(errorLabel->get_visible());
+    };
+
+    SECTION("name in a Smart List")
+    {
+      auto& name = requireEntryByPlaceholder(dialog, "List name");
+      name.set_text("First name");
+      showFailure();
+      name.set_text("New name");
+      CHECK(dialog.draft().name == "New name");
+    }
+
+    SECTION("name in a Playlist with a separately chosen tag")
+    {
+      dialog.configurePlaylistTemplate("First name", "Fixed tag");
+      auto const expression = dialog.draft().expression;
+      showFailure();
+      requireEntryByPlaceholder(dialog, "List name").set_text("New name");
+      CHECK(dialog.draft().name == "New name");
+      CHECK(dialog.draft().expression == expression);
+    }
+
+    SECTION("description")
+    {
+      requireEntryByPlaceholder(dialog, "List name").set_text("List draft");
+      showFailure();
+      requireEntryByPlaceholder(dialog, "Optional description").set_text("New description");
+      CHECK(dialog.draft().description == "New description");
+    }
+
+    SECTION("membership tag")
+    {
+      dialog.configurePlaylistTemplate("Playlist", "FirstTag");
+      showFailure();
+      requireEntryByPlaceholder(dialog, "Visible tag used for membership").set_text("Another tag");
+      CHECK(dialog.draft().expression ==
+            query::serialize(query::VariableExpression{.type = query::VariableType::Tag, .name = "Another tag"}));
+    }
+
+    SECTION("local filter before debounce")
+    {
+      requireEntryByPlaceholder(dialog, "List name").set_text("List draft");
+      auto* const filter = findWidgetByClass<Gtk::Entry>(dialog, "ao-query-expression-entry");
+      REQUIRE(filter != nullptr);
+      showFailure();
+      filter->set_text("true");
+      CHECK(dialog.draft().expression == "true");
+    }
+
+    CHECK_FALSE(errorLabel->get_visible());
+  }
+
+  TEST_CASE("SmartListDialog - a pending filter refresh preserves a later submission error")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto window = Gtk::Window{};
+    auto& runtime = fixture.runtime();
+    auto cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
+    auto dialog = SmartListDialog{window,
+                                  runtime.library(),
+                                  runtime.views(),
+                                  runtime.sources(),
+                                  runtime.completion(),
+                                  runtime.workspace().customPresets(),
+                                  ao::test::englishMessageCatalog(),
+                                  rt::kAllTracksListId,
+                                  cache};
+    drainGtkEvents();
+
+    auto* const errorLabel = findWidgetByClass<Gtk::Label>(dialog, "ao-layout-error");
+    auto* const filter = findWidgetByClass<Gtk::Entry>(dialog, "ao-query-expression-entry");
+    auto* const createButton = findButtonByLabel(dialog, "Create");
+    REQUIRE(errorLabel != nullptr);
+    REQUIRE(filter != nullptr);
+    REQUIRE(createButton != nullptr);
+    auto& name = requireEntryByPlaceholder(dialog, "List name");
+    name.set_text("List draft");
+    REQUIRE(dialog.tryBeginSubmission());
+
+    // Edit during the write, then deliver its failure before yielding to the timeout.
+    filter->set_text("(");
+    dialog.completeSubmission();
+    dialog.showError("Create list is busy");
+    CHECK(errorLabel->get_text() == "Create list is busy");
+    REQUIRE_FALSE(filter->has_css_class("ao-query-invalid"));
+    REQUIRE(tryPumpGtkEventsUntil([&] { return filter->has_css_class("ao-query-invalid"); }));
+    CHECK_FALSE(createButton->get_sensitive());
+    CHECK(errorLabel->get_visible());
+    CHECK(errorLabel->get_text().raw().starts_with("Create list is busy\nFilter error:"));
+
+    name.set_text("Renamed draft");
+    CHECK(errorLabel->get_visible());
+    CHECK(errorLabel->get_text().raw().starts_with("Filter error:"));
   }
 
   // A list created from the library root, and any top-level list opened for
