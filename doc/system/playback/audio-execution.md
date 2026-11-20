@@ -278,7 +278,7 @@ Explicit `play`, `stop`, and output-device changes clear unconsumed lookahead.
 A seek clears lookahead only after passing its initial Error and expected-item admission checks.
 An `updateDevice` call carrying the unchanged device snapshot is a no-op and
 does not invalidate pending starts or prepared lookahead.
-Prepared-source failure clears lookahead without changing the current track; after splice, that source generation is current and fails as current.
+Prepared-source failure clears lookahead without changing the current track. If render has already claimed that successor, Engine settles the handoff and delivers its advance before reducing the failure against the new current item. If an advance callback starts another item or seeks the same source, the displaced item's or decode attempt's error is discarded. A stale error cannot disarm an unrelated successor.
 
 A splice requires both sessions to be gapless-capable and `Backend::canReuseFormat` to authorize the successor's canonical PCM mode, both before preparation and again at adoption.
 The default is exact mode equality, including the speaker mask; this query performs no native I/O, reconfiguration, or outward callback.
@@ -848,6 +848,7 @@ NaN requests return `InvalidInput` before mixer locking, refresh, graph publicat
 The first `Engine::shutdown()` caller changes lifecycle under the control lock, retires the render session, stops and joins the event worker, and closes backend/timeline state.
 Commands admitted after lifecycle transition do not enter backend/timeline logic and result-bearing commands return `InvalidState`.
 Concurrent shutdown callers wait for the single teardown; repeated completed shutdown is a no-op.
+Joining the event worker does not quiesce render. The timeline retains its nodes until backend stop/close has quiesced render; only then are the remaining non-owning realtime signals discarded and the nodes released.
 Engine event-queue destruction requires a non-joinable worker, a published
 stopped state, an empty non-realtime event deque, and an empty realtime ring.
 Those are always-active invariants in every build configuration.

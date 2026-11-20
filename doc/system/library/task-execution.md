@@ -52,6 +52,13 @@ Guard destruction remains an idempotent lifetime fallback; coordinated Closing m
 The background-task lease uses the same lifetime-safe owner anchor but needs no callback-affine availability transition when it finishes.
 Scan and backfill return to the callback executor for workflow finalization, release the lease, and emit their progress-finished pulse only after every committed command reached revision settlement.
 
+## Audio identity scheduling
+
+Backfill and unrelated work share the same worker pool, including when the CLI runs backfill.
+The actual Runtime worker count caps fingerprint concurrency: at most the pool size minus one, with a minimum of one, whether concurrency is requested explicitly or chosen by default.
+Fingerprint workers post a new worker turn between rows, so even a single-worker pool can service queued work before the next file.
+One file's checks and fingerprint can still occupy a worker until that row finishes; this bounds uninterrupted fingerprint work by file, not by elapsed time, and does not guarantee latency on a contended disk.
+
 ## Progress and outcome
 
 Task progress uses owner-local operational channels on `LibraryJobs`.
@@ -78,23 +85,24 @@ Neither the finished pulse nor an awaited-task caller refreshes runtime replicas
 
 ## Cancellation
 
-Every task uses its stop token at worker/callback executor hops, but only operations with a synchronous stop-token surface support cancellation while their core work is running.
+Tasks check caller cancellation at admission and at cancellable executor hops. Between files, an identity worker yields without throwing so it can return completed candidates to the coordinator. Only operations with a synchronous stop-token surface support cancellation during their core work.
 
 | Operation          | In-operation cancellation                                                                                            |
 | ------------------ | -------------------------------------------------------------------------------------------------------------------- |
 | YAML import/export | None after synchronous transfer work begins.                                                                         |
 | Scan plan build    | Cooperative while copying the manifest, walking entries, reporting progress, matching moves, and hashing candidates. |
 | Scan plan apply    | Cooperative between items and fingerprint chunks; cancellation aborts the plan transaction.                          |
-| Identity backfill  | Cooperative between hash chunks; completed hashes in the current batch may be flushed.                               |
+| Identity backfill  | Cooperative between hash chunks; completed hash candidates in the current batch are submitted for revalidation.      |
 
-Lifetime cancellation unwinds the coroutine and prevents post-cancellation access to destroyed borrowed owners.
+Observing cooperative cancellation unwinds the task; requesting cancellation alone does not guarantee that work using a borrowed owner has stopped.
 Business code does not reinterpret cancellation as a generic recoverable error or encode it in a successful value.
 Pre-admission cancellation has no progress-channel side effect; post-admission cancellation follows the admitted conversation's cleanup contract.
 Once scan apply or identity backfill has acquired its background-task lease, task plumbing returns to the callback executor without consulting the stop token, finishes the lease, emits the status-free progress pulse, and then propagates `OperationCancelled`.
 The same cleanup occurs whether cancellation is observed as stop-token state or escapes from worker code as an exception.
 Closing separately requests stop from active pre-transaction work and retires queued command requests.
 Once native commit succeeds, caller cancellation cannot replace `Published` or internal `RetiredByClosing` with an ordinary pre-commit outcome.
-An identity batch whose hashes were already submitted keeps the existing flush boundary: the accepted batch is completed rather than discarded solely because caller stop arrives while it waits for its turn.
+While the runtime and write lane remain live, caller stop does not discard an accepted identity batch waiting for its turn.
+Terminal Closing need not flush uncommitted identity work; the [backfill contract](scan-and-identity.md#identity-backfill) describes its outcome.
 
 ## Failure behavior
 
@@ -120,7 +128,7 @@ If one throws, required cleanup completes before that exception propagates and r
 - [`LibraryJobsTest.cpp`](../../../test/runtime/library/LibraryJobsTest.cpp) proves worker/callback affinity, bounded progress coalescing and terminal ordering, paired progress identities, transfer phase/file-name publication, background-task exclusion, interactive authoring during scan preparation and after background commit, maintenance admission, errors, status-free progress finalization, pre-admission silence, callback exception propagation, cancellation cleanup, and the mandatory post-commit barrier.
 - [`ActivityStatusFeedProjectionCompactTest.cpp`](../../../test/uimodel/status/activity/ActivityStatusFeedProjectionCompactTest.cpp) proves that finishing one overlapping read-only task immediately restores another task's active progress instead of clearing the status surface.
 - [`LibraryAuthoringTest.cpp`](../../../test/runtime/library/LibraryAuthoringTest.cpp) proves non-terminal contention behind a background command, worker-side execution, Maintenance ordering, active pre-transaction Closing cancellation, and later admission after release.
-- [`AudioIdentityIndexerTest.cpp`](../../../test/runtime/library/AudioIdentityIndexerTest.cpp) proves concurrent fingerprinting and bounded write-back behavior.
+- [`AudioIdentityIndexerTest.cpp`](../../../test/runtime/library/AudioIdentityIndexerTest.cpp) proves concurrent fingerprinting, worker capacity reserved for unrelated work, single-worker service between files, and bounded write-back behavior.
 
 ## Related documents
 

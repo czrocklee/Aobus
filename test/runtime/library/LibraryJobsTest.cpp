@@ -50,7 +50,6 @@
 #include <filesystem>
 #include <format>
 #include <fstream>
-#include <future>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -353,12 +352,11 @@ namespace ao::rt::test
     executor.drain();
     REQUIRE(completedPtr->load());
     REQUIRE(optFuture);
-    CHECK_THROWS_AS(optFuture->get(), std::future_error);
+    CHECK_THROWS_AS(optFuture->get(), async::OperationCancelled);
     CHECK(Library::prepare(libraryFixture.library()));
   }
 
-  TEST_CASE("LibraryJobs - fixture unwinding releases admitted maintenance on cancellation or future retirement",
-            "[concurrency]")
+  TEST_CASE("LibraryJobs - fixture unwinding cancels the future and releases admitted maintenance", "[concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = ManualExecutor{};
@@ -395,26 +393,7 @@ namespace ao::rt::test
     executor.runUntilIdle();
     REQUIRE(completedPtr->load());
     REQUIRE(optFuture);
-    auto const exceptionPtr = captureTaskFutureException(*optFuture);
-    REQUIRE(exceptionPtr);
-    auto const cancelled = async::isOperationCancelled(exceptionPtr);
-    bool futureRetired = false;
-
-    if (!cancelled)
-    {
-      try
-      {
-        std::rethrow_exception(exceptionPtr);
-      }
-      catch (std::future_error const& error)
-      {
-        // Closing settles lane admission before the outer future necessarily
-        // completes; stopping workers may retire that completion and break its promise.
-        futureRetired = error.code() == std::make_error_code(std::future_errc::broken_promise);
-      }
-    }
-
-    CHECK((cancelled || futureRetired));
+    CHECK_THROWS_AS(optFuture->get(), async::OperationCancelled);
     CHECK(availabilityCount == 0);
     CHECK(finishedCount == 0);
     CHECK(Library::prepare(libraryFixture.library()));

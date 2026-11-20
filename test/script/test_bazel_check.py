@@ -231,6 +231,50 @@ class CompletionEvidenceTest(unittest.TestCase):
         self.assertIn("required check did not pass: //test:unit", message)
         self.assertNotIn("skipped required checks", message)
 
+    def expanded_check_suites(self, *members):
+        return {
+            "id": {"pattern": {"pattern": ["//..."]}},
+            "expanded": {
+                "testSuiteExpansions": [
+                    {
+                        "suiteLabel": suite,
+                        "testLabels": [UNIT_TEST, *members] if suite == "//:check_tests" else [UNIT_TEST],
+                    }
+                    for suite in self.scope.suites
+                ]
+            },
+        }
+
+    def test_dictionary_publication_requires_a_linux_pass_even_without_suite_discovery(self):
+        label = "//test:dictionary_publication_test"
+        self.scope = completion._selection("linux", completion.Request())
+        for discovered in ((), (label,)):
+            expansions = self.expanded_check_suites(*discovered)
+            events = [expansions, _summary(), *(_summary(item) for item in self.scope.required - {label})]
+            for evidence in ([], [_skipped(label, "skip-cfg")], [_summary(label, status="FAILED")]):
+                with (
+                    self.subTest(discovered=discovered, evidence=evidence),
+                    self.assertRaises(bazel_native.BazelWorkspaceError),
+                ):
+                    self.verify([*events, *evidence, self.finish, self.last])
+            self.verify([*events, _summary(label), self.finish, self.last])
+
+    def test_foreign_dictionary_skip_does_not_hide_missing_or_skipped_required_checks(self):
+        label = "//test:dictionary_publication_test"
+        for platform in ("macos", "windows"):
+            with self.subTest(platform=platform):
+                self.scope = completion._selection(platform, completion.Request())
+                base = [self.expanded_check_suites(label), _summary(), _skipped(label, "skip-cfg")]
+                for gate in ("//:native_policy", "//test/lint:production_lint"):
+                    others = [_summary(item) for item in self.scope.required - {gate}]
+                    for evidence in ([], [_skipped(gate, "skip-cfg")]):
+                        with (
+                            self.subTest(gate=gate, evidence=evidence),
+                            self.assertRaises(bazel_native.BazelWorkspaceError),
+                        ):
+                            self.verify([*base, *others, *evidence, self.finish, self.last])
+                self.verify([*base, *(_summary(item) for item in self.scope.required), self.finish, self.last])
+
     def test_a_required_member_must_have_one_unambiguous_pass(self):
         for summaries in (
             [_summary(status="FAILED")],

@@ -50,7 +50,7 @@ The runtime-private `ScanApplyOperation::run()` is the distinct offline composit
 - Filesystem reads, media parsing, and fingerprinting hold no LMDB write transaction; final scan revalidation runs in the active pre-transaction lane phase.
 - Plan construction owns a copy of the manifest snapshot and releases its LMDB read transaction before filesystem traversal, file I/O, or hashing.
 - Media decoders may translate their declared legacy encodings, but library admission never repairs malformed declared UTF-8: a new file with invalid metadata becomes a per-item failure and no Track, manifest, dictionary row, or replacement character is committed.
-- Cancellation before commit leaves all track, manifest, identity, and relink state unchanged.
+- Scan application cancellation before commit leaves all track, manifest, identity, and relink state unchanged.
 - A relink preserves `TrackId` and updates the track URI and manifest binding together or not at all.
 - Automatic relinking requires one missing row and one new file with exactly equal non-pending audio identity.
 - A modification time crosses filesystem, manifest, plan, and backfill boundaries as one portable Unix/POSIX instant: the planner converts each inspected file's native clock to that scale, a conversion the native clock cannot express is a per-item failure, and comparisons include stored absence, so an absent stored time never equals a file's present instant.
@@ -260,7 +260,7 @@ Aobus never writes a guessed identity.
 `AudioIdentityIndexer` processes bounded batches in three phases:
 
 1. Under one outer `AudioIdentityBackfill` background-task lease, snapshot available pending rows and their URI, size, and modification time in a read transaction without a write-lane turn.
-2. Fingerprint files concurrently outside LMDB transactions; the default concurrency is `clamp(hardware_concurrency / 2, 2, 4)`.
+2. Fingerprint files concurrently outside LMDB transactions. The default request is `clamp(hardware_concurrency / 2, 2, 4)` and is subject, like an explicit request, to the [worker-pool scheduling cap](task-execution.md#audio-identity-scheduling).
 3. Acquire one bounded background mutation per serial write-back batch, re-read every row, and commit identities for rows still available, pending, and stat-equal.
 
 The lease prevents another scan, backfill, or import preparation from overlapping the run, but it emits no `Maintenance` availability transition. Interactive authoring remains enabled between write-back batches and reports non-terminal `Busy` only while a bounded background batch is queued or active; ordinary commands use `ResourceBusy`.
@@ -269,9 +269,11 @@ Per-file failures are reported and counted without aborting the run; recoverable
 Manifest iteration trusts the open gate and aborts through `AO_INVARIANT` on a later row-integrity breach rather than skipping it, treating it as pending work, or translating a private mechanism in runtime.
 Progress callbacks are serialized but may run on worker-pool threads.
 
-Cancellation stops hashing at chunk boundaries, commits valid rows already completed and submitted in the current batch, leaves unfinished rows pending, and propagates `OperationCancelled` after callback-owner lease cleanup.
+On cooperative caller cancellation, hashing stops at chunk boundaries and completed hash candidates in the current batch are submitted for revalidation while the runtime and write lane remain live.
+A write error takes precedence over `OperationCancelled`; otherwise cancellation propagates after callback-owner lease cleanup.
+Terminal shutdown need not flush uncommitted work.
 The successful result contains only completed, skipped, and per-item-failure counts; it never also represents cancellation.
-Earlier committed batches remain durable, and the next run resumes from the pending manifest rows rather than reconstructing partial counts for the cancelled run.
+Earlier committed batches remain durable, and a later run sees only rows still pending rather than reconstructing partial counts for the cancelled run.
 Backfill changes only manifest identity; each effective batch publishes its committed revision with no track/list category rather than claiming a metadata mutation.
 A carrier is one pending row, so backfill hashes that file once and writes that one row.
 It never adds recording dates or credits, nor infers either value from a matching hash or another Track.

@@ -59,7 +59,7 @@ Views returned by those readers borrow mapped bytes and must not outlive the tra
 Application results copy or otherwise own everything they retain.
 Dictionary values are the exception to ordinary record borrowing: committed dictionary entries are append-only and live in stable store-owned memory until the `DictionaryStore` is destroyed.
 Each dictionary read or symbol-binding batch observes either the complete old mapping or the complete published mapping, never a partially installed transaction delta; separate calls do not form a multi-call snapshot.
-Transaction-local interned entries remain hidden until commit succeeds. Abort or failed commit discards the unpublished tail, so its ids may be reused without rebinding any committed id.
+Transaction-local interned entries remain hidden until commit succeeds. The writer prepares the new tail before the durable commit; ordinary lookups and read transactions whose native snapshot needs only previously published ids can continue during that commit. Success exposes the whole tail and advances the dictionary generation without allocating. Abort or failed commit discards the unpublished tail, so its ids may be reused without rebinding any committed id.
 Before exposing a new read transaction's Track views, `MusicLibrary` extends its in-memory dictionary with any committed tail visible in that native snapshot, including additions from another supported writer process.
 Writer-capability acquisition refreshes that tail again after acquiring the writer-session lease, closing the gap between opening the library and writer admission.
 
@@ -271,7 +271,7 @@ Source and projection subscriptions release before the owners they observe; proj
 ## Test map
 
 - Storage tests under [`test/library/`](../../../test/library) protect open admission, transaction capabilities, rollback, open-lock and writer exclusion, and logical aggregate writes.
-- [`DictionaryStoreTest.cpp`](../../../test/library/DictionaryStoreTest.cpp) protects complete dictionary publication, hidden uncommitted entries, failed-commit rollback, id reuse, and stable borrowed text; [`MetadataStoreTest.cpp`](../../../test/library/MetadataStoreTest.cpp) protects external-tail refresh on read snapshots and writer admission.
+- [`DictionaryStoreTest.cpp`](../../../test/library/DictionaryStoreTest.cpp) protects dictionary publication, rollback, id reuse, and stable borrowed text. The [Linux publication test](../../../test/linux/library/DictionaryPublicationTest.cpp) checks the local handoff between a successful native commit and an incoming read snapshot; [`MetadataStoreTest.cpp`](../../../test/library/MetadataStoreTest.cpp) covers external-tail refresh on read snapshots and writer admission.
 - Runtime library tests under [`test/runtime/library/`](../../../test/runtime/library) protect command admission, publication settlement, scan/transfer behavior, and shutdown retirement.
 - Source tests under [`test/runtime/source/`](../../../test/runtime/source) protect leases, cache identity, expression/rank composition, and deltas.
 - Projection tests under [`test/runtime/projection/`](../../../test/runtime/projection) protect lifecycle, ordering, grouping, locale replacement, and incremental equivalence.

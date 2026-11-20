@@ -195,15 +195,20 @@ namespace ao::rt::test
       void defer(compat::MoveOnlyFunction<void()> task) override { task(); }
     };
 
-    class RejectingPublicationExecutor final : public async::Executor
+    class RejectingDispatchExecutor final : public async::Executor
     {
     public:
-      bool isCurrent() const noexcept override { return false; }
-      void dispatch(compat::MoveOnlyFunction<void()> /*task*/) override
+      explicit RejectingDispatchExecutor(char const* rejectionMessage)
+        : _rejectionMessage{rejectionMessage}
       {
-        throw std::runtime_error{"probe publication admission rejection"};
       }
+
+      bool isCurrent() const noexcept override { return false; }
+      void dispatch(compat::MoveOnlyFunction<void()> /*task*/) override { throw std::runtime_error{_rejectionMessage}; }
       void defer(compat::MoveOnlyFunction<void()> /*task*/) override {}
+
+    private:
+      char const* _rejectionMessage;
     };
 
     class ClosingRaceRejectingExecutor final : public async::Executor
@@ -558,7 +563,7 @@ namespace ao::rt::test
       }
 
       auto callbackExecutor = async::LoopExecutor{};
-      auto rejectingExecutor = RejectingPublicationExecutor{};
+      auto rejectingExecutor = RejectingDispatchExecutor{"probe publication admission rejection"};
       auto& executor = phase == PublicationFailurePhase::Admission ? static_cast<async::Executor&>(rejectingExecutor)
                                                                    : static_cast<async::Executor&>(callbackExecutor);
       auto transaction = musicLibrary.readTransaction();
@@ -806,6 +811,26 @@ namespace ao::rt::test
     std::int32_t runEmptyExceptionRethrow()
     {
       async::rethrowException({});
+    }
+
+    std::int32_t runCallbackHopDispatchException()
+    {
+      auto executor = RejectingDispatchExecutor{"probe callback hop dispatch rejection"};
+      auto runtime = async::Runtime{executor, 1};
+
+      if (!tryRegisterFatalSink(
+            [](FatalDiagnostic const&)
+            {
+              std::fputs("AOBUS_TEST sink=accepted\n", stderr);
+              std::fflush(stderr);
+              return true;
+            }))
+      {
+        return 3;
+      }
+
+      runtime.spawn(runtime.resumeOnCallbackExecutorAsync()).get();
+      return 3;
     }
 
     std::int32_t runSpawnLoggedException()
@@ -1421,6 +1446,11 @@ namespace ao::rt::test
     if (name == "operation-cancelled-empty-rethrow")
     {
       return runEmptyExceptionRethrow();
+    }
+
+    if (name == "runtime-callback-hop-dispatch-exception")
+    {
+      return runCallbackHopDispatchException();
     }
 
     if (name == "runtime-spawn-logged-exception")

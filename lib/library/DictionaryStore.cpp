@@ -77,6 +77,8 @@ namespace ao::library
         detail::throwLibraryError(Error::Code::CorruptData, "Dictionary database contains duplicate text values");
       }
     }
+
+    _publishedSize = _idToStringStorage.size();
   }
 
   void DictionaryStore::refresh(lmdb::IntegerKeyDatabase::Reader const& reader)
@@ -85,14 +87,18 @@ namespace ao::library
     {
       auto const lock = std::shared_lock{_mutex};
 
-      if (count <= _idToStringStorage.size())
+      if (count <= _publishedSize)
       {
         return;
       }
     }
 
+    // Only a snapshot that actually needs more ids takes this slow path.
+    // If it observed the local native commit before publish(), wait for that
+    // publication instead of appending its prepared tail a second time.
+    auto const publicationLock = std::scoped_lock{_tailPublicationMutex};
     auto const lock = std::scoped_lock{_mutex};
-    auto const previousSize = _idToStringStorage.size();
+    auto const previousSize = _publishedSize;
 
     if (count <= previousSize)
     {
@@ -127,6 +133,7 @@ namespace ao::library
       throw;
     }
 
+    _publishedSize = count;
     ++_generation;
   }
 
@@ -138,7 +145,7 @@ namespace ao::library
     // 0 is null/invalid
     AO_EXPECTS(index != 0, "Invalid dictionary ID");
 
-    AO_EXPECTS(index - 1 < _idToStringStorage.size(), "Invalid dictionary ID");
+    AO_EXPECTS(index <= _publishedSize, "Invalid dictionary ID");
 
     return _idToStringStorage[index - 1];
   }
@@ -148,7 +155,7 @@ namespace ao::library
     auto const lock = std::shared_lock{_mutex};
     auto index = id.raw();
 
-    if (index == 0 || index - 1 >= _idToStringStorage.size())
+    if (index == 0 || index > _publishedSize)
     {
       return defaultValue;
     }
@@ -159,8 +166,12 @@ namespace ao::library
   std::optional<DictionaryId> DictionaryStore::findId(std::string_view str) const
   {
     auto const lock = std::shared_lock{_mutex};
+    return findPublishedId(str);
+  }
 
-    if (auto const it = _stringToId.find(str); it != _stringToId.end())
+  std::optional<DictionaryId> DictionaryStore::findPublishedId(std::string_view text) const
+  {
+    if (auto const it = _stringToId.find(text); it != _stringToId.end() && it->raw() <= _publishedSize)
     {
       return *it;
     }
@@ -177,7 +188,7 @@ namespace ao::library
   std::size_t DictionaryStore::size() const
   {
     auto const lock = std::shared_lock{_mutex};
-    return _idToStringStorage.size();
+    return _publishedSize;
   }
 
   std::uint64_t DictionaryStore::bindSymbols(std::span<std::string const> symbols, std::span<DictionaryId> ids) const
@@ -187,14 +198,7 @@ namespace ao::library
 
     for (std::size_t index = 0; index < symbols.size(); ++index)
     {
-      if (auto const it = _stringToId.find(symbols[index]); it != _stringToId.end())
-      {
-        ids[index] = *it;
-      }
-      else
-      {
-        ids[index] = kInvalidDictionaryId;
-      }
+      ids[index] = findPublishedId(symbols[index]).value_or(kInvalidDictionaryId);
     }
 
     return _generation;
@@ -212,7 +216,7 @@ namespace ao::library
       : dictionary{&owner}, transaction{&writeTransaction}
     {
       auto const lock = std::shared_lock{dictionary->_mutex};
-      auto const committedSize = dictionary->_idToStringStorage.size();
+      auto const committedSize = dictionary->_publishedSize;
       nextId =
         committedSize < std::numeric_limits<std::uint32_t>::max() ? static_cast<std::uint32_t>(committedSize) + 1 : 0;
     }
@@ -305,36 +309,28 @@ namespace ao::library
         return;
       }
 
-      publicationLock = std::unique_lock{dictionary->_mutex};
-
-      auto const expectedFirstId = static_cast<std::uint32_t>(dictionary->_idToStringStorage.size()) + 1;
+      publicationLock = std::unique_lock{dictionary->_tailPublicationMutex};
+      auto const lock = std::scoped_lock{dictionary->_mutex};
+      auto const expectedFirstId = static_cast<std::uint32_t>(dictionary->_publishedSize) + 1;
 
       AO_INVARIANT(
         delta.front().id.raw() == expectedFirstId, "Dictionary publication order changed during a library write");
 
-      try
+      // Perform every allocation before native commit. Readers filter both
+      // indices by _publishedSize, including if preparation throws partway.
+      // WriteTransaction rolls that hidden tail back before releasing the gate.
+      dictionary->_stringToId.reserve(dictionary->_stringToId.size() + delta.size());
+
+      for (auto& entry : delta)
       {
-        dictionary->_stringToId.reserve(dictionary->_stringToId.size() + delta.size());
-
-        for (auto& entry : delta)
-        {
-          dictionary->_idToStringStorage.emplace_back(std::move(entry.text));
-          appendedCount++;
-        }
-
-        for (auto const& entry : delta)
-        {
-          auto const [it, inserted] = dictionary->_stringToId.insert(entry.id);
-
-          AO_INVARIANT(inserted, "Dictionary publication would rebind an existing string");
-
-          insertedCount++;
-        }
+        dictionary->_idToStringStorage.emplace_back(std::move(entry.text));
       }
-      catch (...)
+
+      for (auto const& entry : delta)
       {
-        rollbackPublication();
-        throw;
+        auto const [it, inserted] = dictionary->_stringToId.insert(entry.id);
+        AO_INVARIANT(inserted, "Dictionary publication would rebind an existing string");
+        insertedCount++;
       }
     }
 
@@ -345,9 +341,11 @@ namespace ao::library
         return;
       }
 
-      dictionary->_generation++;
-      insertedCount = 0;
-      appendedCount = 0;
+      {
+        auto const lock = std::scoped_lock{dictionary->_mutex};
+        dictionary->_publishedSize = dictionary->_idToStringStorage.size();
+        dictionary->_generation++;
+      }
       publicationLock.unlock();
     }
 
@@ -358,18 +356,19 @@ namespace ao::library
         return;
       }
 
-      for (std::size_t index = 0; index < insertedCount; ++index)
       {
-        dictionary->_stringToId.erase(delta[index].id);
-      }
+        auto const lock = std::scoped_lock{dictionary->_mutex};
 
-      while (appendedCount > 0)
-      {
-        dictionary->_idToStringStorage.pop_back();
-        appendedCount--;
-      }
+        for (std::size_t index = 0; index < insertedCount; ++index)
+        {
+          dictionary->_stringToId.erase(delta[index].id);
+        }
 
-      insertedCount = 0;
+        while (dictionary->_idToStringStorage.size() > dictionary->_publishedSize)
+        {
+          dictionary->_idToStringStorage.pop_back();
+        }
+      }
       publicationLock.unlock();
     }
 
@@ -378,9 +377,8 @@ namespace ao::library
     std::optional<lmdb::IntegerKeyDatabase::Writer> optWriter;
     std::map<std::string, DictionaryId, std::less<>> overlay;
     std::vector<Delta> delta;
-    std::unique_lock<std::shared_mutex> publicationLock;
+    std::unique_lock<std::mutex> publicationLock;
     std::uint32_t nextId = 1;
-    std::size_t appendedCount = 0;
     std::size_t insertedCount = 0;
   };
 

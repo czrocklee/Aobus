@@ -150,12 +150,12 @@ When a root, cancellable, or lifetime-bound coroutine completes, the runtime fol
 The fatal entry runs synchronously at the terminal boundary and may be reached concurrently by different worker threads.
 It does not acknowledge a command, recover domain state, publish a user-facing outcome, or continue the process.
 
-For a `LifetimeScope` task, retirement means marking the task complete and removing it from the scope before fatal entry.
+For a `LifetimeScope` task, the completion handler removes its registration from the scope, if still present, before fatal entry.
 The subprocess test observes that bookkeeping through an independent marker before process death.
 
-`Runtime::spawn` returns a caller-owned `TaskFuture<T>` and retains an escaping task exception there instead of invoking the diagnostic handler.
-For non-void tasks, its private future carries `std::optional<T>` so neither Boost.Asio nor the standard-library future needs to default-construct the domain result before completion.
-`TaskFuture<T>::get()` returns the produced value or rethrows the original task exception; a successful terminal state without the required value is an invariant fault.
+`Runtime::spawn` returns a caller-owned `TaskFuture<T>`. A settled future preserves its value or original task exception; neither goes to the fatal diagnostic handler.
+Explicit runtime stop publishes `OperationCancelled` to unresolved futures without waiting for their tasks to return. A late `spawn` after stop or natural join also yields a cancelled future.
+`TaskFuture<T>::get()` returns or rethrows that single outcome. The non-void transport never needs to default-construct `T`; a successful terminal state without the required value is an invariant fault.
 
 The exception-aware fatal diagnostic distinguishes standard exceptions, whose `what()` detail is available, from unknown exceptions.
 Formatting, emergency output, and fatal-sink failure are contained and never replace the final abort.

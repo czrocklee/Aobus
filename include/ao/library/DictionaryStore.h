@@ -120,6 +120,8 @@ namespace ao::library
       bool operator()(std::string_view str, DictionaryId id) const { return (*storage)[id.raw() - 1] == str; }
     };
 
+    // Requires _mutex. The reverse index may already contain a prepared, hidden tail.
+    std::optional<DictionaryId> findPublishedId(std::string_view text) const;
     std::uint64_t bindSymbols(std::span<std::string const> symbols, std::span<DictionaryId> ids) const;
 
     lmdb::IntegerKeyDatabase _database;
@@ -130,10 +132,13 @@ namespace ao::library
     // in-process publication share the same order.
     mutable std::mutex _writerMutex;
 
-    // Guards the in-memory indices below. A shared_mutex lets read-mostly
-    // lookups run concurrently while committed transaction deltas are published
-    // under exclusive ownership.
+    // A local commit and a refresh importing a newer LMDB snapshot must not
+    // install the same tail twice. Ordinary readers do not take this lock.
+    std::mutex _tailPublicationMutex;
+
+    // Protects the indices and their visible prefix, never held across LMDB commit.
     mutable std::shared_mutex _mutex;
+    std::size_t _publishedSize = 0;
 
     // In-memory index: id → string (owner of all strings). A deque keeps element
     // addresses stable across publication, so a string_view returned by get()

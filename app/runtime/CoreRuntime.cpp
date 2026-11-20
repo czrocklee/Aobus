@@ -91,9 +91,8 @@ namespace ao::rt
 
       stopped = true;
       // Seal mutation/publication admission before callback resumption closes,
-      // then stop worker coroutines before library-backed members are destroyed.
-      // Runtime is declared before them, so its destructor would otherwise run
-      // after the LMDB environment and its consumers have already torn down.
+      // while workers can still release lane leases. Joining stops worker
+      // execution before storage teardown; it does not reclaim every frame.
       if (optLibrary)
       {
         optLibrary->beginClosing();

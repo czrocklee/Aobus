@@ -423,6 +423,23 @@ cc_test(
     deps = STORAGE_TEST_DEPS + [":library_test_support"],
 )
 
+# Only the Linux regression executable interposes the native commit and admission calls.
+cc_test(
+    name = "dictionary_publication_test",
+    size = "small",
+    srcs = ["linux/library/DictionaryPublicationTest.cpp"],
+    linkopts = [
+        "-Wl,--wrap=mdb_stat",
+        "-Wl,--wrap=mdb_txn_commit",
+        "-Wl,--wrap=pthread_mutex_lock",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = STORAGE_TEST_DEPS + [
+        ":common_test_support",
+        ":library_test_support",
+    ],
+)
+
 # Only cc_library owns virtual include prefixes; executable rules do not.
 cc_library(
     name = "query_test_headers",

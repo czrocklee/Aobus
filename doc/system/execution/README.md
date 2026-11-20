@@ -40,8 +40,9 @@ audio/device callbacks
 
 GTK, TUI, WinUI, and AppKit adapt their native event loops. CLI uses an
 owner-driven loop on the invocation thread and pumps it until a command's
-terminal marker returns. A worker continuation never becomes a second owner of
-CLI or interactive state.
+terminal marker returns. The CLI serializes command execution and runtime
+shutdown: it does not stop the runtime from within an admitted command. A
+worker continuation never becomes a second owner of CLI or interactive state.
 
 ### Callback executor
 
@@ -104,22 +105,31 @@ The detailed queue, generation, and realtime rules belong to
 
 `Runtime::spawnCancellable` owns a stop source through its returned registration;
 `LifetimeScope` extends that ownership to all work belonging to an object.
+`LifetimeScope::cancelAll()` permanently closes admission and requests stop for
+admitted tasks without waiting for them to finish. `Runtime::spawnWithLifetime()`
+does not submit work or invoke the task factory if the scope is already closed.
 Cancellation is cooperative. Executor switches, timers, and subsystem work
 provide checkpoints, but a blocking third-party or codec call need not return
 immediately. A cancelled or superseded operation must still be rejected before
 it can publish.
 
 A callback-executor hop checks cancellation before dispatch and after resume.
-During runtime shutdown, callback admission closes first. A queued hop then
-drops its Asio handler instead of running application code; destroying that
-handler unwinds the suspended frame, and shared callback state keeps the worker
-executor alive until that destruction finishes.
+If submitting the hop throws, the Runtime reports the original exception at
+that dispatch boundary and aborts. This is not a task result or cancellation.
+During runtime shutdown, callback admission closes first. A queued hop that
+observes the closure drops its Asio handler without resuming the coroutine.
+Dropping the handler can post frame cleanup back to its executor. The queued
+hop keeps the pool alive for that handoff; an undelivered hop can therefore
+outlive `Runtime` and delay even the cleanup of other frames in that pool.
 
 Task ownership determines exception handling:
 
-- `Runtime::spawn()` returns a `TaskFuture<T>` whose caller owns the original
-  result or exception. Non-void transport uses an optional payload, so `T` need
-  not have an invalid default state.
+- `Runtime::spawn()` returns a caller-owned `TaskFuture<T>`. Explicit
+  `requestStop()` settles unresolved futures with `OperationCancelled` before
+  returning. A value or exception already published wins, even if unread.
+  A natural `join()` lets work finish first. Submissions after either boundary
+  return cancelled futures without starting the task. A ready future does not
+  mean a running task has exited or a suspended frame has been destroyed.
 - Fire-and-forget, cancellable, and lifetime-bound roots consume expected
   cancellation. They finish their owned bookkeeping, then send every other
   escaping exception to the exception-aware AO fatal entry.
@@ -151,8 +161,8 @@ have joined:
 3. `CoreRuntime` seals library command and publication admission while callback
    delivery is still available.
 4. `Runtime::requestStop()` closes callback resumption and stops the pool;
-   `join()` waits while storage-backed and notification collaborators remain
-   alive.
+   `join()` waits for worker threads while storage-backed and notification
+   collaborators remain alive. It does not destroy all handlers or frames.
 5. The frontend performs only its explicitly permitted final executor drain,
    destroys runtime collaborators, and releases the callback executor last.
 6. The registered fatal sink is removed only after worker, audio, device, and

@@ -99,6 +99,11 @@ namespace ao::rt::test
       auto exitObserver = TaskExitObserver{taskExited};
       co_await runtime->sleepForAsync(std::chrono::hours{1}, stopToken);
     }
+
+    Task<void> noOpAsync()
+    {
+      co_return;
+    }
   } // namespace
 
   TEST_CASE("LifetimeScope - task completes while scope remains alive", "[concurrency]")
@@ -133,11 +138,13 @@ namespace ao::rt::test
       executor.runUntilIdle();
       CHECK(completed.load());
       CHECK(taskExited.load());
+
+      // Drain the worker-side completion before checking that the open scope retired the task.
+      runtime.join();
+      CHECK(scope.empty());
     }
 
     CHECK(completed.load());
-    runtime.requestStop();
-    runtime.join();
   }
 
   TEST_CASE("LifetimeScope - destruction cancels blocked task before callback resume", "[concurrency]")
@@ -194,6 +201,76 @@ namespace ao::rt::test
     CHECK_FALSE(completed.load());
     runtime.requestStop();
     runtime.join();
+  }
+
+  TEST_CASE("LifetimeScope - a closed scope does not submit a task", "[concurrency]")
+  {
+    auto barrier = AsyncBarrier{};
+    auto reachedBarrier = AsyncTestState<bool>::create(false);
+    auto executor = ManualExecutor{};
+    auto runtime = Runtime{executor, 1};
+    auto scope = LifetimeScope{};
+    auto releaseBarrier = gsl_lite::finally([&barrier] { barrier.release(); });
+    auto holdWorkerAsync = [](AsyncBarrier* barrier, AsyncTestState<bool> reachedBarrier) -> Task<void>
+    {
+      reachedBarrier.set(true);
+      barrier->wait();
+      co_return;
+    };
+    auto worker = runtime.spawn(holdWorkerAsync(&barrier, reachedBarrier));
+    REQUIRE(reachedBarrier.tryWaitUntil(true));
+    scope.cancelAll();
+    scope.cancelAll();
+
+    auto sentinelPtr = std::make_shared<int>(0);
+    auto weakSentinelPtr = std::weak_ptr<int>{sentinelPtr};
+    auto factoryEntries = AsyncTestState<int>::create(0);
+    runtime.spawnWithLifetime(scope,
+                              [sentinelPtr = std::move(sentinelPtr), factoryEntries](std::stop_token)
+                              {
+                                factoryEntries.set(++*sentinelPtr);
+                                return noOpAsync();
+                              });
+
+    // A queued coroutine would still own the factory even if already cancelled.
+    CHECK(weakSentinelPtr.expired());
+    CHECK(scope.empty());
+
+    barrier.release();
+    worker.get();
+    runtime.join();
+    CHECK(factoryEntries.load() == 0);
+  }
+
+  TEST_CASE("LifetimeScope - a task factory can cancel its own scope before returning", "[concurrency]")
+  {
+    auto executor = ManualExecutor{};
+    auto scope = LifetimeScope{};
+    auto runtime = Runtime{executor, 1};
+    auto cancellationCount = AsyncTestState<int>::create(0);
+    auto spawnOnWorkerAsync =
+      [](Runtime* runtime, LifetimeScope* scope, AsyncTestState<int> cancellationCount) -> Task<void>
+    {
+      runtime->spawnWithLifetime(*scope,
+                                 [scope, cancellationCount](std::stop_token const stopToken)
+                                 {
+                                   auto onStop = std::stop_callback{stopToken,
+                                                                    [scope, cancellationCount]
+                                                                    {
+                                                                      scope->cancelAll();
+                                                                      cancellationCount.increment();
+                                                                    }};
+                                   scope->cancelAll();
+                                   return noOpAsync();
+                                 });
+      co_return;
+    };
+    auto spawningTask = runtime.spawn(spawnOnWorkerAsync(&runtime, &scope, cancellationCount));
+    spawningTask.get();
+    runtime.join();
+
+    CHECK(cancellationCount.load() == 1);
+    CHECK(scope.empty());
   }
 
   TEST_CASE("OperationCancelled - current exception guard recognizes cancellation")

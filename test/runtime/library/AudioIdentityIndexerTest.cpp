@@ -37,6 +37,8 @@
 #include <ao/utility/Xxh3.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <atomic>
 #include <chrono>
@@ -361,6 +363,136 @@ namespace ao::rt::test
     CHECK(res->completedCount == 2);
     CHECK(hasManifestIdentity(ml, "a.flac"));
     CHECK(hasManifestIdentity(ml, "b.flac"));
+  }
+
+  TEST_CASE("AudioIdentityIndexer - a single worker services queued work between files", "[concurrency]")
+  {
+    auto const stopBetweenFiles = GENERATE(false, true);
+    auto const temp = ao::test::TempDir{};
+    auto const musicRoot = temp.path() / "music";
+    std::filesystem::create_directories(musicRoot);
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, temp.path() / "db");
+    addPendingManifestRows(ml, 2);
+
+    auto fingerprintsStarted = AsyncTestState<std::size_t>::create(0);
+    auto releaseFirstFile = AsyncBarrier{};
+    auto stopSource = std::stop_source{};
+    auto executor = InlineExecutor{};
+    auto runtime = async::Runtime{executor, 1};
+    auto indexer = AudioIdentityIndexer{runtime, ml};
+    auto cleanup = gsl_lite::finally([&releaseFirstFile] { releaseFirstFile.release(); });
+    auto options =
+      AudioIdentityIndexer::Options{.fingerprint = [&fingerprintsStarted, &releaseFirstFile](
+                                                     std::filesystem::path const&,
+                                                     library::AudioIdentityProgressCallback,
+                                                     std::stop_token) -> Result<std::optional<library::AudioIdentity>>
+                                    {
+                                      if (fingerprintsStarted.increment() == 1)
+                                      {
+                                        releaseFirstFile.wait();
+                                      }
+
+                                      return std::optional{fakeIdentity()};
+                                    }};
+    auto indexed = runtime.spawn(
+      indexer.indexPendingAsync(makeOfflineBatchCommit(ml), std::move(options), {}, {}, stopSource.get_token()));
+    CHECK(fingerprintsStarted.tryWaitUntil(1));
+
+    // Submit from outside the pool while its only worker is inside the first file.
+    // The probe cannot run until that file finishes, but must beat the next file.
+    auto probe = runtime.spawn(
+      [](AsyncTestState<std::size_t> started, std::stop_source* optStop) -> async::Task<std::size_t>
+      {
+        if (optStop != nullptr)
+        {
+          std::ignore = optStop->request_stop();
+        }
+
+        co_return started.load();
+      }(fingerprintsStarted, stopBetweenFiles ? &stopSource : nullptr));
+    releaseFirstFile.release();
+    CHECK(probe.get() == 1);
+
+    if (stopBetweenFiles)
+    {
+      CHECK_THROWS_AS(std::ignore = indexed.get(), async::OperationCancelled);
+      CHECK(hasManifestIdentity(ml, "song-0000.flac"));
+      CHECK_FALSE(hasManifestIdentity(ml, "song-0001.flac"));
+    }
+    else
+    {
+      auto const res = indexed.get();
+      REQUIRE(res);
+      CHECK(res->completedCount == 2);
+    }
+  }
+
+  TEST_CASE("AudioIdentityIndexer - leaves worker capacity for unrelated work", "[concurrency]")
+  {
+    auto const requestedConcurrency = GENERATE(std::size_t{0}, std::size_t{8});
+    auto const temp = ao::test::TempDir{};
+    auto const musicRoot = temp.path() / "music";
+    std::filesystem::create_directories(musicRoot);
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, temp.path() / "db");
+    addPendingManifestRows(ml, 2);
+
+    auto blockerStarted = AsyncTestState<bool>::create(false);
+    auto fingerprintsStarted = AsyncTestState<std::size_t>::create(0);
+    auto releaseBlocker = AsyncBarrier{};
+    auto releaseFingerprints = AsyncBarrier{};
+    auto executor = InlineExecutor{};
+    auto runtime = async::Runtime{executor, 2};
+    auto indexer = AudioIdentityIndexer{runtime, ml};
+    auto cleanup = gsl_lite::finally(
+      [&]
+      {
+        releaseBlocker.release();
+        releaseFingerprints.release();
+      });
+
+    // Until the probe is queued, force all child submissions to happen on the
+    // same worker that takes the first file. Any excess child is already queued
+    // ahead of the probe when the other worker is released.
+    auto blocker = runtime.spawn(
+      [](AsyncTestState<bool> started, AsyncBarrier* release) -> async::Task<>
+      {
+        started.set(true);
+        release->wait();
+        co_return;
+      }(blockerStarted, &releaseBlocker));
+    REQUIRE(blockerStarted.tryWaitUntil(true));
+    auto options =
+      AudioIdentityIndexer::Options{.maxConcurrency = requestedConcurrency,
+                                    .fingerprint = [&fingerprintsStarted, &releaseFingerprints](
+                                                     std::filesystem::path const&,
+                                                     library::AudioIdentityProgressCallback,
+                                                     std::stop_token) -> Result<std::optional<library::AudioIdentity>>
+                                    {
+                                      // Unblock the test even if an excess fingerprint displaced the probe.
+                                      if (fingerprintsStarted.increment() == 2)
+                                      {
+                                        releaseFingerprints.release();
+                                      }
+
+                                      releaseFingerprints.wait();
+                                      return std::optional{fakeIdentity()};
+                                    }};
+    auto indexed = runtime.spawn(indexer.indexPendingAsync(makeOfflineBatchCommit(ml), std::move(options)));
+    CHECK(fingerprintsStarted.tryWaitUntil(1));
+    auto probe = runtime.spawn(
+      [](AsyncTestState<std::size_t> started, AsyncBarrier* release) -> async::Task<std::size_t>
+      {
+        auto const count = started.load();
+        release->release();
+        co_return count;
+      }(fingerprintsStarted, &releaseFingerprints));
+    releaseBlocker.release();
+    CHECK(probe.get() == 1);
+
+    blocker.get();
+    auto const res = indexed.get();
+    REQUIRE(res);
+    CHECK(res->completedCount == 2);
   }
 
   TEST_CASE("AudioIdentityIndexer - mutation lock is free while fingerprinting", "[concurrency]")

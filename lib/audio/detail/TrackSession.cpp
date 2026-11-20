@@ -131,7 +131,8 @@ namespace ao::audio::detail
     }
   }
 
-  TrackSession::OpenedTrack TrackSession::activate(PreparedTrack preparedTrack, OnSourceErrorFn onSourceError)
+  TrackSession::OpenedTrack TrackSession::activate(PreparedTrack preparedTrack,
+                                                   StreamingSource::OnSourceError onSourceError)
   {
     AO_INVARIANT(preparedTrack.sourcePtr, "Prepared track has no streaming source");
 

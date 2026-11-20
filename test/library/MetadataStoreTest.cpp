@@ -192,6 +192,8 @@ namespace ao::library::test
                                                   std::chrono::seconds{15});
     REQUIRE(result.hasSuccessfulExit());
     REQUIRE(result.standardOutput == "committed-dictionary");
+    CHECK(library.dictionary().generation() == previousGeneration);
+    CHECK_FALSE(library.dictionary().findId("Child artist"));
 
     SECTION("a fresh read resolves every newly referenced dictionary value")
     {
@@ -199,13 +201,19 @@ namespace ao::library::test
       auto const optTrack = library.tracks().reader(fresh).get(TrackId{1});
       REQUIRE(optTrack);
       CHECK(optTrack->metadata().title() == "Child title");
-      CHECK(library.dictionary().get(optTrack->metadata().artistId()) == "Child artist");
+      CHECK(library.dictionary().getOrDefault(optTrack->metadata().artistId()) == "Child artist");
+      CHECK(library.dictionary().generation() == previousGeneration + 1);
       CHECK_FALSE(library.tracks().reader(oldRead).get(TrackId{1}));
+
+      auto repeated = library.readTransaction();
+      CHECK(library.libraryRevision(repeated) == library.libraryRevision(fresh));
+      CHECK(library.dictionary().generation() == previousGeneration + 1);
     }
 
     SECTION("writer acquisition refreshes the open-to-lease gap without a preceding fresh read")
     {
       auto writer = requireWritableLibrary(library);
+      CHECK(library.dictionary().generation() == previousGeneration + 1);
       REQUIRE(library.dictionary().findId("Child artist"));
       auto write = writer.writeTransaction();
       auto const childId = ao::test::requireValue(physicalDictionary(write).intern("Child artist"));
@@ -214,9 +222,9 @@ namespace ao::library::test
       REQUIRE(addedRes);
       REQUIRE(write.commit());
       CHECK(library.dictionary().get(*addedRes) == "Later parent value");
+      CHECK(library.dictionary().generation() == previousGeneration + 2);
     }
 
-    CHECK(library.dictionary().generation() > previousGeneration);
     CHECK(original == "Original borrowed text");
     CHECK(original.data() == originalAddress);
     CHECK(library.dictionary().get(originalId).data() == originalAddress);

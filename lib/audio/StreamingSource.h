@@ -27,6 +27,8 @@ namespace ao::audio
   class StreamingSource final : public PcmSource
   {
   public:
+    using OnSourceError = std::function<void(Error const&, std::stop_token)>;
+
     enum class DecodeBlockStatus : std::uint8_t
     {
       Decoded,
@@ -51,7 +53,7 @@ namespace ao::audio
 
     /// Installs the source-error callback and starts steady-state decoding.
     /// Must be called exactly once after successful prepare().
-    void activate(std::function<void(Error const&)> onError);
+    void activate(OnSourceError onError);
 
     // Requires successful prepare() and activate(). The caller quiesces render
     // and query consumers. This method separately stops and joins the
@@ -74,7 +76,7 @@ namespace ao::audio
                        std::stop_token const* threadStopToken);
 
     std::unique_ptr<DecoderSession> _decoderPtr;
-    std::function<void(Error const&)> _onError;
+    OnSourceError _onError;
     PcmFrameRing _frameRing;
     std::jthread _decodeThread;
     mutable std::mutex _decoderMutex;

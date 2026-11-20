@@ -13,7 +13,6 @@
 #include <gtkmm/listbox.h>
 #include <gtkmm/window.h>
 
-#include <optional>
 #include <string_view>
 
 namespace ao::gtk
@@ -26,12 +25,11 @@ namespace ao::gtk
                           rt::TrackPresentationSpec const& initialSpec,
                           std::string_view initialLabel);
 
-    std::optional<rt::CustomTrackPresentationPreset> runDialog();
+    rt::CustomTrackPresentationPreset collectState();
 
   private:
     void buildUi();
     void populateFromSpec(rt::TrackPresentationSpec const& spec, std::string_view label);
-    rt::CustomTrackPresentationPreset collectState();
 
     void rebuildSortList();
     void rebuildVisibleFieldsList();

@@ -27,7 +27,9 @@ foreign-platform test available.
 - Core tests cover async, audio, library/LMDB, media, query, utility, and
   device-free native-platform contracts. These include portable decoder/graph
   cases and the PipeWire SDK, ALSA null/fake/refusal, Core Audio, and WASAPI
-  cases that require no live endpoint or service.
+  cases that require no live endpoint or service. Linux also runs
+  `//test:dictionary_publication_test` separately so its native commit and reader
+  probes are never linked into ordinary storage tests or product binaries.
 - Application tests cover runtime services and playback, UIModel, catalogs,
   desktop support, the portable WinUI model, performance reporting, media
   fixtures, and runtime fatal-probe scenarios.

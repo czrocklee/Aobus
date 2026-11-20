@@ -19,7 +19,6 @@
 #include <cstdint>
 #include <exception>
 #include <expected>
-#include <functional>
 #include <memory>
 #include <mutex>
 #include <span>
@@ -97,7 +96,7 @@ namespace ao::audio
     }
   }
 
-  void StreamingSource::activate(std::function<void(Error const&)> onError)
+  void StreamingSource::activate(OnSourceError onError)
   {
     AO_EXPECTS((_prepared && !_activated), "Streaming source activation requires one prepared source");
 
@@ -185,7 +184,7 @@ namespace ao::audio
 
       if (failedExchanged && _onError)
       {
-        _onError(ex.error());
+        _onError(ex.error(), seekToken);
       }
 
       return std::unexpected{ex.error()};
@@ -259,7 +258,7 @@ namespace ao::audio
       {
         if (_onError)
         {
-          _onError(ex.error());
+          _onError(ex.error(), seekToken);
         }
       }
     }

@@ -19,6 +19,7 @@
 #include <expected>
 #include <memory>
 #include <semaphore>
+#include <stop_token>
 #include <utility>
 #include <vector>
 
@@ -57,7 +58,7 @@ namespace ao::audio::test
   {
     auto const info = testStreamInfo();
     auto errorCount = std::atomic<int>{0};
-    auto onError = [&](Error const&) { errorCount.fetch_add(1); };
+    auto onError = [&](Error const&, std::stop_token) { errorCount.fetch_add(1); };
 
     auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
     auto block = silenceBlock(400); // 200ms
@@ -76,7 +77,7 @@ namespace ao::audio::test
   {
     auto const info = testStreamInfo();
     auto errorCount = std::atomic<int>{0};
-    auto onError = [&](Error const&) { errorCount.fetch_add(1); };
+    auto onError = [&](Error const&, std::stop_token) { errorCount.fetch_add(1); };
 
     auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
     auto block = silenceBlock(20); // 10ms
@@ -161,7 +162,7 @@ namespace ao::audio::test
   {
     auto const info = testStreamInfo();
     auto errorCount = std::atomic<int>{0};
-    auto onError = [&](Error const&) { errorCount.fetch_add(1); };
+    auto onError = [&](Error const&, std::stop_token) { errorCount.fetch_add(1); };
     auto beforeSeekBlock = std::vector(400, std::byte{0x11});
     auto afterSeekBlock = std::vector(400, std::byte{0x22});
 
@@ -190,7 +191,7 @@ namespace ao::audio::test
   {
     auto const info = testStreamInfo();
     auto errorCount = std::atomic<int>{0};
-    auto onError = [&](Error const&) { errorCount.fetch_add(1); };
+    auto onError = [&](Error const&, std::stop_token) { errorCount.fetch_add(1); };
     auto block = silenceBlock(400);
 
     auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
@@ -214,7 +215,7 @@ namespace ao::audio::test
     auto const info = testStreamInfo();
     auto errors = std::vector<Error>{};
     auto errorReady = std::counting_semaphore{0};
-    auto onError = [&](Error const& error)
+    auto onError = [&](Error const& error, std::stop_token)
     {
       errors.push_back(error);
       errorReady.release();
@@ -244,7 +245,7 @@ namespace ao::audio::test
     auto const info = testStreamInfo();
     auto errors = std::vector<Error>{};
     auto errorReady = std::counting_semaphore{0};
-    auto onError = [&](Error const& error)
+    auto onError = [&](Error const& error, std::stop_token)
     {
       errors.push_back(error);
       errorReady.release();
@@ -270,7 +271,7 @@ namespace ao::audio::test
   {
     auto const info = testStreamInfo();
     auto errorCount = std::atomic<int>{0};
-    auto onError = [&](Error const&) { errorCount.fetch_add(1); };
+    auto onError = [&](Error const&, std::stop_token) { errorCount.fetch_add(1); };
 
     auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
     auto block = silenceBlock(20); // 10ms

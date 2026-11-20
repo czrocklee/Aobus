@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "common/MainContextCallbackScope.h"
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/library/presentation/TrackPresentationPickerViewModel.h>
 
@@ -13,6 +14,7 @@
 #include <sigc++/scoped_connection.h>
 
 #include <memory>
+#include <optional>
 #include <string_view>
 
 namespace ao::rt
@@ -49,9 +51,12 @@ namespace ao::gtk
                                  ThemeCoordinator* themeCoordinator);
 
   private:
+    struct CustomViewEditor;
+    void queueCustomViewFinish(bool save);
     void render(uimodel::TrackPresentationPickerState const& state);
     void populatePresentationOptions(uimodel::TrackPresentationPickerState const& state);
     void handlePresentationSelected(std::string_view presentationId);
+    void applyPresentation(uimodel::TrackPresentationSelection const& selection);
     void handleCreateCustomViewClicked();
     void showPresentationError(std::string_view message);
 
@@ -67,5 +72,7 @@ namespace ao::gtk
     Gtk::Popover _popover;
     Gtk::Box _menuBox{Gtk::Orientation::VERTICAL};
     sigc::scoped_connection _applyPresentationConn;
+    std::optional<MainContextCallbackScope> _optBindingCallbacks;
+    std::unique_ptr<CustomViewEditor> _customViewEditorPtr;
   };
 } // namespace ao::gtk

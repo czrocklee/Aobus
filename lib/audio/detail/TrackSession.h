@@ -32,7 +32,6 @@ namespace ao::audio::detail
   public:
     using DecoderFactoryFn = std::function<Result<std::unique_ptr<DecoderSession>>(std::filesystem::path const&,
                                                                                    std::optional<SampleEncoding>)>;
-    using OnSourceErrorFn = std::function<void(Error const&)>;
 
     struct Inspection
     {
@@ -61,7 +60,7 @@ namespace ao::audio::detail
                                          DecoderFactoryFn const& decoderFactory,
                                          std::chrono::milliseconds initialOffset = {});
 
-    static OpenedTrack activate(PreparedTrack preparedTrack, OnSourceErrorFn onSourceError);
+    static OpenedTrack activate(PreparedTrack preparedTrack, StreamingSource::OnSourceError onSourceError);
 
   private:
     static std::unique_ptr<StreamingSource> preparePcmSource(std::unique_ptr<DecoderSession> decoderPtr,

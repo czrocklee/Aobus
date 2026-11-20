@@ -6,12 +6,16 @@
 #include "test/TestFixtureSupport.h"
 #include "test/library/MusicLibraryTestSupport.h"
 #include <ao/async/Executor.h>
+#include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/rt/CoreRuntime.h>
+#include <ao/rt/library/LibraryDurability.h>
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <atomic>
+#include <memory>
 #include <sstream>
 #include <stdexcept>
 #include <thread>
@@ -38,6 +42,12 @@ namespace ao::cli::test
     {
       co_await runtime->resumeOnWorkerAsync();
       throw std::runtime_error{"worker task failed"};
+    }
+
+    async::Task<void> markTaskStartedAsync(std::shared_ptr<std::atomic_bool> startedPtr)
+    {
+      startedPtr->store(true);
+      co_return;
     }
   } // namespace
 
@@ -67,6 +77,21 @@ namespace ao::cli::test
     auto& asyncRuntime = cli.core().async();
 
     CHECK_THROWS_AS(cli.runTask(failOnWorkerAsync(&asyncRuntime)), std::runtime_error);
+  }
+
+  TEST_CASE("CliRuntime - runTask throws cancellation after an explicit stop")
+  {
+    auto temp = ao::test::TempDir{};
+    auto out = std::ostringstream{};
+    auto err = std::ostringstream{};
+    auto startedPtr = std::make_shared<std::atomic_bool>(false);
+    auto cli = CliRuntime{
+      out, err, library::test::kTestMusicLibraryMapBytes, rt::LibraryDurability::Durable, temp.path() / "cache"};
+    cli.options().root = temp.path();
+    cli.core().async().requestStop();
+
+    CHECK_THROWS_AS(cli.runTask(markTaskStartedAsync(startedPtr)), async::OperationCancelled);
+    CHECK_FALSE(startedPtr->load());
   }
 
   TEST_CASE("CliRuntime - teardown drains callbacks queued by a foreign producer", "[concurrency]")

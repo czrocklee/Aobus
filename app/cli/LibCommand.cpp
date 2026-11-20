@@ -12,6 +12,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/FileTimestamp.h>
+#include <ao/async/Task.h>
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestLayout.h>
@@ -46,6 +47,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <expected>
 #include <filesystem>
 #include <format>
 #include <iostream>
@@ -53,7 +55,6 @@
 #include <optional>
 #include <print>
 #include <span>
-#include <stop_token>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -980,6 +981,38 @@ namespace ao::cli
                    dryRun ? " (dry-run)" : "");
     }
 
+    async::Task<Result<>> applyRelinkPlanAsync(rt::LibraryJobs* jobs, rt::ScanPlan plan)
+    {
+      // The awaited scan reports failures before returning. Keep the first one
+      // in this coroutine frame, not on the calling CLI thread's stack.
+      auto firstFailure = std::string{};
+      auto const reportFailure = [&firstFailure](rt::ScanFailure const& failure)
+      {
+        if (firstFailure.empty())
+        {
+          firstFailure = failure.uri.empty()
+                           ? std::format("failed to {}: {}", failure.stage, failure.message)
+                           : std::format("failed to {} {}: {}", failure.stage, failure.uri, failure.message);
+        }
+      };
+
+      // Use eager fingerprinting: rebinding a moved row must not leave its identity pending.
+      auto res = co_await jobs->applyScanPlanAsync(std::move(plan), rt::ScanApplyOptions{}, {}, {}, reportFailure);
+
+      if (!res)
+      {
+        co_return std::unexpected{std::move(res.error())};
+      }
+
+      if (res->failureCount != 0 || res->relinkedFileCount != 1)
+      {
+        co_return makeError(
+          Error::Code::IoError, firstFailure.empty() ? "relink did not update the library" : std::move(firstFailure));
+      }
+
+      co_return Result<>{};
+    }
+
     void applyRelink(CliRuntime& cli,
                      rt::ScanPlan relinkPlan,
                      RelinkCandidateDto const& candidate,
@@ -1005,34 +1038,10 @@ namespace ao::cli
         }
       }
 
-      auto failures = std::vector<std::string>{};
-      auto const stopToken = std::stop_token{};
-      auto progressCallback = rt::LibraryJobs::ScanProgressCallback{};
-      auto res = cli.runTask(cli.library().jobs().applyScanPlanAsync(
-        std::move(relinkPlan),
-        // Default (eager) options on purpose: Moved items are fingerprinted
-        // during apply regardless of policy, so a relink must never leave the
-        // rebound row with a pending identity.
-        rt::ScanApplyOptions{},
-        stopToken,
-        std::move(progressCallback),
-        [&failures](rt::ScanFailure const& failure)
-        {
-          failures.push_back(failure.uri.empty()
-                               ? std::format("failed to {}: {}", failure.stage, failure.message)
-                               : std::format("failed to {} {}: {}", failure.stage, failure.uri, failure.message));
-        }));
-
-      if (!res)
+      if (auto const res = cli.runTask(applyRelinkPlanAsync(&cli.library().jobs(), std::move(relinkPlan))); !res)
       {
         auto const& error = res.error();
         throwCommandError(error, "relink failed: {}", error.message);
-      }
-
-      if (res->failureCount != 0 || res->relinkedFileCount != 1)
-      {
-        auto const message = failures.empty() ? "relink did not update the library" : failures.front();
-        throwCommandError(Error::Code::IoError, "relink failed: {}", message);
       }
 
       for (auto const& notice : notices)

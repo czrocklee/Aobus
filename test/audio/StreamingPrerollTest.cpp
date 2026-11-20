@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <memory>
 #include <span>
+#include <stop_token>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -146,7 +147,7 @@ namespace ao::audio::test
     auto const expected = expectedPcm(growingBlockEndsStream, 0x10);
     CHECK(std::ranges::equal(prefix, std::span{expected}.first(prefix.size())));
 
-    source.activate([&](Error const&) { ++errors; });
+    source.activate([&](Error const&, std::stop_token) { ++errors; });
     checkPcmUntilDrained(source, std::span{expected}.subspan(prefix.size()));
     CHECK(errors.load() == 0);
   }
@@ -161,7 +162,7 @@ namespace ao::audio::test
                                   std::chrono::milliseconds{500},
                                   std::chrono::milliseconds{500}};
     REQUIRE(source.prepare());
-    source.activate([&](Error const&) { ++errors; });
+    source.activate([&](Error const&, std::stop_token) { ++errors; });
 
     // The old ring remains full, so its producer cannot finish the retained
     // block. seek must join it and discard its borrow before decoder mutation.
@@ -181,7 +182,7 @@ namespace ao::audio::test
                                   std::chrono::milliseconds{500}};
     REQUIRE(source.prepare());
     auto const fullBufferDuration = source.bufferedDuration();
-    source.activate([&](Error const&) { ++errors; });
+    source.activate([&](Error const&, std::stop_token) { ++errors; });
 
     // Withhold consumption throughout: every seek fills the ring and retains
     // an unwritten tail that the following seek must retire before decoder reuse.
@@ -214,7 +215,7 @@ namespace ao::audio::test
 
     if (activate)
     {
-      sourcePtr->activate([&](Error const&) { ++errors; });
+      sourcePtr->activate([&](Error const&, std::stop_token) { ++errors; });
     }
 
     sourcePtr.reset();
@@ -234,7 +235,7 @@ namespace ao::audio::test
       std::move(decoderPtr), prerollStreamInfo(), std::chrono::milliseconds{1}, std::chrono::milliseconds{500});
     REQUIRE(sourcePtr->prepare());
     auto const preparedBufferedDuration = sourcePtr->bufferedDuration();
-    sourcePtr->activate([&](Error const&) { ++errors; });
+    sourcePtr->activate([&](Error const&, std::stop_token) { ++errors; });
     auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
 
     // With no consumer, growth proves a partial write of the second block:
