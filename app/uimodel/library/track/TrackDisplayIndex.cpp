@@ -3,11 +3,14 @@
 
 #include <ao/uimodel/library/track/TrackDisplayIndex.h>
 
+#include <ao/rt/projection/TrackListProjection.h>
+
 #include <algorithm>
 #include <cstddef>
 #include <iterator>
 #include <optional>
 #include <span>
+#include <vector>
 
 namespace ao::uimodel
 {
@@ -36,6 +39,21 @@ namespace ao::uimodel
     _rowCount = rowCount;
     _sections.assign(sections.begin(), sections.end());
     return true;
+  }
+
+  bool TrackDisplayIndex::tryReset(rt::TrackListProjection const& projection)
+  {
+    auto const groupCount = projection.groupCount();
+    auto sections = std::vector<TrackDisplaySection>{};
+    sections.reserve(groupCount);
+
+    for (std::size_t index = 0; index < groupCount; ++index)
+    {
+      auto const rows = projection.groupAt(index).rows;
+      sections.push_back({.start = rows.start, .count = rows.count});
+    }
+
+    return tryReset(projection.size(), sections);
   }
 
   void TrackDisplayIndex::clear() noexcept

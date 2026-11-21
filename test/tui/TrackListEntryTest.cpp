@@ -36,6 +36,10 @@ namespace ao::tui::test
 
     CHECK(item.label == " -  untitled.flac  A. Composer  Keyboard Works");
 
+    // A present path with no filename is not an absent path: don't substitute the localized ID.
+    row.optUriPath = std::filesystem::path{"music/"};
+    CHECK(trackDisplayTitle(ao::test::englishMessageCatalog(), row).empty());
+
     row.optUriPath.reset();
     row.id = TrackId{99};
     item = makeTrackListEntry(ao::test::englishMessageCatalog(), row);

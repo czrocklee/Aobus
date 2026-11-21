@@ -146,14 +146,6 @@ namespace ao::tui
       resizedField,
       std::clamp(targetColumns, kMinimumTrackColumnWidthColumns, kMaximumTrackColumnWidthColumns),
       trackColumnViewport(availableColumns, fields.size()));
-    auto visibleLayout = std::vector<uimodel::TrackColumnState>{};
-    visibleLayout.reserve(resizedSpecs.size());
-
-    for (auto const& spec : resizedSpecs)
-    {
-      visibleLayout.push_back(uimodel::canonicalTrackColumnState(spec));
-    }
-
-    return uimodel::mergeVisibleTrackColumnLayout(storedLayout, visibleLayout);
+    return uimodel::mergeVisibleTrackColumnSpecs(storedLayout, resizedSpecs);
   }
 } // namespace ao::tui

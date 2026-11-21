@@ -565,15 +565,7 @@ namespace ao::appkit
   {
     auto& storage = *_storagePtr;
     auto const& projectionPtr = storage.projectionPtr;
-    auto sections = std::vector<uimodel::TrackDisplaySection>{};
-
-    for (std::size_t index = 0; index < projectionPtr->groupCount(); ++index)
-    {
-      auto const group = projectionPtr->groupAt(index);
-      sections.push_back({.start = group.rows.start, .count = group.rows.count});
-    }
-
-    auto const displayReset = storage.displayIndex.tryReset(projectionPtr->size(), sections);
+    auto const displayReset = storage.displayIndex.tryReset(*projectionPtr);
     AO_INVARIANT(displayReset);
     storage.rows.reset(
       projectionPtr->size(),

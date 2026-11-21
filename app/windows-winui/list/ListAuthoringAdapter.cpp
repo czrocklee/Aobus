@@ -55,31 +55,12 @@ namespace ao::winui
       }
     }
 
-    auto currentId = state.selectedListId;
-    auto remaining = projection.rowsById.size();
-
-    while (remaining-- > 0)
+    for (auto const parentId : uimodel::listTreeAncestorIds(projection, state.selectedListId))
     {
-      auto const current = projection.rowsById.find(currentId);
-
-      if (current == projection.rowsById.end())
-      {
-        break;
-      }
-
-      auto const parentId = current->second.parentId;
-
-      if (parentId == kInvalidListId || parentId == currentId)
-      {
-        break;
-      }
-
       if (auto const parentExpansion = state.expandedById.find(parentId); parentExpansion != state.expandedById.end())
       {
         parentExpansion->second = true;
       }
-
-      currentId = parentId;
     }
 
     return state;

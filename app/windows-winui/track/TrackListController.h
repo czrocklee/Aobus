@@ -121,7 +121,7 @@ namespace ao::winui
     void refreshRows();
     void refreshColumns();
     void adoptWorkspaceView(rt::ViewId viewId);
-    Result<> storeColumnSpecs(std::vector<uimodel::TrackColumnSolveSpec> const& specs);
+    void storeColumnSpecs(ListId listId, std::span<uimodel::TrackColumnSolveSpec const> specs);
     void resetProjection(std::shared_ptr<rt::TrackListProjection const> projectionPtr);
     i18n::MessageCatalog _textCatalog;
     rt::ViewService& _views;

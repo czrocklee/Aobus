@@ -139,6 +139,33 @@ namespace ao::tui::test
     CHECK(model.cursor() == ListId{8});
   }
 
+  TEST_CASE("ListNavigationModel - replacement tries old parent links nearest first even after a missing edge")
+  {
+    auto tree = navigationTree();
+    tree.rowsById.at(ListId{1}).parentId = ListId{3};
+    auto model = ListNavigationModel{};
+    model.setTree(std::move(tree), ListId{2});
+    REQUIRE(model.activationTarget() == ListId{2});
+
+    auto replacement = flatTree();
+    replacement.rowsById.erase(ListId{2});
+    replacement.rootIds = {rt::kAllTracksListId, ListId{1}, ListId{3}};
+
+    SECTION("Both referenced parents exist")
+    {
+      model.setTree(replacement, rt::kAllTracksListId);
+      CHECK(model.activationTarget() == ListId{1});
+    }
+
+    SECTION("Only the formerly missing grandparent exists")
+    {
+      replacement.rowsById.erase(ListId{1});
+      replacement.rootIds = {rt::kAllTracksListId, ListId{3}};
+      model.setTree(std::move(replacement), rt::kAllTracksListId);
+      CHECK(model.activationTarget() == ListId{3});
+    }
+  }
+
   TEST_CASE("ListNavigationModel - expand and collapse follow cursor semantics")
   {
     auto model = ListNavigationModel{};
@@ -261,6 +288,23 @@ namespace ao::tui::test
     REQUIRE(model.rows().size() == 3);
     CHECK(model.rows()[1].expanded);
     CHECK(model.cursor() == ListId{2});
+  }
+
+  TEST_CASE("ListNavigationModel - search context follows the displayed child edge despite a missing logical parent")
+  {
+    auto tree = navigationTree("Needle");
+    tree.rowsById.at(ListId{2}).parentId = ListId{99};
+    auto model = ListNavigationModel{};
+    model.setTree(std::move(tree), rt::kAllTracksListId);
+
+    REQUIRE(model.trySearchEvent(ftxui::Event::Character("/")));
+    REQUIRE(model.trySearchEvent(ftxui::Event::Character("needle")));
+
+    REQUIRE(model.rows().size() == 2);
+    CHECK(model.rows().front().id == ListId{1});
+    CHECK(model.rows().front().expanded);
+    CHECK_FALSE(model.rows().front().matching);
+    CHECK(model.activationTarget() == ListId{2});
   }
 
   TEST_CASE("ListNavigationModel - search uses paths and rejects empty results")

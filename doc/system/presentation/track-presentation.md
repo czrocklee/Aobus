@@ -30,6 +30,12 @@ Runtime presentation values, built-ins, normalization, and projection interpreta
 - An Album group whose tracks have no album artist keeps that empty identity, but its heading names the artist that more than half of its tracks with an artist name, by group identity and with that artist's first row's text, or Various Artists when no artist has such a majority. A guest artist on one track of an album therefore leaves the album's own artist in the heading, while two artists with equal track counts make Various Artists. Tracks without an artist do not count, and with none the heading shows the missing-artist value. Two albums with the same title and no album artist share that empty identity and form one group, so the vote covers the tracks of both: 10 Queen tracks and 3 ABBA tracks under one title show Queen, which hides the merge.
 - Movement sorting compares numeric movement number rather than movement-name text.
 
+## Table rows and display coordinates
+
+The [shared row formatter](../../../app/include/ao/uimodel/field/TrackRowField.h) supplies field text without filling in placeholders or substituting a title. The adapter supplies those choices without changing metadata or sort keys. AppKit shows the stored title, even when empty. WinUI and TUI use the stored title when nonempty, otherwise the filename if a path exists—even if its filename is empty—and a localized track-id label only if there is no path. TUI uses native path spelling, WinUI uses generic path spelling, and only a placeholder for an empty cell gets the terminal's dim dash style; a literal `-` is ordinary text.
+
+The AppKit and WinUI tables build a shared display index from the projection. A group heading has a display position and points to the start of its section, but it is not a selectable or playable track. Group ranges must be nonempty, contiguous, and cover all projection rows; no groups gives a flat index. A rejected reset leaves the index unchanged. AppKit treats that rejection as an invariant failure; WinUI installs a fresh flat mapping over the same projection rows.
+
 ## Grouping and sorting
 
 Runtime group headers contain three structured slots.

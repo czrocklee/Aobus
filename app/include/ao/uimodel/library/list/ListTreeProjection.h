@@ -34,6 +34,10 @@ namespace ao::uimodel
     std::map<ListId, ListTreeProjectionRow> rowsById;
   };
 
+  // Follow projected row.parentId links nearest first, excluding the starting ID and stopping before a repeat.
+  // A final dangling parent ID is included: it may exist in a replacement tree even if not in this one.
+  std::vector<ListId> listTreeAncestorIds(ListTreeProjection const& projection, ListId id);
+
   ListTreeProjection buildListTreeProjection(i18n::MessageCatalog const& textCatalog,
                                              std::span<rt::ListNode const> snapshot);
 } // namespace ao::uimodel

@@ -75,24 +75,29 @@ namespace ao::tui::test
   {
     auto const presentation = rt::TrackPresentationSpec{
       .id = "hidden",
-      .visibleFields = {rt::TrackField::Title, rt::TrackField::Artist},
+      .visibleFields = {rt::TrackField::Title, rt::TrackField::Duration},
     };
     auto const stored = std::vector{
-      uimodel::TrackColumnState{.field = rt::TrackField::Title, .visible = false},
-      uimodel::TrackColumnState{.field = rt::TrackField::Artist, .visible = false},
+      uimodel::TrackColumnState{.field = rt::TrackField::Title, .weight = 2.5, .visible = false},
+      uimodel::TrackColumnState{.field = rt::TrackField::Duration, .width = 12, .visible = false},
     };
 
     CHECK(projectTerminalTrackColumnLayout(presentation, stored, 80).columns.empty());
+    CHECK(resizeTerminalTrackColumnLayout(presentation, stored, rt::TrackField::Duration, 15, 80) == stored);
   }
 
   TEST_CASE("TerminalTrackColumnLayout - canonical resize survives viewport reflow")
   {
     auto const presentation = rt::TrackPresentationSpec{
       .id = "terminal",
-      .visibleFields = {rt::TrackField::Title, rt::TrackField::Artist, rt::TrackField::Duration},
+      .visibleFields = {rt::TrackField::Title, rt::TrackField::Artist, rt::TrackField::Album, rt::TrackField::Duration},
     };
+    auto const hiddenAlbum =
+      uimodel::TrackColumnState{.field = rt::TrackField::Album, .weight = 1.75, .visible = false};
     auto const stored = std::vector{
       uimodel::TrackColumnState{.field = rt::TrackField::Duration, .width = 11},
+      hiddenAlbum,
+      uimodel::TrackColumnState{.field = rt::TrackField::Title, .weight = 3.0},
     };
     auto const before = projectTerminalTrackColumnLayout(presentation, stored, 102);
     auto const titleIt = std::ranges::find(before.columns, rt::TrackField::Title, &TerminalTrackColumn::field);
@@ -107,6 +112,8 @@ namespace ao::tui::test
 
     auto const resized =
       resizeTerminalTrackColumnLayout(presentation, stored, rt::TrackField::Title, kTargetColumns, 102);
+    REQUIRE(resized.size() == 4);
+    CHECK(resized[1] == hiddenAlbum);
     auto const sameViewport = projectTerminalTrackColumnLayout(presentation, resized, 102);
     auto const wideViewport = projectTerminalTrackColumnLayout(presentation, resized, 132);
     auto const resizedTitle =

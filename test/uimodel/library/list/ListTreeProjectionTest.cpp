@@ -14,6 +14,49 @@
 
 namespace ao::uimodel::test
 {
+  TEST_CASE("listTreeAncestorIds returns distinct parents nearest first")
+  {
+    auto const start = ListId{2};
+    auto const parent = ListId{3};
+    auto const grandparent = ListId{4};
+    auto const missing = ListId{99};
+    auto projection = ListTreeProjection{};
+    projection.rowsById.emplace(start, ListTreeProjectionRow{.id = start, .parentId = parent, .name = "Child"});
+    projection.rowsById.emplace(parent, ListTreeProjectionRow{.id = parent, .parentId = grandparent, .name = "Parent"});
+    projection.rowsById.emplace(grandparent, ListTreeProjectionRow{.id = grandparent, .name = "Root"});
+
+    SECTION("a complete chain ends at the root")
+    {
+      CHECK(listTreeAncestorIds(projection, start) == std::vector{parent, grandparent});
+      CHECK(listTreeAncestorIds(projection, grandparent).empty());
+      CHECK(listTreeAncestorIds(projection, missing).empty());
+    }
+
+    SECTION("a cycle through the starting row never includes it")
+    {
+      projection.rowsById.at(grandparent).parentId = start;
+      CHECK(listTreeAncestorIds(projection, start) == std::vector{parent, grandparent});
+    }
+
+    SECTION("a cycle above the starting row stops before repeating a parent")
+    {
+      projection.rowsById.at(grandparent).parentId = parent;
+      CHECK(listTreeAncestorIds(projection, start) == std::vector{parent, grandparent});
+    }
+
+    SECTION("a self-parent has no ancestors")
+    {
+      projection.rowsById.at(start).parentId = start;
+      CHECK(listTreeAncestorIds(projection, start).empty());
+    }
+
+    SECTION("the final parent need not have a row")
+    {
+      projection.rowsById.erase(grandparent);
+      CHECK(listTreeAncestorIds(projection, start) == std::vector{parent, grandparent});
+    }
+  }
+
   TEST_CASE("buildListTreeProjection projects nested list rows")
   {
     auto const parentId = ListId{2};

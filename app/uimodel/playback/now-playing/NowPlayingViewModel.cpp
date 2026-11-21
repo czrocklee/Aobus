@@ -9,12 +9,11 @@
 #include <ao/audio/Transport.h>
 #include <ao/audio/flow/Graph.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/query/Expression.h>
-#include <ao/query/Serializer.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
+#include <ao/uimodel/library/track/TrackFilter.h>
 #include <ao/uimodel/playback/output/PlaybackOutputText.h>
 #include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
@@ -33,11 +32,6 @@ namespace ao::uimodel
 {
   namespace
   {
-    std::string quoteExpressionString(std::string_view value)
-    {
-      return query::serialize(query::ConstantExpression{std::string{value}});
-    }
-
     std::string sourceStreamInfo(AudioQualityFormatter const& formatter, rt::QualityState const& quality)
     {
       auto const it =
@@ -214,7 +208,7 @@ namespace ao::uimodel
 
       case NowPlayingFieldAction::FilterByField:
       {
-        auto value = std::string{};
+        auto value = std::string_view{};
 
         switch (field)
         {
@@ -223,10 +217,11 @@ namespace ao::uimodel
           default: break;
         }
 
-        if (auto const variable = rt::trackFieldFilterExpressionVariable(field); !variable.empty() && !value.empty())
+        cmd.navigateQuery = trackFieldTextEqualityFilter(field, value);
+
+        if (!cmd.navigateQuery.empty())
         {
           cmd.type = NowPlayingActionCommand::Type::Navigate;
-          cmd.navigateQuery = std::format("{} = {}", variable, quoteExpressionString(value));
         }
 
         break;

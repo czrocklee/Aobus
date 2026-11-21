@@ -679,6 +679,94 @@ namespace
       enqueueStep(&WinUiTrackTableProbeApplication::buildAndPublishStep);
     }
 
+    void verifyColumnLayoutEdits()
+    {
+      _report.beginScenario("column edits preserve hidden sizing and order");
+      using ao::rt::TrackField;
+      using ao::uimodel::TrackColumnState;
+      auto const listId = _trackListPtr->activeListId();
+      auto const hiddenDuration = TrackColumnState{.field = TrackField::Duration, .width = 123, .visible = false};
+      auto const unavailableAlbum = TrackColumnState{.field = TrackField::Album, .weight = 4.0};
+      auto const numberFieldId = ao::rt::trackFieldId(TrackField::DisplayTrackNumber);
+      _columnLayoutsPtr->updateLayout(listId,
+                                      {TrackColumnState{.field = TrackField::Title, .weight = 3.0},
+                                       hiddenDuration,
+                                       unavailableAlbum,
+                                       TrackColumnState{.field = TrackField::DisplayTrackNumber, .width = 91}});
+      _trackListPtr->setViewportWidth(800.0, 0.0);
+
+      _report.check(_trackListPtr->setColumnVisible("artist", false).has_value(),
+                    "hiding an unrecorded Artist materializes column state");
+      _report.check(_trackListPtr->moveColumn("title", 1).has_value(), "Title moves past the track number");
+      _report.check(_trackListPtr->resizeColumn(numberFieldId, 36.0).has_value(), "track number resizes by 36 DIP");
+      auto const expected = std::vector{
+        TrackColumnState{.field = TrackField::DisplayTrackNumber, .width = 127},
+        hiddenDuration,
+        TrackColumnState{.field = TrackField::Title, .weight = 1.0},
+        TrackColumnState{.field = TrackField::Artist, .weight = 2.0, .visible = false},
+        unavailableAlbum,
+      };
+      _report.check(_columnLayoutsPtr->layoutForList(listId) == expected,
+                    "reorder and resize preserve hidden and unavailable state while saving canonical dimensions");
+
+      auto const resizedHeaders = _trackListPtr->headers();
+      _report.check(resizedHeaders.Size() == 2, "only the track number and Title remain visible after resize");
+
+      if (resizedHeaders.Size() == 2)
+      {
+        auto const number = resizedHeaders.GetAt(0).as<winrt::Aobus::TrackCellItem>();
+        auto const title = resizedHeaders.GetAt(1).as<winrt::Aobus::TrackCellItem>();
+        _report.check(number.FieldId() == winrt::to_hstring(numberFieldId) && number.Width() == 127.0,
+                      "the moved track number has its resized width in the projected header");
+        _report.check(title.FieldId() == L"title" && title.Width() == 673.0,
+                      "the remaining flexible Title header receives the rest of the viewport");
+      }
+
+      _report.check(_trackListPtr->setColumnVisible("duration", true).has_value(), "Duration can be shown again");
+      auto const headers = _trackListPtr->headers();
+      _report.check(headers.Size() == 3, "showing Duration restores only that hidden header");
+
+      if (headers.Size() == 3)
+      {
+        auto const duration = headers.GetAt(1).as<winrt::Aobus::TrackCellItem>();
+        _report.check(duration.FieldId() == L"duration" && duration.Width() == 123.0,
+                      "the restored Duration header has its stored position and width in DIP");
+      }
+
+      _report.beginScenario("column edits respect an external hide with stale headers");
+      auto const hideDurationInStore = [this, listId, &expected]
+      {
+        // Change the store without refreshing the controller.
+        _columnLayoutsPtr->updateLayout(listId, expected);
+        auto const cachedHeaders = _trackListPtr->headers();
+        _report.check(cachedHeaders.Size() == 3 &&
+                        cachedHeaders.GetAt(1).as<winrt::Aobus::TrackCellItem>().FieldId() == L"duration",
+                      "the controller still projects Duration immediately after the external hide");
+      };
+
+      hideDurationInStore();
+      _report.check(_trackListPtr->moveColumn("title", -1).has_value(), "Title moves left with a stale header");
+      auto moved = expected;
+      std::swap(moved[0], moved[2]);
+      _report.check(_columnLayoutsPtr->layoutForList(listId) == moved,
+                    "Title swaps with the track number, leaving Duration hidden at 123 DIP in its stored slot");
+
+      // Reseed before resize: move refreshes the cache, even if it revives Duration.
+      _columnLayoutsPtr->updateLayout(listId, expected);
+      _report.check(_trackListPtr->setColumnVisible("duration", true).has_value(), "Duration is shown before resize");
+      hideDurationInStore();
+      _report.check(
+        _trackListPtr->resizeColumn(numberFieldId, 36.0).has_value(), "the track number resizes with a stale header");
+      auto resized = expected;
+      resized[0].width = 163;
+      _report.check(_columnLayoutsPtr->layoutForList(listId) == resized,
+                    "the track number reaches 163 DIP while Duration remains hidden at 123 DIP");
+
+      // The loaded-table scenarios use the original layout and viewport.
+      _columnLayoutsPtr->restore({}, {});
+      _trackListPtr->setViewportWidth(1200.0, 0.0);
+    }
+
     void buildAndPublishStep()
     {
       if (_trackListPtr->activeListId() != ao::rt::kAllTracksListId ||
@@ -688,6 +776,7 @@ namespace
         return;
       }
 
+      verifyColumnLayoutEdits();
       _hostPtr = std::make_unique<ao::winui::layout::LayoutHost>(_hostBorder);
       _gatePtr = _hostPtr->stage();
       _focusedDetailPtr = std::make_shared<ao::winui::layout::FocusedDetail>();

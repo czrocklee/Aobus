@@ -13,10 +13,9 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/query/Expression.h>
-#include <ao/query/Serializer.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationState.h>
+#include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
@@ -796,17 +795,15 @@ namespace ao::tui
 
   Result<> LibraryController::navigateToArtist(std::string_view const artist)
   {
-    if (artist.empty())
+    auto expression = uimodel::trackFieldTextEqualityFilter(rt::TrackField::Artist, artist);
+
+    if (expression.empty())
     {
       return makeError(Error::Code::InvalidInput, "Cannot navigate to an empty artist");
     }
 
     return navigateFromActiveView({
-      .target =
-        rt::FilteredListTarget{
-          .listId = rt::kAllTracksListId,
-          .filterExpression = "$artist = " + query::serialize(query::ConstantExpression{std::string{artist}}),
-        },
+      .target = rt::FilteredListTarget{.listId = rt::kAllTracksListId, .filterExpression = std::move(expression)},
     });
   }
 

@@ -3,6 +3,7 @@
 
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
+#include <ao/uimodel/library/presentation/TrackColumnWidthSolver.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -38,27 +39,29 @@ namespace ao::uimodel::test
     CHECK(visible[1] == rt::TrackField::Title);
   }
 
-  TEST_CASE("TrackColumnLayouts - visible updates preserve hidden column slots")
+  TEST_CASE("TrackColumnLayouts - canonical visible updates preserve hidden and unavailable column slots")
   {
+    auto const hiddenGenre = TrackColumnState{.field = rt::TrackField::Genre, .weight = 1.25, .visible = false};
+    auto const unavailableAlbum = TrackColumnState{.field = rt::TrackField::Album, .weight = 1.5};
     auto const stored = std::vector{
       TrackColumnState{.field = rt::TrackField::Title, .weight = 1.0},
-      TrackColumnState{.field = rt::TrackField::Genre, .weight = 1.0, .visible = false},
+      hiddenGenre,
       TrackColumnState{.field = rt::TrackField::Artist, .weight = 1.0},
-      TrackColumnState{.field = rt::TrackField::Album, .weight = 1.0, .visible = false},
+      unavailableAlbum,
     };
-    auto const updated = std::vector{
-      TrackColumnState{.field = rt::TrackField::Artist, .weight = 2.0},
-      TrackColumnState{.field = rt::TrackField::Title, .weight = 3.0},
-      TrackColumnState{.field = rt::TrackField::Duration, .width = 95},
+    auto const visibleSpecs = std::vector{
+      TrackColumnSolveSpec{.field = rt::TrackField::Artist, .weight = 2.1254},
+      TrackColumnSolveSpec{.field = rt::TrackField::Title},
+      TrackColumnSolveSpec{.field = rt::TrackField::Duration, .fixedWidth = 95},
     };
 
-    auto const merged = mergeVisibleTrackColumnLayout(stored, updated);
+    auto const merged = mergeVisibleTrackColumnSpecs(stored, visibleSpecs);
 
     REQUIRE(merged.size() == 5);
-    CHECK(merged[0] == updated[0]);
-    CHECK(merged[1] == stored[1]);
-    CHECK(merged[2] == updated[1]);
-    CHECK(merged[3] == stored[3]);
-    CHECK(merged[4] == updated[2]);
+    CHECK(merged[0] == TrackColumnState{.field = rt::TrackField::Artist, .weight = 2.125});
+    CHECK(merged[1] == hiddenGenre);
+    CHECK(merged[2] == TrackColumnState{.field = rt::TrackField::Title, .weight = 3.0});
+    CHECK(merged[3] == unavailableAlbum);
+    CHECK(merged[4] == TrackColumnState{.field = rt::TrackField::Duration, .width = 95});
   }
 } // namespace ao::uimodel::test

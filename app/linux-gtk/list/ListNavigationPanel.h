@@ -5,6 +5,7 @@
 
 #include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/uimodel/library/list/ListTreeProjection.h>
 
 #include <gdkmm/rectangle.h>
 #include <glibmm/refptr.h>
@@ -19,8 +20,6 @@
 
 #include <cstdint>
 #include <functional>
-#include <map>
-#include <vector>
 
 namespace Gio
 {
@@ -70,7 +69,6 @@ namespace ao::gtk
     void handleListSelectionChanged(std::uint32_t position, std::uint32_t nItems) const;
 
     guint findListPosition(ListId listId) const;
-    std::vector<ListId> collectAncestorIds(ListId listId) const;
     void expandAncestorsOf(ListId listId);
 
     Callbacks _callbacks;
@@ -84,6 +82,6 @@ namespace ao::gtk
     Glib::RefPtr<Gtk::TreeListModel> _treeListModelPtr;
     Glib::RefPtr<Gtk::SingleSelection> _listSelectionModelPtr;
     sigc::scoped_connection _selectionChangedConnection;
-    std::map<ListId, Glib::RefPtr<ListTreeItem>> _nodesById;
+    uimodel::ListTreeProjection _projection;
   };
 } // namespace ao::gtk

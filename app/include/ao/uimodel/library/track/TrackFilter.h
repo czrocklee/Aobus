@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/rt/TrackField.h>
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/rt/completion/QueryExpressionCompleter.h>
 
@@ -33,6 +34,9 @@ namespace ao::uimodel
   };
 
   ResolvedTrackFilter resolveTrackFilter(std::string_view rawFilter);
+
+  /// Returns an empty expression for an empty value or a field without a filter variable.
+  std::string trackFieldTextEqualityFilter(rt::TrackField field, std::string_view value);
 
   class TrackFilterCompleter final
   {

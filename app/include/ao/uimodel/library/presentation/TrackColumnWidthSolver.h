@@ -36,4 +36,9 @@ namespace ao::uimodel
                                                            std::int32_t viewportWidth);
 
   TrackColumnState canonicalTrackColumnState(TrackColumnSolveSpec const& spec);
+
+  /// Pass only specs for currently visible fields. Their canonical states are merged in spec order,
+  /// while stored columns absent from the specs keep their slots and sizing.
+  std::vector<TrackColumnState> mergeVisibleTrackColumnSpecs(std::span<TrackColumnState const> storedLayout,
+                                                             std::span<TrackColumnSolveSpec const> visibleSpecs);
 } // namespace ao::uimodel

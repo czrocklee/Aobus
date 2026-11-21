@@ -63,6 +63,18 @@ namespace ao::uimodel
     }
   } // namespace
 
+  std::string trackFieldTextEqualityFilter(rt::TrackField const field, std::string_view const value)
+  {
+    auto const variable = rt::trackFieldFilterExpressionVariable(field);
+
+    if (value.empty() || variable.empty())
+    {
+      return {};
+    }
+
+    return std::format("{} = {}", variable, query::serialize(query::ConstantExpression{std::string{value}}));
+  }
+
   ResolvedTrackFilter resolveTrackFilter(std::string_view rawFilter)
   {
     auto const trimmed = utility::trim(rawFilter);

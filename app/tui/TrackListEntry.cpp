@@ -7,7 +7,7 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackRow.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
-#include <ao/utility/Path.h>
+#include <ao/uimodel/field/TrackRowField.h>
 
 #include <format>
 #include <string>
@@ -25,14 +25,9 @@ namespace ao::tui
 
   std::string trackDisplayTitle(i18n::MessageCatalog const& textCatalog, rt::TrackRow const& row)
   {
-    if (!row.title.empty())
+    if (auto optTitle = uimodel::trackTitleOrFilename(row); optTitle)
     {
-      return row.title;
-    }
-
-    if (row.optUriPath)
-    {
-      return utility::pathToUtf8(row.optUriPath->filename());
+      return std::move(*optTitle);
     }
 
     return i18n::requiredFormat(textCatalog, i18n::MessageId::TrackFallback, {{"id", row.id.raw()}});

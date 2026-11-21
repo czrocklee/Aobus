@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <map>
+#include <set>
 #include <span>
 #include <vector>
 
@@ -91,6 +92,28 @@ namespace ao::uimodel
       return result;
     }
   } // namespace
+
+  std::vector<ListId> listTreeAncestorIds(ListTreeProjection const& projection, ListId id)
+  {
+    auto ancestors = std::vector<ListId>{};
+    auto visited = std::set<ListId>{};
+    auto row = projection.rowsById.find(id);
+
+    while (row != projection.rowsById.end())
+    {
+      auto const parentId = row->second.parentId;
+
+      if (parentId == kInvalidListId || parentId == id || !visited.insert(parentId).second)
+      {
+        break;
+      }
+
+      ancestors.push_back(parentId);
+      row = projection.rowsById.find(parentId);
+    }
+
+    return ancestors;
+  }
 
   ListTreeProjection buildListTreeProjection(i18n::MessageCatalog const& textCatalog,
                                              std::span<rt::ListNode const> snapshot)

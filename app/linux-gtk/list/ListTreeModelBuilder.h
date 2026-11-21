@@ -5,15 +5,13 @@
 
 #include "list/ListNavigationSectionModel.h"
 #include "list/ListTreeItem.h"
-#include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/uimodel/library/list/ListTreeProjection.h>
 
 #include <giomm/liststore.h>
 #include <glibmm/refptr.h>
 #include <gtkmm/singleselection.h>
 #include <gtkmm/treelistmodel.h>
-
-#include <map>
 
 namespace ao::rt
 {
@@ -31,7 +29,7 @@ namespace ao::gtk
       Glib::RefPtr<Gtk::TreeListModel> treeModelPtr;
       Glib::RefPtr<ListNavigationSectionModel> sectionModelPtr;
       Glib::RefPtr<Gtk::SingleSelection> selectionModelPtr;
-      std::map<ListId, Glib::RefPtr<ListTreeItem>> nodesById;
+      uimodel::ListTreeProjection projection;
     };
 
     static BuildResult build(rt::Library const& reads, i18n::MessageCatalog const& textCatalog);

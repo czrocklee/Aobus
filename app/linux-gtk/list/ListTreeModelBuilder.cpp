@@ -6,9 +6,9 @@
 #include "list/ListNavigationSectionModel.h"
 #include "list/ListRowObject.h"
 #include "list/ListTreeItem.h"
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/uimodel/library/list/ListTreeProjection.h>
@@ -20,6 +20,7 @@
 #include <gtkmm/singleselection.h>
 #include <gtkmm/treelistmodel.h>
 
+#include <map>
 #include <memory>
 
 namespace ao::gtk
@@ -32,47 +33,37 @@ namespace ao::gtk
 
     auto scope = reads.snapshot();
     auto const snapshot = scope.lists();
-    auto const projection = uimodel::buildListTreeProjection(textCatalog, snapshot);
+    result.projection = uimodel::buildListTreeProjection(textCatalog, snapshot);
+    auto nodesById = std::map<ListId, Glib::RefPtr<ListTreeItem>>{};
 
-    for (auto const& [id, row] : projection.rowsById)
+    for (auto const& [id, row] : result.projection.rowsById)
     {
       auto listRowPtr = ListRowObject::create(id, row.isSystem, row.name, row.localExpression);
       auto treeNodePtr = ListTreeItem::create(listRowPtr);
-      result.nodesById[id] = treeNodePtr;
+      nodesById.emplace(id, treeNodePtr);
     }
 
-    for (auto const& [parentId, row] : projection.rowsById)
+    auto const nodeForId = [&nodesById](ListId const id) -> Glib::RefPtr<ListTreeItem> const&
     {
-      auto const parentIt = result.nodesById.find(parentId);
+      auto const it = nodesById.find(id);
+      AO_INVARIANT(it != nodesById.end(), "Missing list tree node for ID {}", id.raw());
+      return it->second;
+    };
 
-      if (parentIt == result.nodesById.end())
-      {
-        continue;
-      }
+    // buildListTreeProjection repairs parent links: every child ID names a row whose parentId matches this parent.
+    for (auto const& [parentId, row] : result.projection.rowsById)
+    {
+      auto const& parentPtr = nodeForId(parentId);
 
       for (auto const childId : row.childIds)
       {
-        if (auto const childIt = result.nodesById.find(childId); childIt != result.nodesById.end())
-        {
-          parentIt->second->children()->append(childIt->second);
-        }
+        parentPtr->children()->append(nodeForId(childId));
       }
     }
 
-    if (auto const allTracksIt = result.nodesById.find(rt::kAllTracksListId); allTracksIt != result.nodesById.end())
+    for (auto const rootId : result.projection.rootIds)
     {
-      result.storePtr->append(allTracksIt->second);
-    }
-
-    for (auto const rootId : projection.rootIds)
-    {
-      if (rootId != rt::kAllTracksListId)
-      {
-        if (auto const rootIt = result.nodesById.find(rootId); rootIt != result.nodesById.end())
-        {
-          result.storePtr->append(rootIt->second);
-        }
-      }
+      result.storePtr->append(nodeForId(rootId));
     }
 
     result.treeModelPtr = Gtk::TreeListModel::create(

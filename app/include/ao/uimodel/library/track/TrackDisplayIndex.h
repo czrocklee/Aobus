@@ -9,6 +9,11 @@
 #include <span>
 #include <vector>
 
+namespace ao::rt
+{
+  class TrackListProjection;
+}
+
 namespace ao::uimodel
 {
   struct TrackDisplaySection final
@@ -44,6 +49,7 @@ namespace ao::uimodel
   {
   public:
     bool tryReset(std::size_t rowCount, std::span<TrackDisplaySection const> sections);
+    bool tryReset(rt::TrackListProjection const& projection);
     void clear() noexcept;
 
     std::size_t rowCount() const noexcept { return _rowCount; }

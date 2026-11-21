@@ -340,14 +340,16 @@ namespace ao::uimodel::test
       CHECK(query::serialize(parsed) == R"($title = "A \"Song\" 'Name'")");
     }
 
-    SECTION("FilterByField with Artist")
+    SECTION("FilterByField treats artist metadata as one literal")
     {
-      auto desc = playbackRequest(TrackId{1}, "Song", "Artist");
+      auto desc = playbackRequest(TrackId{1}, "Song", R"(A "quoted" artist\with slash; B)");
       REQUIRE(playbackTransport.play(desc, ListId{1}));
 
       auto const cmd = viewModel.resolveAction(NowPlayingFieldAction::FilterByField, rt::TrackField::Artist);
       CHECK(cmd.type == NowPlayingActionCommand::Type::Navigate);
-      CHECK(cmd.navigateQuery == "$artist = \"Artist\"");
+      CHECK(cmd.navigateQuery == R"($artist = "A \"quoted\" artist\\with slash; B")");
+      auto parsed = ao::test::requireValue(query::parse(cmd.navigateQuery));
+      CHECK(query::serialize(parsed) == cmd.navigateQuery);
     }
 
     SECTION("FilterByField escapes a double-quote title")

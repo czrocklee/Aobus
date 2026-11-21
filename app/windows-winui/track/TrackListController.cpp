@@ -149,6 +149,14 @@ namespace ao::winui
       std::weak_ptr<void> _lifetimePtr;
     };
 
+    // A header gesture can arrive after the stored layout changes but before the headers refresh.
+    std::vector<uimodel::TrackColumnSolveSpec> visibleColumnSpecs(rt::TrackPresentationSpec const& presentation,
+                                                                  std::span<uimodel::TrackColumnState const> stored)
+    {
+      auto const fields = uimodel::visibleTrackFieldsInStoredLayout(presentation.visibleFields, stored);
+      return uimodel::pixelTrackColumnSpecs(fields, stored);
+    }
+
     bool tryMaterializeStoredColumns(std::vector<uimodel::TrackColumnState>& stored,
                                      std::span<rt::TrackField const> const presentationFields)
     {
@@ -343,21 +351,11 @@ namespace ao::winui
     }
 
     refreshColumns();
-    auto const rowCount = _projectionPtr->size();
-    auto sections = std::vector<uimodel::TrackDisplaySection>{};
-    sections.reserve(_projectionPtr->groupCount());
-
-    for (std::size_t groupIndex = 0; groupIndex < _projectionPtr->groupCount(); ++groupIndex)
-    {
-      auto const group = _projectionPtr->groupAt(groupIndex);
-      sections.push_back({.start = group.rows.start, .count = group.rows.count});
-    }
-
     auto displayIndex = uimodel::TrackDisplayIndex{};
 
-    if (!displayIndex.tryReset(rowCount, sections))
+    if (!displayIndex.tryReset(*_projectionPtr))
     {
-      std::ignore = displayIndex.tryReset(rowCount, {});
+      std::ignore = displayIndex.tryReset(_projectionPtr->size(), {});
     }
 
     _displayIndex = displayIndex;
@@ -398,14 +396,13 @@ namespace ao::winui
     auto const& state = *stateRes;
     auto const listId = state.listId;
     auto const& storedLayout = _columnLayouts.layoutForList(listId);
-    auto const fields = uimodel::visibleTrackFieldsInStoredLayout(state.presentation.visibleFields, storedLayout);
-    auto const specs = uimodel::pixelTrackColumnSpecs(fields, storedLayout);
+    auto const specs = visibleColumnSpecs(state.presentation, storedLayout);
     auto const widths = uimodel::solveTrackColumnWidths(specs, _viewportWidth);
-    _columns.reserve(fields.size());
+    _columns.reserve(specs.size());
 
-    for (std::size_t index = 0; index < fields.size(); ++index)
+    for (std::size_t index = 0; index < specs.size(); ++index)
     {
-      auto const field = fields[index];
+      auto const field = specs[index].field;
       auto const width = index < widths.size() ? static_cast<double>(widths[index])
                                                : static_cast<double>(uimodel::trackColumnDefaults(field).width);
       _columns.push_back({.field = field, .width = width});
@@ -443,35 +440,11 @@ namespace ao::winui
       std::max(_contentWidth + static_cast<double>(_trailingChromeWidth), static_cast<double>(_surfaceViewportWidth));
   }
 
-  Result<> TrackListController::storeColumnSpecs(std::vector<uimodel::TrackColumnSolveSpec> const& specs)
+  void TrackListController::storeColumnSpecs(ListId const listId, std::span<uimodel::TrackColumnSolveSpec const> specs)
   {
-    auto const listId = activeListId();
-
-    if (listId == kInvalidListId)
-    {
-      return makeError(Error::Code::InvalidState, resourceString("NoListActive"));
-    }
-
-    auto stored = _columnLayouts.layoutForList(listId);
-    auto visibleLayout = std::vector<uimodel::TrackColumnState>{};
-    visibleLayout.reserve(specs.size());
-
-    for (auto const& spec : specs)
-    {
-      auto state = uimodel::canonicalTrackColumnState(spec);
-
-      if (auto const prior = std::ranges::find(stored, spec.field, &uimodel::TrackColumnState::field);
-          prior != stored.end())
-      {
-        state.visible = prior->visible;
-      }
-
-      visibleLayout.push_back(state);
-    }
-
-    _columnLayouts.updateLayout(listId, uimodel::mergeVisibleTrackColumnLayout(stored, visibleLayout));
+    auto const& stored = _columnLayouts.layoutForList(listId);
+    _columnLayouts.updateLayout(listId, uimodel::mergeVisibleTrackColumnSpecs(stored, specs));
     refreshRows();
-    return {};
   }
 
   Result<> TrackListController::resizeColumn(std::string_view const fieldId, double const horizontalChange)
@@ -483,34 +456,26 @@ namespace ao::winui
       return makeError(Error::Code::InvalidState, resourceString("NoResizableColumn"));
     }
 
-    auto fields = std::vector<rt::TrackField>{};
-    fields.reserve(_columns.size());
+    auto const stateRes = _views.findTrackListState(_viewId);
 
-    for (auto const& column : _columns)
-    {
-      fields.push_back(column.field);
-    }
-
-    auto const listId = activeListId();
-
-    if (listId == kInvalidListId)
+    if (!stateRes || stateRes->listId == kInvalidListId)
     {
       return makeError(Error::Code::InvalidState, resourceString("NoListActive"));
     }
 
-    auto const& stored = _columnLayouts.layoutForList(listId);
-    auto const specs = uimodel::pixelTrackColumnSpecs(fields, stored);
-    auto const widths = uimodel::solveTrackColumnWidths(specs, _viewportWidth);
-    auto const it = std::ranges::find(fields, *optField);
+    auto const specs = visibleColumnSpecs(stateRes->presentation, _columnLayouts.layoutForList(stateRes->listId));
+    auto const it = std::ranges::find(specs, *optField, &uimodel::TrackColumnSolveSpec::field);
 
-    if (it == fields.end())
+    if (it == specs.end())
     {
       return makeError(Error::Code::NotFound, resourceString("ColumnHidden"));
     }
 
-    auto const index = static_cast<std::size_t>(std::distance(fields.begin(), it));
+    auto const widths = uimodel::solveTrackColumnWidths(specs, _viewportWidth);
+    auto const index = static_cast<std::size_t>(std::distance(specs.begin(), it));
     auto const target = static_cast<std::int32_t>(std::lround(static_cast<double>(widths[index]) + horizontalChange));
-    return storeColumnSpecs(uimodel::resizeTrackColumnSpecs(specs, *optField, target, _viewportWidth));
+    storeColumnSpecs(stateRes->listId, uimodel::resizeTrackColumnSpecs(specs, *optField, target, _viewportWidth));
+    return {};
   }
 
   Result<> TrackListController::moveColumn(std::string_view const fieldId, std::int32_t const offset)
@@ -522,40 +487,31 @@ namespace ao::winui
       return makeError(Error::Code::InvalidState, resourceString("NoMovableColumn"));
     }
 
-    auto fields = std::vector<rt::TrackField>{};
-    fields.reserve(_columns.size());
+    auto const stateRes = _views.findTrackListState(_viewId);
 
-    for (auto const& column : _columns)
-    {
-      fields.push_back(column.field);
-    }
-
-    auto const it = std::ranges::find(fields, *optField);
-
-    if (it == fields.end())
-    {
-      return makeError(Error::Code::NotFound, resourceString("ColumnHidden"));
-    }
-
-    auto const index = static_cast<std::ptrdiff_t>(std::distance(fields.begin(), it));
-    auto const target = index + static_cast<std::ptrdiff_t>(offset);
-
-    if (target < 0 || std::cmp_greater_equal(target, fields.size()))
-    {
-      return {};
-    }
-
-    std::iter_swap(fields.begin() + index, fields.begin() + target);
-
-    auto const listId = activeListId();
-
-    if (listId == kInvalidListId)
+    if (!stateRes || stateRes->listId == kInvalidListId)
     {
       return makeError(Error::Code::InvalidState, resourceString("NoListActive"));
     }
 
-    auto const& stored = _columnLayouts.layoutForList(listId);
-    return storeColumnSpecs(uimodel::pixelTrackColumnSpecs(fields, stored));
+    auto specs = visibleColumnSpecs(stateRes->presentation, _columnLayouts.layoutForList(stateRes->listId));
+    auto const it = std::ranges::find(specs, *optField, &uimodel::TrackColumnSolveSpec::field);
+
+    if (it == specs.end())
+    {
+      return makeError(Error::Code::NotFound, resourceString("ColumnHidden"));
+    }
+
+    auto const target = std::distance(specs.begin(), it) + static_cast<std::ptrdiff_t>(offset);
+
+    if (target < 0 || std::cmp_greater_equal(target, specs.size()))
+    {
+      return {};
+    }
+
+    std::iter_swap(it, specs.begin() + target);
+    storeColumnSpecs(stateRes->listId, specs);
+    return {};
   }
 
   std::vector<TrackColumnChoice> TrackListController::columnChoices() const
