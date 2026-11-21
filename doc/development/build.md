@@ -145,6 +145,18 @@ SDK installation is explicit: `ao setup deps`, and `ao setup llvm-sdk` for
 the Windows LLVM SDK, are the provisioning actions; ordinary build, lint and
 format commands never install an SDK and consume a ready installed one.
 
+### Shared-source Git discovery
+
+If native Git cannot follow a foreign linked worktree's `.git` pointer, set `AOBUS_GIT_DIR` to the private Git directory and `AOBUS_GIT_WORK_TREE` to the source root seen by the portal for that invocation. Use the [macOS shell example](macos.md#bind-git-metadata-on-macos) or the [Windows PowerShell example](windows.md#bind-git-metadata-on-windows). Bind existing metadata; do not create or copy it for these examples.
+
+Before using the pair, compare the private directory, common directory, index path, exact HEAD, and staged entries with the intended checkout. Matching metadata does not verify the contents of a source mirror or its comparison base. Check the intended edits and the base revision separately. A matching `--show-toplevel` is not sufficient: the portal trusts the association. Both values must be nonempty native absolute paths. Discovery rejects a malformed pair and ignores a complete pair for a different normalized root; use the portal's spelling, not an assumed path alias. If the changed-files comparison fails because Git returned an error after ignoring the pair, the diagnostic names both roots.
+
+Name files individually to bypass Git-backed scope discovery. For `format`, `check format`, `check lint`, and `check analyzer`, directories and `--all` skip the changed-files comparison but can still call Git to enumerate authored text files. That enumeration falls back to a filesystem scan only if Git is missing or reports no repository and no effective binding selects this checkout. A malformed pair or a binding for this checkout that Git cannot use fails instead.
+
+`--commit REV` requires Git and selects a base while still including staged, unstaged, and non-ignored untracked changes. A change only to timestamps or other cached file stats does not select a file; real content changes and applicable executable-bit changes still count. Discovery uses both `--no-optional-locks` and `-c diff.autoRefreshIndex=false` because optional-lock suppression alone does not prevent diff index refreshes.
+
+Only Git-backed source discovery uses the binding. It does not rewrite `.git`, redirect `setup git-hooks`, performance provenance, arbitrary Git commands, or checkout-ID creation. If managed tools cannot access the original private directory, supply a separate stable, unique `AOBUS_CHECKOUT_ID`. Do not export standard `GIT_DIR` or `GIT_WORK_TREE` across the portal: dependencies and disposable test repositories need independent Git contexts. These safeguards do not make the whole checkout write-free.
+
 ## Default parallelism
 
 Native Bazel owns its build/test scheduling; use `--jobs=N` and the native

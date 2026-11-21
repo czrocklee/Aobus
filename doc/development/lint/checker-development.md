@@ -37,75 +37,6 @@ Common AST traps include:
 - C++20 rewritten comparisons contain synthesized operators. Use `aobus::isWithinRewrittenOperator` or match the source comparison to avoid duplicate or inverted diagnostics.
 - Initializer-list constructor detection uses the first parameter's type; parent traversal requires `clang/AST/ParentMapContext.h`.
 
-For redundant namespace-qualification diagnostics, lookup safety concerns the first component
-left after removal, not just the final referenced member. Preserve source names
-from aliases and using-declarations, and inspect template heads on concepts and
-requires-clauses as well as outer template parameter lists on source definitions
-when instantiated nodes omit them. Template-scope proof must recover lexical
-source owners as well as semantic declaration contexts: requires-local parameter
-types and template heads can otherwise lose their owning parameter lists.
-A template declaration's templated declaration also owns outer lists on renamed
-out-of-line definitions. Default-argument/default-initializer use sites and
-implicit instantiation copies are not additional lexical lookup scopes.
-Diagnose spelled source rather than revisiting those copies, and reject
-non-ancestor namespace qualifiers before collecting outer source owners.
-Cover shadowed negatives, corresponding unshadowed positives, self-defaults,
-later-parameter declaration-order controls, and used/unused default expressions.
-A template parameter is not visible inside its own default; apply that source
-ordering to class/function templates as well as variable/alias templates.
-Lambda captures, including init-captures, can hide namespace members even when
-ordinary declaration-context enumeration does not expose their names.
-Requires-expression local parameters likewise need their explicit source list:
-visible parameters hide ordinary names inside requirements and later parameter
-types, but not in earlier parameter types. A variable does not hide the first
-surviving type/namespace name before `::`; cover that distinction with positives
-rather than treating every same-named requires-local parameter as a shadow.
-Ordinary parameters become visible after their complete declarator and before
-an attached default argument. Inspect the selected written declaration's parameter
-list, including the written outer function of a lambda in its signature;
-names from nested function types or other redeclarations do not leak into it.
-Unscoped enumerators are injected only into their active lexical region and become
-visible after their complete enumerator-definition. Do not flatten ended or sibling
-block scopes into a function-wide declaration set.
-
-Inline friend definitions use their lexical class for lookup. Class lookup has two
-obligations: lookup from the written position and agreement with lookup in the
-completed class ([class.member.lookup](https://eel.is/c++draft/class.member.lookup#6)).
-Outside a complete-class context, source-order lookup can succeed yet disagree with
-the completed class, making the shortened program ill-formed without a required diagnostic.
-A later same-named member therefore blocks shortening in trailing return types,
-member types, array bounds, and static initializers as well as function bodies,
-constructor initializer lists, defaults, and exception specifications.
-Do not infer safety from a compiler accepting the shortened spelling.
-Use lookup parents for this class relationship, retain explicit lambda-capture checks,
-and distinguish value candidates from type or namespace lookup before a surviving `::`.
-
-The function-body shortcut reuses semantic owners only when each enclosing function
-contains the use in its body and none of those owners is a lambda call operator.
-Lambdas need the full source-owner walk, including ordinary and template parameter lists:
-their semantic contexts can omit template initializers and signature owners, even for
-lambdas in local-class member signatures or another lambda's defaults inside a function.
-Nearest requires-expressions also retain that walk. Local-enumerator scope proof can
-request full ancestry lazily; its declaration scan shares the ordinary closer-name scan.
-Repeated instantiation-owner classification is memoized within one callback, not across
-uses or translation units. Reused default-use edges remain excluded before traversal.
-Cover both hiding cases and unshadowed controls, and measure distinct-local functions
-separately from repeated uses of a single local and deeply nested lambdas.
-Removing the complete qualifier from a function call can enable argument-dependent
-lookup even when ordinary lookup finds the same declaration.
-The bounded proof accepts only fundamental-typed source arguments (before implicit
-conversions), ignoring default arguments.
-Newly unqualified direct calls with explicit template arguments, dependent or
-instantiated source contexts, and unfamiliar function-use forms are left
-qualified. A surviving qualifier, parenthesized callee, or explicit address-taking
-does not activate ADL through this removal.
-
-The checker also abstains when inherited, using-directive, inline-namespace, or
-dependent lookup cannot be proved from its AST context. Fixtures record those
-conservative boundaries alongside unshadowed positives and type/callable
-identity assertions; successful compilation alone does not establish that an
-unqualified spelling preserves binding.
-
 ### Fixture contract
 
 Place fixtures under `test/lint/fixture/<check-alias>/`; the directory selects the check.
@@ -154,6 +85,57 @@ For focused diagnosis against an owned product or test translation unit's real c
 ```bash
 ./ao check lint --tidy-check <alias> <owned-source>
 ```
+
+## Redundant namespace qualification
+
+[`aobus-readability-redundant-namespace-qualification`](../../../tool/lint/check/RedundantNamespaceQualificationCheck.cpp)
+must report an ancestor namespace prefix only when shortening preserves binding.
+Removing `q::` from `q::Outer::Inner` changes lookup of `Outer`, not `Inner`.
+Keep the names that aliases and using-declarations expose; a same-named value
+does not hide a type or namespace before a surviving `::`.
+
+**Known limitation:** Keep the qualifier when the namespace being removed contains
+a using-directive for one of its nested namespaces, even if the checker reports
+it as redundant. Shortening can add an overload to ordinary lookup and select a
+different function without ADL.
+
+- **Written scope.** Semantic parents can miss lambda captures (including
+  init-captures), requires-expression parameter lists, and template or signature
+  owners. Recover the written owners of concept and requires-clause heads and
+  renamed out-of-line template definitions. Diagnose spelled source; reused
+  default arguments or initializers and implicit instantiations do not add
+  lookup scopes.
+- **Declaration order.** A template parameter is not visible in its own
+  default; an ordinary parameter is visible after its complete declarator,
+  including in its default. Use the parameter list at the written declaration,
+  not a different redeclaration or an already-ended nested function type.
+  Requires-expression parameters can hide ordinary names in later parameter
+  types and requirements, not in earlier parameter types. Block-scope unscoped
+  enumerators enter the active enclosing scope only after their complete
+  definitions. A scoped enum definition does not inject its enumerators into
+  that scope; a `using enum` declaration can introduce them.
+- **Class lookup.** An inline friend uses its lexical class. A later member can
+  make lookup at the written position disagree with lookup in the completed
+  class. That can make shortening ill-formed without a required diagnostic, so
+  compiler acceptance is not proof of safety
+  ([class.member.lookup](https://eel.is/c++draft/class.member.lookup#6)).
+- **Unproved lookup.** Keep qualifiers when inherited, using-directive,
+  inline-namespace, or dependent lookup is uncertain. Removing the entire
+  qualifier from a direct call can enable argument-dependent lookup even when
+  ordinary lookup finds the same declaration. The bounded proof admits only
+  fundamental-typed arguments as written, before implicit conversions, and
+  ignores default arguments. Explicit template arguments, dependent or
+  instantiated source contexts, and unfamiliar function-use forms are outside
+  that proof. A surviving qualifier, a parenthesized callee, or taking the
+  function's address does not enable ADL through this removal.
+
+The [qualification fixtures](../../../test/lint/fixture/aobus-readability-redundant-namespace-qualification)
+pair shadowed negatives with unshadowed positives, including declaration-order
+and used/unused-default controls. Assert the selected type or callable in the
+original fixture; the runner checks diagnostic markers, not a rewritten program.
+
+When profiling this lookup walk, vary the number of distinct locals, references
+per local, and lambda nesting separately.
 
 ## Prefix comparisons
 
@@ -325,42 +307,44 @@ Clang-tidy requires an exact native compilation command; the lint report actions
 capture real Bazel `CppCompile`/`ObjcCompile` contexts
 ([lint reports](../bazel.md#lint-reports) owns the action, cache and gate
 contracts).
-For a selected header, the portal first prefers a same-component implementation with the same stem, including recognized `Windows`, `Linux`, or `Posix` suffixes;
-otherwise the nearest configured consumer's captured context is replayed with
-the header as the physical main file.
+For a selected header, the report aspect pairs it with an unambiguous
+same-component source with the same stem, allowing the `Windows`, `Linux`,
+`Macos`, and `Posix` suffixes. Without a pair, replay requires a configured
+translation unit whose report shows that it included the header. In either
+case, the header becomes the physical main file.
 
 Derived header-main replay keeps the original command's semantic flags.
-Forced includes remain in place: the Unix helper that omitted a forced include
-resolving to the selected header main itself is retired, because its only
-consumer was the Linux compatibility shim that the lint SDK repository now
-generates instead of the authored tree. Windows forced-include handling is
-unchanged.
+Unix retains its forced includes. The [lint SDK repository](../../../bazel/lint/sdk.bzl)
+generates the Linux compatibility shim for the checker plugin build; it is not
+an authored header selected for replay.
+Windows replay must drop a relative `/FI` include only if its first existing
+match is the selected physical header. To check for a self-include, the action
+looks in its working directory, then the header's directory, then the native
+`/I` directories in order. Keep absolute or drive-qualified values, missing or
+unresolved values, and includes that first match a different file.
 Unix replay appends `-Wno-error`: a compiler warning that only the header main raises must stay a disabled compiler diagnostic, not become a fatal error under the native `-Werror`.
-On Windows it removes the translation unit's `/TP` after replacing the input because the invocation supplies `-x c++-header`, and excludes MSVC `/WX` warning promotion alongside the audited code-generation flags.
+Windows replay excludes MSVC `/WX` warning promotion alongside the audited code-generation flags. Header mains use explicit `-x` language selection.
 For WinUI it suppresses only the nonportable-include-path compiler diagnostic because generated C++/WinRT headers preserve schema casing while Windows resolves paths case-insensitively.
 Intentional header-only WinUI support has audited implementation companions.
 
-Selected headers, include fragments, and WinUI-context files also receive an
-exact full-path line filter. Include fragments run through their consumer, so
-this filter must exclude unrelated diagnostics in the consumer main file and
-other headers. LLVM filters diagnostic groups: a template warning in another
-file can remain visible when an instantiation note is in the selected file.
-Windows entries retain both native and forward-slash spellings
-for each validated source root; header regex separator handling alone does not
-make LLVM's line-filter names interchangeable. An included fragment can acquire
-a mixed name from a native include directory and a forward-slash include token.
-Windows fragment replay therefore uses a file-only VFS overlay whose aliases
-must identify the same selected physical file. Its canonical external name
-stabilizes LLVM's file identity without changing the selected bytes, consumer
-command or full-path filtering boundary. Caller VFS and response/config-file
-contexts fail closed when their virtual contents cannot be safely composed.
-Keep selected-file positive controls alongside excluded-file controls: a
-successful process with no warnings cannot distinguish clean input from a
-mismatched filter.
+By default a header-main lint report uses a header filter for that header and
+its declared virtual include spellings. WinUI lint also uses a path line
+filter with native and forward-slash spellings. LLVM filters diagnostic groups:
+a warning in another file can remain visible when an associated note matches.
 
-A platform-incompatible header without a safe pair or audited WinUI companion is deferred in a batch scan.
-A compatible header without that evidence fails closed; check its declared
-owner and selected native prerequisites before retrying the report action.
+Include fragments stay inside their consumer. The action passes a basename line
+filter to LLVM so mixed separator spellings do not miss the fragment. It then
+keeps warning blocks with the selected normalized primary path, after checking
+the whole attempt. Consumer errors and unlocated diagnostics are not discarded.
+Replay does not generate a VFS overlay. The [lint report contract](../bazel.md#lint-reports)
+owns unsupported compile contexts and coverage. Keep selected-file positive
+controls alongside excluded-file controls: a successful process with no
+warnings cannot distinguish clean input from a mismatched filter.
+
+A discovered, uncovered header that is platform-incompatible can be deferred in
+a batch scan. A compatible header without a pair or observed consumer fails
+closed; check its declared owner and selected native prerequisites before
+retrying the report action.
 An explicitly selected uncovered file fails.
 These rules cover main-file-only checks and prevent clang-tidy from falling back to a nearby unrelated command.
 
@@ -377,8 +361,13 @@ WinUI and generated C++/WinRT headers enter through their real configured
 compile contexts; generated trees retain their producers rather than being
 reconstructed from path strings.
 
-Before replay, the portal removes only exact `/Zc:preprocessor`, `/c`, `/ZW:nostdlib`, `/GL`, `/GL-`, and `/experimental:deterministic` driver tokens.
-The first remains required in product builds; `/c` and `/ZW:nostdlib` describe MSVC behavior the clang-tidy driver already establishes; both IPO spellings are irrelevant to one-translation-unit analysis; and deterministic output is a compiler code-generation toggle rather than analysis input.
+Apart from replacing the input and omitting a proved self-include for header
+mains, the replay action removes only exact `/Zc:preprocessor`, `/c`,
+`/ZW:nostdlib`, `/WX`, `/GL`, `/GL-`, and `/experimental:deterministic`
+driver tokens. `/Zc:preprocessor` remains required in product builds; `/c`
+and `/ZW:nostdlib` describe MSVC behavior the clang-tidy driver already
+establishes. `/WX` would promote Clang warnings to errors. Both IPO spellings
+and deterministic output affect code generation rather than analysis.
 Other related spellings, such as `/Zc:preprocessor-`, are retained.
 
 The Windows analysis command defines `_USE_STD_VECTOR_ALGORITHMS=0` only for clang-tidy as a workaround for [microsoft/STL#6294](https://github.com/microsoft/STL/issues/6294), in which Visual Studio 18 sends three-byte element types to a vectorized helper that accepts only one-, two-, four-, or eight-byte types.

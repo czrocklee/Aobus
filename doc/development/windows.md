@@ -116,8 +116,9 @@ for tool admission and transfers any resolved source scope, including individual
 provenance, through a private temporary record. The foreground selected interpreter
 parses the same arguments and consumes that frozen scope rather than scanning again;
 the bootstrap retains the record until the child exits. Ambient scope records are
-not adopted. Visual Studio's batch setup runs separately with no application arguments; its
-environment returns through a private in-memory channel. Argument forwarding does
+not adopted. When native setup is needed, the portal invokes the Visual Studio
+environment batch script separately, without application arguments, and captures
+its environment through a private in-memory channel. Argument forwarding does
 not use `CALL`. Parsing keeps the caller's working directory, while command
 execution uses the repository root; UNC roots retain a `pushd` mapping until the
 foreground portal exits. This does not replace build-tree or provisioning locks.
@@ -159,11 +160,11 @@ graph-owned outputs, not launch-time copies or `PATH` discovery; `data` alone
 does not place a DLL beside an executable. Actual Debug/Release deployment,
 CRT-flavor and loading validation remain separate from SDK admission.
 
-FLAC consumes Ogg from the SDK as a normal dynamic dependency. CLI/TUI keep
-the existing executable C++ global `new`/`delete` forwarding operators from
-`mimalloc-new-delete.h`. This does not preserve or claim broad CRT
-`malloc`/`free` or arbitrary cross-DLL allocation interception. Allocation
-ownership must still match the allocating interface.
+FLAC consumes Ogg from the SDK as a normal dynamic dependency. The CLI and TUI
+use `mimalloc-new-delete.h` to define executable-global `operator new` and
+`operator delete` overloads that forward to mimalloc. This does not intercept
+CRT `malloc`/`free` calls broadly or redirect arbitrary cross-DLL allocations.
+Allocation ownership must still match the allocating interface.
 
 Validate a changed SDK in both Debug and Release, including product startup,
 allocation behavior, decoder workflows and the catalog build-tool closure.
@@ -268,7 +269,7 @@ case-insensitive lookup does not prove exact governed source spelling.
 
 A source root without usable private Git metadata needs a stable
 `AOBUS_CHECKOUT_ID` for managed-tool identity. Git-backed discovery independently
-needs a supported [metadata binding](#shared-source-git-discovery).
+needs a supported [metadata binding](build.md#shared-source-git-discovery).
 Neither setting copies metadata, synchronizes source, or prepares another
 root's tooling. Follow the [locked bootstrap](#prerequisites) for each checkout;
 virtual environments contain checkout-specific paths and are not relocatable.
@@ -277,18 +278,12 @@ The checkout key's tolerance of mapped-drive, UNC and junction aliases is an
 identity feature, not permission to build from a network root. Run the selected
 local checkout's `ao.bat` from that root.
 
-### Shared-source Git discovery
+### Bind Git metadata on Windows
 
-A linked worktree created on another host may have a `.git` pointer that native
-Git cannot use. For Git-backed source discovery, pass `AOBUS_GIT_DIR` (the
-intended private Git directory) and `AOBUS_GIT_WORK_TREE` (the source root) to
-the portal process. Both must be present, nonempty native absolute paths;
-malformed pairs fail when discovery runs. Explicit files or directories and
-`--all` bypass this discovery and its binding validation. A complete pair for
-another normalized root is ignored; a discovery failure reports the mismatch.
-
-Use Python's `PROJECT_ROOT`, derived from the imported tooling module's path,
-not the current directory after `ao.bat`'s `pushd`. The batch file sets
+Follow [shared-source Git discovery](build.md#shared-source-git-discovery) to
+verify the metadata. For the work tree, use Python's `PROJECT_ROOT`, derived
+from the imported tooling module's path, not the current directory after
+`ao.bat`'s `pushd`. The batch file sets
 `PYTHONPATH` from its own directory before `pushd`: a UNC module path remains
 UNC even when the working directory becomes a temporary drive letter. UNC,
 mapped-drive, and junction spellings are not guaranteed to match each other.
@@ -309,27 +304,6 @@ try {
     $env:AOBUS_GIT_WORK_TREE = $previousWorkTree
 }
 ```
-
-Do not create or copy metadata for this example. Before accepting a
-mapping, compare its actual private/common/index paths, exact HEAD, and semantic
-staged index with the intended checkout. A plausible `--show-toplevel` is not
-association proof: this trusted binding does not verify that metadata belongs
-to the source root.
-
-Only Git-backed source discovery calls use the pair. Discovery also uses
-process-local `--no-optional-locks` and `-c diff.autoRefreshIndex=false`:
-optional-lock suppression alone does not
-prevent `git diff` from writing stat-only index refreshes.
-Working-tree discovery also compares content, so stat-only differences do not
-expand the selected source scope.
-The binding does not redirect `setup git-hooks`,
-performance revision commands, or arbitrary Git operations. It neither rewrites
-`.git` nor redirects checkout-ID creation. If the original private Git directory
-is inaccessible, supply a separate stable, unique `AOBUS_CHECKOUT_ID` as
-described above. Do not export standard `GIT_DIR` or `GIT_WORK_TREE` across
-the portal: dependencies and disposable test repositories must remain independent.
-The binding and these discovery options do not prove that Git or the entire
-checkout is write-free.
 
 ## Build and run WinUI
 
@@ -375,9 +349,11 @@ For offline deployment without SDKs, Python, or network access, see
 building or executing probes. `ao.bat check` builds the application and every
 native probe, stages the probes'
 XBF/PRI resources, then executes the track-item and localization console checks.
-It never launches GUI probes. The configured graph owns the boundary that
-neither the shipping nor default build transitively depends on probes, and the
-completion selection includes the application and every configured probe.
+A default check does not launch GUI probes; desktop-enabled CI runs the separate
+[UI Automation naming gate](#ui-automation-naming-gate). The configured graph
+owns the boundary that neither the shipping nor default build transitively
+depends on probes, and the completion selection includes the application and
+every configured probe.
 
 `ao.bat check --config release` validates the managed Release IPO graph — MSVC `/GL` and
 `/LTCG`, with `/GL-` only for the authored `app/windows-winui/MainWindow.xaml.cpp`
@@ -398,8 +374,8 @@ facades.
 The [WinUI target](bazel.md#winui-product) stages the real
 product as `//app/windows-winui:aobus-winui`. `ao.bat setup deps` installs
 the tree's vcpkg manifest and restores the locked NuGet closure into the managed
-cache; the existing `packages.config`, dependency
-policy and Windows SDK selection remain the version authorities, and builds
+cache; `packages.config`, the dependency
+policy and the Windows SDK selection are the version authorities, and builds
 themselves neither restore nor install packages. The build also
 exposes explicit native probe targets and lint; development build acceptance
 supplies no signing or installer workflow. The [WinUI product](bazel.md#winui-product)
@@ -475,129 +451,150 @@ bundled CRT floor/hash and governed runtime identity/minimum/hash; it is an
 artifact, not another dependency policy. Keep the complete package together,
 include applicable notices, and verify its hash after transfer.
 
+### Run manual WinUI probes
+
+Use the [native Bazel setup](#native-bazel-and-project-commands) and a logged-in
+local or RDP desktop with the [Windows App Runtime](#build-and-run-winui)
+registered for that user. `ao.bat check` stages the manual probes below but
+does not launch them. Their `bazel run` labels build and launch the staged
+executables with executable-local resources and DLLs.
+
+To run a staged probe directly, append `app\windows-winui\<probe>\<probe>.exe`
+to the path from `bazel info bazel-bin`. Use the same output base, config,
+and compilation mode as the build. For a portal-built probe, use the matching
+prepared tree's rc (set `$tree` to the build tree in PowerShell):
+
+```powershell
+bazel --bazelrc="$tree\configuration\aobus.bazelrc" info bazel-bin
+```
+
+The rc selects the output base; matching just the config does not find a portal
+build in a bare Bazel tree. See [trees and direct Bazel](bazel.md#trees-and-direct-bazel).
+For a bare Bazel build, use bare `bazel info bazel-bin` with the same build
+options. Keep the PRI, XBFs, assets, and DLLs alongside the executable and capture
+its exit status and output. A dispatcher deadline is not an external process
+watchdog.
+
+The shipping executable has no probe switches or dependency on probe application
+metadata. Close the application and probes before another build or lint refresh
+can relink them.
+
 ### Soul lifecycle probe
 
-`ao.bat check` also produces `ao_winui_soul_probe`, a separate native GUI
-executable not run by unattended suites. From a
-logged-in desktop, run
-`<printed staged probe path>\ao_winui_soul_probe.exe`.
-It removes and reinserts the same Soul in a real XAML tree, checking that both a
-pause coast and an aura fade settle on `Unloaded` and do not replay on `Loaded`.
-Exit code 0 requires both cases to complete; a 20-second dispatcher timeout
-fails the probe. It uses the control's normal presentation API and no library,
-audio endpoint, or saved application settings. The shipping executable has no
-probe switches.
+```bat
+bazel run //app/windows-winui:ao_winui_soul_probe
+```
+
+The native Soul control must settle both pause coast and aura fade on `Unloaded`
+without replaying either on `Loaded`. Expect exit code 0 after both checks;
+the dispatcher timeout is 20 seconds. No library, audio endpoint, or saved
+settings are needed.
 
 ### Quality tooltip property probe
 
-`ao_winui_quality_tooltip_probe` is built by native checks but runs only from a
-logged-in desktop:
-`<printed staged probe path>\ao_winui_quality_tooltip_probe.exe STATE_ROOT AUDIO_FIXTURE`.
-Both arguments must be absolute paths canonically outside the checkout used
-at build time. The probe resolves and reports its compiled checkout root;
-verify that it is the actual native-local checkout path, not an alias or a
-mapped view. The desktop logon must have access to that same checkout.
-Admission fails rather
-than skipping checkout checks if the compiled root is inaccessible.
-The state directory must not exist (even as a symlink), its parent must exist,
-and it must be outside the fixture's directory tree. The probe resolves existing
-ancestors and compares filesystem identities, including Windows path aliases,
-before creating state. Ancestor checks include DOS volume roots and stop at
-real UNC share roots, never the virtual server root. Canonical paths must use
-ordinary DOS-drive or UNC-share syntax; extended spellings are accepted only
-when canonicalization normalizes them to those forms. Other namespaces are
-rejected rather than given guessed containment rules.
-Use an existing `.flac` fixture. The decoder opens it
-read-only; no filesystem read-only attribute is required or changed. Keep the
-fixture and paths unchanged during the run. No media copying, fixture-directory
-writes, or cleanup is performed; database and workspace configuration writes
-stay under the fresh state root.
+```bat
+bazel run //app/windows-winui:ao_winui_quality_tooltip_probe -- "C:\scratch\quality-state" "C:\fixtures\track.flac"
+```
 
-The probe uses a real decoder and application runtime with a discard backend,
-not an audio endpoint. Its graph has no Sink, so Unknown channel confidence
-here does not establish that the decoder failed to identify its source layout.
-It checks real seeded-track publication and the shipping tooltip adapter's
-text, HelpText, availability, owner-window resize, and teardown against shared
-Now Playing presentation.
-These are native-property observations, not an opened tooltip's wrapping,
-clipping, pixels, or physical speaker-routing evidence. Keep the state directory
-as evidence and close the probe before another build or lint refresh.
+Pass `STATE_ROOT` then `AUDIO_FIXTURE`, both absolute and canonically outside
+the checkout used to build the probe. Build from the native-local checkout and
+make sure the desktop user can access it: admission refuses an inaccessible
+compiled checkout rather than skipping the check. The state path must end in
+an unambiguous directory name, be absent (not even a symlink), and have an
+existing directory as its parent, outside the fixture's directory tree.
+The probe compares resolved ancestor identities, not spellings, including DOS
+volume roots and real UNC shares but not virtual server roots. Canonical paths
+must use DOS-drive or ordinary UNC-share syntax; extended input is allowed only
+if it resolves to one of those forms.
 
-Input rejection runs before WinRT/XAML startup and can be checked without a
-desktop. Invoke the same executable with invalid arguments and require exit
-code 2, the expected input/startup diagnostic, and no state-directory creation.
-Useful cases include relative paths, reused state, a missing parent, a fresh
-state path inside the checkout (including aliases), state under the fixture's
-directory, and malformed state names. Check the diagnostic as well as the exit
-code: an inaccessible compiled checkout is not evidence that the intended
-externality or overlap check ran. Accepted inputs still require a desktop.
+Use an existing file with the lowercase `.flac` extension and keep the fixture
+and paths stable. The decoder opens it read-only without requiring or changing
+a read-only attribute. The probe neither copies media nor writes in the fixture's
+directory; all database and workspace writes stay under `STATE_ROOT`. Keep that
+directory as evidence; the probe does not clean it up.
+
+Expect exit code 0 when the shipping adapter's tooltip text, HelpText, and
+availability match shared Now Playing before and after the seeded track's real
+decoder publication and across owner-window resize. The probe also checks that
+the tooltip attachment and HelpText clear on teardown. The dispatcher deadline
+is 90 seconds. The discard backend has no Sink or audio endpoint:
+Unknown channel confidence does not mean the decoder failed to identify the
+source layout. This is not evidence for opened-tooltip wrapping, clipping or
+pixels, or physical speaker routing.
+
+To check input rejection without a desktop, invoke the staged `.exe` directly
+with invalid arguments. Require exit code 2, the diagnostic for the intended
+rejection, and no fresh state directory; admission runs before WinRT/XAML.
+Test one invalid condition at a time: a relative path, reused state, a missing
+parent, a state path inside the build checkout (also through an alias), a
+state path under the fixture's directory, or an ambiguous state name. For
+this Windows-subsystem executable, wait for the process and redirect stderr
+explicitly in PowerShell (set `$probe` to the staged executable's absolute path
+and `$stderrFile` to an absolute scratch log path):
+
+```powershell
+$p = Start-Process -FilePath $probe -ArgumentList @('"C:\checkout\rejected-state"', '"C:\fixtures\track.flac"') -Wait -PassThru -RedirectStandardError $stderrFile
+$p.ExitCode
+Get-Content $stderrFile
+```
+
+Use the actual build checkout and a valid external fixture. For the example,
+verify the `Both paths must be canonically outside the checkout` diagnostic
+and that `rejected-state` was not created. An inaccessible compiled checkout
+is not evidence that the outside-checkout or fixture-overlap check ran.
+Accepted inputs still need the [interactive desktop](#run-manual-winui-probes).
 
 ### Track and navigation probes
 
-The WinUI validation aggregate executes `ao_winui_track_item_probe`, a console check of the
-real generated TrackRowItem projection and lazy item view. Its nine scenarios
-cover bounded materialization, null retry, cache identity and eviction, IndexOf,
-GetMany, iterator lifetime, oversized-count rejection, duplicate-inclusive
-compact Credits counts, and the row names UI Automation reads. Failure stops the
-build; no interactive desktop or audio endpoint is required.
+The unattended `ao_winui_track_item_probe` checks the generated `TrackRowItem`
+projection, lazy item-view behavior, duplicate-inclusive compact Credits counts,
+and the projected text used for row automation names. A failing run fails
+completion. To run it alone, no desktop or audio endpoint is needed:
 
-`ao_winui_track_table_probe` is built by native checks but runs only from a
-logged-in desktop, like the Soul probe:
-`<printed staged probe path>\ao_winui_track_table_probe.exe`.
-Its temporary offline library and real application runtime exercise registered
-track-table selection, stable-id restoration, scroll anchoring and reveal
-priority. The frame's compiled header template verifies localized column-resize
-names before and after sort and width changes; the probe does not duplicate
-that binding in test XAML. The template donor has no initialized library session,
-so header click, drag, and context-menu routing are not tested: column changes
-use the controller's public API. Sparse selection and interleaved headers distinguish selected-collection
-positions from display indices. Filtering checks retain partially or fully hidden
-Runtime selection through header-only gestures without publication, then restore
-native rows when the filter is cleared. Presentation checks include the intermediate
-public history-replay notification before controller adoption. Transport checks
-retain a loaded icon across window-local Dark/Light transitions and an ancestor
-accent override, comparing it with a separately theme-bound reference. They
-observe programmatic PointerOver/Pressed states and the native disabled foreground
-after runtime readiness is lost. A local silent provider supplies real runtime
-enablement without an audio endpoint or media playback. Native navigation chrome
-clearance covers the 720/1120 effective-width boundaries, including window-local
-Light. A 90-second dispatcher deadline bounds execution; failure reports a
-nonzero exit rather than a dialog.
+```bat
+bazel test //test:winui_track_item_probe_test
+```
 
-`ao_winui_activity_status_probe` also runs only from a logged-in desktop:
-`<printed staged probe path>\ao_winui_activity_status_probe.exe`.
-It builds the registered `status.activity` component — real chrome, adapter, and
-runtime — in its own window, taking the strip's styles from the actual compiled
-`MainWindow` resources through an uninitialized donor window, and invokes the
-component's native automation providers; a separately theme-bound reference
-provides the normal foreground. Empty idle and ordinary Info states have no
-enabled action, attached flyout, or tooltip; warnings and retained idle details
-remain keyboard- and automation-openable. It checks the real compact and
-detail-dismiss names, null inactive tooltips, Light/Dark foreground updates, and
-native Invoke and lifecycle transitions, without physical input,
-playback, or user state. A 30-second dispatcher deadline bounds the probe. Native
-checks build it but do not execute it unattended.
+For the [manual desktop probes](#run-manual-winui-probes), use:
 
-`ao_winui_credits_probe` likewise requires a logged-in desktop:
-`<printed staged probe path>\ao_winui_credits_probe.exe`.
-It hosts the shipping Credits controls at a constrained width and exercises empty,
-single, and multiple entries, duplicates, roles, reordering, locked/full kind scope,
-automation-driven kind dropdown choice, default Add kind, row command names,
-mixed replacement/clear intent, validation, focus, cancellation, and disabled
-callback admission. Steps await native Loaded/template readiness and observed
-TextChanged delivery; a 90-second deadline fails rather than guessing completion
-from dispatcher turns. A disposable application runtime also exercises the shipping
-Properties coordinator's composed Save, durable readback and revision publication,
-staging without writes, discard confirmation, and stale draft reload. It does not
-cover MainWindow modal-root admission or multi-target coordinator workflows.
+```bat
+bazel run //app/windows-winui:ao_winui_track_table_probe
+bazel run //app/windows-winui:ao_winui_activity_status_probe
+bazel run //app/windows-winui:ao_winui_credits_probe
+```
 
-These are programmatic native XAML observations. The table uses representative
-row templates, and transport checks inspect native properties: passing does not
-certify physical input, shipping-template paint, live shipping theme changes or
-audible playback. Inspect the actual shipping window separately for those
-claims. The shipping executable has no probe switches; probe application
-metadata stays outside its WinMD/PRI dependency closure. Close the application
-and probes before another portal build or lint refresh can relink them.
+They use disposable runtime state, not personal settings or an audio endpoint.
+Expect exit code 0; the probes fail at their dispatcher deadlines if the
+required observations do not complete.
+
+| Probe           | Dispatcher deadline | Contract                                                                                                                                                                                |
+| --------------- | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Track table     | 90 s                | Stable-ID selection through filtering, scroll anchors and reveal priority, presentation history replay, themed transport, and navigation clearance at 720 and 1120 effective pixels.    |
+| Activity status | 30 s                | Compiled `MainWindow` styles, theme updates, accessible names, keyboard and automation admission, and detail lifecycle.                                                                 |
+| Credits         | 90 s                | Scoped native editing, automation and callback admission, plus single-track Properties staging without writes, composed Save and revision publication, discard, and stale-draft reload. |
+
+In the activity strip, empty idle and ordinary Info expose no enabled action,
+flyout, or tooltip; warnings and retained idle details stay keyboard-admissible
+and automation-openable.
+
+The table probe checks localized resize names from the compiled shipping header
+template before and after sort and width changes, but the donor has no library
+session: header click, drag, and context-menu routing are not tested. Column
+changes use the controller API and the body uses representative row templates.
+The filter cases check that header-only gestures preserve partly or fully hidden
+runtime selection without a new publication and that clearing the filter restores
+the native rows. History replay checks the presentation label before the table
+controller adopts the replayed view. Transport checks observe a retained icon
+across window-local theme and accent changes, programmatic button states, and
+loss of runtime readiness; a silent provider enables those checks without
+playing media.
+
+The Credits probe checks native event delivery and reads committed values and
+revisions back from the database after a composed Save. It does not check
+`MainWindow` modal-root admission or multi-target Properties coordinator
+workflows. These programmatic observations do not certify physical input,
+shipping-template paint, live shipping theme changes, or audible playback;
+inspect the shipping window separately for those claims.
 
 ### UI Automation naming gate
 
@@ -621,16 +618,22 @@ The probe loads the real `MainWindow` against an isolated `LibrarySession` with 
 
 Positive landmarks use those same audited observations, not visual existence or a minimum control count. Native roles and authored component scopes identify the on-screen Soul and seek controls, title header and resize grip, both track rows, and the album heading when grouped. Wide layouts additionally require the navigation and inspector resize grips, plus Classic's All Tracks tree item. The probe requests DPI-scaled client sizes, overrides only its own window's native tracking ceiling (including measured chrome), and checks the effective DIP width before applying wide or narrow expectations; intentionally hidden narrow panes are not required. The sizing fixture verifies both a constrained width and a client request beyond the system's default tracking ceiling, without changing the desktop resolution. Visual ancestors supply scope metadata only for already-audited peers. Canaries reject missing or whitespace-only names, wrong-role and wrong-scope landmarks, a named control moved to Raw view, and a removed control; factory-named controls (`makeNamed`), text content, and `LabeledBy` sources pass.
 
-Name presence is not semantic correctness: dialogs the probe never opens, rows it never materializes, names in other locales, and real assistive technology such as Narrator remain uncertified. The [frontend accessibility contract](../system/frontend/windows.md#frontend-observations) owns how controls receive names; the existing track-table and activity-status probes stay separate, manual desktop contracts.
+Name presence is not semantic correctness: the probe does not certify dialogs
+it never opens, rows it never materializes, names in other locales, or real
+assistive technology such as Narrator. The [frontend accessibility contract](../system/frontend/windows.md#frontend-observations)
+explains how controls receive names. The track-table and activity-status
+probes are separate manual desktop checks.
 
 ## Native tests and sanitizers
 
 The ordinary `bazel test //:tests` selection covers Core, application, TUI,
-and CLI contracts, including the native process tests. Context-bearing Windows
-tests use the same per-test wrapper as every native OS; off Linux it passes the
-test through unchanged and starts no services: the native process smoke
-resolves its own runfiles, and
-the UIA probe checks the Windows App Runtime and interactive session itself.
+and CLI contracts, including the native process tests. The per-test wrapper
+for context-bearing C++ tests launches the wrapped test from runfiles without
+starting private fixtures on Windows. The separate native process tests resolve
+their executables from runfiles. The two console probes use their staged SDK
+DLLs and do not need the caller's `PATH`. The UIA test inherits `PATH` for
+PowerShell to check the current user's Windows App Runtime; it also requires
+the interactive console before launching the probe.
 
 `ao.bat check` adds tooling, documentation, the shared and naming audits,
 the native-policy audit, and the whole-graph lint test. Workflow lint and the
@@ -644,7 +647,7 @@ provider example below. Concurrency filters should exclude hidden probes.
 
 `bazel test //test/lint:lint_test --nocache_test_results` runs fresh result
 assertions for fixtures produced with the governed LLVM SDK and Visual Studio
-includes; the unchanged Clang fixture producer may be action-cached.
+includes; the action cache can still supply Clang fixture outputs.
 Compiler errors in those diagnostic invocations fail the fixtures; there is no second syntax-only pass.
 Objective-C++ fixtures are explicitly deferred, not counted as Windows coverage.
 Use `ao.bat check lint` for native source findings and `ao.bat check format` for

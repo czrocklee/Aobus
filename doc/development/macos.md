@@ -97,8 +97,8 @@ and lint fixtures; the wildcard graph is broader.
 `./ao check --tsan` runs the full normal fastbuild completion first — which builds
 the completion products, including the AppKit product bundle (built, never
 run) — then a separate
-managed TSan profile over the graph-owned macOS-compatible scope (currently
-core, application, and backend) in the same selected tree; the sanitizer
+managed TSan profile over the graph-owned macOS-compatible scope (core,
+application, and backend) in the same selected tree; the sanitizer
 profile itself does not build GUI smoke. This is not evidence for native GUI
 behavior. Use
 an explicitly configured native smoke target with `--config=tsan` when an
@@ -198,46 +198,18 @@ in a directory-scoped environment.
 
 An unconditional shell-profile export also overrides native clones' stored
 IDs and can select different managed Python environments for them.
-The override does not repair Git linkage. Default Git-based scope discovery
-can fail during preflight, before managed-tool setup. Select explicit files or
-directories, or `--all` for `format`, `check format`, or `check lint` to avoid that discovery;
-these scopes still need a usable managed-tool identity. `--commit` remains
-Git-dependent. For alternate metadata, use the separate binding below.
+The override does not repair Git linkage. Default Git-backed scope discovery
+can fail before managed-tool setup. See [shared-source Git discovery](build.md#shared-source-git-discovery)
+for scope options and binding requirements.
 
-### Shared-source Git discovery
+### Bind Git metadata on macOS
 
-If a foreign linked-worktree `.git` pointer is unusable on macOS, pass the
-intended private Git directory and the portal's actual source root per invocation:
+After verifying the metadata and source root as described in [shared-source Git discovery](build.md#shared-source-git-discovery), pass them to the individual command:
 
 ```bash
 AOBUS_GIT_DIR="$HOME/local-metadata/worktrees/aobus" \
 AOBUS_GIT_WORK_TREE="/Volumes/source/aobus" ./ao check format
 ```
-
-These are example paths, not metadata to create or copy. Both variables must be
-present, nonempty native absolute paths; malformed pairs fail when Git-backed
-source discovery runs. Explicit files or directories and `--all` bypass this
-discovery and its binding validation. A complete pair for another normalized
-root is ignored; a discovery failure reports the mismatch. Use the root
-spelling seen by the portal, rather than assuming aliases will match.
-Before accepting the mapping, compare actual private/common/index paths, exact
-HEAD, and semantic staged index with the intended checkout. The binding is
-trusted configuration, not repository-association verification;
-`--show-toplevel` alone is insufficient.
-
-Only Git-backed source discovery calls use the pair. Discovery also uses
-process-local `--no-optional-locks` and
-`-c diff.autoRefreshIndex=false`: optional-lock suppression alone does not
-prevent `git diff` from writing stat-only index refreshes.
-Working-tree discovery also compares content, so stat-only differences do not
-expand the selected source scope.
-`setup git-hooks`, performance revision commands, and arbitrary Git operations
-remain outside this support. The binding
-does not rewrite `.git` or redirect checkout-ID creation. If the original
-private Git directory is inaccessible, also supply a separate stable, unique
-`AOBUS_CHECKOUT_ID`. Never export standard `GIT_DIR` or `GIT_WORK_TREE` across
-the portal: dependencies and disposable test repositories must remain independent.
-Neither the binding nor these discovery options prove a write-free checkout.
 
 ## Native desktop development slice
 
@@ -288,71 +260,62 @@ separate from static analysis, clang-tidy, and sanitizers.
 
 ### AppKit smoke scenarios
 
-Native smoke uses `ao_appkit_smoke`, which links the same production objects
-as the [shipping product](#bazel-appkit-product) but owns
-disposable scenario controls. The shipping executable does not accept those
-test flags. Both startup paths must preserve the
-[AppKit restoration and geometry ownership contract](../system/session-lifecycle.md#appkit).
-
-Each scenario requires an absent or empty music directory and an absent or empty
-state directory. The two paths must not equal or contain one another. The
-native smoke main rejects unsafe roots and prepares deterministic media fixtures
-before creating the application. The bundle launcher retains the process
-supervisor and library-successor launch bridge for the `desktop` scenario;
-`script/ao/graph/appkit_process.py` owns that process policy.
+Run the smoke bundle with an active macOS desktop session and the
+[ready native SDK](bazel.md#direct-bazel-without-the-portal):
 
 ```bash
+smoke_root=$(mktemp -d /tmp/aobus-appkit.XXXXXX) &&
 bazel run //app/macos-appkit:ao_appkit_smoke -- --scenario desktop \
-  --state-root /tmp/aobus-desktop-state --library /tmp/aobus-desktop-music
-bazel run //app/macos-appkit:ao_appkit_smoke -- --scenario authoring \
-  --state-root /tmp/aobus-authoring-state --library /tmp/aobus-authoring-music
-bazel run //app/macos-appkit:ao_appkit_smoke -- --scenario presentation \
-  --state-root /tmp/aobus-presentation-state --library /tmp/aobus-presentation-music
-bazel run //app/macos-appkit:ao_appkit_smoke -- --scenario quality-presentation \
-  --state-root /tmp/aobus-quality-state --library /tmp/aobus-quality-music
-bazel run //app/macos-appkit:ao_appkit_smoke -- --scenario media \
-  --state-root /tmp/aobus-media-state --library /tmp/aobus-media-music
-bazel run //app/macos-appkit:ao_appkit_smoke -- --scenario credits-controls \
-  --state-root /tmp/aobus-credits-state --library /tmp/aobus-credits-music
-bazel run //app/macos-appkit:ao_appkit_smoke -- --scenario credits-previews \
-  --state-root /tmp/aobus-credits-previews-state --library /tmp/aobus-credits-previews-music
+  --state-root "$smoke_root/state" --library "$smoke_root/music"
 ```
 
-Select Release, ASan, or TSan with native Bazel `--config=release|asan|tsan`
-before the application-argument `--`; raw sanitizer runtime options remain
-caller-owned, not managed sanitizer-gate evidence. For native lifecycle or
-authoring work, run applicable scenarios in Debug, Release, and TSan; add ASan
-for memory-sensitive changes. Include both `app/macos-appkit` and
-`test/macos-appkit` in scoped `check lint` and `check format`.
+Use one scenario name from the table and fresh disposable paths on each run.
+Both directories must be absent or empty and must not equal or contain one
+another after path resolution. The smoke entry point checks the paths and
+generates deterministic media before creating `NSApplication`. It links the
+same AppKit implementation as the shipping bundle, which does not accept
+`--scenario`. Both entry points follow the
+[AppKit restoration and geometry contract](../system/session-lifecycle.md#appkit).
 
-Treat each scenario only as evidence for the surface it drives:
+The scenarios that start playback (`desktop`, `presentation`, `media`) need a
+live Core Audio output; a [software HAL output](#silent-core-audio-test-output)
+is sufficient. The authoring and Credits scenarios do not drive playback, but
+their session fixtures honor the optional Core Audio UID. The isolated
+`quality-presentation` scenario needs no session, runtime, or audio endpoint.
 
-| Scenario               | Direct evidence                                                                                                                                                                                                                                                                                                             |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `desktop`              | Shipping-window composition, native browsing and playback controls, close/quit coordination, restoration and geometry ownership, `desktop.plist` defaults for malformed values and unknown appearance names, per-mode inspector visibility restoration, unknown-key preservation, and supervised library-successor handoff. |
-| `authoring`            | Native property/List editors, validation and stale-draft behavior, save/close/discard ordering, and authoring teardown.                                                                                                                                                                                                     |
-| `presentation`         | Browser projection and reuse, selection/sort/drag adaptation, activity and inspector presentation, accessibility dismissal actions, and inert callbacks after detach.                                                                                                                                                       |
-| `quality-presentation` | Isolated classic quality-tooltip updates, clearing, resize and repeated-layout preservation, plus modern transport separation, using synthetic state and native bar captures without a runtime or audio endpoint.                                                                                                           |
-| `media`                | MediaPlayer metadata/artwork publication, the seven supported remote commands and disabled unsupported commands, stale-seek guards, main-thread admission, runtime handoff, and retirement.                                                                                                                                 |
+| Scenario               | Direct evidence                                                                                                                                                                                                                                                                       |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `desktop`              | Shipping window, browsing and transport, close/quit, disabled AppKit restoration, `desktop.plist` defaults for malformed values, unknown-key preservation, per-mode inspector visibility, fallback to Follow System for an unknown appearance choice, and supervised library handoff. |
+| `authoring`            | Native Properties and List editing, validation and stale drafts, save/discard/close ordering, and teardown.                                                                                                                                                                           |
+| `presentation`         | Browser projection and cell reuse, selection/sort/drag adaptation, activity, inspector and playback presentation, direct accessibility dismissal, and inert callbacks after detach.                                                                                                   |
+| `quality-presentation` | Classic quality-tooltip binding and clearing across resize and repeated layout, while preserving Modern transport and its separate output action.                                                                                                                                     |
+| `media`                | MediaPlayer metadata/artwork, admission of the seven supported remote commands, disabled unsupported commands, stale-seek guards, main-thread delivery, runtime handoff, and retirement.                                                                                              |
+| `credits-controls`     | Native scoped Credits editing and retirement of detached controls.                                                                                                                                                                                                                    |
+| `credits-previews`     | Category-scoped preview edits stage without writing until parent Save; retired preview callbacks no longer reopen the editor.                                                                                                                                                         |
 
-The `credits-controls` and `credits-previews` scenarios follow the same
-disposable-path admission, timeout, and evidence rules; their specific
-direct-evidence surfaces are not enumerated here.
+Collect the run's exit status and retain the disposable state for diagnostics.
+The [bundle supervisor](../../script/ao/graph/appkit_process.py) bounds runs and
+owns the `desktop` successor launch bridge; desktop success requires both
+processes to exit successfully and leave markers for the same invocation.
 
-The isolated `quality-presentation` scenario exercises English and Simplified
-Chinese catalogs at normal and constrained client sizes. Its captures show the
-native playback bars, not opened tooltip pixels or a shipping playback trigger.
-The broader `presentation` scenario also starts session-backed playback; it is
-not a substitute for the isolated quality-binding check.
+Use `quality-presentation` for isolated English and Simplified Chinese checks at
+normal and constrained sizes. It drives real playback bars with synthetic state;
+its captures show the bars, not opened tooltip pixels or a shipping playback
+trigger. The session-backed `presentation` scenario is not a substitute.
 
-These scenarios invoke native controls and production adapters with generated
-fixtures. They do not synthesize physical media keys or prove that Control
-Center sends events; nor do they prove compositor appearance, physical keyboard
-routing, VoiceOver navigation, audible output, or energy behavior. The
-presentation scenario calls accessibility actions directly, which is narrower
-than a VoiceOver session. Validate any claimed OS surface separately in a
-logged-in desktop and report that interactive evidence apart from scenario
-results.
+The scenarios drive native controls and production adapters with generated
+fixtures. The media probe does not send physical media keys or prove Control
+Center event delivery. Direct accessibility actions in `presentation` do not
+prove VoiceOver navigation. Verify compositor appearance, physical keyboard
+routing, audible output, and energy behavior separately in a logged-in desktop
+session, and report that interactive evidence apart from smoke results.
+
+For native lifecycle or authoring changes, run applicable scenarios with
+`--config=debug`, `--config=release`, and `--config=tsan`; add `--config=asan`
+for memory-sensitive changes. Put the config before `--`. These raw sanitizer
+runs have caller-owned runtime options and do not count as managed sanitizer-gate
+evidence. Include `app/macos-appkit` and `test/macos-appkit` in scoped `check lint`
+and `check format`.
 
 ## Validation
 
@@ -364,7 +327,7 @@ configuration, dependencies, or optimizer-sensitive code also run
 `./ao check --config release`. Concurrency and memory work follows
 [concurrency and sanitizer validation](test/concurrency-and-sanitizer.md).
 
-The CI native matrix currently covers Intel and Apple Silicon. Native AppKit GUI
+The CI native matrix covers Intel and Apple Silicon. Native AppKit GUI
 behavior still requires the smoke scenarios above; a passing headless gate does
 not prove it.
 
@@ -380,17 +343,34 @@ still a real Core Audio route, not the application's null backend. Endpoint
 installation, driver choice and persistent environment settings are operator
 concerns; `ao` does not configure them or change the system default output.
 
-Set `testOutputUid` from native device enumeration and select that exact UID
-for the test process:
+Set `testOutputUid` from native device enumeration. The test override is meant
+to select exactly that disposable device without falling back. For a fresh
+Release run of the ordinary Core Audio backend cases, pass the UID explicitly
+and exclude the hidden hardware probes:
 
 ```bash
-AOBUS_TEST_COREAUDIO_DEVICE_UID="$testOutputUid" ./ao check --config release
-AOBUS_TEST_COREAUDIO_DEVICE_UID="$testOutputUid" bazel run //app/macos-appkit:ao_appkit_smoke -- --scenario presentation \
-  --state-root /tmp/aobus-presentation-state --library /tmp/aobus-presentation-music
+bazel test --config=release --nocache_test_results //test:backend_test \
+  --test_filter='CoreAudioBackend*~[.]' \
+  --test_env=AOBUS_TEST_COREAUDIO_DEVICE_UID="$testOutputUid"
 ```
 
-Only test support reads the variable. Shipping executables, production device
-ordering, and system defaults are unchanged.
+`--test_env` supplies the request; it is not evidence of an open. For device
+selection evidence, verify that a case that opens AUHAL passed rather than
+skipped. Run `./ao check --config release` separately when completion is
+required. The portal's default Bazel test environment does not forward the
+shell UID override, so a green completion gate alone cannot certify the
+requested disposable device.
+
+For an AppKit smoke launch, put the UID in the launcher's environment:
+
+```bash
+smoke_root=$(mktemp -d /tmp/aobus-appkit.XXXXXX) &&
+AOBUS_TEST_COREAUDIO_DEVICE_UID="$testOutputUid" bazel run //app/macos-appkit:ao_appkit_smoke -- --scenario presentation \
+  --state-root "$smoke_root/state" --library "$smoke_root/music"
+```
+
+Only test support reads the variable. It does not affect shipping executables,
+production device ordering, or system defaults.
 
 - Core Audio backend cases open the matching live output instead of the first
   enumerated device.
@@ -402,11 +382,13 @@ ordering, and system defaults are unchanged.
   The checkmark reflects the engine-confirmed selection, independently of the
   saved request; it is not a readback of the AudioUnit route or rendered PCM.
 
-An empty, missing, or ambiguous UID fails instead of skipping or falling back
-to the default output; display names, case differences, and surrounding
-whitespace do not match. With the variable unset, the cases keep their existing
-selection and skip on a host without an output device. Take the UID from native
-device enumeration; numeric device IDs do not survive a Core Audio reload.
+If the variable is set, an empty, unknown, or ambiguous UID fails instead of
+skipping or falling back to the default output. Display names, case differences,
+and surrounding whitespace do not match. With the variable unset, there is no
+selection override. The native AUHAL open and run-state cases skip if there is
+no live output; the native fatal reentry probe and playback smoke scenarios
+require one. Take the UID from native device enumeration; numeric device IDs
+do not survive a Core Audio reload.
 
 GUI or service launches that do not inherit the shell environment need the
 setting passed explicitly. To exercise normal output with this test override
@@ -459,10 +441,8 @@ hardware behavior.
   Follow the scoped override guidance under
   [native checkout identity](#native-checkout-identity).
 - "git branch --show-current failed" during default source discovery can occur
-  before checkout-ID initialization. Use a verified
-  [source-discovery binding](#shared-source-git-discovery) or the Git-independent
-  scopes described under [native checkout identity](#native-checkout-identity);
-  an ID override alone does not repair Git linkage.
+  before checkout-ID initialization. [Bind verified Git metadata or name the files individually](build.md#shared-source-git-discovery);
+  a [checkout ID](#native-checkout-identity) alone does not repair Git linkage.
 - If no Core Audio outputs appear, confirm a live output in Audio MIDI Setup.
   Aobus does not invent a route when macOS publishes none.
 - If AUHAL fails from a noninteractive invocation, verify the logged-in console
