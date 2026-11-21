@@ -16,7 +16,7 @@ Your library reflects the supported audio files beneath its root, and frequently
 2. Choose **File → Scan Library**.
 3. Follow progress in the activity status.
 
-A scan adds new supported files, refreshes technical properties for changed files, reconnects recognized moves when identity is available, and marks unmatched manifest rows as missing.
+A scan adds new supported files, refreshes technical properties for changed files, reconnects recognized moves when identity is available, and records which files are missing.
 Curated library metadata remains authoritative after initial import; rescanning a changed file does not replace those edits with file tags.
 
 ### Disc images and CUE sheets
@@ -67,7 +67,7 @@ Windows runs the same transactional reconciliation as GTK. A failed scan keeps t
 The create action appears only while the current resolved expression is non-empty and valid.
 When the source is a saved List, the new List is derived from that parent; creating from All Tracks makes a root List.
 
-Saved Lists keep a predicate rather than a copied membership list, so their results follow later library mutations.
+Saved Lists keep a filter rather than a fixed set of tracks, so their results follow later library changes.
 They may also retain an independent manual rank; see [Organize music with Lists and Playlists](organize-with-lists.md).
 
 ### Understand filtering and suggestions
@@ -86,7 +86,7 @@ Kana suggestions use romanized Kana; Han-only values use a Mandarin-pinyin alias
 
 - A second dry-run scan reports no actionable file changes after a successful apply.
 - Selecting the saved List reproduces the intended filtered result.
-- Editing metadata that participates in the predicate updates the List result through the live library change path.
+- After you successfully save a metadata edit that affects a List's filter, its results update automatically; you don't need to reopen the List.
 
 ## Related documents
 

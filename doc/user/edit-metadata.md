@@ -6,7 +6,7 @@ id: user.edit-metadata
 
 ## Outcome
 
-The selected tracks contain the intended curated metadata and tags, and list, query, and presentation surfaces observe the committed change.
+The selected tracks contain the intended metadata and tags, and lists, searches, and views reflect the saved change.
 
 ## Steps
 
@@ -17,7 +17,7 @@ The selected tracks contain the intended curated metadata and tags, and list, qu
 3. Use the edit button beside an ordinary built-in metadata value.
    Press Enter or click outside to commit; press Escape to cancel.
    Conductor, Ensemble, and Soloist previews instead open a scoped Credits list editor; the full Credits action edits every kind.
-4. Use **Add...** in the Metadata section to add custom metadata.
+4. Choose the **Custom Metadata** (+) button in the Metadata section, enter a **Key** and **Value**, then choose **Add**.
    Custom keys must not duplicate a built-in or existing key.
 5. Add or remove tags in the tag-chip editor.
 6. For a compact multi-field form, right-click the selection and choose **Properties**.
@@ -26,7 +26,8 @@ The selected tracks contain the intended curated metadata and tags, and list, qu
 `<Multiple Values>` means the selected tracks disagree; it is a display marker and is never written as metadata.
 Technical audio properties are read-only.
 Deleting a custom value offers undo only when the prior value is unambiguous across the complete selection.
-A committed Credits clear in GTK detail can likewise offer Undo for a common nonempty scope, even when another category differs; mixed scopes have no offer.
+After you choose **Clear this scope → Save credits** in GTK detail, **Undo** can appear only if the selected tracks all had the same list of credits in that scope, with at least one credit to restore.
+Differences outside the cleared scope do not prevent **Undo**.
 
 ### Edit from the Windows desktop
 
@@ -34,20 +35,21 @@ A committed Credits clear in GTK detail can likewise offer Undo for a common non
 2. Right-click a row and choose **Properties...**, choose **More > Properties...** in Modern, choose **View > Properties...** in Classic, or press `Alt+Enter`.
 3. Edit ordinary built-in fields that have one value across the selection.
    `<Multiple Values>` identifies a field whose selected tracks disagree; it is not written back as metadata.
-   Use a category's edit action or Full Credits for names, kinds, and optional roles; the details pane can open Properties directly at the requested scope.
+   To edit names and optional roles, choose a category button such as **Credits scope: Conductor**. Its kind is fixed; choose **Credits scope: All credit kinds** to change kinds. The details pane can open **Properties** directly at a scope.
 4. Add or remove tags, and add, edit, or delete custom metadata.
-   Tags shown in the dialog are shared by every selected track, and a custom-key change applies to the complete captured selection.
-5. Review the read-only audio properties, then choose **Save**.
-   Save becomes available only after a valid change and the dialog closes only after the library accepts it.
+   The tag list starts with the tags shared by all the tracks selected when you opened **Properties**.
+   When you save, custom metadata changes apply to all of those tracks, even if the selection changes afterward.
+5. Review the read-only **Audio Properties**, then choose **Save**.
+   **Save** becomes available only after a valid change, and saving closes the dialog only after the library accepts the change.
 
-If the library changes while the dialog is open, Save is disabled and the draft is retained.
-Choose Reload and confirm discarding the draft to refresh the captured targets, or close and reopen Properties.
-Busy keeps your draft for retry.
+If the library changes while the dialog is open, **Save** is disabled and the dialog keeps your draft.
+Choose **Reload**, then **Discard Changes** to load the latest values for the same tracks, or close and reopen **Properties**.
+If you see **Library is busy. Try again.**, the dialog keeps your draft so you can retry.
 
 ### Edit Credits
 
 Credits have twelve kinds: Conductor, Ensemble, Soloist, Performer, Lyricist, Arranger, Writer, Producer, Engineer, Mixer, DJ-mixer, and Remixer. A kind after Performer appears in Detail only when a selected track has its credits or empty fields are shown; otherwise add the first one from the full Credits action. Artist, Album Artist, and Composer are separate fields.
-A category preview shows the first name and `+N` for additional entries, including duplicates; details show every entry and its optional role.
+A category preview shows the first name and `+N` for additional entries, including duplicates; details show every entry and its optional role for a common category, or `<Multiple Values>` for a differing category.
 A category editor keeps its kind fixed. Full Credits lets you change kind, which moves the entry to the end of its new category; Up/Down moves only within a category.
 Changing a name preserves its role and kind. Blank names prevent Save; a blank role means no role.
 
@@ -59,12 +61,9 @@ In Properties, **Save credits** accepts the child draft but writes nothing yet.
 Finish or cancel that child before the parent Save becomes available, even when metadata or tags are already changed.
 You can accept several category edits in sequence; the final Properties Save applies those scopes, ordinary metadata, and tags together or none of them.
 Cancelling a child leaves previously accepted scopes unchanged.
-Only GTK detail offers the scoped clear Undo described above; Windows, TUI, and AppKit Properties do not offer Credits Undo.
+Only GTK detail offers the scoped clear Undo described above; Windows and TUI Properties do not offer Credits Undo.
 
-### Edit from AppKit or the TUI
-
-In AppKit, choose **Edit Properties** in the inspector, including its compact sheet, then use the category or full Credits controls in Properties.
-If the draft becomes stale, confirm discarding it when closing, then reopen Properties; there is no inline Reload.
+### Edit from the TUI
 
 In the TUI, open Properties with `e`, select a category preview and press Enter, or press `Ctrl+O` on Metadata for all Credits.
 `Ctrl+S` accepts the child into Properties; a later parent `Ctrl+S` submits the complete edit. `Esc` cancels only the active child.
@@ -72,10 +71,10 @@ See [TUI editing](use-tui.md#select-and-edit-tracks) for controls and confirmed 
 
 ### Edit from the CLI
 
-1. Preview a bulk mutation:
+1. Preview a bulk update:
 
    ```bash
-   aobus -C /music track update --filter '$album == "Kind of Blue"' \
+   aobus -C /music -O json track update --filter '$album = "Kind of Blue"' \
      --album-artist "Miles Davis" --set source=curated --dry-run
    ```
 
@@ -88,7 +87,7 @@ Use an explicit track id instead of `--filter` when the change must target one k
 
 - Reopen the track detail or run `aobus -C /music track show <id>` and confirm the new values.
 - Queries and saved Lists using the changed fields update to the new result.
-- The frontend reporting surface reports a failure instead of showing an uncommitted edit as saved.
+- If saving fails, the application reports the error instead of showing the unsaved edit as saved.
 
 ## Related documents
 

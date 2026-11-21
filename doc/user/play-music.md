@@ -6,7 +6,8 @@ id: user.play-music
 
 ## Outcome
 
-Playback starts from the selected track in the Linux GTK application and follows the current list projection through next, previous, shuffle, and repeat commands.
+Playback starts from the selected track in the Linux GTK application.
+The view you start from supplies the eligible tracks: sequential playback follows the source order, while shuffle chooses from the same source without following that order.
 
 For other frontends, see [Use the Windows desktop](use-windows-desktop.md) or [Use the terminal frontend](use-tui.md).
 
@@ -41,8 +42,8 @@ The headline summarizes delivery rather than simply repeating the source's ratin
 ## Verify the result
 
 - The now-playing track matches the row you activated.
-- Next and previous remain anchored to the playback source even if the visible list later changes.
-- The elapsed position, volume, output device, and quality surface update when their corresponding runtime state changes.
+- Browsing another list does not switch the playback source. With shuffle on, Previous uses playback history when it does not restart the current track.
+- The elapsed position, volume, output device, and quality surface update as playback and output state change.
 
 If a track or output route cannot start, read the activity/notification diagnostic before retrying or changing devices.
 

@@ -197,7 +197,7 @@ Other change-record nested fields are defined by the runtime mutation reply type
 `track update` emits `tagChanges` only when tag options were supplied; it uses the same per-track records as `tag add`/`tag remove` changes.
 In that path `updated` and `trackIds` are the sorted, deduplicated union of tracks mutated by metadata or tag changes, while `changes` stays metadata-only.
 Plain output appends `added tag: <tag> to N track(s)` and `removed tag: <tag> from N track(s)` lines with the `tag add`/`tag remove` wording.
-When no tag option is supplied, `updated` and `trackIds` report metadata field changes only, as before.
+When no tag option is supplied, `updated` and `trackIds` report metadata field changes only.
 For `lib import`, `payloadMode` uses `delta`, `metadata`, `full`, or `list-only`, and `targetScope` uses exact lowercase `library` or `lists`.
 
 `lib stats` reports `resources` as the number of descriptor rows and `resourceBytes` as the summed described length of the descriptors tracks currently reference, counting each reachable descriptor once however many tracks name it.
@@ -277,8 +277,7 @@ Both write the error to stderr, emit no success document, and exit `1`; only `Ap
 ## Compatibility and versioning
 
 The command surface and DTOs are unversioned.
-Subtree deletion entries use `forgottenPositionCount` and `tagImpact` rather than the former undocumented `orderTrackIdCount` and `optTagImpact` keys; there is no compatibility alias.
-Scripts reading the former keys must use the new names.
+In scripts that read subtree deletion entries, replace `orderTrackIdCount` with `forgottenPositionCount` and `optTagImpact` with `tagImpact`. Neither old key is emitted as an alias.
 Any syntax or field change requires updating this reference and `CliSmokeTest` in the same change.
 Library YAML and database versioning are independent.
 There is no separate CLI protocol version or migration layer.
@@ -286,7 +285,7 @@ There is no separate CLI protocol version or migration layer.
 ## Examples
 
 ```bash
-aobus -C /music track show --filter '$artist == "Miles Davis"' -O json
+aobus -C /music track show --filter '$artist = "Miles Davis"' -O json
 aobus track update 42 --recording-date 1981-05-12 --credit soloist 'Glenn Gould' Piano --credit conductor 'Leonard Bernstein' ''
 aobus track update 42 --credit-scope performer --clear-credits
 aobus track update 42 --dry-run --credit performer 'Preview only' ''
