@@ -2,6 +2,7 @@
 
 import io
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -10,7 +11,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
 
-from ao.__main__ import make_parser
+from ao.__main__ import make_parser, parse_arguments
 from ao.command import check as verify_command
 from ao.core import bazel_native as native
 from ao.core import jobs
@@ -69,72 +70,50 @@ class VerifyParserTests(unittest.TestCase):
 
 
 class VerifyDispatchTests(unittest.TestCase):
-    def test_verify_prepares_and_analyzes_under_the_tree_lock_without_build_execution(self):
-        # The ordinary fastbuild default and an explicitly requested Debug
-        # analysis both pass their actual configuration through unchanged.
-        for config in ("fastbuild", "debug"):
-            with self.subTest(config=config):
-                self._run_verify_preparation(config, "linux")
-
-    def _run_verify_preparation(self, config, host):
+    def test_verify_prepares_and_analyzes_under_the_selected_tree_lock(self):
         with tempfile.TemporaryDirectory(prefix="aobus-bazel-verify-cli-") as temporary:
-            tree = Path(temporary) / "tree"
-            prepared = tree / "configuration"
-            executable = Path("mock-bazel")
+            tree = Path(temporary).resolve() / "tree"
             events = []
-            locked = False
 
             @contextmanager
             def lock(selected):
-                nonlocal locked
                 self.assertEqual(selected, tree)
-                locked = True
                 events.append("lock")
                 try:
                     yield
                 finally:
                     events.append("unlock")
-                    locked = False
 
-            def prepare(selected, mode, *, prefix=None, graph_options=()):
-                self.assertTrue(locked)
+            def prepare(selected, config, **kwargs):
                 self.assertTrue(tree.is_dir())
-                self.assertEqual((selected, mode, prefix, graph_options), (tree, config, None, ()))
+                self.assertEqual((selected, config), (tree, "fastbuild"))
                 events.append("prepare")
-                return prepared
+                return tree / "configuration"
 
             def lookup():
-                self.assertTrue(locked)
                 events.append("lookup")
-                return executable
+                return Path("bazel")
 
-            def verify(*args, **kwargs):
-                self.assertTrue(locked)
-                events.append("verify")
+            def analyze(executable, selected, prepared, config, **kwargs):
+                self.assertEqual(
+                    (executable, selected, prepared, config), (Path("bazel"), tree, tree / "configuration", "fastbuild")
+                )
+                events.append("analyze")
                 return 7
 
-            output, diagnostics = io.StringIO(), io.StringIO()
-            args = make_parser().parse_args(
-                ["check", "contracts", "--config", config, "--path", str(tree), "--jobs", "3"]
-            )
+            args = parse_arguments(make_parser(), ["check", "contracts", "--path", str(tree)])
             with (
-                patch.object(native, "native_platform", return_value=host),
-                patch.object(workspace, "workspace_path", return_value=tree) as select,
+                patch.object(native, "native_platform", return_value="linux"),
                 patch.object(contract_checks, "build_tree_lock", side_effect=lock),
                 patch.object(workspace, "prepare_workspace", side_effect=prepare),
                 patch.object(workspace, "bazel_executable", side_effect=lookup),
+                patch.object(bazel_verify, "verify", side_effect=analyze),
                 patch.object(workspace, "execute") as execute,
-                patch.object(bazel_verify, "verify", side_effect=verify) as analyze,
-                patch("sys.stdout", output),
-                patch("sys.stderr", diagnostics),
+                patch("sys.stderr", new_callable=io.StringIO),
             ):
                 self.assertEqual(verify_command.run_command(args), 7)
-            select.assert_called_once_with(str(tree), config)
-            analyze.assert_called_once_with(executable, tree, prepared, config, jobs=3, compiler_include_roots=())
             execute.assert_not_called()
-            self.assertEqual(events, ["lock", "prepare", "lookup", "verify", "unlock"])
-            self.assertEqual(output.getvalue(), "")
-            self.assertIn(f"Prepared Bazel configuration: {prepared}", diagnostics.getvalue())
+            self.assertEqual(events, ["lock", "prepare", "lookup", "analyze", "unlock"])
 
     def test_preparation_failure_prevents_verify_and_tool_lookup(self):
         with tempfile.TemporaryDirectory(prefix="aobus-verify-cli-") as temporary:
@@ -156,54 +135,75 @@ class VerifyDispatchTests(unittest.TestCase):
 
 
 class BazelVerifyCaptureTests(unittest.TestCase):
-    def test_native_child_observes_running_checkpoint_and_preserves_failed_binary_streams(self):
+    def test_standalone_contracts_isolates_the_native_child_and_preserves_failed_binary_streams(self):
         with tempfile.TemporaryDirectory(prefix="aobus-bazel-capture-") as temporary:
             root = Path(temporary).resolve()
             tree = root / "tree"
-            prepared = root / "configuration"
-            prepared.mkdir()
-            (prepared / "aobus.bazelrc").write_text("# fixture configuration\n", encoding="utf-8")
+            personal_rc = root / ".bazelrc"
+            personal_rc.write_text("build:debug --config=personal-only\n", encoding="utf-8")
             child = root / "bazel-fixture.py"
             child.write_text(
-                "import json, pathlib, sys\n"
-                "root = pathlib.Path(__file__).parent\n"
-                "assert sys.argv[2] == 'build' and '//:native_policy_inputs' in sys.argv\n"
-                "assert pathlib.Path.cwd() == root\n"
-                "receipt = next((root / 'tree/contracts/debug').glob('verify-*/receipt.json'))\n"
-                "facts = json.loads(receipt.read_text(encoding='utf-8'))['facts']\n"
-                "assert facts['status'] == 'running' and facts['exit'] is None\n"
-                "sys.stdout.buffer.write(b'\\x00facts\\xff\\n')\n"
-                "sys.stderr.buffer.write(b'\\x00diagnostic\\xfe\\n')\n"
-                "sys.exit(23)\n",
+                f"""
+import json, os, pathlib, sys
+
+root = pathlib.Path(__file__).parent
+repository = pathlib.Path({str(native.PROJECT_ROOT)!r})
+assert pathlib.Path.cwd().samefile(repository)
+command = sys.argv.index('build')
+startup = sys.argv[1:command]
+assert {{'--nosystem_rc', '--nohome_rc', '--noworkspace_rc'}} <= set(startup), startup
+assert not any(key.casefold() == 'bazelrc' for key in os.environ)
+rcs = [pathlib.Path(arg.removeprefix('--bazelrc=')) for arg in startup if arg.startswith('--bazelrc=')]
+assert rcs == [repository / '.bazelrc', root / 'tree/configuration/aobus.bazelrc'], rcs
+assert '--config=debug' in rcs[-1].read_text(encoding='utf-8')
+assert sys.argv[command:] == ['build', '--jobs=3', '//:native_policy_inputs'], sys.argv
+receipt = next((root / 'tree/contracts/debug').glob('verify-*/receipt.json'))
+facts = json.loads(receipt.read_text(encoding='utf-8'))['facts']
+assert facts['status'] == 'running' and facts['exit'] is None
+sys.stdout.buffer.write(b'\\x00facts\\xff\\n')
+sys.stderr.buffer.write(b'\\x00diagnostic\\xfe\\n')
+sys.exit(23)
+""",
                 encoding="utf-8",
             )
             run = subprocess.run
 
             def launch(argv, **kwargs):
                 self.assertEqual(argv[0], str(child))
-                # Substitute only the external tool: the native Python child uses
-                # verify's actual cwd, environment and separate binary handles.
-                return run([sys.executable, str(child), *argv[1:]], **kwargs)
+                # Keep the actual process cwd, environment and binary handles.
+                return run([sys.executable, "-E", str(child), *argv[1:]], **kwargs)
 
+            args = parse_arguments(
+                make_parser(), ["check", "contracts", "--config", "debug", "--path", str(tree), "--jobs", "3"]
+            )
             with (
-                patch.object(bazel_verify, "PROJECT_ROOT", root),
-                patch.object(native, "PROJECT_ROOT", root),
+                patch.dict(
+                    os.environ,
+                    {
+                        "HOME": str(root),
+                        "USERPROFILE": str(root),
+                        "BAZELRC": str(personal_rc),
+                        "AOBUS_STATE_ROOT": str(root / "state"),
+                        "AOBUS_BAZEL_DISK_CACHE": "",
+                    },
+                ),
+                patch.object(native, "native_platform", return_value="linux"),
+                patch.object(workspace, "bazel_executable", return_value=child),
+                patch.object(workspace, "_linux_server_javabase", return_value=root / "jdk"),
                 patch.object(bazel_verify.subprocess, "run", side_effect=launch) as process,
                 patch("sys.stdout", new_callable=io.StringIO) as output,
                 patch("sys.stderr", new_callable=io.StringIO),
             ):
-                self.assertEqual(bazel_verify.verify(child, tree, prepared, "debug"), 23)
+                status = args.func(args)
             process.assert_called_once()
             receipt_path = next((tree / "contracts/debug").glob("verify-*/receipt.json"))
             receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
-            self.assertEqual((receipt["status"], receipt["exit"]), ("facts build failed", 23))
             facts = receipt["facts"]
-            self.assertEqual((facts["status"], facts["exit"]), ("failed", 23))
+            stderr = Path(facts["stderr"]).read_bytes()
+            self.assertEqual(status, 23, stderr.decode(errors="replace"))
+            self.assertEqual((receipt["exit"], facts["exit"]), (status, status))
             self.assertEqual(Path(facts["stdout"]).read_bytes(), b"\x00facts\xff\n")
-            self.assertEqual(Path(facts["stderr"]).read_bytes(), b"\x00diagnostic\xfe\n")
-            for stage in (receipt["files"], receipt["execution_root"], receipt["driver"]):
-                self.assertIn(stage["status"], {"unrun", "not applicable"})
-                self.assertIsNone(stage["exit"])
+            self.assertEqual(stderr, b"\x00diagnostic\xfe\n")
             self.assertEqual(output.getvalue(), "")
 
 

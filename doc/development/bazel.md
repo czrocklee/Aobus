@@ -2022,14 +2022,8 @@ entry, including Windows key-case variants; the no-system/home/workspace
 startup flags alone would not disable that separate rc channel. A personal
 filter cannot silently narrow completion. Managed sanitizer admission, including
 its compile-contract phase, and coverage use the same isolation. Standalone
-`check contracts` must apply it too. Ordinary build/test invocations retain
-their personal-rc behavior.
-
-**Standalone analysis limitation:** The standalone `check contracts` launcher
-neither excludes personal rc files nor removes `BAZELRC`, so its verdict can
-reflect personal settings. The isolated policy checks inside `./ao check` and
-the managed sanitizer checks are completion results, not a standalone report,
-and completion rejects the sampling profile.
+`check contracts` uses the same isolation. Ordinary build/test invocations retain
+their personal-rc behavior. Completion rejects the sampling profile.
 
 ```bash
 ./ao check
@@ -2079,9 +2073,11 @@ Linux private fixtures are owned per test, not per gate. There is no global
 `--run_under` rc entry: only context-bearing `cc_test` targets are wrapped by
 the thin [`native_context_test`](../../bazel/testing.bzl) rule. Its inner
 `cc_test` is tagged `manual` and owns compilation, coverage instrumentation
-and aspect facts. The wrapper supplies the public test label, owns Bazel's
-scheduling, and re-exports `InstrumentedFilesInfo` unchanged. It merges the wrapped
-test's runfiles and forwards its run environment with the wrapper's context
+and aspect facts. The GTK and backend tests use `local = True` for both the
+public and wrapped TestRunners, and `external` forces fresh test execution.
+Their compile, link and lint actions remain cacheable. The wrapper supplies the
+public test label, owns Bazel's scheduling, and re-exports
+`InstrumentedFilesInfo` unchanged. It merges the wrapped test's runfiles and forwards its run environment with the wrapper's context
 and executable settings. On Windows the Python launcher opens the `.zip` (or unzipped
 bootstrap) beside the wrapper executable. That file is a declared test input,
 not just a build output, so Bazel materializes it before starting the test.
@@ -2449,14 +2445,15 @@ this archive. The restore step can request a main archive on PRs, subject to
 GitHub's cache access rules. After restore and before the completion check the
 workflow marks the time outside the cache. Exact archive hits need neither
 trimming nor saving. On an eligible non-exact restore, trimming removes only
-files whose mtime is not newer than the marker, retaining the current run's
-used/produced working set rather than accumulating old blobs through the
+`ac/` and `cas/` files whose mtime is not newer than the marker, retaining the
+current run's used/produced working set rather than accumulating old blobs through the
 fallback archive. This uses the pinned Bazel's cache-access mtime behavior;
 it is not a fixed archive-size quota, and CI does not wait for idle GC. A failed
 restore, marker or trim prevents saving without bypassing the required gates.
 Transport failure is optional, not failure of those gates.
-The archive excludes servers, install bases, output trees, repositories, provider
-installations and Nix state; it adds no remote endpoint or dependency manager.
+Restore and save select only `ac/` and `cas/`; `gc/lock` and `tmp/` stay on
+the runner. The archive excludes servers, install bases, output trees,
+repositories, provider installations and Nix state; it adds no remote endpoint or dependency manager.
 
 ### CI product gates and R2 validation
 

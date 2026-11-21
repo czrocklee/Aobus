@@ -126,13 +126,15 @@ jobs:
         continue-on-error: true
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ${{ env.AOBUS_BAZEL_DISK_CACHE }}
+          path: |
+            ${{ env.AOBUS_BAZEL_DISK_CACHE }}/ac
+            ${{ env.AOBUS_BAZEL_DISK_CACHE }}/cas
           key: >-
-            bazel-disk-v1-trusted-main-${{ runner.os }}-${{ runner.arch }}-${{
+            bazel-disk-v2-trusted-main-${{ runner.os }}-${{ runner.arch }}-${{
               hashFiles('.bazelversion', 'script/ao/bazel-toolchain.json', 'nixpkgs.json', 'shell.nix', 'MODULE.bazel')
             }}-${{ github.sha }}
           restore-keys: >-
-            bazel-disk-v1-trusted-main-${{ runner.os }}-${{ runner.arch }}-${{
+            bazel-disk-v2-trusted-main-${{ runner.os }}-${{ runner.arch }}-${{
               hashFiles('.bazelversion', 'script/ao/bazel-toolchain.json', 'nixpkgs.json', 'shell.nix', 'MODULE.bazel')
             }}-
 
@@ -239,7 +241,7 @@ jobs:
             --remote-report "$RUNNER_TEMP/bazel-r2-stop.json" \
             --github-summary "$GITHUB_STEP_SUMMARY"'
 
-      # Keep only entries newer than the post-restore marker. Missing markers
+      # Keep only AC/CAS entries newer than the post-restore marker. Missing markers
       # and failed trims block promotion, without making cache transport a gate.
       # Exact archive hits need neither trimming nor saving.
       - name: Trim restored Bazel disk cache
@@ -258,10 +260,13 @@ jobs:
             echo 'Bazel cache directory is absent; nothing to trim.'
             exit 0
           fi
-          before="$(find "$AOBUS_BAZEL_DISK_CACHE" -type f | wc -l)"
-          find "$AOBUS_BAZEL_DISK_CACHE" -type f ! -newer "$AOBUS_BAZEL_CACHE_MARKER" -delete
-          after="$(find "$AOBUS_BAZEL_DISK_CACHE" -type f | wc -l)"
-          echo "Trimmed $((before - after)) restored file(s) untouched since restore; kept $after file(s)."
+          # Bazel servers may still hold gc/lock or be publishing files from tmp/.
+          for store in ac cas; do
+            dir="$AOBUS_BAZEL_DISK_CACHE/$store"
+            [[ -d "$dir" ]] || continue
+            removed="$(find "$dir" -type f ! -newer "$AOBUS_BAZEL_CACHE_MARKER" -delete -printf . | wc -c)"
+            echo "Trimmed $removed untouched $store file(s)."
+          done
           du -sh "$AOBUS_BAZEL_DISK_CACHE"
           df -h "$AOBUS_BAZEL_DISK_CACHE"
 
@@ -274,7 +279,9 @@ jobs:
         continue-on-error: true
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ${{ env.AOBUS_BAZEL_DISK_CACHE }}
+          path: |
+            ${{ env.AOBUS_BAZEL_DISK_CACHE }}/ac
+            ${{ env.AOBUS_BAZEL_DISK_CACHE }}/cas
           key: ${{ steps.bazel-cache.outputs.cache-primary-key }}
 
       - name: Require successful Bazel checks
