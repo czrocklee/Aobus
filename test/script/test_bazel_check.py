@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from ao.__main__ import make_parser
+from ao.__main__ import make_parser, parse_arguments
 from ao.command import check as check_command
 from ao.core import bazel_native
 from ao.portal import bazel_attempt, bazel_workspace, build_dir, completion
@@ -17,6 +17,7 @@ from ao.portal.bazel_test_ownership import ConfiguredTarget
 
 CHECKSUM = "c" * 64
 UNIT_TEST = "//test:unit"
+REPOSITORY_SUITE = "//test/script:ci_repository_checks"
 
 
 class CheckCommandTest(unittest.TestCase):
@@ -33,41 +34,28 @@ class CheckCommandTest(unittest.TestCase):
         with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
             parser.parse_args(["check", "//test:unit"])
 
+    def test_repository_rejects_full_check_flags_on_either_side_of_the_subject(self):
+        for flags in (["--fresh", "repository"], ["repository", "--ci"]):
+            with self.subTest(flags=flags), self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+                parse_arguments(make_parser(), ["check", *flags])
+
+    def test_repository_requires_linux_and_both_tool_environments(self):
+        args = parse_arguments(make_parser(), ["check", "repository"])
+        with mock.patch.object(bazel_native, "native_platform", return_value="linux"):
+            self.assertTrue(check_command.requires_build_environment(args))
+            self.assertTrue(check_command.requires_python_tools(args))
+        with (
+            mock.patch.object(bazel_native, "native_platform", return_value="windows"),
+            self.assertRaises(SystemExit),
+            contextlib.redirect_stderr(io.StringIO()),
+        ):
+            check_command.requires_build_environment(args)
+
     def test_sampling_and_non_fastbuild_ci_are_not_admitted_as_completion(self):
         with mock.patch.object(build_dir, "platform_profile", return_value=build_dir.LINUX_PROFILE):
             for request in (completion.Request(config="profile"), completion.Request(ci=True, config="debug")):
                 with self.subTest(request=request), self.assertRaises(bazel_native.BazelWorkspaceError):
                     completion.validate(request)
-
-    def test_full_check_selects_the_whole_graph_with_the_requested_cache_and_ci_policy(self):
-        request = completion.Request(ci=True, clean=True, fresh=True, jobs=3, remote_cache="https://cache.invalid")
-        with (
-            tempfile.TemporaryDirectory() as temp,
-            mock.patch.object(bazel_workspace, "bazel_executable", return_value=Path("bazel")),
-            mock.patch.object(bazel_workspace, "prepare_workspace", return_value=Path(temp)),
-            mock.patch.object(bazel_workspace, "execute", side_effect=[0, 3, 9]) as execute,
-            contextlib.redirect_stdout(io.StringIO()),
-        ):
-            self.assertEqual(completion._test_graph(request, Path(temp), "fastbuild"), 3)
-            clean, test = execute.call_args_list
-            self.assertEqual((clean.args[3], test.args[3], test.args[5]), ("clean", "test", ["//..."]))
-            self.assertEqual((test.kwargs["jobs"], test.kwargs["remote_cache"]), (3, "https://cache.invalid"))
-            self.assertTrue(test.kwargs["isolate_rc"])
-            self.assertIn("--nocache_test_results", test.kwargs["options"])
-            self.assertIn("--config=ci", test.kwargs["options"])
-            # A failed clean must stop, rather than report an older passing result.
-            self.assertEqual(completion._test_graph(request, Path(temp), "fastbuild"), 9)
-
-    def test_zero_bazel_exit_without_evidence_does_not_complete_the_check(self):
-        with (
-            tempfile.TemporaryDirectory() as temp,
-            mock.patch.object(bazel_workspace, "bazel_executable", return_value=Path("bazel")),
-            mock.patch.object(bazel_workspace, "prepare_workspace", return_value=Path(temp)),
-            mock.patch.object(bazel_workspace, "execute", return_value=0),
-            contextlib.redirect_stdout(io.StringIO()),
-            self.assertRaises(bazel_native.BazelWorkspaceError),
-        ):
-            completion._test_graph(completion.Request(), Path(temp), "fastbuild")
 
     def test_sanitizer_runs_in_the_selected_tree_only_after_normal_completion_passes(self):
         with (
@@ -81,7 +69,7 @@ class CheckCommandTest(unittest.TestCase):
             self.assertEqual(normal.call_args.args[2], "fastbuild")
             sanitizer.assert_not_called()
             self.assertEqual(completion.run(completion.Request(config="debug", asan=True, fresh=True)), 9)
-            self.assertEqual(normal.call_args.args[1:], (Path(temp), "debug"))
+            self.assertEqual(normal.call_args.args[1:3], (Path(temp), "debug"))
             instrumented = sanitizer.call_args.args[0]
             self.assertEqual((instrumented.path, instrumented.config, instrumented.fresh), (temp, "asan", True))
 
@@ -105,7 +93,77 @@ class CheckCommandTest(unittest.TestCase):
         self.assertNotIn("AOBUS_BAZEL_CONFIGURATION", env)
 
 
+class CheckInvocationTest(unittest.TestCase):
+    def setUp(self):
+        root = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
+        self.tree = root / "tree"
+        self.enterContext(
+            mock.patch.dict(os.environ, {"AOBUS_STATE_ROOT": str(root / "state"), "AOBUS_BAZEL_DISK_CACHE": ""})
+        )
+        self.enterContext(mock.patch.object(bazel_native, "native_platform", return_value="linux"))
+        self.enterContext(mock.patch.object(bazel_workspace, "bazel_executable", return_value=Path("bazel")))
+        self.enterContext(mock.patch.object(bazel_workspace, "_linux_server_javabase", return_value=root / "jdk"))
+        self.bazel = self.enterContext(mock.patch.object(bazel_workspace.proc, "run"))
+        self.enterContext(contextlib.redirect_stdout(io.StringIO()))
+
+    def check(self, *arguments):
+        args = parse_arguments(make_parser(), ["check", *arguments, "--path", str(self.tree)])
+        return check_command.run_command(args)
+
+    def test_ci_checks_the_native_partition_and_propagates_test_failure(self):
+        self.bazel.side_effect = [0, 3]
+        self.assertEqual(
+            self.check("--ci", "--clean", "--fresh", "--jobs", "3", "--remote-cache", "https://cache.invalid"), 3
+        )
+        clean, test = (call.args[0] for call in self.bazel.call_args_list)
+        self.assertEqual(clean[-1], "clean")
+        command, separator = test.index("test"), test.index("--")
+        self.assertIn("--nohome_rc", test[:command])
+        self.assertEqual(test[separator:], ["--", "//...", "-" + REPOSITORY_SUITE])
+        self.assertLessEqual(
+            {"--config=ci", "--jobs=3", "--remote_cache=https://cache.invalid", "--nocache_test_results"},
+            set(test[command + 1 : separator]),
+        )
+
+    def test_clean_failure_stops_before_tests(self):
+        self.bazel.return_value = 9
+        self.assertEqual(self.check("--clean"), 9)
+        self.bazel.assert_called_once()
+        self.assertEqual(self.bazel.call_args.args[0][-1], "clean")
+
+    def test_repository_runs_only_its_suite_and_propagates_test_failure(self):
+        self.bazel.return_value = 7
+        self.assertEqual(self.check("repository", "--jobs", "3"), 7)
+        self.bazel.assert_called_once()
+        argv = self.bazel.call_args.args[0]
+        options = argv[argv.index("test") + 1 :]
+        self.assertEqual([arg for arg in options if not arg.startswith("--")], [REPOSITORY_SUITE])
+        self.assertIn("--jobs=3", options)
+        self.assertIn("--keep_going", options)
+        self.assertNotIn("--config=ci", options)
+
+    def test_zero_bazel_exit_without_evidence_does_not_complete_the_check(self):
+        self.bazel.return_value = 0
+        with self.assertRaises(bazel_native.BazelWorkspaceError):
+            completion.run(completion.Request(path=str(self.tree)))
+
+
 class RequiredScopeTest(unittest.TestCase):
+    def test_ci_partitions_the_repository_evidence_but_local_checks_require_both_sets(self):
+        repository = completion._repository_selection()
+        ci = completion._selection("linux", completion.Request(ci=True))
+        local = completion._selection("linux", completion.Request())
+        self.assertIn(REPOSITORY_SUITE, repository.suites)
+        self.assertIn("//test/script:native_repository_checks", ci.suites)
+        self.assertIn("//test/script:repository_checks", local.suites)
+        standalone = repository.required - repository.optional
+        native = ci.required - ci.optional
+        self.assertIn("//test/script:format_docs", standalone)
+        self.assertIn("//test/script:format_sources", native)
+        self.assertTrue(standalone.isdisjoint(native))
+        self.assertEqual(standalone | native, local.required - local.optional)
+        self.assertEqual(local.targets, ("//...",))
+
     def test_losing_a_published_check_from_its_suite_does_not_remove_the_requirement(self):
         scope = completion._selection("linux", completion.Request())
         for label in (

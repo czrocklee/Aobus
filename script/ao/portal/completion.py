@@ -1,13 +1,10 @@
-"""Prepare and execute the complete native Bazel validation graph.
-
-The command adapter and the platform launcher share this request admission.
-This service does not parse CLI arguments or dispatch other public commands.
-"""
+"""Run Bazel validation and verify that the requested checks passed."""
 
 from __future__ import annotations
 
 import json
 import shutil
+import sys
 import tempfile
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -15,7 +12,7 @@ from typing import Any, NamedTuple
 
 from ao.core import bazel_native as native
 from ao.core.build_lock import build_tree_lock
-from ao.portal import bazel_sanitizers, bazel_workflows, bazel_workspace
+from ao.portal import bazel_ci_summary, bazel_sanitizers, bazel_workflows, bazel_workspace
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -35,17 +32,42 @@ def validate(request: Request) -> str:
     return config
 
 
+_CI_REPOSITORY_SUITE = "//test/script:ci_repository_checks"
+_COMMON_CHECKS = {"//test/script:" + name for name in ("docs", "format_docs", "ruff", "name_audit", "test_audit")}
+_WORKFLOWS = "//test/script:workflows"
+
+
 class _CheckSelection(NamedTuple):
     suites: set[str]
     required: set[str]
     optional: set[str]
+    targets: tuple[str, ...] = ("//...",)
+    options: tuple[str, ...] = ()
+    attempt_prefix: str = "check-"
+
+
+def validate_repository() -> None:
+    if native.native_platform() != "linux":
+        raise native.BazelWorkspaceError("check repository requires Linux")
+
+
+def _repository_selection() -> _CheckSelection:
+    return _CheckSelection(
+        suites={_CI_REPOSITORY_SUITE},
+        required=_COMMON_CHECKS | {_WORKFLOWS},
+        optional=set(),
+        targets=(_CI_REPOSITORY_SUITE,),
+        options=("--keep_going",),
+        attempt_prefix="repository-",
+    )
 
 
 def _selection(platform: str, request: Request) -> _CheckSelection:
-    # Read suite membership from Bazel's own expansion of //... in this invocation.
-    # Keep independent promises for the native harnesses: removing a manual test
-    # from its discovery suite must not silently remove it from the evidence gate.
-    suites = {"//:check_tests", "//test/script:repository_checks"}
+    # Require published checks even if one is accidentally dropped from its suite.
+    suites = {
+        "//:check_tests",
+        "//test/script:native_repository_checks" if request.ci else "//test/script:repository_checks",
+    }
     required = {
         "//:native_policy",
         "//test/lint:production_lint",
@@ -54,13 +76,11 @@ def _selection(platform: str, request: Request) -> _CheckSelection:
         "//test:media_test",
         "//test:tui_help_smoke",
     }
-    # Expansion admits new members automatically. Keep the published minimum
-    # independent so deleting a check from the BUILD file cannot lower the bar.
-    required.update(
-        "//test/script:" + name
-        for name in ("docs", "format", "guardrails", "bazel_lint", "mypy", "ruff", "name_audit", "test_audit")
-    )
-    optional = set()
+    required.update("//test/script:" + name for name in ("format_sources", "guardrails", "bazel_lint", "mypy"))
+    optional: set[str] = set()
+    if not request.ci:
+        required.update(_COMMON_CHECKS)
+        (required if platform == "linux" else optional).add(_WORKFLOWS)
     windows_probes = {"//test:winui_localization_probe_test", "//test:winui_track_item_probe_test"}
     # Require these Windows-only analysis tests independently of suite expansion.
     windows_analysis = {
@@ -78,13 +98,13 @@ def _selection(platform: str, request: Request) -> _CheckSelection:
     if platform == "linux":
         required.update(linux_only)
         suites.add("//:instrumentation_tests")
-        required.update(("//:native_driver_policy", "//bazel/header_share:selector_test", "//test/script:workflows"))
+        required.update(("//:native_driver_policy", "//bazel/header_share:selector_test"))
         required.update(
             "//:instrumentation_tests_" + case
             for case in ("coverage", "asan_build", "asan_compile", "tsan_build", "tsan_compile")
         )
     else:
-        optional.update(linux_only | {"//test/script:workflows"})
+        optional.update(linux_only)
     if platform == "macos":
         required.update(
             (
@@ -99,6 +119,10 @@ def _selection(platform: str, request: Request) -> _CheckSelection:
         else:
             optional.add(label)
 
+    if request.ci:
+        return _CheckSelection(
+            suites, required, optional, targets=("--", "//...", "-" + _CI_REPOSITORY_SUITE), options=("--config=ci",)
+        )
     return _CheckSelection(suites, required, optional)
 
 
@@ -180,7 +204,16 @@ def _verify_required_checks(path: Path, selection: _CheckSelection, *, fresh: bo
         raise native.BazelWorkspaceError(f"completion evidence rejected: {path}: {error}") from error
 
 
-def _test_graph(request: Request, tree: Path, config: str) -> int:
+def _report_wasapi(bep: Path, tree: Path) -> None:
+    note = bazel_ci_summary.wasapi_case_note(bep, tree)
+    print(note, flush=True)
+    try:
+        (bep.parent / "wasapi.txt").write_text(note + "\n", encoding="utf-8")
+    except OSError as error:
+        print(f"Cannot save WASAPI note for the CI summary: {error}", file=sys.stderr)
+
+
+def _test_graph(request: Request, tree: Path, config: str, selection: _CheckSelection) -> int:
     executable = bazel_workspace.bazel_executable()
     prepared = bazel_workspace.prepare_workspace(
         tree, config, prefix=request.vcpkg_prefix, graph_options=bazel_workflows.feature_options(request)
@@ -193,15 +226,14 @@ def _test_graph(request: Request, tree: Path, config: str) -> int:
         return status
     directory = tree / "checks" / config
     directory.mkdir(parents=True, exist_ok=True)
-    attempt = Path(tempfile.mkdtemp(prefix="check-", dir=directory))
+    attempt = Path(tempfile.mkdtemp(prefix=selection.attempt_prefix, dir=directory))
     options = [
         "--lockfile_mode=error",
         f"--build_event_json_file={attempt / 'tests.bep.json'}",
         "--experimental_build_event_upload_strategy=local",
         f"--profile={attempt / 'profile.json.gz'}",
+        *selection.options,
     ]
-    if request.ci:
-        options.append("--config=ci")
     if request.fresh:
         options.append("--nocache_test_results")
     print(f"Bazel test graph ({config}); evidence: {attempt}", flush=True)
@@ -213,24 +245,36 @@ def _test_graph(request: Request, tree: Path, config: str) -> int:
             prepared,
             "test",
             config,
-            ["//..."],
+            list(selection.targets),
             jobs=request.jobs,
             remote_cache=request.remote_cache,
             isolate_rc=True,
             options=options,
             log=log,
         )
+        bep = attempt / "tests.bep.json"
+        if native.native_platform() == "windows":
+            _report_wasapi(bep, tree)
         if status == 0:
-            selection = _selection(native.native_platform(), request)
-            _verify_required_checks(attempt / "tests.bep.json", selection, fresh=request.fresh)
+            _verify_required_checks(bep, selection, fresh=request.fresh)
         return status
     finally:
         if log.is_file():
             shutil.copyfile(log, tree / "build.log")
 
 
+def run_repository(*, path: str | None, jobs: int) -> int:
+    validate_repository()
+    request = Request(path=path, jobs=jobs)
+    return _run(request, validate(request), _repository_selection())
+
+
 def run(request: Request) -> int:
     config = validate(request)
+    return _run(request, config, _selection(native.native_platform(), request))
+
+
+def _run(request: Request, config: str, selection: _CheckSelection) -> int:
     normal_config = (
         "debug"
         if request.config == "debug"
@@ -242,7 +286,7 @@ def run(request: Request) -> int:
     with build_tree_lock(tree):
         native.require_supported_source()
         tree.mkdir(parents=True, exist_ok=True)
-        if status := _test_graph(request, tree, normal_config):
+        if status := _test_graph(request, tree, normal_config, selection):
             return status
         if config in bazel_sanitizers.SANITIZER_CONFIGS:
             instrumented = replace(request, path=str(tree), config=config, asan=False, tsan=False)

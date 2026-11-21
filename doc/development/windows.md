@@ -605,14 +605,15 @@ runtime and interactive session:
 bazel run //app/windows-winui:ao_winui_automation_probe
 ```
 
-This builds the probe and declared resources before launching it. The shipping
-application target does not build or refresh probes. `ao.bat check` builds the
-WinUI validation graph but executes no GUI probe by default: the automation
-probe is `//test:winui_uia_test`, which wildcard discovery selects only under
-`--config=ci` (`--//bazel:desktop_tests=true`), and `//:tests` does not include
-this explicit desktop run.
+This builds the probe and its resources before launching it. In the wildcard
+check, `ao.bat check --ci` enables the desktop setting and runs
+`//test:winui_uia_test`. Ordinary `ao.bat check` builds the probe without
+running it, and `//:tests` does not select it.
 
-The probe requires an authenticated interactive console: it exits with a diagnostic instead of starting a GUI whenever the process is not in the active console session (no session 0, no silent skip, no fallback), so an unattended host fails rather than reports false success. CI runs the same real probe inside its `ao check --ci` completion, through Bazel, with the same runtime and interactive-console admission; the runner must provide that session. The gate does not provision or bypass desktop login.
+Both run paths require the Windows App Runtime and an authenticated interactive
+console. Outside the active console session, the probe fails with a diagnostic
+rather than skipping. The CI runner must provide that session; the gate does
+not log in for it.
 
 The probe loads the real `MainWindow` against an isolated `LibrarySession` with two metadata-only tracks in one album (a disposable scratch root, no playback or personal saved settings). It drives the true Modern and Classic shells, flat and album-grouped rows, a narrowed Classic window, and the volume and overflow popups. It walks the automation tree — peers and their children, including disabled controls — and requires a nonblank final `AutomationPeer.Name` from the audited interactive and item roles; an attached property or id stamp alone is never accepted as a name. Decorative (`Raw` view), text, and layout roles are out of scope, and `ScrollBar` template internals are explicitly excluded.
 
@@ -639,9 +640,9 @@ the interactive console before launching the probe.
 the native-policy audit, and the whole-graph lint test. Workflow lint and the
 compiler-driver diagnostic run only on Linux. The native backend suite carries
 `manual`, but completion runs it through the non-manual `//:check_tests` suite.
-Both Windows cases are hidden `[.manual]`, and the unattended executable permits
-an empty selection. A passing empty selection is not hardware evidence
-([completion gate](bazel.md#completion-gate)). Choose the exact case
+Both Windows cases are hidden `[.manual]`. When neither is selected, Bazel can
+report the target `PASSED`; `ao.bat check` and the daily CI summary report the
+hardware cases as **not run**, based on Catch2's XML. Choose the exact case
 whose prerequisites you prepared; `[.manual]` selects both probes, not just the
 provider example below. Concurrency filters should exclude hidden probes.
 
@@ -667,14 +668,16 @@ audio, or sanitizer results. Run the opt-in WASAPI endpoint and playback probe
 on a host with an active render endpoint:
 
 ```bat
-bazel test //test:backend_test --test_filter="WasapiProvider - enumerates and renders through real endpoints"
+bazel test //test:backend_test --test_filter="WasapiProvider - enumerates and renders through real endpoints" --test_output=all
 ```
 
 The exact case name selects the provider probe only; the hidden WASAPI
 channel-map readback probe has different prerequisites and stays separate.
-The probe skips when there are no active endpoints; inspect the test summary
-rather than treating a skipped run as playback evidence. It checks enumeration,
-frame advancement, and drain completion, not whether a listener heard sound.
+A mistyped filter can match nothing, and the provider probe skips without an
+active endpoint. In either case Bazel can report `PASSED`. Check the Catch2
+output or `test.xml` for the named case running without a skip. It checks
+enumeration, frame advancement, and drain completion, not whether a listener
+heard sound.
 Use an interactive audio session and listen separately when audibility is part
 of acceptance. Record the checks performed and remaining limits with the change.
 

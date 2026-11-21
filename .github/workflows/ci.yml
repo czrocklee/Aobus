@@ -23,11 +23,10 @@ concurrency:
 
 jobs:
   changes:
-    name: Change scope / documentation
+    name: Change scope
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     outputs:
-      base: ${{ steps.scope.outputs.sha }}
       docs-only: ${{ steps.scope.outputs.docs-only }}
     steps:
       - name: Check out repository
@@ -38,56 +37,78 @@ jobs:
       - name: Resolve validation scope
         id: scope
         uses: ./.github/actions/resolve-hygiene-base
+
+  repository:
+    name: Repository / check
+    needs: changes
+    if: ${{ needs.changes.outputs.docs-only == 'true' || needs.changes.outputs.docs-only == 'false' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
       - name: Read documentation Python version
+        if: ${{ needs.changes.outputs.docs-only == 'true' }}
         id: python-version
         run: |
           python3 -c 'import json; print("version=" + json.load(open("script/ao/toolchain.json"))["python"])' >> "$GITHUB_OUTPUT"
       - name: Set up documentation Python
+        if: ${{ needs.changes.outputs.docs-only == 'true' }}
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ steps.python-version.outputs.version }}
-      - name: Install locked documentation parser
-        run: >-
-          python -m pip install --disable-pip-version-check --no-input
-          --only-binary=:all: --require-hashes --no-deps
-          -r script/ao/docs-requirements.txt
-      - name: Select documentation tool state
-        run: echo "AOBUS_STATE_ROOT=$RUNNER_TEMP/aobus-doc-tools" >> "$GITHUB_ENV"
       - name: Cache pinned documentation formatter
+        if: ${{ needs.changes.outputs.docs-only == 'true' }}
         continue-on-error: true
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/aobus-doc-tools/tools/prettier
           key: docs-prettier-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('script/ao/prettier.json', 'script/ao/portal/prettier.py') }}
-      - name: Set up pinned documentation formatter
-        env:
-          PYTHONPATH: script
-        run: python -m ao setup prettier
       - name: Check documentation
+        if: ${{ needs.changes.outputs.docs-only == 'true' }}
         env:
+          AOBUS_STATE_ROOT: ${{ runner.temp }}/aobus-doc-tools
           PYTHONPATH: script
-        run: python -m ao check docs
-      - name: Check documentation formatting
+        run: |
+          python -m pip install --disable-pip-version-check --no-input \
+            --only-binary=:all: --require-hashes --no-deps -r script/ao/docs-requirements.txt
+          python -m ao setup prettier
+          python -m ao check docs
+          python -m ao check format --docs
+
+      - name: Install Nix
+        if: ${{ needs.changes.outputs.docs-only == 'false' }}
+        uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+        with:
+          enable_kvm: false
+      - name: Check repository
+        if: ${{ needs.changes.outputs.docs-only == 'false' }}
         env:
-          PYTHONPATH: script
-        run: python -m ao check format --docs
+          AOBUS_STATE_ROOT: ${{ runner.temp }}/aobus-state
+        run: ./ao check repository --path "$RUNNER_TEMP/aobus-bazel-repository"
+      - name: Preserve repository check evidence
+        if: ${{ !cancelled() && needs.changes.outputs.docs-only == 'false' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: bazel-repository-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/aobus-bazel-repository/checks/fastbuild/repository-*
+            ${{ runner.temp }}/aobus-bazel-repository/state/output/execroot/_main/bazel-out/*/testlogs/**
+          if-no-files-found: warn
 
   linux:
-    name: Linux / check
+    name: Linux / native
     needs: changes
-    if: >-
-      ${{ always() && !cancelled() &&
-          (needs.changes.result != 'success' || needs.changes.outputs.docs-only != 'true') }}
+    if: ${{ needs.changes.outputs.docs-only == 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 240
     env:
       PYTHONDONTWRITEBYTECODE: "1"
 
     steps:
-      - name: Require successful scope and documentation validation
-        if: ${{ needs.changes.result != 'success' }}
-        run: exit 1
-
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -176,13 +197,8 @@ jobs:
           CACHE_URL: ${{ steps.bazel-remote.outputs.url }}
         run: test -n "$CACHE_URL"
 
-      # Completion runs the same native Bazel test graph developers use. The
-      # graph owns products, tests, tooling, documentation, formatting, source
-      # guardrails, sanitizer/coverage instrumentation and the whole-graph lint
-      # gate.
       - name: Check Bazel completion
         id: bazel-check
-        continue-on-error: true
         env:
           AOBUS_STATE_ROOT: ${{ runner.temp }}/aobus-state
           AOBUS_BAZEL_REMOTE_CACHE: ${{ steps.bazel-remote.outputs.url }}
@@ -200,9 +216,7 @@ jobs:
           # shellcheck disable=SC2016
           nix-shell --run 'python3 script/ao/portal/bazel_remote_cache.py stop --state "$RUNNER_TEMP/aobus-bazel-remote" --report "$RUNNER_TEMP/bazel-r2-stop.json"'
 
-      # Exercise native bootstrap and one CLI-aspect report, not another check graph.
-      # Resolve only the pinned prerequisites in Nix; run Bazel on the host so
-      # its repository rule must discover Nix itself. No R2 binding or portal rc.
+      # Only look up tools in Nix. Bare Bazel must discover the SDK without the portal.
       - name: Test direct Bazel entry
         if: ${{ steps.bazel-check.outcome == 'success' }}
         shell: bash
@@ -214,14 +228,11 @@ jobs:
           IFS=$'\t' read -r bazel server_javabase python <<< "$tools"
           bare="$RUNNER_TEMP/aobus-bare"
           mkdir -p "$bare"
-          native=("$bazel" --nosystem_rc --nohome_rc --server_javabase="$server_javabase"
-            --output_user_root="$AOBUS_STATE_ROOT/bazel" --output_base="$bare/state/output")
-          flags=(--jobs="$CMAKE_BUILD_PARALLEL_LEVEL" --lockfile_mode=error
-            --symlink_prefix="$bare/bazel-" --disk_cache="$AOBUS_BAZEL_DISK_CACHE")
-          "${native[@]}" test "${flags[@]}" --build_event_json_file="$bare/fastbuild-test.bep.json" \
-            --experimental_build_event_upload_strategy=local //test:utility_test 2>&1 | tee "$bare/build.log"
           PYTHONPATH=script "$python" test/lint/check_scoped_reports.py "$bare/scoped-lint.bep.json" \
-            "${native[@]}" build "${flags[@]}" 2>&1 | tee "$bare/scoped-lint.log"
+            "$bazel" --nosystem_rc --nohome_rc --server_javabase="$server_javabase" \
+            --output_user_root="$AOBUS_STATE_ROOT/bazel" --output_base="$bare/state/output" \
+            build --jobs="$CMAKE_BUILD_PARALLEL_LEVEL" --lockfile_mode=error \
+            --symlink_prefix="$bare/bazel-" --disk_cache="$AOBUS_BAZEL_DISK_CACHE" 2>&1 | tee "$bare/scoped-lint.log"
 
       - name: Summarize native validation
         if: ${{ always() }}
@@ -284,17 +295,6 @@ jobs:
             ${{ env.AOBUS_BAZEL_DISK_CACHE }}/cas
           key: ${{ steps.bazel-cache.outputs.cache-primary-key }}
 
-      - name: Require successful Bazel checks
-        if: ${{ !cancelled() }}
-        shell: bash
-        env:
-          BAZEL_CHECK_OUTCOME: ${{ steps.bazel-check.outcome }}
-        run: |
-          if [[ "$BAZEL_CHECK_OUTCOME" != success ]]; then
-            echo "::error::Bazel outcome: check=$BAZEL_CHECK_OUTCOME" >&2
-            exit 1
-          fi
-
       - name: Preserve Bazel completion evidence
         if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -304,11 +304,8 @@ jobs:
             ${{ runner.temp }}/aobus-bazel-fastbuild/build.log
             ${{ runner.temp }}/aobus-bazel-fastbuild/checks/fastbuild/check-*
             ${{ runner.temp }}/aobus-bazel-fastbuild/state/output/execroot/_main/bazel-out/*/testlogs/**
-            ${{ runner.temp }}/aobus-bare/build.log
-            ${{ runner.temp }}/aobus-bare/fastbuild-test.bep.json
             ${{ runner.temp }}/aobus-bare/scoped-lint.bep.json
             ${{ runner.temp }}/aobus-bare/scoped-lint.log
-            ${{ runner.temp }}/aobus-bare/state/output/execroot/_main/bazel-out/*/testlogs/**
             ${{ runner.temp }}/bazel-r2-stop.json
           if-no-files-found: warn
 
@@ -316,12 +313,32 @@ jobs:
         if: ${{ always() }}
         run: df -h
 
+  # Preserve the existing required status without serializing the two checks.
+  linux_check:
+    name: Linux / check
+    needs: [changes, repository, linux]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require the results for the classified scope
+        shell: bash
+        env:
+          SCOPE_RESULT: ${{ needs.changes.result }}
+          DOCS_ONLY: ${{ needs.changes.outputs.docs-only }}
+          REPOSITORY_RESULT: ${{ needs.repository.result }}
+          LINUX_RESULT: ${{ needs.linux.result }}
+        run: |
+          echo "scope=$SCOPE_RESULT docs-only=$DOCS_ONLY repository=$REPOSITORY_RESULT linux=$LINUX_RESULT"
+          case "$SCOPE_RESULT:$DOCS_ONLY:$REPOSITORY_RESULT:$LINUX_RESULT" in
+            success:true:success:skipped|success:false:success:success) exit 0 ;;
+            *) exit 1 ;;
+          esac
+
   macos:
     name: macOS ${{ matrix.label }} / check
     needs: changes
-    if: >-
-      ${{ always() && !cancelled() &&
-          (needs.changes.result != 'success' || needs.changes.outputs.docs-only != 'true') }}
+    if: ${{ needs.changes.outputs.docs-only == 'false' }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 240
     strategy:
@@ -341,10 +358,6 @@ jobs:
       HOMEBREW_NO_AUTO_UPDATE: "1"
 
     steps:
-      - name: Require successful scope and documentation validation
-        if: ${{ needs.changes.result != 'success' }}
-        run: exit 1
-
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -608,9 +621,7 @@ jobs:
   windows:
     name: Windows / check
     needs: changes
-    if: >-
-      ${{ always() && !cancelled() &&
-          (needs.changes.result != 'success' || needs.changes.outputs.docs-only != 'true') }}
+    if: ${{ needs.changes.outputs.docs-only == 'false' }}
     runs-on: windows-2025-vs2026
     timeout-minutes: 360
     env:
@@ -628,11 +639,6 @@ jobs:
       VCPKG_BINARY_SOURCES: clear;files,C:/aobus-state/cache/vcpkg-binary,readwrite
 
     steps:
-      - name: Require successful scope and documentation validation
-        if: ${{ needs.changes.result != 'success' }}
-        shell: pwsh
-        run: exit 1
-
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -869,7 +875,7 @@ jobs:
           $contract = Get-Content script/ao/toolchain.json -Raw | ConvertFrom-Json
           $python = Join-Path $env:AOBUS_STATE_ROOT "tools\python\$($contract.python)\python.exe"
           & $python -I -S -B -X utf8 script/ao/portal/bazel_ci_summary.py `
-            --tree D:\aobus-bazel-fastbuild `
+            --tree D:\aobus-bazel-fastbuild --expect-wasapi `
             --remote-start $env:BAZEL_REMOTE_START --remote-bound $env:BAZEL_REMOTE_BOUND `
             --remote-stop-outcome $env:BAZEL_REMOTE_STOP `
             --remote-report "$env:RUNNER_TEMP\bazel-r2-stop.json" `

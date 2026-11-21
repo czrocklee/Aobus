@@ -12,7 +12,7 @@ from unittest import mock
 
 from ao.core import paths
 from ao.portal import bazel_repository_checks as checks
-from ao.portal import buildifier, git_files, source_lint, source_scope
+from ao.portal import buildifier, documentation_checks, git_files, source_format, source_lint, source_scope
 
 
 class RepositoryChecksTests(unittest.TestCase):
@@ -71,6 +71,20 @@ class RepositoryChecksTests(unittest.TestCase):
             contextlib.redirect_stdout(io.StringIO()),
         ):
             self.assertEqual(checks.run_workflow_lint(root=self.root), 1)
+
+    def test_format_partition_keeps_non_doc_markdown_in_the_source_check(self):
+        docs = source_scope.SourceScope(("README.md",))
+        sources = ("test/fixture.md", "lib/file.cpp")
+        whole = source_scope.SourceScope(docs.files + sources)
+        with (
+            mock.patch.dict(os.environ, {"TEST_TMPDIR": ""}),
+            mock.patch.object(documentation_checks, "markdown_scope", return_value=docs),
+            mock.patch.object(source_scope, "resolve", return_value=whole),
+            mock.patch.object(source_format, "check", return_value=7) as formatter,
+        ):
+            self.assertEqual(checks.main(["format-docs"]), 7)
+            self.assertEqual(checks.main(["format-sources"]), 7)
+        self.assertEqual([call.args[0].files for call in formatter.call_args_list], [docs.files, sources])
 
     def test_bazel_lint_checks_root_starlark_without_requiring_a_diff(self):
         self.write("BUILD.bazel")

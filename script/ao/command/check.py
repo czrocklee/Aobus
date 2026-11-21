@@ -55,10 +55,17 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
     bazel_workflows.add_arguments(parser, allow_sanitizers=True)
     parser.add_argument("--clean", action="store_true", help="clean the selected outputs before complete validation")
     parser.add_argument("--fresh", action="store_true", help="disable Bazel test-result caching")
-    parser.add_argument("--ci", action="store_true", help="include the CI configuration and Windows desktop tests")
+    parser.add_argument(
+        "--ci", action="store_true", help="validate the native CI partition, including Windows desktop tests"
+    )
     parser.set_defaults(func=run_command, check_action=None)
     checks = parser.add_subparsers(dest="check_action", metavar="<subject>")
 
+    repository = checks.add_parser(
+        "repository", help="validate the repository CI partition on Linux", allow_abbrev=False
+    )
+    repository.add_argument("--path", help="external Bazel tree (honors BUILD_DIR)")
+    repository.add_argument("--jobs", type=bazel_workflows.positive_jobs, default=jobs.default_workers())
     formatting = checks.add_parser("format", help="verify formatting without rewriting sources")
     options.add_source_arguments(formatting)
     formatting.add_argument("--docs", action="store_true", help="select the global documentation Markdown inventory")
@@ -92,7 +99,7 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
         "instrumentation", help="analyze coverage instrumentation without collecting it"
     )
     options.add_coverage_arguments(instrumentation, measurement=False)
-    for check in (formatting, lint, analyzer, docs, contracts, dependencies, winui, instrumentation):
+    for check in (repository, formatting, lint, analyzer, docs, contracts, dependencies, winui, instrumentation):
         check.set_defaults(func=run_command)
 
 
@@ -162,6 +169,8 @@ def _admit(args: argparse.Namespace) -> None:
     action = args.check_action
     if action is None:
         completion.validate(_completion_request(args))
+    elif action == "repository":
+        completion.validate_repository()
     elif action == "lint":
         source_lint.validate(_lint_request(args))
         options.selection(args)
@@ -203,7 +212,7 @@ def requires_python_tools(args: argparse.Namespace) -> bool:
     try:
         _admit(args)
         action = args.check_action
-        if action is None or action == "docs":
+        if action in (None, "repository", "docs"):
             return True
         if action == "format":
             return args.docs or options.has_python_sources(options.resolved_scope(args))
@@ -225,6 +234,8 @@ def run_command(args: argparse.Namespace) -> int:
         action = args.check_action
         if action is None:
             return completion.run(_completion_request(args))
+        if action == "repository":
+            return completion.run_repository(path=args.path, jobs=args.jobs)
         if action == "format":
             return source_format.check(options.resolved_scope(args))
         if action == "lint":

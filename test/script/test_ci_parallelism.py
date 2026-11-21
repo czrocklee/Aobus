@@ -1,4 +1,4 @@
-"""CI wiring that could go green without running or enforcing native checks."""
+"""CI routing and failure propagation that actionlint cannot verify."""
 
 import os
 import re
@@ -12,6 +12,7 @@ from pathlib import Path
 from ao.core.paths import PROJECT_ROOT
 
 WORKFLOW = PROJECT_ROOT / ".github" / "workflows" / "ci.yml"
+CODE_SCOPE = "needs.changes.outputs.docs-only == 'false'"
 
 
 def _job(name: str) -> str:
@@ -30,6 +31,15 @@ def _field(block: str, indent: int, key: str) -> str:
     return match[1].strip() if match else ""
 
 
+def _condition(block: str, indent: int) -> str:
+    value = _field(block, indent, "if").lstrip(">|- \n")
+    return " ".join(value.removeprefix("${{").removesuffix("}}").split())
+
+
+def _needs(job: str) -> set[str]:
+    return set(re.findall(r"[\w-]+", _field(job, 4, "needs"))) - {"-"}
+
+
 def _run_bash(
     step: str, env: dict[str, str], *, cwd: Path | None = None, prelude: str = ""
 ) -> subprocess.CompletedProcess[str]:
@@ -46,84 +56,109 @@ def _run_bash(
     )
 
 
-class NativeGateRoutingTest(unittest.TestCase):
-    def test_only_successful_docs_only_validation_can_skip_native_jobs(self):
-        # actionlint checks syntax, not whether a valid expression skips a required job.
-        for name in ("linux", "macos", "windows"):
-            with self.subTest(job=name):
-                job = _job(name)
-                header, _, steps = job.partition("\n    steps:\n")
-                self.assertRegex(header, r"(?m)^    needs: changes$")
-                condition = re.search(r"(?m)^    if:\s*(?:>-?\s*)?\$\{\{(.*?)\}\}", header, re.DOTALL)
-                self.assertIsNotNone(condition)
-                self.assertEqual(
-                    " ".join(condition[1].split()),
-                    "always() && !cancelled() && "
-                    "(needs.changes.result != 'success' || needs.changes.outputs.docs-only != 'true')",
-                )
-                prerequisite = _step(job, "Require successful scope and documentation validation")
-                self.assertTrue(
-                    steps.startswith("      - name: Require successful scope and documentation validation\n")
-                )
-                self.assertIn("if: ${{ needs.changes.result != 'success' }}", prerequisite)
-                self.assertIn("run: exit 1", prerequisite)
-                self.assertNotIn("continue-on-error:", prerequisite)
+def _run_verdict(step: str, context: dict[str, str]) -> subprocess.CompletedProcess[str]:
+    # Feed the actual workflow bindings so a swapped result cannot pass the shell test.
+    bindings = re.findall(r"(?m)^ *(\w+):[ \t]*\$\{\{\s*([\w.-]+)\s*\}\}", _field(step, 8, "env"))
+    return _run_bash(step, {name: context[source] for name, source in bindings if source in context})
 
-    def test_complete_graph_cannot_be_conditionally_skipped_or_advisory(self):
-        for name in ("linux", "macos", "windows"):
-            with self.subTest(job=name):
-                job = _job(name)
-                gate = _step(job, "Check Bazel completion")
+
+class GateRoutingTest(unittest.TestCase):
+    def test_code_changes_trigger_macos_and_windows(self):
+        for job in ("macos", "windows"):
+            with self.subTest(job=job):
+                native = _job(job)
+                self.assertIn("changes", _needs(native))
+                self.assertEqual(_condition(native, 4), CODE_SCOPE)
+
+    def test_repository_checks_are_required_for_code_and_docs_routes(self):
+        repository = _job("repository")
+        self.assertIn(_field(repository, 4, "continue-on-error"), ("", "false"))
+        code = _step(repository, "Check repository")
+        self.assertEqual(_condition(code, 8), CODE_SCOPE)
+        self.assertRegex(code, r"\bcheck repository\b")
+        docs = _step(repository, "Check documentation")
+        self.assertEqual(_condition(docs, 8), "needs.changes.outputs.docs-only == 'true'")
+        self.assertRegex(docs, r"\bcheck docs\b")
+        self.assertRegex(docs, r"\bcheck format --docs\b")
+        for step in (code, docs):
+            self.assertIn(_field(step, 8, "continue-on-error"), ("", "false"))
+
+    def test_native_completion_is_required(self):
+        for job in ("linux", "macos", "windows"):
+            with self.subTest(job=job):
+                native = _job(job)
+                self.assertIn(_field(native, 4, "continue-on-error"), ("", "false"))
+                gate = _step(native, "Check Bazel completion")
                 self.assertRegex(gate, r"(?m)^ +(?:run: )?(?:\./ao|\.\\ao\.bat) check --ci\b")
-                self.assertNotRegex(gate, r"(?m)^        if:")
-                required = _step(job, "Require successful Bazel checks") if name == "linux" else gate
-                self.assertNotIn("continue-on-error:", required)
-                if name == "linux":
-                    self.assertIn("if: ${{ !cancelled() }}", required)
-                    self.assertIn("BAZEL_CHECK_OUTCOME: ${{ steps.bazel-check.outcome }}", required)
+                self.assertEqual(_condition(gate, 8), "")
+                self.assertIn(_field(gate, 8, "continue-on-error"), ("", "false"))
 
 
 @unittest.skipUnless(os.name == "posix", "Linux CI steps require bash")
-class LinuxGateFailureTest(unittest.TestCase):
-    def test_failed_completion_is_rejected_after_evidence_collection(self):
-        step = _step(_job("linux"), "Require successful Bazel checks")
-        for outcome, code in (("success", 0), ("failure", 1), ("skipped", 1)):
-            with self.subTest(outcome=outcome):
-                result = _run_bash(step, {"BAZEL_CHECK_OUTCOME": outcome})
-                self.assertEqual(result.returncode, code, result.stderr)
+class LinuxVerdictTest(unittest.TestCase):
+    def test_required_linux_status_covers_repository_and_native_work(self):
+        job = _job("linux_check")
+        self.assertEqual(_field(job, 4, "name"), "Linux / check")  # Existing required status.
+        self.assertLessEqual({"changes", "repository", "linux"}, _needs(job))
+        self.assertEqual(_condition(job, 4), "always()")
+        self.assertIn(_field(job, 4, "continue-on-error"), ("", "false"))
+        step = _step(job, "Require the results for the classified scope")
+        self.assertIn(_condition(step, 8), ("", "always()"))
+        self.assertIn(_field(step, 8, "continue-on-error"), ("", "false"))
+        for scope, docs_only, repository, linux, accepted in (
+            ("success", "true", "success", "skipped", True),
+            ("success", "false", "success", "success", True),
+            ("failure", "true", "success", "skipped", False),
+            ("success", "true", "success", "cancelled", False),
+            ("success", "true", "failure", "skipped", False),
+            ("success", "false", "failure", "success", False),
+            ("success", "false", "success", "failure", False),
+            ("success", "false", "success", "skipped", False),
+        ):
+            with self.subTest(scope=scope, docs_only=docs_only, repository=repository, linux=linux):
+                result = _run_verdict(
+                    step,
+                    {
+                        "needs.changes.result": scope,
+                        "needs.changes.outputs.docs-only": docs_only,
+                        "needs.repository.result": repository,
+                        "needs.linux.result": linux,
+                    },
+                )
+                self.assertEqual(result.returncode == 0, accepted, result.stdout + result.stderr)
 
-    def test_direct_bazel_runs_without_portal_environment_and_failure_survives_tee(self):
+    def test_bare_bazel_build_failure_survives_logging(self):
         step = _step(_job("linux"), "Test direct Bazel entry")
-        self.assertIn("if: ${{ steps.bazel-check.outcome == 'success' }}", step)
-        self.assertNotIn("continue-on-error:", step)
-        # GitHub's explicit bash shell uses pipefail; the default shell does not.
-        self.assertIn("shell: bash", step)
-        with tempfile.TemporaryDirectory(prefix="bare bazel ") as temporary:
-            root = Path(temporary)
-            bazel = root / "bazel"
-            bazel.write_text(
-                "#!/usr/bin/env bash\n"
-                "[[ -z ${AOBUS_BAZEL_CONFIGURATION+x} && -z ${AOBUS_BAZEL_REMOTE_CACHE+x} ]] || exit 3\n"
-                '[[ " $* " == *" test "* ]] || exit 4\n'
-                "exit 37\n",
-                encoding="utf-8",
-            )
-            bazel.chmod(0o755)
-            # Stand in for the pinned-tool lookup, not the direct Bazel call.
-            nix = 'nix-shell() { printf "%s\\t%s\\n" "$PWD/bazel" /fixture/jdk; }\n'
-            result = _run_bash(
-                step,
-                {
-                    "RUNNER_TEMP": temporary,
-                    "AOBUS_STATE_ROOT": str(root / "state"),
-                    "CMAKE_BUILD_PARALLEL_LEVEL": "4",
-                    "AOBUS_BAZEL_CONFIGURATION": "must-not-inherit",
-                    "AOBUS_BAZEL_REMOTE_CACHE": "must-not-inherit",
-                },
-                cwd=root,
-                prelude=nix,
-            )
-            self.assertEqual(result.returncode, 37, result.stderr)
+        self.assertIn(_field(step, 8, "continue-on-error"), ("", "false"))
+        root = Path(self.enterContext(tempfile.TemporaryDirectory(prefix="bare bazel ")))
+        bazel = root / "bazel"
+        bazel.write_text(
+            "#!/usr/bin/env bash\n"
+            '[[ " $* " == *" build "* && " $* " == *" --disk_cache=$AOBUS_BAZEL_DISK_CACHE "* ]] || exit 2\n'
+            "[[ -z ${AOBUS_BAZEL_CONFIGURATION+x} && -z ${AOBUS_BAZEL_REMOTE_CACHE+x} ]] || exit 3\n"
+            ': > "$0.ran"\n'
+            "exit 37\n",
+            encoding="utf-8",
+        )
+        bazel.chmod(0o755)
+        result = _run_bash(
+            step,
+            {
+                "RUNNER_TEMP": str(root),
+                "FAKE_BAZEL": str(bazel),
+                "TEST_PYTHON": sys.executable,
+                "PYTHONDONTWRITEBYTECODE": "1",
+                "AOBUS_BAZEL_DISK_CACHE": str(root / "cache"),
+                "AOBUS_STATE_ROOT": str(root / "state"),
+                "CMAKE_BUILD_PARALLEL_LEVEL": "4",
+                "AOBUS_BAZEL_CONFIGURATION": "must-not-inherit",
+                "AOBUS_BAZEL_REMOTE_CACHE": "must-not-inherit",
+            },
+            cwd=PROJECT_ROOT,
+            prelude='nix-shell() { printf "%s\\t%s\\t%s\\n" "$FAKE_BAZEL" /fixture/jdk "$TEST_PYTHON"; }\n',
+        )
+        self.assertTrue(bazel.with_suffix(".ran").is_file(), result.stdout + result.stderr)
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
 @unittest.skipUnless(sys.platform == "linux", "Cache trim uses GNU find")

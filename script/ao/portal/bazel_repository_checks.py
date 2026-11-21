@@ -1,24 +1,4 @@
-"""Entry points for repository-level Bazel check targets.
-
-Bazel owns process isolation and parallelism: each target starts one process
-for one check, so this module never builds a worker pool or runs the complete
-tooling suite. Every command returns a process status and prints its own
-diagnostics. Ordinary unit modules do not route through here: they run under
-the minimal ``ao.graph.bazel_unittest`` entry with their own declared sources
-and dependencies.
-
-Every check here reads the live physical checkout (documentation links,
-lexical source audits, formatting, and the Ruff/mypy scopes), so its target
-stays local and non-cacheable. The checkout is anchored through the declared
-``VERSION.txt`` runfile resolved by the official rules_python runfiles
-library; no hand-rolled manifest parsing and no import-time package rewriting.
-Live targets pass the anchor as ``--live-checkout`` and re-execute this entry
-from the physical checkout before any service import, so a Windows copied
-runfiles tree never becomes the tree the checks read.
-The checks also spawn host tools through the inherited ``PATH``, which is not
-a hermetic tool closure: the local/external tags are the honest declaration
-of that, not a sandbox claim.
-"""
+"""Bazel checks that read the live checkout, not the test's runfiles copy."""
 
 from __future__ import annotations
 
@@ -233,27 +213,19 @@ def run_mypy(targets: Sequence[str] | None = None, *, root: Path | None = None, 
     return _run_tool("mypy", argv, base)
 
 
-def run_format(*, root: Path | None = None, python: Path | None = None) -> int:
-    """Check the complete formatter scope without a Git diff selection.
+def run_format(*, docs: bool, root: Path | None = None, python: Path | None = None) -> int:
+    """Check the docs inventory or its complement in whole-source formatting."""
+    from ao.portal import documentation_checks, source_format, source_scope
 
-    The shared selector supplies the whole-source inventory independently of
-    the public command parser. All tools must already be ready.
-    """
-    from ao.core.paths import PROJECT_ROOT
-    from ao.portal import source_format, source_scope
-
-    expected = project_root() if root is None else Path(root)
-    if PROJECT_ROOT != expected:
-        print(f"Format check root mismatch: {PROJECT_ROOT} != {expected}", file=sys.stderr)
+    if _physical_root(root, "format") is None:
         return 1
-    scope = source_scope.resolve(source_scope.Selection(all=True))
+    scope = documentation_checks.markdown_scope()
+    if not docs:
+        # Markdown fixtures outside the docs inventory still need formatting.
+        doc_paths = set(scope.files)
+        whole = source_scope.resolve(source_scope.Selection(all=True))
+        scope = source_scope.SourceScope(tuple(name for name in whole.files if name not in doc_paths))
     _prepare_runtime()
-    # Repository tests never install tools: Buildifier and Prettier must already
-    # be ready, and a missing pinned tool fails with its explicit setup command.
-    # source_format.run_ruff_format asks python_check for the host cache directory,
-    # so Windows/macOS pass an explicit --cache-dir under the managed
-    # interpreter; that shared python_check cache helper owns the boundary.
-    # Linux takes RUFF_CACHE_DIR from _prepare_runtime and stays in TEST_TMPDIR.
     return source_format.check(scope, python=tool_python(python=python))
 
 
@@ -342,7 +314,8 @@ def _parser() -> argparse.ArgumentParser:
     ruff.add_argument("targets", nargs="*")
     mypy = commands.add_parser("mypy", help="run mypy over the repository tooling scope")
     mypy.add_argument("targets", nargs="*")
-    commands.add_parser("format", help="check the complete formatter scope")
+    commands.add_parser("format-sources", help="check source formatting outside the docs inventory")
+    commands.add_parser("format-docs", help="check the documentation Markdown inventory")
     commands.add_parser("test-audit", help="run the Catch2 naming and tag audit")
     commands.add_parser("name-audit", help="run the class/file naming audit")
     commands.add_parser("workflow-lint", help="lint the GitHub workflow YAML")
@@ -407,7 +380,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return run_workflow_lint()
     if arguments.command == "bazel-lint":
         return run_bazel_lint()
-    return run_format()
+    return run_format(docs=arguments.command == "format-docs")
 
 
 if __name__ == "__main__":

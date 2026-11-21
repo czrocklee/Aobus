@@ -103,6 +103,7 @@ windows_utf8_manifest_checks(
     testonly = True,
     binaries = [
         ":utility_test",
+        ":sanitizer_profile",
         ":runtime_test",
         ":i18n_test",
         ":desktop_test",
@@ -217,20 +218,23 @@ config_setting(
     flag_values = {"//bazel:asan_enabled": "true"},
 )
 
-# core/SanitizerProfileTest.cpp compares the selected profile with the
-# compiler's own instrumentation facts. Separate selects keep a combined
-# profile request for the admission aspect to reject.
-SANITIZER_PROFILE_DEFINES = select({
-    "//bazel:asan": ["AOBUS_EXPECT_ADDRESS_SANITIZER"],
-    "//conditions:default": [],
-}) + select({
-    ":linux_asan": ["AOBUS_EXPECT_UNDEFINED_BEHAVIOR_SANITIZER"],
-    ":macos_asan": ["AOBUS_EXPECT_UNDEFINED_BEHAVIOR_SANITIZER"],
-    "//conditions:default": [],
-}) + select({
-    "//bazel:tsan": ["AOBUS_EXPECT_THREAD_SANITIZER"],
-    "//conditions:default": [],
-})
+cc_binary(
+    name = "sanitizer_profile",
+    testonly = True,
+    srcs = ["helper/SanitizerProfile.cpp"],
+    local_defines = select({
+        "//bazel:asan": ["AOBUS_EXPECT_ADDRESS_SANITIZER=1"],
+        "//conditions:default": ["AOBUS_EXPECT_ADDRESS_SANITIZER=0"],
+    }) + select({
+        ":linux_asan": ["AOBUS_EXPECT_UNDEFINED_BEHAVIOR_SANITIZER=1"],
+        ":macos_asan": ["AOBUS_EXPECT_UNDEFINED_BEHAVIOR_SANITIZER=1"],
+        "//conditions:default": ["AOBUS_EXPECT_UNDEFINED_BEHAVIOR_SANITIZER=0"],
+    }) + select({
+        "//bazel:tsan": ["AOBUS_EXPECT_THREAD_SANITIZER=1"],
+        "//conditions:default": ["AOBUS_EXPECT_THREAD_SANITIZER=0"],
+    }),
+    deps = ["//bazel:compile_contract"],
+)
 
 # Shared foundations, compatibility, and fixture behavior use the real utility
 # implementation and the Core-only test entry point. Application and tooling
@@ -247,7 +251,6 @@ cc_test(
     ],
     copts = TEST_WARNING_COPTS,
     data = [":ao_fatal_probe"],
-    local_defines = SANITIZER_PROFILE_DEFINES,
     deps = [
         ":common_test_support",
         ":fatal_probe_support",

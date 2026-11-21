@@ -16,11 +16,12 @@ across checkouts. Each build tree keeps its own outputs.
 | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `setup <component>`         | Explicit preparation: `bazel`, `deps`, `llvm-sdk`, `winui-runtime`, `buildifier`, `prettier`, or `git-hooks`; each component exposes only its relevant options. |
 | `format [paths...]`         | Source rewriting only; paths accept files or directories.                                                                                                       |
-| `check`                     | Full native `bazel test //...` completion; select a mode with `--config`, not a positional flavor.                                                              |
+| `check`                     | [Full local completion or the native CI selection](bazel.md#completion-gate).                                                                                   |
 | `check format [paths...]`   | Read-only formatting; `--docs` selects the global Markdown inventory instead of paths, `--all`, or `--commit`.                                                  |
 | `check lint [paths...]`     | Scoped semantic lint and source audits, without formatting or global documentation semantics.                                                                   |
 | `check analyzer [paths...]` | Path-sensitive analysis; findings fail unless `--report-only` is explicit.                                                                                      |
 | `check docs`                | Global document semantics only; no paths, commit scope, formatting, or native SDK options.                                                                      |
+| `check repository`          | [Repository-only CI checks](bazel.md#completion-gate) on Linux.                                                                                                 |
 | `check contracts`           | Compile-contract analysis, not product or sanitizer runtime execution.                                                                                          |
 | `check deps`                | SDK admission, digest validation, and dependency reporting; optional JSON output.                                                                               |
 | `check winui`               | Read-only WinUI prerequisites; `--build-only` omits runtime prerequisites.                                                                                      |
@@ -189,11 +190,10 @@ AOBUS_PHASE_LOG_DIR=/tmp/aobus-phases ./ao check
 
 Each process writes its own JSONL file. This opt-in capture remains a local
 tool. CI summarizes its existing check BEP files and available
-cache stop accounting without enabling these measurements; the immutable raw
-artifacts remain available ([CI product
-gates](bazel.md#ci-product-gates-and-r2-validation)). Validate collected
-records with `python -m ao.core.phases <directory>`; the reporter runs with
-`PYTHONPATH=script` and is not a second build or test entry point. Its
+cache stop accounting without enabling these measurements; see
+[CI evidence](bazel.md#ci-product-gates-and-r2-validation) for the retained artifacts.
+Validate collected records with `python -m ao.core.phases <directory>`; the
+reporter runs with `PYTHONPATH=script` and is not a second build or test entry point. Its
 optional `--github-summary <file>` appends the same Markdown table. Missing,
 malformed, or incomplete measurements fail the report instead of producing an
 apparently complete timing result. The complete `check` gate remains mandatory

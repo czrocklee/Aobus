@@ -220,22 +220,21 @@ version and hash-pinned official macOS/Windows artifacts. Linux selects the
 matching package from pinned Nixpkgs through `AO_NIX_BUILDIFIER`, not `PATH`.
 Native hosts cache it under their Aobus state root's `tools/buildifier/` and
 validate both SHA-256 and version on every use; an existing damaged entry fails
-rather than falling back or silently repairing it. `./ao setup buildifier`
-(`ao.bat setup buildifier`) explicitly prepares only that tool. Format and lint
-also prepare a missing native tool when their scope contains Bazel files; no
-C++ SDK is required for a Bazel-only scope. See [Starlark hygiene](linting.md#bazelstarlark-hygiene)
+rather than falling back or silently repairing it. Format and lint require a
+ready Buildifier for Bazel files. If it is missing, run `./ao setup buildifier`
+(`ao.bat setup buildifier` on Windows). A Bazel-only scope needs no C++ SDK.
+See [Starlark hygiene](linting.md#bazelstarlark-hygiene)
 and [workflow lint](linting.md#github-actions-workflow-lint).
 
 Prettier and its Node runtime are governed by `script/ao/prettier.json`.
 Linux selects the matching Nix formatter through `AO_NIX_PRETTIER`, with the
-contracted Node provider. Native hosts and the lightweight Linux documentation
-job use the hash-verified official Node archive and self-contained Prettier npm
-archive in managed tool state; no npm install or checkout-local `node_modules`
-is required. Manifest-pinned executable and package-tree digests bind freshly
-extracted and cached files before execution; cache receipts record provenance,
-not an independent source of trusted hashes. `./ao setup prettier` explicitly prepares that closure, and text
-formatting can prepare a missing managed entry. The documentation job uses this
-bounded bootstrap without entering the C++ Nix environment. See
+contracted Node provider. Native macOS/Windows and
+[documentation-only CI](test/validation-and-review.md#continuous-integration)
+use the hash-verified Node and Prettier archives in managed tool state, without
+npm install or checkout-local `node_modules`. Manifest digests verify freshly
+extracted and cached files before execution; receipts record provenance, not
+trusted hashes. Formatting requires a ready bundle. If it is missing, run
+`./ao setup prettier` (`ao.bat setup prettier` on Windows). See
 [authored-text formatting](linting.md#authored-text-formatting) for scope and options.
 
 The native requirements files are artifact locks with hashes, not alternative
@@ -254,12 +253,10 @@ selected wheel at runtime on that platform.
 The documentation parser follows the same split: `script/ao/toolchain.json`
 pins the exact markdown-it-py and mdurl versions, and
 `script/ao/docs-requirements.txt` is their shared hash-verified artifact lock.
-The native requirement locks include that file with a pip `-r` line, so the
-native bootstrap installs the same accepted parser wheels, and the CI
-documentation job installs the shared lock directly before
-`python -m ao check docs`. The managed-environment fingerprint covers the
-included lock, so a changed or missing parser pin rebuilds the native
-environment instead of reusing a stale one. Runtime identity uses the canonical
+The native requirement locks include the parser lock, so the native bootstrap
+and documentation-only CI use the same wheels. The managed-environment
+fingerprint covers the included lock, so a changed or missing parser pin
+rebuilds the native environment instead of reusing a stale one. Runtime identity uses the canonical
 base installation path (`realpath(sys.base_prefix)`) and actual Python version,
 not the current venv executable, so bootstrap and managed callers reuse the same
 environment even when Homebrew exposes the installation through a symlink.

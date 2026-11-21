@@ -445,14 +445,12 @@ def _complete(args: Request, tree: Path, attempt: _Run, prepared: Path, executab
             remote_cache=args.remote_cache,
         ),
     )
-    # Instrumentation itself is proven when the build compiles the sanitizer
-    # profile canary in //test:utility_test, not by re-reading command lines.
     attempt.bazel(
         "build",
         executable,
         prepared,
         "build",
-        [*roots, f"--build_event_json_file={attempt.directory / 'build.bep.json'}"],
+        ["//test:sanitizer_profile", *roots, f"--build_event_json_file={attempt.directory / 'build.bep.json'}"],
         remote_cache=args.remote_cache,
     )
     attempt.bazel(

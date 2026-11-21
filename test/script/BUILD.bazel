@@ -86,8 +86,15 @@ _NATIVE_AND_PORTAL = [
     _PORTAL,
 ]
 
+# These modules use fixtures, not host SDKs or launchers.
+_CI_REPOSITORY_UNIT_MODULES = [
+    "test_bazel_lint_result",
+    "test_doc_check_markdown",
+    "test_name_audit",
+]
+
 # Audited category membership; the reasons are the input audit above.
-_UNIT_MODULES = [
+_UNIT_MODULES = _CI_REPOSITORY_UNIT_MODULES + [
     "test_appkit_scenarios",
     "test_architecture_audit",
     "test_audit_root_guards",
@@ -95,7 +102,6 @@ _UNIT_MODULES = [
     "test_bazel_headers",
     "test_bazel_library",
     "test_bazel_lint_reports",
-    "test_bazel_lint_result",
     "test_bazel_live_checkout",
     "test_bazel_macos_toolchain",
     "test_bazel_path_probes",
@@ -106,9 +112,7 @@ _UNIT_MODULES = [
     "test_dedup",
     "test_doc_check",
     "test_doc_check_boundaries",
-    "test_doc_check_markdown",
     "test_jobs",
-    "test_name_audit",
     "test_paths",
     "test_r2_credentials",
     "test_tidy_path_filters",
@@ -487,13 +491,7 @@ _WINDOWS_MODULE_ENV = {
     for module in _ALL_UNIT_MODULES
 ]
 
-# ---------------------------------------------------------------------------
-# Repository checks over the live physical checkout. Each target passes the
-# declared VERSION.txt anchor: the entry always re-execs the physical script
-# before importing any command module, on both operating systems; the child
-# gets the plain command arguments without the flag, which is the loop guard.
-# Mutable checkout inputs keep all these checks non-cacheable. The two checks
-# with source-scope Git discovery explicitly inherit PATH as well.
+# Repository checks read mutable checkout files, so their results cannot be cached.
 
 _CHECK_ENTRY = "ao.portal.bazel_repository_checks"
 
@@ -521,11 +519,7 @@ _PYTHON_CHECK_DATA = [
 py_test(
     name = "ruff",
     size = "medium",
-    args = [
-        "--live-checkout",
-        "$(rlocationpath //:VERSION.txt)",
-        "ruff",
-    ],
+    args = _LIVE_CHECKOUT_ARGS + ["ruff"],
     data = _PYTHON_CHECK_DATA + glob(["*.py"]),
     main_module = _CHECK_ENTRY,
     tags = _HOST_BACKED_TAGS,
@@ -535,27 +529,18 @@ py_test(
 py_test(
     name = "mypy",
     size = "medium",
-    args = [
-        "--live-checkout",
-        "$(rlocationpath //:VERSION.txt)",
-        "mypy",
-    ],
+    args = _LIVE_CHECKOUT_ARGS + ["mypy"],
     data = _PYTHON_CHECK_DATA,
     main_module = _CHECK_ENTRY,
     tags = _HOST_BACKED_TAGS,
     deps = _CHECK_DEPS,
 )
 
-# Live documentation integrity; the plain check does not need Prettier.
 py_test(
     name = "docs",
     size = "medium",
-    args = [
-        "--live-checkout",
-        "$(rlocationpath //:VERSION.txt)",
-        "docs",
-    ],
-    data = ["//:VERSION.txt"],
+    args = _LIVE_CHECKOUT_ARGS + ["docs"],
+    data = _LIVE_CHECKOUT_DATA,
     main_module = _CHECK_ENTRY,
     tags = _HOST_BACKED_TAGS,
     deps = _CHECK_DEPS,
@@ -565,12 +550,8 @@ py_test(
 py_test(
     name = "guardrails",
     size = "medium",
-    args = [
-        "--live-checkout",
-        "$(rlocationpath //:VERSION.txt)",
-        "guardrails",
-    ],
-    data = ["//:VERSION.txt"],
+    args = _LIVE_CHECKOUT_ARGS + ["guardrails"],
+    data = _LIVE_CHECKOUT_DATA,
     main_module = _CHECK_ENTRY,
     tags = _HOST_BACKED_TAGS,
     deps = _CHECK_DEPS,
@@ -588,18 +569,11 @@ _NATIVE_FORMAT_ENV = select({
     "//conditions:default": [],
 })
 
-# Full-scope formatter check without a Git diff selection. Linux selects the
-# pinned Nix tools through the inherited variables; other hosts need their
-# native clang-format/buildifier/Prettier prerequisites ready before the run.
 py_test(
-    name = "format",
+    name = "format_sources",
     size = "large",
-    args = [
-        "--live-checkout",
-        "$(rlocationpath //:VERSION.txt)",
-        "format",
-    ],
-    data = ["//:VERSION.txt"],
+    args = _LIVE_CHECKOUT_ARGS + ["format-sources"],
+    data = _LIVE_CHECKOUT_DATA,
     env_inherit = ["PATH"] + _NATIVE_FORMAT_ENV + select({
         "@platforms//os:linux": [
             "AO_NIX_BUILDIFIER",
@@ -618,18 +592,28 @@ py_test(
     deps = _CHECK_DEPS,
 )
 
+py_test(
+    name = "format_docs",
+    size = "medium",
+    args = _LIVE_CHECKOUT_ARGS + ["format-docs"],
+    data = _LIVE_CHECKOUT_DATA,
+    env_inherit = _NATIVE_FORMAT_ENV + select({
+        "@platforms//os:linux": ["AO_NIX_PRETTIER"],
+        "//conditions:default": [],
+    }),
+    main_module = _CHECK_ENTRY,
+    tags = _HOST_BACKED_TAGS,
+    deps = _CHECK_DEPS,
+)
+
 # Buildifier lint is independent of the formatter pass: the complete graph can
 # format cleanly while a naming or API convention finding remains. The helper
 # selects the full Bazel/Starlark inventory and never provisions a tool.
 py_test(
     name = "bazel_lint",
     size = "medium",
-    args = [
-        "--live-checkout",
-        "$(rlocationpath //:VERSION.txt)",
-        "bazel-lint",
-    ],
-    data = ["//:VERSION.txt"],
+    args = _LIVE_CHECKOUT_ARGS + ["bazel-lint"],
+    data = _LIVE_CHECKOUT_DATA,
     env_inherit = ["PATH"] + _NATIVE_FORMAT_ENV + select({
         "@platforms//os:linux": ["AO_NIX_BUILDIFIER"],
         "//conditions:default": [],
@@ -642,12 +626,8 @@ py_test(
 # Source conventions and workflow syntax are independent Bazel verdicts.
 py_test(
     name = "test_audit",
-    args = [
-        "--live-checkout",
-        "$(rlocationpath //:VERSION.txt)",
-        "test-audit",
-    ],
-    data = ["//:VERSION.txt"],
+    args = _LIVE_CHECKOUT_ARGS + ["test-audit"],
+    data = _LIVE_CHECKOUT_DATA,
     main_module = _CHECK_ENTRY,
     tags = _HOST_BACKED_TAGS,
     deps = _CHECK_DEPS,
@@ -655,12 +635,8 @@ py_test(
 
 py_test(
     name = "name_audit",
-    args = [
-        "--live-checkout",
-        "$(rlocationpath //:VERSION.txt)",
-        "name-audit",
-    ],
-    data = ["//:VERSION.txt"],
+    args = _LIVE_CHECKOUT_ARGS + ["name-audit"],
+    data = _LIVE_CHECKOUT_DATA,
     main_module = _CHECK_ENTRY,
     tags = _HOST_BACKED_TAGS,
     deps = _CHECK_DEPS,
@@ -668,12 +644,8 @@ py_test(
 
 py_test(
     name = "workflows",
-    args = [
-        "--live-checkout",
-        "$(rlocationpath //:VERSION.txt)",
-        "workflow-lint",
-    ],
-    data = ["//:VERSION.txt"],
+    args = _LIVE_CHECKOUT_ARGS + ["workflow-lint"],
+    data = _LIVE_CHECKOUT_DATA,
     env_inherit = ["AO_NIX_ACTIONLINT"],
     main_module = _CHECK_ENTRY,
     tags = _HOST_BACKED_TAGS,
@@ -696,18 +668,44 @@ test_suite(
     tests = [":" + module for module in _ALL_UNIT_MODULES] + [":test_package_boundary_runfiles"],
 )
 
-# Completion requires passing summaries for this suite's members on their supported hosts.
+test_suite(
+    name = "format",
+    tests = [
+        ":format_docs",
+        ":format_sources",
+    ],
+)
+
+_CI_REPOSITORY_CHECKS = [
+    ":docs",
+    ":format_docs",
+    ":name_audit",
+    ":ruff",
+    ":test_audit",
+    ":workflows",
+]
+
+_NATIVE_REPOSITORY_CHECKS = [
+    ":bazel_lint",
+    ":format_sources",
+    ":guardrails",
+    ":mypy",
+]
+
 test_suite(
     name = "repository_checks",
-    tests = [
-        ":bazel_lint",
-        ":docs",
-        ":format",
-        ":guardrails",
-        ":mypy",
-        ":name_audit",
-        ":ruff",
-        ":test_audit",
-        ":workflows",
+    tests = _CI_REPOSITORY_CHECKS + _NATIVE_REPOSITORY_CHECKS,
+)
+
+test_suite(
+    name = "ci_repository_checks",
+    tests = _CI_REPOSITORY_CHECKS + [":" + module for module in _CI_REPOSITORY_UNIT_MODULES] + [
+        ":test_ci_cache_gates",
+        ":test_ci_parallelism",
     ],
+)
+
+test_suite(
+    name = "native_repository_checks",
+    tests = _NATIVE_REPOSITORY_CHECKS,
 )
