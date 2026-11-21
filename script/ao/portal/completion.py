@@ -73,10 +73,10 @@ def _selection(platform: str, request: Request) -> _CheckSelection:
     else:
         optional.update(windows_probes)
         optional.add(winui_projection)
-    # The ordinary suite expands this GNU linker-wrap test on every host.
-    dictionary_publication = "//test:dictionary_publication_test"
+    # The ordinary suite expands these Linux-only tests on every host.
+    linux_only = {"//test:dictionary_publication_test", "//bazel/header_share:sparse_headers_test"}
     if platform == "linux":
-        required.add(dictionary_publication)
+        required.update(linux_only)
         suites.add("//:instrumentation_tests")
         required.update(("//:native_driver_policy", "//bazel/header_share:selector_test", "//test/script:workflows"))
         required.update(
@@ -84,7 +84,7 @@ def _selection(platform: str, request: Request) -> _CheckSelection:
             for case in ("coverage", "asan_build", "asan_compile", "tsan_build", "tsan_compile")
         )
     else:
-        optional.update((dictionary_publication, "//test/script:workflows"))
+        optional.update(linux_only | {"//test/script:workflows"})
     if platform == "macos":
         required.update(
             (

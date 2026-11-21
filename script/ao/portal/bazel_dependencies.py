@@ -1318,6 +1318,7 @@ def resolve_dependencies(tree: Path, config: str, *, group: str, prefix: str | N
             "packages": [],
         }
         patches = []
+        child_includes: dict[str, Path] = {}
         for package in packages:
             name = package["name"]
             roots = (
@@ -1516,23 +1517,8 @@ def resolve_dependencies(tree: Path, config: str, *, group: str, prefix: str | N
                 patches.append(_manual_patch(spec, name, lexy_interface))
                 continue
             if "header" in package:
-                if name == "fakeit":
-                    reviewed = policy["header_fallbacks"].get(name, {}).get(host)
-                    if reviewed is None:
-                        raise native.BazelWorkspaceError(f"unsupported FakeIt header interface: {host}")
-                    include = native.header_root(roots, reviewed.get("header", package["header"]))
-                    fakeit_interface = {"header_dirs": [str(include / reviewed["include"])]}
-                    if metadata:
-                        selected["expected_versions"] = {module: versions[name] for module in selected["modules"]}
-                        patch = _compile_interface_patch(spec, name, fakeit_interface)
-                        if patch is not None:
-                            patches.append(patch)
-                    else:
-                        selected["modules"] = []
-                        patches.append(_manual_patch(spec, name, fakeit_interface))
-                    continue
-                include = native.header_root(roots, package["header"])
-                marker, macros = {
+                reviewed = policy["header_fallbacks"].get(name, {}).get(host, {})
+                version_marker = {
                     "boost": ("boost/version.hpp", ["BOOST_VERSION"]),
                     "gsl_lite": (package["header"], ["gsl_lite_MAJOR", "gsl_lite_MINOR", "gsl_lite_PATCH"]),
                     "cli11": ("CLI/Version.hpp", ["CLI11_VERSION_MAJOR", "CLI11_VERSION_MINOR", "CLI11_VERSION_PATCH"]),
@@ -1540,20 +1526,27 @@ def resolve_dependencies(tree: Path, config: str, *, group: str, prefix: str | N
                         "fast_float/float_common.h",
                         ["FASTFLOAT_VERSION_MAJOR", "FASTFLOAT_VERSION_MINOR", "FASTFLOAT_VERSION_PATCH"],
                     ),
-                }[name]
-                native.verify_header_version(include / marker, versions[name], macros, encoded=name == "boost")
-                interface = {
-                    "header_dirs": [str(include)],
-                    **policy["header_fallbacks"].get(name, {}).get(host, {}),
-                }
-                if name == "cli11" and host != "linux":
-                    interface = _library_interface(
-                        package,
-                        roots,
-                        config,
-                        host,
-                        policy,
-                    )
+                }.get(name)
+                if "include" in reviewed:
+                    # This policy is for marker-only integrations, not versioned or compiled interfaces.
+                    if version_marker is not None:
+                        raise native.BazelWorkspaceError(f"reviewed child include is unsupported for {name}")
+                    include = native.header_root(roots, reviewed.get("header", package["header"]))
+                    child = include / reviewed["include"]
+                    parent, resolved = include.resolve(), child.resolve()
+                    if resolved == parent or not resolved.is_relative_to(parent):
+                        raise native.BazelWorkspaceError(f"invalid reviewed child include for {name}: {child}")
+                    child_includes[name] = child
+                    interface = {"header_dirs": [str(child)]}
+                else:
+                    if version_marker is None:
+                        raise native.BazelWorkspaceError(f"unsupported {host} header interface: {name}")
+                    include = native.header_root(roots, package["header"])
+                    marker, macros = version_marker
+                    native.verify_header_version(include / marker, versions[name], macros, encoded=name == "boost")
+                    interface = {"header_dirs": [str(include)], **reviewed}
+                    if name == "cli11" and host != "linux":
+                        interface = _library_interface(package, roots, config, host, policy)
                 if metadata:
                     selected["expected_versions"] = {module: versions[name] for module in selected["modules"]}
                     patch = _compile_interface_patch(spec, name, interface)
@@ -1768,6 +1761,16 @@ def resolve_dependencies(tree: Path, config: str, *, group: str, prefix: str | N
         adapter = _Adapter(spec, {"schema": 1, "patches": patches})
         adapter.prepare()
         for name, prepared_interface, _ in adapter.packages:
+            if name in child_includes:
+                child = adapter.path(str(child_includes[name]), directory=True)
+                # A port can own sibling integrations too. Reject broader metadata roots
+                # before selecting individual files, even when a vcpkg .list is available.
+                header_dirs = [adapter.path(path, directory=True) for path in prepared_interface.header_dirs]
+                if header_dirs != [child]:
+                    raise native.BazelWorkspaceError(
+                        f"incompatible header roots for {name}; expected only the reviewed child include {child}, "
+                        f"got {prepared_interface.header_dirs}"
+                    )
             if host == "windows":
                 forbidden = {
                     "mimalloc": {"MI_SHARED_LIB_EXPORT", "MI_STATIC_LIB"},

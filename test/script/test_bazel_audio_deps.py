@@ -4,6 +4,7 @@ import json
 import subprocess
 import tempfile
 import unittest
+from itertools import product
 from pathlib import Path
 from unittest.mock import patch
 
@@ -112,7 +113,7 @@ class BazelAudioSpecTest(unittest.TestCase):
         self.root = Path(temporary.name).resolve()
         self.tree = self.root / "workspace"
         self.tree.mkdir()
-        self.provider = self.root / "provider"
+        self.provider = self.root / f"{'0' * 32}-fixture-dev"
         for marker in ("opus/opus.h", "catch/fakeit.hpp"):
             header = self.provider / "include" / marker
             header.parent.mkdir(parents=True, exist_ok=True)
@@ -128,6 +129,7 @@ class BazelAudioSpecTest(unittest.TestCase):
         self.policy = self.root / "policy.json"
         self.policy.write_text(json.dumps(policy), encoding="utf-8")
         self.versions = {"opus": "1.6.1", "fakeit": "2.5.0"}
+        self.header_cflags = {}
         self.resolver = self.provider / "bin/resolver"
         self.resolver.parent.mkdir()
         self.resolver.touch()
@@ -155,37 +157,31 @@ class BazelAudioSpecTest(unittest.TestCase):
         if "-d" in argv:
             self.assertEqual(argv, [str(self.resolver), "-d", str(self.provider / "lib/libopus.so")])
             return subprocess.CompletedProcess(argv, 0, "(SONAME) [libopus.so]", "")
-        # Linux codecs are shared imports; a --static query would change the set.
-        self.assertNotIn("--static", argv)
-        options = [value for value in argv[1:] if value.startswith("--")]
+        options = [value for value in argv[1:] if value.startswith("--") and value != "--static"]
         self.assertEqual(len(options), 1, argv)
         option, module = options[0], argv[-1]
-        self.assertEqual(module, "opus")
+        self.assertTrue(module == "opus" or module in self.header_cflags, argv)
+        # Linux codecs are shared imports; the test group uses static flag queries.
+        self.assertEqual("--static" in argv, module != "opus" and option in ("--cflags", "--libs"))
         if option == "--modversion":
-            text = self.versions["opus"]
+            text = self.versions[module]
         elif option == "--variable=pcfiledir":
             text = str(self.pc)
         elif option in ("--print-requires", "--print-requires-private"):
             text = ""
         elif option == "--cflags":
-            text = f'-I"{self.provider / "include/opus"}"'
+            text = self.header_cflags.get(module, f'-I"{(self.provider / "include/opus").as_posix()}"')
         elif option == "--libs":
-            text = f'-L"{self.provider / "lib"}" -lopus'
+            text = f'-L"{(self.provider / "lib").as_posix()}" -lopus' if module == "opus" else ""
         else:
             self.fail(f"unexpected pkg-config query: {argv}")
         return subprocess.CompletedProcess(argv, 0, text, "")
 
     def refresh(self):
-        def metadata_flags(spec, option, *, package=None):
-            # Only the opus compile-interface supplement may query metadata here.
-            self.assertEqual((option, package), ("--cflags", "opus"))
-            return ["-I" + str(self.provider / "include/opus")]
-
         with (
             patch.object(native, "native_platform", return_value="linux"),
             patch.object(providers, "POLICY", self.policy),
             patch.object(providers, "linux_provider", side_effect=self.provider_spec),
-            patch.object(dependencies, "_metadata_flags", side_effect=metadata_flags),
             patch.object(providers, "verify_linux_resolution"),
             patch.object(bazel_deps.subprocess, "run", side_effect=self.query),
             patch.object(bazel_deps, "_Adapter", wraps=bazel_deps._Adapter) as adapters,
@@ -219,10 +215,44 @@ class BazelAudioSpecTest(unittest.TestCase):
         self.assertEqual(fallback["expect"]["unmet_requirements"], ["manual_interface"])
         self.assertEqual(fallback["add"], {"header_dirs": [str(self.provider / "include/catch")]})
         self.assertEqual(fallback["expect"]["missing"], fallback["add"])
-        (self.provider / "include/catch/new-header.hpp").touch()
-        self.assertEqual(len(self.refresh()), 2)
-        self.assertIn(str(self.provider / "include/catch/new-header.hpp"), observed_sources(self.resolutions["test"]))
+        include = self.provider / "include"
+        (include / "catch/new-header.hpp").touch()
+        (include / "standalone").mkdir()
+        (include / "standalone/fakeit.hpp").touch()
+        with patch.object(bazel_deps, "_NIX_STORE", self.root):
+            self.refresh()
+        # A directory link would also make ../standalone/fakeit.hpp visible locally.
+        (tree,) = self.resolutions["test"]["packages"][0]["headers"]
+        self.assertEqual(tree["root"], str(include / "catch"))
+        self.assertEqual([entry["path"] for entry in tree["files"]], ["fakeit.hpp", "new-header.hpp"])
         self.assertFalse((self.tree / "generated/test/artifacts").exists())
+
+    def test_reviewed_child_include_controls_projection_and_rejects_broader_metadata(self):
+        name = "fixture_headers"
+        include = self.provider / "include"
+        child = include / "fixture/integration"
+        child.mkdir(parents=True)
+        (child / "fixture.hpp").touch()
+        policy = native.read_json(self.policy)
+        (package,) = policy["packages"]["test"]
+        package.update(name=name, modules=[name], header="fixture/integration/fixture.hpp")
+        policy["header_fallbacks"][name] = {"linux": {"include": "fixture/integration"}}
+        native.write_json(self.policy, policy)
+        self.versions[name] = self.versions.pop("fakeit")
+        (self.pc / f"{name}.pc").touch()
+        self.header_cflags[name] = f'-isystem "{child.as_posix()}"'
+
+        with patch.object(bazel_deps, "_NIX_STORE", self.root):
+            self.refresh()
+            (projected,) = self.resolutions["test"]["packages"]
+            self.assertEqual(projected["name"], name)
+            (tree,) = projected["headers"]
+            self.assertEqual(tree["root"], str(child))
+            self.assertEqual([entry["path"] for entry in tree["files"]], ["fixture.hpp"])
+
+            self.header_cflags[name] += f' -I "{include.as_posix()}"'
+            with self.assertRaisesRegex(native.BazelWorkspaceError, "reviewed child include"):
+                self.refresh()
 
 
 class BazelNativeAudioInterfaceTest(unittest.TestCase):
@@ -662,7 +692,9 @@ class BazelWindowsAudioCodecProjectionTest(unittest.TestCase):
 class BazelNativeFakeItHeaderTest(unittest.TestCase):
     """The reviewed native FakeIt child-include spellings, witnessed through real refreshes."""
 
-    def arrange(self, host, *, fakeit_child=True):
+    FAKEIT_INCLUDE = "include/fakeit/single_header/catch"
+
+    def arrange(self, host, *, fakeit_includes=()):
         temporary = tempfile.TemporaryDirectory(prefix="aobus-native-fakeit-")
         self.addCleanup(temporary.cleanup)
         root = Path(temporary.name).resolve()
@@ -675,10 +707,11 @@ class BazelNativeFakeItHeaderTest(unittest.TestCase):
             "#define CATCH_VERSION_MAJOR 3\n#define CATCH_VERSION_MINOR 7\n#define CATCH_VERSION_PATCH 0\n",
             encoding="utf-8",
         )
-        child = include / "fakeit/single_header/catch/fakeit.hpp"
-        child.parent.mkdir(parents=True)
-        if fakeit_child:
-            child.write_text("fixture header\n", encoding="utf-8")
+        child_header = prefix / self.FAKEIT_INCLUDE / "fakeit.hpp"
+        alternate_header = child_header.parent.with_name("standalone") / "fakeit.hpp"
+        for header in (child_header, alternate_header):
+            header.parent.mkdir(parents=True)
+            header.write_text("fixture header\n", encoding="utf-8")
         library_dir = prefix / "lib"
         library_dir.mkdir(parents=True)
         archive = library_dir / ("Catch2.lib" if host == "windows" else "libCatch2.a")
@@ -689,8 +722,12 @@ class BazelNativeFakeItHeaderTest(unittest.TestCase):
             main.write_bytes(static_archive())
         pcdir = library_dir / "pkgconfig"
         pcdir.mkdir()
-        # Catch2 keeps its metadata; FakeIt has none and must use the reviewed fallback.
         (pcdir / "catch2-with-main.pc").write_text("Name: Catch2\nVersion: 3.7.0\n", encoding="utf-8")
+        fakeit_cflags = " ".join(f'-I"{(prefix / directory).as_posix()}"' for directory in fakeit_includes)
+        if fakeit_cflags:
+            (pcdir / "fakeit.pc").write_text(
+                f"Name: FakeIt\nVersion: 2.5.0\nCflags: {fakeit_cflags}\n", encoding="utf-8"
+            )
         if host == "windows":
             (prefix / "bin").mkdir()  # Probed for staged Catch2 DLLs; none may exist.
         info = root / "vcpkg/info"
@@ -701,7 +738,8 @@ class BazelNativeFakeItHeaderTest(unittest.TestCase):
             encoding="utf-8",
         )
         (info / f"fakeit_2.5.0_{triplet}.list").write_text(
-            f"{triplet}/include/fakeit/single_header/catch/fakeit.hpp\n", encoding="utf-8"
+            "".join(f"{header.relative_to(root).as_posix()}\n" for header in (child_header, alternate_header)),
+            encoding="utf-8",
         )
         resolver = root / "resolver"
         resolver.touch()
@@ -731,22 +769,24 @@ class BazelNativeFakeItHeaderTest(unittest.TestCase):
             options = [value for value in argv[1:] if value.startswith("--") and value != "--static"]
             self.assertEqual(len(options), 1, argv)
             option, module = options[0], argv[-1]
-            self.assertEqual(module, "catch2-with-main")
+            self.assertIn(module, ("catch2-with-main", "fakeit") if fakeit_includes else ("catch2-with-main",))
             # Static interfaces carry --static exactly on flag queries; the adapter
             # probes versions and metadata locations without it.
             self.assertEqual("--static" in argv, option in ("--cflags", "--libs"))
             if option == "--modversion":
-                text = "3.7.0"
+                text = versions["fakeit" if module == "fakeit" else "catch2"]
             elif option == "--variable=pcfiledir":
                 text = str(pcdir)
             elif option in ("--print-requires", "--print-requires-private"):
                 text = ""
             elif option == "--cflags":
-                text = f'-I"{include.as_posix()}"'
+                text = fakeit_cflags if module == "fakeit" else f'-I"{include.as_posix()}"'
             elif option == "--libs":
-                text = (
-                    f'-L"{library_dir.as_posix()}/manual-link" -lCatch2Main ' if host == "windows" else ""
-                ) + f'-L"{library_dir.as_posix()}" -lCatch2'
+                text = ""
+                if module == "catch2-with-main":
+                    text = (
+                        f'-L"{library_dir.as_posix()}/manual-link" -lCatch2Main ' if host == "windows" else ""
+                    ) + f'-L"{library_dir.as_posix()}" -lCatch2'
             else:
                 self.fail(f"unexpected pkg-config query: {argv}")
             return subprocess.CompletedProcess(argv, 0, text, "")
@@ -759,16 +799,16 @@ class BazelNativeFakeItHeaderTest(unittest.TestCase):
                 patch.object(providers, "native_provider", side_effect=provider),
                 patch.object(bazel_deps.subprocess, "run", side_effect=query),
             ):
-                resolution = dependencies.resolve_dependencies(tree, "release", group="test")
-            return resolution["manifest"], observed_sources(resolution)
+                return dependencies.resolve_dependencies(tree, "release", group="test")
 
         return prefix, refresh
 
     def test_native_fakeit_publishes_only_the_reviewed_child_header_interface(self):
-        for host in ("windows", "macos"):
-            with self.subTest(host=host):
-                prefix, refresh = self.arrange(host)
-                manifest, sources = refresh()
+        for host, metadata in product(("windows", "macos"), (False, True)):
+            with self.subTest(host=host, metadata=metadata):
+                prefix, refresh = self.arrange(host, fakeit_includes=(self.FAKEIT_INCLUDE,) if metadata else ())
+                resolution = refresh()
+                manifest = resolution["manifest"]
                 self.assertEqual(manifest["configuration"]["platform"], host)
                 self.assertEqual(manifest["configuration"]["linkage"], "static")
                 packages = {package["name"]: package for package in manifest["packages"]}
@@ -791,14 +831,51 @@ class BazelNativeFakeItHeaderTest(unittest.TestCase):
                     + [{"name": "Catch2", "kind": "static", "file": str(archive)}],
                 )
                 fakeit = packages["fakeit"]
-                self.assertEqual(fakeit["origin"], "manual_fallback")
-                child = prefix / "include/fakeit/single_header/catch"
+                self.assertEqual(fakeit["origin"], "automatic" if metadata else "manual_fallback")
+                child = prefix / self.FAKEIT_INCLUDE
                 self.assertEqual(fakeit["interface"]["header_dirs"], [str(child)])
                 self.assertEqual(fakeit["declared_headers"], 1)
                 self.assertEqual(fakeit["resolved_libraries"], [])
-                self.assertIn(str(child / "fakeit.hpp"), sources)
-                self.assertIn(str(prefix / "include/catch2/catch_version_macros.hpp"), sources)
-                self.assertIn(str(archive), sources)
+
+                projected = {package["name"]: package for package in resolution["packages"]}
+                (fakeit_tree,) = projected["fakeit"]["headers"]
+                # Catch2's enclosing root and FakeIt's owned standalone header must not widen this tree.
+                self.assertEqual(projected["fakeit"]["includes"], [{"tree": 0, "path": "."}])
+                self.assertEqual(fakeit_tree["root"], str(child))
+                self.assertEqual(fakeit_tree["files"], [{"path": "fakeit.hpp", "source": str(child / "fakeit.hpp")}])
+                (catch2_tree,) = projected["catch2"]["headers"]
+                marker = "catch2/catch_version_macros.hpp"
+                self.assertEqual(catch2_tree["files"], [{"path": marker, "source": str(prefix / "include" / marker)}])
+                self.assertIn(str(archive), [library["source"] for library in projected["catch2"]["libraries"]])
+
+    def test_native_fakeit_rejects_metadata_with_an_enclosing_include_root(self):
+        for host, roots in product(("windows", "macos"), (("include",), (self.FAKEIT_INCLUDE, "include"))):
+            with self.subTest(host=host, roots=roots):
+                _, refresh = self.arrange(host, fakeit_includes=roots)
+                with self.assertRaisesRegex(native.BazelWorkspaceError, "fakeit.*expected only the reviewed child"):
+                    refresh()
+
+    def test_native_fakeit_rejects_a_child_alias_to_or_outside_the_include_root(self):
+        for host, target_dir in product(("windows", "macos"), ("include", "outside-include")):
+            with self.subTest(host=host, target_dir=target_dir):
+                prefix, refresh = self.arrange(host, fakeit_includes=(target_dir,))
+                child = prefix / self.FAKEIT_INCLUDE
+                target = prefix / target_dir
+                target.mkdir(exist_ok=True)
+                (child / "fakeit.hpp").rename(target / "fakeit.hpp")
+                child.rmdir()
+                try:
+                    child.symlink_to(target, target_is_directory=True)
+                except OSError as error:
+                    if getattr(error, "winerror", None) != 1314:  # ERROR_PRIVILEGE_NOT_HELD
+                        raise
+                    self.skipTest("Windows symlink privileges are unavailable")
+                # Keep the physical target owned as well, so an inventory error cannot mask the policy.
+                inventory = prefix.parent / "vcpkg/info" / f"fakeit_2.5.0_{prefix.name}.list"
+                with inventory.open("a", encoding="utf-8") as stream:
+                    stream.write(f"{prefix.name}/{target_dir}/fakeit.hpp\n")
+                with self.assertRaisesRegex(native.BazelWorkspaceError, "invalid reviewed child include for fakeit"):
+                    refresh()
 
 
 class BazelMacAudioMetadataTest(unittest.TestCase):

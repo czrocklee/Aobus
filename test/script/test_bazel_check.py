@@ -119,11 +119,14 @@ class RequiredScopeTest(unittest.TestCase):
         self.assertIn("//test:gtk_test", completion._selection("linux", completion.Request()).required)
 
     def test_header_sharing_is_a_linux_only_evidence_requirement(self):
-        selector = "//bazel/header_share:selector_test"
+        sparse_headers = "//bazel/header_share:sparse_headers_test"
         for platform in ("linux", "macos", "windows"):
             with self.subTest(platform=platform):
                 selection = completion._selection(platform, completion.Request(ci=True))
-                self.assertEqual(selector in selection.required - selection.optional, platform == "linux")
+                for label in ("//bazel/header_share:selector_test", sparse_headers):
+                    self.assertEqual(label in selection.required - selection.optional, platform == "linux")
+                # //:check_tests expands the consumer even on hosts that skip it.
+                self.assertEqual(sparse_headers in selection.optional, platform != "linux")
 
     def test_only_windows_ci_requires_the_interactive_probe(self):
         uia = "//test:winui_uia_test"
