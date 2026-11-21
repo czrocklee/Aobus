@@ -33,20 +33,16 @@ Enter persists a valid draft, Escape cancels, and persistence failures retain th
 An empty expression disables ownership.
 No active or readable playing track, or an empty formatted result, falls back to Soul alone when enabled, otherwise `Aobus`.
 
-The terminal title and Settings draft preview each own a `TerminalTitleFormatter`, which caches the compiled plan and the playing track text.
-Each formatter subscribes to applied library changes on the callback executor and invalidates its cached text when a change is published.
-Unchanged playback ticks do not open database snapshots, reload track data, or evaluate either plan, including while the Settings preview is open.
-Idle formatting does not open a snapshot, including after a library publication.
-The runtime snapshot reads a single track, including dictionary-backed and custom fields, independent of list selection and size.
-Only changed output produces OSC 2.
-Updates caused only by Soul animation are coalesced to the latest sampled frame with at least 200 milliseconds between writes.
-Playing-track, formatted metadata, format preference, transport, Soul visibility, and reduced-motion changes bypass that animation interval; title disablement and restoration are immediate.
-The title payload replaces terminal control characters and line breaks with spaces and limits output to 512 terminal cells without splitting Unicode text.
-The first update pushes the window title using the xterm title stack; disabling and normal or handled-signal exit pop it exactly once.
-Restoration is best effort when the output sink fails; teardown retires ownership without retrying a potentially delivered pop.
-A sink reports terminal I/O failure as `false` or `std::system_error`; the title owner attempts restoration once and disables further output without throwing that I/O failure through the application loop or skipping its session checkpoints.
-Other callback exceptions remain programming failures and are not classified as optional output rejection.
-Terminals without title-stack support may retain the last application title until the shell replaces it.
+**Refreshing the text.** The published title and the Settings preview each own a `TerminalTitleFormatter` that caches its compiled plan and playing-track text.
+Applied library changes invalidate each formatter's text on the callback executor. When a read is needed, the runtime snapshot reads only the playing track, including dictionary-backed and custom fields, regardless of list selection or size.
+Unchanged playback ticks neither open a snapshot nor reload track data nor evaluate a plan, even with the preview open. With no playing track, even a library publication requires no snapshot.
+
+**Writing the title.** Only changed output produces OSC 2. The formatter replaces terminal controls and line breaks with spaces and limits the payload to 512 terminal cells without splitting Unicode text.
+For Soul animation alone, the title owner writes the latest sampled frame at intervals of at least 200 milliseconds. Playing-track, formatted metadata, format preference, transport, Soul visibility, and reduced-motion changes bypass that interval.
+
+**Restoring the shell title.** The first write for each acquisition pushes the window title onto the xterm title stack. Disabling the title or exiting normally or by a handled signal attempts one pop while the owner still holds the title, without waiting for animation.
+A sink that returns `false` or throws `std::system_error` may already have delivered the escape. The owner makes at most one restoration attempt and retires output; teardown does not retry the pop. This I/O failure neither escapes through the loop nor skips session checkpoints. Other callback exceptions remain programming failures.
+A terminal without title-stack support may retain the last application title until the shell replaces it.
 
 The optional Soul prefix shares glyph selection and motion samples with the playback button.
 The title owner caches the formatted track text separately from the composed title, so glyph changes never cause format reevaluation.
@@ -112,20 +108,21 @@ Browse overlays admit only play/pause, stop, sequence navigation, mode toggles, 
 ### Playback modes
 
 The playback bar's single mode button cycles through `SEQ-` → `SEQ*` → `SHF-` → `SHF*` → `SEQ1` → `SEQ-`, using the [locale-neutral mode codes](../../reference/tui/command.md#playback-mode-codes).
-Its padded six-cell hit region has the same width for every mode and locale, so mode changes alone keep repeated clicks on the button; hover highlights the whole target.
-The mode and output-backend targets are adjacent and disjoint, with one padding cell per target between their labels and no extra separator.
-With a known duration, elapsed time reserves enough columns to reach that duration without widening; before duration resolves, it keeps its compact zero-time label.
-Volume reserves room for the localized full-volume and mute labels while retaining readable title space and a seek cell; narrow layouts always retain the complete numeric volume and may ellipsize a longer mute label within that stable slot.
-With the same duration, backend, locale, and terminal width, ordinary ticking and volume/mute changes preserve the mode and output targets.
-An unrecognized mode keeps the layout space but has no hover or click target; a stale click cannot normalize an unrecognized runtime mode.
-Hover replaces ordinary workspace hints with the localized current mode and click destination, right-aligned in the status bar.
-After each painted frame, retained button hover is retired if the last pointer position no longer hits that button; duration resolution, track/backend changes, and terminal resizing can still move the controls and restore ordinary hints.
-This geometry check does not reinstate hover cancelled by keyboard input or interrupt an active pointer drag.
-When both do not fit, the current mode takes priority; active input, visual selection, popovers, and keyboard panel resizing keep their own hints.
-An activity slot is omitted when its available width cannot fit the four frame cells and at least one content cell.
-With mouse control enabled and no foreground input or modal surface owning the click, a left press applies the next preset through playback commands without opening a menu.
-When keyboard commands enable shuffle together with repeat-one, the button shows `SHF1` and its localized hover names both preferences; the next mode-button press returns to `SEQ-`.
-Keyboard shuffle and repeat remain independent and report localized status, including turning a mode off.
+With mouse control enabled, no foreground surface owning the click, and playback ready, a left press applies the next preset through playback commands without opening a menu. When playback is unavailable, the modes remain unchanged and a warning is posted.
+Keyboard shuffle and repeat remain independent and report localized status even when turning a mode off. If they select shuffle with repeat-one, the button shows `SHF1`, its hover names both preferences, and the next click returns to `SEQ-`.
+An unrecognized runtime mode keeps its space but has no click or hover target; a stale click cannot change it to a recognized mode.
+
+The dock keeps the mode and output targets stationary through ordinary ticks, volume changes, and muting when duration, backend, locale, and terminal width stay the same:
+
+| Control         | Width budget                                                                                                                                                                                                                   |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Mode and output | The mode occupies six cells in every mode and locale. Its entire padded target highlights on hover. The two targets touch without overlapping; each contributes one padding cell between the labels, with no extra separator.  |
+| Elapsed time    | Reserve the width of the known duration; until it resolves, use the compact zero-time label.                                                                                                                                   |
+| Volume          | Reserve the full localized numeric volume and, where space permits, the mute label. Preserve readable title space and a seek cell before allocating extra width to mute; ellipsize a longer mute label within the stable slot. |
+
+Hover replaces ordinary workspace hints with the localized current mode and click destination, right-aligned. When both do not fit, the current mode takes priority. The hover status omits activity if it cannot fit four frame cells and one content cell. Active input, visual selection, popovers, and keyboard panel resizing keep their own hints.
+
+After painting, the controller clears retained hover if the last pointer position no longer hits the button. Duration resolution, a track or backend change, or resizing can thus restore ordinary hints without pointer motion. This check neither revives hover cancelled by a key nor interrupts a drag.
 
 ## State model
 
@@ -177,13 +174,24 @@ The Command Palette is a centered bounded fraction of terminal width and height 
 Quick Filter replaces the bottom status-bar content with its draft and actual caret; its completion list, footer, and current expression error occupy a bounded popup anchored directly above that row.
 Runtime/query completions without TUI category metadata retain their core detail.
 
-The Quick Filter footer reflects the input transition: empty text advertises clear/preserve, text without candidates advertises literal application, and candidates advertise acceptance/completion. An empty completion result is not a track-search failure. Below 80 panel columns the history reminder yields its row to the current transition hint.
+The Quick Filter footer reflects the input transition: empty text advertises clear/preserve, text without candidates advertises literal application, and candidates advertise acceptance/completion. An empty completion result is not a track-search failure. On narrow panels the [footer width budget](#status-hints-at-narrow-widths) gives the transition hint priority over the history reminder.
 
 ### Workspace and overlays
 
 Empty track-table copy is selected from the active runtime view and its filter error, not an unsubmitted input draft. Invalid filters, valid filters without matches, empty Lists, and unfiltered empty All Tracks each have their own explanation; only the last offers the existing `:scan` command. The table wraps the explanation within its available width.
 
-The one-row workspace status bar keeps activity and the current filter on the left, with operation hints grouped against the right edge. It budgets complete shortcut chips in terminal cells. It reserves Settings and Help, then the filter and its clear action before secondary workspace shortcuts. Filter text uses an explicit ellipsis when shortened; an invalid draft carries `!`. At widths below 100 columns, filtered workspaces suppress informational compact text and represent active work or warnings/errors with a clickable indicator that opens Notifications. Hidden activity and Settings regions are explicitly invalidated. A visual range exposes keep/cancel controls without changing the selection transitions, including while Detail is visible.
+#### Status hints at narrow widths
+
+The one-row workspace status bar keeps activity and the current filter on the left, with operation hints at the right. It admits whole shortcut chips, reserving Settings and Help, then the active filter and its clear action before secondary shortcuts. An ellipsis marks shortened filter text; `!` marks an invalid draft.
+
+| Surface                   | Width constraint                   | What remains visible                                                                                                                                                                                 |
+| ------------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Quick Filter footer       | Panel narrower than 80 columns     | Keep the transition hint; omit the history reminder.                                                                                                                                                 |
+| Filtered workspace status | Terminal narrower than 100 columns | Omit informational activity text. For active work, a warning, or an error, show a clickable Notifications indicator only if at least 16 workspace columns remain after the entry points and spacing. |
+
+Hidden activity and Settings controls have no hit regions. With Tracks focused, the visual-range hints show the effective keep shortcut when bound and fixed Escape to cancel, even with Detail visible. Explicit Detail focus shows section hints instead.
+
+#### Operate the track workspace
 
 The playback bar measures its fixed controls and allocates remaining cells between the title and seek rail, shortening the rail on constrained terminals. Existing keyboard seeking remains available. A present playback subject without title metadata uses the localized track-id fallback; missing metadata alone never renders the no-active-track state.
 
@@ -204,7 +212,26 @@ A fallback or later plain-list navigation supplies that list's saved or recommen
 A successful user presentation choice records the current base list's preference, while filtering and exact workspace attachment do not.
 Reload follows the same direct materialization path; if the controller's view disappeared, it attaches a different active workspace view when available and otherwise opens All Tracks.
 
-Lists are pinned by default with keyboard focus on Tracks. Pinning is a layout preference independent of focus and popup visibility. The pane docks when its 26 cells, at least 72 track-content cells, and the track borders plus one-cell inner padding fit after subtracting Detail. Docked Lists, Tracks, and Detail use the global `panelSeparator` preference: `single` shares one vertical border with joined top and bottom edges; `double` keeps adjacent panel borders with separate corners. Each double separator costs one additional column, included in docking thresholds and track-column allocation. Changing the preference publishes after a successful Settings save without changing focus or pinning, except when the resulting geometry can no longer fit Lists. Each workspace pane keeps one cell of horizontal padding inside its frame, outside track selection highlighting. Permanent Lists and Detail frames omit their redundant headings; popup titles remain visible. Pinned Lists keeps only the selected row's local expression below its tree, aligned with the content gutter and rendered dim. The caption uses one or two rows, wraps at word boundaries where possible, and ellipsizes excess text on its second row without splitting wide glyphs. Empty expressions allocate no caption row. Its separator and panel-local focus hint are omitted; the global Lists status uses the executable focus-return shortcut, with fixed Tab while searching. The pane is only drawn when docked. If resizing removes its space, focus returns to Tracks. If resizing restores a pinned pane while its temporary chooser is open, the chooser closes and focus moves to the pane; an unpinned chooser stays open. The separate `Overlay::ListChooser` remains available through `l` and the track frame button. Geometry is derived each frame.
+#### Fit Lists beside Tracks
+
+Lists starts pinned by default with keyboard focus on Tracks. Pinning is a layout preference, not a focus or popup state. Each frame lays out Detail, if visible, and docks Lists only if the remaining space meets these budgets:
+
+| Part of the workspace | Horizontal budget in terminal cells                                                                                                                                                                               |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Lists                 | 26 framed columns at automatic width; with an explicit request, the pane can shrink to 18.                                                                                                                        |
+| Tracks                | Reserve 72 track-content columns, plus its two borders and one inner padding column in the docking calculation.                                                                                                   |
+| Detail                | Subtract its effective framed width, allowing for a shared border. An explicit resize has a 24-column framed minimum where space permits.                                                                         |
+| Dividers              | `single` shares a vertical border and joins its top and bottom edges. `double` keeps adjacent borders and separate corners; each double divider costs one extra column when docking and allocating track columns. |
+
+A narrower terminal can constrain the displayed widths further or undock Lists; clamping never overwrites preferred widths. Widening or reopening a pane restores its request when space permits.
+Settings publishes the global `panelSeparator` only after a successful save. The change does not toggle pinning or move focus unless docking availability changes.
+If a focused Lists pane loses its space, focus returns to Tracks. If a pinned pane regains space while its temporary chooser is open, the chooser closes and the pane takes focus; an unpinned chooser stays open.
+
+The permanent Lists and Detail frames omit headings; popups keep their titles. Inside each frame one cell per side separates the content from the border. The track highlight does not cover that padding, and the Lists and Tracks scrollbars use the right cell.
+Below the tree, only the selected List's local expression appears, dim and aligned with the content gutter. An empty expression costs no row. Otherwise the caption wraps at word boundaries where possible and uses at most two rows, ellipsizing overflow without splitting wide glyphs.
+There is no caption separator or local focus hint: the Lists status shows the executable return-focus shortcut, or fixed Tab during search.
+
+#### Access and navigate Lists
 
 `l` / `:lists` focuses a visible pinned pane or toggles the popup when no pinned pane is visible. It never changes the layout preference. `L` / `:sidebar` independently toggles pinning through `tui.workspace.togglePinnedLists`; enabling it focuses Lists when there is room to dock, and disabling it returns to Tracks. Pinning from the chooser closes the popup and opens the tree when space permits. At insufficient width the pin preference is retained and temporary popup access remains available. Printable search and editor input retains priority over these root bindings.
 
@@ -224,9 +251,22 @@ The chooser restores the compact anchored list presentation: All Tracks plus eve
 
 The Lists pin preference is persisted in the per-library layout file's versioned `navigation` group. Cursor, expansion, search, focus and chooser visibility are session-local. Panel width requests persist independently in the `panels.navigation` and `panels.detail` fields, with zero selecting automatic width. The existing `navigation.enabled` field stores this preference. Missing or malformed navigation state defaults to pinned independently of other groups. The existing coalesced layout writer saves all groups together; failure leaves live state and dirty state intact, posts one localized warning, and retries at the next requested checkpoint or normal exit.
 
+#### Navigate with Go to
+
 Go to is a modal navigation menu opened by the effective `tui.navigation.openGoTo` shortcut (default `g`) or `:goto`. It owns fixed suffixes `t`/`a`/`b` for the playing track/artist/album and `[`/`]` for backward/forward view history. Arrows, j/k, page keys, Home/End, and Enter provide menu selection. The menu has no timeout; unrelated keys dismiss it without reaching root actions. Escape closes the menu before cancelling any visual selection. Text input and stronger editors retain their own input ownership.
 
-While Go to is open, the status row replaces ordinary shortcuts and activity with clickable suffix hints and Escape to cancel. Labels shorten by terminal cells at constrained widths; the suffixes and Escape take priority. The footer reserves the complete Escape key first, then admits whole suffix chips and separators in menu order. All five suffixes fit at 23 cells; narrower footers omit trailing options instead of clipping controls. Below three cells, the footer paints no controls or mouse targets. Disabled destinations stay dimmed wherever their chips fit; omitted footer actions remain available through the menu and keyboard. Menu and footer clicks validate the rendered playback/history snapshot before activation, so a changed playback subject cannot redirect an old target. Successful navigation or cancellation restores ordinary status hints. Help groups actions by navigation, browsing, playback, selection and editing, panels, and application.
+While Go to is open, its clickable status hints replace ordinary shortcuts and activity. The footer shortens labels before keys and never clips a control:
+
+| Footer width       | Controls that fit                                                                                    |
+| ------------------ | ---------------------------------------------------------------------------------------------------- |
+| Fewer than 3 cells | None; there are no mouse targets.                                                                    |
+| 3–22 cells         | Reserve the complete `Esc` first, then admit whole suffix chips with their separators in menu order. |
+| 23 cells or more   | All five suffixes and `Esc`.                                                                         |
+
+Disabled destinations remain dimmed where their chips fit. Omission from the footer does not remove an action from the menu or keyboard.
+Destination clicks in the menu and footer compare the painted now-playing information and Back/Forward availability with current state, so a changed playback subject cannot redirect an old click. Successful navigation or cancellation restores ordinary hints.
+
+#### Inspect the focused track
 
 The detail sidebar follows the focused track while leaving keyboard navigation with the workspace. The effective `tui.detail.focus` action (default uppercase `D`) opens it if needed and explicitly transfers keyboard focus to its sections. Ordinary `Tab` / `Shift+Tab` continue to alternate Lists and Tracks; from Detail either first returns to Tracks. Detail owns `j/k` and Up/Down to select its Metadata or Audio Properties section, Enter to toggle, Left/Right to collapse/expand, and PageUp/PageDown to scroll. The selected header is revealed and highlighted only while Detail has keyboard focus. Escape returns to Tracks without hiding Detail or cancelling a visual selection. Playback shortcuts remain available. A modal or text input takes precedence over Detail keys.
 
@@ -237,11 +277,23 @@ While it is visible, track and group navigation, wheel selection, scrollbar drag
 Entering text input suspends those gestures for the duration of the input without closing the inspector.
 A track-row click focuses that track; two consecutive unmodified clicks on the same track within 400 ms start playback. Other keys, wheel movement, and intervening controls break the click pair.
 
-The quality, output, presentation, and notification popovers use their effective toggle shortcut to reopen or close that popover.
-Help is a centered, scrollable popover, up to 88 columns wide, over the full-width workspace. Its two-column body pairs effective shortcuts with action descriptions; actions without a shortcut retain a command entry. The Command Palette provides the full command inventory. The title and footer remain visible while the body scrolls. Escape and the effective Help shortcuts close it. Opening and closing Help preserve the underlying filter, focused track, and table layout.
-Return or a row click activates a List, presentation, or output row. Wheel input over those panels moves their selection; over Detail, Quality, Help, or Notifications it scrolls panel content. Centered and anchored popovers share a one-cell clear outer halo, outside their mouse hit regions. Popovers use Escape or outside-click dismissal without a redundant `×` button. Foreground panel regions consume clicks before workspace controls beneath them. A left-button press outside a rendered Lists, Quality, Output, Presentations, Notifications, or Help popover closes it and consumes that press, including clicks on another trigger; background controls require a subsequent click. Closing also retires a stale quality hover. The Detail side panel and Settings do not use outside-click dismissal. Settings retains an explicit close button for its unsaved-change flow. Track-authoring dismissal and unsaved-change behavior belongs to the [TUI track-authoring specification](tui-track-authoring.md).
-Presentation and output pickers accept Up/Down and j/k, PageUp/PageDown, and Home/End. Help, Quality, and Notifications use the same keys to scroll. Unfocused Detail leaves keyboard navigation with the workspace it inspects; explicitly focused Detail uses the section controls above. Page movement uses the current rendered viewport rather than a fixed row count.
-Settings has one right-aligned, clickable footer of actions for its current state. It wraps between actions on narrow terminals. Language and renderer explanations sit beside their settings; internal action ids remain searchable without occupying the footer. Keyboard search appears on demand through `/` or its footer action. While searching, Escape is labeled Clear and does not also advertise Close; empty results offer no edit action. Chord editing and failed-save recovery replace the ordinary actions with their own save, cancel, retry, and discard controls.
+#### Browse and dismiss popovers
+
+Help centers a panel up to 88 columns wide over the full-width workspace. Its two-column body pairs effective shortcuts with descriptions, grouped by navigation, browsing, list order, playback, selection and editing, panels, and application. When an action has no shortcut, its row falls back to a command if defined; otherwise its shortcut cell is blank. The Command Palette provides the full inventory.
+Only the body scrolls. Opening and closing Help preserves the filter, focused track, and track-table layout.
+
+In the Lists chooser, Presentations, and Output, Up/Down or j/k, page keys, Home/End, and the wheel move selection outside search. Return or a row click activates an eligible selected or clicked row. In Help, Quality, and Notifications, the same keys and the wheel scroll content. Page keys use the rendered viewport when available.
+The wheel scrolls Detail too, but keyboard navigation stays with the workspace unless Detail has explicit focus and uses its section controls.
+
+Quality, Output, Presentations, and Notifications each use their effective toggle shortcut to open or close. Help also closes on its effective Help shortcuts. Popovers name the overlay in the frame title; those with extra context, such as the active view or output device, show it on the right. Picker rows lead with the name and dim any description.
+
+Centered and anchored popovers leave a clear one-cell halo outside their hit regions. Foreground controls consume clicks before the workspace. A left press outside Lists, Quality, Output, Presentations, Notifications, or Help dismisses the popover and consumes the press, even on another trigger. It takes a subsequent click to operate the background control. Closing retires stale quality hover.
+These popovers use Escape or outside dismissal rather than a `×` button. Detail and Settings do not dismiss on outside clicks. Settings has an explicit close button for unsaved changes; [TUI track authoring](tui-track-authoring.md) owns editor dismissal and unsaved changes.
+
+#### Find settings and actions
+
+Settings has one right-aligned, clickable footer. It wraps between actions on narrow terminals. Language and renderer explanations stay beside their settings; internal action ids are searchable but do not occupy the footer.
+On the Keyboard page, `/` or the footer opens search. Escape is labeled Clear there, not Close; empty results offer no edit action. Chord editing and failed-save recovery replace ordinary actions with the applicable save, cancel, retry, and discard controls.
 
 Presentations offer `/` local search by Unicode case-insensitive substring. Settings Keyboard searches localized action labels and stable action ids. Search keeps owner row indices and identities, restricts navigation and activation to matches, and never changes the workspace filter. While searching, printable keys including j/k edit the query; Up/Down and page keys move through matches. Return activates the match, and an empty result cannot activate a hidden row. Escape first clears local search; the next Escape closes the overlay. Switching panels or Settings pages clears that panel's query.
 Outside local search, Escape closes the active overlay.
@@ -250,25 +302,32 @@ Go to keeps its dedicated clickable navigation status row in addition to the men
 Opening an overlay does not post a transient notification; closing it retains the existing status feedback and errors remain visible.
 Notification `x` locally suppresses the compact activity entry according to the shared activity model.
 
+#### Layer foreground surfaces
+
 Overlays are composed over the root in one place, ordered by keyboard ownership: whichever surface answers for every key is drawn last, so no candidate below it can cover a surface that still owns input.
 Each candidate is built only once those above it decline, so an overlay that is not drawn publishes no hit regions for rows nobody can click.
 Kitty artwork is suppressed when an actual foreground rectangle intersects its cover rectangle or clearing halo, including the Lists chooser and shell input; it returns when the obstruction closes. Full-surface editors and exit retain unconditional suppression.
-Only a centred modal surface dims what it covers, because it stands on its own rather than beside the control that opened it and the workspace under it is not what the user is acting on.
+Only a centred modal surface dims what it covers, and only when backdrop dimming is enabled. It stands on its own rather than beside the control that opened it; the workspace under it is not what the user is acting on.
 An anchored panel leaves the workspace lit, and Quick Filter must, because the track table behind it is the very thing the typing changes.
 
 ### Playback dock and seek
 
-The single-row dock contains the Soul transport/quality control, title/artist/album, output badge, elapsed, bounded responsive seek rail, duration, and volume percentage.
-Its metadata links navigate without changing playback: the title reveals the current track, the artist opens an All Tracks view with an exact artist filter, and the album opens the All Tracks `albums` presentation and focuses the current track's group.
-Artist navigation treats the complete metadata value as one quoted query constant, including embedded quotes, backslashes, and multiple artist names.
-Artist and album navigation checkpoint the current live filter and presentation before leaving, so workspace Back/Forward restores the previous view without rewriting saved List predicates.
-An empty artist or album field supplies no link; a missing title uses the clickable track-id fallback. An invalid playback track supplies no links. A click captured before the playback subject or its metadata changes is consumed without navigating until the new text has been rendered.
-Each hit region covers only its painted text, excluding separators and padding. Narrow docks shorten whole display-cell clusters and omit trailing metadata fields when space is insufficient; hidden fields have no hit region.
-The title is accented and bold, the artist uses normal text, and the album is dimmed, with `·` before the artist and `/` before the album when both are present.
-Hover applies the shared button highlight only to the pointed field without changing its geometry; separators, hidden fields, and metadata behind active input or overlays are not hover targets.
-Within the admitted fields, shortening preserves the title before the artist and the album while retaining small readable linked fragments.
-The `artist` and `album` commands expose the same destinations when their text is hidden. Text input, editors, and floating-menu dismissal retain their existing pointer ownership.
-Clicking the volume label toggles mute; wheel input over it adjusts gain by the configured volume step. Muted output renders a localized mute label while preserving the stored level.
+The single-row dock contains the Soul transport and quality control, playing-track metadata, mode button, output badge, elapsed time, responsive seek rail, duration, and volume.
+
+**Navigate without changing playback.**
+
+| Painted field       | Destination                                                                                                                                     | When metadata is missing                        |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| Title (bold accent) | Reveal the current track.                                                                                                                       | A valid track id supplies a clickable fallback. |
+| Artist (normal)     | Open All Tracks filtered by the exact artist. The full value is one quoted constant, even with embedded quotes, backslashes, or multiple names. | No artist link.                                 |
+| Album (dim)         | Open the All Tracks `albums` presentation and focus the current track's group.                                                                  | No album link.                                  |
+
+Artist and album navigation checkpoint the live filter and presentation; Back/Forward restores the previous view without rewriting saved List predicates. The `artist` and `album` commands reach the same destinations when the text does not fit. An invalid playback track has no metadata links.
+
+**Find a link on a narrow dock.** The dock separates linked fields with `·`, or `/` between artist and album. It omits trailing fields if needed and shortens the visible fields at display-cluster boundaries. Title gets priority, then artist, while shorter linked fragments remain readable.
+Only painted text has a hit region. Hover highlights the pointed field without changing its size; separators, padding, hidden fields, and metadata behind input or overlays are not targets. Editors, text input, and floating-menu dismissal keep pointer ownership. A click on stale playback identity or metadata is consumed without navigating until the new state is painted.
+
+**Adjust volume.** Click the volume label to toggle mute, or use the wheel over it to adjust gain by the configured step. The localized mute label replaces the percentage without changing the stored level.
 
 The Soul control toggles playback on click; hover shows quality detail without opening a modal overlay.
 The effective `playback.playPause` shortcut (shipped with Space first) and the Soul control pause active playback and resume paused playback even while an output-device selection is pending.
@@ -278,14 +337,14 @@ Stop is an idempotent silent no-op when playback is already Idle.
 Seek press begins a shared `SeekInteraction` gesture and captures the current playback occurrence and duration. Pointer motion publishes guarded queued preview seeks, and release publishes the matching guarded queued final seek through `PlaybackPositionViewModel`.
 Release beyond the rail clamps to the captured rail range. If playback is replaced while the pointer remains held, continued motion and release stay inert; only a fresh press may target the replacement.
 Keyboard seek captures the snapshot occurrence and asks the same view model for the configured relative step, which defaults to five seconds.
-The queued runtime command samples live elapsed at execution and clamps the target; it is inert without the matching occurrence and a positive duration.
-Keyboard volume asks `VolumeViewModel` for a clamped five-percentage-point relative change, including the shared rule that raising volume clears explicit mute.
+The queued runtime command samples live elapsed at execution and clamps the target to the current track; it is inert without the matching occurrence and a positive duration. A final seek to the end while playing follows ordinary track completion; a paused track can hold that position.
+Keyboard volume asks `VolumeViewModel` for a clamped relative change at the configured step (five percentage points by default), including the shared rule that an increase in the clamped level clears explicit mute.
 
 ### Rendering
 
-Panels use titled-frame chrome with one-cell horizontal body padding. Scrollable bodies use the shared panel-body layout so their built-in scrollbar occupies the right padding cell; the surrounding frame adds no further body padding. The track width budget includes that scrollbar column.
-The detail pane shares one vertical border with Tracks, with a cell of content padding on each side. Its middle `›` control hides it and the collapsed right edge offers `‹` to show it again; both sidebar arrow controls highlight their single-cell click target on hover. Moving away or toggling clears that feedback; `d` toggles the same state. It has no close cross, open/close notification, or modal footer. Escape leaves the sidebar visible. Its outer frame is its only chrome: present cover art renders as artwork alone, with no nested title, separator, or border, and block and Kitty delivery reserve the same terminal cells.
-The detail pane initially derives its width from the active locale's field labels plus a fixed value budget and the cover width, capped at half the terminal. Selecting a different track never changes that width. Explicit sidebar widths override automatic sizing when space permits.
+Panels use titled-frame chrome with one-cell horizontal body padding. Bodies with a built-in scrollbar use the shared panel-body layout so the scrollbar occupies the right padding cell; the surrounding frame adds no further body padding. The track width budget includes that scrollbar column. Detail scrolls its text without drawing a scrollbar.
+Detail meets Tracks at the configured single or double divider, with one cell of content padding on each side. Its middle `›` control hides it and the collapsed right edge offers `‹` to show it again; both sidebar arrow controls highlight their single-cell click target on hover. Moving away or toggling clears that feedback; the effective Detail toggle (default `d`) changes the same state. It has no close cross, open/close notification, or modal footer. Escape leaves the sidebar visible. Its outer frame is its only chrome: present cover art renders as artwork alone, with no nested title, separator, or border, and block and Kitty delivery reserve the same terminal cells.
+Automatic Detail width follows the active locale and cover width, not the selected track. Explicit sidebar widths override automatic sizing when space permits.
 The `revealIndicatorsOnHover` appearance preference defaults to false. When enabled, both sidebars render their idle arrow cells as vertical border strokes without removing or moving the click targets. Hovering a divider or the full collapsed side border reveals its centered arrow; moving away hides it again. Single and double separators follow the same rule. Clicking elsewhere along the border does not toggle the pane.
 
 Pinned Lists and Detail dividers support left-button drag outside the centered indicator cell. An admitted drag owns motion and release across pane boundaries, highlights the divider, and previews terminal-cell widths without persisting them. Left-button release commits; Escape, another key, a modal surface, or terminal geometry changes cancel. Escape is consumed by the cancellation; another ordinary key first rolls back the pointer preview, then performs its normal action against committed state. The drag's own horizontal reflow does not cancel it. Shift+Left/Right moves the focused sidebar's divider one cell in screen direction and checkpoints immediately; these fixed contextual keys do not change playback bindings. These quick steps apply only to a focused sidebar, outside text entry and popovers.
@@ -294,17 +353,29 @@ Pinned Lists and Detail dividers support left-button drag outside the centered i
 
 `PanelResize` owns the shared screen-delta and width-limit calculation for pointer drags, immediate keyboard steps, and keyboard-mode previews. `EventController` owns admission, preview lifetime, target switching, and commit/cancel; rendering consumes the same effective widths and selected target.
 
-Lists can shrink to 18 framed columns and Detail to 24; resizing cannot reduce the track body below 72 columns. A narrower terminal can temporarily constrain the layout further or undock Lists. Display clamping never overwrites preferred widths, so widening or reopening panes restores them.
-Metadata, audio properties, and tags share a two-column key/value layout. Labels are muted and separated from left-aligned values by whitespace rather than colons; the title value remains emphasized. Title, artist, album, year, track/disc number (and track total), and duration each occupy a labeled row. Empty values are omitted, as is an album artist identical to the artist. Optional credits include composer, conductor, ensemble, soloist, work, movement, and genre. Collapsed sections retain their identity or compact audio summaries. Tags remain read-only. There is no inline editor or permanent Edit button.
-Field labels are capped at twelve cells before measurement; the label column includes a two-cell gap and takes at most forty percent of the body, leaving at least twelve cells for values at the `80x24` target. Values wrap within their cell budget and continuation lines align with the value column, preferring whitespace and preserving complete display clusters. A terminal too narrow to hold even one cluster uses an ellipsis instead of emitting a partial cluster.
-Artwork stays fixed above the independently scrolling text. It is shown only when the available pane height can reserve the twelve artwork rows, three chrome/separation rows, and ten metadata rows; the decision does not depend on the current track. Scrolling clamps at the last page, and selecting a different track resets it to the top.
-The workspace lower frame edge carries list/view identity on the left and selection/count state on the right.
-Track-table columns are divided by dim box-drawing rules with a one-cell gutter on each side, so the rules join into continuous vertical lines. A value wider than its column ends in an ellipsis rather than being cut silently. Section headers end in a dim rule across the remaining table width.
-Every missing track-table field renders one dim `-` at the column's alignment; absence is carried separately from text, so a value that legitimately reads `-` keeps full emphasis.
-Popovers title their frame with the overlay name and put context, such as the active view or the selected output device, in the frame's right title part. Picker rows lead with their name and dim any description.
-Selected rows and hovered controls use one centralized yellow/black/bold interactive style. The surface paints after its content, so a cell that carries its own accent, such as the now-playing caret or the active List, yields to the interactive pair instead of rendering an unreadable one.
-Marked track rows use a reverse-video mark surface; it pins no palette slot, so it reverses whichever pair the row already resolved.
-An unfocused marked row therefore reverses the terminal's own colors and a focused marked row reverses the interactive pair, which reports mark state in both focus states without a dedicated cell.
+Divider movement respects the [workspace width budgets](#fit-lists-beside-tracks): a resize cannot take space from the minimum track body.
+
+#### Read metadata and artwork in Detail
+
+Metadata, audio properties, and tags share two columns: muted labels, then left-aligned values separated by whitespace, not colons. The title value is emphasized. Title, artist, album, year, track number (with disc and total when applicable), and duration have labeled rows. Optional fields include composer, conductor, ensemble, soloist, work, movement, and genre.
+Empty values and an album artist identical to the artist are omitted. Collapsed sections retain a track identity or compact audio summary. Tags in Detail are read-only; there is no inline editor or permanent Edit button.
+
+| Part of Detail       | Budget                                                                                                                                                                                                 |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Automatic pane width | Allow for the localized labels plus 24 value cells, the cover width, and the localized no-selection text. Cap the framed width at half the terminal.                                                   |
+| Labels               | Measure the widest localized label, cap the text at 12 cells, and add a 2-cell gap. The column including the gap takes at most 40% of the body.                                                        |
+| Values               | Leave at least 12 cells at the `80x24` target. Wrap at whitespace where possible and align continuations with the value column. If a display cluster cannot fit, use an ellipsis rather than split it. |
+| Artwork              | Require 25 available pane rows: 12 for artwork, 3 for chrome and separation, and at least 10 for metadata. This threshold does not depend on the selected track.                                       |
+
+Artwork stays fixed above the independently scrolling text. Scrolling stops at the last page; selecting a different track resets the scroll to the top.
+
+#### Read the table and its selection
+
+When there is room for its footer, the lower workspace frame identifies the view on the left, alongside the List button if Lists is not docked. Selection and counts go on the right. Dim vertical rules separate track columns, with a one-cell gutter on each side; a dim horizontal rule completes each section header. Values that do not fit end in an ellipsis. A missing field renders one aligned, dim `-`; a literal `-` keeps full emphasis.
+
+Rows selected in the focused pane and controls using the shared hover style paint bold black text on yellow after their content, overriding accents such as the now-playing caret or active List. The selected track instead keeps an accent when Tracks loses focus. Marks reverse the resolved colors without reserving a palette slot or a table cell: a marked row outside the focused track selection reverses its own colors; the focused marked track reverses the interactive pair.
+
+#### Render the playback Soul
 
 The playback Soul animation consumes shared UIModel aura/color/timing policy while terminal code chooses braille geometry.
 Its partial arc travels clockwise like the GTK and brand Soul, with its ends positioned by distance along the braille ring.
@@ -336,25 +407,16 @@ Scan progress continues to use `ActivityStatusViewModel` observing `LibraryJobs`
 
 ## Selection and marks
 
-`m` toggles the focused track in the marked set.
-`v` starts a visual selection anchored at the focused track, and pressing it again confirms the range into the marked set.
-While a visual selection runs, every focus move re-derives the marked set as the selection's starting set plus the inclusive flattened-track range from the anchor to the focus, so the range is visible as it grows rather than only after it is committed.
-Escape cancels a running visual selection and restores the marked set exactly as it was when the selection started.
-A modal overlay is closed first, because it holds the keys that grow the range. With Tracks focused, Escape cancels the selection and an open Detail stays visible. With Detail explicitly focused, the first Escape returns to Tracks and preserves the range.
-Confirming, `m`, `Shift+A`, any mark reset, and an anchor that leaves the materialized view all end the visual selection; `m` commits the current range before toggling the focused track, so neither edit is lost.
-Ending a selection because its anchor disappeared keeps the rows the range had already reached; only Escape restores the starting set.
-While a selection runs, the workspace footer names the mode ahead of the mark count, because the count alone does not say whether the next motion still grows the range.
-`Shift+A` marks every materialized track in the current view.
-`u` clears the marked set.
-`j` and `k` move the focused track the same way the arrow keys do.
-Marking is reported by the mark surface in every focus state.
-Moving the cursor does not add or remove marks unless a visual selection is running.
-A successful effective filter change, or navigation to another list/view, clears marks.
-Reattaching the same view, including confirming the current List in the chooser, reconciles marks and focus rather than resetting them; only attaching a different view starts at the top.
-A same-view reload or presentation change intersects marks with remaining track ids, and a still-running visual selection derives its range again from the reconciled starting set, the anchor, and the reconciled focus, because the range is defined by row order rather than by the ids it happened to cover.
-A successful no-op filter keeps marks.
-A plain track click clears marks and focuses the clicked track. Ctrl+click toggles its mark. Shift+click starts or extends the same visual selection used by `v`, so Escape can restore the original marks and `v` can confirm the range.
-`publishSelection()` publishes `selectedTrackIds()`. Playback Enter and Detail/cover remain focus-based: marks change the published selection and the status count, not which track Enter starts.
+**Move focus or mark tracks.** With Tracks focused, Up/Down and the default `k`/`j` move focus without changing marks unless a visual range is active. By default, `m` toggles the focused track's mark, `Shift+A` marks every materialized track in the view, and `u` clears all marks. Marked rows remain distinguishable in every focus state.
+A plain row click clears marks and focuses the clicked track; Ctrl+click toggles its mark. Playback Enter, Detail, and cover art follow focus, not marks. Marks affect the status count and the effective selection that `publishSelection()` publishes from `selectedTrackIds()`.
+
+**Grow or finish a range.** The visual-selection action (default `v`) anchors a range at the focused track. Each move combines the starting marks with the inclusive range from anchor to focus in flattened track order. Shift+click starts or extends the same range. The footer names visual mode before the count so the user can tell whether the next motion will change the selection.
+Press the visual-selection shortcut again to confirm. Toggling a mark commits the range before toggling the focused track; marking all or resetting marks also ends the range.
+
+**Cancel without losing earlier marks.** With Tracks focused, Escape restores the starting marks that still survive in the view and leaves an open Detail visible. A modal overlay takes Escape first. If Detail has focus, the first Escape returns to Tracks without cancelling the range.
+
+**Reconcile changes to the view.** A successful effective filter change or navigation to a different view clears marks; a successful no-op filter preserves them. Attaching a different view starts at the top. Reattaching the same view reconciles focus and marks instead; confirming the current List in the chooser leaves the current view, focus, and marks unchanged.
+On same-view reload or presentation change, marks are intersected with surviving track ids. An active range is derived again in the new row order from its reconciled starting set, anchor, and focus. If the anchor has disappeared, the range ends and keeps the surviving marks it had reached; losing the anchor does not restore the starting set.
 
 ## Track authoring entry
 
@@ -369,17 +431,15 @@ The editor is composed over the live workspace with exclusive input ownership; t
 
 ## Exit and teardown
 
-The effective quit shortcut (shipped as `Shift+Q`), the `quit` command, terminal Ctrl-C, and handleable platform signals (POSIX SIGINT/SIGTERM/SIGHUP; Windows Ctrl-C/Ctrl-Break/close) request one App-owned `ExitController`.
-The [TUI track-authoring specification](tui-track-authoring.md#admitted-write-lifetime-and-exit) owns the handshake when an admitted Properties write is still settling.
-The exit gate otherwise retires scan and editor presentation and transient input before posting loop exit; input dispatch does not stop playback early.
-The gate waits the same way for a submitted List save or deletion: both authoring controllers' pending writes share one `hasPendingSubmittedWrite` answer.
-An accepted MPRIS root Quit first receives its D-Bus reply, then enters this same gate on a later owner-executor turn. The first request closes system-media command and artwork admission immediately, including while the gate waits for an already submitted metadata write; it does not create a second exit or write-wait policy.
-The private bus session attempts at most 250 milliseconds of asynchronous flush, closes locally before releasing its name, and joins independently of further TUI executor progress. This bounded transport teardown does not guarantee that a peer received the last reply.
-Normal teardown cancels pending Quick Filter debounce, seek/scrollbar/column gestures, cover work, and scan presentation before persistence captures state.
-Cancelling an active seek drag commits the current runtime elapsed position as its final stabilization point rather than the uncommitted preview.
-Teardown then checkpoints workspace, checkpoints playback, and requests playback stop.
-Frontend observers and controllers are destroyed before runtime shutdown, while `ScreenInteractive` outlives the runtime executor that borrows it.
-Frame timers and executor callbacks cannot access the screen after their owning application lifetime ends.
+**Request exit.** The effective quit shortcut (default `Shift+Q`), `:quit`, terminal Ctrl-C, and handled platform signals all request the same App-owned `ExitController`. The POSIX watcher requests exit on SIGINT, SIGTERM, or SIGHUP. The Windows watcher requests exit on console Ctrl-C, Ctrl-Break, close, logoff, or shutdown events it receives; Windows can still end the process if cleanup outlasts its grace period.
+
+**Wait for admitted writes.** The gate checks both authoring controllers for a pending submitted write, then immediately retires scan and editor presentation and transient input. A submitted List save or deletion uses the same [write-settlement handshake as Properties](tui-track-authoring.md#admitted-write-lifetime-and-exit): loop exit waits for settlement or a second exit request. Ordinary input is consumed during the wait; Ctrl+C can still request exit. Without a pending write, the gate posts loop exit after retirement. Input dispatch does not stop playback early.
+
+**Retire system media.** For an accepted MPRIS root Quit, the bridge submits the empty D-Bus reply before the deferred exit callback can run on the owner executor. The first exit request closes command and artwork admission immediately, even while waiting for a metadata write. System media has no separate exit or write-wait policy.
+The private bus session starts local close when its asynchronous flush finishes or reaches its 250-millisecond deadline. Closing the connection releases its bus name. The session joins without further progress on the TUI executor. The deadline neither bounds the rest of teardown nor guarantees that the peer receives the last reply.
+
+**Checkpoint and stop.** Before capturing session state, normal teardown cancels Quick Filter debounce, seek, scrollbar and resize gestures, cover work, and scan presentation. Cancelling a still-current seek commits the runtime elapsed position, not the uncommitted preview; a replaced occurrence receives no stale seek.
+Teardown checkpoints workspace, then playback, then requests playback stop. Frontend observers and controllers are destroyed before runtime shutdown. `ScreenInteractive` outlives the runtime executor that borrows it; neither frame timers nor executor callbacks can access the screen beyond the owning application's lifetime.
 
 ## Persistence and versioning
 
@@ -442,9 +502,9 @@ The notification center can be opened explicitly even when compact status is not
 - [`KeymapTest.cpp`](../../../test/tui/KeymapTest.cpp) protects shared action identities, independent terminal defaults, terminal aliases and omissions, collision order, unbinding, and coupled dispatch/hint selection.
 - [`EventControllerTest.cpp`](../../../test/tui/EventControllerTest.cpp) protects input routing, live-filter debounce/cancellation, completion acceptance, key/mouse modality, seek, teardown stabilization, overlays, resizing, scan commands, selection commands, and exit without early playback stop.
 - [`PlaybackNavigationTest.cpp`](../../../test/tui/PlaybackNavigationTest.cpp) protects playback metadata link geometry, title priority, per-field hover, literal artist queries, album-group reveal, navigation history, command parity, and stale or modal pointer input.
-- [`PlaybackHoverTest.cpp`](../../../test/tui/PlaybackHoverTest.cpp) protects hover retirement after painted control geometry changes without mouse motion, retained hover while elapsed time gains a digit, stable hover during height-only resize, and explicit cancellation.
-- [`PlaybackModeTest.cpp`](../../../test/tui/PlaybackModeTest.cpp) protects all six ASCII mode codes, stable padded geometry and adjacent output targets through elapsed/volume/mute changes, retired targets for unrecognized modes, localized current/next hints including shuffle with repeat-one, narrow status layouts, retired shortcut targets, and foreground hint ownership.
-- [`PinnedNavigationTest.cpp`](../../../test/tui/PinnedNavigationTest.cpp) protects independent access/pin bindings, switching from chooser to pinned tree, divider targets, disclosure clicks without List activation, popup dismissal, scrollbar-capture cancellation when foreground input opens, layout checkpoints, and restored frame/status entry points.
+- [`PlaybackHoverTest.cpp`](../../../test/tui/PlaybackHoverTest.cpp) protects hover validity against painted geometry and explicit cancellation, including survival of an elapsed-time digit change and a height-only resize.
+- [`PlaybackModeTest.cpp`](../../../test/tui/PlaybackModeTest.cpp) protects mode codes, stable control geometry, invalid-mode targets, and localized hover hints under space and input constraints.
+- [`PinnedNavigationTest.cpp`](../../../test/tui/PinnedNavigationTest.cpp) protects independent pinning and access, dock and chooser focus, the undocked chooser entry points, divider and disclosure targets, foreground cancellation of scrollbar capture, and layout checkpoints.
 - [`LibraryNavigationTest.cpp`](../../../test/tui/LibraryNavigationTest.cpp) protects chooser preorder, indentation, and label contents; [`LibraryControllerTest.cpp`](../../../test/tui/LibraryControllerTest.cpp) protects chooser selection across refresh.
 - [`PanelResizeTest.cpp`](../../../test/tui/PanelResizeTest.cpp) protects width constraints, resize commit/rollback, hover retirement, and mode hints; [`PanelDividerTest.cpp`](../../../test/tui/PanelDividerTest.cpp) protects shared/separate border geometry and reveal hover.
 - [`TrackDetailLinesTest.cpp`](../../../test/tui/TrackDetailLinesTest.cpp) protects detail row labels, filename fallback, and metadata-title precedence.

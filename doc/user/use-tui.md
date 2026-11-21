@@ -49,7 +49,7 @@ See [filtering and suggestions](manage-library.md#understand-filtering-and-sugge
 Press `:` for the Command Palette. It accepts commands such as:
 
 ```text
-:filter $composer == "Bach"
+:filter $composer = "Bach"
 :view classical-works
 :scan
 :scan cancel
@@ -59,7 +59,7 @@ You may type commands with or without the leading colon. Command names are case-
 
 Useful aliases include `:lists`, `:detail`, `:quality`, `:output`, `:views`, `:notifications`, `:settings`, `:edit`, `:tags`, `:current`, `:back`, `:forward`, and `:quit`. See the [TUI command reference](../reference/tui/command.md) for the complete aliases, keys, and fixed input protocol.
 
-`:scan` starts one eager scan. If a scan is already active, another request does not start duplicate work. `:scan cancel` requests cooperative cancellation; wait for its notice before starting another scan.
+`:scan` starts an eager scan: it requests audio identification during the scan rather than deferring it. If a scan is already active, another request does not start duplicate work. `:scan cancel` requests cooperative cancellation; wait for its notice before starting another scan.
 
 ## Select and edit tracks
 
@@ -72,16 +72,18 @@ The focused track is the effective selection when no rows are marked.
 
 Press `t` or run `:tags` for a quick tag edit over all marked tracks, or the focused track when nothing is marked. Type to search or name a tag, use Up/Down to select it, Space to change its pending state, and Enter to apply. Escape or an outside click discards the draft.
 
-Press `e`, run `:edit`, or run `:properties` for the full Track Properties editor. Its target set is captured when it opens.
+Press `e`, run `:edit`, or run `:properties` for the full Track Properties editor.
+It edits only the tracks marked when you open it, or the focused track if none are marked.
 
 - Tab/Shift+Tab changes between Metadata, Tags, Properties, and the multi-selection Tracks page, except while the Credits child uses them to select its controls.
-- Typing edits the focused metadata field; Ctrl+D clears it for all targets and Ctrl+G restores its baseline.
+- Typing edits the focused metadata field. Ctrl+D clears it for all tracks being edited; Ctrl+G undoes edits to that field since the editor opened or was last successfully reloaded.
+  If the last loaded values differed, Ctrl+G restores `<Multiple Values>` without replacing any track's value.
 - On Tags, Enter cycles the selected tag's intended result.
 - Enter on a Conductor, Ensemble, or Soloist preview opens that category's Credits editor; Ctrl+O on Metadata opens all kinds. Previews are read-only first-name `+N` summaries, not scalar inputs.
 - In Credits, Tab selects Name, Role, Kind, Add/Delete, Move, Replace Scope, Clear, Commit, or Cancel; Enter activates the control. Kind is locked in a category editor, and moves stay within a kind. An empty list starts on Add, and deleting its last row returns there.
 - Mixed scopes require explicit replacement or the separate Clear action. Ctrl+S accepts the child into Properties; Escape cancels just the child.
 - After finishing the child, Ctrl+S submits metadata, staged Credits, and tag changes together. The active child blocks parent Save.
-- Ctrl+R reloads every captured target. Escape closes the editor. Either action asks before discarding a dirty draft.
+- Ctrl+R reloads the latest values for the same tracks. Escape closes the editor. Either action asks before discarding unsaved changes.
 
 If the library changes while the editor is open, the draft becomes stale and cannot be saved. Reload it with Ctrl+R or close it and begin again. Input is inert while a submitted write is finishing.
 
@@ -152,7 +154,7 @@ Some terminals reserve Shift for terminal text selection. Disabling TUI mouse in
 
 Press `,`, click Settings in the status bar, or run `:settings`. Tab/Shift+Tab moves among General, Appearance, Interaction, and Keyboard.
 
-Settings include language, cover rendering, reduced motion, panel borders, mouse and step sizes, terminal title behavior, and shortcuts. Changes save immediately. If a save fails, the running value remains unchanged and the page offers Ctrl+R to retry or Ctrl+G to discard the candidate.
+Settings include language, cover rendering, reduced motion, panel borders, mouse and step sizes, terminal title behavior, and shortcuts. Changes save immediately. If a save fails, the running value remains unchanged and the page offers Ctrl+R to retry or Ctrl+G to discard the unsaved change.
 
 On Keyboard, Left/Right selects a chord, `a` or Insert adds one, Enter replaces one, Delete removes one, and `r` restores that action's defaults. Unsupported terminal chords and conflicts are rejected. Fixed text editing, modal navigation, Escape, and Ctrl+C cannot be replaced by root shortcut overrides.
 
