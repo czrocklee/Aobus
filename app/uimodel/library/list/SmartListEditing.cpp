@@ -5,8 +5,6 @@
 
 #include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/query/Expression.h>
-#include <ao/query/Serializer.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/WritableTagList.h>
@@ -36,9 +34,8 @@ namespace ao::uimodel
 
     if (optWritableTag)
     {
-      auto const expression =
-        query::serialize(query::VariableExpression{.type = query::VariableType::Tag, .name = *optWritableTag});
-      state.membershipEditingText = smartListMembershipEditingText(textCatalog, true, expression);
+      state.membershipEditingText =
+        smartListMembershipEditingText(textCatalog, true, rt::serializeTagExpression(*optWritableTag));
     }
     else
     {

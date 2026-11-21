@@ -8,8 +8,10 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
+#include <ao/rt/ViewState.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/LibraryAuthoring.h>
+#include <ao/rt/source/TrackSource.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -77,6 +79,22 @@ namespace ao::uimodel
     }
 
     return state;
+  }
+
+  ListOrderCapabilityState describeViewListOrderCapabilities(i18n::MessageCatalog const& textCatalog,
+                                                             rt::TrackListViewState const& view,
+                                                             rt::TrackSourceState const sourceState,
+                                                             rt::LibraryAuthoringAvailability const authoring)
+  {
+    return describeListOrderCapabilities(textCatalog,
+                                         ListOrderCapabilityInput{
+                                           .listId = view.listId,
+                                           .presentation = view.presentation,
+                                           .quickFilterExpression = view.filterExpression,
+                                           .sourceLive = sourceState == rt::TrackSourceState::Live,
+                                           .sourceHasError = view.optFilterError.has_value(),
+                                           .authoring = authoring,
+                                         });
   }
 
   std::vector<TrackId> listOrderDragSelection(TrackId const draggedTrackId,

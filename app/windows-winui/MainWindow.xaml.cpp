@@ -190,6 +190,7 @@ namespace winrt::Aobus::implementation
         .library = runtime.library(),
         .views = runtime.views(),
         .sources = runtime.sources(),
+        .notifications = runtime.notifications(),
         .trackList = *_trackListPtr,
         .presentationCatalog = session.presentationCatalog(),
         .listPresentations = session.listPresentations(),

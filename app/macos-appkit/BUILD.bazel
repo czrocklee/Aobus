@@ -139,6 +139,7 @@ objc_library(
         "//test:macos-appkit/AppKitDesktopScenario.mm",
         "//test:macos-appkit/AppKitDesktopScenarioHelpers.mm",
         "//test:macos-appkit/AppKitMediaScenario.mm",
+        "//test:macos-appkit/AppKitMembershipScenario.mm",
         "//test:macos-appkit/AppKitPlaybackScenario.mm",
         "//test:macos-appkit/AppKitPresentationScenario.mm",
         "//test:macos-appkit/AppKitScenarioSupport.mm",

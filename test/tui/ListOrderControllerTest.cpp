@@ -151,6 +151,9 @@ namespace ao::tui::test
     REQUIRE(fixture.executor->tryDrainUntil([&fixture] { return fixture.hasNotifications(); }));
 
     CHECK(fixture.lastMessage() == "Order unchanged.");
+    CHECK(fixture.lastSeverity() == rt::NotificationSeverity::Info);
+    CHECK(fixture.runtimePtr->notifications().feed().entries.back().lifetime.kind() ==
+          rt::NotificationLifetimeKind::Transient);
     // A no-op persists nothing, so the raw order stays unset.
     CHECK(fixture.storedOrder().empty());
   }
@@ -220,6 +223,9 @@ namespace ao::tui::test
     REQUIRE(fixture.executor->tryDrainUntil([&fixture] { return fixture.notificationCount() == 2; }));
 
     CHECK(fixture.lastMessage() == "Reset Manual Order and forgot 3 saved positions.");
+    CHECK(fixture.lastSeverity() == rt::NotificationSeverity::Info);
+    CHECK(fixture.runtimePtr->notifications().feed().entries.back().lifetime.kind() ==
+          rt::NotificationLifetimeKind::Transient);
     // Reset clears the saved rank sequence; the List falls back to its natural order.
     CHECK(fixture.storedOrder().empty());
   }
@@ -257,6 +263,7 @@ namespace ao::tui::test
     controller.apply(ListOrderCommand::MoveDown, viewId, {outsider});
     REQUIRE(fixture.executor->tryDrainUntil([&fixture] { return fixture.hasNotifications(); }));
 
+    CHECK(fixture.lastMessage() == "Every selected track must belong to the bound List source");
     CHECK(fixture.lastSeverity() == rt::NotificationSeverity::Warning);
     CHECK(fixture.runtimePtr->notifications().feed().entries.back().lifetime.kind() ==
           rt::NotificationLifetimeKind::History);

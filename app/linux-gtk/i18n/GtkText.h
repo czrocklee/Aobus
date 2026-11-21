@@ -5,7 +5,6 @@
 
 #include <ao/i18n/MessageCatalog.h>
 
-#include <cstddef>
 #include <string>
 #include <string_view>
 
@@ -17,13 +16,6 @@ namespace ao::gtk
     return std::string{i18n::requiredText(catalog, id)};
   }
 
-  std::string deleteListQuestion(i18n::MessageCatalog const& catalog, std::string_view name);
-  std::string deleteSubtreeQuestion(i18n::MessageCatalog const& catalog, std::size_t count, std::string_view entries);
-  std::string removeMembershipTagQuestion(i18n::MessageCatalog const& catalog, std::string_view tag, std::size_t count);
-  std::string membershipTagReferencesWarning(i18n::MessageCatalog const& catalog,
-                                             std::string_view tag,
-                                             std::string_view references);
-  std::string removeFromCurrentList(i18n::MessageCatalog const& catalog, std::string_view name, std::string_view tag);
   std::string fileSelectionError(i18n::MessageCatalog const& catalog,
                                  std::string_view operation,
                                  std::string_view message);

@@ -176,11 +176,9 @@ Any intervening effective commit makes an offered session stale instead of overw
 Its result reuses `AuthoringStatus` and carries display text only when the frontend has something to report.
 Suggested tags are a presentation aid; only the final add/remove command is authoritative.
 
-GTK adapts the shared tag-frequency result before applying its visible limit:
-frequency remains descending, equal-frequency values use the startup-locale
-ordering key, and raw NFC bytes break equal locale keys. The shared library
-reader remains byte ordered because the CLI consumes that same storage-facing
-result without an interactive locale.
+The library reader ranks suggestions by descending frequency, then raw NFC bytes; the CLI uses that result without a locale. With an interactive ordering policy, GTK and TUI insert the locale key between those two comparisons. Key derivation is independent per tag: GTK treats a failure on an admitted tag as an invariant violation, whereas TUI keeps the tag and sorts it with an empty key, ignoring any partial output.
+
+GTK first caps its candidate pool at 50, then excludes common tags and tags with pending edits from that pool. TUI separates all tags carried by any target from suggestions and searches the full vocabulary before applying its suggestion display cap.
 
 The tag editor's writable saved-List chooser orders eligible List names by the
 interactive locale key and uses `ListId` for equal keys. This changes only the

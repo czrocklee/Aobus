@@ -16,8 +16,6 @@
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/query/Expression.h>
-#include <ao/query/Serializer.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/NotificationService.h>
@@ -78,13 +76,6 @@ namespace ao::tui
     {
       return std::ranges::any_of(
         snapshot.lists(), [listId](rt::ListNode const& node) { return node.parentId == listId; });
-    }
-
-    /// The visible spelling of a membership tag, the same `#name` form the
-    /// expression language itself uses.
-    std::string displayedTag(std::string_view const tag)
-    {
-      return query::serialize(query::VariableExpression{.type = query::VariableType::Tag, .name = std::string{tag}});
     }
 
     /// Appends @p value wrapped to @p columns, one element per row, keeping
@@ -368,47 +359,36 @@ namespace ao::tui
       }
       else
       {
-        confirmation.question =
-          i18n::requiredFormat(textCatalog, MessageId::ListDeleteQuestion, {{"name", preview.name}});
+        confirmation.question = uimodel::formatListDeletionQuestion(textCatalog, preview);
       }
 
-      if (preview.optTagImpact)
+      if (auto const& optImpact = preview.optTagImpact; optImpact)
       {
-        confirmation.tagImpactQuestion = i18n::requiredFormat(
-          textCatalog,
-          MessageId::ListRemoveTag,
-          {{"tag", displayedTag(preview.optTagImpact->tag)}, {"count", preview.optTagImpact->taggedTrackCount}});
+        // The warning names a bounded window of references and counts the
+        // rest; the renderer then wraps it and counts the rows it takes.
+        auto references = std::string{};
+        auto const referenceCount = optImpact->otherListReferences.size();
 
-        if (!preview.optTagImpact->otherListReferences.empty())
+        for (std::size_t index = 0; index < referenceCount; ++index)
         {
-          // The warning names a bounded window of references and counts the
-          // rest; the renderer then wraps it and counts the rows it takes.
-          auto references = std::string{};
-          auto const referenceCount = preview.optTagImpact->otherListReferences.size();
-
-          for (std::size_t index = 0; index < referenceCount; ++index)
+          if (!references.empty())
           {
-            if (!references.empty())
-            {
-              references.append(", ");
-            }
-
-            if (index >= kReferenceNameLimit)
-            {
-              references.append(i18n::requiredFormat(
-                textCatalog, MessageId::TuiListDeleteMore, {{"count", referenceCount - kReferenceNameLimit}}));
-              break;
-            }
-
-            references.append(
-              ellipsizeToCellWidth(preview.optTagImpact->otherListReferences[index].name, kReferenceNameColumns));
+            references.append(", ");
           }
 
-          confirmation.tagReferencesWarning =
-            i18n::requiredFormat(textCatalog,
-                                 MessageId::ListTagReferences,
-                                 {{"tag", displayedTag(preview.optTagImpact->tag)}, {"references", references}});
+          if (index >= kReferenceNameLimit)
+          {
+            references.append(i18n::requiredFormat(
+              textCatalog, MessageId::TuiListDeleteMore, {{"count", referenceCount - kReferenceNameLimit}}));
+            break;
+          }
+
+          references.append(ellipsizeToCellWidth(optImpact->otherListReferences[index].name, kReferenceNameColumns));
         }
+
+        auto cleanup = uimodel::describeListDeletionCleanup(textCatalog, *optImpact, references);
+        confirmation.tagImpactQuestion = std::move(cleanup.question);
+        confirmation.tagReferencesWarning = std::move(cleanup.referencesWarning);
       }
 
       // The question can be answered only once this filled state has been
@@ -599,8 +579,7 @@ namespace ao::tui
     auto confirmation = ListDeleteConfirmation{};
     confirmation.listId = targetListId;
     confirmation.includeDescendants = includeDescendants;
-    confirmation.title = std::string{i18n::requiredText(
-      state.textCatalog, includeDescendants ? MessageId::ListDeleteSubtreeTitle : MessageId::ListDeleteTitle)};
+    confirmation.title = i18n::requiredText(state.textCatalog, uimodel::listDeletionLabels(includeDescendants).title);
     state.optDeleteConfirmation.emplace(std::move(confirmation));
     // A new question starts unarmed for keys and pointer alike: nothing
     // drawn for an earlier question can answer this one.
@@ -1091,9 +1070,8 @@ namespace ao::tui
     {
       auto const questionFor = [&](std::string const& entries)
       {
-        return i18n::requiredFormat(state.textCatalog,
-                                    MessageId::ListDeleteSubtreeQuestion,
-                                    {{"count", confirmation.deletedListNames.size()}, {"entries", entries}});
+        return uimodel::formatListSubtreeDeletionQuestion(
+          state.textCatalog, confirmation.deletedListNames.size(), entries);
       };
 
       // The shared pattern's own lines around its entries, measured with one
@@ -1150,11 +1128,9 @@ namespace ao::tui
         // The destructive answer carries the danger color, and Escape is named
         // for what it does: nothing is deleted.
         footer.push_back(state.confirmationMouseBindings.bind(
-          style::shortcutChip(
-            "Enter",
-            std::string{i18n::requiredText(
-              state.textCatalog,
-              confirmation.includeDescendants ? MessageId::ListDeleteAllAction : MessageId::ListDeleteAction)}) |
+          style::shortcutChip("Enter",
+                              i18n::requiredText(state.textCatalog,
+                                                 uimodel::listDeletionLabels(confirmation.includeDescendants).action)) |
             style::danger(),
           Event::Return));
         footer.push_back(style::mutedSeparator());

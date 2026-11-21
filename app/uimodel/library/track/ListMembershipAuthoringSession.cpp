@@ -7,8 +7,6 @@
 #include <ao/async/OperationCancelled.h>
 #include <ao/async/Task.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/query/Expression.h>
-#include <ao/query/Serializer.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/NotificationState.h>
@@ -34,11 +32,6 @@ namespace ao::uimodel
 {
   namespace
   {
-    std::string tagExpression(std::string_view const tag)
-    {
-      return query::serialize(query::VariableExpression{.type = query::VariableType::Tag, .name = std::string{tag}});
-    }
-
     std::size_t forgottenPositionCount(rt::AddTracksToListReply const& /*reply*/) noexcept
     {
       return 0;
@@ -182,6 +175,35 @@ namespace ao::uimodel
     return result;
   }
 
+  ListMembershipMenu listMembershipMenu(i18n::MessageCatalog const& textCatalog,
+                                        std::span<WritableTagListTarget const> const targets,
+                                        ListId const activeListId)
+  {
+    auto menu = ListMembershipMenu{};
+
+    for (auto const& target : targets)
+    {
+      auto const current = target.listId == activeListId;
+      auto const expression = rt::serializeTagExpression(target.tag);
+      auto label = i18n::requiredFormat(
+        textCatalog,
+        current ? i18n::MessageId::ListRemoveFromCurrent : i18n::MessageId::ListMembershipAddTarget,
+        {{"name", target.name}, {"tag", expression}});
+      auto item = ListMembershipMenuItem{.listId = target.listId, .label = std::move(label)};
+
+      if (current)
+      {
+        menu.optRemoveFromCurrent = std::move(item);
+      }
+      else
+      {
+        menu.addTargets.push_back(std::move(item));
+      }
+    }
+
+    return menu;
+  }
+
   struct ListMembershipAuthoringSession::State final
   {
     template<typename Submit>
@@ -269,7 +291,7 @@ namespace ao::uimodel
                                        result.status,
                                        result.operation,
                                        result.listName,
-                                       tagExpression(result.tag),
+                                       rt::serializeTagExpression(result.tag),
                                        result.changedTrackCount,
                                        result.forgottenPositionCount);
   }

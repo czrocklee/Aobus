@@ -104,13 +104,17 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("CompletionService - locale policy orders equal-frequency vocabulary ties")
+  TEST_CASE("CompletionService - frequency ranks first and locale orders vocabulary ties")
   {
     auto libraryFixture = MusicLibraryFixture{};
     library::test::addTrackWithUniqueFixtureUri(
       libraryFixture.library(), library::test::TrackSpec{.title = "One", .artist = "ä"});
     library::test::addTrackWithUniqueFixtureUri(
       libraryFixture.library(), library::test::TrackSpec{.title = "Two", .artist = "z"});
+    library::test::addTrackWithUniqueFixtureUri(
+      libraryFixture.library(), library::test::TrackSpec{.title = "Three", .artist = "Zebra"});
+    library::test::addTrackWithUniqueFixtureUri(
+      libraryFixture.library(), library::test::TrackSpec{.title = "Four", .artist = "Zebra"});
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto germanPolicyRes = i18n::createIcuTextOrderingPolicy("de-DE");
     auto swedishPolicyRes = i18n::createIcuTextOrderingPolicy("sv-SE");
@@ -121,9 +125,9 @@ namespace ao::rt::test
     auto swedish = CompletionService{libraryFixture.library(), changes, swedishPolicyRes->get()};
 
     CHECK(pairs(german.valuesFor(TrackField::Artist)) ==
-          std::vector<std::pair<std::string, std::uint32_t>>{{"ä", 1}, {"z", 1}});
+          std::vector<std::pair<std::string, std::uint32_t>>{{"Zebra", 2}, {"ä", 1}, {"z", 1}});
     CHECK(pairs(swedish.valuesFor(TrackField::Artist)) ==
-          std::vector<std::pair<std::string, std::uint32_t>>{{"z", 1}, {"ä", 1}});
+          std::vector<std::pair<std::string, std::uint32_t>>{{"Zebra", 2}, {"z", 1}, {"ä", 1}});
   }
 
   TEST_CASE("CompletionService - live locale change invalidates materialized vocabulary")

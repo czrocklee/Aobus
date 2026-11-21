@@ -49,19 +49,17 @@ Changing it later may change both membership and the unranked fallback order.
 3. Select tracks, right-click, and choose the Playlist under **Add to Playlist**.
 
 Direct Add/Remove is available only when the complete local filter is one positive tag, such as `#road-trip`.
-A computed expression such as `#road-trip and $year >= 2020` cannot be safely reversed into metadata, so Aobus directs you to edit its expression or track tags instead.
-The **Add to Playlist** submenu lists writable Playlists by their visible name and tag while commands continue to use stable List identities.
-GTK summarizes omitted computed Lists once and offers **Manage Lists...** instead of filling the menu with disabled computed targets; when no writable Playlist exists, it offers **Create a Playlist...**.
-Windows shows one disabled explanation when no eligible target exists.
-For a nested Playlist, every added track must already belong to the parent List.
+For a computed expression such as `#road-trip and $year >= 2020`, edit the expression or the track tags instead.
+**Add to Playlist** shows other writable Playlists by name and tag. If there are none, the submenu reads **No Playlists to add to**. GTK also offers **Create a Playlist...** in that case, or **Manage Lists...** if there are targets but some Lists were omitted because their membership is computed.
+For a nested Playlist, every selected track must already belong to the parent List before you can add it.
 
 Renaming a Playlist does not rename its membership tag.
 The tag may be referenced by tracks and other expressions independently.
 
 ### Remove a track deliberately
 
-Use **Remove from _Playlist_ (_tag_)** when the track should leave the Playlist and its saved position should be forgotten.
-The result message reports both the global tag change and the forgotten position.
+In the current Playlist, right-click the track and choose **Remove from _Playlist_ (_tag_)** to remove its global tag and forget its saved position in this Playlist.
+The result message tells you whether a saved position was forgotten or there was none to remove.
 Adding the track again later places it at the unranked tail.
 
 Removing the same tag in the ordinary tag editor is a softer operation.
@@ -122,14 +120,14 @@ Deleting a List never deletes music files.
 - Reopen the List and confirm that its expression still produces the intended members.
 - Switch away from Manual Order and back; the saved sequence should return.
 - Start playback from the List; succession follows the same current presentation order shown in the view.
-- After explicit **Remove from Playlist**, confirm that the message mentions both tag removal and the forgotten saved position.
+- After removing a track from a Playlist, confirm that it no longer appears there.
 
 ## Troubleshooting
 
 - **Library is busy**: scanning, import, or identity maintenance temporarily blocks order and membership commits. Wait for maintenance to finish and start the gesture again.
 - **The List changed**: membership, presentation, filter, or library revision changed during the gesture. Retry from the current rows.
 - **No drag handle in GTK**: use a saved List, choose a flat unsorted presentation, clear the quick filter, and resolve any expression error. Windows currently uses menu and keyboard movement only.
-- **Playlist missing from Add to Playlist**: its filter is not one directly writable positive tag, or the selected tracks are outside its parent source.
+- **Playlist missing from Add to Playlist**: check that it isn't the current Playlist and that its local filter is one positive tag. If a nested Playlist appears but the add fails, check that its parent contains every selected track.
 
 ## Related reference
 

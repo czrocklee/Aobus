@@ -9,10 +9,10 @@
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/query/Expression.h>
-#include <ao/query/Serializer.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/ListNode.h>
+#include <ao/rt/NotificationService.h>
+#include <ao/rt/NotificationState.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
@@ -25,6 +25,7 @@
 #include <ao/rt/source/TrackSourceLease.h>
 #include <ao/uimodel/library/list/ListAuthoring.h>
 #include <ao/uimodel/library/list/ListOrder.h>
+#include <ao/uimodel/library/list/ListOrderOutcome.h>
 #include <ao/uimodel/library/list/ListOrderSession.h>
 #include <ao/uimodel/library/list/SmartListEditing.h>
 #include <ao/uimodel/library/presentation/ListPresentations.h>
@@ -54,7 +55,6 @@
 #include <format>
 #include <iterator>
 #include <optional>
-#include <span>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -77,11 +77,6 @@ namespace ao::winui
     constexpr double kContextTextOpacity = 0.72;
     constexpr double kPreviewHeadingFontSize = 18.0;
 
-    std::string displayedTag(std::string_view const tag)
-    {
-      return query::serialize(query::VariableExpression{.type = query::VariableType::Tag, .name = std::string{tag}});
-    }
-
     TextBlock makeWrappedText(double const opacity = 1.0)
     {
       auto text = TextBlock{};
@@ -94,24 +89,6 @@ namespace ao::winui
     {
       return std::format("{}: {}", label, value);
     }
-
-    std::size_t affectedTrackCount(rt::MoveListOrderReply const& reply) noexcept
-    {
-      return reply.selectedTrackIds.size();
-    }
-
-    void appendReferences(std::string& target, std::span<rt::DeleteListReply::TagReference const> const references)
-    {
-      for (auto const& reference : references)
-      {
-        if (!target.empty())
-        {
-          target.append(", ");
-        }
-
-        target.append(reference.name);
-      }
-    }
   } // namespace
 
   ListAuthoringCoordinator::ListAuthoringCoordinator(ListAuthoringCoordinatorConfig config)
@@ -120,6 +97,7 @@ namespace ao::winui
     , _library{config.library}
     , _views{config.views}
     , _sources{config.sources}
+    , _notifications{config.notifications}
     , _trackList{config.trackList}
     , _presentationCatalog{config.presentationCatalog}
     , _listPresentations{config.listPresentations}
@@ -158,7 +136,9 @@ namespace ao::winui
 
     if (!optNode)
     {
-      setDialogError(std::string{i18n::requiredText(_textCatalog, i18n::MessageId::ListOrderListUnavailable)});
+      reportFeedback(rt::NotificationSeverity::Error,
+                     std::string{i18n::requiredText(_textCatalog, i18n::MessageId::ListOrderListUnavailable)},
+                     rt::NotificationLifetime::history());
       return;
     }
 
@@ -494,6 +474,8 @@ namespace ao::winui
       return;
     }
 
+    auto const token = _dialogGenerationGate.token();
+
     if (selected > 0 && static_cast<std::size_t>(selected) < _presentationIds.size())
     {
       _listPresentations.setPresentationIdForList(*res, _presentationIds[static_cast<std::size_t>(selected)]);
@@ -503,17 +485,25 @@ namespace ao::winui
       _listPresentations.clearPresentationForList(*res);
     }
 
+    if (!token.accepts())
+    {
+      return;
+    }
+
     auto presentation =
       rt::NavigationPresentation{.mode = rt::NavigationPresentationMode::Override,
                                  .spec = resolveListAuthoringPresentation(_listPresentations, *res, expression)};
 
-    if (auto const navigatedRes = _trackList.navigateTo(*res, std::move(presentation)); !navigatedRes)
+    auto const navigatedRes = _trackList.navigateTo(*res, std::move(presentation));
+
+    if (!token.accepts())
     {
-      if (_reportStatus)
-      {
-        _reportStatus(i18n::requiredFormat(
-          _textCatalog, i18n::MessageId::WinUiError, {i18n::MessageArgument{"detail", navigatedRes.error().message}}));
-      }
+      return;
+    }
+
+    if (!navigatedRes)
+    {
+      reportWorkflowError(navigatedRes.error());
     }
     else if (_reportStatus)
     {
@@ -521,7 +511,7 @@ namespace ao::winui
         i18n::requiredFormat(_textCatalog, i18n::MessageId::WinUiListStatus, {i18n::MessageArgument{"list", name}}));
     }
 
-    if (_dialog)
+    if (token.accepts())
     {
       _dialog.Hide();
     }
@@ -571,12 +561,7 @@ namespace ao::winui
       _dialogActive = false;
       _dialogGenerationGate.retire();
 
-      if (_reportStatus)
-      {
-        _reportStatus(i18n::requiredFormat(
-          _textCatalog, i18n::MessageId::WinUiError, {i18n::MessageArgument{"detail", res.error().message}}));
-      }
-
+      reportWorkflowError(res.error());
       return;
     }
 
@@ -594,13 +579,12 @@ namespace ao::winui
                                                 [this](rt::DeleteListReply const& entry)
                                                 { return entry.listId == _trackList.activeListId(); });
     _submitting = false;
+    auto const description = uimodel::describeListDeletion(_textCatalog, preview, includeDescendants);
 
     _dialog = ContentDialog{};
     _dialog.XamlRoot(_xamlRoot ? _xamlRoot() : XamlRoot{nullptr});
-    _dialog.Title(winrt::box_value(winrt::to_hstring(i18n::requiredText(
-      _textCatalog, includeDescendants ? i18n::MessageId::ListDeleteSubtreeTitle : i18n::MessageId::ListDeleteTitle))));
-    _dialog.PrimaryButtonText(winrt::to_hstring(i18n::requiredText(
-      _textCatalog, includeDescendants ? i18n::MessageId::ListDeleteAllAction : i18n::MessageId::ListDeleteAction)));
+    _dialog.Title(winrt::box_value(winrt::to_hstring(i18n::requiredText(_textCatalog, description.labels.title))));
+    _dialog.PrimaryButtonText(winrt::to_hstring(i18n::requiredText(_textCatalog, description.labels.action)));
     _dialog.CloseButtonText(winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiCommonCancel)));
     _dialog.DefaultButton(ContentDialogButton::Close);
 
@@ -610,47 +594,22 @@ namespace ao::winui
     _errorText.Visibility(Visibility::Collapsed);
     content.Children().Append(_errorText);
 
-    auto entries = std::string{};
-
-    for (auto const& entry : preview.deletedLists)
-    {
-      entries.append(std::format("• {} ({})\n", entry.name, entry.listId.raw()));
-    }
-
-    auto const message = includeDescendants
-                           ? i18n::requiredFormat(_textCatalog,
-                                                  i18n::MessageId::ListDeleteSubtreeQuestion,
-                                                  {i18n::MessageArgument{"count", preview.deletedLists.size()},
-                                                   i18n::MessageArgument{"entries", entries}})
-                           : i18n::requiredFormat(_textCatalog,
-                                                  i18n::MessageId::ListDeleteQuestion,
-                                                  {i18n::MessageArgument{"name", preview.deletedLists.front().name}});
     auto messageText = makeWrappedText();
-    messageText.Text(winrt::to_hstring(message));
+    messageText.Text(winrt::to_hstring(description.question));
     content.Children().Append(messageText);
 
-    auto const optTagImpact = preview.deletedLists.front().optTagImpact;
     _removeTagCheck = nullptr;
 
-    if (optTagImpact)
+    if (auto const& optCleanup = description.optCleanup; optCleanup)
     {
-      auto const tag = displayedTag(optTagImpact->tag);
       _removeTagCheck = CheckBox{};
-      _removeTagCheck.Content(winrt::box_value(winrt::to_hstring(i18n::requiredFormat(
-        _textCatalog,
-        i18n::MessageId::ListRemoveTag,
-        {i18n::MessageArgument{"tag", tag}, i18n::MessageArgument{"count", optTagImpact->taggedTrackCount}}))));
+      _removeTagCheck.Content(winrt::box_value(winrt::to_hstring(optCleanup->question)));
       content.Children().Append(_removeTagCheck);
 
-      if (!optTagImpact->otherListReferences.empty())
+      if (!optCleanup->referencesWarning.empty())
       {
-        auto references = std::string{};
-        appendReferences(references, optTagImpact->otherListReferences);
         auto warning = makeWrappedText(kSupportingTextOpacity);
-        warning.Text(winrt::to_hstring(
-          i18n::requiredFormat(_textCatalog,
-                               i18n::MessageId::ListTagReferences,
-                               {i18n::MessageArgument{"tag", tag}, i18n::MessageArgument{"references", references}})));
+        warning.Text(winrt::to_hstring(optCleanup->referencesWarning));
         content.Children().Append(warning);
       }
     }
@@ -712,16 +671,17 @@ namespace ao::winui
       return;
     }
 
+    auto const token = _dialogGenerationGate.token();
+
     if (_deleteContainsActive)
     {
-      if (auto const navigatedRes = _trackList.navigateTo(rt::kAllTracksListId); !navigatedRes && _reportStatus)
+      if (auto const navigatedRes = _trackList.navigateTo(rt::kAllTracksListId); token.accepts() && !navigatedRes)
       {
-        _reportStatus(i18n::requiredFormat(
-          _textCatalog, i18n::MessageId::WinUiError, {i18n::MessageArgument{"detail", navigatedRes.error().message}}));
+        reportWorkflowError(navigatedRes.error());
       }
     }
 
-    if (_dialog)
+    if (token.accepts())
     {
       _dialog.Hide();
     }
@@ -750,12 +710,7 @@ namespace ao::winui
 
     if (!sessionRes)
     {
-      if (_reportStatus)
-      {
-        _reportStatus(i18n::requiredFormat(
-          _textCatalog, i18n::MessageId::WinUiError, {i18n::MessageArgument{"detail", sessionRes.error().message}}));
-      }
-
+      finishMembership(std::unexpected{std::move(sessionRes.error())});
       return;
     }
 
@@ -781,19 +736,35 @@ namespace ao::winui
 
   void ListAuthoringCoordinator::finishMembership(Result<uimodel::ListMembershipEditResult> res)
   {
-    if (!_reportStatus)
-    {
-      return;
-    }
-
     if (!res)
     {
-      _reportStatus(i18n::requiredFormat(
-        _textCatalog, i18n::MessageId::WinUiError, {i18n::MessageArgument{"detail", res.error().message}}));
+      reportWorkflowError(res.error());
       return;
     }
 
-    _reportStatus(uimodel::formatListMembershipEditNotification(_textCatalog, *res));
+    auto notification = uimodel::listMembershipEditNotification(_textCatalog, *res);
+    reportFeedback(notification.severity, std::move(notification.text), notification.lifetime);
+  }
+
+  void ListAuthoringCoordinator::reportFeedback(rt::NotificationSeverity const severity,
+                                                std::string text,
+                                                rt::NotificationLifetime const lifetime)
+  {
+    // Feed observers run synchronously and can retire this owner.
+    auto const token = _ownerCallbackGate.token();
+    _notifications.post(severity, text, lifetime);
+
+    if (token.accepts() && _reportStatus)
+    {
+      _reportStatus(std::move(text));
+    }
+  }
+
+  void ListAuthoringCoordinator::reportWorkflowError(Error const& error)
+  {
+    reportFeedback(rt::NotificationSeverity::Error,
+                   i18n::requiredFormat(_textCatalog, i18n::MessageId::WinUiError, {{"detail", error.message}}),
+                   rt::NotificationLifetime::history());
   }
 
   uimodel::ListOrderCapabilityState ListAuthoringCoordinator::orderCapabilities() const
@@ -808,16 +779,10 @@ namespace ao::winui
     }
 
     auto const sourceStateRes = _views.listSourceState(_trackList.viewId());
-    return uimodel::describeListOrderCapabilities(
-      _textCatalog,
-      uimodel::ListOrderCapabilityInput{
-        .listId = stateRes->listId,
-        .presentation = stateRes->presentation,
-        .quickFilterExpression = stateRes->filterExpression,
-        .sourceLive = sourceStateRes && *sourceStateRes == rt::TrackSourceState::Live,
-        .sourceHasError = stateRes->optFilterError.has_value(),
-        .authoring = _library.authoringAvailability(),
-      });
+    return uimodel::describeViewListOrderCapabilities(_textCatalog,
+                                                      *stateRes,
+                                                      sourceStateRes.value_or(rt::TrackSourceState::Invalidated),
+                                                      _library.authoringAvailability());
   }
 
   void ListAuthoringCoordinator::applyOrder(ListOrderCommand const command)
@@ -831,11 +796,7 @@ namespace ao::winui
 
     if (!sessionRes)
     {
-      if (_reportStatus)
-      {
-        _reportStatus(sessionRes.error().message);
-      }
-
+      reportFeedback(rt::NotificationSeverity::Info, sessionRes.error().message, rt::NotificationLifetime::transient());
       return;
     }
 
@@ -858,7 +819,7 @@ namespace ao::winui
             token,
             std::move(submission),
             [](ListAuthoringCoordinator* target, Result<rt::AuthoringResult<rt::ResetListOrderReply>> res)
-            { target->finishOrderReset(std::move(res)); },
+            { target->finishOrder(std::move(res)); },
             stopToken);
         },
         "Windows List order reset");
@@ -880,7 +841,7 @@ namespace ao::winui
     }();
     _asyncRuntime.spawnWithLifetime(
       _commandTasks,
-      [runtime = &_asyncRuntime, owner = this, token, command, submission = std::move(submission)](
+      [runtime = &_asyncRuntime, owner = this, token, submission = std::move(submission)](
         std::stop_token const stopToken) mutable
       {
         return finishOnCallbackExecutorAsync(
@@ -888,82 +849,25 @@ namespace ao::winui
           owner,
           token,
           std::move(submission),
-          [command](ListAuthoringCoordinator* target, Result<rt::AuthoringResult<rt::MoveListOrderReply>> res)
-          { target->finishOrder(command, std::move(res)); },
+          [](ListAuthoringCoordinator* target, Result<rt::AuthoringResult<rt::MoveListOrderReply>> res)
+          { target->finishOrder(std::move(res)); },
           stopToken);
       },
       "Windows List order edit");
   }
 
-  void ListAuthoringCoordinator::finishOrder(ListOrderCommand const /*command*/,
-                                             Result<rt::AuthoringResult<rt::MoveListOrderReply>> res)
+  template<typename Reply>
+  void ListAuthoringCoordinator::finishOrder(Result<rt::AuthoringResult<Reply>> res)
   {
-    if (!_reportStatus)
-    {
-      return;
-    }
-
     if (!res)
     {
-      _reportStatus(res.error().message);
+      reportFeedback(rt::NotificationSeverity::Warning, res.error().message, rt::NotificationLifetime::history());
       return;
     }
 
-    switch (res->status)
-    {
-      case rt::AuthoringStatus::Applied:
-        _reportStatus(i18n::requiredFormat(_textCatalog,
-                                           i18n::MessageId::ListOrderMoved,
-                                           {i18n::MessageArgument{"count", affectedTrackCount(res->reply)}}));
-        return;
-      case rt::AuthoringStatus::NoOp:
-        _reportStatus(std::string{i18n::requiredText(_textCatalog, i18n::MessageId::ListOrderUnchanged)});
-        return;
-      case rt::AuthoringStatus::Busy:
-        _reportStatus(std::string{i18n::requiredText(_textCatalog, i18n::MessageId::ListOrderLibraryBusy)});
-        return;
-      case rt::AuthoringStatus::Stale:
-        _reportStatus(std::string{i18n::requiredText(_textCatalog, i18n::MessageId::ListOrderChanged)});
-        return;
-      case rt::AuthoringStatus::Unavailable:
-        _reportStatus(std::string{i18n::requiredText(_textCatalog, i18n::MessageId::ListOrderEditingUnavailable)});
-        return;
-    }
-  }
-
-  void ListAuthoringCoordinator::finishOrderReset(Result<rt::AuthoringResult<rt::ResetListOrderReply>> res)
-  {
-    if (!_reportStatus)
-    {
-      return;
-    }
-
-    if (!res)
-    {
-      _reportStatus(res.error().message);
-      return;
-    }
-
-    switch (res->status)
-    {
-      case rt::AuthoringStatus::Applied:
-        _reportStatus(i18n::requiredFormat(_textCatalog,
-                                           i18n::MessageId::ListOrderReset,
-                                           {i18n::MessageArgument{"count", res->reply.forgottenPositionCount}}));
-        return;
-      case rt::AuthoringStatus::NoOp:
-        _reportStatus(std::string{i18n::requiredText(_textCatalog, i18n::MessageId::ListOrderUnchanged)});
-        return;
-      case rt::AuthoringStatus::Busy:
-        _reportStatus(std::string{i18n::requiredText(_textCatalog, i18n::MessageId::ListOrderLibraryBusy)});
-        return;
-      case rt::AuthoringStatus::Stale:
-        _reportStatus(std::string{i18n::requiredText(_textCatalog, i18n::MessageId::ListOrderChanged)});
-        return;
-      case rt::AuthoringStatus::Unavailable:
-        _reportStatus(std::string{i18n::requiredText(_textCatalog, i18n::MessageId::ListOrderEditingUnavailable)});
-        return;
-    }
+    reportFeedback(rt::NotificationSeverity::Info,
+                   uimodel::formatListOrderOutcome(_textCatalog, *res),
+                   rt::NotificationLifetime::transient());
   }
 
   void ListAuthoringCoordinator::beginDialogWorkflow()
@@ -1003,18 +907,11 @@ namespace ao::winui
 
   void ListAuthoringCoordinator::setDialogError(std::string text)
   {
-    if (!_errorText)
+    if (_errorText)
     {
-      if (!text.empty() && _reportStatus)
-      {
-        _reportStatus(std::move(text));
-      }
-
-      return;
+      _errorText.Text(winrt::to_hstring(text));
+      _errorText.Visibility(text.empty() ? Visibility::Collapsed : Visibility::Visible);
     }
-
-    _errorText.Text(winrt::to_hstring(text));
-    _errorText.Visibility(text.empty() ? Visibility::Collapsed : Visibility::Visible);
   }
 
   void ListAuthoringCoordinator::handleDialogClosed()

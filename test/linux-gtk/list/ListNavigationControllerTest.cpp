@@ -1029,9 +1029,9 @@ namespace ao::gtk::test
       previewText.append(label->get_text());
     }
 
-    CHECK(previewText.contains("Delete Tree"));
-    CHECK(previewText.contains("Delete Child"));
-    CHECK(previewText.contains("Delete Grandchild"));
+    CHECK(previewText.contains("Delete Tree (" + std::to_string(parentId.raw()) + ")"));
+    CHECK(previewText.contains("Delete Child (" + std::to_string(childId.raw()) + ")"));
+    CHECK(previewText.contains("Delete Grandchild (" + std::to_string(grandchildId.raw()) + ")"));
     confirmation->response(Gtk::ResponseType::YES);
     REQUIRE(tryPumpGtkEventsUntil(
       [&runtime, parentId, childId, grandchildId]

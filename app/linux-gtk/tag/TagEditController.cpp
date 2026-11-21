@@ -15,8 +15,6 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/query/Expression.h>
-#include <ao/query/Serializer.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
@@ -39,7 +37,6 @@
 #include <gtkmm/window.h>
 
 #include <algorithm>
-#include <cstddef>
 #include <cstdint>
 #include <format>
 #include <functional>
@@ -47,20 +44,11 @@
 #include <optional>
 #include <span>
 #include <string>
-#include <string_view>
 #include <utility>
 #include <vector>
 
 namespace ao::gtk
 {
-  namespace
-  {
-    std::string tagExpression(std::string_view const tag)
-    {
-      return query::serialize(query::VariableExpression{.type = query::VariableType::Tag, .name = std::string{tag}});
-    }
-  }
-
   TagEditController::TagEditController(Gtk::Window& parent,
                                        async::Runtime& asyncRuntime,
                                        rt::Library& library,
@@ -276,26 +264,20 @@ namespace ao::gtk
     auto const lists = _library.snapshot().lists();
     auto const targets = uimodel::writableTagListTargets(lists, _textOrderingPolicy);
     auto addToListMenuPtr = Gio::Menu::create();
-    std::size_t addTargetCount = 0;
     auto const activeListId = _optActiveSelection ? _optActiveSelection->listId : rt::kAllTracksListId;
+    auto const membership = uimodel::listMembershipMenu(_textCatalog, targets, activeListId);
 
-    for (auto const& target : targets)
+    for (auto const& target : membership.addTargets)
     {
-      if (_optActiveSelection && target.listId == _optActiveSelection->listId)
-      {
-        continue;
-      }
-
       auto const actionName = std::format("add-to-list-{}", target.listId.raw());
       addAction(addToListMenuPtr,
-                std::format("{} ({})", target.name, tagExpression(target.tag)),
+                target.label,
                 actionName,
                 [this, listId = target.listId]
                 {
                   scheduleContextPopoverRetirement();
                   applyListMembershipToCurrentSelection(listId, true);
                 });
-      ++addTargetCount;
     }
 
     auto const hasOmittedComputedTargets = std::ranges::any_of(
@@ -331,11 +313,11 @@ namespace ao::gtk
         false);
     }
 
-    if (addTargetCount == 0)
+    if (membership.addTargets.empty())
     {
       addAction(
         addToListMenuPtr,
-        gtkText(_textCatalog, i18n::MessageId::ListNoEditablePlaylists),
+        gtkText(_textCatalog, i18n::MessageId::ListNoMembershipAddTargets),
         "add-to-list-unavailable",
         [] {},
         false);
@@ -350,15 +332,12 @@ namespace ao::gtk
 
     if (_optActiveSelection)
     {
-      auto const current =
-        std::ranges::find(targets, _optActiveSelection->listId, &uimodel::WritableTagListTarget::listId);
-
-      if (current != targets.end())
+      if (membership.optRemoveFromCurrent)
       {
         addAction(menuModelPtr,
-                  removeFromCurrentList(_textCatalog, current->name, tagExpression(current->tag)),
+                  membership.optRemoveFromCurrent->label,
                   "remove-from-current-list",
-                  [this, listId = current->listId]
+                  [this, listId = membership.optRemoveFromCurrent->listId]
                   {
                     scheduleContextPopoverRetirement();
                     applyListMembershipToCurrentSelection(listId, false);

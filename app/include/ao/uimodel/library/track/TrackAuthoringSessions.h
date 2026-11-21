@@ -16,6 +16,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <vector>
@@ -98,6 +99,23 @@ namespace ao::uimodel
 
   std::vector<WritableTagListTarget> writableTagListTargets(std::span<rt::ListNode const> lists,
                                                             rt::TextOrderingPolicy const* textOrderingPolicy = nullptr);
+
+  struct ListMembershipMenuItem final
+  {
+    ListId listId = kInvalidListId;
+    std::string label{};
+  };
+
+  struct ListMembershipMenu final
+  {
+    std::vector<ListMembershipMenuItem> addTargets{};
+    std::optional<ListMembershipMenuItem> optRemoveFromCurrent{};
+  };
+
+  /// Menus that distinguish Add to another writable List from Remove from the current one.
+  ListMembershipMenu listMembershipMenu(i18n::MessageCatalog const& textCatalog,
+                                        std::span<WritableTagListTarget const> targets,
+                                        ListId activeListId);
 
   struct ListMembershipEditResult final
   {

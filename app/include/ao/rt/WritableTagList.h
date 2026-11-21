@@ -9,6 +9,9 @@
 
 namespace ao::rt
 {
+  /// Serializes the supplied tag name as one query variable, not as raw query text.
+  std::string serializeTagExpression(std::string_view tag);
+
   /**
    * Returns the tag controlled by a List expression only when the parsed AST
    * root is one positive tag variable. This is a derived editing capability,

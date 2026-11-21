@@ -9,8 +9,10 @@
 #include "test/runtime/AppRuntimeTestSupport.h"
 #include "test/runtime/ExecutorTestSupport.h"
 #include "test/runtime/RuntimeLibraryTestSupport.h"
+#include "test/tui/RenderTestSupport.h"
 #include "tui/TrackPropertiesEditor.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/library/Credits.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListMutation.h>
@@ -18,15 +20,19 @@
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryCommands.h>
+#include <ao/rt/ordering/TextOrderingPolicy.h>
 #include <ao/uimodel/library/detail/TrackCredits.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <ftxui/component/event.hpp>
 
 #include <array>
 #include <bitset>
 #include <cstddef>
+#include <format>
+#include <initializer_list>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -36,6 +42,42 @@ namespace ao::tui::test
 {
   namespace
   {
+    class TagSuggestionOrderingPolicy final : public rt::TextOrderingPolicy
+    {
+    public:
+      explicit TagSuggestionOrderingPolicy(bool const failUnkeyedTag = false)
+        : _failUnkeyedTag{failUnkeyedTag}
+      {
+      }
+
+      Result<> makeSortKeyInto(std::string& output, std::string_view const text) const override
+      {
+        if (_failUnkeyedTag && text == "Unkeyed")
+        {
+          output = "zzzz";
+          return makeError(Error::Code::ResourceExhausted, "Could not derive key");
+        }
+
+        if (text == "ä")
+        {
+          output = "a";
+        }
+        else if (text == "ＡＢＣ")
+        {
+          output = "ABC";
+        }
+        else
+        {
+          output = text;
+        }
+
+        return {};
+      }
+
+    private:
+      bool _failUnkeyedTag;
+    };
+
     std::unique_ptr<async::Executor> makeQueuedExecutor(rt::test::QueuedExecutor*& executor)
     {
       auto ownerPtr = std::make_unique<rt::test::QueuedExecutor>();
@@ -181,6 +223,54 @@ namespace ao::tui::test
     CHECK(editor->targets()[1].title == "Second");
     CHECK(editor->status() == TrackEditorStatus::Ready);
     CHECK(fixture.refreshCount > 0);
+  }
+
+  TEST_CASE("TrackEditController - opens tags with ranked suggestions outside the selection")
+  {
+    auto fixture = EditFixture{};
+    auto const selectedId = fixture.addTrack({.tags = {"Chosen"}});
+    fixture.addTrack({.tags = {"ABC", "ＡＢＣ", "Unkeyed", "ä", "z", "Most frequent"}});
+    fixture.addTrack({.tags = {"Most frequent"}});
+    auto const checkSuggestions =
+      [&](rt::TextOrderingPolicy const* policy, std::initializer_list<std::string_view> const expectedOrder)
+    {
+      auto controller = fixture.makeController();
+      controller.setTextOrderingPolicy(policy);
+      REQUIRE(controller.tryOpen({selectedId}, TrackEditorMode::Tags));
+      CHECK_FALSE(fixture.hasNotifications());
+
+      auto const* const editor = controller.activeEditor();
+      REQUIRE(editor != nullptr);
+      auto const text = renderElement(editor->renderModal(80, 24), 80, 24).text;
+      INFO(text);
+      auto previousLine = lineIndexContaining(text, "[x] Chosen");
+      REQUIRE(previousLine >= 0);
+      CHECK_FALSE(text.contains("[ ] Chosen"));
+
+      for (auto const tag : expectedOrder)
+      {
+        auto const line = lineIndexContaining(text, std::format("[ ] {}", tag));
+        REQUIRE(line > previousLine);
+        previousLine = line;
+      }
+    };
+
+    SECTION("Locale keys break frequency ties, then raw spelling breaks key ties")
+    {
+      auto const policy = TagSuggestionOrderingPolicy{};
+      checkSuggestions(&policy, {"Most frequent", "ABC", "ＡＢＣ", "Unkeyed", "ä", "z"});
+    }
+
+    SECTION("Without a policy the snapshot's raw spelling order breaks frequency ties")
+    {
+      checkSuggestions(nullptr, {"Most frequent", "ABC", "Unkeyed", "z", "ä", "ＡＢＣ"});
+    }
+
+    SECTION("A failed key cannot reorder a retained tag by its partial output")
+    {
+      auto const policy = TagSuggestionOrderingPolicy{true};
+      checkSuggestions(&policy, {"Most frequent", "Unkeyed", "ABC", "ＡＢＣ", "ä", "z"});
+    }
   }
 
   TEST_CASE("TrackEditController - refuses to open without targets")

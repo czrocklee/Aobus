@@ -124,11 +124,11 @@ While the draft is open, committed track or List changes that affect the source 
 
 Create or Save requires a named draft whose current preview allows submission. The button can briefly reflect the previous preview after a filter edit, but activation cancels the pending debounce and refreshes the exact draft before admitting a write.
 A named draft with a blank local expression can still be submitted if its preview source is available, even if that source reports an inherited filter error. With a non-empty local expression, a filter error in the saved parent chain blocks submission and appears in the diagnostic.
-A rejected preview or write leaves the draft open with an error and changes neither the target nor the tree.
+A rejected preview or write leaves the draft open with its diagnostic and changes neither the target nor the tree. These inline diagnostics are not posted to the feed. If the target is already gone when Edit is invoked, there is no editor: the failure is a retained Error and is also reported to the live status line.
 
 Once the List save succeeds, the editor pins the selected named presentation, or clears the pin for Auto or no valid selection. An unavailable stored id opens as Auto: saving in that state clears the pin; merely browsing to the List does not. A failed List save leaves the preference untouched.
 
-The editor then navigates with an `Override` so the history point records the resolved presentation. Even a rename reapplies the choice to a reused view, replacing a temporary header sort. If navigation fails, the editor reports the error and closes; the saved List and its preference remain.
+The editor then navigates with an `Override` so the history point records the resolved presentation. Even a rename reapplies the choice to a reused view, replacing a temporary header sort. If navigation fails, the editor reports a retained Error to the feed and the live status line and closes; the saved List and its preference remain. Successful navigation updates the status line without posting an activity notification.
 
 Quick Filter shows **Create List from current filter** beside the native
 suggestion box only when shared filter state has a non-empty valid resolved
@@ -138,17 +138,15 @@ value rather than unresolved Quick text.
 
 ## Delete Lists
 
-Deletion first obtains the shared impact preview and lists every node in a
-cascade. Removal of a directly writable tag from affected tracks is unchecked by
-default. Rejecting the preview performs no deletion. An admitted operation uses the shared authoring binding and mutation rules; cancellation does not undo a durable commit. Only committed deletion publication rebuilds the tree and triggers deterministic active-view fallback.
+For a single List, the confirmation shows its name. For a subtree, it shows the names and stable List IDs found at preview time. The [deletion command](../library/mutation.md#list-deletion) resolves the subtree and any requested tag cleanup again when it runs; the preview does not freeze either. Removing the root List's directly writable tag from affected tracks is unchecked by default; nested Playlists' tags are kept. Rejecting the preview deletes nothing. Cancellation does not undo a durable commit; only committed deletion updates the tree and triggers active-view fallback.
+
+A failed deletion preview has no confirmation surface. It reports a retained Error to the feed and the same diagnostic to the live status line, as does a failed fallback to All Tracks after deletion. A deletion write failure instead stays in the open confirmation, without a duplicate feed post.
 
 ## Membership and saved order
 
-The selected-row context menu lists writable tag-backed Playlists by stable List
-id and adds the captured stable track selection through
-`ListMembershipAuthoringSession`. It offers explicit removal when the active List
-itself is directly writable and never infers editability from List name or
-presentation.
+The row menu submits the captured track selection through `ListMembershipAuthoringSession`. **Add to Playlist** lists other directly writable Playlists by name and serialized tag expression; the command uses the List ID, not that label. The active writable Playlist offers removal instead. If it is the only writable List, Add shows a disabled empty item while Remove stays available.
+
+Membership completion posts one message to the notification feed and, while the window is still live, the same text to the shell status line. Applied and NoOp are transient Info, Busy is transient Warning, and Stale and Unavailable are retained Errors. A binding or command error retains its own diagnostic. Classic displays the status line rather than the activity strip; replacing that line does not erase a retained notification. Modern displays the feed through the [activity strip](../presentation/activity-status.md): an active task, warning, or error can take priority over a transient success message. That message is not replayed when the strip becomes free.
 
 The same captured selection exposes Manual Order **Move Up**, **Move Down**,
 **Move to Top**, **Move to Bottom**, and **Reset Order** according to
@@ -156,6 +154,8 @@ The same captured selection exposes Manual Order **Move Up**, **Move Down**,
 receive `Alt+Up`, `Alt+Down`, `Alt+Home`, and `Alt+End`. They are native component
 actions, not additions to the layout-document action schema. WinUI does not
 expose drag reordering or Forget Hidden Positions in this version.
+
+A Manual Order command posts its result once and reports the same text to the live status line. A refusal to start and all writer statuses (Applied, NoOp, Busy, Stale, Unavailable) are transient Info; an error returned by the submitted command keeps its diagnostic as a retained Warning. Delivery to the feed does not guarantee that the compact strip displays the message: the same activity priorities apply as for membership.
 
 Membership and order continuations use window or workflow-generation admission.
 Retired admission suppresses late presentation; neither selection changes nor a later dialog retarget the submitted operation.
@@ -204,6 +204,7 @@ remain in the [Windows desktop state reference](../../reference/windows/desktop-
   ancestor reveal, and fallback; shared List editor, membership, and order tests
   protect semantic authoring.
 - The [native automation probe](../../../test/winui/probe/WinUiAutomationProbe.cpp) checks Create before a filter edit's debounce fires, and the open editor's labels, count, and button after a parent filter change and deletion.
+- [`WinUiTrackTableProbe.cpp`](../../../test/winui/probe/WinUiTrackTableProbe.cpp) checks List commands against the status callback and the real feed, including severity, lifetime, and retirement during a post. It also reads the blocking reason in the loaded Modern activity component on an idle feed. It drives the coordinator directly, not a physical shortcut.
 - [`KeymapAcceleratorPlanTest.cpp`](../../../test/winui/input/KeymapAcceleratorPlanTest.cpp)
   protects native-only order accelerators without extending the layout schema.
 - [`CallbackAdmissionGateTest.cpp`](../../../test/winui/app/CallbackAdmissionGateTest.cpp)

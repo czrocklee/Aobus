@@ -3,11 +3,16 @@
 
 #include "test/MessageCatalogTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
+#include <ao/rt/ViewState.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/LibraryAuthoring.h>
+#include <ao/rt/source/TrackSource.h>
 #include <ao/uimodel/library/list/ListOrder.h>
+#include <ao/uimodel/library/list/ListOrderOutcome.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -169,6 +174,94 @@ namespace ao::uimodel::test
     checkDisabled(state);
     REQUIRE_FALSE(expectedReason.empty());
     CHECK(state.disabledReason.contains(expectedReason));
+  }
+
+  TEST_CASE("ListOrder - loaded view details determine which order commands remain available")
+  {
+    auto const& textCatalog = ao::test::englishMessageCatalog();
+    auto view = rt::TrackListViewState{.listId = ListId{42}, .filterExpression = "true"};
+    auto availability = rt::LibraryAuthoringAvailability{};
+    auto sourceState = rt::TrackSourceState::Live;
+
+    SECTION("live quick-filtered view")
+    {
+      auto const state = describeViewListOrderCapabilities(textCatalog, view, sourceState, availability);
+
+      CHECK(state.canAuthorOrder);
+      CHECK_FALSE(state.canGapMove);
+      CHECK_FALSE(state.canRelativeMove);
+      CHECK(state.canAbsoluteMove);
+      CHECK(state.canResetOrder);
+      CHECK(state.canForgetHiddenPositions);
+    }
+
+    SECTION("filter error on a live view")
+    {
+      view.filterExpression = "(";
+      view.optFilterError = Error{.code = Error::Code::InvalidInput, .message = "Invalid expression"};
+      auto const state = describeViewListOrderCapabilities(textCatalog, view, sourceState, availability);
+
+      checkDisabled(state);
+      CHECK(state.disabledReason == "Fix the List or quick-filter expression before changing its order.");
+    }
+
+    SECTION("invalidated source")
+    {
+      sourceState = rt::TrackSourceState::Invalidated;
+      auto const state = describeViewListOrderCapabilities(textCatalog, view, sourceState, availability);
+
+      checkDisabled(state);
+      CHECK(state.disabledReason == "This List is no longer available.");
+    }
+
+    SECTION("authoring under maintenance")
+    {
+      availability.state = rt::LibraryAuthoringState::Maintenance;
+      auto const state = describeViewListOrderCapabilities(textCatalog, view, sourceState, availability);
+
+      checkDisabled(state);
+      CHECK(state.disabledReason == "Library is busy. Manual ordering will be available when maintenance finishes.");
+    }
+  }
+
+  TEST_CASE("ListOrder - applied outcomes format the count from the typed action reply")
+  {
+    auto const& textCatalog = ao::test::englishMessageCatalog();
+    auto const move = rt::AuthoringResult<rt::MoveListOrderReply>{
+      .status = rt::AuthoringStatus::Applied,
+      .reply = {.selectedTrackIds = {TrackId{1}, TrackId{2}}},
+    };
+    auto const reset = rt::AuthoringResult<rt::ResetListOrderReply>{
+      .status = rt::AuthoringStatus::Applied,
+      .reply = {.forgottenPositionCount = 3},
+    };
+    auto const forgetHidden = rt::AuthoringResult<rt::ForgetHiddenListOrderReply>{
+      .status = rt::AuthoringStatus::Applied,
+      .reply = {.forgottenPositionCount = 1},
+    };
+
+    CHECK(formatListOrderOutcome(textCatalog, move) == "Moved 2 tracks in Manual Order.");
+    CHECK(formatListOrderOutcome(textCatalog, reset) == "Reset Manual Order and forgot 3 saved positions.");
+    CHECK(formatListOrderOutcome(textCatalog, forgetHidden) == "Forgot 1 hidden saved position.");
+  }
+
+  TEST_CASE("ListOrder - unchanged and refused outcomes report guidance without a count")
+  {
+    auto const& textCatalog = ao::test::englishMessageCatalog();
+    using rt::AuthoringStatus;
+
+    CHECK(formatListOrderOutcome(
+            textCatalog, rt::AuthoringResult<rt::MoveListOrderReply>{.status = AuthoringStatus::NoOp}) ==
+          "Order unchanged.");
+    CHECK(formatListOrderOutcome(
+            textCatalog, rt::AuthoringResult<rt::MoveListOrderReply>{.status = AuthoringStatus::Busy}) ==
+          "Library is busy. Manual ordering will be available when maintenance finishes.");
+    CHECK(formatListOrderOutcome(
+            textCatalog, rt::AuthoringResult<rt::ResetListOrderReply>{.status = AuthoringStatus::Stale}) ==
+          "The List changed. Start the order action again.");
+    CHECK(formatListOrderOutcome(
+            textCatalog, rt::AuthoringResult<rt::ForgetHiddenListOrderReply>{.status = AuthoringStatus::Unavailable}) ==
+          "Library editing is currently unavailable.");
   }
 
   TEST_CASE("ListOrder - drag selection follows effective order")

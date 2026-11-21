@@ -452,9 +452,10 @@ zh_Hans:table {
     library_restore_confirmation { "此恢复操作将替换以下内容：{scope}。\n\n数据：YAML v{version}，模式 ''{mode}''。\n预览：创建 {tracksCreated} 首，更新 {tracksUpdated} 首，删除 {tracksDeleted} 首；创建 {listsCreated} 个列表，删除 {listsDeleted} 个列表；忽略 {dangling} 个悬空引用；按原样保留 {invalidFilters} 个无效的列表筛选条件。\n\n仅在此内容与所选备份匹配时继续。" }
     library_file_selection_error { "{operation}：{message}" }
     gtk_list_other_computed_membership { "其他列表具有计算出的成员资格；请改为编辑其表达式或曲目标签。" }
-    list_no_editable_playlists { "没有可直接编辑的播放列表" }
+    list_no_membership_add_targets { "没有可接收这些曲目的播放列表" }
     gtk_list_create_playlist { "创建播放列表..." }
     gtk_list_manage_lists { "管理列表..." }
+    list_membership_add_target { "{name} ({tag})" }
     list_add_to_playlist { "添加到播放列表" }
     list_remove_from_current { "从 {name} ({tag}) 中移除" }
     gtk_list_remove_computed_unavailable { "无法从此列表中移除，因为其成员资格是通过计算得出的。" }
@@ -1157,7 +1158,6 @@ zh_Hans:table {
     appkit_new_list { "新建列表" }
     appkit_edit_list { "编辑列表" }
     appkit_remove_from_list { "从列表中移除" }
-    appkit_add_to_list { "添加到列表" }
     appkit_properties_stale { "音乐库已更改。输入内容已保留；请重新打开属性以编辑当前版本。" }
     appkit_editor_busy { "音乐库繁忙。输入内容已保留；请再次尝试保存。" }
     appkit_editor_stale { "音乐库已更改。输入内容已保留；请重新打开编辑器以继续。" }
@@ -1260,7 +1260,6 @@ zh_Hans:table {
     appkit_choose_library_folder { "请选择存放音乐库的文件夹。" }
     appkit_clear_recent_menu { "清除菜单" }
     appkit_unknown_folder { "未知文件夹" }
-    appkit_remove_from_current_list { "从此列表中移除" }
     appkit_playback_position_value { "{elapsed}，共 {duration}" }
     appkit_selection_total { "已选择 {selected, number} / {total, plural, other {共 # 首曲目}}" }
     appkit_tracks_selected { "{count, plural, other {已选择 # 首曲目}}" }

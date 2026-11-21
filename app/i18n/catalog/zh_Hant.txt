@@ -451,9 +451,10 @@ zh_Hant:table {
     library_restore_confirmation { "此還原操作將取代以下內容：{scope}。\n\n資料：YAML v{version}，模式 ''{mode}''。\n預覽：建立 {tracksCreated} 首、更新 {tracksUpdated} 首、刪除 {tracksDeleted} 首；建立 {listsCreated} 個列表、刪除 {listsDeleted} 個列表；忽略 {dangling} 個懸空參照；依原樣保留 {invalidFilters} 個無效的列表篩選條件。\n\n請只在此內容與所選備份相符時繼續。" }
     library_file_selection_error { "{operation}：{message}" }
     gtk_list_other_computed_membership { "其他列表的成員由系統計算；請改為編輯其表示式或曲目標籤。" }
-    list_no_editable_playlists { "沒有可直接編輯的播放清單" }
+    list_no_membership_add_targets { "沒有可接收這些曲目的播放清單" }
     gtk_list_create_playlist { "建立播放清單..." }
     gtk_list_manage_lists { "管理列表..." }
+    list_membership_add_target { "{name} ({tag})" }
     list_add_to_playlist { "新增到播放清單" }
     list_remove_from_current { "從 {name} ({tag}) 中移除" }
     gtk_list_remove_computed_unavailable { "無法從此列表中移除，因為其成員資格是透過計算得出的。" }
@@ -1156,7 +1157,6 @@ zh_Hant:table {
     appkit_new_list { "新建列表" }
     appkit_edit_list { "編輯列表" }
     appkit_remove_from_list { "從列表中移除" }
-    appkit_add_to_list { "新增到列表" }
     appkit_properties_stale { "音樂庫已變更。輸入內容已保留；請重新開啟屬性以編輯目前版本。" }
     appkit_editor_busy { "音樂庫忙碌中。輸入內容已保留；請再次嘗試儲存。" }
     appkit_editor_stale { "音樂庫已變更。輸入內容已保留；請重新開啟編輯器以繼續。" }
@@ -1259,7 +1259,6 @@ zh_Hant:table {
     appkit_choose_library_folder { "請選擇存放音樂庫的資料夾。" }
     appkit_clear_recent_menu { "清除選單" }
     appkit_unknown_folder { "未知的資料夾" }
-    appkit_remove_from_current_list { "從此列表中移除" }
     appkit_playback_position_value { "{elapsed}，共 {duration}" }
     appkit_selection_total { "已選取 {selected, number} / {total, plural, other {共 # 首曲目}}" }
     appkit_tracks_selected { "{count, plural, other {已選取 # 首曲目}}" }

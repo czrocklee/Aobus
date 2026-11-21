@@ -11,6 +11,7 @@
 #include <ao/async/Task.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/ListMutation.h>
+#include <ao/rt/NotificationState.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/source/TrackSourceLease.h>
 #include <ao/uimodel/library/list/ListAuthoring.h>
@@ -44,6 +45,7 @@ namespace ao::async
 namespace ao::rt
 {
   class Library;
+  class NotificationService;
   class TextOrderingPolicy;
   class TrackSourceCache;
   class ViewService;
@@ -66,6 +68,7 @@ namespace ao::winui
     rt::Library& library;
     rt::ViewService& views;
     rt::TrackSourceCache& sources;
+    rt::NotificationService& notifications;
     TrackListController& trackList;
     uimodel::TrackPresentationCatalog& presentationCatalog;
     uimodel::ListPresentations& listPresentations;
@@ -121,8 +124,10 @@ namespace ao::winui
     void finishDeleteCommit(Result<rt::DeleteListSubtreeReply> res);
 
     void finishMembership(Result<uimodel::ListMembershipEditResult> res);
-    void finishOrder(ListOrderCommand command, Result<rt::AuthoringResult<rt::MoveListOrderReply>> res);
-    void finishOrderReset(Result<rt::AuthoringResult<rt::ResetListOrderReply>> res);
+    template<typename Reply>
+    void finishOrder(Result<rt::AuthoringResult<Reply>> res);
+    void reportFeedback(rt::NotificationSeverity severity, std::string text, rt::NotificationLifetime lifetime);
+    void reportWorkflowError(Error const& error);
 
     void beginDialogWorkflow();
     void showDialog();
@@ -151,6 +156,7 @@ namespace ao::winui
     rt::Library& _library;
     rt::ViewService& _views;
     rt::TrackSourceCache& _sources;
+    rt::NotificationService& _notifications;
     TrackListController& _trackList;
     uimodel::TrackPresentationCatalog& _presentationCatalog;
     uimodel::ListPresentations& _listPresentations;

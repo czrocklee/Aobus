@@ -11,12 +11,9 @@
 #include "list/ListNavigationPanel.h"
 #include "list/SmartListDialog.h"
 #include "track/TrackRowCache.h"
-#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/query/Expression.h>
-#include <ao/query/Serializer.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/ListNode.h>
@@ -47,7 +44,6 @@
 
 #include <cstdint>
 #include <expected>
-#include <format>
 #include <memory>
 #include <optional>
 #include <string>
@@ -68,11 +64,6 @@ namespace ao::gtk
       auto actionPtr = Gio::SimpleAction::create(actionName);
       actionPtr->set_enabled(previousActionPtr && previousActionPtr->get_enabled());
       return actionPtr;
-    }
-
-    std::string displayedTag(std::string_view const tag)
-    {
-      return query::serialize(query::VariableExpression{.type = query::VariableType::Tag, .name = std::string{tag}});
     }
   } // namespace
 
@@ -505,16 +496,7 @@ namespace ao::gtk
                     return;
                   }
 
-                  AO_INVARIANT(
-                    !previewRes->deletedLists.empty(), "A successful List deletion preview must contain its root List");
-
-                  auto const& preview = previewRes->deletedLists.front();
-
-                  owner->presentDeleteConfirmation(listId,
-                                                   false,
-                                                   gtkText(owner->_textCatalog, i18n::MessageId::ListDeleteTitle),
-                                                   deleteListQuestion(owner->_textCatalog, preview.name),
-                                                   preview.optTagImpact);
+                  owner->presentDeleteConfirmation(listId, false, *previewRes);
                 });
   }
 
@@ -540,45 +522,26 @@ namespace ao::gtk
                     return;
                   }
 
-                  auto entries = std::string{};
-
-                  for (auto const& list : previewRes->deletedLists)
-                  {
-                    entries.append(std::format("• {} ({})\n", list.name, list.listId));
-                  }
-
-                  auto message = deleteSubtreeQuestion(owner->_textCatalog, previewRes->deletedLists.size(), entries);
-                  auto optTagImpact = previewRes->deletedLists.empty() ? std::optional<rt::DeleteListReply::TagImpact>{}
-                                                                       : previewRes->deletedLists.front().optTagImpact;
-                  owner->presentDeleteConfirmation(
-                    listId,
-                    true,
-                    gtkText(owner->_textCatalog, i18n::MessageId::ListDeleteSubtreeTitle),
-                    std::move(message),
-                    std::move(optTagImpact));
+                  owner->presentDeleteConfirmation(listId, true, *previewRes);
                 });
   }
 
   void ListNavigationController::presentDeleteConfirmation(ListId const listId,
                                                            bool const deleteDescendants,
-                                                           std::string title,
-                                                           std::string message,
-                                                           std::optional<rt::DeleteListReply::TagImpact> optTagImpact)
+                                                           rt::DeleteListSubtreeReply const& preview)
   {
+    auto description = uimodel::describeListDeletion(_textCatalog, preview, deleteDescendants);
     auto* const dialog = Gtk::make_managed<AppDialog>();
-    dialog->set_title(std::move(title));
+    dialog->set_title(gtkText(_textCatalog, description.labels.title));
     dialog->configureForParent(_parent);
     dialog->setCloseResponse(Gtk::ResponseType::CANCEL);
     dialog->addCancelAction(gtkText(_textCatalog, i18n::MessageId::GtkCommonCancel), Gtk::ResponseType::CANCEL);
-    dialog->addPrimaryAction(
-      gtkText(
-        _textCatalog, deleteDescendants ? i18n::MessageId::ListDeleteAllAction : i18n::MessageId::ListDeleteAction),
-      Gtk::ResponseType::YES);
+    dialog->addPrimaryAction(gtkText(_textCatalog, description.labels.action), Gtk::ResponseType::YES);
     dialog->setDefaultResponse(Gtk::ResponseType::CANCEL);
 
     auto* const content = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 12);
     content->set_size_request(kDeleteDialogWidth, -1);
-    auto* const messageLabel = Gtk::make_managed<Gtk::Label>(std::move(message));
+    auto* const messageLabel = Gtk::make_managed<Gtk::Label>(std::move(description.question));
     messageLabel->set_halign(Gtk::Align::START);
     messageLabel->set_xalign(0.0F);
     messageLabel->set_wrap(true);
@@ -587,29 +550,15 @@ namespace ao::gtk
 
     auto* cleanupCheck = static_cast<Gtk::CheckButton*>(nullptr);
 
-    if (optTagImpact)
+    if (auto& optCleanup = description.optCleanup; optCleanup)
     {
-      cleanupCheck = Gtk::make_managed<Gtk::CheckButton>(
-        removeMembershipTagQuestion(_textCatalog, displayedTag(optTagImpact->tag), optTagImpact->taggedTrackCount));
+      cleanupCheck = Gtk::make_managed<Gtk::CheckButton>(std::move(optCleanup->question));
       cleanupCheck->set_active(false);
       content->append(*cleanupCheck);
 
-      if (!optTagImpact->otherListReferences.empty())
+      if (!optCleanup->referencesWarning.empty())
       {
-        auto references = std::string{};
-
-        for (auto const& reference : optTagImpact->otherListReferences)
-        {
-          if (!references.empty())
-          {
-            references.append(", ");
-          }
-
-          references.append(reference.name);
-        }
-
-        auto* const warningLabel = Gtk::make_managed<Gtk::Label>(
-          membershipTagReferencesWarning(_textCatalog, displayedTag(optTagImpact->tag), references));
+        auto* const warningLabel = Gtk::make_managed<Gtk::Label>(std::move(optCleanup->referencesWarning));
         warningLabel->set_halign(Gtk::Align::START);
         warningLabel->set_xalign(0.0F);
         warningLabel->set_wrap(true);

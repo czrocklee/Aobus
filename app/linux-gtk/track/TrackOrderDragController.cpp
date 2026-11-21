@@ -15,8 +15,8 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/ViewIds.h>
-#include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/uimodel/library/list/ListOrder.h>
+#include <ao/uimodel/library/list/ListOrderOutcome.h>
 #include <ao/uimodel/library/list/ListOrderSession.h>
 
 #include <gdkmm/contentprovider.h>
@@ -351,41 +351,22 @@ namespace ao::gtk
       auto selectedIds = std::move(selectedTrackIds);
       auto submission = optSession->moveBeforeAsync(std::move(selectedIds), *anchorRes);
       clearActiveDrag();
-      spawnUiTask(
-        asyncRuntime,
-        tasks,
-        *this,
-        "track order drop",
-        std::move(submission),
-        [](State* state, auto res)
-        {
-          if (!res)
-          {
-            APP_LOG_ERROR("Track order drop failed: {}", res.error().message);
-            state->showStatus(res.error().message);
-            return;
-          }
+      spawnUiTask(asyncRuntime,
+                  tasks,
+                  *this,
+                  "track order drop",
+                  std::move(submission),
+                  [](State* state, auto res)
+                  {
+                    if (!res)
+                    {
+                      APP_LOG_ERROR("Track order drop failed: {}", res.error().message);
+                      state->showStatus(res.error().message);
+                      return;
+                    }
 
-          switch (res->status)
-          {
-            case rt::AuthoringStatus::Applied:
-              state->showStatus(i18n::requiredFormat(
-                state->textCatalog, i18n::MessageId::ListOrderMoved, {{"count", res->reply.selectedTrackIds.size()}}));
-              break;
-            case rt::AuthoringStatus::NoOp:
-              state->showStatus(gtkText(state->textCatalog, i18n::MessageId::ListOrderUnchanged));
-              break;
-            case rt::AuthoringStatus::Busy:
-              state->showStatus(gtkText(state->textCatalog, i18n::MessageId::ListOrderLibraryBusy));
-              break;
-            case rt::AuthoringStatus::Stale:
-              state->showStatus(gtkText(state->textCatalog, i18n::MessageId::ListOrderChanged));
-              break;
-            case rt::AuthoringStatus::Unavailable:
-              state->showStatus(gtkText(state->textCatalog, i18n::MessageId::ListOrderEditingUnavailable));
-              break;
-          }
-        });
+                    state->showStatus(uimodel::formatListOrderOutcome(state->textCatalog, *res));
+                  });
       return true;
     }
 

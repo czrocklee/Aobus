@@ -451,9 +451,10 @@ fr:table {
     library_restore_confirmation { "Cette restauration remplacera le contenu actuel du périmètre suivant : {scope}.\n\nDonnées : YAML v{version}, mode ''{mode}''.\nAperçu : morceaux créés : {tracksCreated}, morceaux mis à jour : {tracksUpdated}, morceaux supprimés : {tracksDeleted} ; listes créées : {listsCreated}, listes supprimées : {listsDeleted} ; références orphelines ignorées : {dangling} ; filtres de liste invalides conservés tels quels : {invalidFilters}.\n\nNe continuez que si cela correspond à la sauvegarde sélectionnée." }
     library_file_selection_error { "{operation} : {message}" }
     gtk_list_other_computed_membership { "D''autres listes ont des membres calculés ; modifiez leur expression ou leurs tags à la place." }
-    list_no_editable_playlists { "Aucune liste de lecture directement modifiable" }
+    list_no_membership_add_targets { "Aucune liste de lecture de destination" }
     gtk_list_create_playlist { "Créer une liste de lecture..." }
     gtk_list_manage_lists { "Gérer les listes..." }
+    list_membership_add_target { "{name} ({tag})" }
     list_add_to_playlist { "Ajouter à la liste de lecture" }
     list_remove_from_current { "Supprimer de {name} ({tag})" }
     gtk_list_remove_computed_unavailable { "Impossible de supprimer de cette liste car ses membres sont calculés." }
@@ -1156,7 +1157,6 @@ fr:table {
     appkit_new_list { "Nouvelle liste" }
     appkit_edit_list { "Modifier la liste" }
     appkit_remove_from_list { "Supprimer de la liste" }
-    appkit_add_to_list { "Ajouter à la liste" }
     appkit_properties_stale { "La bibliothèque a changé. Vos saisies sont conservées ; rouvrez les propriétés pour modifier la version actuelle." }
     appkit_editor_busy { "La bibliothèque est occupée. Vos saisies sont conservées ; réessayez d’enregistrer." }
     appkit_editor_stale { "La bibliothèque a changé. Vos saisies sont conservées ; rouvrez l’éditeur pour continuer." }
@@ -1259,7 +1259,6 @@ fr:table {
     appkit_choose_library_folder { "Choisissez le dossier qui contient votre bibliothèque musicale." }
     appkit_clear_recent_menu { "Effacer le menu" }
     appkit_unknown_folder { "Dossier inconnu" }
-    appkit_remove_from_current_list { "Supprimer de cette liste" }
     appkit_playback_position_value { "{elapsed} sur {duration}" }
     appkit_selection_total { "Sélection : {selected, number} / {total, plural, one {# morceau} other {# morceaux}}" }
     appkit_tracks_selected { "{count, plural, one {# morceau sélectionné} other {# morceaux sélectionnés}}" }

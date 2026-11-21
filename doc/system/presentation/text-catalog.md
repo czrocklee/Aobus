@@ -112,6 +112,9 @@ Important formatter semantics include:
   localized unknown error;
 - notification grouping is selected from typed severity and count;
 - scan change counts are combined from structured relinked/missing values;
+- saved-order results use the mutation reply to count moved tracks or forgotten
+  positions, not the size of a later UI selection. An unchanged result is not
+  a successful move or reset;
 - Smart List membership distinguishes direct tag-backed from computed membership
   before selecting its message;
 - List-membership results select messages from operation and typed authoring
@@ -132,8 +135,8 @@ The source mappings live in
 [`PlaybackCommandText.cpp`](../../../app/uimodel/playback/command/PlaybackCommandText.cpp),
 [`PlaybackOutputText.cpp`](../../../app/uimodel/playback/output/PlaybackOutputText.cpp),
 [`ListMembershipAuthoringSession.cpp`](../../../app/uimodel/library/track/ListMembershipAuthoringSession.cpp),
-and
-[`ActivityPresentationText.cpp`](../../../app/uimodel/status/activity/ActivityPresentationText.cpp).
+[`ListOrderOutcome.cpp`](../../../app/uimodel/library/list/ListOrderOutcome.cpp),
+and [`ActivityPresentationText.cpp`](../../../app/uimodel/status/activity/ActivityPresentationText.cpp).
 Those sources, not a duplicate table here, own exact enum/message and id/message
 associations.
 

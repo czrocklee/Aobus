@@ -24,6 +24,7 @@
 #include <array>
 #include <atomic>
 #include <memory>
+#include <span>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -77,6 +78,40 @@ namespace ao::uimodel::test
       CHECK(result[0].listId == ListId{3});
       CHECK(result[1].listId == ListId{9});
     }
+  }
+
+  TEST_CASE("List membership menu - keeps other writable targets in order and separates the current one")
+  {
+    auto const& catalog = ao::test::englishMessageCatalog();
+    auto const lists = std::array{
+      rt::ListNode{.id = ListId{1}, .name = "Replay", .expression = R"(#"雪\"Mix\\1")"},
+      rt::ListNode{.id = ListId{2}, .name = "Recent", .expression = "$year > 2020"},
+      rt::ListNode{.id = ListId{3}, .name = "Archive", .expression = "#old"},
+    };
+    auto const targets = writableTagListTargets(lists);
+    auto const menu = listMembershipMenu(catalog, targets, ListId{3});
+    REQUIRE(menu.addTargets.size() == 1);
+    CHECK(menu.addTargets.front().listId == ListId{1});
+    CHECK(menu.addTargets.front().label == R"label(Replay (#"雪\"Mix\\1"))label");
+    REQUIRE(menu.optRemoveFromCurrent);
+    CHECK(menu.optRemoveFromCurrent->listId == ListId{3});
+    CHECK(menu.optRemoveFromCurrent->label == "Remove from Archive (#old)");
+    auto const german = listMembershipMenu(ao::test::messageCatalog("de-DE"), targets, ListId{3});
+    REQUIRE(german.optRemoveFromCurrent);
+    CHECK(german.optRemoveFromCurrent->label == "Aus Archive (#old) entfernen");
+
+    auto const computed = listMembershipMenu(catalog, targets, ListId{2});
+    REQUIRE(computed.addTargets.size() == 2);
+    CHECK(computed.addTargets[0].listId == ListId{3});
+    CHECK(computed.addTargets[1].listId == ListId{1});
+    CHECK_FALSE(computed.optRemoveFromCurrent);
+    auto const currentOnly = listMembershipMenu(catalog, std::span{targets}.first(1), ListId{3});
+    CHECK(currentOnly.addTargets.empty());
+    REQUIRE(currentOnly.optRemoveFromCurrent);
+    CHECK(currentOnly.optRemoveFromCurrent->listId == ListId{3});
+    auto const empty = listMembershipMenu(catalog, {}, ListId{2});
+    CHECK(empty.addTargets.empty());
+    CHECK_FALSE(empty.optRemoveFromCurrent);
   }
 
   TEST_CASE("ListMembershipAuthoringSession - formats edit notifications")

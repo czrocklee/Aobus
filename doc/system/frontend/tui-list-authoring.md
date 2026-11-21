@@ -61,7 +61,8 @@ The confirmation owns input from the command on, so no key typed while the previ
 Until the preview lands the question shows only its title and `Esc`, which cancels and leaves the late preview unmatched; a failed preview closes the question and reports the runtime's diagnostic.
 A filled question can be confirmed only after it has been drawn once, so a key buffered before the question was visible, such as a second Return after the command, cannot answer it.
 
-The confirmation shows the shared deletion question for the previewed scope: a plain List asks the single-list question, and a List with descendants asks the subtree question naming a bounded leading window of removed Lists and counting the rest with one localized line. The window shrinks further on short terminals so the question and its footer always fit; each entry keeps one row, and a name too wide for it, like a List named in the tag-reference warning, ends in an ellipsis.
+For one List the confirmation names that List. For a subtree it lists a bounded number of names without numeric IDs and counts the remaining Lists in one localized line. Short terminals show fewer entries to preserve the question and footer. Each entry keeps one row; long names end in an ellipsis, including in the tag-reference warning.
+
 A directly editable single-tag List additionally offers the shared tag-removal question as a `Space`-toggled row and warns when other Lists still reference that tag; the toggle decides the deletion's `removeWritableTagFromTracks` option.
 `Enter` confirms with the shared Delete or Delete-all label in the danger color, `Esc` is labelled Cancel and changes nothing, and both footer controls are clickable.
 The confirmation is a titled popover with the command palette's cleared halo; its height follows its wrapped content, and the question yields rows before the footer does.

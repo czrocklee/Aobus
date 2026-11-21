@@ -451,9 +451,10 @@ ja:table {
     library_restore_confirmation { "この復元により、現在の対象データ（{scope}）が置き換えられます。\n\nバックアップは YAML v{version} 形式で、モードは ''{mode}'' です。\nプレビューでは、{tracksCreated} 曲を作成し、{tracksUpdated} 曲を更新し、{tracksDeleted} 曲を削除します。{listsCreated} 件のリストを作成し、{listsDeleted} 件を削除します。未解決の参照 {dangling} 件は無視します。無効なリストフィルター {invalidFilters} 件はそのまま保持します。\n\n選択したバックアップの内容と一致する場合のみ続行してください。" }
     library_file_selection_error { "{operation}: {message}" }
     gtk_list_other_computed_membership { "他のリストには計算されたメンバーシップがあります。代わりにその式または曲のタグを編集してください。" }
-    list_no_editable_playlists { "直接編集可能なプレイリストはありません" }
+    list_no_membership_add_targets { "追加先のプレイリストはありません" }
     gtk_list_create_playlist { "プレイリストを作成..." }
     gtk_list_manage_lists { "リストを管理..." }
+    list_membership_add_target { "{name} ({tag})" }
     list_add_to_playlist { "プレイリストに追加" }
     list_remove_from_current { "{name} ({tag}) から削除" }
     gtk_list_remove_computed_unavailable { "メンバーシップが計算されているため、このリストからの削除は利用できません。" }
@@ -1156,7 +1157,6 @@ ja:table {
     appkit_new_list { "新規リスト" }
     appkit_edit_list { "リストを編集" }
     appkit_remove_from_list { "リストから削除" }
-    appkit_add_to_list { "リストに追加" }
     appkit_properties_stale { "ライブラリが変更されました。入力内容は保持されています。最新の内容を編集するには、プロパティを開き直してください。" }
     appkit_editor_busy { "ライブラリがビジー状態です。入力内容は保持されています。もう一度保存してください。" }
     appkit_editor_stale { "ライブラリが変更されました。入力内容は保持されています。続けるにはエディターを開き直してください。" }
@@ -1259,7 +1259,6 @@ ja:table {
     appkit_choose_library_folder { "音楽ライブラリが入っているフォルダを選択してください。" }
     appkit_clear_recent_menu { "メニューを消去" }
     appkit_unknown_folder { "不明なフォルダ" }
-    appkit_remove_from_current_list { "このリストから削除" }
     appkit_playback_position_value { "{elapsed}（全体 {duration}）" }
     appkit_selection_total { "{selected, number} 曲を選択中 / {total, plural, other {全 # 曲}}" }
     appkit_tracks_selected { "{count, plural, other {# 曲を選択中}}" }

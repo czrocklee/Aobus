@@ -453,9 +453,10 @@ root:table {
     library_restore_confirmation { "This restore will replace the current {scope}.\n\nPayload: YAML v{version}, mode ''{mode}''.\nPreview — tracks: {tracksCreated} created, {tracksUpdated} updated, {tracksDeleted} deleted; Lists: {listsCreated} created, {listsDeleted} deleted; dangling references ignored: {dangling}; invalid List filters kept as written: {invalidFilters}.\n\nContinue only if this matches the selected backup." }
     library_file_selection_error { "{operation}: {message}" }
     gtk_list_other_computed_membership { "Other Lists have computed membership; edit their expression or track tags instead." }
-    list_no_editable_playlists { "No directly editable Playlists" }
+    list_no_membership_add_targets { "No Playlists to add to" }
     gtk_list_create_playlist { "Create a Playlist..." }
     gtk_list_manage_lists { "Manage Lists..." }
+    list_membership_add_target { "{name} ({tag})" }
     list_add_to_playlist { "Add to Playlist" }
     list_remove_from_current { "Remove from {name} ({tag})" }
     gtk_list_remove_computed_unavailable { "Remove from this List is unavailable because its membership is computed." }
@@ -1158,7 +1159,6 @@ root:table {
     appkit_new_list { "New List" }
     appkit_edit_list { "Edit List" }
     appkit_remove_from_list { "Remove from List" }
-    appkit_add_to_list { "Add to List" }
     appkit_properties_stale { "The library changed. Your input is preserved; reopen Properties to edit the current revision." }
     appkit_editor_busy { "The library is busy. Your input is preserved; try saving again." }
     appkit_editor_stale { "The library changed. Your input is preserved; reopen the editor to continue." }
@@ -1261,7 +1261,6 @@ root:table {
     appkit_choose_library_folder { "Choose the folder containing your music library." }
     appkit_clear_recent_menu { "Clear Menu" }
     appkit_unknown_folder { "Unknown folder" }
-    appkit_remove_from_current_list { "Remove from This List" }
     appkit_playback_position_value { "{elapsed} of {duration}" }
     appkit_selection_total { "{selected, number} selected / {total, plural, one {# track} other {# tracks}}" }
     appkit_tracks_selected { "{count, plural, one {# track selected} other {# tracks selected}}" }

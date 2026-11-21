@@ -10,16 +10,15 @@
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/rt/ListMutation.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
+#include <ao/uimodel/library/list/ListOrderOutcome.h>
 #include <ao/uimodel/library/list/ListOrderSession.h>
 
-#include <cstddef>
 #include <exception>
 #include <memory>
 #include <source_location>
@@ -29,19 +28,6 @@
 
 namespace ao::tui
 {
-  namespace
-  {
-    std::size_t affectedTrackCount(rt::MoveListOrderReply const& reply)
-    {
-      return reply.selectedTrackIds.size();
-    }
-
-    std::size_t affectedTrackCount(rt::ResetListOrderReply const& reply)
-    {
-      return reply.forgottenPositionCount;
-    }
-  } // namespace
-
   struct ListOrderController::State final
   {
     async::Runtime& runtime;
@@ -72,8 +58,7 @@ namespace ao::tui
     template<typename Reply>
     void completeSubmission(bool const cancelled,
                             Result<rt::AuthoringResult<Reply>> res,
-                            std::exception_ptr unexpectedPtr,
-                            i18n::MessageId const appliedMessageId)
+                            std::exception_ptr unexpectedPtr)
     {
       expectCallbackExecutor();
 
@@ -101,33 +86,8 @@ namespace ao::tui
         return;
       }
 
-      switch (res->status)
-      {
-        case rt::AuthoringStatus::Applied:
-          post(rt::NotificationSeverity::Info,
-               i18n::requiredFormat(textCatalog, appliedMessageId, {{"count", affectedTrackCount(res->reply)}}));
-          return;
-        case rt::AuthoringStatus::NoOp:
-          post(rt::NotificationSeverity::Info,
-               std::string{i18n::requiredText(textCatalog, i18n::MessageId::ListOrderUnchanged)});
-          return;
-        // A busy library, a moved revision, and a view that cannot be ordered
-        // are moments to retry, not faults, so they pass like the GTK status
-        // line instead of pinning a warning the next successful move would
-        // leave standing.
-        case rt::AuthoringStatus::Busy:
-          post(rt::NotificationSeverity::Info,
-               std::string{i18n::requiredText(textCatalog, i18n::MessageId::ListOrderLibraryBusy)});
-          return;
-        case rt::AuthoringStatus::Stale:
-          post(rt::NotificationSeverity::Info,
-               std::string{i18n::requiredText(textCatalog, i18n::MessageId::ListOrderChanged)});
-          return;
-        case rt::AuthoringStatus::Unavailable:
-          post(rt::NotificationSeverity::Info,
-               std::string{i18n::requiredText(textCatalog, i18n::MessageId::ListOrderEditingUnavailable)});
-          return;
-      }
+      // Writer statuses, including refusals, are transient feedback rather than operational faults.
+      post(rt::NotificationSeverity::Info, uimodel::formatListOrderOutcome(textCatalog, *res));
     }
 
     /**
@@ -139,8 +99,7 @@ namespace ao::tui
      */
     template<typename Reply>
     static async::Task<void> runSubmissionAsync(std::shared_ptr<State> statePtr,
-                                                async::Task<Result<rt::AuthoringResult<Reply>>> submission,
-                                                i18n::MessageId const appliedMessageId)
+                                                async::Task<Result<rt::AuthoringResult<Reply>>> submission)
     {
       auto res = Result<rt::AuthoringResult<Reply>>{};
       auto unexpectedPtr = std::exception_ptr{};
@@ -169,7 +128,7 @@ namespace ao::tui
       }
 
       co_await statePtr->runtime.resumeOnCallbackExecutorAsync();
-      statePtr->completeSubmission(cancelled, std::move(res), std::move(unexpectedPtr), appliedMessageId);
+      statePtr->completeSubmission(cancelled, std::move(res), std::move(unexpectedPtr));
     }
   };
 
@@ -218,56 +177,21 @@ namespace ao::tui
 
     auto& session = *sessionRes;
 
-    // Each submission task is constructed before the in-flight gate is armed
-    // and its coroutine spawned, so a throwing construction leaves the gate
-    // open for the next command instead of dropping every later key.
+    // The task is constructed before arming the in-flight gate, so a throwing
+    // construction leaves the gate open for the next command.
+    auto submit = [this, &state](auto submission)
+    {
+      state.submissionPending = true;
+      state.runtime.spawnLogged(State::runSubmissionAsync(_statePtr, std::move(submission)), "TUI list order command");
+    };
+
     switch (command)
     {
-      case ListOrderCommand::MoveUp:
-      {
-        auto submission = session.moveUpAsync(std::move(selectedTrackIds));
-        state.submissionPending = true;
-        state.runtime.spawnLogged(
-          State::runSubmissionAsync(_statePtr, std::move(submission), i18n::MessageId::ListOrderMoved),
-          "TUI list order command");
-        return;
-      }
-      case ListOrderCommand::MoveDown:
-      {
-        auto submission = session.moveDownAsync(std::move(selectedTrackIds));
-        state.submissionPending = true;
-        state.runtime.spawnLogged(
-          State::runSubmissionAsync(_statePtr, std::move(submission), i18n::MessageId::ListOrderMoved),
-          "TUI list order command");
-        return;
-      }
-      case ListOrderCommand::MoveToTop:
-      {
-        auto submission = session.moveToTopAsync(std::move(selectedTrackIds));
-        state.submissionPending = true;
-        state.runtime.spawnLogged(
-          State::runSubmissionAsync(_statePtr, std::move(submission), i18n::MessageId::ListOrderMoved),
-          "TUI list order command");
-        return;
-      }
-      case ListOrderCommand::MoveToBottom:
-      {
-        auto submission = session.moveToBottomAsync(std::move(selectedTrackIds));
-        state.submissionPending = true;
-        state.runtime.spawnLogged(
-          State::runSubmissionAsync(_statePtr, std::move(submission), i18n::MessageId::ListOrderMoved),
-          "TUI list order command");
-        return;
-      }
-      case ListOrderCommand::Reset:
-      {
-        auto submission = session.resetOrderAsync();
-        state.submissionPending = true;
-        state.runtime.spawnLogged(
-          State::runSubmissionAsync(_statePtr, std::move(submission), i18n::MessageId::ListOrderReset),
-          "TUI list order command");
-        return;
-      }
+      case ListOrderCommand::MoveUp: submit(session.moveUpAsync(std::move(selectedTrackIds))); return;
+      case ListOrderCommand::MoveDown: submit(session.moveDownAsync(std::move(selectedTrackIds))); return;
+      case ListOrderCommand::MoveToTop: submit(session.moveToTopAsync(std::move(selectedTrackIds))); return;
+      case ListOrderCommand::MoveToBottom: submit(session.moveToBottomAsync(std::move(selectedTrackIds))); return;
+      case ListOrderCommand::Reset: submit(session.resetOrderAsync()); return;
     }
   }
 } // namespace ao::tui

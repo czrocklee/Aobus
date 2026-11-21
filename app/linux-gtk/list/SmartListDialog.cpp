@@ -11,8 +11,6 @@
 #include "track/TrackRowObject.h"
 #include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/query/Expression.h>
-#include <ao/query/Serializer.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/Log.h>
@@ -21,6 +19,7 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/VirtualListIds.h>
+#include <ao/rt/WritableTagList.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/source/TrackSource.h>
@@ -605,7 +604,7 @@ namespace ao::gtk
 
     if (!tag.empty())
     {
-      expression = query::serialize(query::VariableExpression{.type = query::VariableType::Tag, .name = tag});
+      expression = rt::serializeTagExpression(tag);
     }
 
     setLocalExpression(expression);

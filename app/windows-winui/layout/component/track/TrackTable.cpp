@@ -15,8 +15,6 @@
 #include <ao/Error.h>
 #include <ao/async/Subscription.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/query/Expression.h>
-#include <ao/query/Serializer.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/shell/ShellGenerationSequence.h>
@@ -36,7 +34,6 @@
 #include <winrt/Windows.Foundation.h>
 #include <winrt/base.h>
 
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <format>
@@ -116,11 +113,6 @@ namespace ao::winui::layout
       }
 
       return nullptr;
-    }
-
-    std::string tagExpression(std::string_view const tag)
-    {
-      return query::serialize(query::VariableExpression{.type = query::VariableType::Tag, .name = std::string{tag}});
     }
 
     /**
@@ -488,44 +480,34 @@ namespace ao::winui::layout
 
         if (_membershipTargets && _editMembership)
         {
-          auto const targets = _membershipTargets();
+          auto const membership =
+            uimodel::listMembershipMenu(_textCatalog, _membershipTargets(), _trackList.activeListId());
           auto addSubmenu = MenuFlyoutSubItem{};
           addSubmenu.Text(winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::ListAddToPlaylist)));
-          std::size_t addCount = 0;
-          auto const activeListId = _trackList.activeListId();
 
-          for (auto const& target : targets)
+          for (auto const& target : membership.addTargets)
           {
-            if (target.listId == activeListId)
-            {
-              continue;
-            }
-
             appendItem(addSubmenu.Items(),
-                       std::format("{} ({})", target.name, tagExpression(target.tag)),
+                       target.label,
                        [edit = _editMembership, listId = target.listId] { edit(listId, true); });
-            ++addCount;
           }
 
-          if (addCount == 0)
+          if (membership.addTargets.empty())
           {
             appendItem(addSubmenu.Items(),
-                       i18n::requiredText(_textCatalog, i18n::MessageId::ListNoEditablePlaylists),
+                       i18n::requiredText(_textCatalog, i18n::MessageId::ListNoMembershipAddTargets),
                        {},
                        false);
           }
 
           _contextFlyout.Items().Append(addSubmenu);
 
-          if (auto const current = std::ranges::find(targets, activeListId, &uimodel::WritableTagListTarget::listId);
-              current != targets.end())
+          if (membership.optRemoveFromCurrent)
           {
             appendItem(_contextFlyout.Items(),
-                       i18n::requiredFormat(_textCatalog,
-                                            i18n::MessageId::ListRemoveFromCurrent,
-                                            {i18n::MessageArgument{"name", current->name},
-                                             i18n::MessageArgument{"tag", tagExpression(current->tag)}}),
-                       [edit = _editMembership, listId = current->listId] { edit(listId, false); });
+                       membership.optRemoveFromCurrent->label,
+                       [edit = _editMembership, listId = membership.optRemoveFromCurrent->listId]
+                       { edit(listId, false); });
           }
         }
 

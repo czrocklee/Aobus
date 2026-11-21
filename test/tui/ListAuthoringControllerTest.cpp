@@ -724,8 +724,10 @@ namespace ao::tui::test
     // The subtree question names both removed Lists through the modal.
     auto const rendered = renderElement(controller.activeModal(80, 24), 80, 24);
     CHECK(findTextCells(rendered.screen, "Delete 2 Lists in this derived subtree?"));
-    CHECK(findTextCells(rendered.screen, "Tours"));
-    CHECK(findTextCells(rendered.screen, "2026"));
+    CHECK(findTextCells(rendered.screen, "• Tours"));
+    CHECK(findTextCells(rendered.screen, "• 2026"));
+    CHECK_FALSE(findTextCells(rendered.screen, "Tours (" + std::to_string(parentId.raw()) + ")"));
+    CHECK_FALSE(findTextCells(rendered.screen, "2026 (" + std::to_string(childId.raw()) + ")"));
 
     CHECK(controller.tryHandleEvent(ftxui::Event::Return));
     REQUIRE(fixture.executor->tryDrainUntil([&] { return !controller.hasPendingSubmission(); }));
@@ -767,7 +769,8 @@ namespace ao::tui::test
     fixture.addTrack({.title = "Roadsongs", .uri = "road.flac", .tags = {"live"}});
     auto const targetId = fixture.addList("Target", "#live");
     fixture.addList("Alpha", "#live");
-    fixture.addList("Beta", "#live");
+    auto const longName = GENERATE(false, true);
+    fixture.addList(longName ? "Beta 1234567890123456789 end" : "Beta", "#live");
     fixture.addList("Gamma", "#live");
     fixture.addList("Delta", "#live");
     auto controller = fixture.makeController();
@@ -780,14 +783,28 @@ namespace ao::tui::test
 
     // The warning names a bounded window of references and counts the rest
     // instead of wrapping to an unbounded height.
-    CHECK(confirmation.tagReferencesWarning.contains("Alpha"));
+    CHECK(confirmation.tagReferencesWarning.contains(longName ? "Alpha, Beta 123456789012345678…, " : "Alpha, Beta, "));
     CHECK(confirmation.tagReferencesWarning.contains("+2 more Lists"));
+    CHECK_FALSE(confirmation.tagReferencesWarning.contains("Gamma"));
     CHECK_FALSE(confirmation.tagReferencesWarning.contains("Delta"));
 
     // At a constrained terminal the measured warning budget keeps the footer
     // chips on screen next to the bounded warning.
     auto const rendered = renderElement(controller.activeModal(80, 20), 80, 20);
-    CHECK(findTextCells(rendered.screen, "+2 more Lists"));
+
+    if (longName)
+    {
+      auto const optFirst = findTextCells(rendered.screen, "Beta 123456789012345678…, +2 more");
+      auto const optNext = findTextCells(rendered.screen, "Lists. Removing it may change those Lists.");
+      REQUIRE(optFirst);
+      REQUIRE(optNext);
+      CHECK(optNext->y_min == optFirst->y_min + 1);
+    }
+    else
+    {
+      CHECK(findTextCells(rendered.screen, "+2 more Lists"));
+    }
+
     CHECK(findTextCells(rendered.screen, "Enter Delete"));
     CHECK(findTextCells(rendered.screen, "Esc cancel"));
   }

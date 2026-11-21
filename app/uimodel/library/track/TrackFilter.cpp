@@ -8,6 +8,7 @@
 #include <ao/query/Expression.h>
 #include <ao/query/Serializer.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/WritableTagList.h>
 #include <ao/utility/String.h>
 
 #include <array>
@@ -55,9 +56,7 @@ namespace ao::uimodel
         expression += std::format("{} ~ {}", variables[index], quoted);
       }
 
-      auto const tagExpression =
-        query::serialize(query::VariableExpression{.type = query::VariableType::Tag, .name = std::string{term}});
-      expression += std::format(" or {})", tagExpression);
+      expression += std::format(" or {})", rt::serializeTagExpression(term));
 
       return expression;
     }

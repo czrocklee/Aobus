@@ -22,7 +22,6 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/rt/ListMutation.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
@@ -35,6 +34,7 @@
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/uimodel/library/list/ListOrder.h>
+#include <ao/uimodel/library/list/ListOrderOutcome.h>
 #include <ao/uimodel/library/list/ListOrderSession.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h>
@@ -64,7 +64,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -78,21 +77,6 @@ namespace ao::gtk
 {
   namespace
   {
-    std::size_t affectedTrackCount(rt::MoveListOrderReply const& reply)
-    {
-      return reply.selectedTrackIds.size();
-    }
-
-    std::size_t affectedTrackCount(rt::ResetListOrderReply const& reply)
-    {
-      return reply.forgottenPositionCount;
-    }
-
-    std::size_t affectedTrackCount(rt::ForgetHiddenListOrderReply const& reply)
-    {
-      return reply.forgottenPositionCount;
-    }
-
     void configureSectionLabel(Gtk::Label& label)
     {
       label.set_halign(Gtk::Align::START);
@@ -640,16 +624,10 @@ namespace ao::gtk
     }
 
     auto const sourceStateRes = _views.listSourceState(_viewId);
-    return uimodel::describeListOrderCapabilities(
-      _textCatalog,
-      uimodel::ListOrderCapabilityInput{
-        .listId = stateRes->listId,
-        .presentation = stateRes->presentation,
-        .quickFilterExpression = stateRes->filterExpression,
-        .sourceLive = sourceStateRes && *sourceStateRes == rt::TrackSourceState::Live,
-        .sourceHasError = stateRes->optFilterError.has_value(),
-        .authoring = _library.authoringAvailability(),
-      });
+    return uimodel::describeViewListOrderCapabilities(_textCatalog,
+                                                      *stateRes,
+                                                      sourceStateRes.value_or(rt::TrackSourceState::Invalidated),
+                                                      _library.authoringAvailability());
   }
 
   void TrackViewPage::applyListOrderCommand(TrackOrderCommand const command)
@@ -662,64 +640,35 @@ namespace ao::gtk
       return;
     }
 
-    auto submit = [this](auto task, i18n::MessageId const appliedMessage)
+    auto submit = [this](auto task)
     {
-      spawnUiTask(
-        _asyncRuntime,
-        _tasks,
-        *this,
-        "list order command",
-        std::move(task),
-        [appliedMessage](TrackViewPage* owner, auto res)
-        {
-          if (!res)
-          {
-            owner->setStatusMessage(res.error().message);
-            return;
-          }
+      spawnUiTask(_asyncRuntime,
+                  _tasks,
+                  *this,
+                  "list order command",
+                  std::move(task),
+                  [](TrackViewPage* owner, auto res)
+                  {
+                    if (!res)
+                    {
+                      owner->setStatusMessage(res.error().message);
+                      return;
+                    }
 
-          switch (res->status)
-          {
-            case rt::AuthoringStatus::Applied:
-              owner->setStatusMessage(
-                i18n::requiredFormat(owner->_textCatalog, appliedMessage, {{"count", affectedTrackCount(res->reply)}}));
-              return;
-            case rt::AuthoringStatus::NoOp:
-              owner->setStatusMessage(gtkText(owner->_textCatalog, i18n::MessageId::ListOrderUnchanged));
-              return;
-            case rt::AuthoringStatus::Busy:
-              owner->setStatusMessage(gtkText(owner->_textCatalog, i18n::MessageId::ListOrderLibraryBusy));
-              return;
-            case rt::AuthoringStatus::Stale:
-              owner->setStatusMessage(gtkText(owner->_textCatalog, i18n::MessageId::ListOrderChanged));
-              return;
-            case rt::AuthoringStatus::Unavailable:
-              owner->setStatusMessage(gtkText(owner->_textCatalog, i18n::MessageId::ListOrderEditingUnavailable));
-              return;
-          }
-        });
+                    owner->setStatusMessage(uimodel::formatListOrderOutcome(owner->_textCatalog, *res));
+                  });
     };
     auto& session = *sessionRes;
     auto selectedIds = _viewHostPtr->selectionController().selectedTrackIds();
 
     switch (command)
     {
-      case TrackOrderCommand::MoveUp:
-        submit(session.moveUpAsync(std::move(selectedIds)), i18n::MessageId::ListOrderMoved);
-        return;
-      case TrackOrderCommand::MoveDown:
-        submit(session.moveDownAsync(std::move(selectedIds)), i18n::MessageId::ListOrderMoved);
-        return;
-      case TrackOrderCommand::MoveToTop:
-        submit(session.moveToTopAsync(std::move(selectedIds)), i18n::MessageId::ListOrderMoved);
-        return;
-      case TrackOrderCommand::MoveToBottom:
-        submit(session.moveToBottomAsync(std::move(selectedIds)), i18n::MessageId::ListOrderMoved);
-        return;
-      case TrackOrderCommand::Reset: submit(session.resetOrderAsync(), i18n::MessageId::ListOrderReset); return;
-      case TrackOrderCommand::ForgetHidden:
-        submit(session.forgetHiddenPositionsAsync(), i18n::MessageId::ListOrderForgotHidden);
-        return;
+      case TrackOrderCommand::MoveUp: submit(session.moveUpAsync(std::move(selectedIds))); return;
+      case TrackOrderCommand::MoveDown: submit(session.moveDownAsync(std::move(selectedIds))); return;
+      case TrackOrderCommand::MoveToTop: submit(session.moveToTopAsync(std::move(selectedIds))); return;
+      case TrackOrderCommand::MoveToBottom: submit(session.moveToBottomAsync(std::move(selectedIds))); return;
+      case TrackOrderCommand::Reset: submit(session.resetOrderAsync()); return;
+      case TrackOrderCommand::ForgetHidden: submit(session.forgetHiddenPositionsAsync()); return;
     }
   }
 

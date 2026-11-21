@@ -22,6 +22,7 @@
 #include <ao/rt/TrackRow.h>
 #include <ao/rt/completion/CompletionService.h>
 #include <ao/rt/completion/MetadataValueCompleter.h>
+#include <ao/rt/completion/VocabularyRanking.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibrarySnapshot.h>
@@ -33,7 +34,6 @@
 
 #include <ftxui/component/event.hpp>
 
-#include <algorithm>
 #include <bitset>
 #include <cstddef>
 #include <exception>
@@ -88,64 +88,18 @@ namespace ao::tui
       return row.optUriPath ? utility::pathToUtf8(*row.optUriPath) : std::string{};
     }
 
-    /**
-     * @brief Re-sorts @p tags so equal-frequency names follow the locale's collation.
-     *
-     * LibrarySnapshot already returns descending frequency then ascending byte
-     * order, so this only replaces the tiebreak, and only where a collation
-     * policy exists to replace it with.
-     */
-    void sortTagsByFrequency(std::vector<std::pair<std::string, std::size_t>>& tags,
-                             rt::TextOrderingPolicy const& textOrderingPolicy)
-    {
-      struct TagWithSortKey final
-      {
-        std::pair<std::string, std::size_t> tag;
-        std::string sortKey;
-      };
-
-      auto ordered = std::vector<TagWithSortKey>{};
-      ordered.reserve(tags.size());
-
-      for (auto& tag : tags)
-      {
-        auto sortKey = std::string{};
-        std::ignore = textOrderingPolicy.makeSortKeyInto(sortKey, tag.first);
-        ordered.push_back(TagWithSortKey{.tag = std::move(tag), .sortKey = std::move(sortKey)});
-      }
-
-      std::ranges::sort(ordered,
-                        [](TagWithSortKey const& lhs, TagWithSortKey const& rhs)
-                        {
-                          if (lhs.tag.second != rhs.tag.second)
-                          {
-                            return lhs.tag.second > rhs.tag.second;
-                          }
-
-                          if (auto const cmp = lhs.sortKey.compare(rhs.sortKey); cmp != 0)
-                          {
-                            return cmp < 0;
-                          }
-
-                          return lhs.tag.first < rhs.tag.first;
-                        });
-
-      tags.clear();
-
-      for (auto& item : ordered)
-      {
-        tags.push_back(std::move(item.tag));
-      }
-    }
+    using TagFrequency = std::pair<std::string, std::size_t>;
 
     /// The library tags no captured track carries, most frequent first.
-    std::vector<std::string> selectTagSuggestions(std::vector<std::pair<std::string, std::size_t>> allTags,
-                                                  std::span<std::pair<std::string, std::size_t> const> const tagCounts,
+    std::vector<std::string> selectTagSuggestions(std::vector<TagFrequency> allTags,
+                                                  std::span<TagFrequency const> const tagCounts,
                                                   rt::TextOrderingPolicy const* const textOrderingPolicy)
     {
       if (textOrderingPolicy != nullptr)
       {
-        sortTagsByFrequency(allTags, *textOrderingPolicy);
+        // Keep suggestions available even when a key cannot be derived.
+        rt::sortVocabularyByFrequency(
+          allTags, textOrderingPolicy, &TagFrequency::first, &TagFrequency::second, [](Result<> const&) {});
       }
 
       // The selection's own tags are their own section in the editor, so the
