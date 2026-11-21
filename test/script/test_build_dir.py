@@ -1,6 +1,7 @@
 """Tests for ao.portal.build_dir — state/checkout roots and platform profiles."""
 
 import os
+import runpy
 import tempfile
 import unittest
 from pathlib import Path
@@ -202,17 +203,33 @@ class WindowsBuildRootTest(unittest.TestCase):
 
 
 class PlatformProfileTest(unittest.TestCase):
-    def test_linux_profile_selects_the_overridden_host_storage(self):
-        with mock.patch.dict(os.environ, {"AOBUS_BUILD_ROOT": "/tmp/native-checks"}):
+    def test_import_and_windows_profile_name_do_not_access_host_storage(self):
+        with (
+            mock.patch.dict(os.environ, clear=True),
+            mock.patch.object(Path, "home", side_effect=RuntimeError("host home unavailable")),
+            mock.patch.object(Path, "stat", side_effect=AssertionError("unexpected checkout stat")),
+            mock.patch.object(Path, "open", side_effect=AssertionError("unexpected checkout open")),
+        ):
+            # Execute the module afresh instead of using the test suite's cached import.
+            isolated = runpy.run_path(build_dir.__file__, run_name="ao.portal._build_dir_import_test")
+            profile = isolated["platform_profile"]("nt")
+            self.assertEqual(profile.name, "windows")
+            with self.assertRaisesRegex(RuntimeError, "host home unavailable"):
+                _ = profile.build_root
+
+    def test_linux_profile_selects_the_current_host_storage_override(self):
+        with mock.patch.dict(os.environ, {"AOBUS_BUILD_ROOT": "/tmp/earlier"}, clear=True):
             profile = build_dir.platform_profile("posix")
         self.assertEqual(profile.name, "linux")
-        self.assertEqual(profile.build_root, Path("/tmp/native-checks") / build_dir.PROJECT_ROOT.name)
+        with mock.patch.dict(os.environ, {"AOBUS_BUILD_ROOT": "/tmp/native-checks"}, clear=True):
+            self.assertEqual(profile.build_root, Path("/tmp/native-checks") / build_dir.PROJECT_ROOT.name)
 
     def test_macos_is_a_native_posix_profile_distinct_from_linux(self):
         # os.name is "posix" on macOS too, so only sys.platform separates them.
         host_os = mock.Mock(environ=os.environ)
         host_os.name = "posix"
         with (
+            mock.patch.dict(os.environ, {"AOBUS_BUILD_ROOT": "/tmp/earlier"}, clear=True),
             mock.patch("ao.portal.build_dir.os", host_os),
             mock.patch("ao.portal.build_dir.sys.platform", "darwin"),
         ):
@@ -220,12 +237,21 @@ class PlatformProfileTest(unittest.TestCase):
             self.assertEqual(profile.name, "macos")
             # An explicit os_name still selects the Linux profile.
             self.assertEqual(build_dir.platform_profile("posix").name, "linux")
+            with mock.patch.dict(os.environ, {"AOBUS_BUILD_ROOT": "/tmp/mac-builds"}, clear=True):
+                self.assertEqual(profile.build_root, Path("/tmp/mac-builds") / build_dir.PROJECT_ROOT.name)
 
     def test_windows_profile_selects_checkout_isolated_host_storage(self):
-        with mock.patch.object(build_dir, "windows_build_root", return_value=Path("D:/native/checkouts/aobus")):
+        environment = {"AOBUS_CHECKOUT_ID": "checkout-a", "LOCALAPPDATA": "C:/Users/Alice/AppData/Local"}
+        with mock.patch.dict(os.environ, environment, clear=True):
             profile = build_dir.platform_profile("nt")
+            default = profile.build_root
+            with mock.patch.dict(os.environ, {"AOBUS_BUILD_ROOT": "D:/native/checkouts"}):
+                overridden = profile.build_root
+
         self.assertEqual(profile.name, "windows")
-        self.assertEqual(profile.build_root, Path("D:/native/checkouts/aobus"))
+        self.assertEqual(default.parent, Path("C:/Users/Alice/AppData/Local/Aobus/build"))
+        self.assertRegex(default.name, r"^[A-Za-z0-9._-]+-[0-9a-f]{12}$")
+        self.assertEqual(overridden, Path("D:/native/checkouts") / default.name)
 
 
 if __name__ == "__main__":

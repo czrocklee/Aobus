@@ -90,7 +90,7 @@ class MacosToolchainIdentityTest(unittest.TestCase):
         with self.patched("ARM64"):
             data = compiler_probe.probe_compiler("macos")
         sdk = data["sdk"]
-        self.assertEqual(set(data), {"platform", "sdk", "identity"})
+        self.assertEqual(set(data), {"platform", "sdk", "identity", "shim_header"})
         self.assertEqual(data["identity"], {"schema": 2, "platform": "macos", "sdk": sdk})
         self.assertNotIn("files", data["identity"])
         self.assertEqual(sdk["machine"], "ARM64")
@@ -98,7 +98,7 @@ class MacosToolchainIdentityTest(unittest.TestCase):
         self.assertEqual(sdk["sdk_version"], "26.5")
         self.assertEqual(sdk["sdk_build_version"], "25F70")
         self.assertEqual(sdk["sdk"], str(self.sdk))
-        self.assertEqual(sdk["shim"], str(self.shim))
+        self.assertEqual(data["shim_header"], str(self.shim_header))
         self.assertEqual(sdk["liblto"], str(self.liblto))
         self.assertEqual(sdk["developer_dir"], str(self.developer))
         self.assertEqual(sdk["deployment"], "15.0")
@@ -116,6 +116,16 @@ class MacosToolchainIdentityTest(unittest.TestCase):
             },
         )
         self.assertEqual(len(self.calls), len(set(self.calls)))
+
+    def test_relocating_the_generated_shim_changes_only_its_projection_source(self):
+        first = self.probe()
+        relocated = self.root / "other output base/shim"
+        header = relocated / "__expected/expected.h"
+        header.parent.mkdir(parents=True)
+        header.write_bytes(self.shim_header.read_bytes())
+        self.environment["AOBUS_LIBCXX_EXPECTED_SHIM"] = str(relocated)
+        second = self.probe()
+        self.assertEqual(second, {**first, "shim_header": str(header)})
 
     def test_sdk_settings_are_watched_but_implicit_headers_are_not_enumerated(self):
         observed = []

@@ -74,6 +74,7 @@ class BazelWorkspaceTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory(prefix="aobus-bazel-test-")
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name).resolve()
+        self.enterContext(patch.dict(os.environ, {"AOBUS_STATE_ROOT": str(self.root / "state")}))
         self.small_policy = native.read_json(providers.POLICY)
         self.small_policy["packages"]["native"] = [self.small_policy["packages"]["native"][0]]
         self.small_policy["packages"]["test"] = [self.small_policy["packages"]["test"][0]]

@@ -584,7 +584,7 @@ The [workspace launcher](../../script/ao/portal/bazel_workspace.py) writes:
 
 - `<tree>/configuration/request.json`: mode-neutral native host, selected
   provider prefix and the original checkout source;
-- `<tree>/configuration/aobus.bazelrc`: launch environment, output/cache selection
+- `<tree>/configuration/aobus.bazelrc`: launch environment, output roots
   and startup `--max_idle_secs=900`;
 - `<tree>/build.log`: noninteractive invocation output.
 
@@ -965,9 +965,8 @@ The headerless [`//bazel:compile_contract`](../../bazel/BUILD.bazel) always enab
 GSL checking for utility headers and pure probe support. Actual `compilation_mode`
 selects `TERMINATES` for `opt`, `ASSERTS` for `dbg`/`fastbuild`, independently of
 the prepared provider. Each registered Unix toolchain records its own
-compiler/runtime/SDK/shim identity in its `identity.json` and declares it
-directly through toolchain tool/policy
-inputs; it does not rely on a consumer macro or library dependency. Windows
+compiler and SDK selection in `identity.json` and declares the selection and
+its tool/header inputs through toolchain policy; it does not rely on a consumer macro or library dependency. Windows
 records no local compiler identity ledger.
 
 Consumer BUILD owners reference the named compile-policy sets the policy
@@ -1156,7 +1155,11 @@ paths. Bounded SDKSettings watches refresh those SDK version/build observations.
 It contains no SDK, libc++ or compiler-resource byte inventory. The
 projection binds the selected tools as tool inputs and the linker plugin and
 governed shim header as explicit file inputs; the aggregate identity input
-groups that small metadata with those two files. Implicit installed SDK content
+groups that small metadata with those two files. Compile and lint actions use
+the shim's declared include directory relative to the execution root. The
+staging path under `output_base` is not a compiler argument or SDK identity.
+Moving a tree therefore does not change the key, but changing the header does.
+Implicit installed SDK content
 is trusted: a same-path, same-version rewrite of its headers is not guaranteed
 to invalidate actions automatically. A governed SDK
 upgrade must change the admitted identity and the affected cache inputs;
@@ -2145,12 +2148,13 @@ selected. No second `cquery` or test invocation is needed.
 By default the gate uses Bazel's ordinary test-result caching: a passing test
 summary counts as completion evidence whether Bazel executed the test anew on
 this host or restored it from the result cache. A cached PASS is valid for the
-declared inputs, environment and configuration Bazel hashed. For example, the
-Windows SDK checks inherit `LOCALAPPDATA` where needed for the bare entry; the
-whole test graph no longer inherits it or `CI`. Host `PATH` is still forwarded
-for native fixture tools. A cached pass is not a claim
-of a new host execution, and cache authority follows the existing trusted-cache
-boundaries ([native hosts and caching](#native-hosts-and-caching)). A cached
+declared inputs, environment and configuration Bazel hashed. Ordinary tests do
+not inherit the caller's `PATH` or the portal's `AOBUS_STATE_ROOT`. A test that
+uses host tools, private services or managed SDK state declares the relevant
+environment on its own target instead. Thus an unchanged ordinary test can
+restore its result, not just its executable, from another checkout's build.
+A cached pass is not a new host execution. Cache authority follows the existing
+trusted-cache boundaries ([native hosts and caching](#native-hosts-and-caching)). A cached
 pass samples no new random schedule or interleaving, so it can conceal an
 intermittent failure while its declared inputs and configuration stay
 unchanged; relevant changes invalidate it, and `--fresh` remains the explicit
@@ -2328,10 +2332,12 @@ configuration](#windows-compiler-configuration)) owns compiler admission; the
 captured `compiler_environment` request still serves WinUI and dependency
 admission, and no whole-SDK byte ledger is required. Directory membership
 changes also invalidate resolution.
-Shell-backed rules need `BAZEL_SH`; the Windows portal selects the
-`usr/bin/bash.exe` that Git for Windows installs beside `git`, unless the caller
-sets `BAZEL_SH`. Bare Windows callers must make Git Bash discoverable by Bazel
-or set `BAZEL_SH` explicitly.
+For shell-backed rules the Windows portal selects the same `BAZEL_SH` for the
+Bazel client and its repository rules: an explicit selection wins, otherwise
+it uses Git for Windows' `usr/bin/bash.exe`. For bare Bazel, start with that
+Bash on `PATH` or set `BAZEL_SH` in the developer shell to its full path.
+Having only `git.exe` on `PATH` does not guarantee that Bazel finds Bash. A
+repository-only setting does not change the client's strict action `PATH`.
 
 Keep selected SDK/tool installations stable while resolution and actions run;
 admission is not an atomic installation snapshot. These are native
@@ -2362,16 +2368,54 @@ listed. `REPO.bazel` `ignore_directories` patterns would only filter packages:
 Bazel still lists the directories beneath them. A tooling test keeps tracked
 files outside every ignored prefix.
 
-Bazel retains per-output action state and a shared disk cache at the managed
-state root's `cache/bazel`. Generated launch rc files set
-`--experimental_disk_cache_gc_max_size=50G`. This target applies to the shared
-cache directory across workspaces/trees, not separately to each tree.
-It is an idle-time GC target, not a synchronous disk quota: the cache may exceed
-it during active builds or before Bazel's default five-minute idle delay elapses.
-The portal does not manually purge the shared cache. See [Bazel disk-cache GC](https://bazel.build/remote/caching#garbage-collection).
+### Shared local action cache
+
+Bare `bazel build/test/run` and portal commands use the same per-user action
+cache, even across checkouts and build trees. The [repository rc](../../.bazelrc)
+selects the default directory; no setup or personal rc is needed. Bazel expands
+`~` using the JVM's `user.home`, not the shell. On Linux this is normally the
+account home; setting `HOME` to a temporary directory does not isolate the cache:
+
+| Host    | Action cache directory               |
+| ------- | ------------------------------------ |
+| Linux   | `~/.cache/Aobus/cache/bazel`         |
+| macOS   | `~/Library/Caches/Aobus/cache/bazel` |
+| Windows | `~/AppData/Local/Aobus/cache/bazel`  |
+
+`AOBUS_STATE_ROOT` still selects portal-managed tool and installation state.
+Neither it nor a redirected `XDG_CACHE_HOME` or `LOCALAPPDATA` relocates this
+action cache. If an older portal used a custom state root, its old cache is
+not moved or deleted. Output bases and their incremental state remain separate.
+
+To move only the action cache, set `AOBUS_BAZEL_DISK_CACHE` for the portal to a
+dedicated absolute directory on a trusted local disk. Leaving it unset or empty
+keeps the default. Bare Bazel does not read this portal variable: pass the same
+path explicitly if you want both entry points to share the relocated cache.
+For example, in a POSIX shell:
+
+```bash
+export AOBUS_BAZEL_DISK_CACHE='/mnt/build-cache/aobus'
+./ao check
+bazel test --disk_cache="$AOBUS_BAZEL_DISK_CACHE" //test:utility_test
+```
+
+The shared directory has one **50 GiB** size target
+(`--experimental_disk_cache_gc_max_size=50G`), not a quota per workspace.
+After the Bazel server has been idle for five minutes, its [disk-cache garbage
+collector](https://bazel.build/remote/caching#garbage-collection) evicts the
+least recently used entries first if the cache is over target. There is no
+age-based expiry or periodic full reset. The cache can exceed 50 GiB during
+builds or if no server stays idle long enough. Other caches and build outputs
+are outside this budget.
+
 A trusted remote cache is optional; forward
 `--noremote_upload_local_results` for read-only remote use. Cross-tree/worktree
-hits still require matching inputs, toolchain, environment and paths.
+hits still require matching declared inputs, toolchain, options and relevant
+environment. To distinguish a reused test **result** from a reused binary, run
+`bazel test --execution_log_json_file=<file> //test:utility_test` in a second
+checkout with a fresh output base after the first passes. Look for the
+`TestRunner` entry with `runner: disk cache hit` and `cacheHit: true`; a compile
+or link hit by itself does not prove test-result reuse.
 `//test:audio_test`, `//test:audio_platform_test` and, on Linux,
 `//test:systemmedia_test` carry Bazel's `external` tag and execute on warm
 invocations of the default aggregate. Catch case tags are unchanged; cached results
@@ -2387,8 +2431,10 @@ Tests tagged `external` retain their native rerun behavior. The independent
 documentation job remains responsible for docs-only routing.
 
 The same workflow transports only
-`${{ runner.temp }}/aobus-state/cache/bazel` using pinned cache restore/save
-actions. The Bazel steps explicitly set `AOBUS_STATE_ROOT`.
+the Linux action cache using pinned cache restore/save actions. It explicitly
+selects `$RUNNER_TEMP/aobus-state/cache/bazel` for the portal, bare Bazel, and
+archive restore/trim/save. No step needs `$HOME` to match the account home.
+`AOBUS_STATE_ROOT` is set separately for managed state.
 The versioned OS/architecture/pin-contract/commit key and same-contract fallback
 select candidate archives, not ABI compatibility; Bazel action keys decide reuse.
 Only successful pushes to `refs/heads/main` may save, and only after the

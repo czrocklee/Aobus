@@ -195,7 +195,7 @@ class _Check:
             return proc.run(
                 argv,
                 cwd=PROJECT_ROOT,
-                env=native.child_environment(isolate_rc=True),
+                env=bazel_workspace.client_environment(isolate_rc=True),
                 stdout=out,
                 log=err,
                 console=self.console,

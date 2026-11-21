@@ -506,7 +506,7 @@ class _Invocation:
                     result = subprocess.run(
                         argv,
                         cwd=PROJECT_ROOT,
-                        env=native.child_environment(isolate_rc=True),
+                        env=bazel_workspace.client_environment(isolate_rc=True),
                         stdout=out,
                         stderr=err,
                         check=False,

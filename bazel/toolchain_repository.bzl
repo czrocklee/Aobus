@@ -20,7 +20,7 @@ linux_toolchain(
 """
 
 _MACOS_BUILD = """load("@aobus//bazel:macos_cc_config.bzl", "macos_toolchain")
-load(":native_paths.bzl", "CONSTRAINT_CPU", "CPU", "DEPLOYMENT", "DEVELOPER_DIR", "LINKER", "LLVM", "LLVM_REAL", "LLVM_VERSION", "SDK", "SHIM", "TOOLS")
+load(":native_paths.bzl", "CONSTRAINT_CPU", "CPU", "DEPLOYMENT", "DEVELOPER_DIR", "LINKER", "LLVM", "LLVM_REAL", "LLVM_VERSION", "SDK", "TOOLS")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -29,7 +29,6 @@ macos_toolchain(
     llvm_real = LLVM_REAL,
     llvm_version = LLVM_VERSION,
     sdk = SDK,
-    shim = SHIM,
     linker = LINKER,
     developer_dir = DEVELOPER_DIR,
     deployment = DEPLOYMENT,
@@ -127,13 +126,12 @@ def materialize_toolchain(ctx, data):
         cpu = machine.lower()
         tools, sources = _project_tools(sdk["tools"], ["clang", "clang++", "ar", "strip", "ld", "dsymutil", "apple_strip", "xcrun"], platform)
         sources["runtime/libLTO.dylib"] = sdk["liblto"]
-        sources["include/__expected/expected.h"] = sdk["shim"] + "/__expected/expected.h"
+        sources["include/__expected/expected.h"] = data["shim_header"]
         paths = {
             "LLVM": sdk["llvm"],
             "LLVM_REAL": sdk["llvm_real"],
             "LLVM_VERSION": sdk["llvm_version"],
             "SDK": sdk["sdk"],
-            "SHIM": sdk["shim"],
             "LINKER": sdk["linker"],
             "DEVELOPER_DIR": sdk["developer_dir"],
             "DEPLOYMENT": sdk["deployment"],

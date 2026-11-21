@@ -73,8 +73,10 @@ triplet with `AOBUS_BAZEL_VCPKG_PREFIX`, and set all three matching standard
 selectors: `BAZEL_VC`, `BAZEL_VC_FULL_VERSION`, and
 `BAZEL_WINSDK_FULL_VERSION`. An initialized shell alone is insufficient;
 [native Bazel setup](bazel.md#direct-bazel-without-the-portal) supplies the
-PowerShell selector recipe and admission rules. Make Git Bash discoverable or
-set `BAZEL_SH`. Bare Bazel never installs Python, SDKs, ports, or WinUI runtime.
+PowerShell selector recipe and admission rules. If Git's `usr\bin\bash.exe`
+is not on `PATH`, set `BAZEL_SH` in the developer shell to its full path. The
+portal selects the same executable from Git for Windows when no override is
+set. `--repo_env=BAZEL_SH=…` alone does not select the Bazel client's shell. Bare Bazel never installs Python, SDKs, ports, or WinUI runtime.
 
 ```bat
 bazel build //app/cli:aobus //app/tui:aobus-tui
@@ -228,6 +230,11 @@ Overrides apply in this order:
 3. `AOBUS_STATE_ROOT` replaces the complete managed-state base;
 4. otherwise `%LOCALAPPDATA%\Aobus` is used.
 
+The [Bazel action cache](bazel.md#shared-local-action-cache) is separate from
+these overrides. For example, to use `D:\Aobus\action-cache`, set
+`$env:AOBUS_BAZEL_DISK_CACHE` to that path for `ao.bat` and pass
+`"--disk_cache=$env:AOBUS_BAZEL_DISK_CACHE"` to bare Bazel. Leave it unset
+to use the shared default.
 Keep build, tool, and cache overrides on a local Windows disk; mapped
 drives are not reliably distinguishable from local disks and drive mappings are
 login-session scoped. This is a storage requirement, not automatic local-volume

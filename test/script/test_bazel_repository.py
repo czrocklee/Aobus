@@ -365,6 +365,7 @@ class LaunchConfigurationTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="aobus-bazel-launch-") as temporary:
             tree = Path(temporary)
             with (
+                patch.dict(os.environ, {"AOBUS_STATE_ROOT": str(tree / "state")}),
                 patch.object(native, "native_platform", return_value="linux"),
                 patch.object(native, "executable", side_effect=AssertionError("outer compiler probe")),
                 patch.object(

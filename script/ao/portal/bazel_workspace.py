@@ -219,6 +219,20 @@ def _git_bash() -> Path | None:
     return None
 
 
+def client_environment(*, isolate_rc: bool = False) -> dict[str, str]:
+    """Select the Bazel client's native shell without changing workspace selectors."""
+    environment = native.child_environment(isolate_rc=isolate_rc)
+    # On Windows Bazel derives strict action PATH from the client's BAZEL_SH,
+    # not --repo_env. Select the same shell for both the client and repositories.
+    if (
+        native.native_platform() == "windows"
+        and not any(key.upper() == "BAZEL_SH" for key in environment)
+        and (bash := _git_bash())
+    ):
+        environment["BAZEL_SH"] = str(bash)
+    return environment
+
+
 def prepare_workspace(
     tree: Path,
     config: str,
@@ -246,7 +260,7 @@ def prepare_workspace(
         # The WinUI quality probe needs the original checkout, not Bazel's execution root or a compiler view.
         "source": native.source_root(),
     }
-    environment = native.child_environment()
+    environment = client_environment()
     # os.environ is case-insensitive on Windows, but dict(os.environ) is not:
     # enumeration uppercases SDK/toolset names such as WindowsSdkDir.
     lookup = {key.casefold() if host == "windows" else key: value for key, value in environment.items()}
@@ -271,10 +285,6 @@ def prepare_workspace(
         if key in lookup:
             selected[name] = lookup[key]
     selected.update(compiler_selection)
-    # Bazel's Windows shell toolchain needs a bash, which the checkout's Git
-    # for Windows provides unless the caller selects another one.
-    if host == "windows" and "BAZEL_SH" not in selected and (bash := _git_bash()):
-        selected["BAZEL_SH"] = str(bash)
     if host == "windows" and "AOBUS_NUGET_PACKAGES_DIR" not in selected:
         from ao.portal.bazel_provision import restored_nuget_packages
 
@@ -291,9 +301,8 @@ def prepare_workspace(
     if lint_configuration is not None:
         selected["AOBUS_BAZEL_LINT_CONFIGURATION"] = lint_configuration.absolute().as_posix()
     state = state_root()
-    cache = state / "cache/bazel"
-    # Downloads use Bazel's default content-addressed repository cache under the
-    # shared output root; the repository rc keeps the contents cache disabled.
+    # Downloads share the output user root. Without an explicit override,
+    # the repository rc selects the same action cache for bare and portal.
     lines = [
         "# Generated launch configuration; repository rules own dependency refresh.",
         "startup " + json.dumps("--output_user_root=" + (state / "bazel").as_posix(), ensure_ascii=False),
@@ -302,9 +311,12 @@ def prepare_workspace(
         "common --experimental_install_base_gc_max_age=0",
         "build " + json.dumps("--config=" + config, ensure_ascii=False),
         "build " + json.dumps("--symlink_prefix=" + tree.as_posix() + "/bazel-", ensure_ascii=False),
-        "build " + json.dumps("--disk_cache=" + cache.as_posix(), ensure_ascii=False),
-        "build --experimental_disk_cache_gc_max_size=50G",
     ]
+    if cache := os.environ.get("AOBUS_BAZEL_DISK_CACHE"):
+        path = Path(cache)
+        if not path.is_absolute() or path.drive.startswith("\\\\") or not cache.isprintable():
+            raise native.BazelWorkspaceError("AOBUS_BAZEL_DISK_CACHE requires a printable absolute local path")
+        lines.append("build " + json.dumps("--disk_cache=" + path.as_posix(), ensure_ascii=False))
     lines.extend("build " + value for value in graph_options)
     lines.extend(
         "common " + json.dumps("--repo_env=" + key + "=" + value, ensure_ascii=False)
@@ -346,7 +358,7 @@ def invocation(executable: Path, generated: Path, *, isolate_rc: bool = False) -
 
 def launch_environment(*, isolate_rc: bool = False) -> dict[str, str]:
     """Keep ambient selectors out of the configuration owned by a prepared launch."""
-    environment = native.child_environment(isolate_rc=isolate_rc)
+    environment = client_environment(isolate_rc=isolate_rc)
     for name in (
         "AOBUS_BAZEL_CONFIGURATION",
         "AOBUS_BAZEL_PYTHON",

@@ -460,7 +460,9 @@ def discover_sdk(
         runtime = [cpp, *llvm_libraries]
         analysis_arguments = [f"-resource-dir={resource_dir}"]
         system_arguments = []
-        if shim := environment.get("AOBUS_LIBCXX_EXPECTED_SHIM"):
+        # macOS analysis replays the native TU's include path and inputs. Its
+        # standalone fixtures receive the same projection from their Bazel rule.
+        if host != "macos" and (shim := environment.get("AOBUS_LIBCXX_EXPECTED_SHIM")):
             if Path(shim).is_dir():
                 system_arguments.append("-isystem" + shim)
         probe = _run(clang, "-E", "-x", "c++", "-", "-v", input_text="")
@@ -478,8 +480,7 @@ def discover_sdk(
         if not macos_sdk.is_dir():
             raise LintSdkError(f"Selected native macOS SDK is missing: {macos_sdk}")
         shim_path = _absolute(environment.get("AOBUS_LIBCXX_EXPECTED_SHIM", ""), "AOBUS_LIBCXX_EXPECTED_SHIM")
-        if not shim_path.is_dir():
-            raise LintSdkError(f"Governed libc++ expected shim is missing: {shim_path}")
+        _file(shim_path / "__expected/expected.h")
         fixture_arguments = [
             "--no-default-config",
             "-stdlib=libc++",

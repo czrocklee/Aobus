@@ -180,9 +180,11 @@ def native_validation_tests(
             "@platforms//os:linux": [":" + debug_inputs],
             "//conditions:default": [],
         }),
-        # Linux compares analyzed compiler facts against the pinned shell report.
-        env_inherit = ["VCToolsVersion"] + select({
+        # The authored-source audit runs live Git. Compiler comparison uses the
+        # Linux shell report or the Windows toolset version, respectively.
+        env_inherit = ["PATH"] + select({
             "@platforms//os:linux": ["AOBUS_NIX_DEPENDENCY_REPORT"],
+            "@platforms//os:windows": ["VCToolsVersion"],
             "//conditions:default": [],
         }),
         main_module = "ao.portal.bazel_validation",

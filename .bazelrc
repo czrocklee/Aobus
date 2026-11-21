@@ -43,6 +43,12 @@ common --repo_env==NIX_LDFLAGS_FOR_TARGET
 common --repo_env==NIX_LDFLAGS_FOR_BUILD
 
 build --enable_platform_specific_config
+# Share action results across checkouts and launchers, not their output bases.
+# Bazel expands ~/ using the JVM's user.home, not shell tilde expansion.
+build:linux --disk_cache=~/.cache/Aobus/cache/bazel
+build:macos --disk_cache=~/Library/Caches/Aobus/cache/bazel
+build:windows --disk_cache=~/AppData/Local/Aobus/cache/bazel
+build --experimental_disk_cache_gc_max_size=50G
 build --incompatible_strict_action_env
 build --action_env=NIX_CFLAGS_COMPILE=
 build --action_env=NIX_CFLAGS_COMPILE_FOR_TARGET=
@@ -137,15 +143,8 @@ build:windows --aspects=//bazel:windows_utf8_manifest.bzl%windows_utf8_manifest_
 build:windows --run_validations
 
 test --test_output=errors
-# Prefer target-owned env_inherit. Keep these shared until the host process
-# and managed-state lookups behind native tests and tooling fixtures are audited.
-# Keep shared test env in build: Bazel 9.2 cquery inherits the test rc section
-# but aquery does not, which would split their configured identities.
-build --test_env=PATH
-build:windows --test_env=PATHEXT
-build:windows --test_env=USERPROFILE
-build:windows --test_env=PROCESSOR_ARCHITECTURE
-build --test_env=AOBUS_STATE_ROOT
+# Tests that use installed host tools inherit their inputs on the target.
+# Do not key ordinary TestRunner actions on portal state or the caller's PATH.
 
 # CI uses the same graph, adding only the explicitly required desktop gate.
 build:ci --keep_going

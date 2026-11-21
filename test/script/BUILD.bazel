@@ -17,8 +17,7 @@
 #   git-state reads, or dynamic/whole-tree scans. "local" keeps them
 #   unsandboxed and "external" forces a real run, so no cached result can
 #   stand in for the checkout or tools they use. The runtime is the installed
-#   native py_runtime and tools come from the inherited PATH: that is an
-#   honest non-hermetic tool closure, not a sandbox claim.
+#   native py_runtime, and host tool discovery uses the inherited PATH.
 #
 # Host-backed targets pass the declared VERSION.txt anchor as --live-checkout.
 # On both operating systems the entry then always re-execs itself from the
@@ -131,9 +130,8 @@ _DATA_MODULES = [
     "test_nix_output_metadata",
 ]
 
-# Host-tool modules stay local and non-cacheable: the audit observed real
-# host-process spawns (git, compilers, bash, Python children) found through
-# the inherited PATH, which is not a hermetic tool closure.
+# Host-process modules stay local and non-cacheable: the audit observed real
+# process spawns (Git, compilers, Bash, Python children).
 _HOST_TOOL_MODULES = [
     "test_appkit_process",
     "test_bazel",
@@ -445,6 +443,24 @@ _WINDOWS_PROCESS_MODULES = [
     "test_windows_prerequisites",
 ]
 
+_WINDOWS_MANAGED_STATE = [
+    "AOBUS_STATE_ROOT",
+    "LOCALAPPDATA",
+]
+
+# Windows PowerShell fixtures dispatch native programs; in particular the
+# manifest verifier invokes a fake mt.cmd, not the real SDK's mt.exe.
+_WINDOWS_MODULE_ENV = {
+    "test_bazel_windows_manifest": ["PATHEXT"],
+    # The native launch fixture reuses an installed managed base Python.
+    "test_windows_portal": ["PATHEXT"] + _WINDOWS_MANAGED_STATE,
+    # The native prerequisite script checks the actual x64 host.
+    "test_windows_prerequisites": [
+        "PATHEXT",
+        "PROCESSOR_ARCHITECTURE",
+    ],
+}
+
 [
     py_test(
         name = module,
@@ -453,10 +469,9 @@ _WINDOWS_PROCESS_MODULES = [
         srcs = [module + ".py"] + _SUPPORT.get(module, []),
         args = [module] + (_LIVE_CHECKOUT_ARGS if module in _HOST_BACKED_MODULES else []),
         data = _REPO_DATA.get(module, []) + (_LIVE_CHECKOUT_DATA if module in _HOST_BACKED_MODULES else []),
-        # The native portal fixture checks reuse of the installed base Python,
-        # including the Windows default when AOBUS_STATE_ROOT is unset.
-        env_inherit = select({
-            "@platforms//os:windows": ["LOCALAPPDATA"] if module == "test_windows_portal" else [],
+        # Missing host tools can turn a live probe into an unnoticed skip.
+        env_inherit = (["PATH"] if module in _HOST_BACKED_MODULES else []) + select({
+            "@platforms//os:windows": _WINDOWS_MODULE_ENV.get(module, []),
             "//conditions:default": [],
         }),
         imports = ["."],
@@ -477,8 +492,8 @@ _WINDOWS_PROCESS_MODULES = [
 # declared VERSION.txt anchor: the entry always re-execs the physical script
 # before importing any command module, on both operating systems; the child
 # gets the plain command arguments without the flag, which is the loop guard.
-# The checks spawn host tools through the inherited PATH, which is not a
-# hermetic closure, so every target stays local and non-cacheable.
+# Mutable checkout inputs keep all these checks non-cacheable. The two checks
+# with source-scope Git discovery explicitly inherit PATH as well.
 
 _CHECK_ENTRY = "ao.portal.bazel_repository_checks"
 
@@ -561,6 +576,18 @@ py_test(
     deps = _CHECK_DEPS,
 )
 
+# Native Buildifier and Prettier use the selected managed state. Windows
+# Buildifier uses platform.machine(), whose non-WMI fallback reads the host
+# architecture; state lookup can fall back to USERPROFILE via Path.home().
+_NATIVE_FORMAT_ENV = select({
+    "@platforms//os:macos": ["AOBUS_STATE_ROOT"],
+    "@platforms//os:windows": _WINDOWS_MANAGED_STATE + [
+        "PROCESSOR_ARCHITECTURE",
+        "USERPROFILE",
+    ],
+    "//conditions:default": [],
+})
+
 # Full-scope formatter check without a Git diff selection. Linux selects the
 # pinned Nix tools through the inherited variables; other hosts need their
 # native clang-format/buildifier/Prettier prerequisites ready before the run.
@@ -573,7 +600,7 @@ py_test(
         "format",
     ],
     data = ["//:VERSION.txt"],
-    env_inherit = ["PATH"] + select({
+    env_inherit = ["PATH"] + _NATIVE_FORMAT_ENV + select({
         "@platforms//os:linux": [
             "AO_NIX_BUILDIFIER",
             "AO_NIX_PRETTIER",
@@ -583,7 +610,6 @@ py_test(
         "@platforms//os:windows": [
             "AOBUS_LLVM_SDK_CACHE_ROOT",
             "AOBUS_LLVM_SDK_ROOT",
-            "LOCALAPPDATA",
         ],
         "//conditions:default": [],
     }),
@@ -604,9 +630,8 @@ py_test(
         "bazel-lint",
     ],
     data = ["//:VERSION.txt"],
-    env_inherit = select({
+    env_inherit = ["PATH"] + _NATIVE_FORMAT_ENV + select({
         "@platforms//os:linux": ["AO_NIX_BUILDIFIER"],
-        "@platforms//os:windows": ["LOCALAPPDATA"],
         "//conditions:default": [],
     }),
     main_module = _CHECK_ENTRY,

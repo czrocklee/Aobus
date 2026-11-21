@@ -400,13 +400,9 @@ class _OrchestrationHarness:
         prepared.mkdir(parents=True, exist_ok=True)
         rc = prepared / "aobus.bazelrc"
         if not rc.is_file():
-            # A real baseline rc, created once. Prior consumer and output
-            # selection lines persist until the next report pass rewrites them.
-            rc.write_text(
-                "build " + json.dumps("--config=" + config, ensure_ascii=False) + "\n"
-                "build --experimental_disk_cache_gc_max_size=50G\n",
-                encoding="utf-8",
-            )
+            # Prior consumer and output selection lines persist until the
+            # next report pass rewrites them.
+            rc.write_text("build " + json.dumps("--config=" + config, ensure_ascii=False) + "\n", encoding="utf-8")
         return prepared
 
     def fake_execute(
@@ -819,22 +815,31 @@ class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
             self.assertEqual(self.run_quiet(self.args(files=[str(source)], report_only=True)), 2)
         prepare.assert_called_once()
 
-    def test_ambient_rc_selection_cannot_influence_the_native_lint_client(self):
+    def test_lint_queries_select_the_windows_shell_without_admitting_ambient_rcs(self):
         owner = "@@//lib/sample:sample"
         self.inventories = (self.owner_inventory(owner, self.report(owner, "lib/sample/Sample.cpp")),)
         ambient = self.root / "ambient.bazelrc"
         ambient.write_text("build --aspects_parameters=aobus_lint_consumers=ambient\n", encoding="utf-8")
         child = (
             "import json,os; print(json.dumps({k: v for k, v in os.environ.items() "
-            "if k.casefold() == 'bazelrc' or k == 'AOBUS_RC_TEST_SENTINEL'}))"
+            "if k.upper() in {'BAZELRC', 'BAZEL_SH', 'AOBUS_BAZEL_LINT_CONFIGURATION'}}))"
         )
-        with patch.dict(os.environ, {"BAZELRC": str(ambient), "AOBUS_RC_TEST_SENTINEL": "retained"}):
+        shell = self.root / "Git for Windows/usr/bin/bash.exe"
+        environment = {key: value for key, value in os.environ.items() if key.upper() != "BAZEL_SH"}
+        environment.update(BAZELRC=str(ambient), AOBUS_BAZEL_LINT_CONFIGURATION="lint-selection")
+        with (
+            patch.dict(os.environ, environment, clear=True),
+            patch.object(native, "native_platform", return_value="windows"),
+            patch.object(bazel_lint.bazel_workspace, "_git_bash", return_value=shell),
+        ):
             self.assertEqual(self.run_quiet(self.args(files=[str(self.checkout / "lib/sample/Sample.cpp")])), 0)
-            # The real transport at the process boundary: a real child observes
-            # the environment production hands to the Bazel client.
+            # A real child observes the environment handed to the Bazel client.
             stdout, stderr = self.root / "child.env.json", self.root / "child.stderr"
             self.assertEqual(self.real_run_process([sys.executable, "-c", child], stdout, stderr), 0)
-        self.assertEqual(json.loads(stdout.read_text(encoding="utf-8")), {"AOBUS_RC_TEST_SENTINEL": "retained"})
+        self.assertEqual(
+            json.loads(stdout.read_text(encoding="utf-8")),
+            {"AOBUS_BAZEL_LINT_CONFIGURATION": "lint-selection", "BAZEL_SH": str(shell)},
+        )
         # Every query launches through the governed rc selection: personal,
         # system and workspace rc files are disabled and only the repository
         # and generated rc files remain.

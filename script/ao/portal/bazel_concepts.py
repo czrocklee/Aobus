@@ -578,7 +578,7 @@ def _process(argv: Sequence[str], *, cwd: Path, environment: Mapping[str, str], 
 class _Attempt:
     def __init__(self, args: Request, root: Path, tree: Path):
         self.root, self.tree, self.config, self.jobs = root, tree, args.config, args.jobs
-        self.client_environment = native.child_environment(isolate_rc=True)
+        self.client_environment = bazel_workspace.client_environment(isolate_rc=True)
         self.client_fields = {
             key.upper(): value
             for key, value in self.client_environment.items()

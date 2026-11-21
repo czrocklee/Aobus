@@ -151,7 +151,7 @@ class WindowsToolchainPreparationTest(unittest.TestCase):
         self.assertEqual(repo_env["BAZEL_VC_FULL_VERSION"], self.selected["VCToolsVersion"])
         self.assertEqual(repo_env["BAZEL_WINSDK_FULL_VERSION"], "10.0.26100.0")
 
-    def test_prepare_selects_git_for_windows_bash_unless_the_caller_names_a_shell(self):
+    def test_client_and_repo_select_the_same_git_bash_unless_the_caller_names_a_shell(self):
         git = self.root / "Git/cmd/git.exe"
         bash = self.root / "Git/usr/bin/bash.exe"
         for path in (git, bash):
@@ -159,22 +159,27 @@ class WindowsToolchainPreparationTest(unittest.TestCase):
             path.write_bytes(b"")
 
         def shell(extra, *, found=str(git)):
-            with patch.object(workspace.shutil, "which", return_value=found) as which:
-                prepared = self.prepare({**self.selected, **extra})
-            rc = (prepared / "aobus.bazelrc").read_text(encoding="utf-8")
-            selected = [line for line in rc.splitlines() if "--repo_env=BAZEL_SH=" in line]
-            return [json.loads(line.split(" ", 1)[1]).partition("=")[2].partition("=")[2] for line in selected], which
+            environment = {**self.selected, **extra}
+            with (
+                patch.dict(os.environ, environment, clear=True),
+                patch.object(native, "native_platform", return_value="windows"),
+                patch.object(workspace.build_dir, "windows_state_root", return_value=self.root / "state"),
+                patch.object(workspace.shutil, "which", return_value=found) as which,
+            ):
+                repo = self.repo_env(self.prepare(environment)).get("BAZEL_SH")
+                client = workspace.launch_environment(isolate_rc=True)
+                shells = [value for key, value in client.items() if key.upper() == "BAZEL_SH"]
+                self.assertEqual(shells, [] if repo is None else [repo])
+            return repo, which
 
-        selected, which = shell({})
-        self.assertEqual(selected, [str(bash.resolve())])
-        which.assert_called_once_with("git")
+        self.assertEqual(shell({})[0], str(bash.resolve()))
         explicit = str(self.root / "msys64/usr/bin/bash.exe")
-        selected, which = shell({"BAZEL_SH": explicit})
-        self.assertEqual(selected, [explicit])
+        selected, which = shell({"bazel_sh": explicit})
+        self.assertEqual(selected, explicit)
         which.assert_not_called()
         bash.unlink()
-        self.assertEqual(shell({})[0], [])
-        self.assertEqual(shell({}, found=None)[0], [])
+        self.assertIsNone(shell({})[0])
+        self.assertIsNone(shell({}, found=None)[0])
 
 
 if __name__ == "__main__":

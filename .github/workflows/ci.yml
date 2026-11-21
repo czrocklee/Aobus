@@ -107,7 +107,9 @@ jobs:
 
       - name: Select runner-local state
         shell: bash
-        run: echo "AOBUS_STATE_ROOT=$RUNNER_TEMP/aobus-state" >> "$GITHUB_ENV"
+        run: |
+          echo "AOBUS_STATE_ROOT=$RUNNER_TEMP/aobus-state" >> "$GITHUB_ENV"
+          echo "AOBUS_BAZEL_DISK_CACHE=$RUNNER_TEMP/aobus-state/cache/bazel" >> "$GITHUB_ENV"
 
       - name: Provision Bazel tree
         run: ./ao setup bazel
@@ -124,7 +126,7 @@ jobs:
         continue-on-error: true
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ${{ runner.temp }}/aobus-state/cache/bazel
+          path: ${{ env.AOBUS_BAZEL_DISK_CACHE }}
           key: >-
             bazel-disk-v1-trusted-main-${{ runner.os }}-${{ runner.arch }}-${{
               hashFiles('.bazelversion', 'script/ao/bazel-toolchain.json', 'nixpkgs.json', 'shell.nix', 'MODULE.bazel')
@@ -213,7 +215,7 @@ jobs:
           native=("$bazel" --nosystem_rc --nohome_rc --server_javabase="$server_javabase"
             --output_user_root="$AOBUS_STATE_ROOT/bazel" --output_base="$bare/state/output")
           flags=(--jobs="$CMAKE_BUILD_PARALLEL_LEVEL" --lockfile_mode=error
-            --disk_cache="$AOBUS_STATE_ROOT/cache/bazel" --symlink_prefix="$bare/bazel-")
+            --symlink_prefix="$bare/bazel-" --disk_cache="$AOBUS_BAZEL_DISK_CACHE")
           "${native[@]}" test "${flags[@]}" --build_event_json_file="$bare/fastbuild-test.bep.json" \
             --experimental_build_event_upload_strategy=local //test:utility_test 2>&1 | tee "$bare/build.log"
           PYTHONPATH=script "$python" test/lint/check_scoped_reports.py "$bare/scoped-lint.bep.json" \
@@ -246,23 +248,22 @@ jobs:
         continue-on-error: true
         shell: bash
         env:
-          AOBUS_BAZEL_CACHE_DIR: ${{ runner.temp }}/aobus-state/cache/bazel
           AOBUS_BAZEL_CACHE_MARKER: ${{ runner.temp }}/aobus-bazel-cache-restored.marker
         run: |
           if [[ ! -f "$AOBUS_BAZEL_CACHE_MARKER" ]]; then
             echo "::error::Bazel cache restore marker '$AOBUS_BAZEL_CACHE_MARKER' is missing; not saving." >&2
             exit 1
           fi
-          if [[ ! -d "$AOBUS_BAZEL_CACHE_DIR" ]]; then
+          if [[ ! -d "$AOBUS_BAZEL_DISK_CACHE" ]]; then
             echo 'Bazel cache directory is absent; nothing to trim.'
             exit 0
           fi
-          before="$(find "$AOBUS_BAZEL_CACHE_DIR" -type f | wc -l)"
-          find "$AOBUS_BAZEL_CACHE_DIR" -type f ! -newer "$AOBUS_BAZEL_CACHE_MARKER" -delete
-          after="$(find "$AOBUS_BAZEL_CACHE_DIR" -type f | wc -l)"
+          before="$(find "$AOBUS_BAZEL_DISK_CACHE" -type f | wc -l)"
+          find "$AOBUS_BAZEL_DISK_CACHE" -type f ! -newer "$AOBUS_BAZEL_CACHE_MARKER" -delete
+          after="$(find "$AOBUS_BAZEL_DISK_CACHE" -type f | wc -l)"
           echo "Trimmed $((before - after)) restored file(s) untouched since restore; kept $after file(s)."
-          du -sh "$AOBUS_BAZEL_CACHE_DIR"
-          df -h "$AOBUS_BAZEL_CACHE_DIR"
+          du -sh "$AOBUS_BAZEL_DISK_CACHE"
+          df -h "$AOBUS_BAZEL_DISK_CACHE"
 
       - name: Save Bazel disk cache
         if: >-
@@ -273,7 +274,7 @@ jobs:
         continue-on-error: true
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ${{ runner.temp }}/aobus-state/cache/bazel
+          path: ${{ env.AOBUS_BAZEL_DISK_CACHE }}
           key: ${{ steps.bazel-cache.outputs.cache-primary-key }}
 
       - name: Require successful Bazel checks
@@ -610,9 +611,10 @@ jobs:
       # restored tools contain the same absolute paths used when created.
       AOBUS_STATE_ROOT: C:\aobus-state
       # Bazel product and tooling outputs exceed the system drive's free space.
-      # Keep disposable build trees on the runner's roomy local data drive;
-      # restored tools and reusable caches retain their existing paths.
+      # Keep build trees and the job-local Bazel action cache on D:. Restored
+      # tools and vcpkg archives keep their existing paths on C:.
       AOBUS_BUILD_ROOT: D:\aobus-build
+      AOBUS_BAZEL_DISK_CACHE: D:\aobus-bazel-cache
       AOBUS_CHECKOUT_ID: github-actions-windows-x64
       # vcpkg 2026 removed x-gha. Keep its ABI-addressed archives in a local
       # files backend and let actions/cache move that directory between VMs.

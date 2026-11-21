@@ -24,6 +24,19 @@ def _required_conditions(step):
 
 
 class CachePromotionTest(unittest.TestCase):
+    def test_linux_disk_cache_uses_one_runner_local_path(self):
+        job = _job("linux")
+        selection = _step(job, "Select runner-local state")
+        self.assertIn('"AOBUS_BAZEL_DISK_CACHE=$RUNNER_TEMP/aobus-state/cache/bazel" >> "$GITHUB_ENV"', selection)
+        for name in ("Restore Bazel disk cache", "Save Bazel disk cache"):
+            self.assertIn("path: ${{ env.AOBUS_BAZEL_DISK_CACHE }}", _step(job, name))
+        trim = _step(job, "Trim restored Bazel disk cache")
+        self.assertIn('find "$AOBUS_BAZEL_DISK_CACHE" -type f ! -newer', trim)
+        bare = _step(job, "Test direct Bazel entry")
+        self.assertIn('--disk_cache="$AOBUS_BAZEL_DISK_CACHE"', bare)
+        self.assertIn('test "${flags[@]}"', bare)
+        self.assertIn('build "${flags[@]}"', bare)
+
     def test_linux_disk_archive_only_promotes_a_successful_main_push_after_trim(self):
         conditions = _required_conditions(_step(_job("linux"), "Save Bazel disk cache"))
         self.assertLessEqual(
