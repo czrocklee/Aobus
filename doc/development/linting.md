@@ -10,7 +10,7 @@ Checker internals, fixture design, AST proof, and native replay mechanics are in
 Use project commands as the public entry points:
 
 - `./ao check lint` runs C++ clang-tidy, Python Ruff/mypy, Buildifier semantic lint, naming/test audits, and workflow lint for one source scope. It performs no formatting or global documentation check. The C++ stage consumes the Bazel lint report actions; full `ao check` gates the complete native project graph separately.
-- `./ao check analyzer` runs path-sensitive analysis; findings fail by default. Use `--report-only` for advisory lint or analyzer output; tool and admission failures still fail.
+- `./ao check analyzer` runs path-sensitive analysis; findings fail by default. Use `--report-only` for advisory lint or analyzer warnings; selected compiler errors, tool and admission failures still fail.
 - `bazel test //test/lint:lint_test --nocache_test_results` runs fresh assertions on the Aobus clang-tidy fixture result; it is not the Python lint command.
 - `./ao format` rewrites native, Python, Bazel, Markdown, JSON, YAML, and CSS sources; `./ao check format` verifies the same scope without rewriting it.
 
@@ -51,7 +51,10 @@ nonportable-include-path warnings.
 The C++ stage's Bazel lint report route has bounded native Debug evidence on Linux, macOS and Windows. The native CI check jobs gate the complete project C++ graph through the graph's `//:production_lint` test inside `ao check`; there is no separate CI lint step.
 It accepts file/directory paths and the `--commit`/`--all` selectors plus repeatable `--target`; `--target` alone covers every actual translation unit and paired header main in those owners, not unpaired declared headers.
 Without `--target`, scope maps through actual Bazel `srcs` owners (including filegroups and aliases), not a dependency closure; with `--target`, those owners restrict the request and the selected scope gates the reports.
-A header without a same-component companion, or an include fragment, is analyzed in the native context of a translation unit whose report recorded including it. Fragment warnings are scoped to its normalized file identity; consumer compiler errors and unlocated diagnostics remain, and scoping cannot hide an incomplete attempt.
+For example, `./ao check lint --target //lib/utility:utility include/ao/utility/Base64.h` checks just the header in its owner's native context; omit `include/ao/utility/Base64.h` to check the entire owner. Both requests require an index proving the owner has a native translation unit. The header-only request does not need its sibling `.cpp` report.
+For a supported direct main path, a direct-only scope requests its existing reports in all actual native contexts and the owner inventory, not sibling reports from those owners; donor discovery may also request sibling native TU reports.
+If any path is unsupported by the selection codec, all compatible owners in the request fall back to the full output group while gating only selected mains.
+For a header without a same-component companion, or an include fragment, lint discovers an actual consumer through translation-unit reports, then analyzes in that consumer's native context. Fragment warnings are scoped to its normalized file identity; consumer compiler errors and unlocated diagnostics remain, and scoping cannot hide an incomplete attempt.
 Scoped lint defers discovered platform-incompatible files. With `--gtk off` it also defers discovered GTK files only if the configured graph proves every candidate owner incompatible. Explicit files still require reports; a compatible header or fragment that no analyzed translation unit includes, or a compatible path with no owner, fails rather than producing a partial pass.
 `--all` selects the project C++ scope with the same rules.
 
@@ -60,8 +63,9 @@ A direct main report from any configured owner in the gate makes replay unnecess
 Headers and fragments without a direct main still replay through a real consumer selected from the baseline reports' include evidence.
 Deferral is still limited to recognized foreign-native-platform paths ([report contracts](bazel.md#lint-reports)). Full coverage reuses the existing report graph and action cache, with no new rule set, filename classifier or separate CI job, and it is not full fresh execution: a warm cache replays existing reports while a cold cache pays the complete analysis cost once. The independent authored-source ownership scan is the root `//:native_policy` test ([test ownership](bazel.md#test-ownership)). The lint test filters generated-only owners from authored policy, matching the former portal scope, so GLib-generated C and catalog arrays are not linted as project source while their real compile build remains in the normal graph.
 
-Reports are cached from actual native compile contexts and gated from the current BEP: 0 clean, 1 findings, 2 incomplete.
-Cached warnings still fail.
+The native C++ stage of `./ao check lint` reads reports from the current BEP: it returns 0 for a clean selection, 1 for warnings, and 2 for selected compiler errors or an incomplete attempt.
+`--report-only` makes only warnings advisory. Reusing a cached report does not change the verdict.
+Inputs, native context and analysis profile changes invalidate reports; selecting reports does not.
 `--tidy-check` and `--header-filter` are analysis-keyed; scope is not.
 `--tidy-check <name>` runs only the requested C++ diagnostics, skipping unrelated language lint and audits. It still applies the file's mode disables, so a check disabled in `RELAXED` mode produces no diagnostics on `test/` files.
 `--tidy-arg` accepts only the documented diagnostic-only allowlist, and other raw options are rejected before preparation.

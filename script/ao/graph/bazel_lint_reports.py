@@ -150,6 +150,12 @@ class OwnerInventory:
     sources: tuple[str, ...]
     uncovered: tuple[Uncovered, ...]
     execroot: Path
+    _omitted_native_tu: bool = False
+
+    @property
+    def has_native_tu(self) -> bool:
+        """Whether the complete index, not just the selected groups, has a native TU."""
+        return self._omitted_native_tu or any(r.identity.main == r.identity.source for r in self.reports)
 
 
 # These are infrastructure failures even when clang-tidy exits zero or prints a
@@ -262,18 +268,36 @@ def _owner_directory(owner: str, configuration: str) -> tuple[str, str]:
     return directory, directory + name + ".aobus-lint.index.json"
 
 
+_FULL = "aobus_lint"
+_INDEX = "aobus_lint_index"
+_SOURCES = "aobus_lint_sources"
+_MAIN = "aobus_lint_main_"
+
+
+def main_output_group(path: str, *, windows: bool) -> str | None:
+    """Encode the producer's fixed main group, or decline an unsupported spelling."""
+    if not re.fullmatch(r"[a-zA-Z0-9_/.-]+", path):
+        return None
+    key = path.lower() if windows else path
+    return _MAIN + key.replace("_", "__").replace("/", "_s").replace(".", "_d").replace("-", "_h")
+
+
 def _inventory(
     owner: str,
     config_id: str,
     configuration: str,
-    files: dict[str, Path],
+    groups: dict[str, dict[str, Path]],
+    requested: frozenset[str],
     execroot: Path,
     allowed_modes: frozenset[str],
 ) -> OwnerInventory:
     directory, index_name = _owner_directory(owner, configuration)
-    if index_name not in files:
-        raise ValueError(f"missing current owner index: {index_name}")
-    data = load_json(files[index_name])
+    full = _FULL in requested
+    index_group = _FULL if full else _INDEX
+    index_files = groups.get(index_group, {})
+    if index_name not in index_files or (not full and len(index_files) != 1):
+        raise ValueError(f"expected current owner index in {index_group}: {index_name}")
+    data = load_json(index_files[index_name])
     if data.get("owner") != owner or data.get("configuration") != configuration:
         raise ValueError("index owner/configuration mismatch")
     sources = _strings(data.get("sources"), "eligible owner sources")
@@ -281,11 +305,15 @@ def _inventory(
     for item in _array(data.get("uncovered"), "uncovered"):
         item = _object(item, "uncovered entry")
         uncovered.append(Uncovered(exec_path(item.get("path")), _text(item.get("reason"), "coverage reason")))
-    if len({u.path for u in uncovered}) != len(uncovered) or any(u.path not in sources for u in uncovered):
+    uncovered_paths = {u.path for u in uncovered}
+    if len(uncovered_paths) != len(uncovered) or not uncovered_paths.issubset(sources):
         raise ValueError("duplicate or foreign uncovered source")
     reports: list[Report] = []
     identities: set[Identity] = set()
-    used = {index_name}
+    indexed_paths = {index_name}
+    accounted = {name: set[str]() for name in requested}
+    accounted[index_group].add(index_name)
+    omitted_native_tu = False
     for entry in _array(data.get("reports"), "indexed reports"):
         entry = _object(entry, "report index entry")
         identity = Identity.from_json(entry.get("identity"))
@@ -299,17 +327,35 @@ def _inventory(
             or any(not output.startswith(directory) for output in identity.outputs)
         ):
             raise ValueError("foreign report context")
-        if identity in identities or identity.main in {u.path for u in uncovered}:
+        if identity in identities or identity.main in uncovered_paths:
             raise ValueError("duplicate or simultaneously uncovered report identity")
         identities.add(identity)
-        paths = []
-        for key in ("report", "log"):
-            name = exec_path(entry.get(key))
-            if not name.startswith(directory) or name not in files or name in used:
-                raise ValueError(f"missing, duplicate or foreign current {key}: {name}")
-            used.add(name)
-            paths.append(files[name])
-        report_path, log = paths
+        report_name, log_name = exec_path(entry.get("report")), exec_path(entry.get("log"))
+        for name in (report_name, log_name):
+            if not name.startswith(directory) or name in indexed_paths:
+                raise ValueError(f"duplicate or foreign indexed report/log: {name}")
+            indexed_paths.add(name)
+
+        # Require the pair independently in *each* matching group. A flat union
+        # could hide a missing main group behind overlapping discovery outputs.
+        native_tu = identity.main == identity.source
+        selected = [_FULL] if full else []
+        if not full:
+            main = main_output_group(identity.main, windows=identity.platform == "windows")
+            if main is not None and main in requested:
+                selected.append(main)
+            if native_tu and _SOURCES in requested:
+                selected.append(_SOURCES)
+        if not selected:
+            omitted_native_tu |= native_tu
+            continue
+        for group in selected:
+            files = groups.get(group, {})
+            if report_name not in files or log_name not in files:
+                raise ValueError(f"missing current report/log in {group}: {report_name}")
+            accounted[group].update((report_name, log_name))
+        files = groups[selected[0]]
+        report_path, log = files[report_name], files[log_name]
         report = load_json(report_path)
         if Identity.from_json(report.get("identity")) != identity:
             raise ValueError("report identity differs from its current index")
@@ -318,14 +364,18 @@ def _inventory(
             raise ValueError("report outcome differs from its completed log")
         includes = _strings(report.get("includes"), "report includes")
         reports.append(Report(identity, outcome, report["tool_exit"], report_path, log, includes))
-    if set(sources) != {r.identity.main for r in reports} | {u.path for u in uncovered}:
+    if set(sources) != {identity.main for identity in identities} | uncovered_paths:
         raise ValueError("eligible owner inventory has unaccounted sources")
-    if any(name.endswith((".report.json", ".log", ".aobus-lint.index.json")) and name not in used for name in files):
-        raise ValueError("unindexed lint output")
-    return OwnerInventory(owner, configuration, config_id, tuple(reports), sources, tuple(uncovered), execroot)
+    for group, files in groups.items():
+        extras = files.keys() - accounted[group]
+        if extras and (not full or any(p.endswith((".report.json", ".log", ".aobus-lint.index.json")) for p in extras)):
+            raise ValueError(f"unexpected lint output in {group}")
+    return OwnerInventory(
+        owner, configuration, config_id, tuple(reports), sources, tuple(uncovered), execroot, omitted_native_tu
+    )
 
 
-def _group_files(group: dict[str, Any], sets: dict[str, dict[str, Any]]) -> tuple[dict[str, Path], Path]:
+def _group_files(group: dict[str, Any], sets: dict[str, dict[str, Any]]) -> tuple[dict[str, Path], Path | None]:
     files: dict[str, Path] = {}
     visited: set[str] = set()
     roots: set[Path] = set()
@@ -353,9 +403,7 @@ def _group_files(group: dict[str, Any], sets: dict[str, dict[str, Any]]) -> tupl
     add(group.get("inlineFiles", []))
     for reference in _array(group.get("fileSets", []), "group named sets"):
         visit(_text(_object(reference, "named set reference").get("id"), "named set id"), frozenset())
-    if len(roots) != 1:
-        raise ValueError("lint output group has no local execution root")
-    return files, next(iter(roots))
+    return files, next(iter(roots), None)
 
 
 _LINT_ASPECT_BASE = "//bazel/lint:lint.bzl%lint_aspect"
@@ -378,13 +426,20 @@ def lint_aspect_id(consumers: str = "{}", *, profile: str = "lint") -> str:
 
 
 def read_reports(
-    bep: Path, owners: list[str], *, consumers: str = "{}", profile: str = "lint"
+    bep: Path,
+    owners: list[str],
+    *,
+    consumers: str = "{}",
+    profile: str = "lint",
+    output_groups: Sequence[str] = (_FULL,),
 ) -> tuple[OwnerInventory, ...]:
     """Bind exactly one current aspect completion to each requested root.
 
     Only a completion of exactly lint_aspect_id(consumers, profile=profile)
-    binds an owner; unparameterized, foreign, differently parameterized or
-    other-profile aspects cannot stand in for it, and every report identity
+    binds an owner; all owners in this BEP must share one execution root,
+    including when their reports are used only for donor discovery.
+    Unparameterized, foreign, differently parameterized or other-profile
+    aspects cannot stand in for the requested one, and every report identity
     must carry exactly the profile's mode set. The consumer payload spelling
     is the producer's authority. The caller must first require the native
     Bazel process to exit successfully. No retained-directory scan or
@@ -395,6 +450,15 @@ def read_reports(
         raise ValueError("expected owners must be nonempty and unique")
     expected_aspect = lint_aspect_id(consumers, profile=profile)
     allowed_modes = _ANALYZER_MODES if profile == "analyzer" else _ANALYSIS_MODES
+    requested = frozenset(output_groups)
+    if len(requested) != len(output_groups):
+        raise ValueError("duplicate requested lint output group")
+    if requested != {_FULL} and (
+        profile != "lint"
+        or _INDEX not in requested
+        or any(not re.fullmatch(_MAIN + r"(?:[a-zA-Z0-9]|_[sdh_])+", g) for g in requested - {_INDEX, _SOURCES})
+    ):
+        raise ValueError("invalid scoped lint output groups")
     events = _events(bep)
     configurations: dict[str, dict[str, Any]] = {}
     sets: dict[str, dict[str, Any]] = {}
@@ -425,6 +489,7 @@ def read_reports(
     if set(completions) != set(expected):
         raise ValueError("missing requested lint owner completion")
     result = []
+    execroot: Path | None = None
     for owner in expected:
         config_id, complete = completions[owner]
         if config_id not in configurations:
@@ -437,12 +502,24 @@ def read_reports(
         variables = _object(config.get("makeVariable", {}), "configuration variables")
         if variables.get("BINDIR", configuration) != configuration:
             raise ValueError("BEP configuration bin directory mismatch")
-        groups = [_object(g, "output group") for g in _array(complete.get("outputGroup"), "output groups")]
-        groups = [g for g in groups if g.get("name") == "aobus_lint"]
-        if len(groups) != 1 or groups[0].get("incomplete", False) is not False:
-            raise ValueError("missing/incomplete lint output group")
-        files, execroot = _group_files(groups[0], sets)
-        result.append(_inventory(owner, config_id, configuration, files, execroot, allowed_modes))
+        groups: dict[str, dict[str, Path]] = {}
+        for item in _array(complete.get("outputGroup"), "output groups"):
+            group = _object(item, "output group")
+            name = _text(group.get("name"), "output group name")
+            if name not in requested:
+                if _FULL not in requested and name.startswith(_FULL):
+                    raise ValueError(f"unexpected lint output group: {name}")
+                continue
+            if name in groups or group.get("incomplete", False) is not False:
+                raise ValueError(f"duplicate/incomplete lint output group: {name}")
+            groups[name], root = _group_files(group, sets)
+            if root is not None:
+                if execroot is not None and root != execroot:
+                    raise ValueError("lint reports come from multiple execution roots")
+                execroot = root
+        if execroot is None:
+            raise ValueError("lint output groups require a local execution root")
+        result.append(_inventory(owner, config_id, configuration, groups, requested, execroot, allowed_modes))
     return tuple(result)
 
 

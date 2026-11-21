@@ -744,8 +744,10 @@ def _consumer_selection(consumers: Mapping[str, tuple[str, str]]) -> dict[str, l
     return grouped
 
 
-def _write_consumer_parameters(prepared: Path, consumers: Mapping[str, tuple[str, str]]) -> str:
-    """Keep the whole map out of native argv; the caller holds the tree lock.
+def _write_consumer_parameters(
+    prepared: Path, consumers: Mapping[str, tuple[str, str]], *, output_groups: Sequence[str] = (_OUTPUT_GROUP,)
+) -> str:
+    """Keep long consumer and output selections out of native argv under the tree lock.
 
     The rc is byte-addressed: only ``\n`` separates lines (never the Unicode
     line separators that ``str.splitlines`` would also split on), and the
@@ -760,8 +762,11 @@ def _write_consumer_parameters(prepared: Path, consumers: Mapping[str, tuple[str
     lines = original.decode("utf-8").split("\n")
     if lines and lines[-1] == "":
         lines.pop()
-    lines = [line for line in lines if not line.startswith(prefix)]
+    scope_prefix = "build:aobus_lint_scope "
+    lines = [line for line in lines if not line.startswith((prefix, scope_prefix))]
     lines.append(prefix + json.dumps("--aspects_parameters=aobus_lint_consumers=" + parameters))
+    if tuple(output_groups) != (_OUTPUT_GROUP,):
+        lines.append(scope_prefix + "--output_groups=" + ",".join(output_groups))
     content = ("\n".join(lines) + "\n").encode("utf-8")
     if content != original:
         rc.write_bytes(content)
@@ -892,6 +897,20 @@ def _finish_unowned(
     return 0
 
 
+def _lint_output_groups(selected: Sequence[str]) -> tuple[str, ...]:
+    """Select artifacts, not analysis inputs: a report is reusable across scopes."""
+    if not selected:
+        return (_OUTPUT_GROUP,)
+    groups = {"aobus_lint_index"}
+    for path in selected:
+        group = bazel_lint_reports.main_output_group(path, windows=os.name == "nt")
+        if group is None:
+            # Conservatively use the complete inventory for non-portable group names.
+            return (_OUTPUT_GROUP,)
+        groups.add(group)
+    return tuple(sorted(groups))
+
+
 def _report_pass(
     executable: Path,
     tree: Path,
@@ -907,16 +926,17 @@ def _report_pass(
     jobs: int,
     remote_cache: str | None,
     debug: bool,
+    output_groups: tuple[str, ...] = (_OUTPUT_GROUP,),
 ) -> tuple[Path, tuple[bazel_lint_reports.OwnerInventory, ...]]:
     """Build one native report pass and bind its owners' current inventories."""
-    parameters = _write_consumer_parameters(prepared, consumers)
+    parameters = _write_consumer_parameters(prepared, consumers, output_groups=output_groups)
     aspect_id = bazel_lint_reports.lint_aspect_id(parameters, profile=profile)
     bep = run_dir / f"{name}.bep.json"
     build_targets = [
         *owners,
         f"--aspects={aspect}",
         "--config=aobus_lint_consumers",
-        f"--output_groups={_OUTPUT_GROUP}",
+        f"--output_groups={_OUTPUT_GROUP}" if output_groups == (_OUTPUT_GROUP,) else "--config=aobus_lint_scope",
         f"--build_event_json_file={bep.absolute()}",
         "--experimental_build_event_upload_strategy=local",
         "--remote_download_outputs=all",
@@ -948,12 +968,17 @@ def _report_pass(
             "bep": str(bep),
             "aspect": aspect_id,
             "aspect_parameters": parameters,
+            "output_groups": output_groups,
         },
     )
     if status:
         raise ValueError(f"Bazel {profile} report build failed (exit {status}); log: {tree / 'build.log'}")
     return bep, bazel_lint_reports.read_reports(
-        bep, [_canonical_owner(owner) for owner in owners], consumers=parameters, profile=profile
+        bep,
+        [_canonical_owner(owner) for owner in owners],
+        consumers=parameters,
+        profile=profile,
+        output_groups=output_groups,
     )
 
 
@@ -1115,8 +1140,15 @@ def _run(args: bazel_workflows.NativeRequest) -> int:
                 stale_status, _finish_unowned(selected, explicit_files=explicit_selected, gtk_disabled=gtk_disabled)
             )
 
+        direct_groups = _lint_output_groups([] if target_only or all_sources else selected)
+        discovery_groups = (
+            direct_groups
+            if direct_groups == (_OUTPUT_GROUP,)
+            else tuple(sorted((*direct_groups, "aobus_lint_sources")))
+        )
+
         def report_pass(
-            name: str, owners: Sequence[str], consumers: Mapping[str, tuple[str, str]]
+            name: str, owners: Sequence[str], consumers: Mapping[str, tuple[str, str]], groups: tuple[str, ...]
         ) -> tuple[Path, tuple[bazel_lint_reports.OwnerInventory, ...]]:
             return _report_pass(
                 executable,
@@ -1125,6 +1157,7 @@ def _run(args: bazel_workflows.NativeRequest) -> int:
                 run_dir,
                 name=name,
                 aspect=_ASPECT,
+                output_groups=groups,
                 profile="lint",
                 config=config,
                 owners=owners,
@@ -1134,14 +1167,21 @@ def _run(args: bazel_workflows.NativeRequest) -> int:
                 debug=debug,
             )
 
-        bep, inventories = report_pass("build", compatible, {})
+        # Fragments never have a direct companion. For ordinary headers let the
+        # configured index decide; the loading query alone cannot prove pairing.
+        needs_donor = any(PurePosixPath(path).suffix.lower() in _INCLUDE_FRAGMENT_SUFFIXES for path in selected)
+        initial_groups = discovery_groups if needs_donor else direct_groups
+        bep, inventories = report_pass("build", compatible, {}, initial_groups)
         consumers: dict[str, tuple[str, str]] = {}
         if not target_only:
             selected = sorted(_match_paths(set(selected), inventories))
-            consumers = _choose_consumers(_unreported(selected, inventories), inventories)
+            missing = _unreported(selected, inventories)
+            if missing and initial_groups != discovery_groups:
+                bep, inventories = report_pass("discovery", compatible, {}, discovery_groups)
+            consumers = _choose_consumers(missing, inventories)
             further = {
                 owner
-                for path in _unreported(selected, inventories)
+                for path in missing
                 if path not in consumers
                 for owner in held.get(path, ())
                 if owner not in compatible and owner not in incompatible
@@ -1153,16 +1193,16 @@ def _run(args: bazel_workflows.NativeRequest) -> int:
                 added = [owner for owner in sorted(further) if not rows[owner]]
                 if added:
                     compatible.extend(added)
-                    bep, inventories = report_pass("consumer-owners", compatible, {})
+                    bep, inventories = report_pass("consumer-owners", compatible, {}, discovery_groups)
                     selected = sorted(_match_paths(set(selected), inventories))
                     consumers = _choose_consumers(_unreported(selected, inventories), inventories)
             if consumers:
-                bep, inventories = report_pass("consumers", compatible, consumers)
+                bep, inventories = report_pass("consumers", compatible, consumers, direct_groups)
 
         deferred: set[str] = set()
         if targets:
             for inventory in inventories:
-                if not any(report.identity.source == report.identity.main for report in inventory.reports):
+                if not inventory.has_native_tu:
                     raise ValueError(
                         "explicit lint owner produced no native translation-unit reports: " + inventory.owner
                     )

@@ -9,6 +9,7 @@
 #include <ao/audio/Device.h>
 #include <ao/audio/OutputDeviceSelection.h>
 #include <ao/rt/ConfigStore.h>
+#include <ao/winui/WindowPlacement.h>
 #include <ao/winui/app/DesktopOutputSelection.h>
 #include <ao/winui/layout/ShellState.h>
 #include <ao/yaml/RymlAdapter.h>

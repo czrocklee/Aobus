@@ -14,6 +14,7 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/winui/DesktopSettingsYamlSchema.h>
+#include <ao/winui/WindowPlacement.h>
 #include <ao/winui/layout/ShellState.h>
 
 #include <catch2/catch_message.hpp>

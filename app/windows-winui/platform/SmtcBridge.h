@@ -10,14 +10,16 @@
 #include <ao/rt/resource/ResourceBytes.h>
 #include <ao/utility/ScopedRegistration.h>
 
+// Select native IUnknown before either C++/WinRT projection fixes its COM ABI.
+#pragma push_macro("GetCurrentTime")
+#include <unknwn.h>
+#pragma pop_macro("GetCurrentTime")
+
 #include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Windows.Media.h>
 
 #include <memory>
 #include <stop_token>
-
-struct HWND__;
-using HWND = HWND__*;
 
 namespace ao::rt
 {

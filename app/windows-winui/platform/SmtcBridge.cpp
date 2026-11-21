@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-// clang-format off: the interop factory requires native IUnknown before C++/WinRT.
-#include <unknwn.h>
-// clang-format on
 #include "platform/SmtcBridge.h"
 
 #include <ao/CoreIds.h>

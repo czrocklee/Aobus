@@ -6,15 +6,20 @@
 #include "layout/runtime/SurfaceBrushResolver.h"
 #include <ao/winui/Theme.h>
 
-#include <winrt/Microsoft.UI.Xaml.Media.h>
-
 #include <optional>
-#include <string_view>
+
+namespace winrt::Microsoft::UI::Xaml::Controls
+{
+  struct Grid;
+}
 
 namespace ao::winui
 {
-  /// Brush for an `#RRGGBB` or `#AARRGGBB` theme token.
-  winrt::Microsoft::UI::Xaml::Media::SolidColorBrush themeColorBrush(std::string_view token);
+  /// Apply the override palette and Classic corner radius to the frame root.
+  void applyFrameTheme(winrt::Microsoft::UI::Xaml::Controls::Grid const& root, Theme const& theme);
+
+  /// Clear the frame palette and restore the system background and Classic rounding.
+  void applySystemFrameTheme(winrt::Microsoft::UI::Xaml::Controls::Grid const& root);
 
   /**
    * @brief Resolver a generation paints its authored `surface` slots with.

@@ -96,11 +96,12 @@ cc_library(
 
 # The owned warning feature keeps the product's warning promotion in this
 # context, so an analysis-only compiler warning exercises the report gate.
+# The scoped report test selects just the header; its path exercises all group escapes.
 cc_library(
     name = "werror_replay",
     testonly = True,
-    srcs = ["WerrorReplay.cpp"],
-    hdrs = ["WerrorReplay.h"],
+    srcs = ["scoped_main-group/WerrorReplay.cpp"],
+    hdrs = ["scoped_main-group/WerrorReplay.h"],
     tags = ["manual"],
     deps = ["//bazel:compile_contract"],
 )

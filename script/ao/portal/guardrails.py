@@ -213,8 +213,6 @@ WINUI_COMPOSITION_ROOTS = frozenset(
         "app/LibraryWindowSession.cpp",
         "layout/ShellBuilder.h",
         "layout/ShellBuilder.cpp",
-        "playback/MainWindowPlayback.cpp",
-        "shell/MainWindowShell.cpp",
         "track/MainWindowTrack.cpp",
     )
 )

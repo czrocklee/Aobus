@@ -137,6 +137,11 @@ SPAN = "include/ao/util/Span.h"
 INVENTORY = "app/include/ao/i18n/Inventory.def"
 _CONSUMER_CONFIG_PREFIX = "build:aobus_lint_consumers "
 _CONSUMER_PARAMETER_OPTION = "--aspects_parameters=aobus_lint_consumers="
+_SCOPE_CONFIG_PREFIX = "build:aobus_lint_scope "
+_OUTPUT_GROUP_OPTION = "--output_groups="
+_FULL_GROUP = "aobus_lint"
+_INDEX_GROUP = "aobus_lint_index"
+_SOURCES_GROUP = "aobus_lint_sources"
 
 
 def bazel_action_of(command):
@@ -351,7 +356,7 @@ class _OrchestrationHarness:
         self.commands: list[list[str]] = []
         self.prepare_calls: list[dict[str, object]] = []
         self.execute_calls: list[dict[str, object]] = []
-        self.read_calls: list[tuple[Path, list[str]]] = []
+        self.read_calls: list[tuple[Path, list[str], tuple[str, ...]]] = []
         self.read_profiles: list[str] = []
         self.log_sequence = 0
         # The owned transport is faked below; the focused rc-isolation case
@@ -360,6 +365,7 @@ class _OrchestrationHarness:
 
         patches = [
             patch.object(bazel_lint, "PROJECT_ROOT", self.checkout),
+            patch.object(bazel_lint, "os", SimpleNamespace(name="posix")),
             patch.object(tidy_engine, "PROJECT_ROOT", self.checkout),
             patch.object(bazel_lint.bazel_workspace, "workspace_path", side_effect=lambda path, config: self.tree),
             patch.object(bazel_lint.bazel_workspace, "bazel_executable", return_value=Path("bazel")),
@@ -394,9 +400,8 @@ class _OrchestrationHarness:
         prepared.mkdir(parents=True, exist_ok=True)
         rc = prepared / "aobus.bazelrc"
         if not rc.is_file():
-            # A real baseline rc, created once. A consumer line left by an
-            # earlier run is deliberately preserved: each report pass must
-            # rewrite it, so no pre-query reset is needed.
+            # A real baseline rc, created once. Prior consumer and output
+            # selection lines persist until the next report pass rewrites them.
             rc.write_text(
                 "build " + json.dumps("--config=" + config, ensure_ascii=False) + "\n"
                 "build --experimental_disk_cache_gc_max_size=50G\n",
@@ -408,6 +413,18 @@ class _OrchestrationHarness:
         self, executable, tree, prepared, action, config, targets, *, jobs=2, remote_cache=None, isolate_rc=False
     ):
         self.assertEqual((executable, action), (Path("bazel"), "build"))
+        group_options = [option for option in targets if option.startswith(_OUTPUT_GROUP_OPTION)]
+        if "--config=aobus_lint_scope" in targets:
+            self.assertFalse(group_options)
+            lines = (prepared / "aobus.bazelrc").read_text(encoding="utf-8").splitlines()
+            group_options = [
+                option
+                for line in lines
+                if line.startswith(_SCOPE_CONFIG_PREFIX)
+                for option in shlex.split(line.removeprefix(_SCOPE_CONFIG_PREFIX))
+            ]
+        self.assertEqual(len(group_options), 1, group_options)
+        self.assertTrue(group_options[0].startswith(_OUTPUT_GROUP_OPTION), group_options)
         self.execute_calls.append(
             {
                 "executable": executable,
@@ -419,6 +436,7 @@ class _OrchestrationHarness:
                 "jobs": jobs,
                 "remote_cache": remote_cache,
                 "isolate_rc": isolate_rc,
+                "output_groups": tuple(group_options[0].removeprefix(_OUTPUT_GROUP_OPTION).split(",")),
                 # The consumer mapping the report pass selected through the
                 # named config line in the real generated rc.
                 "consumers": decode_consumer_parameters(prepared),
@@ -426,15 +444,44 @@ class _OrchestrationHarness:
         )
         return self.build_status
 
-    def fake_read_reports(self, bep, owners, *, consumers="{}", profile="lint"):
-        self.read_calls.append((bep, list(owners)))
+    def fake_read_reports(self, bep, owners, *, consumers="{}", profile="lint", output_groups=(_FULL_GROUP,)):
+        self.read_calls.append((bep, list(owners), tuple(output_groups)))
         self.read_profiles.append(profile)
         build = self.execute_calls[-1]
         self.assertEqual(json.loads(consumers), build["consumers"])
+        self.assertCountEqual(output_groups, build["output_groups"])
         self.assertCountEqual(owners, ["@@" + word for word in build["targets"] if word.startswith("//")])
         inventory = self.pass_inventories.pop(0) if self.pass_inventories else self.inventories
         self.assertCountEqual([item.owner for item in inventory], owners)
-        return inventory
+
+        def materialized(report):
+            group = bazel_lint_reports.main_output_group(
+                report.identity.main, windows=report.identity.platform == "windows"
+            )
+            return (
+                _FULL_GROUP in output_groups
+                or (_SOURCES_GROUP in output_groups and report.identity.source == report.identity.main)
+                or group in output_groups
+            )
+
+        # The index still describes the full owner when a pass materializes no TU reports.
+        return tuple(
+            replace(
+                item,
+                reports=tuple(report for report in item.reports if materialized(report)),
+                _omitted_native_tu=any(
+                    report.identity.source == report.identity.main and not materialized(report)
+                    for report in item.reports
+                ),
+            )
+            for item in inventory
+        )
+
+    def assert_report_groups(self, *passes):
+        self.assertEqual(len(self.read_calls), len(passes))
+        for (bep, _, groups), (name, expected) in zip(self.read_calls, passes, strict=True):
+            self.assertEqual(bep.name, f"{name}.bep.json")
+            self.assertCountEqual(groups, expected)
 
     def fake_process(self, command, stdout, stderr):
         # Replace only the owned transport, not subprocess.run shared with the
@@ -833,6 +880,7 @@ class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
         )
         self.inventories = (self.owner_inventory(owner, source, header),)
         self.assertEqual(self.run_quiet(self.args(owner_targets=["//lib/sample:sample"])), 1)
+        self.assert_report_groups(("build", {_FULL_GROUP}))
         receipt = json.loads((self.tree / "lint").glob("run-*/run.receipt.json").__next__().read_text(encoding="utf-8"))
         self.assertEqual(receipt["selected"], ["include/ao/sample/Sample.h", "lib/sample/Sample.cpp"])
 
@@ -847,7 +895,35 @@ class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
         receipt = json.loads((self.tree / "lint").glob("run-*/run.receipt.json").__next__().read_text(encoding="utf-8"))
         self.assertEqual(receipt["selected"], ["lib/sample/Grouped.cpp"])
 
-    def test_header_scope_gates_the_header_as_main_not_its_companion_source(self):
+    def test_scoped_source_requests_its_encoded_main_without_siblings_or_donors(self):
+        owner = "@@//lib/sample:sample"
+        main = "lib/sample-extra/Selected_Name.cpp"
+        self.touch(main)
+        self.query_xml = QUERY_XML.replace("//lib/sample:Sample.cpp", "//lib/sample-extra:Selected_Name.cpp")
+        selected = self.report(owner, main)
+        sibling = self.report(owner, "lib/sample/Grouped.cpp")
+        self.inventories = (self.owner_inventory(owner, selected, sibling),)
+
+        self.assertEqual(self.run_quiet(self.args(files=[main])), 0)
+        self.assert_report_groups(("build", {_INDEX_GROUP, "aobus_lint_main_lib_ssample_hextra_sSelected__Name_dcpp"}))
+
+    def test_windows_case_alias_materializes_and_gates_the_canonical_main(self):
+        owner = "@@//lib/sample:sample"
+        canonical = "lib/sample/Sample.cpp"
+        alias = "lib/sample/SAMPLE.CPP"
+        self.touch(alias)
+        report = self.report(
+            owner, canonical, outcome="warning", log=f"{canonical}:1:1: warning: finding [aobus-example]\n"
+        )
+        report = replace(report, identity=replace(report.identity, platform="windows"))
+        self.inventories = (self.owner_inventory(owner, report),)
+        with patch.object(bazel_lint, "os", SimpleNamespace(name="nt")):
+            self.assertEqual(self.run_quiet(self.args(files=[alias], owner_targets=["//lib/sample:sample"])), 1)
+        self.assert_report_groups(("build", {_INDEX_GROUP, "aobus_lint_main_lib_ssample_ssample_dcpp"}))
+        receipt = json.loads(next((self.tree / "lint").glob("run-*/run.receipt.json")).read_text(encoding="utf-8"))
+        self.assertEqual(receipt["selected"], [canonical])
+
+    def test_explicit_owner_header_scope_uses_the_index_to_admit_the_companion_tu(self):
         owner = "@@//lib/sample:sample"
         source = self.report(
             owner,
@@ -858,9 +934,10 @@ class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
         header = self.report(owner, "lib/sample/Sample.cpp", header="include/ao/sample/Sample.h")
         self.inventories = (self.owner_inventory(owner, source, header),)
         self.assertEqual(
-            self.run_quiet(self.args(files=[str(self.checkout / "include/ao/sample/Sample.h")])),
+            self.run_quiet(self.args(files=["include/ao/sample/Sample.h"], owner_targets=["//lib/sample:sample"])),
             0,
         )
+        self.assert_report_groups(("build", {_INDEX_GROUP, "aobus_lint_main_include_sao_ssample_sSample_dh"}))
         receipt = json.loads((self.tree / "lint").glob("run-*/run.receipt.json").__next__().read_text(encoding="utf-8"))
         self.assertEqual(receipt["selected"], ["include/ao/sample/Sample.h"])
 
@@ -882,6 +959,7 @@ class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
         cquery = next(command for command in self.commands if bazel_action_of(command) == "cquery")
         self.assertEqual(bazel_expression_of(cquery), 'config(set("//lib/odd:odd@rule"), target)')
         self.assertIn("//lib/odd:odd@rule", self.execute_calls[0]["targets"])
+        self.assert_report_groups(("build", {_FULL_GROUP}))
 
     def test_all_explicit_owners_incompatible_fails_without_a_report_build(self):
         self.cquery_text = "@@//app/macos-appkit:appkit|True\n"
@@ -919,14 +997,21 @@ class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
                 0,
             )
         self.assertEqual(self.read_calls[0][1], [owner])
+        self.assert_report_groups(("build", {_INDEX_GROUP, "aobus_lint_main_lib_sutility_sAtomicFileWindows_dcpp"}))
         receipt = json.loads((self.tree / "lint").glob("run-*/run.receipt.json").__next__().read_text(encoding="utf-8"))
         self.assertEqual(receipt["selected"], [])
         self.assertEqual(receipt["deferred"], ["lib/utility/AtomicFileWindows.cpp"])
 
-    def test_unpaired_header_is_analyzed_as_a_main_in_a_consumer_that_included_it(self):
-        self.query_xml = CONSUMER_XML
+    def test_unpaired_header_replay_keeps_the_direct_source_but_not_its_donor(self):
+        direct = "lib/util/Time.cpp"
+        self.touch(direct)
+        self.query_xml = CONSUMER_XML.replace(
+            '<label value="//lib/util:Clock.cpp"/>',
+            '<label value="//lib/util:Clock.cpp"/><label value="//lib/util:Time.cpp"/>',
+        )
         owner = "@@//lib/util:util"
         self.cquery_text = owner + "|False\n"
+        selected = self.report(owner, direct)
         source = self.report(owner, "lib/util/Clock.cpp", includes=(SPAN, "lib/util/Clock.h"))
         header = self.report(
             owner,
@@ -935,19 +1020,28 @@ class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
             outcome="warning",
             log=f"{SPAN}:1:1: warning: header [aobus-example]\n",
         )
-        self.pass_inventories = [
-            (self.owner_inventory(owner, source),),
-            (self.owner_inventory(owner, source, header),),
-        ]
-        self.assertEqual(self.run_quiet(self.args(files=[str(self.checkout / SPAN)])), 1)
+        before_replay = (self.owner_inventory(owner, selected, source),)
+        self.pass_inventories = [before_replay, before_replay, (self.owner_inventory(owner, selected, source, header),)]
+        self.assertEqual(self.run_quiet(self.args(files=[direct, SPAN])), 1)
 
+        selected_groups = {
+            _INDEX_GROUP,
+            "aobus_lint_main_include_sao_sutil_sSpan_dh",
+            "aobus_lint_main_lib_sutil_sTime_dcpp",
+        }
+        self.assert_report_groups(
+            ("build", selected_groups),
+            ("discovery", selected_groups | {_SOURCES_GROUP}),
+            ("consumers", selected_groups),
+        )
         self.assertEqual(
-            [call["consumers"] for call in self.execute_calls], [{}, {owner: [["lib/util/Clock.cpp", SPAN]]}]
+            [call["consumers"] for call in self.execute_calls], [{}, {}, {owner: [["lib/util/Clock.cpp", SPAN]]}]
         )
         # The next run must not inherit the previous header replay.
         self.inventories = (self.owner_inventory(owner, source),)
         self.assertEqual(self.run_quiet(self.args(files=[str(self.checkout / "lib/util/Clock.cpp")])), 0)
         self.assertEqual(self.execute_calls[-1]["consumers"], {})
+        self.assertCountEqual(self.read_calls[-1][2], {_INDEX_GROUP, "aobus_lint_main_lib_sutil_sClock_dcpp"})
 
     def test_held_back_consumers_build_only_when_the_nearest_reports_miss_the_fragment(self):
         self.query_xml = CONSUMER_XML
@@ -964,8 +1058,14 @@ class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
         ]
         self.assertEqual(self.run_quiet(self.args(files=[str(self.checkout / INVENTORY)])), 0)
 
+        selected_groups = {_INDEX_GROUP, "aobus_lint_main_app_sinclude_sao_si18n_sInventory_ddef"}
+        self.assert_report_groups(
+            ("build", selected_groups | {_SOURCES_GROUP}),
+            ("consumer-owners", selected_groups | {_SOURCES_GROUP}),
+            ("consumers", selected_groups),
+        )
         self.assertEqual(
-            [owners for _, owners in self.read_calls], [[nearest], [nearest, compiler], [nearest, compiler]]
+            [owners for _, owners, _ in self.read_calls], [[nearest], [nearest, compiler], [nearest, compiler]]
         )
         self.assertEqual(self.execute_calls[-1]["consumers"], {compiler: [["tool/catalog/Main.cpp", INVENTORY]]})
 
@@ -991,13 +1091,14 @@ class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
         )
         self.pass_inventories = [
             (self.owner_inventory(owner, source),),
+            (self.owner_inventory(owner, source),),
             (self.owner_inventory(owner, source, header),),
         ]
         self.assertEqual(self.run_quiet(self.args(files=[str(path)])), 1)
         receipt = json.loads(next((self.tree / "lint").glob("run-*/run.receipt.json")).read_text(encoding="utf-8"))
         self.assertEqual(receipt["selected"], [header_path])
         self.assertEqual(receipt["deferred"], [])
-        self.assertEqual(len(self.execute_calls), 2)
+        self.assertEqual(len(self.execute_calls), 3)
 
     def test_compatible_header_that_no_analyzed_unit_includes_fails_with_its_reason(self):
         self.query_xml = CONSUMER_XML
@@ -1005,6 +1106,7 @@ class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
         test = "@@//test/unit:unit"
         self.cquery_texts = [owner + "|False\n", test + "|False\n"]
         self.pass_inventories = [
+            (self.owner_inventory(owner, self.report(owner, "lib/util/Clock.cpp")),),
             (self.owner_inventory(owner, self.report(owner, "lib/util/Clock.cpp")),),
             (
                 self.owner_inventory(owner, self.report(owner, "lib/util/Clock.cpp")),
@@ -1014,7 +1116,12 @@ class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
         stderr = io.StringIO()
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(stderr):
             self.assertEqual(bazel_lint.run(self.args(files=[str(self.checkout / SPAN)])), 2)
-        self.assertEqual(len(self.execute_calls), 2)
+        selected_groups = {_INDEX_GROUP, "aobus_lint_main_include_sao_sutil_sSpan_dh"}
+        self.assert_report_groups(
+            ("build", selected_groups),
+            ("discovery", selected_groups | {_SOURCES_GROUP}),
+            ("consumer-owners", selected_groups | {_SOURCES_GROUP}),
+        )
         self.assertIn(f"{SPAN}: no analyzed translation unit includes it", stderr.getvalue())
 
     def test_public_configuration_guard_rejects_raw_options_before_workspace_and_tool_lookup(self):
@@ -1100,6 +1207,7 @@ class AnalyzerOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
         self.assertTrue(json.loads(prepared["lint_configuration"].read_text(encoding="utf-8"))["alpha"])
         self.assertEqual(prepared["config"], "fastbuild")
         self.assertEqual(self.read_profiles, ["analyzer"])
+        self.assert_report_groups(("build", {_FULL_GROUP}))
 
     def test_analyzer_findings_fail_by_default_and_report_only_is_explicit(self):
         log = "lib/sample/Sample.cpp:1:1: warning: leak [clang-analyzer-cplusplus.NewDeleteLeaks]\n"

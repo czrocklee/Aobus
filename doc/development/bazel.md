@@ -1642,6 +1642,7 @@ contracts below.
 
 ```bash
 ./ao check lint --target //lib/utility:utility
+./ao check lint --target //lib/utility:utility include/ao/utility/Base64.h
 ./ao check lint lib/utility/Base64.cpp
 ./ao check lint lib/utility
 ./ao check lint --all
@@ -1661,10 +1662,23 @@ owners restrict the request and the selected scope gates the reports. The portal
 then checks configured compatibility with `cquery`; an owner root never implies
 its dependency closure. Explicit owners also bound the rule-kind query to those
 roots, while native action/report inventories establish configured source coverage.
-Every compatible explicit root must produce a TU report even if another root
-covers the selected file. Compatibility uses the top-level target configuration,
-not an exec-configuration row for the same owner built as a tool.
+The complete configured index must prove a native translation unit for every
+compatible explicit root, even if its report was not requested and another root
+covers the selected file. This index proof does not require delivery of every
+sibling report and does not make sibling mains selected. For example, the
+header-scoped utility command above gates the selected header, unlike the
+broader target-only command. An ordinary compiler error in a delivered but
+unselected sibling report is not a selected-main result; failure of a required
+Bazel build instead makes the attempt incomplete. Compatibility uses the
+top-level target configuration, not an exec-configuration row for the same
+owner built as a tool.
 Automatic discovery without `--target` queries the whole project graph.
+For a supported direct main path, the portal requests its existing reports in
+all actual native contexts plus the owner inventory, not owner sibling reports
+for a direct-only scope. Donor discovery can also request sibling native TU reports.
+If any path is unsupported by the selection codec, all compatible owners in the
+request fall back to the full output group while gating only selected mains. Target-only
+selection and the full completion gate retain their broader coverage.
 Native lint queries and report builds select only the tracked repository rc and
 its generated launch rc, ignoring system/home rc files and environment
 `BAZELRC`, as the completion gate does.
@@ -1672,24 +1686,25 @@ its generated launch rc, ignoring system/home rc files and environment
 Each report records the checkout files its analysis included. A selected header
 without an unambiguous same-component companion source, and a selected include
 fragment, are analyzed through a translation unit that included them. The portal
-picks one from the first report pass, preferring the same component and then the
-longest shared directory prefix, and a second pass replays that consumer's native
+discovers one from translation-unit reports, preferring the same component and
+then the longest shared directory prefix, and subsequently replays that consumer's native
 context: a header becomes the main file, while a fragment stays inside the
 consumer translation unit. Fragment warning blocks are selected by normalized
 file identity; consumer compiler errors and unlocated diagnostics remain, and
 scoping never hides an incomplete attempt. Without
-`--target`, the first pass builds only the possible consumers nearest the path;
+`--target`, discovery builds only the possible consumers nearest the path;
 the other owners whose dependencies declare it build only when none of those
 reports included it. When every nearest consumer is platform-incompatible, the
 held owners are queried for compatibility before the path can defer or fail: an
 incompatible nearest group cannot prove farther consumers unavailable. The
-selection reaches the aspect as one canonical JSON string parameter, outside
-the policy and inputs that every report action reads. The portal writes that
-option into a private named build configuration in its existing generated rc,
-under the tree lock, and selects it only for report builds. Query/cquery do not
-select it; no consumer repository, environment selector or pre-query reset is
-needed. Identical parameter bytes avoid rewrites between report passes; the next
-workspace preparation regenerates the baseline rc without that private line.
+consumer selection reaches the aspect as one canonical JSON string parameter,
+distinct from output group selection. The portal writes the consumer parameter
+and scoped output groups to separate named configs in its generated rc under the
+tree lock. Only report builds select them. Input, native context and analysis
+profile changes invalidate reports; selecting reports does not. Query/cquery do not use these configs;
+no consumer repository, environment selector or pre-query reset is needed.
+Identical consumer parameters and output groups keep the rc section stable; the
+next workspace preparation regenerates the baseline rc without it.
 Large maps stay out of the Windows client argv. This uses the normal
 Bazel server mode: batch mode can re-expand rc options into an oversized Java
 command line and is not supported for large maps. Each pass records its literal
@@ -1764,11 +1779,14 @@ AppKit Objective-C++/ARC and WinUI generated-header dependencies.
 Unsupported compiler views, modules, PCH/header-unit contexts and unresolved
 response files fail rather than being stripped. The portal reads only the
 current invocation's BEP and local report artifacts, binding each owner to the
-fixed production aspect and that pass's exact consumer parameter. A foreign
-aspect or different parameterization cannot stand in. It does not scan stale
-output directories or join `aquery` data. A clean selected set returns 0,
-selected warnings or ordinary compiler errors return 1, and incomplete
-coverage, infrastructure failure or an invalid report returns 2. Cached warnings still fail. `--debug` displays per-run evidence paths
+fixed production aspect and that pass's exact consumer parameter. Before using
+reports from a pass, including for donor discovery, the portal requires every
+owner's outputs to come from the same local execution root. It does not scan
+stale output directories or join `aquery` data. The native lint stage returns
+0 for a clean selection, 1 for warnings, and 2 for selected compiler errors,
+incomplete coverage, infrastructure failure or invalid reports. `--report-only`
+makes only warnings advisory; cache hits do not change the verdict.
+`--debug` displays per-run evidence paths
 and publishes all action completions in the BEP for diagnosis; those events are
 not the report inventory or proof that a disk-cached action executed anew. The
 tree keeps the eight most recent run evidence directories.
@@ -1979,8 +1997,8 @@ It accepts file/directory paths, `--commit`, or `--all` as one source scope,
 plus `--config`, `--path`, `--vcpkg-prefix`, `--jobs`, and `--remote-cache`.
 Missing paths and invalid selections fail before discovery or native preparation.
 `--tidy-check <name>` selects only the requested C++ diagnostics, with no
-unrelated language lint or audits. Findings fail unless `--report-only` makes
-them advisory; tool and admission failures always fail.
+unrelated language lint or audits. Warnings fail unless `--report-only` makes
+them advisory; selected compiler errors, tool and admission failures always fail.
 
 Lint performs no formatting or global document check. Use `./ao check format`
 for scoped read-only formatting and `./ao check docs` for global semantics.
@@ -2405,8 +2423,10 @@ docs-only routing and the failed-prerequisite behavior. Each native job runs
 host-compatible tooling, native tests, the native-policy audits and the
 whole-graph lint test ([lint reports](#lint-reports)). Matching passing test results may be cached,
 and the CI summary reports the BEP test summaries of the attempt. Daily CI is
-fastbuild only. Linux also exercises a bounded bare Bazel entry without the
-portal launch configuration; it does not rerun the whole lint graph. Release
+fastbuild only. Without the portal launch configuration, Linux also runs a bare
+Bazel utility test and requests one paired header's CLI-aspect output group.
+The Python reader checks that Bazel delivered the header report, not its native
+source's report. This does not rerun the whole lint graph. Release
 validation is deferred to a separate job and is not run by this workflow. The former
 advisory/manual `*_bazel` product jobs and the dispatch `mode` selector are
 removed; only the explicit `r2` boolean remains. Native SDK provisioning

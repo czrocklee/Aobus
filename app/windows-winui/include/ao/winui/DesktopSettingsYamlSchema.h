@@ -5,6 +5,7 @@
 
 #include <ao/Error.h>
 #include <ao/audio/OutputDeviceSelection.h>
+#include <ao/winui/WindowPlacement.h>
 #include <ao/winui/layout/ShellState.h>
 
 #include <ryml.hpp>
@@ -17,10 +18,6 @@ namespace ao::winui
 {
   inline constexpr auto kDesktopSettingsConfigGroup = std::string_view{"desktop"};
   inline constexpr std::uint32_t kDesktopSettingsVersion = 1;
-  inline constexpr std::int32_t kDefaultWindowX = 80;
-  inline constexpr std::int32_t kDefaultWindowY = 80;
-  inline constexpr std::int32_t kDefaultWindowWidth = 1280;
-  inline constexpr std::int32_t kDefaultWindowHeight = 800;
   inline constexpr std::int32_t kMinimumWindowWidth = 640;
   inline constexpr std::int32_t kMinimumWindowHeight = 480;
   inline constexpr double kDefaultNavigationPaneWidth = 240.0;
@@ -29,17 +26,6 @@ namespace ao::winui
   inline constexpr double kMinimumInspectorPaneWidth = 160.0;
   inline constexpr double kMaximumNavigationPaneWidth = 360.0;
   inline constexpr double kMaximumInspectorPaneWidth = 480.0;
-
-  struct WindowPlacement final
-  {
-    std::int32_t x = kDefaultWindowX;
-    std::int32_t y = kDefaultWindowY;
-    std::int32_t width = kDefaultWindowWidth;
-    std::int32_t height = kDefaultWindowHeight;
-    bool maximized = false;
-
-    friend bool operator==(WindowPlacement const&, WindowPlacement const&) = default;
-  };
 
   struct DesktopSettings final
   {

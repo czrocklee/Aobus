@@ -35,6 +35,7 @@
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/ordering/TextOrderingPolicy.h>
 #include <ao/utility/ScopedRegistration.h>
+#include <ao/winui/DesktopSettingsYamlSchema.h>
 #include <ao/winui/layout/ShellState.h>
 
 #include <commctrl.h>

@@ -1503,6 +1503,7 @@ cc_test(
         ":uimodel_test_support",
         "//app/i18n:catalog_pattern",
         "//app/windows-winui:model",
+        "//app/windows-winui:window_placement",
         "//lib/utility:unicode_text",
         "@aobus_native_deps//:rapidyaml",
         "@aobus_test_deps//:catch2",
