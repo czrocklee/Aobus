@@ -5,6 +5,7 @@
 
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
+#include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 
 #include <glibmm/objectbase.h>
 #include <glibmm/refptr.h>
@@ -102,5 +103,20 @@ namespace ao::gtk
                                  audio::ProfileId const& profile) const
   {
     return _backendId == backend && _id == devId && _profileId == profile;
+  }
+
+  OutputRoutingPolicyItem::OutputRoutingPolicyItem(uimodel::OutputDeviceRow row)
+    : Glib::ObjectBase{"OutputRoutingPolicyItem"}, _row{std::move(row)}
+  {
+  }
+
+  Glib::RefPtr<OutputRoutingPolicyItem> OutputRoutingPolicyItem::create(uimodel::OutputDeviceRow row)
+  {
+    return Glib::make_refptr_for_instance<OutputRoutingPolicyItem>(new OutputRoutingPolicyItem{std::move(row)});
+  }
+
+  uimodel::OutputDeviceRow const& OutputRoutingPolicyItem::row() const
+  {
+    return _row;
   }
 } // namespace ao::gtk

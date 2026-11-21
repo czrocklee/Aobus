@@ -21,7 +21,7 @@ namespace ao::uimodel::test
     {
       return {
         .backendId = audio::kBackendPipeWire,
-        .deviceId = audio::DeviceId{"studio-dac"},
+        .deviceId = audio::DeviceId{"node:studio-dac"},
         .profileId = audio::kProfileExclusive,
       };
     }

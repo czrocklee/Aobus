@@ -7,6 +7,7 @@
 #include <ao/Error.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/ViewIds.h>
@@ -93,9 +94,13 @@ namespace ao::rt
      */
     virtual bool trySeek(PlaybackOccurrenceId expectedOccurrenceId, std::chrono::milliseconds elapsed) = 0;
 
-    virtual void setOutputDevice(audio::BackendId const& backendId,
-                                 audio::DeviceId const& deviceId,
-                                 audio::ProfileId const& profileId) = 0;
+    virtual void setOutputDevice(audio::OutputDeviceSelection const& selection) = 0;
+    void setOutputDevice(audio::BackendId const& backendId,
+                         audio::DeviceId const& deviceId,
+                         audio::ProfileId const& profileId)
+    {
+      setOutputDevice({.backendId = backendId, .deviceId = deviceId, .profileId = profileId});
+    }
     virtual void setVolume(float volume) = 0;
     virtual void setMuted(bool muted) = 0;
 

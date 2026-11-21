@@ -109,6 +109,13 @@ namespace ao::audio
      */
     virtual std::unique_ptr<Backend> createBackend(Device const& device, ProfileId const& profile) = 0;
 
+    /// Configure a preferred named target that the system may replace, even if it is not in the current inventory.
+    /// Providers without this native routing mode do not substitute a different backend or profile.
+    virtual std::unique_ptr<Backend> createReroutableBackend(Device const& /*device*/, ProfileId const& /*profile*/)
+    {
+      return nullptr;
+    }
+
     /**
      * @brief Subscribes to the system routing graph for a specific node.
      * @param routeAnchor The ID of the node to use as the root for graph discovery.

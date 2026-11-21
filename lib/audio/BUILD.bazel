@@ -73,6 +73,7 @@ cc_library(
             "backend/detail/PipeWireFormatParsing.cpp",
             "backend/detail/PipeWireMonitorParsing.cpp",
             "backend/detail/PipeWireRuntime.cpp",
+            "backend/detail/PipeWireTargetLookup.cpp",
         ],
         "@platforms//os:windows": [
             "PlatformBackendProvidersWindows.cpp",

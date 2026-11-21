@@ -4,9 +4,7 @@
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
 
 #include <ao/CoreIds.h>
-#include <ao/audio/Device.h>
 #include <ao/audio/Quality.h>
-#include <ao/audio/Transport.h>
 #include <ao/audio/flow/Graph.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/PlaybackState.h>
@@ -42,49 +40,6 @@ namespace ao::uimodel
       // The source node carries the track's native format, so show its true
       // resolution (valid bits) rather than a padded transport container width.
       return (it != quality.assessments.end() && it->optFormat) ? formatter.formatLabel(*it->optFormat) : std::string{};
-    }
-
-    struct SelectedDevicePresentation final
-    {
-      std::string name{};
-      AudioIconKind iconKind = AudioIconKind::OutputDevice;
-    };
-
-    SelectedDevicePresentation resolveSelectedDevicePresentation(i18n::MessageCatalog const& textCatalog,
-                                                                 rt::OutputState const& output)
-    {
-      for (auto const& backend : output.availableBackends)
-      {
-        if (backend.id != output.selectedDevice.backendId)
-        {
-          continue;
-        }
-
-        for (auto const& device : backend.devices)
-        {
-          if (device.id != output.selectedDevice.deviceId)
-          {
-            continue;
-          }
-
-          auto name = device.displayName;
-
-          if (device.isDefault && device.id.empty() && name.empty())
-          {
-            name = i18n::requiredText(textCatalog, i18n::MessageId::SystemDefaultOutputDevice);
-          }
-
-          return {.name = std::move(name), .iconKind = audioBackendPresentation(textCatalog, backend.id).iconKind};
-        }
-      }
-
-      return {};
-    }
-
-    NowPlayingActionCommand::Type playPauseCommand(audio::Transport const transport) noexcept
-    {
-      return transport == audio::Transport::Playing ? NowPlayingActionCommand::Type::Pause
-                                                    : NowPlayingActionCommand::Type::Resume;
     }
   } // namespace
 
@@ -177,11 +132,14 @@ namespace ao::uimodel
         std::format_to(std::back_inserter(plainTextFallback), "\n{}", presentation.channelNote);
       }
 
-      auto devicePresentation = resolveSelectedDevicePresentation(_textCatalog, state.output);
+      auto optDeviceName = selectedOutputDeviceName(_textCatalog, state.output);
+      auto const iconKind = optDeviceName
+                              ? audioBackendPresentation(_textCatalog, state.output.selectedDevice.backendId).iconKind
+                              : AudioIconKind::OutputDevice;
 
       view.audioPipeline = AudioPipelineViewState{.quality = state.quality,
-                                                  .deviceName = std::move(devicePresentation.name),
-                                                  .deviceIconKind = devicePresentation.iconKind,
+                                                  .deviceName = std::move(optDeviceName).value_or(std::string{}),
+                                                  .deviceIconKind = iconKind,
                                                   .plainTextFallback = plainTextFallback};
 
       view.isActive = (state.quality.overall != audio::Quality::Unknown);
@@ -204,7 +162,7 @@ namespace ao::uimodel
     {
       case NowPlayingFieldAction::Reveal: cmd.type = NowPlayingActionCommand::Type::Reveal; break;
 
-      case NowPlayingFieldAction::PlayPause: cmd.type = playPauseCommand(state.transport); break;
+      case NowPlayingFieldAction::PlayPause: cmd.type = NowPlayingActionCommand::Type::PlayPause; break;
 
       case NowPlayingFieldAction::FilterByField:
       {

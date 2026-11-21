@@ -42,17 +42,15 @@ namespace ao::rt
   /**
    * @brief Reads persisted application preferences over @p state.
    *
-   * Every field is optional over the value @p state already holds, so a
-   * document written by an older build keeps the caller's defaults for whatever
-   * it predates rather than resetting the whole group. A missing group leaves
-   * @p state untouched; a rejected one is logged and also leaves it untouched,
-   * because discarding a user's remaining preferences to punish one bad field
-   * loses more than it protects.
+   * Route identity and preset fields retain the caller's defaults when absent
+   * or when the group is rejected. Rerouting permission is never seeded: only
+   * a valid opt-in for a complete stored eligible route enables it. Invalid
+   * permission values leave the route fixed rather than rejecting its identity.
    */
   void loadAppPrefs(ConfigStore& store, AppPrefsState& state);
   Result<> saveAppPrefs(ConfigStore& store, AppPrefsState const& state);
 
-  /// Reads the persisted application session over @p state, under the same rule as `loadAppPrefs`.
+  /// Reads persisted session fields over @p state; the last active route never restores rerouting permission.
   void loadAppSession(ConfigStore& store, AppSessionState& state);
   Result<> saveAppSession(ConfigStore& store, AppSessionState const& state);
 } // namespace ao::rt

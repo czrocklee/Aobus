@@ -82,6 +82,7 @@ namespace ao::audio::test
     utility::ScopedRegistration subscribeDevices(OnDevicesChangedCallback callback) override;
 
     std::unique_ptr<Backend> createBackend(Device const& device, ProfileId const& profile) override;
+    std::unique_ptr<Backend> createReroutableBackend(Device const& device, ProfileId const& profile) override;
 
     Status status() const override;
 

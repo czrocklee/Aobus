@@ -10,6 +10,8 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackService.h>
+#include <ao/uimodel/playback/command/PlaybackActions.h>
+#include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
 
 #include <gdkmm/cursor.h>
@@ -39,11 +41,13 @@ namespace ao::gtk
 
   NowPlayingFieldLabel::NowPlayingFieldLabel(rt::PlaybackService& playback,
                                              rt::WorkspaceService& workspace,
+                                             uimodel::PlaybackActions* playbackActions,
                                              i18n::MessageCatalog const& textCatalog,
                                              rt::TrackField field,
                                              Action action)
     : _playback{playback}
     , _workspace{workspace}
+    , _playbackActions{playbackActions}
     , _field{field}
     , _action{action}
     , _nowPlayingViewModel{_playback,
@@ -59,7 +63,7 @@ namespace ao::gtk
 
     _label.set_selectable(false);
 
-    if (_action != Action::None)
+    if (_action != Action::None && (_action != Action::PlayPause || _playbackActions != nullptr))
     {
       _label.add_css_class("ao-clickable");
       _label.set_cursor(Gdk::Cursor::create("pointer"));
@@ -67,7 +71,8 @@ namespace ao::gtk
       auto const gesturePtr = Gtk::GestureClick::create();
       gesturePtr->set_button(1);
       gesturePtr->set_propagation_phase(Gtk::PropagationPhase::BUBBLE);
-      gesturePtr->signal_pressed().connect([this](std::int32_t, double, double) { handleLabelClicked(); });
+      _pressedConnection =
+        gesturePtr->signal_pressed().connect([this](std::int32_t, double, double) { handleLabelClicked(); });
       _label.add_controller(gesturePtr);
     }
   }
@@ -83,13 +88,17 @@ namespace ao::gtk
 
     using Type = uimodel::NowPlayingActionCommand::Type;
 
-    switch (auto& commands = _playback.commands(); cmd.type)
+    switch (cmd.type)
     {
-      case Type::Reveal: commands.revealPlayingTrack(); break;
+      case Type::Reveal: _playback.commands().revealPlayingTrack(); break;
 
-      case Type::Pause: commands.pause(); break;
+      case Type::PlayPause:
+        if (_playbackActions != nullptr)
+        {
+          std::ignore = _playbackActions->tryExecute(uimodel::PlaybackCommand::PlayPause);
+        }
 
-      case Type::Resume: commands.resume(); break;
+        break;
 
       case Type::Navigate:
         APP_LOG_DEBUG("[PID {}] NowPlayingFieldLabel: Navigating to query: {}", getpid(), cmd.navigateQuery);

@@ -9,6 +9,7 @@
 #include <ao/audio/QualityAnalyzer.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
+#include <ao/uimodel/playback/output/PlaybackOutputText.h>
 #include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
 #include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 
@@ -50,30 +51,6 @@ namespace ao::tui
       return ftxui::text("●") | ftxui::color(ftxui::Color::RGB(color.red, color.green, color.blue));
     }
 
-    std::string selectedDeviceName(rt::PlaybackTransportSnapshot const& state)
-    {
-      auto deviceName = std::string{};
-
-      for (auto const& backend : state.output.availableBackends)
-      {
-        for (auto const& device : backend.devices)
-        {
-          if (device.id == state.output.selectedDevice.deviceId)
-          {
-            deviceName = device.displayName;
-            break;
-          }
-        }
-
-        if (!deviceName.empty())
-        {
-          break;
-        }
-      }
-
-      return deviceName;
-    }
-
     std::string qualityNodeLine(uimodel::AudioQualityFormatter const& formatter,
                                 audio::NodeQualityAssessment const& assessment)
     {
@@ -101,7 +78,7 @@ namespace ao::tui
                                    KeymapPlan const& keymapPlan,
                                    std::int32_t const terminalColumns)
   {
-    auto const deviceName = selectedDeviceName(state);
+    auto const deviceName = uimodel::selectedOutputDeviceName(textCatalog, state.output).value_or(std::string{});
     auto const titleColumns = cellWidth(overlayLabel(textCatalog, Overlay::QualityPanel)) +
                               (deviceName.empty() ? 0 : cellWidth(" ─ ") + cellWidth(deviceName));
     auto contentColumns =
@@ -153,7 +130,7 @@ namespace ao::tui
     }
 
     auto rows = Elements{};
-    auto const deviceName = selectedDeviceName(state);
+    auto const deviceName = uimodel::selectedOutputDeviceName(textCatalog, state.output).value_or(std::string{});
 
     if (state.quality.assessments.empty())
     {

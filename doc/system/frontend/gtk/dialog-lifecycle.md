@@ -58,7 +58,7 @@ Preferences opens from `app.preferences`, `Ctrl+,`, or the Edit menu.
 Appearance changes apply immediately and persist through application preferences.
 Keyboard changes persist the candidate before publishing live accelerators.
 Output selection issues the playback command, then persists the exact requested route without requiring engine confirmation.
-The output summary follows the active route rather than the persisted request.
+The output summary follows the live playback snapshot, not the settings file. While a route request is pending, it reports that state rather than presenting the last configured route as the active output.
 Default layout-preset choice affects the next layout load; structural edits use the layout editor.
 Ordinary close of Preferences with a failed shortcut candidate switches to the Keyboard page and prompts Retry, Discard, or keep editing.
 Repeated close requests reuse the live prompt rather than stacking another one.

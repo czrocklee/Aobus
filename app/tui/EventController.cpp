@@ -157,8 +157,9 @@ namespace ao::tui
 
     bool matchesOutputDeviceRow(uimodel::OutputDeviceRow const& row, OutputDeviceRowHitRegion const& hitRegion)
     {
-      return row.kind == uimodel::OutputDeviceRow::Kind::DeviceProfile && row.backendId == hitRegion.backendId &&
-             row.deviceId == hitRegion.deviceId && row.profileId == hitRegion.profileId;
+      return row.kind == hitRegion.kind && row.backendId == hitRegion.backendId && row.deviceId == hitRegion.deviceId &&
+             row.profileId == hitRegion.profileId &&
+             row.optRoutingPolicySelection == hitRegion.optRoutingPolicySelection;
     }
   } // namespace
 
@@ -449,7 +450,7 @@ namespace ao::tui
       return;
     }
 
-    _outputDevices.refresh();
+    _outputDevices.prepareToOpen();
     openOverlay(Overlay::OutputDevices);
   }
 
@@ -557,8 +558,10 @@ namespace ao::tui
 
   void EventController::selectOutputDevice()
   {
-    _outputDevices.trySelectSelected();
-    closeOverlay();
+    if (_outputDevices.activateSelected() == OutputDeviceActivation::DeviceSelected)
+    {
+      closeOverlay();
+    }
   }
 
   void EventController::finishPresentationSelection(PresentationSelectionResult res)
@@ -1744,7 +1747,10 @@ namespace ao::tui
       return false;
     }
 
-    if (_shell.overlay() != Overlay::OutputDevices)
+    auto const& viewportBox = _hitRegions.overlayPanel.navigationBox;
+
+    if (_shell.overlay() != Overlay::OutputDevices ||
+        (!viewportBox.IsEmpty() && !contains(viewportBox, mouse.x, mouse.y)))
     {
       return false;
     }
@@ -1769,7 +1775,7 @@ namespace ao::tui
         return true;
       }
 
-      if (_outputDevices.trySelectRow(hitRegionIt->rowIndex))
+      if (_outputDevices.activateRow(hitRegionIt->rowIndex) == OutputDeviceActivation::DeviceSelected)
       {
         closeOverlay();
       }

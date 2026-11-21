@@ -219,6 +219,16 @@ ja:table {
     audio_profile_exclusive { "排他モード" }
     audio_profile_exclusive_description { "ハードウェアデバイスへの直接アクセス" }
     system_default_output_device { "システムデフォルト" }
+    output_device_pending_summary { "出力先を選択" }
+    output_device_pending_status { "選択した出力先は利用できません" }
+    output_device_pending_named_status { "選択した出力先は利用できません：{device}" }
+    output_device_invalid_pipewire_status { "PipeWire の出力先を選び直してください。保存された選択は無効です。" }
+    output_device_routing_policy_toggle { "出力先の自動切替を許可" }
+    output_device_routing_policy_fixed { "オンにすると、起動時にこのデバイスが利用できない場合や接続が切れた場合に、別の出力先を使用できます。オフの場合はこのデバイスだけを使用します。" }
+    output_device_routing_policy_allowed { "起動時にこのデバイスが利用できない場合や接続が切れた場合は、システムが別の出力先を使うことがあります。" }
+    output_device_routing_policy_exclusive { "{rerouting, select, allowed {} other {オフ：このデバイスのみを使います。}}オンの場合、起動時にこのデバイスが見つからないか接続が切れると、システムが別の出力先を開くことがあります。その場合も排他モードです。出力先が使用中だと再生できないことがあります。Aobus が出力先を確保している間は、他のアプリが使えないことがあります。" }
+    output_device_reroute_status { "システムが別の出力先を使うことがあります" }
+    output_device_preferred_status { "優先出力先（システムが切り替える場合があります）：{route}" }
     completion_field { "フィールド" }
     completion_alias { "エイリアス" }
     completion_operator { "演算子" }

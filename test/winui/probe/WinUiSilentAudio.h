@@ -14,5 +14,6 @@ namespace ao::winui::test
 {
   /// A discard route for real UI availability without an audio endpoint or playback.
   audio::Device silentAudioDevice();
+  void registerSilentAudioProvider(rt::AppRuntime& runtime);
   void addSilentAudioOutput(rt::AppRuntime& runtime);
 } // namespace ao::winui::test

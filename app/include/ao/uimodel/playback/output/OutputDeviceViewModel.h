@@ -6,6 +6,7 @@
 #include <ao/async/Subscription.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/playback/PlaybackCommands.h>
@@ -13,6 +14,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -30,6 +32,8 @@ namespace ao::uimodel
     {
       BackendHeader,
       DeviceProfile,
+      Status,        // Informational; not selectable.
+      RoutingPolicy, // Toggles consent for optRoutingPolicySelection, not an output selection.
     };
 
     Kind kind = Kind::BackendHeader;
@@ -38,8 +42,10 @@ namespace ao::uimodel
     audio::ProfileId profileId{};
     std::string title{};
     std::string description{};
+    // Selected/preferred route for a DeviceProfile; consent for RoutingPolicy. Not delivery evidence.
     bool isActive = false;
     bool isExclusive = false;
+    std::optional<audio::OutputDeviceSelection> optRoutingPolicySelection{};
   };
 
   struct OutputDeviceViewState final
@@ -47,6 +53,7 @@ namespace ao::uimodel
     std::vector<OutputDeviceRow> rows{};
     std::string outputBackendSummary{};
     std::string outputDeviceStatus{};
+    // A route is configured; the physical output may differ when system rerouting is allowed.
     bool hasActiveOutputDevice = false;
   };
 
@@ -72,16 +79,20 @@ namespace ao::uimodel
                             audio::DeviceId const& deviceId,
                             audio::ProfileId const& profileId);
 
+    /// Toggles consent only if the request captured by the initiating row is still current.
+    bool tryToggleOutputRoutingPolicy(audio::OutputDeviceSelection const& expected);
+
     void refresh();
 
     /// Stops automatic Playback snapshot observation immediately; calling twice is harmless.
     /// Observation cannot be restarted for this instance.
-    /// refresh(), selectOutputDevice() and setTextCatalog() still require a live PlaybackService.
+    /// Explicit refresh, commands, and setTextCatalog() still require a live PlaybackService.
     void stopObserving();
 
     void setTextCatalog(i18n::MessageCatalog textCatalog);
 
   private:
+    void submitOutputDevice(audio::OutputDeviceSelection selection);
     void handleSnapshot(rt::PlaybackSnapshot const& snapshot);
     void render(rt::OutputState const& output);
 

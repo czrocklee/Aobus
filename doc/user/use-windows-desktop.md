@@ -56,10 +56,7 @@ The Windows frontend keeps its database beneath the selected music root. Network
    Missing artwork uses a monogram in group headings and a transparent vinyl placeholder in the details pane; these Windows choices are fixed in this version.
 6. Use the persistent Now Playing controls for previous, play/pause, next, shuffle, repeat, seeking, volume, and output.
    Choose **Reveal Current Track** or press `Ctrl+L` to select and scroll the playing track into view when it is visible in its target presentation.
-   Aobus remembers the output backend, device, and profile you request and tries
-   to restore them after providers are discovered on the next launch. A named
-   device may remain preferred while disconnected; until it can be selected,
-   the runtime-selected default remains active.
+   Aobus remembers your output backend, device, and profile. If the named output you requested is missing at launch, Aobus waits rather than playing through the default device. Reconnect it or choose another output, then press Play.
    Missing Now Playing artwork and idle playback use a transparent equalizer placeholder.
 7. Choose **Classic Mode** to use the dense menu, tree, property, status, and GTK-compatible playback layout. Choose **Modern Mode** to return. Playback, the active library, list, and presentation continue across the switch.
 8. In Modern mode, click Soul to play or pause. In Classic mode, click Soul to choose an output device.

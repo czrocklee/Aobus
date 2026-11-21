@@ -46,7 +46,7 @@ namespace ao::uimodel
     {
       if (transport.transport == audio::Transport::Paused)
       {
-        return true;
+        return !transport.output.optPendingOutputSelection;
       }
 
       return transport.ready &&
@@ -56,13 +56,7 @@ namespace ao::uimodel
     bool canPlayPause(rt::PlaybackTransportSnapshot const& transport,
                       rt::PlaybackSuccessionSnapshot const& succession) noexcept
     {
-      if (isActivePlayback(transport.transport) || transport.transport == audio::Transport::Paused)
-      {
-        return true;
-      }
-
-      return transport.ready &&
-             (hasIdleSequenceTrack(transport, succession) || shouldStartSelection(transport.transport));
+      return isActivePlayback(transport.transport) || canPlay(transport, succession);
     }
 
     bool canStop(rt::PlaybackTransportSnapshot const& transport) noexcept

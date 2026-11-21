@@ -391,8 +391,7 @@ namespace ao::winui
 
     if (optOutputSelection)
     {
-      playback.commands().setOutputDevice(
-        optOutputSelection->backendId, optOutputSelection->deviceId, optOutputSelection->profileId);
+      playback.commands().setOutputDevice(*optOutputSelection);
     }
 
     if (storage.playbackPersistenceAdmission == PlaybackPersistenceAdmission::Ready)

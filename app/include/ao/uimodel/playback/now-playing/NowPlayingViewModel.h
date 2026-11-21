@@ -39,8 +39,7 @@ namespace ao::uimodel
     {
       None,
       Reveal,
-      Pause,
-      Resume,
+      PlayPause,
       Navigate
     };
 

@@ -99,6 +99,56 @@ namespace ao::i18n::test
     }
   }
 
+  TEST_CASE("MessageCatalog - output chooser messages resolve in every maintained locale")
+  {
+    auto const* const device = "USB DAC {01}";
+    auto const fixedMessages = std::array{MessageId::OutputDevicePendingSummary,
+                                          MessageId::OutputDevicePendingStatus,
+                                          MessageId::OutputDeviceInvalidPipeWireStatus,
+                                          MessageId::OutputDeviceRoutingPolicyToggle,
+                                          MessageId::OutputDeviceRoutingPolicyFixed,
+                                          MessageId::OutputDeviceRoutingPolicyAllowed,
+                                          MessageId::OutputDeviceRerouteStatus};
+
+    for (auto const& locale : availableCatalogLocales())
+    {
+      INFO(locale.tag);
+      auto catalogRes = MessageCatalog::create(locale.tag);
+      REQUIRE(catalogRes);
+
+      for (auto const id : fixedMessages)
+      {
+        CAPTURE(static_cast<std::size_t>(id));
+        auto const messageRes = catalogRes->format(id);
+        REQUIRE(messageRes);
+        CHECK(messageRes->locale == locale.tag);
+        CHECK_FALSE(messageRes->text.empty());
+      }
+
+      auto const fixedExclusiveRes =
+        catalogRes->format(MessageId::OutputDeviceRoutingPolicyExclusive, {{"rerouting", "fixed"}});
+      auto const allowedExclusiveRes =
+        catalogRes->format(MessageId::OutputDeviceRoutingPolicyExclusive, {{"rerouting", "allowed"}});
+      REQUIRE(fixedExclusiveRes);
+      REQUIRE(allowedExclusiveRes);
+      CHECK(fixedExclusiveRes->locale == locale.tag);
+      CHECK(allowedExclusiveRes->locale == locale.tag);
+      CHECK_FALSE(fixedExclusiveRes->text.empty());
+      CHECK_FALSE(allowedExclusiveRes->text.empty());
+      CHECK(fixedExclusiveRes->text != allowedExclusiveRes->text);
+
+      auto const namedStatusRes = catalogRes->format(MessageId::OutputDevicePendingNamedStatus, {{"device", device}});
+      REQUIRE(namedStatusRes);
+      CHECK(namedStatusRes->locale == locale.tag);
+      CHECK(namedStatusRes->text.contains(device));
+
+      auto const preferredStatusRes = catalogRes->format(MessageId::OutputDevicePreferredStatus, {{"route", device}});
+      REQUIRE(preferredStatusRes);
+      CHECK(preferredStatusRes->locale == locale.tag);
+      CHECK(preferredStatusRes->text.contains(device));
+    }
+  }
+
   TEST_CASE("MessageCatalog - Settings steps use singular and plural forms")
   {
     struct Forms final

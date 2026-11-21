@@ -15,6 +15,7 @@
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
+#include <ao/audio/SignalFormat.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/library/LibraryDurability.h>
@@ -35,9 +36,33 @@ namespace ao::rt::test
       audio::BackendId backendIdValue;
       audio::ProfileId profileIdValue;
 
-      ReadyAudioBackend(audio::BackendId backendId, audio::ProfileId profileId)
-        : backendIdValue{std::move(backendId)}, profileIdValue{std::move(profileId)}
+      std::shared_ptr<SilentRouteCounts> countsPtr;
+
+      ReadyAudioBackend(audio::BackendId backendId,
+                        audio::ProfileId profileId,
+                        std::shared_ptr<SilentRouteCounts> routeCountsPtr)
+        : backendIdValue{std::move(backendId)}
+        , profileIdValue{std::move(profileId)}
+        , countsPtr{std::move(routeCountsPtr)}
       {
+      }
+
+      audio::BackendOpenResult open(audio::SignalFormat const& format, audio::RenderTarget& target) override
+      {
+        if (countsPtr)
+        {
+          ++countsPtr->opens;
+        }
+
+        return audio::NullBackend::open(format, target);
+      }
+
+      void start() override
+      {
+        if (countsPtr)
+        {
+          ++countsPtr->starts;
+        }
       }
 
       audio::BackendId backendId() const override { return backendIdValue; }
@@ -48,13 +73,15 @@ namespace ao::rt::test
     {
       Status providerStatus;
 
-      explicit ReadyAudioProvider(Status status)
-        : providerStatus{std::move(status)}
+      std::shared_ptr<SilentRouteCounts> countsPtr;
+
+      explicit ReadyAudioProvider(Status status, std::shared_ptr<SilentRouteCounts> routeCountsPtr)
+        : providerStatus{std::move(status)}, countsPtr{std::move(routeCountsPtr)}
       {
       }
 
       ReadyAudioProvider()
-        : providerStatus{makeReadyAudioStatus()}
+        : ReadyAudioProvider{makeReadyAudioStatus(), {}}
       {
       }
 
@@ -75,7 +102,14 @@ namespace ao::rt::test
       std::unique_ptr<audio::Backend> createBackend(audio::Device const& device,
                                                     audio::ProfileId const& profile) override
       {
-        return std::make_unique<ReadyAudioBackend>(device.backendId, profile);
+        return std::make_unique<ReadyAudioBackend>(device.backendId, profile, countsPtr);
+      }
+
+      std::unique_ptr<audio::Backend> createReroutableBackend(audio::Device const& device,
+                                                              audio::ProfileId const& profile) override
+      {
+        return device.backendId == audio::kBackendPipeWire && !device.id.empty() ? createBackend(device, profile)
+                                                                                 : nullptr;
       }
 
       utility::ScopedRegistration subscribeGraph(std::string_view /*routeAnchor*/,
@@ -120,7 +154,7 @@ namespace ao::rt::test
       .devices =
         {
           {
-            .id = audio::DeviceId{"device1"},
+            .id = audio::DeviceId{"node:device1"},
             .displayName = "Built-in Audio",
             .description = "Built-in analog stereo",
             .isDefault = true,
@@ -135,9 +169,10 @@ namespace ao::rt::test
     return std::make_unique<ReadyAudioProvider>();
   }
 
-  std::unique_ptr<audio::BackendProvider> makeReadyAudioProvider(audio::BackendProvider::Status status)
+  std::unique_ptr<audio::BackendProvider> makeReadyAudioProvider(audio::BackendProvider::Status status,
+                                                                 std::shared_ptr<SilentRouteCounts> countsPtr)
   {
-    return std::make_unique<ReadyAudioProvider>(std::move(status));
+    return std::make_unique<ReadyAudioProvider>(std::move(status), std::move(countsPtr));
   }
 
   void addReadyAudioProvider(PlaybackTransport& transport)

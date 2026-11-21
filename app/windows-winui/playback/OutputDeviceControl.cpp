@@ -95,10 +95,15 @@ namespace ao::winui
 
     for (auto const& row : _state.rows)
     {
+      if (row.kind == uimodel::OutputDeviceRow::Kind::RoutingPolicy)
+      {
+        continue; // A copied Linux preference does not add a PipeWire switch to WASAPI.
+      }
+
       auto item = winrt::Microsoft::UI::Xaml::Controls::MenuFlyoutItem{};
       item.Text(winrt::to_hstring(row.isActive ? std::format("✓ {}", row.title) : row.title));
 
-      if (row.kind == uimodel::OutputDeviceRow::Kind::BackendHeader)
+      if (row.kind != uimodel::OutputDeviceRow::Kind::DeviceProfile)
       {
         item.IsEnabled(false);
       }
@@ -119,7 +124,7 @@ namespace ao::winui
       _flyout.Items().Append(item);
     }
 
-    if (_state.rows.empty())
+    if (_flyout.Items().Size() == 0)
     {
       auto item = winrt::Microsoft::UI::Xaml::Controls::MenuFlyoutItem{};
       item.Text(resourceHstring(L"winui_playback_no_output_devices"));

@@ -41,7 +41,9 @@
 #include "tui/TrackTable.h"
 #include <ao/CoreIds.h>
 #include <ao/audio/BackendIds.h>
+#include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/audio/Transport.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
@@ -60,6 +62,7 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/library/LibrarySnapshot.h>
+#include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
@@ -67,11 +70,13 @@
 #include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
-#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
+#include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <ftxui/component/event.hpp>
 #include <ftxui/component/mouse.hpp>
 #include <ftxui/dom/node.hpp>
@@ -1959,6 +1964,7 @@ namespace ao::tui::test
     hitRegions.outputDeviceButtonBox = ftxui::Box{.x_min = 4, .x_max = 9, .y_min = 0, .y_max = 0};
     hitRegions.outputDeviceRows = {
       OutputDeviceRowHitRegion{.rowIndex = 1,
+                               .kind = outputRow.kind,
                                .backendId = outputRow.backendId,
                                .deviceId = outputRow.deviceId,
                                .profileId = outputRow.profileId,
@@ -1996,6 +2002,7 @@ namespace ao::tui::test
     auto& hitRegions = fixture.hitRegions;
     hitRegions.outputDeviceRows = {
       OutputDeviceRowHitRegion{.rowIndex = 1,
+                               .kind = uimodel::OutputDeviceRow::Kind::DeviceProfile,
                                .backendId = audio::BackendId{"stale_backend"},
                                .deviceId = audio::DeviceId{"stale_device"},
                                .profileId = audio::kProfileShared,
@@ -2019,18 +2026,131 @@ namespace ao::tui::test
     auto& outputDevices = fixture.outputDevices;
     auto controller = fixture.makeEvents(library);
 
-    REQUIRE(outputDevices.selectedRow() == 1);
     CHECK(controller.tryHandleEvent(ftxui::Event::Character("o")));
     REQUIRE(fixture.shell.overlay() == Overlay::OutputDevices);
+    REQUIRE(outputDevices.selectedRow() == 2);
+    CHECK(outputDevices.viewState().rows[2].isActive);
+    fixture.hitRegions.overlayPanel.navigationBox = {.x_min = 2, .x_max = 38, .y_min = 3, .y_max = 5};
 
     CHECK(controller.tryHandleEvent(ftxui::Event::PageDown));
-    CHECK(outputDevices.selectedRow() == 2);
+    CHECK(outputDevices.selectedRow() == 3);
     CHECK(controller.tryHandleEvent(ftxui::Event::PageUp));
-    CHECK(outputDevices.selectedRow() == 1);
+    CHECK(outputDevices.selectedRow() < 3);
     CHECK(controller.tryHandleEvent(ftxui::Event::End));
-    CHECK(outputDevices.selectedRow() == 2);
+    CHECK(outputDevices.selectedRow() == 3);
     CHECK(controller.tryHandleEvent(ftxui::Event::Home));
-    CHECK(outputDevices.selectedRow() == 1);
+    CHECK(outputDevices.selectedRow() == 0);
+    CHECK(fixture.recordedOutputSelections.empty());
+  }
+
+  TEST_CASE("EventController - Enter leaves an unavailable output request unchanged until navigation")
+  {
+    auto fixture = EventControllerFixture{};
+    fixture.addReadyAudioProvider();
+    auto const available = currentPlayback(fixture).transport.output.selectedDevice;
+    auto const* const missingId = GENERATE("node:missing", "");
+    CAPTURE(missingId);
+    auto const missing = audio::OutputDeviceSelection{
+      .backendId = audio::kBackendPipeWire, .deviceId = audio::DeviceId{missingId}, .profileId = audio::kProfileShared};
+    fixture.runtimePtr->playback().commands().setOutputDevice(missing);
+    fixture.executor->drain();
+    REQUIRE(currentPlayback(fixture).transport.output.optPendingOutputSelection == missing);
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("o")));
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Return));
+    fixture.executor->drain();
+
+    CHECK(fixture.shell.overlay() == Overlay::OutputDevices);
+    CHECK(fixture.recordedOutputSelections.empty());
+    CHECK(currentPlayback(fixture).transport.output.optPendingOutputSelection == missing);
+
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::ArrowDown));
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Return));
+    fixture.executor->drain();
+
+    CHECK(fixture.shell.overlay() == Overlay::None);
+    CHECK(fixture.recordedOutputSelections == std::vector{available});
+    CHECK_FALSE(currentPlayback(fixture).transport.output.optPendingOutputSelection);
+  }
+
+  TEST_CASE("EventController - output routing consent is explicit and stale picker actions do not write")
+  {
+    using RowKind = uimodel::OutputDeviceRow::Kind;
+    auto fixture = EventControllerFixture{};
+    auto status = rt::test::makePipeWireOutputStatus();
+    status.devices.insert(
+      status.devices.begin(), audio::Device{.isDefault = true, .backendId = audio::kBackendPipeWire});
+    fixture.addReadyAudioProvider(std::move(status));
+    auto const fixed = audio::OutputDeviceSelection{.backendId = audio::kBackendPipeWire,
+                                                    .deviceId = audio::DeviceId{"node:device1"},
+                                                    .profileId = audio::kProfileShared};
+    auto allowed = fixed;
+    allowed.routingPolicy = audio::OutputRoutingPolicy::AllowSystemReroute;
+    auto const systemDefault =
+      audio::OutputDeviceSelection{.backendId = audio::kBackendPipeWire, .profileId = audio::kProfileShared};
+    auto& commands = fixture.runtimePtr->playback().commands();
+    commands.setOutputDevice(fixed);
+    fixture.executor->drain();
+    REQUIRE(currentPlayback(fixture).transport.output.selectedDevice == fixed);
+
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("o")));
+    auto& picker = fixture.outputDevices;
+    auto& hitRegions = fixture.hitRegions;
+    auto const renderPicker = [&]
+    {
+      return renderText(outputDevicePanel(ao::test::englishMessageCatalog(),
+                                          picker.viewState(),
+                                          picker.selectedRow(),
+                                          defaultKeymapPlan(),
+                                          &hitRegions.outputDeviceRows,
+                                          40,
+                                          &hitRegions.overlayPanel.navigationBox),
+                        40);
+    };
+
+    REQUIRE(renderPicker().contains("[ ] Let system use other outputs"));
+    auto const policyHit =
+      std::ranges::find(hitRegions.outputDeviceRows, RowKind::RoutingPolicy, &OutputDeviceRowHitRegion::kind);
+    REQUIRE(policyHit != hitRegions.outputDeviceRows.end());
+    auto const staleClick = clickBox(policyHit->box);
+
+    SECTION("keyboard toggles the checkbox after navigating to it")
+    {
+      REQUIRE(picker.selectedRow() > policyHit->rowIndex);
+      REQUIRE(controller.tryHandleEvent(ftxui::Event::Home));
+      REQUIRE(picker.selectedRow() == policyHit->rowIndex);
+      CHECK(fixture.recordedOutputSelections.empty());
+      REQUIRE(controller.tryHandleEvent(ftxui::Event::Return));
+    }
+
+    SECTION("click toggles only the checkbox")
+    {
+      REQUIRE(controller.tryHandleEvent(staleClick));
+    }
+
+    fixture.executor->drain();
+    REQUIRE(fixture.recordedOutputSelections == std::vector{allowed});
+    CHECK(currentPlayback(fixture).transport.output.selectedDevice == allowed);
+    CHECK(fixture.shell.overlay() == Overlay::OutputDevices);
+
+    // Replay the old unchecked mouse hit before another frame, even though the row index and tuple are unchanged.
+    REQUIRE(controller.tryHandleEvent(staleClick));
+    CHECK(fixture.recordedOutputSelections == std::vector{allowed});
+    REQUIRE(renderPicker().contains("[x] Let system use other outputs"));
+
+    commands.setOutputDevice(systemDefault);
+    fixture.executor->drain();
+    CHECK(std::ranges::none_of(
+      picker.viewState().rows, [](auto const& row) { return row.kind == RowKind::RoutingPolicy; }));
+    REQUIRE(controller.tryHandleEvent(staleClick));
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Return));
+    CHECK(fixture.recordedOutputSelections == std::vector{allowed});
+    CHECK(currentPlayback(fixture).transport.output.selectedDevice == systemDefault);
+    CHECK(fixture.shell.overlay() == Overlay::OutputDevices);
   }
 
   TEST_CASE("EventController - hovering the soul button shows transient quality details")
@@ -2224,7 +2344,7 @@ namespace ao::tui::test
     CHECK(fixture.runtimePtr->notifications().feed().entries.empty());
   }
 
-  TEST_CASE("EventController - space pauses playback while output selection is pending")
+  TEST_CASE("EventController - space reports playback unavailable while the interrupted track waits for its output")
   {
     auto fixture = EventControllerFixture{};
     fixture.addReadyAudioProvider();
@@ -2242,14 +2362,17 @@ namespace ao::tui::test
 
     auto transport = playback.snapshot().transport;
     REQUIRE_FALSE(transport.ready);
-    REQUIRE(transport.transport == audio::Transport::Playing);
+    REQUIRE(transport.transport == audio::Transport::Paused);
     auto const notificationCount = fixture.runtimePtr->notifications().feed().entries.size();
 
     CHECK(controller.tryHandleEvent(ftxui::Event::Character(" ")));
 
     transport = playback.snapshot().transport;
     CHECK(transport.transport == audio::Transport::Paused);
-    CHECK(fixture.runtimePtr->notifications().feed().entries.size() == notificationCount);
+    CHECK(transport.nowPlaying.trackId == trackId);
+    auto const feed = fixture.runtimePtr->notifications().feed();
+    REQUIRE(feed.entries.size() == notificationCount + 1);
+    CHECK(std::get<std::string>(feed.entries.back().message) == "Playback control unavailable");
   }
 
   TEST_CASE("EventController - presentation mouse clicks open and select views")

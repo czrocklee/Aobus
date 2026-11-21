@@ -39,7 +39,14 @@ namespace ao::rt::test
   audio::BackendProvider::Status makeReadyAudioStatus();
   audio::BackendProvider::Status makePipeWireOutputStatus();
   std::unique_ptr<audio::BackendProvider> makeReadyAudioProvider();
-  std::unique_ptr<audio::BackendProvider> makeReadyAudioProvider(audio::BackendProvider::Status status);
+  struct SilentRouteCounts final
+  {
+    std::atomic_uint opens{0};
+    std::atomic_uint starts{0};
+  };
+
+  std::unique_ptr<audio::BackendProvider> makeReadyAudioProvider(audio::BackendProvider::Status status,
+                                                                 std::shared_ptr<SilentRouteCounts> countsPtr = {});
 
   void addReadyAudioProvider(PlaybackTransport& transport);
   void addReadyAudioProvider(PlaybackTransport& transport, audio::BackendProvider::Status status);

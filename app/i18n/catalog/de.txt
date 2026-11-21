@@ -219,6 +219,16 @@ de:table {
     audio_profile_exclusive { "Exklusiver Modus" }
     audio_profile_exclusive_description { "Direkter Zugriff auf das Audiogerät" }
     system_default_output_device { "Systemstandard" }
+    output_device_pending_summary { "Ausgabe wählen" }
+    output_device_pending_status { "Gewünschte Ausgabe nicht verfügbar" }
+    output_device_pending_named_status { "Gewünschte Ausgabe nicht verfügbar: {device}" }
+    output_device_invalid_pipewire_status { "Wählen Sie die PipeWire-Ausgabe erneut aus. Die gespeicherte Auswahl ist ungültig." }
+    output_device_routing_policy_toggle { "Andere Ausgaben zulassen" }
+    output_device_routing_policy_fixed { "Aktivieren, um eine andere Ausgabe zu erlauben, wenn dieses Gerät beim Start fehlt oder getrennt wird. Sonst wird nur dieses Gerät genutzt." }
+    output_device_routing_policy_allowed { "Das System darf eine andere Ausgabe verwenden, wenn dieses Gerät beim Start nicht verfügbar ist oder getrennt wird." }
+    output_device_routing_policy_exclusive { "{rerouting, select, allowed {} other {Aus: Nur dieses Gerät verwenden. }}An: Fehlt dieses Gerät beim Start oder wird es getrennt, kann das System eine andere Ausgabe öffnen, weiterhin exklusiv. Ist die Ausgabe belegt, kann die Wiedergabe scheitern. Solange Aobus sie belegt, können andere Apps sie möglicherweise nicht nutzen." }
+    output_device_reroute_status { "Das System darf eine andere Ausgabe verwenden" }
+    output_device_preferred_status { "Bevorzugte Ausgabe (System kann wechseln): {route}" }
     completion_field { "Feld" }
     completion_alias { "Alias" }
     completion_operator { "Operator" }

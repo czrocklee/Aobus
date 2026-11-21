@@ -3,6 +3,7 @@
 
 #include "OutputDevicePanel.h"
 
+#include "AnchoredOverlay.h"
 #include "SelectableList.h"
 #include "ShellInteractionModel.h"
 #include "Style.h"
@@ -17,6 +18,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -24,7 +26,23 @@ namespace ao::tui
 {
   namespace
   {
+    using RowKind = uimodel::OutputDeviceRow::Kind;
+
     constexpr std::int32_t kOutputDeviceRows = 14;
+    constexpr std::size_t kMaximumStatusLines = 3;
+    // The shared frame draws "─ " before the title, " ─ " between the labels, and " " after them.
+    constexpr std::int32_t kTitlePaddingColumns = 3;
+    constexpr std::int32_t kTitleSeparatorColumns = 3;
+
+    bool isOutputDeviceListRow(uimodel::OutputDeviceRow const& row)
+    {
+      return row.kind != RowKind::Status; // The footer already shows this advisory.
+    }
+
+    std::int32_t outputDeviceHeaderColumns(std::string_view const title, std::string_view const summary)
+    {
+      return cellWidth(title) + kTitlePaddingColumns + kTitleSeparatorColumns + cellWidth(summary);
+    }
 
     std::string outputDeviceSummary(uimodel::OutputDeviceViewState const* const outputView)
     {
@@ -57,6 +75,27 @@ namespace ao::tui
 
       return elementPtr;
     }
+
+    ftxui::Elements wrappedOutputLines(std::string_view const value,
+                                       std::string_view const prefix,
+                                       std::int32_t const columns,
+                                       bool const dimmed,
+                                       std::size_t const maxLines = 0)
+    {
+      auto const prefixColumns = cellWidth(prefix);
+      auto const indent = std::string(static_cast<std::size_t>(prefixColumns), ' ');
+      auto lines = ftxui::Elements{};
+
+      for (auto const& line : wrapCellText(value,
+                                           std::max(1, columns - prefixColumns),
+                                           {.lineBreaks = CellLineBreaks::Flatten, .maxLines = maxLines}))
+      {
+        lines.push_back(
+          outputText(std::string{lines.empty() ? prefix : std::string_view{indent}} + line, columns, dimmed));
+      }
+
+      return lines;
+    }
   } // namespace
 
   ftxui::Element outputDeviceBadge(uimodel::OutputDeviceViewState const* const outputView, bool const hovered)
@@ -84,12 +123,12 @@ namespace ao::tui
                                         std::int32_t const terminalColumns)
   {
     auto const title = i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOutputDevicesTitle);
-    auto contentColumns = std::max({cellWidth(title) + cellWidth(outputDeviceSummary(&view)),
-                                    cellWidth(title) + cellWidth(" · ") + cellWidth(outputDeviceSummary(&view)),
-                                    cellWidth(outputDeviceFooter(textCatalog, view)),
-                                    cellWidth(overlayHint(textCatalog, keymapPlan, Overlay::OutputDevices))});
+    auto contentColumns =
+      std::max({outputDeviceHeaderColumns(title, outputDeviceSummary(&view)) - (2 * style::kPanelBodyPaddingColumns),
+                cellWidth(outputDeviceFooter(textCatalog, view)),
+                cellWidth(overlayHint(textCatalog, keymapPlan, Overlay::OutputDevices))});
 
-    if (view.rows.empty())
+    if (std::ranges::none_of(view.rows, isOutputDeviceListRow))
     {
       contentColumns = std::max(
         contentColumns, cellWidth(i18n::requiredText(textCatalog, i18n::MessageId::TuiPlaybackNoOutputDevicesFound)));
@@ -97,21 +136,29 @@ namespace ao::tui
 
     for (auto const& row : view.rows)
     {
-      if (row.kind == uimodel::OutputDeviceRow::Kind::BackendHeader)
+      if (!isOutputDeviceListRow(row))
+      {
+        continue;
+      }
+
+      if (row.kind == RowKind::BackendHeader)
       {
         contentColumns = std::max(contentColumns, cellWidth(row.title));
         continue;
       }
 
-      contentColumns = std::max(contentColumns, cellWidth(row.title) + cellWidth("* "));
+      auto const isRoutingPolicy = row.kind == RowKind::RoutingPolicy;
+      contentColumns = std::max(contentColumns, cellWidth(row.title) + cellWidth(isRoutingPolicy ? "[ ] " : "* "));
 
-      if (!row.description.empty())
+      // The checkbox explanation wraps instead of widening the whole picker.
+      if (!isRoutingPolicy && !row.description.empty())
       {
         contentColumns = std::max(contentColumns, cellWidth(row.description) + cellWidth("  "));
       }
     }
 
-    return style::popupPanelColumnsForContent(contentColumns, terminalColumns);
+    auto const availableColumns = terminalColumns > 0 ? std::max(1, terminalColumns - kAnchoredOverlayHaloColumns) : 0;
+    return style::popupPanelColumnsForContent(contentColumns, availableColumns);
   }
 
   ftxui::Element outputDevicePanel(i18n::MessageCatalog const& textCatalog,
@@ -129,12 +176,12 @@ namespace ao::tui
       columns = outputDevicePanelColumns(textCatalog, view, keymapPlan, 0);
     }
 
+    // The list scrollbar occupies the same right gutter that panelBody leaves beside the footer.
     auto const bodyColumns = style::popupPanelBodyColumns(columns);
-    auto const listTextColumns = bodyColumns;
-    auto const footerTextColumns = bodyColumns;
     auto rows = Elements{};
     auto listRows = std::vector<SelectableListRow>{};
     std::int32_t focusRow = 0;
+    std::int32_t extraTitleRows = 0;
 
     if (rowHitRegions != nullptr)
     {
@@ -148,39 +195,62 @@ namespace ao::tui
     {
       auto const& row = view.rows[index];
 
-      if (row.kind == uimodel::OutputDeviceRow::Kind::BackendHeader)
+      if (!isOutputDeviceListRow(row))
       {
-        listRows.push_back(SelectableListRow{.elementPtr = outputText(row.title, listTextColumns, true)});
         continue;
       }
 
-      auto titleLine = std::string{row.isActive ? "* " : "  "} + row.title;
-      auto rowPtr = outputText(std::move(titleLine), listTextColumns);
+      if (row.kind == RowKind::BackendHeader)
+      {
+        listRows.push_back(SelectableListRow{.elementPtr = outputText(row.title, bodyColumns, true)});
+        continue;
+      }
+
+      auto const isRoutingPolicy = row.kind == RowKind::RoutingPolicy;
       auto const selected = std::cmp_equal(index, selectedRow);
       auto* rowBox = static_cast<ftxui::Box*>(nullptr);
       auto* secondaryBox = static_cast<ftxui::Box*>(nullptr);
 
       if (selected)
       {
-        focusRow = static_cast<std::int32_t>(listRows.size());
+        focusRow = static_cast<std::int32_t>(listRows.size()) + extraTitleRows;
       }
 
       if (rowHitRegions != nullptr)
       {
         rowHitRegions->push_back(OutputDeviceRowHitRegion{.rowIndex = static_cast<std::int32_t>(index),
+                                                          .kind = row.kind,
                                                           .backendId = row.backendId,
                                                           .deviceId = row.deviceId,
-                                                          .profileId = row.profileId});
+                                                          .profileId = row.profileId,
+                                                          .optRoutingPolicySelection = row.optRoutingPolicySelection});
         rowBox = &rowHitRegions->back().box;
         secondaryBox = &rowHitRegions->back().secondaryBox;
       }
 
-      listRows.push_back(SelectableListRow{.elementPtr = std::move(rowPtr), .selected = selected, .box = rowBox});
+      if (isRoutingPolicy)
+      {
+        auto titleLines = wrappedOutputLines(row.title, row.isActive ? "[x] " : "[ ] ", bodyColumns, false);
+        extraTitleRows += static_cast<std::int32_t>(titleLines.size()) - 1;
+        listRows.push_back(
+          SelectableListRow{.elementPtr = vbox(std::move(titleLines)), .selected = selected, .box = rowBox});
+
+        for (auto& linePtr : wrappedOutputLines(row.description, "  ", bodyColumns, true))
+        {
+          listRows.push_back(SelectableListRow{.elementPtr = std::move(linePtr)});
+        }
+
+        continue;
+      }
+
+      auto titleLine = std::string{row.isActive ? "* " : "  "} + row.title;
+      listRows.push_back(SelectableListRow{
+        .elementPtr = outputText(std::move(titleLine), bodyColumns), .selected = selected, .box = rowBox});
 
       if (!row.description.empty())
       {
-        listRows.push_back(SelectableListRow{
-          .elementPtr = outputText("  " + row.description, listTextColumns, true), .box = secondaryBox});
+        listRows.push_back(
+          SelectableListRow{.elementPtr = outputText("  " + row.description, bodyColumns, true), .box = secondaryBox});
       }
     }
 
@@ -193,14 +263,19 @@ namespace ao::tui
         .horizontalScroll = false,
         .viewportBox = viewportBox})));
     rows.push_back(style::panelBody(separator()));
-    rows.push_back(style::panelBody(outputText(outputDeviceFooter(textCatalog, view), footerTextColumns, true)));
     rows.push_back(style::panelBody(
-      outputText(overlayHint(textCatalog, keymapPlan, Overlay::OutputDevices), footerTextColumns, true)));
+      vbox(wrappedOutputLines(outputDeviceFooter(textCatalog, view), "", bodyColumns, true, kMaximumStatusLines))));
+    rows.push_back(style::panelBody(
+      vbox(wrappedOutputLines(overlayHint(textCatalog, keymapPlan, Overlay::OutputDevices), "", bodyColumns, true))));
 
+    auto const title = i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOutputDevicesTitle);
     auto const summary = outputDeviceSummary(&view);
-    return style::titledPanel(i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOutputDevicesTitle),
+    auto const headerColumns = columns - kPanelBorderColumns;
+    // Keep the full title when the two labels compete for space; the footer carries the routing status.
+    auto const showSummary = outputDeviceHeaderColumns(title, summary) <= headerColumns;
+    return style::titledPanel(ellipsizeToCellWidth(title, headerColumns - kTitlePaddingColumns),
                               vbox(std::move(rows)),
-                              style::PanelOptions{.rightTitle = summary}) |
+                              style::PanelOptions{.rightTitle = showSummary ? std::string_view{summary} : ""}) |
            size(WIDTH, EQUAL, columns);
   }
 } // namespace ao::tui

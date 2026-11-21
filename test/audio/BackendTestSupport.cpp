@@ -139,6 +139,11 @@ namespace ao::audio::test
     return _real.createBackend(device, profile);
   }
 
+  std::unique_ptr<Backend> MockProviderProxy::createReroutableBackend(Device const& device, ProfileId const& profile)
+  {
+    return _real.createReroutableBackend(device, profile);
+  }
+
   BackendProvider::Status MockProviderProxy::status() const
   {
     return _real.status();

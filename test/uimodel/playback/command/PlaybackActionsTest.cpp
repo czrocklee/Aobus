@@ -3,11 +3,17 @@
 
 #include <ao/uimodel/playback/command/PlaybackActions.h>
 
+#include "test/runtime/AppRuntimeTestSupport.h"
+#include "test/runtime/ExecutorTestSupport.h"
 #include "test/runtime/PlaybackUiTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/audio/Transport.h>
+#include <ao/rt/AppRuntime.h>
 #include <ao/rt/PlaybackMode.h>
+#include <ao/rt/ViewService.h>
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
@@ -20,6 +26,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
+#include <memory>
+#include <tuple>
 #include <vector>
 
 namespace ao::uimodel::test
@@ -129,21 +137,6 @@ namespace ao::uimodel::test
       CHECK(playback.snapshot().transport.transport == audio::Transport::Playing);
     }
 
-    SECTION("PlayPause pauses while a new output selection is pending")
-    {
-      REQUIRE(fixture.playFromView(trackId));
-      auto const selected = playback.snapshot().transport.output.selectedDevice;
-
-      playback.commands().setOutputDevice(selected.backendId, audio::DeviceId{"pending-device"}, selected.profileId);
-
-      REQUIRE_FALSE(playback.snapshot().transport.ready);
-      REQUIRE(playback.snapshot().transport.transport == audio::Transport::Playing);
-      CHECK(actions.isEnabled(PlaybackCommand::Pause));
-      CHECK(actions.isEnabled(PlaybackCommand::PlayPause));
-      CHECK(actions.tryExecute(PlaybackCommand::PlayPause));
-      CHECK(playback.snapshot().transport.transport == audio::Transport::Paused);
-    }
-
     SECTION("PlayPause resumes a restored sequence track")
     {
       REQUIRE(fixture.playFromView(trackId));
@@ -195,6 +188,91 @@ namespace ao::uimodel::test
       CHECK(playback.snapshot().transport.transport == audio::Transport::Idle);
       CHECK_FALSE(actions.isEnabled(PlaybackCommand::Stop));
     }
+  }
+
+  TEST_CASE("PlaybackActions - manual play resumes the interrupted track when its output appears")
+  {
+    auto fixture = PlaybackUiFixture{};
+    auto& runtime = fixture.runtime();
+    auto& playback = runtime.playback();
+    auto& commands = playback.commands();
+    auto const fallbackCountsPtr = std::make_shared<SilentRouteCounts>();
+    runtime.addAudioProvider(makeReadyAudioProvider(makeReadyAudioStatus(), fallbackCountsPtr));
+    fixture.executor->drain();
+    auto const trackId = fixture.addPlayableTrack("Interrupted Track");
+    auto const selectedTrackId = fixture.addPlayableTrack("Different Selection");
+    auto actions = PlaybackActions{playback, [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }};
+
+    REQUIRE(fixture.playFromView(trackId));
+    auto const offset = std::chrono::milliseconds{250};
+    REQUIRE(playback.snapshot().transport.duration > offset);
+    commands.seek(offset);
+    fixture.executor->drain();
+    REQUIRE(playback.snapshot().transport.transport == audio::Transport::Playing);
+    REQUIRE(playback.snapshot().transport.elapsed == offset);
+    auto const fallbackOpens = fallbackCountsPtr->opens.load();
+    auto const fallbackStarts = fallbackCountsPtr->starts.load();
+    REQUIRE(fallbackStarts > 0);
+
+    auto const dac = audio::OutputDeviceSelection{.backendId = audio::BackendId{"usb"},
+                                                  .deviceId = audio::DeviceId{"studio-dac"},
+                                                  .profileId = audio::kProfileShared};
+    commands.setOutputDevice(dac);
+    fixture.executor->drain();
+
+    auto const held = playback.snapshot().transport;
+    CHECK(held.output.optPendingOutputSelection == dac);
+    CHECK_FALSE(held.ready);
+    CHECK(held.transport == audio::Transport::Paused);
+    CHECK(held.nowPlaying.trackId == trackId);
+    CHECK(held.elapsed == offset);
+    CHECK_FALSE(actions.isEnabled(PlaybackCommand::Play));
+    CHECK_FALSE(actions.isEnabled(PlaybackCommand::PlayPause));
+    CHECK_FALSE(actions.tryExecute(PlaybackCommand::Play));
+    CHECK_FALSE(actions.tryExecute(PlaybackCommand::PlayPause));
+
+    commands.resume();
+    fixture.executor->drain();
+    CHECK(playback.snapshot().transport.transport == audio::Transport::Paused);
+    CHECK(fallbackCountsPtr->opens.load() == fallbackOpens);
+    CHECK(fallbackCountsPtr->starts.load() == fallbackStarts);
+
+    commands.clearSequence();
+    REQUIRE(playback.snapshot().succession.currentTrackId == kInvalidTrackId);
+    REQUIRE(runtime.views().setSelection(fixture.viewId, {selectedTrackId}));
+    auto const dacCountsPtr = std::make_shared<SilentRouteCounts>();
+    runtime.addAudioProvider(makeReadyAudioProvider(
+      {.descriptor = {.id = dac.backendId, .supportedProfiles = {{.id = dac.profileId}}},
+       .devices = {{.id = dac.deviceId, .displayName = "Studio DAC", .backendId = dac.backendId}}},
+      dacCountsPtr));
+    fixture.executor->drain();
+
+    auto const ready = playback.snapshot().transport;
+    REQUIRE(ready.ready);
+    CHECK(ready.output.selectedDevice == dac);
+    CHECK(ready.transport == audio::Transport::Paused);
+    CHECK(ready.nowPlaying.trackId == trackId);
+    CHECK(ready.elapsed == offset);
+    CHECK(dacCountsPtr->opens.load() == 0);
+    CHECK(dacCountsPtr->starts.load() == 0);
+
+    SECTION("Play")
+    {
+      REQUIRE(actions.tryExecute(PlaybackCommand::Play));
+    }
+
+    SECTION("PlayPause")
+    {
+      REQUIRE(actions.tryExecute(PlaybackCommand::PlayPause));
+    }
+
+    fixture.executor->drain();
+    auto const resumed = playback.snapshot().transport;
+    CHECK(resumed.transport == audio::Transport::Playing);
+    CHECK(resumed.nowPlaying.trackId == trackId);
+    CHECK(resumed.elapsed == offset);
+    CHECK(dacCountsPtr->starts.load() == 1);
+    CHECK(fallbackCountsPtr->starts.load() == fallbackStarts);
   }
 
   TEST_CASE("PlaybackActions - owns availability and live-sequence command policy")
@@ -289,8 +367,8 @@ namespace ao::uimodel::test
       REQUIRE_FALSE(playback.snapshot().transport.ready);
 
       checkCommandPolicy(actions,
-                         CommandPolicy{false, true, true, true, false, false, false, false},
-                         CommandPolicy{true, true, true, true, false, false, false, false});
+                         CommandPolicy{false, false, false, true, false, false, false, false},
+                         CommandPolicy{true, true, false, true, false, false, false, false});
     }
 
     SECTION("restored idle track is playable and pause-capable without being pause-enabled")

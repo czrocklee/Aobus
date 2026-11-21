@@ -221,6 +221,16 @@ root:table {
     audio_profile_exclusive { "Exclusive Mode" }
     audio_profile_exclusive_description { "Direct access to the hardware device" }
     system_default_output_device { "System Default" }
+    output_device_pending_summary { "Choose output" }
+    output_device_pending_status { "Requested output unavailable" }
+    output_device_pending_named_status { "Requested output unavailable: {device}" }
+    output_device_invalid_pipewire_status { "Select the PipeWire output again. The saved choice is invalid." }
+    output_device_routing_policy_toggle { "Let system use other outputs" }
+    output_device_routing_policy_fixed { "Enable to allow another output if this device is missing at startup or disconnects. Off uses only this device." }
+    output_device_routing_policy_allowed { "The system may use another output if this device is missing at startup or disconnects." }
+    output_device_routing_policy_exclusive { "{rerouting, select, allowed {} other {Off: use only this device. }}On: the system may open another output, still in Exclusive Mode, if this device is missing at startup or disconnects. Playback may fail if the output is busy. While Aobus holds it, other apps may be unable to use it." }
+    output_device_reroute_status { "System may use another output" }
+    output_device_preferred_status { "Preferred output (system may reroute): {route}" }
     completion_field { "field" }
     completion_alias { "alias" }
     completion_operator { "operator" }

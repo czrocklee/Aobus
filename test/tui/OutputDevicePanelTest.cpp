@@ -6,17 +6,21 @@
 #include "test/MessageCatalogTestSupport.h"
 #include "test/tui/KeymapTestSupport.h"
 #include "test/tui/RenderTestSupport.h"
+#include "tui/AnchoredOverlay.h"
+#include "tui/HitRegions.h"
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
+#include <ao/audio/OutputDeviceSelection.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <ftxui/dom/elements.hpp>
-#include <ftxui/screen/box.hpp>
 #include <ftxui/screen/color.hpp>
 
 #include <cstdint>
 #include <format>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -91,6 +95,134 @@ namespace ao::tui::test
     CHECK(rowHitRegions[1].profileId == audio::kProfileExclusive);
   }
 
+  TEST_CASE("OutputDevicePanel - a waiting output has one advisory and only alternatives can be selected")
+  {
+    auto const view = uimodel::OutputDeviceViewState{
+      .rows = {{.kind = uimodel::OutputDeviceRow::Kind::Status, .title = "Requested output unavailable"},
+               {.kind = uimodel::OutputDeviceRow::Kind::DeviceProfile,
+                .backendId = audio::kBackendPipeWire,
+                .deviceId = audio::DeviceId{"speakers"},
+                .profileId = audio::kProfileShared,
+                .title = "Speakers"}},
+      .outputBackendSummary = "Choose output",
+      .outputDeviceStatus = "Requested output unavailable",
+    };
+
+    for (auto const width : {80, 120})
+    {
+      auto hits = std::vector<OutputDeviceRowHitRegion>{};
+      auto const text =
+        renderText(englishOutputDevicePanel(view, 1, &hits, englishOutputDevicePanelColumns(view, width)), width);
+      CHECK(text.contains(view.outputBackendSummary));
+      REQUIRE(text.contains(view.outputDeviceStatus));
+      CHECK(text.find(view.outputDeviceStatus) == text.rfind(view.outputDeviceStatus));
+      CHECK(text.contains("Speakers"));
+      REQUIRE(hits.size() == 1);
+      CHECK(hits.front().rowIndex == 1);
+      CHECK(hits.front().deviceId == audio::DeviceId{"speakers"});
+    }
+  }
+
+  TEST_CASE("OutputDevicePanel - narrow picker shows fixed exclusive help and the pending-output advisory")
+  {
+    using RowKind = uimodel::OutputDeviceRow::Kind;
+    using i18n::MessageId;
+
+    auto const& catalog = ao::test::englishMessageCatalog();
+    auto const status =
+      i18n::requiredFormat(catalog, MessageId::OutputDevicePendingNamedStatus, {{"device", "Travel DAC"}});
+    auto const expected = audio::OutputDeviceSelection{.backendId = audio::kBackendPipeWire,
+                                                       .deviceId = audio::DeviceId{"node:missing"},
+                                                       .profileId = audio::kProfileExclusive};
+    auto const view = uimodel::OutputDeviceViewState{
+      .rows = {{.kind = RowKind::Status, .title = status},
+               {.kind = RowKind::RoutingPolicy,
+                .title = "Let system use other outputs",
+                .description = i18n::requiredFormat(
+                  catalog, MessageId::OutputDeviceRoutingPolicyExclusive, {{"rerouting", "fixed"}}),
+                .optRoutingPolicySelection = expected},
+               {.kind = RowKind::DeviceProfile,
+                .backendId = audio::kBackendPipeWire,
+                .profileId = audio::kProfileShared,
+                .title = "System Default"}},
+      .outputBackendSummary = "Choose output",
+      .outputDeviceStatus = status,
+    };
+    auto hits = std::vector<OutputDeviceRowHitRegion>{};
+    auto const text = renderText(englishOutputDevicePanel(view, 1, &hits, 40), 40);
+
+    CHECK(text.contains("[ ] Let system use other outputs"));
+    CHECK(text.contains("Off: use only this device."));
+    CHECK(text.contains("Exclusive Mode"));
+    CHECK(text.contains("busy."));
+    CHECK(text.contains("other apps"));
+    CHECK(text.contains("Requested output unavailable:"));
+    CHECK(text.contains("Travel DAC"));
+    CHECK(text.find("Requested output") == text.rfind("Requested output"));
+    CHECK(text.contains("System Default"));
+    CHECK(text.contains("Enter select"));
+    REQUIRE(hits.size() == 2);
+    CHECK(hits[0].kind == RowKind::RoutingPolicy);
+    CHECK(hits[0].optRoutingPolicySelection == expected);
+    CHECK(hasHitArea(hits[0].box));
+    CHECK_FALSE(hasHitArea(hits[0].secondaryBox));
+    CHECK(hits[1].kind == RowKind::DeviceProfile);
+    CHECK_FALSE(hits[1].optRoutingPolicySelection);
+  }
+
+  TEST_CASE("OutputDevicePanel - anchored narrow picker preserves French exclusive routing help")
+  {
+    using RowKind = uimodel::OutputDeviceRow::Kind;
+    using i18n::MessageId;
+
+    auto const french = ao::test::messageCatalog("fr");
+    auto view = uimodel::OutputDeviceViewState{
+      .rows = {{.kind = RowKind::RoutingPolicy,
+                .title = std::string{i18n::requiredText(french, MessageId::OutputDeviceRoutingPolicyToggle)},
+                .description = i18n::requiredFormat(
+                  french, MessageId::OutputDeviceRoutingPolicyExclusive, {{"rerouting", "allowed"}}),
+                .isActive = true,
+                .optRoutingPolicySelection =
+                  audio::OutputDeviceSelection{.backendId = audio::kBackendPipeWire,
+                                               .deviceId = audio::DeviceId{"node:missing"},
+                                               .profileId = audio::kProfileExclusive,
+                                               .routingPolicy = audio::OutputRoutingPolicy::AllowSystemReroute}}},
+      .outputBackendSummary = std::string{i18n::requiredText(french, MessageId::OutputDevicePendingSummary)},
+      .outputDeviceStatus = std::string{i18n::requiredText(french, MessageId::OutputDevicePendingStatus)},
+    };
+
+    // Overflow the viewport so the scrollbar is painted beside the help text.
+    for (std::int32_t index = 0; index < 20; ++index)
+    {
+      auto const name = std::format("DAC {}", index);
+      view.rows.push_back({.kind = RowKind::DeviceProfile,
+                           .backendId = audio::kBackendPipeWire,
+                           .deviceId = audio::DeviceId{name},
+                           .profileId = audio::kProfileShared,
+                           .title = name});
+    }
+
+    constexpr std::int32_t kTerminalColumns = 48;
+    constexpr std::int32_t kTerminalRows = 24;
+    auto const& keymap = defaultKeymapPlan();
+    auto const panelColumns = outputDevicePanelColumns(french, view, keymap, kTerminalColumns);
+    auto const overlayPtr = anchoredOverlay(outputDevicePanel(french, view, 0, keymap, nullptr, panelColumns),
+                                            {.x_min = 20, .x_max = 23, .y_min = 0, .y_max = 0},
+                                            AnchoredOverlayPlacement::Below,
+                                            {.columns = panelColumns},
+                                            {.columns = kTerminalColumns, .rows = kTerminalRows});
+    auto const rendered = renderElement(overlayPtr, kTerminalColumns, kTerminalRows);
+
+    CHECK(rendered.text.contains("Périphériques de sortie"));
+    CHECK(rendered.text.contains("[x] Autoriser une autre sortie"));
+    CHECK(rendered.text.contains("exclusif,"));
+    CHECK(rendered.text.contains("déconnecte."));
+    CHECK(rendered.text.contains("occupée."));
+    CHECK(rendered.text.contains("accès."));
+    CHECK(rendered.text.contains("Sortie demandée indisponible"));
+    CHECK(rendered.text.contains("Esc fermer"));
+  }
+
   TEST_CASE("OutputDevicePanel - empty state uses the selected locale")
   {
     auto const german = ao::test::messageCatalog("de-AT");
@@ -100,6 +232,32 @@ namespace ao::tui::test
     CHECK(text.contains("Ausgabegeräte"));
     CHECK(text.contains("Keine Ausgabegeräte gefunden"));
     CHECK(text.contains("Kein Ausgabegerät ausgewählt"));
+  }
+
+  TEST_CASE("OutputDevicePanel - status-only input keeps the empty list wide enough")
+  {
+    using i18n::MessageId;
+
+    // With the Spanish pending copy, the empty message needs more room than the header or footer.
+    auto const catalog = ao::test::messageCatalog("es");
+    auto view = uimodel::OutputDeviceViewState{
+      .outputBackendSummary = std::string{i18n::requiredText(catalog, MessageId::OutputDevicePendingSummary)},
+      .outputDeviceStatus = std::string{i18n::requiredText(catalog, MessageId::OutputDevicePendingStatus)},
+    };
+    auto const& keymap = defaultKeymapPlan();
+    constexpr std::int32_t kTerminalColumns = 96;
+    auto const emptyColumns = outputDevicePanelColumns(catalog, view, keymap, kTerminalColumns);
+    view.rows.push_back({.kind = uimodel::OutputDeviceRow::Kind::Status, .title = view.outputDeviceStatus});
+
+    auto const columns = outputDevicePanelColumns(catalog, view, keymap, kTerminalColumns);
+    auto hits = std::vector<OutputDeviceRowHitRegion>{};
+    auto const text = renderText(outputDevicePanel(catalog, view, -1, keymap, &hits, columns), columns);
+
+    CHECK(columns == emptyColumns);
+    CHECK(text.contains(i18n::requiredText(catalog, MessageId::TuiPlaybackNoOutputDevicesFound)));
+    CHECK(hits.empty());
+    REQUIRE(text.contains(view.outputDeviceStatus));
+    CHECK(text.find(view.outputDeviceStatus) == text.rfind(view.outputDeviceStatus));
   }
 
   TEST_CASE("OutputDevicePanel - width follows content and terminal bounds")
@@ -123,7 +281,7 @@ namespace ao::tui::test
     view.rows[0].description = "USB interface with a very long ALSA/PipeWire profile identifier";
 
     CHECK(englishOutputDevicePanelColumns(view, 120) > narrowColumns);
-    CHECK(englishOutputDevicePanelColumns(view, 40) == 40);
+    CHECK(englishOutputDevicePanelColumns(view, 40) == 38);
   }
 
   TEST_CASE("OutputDevicePanel - frames long device lists")

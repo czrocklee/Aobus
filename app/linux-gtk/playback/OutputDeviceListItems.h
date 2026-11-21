@@ -5,6 +5,7 @@
 
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
+#include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 
 #include <glibmm/object.h>
 #include <glibmm/objectbase.h>
@@ -67,5 +68,17 @@ namespace ao::gtk
     std::string _description;
     std::string _badge;
     bool _active = false;
+  };
+
+  class OutputRoutingPolicyItem final : public Glib::Object
+  {
+  public:
+    static Glib::RefPtr<OutputRoutingPolicyItem> create(uimodel::OutputDeviceRow row);
+    uimodel::OutputDeviceRow const& row() const;
+
+  private:
+    explicit OutputRoutingPolicyItem(uimodel::OutputDeviceRow row);
+
+    uimodel::OutputDeviceRow _row;
   };
 } // namespace ao::gtk

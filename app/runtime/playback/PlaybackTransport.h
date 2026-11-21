@@ -189,9 +189,13 @@ namespace ao::rt
     bool trySeek(PlaybackOccurrenceId expectedOccurrenceId,
                  std::chrono::milliseconds elapsed,
                  SeekMode mode = SeekMode::Final);
+    void setOutputDevice(audio::OutputDeviceSelection const& selection);
     void setOutputDevice(audio::BackendId const& backendId,
                          audio::DeviceId const& deviceId,
-                         audio::ProfileId const& profileId);
+                         audio::ProfileId const& profileId)
+    {
+      setOutputDevice({.backendId = backendId, .deviceId = deviceId, .profileId = profileId});
+    }
     void setVolume(float volume);
     void setMuted(bool muted);
     void revealPlayingTrack();

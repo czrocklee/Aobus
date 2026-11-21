@@ -665,6 +665,22 @@ assistive technology such as Narrator. The [frontend accessibility contract](../
 explains how controls receive names. The track-table and activity-status
 probes are separate manual desktop checks.
 
+### Output selection probe
+
+The default automation run restores a saved request for a missing WASAPI
+endpoint. The Modern output button's tooltip explains the unavailable request;
+the flyout shows a disabled advisory, leaves alternate devices unchecked, and
+accepts an explicit choice of the discard-only endpoint. To check the same
+choice from Classic's Soul button, run this on a private interactive console:
+
+```bat
+bazel run //app/windows-winui:ao_winui_automation_probe -- --classic-output
+```
+
+Classic activates the frame's playback adapters, including SMTC; the default
+run does not. Neither mode supplies playable files, issues Play, or changes
+the Windows default device.
+
 ## Native tests and sanitizers
 
 The ordinary `bazel test //:tests` selection covers Core, application, TUI,

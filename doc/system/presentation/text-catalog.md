@@ -110,6 +110,9 @@ Important formatter semantics include:
 - playback report subjects fall back from nonempty subject, to `track <id>`, to
   the localized playback subject, and an empty required failure reason becomes
   localized unknown error;
+- a pending output request has its own status; showing the requested device
+  does not describe an active or confirmed output. System rerouting is a
+  separate permission, not a property inferred from the device label;
 - notification grouping is selected from typed severity and count;
 - scan change counts are combined from structured relinked/missing values;
 - saved-order results use the mutation reply to count moved tracks or forgotten

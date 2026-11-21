@@ -10,6 +10,7 @@
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/utility/ScopedRegistration.h>
 
 #include <memory>
@@ -82,6 +83,11 @@ namespace ao::audio::backend
   std::unique_ptr<Backend> PipeWireProvider::createBackend(Device const& device, ProfileId const& profile)
   {
     return std::make_unique<PipeWireBackend>(device, profile);
+  }
+
+  std::unique_ptr<Backend> PipeWireProvider::createReroutableBackend(Device const& device, ProfileId const& profile)
+  {
+    return std::make_unique<PipeWireBackend>(device, profile, OutputRoutingPolicy::AllowSystemReroute);
   }
 
   BackendProvider::Status PipeWireProvider::status() const

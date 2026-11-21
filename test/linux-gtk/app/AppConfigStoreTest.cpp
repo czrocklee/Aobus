@@ -204,9 +204,10 @@ namespace ao::gtk::test
     });
 
     auto const selection = audio::OutputDeviceSelection{
-      .backendId = audio::BackendId{"pipewire"},
-      .deviceId = audio::DeviceId{"headphones"},
+      .backendId = audio::kBackendPipeWire,
+      .deviceId = audio::DeviceId{"node:headphones"},
       .profileId = audio::kProfileExclusive,
+      .routingPolicy = audio::OutputRoutingPolicy::AllowSystemReroute,
     };
 
     preferredOutputDeviceRecorder(configStorePtr).record(selection);

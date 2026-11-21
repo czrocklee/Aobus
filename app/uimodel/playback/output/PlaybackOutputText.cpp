@@ -4,9 +4,13 @@
 #include <ao/uimodel/playback/output/PlaybackOutputText.h>
 
 #include <ao/audio/BackendIds.h>
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/rt/PlaybackState.h>
 
+#include <algorithm>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -87,6 +91,49 @@ namespace ao::uimodel
     }
 
     return AudioProfilePresentation{.label = std::string{id.raw()}};
+  }
+
+  std::optional<std::string> outputDeviceName(MessageCatalog const& catalog,
+                                              rt::OutputState const& output,
+                                              audio::OutputDeviceSelection const& selection)
+  {
+    if (selection.backendId == audio::kBackendNone)
+    {
+      return std::nullopt;
+    }
+
+    auto const backend =
+      std::ranges::find(output.availableBackends, selection.backendId, &rt::OutputBackendSnapshot::id);
+
+    if (backend == output.availableBackends.end())
+    {
+      return std::nullopt;
+    }
+
+    auto const device = std::ranges::find(backend->devices, selection.deviceId, &rt::OutputDeviceSnapshot::id);
+
+    if (device == backend->devices.end())
+    {
+      return std::nullopt;
+    }
+
+    if (device->isDefault && device->id.empty() && device->displayName.empty())
+    {
+      return std::string{requiredText(catalog, MessageId::SystemDefaultOutputDevice)};
+    }
+
+    return device->displayName;
+  }
+
+  std::optional<std::string> selectedOutputDeviceName(MessageCatalog const& catalog, rt::OutputState const& output)
+  {
+    if (output.optPendingOutputSelection ||
+        output.selectedDevice.routingPolicy == audio::OutputRoutingPolicy::AllowSystemReroute)
+    {
+      return std::nullopt;
+    }
+
+    return outputDeviceName(catalog, output, output.selectedDevice);
   }
 
   std::string volumeTooltip(MessageCatalog const& catalog,

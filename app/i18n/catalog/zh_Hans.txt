@@ -220,6 +220,16 @@ zh_Hans:table {
     audio_profile_exclusive { "独占模式" }
     audio_profile_exclusive_description { "直接访问硬件设备" }
     system_default_output_device { "系统默认" }
+    output_device_pending_summary { "选择输出" }
+    output_device_pending_status { "所选输出不可用" }
+    output_device_pending_named_status { "所选输出不可用：{device}" }
+    output_device_invalid_pipewire_status { "请重新选择 PipeWire 输出。保存的选择无效。" }
+    output_device_routing_policy_toggle { "允许系统使用其他输出" }
+    output_device_routing_policy_fixed { "开启后，如果此设备在启动时不可用或断开连接，系统可以使用其他输出。关闭时仅使用此设备。" }
+    output_device_routing_policy_allowed { "如果此设备在启动时不可用或断开连接，系统可以使用其他输出。" }
+    output_device_routing_policy_exclusive { "{rerouting, select, allowed {} other {关闭时仅使用此设备。}}启用后，如果启动时找不到此设备或设备断开连接，系统可能改用其他输出，但仍以独占模式打开。输出被占用时可能无法播放。Aobus 占用该输出期间，其他应用可能无法使用它。" }
+    output_device_reroute_status { "系统可能使用其他输出" }
+    output_device_preferred_status { "首选输出（系统可能切换）：{route}" }
     completion_field { "字段" }
     completion_alias { "别名" }
     completion_operator { "运算符" }

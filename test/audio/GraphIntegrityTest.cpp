@@ -88,7 +88,7 @@ namespace ao::audio::test
     auto engine = Engine{std::move(backendPtr), device};
 
     auto const descriptor = PlaybackInput{.filePath = testFile.string()};
-    auto const item = Engine::PlaybackItem{.id = Engine::PlaybackItemId{.value = 1}, .input = descriptor};
+    auto const item = Engine::PlaybackItem{.id = Engine::PlaybackItemId{1}, .input = descriptor};
     engine.setOnRouteChanged([&routeState](Engine::RouteStatus const& route) { routeState.observe(route.state); });
 
     engine.play(item);

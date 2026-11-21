@@ -106,21 +106,32 @@ The persistence schema does not impose positive-size or display-geometry bounds.
 
 ### Global runtime-preference group
 
-The `runtime` group is a mapping of a required `version`, which must be `1` and is read before every other field, and string fields with an empty C++ default:
+The GTK and TUI `runtime` group is a mapping with a required `version`, which must be `1` and is read before every other field:
 
-| Field                 | Stored identity                                              |
-| --------------------- | ------------------------------------------------------------ |
-| `lastOutputBackendId` | Preferred audio backend id requested through the selector.   |
-| `lastOutputProfileId` | Preferred backend profile id requested through the selector. |
-| `lastOutputDeviceId`  | Preferred output device id requested through the selector.   |
-| `lastLayoutPreset`    | Last selected shell-layout preset id.                        |
-| `lastThemePreset`     | Last selected theme preset id.                               |
+| Field                      | Stored value                                                 |
+| -------------------------- | ------------------------------------------------------------ |
+| `lastOutputBackendId`      | Preferred audio backend id requested through the selector.   |
+| `lastOutputProfileId`      | Preferred backend profile id requested through the selector. |
+| `lastOutputDeviceId`       | Preferred output device id requested through the selector.   |
+| `lastLayoutPreset`         | Last selected shell-layout preset id.                        |
+| `lastThemePreset`          | Last selected theme preset id.                               |
+| `allowSystemOutputReroute` | Optional boolean for a named PipeWire output preference.     |
 
-The schema accepts arbitrary strings.
+The id fields accept arbitrary strings and have empty C++ defaults.
 Current layout and theme workflows interpret unknown or empty preset ids through their own fallback behavior; this group does not validate those catalogs.
-Missing known fields retain the deserialize seed, unknown fields are tolerated, duplicate fields are rejected, and a malformed present known field rejects the complete candidate.
-Output restore requires non-empty backend and profile ids and rejects a profile known to be unsupported by a published backend.
-A non-empty device id may remain preferred while temporarily unavailable; an empty device id is valid only when the selected backend advertises a compatible empty-id default.
+Missing ids retain the deserialize seed, unknown fields are tolerated, and a duplicate field or a malformed present id rejects the complete candidate.
+
+Restore requires non-empty backend and profile ids. With a non-empty device id, the preference is binding even when its backend, device or profile is unavailable: the application must not select a substitute. This does not grant permission to open an unsupported profile. A missing catalog entry and a device that refuses to open have different [playback outcomes](../../system/playback/application-commit.md#snapshot-borrowing-and-output-intent).
+
+An empty device id requests a provider-defined default, not the first enumerated device. Restore normally requires the catalog to advertise a compatible empty-id default. A preferred PipeWire shared default can be requested before discovery; WASAPI and Core Audio publish concrete endpoint ids even for their current defaults.
+
+GTK and TUI save a named PipeWire device as `node:<node.name>`. A bare numeric id from an older file is not matched against live object numbers; reselect the output to save its name.
+
+`allowSystemOutputReroute` has these read and write rules:
+
+- Unquoted `true` grants permission only if the same group explicitly stores `pipewire`, a `node:` id whose name is non-empty and contains no NUL, and `shared` or `exclusive`. PipeWire may then route to another sink at startup or during playback without changing the preferred name, backend or profile.
+- Missing, `false`, quoted or malformed permission values grant no permission, regardless of the seed. A malformed permission value does not reject an otherwise valid route. A missing or rejected group grants no permission either.
+- Saving writes `true` or `false` for eligible routes and omits the field for other routes. The separate TUI `preferences` group and Windows and macOS settings do not store this field.
 
 ### Global GTK application-session group
 
@@ -134,9 +145,12 @@ The `session` group is a mapping whose fields are all strings with an empty C++ 
 | `lastOutputDeviceId`  | Last active output device id.          |
 
 The schema stores `lastLibraryPath` as text and applies no normalization, existence check, or platform-path validation.
-It has no `version` and otherwise uses the same seeded-missing, unknown-field, duplicate-field, and malformed-known-field policy as the `runtime` group.
-When the preferred runtime-group tuple is not restorable, the session tuple is the GTK fallback.
-An incomplete session tuple is ignored; restore never synthesizes missing identity fields.
+It has no `version`. Missing fields retain the deserialize seed, unknown fields are tolerated, and duplicate or malformed known fields reject the complete candidate.
+
+GTK considers the last-active tuple only when it has no usable preference. A complete named preference, or a preferred PipeWire shared default awaiting discovery, takes precedence.
+The session fallback requires backend and profile ids; restore never synthesizes missing fields. A published backend must support the profile. A named device can await discovery, but an empty-id fallback requires an advertised compatible default.
+
+The session records engine-confirmed identity, not consent. Its checkpoint does not write rerouting permission or change the preferred route. Restoring it grants no permission, even if the mapping contains `allowSystemOutputReroute` as an unknown key.
 
 ### Global TUI preferences
 
@@ -251,7 +265,7 @@ The composition root logs the degraded application-preference session once, wher
 | Surface                       | Compatibility mechanism                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `window` and `session`        | No explicit version or migration. Their schemas retain seeded values for missing known fields and tolerate unknown fields while rejecting duplicates and malformed known fields.                                                                                                                                                                                                                                                                                                                                                                                                                |
-| `runtime`                     | Required version `1`, read first; otherwise the `window` and `session` field policy. A protected group.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `runtime`                     | Required version `1`, read first. A protected group; see the runtime field rules for seeded ids and fail-closed rerouting permission.                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `shortcuts`                   | Required version `1`, read first, and strict group fields. Action ids are dynamic; the schema strictly validates the mapping/sequence/scalar structure, and keymap semantics handle unknown actions and invalid chord text. A protected group.                                                                                                                                                                                                                                                                                                                                                  |
 | TUI `preferences`             | Required payload version `1`, read first, strict field membership and value validation, defaults for missing preference fields, and no earlier-version migration. A protected group.                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `workspace`                   | Nested presentation vocabulary version `1`, strict deserialization, stable textual ids, and no unversioned migration. The [workspace session state reference](../workspace/session-state.md) owns remaining root compatibility limits.                                                                                                                                                                                                                                                                                                                                                          |
@@ -265,6 +279,8 @@ The composition root logs the degraded application-preference session once, wher
 
 A protected group of a newer version is neither read nor written: the store refuses every load and save of it, and every removal once a load or save has found it newer, as the [grouped configuration store](../../system/persistence/config-store.md#protected-groups) specifies. The build keeps its defaults for that group for the session.
 The frontend posts one warning when it loads such a group, as the [versioning page](../../system/persistence/versioning.md#protected-configuration) states.
+
+Within unreleased `runtime` version `1`, development builds that do not recognize `allowSystemOutputReroute` ignore it on read and may drop it when replacing the group. This same-version compatibility rule does not override [newer-version write protection](../../decision/0020-versioning-and-upgrade-policy.md).
 
 No file-level envelope declares which groups are present or which application version wrote them.
 Moving a group to another logical document changes composition and lifecycle ownership even when its payload bytes are unchanged; a path override alone does not.
@@ -281,15 +297,16 @@ window:
 runtime:
   version: 1
   lastOutputBackendId: pipewire
-  lastOutputProfileId: default
-  lastOutputDeviceId: speakers
+  lastOutputProfileId: shared
+  lastOutputDeviceId: "node:speakers"
   lastLayoutPreset: classic
   lastThemePreset: classic
+  allowSystemOutputReroute: false
 session:
   lastLibraryPath: /music
   lastOutputBackendId: pipewire
-  lastOutputProfileId: default
-  lastOutputDeviceId: speakers
+  lastOutputProfileId: shared
+  lastOutputDeviceId: "node:speakers"
 shortcuts:
   version: 1
   bindings:
@@ -304,7 +321,7 @@ The example intentionally omits the domain-owned `playback-session` payload.
 ## Implementation authority
 
 - [`Preferences.h`](../../../app/tui/Preferences.h) owns the TUI preference payload and defaults; [`Preferences.cpp`](../../../app/tui/Preferences.cpp) owns the `preferences` schema, version gate, and group reads and writes.
-- [`AppConfigStore.cpp`](../../../app/linux-gtk/app/AppConfigStore.cpp), [`WindowState.h`](../../../app/linux-gtk/app/WindowState.h), and [`AppState.h`](../../../app/include/ao/rt/AppState.h) own the global GTK groups and their frontend-local schemas; [`WindowState.cpp`](../../../app/linux-gtk/app/WindowState.cpp) owns the geometry accumulation rule and [`MainWindow.cpp`](../../../app/linux-gtk/app/MainWindow.cpp) owns when a checkpoint is taken.
+- [`AppState.cpp`](../../../app/runtime/AppState.cpp) owns the `runtime` and `session` schemas, including when saved output ids can grant rerouting permission. [`AppConfigStore.cpp`](../../../app/linux-gtk/app/AppConfigStore.cpp) groups the GTK saves, and [`WindowState.h`](../../../app/linux-gtk/app/WindowState.h) defines the geometry payload; [`WindowState.cpp`](../../../app/linux-gtk/app/WindowState.cpp) owns the geometry accumulation rule and [`MainWindow.cpp`](../../../app/linux-gtk/app/MainWindow.cpp) owns when a checkpoint is taken.
 - [`ConfigStore.h`](../../../app/include/ao/rt/ConfigStore.h) owns the generic `NoLocation` mechanism; [`PlatformDirectories.h`](../../../include/ao/utility/PlatformDirectories.h) owns application-directory resolution. [`Preferences.cpp`](../../../app/tui/Preferences.cpp) and [`app/tui/App.cpp`](../../../app/tui/App.cpp) own the stricter explicit TUI Settings saves and the TUI's additional no-location fallback when application-directory creation fails.
 - [`KeymapStore.h`](../../../app/include/ao/uimodel/input/KeymapStore.h) and [`KeymapModel.h`](../../../app/include/ao/uimodel/input/KeymapModel.h) own the shortcut group name and mapping payload; [`Keymap.h`](../../../app/tui/Keymap.h) owns the terminal defaults supplied when the TUI reads it.
 - [`PlaybackSessionState.h`](../../../app/runtime/PlaybackSessionState.h), [`PlaybackSessionYamlSchema.h`](../../../app/runtime/PlaybackSessionYamlSchema.h), [`PlaybackSessionYamlSchema.cpp`](../../../app/runtime/PlaybackSessionYamlSchema.cpp), and [`PlaybackSessionPersistence.cpp`](../../../app/runtime/PlaybackSessionPersistence.cpp) own the playback group, explicit schema, payload marker, and injected-store use.
@@ -322,7 +339,7 @@ The example intentionally omits the domain-owned `playback-session` payload.
 ## Test authority
 
 - [`PreferencesTest.cpp`](../../../test/tui/PreferencesTest.cpp) protects TUI preference defaults, validation, version rejection, a newer group kept unchanged, round trips, and preservation of sibling groups.
-- [`AppStateTest.cpp`](../../../test/runtime/AppStateTest.cpp) protects the shared `runtime` and `session` schemas, including a missing `version` and a newer `runtime` group kept unchanged.
+- [`AppStateTest.cpp`](../../../test/runtime/AppStateTest.cpp) protects the shared `runtime` and `session` schemas, including scoped routing permission, fixed defaults, a missing `version`, and a newer `runtime` group kept unchanged.
 - [`AppConfigStoreTest.cpp`](../../../test/linux-gtk/app/AppConfigStoreTest.cpp) protects the `window`, `runtime`, and `session` group round trips, missing-file behavior, and the no-location session.
 - [`WindowStateTest.cpp`](../../../test/linux-gtk/app/WindowStateTest.cpp) protects current-session normal geometry across a maximized checkpoint.
 - [`ConfigStoreTest.cpp`](../../../test/runtime/ConfigStoreTest.cpp) protects what a store with no location reads, writes, and leaves out of the working directory, and the protected-group refusals.

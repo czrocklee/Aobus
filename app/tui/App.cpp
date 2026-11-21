@@ -1277,15 +1277,14 @@ namespace ao::tui
       auto prefs = rt::AppPrefsState{};
       rt::loadAppPrefs(store, prefs);
 
-      // The last-active route is the desktop shells' fallback, saved when their
-      // window closes. The TUI runtime-session document deliberately excludes
-      // output identity, so its explicit global preference decides alone.
+      // Unlike GTK, the TUI keeps no last-active output in its session.
+      // Restore only the route explicitly requested in global preferences.
       auto const optSelection = uimodel::resolveOutputDeviceSelectionToRestore(
         prefs.preferredOutputSelection, {}, playback.snapshot().transport.output);
 
       if (optSelection)
       {
-        playback.commands().setOutputDevice(optSelection->backendId, optSelection->deviceId, optSelection->profileId);
+        playback.commands().setOutputDevice(*optSelection);
       }
     }
 

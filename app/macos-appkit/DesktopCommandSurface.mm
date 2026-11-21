@@ -379,6 +379,11 @@ namespace
 
       for (auto const& row : rows)
       {
+        if (row.kind == ao::uimodel::OutputDeviceRow::Kind::RoutingPolicy)
+        {
+          continue; // Core Audio has no PipeWire routing option.
+        }
+
         auto* const item = [menu addItemWithTitle:nativeText(row.title)
                                            action:@selector(selectOutput:)
                                     keyEquivalent:@""];

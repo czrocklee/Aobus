@@ -42,6 +42,7 @@ namespace ao::audio::backend
     utility::ScopedRegistration subscribeDevices(OnDevicesChangedCallback callback) override;
     BackendProvider::Status status() const override;
     std::unique_ptr<Backend> createBackend(Device const& device, ProfileId const& profile) override;
+    std::unique_ptr<Backend> createReroutableBackend(Device const& device, ProfileId const& profile) override;
     utility::ScopedRegistration subscribeGraph(std::string_view routeAnchor, OnGraphChangedCallback callback) override;
 
   private:

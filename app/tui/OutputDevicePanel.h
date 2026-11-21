@@ -5,6 +5,7 @@
 
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 
@@ -12,6 +13,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace ftxui
@@ -28,9 +30,11 @@ namespace ao::tui
   struct OutputDeviceRowHitRegion final
   {
     std::int32_t rowIndex = -1;
+    uimodel::OutputDeviceRow::Kind kind = uimodel::OutputDeviceRow::Kind::BackendHeader;
     audio::BackendId backendId{};
     audio::DeviceId deviceId{};
     audio::ProfileId profileId{};
+    std::optional<audio::OutputDeviceSelection> optRoutingPolicySelection{};
     ftxui::Box box{};
     ftxui::Box secondaryBox{};
   };

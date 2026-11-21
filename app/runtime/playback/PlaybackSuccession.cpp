@@ -526,6 +526,17 @@ namespace ao::rt
 
       if (!admittedRes)
       {
+        if (admittedRes.error().code == Error::Code::InvalidState)
+        {
+          // A missing output or released stream cannot admit lookahead. The candidate itself did not fail.
+          if (pendingLookaheadPtr == pendingPtr)
+          {
+            pendingLookaheadPtr.reset();
+          }
+
+          return false;
+        }
+
         return tryCompleteLookahead(pendingPtr, std::unexpected{admittedRes.error()});
       }
 
@@ -822,6 +833,15 @@ namespace ao::rt
         return;
       }
 
+      if (transport.state().output.optPendingOutputSelection)
+      {
+        // The item really ended; there is neither a held track to resume nor
+        // a route for its successor. Retire the sequence without skipping a
+        // healthy candidate or stopping the already idle transport a second time.
+        deactivateSession();
+        return;
+      }
+
       std::ignore = tryHandleNavigation(sessionPtr->cursor().resolveNext(),
                                         ShuffleHistory::TransitionOrigin::Forward,
                                         NavigationDirection::Forward,
@@ -858,7 +878,9 @@ namespace ao::rt
       // from committing over the accepted transition.
       cancelPendingStart();
       resetFailureState();
-      restartDeadline.replaceSession(std::chrono::milliseconds{0}, true);
+      // A prepared successor starts a new timeline; an explicit resume may reopen at its held offset.
+      auto const elapsed = event.optPreparedNextToken ? std::chrono::milliseconds{0} : transport.state().elapsed;
+      restartDeadline.replaceSession(elapsed, true);
       tryReprepareNext(false);
       synchronizeState();
       notifyRestorableStateChanged();
@@ -893,7 +915,7 @@ namespace ao::rt
         return PlaybackFailureDisposition::Unhandled;
       }
 
-      if (!isRecoverableTrackFailure(failure) ||
+      if (!transport.state().ready || !isRecoverableTrackFailure(failure) ||
           sessionPtr->cursor().sourceState() == PlaybackCursor::SourceState::Invalidated)
       {
         if (failure.kind == PlaybackFailureKind::TrackOpen || failure.kind == PlaybackFailureKind::Decode)

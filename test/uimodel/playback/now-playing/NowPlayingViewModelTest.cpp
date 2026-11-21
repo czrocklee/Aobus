@@ -22,7 +22,6 @@
 #include <ao/audio/RenderTarget.h>
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
-#include <ao/audio/Transport.h>
 #include <ao/audio/flow/Graph.h>
 #include <ao/query/Parser.h>
 #include <ao/query/Serializer.h>
@@ -285,30 +284,10 @@ namespace ao::uimodel::test
       CHECK(cmd.type == NowPlayingActionCommand::Type::Reveal);
     }
 
-    SECTION("PlayPause action resolves to resume when idle")
+    SECTION("PlayPause resolves to a command intent even without a current track")
     {
       auto const cmd = viewModel.resolveAction(NowPlayingFieldAction::PlayPause, rt::TrackField::Title);
-      CHECK(cmd.type == NowPlayingActionCommand::Type::Resume);
-    }
-
-    SECTION("PlayPause action resolves to pause while playing")
-    {
-      auto desc = playbackRequest(TrackId{1}, "Song");
-      REQUIRE(playbackTransport.play(desc, ListId{1}));
-
-      auto const cmd = viewModel.resolveAction(NowPlayingFieldAction::PlayPause, rt::TrackField::Title);
-      CHECK(cmd.type == NowPlayingActionCommand::Type::Pause);
-    }
-
-    SECTION("PlayPause action resolves to resume while paused")
-    {
-      auto desc = playbackRequest(TrackId{1}, "Song");
-      REQUIRE(playbackTransport.play(desc, ListId{1}));
-      playbackTransport.pause();
-      REQUIRE(playback.snapshot().transport.transport == audio::Transport::Paused);
-
-      auto const cmd = viewModel.resolveAction(NowPlayingFieldAction::PlayPause, rt::TrackField::Title);
-      CHECK(cmd.type == NowPlayingActionCommand::Type::Resume);
+      CHECK(cmd.type == NowPlayingActionCommand::Type::PlayPause);
     }
 
     SECTION("FilterByField with Title")
@@ -390,7 +369,10 @@ namespace ao::uimodel::test
     auto const pendingState = fixture.playback.snapshot().transport;
     REQUIRE_FALSE(pendingState.ready);
     CHECK(pendingState.nowPlaying == readyState.nowPlaying);
-    CHECK(pendingState.output == readyState.output);
+    CHECK(pendingState.output.selectedDevice == selected);
+    CHECK(pendingState.output.availableBackends == readyState.output.availableBackends);
+    REQUIRE(pendingState.output.optPendingOutputSelection);
+    CHECK(pendingState.output.optPendingOutputSelection->deviceId == audio::DeviceId{"pending-readiness-device"});
     CHECK(pendingState.quality == readyState.quality);
     REQUIRE_FALSE(log.empty());
     CHECK(log.last().title == "Not Playing");
@@ -402,7 +384,7 @@ namespace ao::uimodel::test
     auto const restoredState = fixture.playback.snapshot().transport;
     REQUIRE(restoredState.ready);
     CHECK(restoredState.nowPlaying == pendingState.nowPlaying);
-    CHECK(restoredState.output == pendingState.output);
+    CHECK(restoredState.output == readyState.output);
     CHECK(restoredState.quality == pendingState.quality);
     REQUIRE_FALSE(log.empty());
     CHECK(log.last().title == "Not Playing");
