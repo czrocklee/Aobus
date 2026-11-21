@@ -94,11 +94,6 @@ Removing `q::` from `q::Outer::Inner` changes lookup of `Outer`, not `Inner`.
 Keep the names that aliases and using-declarations expose; a same-named value
 does not hide a type or namespace before a surviving `::`.
 
-**Known limitation:** Keep the qualifier when the namespace being removed contains
-a using-directive for one of its nested namespaces, even if the checker reports
-it as redundant. Shortening can add an overload to ordinary lookup and select a
-different function without ADL.
-
 - **Written scope.** Semantic parents can miss lambda captures (including
   init-captures), requires-expression parameter lists, and template or signature
   owners. Recover the written owners of concept and requires-clause heads and
@@ -120,14 +115,17 @@ different function without ADL.
   compiler acceptance is not proof of safety
   ([class.member.lookup](https://eel.is/c++draft/class.member.lookup#6)).
 - **Unproved lookup.** Keep qualifiers when inherited, using-directive,
-  inline-namespace, or dependent lookup is uncertain. Removing the entire
-  qualifier from a direct call can enable argument-dependent lookup even when
-  ordinary lookup finds the same declaration. The bounded proof admits only
-  fundamental-typed arguments as written, before implicit conversions, and
-  ignores default arguments. Explicit template arguments, dependent or
-  instantiated source contexts, and unfamiliar function-use forms are outside
-  that proof. A surviving qualifier, a parenthesized callee, or taking the
-  function's address does not enable ADL through this removal.
+  inline-namespace, or dependent lookup is uncertain. Check directives in the
+  namespace being removed, including earlier namespace blocks: unqualified
+  lookup can add an overload even when qualified lookup finds a direct match.
+  Removing the entire qualifier from a direct call can also enable
+  argument-dependent lookup even when ordinary lookup finds the same declaration.
+  The bounded proof admits only fundamental-typed arguments as written, before
+  implicit conversions, and ignores default arguments. Explicit template
+  arguments, dependent or instantiated source contexts, and unfamiliar
+  function-use forms are outside that proof. A surviving qualifier, a
+  parenthesized callee, or taking the function's address does not enable ADL
+  through this removal.
 
 The [qualification fixtures](../../../test/lint/fixture/aobus-readability-redundant-namespace-qualification)
 pair shadowed negatives with unshadowed positives, including declaration-order
