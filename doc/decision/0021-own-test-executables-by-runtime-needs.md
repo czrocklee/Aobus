@@ -63,3 +63,12 @@ A functional directory can be split across executables, so which program runs
 a case is answered by the configured manifest, not by the path alone.
 Adding or removing a marker is a policy change to this decision, because the
 audit enforces exactly the two markers.
+
+## Current authorities
+
+- [Bazel test ownership](../development/bazel.md#test-ownership)
+- [Test suites and execution prerequisites](../development/test/test-suite.md)
+
+## Supersession
+
+[Decision 0022](0022-single-native-build-backend.md) supersedes the CMake source declarations and configured manifest as the mechanism for assigning and checking executable ownership. The functional directory, runtime and link criteria, and case-marker decisions still apply.

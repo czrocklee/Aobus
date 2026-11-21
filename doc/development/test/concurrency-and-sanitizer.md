@@ -83,7 +83,9 @@ A concurrency filter must exclude hidden `[.manual]` probes with `~[.]`.
 
 ## Validation
 
-Run the concurrency gate prescribed by [validation and review](validation-and-review.md). Use
+For C++ concurrency-sensitive changes, run the affected cases and the fresh
+[managed ThreadSanitizer check](#sanitizer-findings) on affected supported hosts
+as part of [completion validation](validation-and-review.md#validation). Use
 repetition only after a deterministic regression exists; [the test-suite reference](test-suite.md) owns suite
 selection and native `--runs_per_test` behavior.
 
@@ -97,19 +99,19 @@ C++ sanitizer build.
 
 ```bash
 # Linux and macOS
-./ao check --asan
+./ao check --asan --fresh
 ```
 
 ```bat
-ao.bat check --asan
+ao.bat check --asan --fresh
 ```
 
-A sanitizer check runs the full normal fastbuild completion first, then a separate
-managed sanitizer profile in the same selected tree; a
-Debug result is never relabeled as a sanitized one
-([sanitizer profiles](../bazel.md#sanitizer-profiles)). Cached sanitizer
-results are admitted unless `--fresh` is given; validate a memory-safety or
-concurrency fix with `--fresh`.
+A sanitizer check runs full normal completion first, then a separate managed
+sanitizer profile in the same selected tree. Passing the normal phase does not
+count as an instrumented execution ([sanitizer profiles](../bazel.md#sanitizer-profiles)).
+Both phases accept cached passes unless `--fresh` requests new test executions.
+A cached result cannot sample another interleaving or heap layout, even when
+the instrumented binary is unchanged.
 
 Linux and macOS combine AddressSanitizer and UndefinedBehaviorSanitizer. The
 managed runtime preserves caller-supplied `UBSAN_OPTIONS` but forces
@@ -126,7 +128,7 @@ The managed Linux TSan scope covers Core, application, backend, and GTK;
 the macOS scope covers Core, application, and backend:
 
 ```bash
-./ao check --tsan
+./ao check --tsan --fresh
 ```
 
 The Linux Nix GTK dependency closure is not TSan-instrumented, so TSan cannot observe its internal synchronization even though it observes calls into intercepted runtime functions.
@@ -145,32 +147,12 @@ Before adding or widening a suppression:
 
 ## Explicit Bazel sanitizer route
 
-The Bazel graph exposes the same sanitizer families as explicit,
-scoped instrumentation runs; [Bazel development](../bazel.md#sanitizer-and-coverage-instrumentation)
-owns the profile design, admission rules and command surface. The managed portal
-commands are:
-
-```bash
-./ao check --asan
-./ao check --tsan
-./ao check contracts --config asan
-```
+Use the [managed checks above](#sanitizer-findings) to validate a fix. See [sanitizer profiles](../bazel.md#sanitizer-profiles) for graph selection and admission rules.
 
 `check contracts --config asan|tsan` checks only the Debug compile contracts of the
-sanitizer-configured graph. Those contracts are the same Debug policy the graph
-folds into its Linux projection ([in-graph native
-policy](../bazel.md#in-graph-native-policy)); `check contracts` remains the standalone
-sanitizer-configured entry. Instrumentation is proven by the [sanitizer
-profile canary](../../../test/core/SanitizerProfileTest.cpp) in
-`//test:utility_test`: a sanitizer run whose compiler did not instrument it, or
-a normal run that is instrumented, fails to build. It proves one first-party
-translation unit per profile; per-action flags such as frame pointers,
-non-recovering UBSan and the MSVC `/Z7`/`/MDd` policies are no longer
-independently verified ([sanitizer profiles](../bazel.md#sanitizer-profiles)).
+sanitizer-configured graph, not runtime behavior. The [profile canary](../../../test/core/SanitizerProfileTest.cpp) proves instrumentation in one first-party translation unit, not every per-action flag.
 
-`./ao check --asan/--tsan` runs normal fastbuild completion first, then a fixed
-graph-owned instrumentation scope with no labels, filters, or forwarded Bazel
-arguments. `check lint` retains its normal fastbuild/Release lint configuration;
+`check lint` accepts fastbuild, Debug, or Release, not sanitizer profiles;
 `./ao setup deps` does not select instrumentation. Explicit native
 `bazel build`, `test`, or `run` requests select the profile through the
 repository rc, not a compilation mode:
@@ -179,23 +161,20 @@ invalid. Raw runs do not get the managed sanitizer options, suppression
 freezing, or report status below; context-bearing tests still start their own
 fixtures.
 
-Scope: `//:asan_tests` covers Core, the application layer, CLI, TUI, Linux GTK
-and Linux system media; `//:tsan_tests` covers Core, the application layer and
-Linux GTK. The managed run adds the `//:check_native_tests` backend roots on
-every host; Windows TSan is rejected before configuration exactly as above.
-A raw `//:asan_tests` invocation alone excludes the native backend suite.
-Manual GUI and performance targets and hidden hardware cases are outside the
-sanitizer scope.
+A raw `//:asan_tests` run does not include the native backend tests that the
+managed sanitizer phase adds. The sanitizer selections exclude manual GUI and
+performance harnesses and leave hidden hardware cases opt-in.
 
 The managed runtime enforces the same report discipline this reference
 requires, plus stricter positive exit codes: `halt_on_error=1` is forced, UBSan
 reports print stack traces, and other caller-supplied options — including
 container-annotation settings — are preserved. Caller TSan suppression files
 are merged with the governed project rules into one immutable file without
-adding suppressions; Linux LSAN keeps the existing replace contract. Caller
-ASan, UBSan and macOS LSan suppression files are each frozen in place as
-copies, preserving option order. The frozen copies are content-addressed, so
-a changed rule file never reuses a cached result.
+adding suppressions. Managed Linux ASan replaces the caller's `LSAN_OPTIONS`
+rather than merging it; managed TSan does not override it. Caller ASan, UBSan
+and macOS LSan suppression files are each frozen in place as copies, preserving
+option order. The frozen copies are content-addressed, so a changed rule file
+never reuses a cached result.
 
 This managed Bazel route parses compiler-rt options before filtering or freezing
 rules. Colons, commas, spaces, tabs and CR/LF separate options outside matching
@@ -211,11 +190,4 @@ test starts only its declared private fixtures; see
 [Bazel development](../bazel.md#sanitizer-and-coverage-instrumentation) for the
 frozen-rc and symbolizer contracts.
 
-The dependency-closure limits above apply unchanged: the Linux GTK closure is
-not TSan-instrumented, and Windows dependencies from the normal vcpkg triplet
-remain uninstrumented. A raw scoped sanitizer run is not whole completion.
-The managed `ao check --asan/--tsan` includes the ordinary fastbuild wildcard
-test graph — documentation, supported-host tooling, native tests and the
-whole-graph lint test ([completion gate](../bazel.md#completion-gate)) — in
-addition to its sanitizer phase; Release evidence remains separate when
-required.
+A raw scoped sanitizer run does not replace the [completion gate](../bazel.md#completion-gate). Where the change requires Release evidence, validate Release separately.

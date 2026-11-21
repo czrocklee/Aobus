@@ -31,9 +31,8 @@ macOS, first-party C++ translation units and final links use the Clang
 driver's ThinLTO; Objective-C++ translation units retain normal Release
 optimization. On Windows, MSVC compiles with `/GL` and links with `/LTCG`;
 the exact authored `app/windows-winui/MainWindow.xaml.cpp` translation unit
-carries a per-file `/GL-` exception only on the selected MSVC 14.51 toolset,
-preserving the existing narrow exception. Generated files and the rest of the
-WinUI implementation are not exempt.
+carries a per-file `/GL-` exception only on the selected MSVC 14.51 toolset.
+Generated files and the rest of the WinUI implementation are not exempt.
 
 Because Bazel 9.2 platform flags replace all previous values of repeatable
 flags, Windows Release platform policy can replace caller `--cxxopt`,
@@ -71,10 +70,12 @@ macOS:
 
 ```bash
 bazel build --config=release //app/macos-appkit:aobus-appkit
-bazel run --config=release //app/macos-appkit:aobus-appkit
 bazel run --config=release //app/tui:aobus-tui
 bazel build --config=profile //app/tui:aobus-tui
 ```
+
+To launch AppKit in Release, use the [isolated product recipe](macos.md#bazel-appkit-product)
+and add `--config=release` after `bazel run`.
 
 Windows:
 

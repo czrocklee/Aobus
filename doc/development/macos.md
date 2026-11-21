@@ -10,9 +10,10 @@ not built. The deployment target is owned by
 `script/ao/macos-toolchain.json`; native compiler setup rejects project triplets
 whose deployment values disagree with that authority.
 
-This page owns platform prerequisites, portal commands, local state, native
-AppKit smoke, and macOS validation. Machine access, source mounts, login/power
-configuration, and persistent shell settings belong in machine-local guidance.
+This page covers platform prerequisites, portal commands, local state,
+AppKit launches and smoke scenarios, and macOS validation. Machine access,
+source mounts, login/power configuration, and persistent shell settings belong
+in machine-local guidance.
 Current AppKit and Core Audio behavior belongs to the
 [frontend](../system/frontend/README.md),
 [session lifecycle](../system/session-lifecycle.md), and
@@ -71,7 +72,6 @@ bazel build --config=release //app/macos-appkit:aobus-appkit  # C++ ThinLTO
 bazel build --config=profile //app/tui:aobus-tui  # sampling with frame pointers
 bazel run //app/cli:aobus -- --help
 bazel run //app/tui:aobus-tui
-bazel run //app/macos-appkit:aobus-appkit
 bazel test //:tests           # ordinary default selection
 bazel test //test/lint:lint_test --nocache_test_results  # fresh result assertions
 ./ao check                    # complete native fastbuild gate
@@ -83,6 +83,8 @@ bazel test //test/lint:lint_test --nocache_test_results  # fresh result assertio
 ./ao setup prettier           # pinned formatter/Node bundle only
 ./ao check deps
 ```
+
+For the desktop app, use the [isolated AppKit launch](#bazel-appkit-product).
 
 `./ao check` runs the same wildcard `bazel test //...` graph as every host, so
 it includes live documentation, formatting, source guardrails, the native-policy
@@ -154,8 +156,10 @@ Managed state defaults to `$HOME/Library/Caches/Aobus`:
 - `tools/venvs/<checkout>/<fingerprint>` — managed Ruff/mypy environment;
 - `tools/libcxx-expected-shim/<llvm-version>` — generated compatibility header.
 
-The Bazel environment repository materializes its own shim copy under its
-repository-local `_state`; ordinary portal tooling uses the managed-state copy.
+The Bazel environment repository stages its own shim under `_state`; the
+[toolchain](bazel.md#macos-toolchain-composition) exposes the header through
+a declared include directory, not that staging path. Ordinary portal tooling
+uses the managed-state copy.
 Both use the same fail-closed transform over the selected LLVM header.
 
 `AOBUS_STATE_ROOT` replaces that base, but does not relocate the [Bazel action
@@ -239,45 +243,53 @@ Neither the binding nor these discovery options prove a write-free checkout.
 
 ### Bazel AppKit product
 
-The explicit `//app/macos-appkit:aobus-appkit` target builds the existing
-incremental AppKit product as `Aobus.app`; it is outside Bazel's default test
-aggregate. After `./ao setup deps` installs the tree's vcpkg manifest, build
-and run from the repository root:
+With the [ready native SDK](bazel.md#direct-bazel-without-the-portal) and an
+active macOS desktop session, build and launch the product from the repository
+root:
 
 ```bash
-bazel build //app/macos-appkit:aobus-appkit
+appkit_root=$(mktemp -d /tmp/aobus-appkit-product.XXXXXX) &&
+mkdir "$appkit_root/library" &&
 bazel run //app/macos-appkit:aobus-appkit -- \
-  --state-root /tmp/aobus-bazel-appkit-state --library /tmp/aobus-bazel-appkit-music
+  --state-root "$appkit_root/state" --library "$appkit_root/library"
 ```
 
-Use separate disposable state and library directories, not your personal data:
-the shipping application opens and scans `--library`, and an unisolated launch
-can use its normal saved state. These are existing shipping arguments, not smoke
-scenario controls.
+The product requires `--library` to name an existing directory; it opens and
+scans that directory. The separate `--state-root` keeps this launch away from
+your saved state. Without these arguments the app can use your personal data;
+do not switch to a personal library during a disposable run. See the [AppKit product graph](bazel.md#appkit-product) for
+build and bundle details.
 
-Standard rules_cc `objc_library` targets compile the mixed C++/Objective-C++
-implementation and the separate entry and smoke units with the existing governed
-Homebrew compiler and SDK. The standard rule selects ARC; mode, warning, SDK and
-external-header policy stay with the [composed toolchain](bazel.md#macos-toolchain-composition),
-not a default Apple/Xcode compiler or a new compiler pin. The bundle action declares the original
-Info.plist template, icon, brand license, catalog inventory and minimum-OS
-metadata; Python retains the existing catalog SDK's host-absolute interpreter
-boundary. Shared desktop launch uses the existing static vcpkg Boost.Process
-and Boost.Filesystem artifacts without another installer.
+A successful development launch does not establish GTK/WinUI feature parity,
+native GUI acceptance, ARM64 validation, or release readiness. This is not an
+installation, signing, or notarization workflow. The
+[AppKit smoke scenarios](#appkit-smoke-scenarios) use a separate target.
 
-This is the same incremental native frontend, not GTK/WinUI feature parity or
-a new GUI smoke framework. The explicit
-`ao_appkit_smoke` bundle builds the same existing smoke scenario
-units and preserves their separate identity and controls; it is not an unattended
-test. The scenario runner below owns the controlled scenarios. This bundle adds no installation,
-signing or notarization workflow. Product build/run support is not native
-GUI acceptance and does not establish ARM64 validation.
+For an optional UI-thread diagnostic, set `checker` to the absolute path of
+Main Thread Checker's dylib from an installed full Xcode; Command Line Tools
+alone do not include it. Inject it into the bundle's native executable, not the
+Bazel server or the launcher script that `bazel run` starts:
+
+```bash
+bazel build //app/macos-appkit:aobus-appkit &&
+bazel_bin=$(bazel info bazel-bin) &&
+appkit_root=$(mktemp -d /tmp/aobus-appkit-product.XXXXXX) &&
+mkdir "$appkit_root/library" &&
+DYLD_INSERT_LIBRARIES="$checker" \
+  "$bazel_bin/app/macos-appkit/Aobus.app/Contents/MacOS/aobus-appkit" \
+  --state-root "$appkit_root/state" --library "$appkit_root/library"
+```
+
+Give `bazel build` and `bazel info` the same options, such as `--config=release`,
+so that `bazel-bin` names the tree holding the bundle you built. For a
+portal-prepared tree, pass its generated rc to both commands
+(`bazel --bazelrc="$tree/configuration/aobus.bazelrc" …`). The diagnostic is
+separate from static analysis, clang-tidy, and sanitizers.
 
 ### AppKit smoke scenarios
 
-`bazel run //app/macos-appkit:aobus-appkit` builds and launches the shipping
-development bundle. Native
-smoke uses `ao_appkit_smoke`, which links the same production objects but owns
+Native smoke uses `ao_appkit_smoke`, which links the same production objects
+as the [shipping product](#bazel-appkit-product) but owns
 disposable scenario controls. The shipping executable does not accept those
 test flags. Both startup paths must preserve the
 [AppKit restoration and geometry ownership contract](../system/session-lifecycle.md#appkit).
@@ -341,18 +353,6 @@ presentation scenario calls accessibility actions directly, which is narrower
 than a VoiceOver session. Validate any claimed OS surface separately in a
 logged-in desktop and report that interactive evidence apart from scenario
 results.
-
-For an optional UI-thread diagnostic, resolve Main Thread Checker's dylib from
-an installed full Xcode and inject it explicitly into the application, not the
-Bazel server. For example, after setting `checker` to that dylib's absolute path:
-
-```bash
-bazel run --run_under="env DYLD_INSERT_LIBRARIES='$checker'" //app/macos-appkit:aobus-appkit
-```
-
-Command Line Tools alone do not include Main Thread Checker. Native Bazel does
-not discover or inject this library for the caller. The diagnostic is separate
-from static analysis, clang-tidy, and sanitizers.
 
 ## Validation
 

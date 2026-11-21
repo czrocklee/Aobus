@@ -106,9 +106,10 @@ the value type converts to `expected`, so the candidate is viable and the
 constraint is checked before the conversion is rejected. There is no way to
 avoid it from the call site.
 
-The macOS portal builds a copy of `__expected/expected.h` with the five C++26
-gates disabled, and the Bazel macOS toolchain composition puts that directory
-ahead of the real one with `-isystem`. Two mechanics are easy to get wrong:
+The macOS bootstrap generates `__expected/expected.h` with five C++26 gates
+disabled. The [Bazel toolchain](bazel.md#macos-toolchain-composition) projects
+that single header and places its include directory ahead of libc++ with
+`-isystem`. Three constraints keep this workaround effective:
 
 - **Only a command-line `-isystem` works.** The real libc++ directory is built
   into the compiler driver rather than passed as an argument. Environment-only
@@ -135,9 +136,9 @@ compile against today, so macOS behaves exactly like the other platforms rather
 than a third way.
 
 To retire it: delete the transform and export from
-`script/ao/macos-vcpkg-bootstrap.sh`, remove the shim directory from the
-Bazel macOS toolchain composition, and confirm the core test suite still builds on
-macOS. A minimal check is a `std::vector<std::expected<T, E>>` that reallocates,
+`script/ao/macos-vcpkg-bootstrap.sh`, remove the declared shim from the macOS
+toolchain and lint fixtures, and confirm that the core test suite and lint
+fixtures still build on macOS. A minimal check is a `std::vector<std::expected<T, E>>` that reallocates,
 compiled with `-std=gnu++26`.
 
 ### 5: `-Wno-c2y-extensions`
@@ -216,9 +217,14 @@ On macOS only, vcpkg supplies Howard Hinnant's `date` library with its default
 features. That build reads the operating system's zoneinfo instead of downloading
 tz data. `TrackFieldFormatter.cpp` names the database through one namespace alias
 and shifts the instant by the zone's offset, so the display code is identical
-for either database and formats only standard types. On macOS, the formatter
-tests derive their expected text from the C library's `localtime_r` rather than
-from `date`, so the substitute is checked against the operating system.
+for either database and formats only standard types.
+
+On the fallback path, the [formatter test](../../test/uimodel/field/TrackFieldFormatterTest.cpp)
+derives its expected text from the C library's `localtime_r`, independently of
+`date`. The test temporarily sets `TZ=:/etc/localtime` and calls `tzset()` so
+that the expectation uses the same operating-system zone file as `date`
+regardless of the incoming `TZ`. It restores the prior `TZ` (or unsets it if
+absent) and calls `tzset()` again when the lookup scope exits.
 
 To retire it: remove the alias and the conditional include, the `date` entry from
 `vcpkg.json`, its imported interface, and its link from `app/uimodel`, then run

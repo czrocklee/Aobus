@@ -182,22 +182,35 @@ Import direction is one-way — core ← policy ← graph ← portal, with core 
 usable alone — and the AST-based package-boundary test
 ([test_ao_package_boundaries.py](../../test/script/test_ao_package_boundaries.py))
 verifies it over every declared source file. Lint fixture inputs are declared
-through the narrow `LINT_FIXTURE_SOURCES` filegroup instead of the broad
-`ao_python_sources` closure, so Portal-side edits do not invalidate cacheable
-fixture/replay actions beyond their explicit dependencies. The moves leave no
-compatibility modules at the former paths and add no marker-based root search.
-Official runfiles resolution and bounded Windows test temporary roots remain
-unchanged.
+through the `//:ao_lint_fixture_sources` filegroup (`LINT_FIXTURE_SOURCES`),
+not the broad `ao_python_sources` closure. Cacheable fixture and replay actions
+use their declared dependencies. Shared native and live-checkout test helpers
+use official runfiles resolution for declared files, not a checkout-marker
+search. On Windows, the Python unit and repository-check entry points try to
+replace Bazel's deep `TEST_TMPDIR` with a short, private temporary directory.
 
 ### Direct Bazel without the portal
 
 Use bare native Bazel commands from the repository root for ordinary
-builds, tests, and launches. No pre-entered Nix shell or generated
-`aobus.bazelrc` is needed on Linux: the tracked [repository rc](../../.bazelrc) supplies the default fastbuild
+builds, tests, and launches. On Linux, SDK resolution needs neither a pre-entered
+Nix shell nor a generated `aobus.bazelrc`: the tracked [repository rc](../../.bazelrc) supplies the default fastbuild
 mode, the GCC default target compiler and both registered native Linux
 toolchains, host toolchain selection and repository-channel clearing, and the
 [`aobus_environment` repository](#architecture) prepares the pinned Nix SDK by
-entering `nix-shell --pure` itself.
+entering `nix-shell --pure` itself. Ordinary Linux `bazel build`, `bazel test`,
+and `bazel run` must not require the caller to enter a Nix shell first.
+
+**Linux test limitation:** SDK resolution does not populate the test `PATH`
+with host fixture tools. On Linux the native audio and GTK test targets inherit
+`PATH`. Their private audio fixture requires `pipewire`, `wireplumber`, and
+`pw-cli` from the Nix store, not arbitrary host installations. The `//:tests` members
+`//test:audio_test` and `//test:audio_platform_test` also look up `dbus-daemon`
+on `PATH`, as does `//test:backend_test`. `//test:systemmedia_test` and
+`//test:gtk_test` instead declare the governed D-Bus daemon. Only the GTK
+fixture needs `Xvfb` on `PATH`; ordinary `//:tests` does not select it.
+If tools are missing, run the affected target from the pinned shell, for
+example `nix-shell --run 'bazel test //:tests'`. Let the wrapper start the
+fixtures; do not substitute personal services.
 
 ```bash
 bazel build --jobs=8 //app/cli:aobus //app/tui:aobus-tui
@@ -222,13 +235,14 @@ interfaces follow each consumer's actual compilation mode, so optimized
 execution tools resolve their own Release interfaces, and fastbuild target
 consumers alias the same Release SDK instead of falling back.
 
-On native macOS and Windows, bare commands still require the existing explicit
-setup and an already provisioned SDK ([macOS setup](macos.md) or
-[Windows setup](windows.md), or `./ao setup deps`); repository fetch never
-installs Python, SDKs, ports or the WinUI runtime. The managed Bazel executable
-is not automatically on `PATH`: use the pinned executable that
-`./ao setup bazel` prints, or a Bazelisk pinned to `.bazelversion`; there is no
-new installer.
+On native macOS and Windows, complete the [macOS host setup](macos.md#host-setup)
+or [Windows prerequisites](windows.md#prerequisites) and provision the SDK
+with `./ao setup deps` (`ao.bat setup deps` on Windows), or select an already
+provisioned SDK. Bare commands need the governed base Python; repository fetch
+never installs Python, SDKs, ports or the WinUI runtime. The managed Bazel
+executable is not automatically on `PATH`:
+use the pinned executable that `./ao setup bazel` prints, or a Bazelisk pinned
+to `.bazelversion`.
 `AOBUS_BAZEL_VCPKG_PREFIX` must explicitly select the installed target-triplet
 prefix — `x64-windows` on Windows, whose host tools come from that same
 triplet, or `x64-aobus-osx`/`arm64-aobus-osx` on macOS —
@@ -251,18 +265,24 @@ $env:BAZEL_VC_FULL_VERSION = $env:VCToolsVersion.TrimEnd('\', '/')
 $env:BAZEL_WINSDK_FULL_VERSION = $env:WindowsSDKVersion.TrimEnd('\', '/')
 ```
 
-Bare SDK admission rejects missing, partial or conflicting selections instead of
-independently choosing the current compiler or latest VS. This deliberately
-narrows the former automatic-discovery contract: an initialized developer shell
-alone, or selectors without its matching compiler environment, is insufficient.
-Upstream auto-configuration still owns compilation; exports made inside a
+Bare SDK admission requires both the complete selector tuple and its matching
+initialized compiler environment. It rejects missing, partial or conflicting
+selections rather than choosing a compiler or Visual Studio installation.
+Upstream auto-configuration owns compilation; exports made inside a
 repository-rule child cannot select another repository's toolchain.
+For shell-backed actions, put Git for Windows' `usr\bin` on `PATH` or set
+`$env:BAZEL_SH` to the full path of `bash.exe` before launching Bazel.
+Finding `git.exe` does not guarantee Bash is on `PATH`. Setting only
+`--repo_env=BAZEL_SH=…` does not select the client's shell for its strict
+action environment.
 
-Changing the host installation selection — Visual Studio, Xcode or SDK
-selection — may require `bazel fetch --force --configure` before repository
-rules observe it; automatic selection is watched host state, not a complete
-registry-drift guarantee. A warm output base reuses the fetched environment
-instead of re-entering Nix on every invocation, but that is not a performance
+After changing the Visual Studio, Xcode or SDK selection, repository
+configuration may need refreshing before it observes the new selection.
+Watched host inputs do not capture every change to an installation. A global
+`bazel fetch --force --configure` is not a host-scoped refresh; see its
+[Windows limitation](#windows-compiler-configuration). A warm Linux output
+base reuses the fetched environment rather than re-entering Nix on every
+invocation, but that is not a performance
 guarantee, and private experiment metrics are not production acceptance. A
 native build or test success is not a lint, hygiene or completion gate;
 `ao check` retains complete validation and standalone `ao check lint` retains
@@ -273,51 +293,11 @@ scoped check-only validation.
 The graph covers static Core utility, LMDB/library, query, coroutine primitives,
 encoded-media readers/containers, complete host-selected Core audio,
 CoreRuntime/AppRuntime, UIModel, the real CLI/TUI entrypoints, and the complete
-Linux GTK application and existing incremental macOS AppKit product with shared
+Linux GTK application and incremental macOS AppKit product with shared
 desktop-launch composition. This does not establish GTK/WinUI feature parity.
 The bounded native Windows slice additionally covers the real WinUI desktop
 product ([WinUI product](#winui-product)); installation, signing, notarization
-and complete release packaging remain outside this build scope. The complete
-`//app/runtime:runtime` library directly owns its implementation sources,
-including `library/MediaTrack.cpp`. Media fixture tests use the regular runtime
-test-header interface and link that actual runtime as `//test:media_fixture_test`.
-The separate pure `//test:media_test` binary retains its media-only dependency
-boundary; production media has no application-runtime dependency.
-
-The ordinary `//lib/utility:utility` library owns `Base64.cpp` alongside the
-other utility implementations. `//lib/utility:path` remains a narrow library for
-the catalog execution tool, and `//lib/utility:unicode_text` keeps ICU behind its
-facade. `//test:utility_test`, exposed by `//:utility_tests`, links the normal
-utility and Unicode-text libraries and reuses the existing algorithm, lifetime,
-path/Unicode, YAML and controlled temporary-file cases. Filesystem fixtures use
-`//test:common_test_support`; the test does not compile product implementation
-sources directly. Existing assertions and the callback-scope concurrency marker
-are unchanged.
-
-Utility coverage also includes the existing atomic-file transaction, platform-directory,
-compatibility, fatal-contract, fixture-self-test and performance-report cases.
-The source-private transaction header has a test-only interface; fatal scenarios
-retain their independent sibling probe rather than entering the test main.
-
-The complete `//app/uimodel:uimodel` library owns all UIModel implementation
-sources, including playback-position interpolation, the subscribed view model,
-time formatting and seek interaction. Runtime and UIModel headers use the regular
-header interfaces. `//test:uimodel_test`, exposed by `//:uimodel_tests`, links
-that full library and reuses the complete UIModel case membership,
-including layout, authoring, presentation, preferences, activity and playback policy.
-Runtime fixtures share the complete `//test:runtime_test_support` owner; async and
-audio support retain their layer owners. Catalogs use the existing message-catalog
-fixture, and decoder/media inputs are declared audio runfiles. On macOS, the UIModel
-time-formatter test temporarily uses `TZ=:/etc/localtime` around its independent
-C-library expectation, restoring the prior environment afterward. This reads the
-same OS zone as the formatter's [date fallback](macos-portability.md#10-date-time-zone-database),
-rather than Bazel's default UTC test environment.
-The private runtime/audio header interfaces and Linux SPA requirements remain
-explicit on their compiling consumers.
-
-These cases use controlled output providers and include real decoder input; they
-do not establish physical or audible playback. Assertions and case markers are
-unchanged. Test-source ownership completeness is not a line-coverage claim.
+and complete release packaging remain outside this build scope.
 
 Build or run the actual frontends explicitly:
 
@@ -331,8 +311,7 @@ bazel build //app/linux-gtk:aobus-gtk
 bazel run //app/linux-gtk:aobus-gtk
 ```
 
-The Linux GTK library owns the existing frontend implementations and links the
-regular desktop-launch, runtime, UIModel, catalog and Linux MPRIS owners.
+The Linux GTK library links desktop-launch, runtime, UIModel and catalog libraries. It also links the MPRIS adapter when system media is enabled.
 The [GTK resource inventory](../../app/linux-gtk/BUILD.bazel) pairs each public
 resource alias with its source file. The [resource rule](../../app/linux-gtk/gresource.bzl)
 generates the GLib XML from those same declared files, so there is no second
@@ -345,36 +324,28 @@ GTK widget tests are not included by this product target, and a headless window
 smoke does not establish Wayland, GPU, physical audio, desktop integration or
 release acceptance.
 
-On native macOS, explicitly build or run the existing AppKit product:
+### AppKit product
 
-```bash
-bazel build //app/macos-appkit:aobus-appkit
-bazel run //app/macos-appkit:aobus-appkit -- \
-  --state-root /tmp/aobus-bazel-appkit-state --library /tmp/aobus-bazel-appkit-music
-```
+The [AppKit target](../../app/macos-appkit/BUILD.bazel) produces `Aobus.app`
+separately from the smoke bundle. The GUI product is outside the default test
+aggregate. For build and launch commands that keep the application away from
+personal settings and library data, see [Run the AppKit product](macos.md#bazel-appkit-product).
+GTK, WinUI and AppKit share the desktop-launch library. On macOS it links
+static Boost.Process and Boost.Filesystem artifacts from the provisioned
+vcpkg SDK.
 
-The [AppKit target](../../app/macos-appkit/BUILD.bazel) produces `Aobus.app`,
-not a replacement smoke executable. Use separate disposable state and library
-paths for development launches; `--library` opens and scans that directory.
-Omitting isolation can use personal application state and library data.
-The GUI product is outside the default test aggregate.
-The shared desktop-launch owner supports Linux and macOS; macOS Boost.Process
-and Boost.Filesystem use static artifacts from the existing vcpkg SDK, without a
-new installer.
-
-The standard rules_cc `objc_library` owns the mixed C++/Objective-C++
-implementation, separate entry unit and smoke sources. Its ARC feature selection
-uses the [governed Homebrew toolchain](#macos-toolchain-composition), which retains
-mode, warning and SDK policy; no default Apple/Xcode compiler is introduced.
-`alwayslink` preserves the complete object-library membership.
-The local [bundle rule](../../app/macos-appkit/bundle.bzl) declares the original
-Info.plist template, icon, brand license, catalog inventory and minimum-OS
-metadata as inputs. Its native Python action retains the catalog SDK's declared
-host-absolute interpreter boundary, not a new hermetic Python toolchain.
-The native product/release gates and the existing
-[AppKit GUI smoke scenarios](macos.md#appkit-smoke-scenarios) are owned by the
-same Bazel graph and the native test routes. This bundle adds no installation,
-signing or notarization workflow.
+Standard rules_cc `objc_library` targets own the mixed C++/Objective-C++
+implementation, separate entry unit and smoke sources. ARC feature selection
+uses the [governed Homebrew toolchain](#macos-toolchain-composition) for mode,
+warning, SDK and external-header policy, not the default Apple/Xcode compiler. `alwayslink`
+keeps all objects in the linked product. The local
+[bundle rule](../../app/macos-appkit/bundle.bzl) declares the Info.plist template,
+icon, brand license, catalog inventory and minimum-OS metadata as inputs. Its
+native Python action uses the catalog SDK's declared host-absolute interpreter;
+it is not hermetic. The graph builds the product and the separate smoke bundle,
+including in Release. The [AppKit GUI smoke scenarios](macos.md#appkit-smoke-scenarios)
+require explicit runs on a logged-in desktop. The graph does not install, sign
+or notarize the bundle.
 Product build/run support alone does not establish GUI or ARM64 acceptance.
 
 ### WinUI product
@@ -410,7 +381,7 @@ requests the installed SDK. It reads the NuGet cache under managed state's
 `n/<lock-id>/p`, which `ao.bat setup deps` restores
 under its lock and completion marker; preparation selects it once complete,
 and `AOBUS_NUGET_PACKAGES_DIR` selects another restored cache. The repository
-rule consumes the existing
+rule consumes
 [packages.config](../../app/windows-winui/packages.config) and dependency
 policy and never restores, installs, or registers versions. The selected
 [Windows source requirements](windows.md#source-checkout-routes), host-local
@@ -437,7 +408,7 @@ becomes an SDK action tool.
 Consequently, a .NET patch that changes loaded assemblies can invalidate these
 native actions; this is intentional, not a hermetic or image-independent cache
 claim. The nested import evaluation
-runs no targets; the existing interface query still runs its SDK initializers
+runs no targets; the interface query runs its SDK initializers
 and dependency-presence checks. Directory observations supplement successful
 imports, but do not establish every missing candidate, empty wildcard or
 evaluation-time file read.
@@ -478,8 +449,8 @@ An action using another record's known projection root without declaring that
 projection also fails. This comparison does not infer a missing dependency
 when both its metadata and its include paths disappear.
 The narrow
-[rules_cc API patch](../../bazel/rules_cc_external_includes.patch) exposes the
-existing `external_includes` field to code generators: on the pinned MSVC
+[rules_cc API patch](../../bazel/rules_cc_external_includes.patch) exposes the rules_cc
+`external_includes` field to code generators: on the pinned MSVC
 toolchain it emits `/external:I`, whereas `system_includes` emits ordinary `/I`.
 It does not change the toolchain flags for other roots. XBFs are separate
 declared outputs. MSBuild projects, logs and intermediate metadata
@@ -497,23 +468,24 @@ signing or install workflow.
 
 CLI retains the complete-runtime/Unicode-only link boundary: no interactive
 catalog or ICU i18n library. TUI embeds the full maintained/pseudo catalog and
-uses the existing UIModel, FTXUI and platform signal/terminal adapters. Linux
-TUI includes the real shared MPRIS adapter; `--system-media=off` is a runtime
-choice, not a reduced build. Linux `//test:systemmedia_test` owns the adapter
-contracts and real-product PTY/private-bus cases together, with declared product
-runfiles and the governed D-Bus daemon. It joins the Linux test aggregate;
-`//:tui_system_media_tests` remains a convenience selection. Benchmarks stay
-outside ordinary tests. Help/version smokes alone do not prove an interactive
+uses UIModel, FTXUI and platform signal/terminal adapters. On Linux the
+Bazel feature `--//bazel:system_media_enabled` defaults to `true` and controls
+whether TUI and GTK link the shared MPRIS adapter. Passing `--system-media=off`
+to an enabled TUI prevents the adapter from starting; it does not change the
+build. `//test:systemmedia_test` owns the adapter contracts and real-TUI
+PTY/private-bus cases, with declared product runfiles and the governed D-Bus
+daemon. It is a fixed member of `//:tests` and compatible only on Linux with
+system media enabled; `//:tui_system_media_tests` selects the same executable.
+Benchmarks stay outside ordinary tests. Help/version smokes alone do not prove an interactive
 terminal session or audible playback.
 
-The [root BUILD](../../BUILD.bazel) owns the `//:tests` aggregate — the
-default test closure that [compile-contract
-verification](#compile-contract-verification) expands — and the existing
-subsystem convenience suites. Its membership is non-configurable; platform
-compatibility belongs to the member executables.
-[test/BUILD.bazel](../../test/BUILD.bazel) owns complete case membership at
-module boundaries, not migration milestones. Ordinary tests use
-`bazel test //:tests`; products are selected by their native labels.
+The [root BUILD](../../BUILD.bazel) owns the ordinary `//:tests` aggregate and
+subsystem convenience suites. Aggregate membership is non-configurable;
+platform compatibility belongs to the member executables.
+[test/BUILD.bazel](../../test/BUILD.bazel) declares test membership by module.
+Ordinary tests use `bazel test //:tests`; products are selected by their
+native labels. [Compile-contract verification](#compile-contract-verification)
+analyzes the broader completion roots.
 `ao check` runs the wildcard `//...` graph, not only the ordinary aggregate, and
 the declared completion roots remain the selections the sanitizer, concept and
 lint routes read. Raw sanitizer labels remain explicitly selected,
@@ -535,23 +507,24 @@ bazel build //test:gtk_test //test:backend_test  # GTK is Linux-only
 bazel build --config=release //test:ao_perf_baseline //test:ao_tui_bench
 ```
 
-On Linux the declared context-specific test wrapper owns the Xvfb display,
-private no-activation session bus and complete headless child profile before GTK selects
-its accessibility and input-method backends. It never adopts personal desktop endpoints or the
-caller's desktop bus. An explicit `bazel test //test:gtk_test` or
-`bazel test //test:backend_test` starts those private fixtures automatically from
-the target's declared context, so the caller needs only the ready native tools
-and SDK, not a hand-started display or session bus; separate shards still need
-separate displays and buses to avoid popup round-trip races and canonical MPRIS
-name contention.
-GTK retains its original main, accessibility/rendering profile and GApplication
+On Linux an explicit `bazel test //test:gtk_test` or
+`bazel test //test:backend_test` starts only the private fixtures declared by
+that target's context. Both get a private no-activation D-Bus session and
+private audio services. Only GTK gets an owned Xvfb display and a headless
+child profile set before GTK selects its accessibility and input-method
+backends. Supply the [native SDK and fixture tools](#direct-bazel-without-the-portal),
+not hand-started services. GTK never adopts personal desktop endpoints or
+the caller's bus; separate GTK shards need separate displays and buses to avoid
+popup round-trip races and canonical MPRIS name contention.
+The GTK test has its own main, accessibility/rendering profile and GApplication
 probe. Native backend/hardware filters require the same admission as any native
-test route;
-compilation does not authorize real playback. Performance executables stay manual,
-with independent entry points; plain `opt` compilation is not the managed
-Release IPO performance baseline. AppKit smoke and the other WinUI probes likewise retain their existing independent
-native entry points and bundle/resource identities, outside unattended selection;
-only the declared WinUI automation test joins the desktop-enabled wildcard.
+test route; compilation does not authorize real playback. Performance executables
+are manual, with independent entry points; plain `opt` compilation is not the
+managed Release IPO performance baseline. AppKit smoke and the WinUI GUI
+probes have independent native entry points and bundle/resource identities.
+They require explicit runs, except that desktop-enabled Windows wildcard tests
+run `//test:winui_uia_test` on an authenticated interactive console. The two
+WinUI console probes run without that desktop opt-in.
 
 Library/doc/WinUI source inputs use exact declared runfiles, including manifest-only
 Windows execution. The WinUI source-inspection case receives a manifest of authored
@@ -560,9 +533,8 @@ Explicit labels retain normal Bazel meaning: `//...` is not rewritten and may
 be expensive on a shared source filesystem.
 
 Audio includes every Core implementation for the selected host, not just
-NullBackend. Common and bounded native SDK tests retain existing assertions
-and case markers. Core discovery and provider contracts join
-`//test:audio_platform_test`; the native backend cases have the explicit
+NullBackend. `//test:audio_platform_test` covers Core discovery and provider
+contracts; the native backend cases have the explicit
 `//test:backend_test` owner. Ordinary Core coverage includes
 ALSA null/missing-device calls, synthetic Core Audio UID lookup and native
 provider construction, not only pure fakes; live endpoint and service requirements
@@ -575,8 +547,8 @@ platform build root supplies the per-configuration default tree named
 `bazel-<config>`. Source-contained trees and ancestors
 of the checkout are rejected. An explicitly selected tree is mode-neutral: the
 selected profile, not the tree, picks the compilation mode, and the composite
-sanitizer check runs its normal fastbuild completion and the managed sanitizer
-profile in that one selected tree.
+sanitizer check runs normal completion first (fastbuild by default, Debug with
+`--config debug`), then the managed sanitizer profile in that same tree.
 Do not reconfigure a tree during another invocation or remove an active tree or
 lock: the portal serializes writers and Bazel owns its server/output-base lock.
 
@@ -584,30 +556,29 @@ The [workspace launcher](../../script/ao/portal/bazel_workspace.py) writes:
 
 - `<tree>/configuration/request.json`: mode-neutral native host, selected
   provider prefix and the original checkout source;
-- `<tree>/configuration/aobus.bazelrc`: launch environment, output roots
-  and startup `--max_idle_secs=900`;
+- `<tree>/configuration/aobus.bazelrc`: launch environment, output roots,
+  startup `--max_idle_secs=900`, and a disk-cache path only when explicitly overridden;
 - `<tree>/build.log`: noninteractive invocation output.
 
 Each tree has an explicit `--output_base=<tree>/state/output`; its server,
 analysis and materialized repositories stay separate. A shared native
 `--output_user_root=<managed-state>/bazel` lets Bazel select installations by its
 embedded key, not just the version string. Repository downloads use Bazel's
-default content-addressed cache under that shared root, and action disk caching
-remains shared; the repository rc keeps the repository contents cache disabled.
+default content-addressed cache under that shared root. The [shared local action
+cache](#shared-local-action-cache) has a separate location; the repository rc
+keeps the repository contents cache disabled.
 Install-base GC is disabled as a retention choice: Bazel re-extracts a missing
-installation for an existing tree. The portal does not migrate or clean up
-legacy installations or former per-tree `state/cache/repos` downloads.
-Native invalid-install repair remains Bazel behavior. Convenience links use
-`<tree>/bazel-`.
+installation and owns invalid-install repair. Convenience links use
+`<tree>/bazel-`. Bazel keeps external repository state in its output base.
 
-Repreparing an older tree selects the new `state/output` child and starts new
-server/analysis state without moving or deleting its old hashed output base or
-installation. It does not preserve the old JVM's warm analysis state. Repository
-state remains in Bazel's external repository area, not a Python-refreshed tree.
-New servers use the 900-second idle timeout on all hosts/profiles. Existing
-servers retain their original timeout until exit; the portal does not force a
-restart. Action/disk caches survive exit, but the next invocation pays startup
-and analysis warm-up costs.
+To reuse a tree prepared with a legacy layout, reprepare it before running
+Bazel. Preparation selects `state/output` without moving or deleting the
+legacy hashed output base, installation or `state/cache/repos` downloads.
+Bazel does not reuse the legacy server's in-memory analysis state.
+The launch configuration requests a 900-second idle timeout for new managed
+servers on all hosts and profiles. Preparation itself does not stop or restart
+an existing server. On-disk caches survive server exit, but the next invocation
+pays startup and analysis warm-up costs.
 
 After preparation, use the pinned executable with the generated rc from the
 same checkout for diagnostic work:
@@ -647,12 +618,16 @@ within each output base and refreshed when its watched inputs change.
 It runs the [environment helper](../../script/ao/portal/bazel_environment.py)
 and publishes a mode-neutral host environment. Linux enters the pinned
 `nix-shell --pure` itself, independent of the caller's Nix environment;
-Nix may download or build missing pinned store outputs. macOS reuses the existing
-Homebrew Python/LLVM/pkgconf and the selected SDK; Windows reuses the governed
-base Python and captures the Visual Studio environment through the existing
-batch. Native macOS/Windows discovery never installs SDKs, ports, Python or
-runtimes. The Python discovery helper itself only validates ready inputs;
-an invalid explicit selection fails without fallback. Every projection repository
+Nix may download or build missing pinned store outputs. macOS uses the installed
+Homebrew Python, LLVM and pkgconf and the selected SDK; Windows uses the governed
+base Python. For managed launches, the [Windows portal](../../script/ao/portal/windows_portal.py)
+runs the [build-environment batch script](../../script/ao/windows-build-env.bat)
+and captures the x64 Visual Studio environment before launching Bazel. For bare
+launches, the environment helper validates the caller's initialized x64
+environment and [three matching selectors](#direct-bazel-without-the-portal);
+it does not run the batch script. Native macOS/Windows discovery never installs
+SDKs, ports, Python or runtimes. The Python discovery helper itself only validates
+ready inputs; an invalid explicit selection fails without fallback. Every projection repository
 — dependencies, tools, the Unix compiler toolchain and the lazy lint SDK/policy —
 consumes that shared `environment.json` and its recorded interpreter instead of
 per-invocation portal state.
@@ -668,7 +643,7 @@ input contract:
   restored on exit, not assigned through launcher globals.
 - [Providers](../../script/ao/portal/bazel_providers.py) admit Nix report identity
   and installed vcpkg status/features; [library interfaces](../../script/ao/portal/bazel_dependencies.py)
-  apply reviewed metadata repairs and ABI checks through the existing artifact
+  apply reviewed metadata repairs and ABI checks through the artifact
   adapter and header-ownership owner.
 - [Host tools](../../script/ao/portal/bazel_host_tools.py) observe selected
   executables and their declared ICU/Python/runtime inputs.
@@ -687,8 +662,8 @@ input contract:
 - [Lint SDK admission](../../script/ao/portal/bazel_lint_sdk.py) validates the ready
   LLVM tools, archive closure and ABI interface, independently of product SDK imports.
 - The [launcher](../../script/ao/portal/bazel_workspace.py) owns managed Bazel,
-  launch/output/cache selection, the governed `build`/`clean` invocations and
-  logs.
+  output roots, explicit action-cache overrides, the governed `build`/`clean`
+  invocations and logs. The repository rc selects the default action cache.
 
 Native observers return data directly, without temporary BUILD/native-path
 programs for the resolver to reread. The
@@ -713,10 +688,10 @@ their own Debug or Release configuration. On Linux and on Windows with vcpkg,
 Debug and Release share a sparse header projection for the same package only
 when the complete, nonempty header records (including source paths) and ordered
 include roots match. A mismatch keeps the two projections separate. macOS does
-not share them. The shared files keep their existing Release paths under
-`artifacts/_headers/` in `release/` (or `catalog-release/` for the catalog SDK).
-On Windows only Debug uses the Release header-only target; Release and fastbuild
-keep their original compile interfaces. Libraries, defines, manifests and mode
+not share them. Shared files live under `artifacts/_headers/` in `release/`
+(or `catalog-release/` for the catalog SDK). On Windows only Debug depends on
+the Release header-only target; Release and fastbuild use the standard Release
+compile interface. Libraries, defines, manifests and mode
 guards are never shared by this comparison. It does not rehash header contents.
 WinUI remains independent and lazy, using the same Starlark mode selection.
 The resolver returns no generated-file, destination-link or alias program.
@@ -730,7 +705,7 @@ membership, negative probes and declared tools. Python audit events supplement
 it but are neither a complete trace of pkgconf/native reads nor an OS sandbox.
 Repository subprocesses receive a closed environment: an empty `ctx.execute`
 environment alone would inherit client variables. Isolated Python uses `-B` and
-a directory `pycache_prefix` under the existing repository-owned `_tmp`.
+a directory `pycache_prefix` under the repository-owned `_tmp`.
 Bazel clears that root before each new fetch, so source-backed imports do not
 consume source-tree bytecode caches. Source/directory and actual dynamic-input
 watches remain; explicit sourceless bytecode is not disabled or silently ignored.
@@ -754,6 +729,10 @@ and materialized payloads remain Bazel inputs. Bazel owns and watches Windows
 file-copy fallback without requiring symlink privileges. Concurrent provider
 mutation during resolution/build is unsupported.
 
+[Production Core media](../../lib/media/BUILD.bazel) does not depend on the
+application runtime. Runtime integration tests can link both layers without
+adding a dependency to the media library.
+
 ## Imported interfaces and compilation
 
 The governed repositories provide:
@@ -768,9 +747,9 @@ The governed repositories provide:
   imports cover Debug/Release
   independently of the target provider mode;
 - `@aobus_toolchain`: the governed Unix compiler identities — both pinned Nix
-  Linux compilers or the selected macOS LLVM SDK; Windows omits this repository
-  and uses rules_cc's default MSVC
-  auto-configuration;
+  Linux compilers or the selected macOS LLVM SDK. The extension declares this
+  repository on all hosts, but ordinary Windows compilation uses rules_cc's
+  default MSVC auto-configuration instead;
 - `@aobus_winui_sdk`: the installed WinUI NuGet SDK's headers, bootstrap sources,
   import libraries, runtime payload and generation tools, projected lazily from
   the restored NuGet cache for the [WinUI product](#winui-product) and its shared projection.
@@ -839,10 +818,10 @@ metadata-token preconditions, ABI defines, and native repair entries. Narrow
 producer-format rules derive the expected metadata version shape from the
 observed provider — mimalloc's major/minor, the Nix ALAC release part, udev's
 major number — and a mismatch or unrecognized format fails. Catalog ICU takes
-its version from the same existing contract entry and the actual provider,
+its version from the same contract entry and the actual provider,
 with header macros and the genrb report required to match; the core/tools
 split and static tool adjacency remain. A coherent SDK upgrade accepted by the
-shared policy consequently passes these unchanged structural checks without a
+shared policy consequently passes the same structural checks without a
 Bazel-side version edit — this is intentional. It is not a claim that the
 structure certifies any future version's API/ABI compatibility: governed
 upgrades still run the affected native validation. Structural preconditions
@@ -853,14 +832,20 @@ overlay ports](dependency-governance.md#temporary-overlay-ports)); the Bazel
 header API checks are not proof of the undefined-behavior fix or of upstream
 provenance.
 
+A target that compiles against private runtime or audio headers must declare
+its header interface explicitly. Tests use `//app/runtime:test_headers` or
+`//lib/audio:test_headers` for those interfaces, not a broad include root.
+The atomic-file transaction header also has a test-only interface in
+`//lib/utility:test_headers`.
+
 Non-definition compile flags are closed requirements, not generic `PACKAGE_COPTS`
-for all consumers. Windows `/permissive-` is satisfied globally; the reviewed
-PipeWire and admitted x86_64 SSE values are the named consumer sets of
-[clang_linux_policy.bzl](../../bazel/clang_linux_policy.bzl) and belong to
-their compiling consumer closures, with no ISA flags on other CPUs.
-New unsatisfied thread/PIC/ISA
-requirements fail rather than disappear. Defines and link requirements retain
-their own transitive semantics.
+for all consumers. Windows `/permissive-` is satisfied globally. On Linux,
+each compiling consumer of PipeWire SPA headers must declare the named
+`PIPEWIRE_SPA_COPTS` set in [compiler policy](../../bazel/compiler_policy.bzl);
+a transitive dependency does not pass on those options. The named
+`GTK_HEADER_SSE_COPTS` set applies to the x86_64 GTK header consumers, not
+other CPUs. Unsatisfied thread/PIC/ISA requirements fail rather than disappear.
+Defines and link requirements retain their own transitive semantics.
 
 ## Compiler policy ownership
 
@@ -886,7 +871,9 @@ action environments and requires Windows manifest validation; it contains no
 raw Unix compiler/linker parameters, and supplies the Windows project profile
 only through the upstream auto-configuration inlets of
 [Windows compiler configuration](#windows-compiler-configuration).
-Launch/server/cache configuration belongs to the launcher.
+The repository rc also sets the shared action-cache default and size target.
+The launcher selects managed server and output roots and applies an explicit
+portal cache override.
 Repository clearing is separate from action clearing: `--repo_env==CPLUS_INCLUDE_PATH`
 unsets the variable, rather than assigning an empty path entry. Linux target and
 execution actions also leave `LIBRARY_PATH` unset: GCC interprets an empty value
@@ -909,8 +896,8 @@ environment clearing or control warning-feature selection.
 [REPO.bazel](../../REPO.bazel) requests `aobus_warnings` and the standard
 `treat_warnings_as_errors` feature for standard rules_cc compiling targets in
 the main repository. The Unix platform configurations disable the standard
-feature for both target and host consumers, preserving the existing
-`aobus_warnings`-owned Unix warning policy; on Windows only the standard
+feature for both target and host consumers, so `aobus_warnings`
+owns the Unix warning policy; on Windows only the standard
 feature supplies `/WX`, for main-repository compiling targets only, and
 fixture targets disable both feature names. Ownership follows the compiling
 target, not the source filename, suffix, generator or macro origin. Generated
@@ -964,10 +951,11 @@ interfaces, not arbitrary prefix exemptions.
 The headerless [`//bazel:compile_contract`](../../bazel/BUILD.bazel) always enables
 GSL checking for utility headers and pure probe support. Actual `compilation_mode`
 selects `TERMINATES` for `opt`, `ASSERTS` for `dbg`/`fastbuild`, independently of
-the prepared provider. Each registered Unix toolchain records its own
-compiler and SDK selection in `identity.json` and declares the selection and
-its tool/header inputs through toolchain policy; it does not rely on a consumer macro or library dependency. Windows
-records no local compiler identity ledger.
+the prepared provider. The registered Unix toolchains declare their inputs
+directly rather than relying on a consumer macro or library dependency. Linux
+records hashes for the selected Nix compiler inputs; macOS records the
+[installed tool and SDK selection](#macos-toolchain-composition) in `identity.json`.
+Windows records no local compiler identity ledger.
 
 Consumer BUILD owners reference the named compile-policy sets the policy
 modules export — GTK header SSE, PipeWire SPA, test warning and WinUI copts —
@@ -996,16 +984,16 @@ external-target exclusion.
 
 The [rule-based Linux toolchain](../../bazel/linux_toolchain.bzl) uses the
 pinned rules_cc, with no additional compiler manager/pin, rules_nixpkgs or
-toolchains_llvm. The [pinned shell's report](../../shell.nix) observes both
-original Nix compiler wrappers — GCC 16 and Clang 22 — with unchanged pins.
+toolchains_llvm. The [pinned shell's report](../../shell.nix) identifies both Nix compiler
+wrappers: GCC 16 and Clang 22.
 The repository rc defaults the Linux target to `--compiler=gcc` and registers
 both real toolchains (`registered_nix_gcc`/`registered_nix_clang`) keyed by
 the `--compiler` value: `bazel build/test/run --compiler=gcc|clang` selects the
 actual target compiler, and an unknown value fails toolchain resolution rather
-than silently falling back to GCC. Windows has no such option; its MSVC
-auto-configuration is unchanged. Preparation does not probe
-`CC`/`CXX`: SDK tools, standard-library/builtin roots and Nix wrapper hardening
-metadata come from that report. Execution configurations do not inherit the
+than silently falling back to GCC. The selector is Linux-only. Preparation
+uses the report to select SDK tools and read Nix wrapper hardening metadata.
+It probes each selected wrapper for its standard-library and builtin include
+paths, not the ambient `CC` or `CXX`. Execution configurations do not inherit the
 target `--compiler` value: the registered native execution platform pins
 `--compiler=gcc` on Linux, so compiled execution tools — the catalog compiler
 and the LLVM lint checker — build with GCC independently of the selected target
@@ -1048,8 +1036,7 @@ Release providers.
 
 ## Release and sampling profiles
 
-Release and `profile` are named managed profiles over the ordinary
-`fastbuild`/`opt` modes; they are selected with the `release`/`profile` flavors
+Release and sampling both use Bazel's `opt` compilation mode. Select them with the `release` and `profile` flavors respectively
 (`--config release|profile` for `./ao check contracts`), never through
 Bazel's generic `thin_lto`/`full_lto` features, and the repository rc selects
 them with appendable `--features` entries so user and baseline features are
@@ -1067,7 +1054,7 @@ Release instead uses its governed platform flags.
   Clang uses ThinLTO (`-flto=thin`) with its vtable-localization workaround;
   neither enables Bazel's separate ThinLTO index/backend pipeline. Final link
   actions exclude archive
-  actions from the IPO policy. Apple uses the existing `lto_object_path`
+  actions from the IPO policy. Apple uses the `lto_object_path`
   mechanism; the generic Apple `thin_lto`/`full_lto` indexing is not used.
 - GCC Release IPO links set `MAKE` to a declared GNU make helper from the
   [pinned shell report](../../shell.nix), rather than searching the restricted
@@ -1075,10 +1062,9 @@ Release instead uses its governed platform flags.
   `gcc/runtime/make`, outside compiler identity and `native_paths` inputs.
   rules_cc conservatively includes it in other GCC linker inputs too, but
   only Release IPO activates `MAKE`; ordinary compiler/archive inputs do not
-  acquire it. Existing `-flto=auto` is unchanged: each link chooses its own
-  CPU-based parallelism, while Bazel `--jobs` limits Bazel actions, not the
-  LTRANS subprocess budget. Clang's lld-driven links need no helper; macOS
-  and Windows are unchanged.
+  acquire it. With `-flto=auto`, each link chooses its own CPU-based
+  parallelism; Bazel `--jobs` limits Bazel actions, not the LTRANS subprocess
+  budget. This helper is specific to Linux GCC Release IPO.
 - Windows Release applies MSVC `/GL` at compile and `/LTCG` at link through
   target-platform flags, with the exact per-file `/GL-` exception for the
   authored `app/windows-winui/MainWindow.xaml.cpp` on the selected MSVC 14.51
@@ -1106,11 +1092,9 @@ link and runtime gates. Release evidence does not qualify the sampling profile.
 
 The [module graph](../../MODULE.bazel) fetches the pinned `apple_support`
 implementation from BCR. The [local composition](../../bazel/macos_cc_config.bzl)
-loads its public `cc_toolchain` macro rather than copying Apple action/argument
-implementations. Existing Homebrew LLVM, SDK admission, deployment and expected-header
-shim remain authoritative; this is not registration of an automatically selected
-Apple Clang toolchain. The existing `registered_llvm22` label and default-toolchain
-rejection guards are unchanged.
+loads its public `cc_toolchain` macro. Aobus registers `registered_llvm22`
+with the admitted Homebrew LLVM, SDK, deployment target and expected-header
+shim, and disables automatic Apple Clang toolchain selection.
 
 The [small external patch](../../bazel/apple_support_llvm.patch) selects an explicit
 installed LLVM compiler while preserving its full child `argv[0]`, and lets the
@@ -1127,11 +1111,10 @@ when the upstream pin declares the dependency itself.
 A local instance of the public `apple_genrule` bootstraps the external wrapper
 source with the selected LLVM at the project C++26 standard through the
 [macOS policy](../../bazel/clang_macos_policy.bzl) entry flags, without
-resolving the C++ toolchain it constructs. The host tool no longer selects a
-separate language standard. Its explicit command preserves the admitted developer, SDK,
-linker and host target selection. Original compiler/tool bytes and the admitted
-SDK selection metadata are declared inputs, not compiler source arguments. The wrapper is
-not compiled during repository fetch.
+resolving the C++ toolchain it constructs. Its explicit command uses the
+admitted developer, SDK, linker and host target selection. Compiler/tool bytes
+and admitted SDK selection metadata are declared inputs, not compiler source
+arguments. Repository fetch does not compile the wrapper.
 The repository also projects the selected Apple linker and wrapper postprocessors;
 `xcrun`, `dsymutil` and Apple `strip` remain declared tool inputs. Ordinary
 archives and explicit strip actions retain the selected LLVM tools. These are
@@ -1152,15 +1135,13 @@ Windows: `identity.json` carries small schema-2 selection metadata — the
 selected SDK path with its `xcrun`-reported version and build, LLVM root and
 version, deployment target, and the selected tool, linker and developer-directory
 paths. Bounded SDKSettings watches refresh those SDK version/build observations.
-It contains no SDK, libc++ or compiler-resource byte inventory. The
-projection binds the selected tools as tool inputs and the linker plugin and
-governed shim header as explicit file inputs; the aggregate identity input
-groups that small metadata with those two files. Compile and lint actions use
-the shim's declared include directory relative to the execution root. The
-staging path under `output_base` is not a compiler argument or SDK identity.
-Moving a tree therefore does not change the key, but changing the header does.
-Implicit installed SDK content
-is trusted: a same-path, same-version rewrite of its headers is not guaranteed
+It contains no SDK, libc++ or compiler-resource byte inventory. The projection
+declares the selected tools, linker plugin and generated shim header as inputs.
+Compile and lint actions find the header through its execution-root-relative
+include directory. Moving the identical shim to another staging directory under
+a new output base does not by itself invalidate those actions: the staging path
+is neither an argument nor part of `identity.json`. Changing the header bytes
+does invalidate actions that consume it. Implicit installed SDK content is trusted: a same-path, same-version rewrite of its headers is not guaranteed
 to invalidate actions automatically. A governed SDK
 upgrade must change the admitted identity and the affected cache inputs;
 refetching unchanged metadata or selecting a new output base over the same disk
@@ -1186,8 +1167,7 @@ auto-configuration. There is no local Windows compiler definition, probe, SDK
 identity ledger or materialization; the governed Linux and macOS toolchains
 retain their own identity records. The [repository rc](../../.bazelrc) overrides the generic
 `BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1` guard with `0` in its Windows
-configuration so rules_cc registers the default MSVC toolchain, and it no
-longer registers `@aobus_toolchain//:registered_msvc`.
+configuration so rules_cc registers the default MSVC toolchain.
 
 This follows the installed-SDK trust boundary that the macOS toolchain also
 uses; only the Linux Nix toolchains retain byte ledgers. Selected versions,
@@ -1246,21 +1226,22 @@ environment: `BAZEL_VC` from `VSINSTALLDIR` plus `VC`, `BAZEL_VC_FULL_VERSION`
 from `VCToolsVersion` and `BAZEL_WINSDK_FULL_VERSION` from `WindowsSDKVersion`.
 Missing captured metadata, or an explicit caller selector conflicting with
 that environment, fails preparation; it does not guess or silently reselect.
-Existing Visual Studio bootstrap/SDK installation remain authoritative. Bare
+The Visual Studio installation and its SDK supply the compiler environment. Bare
 Windows callers must supply the complete standard selector tuple and a matching
 initialized x64 compiler environment, as shown in
 [direct entry](#direct-bazel-without-the-portal). SDK admission checks the original
 client selection before relying on upstream auto-configuration; it does not
 attempt to influence that independent repository by exporting child variables.
 
-The existing `compiler_environment` request capture (original `INCLUDE`,
-`LIB`, `PATH`, `TMP` and VC/SDK selectors) stays for WinUI and dependency
-admission; it is not a compiler-policy channel, and no whole-SDK byte ledger
-or hermetic SDK claim is made. The Windows `mt.exe` manifest-tool helper is
-owned by governed host-tools discovery; manifest tools and validation
-contracts are unchanged. Repository fetch omits the Unix compiler repository
-on Windows, fetches the remaining SDK repositories and may reevaluate them, so
-use ordinary build/test invocations to assess warm repository reuse.
+The portal records `INCLUDE`, `LIB`, `PATH`, `TMP` and the original toolset and SDK fields in `request.json` under `compiler_environment` for WinUI and dependency admission. The generated launch rc supplies the three derived Bazel selectors as `--repo_env` options. The capture is
+not a compiler-policy channel, a whole-SDK byte ledger or a hermetic SDK.
+Governed host-tools discovery owns the Windows `mt.exe` manifest-tool helper.
+Ordinary Windows builds must not require a Unix compiler.
+
+**Windows refresh limitation:** Do not use the untargeted `bazel fetch --force --configure`
+command to refresh a Windows SDK. It selects the Unix compiler repository
+as well, and that repository's probe rejects Windows. Use ordinary builds or
+tests to assess warm repository reuse, not to verify a forced refresh.
 
 ## Compile-contract verification
 
@@ -1277,9 +1258,7 @@ source checkout. UNC/mapped-network sources remain rejected, including by this
 analysis entry. `--path` selects an external host-local Bazel tree as for other
 Bazel commands, including its provisioned vcpkg triplet.
 
-`check contracts` accepts the `--config` flavors — `debug`, `release`, `profile` and
-the `asan`/`tsan` analysis profiles — plus path, provider prefix and jobs,
-not labels or forwarded Bazel options. After provider preparation, the
+`check contracts` defaults to `fastbuild`. Linux and macOS also accept `debug`, `release`, `profile`, `asan` and `tsan`; Windows also accepts `debug`, `release` and `asan`, but not sampling or TSan. Other options select the path, provider prefix, jobs and Linux compiler. It accepts no labels or forwarded Bazel options. After provider preparation, the
 [shared checker](../../script/ao/policy/bazel_contract.py) builds the folded
 [native policy facts](#in-graph-native-policy) (`//:native_policy_inputs`)
 under the caller's frozen prepared configuration and validates them with the
@@ -1294,13 +1273,11 @@ satisfy it). The single configured `DefaultInfo` output file is located by one
 exact `cquery --output=files` of the facts target, never by guessing an
 output-tree layout; the declared output filename stays the Starlark macro's
 contract. The managed sanitizer route forwards the caller's trusted remote
-cache to the facts build; the standalone CLI passes none. That
-universe replaces the retired query-expanded default-tests root without silent
-weakening: the folded portable suites additionally own the backend, CLI, lint
-and TUI members plus the conditional GTK suite, product roots are analyzed on
-every host instead of macOS native actions only, and the retired
-native-process harness members own no compile actions of their own while their
-executables stay covered by the product roots.
+cache to the facts build; the standalone CLI passes none. The test roots
+cover the backend, CLI, lint and TUI members, plus GTK and system-media tests
+when enabled on Linux. Native process tests own no C++ compile actions of
+their own; they reuse the TUI executable and WinUI probes covered by the
+product roots.
 
 Checks cover effective C++ standard (`-std=c++26` or `/std:c++latest`), mode,
 warnings, GSL, imported system includes and local SPA requirements; SPA checks
@@ -1342,18 +1319,18 @@ The root `//:native_policy_inputs` producer folds the native action facts of the
 completion roots into one JSON file per configuration and exports the declared
 SDK compiler inputs as an output group. It never consumes a dependency's files,
 so building it forces no C++ compilation. The root `//:native_policy` `py_test`
-consumes that file and reuses the existing compile/link/archive flag oracles,
-the lexical Catch2 registration detector, the authored-C++ orphan audit over
+consumes that file and uses the same compile, link and archive flag checks as
+standalone verification. It also runs the lexical Catch2 registration detector,
+the authored-C++ orphan audit over
 the tracked and untracked non-ignored Git manifest
-([test ownership](#test-ownership)), and the stale-`NOLINT` oracle. No test runs
-Bazel, a query or an aquery, and no graph schema is introduced. All three native
+([test ownership](#test-ownership)), and the stale-`NOLINT` check. The test does
+not invoke Bazel or run queries against the graph. All three native
 hosts run the ambient policy; Linux additionally folds one Debug projection of
-the same producer into that test, which is the Debug policy the former sanitizer
-analysis checked.
+the same producer into that test.
 
 The Linux-only `//:native_driver_policy` `py_test` consumes the same fastbuild
 and Debug fact files plus the `native_policy_compilers` output group, which names
-the declared SDK compiler file, and runs the existing representative Nix
+the declared SDK compiler file, and runs the representative Nix
 compiler `-###` oracle. It executes no compiler front end and issues no query.
 `ao check contracts` remains the standalone portal entry
 ([compile-contract verification](#compile-contract-verification)).
@@ -1378,12 +1355,11 @@ validation](test/concurrency-and-sanitizer.md) and the [coverage
 workflow](test/coverage-workflow.md). Sanitizer and coverage profiles use the
 same `--path`/`BUILD_DIR` selection; without an explicit selection the
 per-configuration default tree names apply, and the composite sanitizer check
-uses one selected tree for its normal fastbuild completion and the managed profile.
+uses one selected tree for normal completion and the managed profile.
 
 ### Sanitizer profiles
 
-`./ao check --asan` and `./ao check --tsan` run normal fastbuild completion first,
-then the managed fixed sanitizer scope in the same selected tree. `./ao check contracts`
+`./ao check --asan` and `./ao check --tsan` run normal completion first (fastbuild by default, Debug with `--config debug`), then the fixed Debug-based sanitizer scope in the same selected tree. `./ao check contracts`
 accepts `--config asan|tsan` for analysis only. Native explicit builds/runs use
 Bazel's named rc profiles and remain caller-owned; building a test does not
 admit its sanitizer runtime.
@@ -1399,15 +1375,13 @@ Managed sanitizer completion accepts no labels, test filters, or forwarded
 Bazel arguments: narrowing the instrumentation scope would silently change
 what was measured. The [root
 BUILD](../../BUILD.bazel) owns the suites: `//:asan_tests` covers Core, the
-application layer, CLI, TUI, Linux GTK and Linux system media; `//:tsan_tests`
-covers Core, the application layer and Linux GTK. The managed test adds the
+application layer, CLI and TUI; `//:tsan_tests` covers Core and the application layer. Both also select GTK tests on Linux when GTK is enabled; ASan additionally selects Linux system-media tests when that feature is enabled. The managed test adds the
 `//:check_native_tests` backend selection through `cquery`, so every host adds
 the native backend suite; a raw `//:asan_tests` invocation alone therefore
 excludes the backend. Manual GUI and performance
-targets and hidden hardware cases stay outside the sanitizer scope, and the existing C++
-fatal-contract sibling probes remain in the transitive test dependencies.
-Under the ASan profile the TUI cover-art target sets `STBIR_NO_SIMD`, a
-retained local parity decision.
+targets and hidden hardware cases stay outside the sanitizer scope. The C++
+fatal-contract sibling probes are transitive test dependencies. The ASan
+profile sets `STBIR_NO_SIMD` on the TUI cover-art target.
 
 Bare commands select a profile through the repository rc, not a compilation
 mode: `-c asan` is invalid because Bazel accepts only `dbg|opt|fastbuild`.
@@ -1432,8 +1406,8 @@ therefore impossible, and the normal full check retains lint. The profile
 sets `--compilation_mode=dbg` explicitly, so
 an explicit `-c opt` beside `--config=asan` fails admission instead of being
 hidden by rc ordering. The [platforms](../../bazel/BUILD.bazel) derive from
-the standard host constraints; the macOS profiles parent the existing
-deployment platform. Unix profiles select the standard upstream Apple
+the standard host constraints; the macOS profiles use the
+deployment platform as their parent. Unix profiles select the standard upstream Apple
 `asan`/`ubsan` features on macOS and the local Linux toolchain's
 `asan`/`ubsan`/`tsan` features, preserving the Unix
 `treat_warnings_as_errors` disablement; the Windows ASan profile selects MSVC
@@ -1465,23 +1439,25 @@ context-bearing tests own their Linux services. It forces
 `halt_on_error=1` and positive report exit codes, adds UBSan stack traces, and
 preserves other caller-supplied options. Caller TSan suppression files are
 merged with the governed project rules into one immutable file without adding
-suppressions; Linux LSAN keeps the existing replace contract. Caller ASan,
-UBSan and macOS LSan suppression files are each frozen in place as separate
-copies, preserving option order. Every frozen copy is content-addressed under
+suppressions. Managed Linux ASan replaces the caller's `LSAN_OPTIONS` rather
+than merging it; managed TSan does not override it. Caller ASan, UBSan and
+macOS LSan suppression files are each frozen in place as separate copies,
+preserving option order. Every frozen copy is content-addressed under
 `<tree>/sanitizers/<profile>/runtime/<sha256>/`: Bazel hashes the path in
 `--test_env`, not the bytes behind it, so unchanged rules keep one path and
 changed rules always miss the test-result cache.
 Tests use `--test_strategy=standalone` with `--strategy=TestRunner=local`:
 the standalone runner alone can still delegate to a sandboxed spawn. Local
 execution preserves absolute suppression paths and native fatal-child
-contracts; a trusted remote action cache stays optional for the build phase. Linux and macOS select the existing governed LLVM symbolizer; macOS
-adds no service context and keeps the existing console-user audio admission;
-Windows freezes the already-selected MSVC runtime `PATH` and provisions no new
-DLL. Attempt receipts live under
+contracts; a trusted remote action cache stays optional for the build phase.
+Linux and macOS select the governed LLVM symbolizer. macOS adds no service
+context and requires the same console-user audio admission;
+Windows freezes the already-selected MSVC runtime `PATH` and provisions no
+additional DLL. Attempt receipts live under
 `<tree>/sanitizers/<profile>/run-*/receipt.json`.
 
 The `./ao check --asan` and `./ao check --tsan` commands run the full
-normal fastbuild completion gate first — including its completion products — then
+normal completion gate first — including its completion products — then
 a separate managed sanitizer profile in the same selected tree. Both use the same
 [test-result cache admission](#test-result-cache-admission): a cached sanitizer
 PASS belongs to the sanitizer-configured binary and runtime environment Bazel
@@ -1514,30 +1490,30 @@ an unknown feature name — fails to build, as does a normal profile that is
 unexpectedly instrumented; linking the instrumented object also requires the
 sanitizer runtime.
 
-This replaced an action-level `aquery` oracle and deliberately narrows the
-guarantee. The canary proves one first-party target-configuration translation
-unit per profile, not every action. The Linux-only
+The canary proves instrumentation for one first-party target-configuration
+translation unit per profile, not every action. The Linux-only
 [native instrumentation tests](#native-instrumentation-tests) inspect the
-configured compile and link actions of that same utility test target, which is
-still a configured-action check rather than execution. These per-action
-properties are no longer independently verified: frame pointers and non-recovering UBSan
-(`-fno-sanitize-recover`) on instrumented compiles, the Linux TSan `-isystem`
-interface root on every target C++ compile, MSVC `/Z7`, `/MDd`,
-`/INCREMENTAL:NO` and `_DISABLE_STL_ANNOTATION`, and the absence of sanitizer
-flags on execution-tool and archive command lines. The Debug compile-contract
-oracle still requires no optimization, debug information and no `NDEBUG` on
-first-party target compiles of the default test closure, and optimized
-execution-tool compiles; the managed runtime still forces UBSan
+configured compile and link actions of that utility test target; they do not
+execute it. The sanitizer-specific checks do not independently verify frame
+pointers or non-recovering UBSan (`-fno-sanitize-recover`) on instrumented
+compiles, the Linux TSan `-isystem` interface root on every target C++ compile,
+MSVC `/Z7`, `/INCREMENTAL:NO` and `_DISABLE_STL_ANNOTATION`, or the absence
+of sanitizer flags on execution-tool and archive command lines. The Debug
+compile-contract oracle requires no optimization, debug information and no
+`NDEBUG` on first-party target compiles of the folded test and product roots,
+and optimized execution-tool compiles. On Windows it also requires `/MDd` for
+Debug target compiles and `/MD` for optimized execution-tool compiles. The
+managed runtime still forces UBSan
 `halt_on_error=1`. The fastbuild compile-contract oracle likewise requires no
 optimization, no full compile-time debug flags, no `NDEBUG` and enabled GSL
 checking on first-party target compiles. Non-recovering UBSan code generation has no compiler fact
 the canary could observe without executing undefined behavior.
 
-These are implemented contracts, not native acceptance: sanitizer runtime
-compatibility and symbolization still require the real native validation gates
-described under [Completion](#completion), and the dependency-closure limits
-apply unchanged — the Linux GTK closure is not
-TSan-instrumented and Windows dependencies stay uninstrumented.
+Sanitizer runtime compatibility and symbolization require [native
+validation](#completion); compile and analysis checks alone are not acceptance.
+Linux TSan includes Aobus GTK tests when GTK is enabled, but it does not
+instrument the imported GTK SDK binaries. Windows ASan likewise does not
+instrument imported SDK binaries.
 
 ### Coverage
 
@@ -1553,7 +1529,7 @@ patch](../../bazel/rules_cc_coverage_private_headers.patch): private implementat
 header aliases must reach the final binary's standard source replacement file
 without exporting the private C++ compilation interface. Retire it when upstream
 preserves that mapping closure; keep the private-interface and zero-hit-line
-regressions. The coverage merger uses the existing selected JDK's declared
+regressions. The coverage merger uses the selected JDK's declared
 runtime files and Bazel's pinned precompiled stock deploy JAR. It does not build
 the source-less Java launcher or its compiler/bootclasspath intermediates: those
 upstream generic-Linux SDK executables cannot run directly on NixOS. This is a
@@ -1569,7 +1545,7 @@ the Linux-only `//:instrumentation_tests` suite with the standard bazel_skylib
 invocation, query/aquery receipt or coverage execution. The suite contains five
 verdicts:
 
-- The two build tests compile and link the existing `//test:utility_test` under
+- The two build tests compile and link `//test:utility_test` under
   each profile without executing it, so the profile still produces a linkable
   binary.
 - The two compile tests inspect the configured `CppCompile` and `CppLink`
@@ -1592,20 +1568,20 @@ retain those runtime boundaries.
 
 ### CI instrumentation
 
-Daily native jobs run one `ao check --ci`; the graph's Linux-only
-[native instrumentation tests](#native-instrumentation-tests) replace the former
-separate Linux compile-contract/canary/coverage-analysis step. The build tests compile
-and link the utility canary under each sanitizer profile, the compile tests check
-the configured flags, and the coverage test checks the configured coverage graph.
-None executes a sanitizer suite or produces a coverage report. `ao check contracts`
-and `ao check instrumentation` remain standalone analysis entries for focused work;
-`ao measure coverage` alone collects actual coverage.
+Daily native jobs run one `ao check --ci`, whose graph includes the Linux-only
+[native instrumentation tests](#native-instrumentation-tests). The build tests
+compile and link the utility canary under each sanitizer profile, the compile
+tests check the configured flags, and the coverage test checks the configured
+coverage graph. None executes a sanitizer suite or produces a coverage report.
+Use `ao check contracts` or `ao check instrumentation` for focused analysis;
+use `ao measure coverage` to collect actual coverage.
 
 The instrumentation tests require the prepared native toolchain: they do not
 belong to the lightweight documentation prerequisite job. A failure is fatal to
-that native job and prevents disk-cache publication. The product, Release and
-lint gates remain independent. This is Linux analysis plus bounded sanitizer
-canary builds, not an all-platform sanitizer/coverage build or runtime matrix.
+that native job and prevents disk-cache publication. The checks do not replace
+product builds, whole-graph lint or explicit Release validation. They provide
+Linux analysis and bounded sanitizer canary builds, not an all-platform
+sanitizer/coverage build or runtime matrix.
 
 `check instrumentation` is Linux Debug analysis with `--suite` selection and the
 normal compiler, tree, jobs, and cache controls. It reuses the action oracle:
@@ -1613,7 +1589,7 @@ coverage flags and atomic counters must appear on measured target actions, while
 execution tools remain unprofiled; each selected configured test must consume its
 own standard metadata outputs. Queries of the actual C++ compilation context and
 `InstrumentedFilesInfo` verify private-header mapping propagation, instrumented
-source declarations and declared counter-note dependencies: the existing LMDB
+source declarations and declared counter-note dependencies: the LMDB
 private aliases must reach a selected consumer's context when the library closure
 is present. Independent public JDK and stock-payload queries also constrain that
 consumer's merger runfiles.
@@ -1630,8 +1606,8 @@ the independent standard-map and runtime/report cross-checks.
 `coverage` command, enters no private audio/display service context, and produces
 no compilation, test execution or coverage report. Its unique receipt and query
 evidence remain under `<tree>/coverage/run-*`, explicitly marked as
-analysis-only. Ordinary coverage
-retains its fresh tests and strict runtime/report validation unchanged.
+analysis-only. Ordinary coverage uses fresh tests and strict runtime/report
+validation.
 
 ## Lint reports
 
@@ -1676,7 +1652,7 @@ Bazel build instead makes the attempt incomplete. Compatibility uses the
 top-level target configuration, not an exec-configuration row for the same
 owner built as a tool.
 Automatic discovery without `--target` queries the whole project graph.
-For a supported direct main path, the portal requests its existing reports in
+For a supported direct main path, the portal requests its reports in
 all actual native contexts plus the owner inventory, not owner sibling reports
 for a direct-only scope. Donor discovery can also request sibling native TU reports.
 If any path is unsupported by the selection codec, all compatible owners in the
@@ -1712,9 +1688,9 @@ Large maps stay out of the Windows client argv. This uses the normal
 Bazel server mode: batch mode can re-expand rc options into an oversized Java
 command line and is not supported for large maps. Each pass records its literal
 parameter and exact parameterized aspect identity in the receipt. Naming a new
-consumer adds its reports without changing existing report actions. The
-completion gate declares its own fallback replay actions without a portal-written
-consumer parameter, so the former separate CI production-lint step is gone.
+consumer adds its reports without changing other report actions. The
+completion gate declares its own fallback replay actions without a
+portal-written consumer parameter.
 
 Scoped lint defers unreported, discovered paths that are incompatible with the
 current platform. With `--gtk off` on Linux it also defers discovered GTK paths
@@ -1744,25 +1720,23 @@ header closure. The other contexts remain available during template expansion,
 but their unrelated source edits cannot by themselves invalidate the selected
 diagnostic. The header is the main file; a `.def` fragment instead retains the
 consumer TU as its main. No test runs Bazel or an `ao` command; the launcher
-only reads the completed gate result. The portal keeps its
-scoped [bazel_lint.run](../../script/ao/portal/bazel_lint.py) path for `ao check lint`;
-the former project-wide `run_project` route is retired, and scoped `ao check lint`
-and `ao check analyzer` are the CLI diagnostic entries. Bazel source-file targets distinguish
+only reads the completed gate result. The CLI's scoped diagnostic entries are
+[`ao check lint`](../../script/ao/portal/bazel_lint.py) and `ao check analyzer`.
+Bazel source-file targets distinguish
 authored checkout inputs from generated ones. Eligible owners declare STRICT or
 RELAXED inputs through `srcs`, `hdrs`, `textual_hdrs` or additional compiler inputs;
 compatible owners, including header-only libraries, contribute configured
 inventories. Those inventories identify inactive `select()` inputs, while the
 stage preserves `check`'s compiler and graph-feature selections. Declared header
 closures can include other platforms' headers through broad globs, so the
-existing native ownership policy still defers unreported platform-specific
+native ownership policy defers unreported platform-specific
 headers. Fallback replay still requires an observed include consumer; a
 configured portable declaration with neither a direct main nor a consumer fails.
 The stale `NOLINT` scan covers the complete candidate set. The independent
 authored-source ownership scan is the root `//:native_policy` test
-([test ownership](#test-ownership)). The lint test filters generated-only owners
-from authored policy, matching the former portal scope, so GLib-generated C and
-catalog arrays are not linted as project source while their real compile build
-remains in the normal graph. A declared portable
+([test ownership](#test-ownership)). The lint test excludes generated-only
+owners from authored policy: Bazel compiles GLib-generated C and catalog arrays
+but does not lint them as project source. A declared portable
 path that no admitted configuration selects — for example, only under an
 off-by-default feature flag — fails rather than silently passing; deferral
 stays reserved for recognized foreign-native-platform paths.
@@ -1802,7 +1776,7 @@ presentation options (`--quiet`, `--system-headers`, `--system-headers=true`,
 `--system-headers=false`, `--enable-check-profile`, `--use-color=false`); other
 raw options, including fix/export, overlay/config, extra-arg and
 warnings-as-errors forms, are rejected before workspace or native preparation.
-The existing ownership/suppression policy applies, including stale `NOLINT`
+The ownership and suppression policy applies, including stale `NOLINT`
 detection inside cached analysis. The route never exports or applies fixes.
 
 ### Native lint contexts and cache boundary
@@ -1872,11 +1846,12 @@ but the public gate still fails them. A selected path is covered when any
 requested owner reports it as a main; another owner's uncovered listing does
 not negate that coverage. Whole main/context diagnostics and related
 notes remain together; infrastructure failure in an owner-wide report build
-cannot be hidden by selecting fewer mains. The report build alone disables
-product validations to avoid pulling PE/link actions into lint; normal
-build/test/run validations remain unchanged. STRICT/RELAXED mode, tools, checks,
-filters and compiler policy remain action inputs even though selected scope is
-not. The selected tree lock covers preparation through report consumption and
+cannot be hidden by selecting fewer mains. The lint report build passes
+`--norun_validations` to avoid pulling PE/link actions into lint. This does not
+change the [Windows executable validation](#generated-files-and-runtime-data)
+required by the repository rc for ordinary build/test/run. STRICT/RELAXED mode,
+tools, checks, filters and compiler policy remain action inputs even though
+selected scope is not. The selected tree lock covers preparation through report consumption and
 the final gate decision; it is not a source-filesystem snapshot. The portal
 launches no detached lint workers and does not mutate source-checkout links.
 
@@ -1910,8 +1885,8 @@ exceptions, compiler-warning promotion and stale-suppression behavior.
 ### Checker, fixtures and validation scope
 
 The [checker build](../../tool/lint/build.bzl) consumes a ready installed LLVM
-SDK without CMake configuration, new dependency pins or installed CMake-export
-parsing. Explicit Windows provisioning installs that governed SDK —
+SDK without configuring CMake, adding another version authority or parsing
+installed CMake exports. Explicit Windows provisioning installs that governed SDK —
 `ao.bat setup deps` or `ao.bat setup llvm-sdk`, which call the same
 installer; ordinary ready-only lint does not. The lazy [lint SDK](../../bazel/lint/sdk.bzl) and
 [policy](../../bazel/lint/policy.bzl) repositories consume the same shared
@@ -1935,30 +1910,28 @@ MSVC — beside the selected SDK ABI. On Linux the governed LLVM SDK uses
 libstdc++ with RTTI enabled and assertions disabled; the checker retains those
 facts and the SDK's exception policy when built with GCC. Linux checker
 compilations force-include a GCC/LLVM compatibility header that the tracked
-[SDK repository generator](../../bazel/lint/sdk.bzl) emits into the existing
-`@aobus_lint_sdk` facade, which exports the SDK imports; the checker build
-declares the generated external header and adds the force-include line on
-Linux only. The shim keeps the narrow guard unchanged: for GCC 16 with LLVM 22
-only, it disables `-Wnonnull` while parsing `clang/AST/ExternalASTSource.h`,
-whose guarded lazy-pointer fast path triggers a known false positive, then
-restores the full diagnostic policy, with push/pop warning boundaries, the
-projected ABI facts and version pins preserved and no modification of the
-pinned SDK's original bytes. Checker implementation code keeps
-`-Werror=nonnull`; there is no translation-unit-wide downgrade, and ordinary
-products and tests remain unchanged. Retire the generated shim when the pinned
+[SDK repository generator](../../bazel/lint/sdk.bzl) emits into the
+`@aobus_lint_sdk` facade, which exports the SDK imports. The checker build
+declares and force-includes the generated header on Linux only. For GCC 16
+with LLVM 22, the shim disables `-Wnonnull` while parsing
+`clang/AST/ExternalASTSource.h`, whose guarded lazy-pointer fast path triggers
+a false positive, then restores the full diagnostic policy. It does not
+modify the pinned SDK files or its projected ABI facts. Checker implementation
+code keeps `-Werror=nonnull`; the shim does not downgrade the whole translation
+unit or apply to ordinary products and tests. Retire the shim when the pinned
 compiler/SDK pair accepts the fast-path reproducer without it.
 The SDK importer drops the SDK metadata's own standard flag, including the MSVC
 dash-colon `-std:c++17` spelling, and projects the LLVM EH/RTTI/static-build
 ABI facts from the shared and MSVC policy literals; those overrides remain
 necessary for the uninstrumented static LLVM host, not a separate language
 policy. The local [rules_cc patch](../../bazel/rules_cc_msvc_exception_handling.patch)
-keeps ordinary MSVC compile arguments unchanged and makes only the default
-`/EHsc` independently selectable. The Windows checker disables
-`default_exception_handling` while retaining the SDK's explicit `/EHs-c-`;
+makes the default `/EHsc` independently selectable and preserves the ordinary
+MSVC compile arguments and their order when it is enabled. The Windows checker
+disables `default_exception_handling` while retaining the SDK's explicit `/EHs-c-`;
 this avoids D9025 overrides without disabling the other default compile flags
 or changing the product's exception policy. Retire the patch when upstream
 provides that selection directly.
-Unix builds the existing plugin against its externally supplied host, excluding
+Unix builds the plugin against its externally supplied host, excluding
 product sanitizer instrumentation from compilation and linking. Windows builds
 the linked `AobusClangTidy` host optimized with `/MT`, independently of product
 `/MDd` or `/MD`. Plugin/host ABI and sanitizer compatibility must be preserved;
@@ -2028,14 +2001,13 @@ Ruff/mypy, preserving Bazel interpreter and cache identity. See
 environment and runs one `bazel test //...` in the selected tree, so the
 graph a developer invokes directly is also the gate: native products and tests,
 the repository checks (documentation, formatting, Buildifier lint, lexical source
-guardrails, test and class naming audits, workflow lint, Ruff, mypy and one target per
+guardrails, test and class naming audits, Linux-only workflow lint, Ruff, mypy and one target per
 tooling module), the native process tests, the root `//:native_policy`
 native-policy test on every host, the Linux-only `//:native_driver_policy`
 wrapper diagnostic and [instrumentation analysis
 tests](#native-instrumentation-tests), and the declared whole-graph lint test.
 Standalone `ao check docs`, `ao check format`, and `ao check lint` remain
-task-specific entries. `--config release` selects Release; `--asan`/`--tsan` run fastbuild normal completion first, then the Debug
-instrumented scope. Common selectors include `--path`, `--jobs`,
+task-specific entries. `--config release` selects Release; `--asan`/`--tsan` add the [instrumented scope](#sanitizer-profiles) after normal completion. Common selectors include `--path`, `--jobs`,
 `--vcpkg-prefix`, `--remote-cache`, `--clean`, `--ci` and `--fresh`
 ([test-result cache admission](#test-result-cache-admission)). There is no
 `--commit` selector: the graph always checks
@@ -2043,14 +2015,21 @@ the complete source snapshot, so it never narrows native tests, repository
 checks or the C++ lint test. `--ci` adds `--config=ci`, which keeps going and
 enables the Windows desktop tests; it is valid only with fastbuild. The gate
 accepts no targets, forwarded Bazel arguments, or test filters: there is no
-partial native completion selection. Completion ignores system and personal
-Bazel rc files, loading only the checked-in repository rc.
-Isolated Bazel clients also remove the `BAZELRC` environment entry, including
-Windows key-case variants; the no-system/home/workspace startup flags alone
-would not disable that separate rc channel. Sanitizer admission, coverage and
-the standalone compile-contract analysis use the same environment isolation.
-Ordinary build/test invocations retain their personal-rc behavior; a
-personal test filter cannot silently narrow completion.
+partial native completion selection. Completion loads only the checked-in
+repository rc and the tree's generated launch rc, ignoring system and personal
+Bazel rc files. Isolated Bazel clients also remove the `BAZELRC` environment
+entry, including Windows key-case variants; the no-system/home/workspace
+startup flags alone would not disable that separate rc channel. A personal
+filter cannot silently narrow completion. Managed sanitizer admission, including
+its compile-contract phase, and coverage use the same isolation. Standalone
+`check contracts` must apply it too. Ordinary build/test invocations retain
+their personal-rc behavior.
+
+**Standalone analysis limitation:** The standalone `check contracts` launcher
+neither excludes personal rc files nor removes `BAZELRC`, so its verdict can
+reflect personal settings. The isolated policy checks inside `./ao check` and
+the managed sanitizer checks are completion results, not a standalone report,
+and completion rejects the sampling profile.
 
 ```bash
 ./ao check
@@ -2058,17 +2037,18 @@ personal test filter cannot silently narrow completion.
 ./ao check --config release --path /tmp/build/aobus-bazel-release
 ```
 
-The [root BUILD](../../BUILD.bazel) still declares the completion roots other
+The [root BUILD](../../BUILD.bazel) declares the completion roots other
 tools select. `//:check_tests` groups the portable default aggregate with the
 Linux GTK test, the native backend suite and the lint fixtures;
 `//:check_native_tests` is the backend filegroup the managed sanitizer route
-adds; `//:check_products` builds the CLI/TUI entrypoints, the host's GTK,
-AppKit or WinUI product, and the explicitly manual GUI harnesses and
-performance benchmarks — built, never run, so no interactive GUI session and no
-performance execution happens; `//:check_runs` names the two unattended native
-WinUI console probes; `//:check_cpp_tests` is the portable C++ owner set the
-lint graph test reads. `//:native_policy_inputs` is the non-test producer that
-folds the native action facts and owned-source closures into one JSON file, with
+adds. `//:check_products` groups the CLI/TUI entrypoints, the enabled host
+product (GTK, AppKit or WinUI), the GUI probes and the performance benchmarks
+as build inputs. The filegroup does not run them; the test graph separately
+launches applicable native process probes. `//:check_runs` names the two
+unattended WinUI console probes; `//:check_cpp_tests` is the configured C++
+test owner set used by the native policy and lint graph tests.
+`//:native_policy_inputs` is the non-test producer that folds the native action
+facts and owned-source closures into one JSON file, with
 the Linux Debug projection reusing the same producer under a debug transition.
 `//:production_lint` is the public alias for the declared whole-graph lint test
 in `//test/lint` ([lint reports](#lint-reports)); the alias keeps the analysis
@@ -2089,23 +2069,24 @@ also independently requires `//test/winui/projection:winui_projection_test` and
 public RapidYAML import in all three modes and verifies that only Debug depends
 on the Release header helper. These requirements do not apply on other hosts.
 `--config=ci` additionally enables
-`//test:winui_uia_test`, the real automation probe with the existing runtime and
+`//test:winui_uia_test`, the real automation probe with the Windows App Runtime and
 interactive-console admission. The other
-GUI probes and performance harnesses are never executed by a wildcard build.
-Interactive GUI scenarios, physical playback and hardware admission stay outside
-the gate.
+GUI probes and performance harnesses remain build-only in wildcard completion.
+Manual interactive scenarios stay outside the gate. The UIA exception does not
+establish physical input, physical playback, or hardware admission.
 
 Linux private fixtures are owned per test, not per gate. There is no global
 `--run_under` rc entry: only context-bearing `cc_test` targets are wrapped by
-the thin [`native_context_test`](../../bazel/testing.bzl) rule, whose inner
-`cc_test` (tagged `manual`, public suite name unchanged) keeps compilation,
-coverage instrumentation and aspect ownership while the wrapper owns Bazel's
-scheduling and forwards `InstrumentedFilesInfo`, `RunEnvironmentInfo` and
-runfiles. On Windows the Python launcher opens the `.zip` (or unzipped
+the thin [`native_context_test`](../../bazel/testing.bzl) rule. Its inner
+`cc_test` is tagged `manual` and owns compilation, coverage instrumentation
+and aspect facts. The wrapper supplies the public test label, owns Bazel's
+scheduling, and re-exports `InstrumentedFilesInfo` unchanged. It merges the wrapped
+test's runfiles and forwards its run environment with the wrapper's context
+and executable settings. On Windows the Python launcher opens the `.zip` (or unzipped
 bootstrap) beside the wrapper executable. That file is a declared test input,
 not just a build output, so Bazel materializes it before starting the test.
-Off Linux the wrapper passes the test through unchanged and starts no services. The
-wrapper's [runner](../../script/ao/graph/bazel_test_runner.py) starts only the
+Off Linux the wrapper still launches the test but starts no private Linux
+fixtures. The wrapper's [runner](../../script/ao/graph/bazel_test_runner.py) starts only the
 fixtures the target declares through `AOBUS_TEST_CONTEXT` (`audio`, `dbus`,
 `gtk`) on Linux before forwarding the test's own arguments and environment; a
 test without a context marker starts no fixture. The bounded
@@ -2120,17 +2101,18 @@ the UIA probe's smoke entrypoint performs the Windows App Runtime and
 interactive-session admission itself.
 
 The gate uses `--lockfile_mode=error` instead of rewriting the shared
-checkout's module lock, and it loads only the tracked repository rc. The frozen
-per-attempt rc and `AOBUS_BAZEL_SERVER_JAVABASE` JVM selection described under
-[sanitizer profiles](#sanitizer-profiles) belong to the managed sanitizer and
-coverage routes, not to `ao check`. Fixtures remain owned by individual tests.
+checkout's module lock, and it loads the tracked repository rc and generated
+launch rc. On Linux the isolated launcher selects the pinned Nix JDK through
+`AOBUS_BAZEL_SERVER_JAVABASE`. The extra per-attempt rc snapshots belong to
+managed sanitizer and coverage runs, not the ordinary completion attempt.
+Fixtures remain owned by individual tests.
 
 Each attempt holds the tree lock and writes its evidence under
 `<tree>/checks/<config>/check-*/`: `tests.bep.json`, `test.log` and
 `profile.json.gz`, with the test stream also copied to `build.log`. A failed
 attempt keeps that terminal evidence; an interrupted controller does not
 establish that native writers have stopped. The native completion attempt does
-not certify interactive GUI runs, performance runs, coverage, or distribution.
+not certify manual GUI scenarios, performance runs, coverage, or distribution. Desktop-enabled Windows CI requires the UIA test specifically, not the other GUI probes.
 Optional sanitizers have their own receipts. After Bazel succeeds, `check`
 uses the same invocation's BEP suite expansions to require a passing summary
 for every applicable member of `//:check_tests`, `//test/script:repository_checks`
@@ -2145,22 +2127,20 @@ selected. No second `cquery` or test invocation is needed.
 
 ### Test-result cache admission
 
-By default the gate uses Bazel's ordinary test-result caching: a passing test
-summary counts as completion evidence whether Bazel executed the test anew on
-this host or restored it from the result cache. A cached PASS is valid for the
-declared inputs, environment and configuration Bazel hashed. Ordinary tests do
-not inherit the caller's `PATH` or the portal's `AOBUS_STATE_ROOT`. A test that
-uses host tools, private services or managed SDK state declares the relevant
-environment on its own target instead. Thus an unchanged ordinary test can
-restore its result, not just its executable, from another checkout's build.
-A cached pass is not a new host execution. Cache authority follows the existing
-trusted-cache boundaries ([native hosts and caching](#native-hosts-and-caching)). A cached
-pass samples no new random schedule or interleaving, so it can conceal an
-intermittent failure while its declared inputs and configuration stay
-unchanged; relevant changes invalidate it, and `--fresh` remains the explicit
-request for new executions when a fix needs fresh samples.
+A passing Bazel test summary counts toward completion whether the test ran on
+this host or its result came from a [trusted cache](#native-hosts-and-caching).
+Another checkout can reuse the result, not just the executable, when Bazel's
+declared inputs, options and relevant environment match. The repository rc does
+not forward the caller's `PATH`, `AOBUS_STATE_ROOT`, `LOCALAPPDATA` or `CI` to
+every test. Targets opt in to what they use: Linux private-service tests inherit
+`PATH` for fixture tools; Windows tests that locate managed tools can inherit
+`AOBUS_STATE_ROOT` and `LOCALAPPDATA`.
 
-`--fresh` adds `--nocache_test_results`, so every selected test executes again.
+A cached pass is not a new execution on this host. It samples no new random
+schedule or interleaving. Use `--fresh` when investigating intermittent failures.
+
+`--fresh` adds `--nocache_test_results` to request new executions of the same
+selected tests. It does not force an unchanged compiler or lint producer to run.
 `--clean` removes the selected tree's Bazel outputs first. The
 `external`-tagged native audio, platform and Linux system-media tests execute on
 every attempt, and the repository checks are `local`/`external` because they
@@ -2180,32 +2160,46 @@ reads the standard BEP test summaries of a check attempt instead of a receipt.
 
 ### Test ownership
 
-There are no handwritten source inventories. Test registrations come from the
-existing lexical test-audit detector, and the
-[ownership module](../../script/ao/portal/bazel_test_ownership.py) defines the
-configured-target identities and reconciliation rules. The root
-`//:native_policy` test applies them to the folded native facts
-([in-graph native policy](#in-graph-native-policy)): every discovered
-registration needs an executable owner from the folded owned-source closures.
-A `cc_test` owner must be in the executed test selection; a `cc_binary` owner
-counts as built when the selected test closure reaches it, including the
-completion roots and their test dependencies, because such a binary holds
-registrations that run only on request. A compatible registration with no owner
-fails.
+The audit does not maintain a separate source inventory. The
+[test ownership helper](../../script/ao/portal/bazel_test_ownership.py) discovers
+registrations with the lexical test-audit detector and normalizes executable labels.
+The root `//:native_policy` test's [registration audit](../../script/ao/portal/bazel_validation.py)
+reconciles those registrations with the folded native facts
+([in-graph native policy](#in-graph-native-policy)): each compatible source
+that registers cases needs a declared executable owner. A `cc_test` owner
+must be reachable from `//:check_cpp_tests`; a `cc_binary` owner may be
+reachable from those roots or `//:check_products`, including binaries whose
+cases run only on request. This audit checks configured owned-source closures,
+not test execution. For completion, include a `cc_test` owner in the test
+selection as well, through its public wrapper if it has one. Adding an owner
+only to an analysis or build root does not schedule it. The
+[completion gate](#completion-gate) separately checks passing summaries for its
+required tests.
 
-The same test audits authored C++ ownership: every authored C++ file in the
-tracked and untracked non-ignored Git manifest must be declared by a native
-owner. Sources the configured universe cannot reach are deferred only by the
-existing platform policy or by an explicitly reported disabled-frontend
+Tests link the ordinary product libraries where they exercise production
+implementations. For example, `//test:utility_test` links the utility and
+Unicode-text libraries without compiling product implementation sources
+itself. A sibling probe for utility fatal-contract tests runs independently
+of the test main. `//test:media_fixture_test` links the application runtime
+through its test-header interface; `//test:media_test` tests Core media without
+the application runtime. `//test:uimodel_test` links the production UIModel
+library. Its playback cases can use controlled output providers and real
+decoder inputs, but do not establish physical or audible playback. See the macOS
+[time-zone fallback](macos-portability.md#10-date-time-zone-database) for the
+formatter test's host-zone expectation.
+
+`//:native_policy` also checks C++ files in the tracked and untracked non-ignored Git inventory. It considers files present on disk that the shared source policy does not ignore. Eligible files must have a native owner. Sources the configured universe cannot reach are deferred only by the
+platform policy or by an explicitly reported disabled-frontend
 boundary (`gtk_enabled`/`system_media_enabled`), with the reason printed;
 compatible orphans always fail. Deferral follows the configured scope, so each
-native host's policy test catches only its own host's orphans: the three native
-CI jobs together cover the matrix, and Linux does not reconcile every host's
-paths in one unconfigured run. The check works on labels and the analyzed
-configuration's declared sources, so it reflects that configuration's
-`select()` results; diagnostics name the source or label, not a per-source
-configuration matrix. The managed sanitizer route uses the same module to bind
-its configured selection to BEP summaries.
+native policy test catches orphans applicable to its analyzed host. The
+[configured native CI matrix](#ci-product-gates-and-r2-validation) includes
+all three host families; Linux does not reconcile every host's paths in one
+unconfigured run. The audit combines the declared sources from the supplied
+configured graphs, including their `select()` results; diagnostics name the
+source or label, not a per-source configuration matrix. Source ownership is not a line-coverage claim. The
+managed sanitizer route uses the test ownership helper's configured-target
+identities to bind its selection to BEP summaries.
 
 ### Shared audits and the root version
 
@@ -2229,8 +2223,8 @@ The `.txt` suffix avoids shadowing the standard C++
 Ordinary fastbuild completion implies no sanitizer, GUI-performance, Release,
 cache-portability, or distribution acceptance; optional sanitizer checks and
 explicit Release checks certify only their own selected profiles.
-Formatting, documentation, lexical audits, naming audits and workflow lint are
-graph test targets, so `ao check` runs them; standalone `ao check docs`,
+`ao check` runs formatting, documentation, lexical audits, and naming audits as
+graph tests. On Linux it also runs workflow lint. Standalone `ao check docs`,
 `ao check format`, and `ao check lint` remain available for task-specific checks.
 
 ## Generated files and runtime data
@@ -2241,11 +2235,11 @@ arguments. Resolution executes `gperf --version` and rejects an unexecutable or
 mismatched tool. It generates query's unit dispatch and four media dispatch
 headers without pre-generated headers or shell redirection.
 
-The [catalog rule](../../bazel/catalog.bzl) declares the existing authored
+The [catalog rule](../../bazel/catalog.bzl) declares the authored
 inventory, text/templates, native ICU/Python SDK inputs and the real compiled
 [`ao_catalog_compiler`](../../tool/catalog/BUILD.bazel) in exec configuration.
-One [action helper](../../tool/catalog/build_catalog.py) follows the existing
-strict genrb/validation/pseudo/pkgdata-common pipeline and emits aligned embedded
+One [action helper](../../tool/catalog/build_catalog.py) runs the strict
+genrb, validation, pseudo-locale and pkgdata common-data pipeline and emits aligned embedded
 C++ data plus maintained locale tags. A private tree owns all resource/RESW/temp
 side outputs; package.lst remains the sole locale inventory. No external configure,
 prebuilt project tool or pre-generated resource is consumed. Common-data
@@ -2261,7 +2255,7 @@ tooling venv or its site packages.
 This is a native SDK boundary, not a relocatable/hermetic Python toolchain.
 Switching to a repository-local executable requires separate native validation
 of DLL and standard-library lookup, particularly on Windows.
-The application version header expands the existing template from the project's
+The application version header expands its template from the project's
 version declaration without a CMake configure.
 
 [Audio fixtures](../../test/data/audio/BUILD.bazel) are checked-in files;
@@ -2281,10 +2275,10 @@ configured SDK projection rejects case-insensitive DLL basename collisions
 between distinct sources, and WinUI checks the combined SDK payload again.
 There are no executable deployment companions.
 
-CLI/TUI retain the existing executable-local `mimalloc-new-delete.h` integration.
-This preserves that C++ allocation interface, not broad CRT `malloc`/`free` interception or arbitrary cross-DLL
-allocation redirection. Ordinary tests do not link mimalloc. Catalog tools are
-a separate execution boundary: the compiled catalog compiler and actual
+In the Windows CLI and TUI, executable-global `operator new` and `operator delete`
+forward to mimalloc; see [Windows dependency linkage](windows.md#dependency-linkage)
+for the allocation boundary. Ordinary tests do not link mimalloc. Catalog tools
+are a separate execution boundary: the compiled catalog compiler and actual
 `genrb`/`pkgdata` tools retain their declared inputs and runtime guards,
 including the declared DLL runtime closure of the same `x64-windows`
 triplet's host tools. Catalog generation and the compiled execution tool still
@@ -2317,8 +2311,8 @@ separate from compiler `/utf-8` and observed effective runtime code pages.
 macOS uses governed Homebrew LLVM 22, the SDK, deployment target and libc++
 expected shim with the tree's provisioned vcpkg artifacts; the launcher, not Bazel,
 bootstraps the pinned vcpkg, and Bazel does not bootstrap CMake/Ninja. Windows uses Visual Studio, its selected SDK, reviewed dynamic portable target
-dependencies and the existing dynamic CRT. No global `/MT` or replacement CRT
-flag is added; upstream toolchain mode features still select `/MDd` and `/MD`.
+dependencies and the dynamic CRT. Bazel adds no global `/MT` or replacement CRT
+flag; upstream toolchain mode features still select `/MDd` and `/MD`.
 Native input identity follows each toolchain's trust boundary. Linux hashes
 its selected Nix compiler inputs. macOS declares the selected LLVM tools, the real
 `xcrun`-selected linker, the governed libc++ shim and the driver's explicit
@@ -2332,12 +2326,10 @@ configuration](#windows-compiler-configuration)) owns compiler admission; the
 captured `compiler_environment` request still serves WinUI and dependency
 admission, and no whole-SDK byte ledger is required. Directory membership
 changes also invalidate resolution.
-For shell-backed rules the Windows portal selects the same `BAZEL_SH` for the
-Bazel client and its repository rules: an explicit selection wins, otherwise
-it uses Git for Windows' `usr/bin/bash.exe`. For bare Bazel, start with that
-Bash on `PATH` or set `BAZEL_SH` in the developer shell to its full path.
-Having only `git.exe` on `PATH` does not guarantee that Bazel finds Bash. A
-repository-only setting does not change the client's strict action `PATH`.
+For shell-backed rules the Windows portal honors an explicit `BAZEL_SH`;
+otherwise it looks for Bash in the detected Git for Windows installation. It
+uses the selected shell for both the Bazel client and its repository rules.
+For bare Bazel, [select Bash in the developer shell](#direct-bazel-without-the-portal).
 
 Keep selected SDK/tool installations stable while resolution and actions run;
 admission is not an atomic installation snapshot. These are native
@@ -2347,10 +2339,12 @@ Runtime libraries, .NET/registry state and other inputs outside the enumerated
 families remain trusted host state; changing
 those is not certified by the selected SDK identity. Linux similarly trusts
 immutable native Nix SDK state. None is an RBE contract. Changing the host's
-installation selection — Visual Studio, Xcode or SDK selection — can require
-`bazel fetch --force --configure` before repository rules observe the new
-selection; the bootstrap treats it as watched host state, not a complete
-registry-drift guarantee.
+installation selection — Visual Studio, Xcode or an SDK — can require refreshing
+configured repositories so they observe the new selection. On Linux and macOS,
+`bazel fetch --force --configure` forces configure repositories to reevaluate.
+Do not use that untargeted command for a Windows SDK refresh; see
+[Windows compiler configuration](#windows-compiler-configuration). The bootstrap
+treats selection as watched host state, not a complete registry-drift guarantee.
 
 Windows Bazel commands require a local source root and host-local NTFS output;
 UNC and mapped-network working roots are rejected without a network-build
@@ -2370,9 +2364,9 @@ files outside every ignored prefix.
 
 ### Shared local action cache
 
-Bare `bazel build/test/run` and portal commands use the same per-user action
-cache, even across checkouts and build trees. The [repository rc](../../.bazelrc)
-selects the default directory; no setup or personal rc is needed. Bazel expands
+By default, bare `bazel build`, `bazel test`, `bazel run` and portal-launched
+Bazel share a per-user disk cache across checkouts and build trees. The
+[repository rc](../../.bazelrc) selects it without setup or a personal rc. Bazel expands
 `~` using the JVM's `user.home`, not the shell. On Linux this is normally the
 account home; setting `HOME` to a temporary directory does not isolate the cache:
 
@@ -2382,15 +2376,17 @@ account home; setting `HOME` to a temporary directory does not isolate the cache
 | macOS   | `~/Library/Caches/Aobus/cache/bazel` |
 | Windows | `~/AppData/Local/Aobus/cache/bazel`  |
 
-`AOBUS_STATE_ROOT` still selects portal-managed tool and installation state.
-Neither it nor a redirected `XDG_CACHE_HOME` or `LOCALAPPDATA` relocates this
-action cache. If an older portal used a custom state root, its old cache is
-not moved or deleted. Output bases and their incremental state remain separate.
+`AOBUS_STATE_ROOT` selects portal-managed tool and installation state.
+Neither it nor a redirected `XDG_CACHE_HOME` or `LOCALAPPDATA` relocates the
+action cache. If you used a cache under a custom state root, the portal does
+not move or delete it. Each output base retains its own incremental state.
 
 To move only the action cache, set `AOBUS_BAZEL_DISK_CACHE` for the portal to a
-dedicated absolute directory on a trusted local disk. Leaving it unset or empty
-keeps the default. Bare Bazel does not read this portal variable: pass the same
-path explicitly if you want both entry points to share the relocated cache.
+dedicated directory on a trusted local disk. Supply a printable absolute path;
+a relative path, a literal `~/…` or a Windows UNC path fails preparation rather
+than silently selecting another cache. Leaving the variable unset or empty keeps
+the default. Bare Bazel does not read this variable: pass `--disk_cache` with
+the same directory if you want both entry points to share it.
 For example, in a POSIX shell:
 
 ```bash
@@ -2411,15 +2407,24 @@ are outside this budget.
 A trusted remote cache is optional; forward
 `--noremote_upload_local_results` for read-only remote use. Cross-tree/worktree
 hits still require matching declared inputs, toolchain, options and relevant
-environment. To distinguish a reused test **result** from a reused binary, run
-`bazel test --execution_log_json_file=<file> //test:utility_test` in a second
-checkout with a fresh output base after the first passes. Look for the
-`TestRunner` entry with `runner: disk cache hit` and `cacheHit: true`; a compile
-or link hit by itself does not prove test-result reuse.
+environment. To check reuse of a test **result**, first run
+`bazel test //test:utility_test`. In a second checkout at the same revision,
+use a fresh output base and matching build options. Both commands here use the
+default disk cache; if you relocated it, pass the same `--disk_cache` to both.
+For example, in a POSIX shell:
+
+```bash
+probe=$(mktemp -d)
+bazel --output_base="$probe/output" test --execution_log_json_file="$probe/actions.json" //test:utility_test
+```
+
+In `actions.json`, look for the `TestRunner` entry with `runner` set to
+`disk cache hit` and `cacheHit` set to `true`. A compile or link hit alone does
+not establish that the test result was reused.
 `//test:audio_test`, `//test:audio_platform_test` and, on Linux,
 `//test:systemmedia_test` carry Bazel's `external` tag and execute on warm
-invocations of the default aggregate. Catch case tags are unchanged; cached results
-from other tests are not fresh binary executions.
+invocations of the default aggregate. Cached results from other tests are not
+fresh binary executions.
 
 The [Linux workflow](../../.github/workflows/ci.yml) runs
 `ao check --ci` (fastbuild) as its complete native-host gate, so the same graph
@@ -2430,25 +2435,26 @@ from Bazel's cache;
 Tests tagged `external` retain their native rerun behavior. The independent
 documentation job remains responsible for docs-only routing.
 
-The same workflow transports only
-the Linux action cache using pinned cache restore/save actions. It explicitly
-selects `$RUNNER_TEMP/aobus-state/cache/bazel` for the portal, bare Bazel, and
-archive restore/trim/save. No step needs `$HOME` to match the account home.
-`AOBUS_STATE_ROOT` is set separately for managed state.
+Only the Linux job archives its Bazel disk cache across runs. It selects
+`$RUNNER_TEMP/aobus-state/cache/bazel` explicitly for the portal, the bare
+Bazel smoke and the archive restore, trim and save steps; it does not depend
+on `$HOME`. Windows keeps its job-local Bazel cache on `D:\aobus-bazel-cache`,
+separate from its build trees and managed state. Neither Windows nor macOS
+archives that Bazel disk cache; their tool and dependency archives are separate.
 The versioned OS/architecture/pin-contract/commit key and same-contract fallback
 select candidate archives, not ABI compatibility; Bazel action keys decide reuse.
-Only successful pushes to `refs/heads/main` may save, and only after the
-complete fastbuild check succeeds. Release verification and the separate
-production-lint and instrumentation steps are no longer daily CI steps
-([CI product gates](#ci-product-gates-and-r2-validation)). PRs and manual dispatches never publish; GitHub's branch
-restore rules may let untrusted PRs reuse main's cache. After restore and before Bazel runs, CI creates a marker outside the cache.
-Before saving, it removes only cache files whose mtime is not newer than that
-marker, retaining the current run's used/produced working set rather than
-accumulating old blobs through the fallback archive. This uses the pinned
-Bazel's cache-access mtime behavior; it is not a fixed archive-size quota.
-CI does not wait for idle GC. Failed trimming prevents publication, without
-bypassing the required gates. Transport failure is optional, not failure of
-those gates.
+Only a successful push build on `refs/heads/main` may save, after both the
+fastbuild completion check and the direct Bazel smoke succeed. PRs and manual dispatches never publish
+this archive. The restore step can request a main archive on PRs, subject to
+GitHub's cache access rules. After restore and before the completion check the
+workflow marks the time outside the cache. Exact archive hits need neither
+trimming nor saving. On an eligible non-exact restore, trimming removes only
+files whose mtime is not newer than the marker, retaining the current run's
+used/produced working set rather than accumulating old blobs through the
+fallback archive. This uses the pinned Bazel's cache-access mtime behavior;
+it is not a fixed archive-size quota, and CI does not wait for idle GC. A failed
+restore, marker or trim prevents saving without bypassing the required gates.
+Transport failure is optional, not failure of those gates.
 The archive excludes servers, install bases, output trees, repositories, provider
 installations and Nix state; it adds no remote endpoint or dependency manager.
 
@@ -2458,37 +2464,38 @@ The [CI workflow](../../.github/workflows/ci.yml) owns product compilation,
 tests and check work through the Bazel completion gate. Its native job
 identities are Linux / check, macOS Intel / check, macOS ARM64 / check and
 Windows / check. Repository rulesets, not the workflow, select which status
-checks block merging. The current main ruleset requires only Linux / check;
-a passing Linux job alone is not evidence that the native macOS and Windows
-gates passed. A build-system migration requires successful results from the
-full affected native matrix before merging, independently of that setting.
+checks block merging. A passing Linux job alone is not evidence that the native
+macOS and Windows gates passed. A build-system migration requires successful
+results from the full affected native matrix before merging, independently of
+which status checks block merges.
 A separate unconditional documentation job runs `ao check docs` and
 `ao check format --docs` with host Python outside Nix/SDK setup, preserving the
 docs-only routing and the failed-prerequisite behavior. Each native job runs
 `ao check --ci` in fastbuild; the graph covers live documentation,
 host-compatible tooling, native tests, the native-policy audits and the
 whole-graph lint test ([lint reports](#lint-reports)). Matching passing test results may be cached,
-and the CI summary reports the BEP test summaries of the attempt. Daily CI is
-fastbuild only. Without the portal launch configuration, Linux also runs a bare
-Bazel utility test and requests one paired header's CLI-aspect output group.
-The Python reader checks that Bazel delivered the header report, not its native
-source's report. This does not rerun the whole lint graph. Release
-validation is deferred to a separate job and is not run by this workflow. The former
-advisory/manual `*_bazel` product jobs and the dispatch `mode` selector are
-removed; only the explicit `r2` boolean remains. Native SDK provisioning
-uses `ao setup bazel`/`ao setup deps`. Package providers and
-isolated tooling fixtures may still use CMake internally; CI configures or
-builds no Aobus CMake product graph. This implies no
+and the CI summary reports the BEP test summaries of the attempt. After a
+successful Linux completion check, the workflow runs
+`bazel test //test:utility_test` and uses a [Python reader](../../test/lint/check_scoped_reports.py)
+to request and verify the index and one paired header's CLI-aspect output group.
+The reader requires the header report, not a report for its companion source,
+and rejects a compiler-error result. Both commands may use the disk cache.
+This exercises direct Bazel without the portal launch rc or R2 binding; it is
+not a second whole-graph lint pass or a guarantee of fresh test execution.
+
+The workflow does not run Release validation. Manual dispatch accepts only the
+`r2` boolean for remote-cache validation. The native jobs run `ao setup bazel`;
+macOS and Windows also use `ao setup deps` (`ao.bat` on Windows). Package
+providers and isolated tooling fixtures may still use CMake internally; CI
+configures or builds no Aobus CMake product graph. These checks do not establish
 sanitizer or coverage runtime, GUI-performance, release or full Release matrix
-acceptance. The Linux job's single check includes the
-[instrumentation tests](#native-instrumentation-tests); the documentation job
-remains SDK-free.
+acceptance.
 
 The check keeps its graph scope ([Completion gate](#completion-gate)): the
 portable suites and the native process tests run, manual GUI and performance
 harnesses are built rather than run, and Windows additionally runs the two
 unattended native console probes plus, under `--config=ci`, the real WinUI
-automation probe with its existing runtime and interactive-console admission
+automation probe with its Windows App Runtime and interactive-console requirements
 and no login or system bypass. AppKit GUI smoke scenarios remain explicit and
 are not daily acceptance. The Linux job's single check includes the
 [instrumentation tests](#native-instrumentation-tests); that analysis and canary
@@ -2496,7 +2503,7 @@ build is not sanitizer or coverage runtime execution.
 
 CI retains each attempt's check BEP, test log and profile on every attempt;
 Windows keeps its separate artifact roots.
-Each native job also appends a best-effort summary of existing evidence to
+Each native job also appends a best-effort summary of the attempt's evidence to
 `GITHUB_STEP_SUMMARY`: the standard BEP verdict and admitted test counts of the
 check attempt, per-invocation Bazel timing and action-cache counters, and
 available R2 stop accounting. Nested phase times overlap and are not additive job time.
@@ -2505,9 +2512,12 @@ test-result reuse and whole-job R2 blob transfers remain separate; none is
 presented as an R2 hit rate. Missing or incomplete evidence is marked unavailable,
 not zero or successful. Summary generation adds no measurements, cache probes or
 validation gates and does not replace the raw artifacts.
-The macOS and Windows jobs save their existing dependency and managed-tool
-caches under the preserved restore/seal/key policies. The local
-[phase-capture contract](build.md#measure-native-validation) is unchanged.
+The macOS and Windows jobs restore separately keyed vcpkg and managed-tool
+caches. They seal vcpkg archives after dependency preparation so an admitted
+cache fill can survive a later validation failure. The workflow saves managed
+tools only after their preparation checks pass; Windows keys the LLVM SDK
+separately and checks its completion marker before saving. For local timing
+and evidence, see [phase capture](build.md#measure-native-validation).
 
 The Bazel disk archive keeps its trusted-main key, fallback, marker, trim and
 save contract ([native hosts and caching](#native-hosts-and-caching)): only
@@ -2520,12 +2530,12 @@ default. A manual `r2=true` dispatch explicitly trusts the selected checkout: na
 Linux/macOS/Windows jobs use run/attempt-isolated `bazel-ci-validation/` prefixes, separate from
 the automatic main cache's `bazel-v1/` prefix, require a strictly nonempty
 proxy URL and a successful drain, and fail rather than silently passing with
-local cache only. This reuses the existing `R2_SCCACHE_ENDPOINT`,
+local cache only. It uses the `R2_SCCACHE_ENDPOINT`,
 `R2_SCCACHE_ACCESS_KEY_ID` and `R2_SCCACHE_SECRET_ACCESS_KEY` secrets and the
-`aobus-sccache` bucket; no new bucket or credential is required.
+`aobus-sccache` bucket; it needs no other bucket or credential.
 
 Manual selection explicitly trusts the chosen workflow and checkout.
-Same-repository PR consumers reuse the existing credentials with proxy uploads
+Same-repository PR consumers use the same credentials with proxy uploads
 disabled; they do not receive a backend read-only token. Reused bucket-level
 writer credentials retain their write rights, including in an upload-disabled
 consumer. Prefix separation, a YAML condition and disabling
@@ -2583,16 +2593,15 @@ mechanisms and specific failure contracts, not a second representation of the
 complete product build. C++ tests executed by Bazel retain their own behavior
 contracts.
 
-Historical selected-graph tests and compiler-action evidence cover native
-Debug/Release on Linux, macOS and Windows, not subsequent policy changes. Rerun
-affected native gates after changes; Windows validation must cover the
-selected SDK's builds, product startup, decoder workflows, allocator integration
-and catalog pipeline, not merely archive inventory or receipts from a former
-linkage.
-The Windows auto-configuration migration supersedes prior Windows compiler-action
-receipts; no fresh native validation of it is claimed until the affected gates
-rerun. Older macOS receipts predate repaired mode flags and do not by themselves prove
-optimized Release or debug information. No physical playback, complete GUI,
-ARM64, shipping/release, RBE or cold-build performance acceptance is implied.
+Validate build and policy changes with the affected native hosts and profiles.
+On Windows, validate the selected SDK's builds, product startup, decoder
+workflows, allocator integration and catalog pipeline; an archive inventory
+or results from a former linkage are insufficient. See the [Windows SDK
+validation requirements](windows.md#dependency-linkage). Compiler-action
+evidence must match the compiler selection and profile being validated,
+including the effective optimization and debug information required by the
+macOS mode. Development build and test results do
+not establish physical playback, complete GUI, ARM64, shipping/release, RBE
+or cold-build performance acceptance.
 Development build/run support does not establish distribution readiness; see
 [binary distribution](dependency-governance.md#binary-distribution).

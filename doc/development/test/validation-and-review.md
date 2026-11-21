@@ -20,11 +20,15 @@ Registrations live only
 in `*Test.cpp`/`*Test.mm` files (`*Benchmark.cpp` for benchmark cases);
 [naming and assertions](naming-and-assertion.md#tags) owns the discovery and
 placement contract. The source audit in scoped `check lint` does not require
-a build tree or check ownership; other applicable lint stages may need native tools. The completion gate's ownership check
-joins registration discovery with the Bazel graph — a declaring `cc_test` the
-gate executes, or a `cc_binary` it builds — so an unowned or never-run test
-source fails the gate; keep throwaway tests outside the checkout. When moving tests between binaries, compare
-runtime test lists on each affected platform.
+a build tree or check ownership; other applicable lint stages may need native tools.
+The [ownership audit](../bazel.md#test-ownership) checks that each compatible source
+that registers cases has a declared executable owner reachable from the appropriate
+completion roots. Put `cc_test` owners in the actual completion test selection;
+only building the owner does not exercise its tests. Manually run `cc_binary`
+owners, such as benchmarks, only need to be built. Use test summaries, not the
+ownership audit, for test evidence. Keep throwaway tests outside the checkout.
+When moving tests between binaries, compare runtime test lists on each affected
+platform.
 
 ## Regression tests
 
@@ -92,24 +96,13 @@ For changes requiring complete native validation, run:
 ./ao check --ci
 ```
 
-`check` prepares the ready native environment and runs one `bazel test //...`
-([completion gate](../bazel.md#completion-gate)), so the graph itself owns live
-documentation, formatting, lexical source guardrails, test and class naming
-audits, workflow lint, Ruff/mypy, one target per tooling module, native tests
-and the whole-graph lint test. `--ci` adds the repository CI configuration;
-`check` has no `--commit` selector and always checks the complete source
-snapshot. After Bazel succeeds, `check` verifies BEP passing summaries for its
-required platform-selected checks; cached passes are accepted unless `--fresh`
-is selected, and optional test semantics are unchanged. Standalone `ao check docs`,
-`ao check format`, and `ao check lint` remain task-specific entries; the docs semantics check is always global. An explicitly invoked `./ao check` is complete for every change,
-including documentation-only edits: the whole-graph lint test runs regardless of
-the diff, and a cold cache pays that analysis cost — cache reuse never makes the
-gate free. Docs-only local validation uses `./ao check docs` plus
-`./ao check format --docs`, while docs-only CI events route to the documentation job
-([continuous integration](#continuous-integration)). CI uses the same command
-for native changes, and its separate documentation job remains responsible for
-docs-only routing. The tooling targets also test the document checker against
-isolated fixtures.
+The [completion gate](../bazel.md#completion-gate) checks the whole source snapshot,
+regardless of the diff. It accepts cached passing test results; use `--fresh`
+when the change needs new executions, not to select a different scope. For
+documentation-only changes use the two checks in the table above;
+[CI routing](#continuous-integration) selects the documentation job. If you
+instead run `./ao check`, you still pay the analysis cost of
+[whole-graph lint](../linting.md#bazel-backed-reports) on a cold cache.
 
 `check lint` remains a useful standalone semantic check: source audits and
 Python checks for files in scope, plus native clang-tidy coverage for selected
@@ -121,43 +114,12 @@ coverage is the declared `//:production_lint` test
 It never rewrites source. Sanitizer execution remains separate from the normal
 lint configuration; a sanitizer result cannot stand in for native lint.
 
-`./ao check` is the completion route
-([completion gate](../bazel.md#completion-gate)): it builds the platform
-products and the manual GUI/performance harnesses without running them, runs
-the portable suites, the native process tests, the GTK, backend and lint-fixture
-tests listed by `//:check_tests`, the root `//:native_policy` audit, and on
-Linux the `//:native_driver_policy` diagnostic and
-[instrumentation analysis tests](../bazel.md#native-instrumentation-tests). On
-Windows it runs the two unattended native console probes plus, under
-`--config=ci`, the declared WinUI automation test, and independently requires
-`//test/winui/projection:winui_projection_test` on Windows only. By default it admits passing test summaries from Bazel's
-result cache or new executions; `--fresh` adds `--nocache_test_results` so every
-selected test executes again
-([test-result cache admission](../bazel.md#test-result-cache-admission)).
-Documentation, formatting, source and naming audits, workflow lint, the native
-policy tests and the tooling targets are graph tests inside the same check;
-standalone `check docs`, `check format`, and `check lint` remain available for
-task-specific validation.
-
-C++ concurrency-sensitive changes additionally follow
-[concurrency and sanitizer validation](concurrency-and-sanitizer.md) and run:
-
-```bash
-# Focus a binary that owns the changed concurrency contract:
-bazel test //test:async_test --test_filter='[concurrency]~[.]'
-./ao check --tsan --fresh
-```
-
-`./ao check --asan` and `./ao check --tsan` run the full normal fastbuild
-completion first, then a separate managed sanitizer profile in the same
-selected tree; a Debug result is never relabeled as a sanitized
-one ([sanitizer profiles](../bazel.md#sanitizer-profiles)). The normal
-completion already includes the Linux-only instrumentation analysis tests,
-which prove configured flags and providers rather than executing a sanitizer
-suite. Both admit cached
-test results unless `--fresh` requires new executions; a memory-safety or
-concurrency fix asks for `--fresh`, because rerunning an unchanged binary is
-what samples another interleaving.
+For a C++ memory-safety fix, run [fresh native ASan](concurrency-and-sanitizer.md#sanitizer-findings)
+on the affected supported hosts. For a C++ concurrency-sensitive change,
+follow [concurrency validation](concurrency-and-sanitizer.md#validation): exercise
+the affected binary (for example, `bazel test //test:async_test --test_filter='[concurrency]~[.]'`)
+and run fresh managed TSan on affected supported hosts. A compile-contract check
+is not an instrumented execution.
 
 Python subprocess or thread changes need native process-level regressions;
 rebuilding unchanged C++ under TSan does not validate the Python runtime.
@@ -170,11 +132,10 @@ bazel test //test:uimodel_test --test_filter='Component - behavior'
 ```
 
 Use the actual owning executable: a selected binary with no matching case
-fails. On Linux, GTK and backend tests declare their own context, and the declared
-context-specific wrapper starts only the private fixtures that context
-requests — display, session bus, GTK environment profile and private audio
-for `gtk`; a private session bus with private PipeWire services and no display
-for `audio` — so an explicit label needs only the ready native tools and SDK.
+fails. On Linux, the wrapper starts only the private fixtures declared by the
+selected test. Before running an explicit GTK or backend test, check the
+[Linux fixture prerequisites](../bazel.md#direct-bazel-without-the-portal);
+do not start the services yourself.
 Focused results do not replace a full gate required by the table.
 Reuse a successful check when the relevant source, tests, dependencies,
 configuration, platform, and selected scope are unchanged.
@@ -261,8 +222,9 @@ not test exact Homebrew Python patch parity or the full tooling suite. Ordinary 
 results from cache; use
 `--fresh` when new executions are required for diagnosis ([CI product
 gates](../bazel.md#ci-product-gates-and-r2-validation)). Daily CI is fastbuild
-only. Linux adds a separate bounded bare Bazel entry without duplicating the
-whole-graph lint check. Release verification is deferred to its own job. The Linux job's graph includes the
+only. Linux also checks the bare Bazel entry with one test target and one
+paired-header lint report. Both may use the shared disk cache; this is not a
+second whole-graph lint pass or evidence of fresh execution. This workflow does not validate Release builds. The Linux job's graph includes the
 [instrumentation tests](../bazel.md#native-instrumentation-tests) inside the same
 check. Those tests require the native SDK; they do not expand the documentation
 job or certify sanitizer or coverage runtime execution. CI runs the same Bazel completion route as the

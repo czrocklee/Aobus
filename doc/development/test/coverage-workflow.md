@@ -39,8 +39,7 @@ a vacuous percentage.
 
 A Catch2 filter is not accepted: filters require genuine per-case Catch2 XML
 proof, which this route does not collect, so a filter request is rejected
-explicitly instead of silently narrowing the measurement. The former
-renderer-facing `--summary-limit` option is retired.
+explicitly instead of silently narrowing the measurement.
 
 Measurement contracts:
 

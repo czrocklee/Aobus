@@ -7,8 +7,8 @@ The four public commands are `setup` (explicit preparation), `format` (rewriting
 `check` (read-only validation), and `measure` (coverage, performance, and concepts).
 The [Bazel build system](bazel.md) owns the graph, toolchain, profile, and cache
 contracts, including [native executable and SDK setup](bazel.md#direct-bazel-without-the-portal).
-Both entry points share the [same local action cache](bazel.md#shared-local-action-cache);
-its size budget applies across checkouts.
+By default, bare Bazel and the portal share one [local action cache](bazel.md#shared-local-action-cache)
+across checkouts. Each build tree keeps its own outputs.
 
 ## Project commands
 
@@ -40,7 +40,9 @@ native build, sanitizer, or SDK switches to unrelated checks or measurements.
 
 Install the pinned Bazel version with a JVM and Nix with `nix-shell` on `PATH`.
 Bare Bazel needs no pre-entered shell or generated launch rc: its environment
-repository prepares the pinned Nix SDK itself.
+repository prepares the pinned Nix SDK itself. Tests that start private audio
+services, including members of `//:tests`, still need the fixture tools
+described in the [Linux test limitation](bazel.md#direct-bazel-without-the-portal).
 
 ```bash
 bazel build //app/cli:aobus //app/tui:aobus-tui
@@ -53,12 +55,7 @@ Bazel builds incrementally and defaults to fastbuild. Linux targets compile with
 pinned GCC by default: `--compiler=gcc|clang` on `bazel build`/`test`/`run`
 selects the actual target compiler. Project `check`, `measure performance`, and
 `check contracts` accept `--compiler gcc|clang`; there is no `--clang` alias. An unknown compiler value fails resolution; there is no silent
-fallback. `//:tests` is the ordinary
-test selection, not the completion gate. `check` prepares the ready native environment and
-runs one `bazel test //...`, so the graph owns documentation, supported-host
-tooling, native products/tests, the shared audits, the native-policy audits, the
-Linux-only instrumentation analysis tests and the whole-graph lint test; see the
-[completion gate](bazel.md#completion-gate).
+fallback. Use `//:tests` for the ordinary test selection and `./ao check` for the [completion gate](bazel.md#completion-gate).
 Standalone `./ao check lint` validates source semantics in a selected scope;
 `./ao check format` verifies formatting separately. Choose completion checks from
 [validation and review](test/validation-and-review.md).
@@ -136,11 +133,13 @@ Set `AOBUS_NIX_UNSTRIPPED_GTK=1` only when stepping into GTK internals; it force
 
 Use the [macOS guide](macos.md) or [Windows guide](windows.md) before native work: they own host tools, bootstrap, supported commands, build storage, and platform limitations.
 Both use the shared governed vcpkg manifest rather than Linux's Nix resolver.
-The native AppKit desktop remains a development slice and is launched with
-`bazel run //app/macos-appkit:aobus-appkit`; macOS also builds Core, CLI, and TUI
-with Core Audio. Bare native commands require an explicitly selected provisioned
+To launch the AppKit development slice without using personal settings or library
+data, follow the [isolated AppKit launch](macos.md#bazel-appkit-product).
+macOS also builds Core, CLI, and TUI with Core Audio. Bare native commands require an explicitly selected provisioned
 SDK; Windows additionally needs an initialized x64 Visual Studio environment
 and all three [standard compiler selectors](bazel.md#direct-bazel-without-the-portal).
+For shell-backed Windows actions, follow the same guide to select Git Bash in
+the client environment.
 Project commands use `ao.bat` to initialize Visual Studio and pinned Python tooling.
 SDK installation is explicit: `ao setup deps`, and `ao setup llvm-sdk` for
 the Windows LLVM SDK, are the provisioning actions; ordinary build, lint and

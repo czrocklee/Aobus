@@ -73,10 +73,12 @@ triplet with `AOBUS_BAZEL_VCPKG_PREFIX`, and set all three matching standard
 selectors: `BAZEL_VC`, `BAZEL_VC_FULL_VERSION`, and
 `BAZEL_WINSDK_FULL_VERSION`. An initialized shell alone is insufficient;
 [native Bazel setup](bazel.md#direct-bazel-without-the-portal) supplies the
-PowerShell selector recipe and admission rules. If Git's `usr\bin\bash.exe`
-is not on `PATH`, set `BAZEL_SH` in the developer shell to its full path. The
-portal selects the same executable from Git for Windows when no override is
-set. `--repo_env=BAZEL_SH=…` alone does not select the Bazel client's shell. Bare Bazel never installs Python, SDKs, ports, or WinUI runtime.
+PowerShell selector recipe and admission rules. For shell-backed rules, put
+Git for Windows' `usr\bin` on `PATH` or set `BAZEL_SH` in the developer shell
+to the full path of `bash.exe`. Having `git.exe` alone, or setting only
+`--repo_env=BAZEL_SH=…`, does not select Bash for the Bazel client. The portal
+uses an explicit `BAZEL_SH` or discovers Git Bash for both the client and its
+repository rules. Bare Bazel never installs Python, SDKs, ports, or WinUI runtime.
 
 ```bat
 bazel build //app/cli:aobus //app/tui:aobus-tui
@@ -230,11 +232,11 @@ Overrides apply in this order:
 3. `AOBUS_STATE_ROOT` replaces the complete managed-state base;
 4. otherwise `%LOCALAPPDATA%\Aobus` is used.
 
-The [Bazel action cache](bazel.md#shared-local-action-cache) is separate from
-these overrides. For example, to use `D:\Aobus\action-cache`, set
-`$env:AOBUS_BAZEL_DISK_CACHE` to that path for `ao.bat` and pass
-`"--disk_cache=$env:AOBUS_BAZEL_DISK_CACHE"` to bare Bazel. Leave it unset
-to use the shared default.
+These overrides do not relocate the [Bazel action cache](bazel.md#shared-local-action-cache).
+To share a different directory, set `$env:AOBUS_BAZEL_DISK_CACHE` to its
+absolute local path for `ao.bat` and pass `"--disk_cache=$env:AOBUS_BAZEL_DISK_CACHE"`
+to bare Bazel from the same PowerShell session. Omit both for the shared default.
+
 Keep build, tool, and cache overrides on a local Windows disk; mapped
 drives are not reliably distinguishable from local disks and drive mappings are
 login-session scoped. This is a storage requirement, not automatic local-volume
@@ -629,13 +631,13 @@ tests use the same per-test wrapper as every native OS; off Linux it passes the
 test through unchanged and starts no services: the native process smoke
 resolves its own runfiles, and
 the UIA probe checks the Windows App Runtime and interactive session itself.
-`ao.bat check` adds
-tooling, documentation, the shared and naming audits, workflow lint, the
-native-policy audit (the driver diagnostic is Linux-only) and the whole-graph
-lint test. The native backend suite carries `manual` but the
-non-manual `//:check_tests` suite lists it, so completion runs it; both current
-Windows cases are hidden `[.manual]`, and the unattended executable permits an
-empty selection. A passing empty selection is not hardware evidence
+
+`ao.bat check` adds tooling, documentation, the shared and naming audits,
+the native-policy audit, and the whole-graph lint test. Workflow lint and the
+compiler-driver diagnostic run only on Linux. The native backend suite carries
+`manual`, but completion runs it through the non-manual `//:check_tests` suite.
+Both Windows cases are hidden `[.manual]`, and the unattended executable permits
+an empty selection. A passing empty selection is not hardware evidence
 ([completion gate](bazel.md#completion-gate)). Choose the exact case
 whose prerequisites you prepared; `[.manual]` selects both probes, not just the
 provider example below. Concurrency filters should exclude hidden probes.

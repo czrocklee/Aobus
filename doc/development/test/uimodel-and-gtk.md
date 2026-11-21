@@ -161,13 +161,14 @@ The native mouse tests do not establish Wayland, touch, or grab-transfer behavio
 
 ### Process isolation and diagnostics
 
-Managed `ao check` gives GTK a private Xvfb and a private session bus without
-service activation, so tests never touch the desktop session or compete for
-MPRIS names. The declared context-specific wrapper starts those fixtures for an
-explicit GTK or backend label too, so the caller needs only the ready native
-tools and SDK; separately sharded processes need separate displays and buses. It marks them with
-`AOBUS_OWNED_GTK_DISPLAY` and `AOBUS_OWNED_GTK_BUS` and keeps both daemons alive
-until the process exits.
+On Linux, both `ao check` and a focused `bazel test //test:gtk_test` use the
+GTK target's wrapper. It starts a private Xvfb, a session bus without service
+activation, and private audio services. GTK shards get separate displays and
+buses, so they neither touch the desktop session nor compete for MPRIS names.
+The wrapper sets `AOBUS_OWNED_GTK_DISPLAY` and `AOBUS_OWNED_GTK_BUS` and keeps
+the marked services alive until the process exits. The backend target requests
+audio and a private bus, not a display. Both targets need the [Linux fixture
+tools](../bazel.md#direct-bazel-without-the-portal).
 
 - Native-input tests skip unless the display marker is present. Never set it for
   an inherited desktop display.
@@ -204,10 +205,10 @@ invocations isolated even while an earlier owner remains alive on the shared bus
 This protects name isolation, not orphaned-process cleanup; the owner's existing
 stdin EOF/HUP shutdown path remains in place.
 
-Rerun native-input or bus-dependent cases through `ao check`, which recreates
-owned endpoints. A focused `bazel test //test:gtk_test --test_filter=...` is
-caller-owned and requires the same private service and headless profile
-prerequisites; never reuse retired addresses or mark personal endpoints owned.
+Rerun native-input or bus-dependent cases with `ao check` or a focused
+`bazel test //test:gtk_test --test_filter=...`. Both use the wrapper to prepare
+owned endpoints when the test executes. Launching the test executable directly
+does not; never reuse retired addresses or mark personal endpoints owned.
 
 ## Show and present
 
