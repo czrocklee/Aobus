@@ -62,17 +62,17 @@ def _selection(platform: str, request: Request) -> _CheckSelection:
     )
     optional = set()
     windows_probes = {"//test:winui_localization_probe_test", "//test:winui_track_item_probe_test"}
-    # Independent of suite expansion: a Windows-only analysis test must not
-    # disappear from the evidence gate if discovery stops listing it.
-    winui_projection = "//test/winui/projection:winui_projection_test"
+    # Require these Windows-only analysis tests independently of suite expansion.
+    windows_analysis = {
+        "//test/winui/projection:winui_projection_test",
+        "//bazel/windows_header_share:mode_interfaces_test",
+    }
     if platform == "windows":
-        required.update(windows_probes)
-        required.add(winui_projection)
+        required.update(windows_probes | windows_analysis)
         if request.ci:
             required.add("//test:winui_uia_test")
     else:
-        optional.update(windows_probes)
-        optional.add(winui_projection)
+        optional.update(windows_probes | windows_analysis)
     # The ordinary suite expands these Linux-only tests on every host.
     linux_only = {"//test:dictionary_publication_test", "//bazel/header_share:sparse_headers_test"}
     if platform == "linux":

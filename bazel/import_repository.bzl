@@ -118,8 +118,8 @@ def _project_runtime(ctx, subpackage, path, source, projected, windows, runtime_
         runtime_sources[identity] = path
     return path
 
-def shared_linux_header_packages(imports):
-    """Find packages with identical Linux header providers and ordered include roots.
+def shared_file_header_packages(imports):
+    """Find mode-identical sparse header interfaces in this importing repository.
 
     Args:
         imports: Independently admitted debug and release resolver observations.
@@ -127,7 +127,11 @@ def shared_linux_header_packages(imports):
     Returns:
         Names eligible to share a header-only interface, never binaries or defines.
     """
-    if any([entry["manifest"]["configuration"]["platform"] != "linux" for entry in imports.values()]):
+    configs = [entry["manifest"]["configuration"] for entry in imports.values()]
+    if not all([c["platform"] == "linux" for c in configs]) and not all([
+        c["platform"] == "windows" and (c.get("provider") or {}).get("name") == "vcpkg"
+        for c in configs
+    ]):
         return {}
     release = {p["name"]: p for p in imports["release"]["packages"]}
     shared = {}
@@ -151,7 +155,7 @@ def materialize_imports(ctx, subpackage, config, packages, manifest, shared_head
         config: Admitted dependency configuration, either debug or release.
         packages: Admitted package interfaces with original artifact paths and header anchors.
         manifest: Admission metadata whose configuration identifies the native platform.
-        shared_headers: Linux packages whose header-only interface is materialized in the release subpackage.
+        shared_headers: Packages whose identical mode-specific headers are materialized in the release subpackage.
 
     Returns:
         Sorted public target names for the materialized SDK subpackage.
