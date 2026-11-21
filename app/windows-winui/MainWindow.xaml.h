@@ -25,6 +25,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 
 namespace ao::winui
 {
@@ -73,6 +74,9 @@ namespace winrt::Aobus::implementation
     ao::Result<> activate();
     ao::Result<> prepareLibraryRestart();
     void retire() noexcept;
+
+    /// Dispatch a frame command through the mounted shell's action registry.
+    bool tryInvokeShellAction(std::string_view actionId) const;
 
     void handleRootSizeChanged(Windows::Foundation::IInspectable const&,
                                Microsoft::UI::Xaml::SizeChangedEventArgs const& args);

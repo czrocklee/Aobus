@@ -72,7 +72,7 @@ Persisted parent validation and format compatibility belong to the library model
 
 GTK builds native tree nodes from the effective parent/child edges and uses root sections to render All Tracks separately from the saved-List forest.
 TUI walks the same roots and child edges in preorder, then adds terminal-specific indentation, one shared List icon, and expression detail.
-WinUI rebuilds its Modern `NavigationView` or Classic `TreeView` only after a committed library reset, List upsert, or List deletion; track-only and saved-order publications do not replace the tree.
+WinUI rebuilds its Modern `NavigationView` or Classic `TreeView` after a committed library reset, List upsert, or List deletion. Track or order changes alone do not replace the tree. Moving or resetting a saved order also publishes a List upsert, so it does rebuild the tree.
 During replacement it suppresses selection callbacks, preserves expansion for surviving ids, expands every ancestor needed to reveal the active saved List, and selects All Tracks when the active List no longer exists.
 A later workspace selection also reveals its ancestor chain, including when the parent survived in a collapsed state.
 None of the frontends independently sorts the snapshot or follows source-parent chains.

@@ -153,7 +153,10 @@ The same captured selection exposes Manual Order **Move Up**, **Move Down**,
 `ListOrderAuthoringSession` capability flags. The four movement handlers also
 receive `Alt+Up`, `Alt+Down`, `Alt+Home`, and `Alt+End`. They are native component
 actions, not additions to the layout-document action schema. WinUI does not
-expose drag reordering or Forget Hidden Positions in this version.
+expose drag reordering or Forget Hidden Positions. Classic shows
+move and reset results in its status line. When the tree restores the already-active List, its
+selection callback leaves the operation status intact. Selecting a different
+List reports navigation instead.
 
 A Manual Order command posts its result once and reports the same text to the live status line. A refusal to start and all writer statuses (Applied, NoOp, Busy, Stale, Unavailable) are transient Info; an error returned by the submitted command keeps its diagnostic as a retained Warning. Delivery to the feed does not guarantee that the compact strip displays the message: the same activity priorities apply as for membership.
 

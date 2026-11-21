@@ -51,6 +51,7 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/completion/CompletionAliasPolicy.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/library/LibrarySnapshot.h>
@@ -119,11 +120,14 @@ namespace
   using Controls::Primitives::Thumb;
 
   constexpr std::size_t kProbeTrackCount = 12;
+  constexpr auto kComposerFilter = R"($composer = "Bach")";
+  constexpr auto kAlphaFilter = R"($title = "Audit Alpha")";
   constexpr auto kExpectedMissing = kProbeTrackCount - 1; // Only the rescan target has a physical file.
   constexpr std::size_t kRescanTrackIndex = 2;            // Neither named Bach landmark.
   constexpr auto kRescanUri = "probe/selected.wav";
   constexpr auto kPreviewStatusId = L"list-editor-preview-status";
   constexpr auto kSelectionSummaryId = L"modern-selection-info";
+  constexpr auto kClassicStatusId = L"classic-status-message";
   constexpr auto kSelectionDurations =
     std::array{std::chrono::seconds{123}, std::chrono::seconds{65}, std::chrono::seconds{9}, std::chrono::seconds{0}};
 
@@ -440,18 +444,18 @@ namespace
           }
         }
 
-        auto const createComposerList = [&write](std::string_view name)
-        {
-          return write.lists().create(ao::library::ListBuilder::makeEmpty().name(name).filter("$composer = \"Bach\""));
-        };
-        auto const bachRes = createComposerList("Bach");
+        auto bach = ao::library::ListBuilder::makeEmpty();
+        bach.name("Bach").filter(kComposerFilter);
+        bach.orderTrackIds().add(seed.summaryTracks.front()).add(seed.summaryTracks.at(1));
+        auto const bachRes = write.lists().create(bach);
 
         if (!bachRes)
         {
           return std::unexpected{bachRes.error()};
         }
 
-        auto const pinnedBachRes = createComposerList("Pinned Bach");
+        auto const pinnedBachRes =
+          write.lists().create(ao::library::ListBuilder::makeEmpty().name("Pinned Bach").filter(kComposerFilter));
 
         if (!pinnedBachRes)
         {
@@ -613,7 +617,10 @@ namespace
       _timeout.Tick(
         [this](auto const&, auto const&)
         {
-          fail("90-second desktop deadline expired");
+          auto const status = findVisualById<Controls::TextBlock>(_root, kClassicStatusId);
+          fail(status ? std::format(
+                          "90-second desktop deadline expired; Classic status: '{}'", winrt::to_string(status.Text()))
+                      : "90-second desktop deadline expired");
           finish();
         });
       _timeout.Start();
@@ -1276,19 +1283,19 @@ namespace
       }
       else if (next && !owner->_finished)
       {
-        owner->enqueue(next);
+        owner->afterFrame(next);
       }
     }
 
     template<typename Reply>
-    void runPreviewCommand(ao::async::Task<ao::Result<Reply>> task, Step next = nullptr)
+    void runLibraryCommand(ao::async::Task<ao::Result<Reply>> task, Step next = nullptr)
     {
       auto& runtime = _sessionPtr->runtime().async();
       runtime.spawnWithLifetime(
-        _previewTasks,
+        _libraryTasks,
         [this, &runtime, task = std::move(task), next](std::stop_token stop) mutable
         { return checkMutationAsync(this, &runtime, std::move(task), next, stop); },
-        "List preview probe external commit");
+        "List probe library command");
     }
 
     void clickFastCreate()
@@ -1311,7 +1318,7 @@ namespace
             "Create synchronously rejects the current filter over a broken parent");
 
       // Unlike the editor, the writer accepts this locally valid predicate.
-      runPreviewCommand(_sessionPtr->runtime().library().commands().previewCreateListAsync(
+      runLibraryCommand(_sessionPtr->runtime().library().commands().previewCreateListAsync(
                           {.parentId = _seed.previewParentId, .name = "Child draft", .expression = "$year = 2000"}),
                         &WinUiAutomationProbe::repairPreviewParent);
     }
@@ -1327,7 +1334,7 @@ namespace
       _optPreviewStatusToken = _previewStatus.RegisterPropertyChangedCallback(
         Controls::TextBlock::TextProperty(),
         [this](auto const&, auto const&) { enqueue(&WinUiAutomationProbe::checkLiveParent); });
-      runPreviewCommand(_sessionPtr->runtime().library().commands().updateListAsync(
+      runLibraryCommand(_sessionPtr->runtime().library().commands().updateListAsync(
         {.listId = _seed.previewParentId, .name = "Preview parent", .expression = "$composer = 'Debussy'"}));
     }
 
@@ -1351,7 +1358,7 @@ namespace
       _optPreviewStatusToken = _previewStatus.RegisterPropertyChangedCallback(
         Controls::TextBlock::TextProperty(),
         [this](auto const&, auto const&) { enqueue(&WinUiAutomationProbe::checkDeletedParent); });
-      runPreviewCommand(_sessionPtr->runtime().library().commands().deleteListAsync(_seed.previewParentId));
+      runLibraryCommand(_sessionPtr->runtime().library().commands().deleteListAsync(_seed.previewParentId));
     }
 
     void checkDeletedParent()
@@ -1588,6 +1595,52 @@ namespace
       _stage = "pinned composer list reused after temporary sort";
       checkComposerState(_sortedSpec, "technical");
       checkSelectionSummary("switch back to the existing Bach selection", "1 item selected (1:05)");
+      prepareModernRebuild();
+    }
+
+    Controls::NavigationViewItem selectedModernBach() const
+    {
+      auto const pane = findVisualById<Controls::NavigationView>(_root, L"modern-navigation");
+      auto const selected = pane ? pane.SelectedItem().try_as<Controls::NavigationViewItem>() : nullptr;
+      std::uint32_t index = 0;
+      return selected && AutomationProperties::GetName(selected) == L"Bach" && pane.MenuItems().IndexOf(selected, index)
+               ? selected
+               : nullptr;
+    }
+
+    void prepareModernRebuild()
+    {
+      _stage = "Modern rebuild: filtered Bach";
+      auto& runtime = _sessionPtr->runtime();
+      auto const viewRes = runtime.workspace().navigate({
+        .target = ao::rt::FilteredListTarget{.listId = _seed.composerListId, .filterExpression = kAlphaFilter},
+        .optPresentation = ao::rt::NavigationPresentation{.spec = _sortedSpec},
+      });
+      _modernBachBeforeUpsert = selectedModernBach();
+
+      if (!viewRes || activeState().id != *viewRes || !_modernBachBeforeUpsert)
+      {
+        fail("could not start with a filtered Bach view and native Bach sidebar selection");
+        finish();
+        return;
+      }
+
+      _modernFilteredViewId = *viewRes;
+      // Commit outside the List editor so its own post-save navigation cannot replace the view under test.
+      runLibraryCommand(runtime.library().commands().createListAsync({.name = "Rebuild witness"}),
+                        &WinUiAutomationProbe::modernListRebuilt);
+    }
+
+    void modernListRebuilt()
+    {
+      _stage = "Modern rebuild: restored Bach selection";
+      auto const bach = selectedModernBach();
+      check(bach && bach != _modernBachBeforeUpsert, "rebuilt Modern sidebar did not select the replacement Bach item");
+      _modernBachBeforeUpsert = nullptr;
+      auto const state = activeState();
+      check(state.id == _modernFilteredViewId && state.listId == _seed.composerListId &&
+              state.filterExpression == kAlphaFilter && !state.optFilterError && state.presentation == _sortedSpec,
+            "Modern sidebar rebuild did not keep the filtered Bach view and its exact presentation");
       selectSidebarList(L"All Tracks", &WinUiAutomationProbe::groupModern);
     }
 
@@ -1989,9 +2042,7 @@ namespace
       _stage = "Classic Rescan idle";
       checkClassicRescanControls(true);
       _stage = "Classic Rescan busy";
-      auto const status = findVisualIf<Controls::TextBlock>(
-        _root,
-        [](auto const& text) { return AutomationProperties::GetAutomationId(text) == L"classic-status-message"; });
+      auto const status = findVisualById<Controls::TextBlock>(_root, kClassicStatusId);
       check(static_cast<bool>(status), "Classic status line missing");
       writeRescanAudio(std::chrono::seconds{2});
       startRescan(&WinUiAutomationProbe::classicRescanFinished, status);
@@ -2008,6 +2059,253 @@ namespace
             "the retired Modern summary changed after a selected-track commit");
       _retiredSelectionSummary = nullptr;
       checkClassicRescanControls(true);
+      resizeForLayout(1200, 800);
+      afterFrame(&WinUiAutomationProbe::restoreClassicSelection);
+    }
+
+    Controls::TreeView classicTree() const
+    {
+      auto const pane = findVisualById<Grid>(_root, L"classic-navigation");
+      return pane ? findVisualIf<Controls::TreeView>(pane, [](auto const&) { return true; }) : nullptr;
+    }
+
+    void restoreClassicSelection()
+    {
+      _stage = "Classic selection restoration preserves status";
+      auto const tree = classicTree();
+      auto const node = tree ? tree.SelectedNode() : nullptr;
+
+      if (!node || activeState().listId != ao::rt::kAllTracksListId)
+      {
+        fail("Classic tree has no active All Tracks selection to restore");
+        finish();
+        return;
+      }
+
+      // Force a native selection transition back to the already active List.
+      tree.SelectedNode(nullptr);
+      check(!tree.SelectedNode(), "Classic tree selection did not clear");
+      tree.SelectedNode(node);
+      check(tree.SelectedNode() == node, "Classic tree selection did not restore");
+      afterFrame(&WinUiAutomationProbe::classicSelectionRestored);
+    }
+
+    void classicSelectionRestored()
+    {
+      auto const status = findVisualById<Controls::TextBlock>(_root, kClassicStatusId);
+      auto const expected = ao::i18n::requiredFormat(
+        _sessionPtr->textCatalog(), ao::i18n::MessageId::LibraryScanMissing, {{"count", kExpectedMissing}});
+      check(status && status.Text() == winrt::to_hstring(expected), "selection restoration replaced the Rescan result");
+
+      auto const tree = classicTree();
+      auto const bach = classicBachNode(tree);
+
+      if (!bach)
+      {
+        fail("Classic Bach row missing after selection restoration");
+        finish();
+        return;
+      }
+
+      tree.SelectedNode(bach);
+      afterFrame(&WinUiAutomationProbe::classicNavigated);
+    }
+
+    void classicNavigated()
+    {
+      _stage = "Classic navigation after selection restoration";
+      auto const status = findVisualById<Controls::TextBlock>(_root, kClassicStatusId);
+      check(activeState().listId == _seed.composerListId, "Classic tree did not navigate to Bach");
+      auto const expected =
+        ao::i18n::requiredFormat(_sessionPtr->textCatalog(), ao::i18n::MessageId::WinUiListStatus, {{"list", "Bach"}});
+      check(
+        status && status.Text() == winrt::to_hstring(expected), "selecting a different List did not report navigation");
+      prepareClassicMove();
+    }
+
+    static Controls::TreeViewNode classicBachNode(Controls::TreeView const& tree)
+    {
+      auto const row = tree ? findVisual<Controls::TreeViewItem>(tree, L"Bach") : nullptr;
+      return row ? tree.NodeFromContainer(row) : nullptr;
+    }
+
+    Controls::ListView filteredClassicRows() const
+    {
+      auto const table = findVisualById<Controls::ScrollViewer>(_root, L"classic-track-table");
+      auto const rows = table ? findVisualIf<Controls::ListView>(table, [](auto const&) { return true; }) : nullptr;
+      auto const item = rows && rows.Items().Size() == 1 ? rows.ContainerFromIndex(0) : nullptr;
+      auto const row = item ? item.try_as<Controls::ListViewItem>() : nullptr;
+      auto const peer = row ? FrameworkElementAutomationPeer::CreatePeerForElement(row) : nullptr;
+      return peer && peer.GetName() == L"Audit Alpha" ? rows : nullptr;
+    }
+
+    void prepareClassicMove()
+    {
+      _stage = "Classic Move: filtered Manual Order view";
+      auto const* manual = ao::rt::builtinTrackPresentationPreset(ao::rt::kListOrderTrackPresentationId);
+
+      if (!manual)
+      {
+        fail("Manual Order presentation missing");
+        finish();
+        return;
+      }
+
+      auto viewRes = _sessionPtr->runtime().workspace().navigate({
+        .target = ao::rt::FilteredListTarget{.listId = _seed.composerListId, .filterExpression = kAlphaFilter},
+        .optPresentation = ao::rt::NavigationPresentation{.spec = manual->spec},
+      });
+
+      if (!viewRes)
+      {
+        fail(viewRes.error().message);
+        finish();
+        return;
+      }
+
+      _moveViewId = *viewRes;
+      afterFrame(&WinUiAutomationProbe::moveClassicSelection);
+    }
+
+    bool isClassicMoveViewIntact() const
+    {
+      auto const state = activeState();
+      auto const* manual = ao::rt::builtinTrackPresentationPreset(ao::rt::kListOrderTrackPresentationId);
+      return state.id == _moveViewId && state.listId == _seed.composerListId &&
+             state.filterExpression == kAlphaFilter && !state.optFilterError && manual &&
+             state.presentation == manual->spec && state.selection == std::vector{_seed.summaryTracks.front()};
+    }
+
+    void moveClassicSelection()
+    {
+      auto const tree = classicTree();
+      _bachBeforeMove = classicBachNode(tree);
+      auto const rows = filteredClassicRows();
+
+      if (!_bachBeforeMove || tree.SelectedNode() != _bachBeforeMove || !rows)
+      {
+        _stage = "Classic Move: waiting for selected Bach with only Alpha visible";
+        afterFrame(&WinUiAutomationProbe::moveClassicSelection);
+        return;
+      }
+
+      rows.SelectedIndex(0);
+      auto& library = _sessionPtr->runtime().library();
+
+      if (!isClassicMoveViewIntact() || library.snapshot().listOrderTrackIds(_seed.composerListId) !=
+                                          std::vector{_seed.summaryTracks.front(), _seed.summaryTracks.at(1)})
+      {
+        fail("expected selected Alpha in filtered Manual Order and saved order Alpha, Beta before Move");
+        finish();
+        return;
+      }
+
+      _movedText = winrt::to_hstring(
+        ao::i18n::requiredFormat(_sessionPtr->textCatalog(), ao::i18n::MessageId::ListOrderMoved, {{"count", 1}}));
+      auto const status = findVisualById<Controls::TextBlock>(_root, kClassicStatusId);
+
+      if (!status || status.Text() == _movedText)
+      {
+        fail("expected a Classic status line distinct from the upcoming Move result");
+        finish();
+        return;
+      }
+
+      // Record delivery independently of the tree rebuild. If restoration immediately
+      // overwrites the text, the final assertion must read the replacement, not this sample.
+      auto const token = status.RegisterPropertyChangedCallback(
+        Controls::TextBlock::TextProperty(),
+        [this, previous = status.Text()](DependencyObject const& sender, auto const&)
+        {
+          auto const text = sender.as<Controls::TextBlock>().Text();
+
+          if (text == _movedText)
+          {
+            _moveReported = true;
+          }
+          else if (text != previous)
+          {
+            _otherMoveStatus = text;
+          }
+        });
+      _moveStatusObserver = ao::utility::ScopedRegistration{
+        [status, token] { status.UnregisterPropertyChangedCallback(Controls::TextBlock::TextProperty(), token); }};
+      _stage = "Classic Move: waiting for committed Bach upsert";
+      _moveUpsertSub = library.changes().onChanged(
+        [this](ao::rt::LibraryChangeSet const& change)
+        { _moveUpserted = _moveUpserted || std::ranges::contains(change.listsUpserted, _seed.composerListId); });
+      // Enter the same mounted action registry as Alt+End, without injecting desktop input.
+      if (!implementation()->tryInvokeShellAction("track.orderMoveToBottom"))
+      {
+        fail("mounted shell did not dispatch Move to Bottom");
+        finish();
+        return;
+      }
+
+      afterFrame(&WinUiAutomationProbe::awaitClassicMoveSettlement);
+    }
+
+    bool isClassicMoveUiSettled() const
+    {
+      auto const tree = classicTree();
+      auto const bach = classicBachNode(tree);
+      auto const rows = filteredClassicRows();
+      return bach && bach != _bachBeforeMove && tree.SelectedNode() == bach && rows && rows.SelectedIndex() == 0;
+    }
+
+    void awaitClassicMoveSettlement()
+    {
+      if (activeState().id != _moveViewId)
+      {
+        fail("Classic navigated away from the filtered view during Move");
+        finish();
+        return;
+      }
+
+      if (!_moveUpserted)
+      {
+        if (!_otherMoveStatus.empty())
+        {
+          fail(std::format("Move reported '{}' without a Bach upsert", winrt::to_string(_otherMoveStatus)));
+          finish();
+          return;
+        }
+
+        afterFrame(&WinUiAutomationProbe::awaitClassicMoveSettlement);
+        return;
+      }
+
+      _moveUpsertSub.reset();
+      _stage = _moveReported ? "Classic Move: waiting for rebuilt Bach and selected Alpha"
+                             : "Classic Move: waiting for the command result after upsert";
+
+      if (!_moveReported || !isClassicMoveUiSettled())
+      {
+        afterFrame(&WinUiAutomationProbe::awaitClassicMoveSettlement);
+        return;
+      }
+
+      // Do not pass on the first sight of the outcome. Let delayed tree events run.
+      afterFrame(&WinUiAutomationProbe::classicMoveSettled);
+    }
+
+    void classicMoveSettled()
+    {
+      _stage = "Classic Move settled";
+      {
+        auto const snapshot = _sessionPtr->runtime().library().snapshot();
+        auto const optBach = snapshot.listNode(_seed.composerListId);
+        check(optBach && optBach->expression == kComposerFilter, "Move changed the saved Bach filter");
+        check(snapshot.listOrderTrackIds(_seed.composerListId) ==
+                std::vector{_seed.summaryTracks.at(1), _seed.summaryTracks.front()},
+              "Move to Bottom did not save Beta, Alpha across the view filter");
+      }
+      check(isClassicMoveViewIntact(), "Move lost the exact filtered view, presentation or track selection");
+      check(isClassicMoveUiSettled(), "rebuilt Classic tree or track row lost its selection");
+      auto const status = findVisualById<Controls::TextBlock>(_root, kClassicStatusId);
+      check(
+        status && status.Visibility() == Visibility::Visible && status.ActualWidth() > 0 && status.Text() == _movedText,
+        "Classic status line did not retain the Move outcome after tree restoration");
       finish();
     }
 
@@ -2032,7 +2330,11 @@ namespace
 
       _windowSizing.reset();
       _rescanSub.reset();
-      _previewTasks.cancelAll();
+      _libraryTasks.cancelAll();
+      _modernBachBeforeUpsert = nullptr;
+      _moveUpsertSub.reset();
+      _moveStatusObserver.reset();
+      _bachBeforeMove = nullptr;
 
       if (_window)
       {
@@ -2083,13 +2385,23 @@ namespace
     bool _listPreviewReady = false;
     bool _liveParent = false;
     std::uint64_t _previewRevision = 0;
-    ao::async::LifetimeScope _previewTasks;
+    ao::async::LifetimeScope _libraryTasks;
     Popup::Closed_revoker _listPreviewClosed{};
     Controls::StackPanel _canaries{nullptr};
     FlyoutBase _flyout{nullptr};
     std::unique_ptr<ao::rt::TextOrderingPolicy> _orderingPtr;
     std::unique_ptr<ao::rt::CompletionAliasPolicy> _aliasesPtr;
     std::unique_ptr<ao::winui::LibrarySession> _sessionPtr;
+    ao::rt::ViewId _modernFilteredViewId{};
+    Controls::NavigationViewItem _modernBachBeforeUpsert{nullptr};
+    ao::rt::ViewId _moveViewId{};
+    Controls::TreeViewNode _bachBeforeMove{nullptr};
+    ao::async::Subscription _moveUpsertSub;
+    winrt::hstring _movedText;
+    winrt::hstring _otherMoveStatus;
+    ao::utility::ScopedRegistration _moveStatusObserver;
+    bool _moveReported = false;
+    bool _moveUpserted = false;
     ao::async::Subscription _rescanSub;
     std::size_t _scanStarts = 0;
     SeededLibrary _seed;

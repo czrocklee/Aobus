@@ -621,6 +621,22 @@ check the summary in the live Modern shell and after retirement. It exercises bo
 flat and grouped track rows, a narrowed Classic window, and the volume and
 overflow popups. It also checks the live count and filter validity in New List.
 
+In Modern, a committed List upsert rebuilds the native `NavigationView` while a
+filtered view is active. The probe checks that the replacement item is selected
+and that the exact workspace view, filter, and presentation survive. It does not
+force or establish delayed `SelectionChanged` delivery.
+
+In Classic, the probe clears and restores native tree selection to check that the
+Rescan result survives, then selects a different List to check that navigation is
+reported. It invokes **Move to Bottom** through the mounted shell's action
+registry in a filtered Manual Order view. Once the committed List upsert has
+replaced the selected tree node and the filtered row is selected, the probe
+checks the saved order (including the hidden track), the exact view and
+selection, and the localized Move result in the status line on a subsequent
+render and dispatcher turn.
+The probe sets up the filter through the workspace; it does not type the
+filter, press a physical shortcut, or open the track context menu.
+
 The audit requires a nonblank final `AutomationPeer.Name` on interactive and
 item peers, including disabled controls. An ID or attached property alone is
 not evidence of a name. The Soul and seek controls, title header and resize
