@@ -10,7 +10,9 @@
 #include <ao/audio/PcmBlock.h>
 #include <ao/audio/SampleEncoding.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <algorithm>
 #include <array>
@@ -119,6 +121,18 @@ namespace ao::audio::test
       {
         CHECK(readSigned16LePcmSample(block.bytes, frame * 2U) == markers[0]);
         CHECK(readSigned16LePcmSample(block.bytes, (frame * 2U) + 1U) == markers[1]);
+      }
+    }
+
+    void checkStableEmptyEnd(FlacDecoderSession& decoder)
+    {
+      for (std::uint32_t repeat = 0; repeat < 2; ++repeat)
+      {
+        auto const endRes = decoder.readNextBlock();
+        REQUIRE(endRes);
+        CHECK(endRes->endOfStream);
+        CHECK(endRes->frames == 0);
+        CHECK(endRes->bytes.empty());
       }
     }
 
@@ -345,13 +359,101 @@ namespace ao::audio::test
     CHECK(decoder.streamInfo() == info);
   }
 
+  TEST_CASE("FlacDecoderSession - a short or truncated tail leaves a stable read failure")
+  {
+    struct TailCase
+    {
+      std::uint64_t totalSamples;
+      std::size_t keptHeaderBytes;
+    };
+
+    // With four header bytes libFLAC reaches EOF but reports native failure;
+    // compare the known deficit to the same shortfall at a clean frame boundary.
+    auto const tail = GENERATE(TailCase{0, 4},
+                               TailCase{kFrameSamples, 4},
+                               TailCase{kDeclaredTotalSamples, 0},
+                               TailCase{kDeclaredTotalSamples, 4});
+    CAPTURE(tail.totalSamples, tail.keptHeaderBytes);
+
+    auto bytes = buildFlacStreaminfoBytes(tail.totalSamples);
+    appendBytes(bytes, buildFrameBytes(0, kFirstFrameMarkers));
+    auto truncatedHeader = buildFrameBytes(1, kMiddleFrameMarkers);
+    // Four bytes keep the sync and fixed fields, but not the frame number.
+    truncatedHeader.resize(tail.keptHeaderBytes);
+    appendBytes(bytes, truncatedHeader);
+
+    auto const temp = ao::test::TempFile{bytes, ".flac"};
+    auto decoderPtr = ao::test::requireValue(FlacDecoderSession::open(temp.path, std::nullopt));
+    auto& decoder = *decoderPtr;
+
+    auto const firstBlockRes = decoder.readNextBlock();
+    REQUIRE(firstBlockRes);
+    checkFrameBlock(*firstBlockRes, 0, kFirstFrameMarkers);
+
+    auto const offendingRes = decoder.readNextBlock();
+    REQUIRE_FALSE(offendingRes);
+    CHECK(offendingRes.error().code == Error::Code::DecodeFailed);
+    CHECK_FALSE(offendingRes.error().message.empty());
+    CHECK(offendingRes.error().message.contains("ended before the declared sample count") ==
+          (tail.totalSamples > kFrameSamples));
+
+    // The failed call can leave libFLAC in END_OF_STREAM; the next read must
+    // preserve the failure rather than interpreting that state as success.
+    auto const repeatedRes = decoder.readNextBlock();
+    REQUIRE_FALSE(repeatedRes);
+    checkPreservedError(repeatedRes.error(), offendingRes.error());
+
+    SECTION("Flush alone preserves the failure")
+    {
+      decoder.flush();
+      auto const afterFlushRes = decoder.readNextBlock();
+      REQUIRE_FALSE(afterFlushRes);
+      checkPreservedError(afterFlushRes.error(), offendingRes.error());
+    }
+
+    SECTION("Seeking to zero without flushing replays PCM before failing again")
+    {
+      REQUIRE(decoder.seekFrame(0));
+      auto const replayRes = decoder.readNextBlock();
+      REQUIRE(replayRes);
+      checkFrameBlock(*replayRes, 0, kFirstFrameMarkers);
+
+      auto const tailRes = decoder.readNextBlock();
+      REQUIRE_FALSE(tailRes);
+      CHECK(tailRes.error().code == Error::Code::DecodeFailed);
+      CHECK(tailRes.error().message == offendingRes.error().message);
+    }
+
+    if (tail.totalSamples != 0)
+    {
+      SECTION("Seeking beyond the declared end preserves the failure but seeking to it produces EOF")
+      {
+        auto const beyondEndRes = decoder.seekFrame(tail.totalSamples + 1U);
+        REQUIRE_FALSE(beyondEndRes);
+        CHECK(beyondEndRes.error().code == Error::Code::SeekFailed);
+
+        auto const afterRejectedSeekRes = decoder.readNextBlock();
+        REQUIRE_FALSE(afterRejectedSeekRes);
+        checkPreservedError(afterRejectedSeekRes.error(), offendingRes.error());
+
+        // A new cursor at the declared end can produce clean EOF without
+        // claiming the earlier audio was complete.
+        REQUIRE(decoder.seekFrame(tail.totalSamples));
+        checkStableEmptyEnd(decoder);
+      }
+    }
+  }
+
   TEST_CASE("FlacDecoderSession - stray bytes between frames resynchronize without losing samples")
   {
+    auto const totalSamples = GENERATE(std::uint64_t{0}, kDeclaredTotalSamples);
+    CAPTURE(totalSamples);
+
     // Positive control for gap rejection: harmless noise between otherwise
     // contiguous frames only makes the provider resynchronize. Every sample
     // must still be delivered at its literal index with the full marker PCM,
     // the stream must reach its normal end, and the info must stay unchanged.
-    auto bytes = buildFlacStreaminfoBytes(kDeclaredTotalSamples);
+    auto bytes = buildFlacStreaminfoBytes(totalSamples);
     appendBytes(bytes, buildFrameBytes(0, kFirstFrameMarkers));
     // 'x', 'y', 'z': bytes that cannot form a frame sync.
     bytes.push_back(0x78);
@@ -378,14 +480,7 @@ namespace ao::audio::test
     REQUIRE(lastBlockRes);
     checkFrameBlock(*lastBlockRes, 32, kLastFrameMarkers);
 
-    for (std::uint32_t repeat = 0; repeat < 2; ++repeat)
-    {
-      auto const endRes = decoder.readNextBlock();
-      REQUIRE(endRes);
-      CHECK(endRes->endOfStream);
-      CHECK(endRes->frames == 0);
-      CHECK(endRes->bytes.empty());
-    }
+    checkStableEmptyEnd(decoder);
 
     CHECK(decoder.streamInfo() == info);
   }

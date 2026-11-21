@@ -868,6 +868,7 @@ cc_test(
         "audio/FlacDecoderFormatStabilityTest.cpp",
         "audio/FlacDecoderMalformedTest.cpp",
         "audio/FlacDecoderSessionTest.cpp",
+        "audio/FlacDecoderTrailingTagTest.cpp",
         "audio/FlacMetadataInitializationTest.cpp",
         "audio/FlacWavMaskCompatibilityTest.cpp",
         "audio/FormatTest.cpp",

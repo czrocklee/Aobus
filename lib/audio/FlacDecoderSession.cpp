@@ -205,11 +205,13 @@ namespace ao::audio
     std::optional<::FLAC__StreamDecoderErrorStatus> optDecodeError;
     std::optional<FlacFrameFormatMismatch> optFormatMismatch;
     std::optional<FlacFrameDiscontinuity> optFrameDiscontinuity;
-    std::optional<Error> optOutputError;
+    std::optional<Error> optOperationError;
     // Only seek_absolute's synchronous write callback uses this target; normal
     // delivery is checked against the next public block's sequential index.
     std::optional<std::uint64_t> optSeekTarget;
     std::optional<FlacStreamInfoMetadata> optStreamInfoMetadata;
+    std::optional<std::uint64_t> optId3v1Offset;
+    bool lastFramePrecedesId3v1 = false;
     bool isReadingFirstMetadataBlock = false;
     bool hasFramePhaseWithoutStreamInfo = false;
     bool hasStreamInfo = false;
@@ -389,18 +391,44 @@ namespace ao::audio
           std::string{"FLAC decode error: "} + ::FLAC__StreamDecoderErrorStatusString[*optDecodeError]);
       }
 
-      if (optOutputError)
+      if (optOperationError)
       {
-        detail::throwDecoderError(*optOutputError);
+        detail::throwDecoderError(*optOperationError);
       }
     }
 
-    void checkEndOfStream() const
+    bool isAtTrailingId3v1() const noexcept
     {
-      if (totalFrames != 0 && nextFrameIndex + bufferedFrames < totalFrames)
+      ::FLAC__uint64 position = 0;
+      return optId3v1Offset && ::FLAC__stream_decoder_get_decode_position(decoder, &position) != 0 &&
+             position == *optId3v1Offset;
+    }
+
+    void checkEndOfStream(bool failedNativeRead)
+    {
+      bool const missingSamples = totalFrames != 0 && nextFrameIndex + bufferedFrames < totalFrames;
+      // If only the witnessed ID3v1 suffix remains, a terminal sync-like byte
+      // sequence in its payload need not invalidate the preceding audio.
+      bool const failedInTag = lastFramePrecedesId3v1 && bufferedFrames == 0;
+
+      if (!missingSamples && (!failedNativeRead || failedInTag))
       {
-        detail::throwDecoderError(Error::Code::DecodeFailed, "FLAC stream ended before the declared sample count");
+        return;
       }
+
+      auto error = Error{
+        .code = Error::Code::DecodeFailed,
+        .message = missingSamples ? "FLAC stream ended before the declared sample count" : "FLAC process single failed",
+        .location = std::source_location::current(),
+      };
+
+      if (failedNativeRead)
+      {
+        // Another native call at EOF can succeed even though this one failed.
+        optOperationError = error;
+      }
+
+      detail::throwDecoderError(std::move(error));
     }
   };
 
@@ -418,6 +446,14 @@ namespace ao::audio
       if (auto const res = _implPtr->fileCursor.open(filePath); !res)
       {
         detail::throwDecoderError(res.error());
+      }
+
+      constexpr std::size_t kId3v1Bytes = 128;
+
+      if (auto const bytes = _implPtr->fileCursor.bytes();
+          bytes.size() >= kId3v1Bytes && utility::bytes::stringView(bytes.last(kId3v1Bytes)).starts_with("TAG"))
+      {
+        _implPtr->optId3v1Offset = bytes.size() - kId3v1Bytes;
       }
 
       _implPtr->eof = false;
@@ -531,26 +567,20 @@ namespace ao::audio
         detail::throwDecoderError(Error::Code::SeekFailed, "FLAC decoder must be flushed before seeking again");
       }
 
+      if (_implPtr->totalFrames != 0 && frameIndex > _implPtr->totalFrames)
+      {
+        detail::throwDecoderError(Error::Code::SeekFailed, "FLAC frame seek is out of bounds");
+      }
+
       _implPtr->pcmBuffer.clear();
       _implPtr->outputBytes = {};
       _implPtr->bufferedFrames = 0;
       _implPtr->optDecodeError.reset();
       _implPtr->optFormatMismatch.reset();
       _implPtr->optFrameDiscontinuity.reset();
-      _implPtr->optOutputError.reset();
+      _implPtr->optOperationError.reset();
+      _implPtr->lastFramePrecedesId3v1 = false;
       _implPtr->eof = false;
-
-      auto const sampleRate = _implPtr->info.sourceFormat.sampleRate;
-
-      if (sampleRate == 0)
-      {
-        detail::throwDecoderError(Error::Code::SeekFailed, "Sample rate is 0");
-      }
-
-      if (_implPtr->totalFrames != 0 && frameIndex > _implPtr->totalFrames)
-      {
-        detail::throwDecoderError(Error::Code::SeekFailed, "FLAC frame seek is out of bounds");
-      }
 
       if (_implPtr->totalFrames != 0 && frameIndex == _implPtr->totalFrames)
       {
@@ -595,7 +625,7 @@ namespace ao::audio
     {
       auto const decoderState = ::FLAC__stream_decoder_get_state(_implPtr->decoder);
       auto const preservePosition = !_implPtr->optDecodeError && !_implPtr->optFormatMismatch &&
-                                    !_implPtr->optFrameDiscontinuity && !_implPtr->optOutputError &&
+                                    !_implPtr->optFrameDiscontinuity && !_implPtr->optOperationError &&
                                     (decoderState == ::FLAC__STREAM_DECODER_SEARCH_FOR_FRAME_SYNC ||
                                      decoderState == ::FLAC__STREAM_DECODER_END_OF_STREAM);
       ::FLAC__uint64 bytePosition = 0;
@@ -615,7 +645,7 @@ namespace ao::audio
           return;
         }
 
-        _implPtr->optOutputError = Error{
+        _implPtr->optOperationError = Error{
           .code = Error::Code::DecodeFailed,
           .message = "FLAC flush could not preserve the decode position",
           .location = std::source_location::current(),
@@ -626,6 +656,7 @@ namespace ao::audio
     _implPtr->pcmBuffer.clear();
     _implPtr->outputBytes = {};
     _implPtr->bufferedFrames = 0;
+    _implPtr->lastFramePrecedesId3v1 = false;
   }
 
   // Result error materialization may allocate; DecoderSession requires fail-fast
@@ -641,48 +672,32 @@ namespace ao::audio
 
       _implPtr->checkDecodeError();
 
-      if (_implPtr->eof && _implPtr->bufferedFrames == 0)
-      {
-        return PcmBlock{.endOfStream = true};
-      }
-
       // If buffer is empty, process a single frame
       while (_implPtr->bufferedFrames == 0 && !_implPtr->eof)
       {
-        if (::FLAC__stream_decoder_process_single(_implPtr->decoder) == 0)
-        {
-          // An aborted callback stored the concrete failure; surface it instead
-          // of masking it with the generic process failure below.
-          _implPtr->checkDecodeError();
-
-          if (::FLAC__stream_decoder_get_state(_implPtr->decoder) == ::FLAC__STREAM_DECODER_END_OF_STREAM)
-          {
-            _implPtr->checkEndOfStream();
-
-            _implPtr->eof = true;
-            break;
-          }
-
-          detail::throwDecoderError(Error::Code::DecodeFailed, "FLAC process single failed");
-        }
-
+        auto const processed = ::FLAC__stream_decoder_process_single(_implPtr->decoder);
+        // Surface the concrete callback failure before any generic process error.
         _implPtr->checkDecodeError();
 
-        // process_single can report success in a failed state without producing
-        // a frame; do not retry indefinitely when no stored callback cause exists.
         auto const decoderState = ::FLAC__stream_decoder_get_state(_implPtr->decoder);
-
-        if (decoderState == ::FLAC__STREAM_DECODER_ABORTED)
-        {
-          detail::throwDecoderError(Error::Code::DecodeFailed, "FLAC decoder cannot continue from its failed state");
-        }
 
         if (decoderState == ::FLAC__STREAM_DECODER_END_OF_STREAM)
         {
-          _implPtr->checkEndOfStream();
-
+          _implPtr->checkEndOfStream(processed == 0);
           _implPtr->eof = true;
           break;
+        }
+
+        if (processed == 0)
+        {
+          // A read attempted in SEEK_ERROR is not a new cause for later seeks.
+          detail::throwDecoderError(Error::Code::DecodeFailed, "FLAC process single failed");
+        }
+
+        // process_single can report success in a failed state without producing a frame.
+        if (decoderState == ::FLAC__STREAM_DECODER_ABORTED)
+        {
+          detail::throwDecoderError(Error::Code::DecodeFailed, "FLAC decoder cannot continue from its failed state");
         }
       }
 
@@ -699,6 +714,9 @@ namespace ao::audio
                        (::FLAC__stream_decoder_get_state(_implPtr->decoder) == ::FLAC__STREAM_DECODER_END_OF_STREAM),
       };
 
+      // Remember the native boundary, but keep decoding: TAG can also be junk
+      // before another real frame. Any later PCM replaces this observation.
+      _implPtr->lastFramePrecedesId3v1 = _implPtr->isAtTrailingId3v1();
       _implPtr->nextFrameIndex += _implPtr->bufferedFrames;
       _implPtr->bufferedFrames = 0;
 
@@ -893,7 +911,7 @@ namespace ao::audio
 
         if (!convertedRes)
         {
-          impl->optOutputError = convertedRes.error();
+          impl->optOperationError = convertedRes.error();
           return ::FLAC__STREAM_DECODER_WRITE_STATUS_ABORT;
         }
 
