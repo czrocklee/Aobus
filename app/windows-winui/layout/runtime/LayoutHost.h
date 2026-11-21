@@ -5,12 +5,14 @@
 
 #include "layout/runtime/LayoutComponent.h"
 #include <ao/Error.h>
+#include <ao/async/Subscription.h>
 #include <ao/uimodel/layout/shell/ShellGenerationSequence.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 
 #include <memory>
+#include <vector>
 
 namespace ao::winui::layout
 {
@@ -39,6 +41,9 @@ namespace ao::winui::layout
      * it built and the frame asks for it after each publication.
      */
     winrt::Microsoft::UI::Xaml::FrameworkElement titleBarElement{nullptr};
+
+    /// Retiring the generation disconnects its menu items and buttons from the session.
+    std::vector<async::Subscription> rescanAvailabilitySubs{};
   };
 
   /**
@@ -51,7 +56,8 @@ namespace ao::winui::layout
    * and token before reporting it, and the candidate is destroyed.
    *
    * The host does not build or update generations. It owns only publication
-   * and retirement; components subscribe directly to shell-lifetime sources.
+   * and retirement; components and generation-owned controls observe
+   * shell-lifetime sources.
    */
   class LayoutHost final
   {

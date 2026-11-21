@@ -19,10 +19,12 @@
 #include <ao/rt/library/LibraryJobs.h>
 #include <ao/uimodel/library/task/LibraryScanOutcome.h>
 #include <ao/uimodel/status/activity/ActivityPresentationText.h>
+#include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <stop_token>
@@ -206,26 +208,33 @@ namespace ao::tui::test
     auto fixture = ScanFixture{};
     std::filesystem::copy_file(
       audio::test::requireAudioFixture("basic_metadata.flac"), fixture.runtimePtr->musicRoot() / "song.flac");
-    auto controller = LibraryScanController{fixture.runtimePtr->async(),
-                                            fixture.runtimePtr->library().jobs(),
-                                            fixture.runtimePtr->notifications(),
-                                            ao::test::englishMessageCatalog()};
+    auto& jobs = fixture.runtimePtr->library().jobs();
+    auto& notifications = fixture.runtimePtr->notifications();
+    auto const& catalog = ao::test::englishMessageCatalog();
+    auto activity = uimodel::ActivityStatusViewModel{notifications, catalog, {}, {.libraryJobs = &jobs}};
+    auto controller = LibraryScanController{fixture.runtimePtr->async(), jobs, notifications, catalog};
+    std::int32_t finishedCount = 0;
+    auto progressFinishedSub = jobs.onProgressFinished([&finishedCount](auto const&) { ++finishedCount; });
+
+    controller.start();
+    // No planning progress can arrive until the callback executor is driven.
+    controller.start();
+    CHECK(activity.viewState().compact.text == "A library scan is already running");
+    REQUIRE(fixture.executor->tryDrainUntil([&] { return controller.phase() == LibraryScanController::Phase::Idle; }));
+    fixture.executor->drain();
+    REQUIRE(controller.phase() == LibraryScanController::Phase::Idle);
+    CHECK(finishedCount == 2); // One plan and one apply.
+    CHECK(lastMessage(notifications) ==
+          uimodel::formatLibraryScanMessage(
+            catalog, {.verdict = uimodel::LibraryScanVerdict::Complete, .summary = {.newCount = 1}}));
 
     controller.start();
     REQUIRE(fixture.executor->tryDrainUntil([&] { return controller.phase() == LibraryScanController::Phase::Idle; }));
-    CHECK(lastMessage(fixture.runtimePtr->notifications()) ==
-          uimodel::formatLibraryScanMessage(
-            ao::test::englishMessageCatalog(),
-            {.verdict = uimodel::LibraryScanVerdict::Complete, .summary = {.newCount = 1}}));
+    CHECK(finishedCount == 3); // Only the explicitly requested up-to-date plan was added.
+    CHECK(lastMessage(notifications) ==
+          uimodel::formatLibraryScanMessage(catalog, {.verdict = uimodel::LibraryScanVerdict::UpToDate}));
 
-    controller.start();
-    REQUIRE(fixture.executor->tryDrainUntil([&] { return controller.phase() == LibraryScanController::Phase::Idle; }));
-    CHECK(lastMessage(fixture.runtimePtr->notifications()) ==
-          uimodel::formatLibraryScanMessage(
-            ao::test::englishMessageCatalog(), {.verdict = uimodel::LibraryScanVerdict::UpToDate}));
-
-    auto const backfillRes =
-      rt::test::runRuntimeTask(*fixture.runtimePtr, fixture.runtimePtr->library().jobs().backfillAudioIdentityAsync());
+    auto const backfillRes = rt::test::runRuntimeTask(*fixture.runtimePtr, jobs.backfillAudioIdentityAsync());
     REQUIRE(backfillRes);
     CHECK(backfillRes->completedCount == 0);
     CHECK(backfillRes->skippedCount == 0);

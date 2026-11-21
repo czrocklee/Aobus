@@ -46,6 +46,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -98,6 +99,13 @@ namespace ao::gtk::test
         feed.entries,
         [&](auto const& entry)
         { return entry.severity == severity && std::get<std::string>(entry.message).contains(messageFragment); });
+    }
+
+    bool hasErrorNotification(GtkRuntimeFixture& fixture)
+    {
+      auto const feed = fixture.runtime().notifications().feed();
+      return std::ranges::any_of(
+        feed.entries, [](auto const& entry) { return entry.severity == rt::NotificationSeverity::Error; });
     }
 
     portal::ImportExportCallbacks confirmingCallbacks()
@@ -179,11 +187,14 @@ namespace ao::gtk::test
     CHECK(std::get<std::string>(feed.entries.back().message) == "Library is up to date");
   }
 
-  TEST_CASE("LibraryImportExportWorkflow - scan mutates only when files change")
+  TEST_CASE("LibraryImportExportWorkflow - scan drops duplicate requests and mutates only when files change",
+            "[concurrency]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
+    auto activeChanges = std::vector<bool>{};
     auto callbacks = confirmingCallbacks();
+    callbacks.onScanActiveChanged = [&activeChanges](bool active) { activeChanges.push_back(active); };
     auto workflow = makeWorkflow(fixture, callbacks);
 
     copyMetadataFixtureToLibrary(fixture);
@@ -191,21 +202,37 @@ namespace ao::gtk::test
     auto progressEvents = std::vector<rt::LibraryTaskProgressUpdated>{};
     auto finishedEvents = std::vector<std::pair<rt::LibraryTaskProgressId, std::size_t>>{};
     auto changeEvents = std::vector<rt::LibraryChangeSet>{};
+    auto optActiveDuringPlanning = std::optional<bool>{};
     auto progressFinishedSub = fixture.runtime().library().jobs().onProgressFinished(
       [&finishedEvents, &progressEvents](rt::LibraryTaskProgressFinished const& event) noexcept
       { finishedEvents.emplace_back(event.id, progressEvents.size()); });
-    auto progressSub = fixture.runtime().library().jobs().onProgress([&progressEvents](auto const& event) noexcept
-                                                                     { progressEvents.push_back(event); });
+    auto progressSub = fixture.runtime().library().jobs().onProgress(
+      [&](rt::LibraryTaskProgressUpdated const& event)
+      {
+        progressEvents.push_back(event);
+
+        if (event.kind == rt::LibraryTaskProgressKind::Scanning && !optActiveDuringPlanning)
+        {
+          optActiveDuringPlanning = !activeChanges.empty() && activeChanges.back();
+          workflow.scan();
+        }
+      });
     auto changeSub = fixture.runtime().library().changes().onChanged(
       [&changeEvents](rt::LibraryChangeSet const& event) noexcept { changeEvents.push_back(event); });
 
     workflow.scan();
+    CHECK(activeChanges == std::vector<bool>{true});
+    workflow.scan();
+    auto const feed = fixture.runtime().notifications().feed();
+    REQUIRE_FALSE(feed.entries.empty());
+    auto const& rejection = feed.entries.back();
+    CHECK(rejection.severity == rt::NotificationSeverity::Info);
+    CHECK(rejection.lifetime.kind() == rt::NotificationLifetimeKind::Transient);
+    CHECK(std::get<std::string>(rejection.message) == "A library scan is already running");
     REQUIRE(tryPumpGtkEventsUntil(
-      [&fixture, &finishedEvents]
-      {
-        return finishedEvents.size() == 2 &&
-               hasNotification(fixture, rt::NotificationSeverity::Info, "Library scan complete");
-      }));
+      [&fixture] { return hasNotification(fixture, rt::NotificationSeverity::Info, "Library scan complete"); }));
+    CHECK(optActiveDuringPlanning == true);
+    CHECK(activeChanges == std::vector<bool>{true, false});
     REQUIRE(finishedEvents.size() == 2);
     auto const scanningId = finishedEvents[0].first;
     auto const applyingId = finishedEvents[1].first;
@@ -261,6 +288,8 @@ namespace ao::gtk::test
                hasNotification(fixture, rt::NotificationSeverity::Info, "Library is up to date");
       }));
 
+    CHECK(activeChanges == std::vector<bool>{true, false, true, false});
+    CHECK_FALSE(hasErrorNotification(fixture));
     REQUIRE(finishedEvents.size() == 1);
     REQUIRE(progressEvents.size() == 1);
     CHECK(progressEvents[0].id != rt::kInvalidLibraryTaskProgressId);
@@ -277,32 +306,74 @@ namespace ao::gtk::test
     CHECK(trackTitles(fixture) == std::vector<std::string>{"Test Title"});
   }
 
-  TEST_CASE("LibraryImportExportWorkflow - fast bootstrap background identity relinks a moved file")
+  TEST_CASE("LibraryImportExportWorkflow - fast bootstrap keeps rescans blocked through audio identity indexing",
+            "[concurrency]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
+    auto activeChanges = std::vector<bool>{};
     auto callbacks = confirmingCallbacks();
+    callbacks.onScanActiveChanged = [&activeChanges](bool active) { activeChanges.push_back(active); };
     auto workflow = makeWorkflow(fixture, callbacks);
 
     copyMetadataFixtureToLibrary(fixture);
+    auto& runtime = fixture.runtime();
+    auto const additionalFixture = audio::test::requireAudioFixture("hires.flac");
+    auto const additionalPath = runtime.musicRoot() / "additional.flac";
+    auto copyError = std::error_code{};
+    auto optActiveAtHandoff = std::optional<bool>{};
+    auto optActiveDuringBackfill = std::optional<bool>{};
+    std::int32_t finishedCount = 0;
+    auto finishedSub = runtime.library().jobs().onProgressFinished(
+      [&finishedCount](rt::LibraryTaskProgressFinished const&) noexcept { ++finishedCount; });
+    auto progressSub = runtime.library().jobs().onProgress(
+      [&](rt::LibraryTaskProgressUpdated const& event)
+      {
+        if (event.kind == rt::LibraryTaskProgressKind::IndexingAudioIdentity && !optActiveDuringBackfill)
+        {
+          optActiveDuringBackfill = !activeChanges.empty() && activeChanges.back();
+          workflow.scan();
+        }
+      });
+    auto notificationSub = runtime.notifications().onFeedUpdated(
+      [&](rt::NotificationFeedUpdate const& update)
+      {
+        if (update.mutationKind != rt::NotificationFeedMutationKind::Posted || optActiveAtHandoff)
+        {
+          return;
+        }
+
+        if (update.feedPtr->entries.back().message ==
+            rt::NotificationMessage{"Library ready; indexing audio identity in background"})
+        {
+          // The bootstrap plan is already applied, but the backfill has not yet finished.
+          optActiveAtHandoff = !activeChanges.empty() && activeChanges.back();
+          std::filesystem::copy_file(additionalFixture, additionalPath, copyError);
+          workflow.scan();
+        }
+      });
 
     workflow.scan(portal::ScanRequestMode::FastBootstrap);
 
-    REQUIRE(tryPumpGtkEventsUntil(
-      [&fixture]
-      { return hasNotification(fixture, rt::NotificationSeverity::Info, "Audio identity indexing complete"); }));
-
-    CHECK(
-      hasNotification(fixture, rt::NotificationSeverity::Info, "Library ready; indexing audio identity in background"));
+    REQUIRE(tryPumpGtkEventsUntil([&activeChanges] { return activeChanges.size() >= 2 && !activeChanges.back(); }));
+    REQUIRE_FALSE(copyError);
+    CHECK(optActiveAtHandoff == true);
+    CHECK(optActiveDuringBackfill == true);
+    CHECK(activeChanges == std::vector<bool>{true, false});
+    CHECK(finishedCount == 3);
     CHECK(trackUris(fixture) == std::vector<std::string>{"song.flac"});
 
-    std::filesystem::rename(
-      fixture.runtime().musicRoot() / "song.flac", fixture.runtime().musicRoot() / "renamed.flac");
+    std::filesystem::rename(runtime.musicRoot() / "song.flac", runtime.musicRoot() / "renamed.flac");
     workflow.scan();
 
     REQUIRE(tryPumpGtkEventsUntil(
       [&fixture] { return hasNotification(fixture, rt::NotificationSeverity::Info, "Relinked 1 moved file"); }));
-    CHECK(trackUris(fixture) == std::vector<std::string>{"renamed.flac"});
+    CHECK(activeChanges == std::vector<bool>{true, false, true, false});
+    CHECK(finishedCount == 5);
+    CHECK_FALSE(hasErrorNotification(fixture));
+    auto uris = trackUris(fixture);
+    std::ranges::sort(uris);
+    CHECK(uris == std::vector<std::string>{"additional.flac", "renamed.flac"});
   }
 
   TEST_CASE("LibraryImportExportWorkflow - scan reports relinked moved files")

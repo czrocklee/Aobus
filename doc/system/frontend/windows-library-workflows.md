@@ -55,10 +55,12 @@ keep them in the activity feed either way. Initial-scan failure leaves the selec
 Rescan runs the transactional scan workflow against the active
 `LibrarySession`. Committed changes reach projections only through
 `LibraryChanges`. Worker completion resumes on the Runtime callback executor
-before changing operation state or publishing status to XAML. Another Rescan
-reports the current operation rather than starting a competing scan. A queued
-Open Library transition rejects another Open Library request; parent teardown
-may cancel an active scan.
+before changing operation state or publishing status to XAML. Rescan controls
+are disabled during the scan, including in a shell rebuilt while it runs. A
+direct command still reports the current operation; it does not queue a retry.
+Rescan becomes available after the result is reported. A queued Open Library
+transition rejects another Open Library request; parent teardown may cancel an
+active scan.
 
 Session teardown retires callback admission before requesting scan cancellation.
 The retired token suppresses later presentation, while Runtime join keeps the

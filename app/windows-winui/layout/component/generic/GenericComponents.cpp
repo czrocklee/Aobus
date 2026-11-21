@@ -148,10 +148,10 @@ namespace ao::winui::layout
     registry.registerComponent(
       "menuButton",
       [menus = std::move(menus)](
-        LayoutBuildContext& /*ctx*/, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
+        LayoutBuildContext& ctx, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
       {
         auto const menuId = node.propertyOr<std::string>("menuId", "modernOverflow");
-        auto flyout = menus.flyout ? menus.flyout(menuId) : MenuFlyout{nullptr};
+        auto flyout = menus.flyout ? menus.flyout(ctx, menuId) : MenuFlyout{nullptr};
 
         if (!flyout)
         {

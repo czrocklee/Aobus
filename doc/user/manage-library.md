@@ -13,8 +13,8 @@ Your library reflects the supported audio files beneath its root, and frequently
 ### Reconcile files from GTK
 
 1. Open the intended root with **File → Open Library...**.
-2. Choose **File → Scan Library**.
-3. Follow progress in the activity status.
+2. If opening the library starts a scan, let it continue. Otherwise, choose **File → Scan Library**.
+3. Follow progress in the activity status. If it shows **Indexing audio identity**, Aobus is still identifying files in the background. **Scan Library** stays unavailable until that work finishes; there is no cancel command for this step. If you add files while a scan is running, choose **Scan Library** again when it becomes available. A second request is not queued.
 
 A scan adds new supported files, refreshes technical properties for changed files, reconnects recognized moves when identity is available, and records which files are missing.
 Curated library metadata remains authoritative after initial import; rescanning a changed file does not replace those edits with file tags.
@@ -36,11 +36,11 @@ The [CUE sheet reference](../reference/media/cue-sheet.md) defines the accepted 
 
 ### Reconcile files from the Windows desktop
 
-1. Open the intended root with **Open Library...**.
-2. Choose **Rescan** after files beneath that root change.
+1. Choose **Open Library...** from **More** in Modern mode or **File** in Classic mode and select the intended root.
+2. After files beneath that root change, choose **More → Rescan Library** in Modern or **File → Rescan** in Classic.
 3. Follow progress in the activity surface in Modern mode or the status bar in Classic mode.
 
-Windows runs the same transactional reconciliation as GTK. A failed scan keeps the active root open so **Rescan** can retry it, and another **Rescan** while one is active starts no duplicate work.
+Windows applies scan changes together. A failed scan leaves the same folder open for retry. If another scan is already running, wait for its result before requesting the next scan; a second request is not queued.
 
 ### Preview and apply a scan from the CLI
 

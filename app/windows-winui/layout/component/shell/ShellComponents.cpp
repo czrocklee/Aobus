@@ -438,7 +438,7 @@ namespace ao::winui::layout
     registry.registerComponent(
       "app.menuBar",
       [menus = std::move(menus)](
-        LayoutBuildContext& /*ctx*/, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
+        LayoutBuildContext& ctx, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
       {
         if (!menus.composeMenuBar)
         {
@@ -448,7 +448,7 @@ namespace ao::winui::layout
         }
 
         auto bar = MenuBar{};
-        menus.composeMenuBar(bar);
+        menus.composeMenuBar(ctx, bar);
         return std::make_unique<MenuBarComponent>(std::move(bar));
       });
   }

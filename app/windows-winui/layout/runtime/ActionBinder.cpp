@@ -141,6 +141,16 @@ namespace ao::winui::layout
       }
     }
 
+    // Only disable a Rescan button, not an unrelated primary command that
+    // has a secondary scan gesture. All routes still enter the session guard.
+    if (ctx.bindRescanControl && schema.actionId(node, uimodel::ActionSlot::PrimaryClick) == "library.rescan")
+    {
+      if (auto const button = element.try_as<ButtonBase>(); button)
+      {
+        ctx.bindRescanControl(button);
+      }
+    }
+
     return {};
   }
 } // namespace ao::winui::layout

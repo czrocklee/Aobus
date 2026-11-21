@@ -16,6 +16,8 @@
 #include "platform/ResourceLanguage.h"
 #include "platform/WinRtStringResources.h"
 #include <ao/Error.h>
+#include <ao/async/Signal.h>
+#include <ao/async/Subscription.h>
 #include <ao/desktop/LibrarySwitch.h>
 #include <ao/i18n/IcuCompletionAliases.h>
 #include <ao/i18n/IcuTextOrdering.h>
@@ -28,6 +30,7 @@
 #include <ao/library/WritableMusicLibrary.h>
 #include <ao/library/WriteTransaction.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/WorkspaceService.h>
@@ -75,6 +78,7 @@
 #include <system_error>
 #include <tuple>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace
@@ -268,24 +272,47 @@ namespace
     }
   }
 
-  template<typename T>
-  T findVisual(DependencyObject const& root, winrt::hstring const& name)
+  template<typename T, typename Predicate>
+  T findVisualIf(DependencyObject const& root, Predicate const& matches)
   {
-    if (auto const element = root.try_as<T>(); element)
+    if (auto const element = root.try_as<T>(); element && matches(element))
     {
-      auto const peer = FrameworkElementAutomationPeer::CreatePeerForElement(element);
-
-      if (peer && peer.GetName() == name)
-      {
-        return element;
-      }
+      return element;
     }
 
     for (std::int32_t index = 0; index < Media::VisualTreeHelper::GetChildrenCount(root); ++index)
     {
-      if (auto const found = findVisual<T>(Media::VisualTreeHelper::GetChild(root, index), name); found)
+      if (auto const found = findVisualIf<T>(Media::VisualTreeHelper::GetChild(root, index), matches); found)
       {
         return found;
+      }
+    }
+
+    return nullptr;
+  }
+
+  template<typename T>
+  T findVisual(DependencyObject const& root, winrt::hstring const& name)
+  {
+    return findVisualIf<T>(root,
+                           [&name](T const& element)
+                           {
+                             auto const peer = FrameworkElementAutomationPeer::CreatePeerForElement(element);
+                             return peer && peer.GetName() == name;
+                           });
+  }
+
+  Controls::MenuFlyoutItem findMenuItem(
+    winrt::Windows::Foundation::Collections::IVector<Controls::MenuFlyoutItemBase> const& items,
+    wchar_t const* resourceId)
+  {
+    auto const label = ao::winui::resourceHstring(resourceId);
+
+    for (auto const& entry : items)
+    {
+      if (auto const item = entry.try_as<Controls::MenuFlyoutItem>(); item && item.Text() == label)
+      {
+        return item;
       }
     }
 
@@ -318,7 +345,8 @@ namespace
         {
           auto builder = ao::library::TrackBuilder::makeEmpty();
           builder.metadata().title(title).artist("Audit Artist").album("Audit Album");
-          // Metadata-only tracks: the probe neither scans files nor plays audio.
+          // Both rescans report these two absent files, without playing audio
+          // or removing the tracks the shell displays.
           auto const uri = std::format("probe/{}.flac", title);
           builder.property().uri(uri);
           auto createRes = write.tracks().create(builder, ao::library::FileManifestBuilder::makeEmpty());
@@ -972,6 +1000,18 @@ namespace
     void moreOpened()
     {
       auditShell("Modern menu popup");
+      auto const rescan = findMenuItem(_flyout.as<Controls::MenuFlyout>().Items(), L"winui_shell_rescan_library");
+      check(rescan && rescan.IsEnabled(), "Modern's idle Rescan menu item must be enabled");
+      startRescan(&WinUiAutomationProbe::modernRescanFinished);
+      check(rescan && !rescan.IsEnabled(), "Modern's busy Rescan menu item must be disabled");
+    }
+
+    void modernRescanFinished()
+    {
+      _stage = "Modern Rescan settled";
+      checkRescanSettled();
+      auto const rescan = findMenuItem(_flyout.as<Controls::MenuFlyout>().Items(), L"winui_shell_rescan_library");
+      check(rescan && rescan.IsEnabled(), "Modern's settled Rescan menu item must be re-enabled");
       auto classic = Controls::MenuFlyoutItem{nullptr};
 
       for (auto const& popup : Media::VisualTreeHelper::GetOpenPopupsForXamlRoot(_root.XamlRoot()))
@@ -1004,9 +1044,95 @@ namespace
       afterFrame(&WinUiAutomationProbe::narrowClassic);
     }
 
+    Controls::MenuFlyoutItem classicRescanMenuItem() const
+    {
+      auto const file = findVisual<Controls::MenuBarItem>(_root, ao::winui::resourceHstring(L"winui_shell_menu_file"));
+      return file ? findMenuItem(file.Items(), L"winui_shell_rescan") : nullptr;
+    }
+
+    void checkClassicRescanControls(bool const enabled)
+    {
+      auto const toolbar = findVisual<Button>(_root, ao::winui::resourceHstring(L"winui_library_rescan_label"));
+      auto const menu = classicRescanMenuItem();
+      auto const open = findVisual<Button>(_root, ao::winui::resourceHstring(L"winui_library_open_label"));
+      check(toolbar && toolbar.IsEnabled() == enabled, "Classic toolbar Rescan has the wrong availability");
+      check(menu && menu.IsEnabled() == enabled, "Classic File > Rescan has the wrong availability");
+      check(open && open.IsEnabled(), "Rescan must not disable the unrelated Open Library button");
+    }
+
+    void startRescan(Step settled, Controls::TextBlock const& classicStatus = nullptr)
+    {
+      _scanStarts = 0;
+      auto const expected =
+        ao::i18n::requiredFormat(_sessionPtr->textCatalog(), ao::i18n::MessageId::LibraryScanMissing, {{"count", 2}});
+      auto const before = _sessionPtr->runtime().notifications().feed();
+      auto const previousId = before.entries.empty() ? ao::rt::kInvalidNotificationId : before.entries.back().id;
+      _rescanSub = _sessionPtr->signalRescanAvailabilityChanged().connect(
+        [this, settled, previousId, expected, classicStatus]
+        {
+          if (_sessionPtr->canRescan())
+          {
+            auto const now = _sessionPtr->runtime().notifications().feed();
+            check(std::ranges::any_of(now.entries,
+                                      [previousId, &expected](ao::rt::NotificationEntry const& entry)
+                                      {
+                                        auto const* text = std::get_if<std::string>(&entry.message);
+                                        return entry.id > previousId &&
+                                               entry.severity == ao::rt::NotificationSeverity::Warning &&
+                                               text != nullptr && *text == expected;
+                                      }),
+                  "Rescan became available without this scan's missing-files warning");
+
+            if (classicStatus)
+            {
+              check(classicStatus.Text() == winrt::to_hstring(expected),
+                    "Classic Rescan became available before its status line showed the result");
+            }
+
+            // Observe after settlement returns to the dispatcher, not inside
+            // the first idle publication where a retry might still be queued.
+            afterFrame(settled);
+          }
+          else
+          {
+            ++_scanStarts;
+          }
+        });
+      _sessionPtr->rescan();
+      _sessionPtr->rescan();
+
+      if (classicStatus)
+      {
+        check(classicStatus.Text() == ao::winui::resourceHstring(L"winui_library_rescanning"),
+              "Classic did not show the in-progress scan on its status line");
+      }
+    }
+
+    void checkRescanSettled()
+    {
+      check(_scanStarts == 1 && _sessionPtr->canRescan(), "a second Rescan started after one busy rejection");
+      _rescanSub.reset();
+    }
+
     void narrowClassic()
     {
       auditShell("Classic narrow");
+      _stage = "Classic Rescan idle";
+      checkClassicRescanControls(true);
+      _stage = "Classic Rescan busy";
+      auto const status = findVisualIf<Controls::TextBlock>(
+        _root,
+        [](auto const& text) { return AutomationProperties::GetAutomationId(text) == L"classic-status-message"; });
+      check(static_cast<bool>(status), "Classic status line missing");
+      startRescan(&WinUiAutomationProbe::classicRescanFinished, status);
+      checkClassicRescanControls(false);
+    }
+
+    void classicRescanFinished()
+    {
+      _stage = "Classic Rescan settled";
+      checkRescanSettled();
+      checkClassicRescanControls(true);
       finish();
     }
 
@@ -1028,6 +1154,7 @@ namespace
       }
 
       _windowSizing.reset();
+      _rescanSub.reset();
 
       if (_window)
       {
@@ -1073,6 +1200,8 @@ namespace
     std::unique_ptr<ao::rt::TextOrderingPolicy> _orderingPtr;
     std::unique_ptr<ao::rt::CompletionAliasPolicy> _aliasesPtr;
     std::unique_ptr<ao::winui::LibrarySession> _sessionPtr;
+    ao::async::Subscription _rescanSub;
+    std::size_t _scanStarts = 0;
     winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer _timeout{nullptr};
     FrameworkElement::Loaded_revoker _loaded{};
     Media::CompositionTarget::Rendering_revoker _rendering{};

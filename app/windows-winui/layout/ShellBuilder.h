@@ -46,6 +46,7 @@ namespace ao::rt
 
 namespace ao::winui::layout
 {
+  struct LayoutBuildContext;
   struct MenuComposer;
   struct PaneSettingsAccess;
 
@@ -159,9 +160,9 @@ namespace ao::winui::layout
     void installKeyboardAccelerators();
     PaneSettingsAccess paneSettings();
     MenuComposer menus();
-    winrt::Microsoft::UI::Xaml::Controls::MenuFlyout modernOverflowFlyout() const;
+    winrt::Microsoft::UI::Xaml::Controls::MenuFlyout modernOverflowFlyout(LayoutBuildContext const& ctx) const;
     winrt::Microsoft::UI::Xaml::Controls::MenuFlyout nowPlayingOverflowFlyout() const;
-    void composeMenuBar(winrt::Microsoft::UI::Xaml::Controls::MenuBar const& bar) const;
+    void composeMenuBar(LayoutBuildContext const& ctx, winrt::Microsoft::UI::Xaml::Controls::MenuBar const& bar) const;
     /// Replace the host content with the frame's minimal fatal layout-error surface.
     void showFatalLayoutError(Error const& error);
 

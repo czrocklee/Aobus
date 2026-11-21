@@ -10,6 +10,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
+#include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
 #include <ao/async/Task.h>
 #include <ao/audio/BackendProvider.h>
@@ -239,6 +240,7 @@ namespace ao::winui
     CallbackAdmissionGate ownerCallbackGate;
     std::string_view operationStatusKey;
     bool operationActive = false;
+    async::Signal<> rescanAvailabilityChanged;
     bool scanAfterOpen = false;
     StartupWarnings startupWarnings;
     bool shutdown = false;
@@ -438,6 +440,7 @@ namespace ao::winui
     // cancellation, then join every producer before releasing the facade.
     storage.ownerCallbackGate.retire();
     storage.callbacks = {};
+    // Shutdown keeps canRescan() false; clearing the scan does not announce a retry.
     storage.operationActive = false;
     storage.operationStatusKey = {};
     storage.libraryTask.reset();
@@ -746,25 +749,36 @@ namespace ao::winui
       });
   }
 
+  bool LibrarySession::canRescan() const noexcept
+  {
+    auto const& storage = *_storagePtr;
+    return !storage.shutdown && !storage.operationActive;
+  }
+
+  async::Signal<>& LibrarySession::signalRescanAvailabilityChanged() noexcept
+  {
+    return _storagePtr->rescanAvailabilityChanged;
+  }
+
   void LibrarySession::rescan() noexcept
   {
     auto& storage = *_storagePtr;
 
     try
     {
-      if (storage.shutdown)
+      if (!canRescan())
       {
-        return;
-      }
+        if (!storage.shutdown)
+        {
+          reportBusy();
+        }
 
-      if (storage.operationActive)
-      {
-        reportBusy();
         return;
       }
 
       storage.operationActive = true;
       storage.operationStatusKey = "winui_library_rescanning";
+      storage.rescanAvailabilityChanged.emit();
       reportBusy();
 
       startActiveScan();
@@ -806,9 +820,6 @@ namespace ao::winui
       return;
     }
 
-    storage.operationStatusKey = {};
-    storage.operationActive = false;
-
     // What the scan amounts to, how loudly to say it, and the sentence itself
     // are decided in uimodel, so this window and the GTK one report the same
     // scan the same way. A scan that lost files says so here rather than
@@ -824,20 +835,15 @@ namespace ao::winui
     if (severity == rt::NotificationSeverity::Error)
     {
       reportScanFailure(outcome, std::move(message));
-      return;
     }
-
-    // Only a scan error outranks the startup warnings: a scan warning describes
-    // the library on screen, while they explain ignored configuration or a
-    // failed commit that concerns the next launch, which nothing else on screen
-    // reveals.
-    if (optStartupStatus)
+    else if (optStartupStatus)
     {
+      // A scan warning describes the library on screen, but nothing there
+      // shows which settings will be ignored or lost on the next launch.
+      // Keep that explanation on the status line unless the scan failed.
       reportStatus(std::move(*optStartupStatus));
-      return;
     }
-
-    if (severity == rt::NotificationSeverity::Warning)
+    else if (severity == rt::NotificationSeverity::Warning)
     {
       // The notification feed alone is not enough: only a shell carrying a
       // `status.activity` component presents it, and the Classic preset does
@@ -845,10 +851,17 @@ namespace ao::winui
       // users no indication at all, so the warning takes the status line, which
       // the Classic preset shows.
       reportStatus(std::move(message));
-      return;
+    }
+    else
+    {
+      reportReady(appRuntime.musicRoot());
     }
 
-    reportReady(appRuntime.musicRoot());
+    // Even onFailure runs while the scan is active. Retry from the availability
+    // signal, not the result callback, so the old result cannot overwrite a new scan.
+    storage.operationStatusKey = {};
+    storage.operationActive = false;
+    storage.rescanAvailabilityChanged.emit();
   }
 
   void LibrarySession::reportScanFailure(uimodel::LibraryScanOutcome const& outcome, std::string message)

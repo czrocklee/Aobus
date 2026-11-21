@@ -10,6 +10,8 @@
 
 namespace ao::winui::layout
 {
+  struct LayoutBuildContext;
+
   /**
    * @brief The shell's menu composition, borrowed by the components that present it.
    *
@@ -20,9 +22,9 @@ namespace ao::winui::layout
   struct MenuComposer final
   {
     /// The flyout a `menuButton` presents, keyed by its authored `menuId`.
-    std::function<winrt::Microsoft::UI::Xaml::Controls::MenuFlyout(std::string_view)> flyout;
+    std::function<winrt::Microsoft::UI::Xaml::Controls::MenuFlyout(LayoutBuildContext const&, std::string_view)> flyout;
 
     /// Fills the application menu bar the Classic shell shows.
-    std::function<void(winrt::Microsoft::UI::Xaml::Controls::MenuBar const&)> composeMenuBar;
+    std::function<void(LayoutBuildContext const&, winrt::Microsoft::UI::Xaml::Controls::MenuBar const&)> composeMenuBar;
   };
 } // namespace ao::winui::layout
