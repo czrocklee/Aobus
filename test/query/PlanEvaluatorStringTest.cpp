@@ -3,6 +3,8 @@
 
 #include "test/query/ExecutionPlanTestSupport.h"
 #include "test/query/PlanEvaluatorTestSupport.h"
+#include <ao/library/DictionaryStore.h>
+#include <ao/library/TrackView.h>
 #include <ao/query/Field.h>
 #include <ao/query/PlanEvaluator.h>
 #include <ao/query/detail/Bytecode.h>
@@ -143,6 +145,90 @@ namespace ao::query::test
     auto track3 = TestTrack{"Apple"}; // case-sensitive
     result = evaluator.matchesFullPlan(plan, track3.view());
     CHECK(result == false);
+  }
+
+  TEST_CASE("PlanEvaluator - keeps digit-only quoted literals as text")
+  {
+    auto const evaluator = PlanEvaluator{};
+    auto const track = TestTrack{"002020"};
+
+    CHECK(evaluator.matchesFullPlan(compileOk(parseOk("$title = '002020'")), track.view()));
+    CHECK(evaluator.matchesFullPlan(compileOk(parseOk("'002020' = $title")), track.view()));
+    CHECK_FALSE(evaluator.matchesFullPlan(compileOk(parseOk("$title = '2020'")), track.view()));
+  }
+
+  TEST_CASE("PlanEvaluator - orders text literals lexicographically")
+  {
+    auto const evaluator = PlanEvaluator{};
+    auto const track = library::TrackView{{}, {}};
+
+    CHECK(evaluator.matchesFullPlan(compileOk(parseOk("'2' > '10'")), track));
+    CHECK_FALSE(evaluator.matchesFullPlan(compileOk(parseOk("'2' < '10'")), track));
+  }
+
+  TEST_CASE("PlanEvaluator - compares scalar text fields across storage kinds")
+  {
+    auto track = TrackFixture{TrackSpec{
+      .title = "Goldberg",
+      .artist = "Goldberg",
+      .album = "Aria",
+      .customPairs = {{"label", "Goldberg"}, {"movement", "Aria"}},
+    }};
+    auto const evaluator = PlanEvaluator{};
+    auto const matches = [&](std::string_view expression)
+    {
+      auto const plan = compileOk(parseOk(expression));
+      return matchesFullPlanWithDictionary(evaluator, plan, track.view(), track.dictionary());
+    };
+
+    CHECK(matches("$title = $title"));
+    CHECK_FALSE(matches("$title != $title"));
+    CHECK(matches("$title = $artist"));
+    CHECK(matches("$artist = %label"));
+    CHECK(matches("%movement = $album"));
+    CHECK(matches("%label > %movement"));
+    CHECK(matches("%movement < $artist"));
+    CHECK_FALSE(matches("$title = %movement"));
+  }
+
+  TEST_CASE("PlanEvaluator - distinguishes missing from empty text in field comparisons")
+  {
+    auto track = TrackFixture{TrackSpec{
+      .title = "",
+      .artist = "",
+      .album = "future",
+      .customPairs = {{"empty", ""}, {"nonempty", "value"}},
+    }};
+    auto const evaluator = PlanEvaluator{};
+    auto const matches = [&](std::string_view expression)
+    {
+      auto const plan = compileOk(parseOk(expression));
+      return matchesFullPlanWithDictionary(evaluator, plan, track.view(), track.dictionary());
+    };
+
+    CHECK_FALSE(matches("%missing = %empty"));
+    CHECK_FALSE(matches("%empty = %missing"));
+    CHECK(matches("%missing != %empty"));
+    CHECK(matches("%empty != %missing"));
+    CHECK_FALSE(matches("%missing <= $title"));
+    CHECK_FALSE(matches("$title >= %missing"));
+
+    // The album interns the key without giving this track a custom value for it.
+    REQUIRE(track.dictionary().findId("future"));
+    CHECK_FALSE(matches("%future = $title"));
+    CHECK_FALSE(matches("$title = %future"));
+    CHECK(matches("%future != $title"));
+    CHECK(matches("$title != %future"));
+    CHECK_FALSE(matches("%future <= $title"));
+    CHECK_FALSE(matches("$title >= %future"));
+    CHECK(matches("$title = %empty"));
+
+    CHECK_FALSE(matches("$artist = $title"));
+    CHECK(matches("$artist != $title"));
+    CHECK(matches("$artist <= $title"));
+    CHECK(matches("$artist >= $title"));
+    CHECK(matches("$artist < %nonempty"));
+    CHECK_FALSE(matches("%missing < %nonempty"));
   }
 
   TEST_CASE("PlanEvaluator - matches quoted title LIKE substrings")

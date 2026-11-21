@@ -120,6 +120,18 @@ namespace ao::query::test
     CHECK_FALSE(matches("(%isrc = 'ABC') = false", labeled));
   }
 
+  TEST_CASE("PredicateOperandContext - compares the results of two distinct nested predicates")
+  {
+    auto both = TrackFixture{TrackSpec{.title = "Goldberg", .artist = "Bach"}};
+    auto one = TrackFixture{TrackSpec{.artist = "Bach"}};
+    auto neither = TrackFixture{};
+
+    CHECK(matches("($artist = 'Bach') = ($title = 'Goldberg')", both));
+    CHECK_FALSE(matches("($artist = 'Bach') = ($title = 'Goldberg')", one));
+    CHECK(matches("($artist = 'Bach') = ($title = 'Goldberg')", neither));
+    CHECK(matches("($artist = 'Bach') != ($title = 'Goldberg')", one));
+  }
+
   TEST_CASE("PredicateOperandContext - date and credit context stays on the direct field")
   {
     auto dated = TrackFixture{TrackSpec{

@@ -79,11 +79,13 @@ The payload contains none of these:
 Only version `1` is accepted. Development builds before the first release wrote versions 1 through 5 of earlier schemas; those payloads are unsupported and not detected, so one marked version `1` is validated against this schema like any other.
 There is no migration or seeded missing-field fallback for another/malformed version.
 Version `1` includes the accepted predicate grammar, field binding, and Unicode-caseless `~` evaluation meaning of `quickFilterExpression`.
-A predicate change that can emit quick-filter text an existing version-1 reader rejects, or can reject or reinterpret retained quick-filter text, requires a new playback schema version; the owner may then reject version `1` or provide an explicit tested migration.
+Version 1 is unreleased and may be amended before the first release without a version increment or upgrade.
+An older development session whose quick filter no longer compiles is rejected as a complete candidate before live state changes; no upgrade is attempted.
+After release, a predicate change that can emit quick-filter text an existing reader rejects, or can reject or reinterpret retained quick-filter text, requires a playback schema version change; the owner may then reject the older version or provide an explicit tested migration.
 The expression carries no separate language version.
 
 Version `1` also includes the current numeric `TrackSortField` mapping.
-Changing a sort-field raw value requires a playback schema version or an explicit version-1 compatibility implementation; the stable text ids used by presentation documents do not silently migrate this payload.
+After release, changing a sort-field raw value requires a playback schema version change or an explicit version-1 compatibility implementation; the stable text ids used by presentation documents do not silently migrate this payload.
 
 List and track ids are scoped to one library, so version 1 records that library's UUID and the current subject's URI and ordinal.
 A missing ordinal retains whole-file identity rather than matching an arbitrary carrier member.

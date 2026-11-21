@@ -280,7 +280,7 @@ Each list is a closed map.
 | `order`       | No.      | Sequence of saved rank references; empty or omitted means no saved rank. |
 
 `filter` and `order` are independent and may coexist.
-The document version names the predicate language of its filters, which carry no version of their own: a version-1 filter means what the version-1 [predicate language](../../query/predicate-language.md) defines, and a grammar, field-binding, or evaluation change that alters the outcome of filter text that language accepts increments the format version, as the [predicate language reference](../../query/predicate-language.md#compatibility-and-versioning) defines.
+The document version names the predicate language of its filters, which carry no version of their own: a version-1 filter means what the version-1 [predicate language](../../query/predicate-language.md) defines, and a grammar, field-binding, or evaluation change that alters the outcome of accepted filter text is incompatible, subject to the amendment and versioning rules in the [predicate language reference](../../query/predicate-language.md#compatibility-and-versioning).
 A non-empty `filter` that does not parse or compile is still imported byte-exactly and counted in the import report's `invalidFiltersKept`, so a library that holds such a filter can restore its own backup.
 The producer always emits `id`, `parent-id`, and `name`; it omits an empty description, identity filter, and empty order.
 Order references do not define membership and need not currently match the List expression.
@@ -350,7 +350,7 @@ Changing a released field name, node kind, scalar width, accepted enum value, om
 Version 1 accepts only the schema defined here; alternative layouts are unsupported even when labeled version 1. There is no dual reader or layout autodetection.
 Version 1 has not been released. Until the first public release, a development build may change its schema or widen one of its limits without incrementing it, and an earlier development build then rejects a document that relies on the change.
 After the first release, a version is incremented at most once per release, and every later release imports every released version without losing curation, as [decision 0020](../../../decision/0020-versioning-and-upgrade-policy.md) records.
-Payload versioning is independent of the database's `kLibraryVersion`, except that a predicate-language change that alters accepted filter text increments both.
+Payload versioning is independent of the database's `kLibraryVersion`, except that a predicate-language change that alters the outcome of accepted filter text is incompatible for both; each follows the amendment and versioning policy above.
 
 ## Examples
 

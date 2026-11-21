@@ -6,8 +6,10 @@
 #include <ao/query/Field.h>
 #include <ao/query/detail/Bytecode.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -73,12 +75,65 @@ namespace ao::query::test
 
   TEST_CASE("ExecutionPlan - dictionary-backed equality compiles to a bindable symbol")
   {
-    auto const plan = compileOk(parseOk("$artist = 'Bach'"));
+    for (auto const* query : {"$artist = 'Bach'", "'Bach' = $artist"})
+    {
+      CAPTURE(query);
+      auto const plan = compileOk(parseOk(query));
 
-    REQUIRE(plan.dictionarySymbols == std::vector<std::string>{"Bach"});
-    CHECK(plan.stringConstants.empty());
-    CHECK(findInstruction(plan, OpCode::Eq)->dictionarySymbol == 0);
-    CHECK(plan.requiresDictionary);
+      REQUIRE(plan.dictionarySymbols == std::vector<std::string>{"Bach"});
+      CHECK(plan.stringConstants.empty());
+      auto const& comparison = *findInstruction(plan, OpCode::Eq);
+      CHECK(comparison.field == static_cast<std::uint8_t>(Field::ArtistId));
+      CHECK(comparison.dictionarySymbol == 0);
+      CHECK(plan.requiresDictionary);
+    }
+  }
+
+  TEST_CASE("ExecutionPlan - dictionary field equality compares IDs")
+  {
+    for (auto const& [query, op] :
+         {std::pair{"$artist = $album", OpCode::Eq}, std::pair{"$artist != $album", OpCode::Ne}})
+    {
+      CAPTURE(query);
+      auto const plan = compileOk(parseOk(query));
+      CHECK(std::ranges::find(plan.instructions, OpCode::CompareText, &Instruction::op) == plan.instructions.end());
+      auto const& comparison = *findInstruction(plan, op);
+      CHECK(comparison.field == static_cast<std::uint8_t>(Field::ArtistId));
+      CHECK(comparison.dictionarySymbol == kNoDictionarySymbol);
+    }
+  }
+
+  TEST_CASE("ExecutionPlan - text field comparisons resolve both operand fields")
+  {
+    auto const ordered = compileOk(parseOk("$artist < $album"));
+    auto const& less = *findInstruction(ordered, OpCode::CompareText);
+    CHECK(less.textRelation == OpCode::Lt);
+    CHECK(less.field == static_cast<std::uint8_t>(Field::ArtistId));
+    CHECK(less.rightTextField == Field::AlbumId);
+
+    auto const mixed = compileOk(parseOk("$title = $artist"));
+    auto const& equal = *findInstruction(mixed, OpCode::CompareText);
+    CHECK(equal.textRelation == OpCode::Eq);
+    CHECK(equal.field == static_cast<std::uint8_t>(Field::Title));
+    CHECK(equal.rightTextField == Field::ArtistId);
+  }
+
+  TEST_CASE("ExecutionPlan - reversed text ordering reverses the relation")
+  {
+    auto const plan = compileOk(parseOk("'Mozart' < $artist"));
+
+    REQUIRE(plan.stringConstants == std::vector<std::string>{"Mozart"});
+    auto const& comparison = *findInstruction(plan, OpCode::Gt);
+    CHECK(comparison.field == static_cast<std::uint8_t>(Field::ArtistId));
+  }
+
+  TEST_CASE("ExecutionPlan - literal text comparison marks both operands")
+  {
+    auto const plan = compileOk(parseOk("'Bach' = 'Mozart'"));
+    auto const& comparison = *findInstruction(plan, OpCode::CompareText);
+    CHECK(comparison.textRelation == OpCode::Eq);
+    CHECK(comparison.field == static_cast<std::uint8_t>(kTextLiteralField));
+    CHECK(comparison.rightTextField == kTextLiteralField);
   }
 
   TEST_CASE("ExecutionPlan - canonicalizes Unicode lookup literals")

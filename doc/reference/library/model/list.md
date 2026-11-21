@@ -70,7 +70,7 @@ Application authoring may reject an invalid expression for immediate feedback, w
 
 The physical version is owned by the [library database reference](../storage/database.md).
 The database version gates the List record layout, rank representation, and text invariant.
-Stored `filter` bytes carry no nested language version, so the database version also names their predicate language: a grammar or semantic change that alters the outcome of filter text the current language accepts increments it, as the [database versioning rules](../storage/database.md#compatibility-and-versioning) state.
+Stored `filter` bytes carry no nested language version, so the database version also names their predicate language: a grammar or semantic change that alters the outcome of accepted filter text is incompatible, subject to the amendment and versioning rules in the [database reference](../storage/database.md#compatibility-and-versioning).
 Database admission never parses a filter; text that does not parse or compile is an application expression outcome rather than database corruption.
 Changing hierarchy or rank-overlay persistence semantics remains a storage compatibility change.
 

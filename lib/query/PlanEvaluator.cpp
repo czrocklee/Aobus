@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -136,16 +137,21 @@ namespace ao::query
       return dictionaryId == kInvalidDictionaryId ? std::string_view{} : dictionary->get(dictionaryId);
     }
 
-    std::string_view readStringFieldValue(library::TrackView const& track, Field field, DictionaryId customKey)
+    std::optional<std::string_view> readStringFieldValue(library::TrackView const& track,
+                                                         Field field,
+                                                         std::span<DictionaryId const> dictionaryIds,
+                                                         std::uint32_t symbol) noexcept
     {
       switch (field)
       {
         case Field::Title: return track.metadata().title();
         case Field::Uri: return track.property().uri();
         case Field::Custom:
-          return customKey == kInvalidDictionaryId ? std::string_view{}
-                                                   : track.customMetadata().get(customKey).value_or("");
-        default: return {};
+        {
+          auto const customKey = boundDictionaryId(dictionaryIds, symbol);
+          return customKey == kInvalidDictionaryId ? std::nullopt : track.customMetadata().get(customKey);
+        }
+        default: return std::string_view{};
       }
     }
 
@@ -226,6 +232,64 @@ namespace ao::query
       }
     }
 
+    void executeTextComparison(std::vector<std::int64_t>& registers,
+                               library::TrackView const& track,
+                               ExecutionPlan const& plan,
+                               library::DictionaryReadContext* dictionary,
+                               std::span<DictionaryId const> dictionaryIds,
+                               Instruction const& instr)
+    {
+      auto const readOperand =
+        [&](Field field, std::uint32_t symbol, std::int32_t operand) -> std::optional<std::string_view>
+      {
+        switch (field)
+        {
+          case kTextLiteralField: return stringConstant(plan, reg(registers, operand));
+          case Field::Title:
+          case Field::Uri:
+          case Field::Custom: return readStringFieldValue(track, field, dictionaryIds, symbol);
+          default: break;
+        }
+
+        AO_INVARIANT(dictionary != nullptr);
+        auto const dictionaryId = dictionaryFieldId(track, field);
+
+        if (dictionaryId == kInvalidDictionaryId)
+        {
+          if (isOrderedComparison(instr.textRelation))
+          {
+            return std::string_view{};
+          }
+
+          return std::nullopt;
+        }
+
+        return dictionary->get(dictionaryId);
+      };
+
+      auto const optLhs = readOperand(static_cast<Field>(instr.field), instr.dictionarySymbol, instr.operand - 1);
+      auto const optRhs = readOperand(instr.rightTextField, instr.rightDictionarySymbol, instr.operand);
+
+      // Missing operands match only inequality; a stored empty value is present.
+      bool matches = instr.textRelation == OpCode::Ne;
+
+      if (optLhs && optRhs)
+      {
+        switch (instr.textRelation)
+        {
+          case OpCode::Eq: matches = *optLhs == *optRhs; break;
+          case OpCode::Ne: matches = *optLhs != *optRhs; break;
+          case OpCode::Lt: matches = *optLhs < *optRhs; break;
+          case OpCode::Le: matches = *optLhs <= *optRhs; break;
+          case OpCode::Gt: matches = *optLhs > *optRhs; break;
+          case OpCode::Ge: matches = *optLhs >= *optRhs; break;
+          default: break;
+        }
+      }
+
+      reg(registers, instr.operand - 1) = matches ? 1 : 0;
+    }
+
     template<typename Op>
     void executeComparison(std::vector<std::int64_t>& registers,
                            library::TrackView const& track,
@@ -255,17 +319,10 @@ namespace ao::query
 
       if (isStringField(field))
       {
-        auto const customKey = boundDictionaryId(dictionaryIds, instr.dictionarySymbol);
-
-        if (field == Field::Custom && customKey == kInvalidDictionaryId)
-        {
-          reg(registers, instr.operand - 1) = unresolvedResult ? 1 : 0;
-          return;
-        }
-
-        auto const fieldText = readStringFieldValue(track, field, customKey);
-        auto const constantText = stringConstant(plan, rhs);
-        reg(registers, instr.operand - 1) = std::invoke(std::forward<Op>(op), fieldText, constantText) ? 1 : 0;
+        auto const optFieldText = readStringFieldValue(track, field, dictionaryIds, instr.dictionarySymbol);
+        bool const matches =
+          optFieldText ? std::invoke(std::forward<Op>(op), *optFieldText, stringConstant(plan, rhs)) : unresolvedResult;
+        reg(registers, instr.operand - 1) = matches ? 1 : 0;
         return;
       }
 
@@ -328,17 +385,9 @@ namespace ao::query
 
       if (isStringField(field))
       {
-        auto const customKey = boundDictionaryId(dictionaryIds, instr.dictionarySymbol);
-
-        if (field == Field::Custom && customKey == kInvalidDictionaryId)
-        {
-          reg(registers, instr.operand - 1) = 0;
-          return;
-        }
-
-        auto const fieldText = readStringFieldValue(track, field, customKey);
-        auto const constantText = stringConstant(plan, reg(registers, instr.operand));
-        reg(registers, instr.operand - 1) = fieldText == constantText ? 1 : 0;
+        auto const optFieldText = readStringFieldValue(track, field, dictionaryIds, instr.dictionarySymbol);
+        reg(registers, instr.operand - 1) =
+          optFieldText && *optFieldText == stringConstant(plan, reg(registers, instr.operand)) ? 1 : 0;
         return;
       }
 
@@ -380,22 +429,21 @@ namespace ao::query
 
       if (field == Field::Uri)
       {
-        fieldText = readStringFieldValue(track, field, kInvalidDictionaryId);
-        reg(registers, instr.operand - 1) = fieldText.contains(constantText) ? 1 : 0;
+        reg(registers, instr.operand - 1) = track.property().uri().contains(constantText) ? 1 : 0;
         return;
       }
 
       if (isStringField(field))
       {
-        auto const customKey = boundDictionaryId(dictionaryIds, instr.dictionarySymbol);
+        auto const optFieldText = readStringFieldValue(track, field, dictionaryIds, instr.dictionarySymbol);
 
-        if (field == Field::Custom && customKey == kInvalidDictionaryId)
+        if (!optFieldText)
         {
           reg(registers, instr.operand - 1) = 0;
           return;
         }
 
-        fieldText = readStringFieldValue(track, field, customKey);
+        fieldText = *optFieldText;
       }
       else if (isDictionaryField(field))
       {
@@ -509,16 +557,8 @@ namespace ao::query
       if (set.valueKind == InSetValueKind::String)
       {
         auto const field = static_cast<Field>(instr.field);
-        auto const customKey = boundDictionaryId(dictionaryIds, instr.dictionarySymbol);
-
-        if (field == Field::Custom && customKey == kInvalidDictionaryId)
-        {
-          reg(registers, instr.operand) = 0;
-          return;
-        }
-
-        auto const fieldValue = readStringFieldValue(track, field, customKey);
-        reg(registers, instr.operand) = containsString(set, fieldValue) ? 1 : 0;
+        auto const optFieldText = readStringFieldValue(track, field, dictionaryIds, instr.dictionarySymbol);
+        reg(registers, instr.operand) = optFieldText && containsString(set, *optFieldText) ? 1 : 0;
         return;
       }
 
@@ -674,6 +714,9 @@ namespace ao::query
         case OpCode::LoadConstant: reg(_registers, instr.operand) = instr.constValue; break;
 
         case OpCode::Eq: executeEq(_registers, track, plan, state.dictionaryIds, instr); break;
+        case OpCode::CompareText:
+          executeTextComparison(_registers, track, plan, state.dictionary, state.dictionaryIds, instr);
+          break;
 
         case OpCode::Ne:
           executeComparison(_registers,

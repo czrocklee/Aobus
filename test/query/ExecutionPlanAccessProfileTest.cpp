@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <span>
 #include <string>
+#include <string_view>
 
 namespace ao::query::test
 {
@@ -66,6 +67,31 @@ namespace ao::query::test
     auto plan = compileOk(expr);
 
     CHECK(plan.accessProfile == AccessProfile::HotAndCold);
+  }
+
+  TEST_CASE("ExecutionPlan - includes right operand dependencies in comparison plans")
+  {
+    struct Case final
+    {
+      std::string_view predicate;
+      AccessProfile profile;
+      bool requiresDictionary;
+    };
+    constexpr auto kCases = std::array{
+      Case{.predicate = "$title = %label", .profile = AccessProfile::HotAndCold, .requiresDictionary = true},
+      Case{.predicate = "'x' = %label", .profile = AccessProfile::ColdOnly, .requiresDictionary = true},
+      Case{.predicate = "$title = $artist", .profile = AccessProfile::HotOnly, .requiresDictionary = true},
+      Case{.predicate = "$title = $work", .profile = AccessProfile::HotAndCold, .requiresDictionary = true},
+      Case{.predicate = "$year = $trackNumber", .profile = AccessProfile::HotAndCold, .requiresDictionary = false},
+    };
+
+    for (auto const& [predicate, profile, requiresDictionary] : kCases)
+    {
+      CAPTURE(predicate);
+      auto const plan = compileOk(parseOk(predicate));
+      CHECK(plan.accessProfile == profile);
+      CHECK(plan.requiresDictionary == requiresDictionary);
+    }
   }
 
   TEST_CASE("ExecutionPlan - reports ColdOnly access for cold property fields")
@@ -153,28 +179,22 @@ namespace ao::query::test
   {
     SECTION("HotOnly")
     {
-      auto fields = {"$title",
-                     "$artist",
-                     "$album",
-                     "$genre",
-                     "$albumArtist",
-                     "$composer",
-                     "$year",
-                     "#rock",
-                     "@sampleRate",
-                     "@bitDepth",
-                     "@codec"};
+      auto const predicates = {"$title = 'Title'",
+                               "$artist = 'Artist'",
+                               "$album = 'Album'",
+                               "$genre = 'Genre'",
+                               "$albumArtist = 'Album Artist'",
+                               "$composer = 'Composer'",
+                               "$year = 0",
+                               "#rock",
+                               "@sampleRate = 0",
+                               "@bitDepth = 0",
+                               "@codec = 0"};
 
-      for (auto const* f : fields)
+      for (auto const* predicate : predicates)
       {
-        auto expr = parseOk(f);
-
-        if (f[0] != '#' && std::string{f} != "true" && std::string{f} != "false")
-        {
-          expr = parseOk(std::string{f} + " = 0");
-        }
-
-        auto plan = compileOk(expr);
+        CAPTURE(predicate);
+        auto const plan = compileOk(parseOk(predicate));
         CHECK(plan.accessProfile == AccessProfile::HotOnly);
       }
     }
@@ -190,27 +210,25 @@ namespace ao::query::test
 
     SECTION("ColdOnly")
     {
-      auto fields = {"$trackNumber",
-                     "$trackTotal",
-                     "$discNumber",
-                     "$discTotal",
-                     "$movementNumber",
-                     "$movementTotal",
-                     "$coverArt",
-                     "%isrc",
-                     "@duration",
-                     "@bitrate",
-                     "@channels"};
+      auto const predicates = {"$trackNumber >= 0",
+                               "$trackTotal >= 0",
+                               "$discNumber >= 0",
+                               "$discTotal >= 0",
+                               "$movementNumber >= 0",
+                               "$movementTotal >= 0",
+                               "$coverArt >= 0",
+                               "%isrc >= 'ABC'",
+                               "@duration >= 0",
+                               "@bitrate >= 0",
+                               "@channels >= 0"};
 
-      for (auto const* f : fields)
+      for (auto const* predicate : predicates)
       {
-        auto expr = parseOk(std::string{f} + " >= 0");
-        auto plan = compileOk(expr);
+        CAPTURE(predicate);
+        auto const plan = compileOk(parseOk(predicate));
         CHECK(plan.accessProfile == AccessProfile::ColdOnly);
       }
 
-      // Cold dictionary and credit member fields accept string equality,
-      // but not the numeric ordered comparison used above.
       auto workPlan = compileOk(parseOk("$work = w"));
       CHECK(workPlan.accessProfile == AccessProfile::ColdOnly);
 

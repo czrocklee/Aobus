@@ -8,6 +8,7 @@
 #include <ao/query/Field.h>
 #include <ao/query/detail/Bytecode.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
@@ -92,6 +93,8 @@ namespace ao::query::test
   TEST_CASE("ExecutionPlan - rejects unsupported codec constants")
   {
     std::ignore = compileError(parseOk("@codec = VORBIS"));
+    CHECK_THAT(
+      compileError(parseOk("'FLAC' = @codec")).message, Catch::Matchers::ContainsSubstring("@codec on the left"));
   }
 
   TEST_CASE("ExecutionPlan - compiles logical and")
@@ -202,6 +205,44 @@ namespace ao::query::test
     CHECK(checkComparison(plan, OpCode::Le, Field::Year, 2000)->operand == 1);
   }
 
+  TEST_CASE("ExecutionPlan - rejects text and numeric comparisons without coercion")
+  {
+    for (auto const* expression : {"$year = '2020'",
+                                   "'2020' <= $year",
+                                   "$title = 2020",
+                                   "$year = $title",
+                                   "$title < $year",
+                                   "$artist = 1",
+                                   "1 != $artist",
+                                   "%label != 1"})
+    {
+      CAPTURE(expression);
+      std::ignore = compileError(parseOk(expression));
+    }
+  }
+
+  TEST_CASE("ExecutionPlan - rejects comparisons that mix booleans with text or integers")
+  {
+    for (auto const* expression : {"$album = ($artist = 'Bach')",
+                                   "($artist = 'Bach') = $album",
+                                   "$year = true",
+                                   "#rock = 1",
+                                   "0 < #rock",
+                                   "true = 1"})
+    {
+      CAPTURE(expression);
+      std::ignore = compileError(parseOk(expression));
+    }
+  }
+
+  TEST_CASE("ExecutionPlan - type errors identify the field or its accepted literals")
+  {
+    CHECK_THAT(
+      compileError(parseOk("@codec = true")).message, Catch::Matchers::ContainsSubstring("codec name or an integer"));
+    CHECK_THAT(compileError(parseOk("#rock = 'x'")).message, Catch::Matchers::ContainsSubstring("#rock"));
+    CHECK_THAT(compileError(parseOk("2020 <= $title")).message, Catch::Matchers::ContainsSubstring("$title"));
+  }
+
   TEST_CASE("ExecutionPlan - rejects add operators")
   {
     auto expr = parseOk("$title + $artist");
@@ -216,6 +257,18 @@ namespace ao::query::test
     CHECK(plan.instructions[0].op == OpCode::LoadConstant);
     CHECK(plan.instructions[0].constValue == 0);
     CHECK_FALSE(plan.matchesAll);
+  }
+
+  TEST_CASE("ExecutionPlan - a wrapped comparison operand keeps its literal type")
+  {
+    auto wrapperPtr = std::make_unique<BinaryExpression>();
+    wrapperPtr->operand = ConstantExpression{std::int64_t{1990}};
+    auto comparisonPtr = std::make_unique<BinaryExpression>();
+    comparisonPtr->operand = VariableExpression{.type = VariableType::Metadata, .name = "year"};
+    comparisonPtr->optOperation = BinaryExpression::Operation{.op = Operator::Equal, .operand = std::move(wrapperPtr)};
+    auto const expression = Expression{std::move(comparisonPtr)};
+    auto const plan = compileOk(expression);
+    CHECK(checkComparison(plan, OpCode::Eq, Field::Year, 1990)->operand == 1);
   }
 
   TEST_CASE("ExecutionPlan - rejects invalid AST nodes")
