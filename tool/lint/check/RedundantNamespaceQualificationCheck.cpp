@@ -31,6 +31,7 @@
 #include <clang/Basic/SourceManager.h>
 #include <clang/Lex/Lexer.h>
 #include <llvm/ADT/DenseMap.h>
+#include <llvm/ADT/STLExtras.h>
 #include <llvm/ADT/SmallPtrSet.h>
 #include <llvm/ADT/SmallVector.h>
 
@@ -556,7 +557,10 @@ namespace clang::tidy::readability
       return nullptr;
     }
 
-    bool hasSameNamespaceLookup(NamedDecl const* declaration, NestedNameSpecifierLoc const& lastRedundant)
+    bool hasSameNamespaceLookup(NamedDecl const* declaration,
+                                NestedNameSpecifierLoc const& lastRedundant,
+                                SourceLocation useLocation,
+                                SourceManager const& sourceManager)
     {
       auto const* ns = namespaceDecl(lastRedundant);
 
@@ -565,7 +569,33 @@ namespace clang::tidy::readability
         return false;
       }
 
-      auto const lookup = ns->lookup(declaration->getDeclName());
+      auto const name = declaration->getDeclName();
+      auto const precedesUse = [useLocation, &sourceManager](UsingDirectiveDecl const* directive)
+      { return isSourceLocusBeforeUse(directive->getBeginLoc(), useLocation, sourceManager); };
+
+      // Qualified lookup can stop at a direct declaration while unqualified
+      // lookup adds overloads from an active using-directive in this namespace.
+      // This can miss safe removals when unqualified lookup stops here before
+      // reaching the directive's common ancestor at global scope. Source order
+      // filters directives, not direct candidates in the nominated namespace,
+      // so a later declaration there can also block a warning.
+      for (auto const* directive : ns->using_directives())
+      {
+        if (!precedesUse(directive))
+        {
+          continue;
+        }
+
+        // Direct lookup can rule out an unrelated name, but cannot exclude a
+        // transitive import. Do not walk arbitrary using-directive graphs.
+        if (auto const* nominated = directive->getNominatedNamespace();
+            !nominated->lookup(name).empty() || llvm::any_of(nominated->using_directives(), precedesUse))
+        {
+          return false;
+        }
+      }
+
+      auto const lookup = ns->lookup(name);
       return std::ranges::any_of(lookup,
                                  [declaration](auto const* candidate)
                                  { return candidate->getCanonicalDecl() == declaration->getCanonicalDecl(); });
@@ -1189,7 +1219,7 @@ namespace clang::tidy::readability
     // Require the source declaration in q and no uncertain or closer lookup.
     auto const* firstDeclaration = firstSurvivingDeclaration(result, lastRedundant, chain);
 
-    if (!hasSameNamespaceLookup(firstDeclaration, lastRedundant))
+    if (!hasSameNamespaceLookup(firstDeclaration, lastRedundant, loc, sm))
     {
       return;
     }

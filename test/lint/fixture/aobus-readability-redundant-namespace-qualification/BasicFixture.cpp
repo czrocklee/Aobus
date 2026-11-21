@@ -56,6 +56,119 @@ namespace other
   }
 }
 
+namespace directiveLookup
+{
+  namespace nested
+  {
+    constexpr int pick(int)
+    {
+      return 1;
+    }
+  }
+
+  constexpr int pick(long)
+  {
+    return 2;
+  }
+
+  // POSITIVE - before the directive both calls select pick(long).
+  static_assert(directiveLookup::pick(0) == pick(0));
+
+  using namespace nested;
+}
+
+namespace directiveLookup
+{
+  // NEGATIVE - unqualified lookup also finds the exact match from the prior namespace block.
+  static_assert(directiveLookup::pick(0) == 2 && pick(0) == 1);
+
+  constexpr int other()
+  {
+    return 3;
+  }
+  // POSITIVE - the nominated namespace has no declaration named other.
+  static_assert(directiveLookup::other() == other());
+}
+
+namespace transitiveLookup
+{
+  namespace nested::overloads
+  {
+    constexpr int pick(int)
+    {
+      return 1;
+    }
+  }
+  using namespace nested;
+  constexpr int pick(long)
+  {
+    return 2;
+  }
+
+  // POSITIVE - nested does not yet import overloads.
+  static_assert(transitiveLookup::pick(0) == pick(0));
+
+  namespace nested
+  {
+    using namespace overloads;
+  }
+  // NEGATIVE - a direct lookup in nested alone would miss the overload.
+  static_assert(transitiveLookup::pick(0) == 2 && pick(0) == 1);
+}
+
+namespace inlineNomineeLookup
+{
+  namespace nested
+  {
+    inline namespace version
+    {
+      constexpr int pick(int)
+      {
+        return 1;
+      }
+    }
+  }
+
+  constexpr int pick(long)
+  {
+    return 2;
+  }
+
+  // POSITIVE - before the directive both calls select pick(long).
+  static_assert(inlineNomineeLookup::pick(0) == 2 && pick(0) == 2);
+
+  using namespace nested;
+  // NEGATIVE - the nominated namespace exposes pick(int) through its inline child.
+  static_assert(inlineNomineeLookup::pick(0) == 2 && pick(0) == 1);
+}
+
+namespace inlineOwnerLookup
+{
+  namespace nested
+  {
+    constexpr int pick(int)
+    {
+      return 1;
+    }
+  }
+
+  constexpr int pick(long)
+  {
+    return 2;
+  }
+
+  // POSITIVE - before the directive both calls select pick(long).
+  static_assert(inlineOwnerLookup::pick(0) == 2 && pick(0) == 2);
+
+  inline namespace version
+  {
+    using namespace nested;
+  }
+
+  // NEGATIVE - the inline child's directive affects lookup in its enclosing namespace.
+  static_assert(inlineOwnerLookup::pick(0) == 2 && pick(0) == 1);
+}
+
 namespace ao::test
 {
   struct TempDir
