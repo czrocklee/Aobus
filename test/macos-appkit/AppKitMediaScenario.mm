@@ -501,7 +501,7 @@ namespace ao::appkit::test
       auto rename = [&](std::string const& title)
       {
         auto& editor = session.editor();
-        auto const beginRes = editor.beginProperties({trackId});
+        auto const beginRes = editor.beginProperties(std::array{trackId});
         AO_INVARIANT(beginRes, "The clock regression must edit its playing fixture");
         auto const& fields = editor.state().fields;
         auto const field = std::ranges::find(

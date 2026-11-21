@@ -10,7 +10,6 @@
 #include <ao/async/Task.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/library/Credits.h>
-#include <ao/rt/TrackField.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
@@ -22,6 +21,7 @@
 #pragma push_macro("GetCurrentTime")
 #include <unknwn.h>
 #undef GetCurrentTime
+#include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 #include <winrt/Windows.Foundation.h>
@@ -34,6 +34,7 @@
 #include <optional>
 #include <stop_token>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ao::async
@@ -90,15 +91,39 @@ namespace ao::winui
       Closing,
     };
 
+    enum class Addition : std::uint8_t
+    {
+      Tag,
+      CustomMetadata,
+    };
+
+    struct AdditionRejection final
+    {
+      Addition kind;
+      std::string message;
+    };
+
+    struct DraftFeedback final
+    {
+      TrackPropertiesRetryDraft retryDraft = TrackPropertiesRetryDraft::Blocked;
+      std::optional<uimodel::TrackPropertiesFormEditorKind> optInvalidKind;
+      bool showPendingHint = false;
+    };
+
     struct FieldEditor final
     {
-      rt::TrackField field = rt::TrackField::Title;
-      TrackPropertyControlKind controlKind = TrackPropertyControlKind::Text;
+      TrackPropertyRowProjection row;
       winrt::Microsoft::UI::Xaml::Controls::TextBox textBox{nullptr};
       winrt::Microsoft::UI::Xaml::Controls::AutoSuggestBox suggestBox{nullptr};
+      winrt::Microsoft::UI::Xaml::Controls::CheckBox clearCheck{nullptr};
+      winrt::Microsoft::UI::Xaml::Controls::CheckBox::Checked_revoker checkedRevoker{};
+      winrt::Microsoft::UI::Xaml::Controls::CheckBox::Unchecked_revoker uncheckedRevoker{};
       winrt::Microsoft::UI::Xaml::Controls::TextBox::TextChanged_revoker textChangedRevoker{};
+      winrt::Microsoft::UI::Xaml::Controls::TextBox::LostFocus_revoker lostFocusRevoker{};
       winrt::Microsoft::UI::Xaml::Controls::AutoSuggestBox::TextChanged_revoker suggestionChangedRevoker{};
-      bool enabled = false;
+
+      bool isClearRequested() const { return clearCheck && clearCheck.IsChecked().GetBoolean(); }
+      void setEnabled(bool enabled) const;
     };
 
     struct CustomEditor final
@@ -117,11 +142,13 @@ namespace ao::winui
 
     Result<> prepareSession();
     void buildDialog();
+    void buildDialogContent();
     void buildCreditsSection(winrt::Microsoft::UI::Xaml::Controls::StackPanel const& content);
     void refreshCreditsPreview();
     void beginCreditsEdit(std::bitset<library::kCreditKindCount> scope);
     void finishCreditsEdit(bool accept);
     void requestDiscard(bool reload);
+    void cancelDiscard();
     void confirmDiscard();
     void buildMetadataSection(winrt::Microsoft::UI::Xaml::Controls::StackPanel const& content);
     void buildTechnicalSection(winrt::Microsoft::UI::Xaml::Controls::StackPanel const& content);
@@ -135,31 +162,39 @@ namespace ao::winui
     void addTag();
     void addCustomMetadata();
     void deleteCustomMetadata(std::size_t index);
+    bool acceptsFieldGesture() const;
+    void handleClearToggled(winrt::Microsoft::UI::Xaml::Controls::CheckBox const& source);
+    void restoreWithdrawnInput(winrt::Microsoft::UI::Xaml::Controls::TextBox const& source);
     void refreshMetadataSuggestions(FieldEditor const& editor);
     std::string editorText(FieldEditor const& editor) const;
     void refreshTagSuggestions();
     void refreshCustomKeySuggestions();
-    bool trySynchronizeFieldEdits();
-    bool hasPendingChanges() const;
+    std::optional<uimodel::TrackPropertiesFormEditorKind> synchronizeFieldEdits(
+      uimodel::TrackPropertiesFormModel& form) const;
+    bool hasAuxiliaryChanges() const;
+    bool hasUnstagedTagInput() const;
+    bool hasUnstagedCustomInput() const;
+    bool hasUnstagedInput() const;
+    bool needsDiscardDecision() const;
     rt::MetadataPatch buildMetadataPatch() const;
-    std::vector<std::string> tagsToAdd() const;
-    std::vector<std::string> tagsToRemove() const;
     void setInteractionState(InteractionState state);
     void updateEditorEnabled();
-    void updateSaveEnabled();
-    void setError(std::string text);
-    void clearError();
+    DraftFeedback synchronizeDraftFeedback(std::string_view actionError, std::optional<Addition> optRejectedAddition);
+    winrt::hstring dialogFeedbackText(DraftFeedback const& draft,
+                                      bool bindingCurrent,
+                                      std::string_view actionError) const;
+    TrackPropertiesRetryDraft updateDialogFeedback(std::string_view actionError = {},
+                                                   std::optional<Addition> optRejectedAddition = {});
+    void clearAdditionRejection(Addition kind);
     void handleSessionInvalidated();
     void handleSaveClicked(winrt::Microsoft::UI::Xaml::Controls::ContentDialogButtonClickEventArgs const& args);
-    void finishSave(Result<TrackPropertiesCommitState> res);
+    void finishSave(Result<uimodel::TrackPropertiesSubmitResult> res);
     void handleClosed();
 
-    static async::Task<Result<TrackPropertiesCommitState>> submitChangesAsync(
-      async::Task<Result<uimodel::TrackPropertiesSubmitResult>> submission);
     static async::Task<void> runSaveWorkflowAsync(async::Runtime* runtime,
                                                   TrackPropertiesCoordinator* owner,
                                                   CallbackAdmissionGate::Token token,
-                                                  async::Task<Result<TrackPropertiesCommitState>> submission,
+                                                  async::Task<Result<uimodel::TrackPropertiesSubmitResult>> submission,
                                                   std::stop_token stopToken);
 
     winrt::Microsoft::UI::Xaml::XamlRoot _xamlRoot{nullptr};
@@ -180,6 +215,10 @@ namespace ao::winui
 
     winrt::Microsoft::UI::Xaml::Controls::ContentDialog _dialog{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::TextBlock _errorText{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::TextBlock _unstagedInputHint{nullptr};
+    std::optional<std::string> _optFrozenError;
+    std::optional<AdditionRejection> _optAdditionRejection;
+    TrackPropertiesRetryFeedback _retryFeedback = TrackPropertiesRetryFeedback::None;
     winrt::Microsoft::UI::Xaml::Controls::StackPanel _creditsPreview{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::StackPanel _creditsHost{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::StackPanel _discardPrompt{nullptr};
@@ -204,6 +243,7 @@ namespace ao::winui
     std::vector<winrt::Microsoft::UI::Xaml::Controls::Button> _tagRemoveButtons;
     std::vector<winrt::Microsoft::UI::Xaml::Controls::Button::Click_revoker> _tagRemoveClickRevokers;
     winrt::Microsoft::UI::Xaml::Controls::AutoSuggestBox::TextChanged_revoker _customKeyChangedRevoker{};
+    winrt::Microsoft::UI::Xaml::Controls::TextBox::TextChanged_revoker _customValueChangedRevoker{};
     winrt::Microsoft::UI::Xaml::Controls::Button::Click_revoker _customAddClickRevoker{};
     winrt::Windows::Foundation::IAsyncOperation<winrt::Microsoft::UI::Xaml::Controls::ContentDialogResult>
       _showOperation{nullptr};

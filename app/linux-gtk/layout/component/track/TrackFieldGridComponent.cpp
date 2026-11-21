@@ -233,8 +233,7 @@ namespace ao::gtk::layout
         for (auto const field : projection.metadataFields)
         {
           // Category previews belong to the scoped list editor, never scalar entries.
-          if (field == rt::TrackField::Conductor || field == rt::TrackField::Ensemble ||
-              field == rt::TrackField::Soloist)
+          if (rt::creditKindForTrackField(field))
           {
             continue;
           }

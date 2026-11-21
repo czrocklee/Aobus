@@ -223,6 +223,7 @@ cc_library(
         "//app/i18n",
         "//lib:ao",
         "//lib/audio",
+        "//lib/utility:unicode_text",
         "@aobus_native_deps//:boost_process",
         "@aobus_native_deps//:cli11",
         "@aobus_native_deps//:giomm",

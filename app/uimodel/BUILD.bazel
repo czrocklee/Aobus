@@ -64,6 +64,7 @@ cc_library(
         "library/property/TagEdit.cpp",
         "library/property/TrackPropertiesFormModel.cpp",
         "library/property/TrackPropertiesFormSpec.cpp",
+        "library/property/TrackPropertiesPreparation.cpp",
         "library/task/LibraryScanOutcome.cpp",
         "library/task/LibraryScanWorkflow.cpp",
         "library/track/IndexedTrackRowCache.cpp",
@@ -100,7 +101,10 @@ cc_library(
         "status/activity/ActivityStatusFeedProjection.cpp",
         "status/activity/ActivityStatusViewModel.cpp",
     ],
-    implementation_deps = ["//app/i18n"] + select({
+    implementation_deps = [
+        "//app/i18n",
+        "//lib/utility:unicode_text",
+    ] + select({
         "@platforms//os:macos": ["@aobus_native_deps//:date_tz"],
         "//conditions:default": [],
     }),

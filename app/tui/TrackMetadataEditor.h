@@ -43,13 +43,13 @@ namespace ao::tui
       std::function<std::optional<rt::CompletionResult>(rt::TrackField, std::string_view, std::size_t)>;
 
     TrackMetadataEditor(i18n::MessageCatalog textCatalog,
-                        std::size_t targetCount,
                         uimodel::TrackPropertiesFormModel baseline,
                         CompletionProvider completionProvider,
                         TrackCreditsEditor::CompletionProvider creditCompletionProvider = {});
 
+    std::size_t targetCount() const noexcept { return _form.targetCount(); }
     bool isDirty() const noexcept;
-    bool isEditingCredits() const noexcept { return _baseline.creditsEditor().isEditing(); }
+    bool isEditingCredits() const noexcept { return _form.creditsEditor().isEditing(); }
     void beginCreditsEdit(std::bitset<library::kCreditKindCount> kinds);
     void handleCreditsEvent(ftxui::Event const& event);
     bool hasInvalidFields() const noexcept;
@@ -58,6 +58,7 @@ namespace ao::tui
     rt::MetadataPatch buildPatch() const;
     bool hasCompletion() const noexcept { return _optActiveCompletion.has_value(); }
     bool supportsCompletion() const noexcept;
+    std::optional<std::string> focusedClearLabel() const;
     void closeCompletion();
     bool tryHandleCompletionEvent(ftxui::Event const& event);
     void handleEvent(ftxui::Event const& event);
@@ -66,6 +67,7 @@ namespace ao::tui
     ftxui::Element renderProperties() const;
 
   private:
+    // Local markup for pending input; the form owns what becomes a patch.
     enum class FieldIntent : std::uint8_t
     {
       Unchanged,
@@ -92,15 +94,13 @@ namespace ao::tui
     void clearField(MetadataRow& row);
     void restoreField(MetadataRow& row);
     void noteRowEdited(MetadataRow& row);
-    void revalidate(MetadataRow& row);
     void maybeTriggerCompletion(MetadataRow const& row, bool explicitRequest);
 
     ftxui::Element renderFieldValue(MetadataRow const& row, bool focused, ftxui::Box& inputBox) const;
     ftxui::Element renderRows(std::int32_t labelColumns) const;
 
     i18n::MessageCatalog _textCatalog;
-    std::size_t _targetCount;
-    uimodel::TrackPropertiesFormModel _baseline;
+    uimodel::TrackPropertiesFormModel _form;
     TrackCreditsEditor _creditsEditor;
     uimodel::TrackPropertiesFormSpec _spec;
     std::vector<MetadataRow> _metadataRows{};

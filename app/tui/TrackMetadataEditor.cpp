@@ -13,12 +13,11 @@
 #include "TrackCreditsEditor.h"
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/library/Credits.h>
-#include <ao/library/RecordingDate.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackMutation.h>
 #include <ao/uimodel/library/detail/TrackCredits.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
-#include <ao/uimodel/library/track/TrackAuthoring.h>
 
 #include <ftxui/component/event.hpp>
 #include <ftxui/component/mouse.hpp>
@@ -31,7 +30,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
-#include <string_view>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -42,30 +41,9 @@ namespace ao::tui
     using i18n::MessageId;
     constexpr std::int32_t kMaximumLabelColumns = 18;
 
-    bool isNumberRow(uimodel::TrackPropertiesFormRow const& row) noexcept
+    bool isEditable(uimodel::TrackPropertiesFormRow const& row) noexcept
     {
-      return row.editorKind == uimodel::TrackPropertiesFormEditorKind::Number;
-    }
-
-    bool isDateRow(uimodel::TrackPropertiesFormRow const& row) noexcept
-    {
-      return row.editorKind == uimodel::TrackPropertiesFormEditorKind::Date;
-    }
-
-    /// Whether @p text parses under the field's own codec, which is what Save will use.
-    bool isValidForRow(uimodel::TrackPropertiesFormRow const& row, std::string_view const text)
-    {
-      if (isNumberRow(row))
-      {
-        return uimodel::parseUint16EditValue(text).has_value();
-      }
-
-      if (isDateRow(row))
-      {
-        return uimodel::parseRecordingDateEditValue(text).has_value();
-      }
-
-      return uimodel::parseTextEditValue(text).has_value();
+      return row.editorKind != uimodel::TrackPropertiesFormEditorKind::ReadonlyText;
     }
 
     std::string countedText(i18n::MessageCatalog const& textCatalog, MessageId const id, std::size_t const count)
@@ -83,13 +61,11 @@ namespace ao::tui
   } // namespace
 
   TrackMetadataEditor::TrackMetadataEditor(i18n::MessageCatalog textCatalog,
-                                           std::size_t const targetCount,
                                            uimodel::TrackPropertiesFormModel baseline,
                                            CompletionProvider completionProvider,
                                            TrackCreditsEditor::CompletionProvider creditCompletionProvider)
     : _textCatalog{std::move(textCatalog)}
-    , _targetCount{targetCount}
-    , _baseline{std::move(baseline)}
+    , _form{std::move(baseline)}
     , _creditsEditor{_textCatalog, std::move(creditCompletionProvider)}
     , _spec{uimodel::buildTrackPropertiesFormSpec(_textCatalog)}
     , _completionProvider{std::move(completionProvider)}
@@ -98,7 +74,7 @@ namespace ao::tui
 
     for (auto const& specRow : _spec.metadataRows)
     {
-      auto const view = _baseline.rowView(specRow.field);
+      auto const view = _form.rowView(specRow.field);
       auto row = MetadataRow{.spec = specRow, .mixed = view.mixed};
 
       // A mixed field starts empty so its marker can be presentation-only. A
@@ -113,15 +89,15 @@ namespace ao::tui
     }
 
     // A baseline prepared with a begun Credits session opens in that session.
-    if (_baseline.creditsEditor().isEditing())
+    if (_form.creditsEditor().isEditing())
     {
-      _creditsEditor.reset(_baseline.creditsEditor());
+      _creditsEditor.reset(_form.creditsEditor());
     }
   }
 
   bool TrackMetadataEditor::isDirty() const noexcept
   {
-    return _baseline.pendingCredits().has_value() || _baseline.creditsEditor().hasDraftChanges() ||
+    return _form.pendingCredits().has_value() || _form.creditsEditor().hasDraftChanges() ||
            std::ranges::any_of(_metadataRows, [](auto const& row) { return row.isIncluded(); });
   }
 
@@ -130,23 +106,23 @@ namespace ao::tui
     closeCompletion();
 
     // A refused baseline stays visible; otherwise the key would look ignored.
-    if (auto res = _baseline.beginCreditsEdit(kinds); !res)
+    if (auto res = _form.beginCreditsEdit(kinds); !res)
     {
       _creditsOpenError = std::move(res.error().message);
       return;
     }
 
     _creditsOpenError.clear();
-    _creditsEditor.reset(_baseline.creditsEditor());
+    _creditsEditor.reset(_form.creditsEditor());
   }
 
   void TrackMetadataEditor::handleCreditsEvent(ftxui::Event const& event)
   {
-    switch (_creditsEditor.handleEvent(event, _baseline.creditsEditor()))
+    switch (_creditsEditor.handleEvent(event, _form.creditsEditor()))
     {
       case TrackCreditsEditor::Request::None: break;
-      case TrackCreditsEditor::Request::Cancel: _baseline.cancelCreditsEdit(); break;
-      case TrackCreditsEditor::Request::Accept: std::ignore = _baseline.acceptCreditsEdit(); break;
+      case TrackCreditsEditor::Request::Cancel: _form.cancelCreditsEdit(); break;
+      case TrackCreditsEditor::Request::Accept: std::ignore = _form.acceptCreditsEdit(); break;
     }
   }
 
@@ -159,79 +135,19 @@ namespace ao::tui
   {
     return static_cast<std::size_t>(
              std::ranges::count_if(_metadataRows, [](auto const& row) { return row.isIncluded(); })) +
-           (_baseline.pendingCredits() ? 1 : 0);
+           (_form.pendingCredits() ? 1 : 0);
   }
 
   std::size_t TrackMetadataEditor::clearedFieldCount() const noexcept
   {
     return static_cast<std::size_t>(std::ranges::count_if(
              _metadataRows, [](auto const& row) { return row.intent == FieldIntent::ExplicitClear; })) +
-           (_baseline.pendingCredits() && _baseline.pendingCredits()->entries.empty() ? 1 : 0);
+           (_form.pendingCredits() && _form.pendingCredits()->entries.empty() ? 1 : 0);
   }
 
   rt::MetadataPatch TrackMetadataEditor::buildPatch() const
   {
-    if (isEditingCredits())
-    {
-      return {};
-    }
-
-    auto form = _baseline;
-
-    for (auto const& row : _metadataRows)
-    {
-      if (row.intent == FieldIntent::Unchanged)
-      {
-        continue;
-      }
-
-      if (row.intent == FieldIntent::ExplicitClear)
-      {
-        if (isNumberRow(row.spec))
-        {
-          form.setExplicitFieldEdit(row.spec.field, static_cast<std::uint16_t>(0));
-        }
-        else if (isDateRow(row.spec))
-        {
-          // An empty editor input clears the recording date; zero is the
-          // shared absence sentinel, not an admitted year.
-          form.setExplicitFieldEdit(row.spec.field, library::RecordingDate{});
-        }
-        else
-        {
-          form.setExplicitFieldEdit(row.spec.field, std::string{});
-        }
-
-        continue;
-      }
-
-      if (isNumberRow(row.spec))
-      {
-        if (auto const valueRes = uimodel::parseUint16EditValue(row.input.value()); valueRes)
-        {
-          form.setExplicitFieldEdit(row.spec.field, *valueRes);
-        }
-
-        continue;
-      }
-
-      if (isDateRow(row.spec))
-      {
-        if (auto const valueRes = uimodel::parseRecordingDateEditValue(row.input.value()); valueRes)
-        {
-          form.setExplicitFieldEdit(row.spec.field, *valueRes);
-        }
-
-        continue;
-      }
-
-      if (auto const valueRes = uimodel::parseTextEditValue(row.input.value()); valueRes)
-      {
-        form.setExplicitFieldEdit(row.spec.field, *valueRes);
-      }
-    }
-
-    return form.buildPatch();
+    return _form.buildPatch();
   }
 
   bool TrackMetadataEditor::supportsCompletion() const noexcept
@@ -239,6 +155,18 @@ namespace ao::tui
     return _focusedMetadataRow < _metadataRows.size() &&
            !rt::creditKindForTrackField(_metadataRows[_focusedMetadataRow].spec.field) &&
            rt::supportsTrackFieldValueCompletion(_metadataRows[_focusedMetadataRow].spec.field);
+  }
+
+  std::optional<std::string> TrackMetadataEditor::focusedClearLabel() const
+  {
+    if (_focusedMetadataRow >= _metadataRows.size() || !isEditable(_metadataRows[_focusedMetadataRow].spec))
+    {
+      return std::nullopt;
+    }
+
+    auto const& row = _metadataRows[_focusedMetadataRow].spec;
+    return i18n::requiredFormat(
+      _textCatalog, MessageId::TrackClearFieldForTracks, {{"field", row.label}, {"count", targetCount()}});
   }
 
   void TrackMetadataEditor::closeCompletion()
@@ -384,6 +312,11 @@ namespace ao::tui
       return;
     }
 
+    if (!isEditable(row.spec))
+    {
+      return;
+    }
+
     if (event == ftxui::Event::CtrlD)
     {
       clearField(row);
@@ -427,7 +360,7 @@ namespace ao::tui
   {
     if (isEditingCredits())
     {
-      return _creditsEditor.render(_baseline.creditsEditor());
+      return _creditsEditor.render(_form.creditsEditor());
     }
 
     std::int32_t labelColumns = 0;
@@ -458,7 +391,7 @@ namespace ao::tui
       labelColumns = std::max(labelColumns, cellWidth(specRow.label));
     }
 
-    for (auto const& row : _baseline.segmentRows())
+    for (auto const& row : _form.segmentRows())
     {
       labelColumns = std::max(labelColumns, cellWidth(row.label));
     }
@@ -466,11 +399,11 @@ namespace ao::tui
     labelColumns = std::min(labelColumns, kMaximumLabelColumns);
 
     auto rows = std::vector<SelectableListRow>{};
-    rows.reserve(_spec.propertyRows.size() + _baseline.segmentRows().size());
+    rows.reserve(_spec.propertyRows.size() + _form.segmentRows().size());
 
     for (auto const& specRow : _spec.propertyRows)
     {
-      auto const view = _baseline.rowView(specRow.field);
+      auto const view = _form.rowView(specRow.field);
       auto valuePtr = text(view.text);
 
       rows.push_back(SelectableListRow{
@@ -482,7 +415,7 @@ namespace ao::tui
       });
     }
 
-    for (auto const& row : _baseline.segmentRows())
+    for (auto const& row : _form.segmentRows())
     {
       rows.push_back(SelectableListRow{
         .elementPtr = hbox({text(fitCellText(row.label, labelColumns)) | style::muted(), text("  "), text(row.text)}),
@@ -542,7 +475,7 @@ namespace ao::tui
 
   void TrackMetadataEditor::scrollProperties(std::int32_t const delta)
   {
-    auto const count = static_cast<std::int32_t>(_spec.propertyRows.size() + _baseline.segmentRows().size());
+    auto const count = static_cast<std::int32_t>(_spec.propertyRows.size() + _form.segmentRows().size());
 
     if (count == 0)
     {
@@ -555,13 +488,15 @@ namespace ao::tui
 
   void TrackMetadataEditor::clearField(MetadataRow& row)
   {
+    _form.clearFieldEdit(row.spec.field);
     row.input.reset("");
-    row.intent = FieldIntent::ExplicitClear;
-    revalidate(row);
+    row.intent = _form.hasFieldChange(row.spec.field) ? FieldIntent::ExplicitClear : FieldIntent::Unchanged;
+    row.invalid = false;
   }
 
   void TrackMetadataEditor::restoreField(MetadataRow& row)
   {
+    _form.restoreFieldEdit(row.spec.field);
     row.intent = FieldIntent::Unchanged;
     row.invalid = false;
     row.input.reset(row.mixed ? "" : row.baselineText);
@@ -569,25 +504,34 @@ namespace ao::tui
 
   void TrackMetadataEditor::noteRowEdited(MetadataRow& row)
   {
+    auto valueRes = uimodel::parseTrackPropertiesFieldInput(row.spec.editorKind, row.input.value());
+    row.invalid = !valueRes;
+
+    if (!valueRes)
+    {
+      // Keep invalid input available to fix, but never keep a stale edit in the patch.
+      _form.restoreFieldEdit(row.spec.field);
+      row.intent = FieldIntent::Replacement;
+      return;
+    }
+
     if (!row.mixed && row.input.value() == row.baselineText)
+    {
+      _form.restoreFieldEdit(row.spec.field);
+      row.intent = FieldIntent::Unchanged;
+      return;
+    }
+
+    _form.setFieldInput(row.spec.field, std::move(*valueRes));
+
+    if (!_form.hasFieldChange(row.spec.field))
     {
       row.intent = FieldIntent::Unchanged;
     }
-    else if (row.input.empty())
-    {
-      row.intent = FieldIntent::ExplicitClear;
-    }
     else
     {
-      row.intent = FieldIntent::Replacement;
+      row.intent = row.input.empty() ? FieldIntent::ExplicitClear : FieldIntent::Replacement;
     }
-
-    revalidate(row);
-  }
-
-  void TrackMetadataEditor::revalidate(MetadataRow& row)
-  {
-    row.invalid = (row.intent != FieldIntent::Unchanged) && !isValidForRow(row.spec, row.input.value());
   }
 
   void TrackMetadataEditor::maybeTriggerCompletion(MetadataRow const& row, bool const explicitRequest)
@@ -630,7 +574,7 @@ namespace ao::tui
 
     if (auto const optKind = rt::creditKindForTrackField(row.spec.field); optKind)
     {
-      auto const sections = _baseline.creditSections();
+      auto const sections = _form.creditSections();
       auto const& section = sections[static_cast<std::size_t>(*optKind)];
       auto const value = uimodel::formatTrackCreditSectionSummary(_textCatalog, section);
       return hbox({text(value) | flex, text(" [Enter]") | dim});
@@ -638,14 +582,19 @@ namespace ao::tui
 
     if (row.intent == FieldIntent::ExplicitClear)
     {
-      auto clearPtr = text(countedText(_textCatalog, MessageId::TuiEditorClearForAll, _targetCount)) | style::warning();
+      auto clearPtr =
+        text(countedText(_textCatalog, MessageId::TuiEditorClearForAll, targetCount())) | style::warning();
       return focused ? hbox({emptyInputCaret(), std::move(clearPtr)}) : std::move(clearPtr);
     }
 
-    if (row.intent == FieldIntent::Unchanged && row.mixed && row.input.empty())
+    if (targetCount() > 1 && row.intent == FieldIntent::Unchanged && (row.input.empty() || !focused) &&
+        (row.mixed || row.input.value() != row.baselineText))
     {
-      auto markerPtr =
-        text(std::string{i18n::requiredText(_textCatalog, MessageId::TrackMultipleValues)}) | style::muted();
+      // Tell the user what will be preserved without inserting the displayed
+      // value into their empty input or making them erase it again.
+      auto markerPtr = text(row.mixed ? std::string{i18n::requiredText(_textCatalog, MessageId::TrackMultipleValues)}
+                                      : row.baselineText) |
+                       style::muted();
       return focused ? hbox({emptyInputCaret(), std::move(markerPtr)}) : std::move(markerPtr);
     }
 
@@ -681,12 +630,9 @@ namespace ao::tui
 
       if (row.invalid)
       {
-        // A date row keeps its own hint; the number hint would promise a
-        // whole-number edit that the date codec never accepts.
-        auto const hint =
-          isDateRow(row.spec) ? MessageId::TrackRecordingDateInvalid : MessageId::TuiEditorInvalidNumber;
+        auto const hint = uimodel::trackPropertiesInputHint(_textCatalog, row.spec.editorKind);
         cells.push_back(text(" "));
-        cells.push_back(text(std::string{i18n::requiredText(_textCatalog, hint)}) | style::danger());
+        cells.push_back(text(std::string{hint}) | style::danger());
       }
 
       auto rowElementPtr = hbox(std::move(cells)) | ftxui::reflect(_rowBoxes[index]);

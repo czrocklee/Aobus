@@ -3,10 +3,13 @@
 
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
 
+#include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/library/presentation/TrackPresentationText.h>
 #include <ao/uimodel/library/track/TrackAuthoring.h>
+
+#include <string_view>
 
 namespace ao::uimodel
 {
@@ -38,6 +41,36 @@ namespace ao::uimodel
       return def.category == rt::TrackFieldCategory::Technical && !def.synthetic;
     }
   } // namespace
+
+  Result<TrackFieldEditValue> parseTrackPropertiesFieldInput(TrackPropertiesFormEditorKind const kind,
+                                                             std::string_view const text)
+  {
+    switch (kind)
+    {
+      case TrackPropertiesFormEditorKind::Text: return parseTextEditValue(text);
+      case TrackPropertiesFormEditorKind::Number: return parseUint16EditValue(text);
+      case TrackPropertiesFormEditorKind::Date: return parseRecordingDateEditValue(text);
+      case TrackPropertiesFormEditorKind::ReadonlyText:
+        return makeError(Error::Code::InvalidInput, "A read-only property cannot be edited.");
+    }
+
+    return makeError(Error::Code::InvalidInput, "Unknown track property editor kind.");
+  }
+
+  std::string_view trackPropertiesInputHint(i18n::MessageCatalog const& textCatalog, TrackPropertiesFormEditorKind kind)
+  {
+    if (kind == TrackPropertiesFormEditorKind::Number)
+    {
+      return i18n::requiredText(textCatalog, i18n::MessageId::TrackNumberInvalid);
+    }
+
+    if (kind == TrackPropertiesFormEditorKind::Date)
+    {
+      return i18n::requiredText(textCatalog, i18n::MessageId::TrackRecordingDateInvalid);
+    }
+
+    return {};
+  }
 
   TrackPropertiesFormSpec buildTrackPropertiesFormSpec(i18n::MessageCatalog const& textCatalog)
   {

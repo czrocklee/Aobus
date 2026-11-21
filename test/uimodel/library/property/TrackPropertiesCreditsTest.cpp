@@ -271,6 +271,8 @@ namespace ao::uimodel::test
     CHECK(form.pendingCredits()->entries == std::vector<library::Credit>{{"Draft", K::Conductor, ""}});
     REQUIRE(form.beginCreditsEdit(trackCreditScope(K::Performer)));
     CHECK(form.creditsEditor().entries().empty());
+    CHECK(form.hasEffectiveChanges());
+    CHECK_FALSE(form.canSave());
     form.cancelCreditsEdit();
     CHECK(fixture.title(fixture.trackIds().front()) == "Old Title");
     CHECK(fixture.library().snapshot().trackCredits(fixture.trackIds().front()) ==

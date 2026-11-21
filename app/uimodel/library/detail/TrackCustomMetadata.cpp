@@ -11,6 +11,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace ao::uimodel
 {
@@ -46,17 +47,24 @@ namespace ao::uimodel
     return CustomMetadataAddValidation::Accepted;
   }
 
+  void setCustomMetadataPatchEntry(rt::MetadataPatch& patch,
+                                   std::string_view const key,
+                                   std::optional<std::string> optValue)
+  {
+    patch.customUpdates.insert_or_assign(std::string{key}, std::move(optValue));
+  }
+
   rt::MetadataPatch makeCustomMetadataUpdatePatch(std::string_view const key, std::string_view const value)
   {
     auto patch = rt::MetadataPatch{};
-    patch.customUpdates[std::string{key}] = std::string{value};
+    setCustomMetadataPatchEntry(patch, key, std::string{value});
     return patch;
   }
 
   rt::MetadataPatch makeCustomMetadataDeletePatch(std::string_view const key)
   {
     auto patch = rt::MetadataPatch{};
-    patch.customUpdates[std::string{key}] = std::nullopt;
+    setCustomMetadataPatchEntry(patch, key, std::nullopt);
     return patch;
   }
 } // namespace ao::uimodel

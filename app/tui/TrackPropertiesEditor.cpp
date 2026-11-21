@@ -9,6 +9,7 @@
 #include "SelectionNavigation.h"
 #include "Style.h"
 #include "TrackCreditsEditor.h"
+#include <ao/Contract.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackMutation.h>
 
@@ -45,14 +46,15 @@ namespace ao::tui
     : _textCatalog{std::move(textCatalog)}
     , _targets{std::move(preparation.targets)}
     , _metadataEditor{_textCatalog,
-                      _targets.size(),
                       std::move(preparation.baseline),
                       std::move(completionProvider),
                       std::move(creditCompletionProvider)}
-    , _tagEditor{_textCatalog, _targets.size(), std::move(preparation.tagCounts), std::move(preparation.tagSuggestions)}
+    , _tagEditor{_textCatalog, targetCount(), std::move(preparation.tagCounts), std::move(preparation.tagSuggestions)}
     , _mode{mode}
     , _tab{mode == TrackEditorMode::Tags ? TrackEditorTab::Tags : TrackEditorTab::Metadata}
   {
+    AO_EXPECTS(targetCount() == _targets.size(),
+               "Track editor baseline and prepared identities must have the same target count");
   }
 
   bool TrackPropertiesEditor::isDirty() const noexcept
@@ -144,7 +146,7 @@ namespace ao::tui
 
     _mouseReady = false;
 
-    if (tryHandleConfirmationEvent(event))
+    if (tryHandleConfirmationEvent(event) || tryHandleHiddenBatchClear(event))
     {
       return true;
     }
@@ -245,9 +247,8 @@ namespace ao::tui
       return renderTagPopover(kTagPopoverColumns, kTagPopoverRows);
     }
 
-    auto const title = _targets.size() == 1
-                         ? std::string{i18n::requiredText(_textCatalog, MessageId::TuiEditorTitle)}
-                         : countedText(_textCatalog, MessageId::TuiEditorTitleMultiple, _targets.size());
+    auto const title = targetCount() == 1 ? std::string{i18n::requiredText(_textCatalog, MessageId::TuiEditorTitle)}
+                                          : countedText(_textCatalog, MessageId::TuiEditorTitleMultiple, targetCount());
 
     _mouseBindings.clear();
     _renderedTab = _tab;
@@ -259,10 +260,10 @@ namespace ao::tui
       header.push_back(text(" "));
       header.push_back(renderSaveSummary());
     }
-    else if (_targets.size() > 1)
+    else if (targetCount() > 1)
     {
       header.push_back(text(" "));
-      header.push_back(text(countedText(_textCatalog, MessageId::TuiEditorAppliesToAll, _targets.size())) |
+      header.push_back(text(countedText(_textCatalog, MessageId::TuiEditorAppliesToAll, targetCount())) |
                        style::muted());
     }
 
@@ -466,6 +467,29 @@ namespace ao::tui
     return true;
   }
 
+  bool TrackPropertiesEditor::tryHandleHiddenBatchClear(ftxui::Event const& event)
+  {
+    if (event != ftxui::Event::CtrlD || !hasTracksTab() || _tab != TrackEditorTab::Metadata || isEditingCredits())
+    {
+      return false;
+    }
+
+    if (_status == TrackEditorStatus::Ready && _diagnostic.empty() && !_metadataEditor.hasCompletion())
+    {
+      return false;
+    }
+
+    // A warning or completion popup can hide the scoped action. Dismiss that
+    // obstruction first; do not stage a clear while its scope is hidden.
+    if (_status == TrackEditorStatus::Ready)
+    {
+      _diagnostic.clear();
+    }
+
+    _metadataEditor.closeCompletion();
+    return true;
+  }
+
   ftxui::Element TrackPropertiesEditor::renderTabStrip() const
   {
     using namespace ftxui;
@@ -579,7 +603,7 @@ namespace ao::tui
 
     if (isEditingCredits())
     {
-      return paragraph(countedText(_textCatalog, MessageId::TuiEditorAppliesToAll, _targets.size()));
+      return paragraph(countedText(_textCatalog, MessageId::TuiEditorAppliesToAll, targetCount()));
     }
 
     auto makeRow = [](Elements chips) -> Element
@@ -606,6 +630,7 @@ namespace ao::tui
 
     auto row1Chips = Elements{};
     auto row2Chips = Elements{};
+    auto clearActionPtr = Element{};
 
     if (_tab == TrackEditorTab::Metadata)
     {
@@ -627,9 +652,7 @@ namespace ao::tui
       }
       else
       {
-        row1Chips.push_back(_mouseBindings.bind(
-          style::shortcutChip("Ctrl-D", i18n::requiredText(_textCatalog, MessageId::TuiEditorHintClear)),
-          Event::CtrlD));
+        clearActionPtr = renderMetadataClearAction(row1Chips);
         row1Chips.push_back(_mouseBindings.bind(
           style::shortcutChip("Ctrl-G", i18n::requiredText(_textCatalog, MessageId::TuiEditorHintRestore)),
           Event::CtrlG));
@@ -676,7 +699,7 @@ namespace ao::tui
     }
 
     auto applyPtr = _mouseBindings.bind(
-      style::shortcutChip("Ctrl-S", countedText(_textCatalog, MessageId::TuiEditorApplyAction, _targets.size())),
+      style::shortcutChip("Ctrl-S", countedText(_textCatalog, MessageId::TuiEditorApplyAction, targetCount())),
       Event::CtrlS);
     row2Chips.push_back(canApply() ? std::move(applyPtr) : std::move(applyPtr) | dim);
 
@@ -688,6 +711,11 @@ namespace ao::tui
       });
     }
 
+    if (clearActionPtr)
+    {
+      return vbox({makeRow(std::move(row1Chips)), std::move(clearActionPtr), makeRow(std::move(row2Chips))});
+    }
+
     if (row1Chips.empty())
     {
       return makeRow(std::move(row2Chips));
@@ -697,6 +725,34 @@ namespace ao::tui
       makeRow(std::move(row1Chips)),
       makeRow(std::move(row2Chips)),
     });
+  }
+
+  ftxui::Element TrackPropertiesEditor::renderMetadataClearAction(std::vector<ftxui::Element>& inlineChips) const
+  {
+    using namespace ftxui;
+
+    if (!_diagnostic.empty())
+    {
+      return {};
+    }
+
+    if (!hasTracksTab())
+    {
+      inlineChips.push_back(_mouseBindings.bind(
+        style::shortcutChip("Ctrl-D", i18n::requiredText(_textCatalog, MessageId::TuiEditorHintClear)), Event::CtrlD));
+      return {};
+    }
+
+    auto const optLabel = _metadataEditor.focusedClearLabel();
+
+    if (!optLabel)
+    {
+      return {};
+    }
+
+    // Keep the scoped label on its own line so it does not crowd out Restore or Complete.
+    return _mouseBindings.bind(
+      hbox({text("Ctrl-D ") | style::accent() | bold, paragraph(*optLabel) | dim | flex}), Event::CtrlD);
   }
 
   ftxui::Element TrackPropertiesEditor::renderSaveSummary() const
@@ -744,10 +800,10 @@ namespace ao::tui
         _textCatalog, MessageId::TuiEditorSummaryTagsRemove, {{"count", summary.tagRemoveCount}})));
     }
 
-    if (_targets.size() > 1 && !parts.empty())
+    if (targetCount() > 1 && !parts.empty())
     {
       parts.push_back(style::mutedSeparator());
-      parts.push_back(text(countedText(_textCatalog, MessageId::TuiEditorSummaryTargets, _targets.size())) |
+      parts.push_back(text(countedText(_textCatalog, MessageId::TuiEditorSummaryTargets, targetCount())) |
                       style::muted());
     }
 

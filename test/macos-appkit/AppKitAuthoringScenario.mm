@@ -10,6 +10,7 @@
 #include "test/macos-appkit/AppKitScenarioSupport.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/library/Credits.h>
 #include <ao/library/RecordingDate.h>
 #include <ao/rt/ListMutation.h>
@@ -177,6 +178,28 @@ namespace ao::appkit::test
       AO_INVARIANT(
         [control isKindOfClass:NSTextField.class] != 0, "The requested semantic control must be a text field");
       return static_cast<NSTextField*>(control);
+    }
+
+    NSMenu* fieldMenu(NSTextField* field)
+    {
+      auto* const actions = static_cast<NSButton*>(findControl(field.superview, @"field-actions"));
+      NSMenu* const menu = actions.cell.representedObject;
+      AO_INVARIANT(actions != nil && actions.enabled && actions.tag == field.tag &&
+                     actions.action == @selector(fieldActions:) && menu.numberOfItems > 0,
+                   "An editable field must expose its native field-actions menu");
+      auto* const item = [menu itemAtIndex:0];
+      AO_INVARIANT(item.tag == field.tag && item.action == @selector(clearField:) && item.target == actions.target,
+                   "The native clear menu item must target its own property row");
+      return menu;
+    }
+
+    NSInteger restoreItemIndex(NSMenu* menu, i18n::MessageCatalog const& catalog, bool enabled)
+    {
+      [menu update]; // Run the native menu's target validation, not just the model predicate.
+      auto const index = [menu indexOfItemWithTitle:catalogText(catalog, i18n::MessageId::AppKitRestoreFieldValue)];
+      AO_INVARIANT(index >= 0 && ([menu itemAtIndex:index].enabled != NO) == enabled,
+                   "Restore must be available only when this batch row has a draft");
+      return index;
     }
 
     std::vector<TrackId> firstThreeTracks(LibrarySession& session)
@@ -351,7 +374,7 @@ namespace ao::appkit::test
     void verifyPendingTagClose(EditorFixture& fixture, TrackId trackId)
     {
       auto& model = fixture.model();
-      requireAdmission(model.beginProperties({trackId}), "The token-only close draft must begin");
+      requireAdmission(model.beginProperties(std::array{trackId}), "The token-only close draft must begin");
       fixture.present();
       auto const originalTags = model.state().tags;
       AO_INVARIANT(!model.state().dirty, "The token-only close regression must start with a clean draft");
@@ -385,6 +408,38 @@ namespace ao::appkit::test
                    "Discarding the native token candidate must leave durable tags unchanged");
     }
 
+    void verifyPendingTagSave(EditorFixture& fixture, TrackId trackId)
+    {
+      auto& model = fixture.model();
+      auto& library = fixture.session().runtime().library();
+      auto const revision = library.snapshot().revision();
+      requireAdmission(model.beginProperties(std::array{trackId}), "The pending-token Save draft must begin");
+      fixture.present();
+      editText(fixture.editor().window, @"genre", @"Pending token Save probe");
+      editText(fixture.editor().window, @"shared-tags", @"uncommitted_token");
+      model.save();
+      AO_INVARIANT(!model.state().busy && !model.state().completed && model.state().dirty &&
+                     library.snapshot().revision() == revision,
+                   "A direct Save with native token input pending must not submit even a valid scalar edit");
+
+      model.markTagInputPending("Token conversion failed");
+      model.save();
+      AO_INVARIANT(model.state().error == "Token conversion failed" && !model.state().busy &&
+                     !model.state().completed && library.snapshot().revision() == revision,
+                   "A refused Save must preserve the pending input error and draft");
+      editText(fixture.editor().window, @"shared-tags", @"corrected_token");
+      [fixture.editor() save:nil];
+      requireWaitUntil([&] { return model.state().completed; }, "Native Save must end token editing before submission");
+      auto snapshot = library.snapshot();
+      auto const optRow = snapshot.trackRow(trackId);
+      auto const tags = snapshot.selectionTags(std::vector{trackId});
+      AO_INVARIANT(snapshot.revision() == revision + 1 && optRow && optRow->genre == "Pending token Save probe" &&
+                     std::ranges::contains(tags, "corrected_token") &&
+                     !std::ranges::contains(tags, "uncommitted_token"),
+                   "The scalar and corrected token must persist together in one revision");
+      fixture.finish();
+    }
+
     void verifyCallbackExecutorSubmission(EditorFixture& fixture, TrackId trackId)
     {
       std::int32_t callbackCount = 0;
@@ -399,7 +454,7 @@ namespace ao::appkit::test
                                       }};
       AO_INVARIANT(session.runtime().textOrderingPolicy() != nullptr,
                    "The AppKit runtime must borrow its locale ordering policy from the session");
-      auto const beganPropertiesRes = model.beginProperties({trackId});
+      auto const beganPropertiesRes = model.beginProperties(std::array{trackId});
       AO_INVARIANT(beganPropertiesRes, "The callback-affinity property edit must begin");
       auto const field = std::ranges::find_if(model.state().fields,
                                               [](LibraryEditorField const& candidate)
@@ -420,13 +475,60 @@ namespace ao::appkit::test
       model.cancel();
     }
 
+    void verifyRejectedTitleRecovery(EditorFixture& fixture, TrackId trackId)
+    {
+      auto& model = fixture.model();
+      auto& library = fixture.session().runtime().library();
+      auto const revision = library.snapshot().revision();
+      auto const optOriginal = library.snapshot().trackRow(trackId);
+      AO_INVARIANT(optOriginal, "The rejected-write fixture requires a readable track");
+      requireAdmission(model.beginProperties(std::array{trackId}), "The rejected-write draft must begin");
+      fixture.present();
+      auto* const title = requireTextField(fixture, @"title");
+      auto const titleIndex = static_cast<std::size_t>(title.tag);
+      // One byte past the stored title length limit. Text decoding succeeds; the actual write must fail.
+      auto const oversized = std::string(65'536, 't');
+      model.editField(titleIndex, oversized);
+      [fixture.editor() save:nil];
+      requireWaitUntil([&] { return model.state().stale && !model.state().busy; },
+                       "A real write failure must retire the binding before retry");
+      [fixture.editor() refresh];
+      auto* const status = requireTextField(fixture, @"editor-status");
+      auto* const reopen = catalogText(fixture.session().catalog(), i18n::MessageId::AppKitPropertiesStale);
+      AO_INVARIANT([status.stringValue containsString:@"Hot title length 65536"] &&
+                     [status.stringValue containsString:reopen] && !title.editable && model.state().dirty &&
+                     !model.state().completed,
+                   "The frozen sheet must report both the library's title-length diagnostic and how to recover");
+      model.editField(titleIndex, "Must not retry");
+      [fixture.editor() save:nil];
+      auto const optRejected = library.snapshot().trackRow(trackId);
+      AO_INVARIANT(!model.state().busy && model.state().fields.at(titleIndex).text == oversized &&
+                     revision == library.snapshot().revision() && optRejected &&
+                     optRejected->title == optOriginal->title,
+                   "A stale draft must retain the candidate without writing the invalid title or accepting a retry");
+      fixture.finish();
+
+      requireAdmission(model.beginProperties(std::array{trackId}), "Reopening must acquire a fresh binding");
+      fixture.present();
+      auto* const fresh = requireTextField(fixture, @"title");
+      AO_INVARIANT(fresh.editable && [fresh.stringValue isEqual:nativeText(optOriginal->title)],
+                   "The fresh sheet must start at the original durable value");
+      editText(fixture.editor().window, @"title", @"Recovered title");
+      [fixture.editor() save:nil];
+      requireWaitUntil([&] { return model.state().completed; }, "A corrected title must save on the fresh binding");
+      auto const optSaved = library.snapshot().trackRow(trackId);
+      AO_INVARIANT(optSaved && optSaved->title == "Recovered title" && library.snapshot().revision() == revision + 1,
+                   "Only the corrected write may advance the library revision");
+      fixture.finish();
+    }
+
     void verifyRecordingDateProperty(EditorFixture& fixture, TrackId trackId)
     {
       auto& session = fixture.session();
       auto model = LibraryEditorModel{session.runtime(), session.catalog(), [] {}};
 
       // A full typed date through the shared Date editor parsing.
-      requireAdmission(model.beginProperties({trackId}), "The recording-date property edit must begin");
+      requireAdmission(model.beginProperties(std::array{trackId}), "The recording-date property edit must begin");
       auto const dateField = std::ranges::find_if(model.state().fields,
                                                   [](LibraryEditorField const& candidate)
                                                   { return candidate.spec.field == rt::TrackField::RecordingDate; });
@@ -446,7 +548,7 @@ namespace ao::appkit::test
       model.cancel();
 
       // An invalid date is rejected before submission; the durable value stands.
-      requireAdmission(model.beginProperties({trackId}), "The invalid recording-date edit must begin");
+      requireAdmission(model.beginProperties(std::array{trackId}), "The invalid recording-date edit must begin");
       auto const invalidDateField = std::ranges::find_if(
         model.state().fields,
         [](LibraryEditorField const& candidate) { return candidate.spec.field == rt::TrackField::RecordingDate; });
@@ -469,7 +571,7 @@ namespace ao::appkit::test
       model.cancel();
 
       // An empty Date-editor value is the explicit clear.
-      requireAdmission(model.beginProperties({trackId}), "The recording-date clear must begin");
+      requireAdmission(model.beginProperties(std::array{trackId}), "The recording-date clear must begin");
       auto const clearDateField = std::ranges::find_if(
         model.state().fields,
         [](LibraryEditorField const& candidate) { return candidate.spec.field == rt::TrackField::RecordingDate; });
@@ -537,7 +639,7 @@ namespace ao::appkit::test
       };
 
       // The Date control is disclosed with Work & Performance, not File Information.
-      requireAdmission(model.beginProperties({trackId}), "The native recording-date edit must begin");
+      requireAdmission(model.beginProperties(std::array{trackId}), "The native recording-date edit must begin");
       fixture.present();
       auto* const performance = static_cast<NSButton*>(findControl(fixture.editor().window.contentView, @"section-3"));
       auto* const fileInformation =
@@ -588,7 +690,7 @@ namespace ao::appkit::test
       fixture.finish();
 
       // Collapse the performance section, then require invalid Save to reveal, focus, and describe it.
-      requireAdmission(model.beginProperties({trackId}), "The native invalid recording-date edit must begin");
+      requireAdmission(model.beginProperties(std::array{trackId}), "The native invalid recording-date edit must begin");
       fixture.present();
       auto* const invalidPerformance =
         static_cast<NSButton*>(findControl(fixture.editor().window.contentView, @"section-3"));
@@ -629,7 +731,7 @@ namespace ao::appkit::test
       fixture.finish();
 
       // The production clear action, not a model edit, then Save.
-      requireAdmission(model.beginProperties({trackId}), "The native recording-date clear must begin");
+      requireAdmission(model.beginProperties(std::array{trackId}), "The native recording-date clear must begin");
       fixture.present();
       auto* const clearPerformance =
         static_cast<NSButton*>(findControl(fixture.editor().window.contentView, @"section-3"));
@@ -639,25 +741,12 @@ namespace ao::appkit::test
       AO_INVARIANT(
         [populatedDate.stringValue isEqualToString:@"1974-03-09"] != 0 && populatedDate.hiddenOrHasHiddenAncestor == 0,
         "The reopened recording-date control must show the durable typed value");
-      auto* const line = populatedDate.superview;
-      AO_INVARIANT([line isKindOfClass:NSStackView.class] != 0, "The recording-date control must own its action line");
-      NSButton* actions = nil;
-      auto* const subviews = static_cast<NSStackView*>(line).arrangedSubviews;
-
-      for (NSUInteger index = 0; index < subviews.count; ++index)
-      {
-        if (auto* const subview = subviews[index]; [subview.identifier isEqualToString:@"field-actions"] != NO)
-        {
-          actions = static_cast<NSButton*>(subview);
-        }
-      }
-
-      AO_INVARIANT(actions != nil && actions.enabled != 0 && actions.tag == populatedDate.tag &&
-                     actions.action == @selector(fieldActions:),
-                   "The recording-date row must expose its field-actions affordance");
-      auto* const clearDate = [[NSMenuItem alloc] init];
-      clearDate.tag = populatedDate.tag;
-      [fixture.editor() clearField:clearDate];
+      editText(fixture.editor().window, @"recording-date", @" 1974-03-09");
+      AO_INVARIANT(!model.state().dirty && !requireSaveButton().enabled,
+                   "An equivalent single-track date spelling must not enable Save");
+      auto* const dateMenu = fieldMenu(populatedDate);
+      AO_INVARIANT(dateMenu.numberOfItems == 1, "The single-track field menu must retain only its Clear action");
+      [dateMenu performActionForItemAtIndex:0];
       AO_INVARIANT(model.state().dirty &&
                      model.state().fields.at(static_cast<std::size_t>(populatedDate.tag)).text.empty() &&
                      populatedDate.stringValue.length == 0 &&
@@ -695,7 +784,7 @@ namespace ao::appkit::test
                                                                object:tags]];
     }
 
-    void verifyNativeCreditPreviews(EditorFixture& fixture, TrackId trackId)
+    void verifyNativeCreditPreviews(EditorFixture& fixture, TrackId trackId, TrackId otherTrackId)
     {
       auto& model = fixture.model();
       auto& library = fixture.session().runtime().library();
@@ -729,7 +818,7 @@ namespace ao::appkit::test
         library::Credit{.name = "Preview ensemble", .kind = library::CreditKind::Ensemble, .role = "strings"},
         library::Credit{.name = "Preview soloist", .kind = library::CreditKind::Soloist, .role = "violin"}};
 
-      requireAdmission(model.beginProperties({trackId}), "Category previews must begin Properties");
+      requireAdmission(model.beginProperties(std::array{trackId}), "Category previews must begin Properties");
       fixture.present();
       click(@"section-3");
       auto* const previews =
@@ -795,7 +884,8 @@ namespace ao::appkit::test
       AO_INVARIANT(storedCredits() == expected && library.snapshot().revision() == before + 1,
                    "Parent Save must compose all three preview segments and preserve unselected performers");
       fixture.finish();
-      requireAdmission(model.beginProperties({trackId}), "Preview teardown must permit a successor Properties draft");
+      requireAdmission(
+        model.beginProperties(std::array{trackId}), "Preview teardown must permit a successor Properties draft");
       fixture.present();
       auto* const responder = fixture.editor().window.firstResponder;
 
@@ -811,6 +901,27 @@ namespace ao::appkit::test
                      "Retained preview callbacks must not reopen or disturb a successor draft");
       }
 
+      fixture.finish();
+
+      requireAdmission(model.beginProperties(std::array{trackId, otherTrackId}), "Mixed category previews must begin");
+      fixture.present();
+      click(@"section-3");
+      auto* const conductor = requireTextField(fixture, @"conductor");
+      AO_INVARIANT(!conductor.editable && conductor.selectable &&
+                     model.state().fields.at(static_cast<std::size_t>(conductor.tag)).mixed,
+                   "The conductor preview must be a selectable readonly row with a mixed scalar baseline");
+      click(@"credit-preview-edit-0");
+      click(@"credits-replace");
+      click(@"credits-add");
+      editText(fixture.editor().window, @"credit-name-0", @"Batch preview conductor");
+      click(@"credits-save");
+      AO_INVARIANT([conductor.stringValue isEqual:@"Batch preview conductor"], "The staged replacement must render");
+      // Inject end-edit at the delegate boundary; this does not assert that Cocoa emits it for readonly rows.
+      [fixture.editor()
+        controlTextDidEndEditing:[NSNotification notificationWithName:NSControlTextDidEndEditingNotification
+                                                               object:conductor]];
+      AO_INVARIANT([conductor.stringValue isEqual:@"Batch preview conductor"],
+                   "End-edit must not replace the staged Credits preview with the mixed scalar baseline");
       fixture.finish();
     }
 
@@ -952,7 +1063,8 @@ namespace ao::appkit::test
       auto* const inspector = [[AobusTrackInspector alloc] initWithCatalog:fixture.session().catalog()
         revealHandler:^{}
         propertiesHandler:^{
-          requireAdmission(fixtureBorrow->model().beginProperties({trackId}), "Inspector Properties must begin");
+          requireAdmission(
+            fixtureBorrow->model().beginProperties(std::array{trackId}), "Inspector Properties must begin");
           fixtureBorrow->present();
         }
         dismissHandler:^{}];
@@ -1088,7 +1200,7 @@ namespace ao::appkit::test
       fixture.finish();
 
       // Retained native senders must not acquire the meaning of a reused row tag.
-      requireAdmission(model.beginProperties({trackId}), "Retired Credits controls must begin");
+      requireAdmission(model.beginProperties(std::array{trackId}), "Retired Credits controls must begin");
       fixture.present();
       auto* const retiredEntry = button(@"credits-edit-all");
       id const retiredEntryTarget = retiredEntry.target;
@@ -1167,7 +1279,7 @@ namespace ao::appkit::test
       click(@"credits-cancel");
       fixture.finish();
 
-      requireAdmission(model.beginProperties({trackId}), "Scoped native Credits must reopen");
+      requireAdmission(model.beginProperties(std::array{trackId}), "Scoped native Credits must reopen");
       fixture.present();
       click(@"credits-edit-0");
       AO_INVARIANT(model.creditsEditor().scope() == uimodel::trackCreditScope(library::CreditKind::Conductor) &&
@@ -1194,7 +1306,7 @@ namespace ao::appkit::test
                    "A category name edit must preserve role and every unselected segment");
       fixture.finish();
 
-      requireAdmission(model.beginProperties({trackId, tracks[1]}), "Mixed Credits must begin");
+      requireAdmission(model.beginProperties(std::array{trackId, tracks[1]}), "Mixed Credits must begin");
       fixture.present();
       auto const mixedBefore = revision();
       click(@"credits-edit-0");
@@ -1214,12 +1326,12 @@ namespace ao::appkit::test
                    "Explicit mixed clear must preserve each target's unselected credits independently");
       fixture.finish();
 
-      requireAdmission(model.beginProperties({trackId}), "Stale child Credits must begin");
+      requireAdmission(model.beginProperties(std::array{trackId}), "Stale child Credits must begin");
       fixture.present();
       click(@"credits-edit-3");
       editText(fixture.editor().window, @"credit-role-0", @"Retained stale role");
       auto concurrent = LibraryEditorModel{fixture.session().runtime(), fixture.session().catalog(), [] {}};
-      requireAdmission(concurrent.beginProperties({tracks[1]}), "Independent mutation must begin");
+      requireAdmission(concurrent.beginProperties(std::array{tracks[1]}), "Independent mutation must begin");
       auto const field = std::ranges::find(
         concurrent.state().fields, rt::TrackField::Genre, [](auto const& candidate) { return candidate.spec.field; });
       AO_INVARIANT(field != concurrent.state().fields.end(), "Independent mutation requires Genre");
@@ -1251,6 +1363,276 @@ namespace ao::appkit::test
                    "Discarding a stale child must not write its candidate");
     }
 
+    void verifyBatchAlbumIntent(EditorFixture& fixture, std::vector<TrackId> const& tracks)
+    {
+      auto& session = fixture.session();
+      auto& model = fixture.model();
+      auto& library = session.runtime().library();
+      auto const targets = std::vector{tracks[0], tracks[1]};
+      auto const albums = [&]
+      {
+        auto snapshot = library.snapshot();
+        auto values = std::array<std::string, 3>{};
+
+        for (std::size_t index = 0; index < values.size(); ++index)
+        {
+          auto const optRow = snapshot.trackRow(tracks[index]);
+          AO_INVARIANT(optRow, "Each captured track and the independent selection must remain readable");
+          values[index] = optRow->album;
+        }
+
+        return values;
+      };
+      auto const revision = [&] { return library.snapshot().revision(); };
+      auto const save = [&]
+      {
+        [fixture.editor() save:nil];
+        requireWaitUntil([&] { return model.state().completed; }, "The album draft must finish saving");
+        fixture.finish();
+      };
+      auto const open = [&]
+      {
+        session.select(targets);
+        requireAdmission(model.beginProperties(session.selection()), "Both selected tracks must bind to Properties");
+        fixture.present();
+        return requireTextField(fixture, @"album");
+      };
+
+      requireAdmission(model.beginProperties(std::array{tracks[0]}), "The single-track fixture edit must begin");
+      fixture.present();
+      editText(fixture.editor().window, @"album", @"Distinct source album");
+      addSharedTag(fixture, @"first_only");
+      save();
+      auto const original = albums();
+      AO_INVARIANT(original[0] != original[1] && !original[1].empty() && !original[2].empty(),
+                   "The fixture must distinguish both source albums and a later selection from clear");
+      auto before = revision();
+      auto* const mixed = catalogText(session.catalog(), i18n::MessageId::TrackMultipleValues);
+      auto* const clean = open();
+      AO_INVARIANT(clean.editable && clean.stringValue.length == 0 && !model.state().dirty &&
+                     [clean.placeholderString isEqual:mixed],
+                   "Mixed albums must be editable without a seeded replacement");
+      save();
+      AO_INVARIANT(albums() == original && revision() == before, "Saving a clean form must preserve each album");
+
+      auto* const other = open();
+      AO_INVARIANT(other.stringValue.length == 0, "Reopening must not seed a mixed replacement");
+      editText(fixture.editor().window, @"genre", @"Album preservation probe");
+      save();
+      AO_INVARIANT(albums() == original && revision() == before + 1,
+                   "A committed edit to another field must leave each source album unchanged");
+
+      before = revision();
+      auto* const restored = open();
+      auto* const otherMenu = fieldMenu(restored);
+      restoreItemIndex(otherMenu, session.catalog(), false);
+      editText(fixture.editor().window, @"genre", @"Retained across Restore");
+      editText(fixture.editor().window, @"album", @"Superseded album");
+      [otherMenu performActionForItemAtIndex:0];
+      [otherMenu performActionForItemAtIndex:restoreItemIndex(otherMenu, session.catalog(), true)];
+      restoreItemIndex(otherMenu, session.catalog(), false);
+      AO_INVARIANT(restored.stringValue.length == 0 && [restored.placeholderString isEqual:mixed] &&
+                     model.state().dirty && revision() == before,
+                   "Restoring a staged clear must show the mixed baseline while retaining the other field's edit");
+      save();
+      auto const optFirstGenre = library.snapshot().trackRow(targets[0]);
+      auto const optSecondGenre = library.snapshot().trackRow(targets[1]);
+      AO_INVARIANT(albums() == original && revision() == before + 1 && optFirstGenre && optSecondGenre &&
+                     optFirstGenre->genre == "Retained across Restore" &&
+                     optSecondGenre->genre == "Retained across Restore",
+                   "Saving after Restore must commit only the genre to both tracks, never the superseded album edit");
+
+      before = revision();
+      auto* const retry = open();
+      editText(fixture.editor().window, @"album", @"Withdraw this replacement");
+      editText(fixture.editor().window, @"year", @"70000");
+      [fixture.editor() save:nil];
+      AO_INVARIANT(
+        model.state().optInvalidField == rt::TrackField::Year && albums() == original && revision() == before,
+        "Validation of a later field must not partially commit the album");
+      [retry selectText:nil];
+      auto* const editor = static_cast<NSTextView*>(retry.currentEditor);
+      AO_INVARIANT(editor != nil, "The album must still admit native edits after failed validation");
+      [editor deleteBackward:nil];
+      AO_INVARIANT(retry.stringValue.length == 0 && [retry.placeholderString isEqual:mixed],
+                   "Deleting a temporary batch replacement must restore the mixed placeholder, not Will clear");
+      editText(fixture.editor().window, @"year", @"2003");
+      save();
+      AO_INVARIANT(albums() == original && revision() == before + 1,
+                   "Retry must commit the corrected year without reusing the withdrawn album edit");
+
+      before = revision();
+      auto* const discardMenu = fieldMenu(open());
+      auto* const clearTitle =
+        catalogFormat(session.catalog(), i18n::MessageId::TrackClearFieldForTracks, {{"field", "Album"}, {"count", 2}});
+      AO_INVARIANT([[discardMenu itemAtIndex:0].title isEqual:clearTitle],
+                   "The clear action must name the specific field and bound track count");
+      [discardMenu performActionForItemAtIndex:0];
+      AO_INVARIANT(model.state().dirty && albums() == original && revision() == before,
+                   "Explicit clear must only stage a batch edit");
+      [fixture.editor() cancel:nil];
+      requireWaitUntil([&] { return fixture.editor().window.attachedSheet != nil; }, "Cancel must offer discard");
+      [fixture.editor().window endSheet:fixture.editor().window.attachedSheet returnCode:NSAlertSecondButtonReturn];
+      requireWaitUntil([&] { return fixture.editor().window == nil; }, "Discard must close the clear draft");
+      fixture.detachClosed();
+      AO_INVARIANT(albums() == original && revision() == before, "Discard must preserve both stored albums");
+
+      open();
+      editText(fixture.editor().window, @"album", @"Unified album");
+      addSharedTag(fixture, @"caf\u00e9");
+      session.select({tracks[2]});
+      AO_INVARIANT(session.selection() == std::vector{tracks[2]}, "The browser must move away from both targets");
+      save();
+      auto const unified = std::array<std::string, 3>{"Unified album", "Unified album", original[2]};
+      AO_INVARIANT(albums() == unified && revision() == before + 1 &&
+                     std::ranges::contains(library.snapshot().selectionTags(targets), "café") &&
+                     !std::ranges::contains(library.snapshot().selectionTags(std::vector{tracks[2]}), "café"),
+                   "One revision must replace both captured albums and add the shared tag without following selection");
+
+      before = revision();
+      auto* const common = open();
+      auto* const year = requireTextField(fixture, @"year");
+      editText(fixture.editor().window, @"year", @"invalid");
+      [fixture.editor() save:nil];
+      AO_INVARIANT(model.state().optInvalidField == rt::TrackField::Year && year.currentEditor != nil,
+                   "The rejected batch year must still own its native editor");
+      auto* const yearMenu = fieldMenu(year);
+      [yearMenu performActionForItemAtIndex:restoreItemIndex(yearMenu, session.catalog(), true)];
+      restoreItemIndex(yearMenu, session.catalog(), false);
+      AO_INVARIANT([year.stringValue isEqual:@"2003"] && !model.state().dirty && !model.state().optInvalidField &&
+                     model.state().error.empty() && revision() == before,
+                   "Restore must retire invalid focused input and show the common year without a phantom edit");
+      auto* const saveButton = static_cast<NSButton*>(findControl(fixture.editor().window.contentView, @"save"));
+      editText(fixture.editor().window, @"year", @"02003");
+      auto* const yearEditor = static_cast<NSTextView*>(year.currentEditor);
+      AO_INVARIANT(yearEditor != nil && !model.state().dirty && saveButton != nil && !saveButton.enabled,
+                   "An equivalent year spelling must not stage a replacement or enable Save");
+      restoreItemIndex(yearMenu, session.catalog(), false);
+      [yearEditor insertText:@"4" replacementRange:NSMakeRange(yearEditor.string.length, 0)];
+      AO_INVARIANT(year.currentEditor == yearEditor && [yearEditor.string isEqual:@"020034"] && model.state().dirty,
+                   "Editing an equivalent spelling must continue from its raw text and stage the new value");
+      editText(fixture.editor().window, @"year", @"02003");
+      AO_INVARIANT([fixture.editor().window makeFirstResponder:nil] && [year.stringValue isEqual:@"2003"],
+                   "Ending an equivalent numeric edit must restore the common year");
+      editText(fixture.editor().window, @"year", @"0");
+      AO_INVARIANT(!model.state().dirty, "Typing the numeric absence sentinel must withdraw a batch edit");
+      editText(fixture.editor().window, @"album", @"Temporary common edit");
+      AO_INVARIANT([year.stringValue isEqual:@"2003"], "Ending a typed zero must still restore the common year");
+      [common selectText:nil];
+      auto* const commonEditor = static_cast<NSTextView*>(common.currentEditor);
+      AO_INVARIANT(commonEditor != nil, "A common batch value must have a native field editor");
+      auto const selection = commonEditor.selectedRange;
+      AO_INVARIANT(selection.location == 0 && selection.length == commonEditor.string.length,
+                   "The erase gesture must select the whole replacement; got {}:{} for '{}'",
+                   selection.location,
+                   selection.length,
+                   utf8(commonEditor.string));
+      [commonEditor deleteBackward:nil];
+      AO_INVARIANT(commonEditor.string.length == 0,
+                   "Deleting the replacement left editor '{}', field '{}', placeholder '{}', dirty {}, active {}",
+                   utf8(commonEditor.string),
+                   utf8(common.stringValue),
+                   utf8(common.placeholderString),
+                   model.state().dirty,
+                   common.currentEditor == commonEditor);
+      AO_INVARIANT(!model.state().dirty, "Withdrawing the last replacement must leave the draft clean");
+      AO_INVARIANT([common.placeholderString isEqual:@"Unified album"],
+                   "Expected the preserved common album as placeholder, got '{}'",
+                   utf8(common.placeholderString));
+      [commonEditor insertText:@"Rearmed" replacementRange:NSMakeRange(0, 0)];
+      AO_INVARIANT(model.state().dirty && [common.stringValue isEqual:@"Rearmed"],
+                   "Typing after withdrawal must start a fresh replacement");
+      editText(fixture.editor().window, @"album", @"Unified album");
+      auto* const tokens = requireTextField(fixture, @"shared-tags");
+      auto const invalid = std::string(1, static_cast<char>(0xff));
+      // Malformed UTF-8 is a model-only input, not a native NSString token.
+      auto const accepted = model.tryEditTags({invalid});
+      [fixture.editor() save:nil];
+      auto const normalizationError =
+        i18n::requiredText(session.catalog(), i18n::MessageId::TrackPropertiesTextNormalizationFailed);
+      AO_INVARIANT(!accepted && model.state().dirty && !model.state().busy &&
+                     model.state().error == normalizationError && model.state().tags == std::vector{invalid} &&
+                     revision() == before,
+                   "Invalid tag input must remain correctable and block submission with a localized diagnostic");
+      editText(fixture.editor().window, @"year", @"invalid");
+      [fixture.editor() save:nil];
+      auto const yearError = model.state().error;
+      AO_INVARIANT(model.state().optInvalidField == rt::TrackField::Year && !yearError.empty(),
+                   "The scalar diagnostic must be visible before accepting corrected tags");
+      tokens.objectValue = @[@"cafe\u0301", @"caf\u00e9"];
+      // Inject committed tokens at the delegate boundary rather than testing Cocoa tokenization.
+      [fixture.editor()
+        controlTextDidEndEditing:[NSNotification notificationWithName:NSControlTextDidEndEditingNotification
+                                                               object:tokens]];
+      NSArray<NSString*>* const canonicalTokens = tokens.objectValue;
+      AO_INVARIANT(model.state().tags == std::vector<std::string>{"café"} && canonicalTokens.count == 1 &&
+                     utf8(canonicalTokens.firstObject) == "café" &&
+                     model.state().optInvalidField == rt::TrackField::Year && model.state().error == yearError,
+                   "Accepted tags must canonicalize in the control without clearing an unrelated scalar diagnostic");
+      editText(fixture.editor().window, @"year", @"2003");
+      AO_INVARIANT(!model.state().dirty && model.state().error.empty(),
+                   "Correcting the scalar draft must leave no pending tag or scalar edit");
+      save();
+      auto const optFirst = library.snapshot().trackRow(tracks[0]);
+      auto const optSecond = library.snapshot().trackRow(tracks[1]);
+      AO_INVARIANT(revision() == before && albums() == unified && optFirst && optSecond && optFirst->year == 2003 &&
+                     optSecond->year == 2003 &&
+                     std::ranges::contains(library.snapshot().selectionTags(targets), "café") &&
+                     std::ranges::contains(library.snapshot().selectionTags(std::vector{tracks[0]}), "first_only") &&
+                     !std::ranges::contains(library.snapshot().selectionTags(std::vector{tracks[1]}), "first_only"),
+                   "No-op Save must retain years, canonical shared tag and first-track-only tag independently");
+
+      requireAdmission(
+        model.beginProperties(std::array{tracks[0]}), "The clear test must start with unequal stored values");
+      fixture.present();
+      editText(fixture.editor().window, @"album", @"First album before clear");
+      save();
+      [fieldMenu(open()) performActionForItemAtIndex:0];
+      save();
+      auto const cleared = std::array<std::string, 3>{"", "", original[2]};
+      AO_INVARIANT(albums() == cleared && revision() == before + 2,
+                   "Saving the clear action must empty each selected album and only those albums");
+    }
+
+    void verifyPropertyOccurrenceCount(EditorFixture& fixture, TrackId trackId)
+    {
+      auto& model = fixture.model();
+      auto const& catalog = fixture.session().catalog();
+      requireAdmission(model.beginProperties(std::array{trackId, trackId}), "Repeated target occurrences must bind");
+      fixture.present();
+      auto* const year = requireTextField(fixture, @"year");
+      auto* const menu = fieldMenu(year);
+      auto* const clearTitle =
+        catalogFormat(catalog, i18n::MessageId::TrackClearFieldForTracks, {{"field", "Year"}, {"count", 2}});
+      AO_INVARIANT([[menu itemAtIndex:0].title isEqualToString:clearTitle],
+                   "Two occurrences of the same track must still present the two-track Clear label");
+      editText(fixture.editor().window, @"year", @"2004");
+      [menu performActionForItemAtIndex:restoreItemIndex(menu, catalog, true)];
+      AO_INVARIANT(!model.state().dirty && [year.stringValue isEqualToString:@"2003"],
+                   "A duplicate-occurrence batch must restore the single common baseline");
+      fixture.finish();
+
+      requireAdmission(
+        model.beginProperties(std::array{trackId}), "A single target must bind after the duplicate batch closes");
+      fixture.present();
+      auto* const singleYear = requireTextField(fixture, @"year");
+      auto* const save = static_cast<NSButton*>(findControl(fixture.editor().window.contentView, @"save"));
+      AO_INVARIANT(fieldMenu(singleYear).numberOfItems == 1, "A single occurrence must not offer Restore");
+      editText(fixture.editor().window, @"year", @"02003");
+      auto* const editor = static_cast<NSTextView*>(singleYear.currentEditor);
+      AO_INVARIANT(editor != nil && save != nil && !save.enabled && !model.state().dirty,
+                   "An equivalent single-track number spelling must not enable Save");
+      [editor insertText:@"4" replacementRange:NSMakeRange(editor.string.length, 0)];
+      AO_INVARIANT(singleYear.currentEditor == editor && [editor.string isEqualToString:@"020034"] && save.enabled &&
+                     model.state().dirty,
+                   "Typing must continue from the raw equivalent spelling and stage a genuinely different number");
+      editText(fixture.editor().window, @"year", @"02003");
+      [fixture.editor() cancel:nil];
+      AO_INVARIANT(
+        fixture.editor().window == nil, "An equivalent numeric spelling alone must close without a discard prompt");
+      fixture.detachClosed();
+    }
+
     void verifyPropertyAuthoring(EditorFixture& fixture,
                                  std::vector<TrackId> const& tracks,
                                  std::filesystem::path const& stateRoot)
@@ -1267,7 +1649,7 @@ namespace ao::appkit::test
       auto const originalThirdGenre = optThirdRow->genre;
 
       session.select({tracks[0], tracks[1]});
-      requireAdmission(model.beginProperties({tracks[0], tracks[1]}), "Mixed properties must begin editing");
+      requireAdmission(model.beginProperties(std::array{tracks[0], tracks[1]}), "Mixed properties must begin editing");
       fixture.present();
       auto* const disclosure = static_cast<NSButton*>(findControl(fixture.editor().window.contentView, @"section-3"));
       auto* const composer = requireTextField(fixture, @"composer");
@@ -1289,16 +1671,15 @@ namespace ao::appkit::test
         model.state().fields.at(titleIndex).mixed, "The first two fixture tracks must expose a mixed title value");
       NSString* const mixedPlaceholder = [title.placeholderString copy];
       AO_INVARIANT(mixedPlaceholder.length > 0, "A mixed field must have a visible placeholder");
-      auto* const clearTitle = [[NSMenuItem alloc] init];
-      clearTitle.tag = title.tag;
-      [fixture.editor() clearField:clearTitle];
+      [fieldMenu(title) performActionForItemAtIndex:0];
       AO_INVARIANT(model.state().fields.at(titleIndex).changed && model.state().fields.at(titleIndex).text.empty(),
                    "Clearing a mixed field must record an explicit empty edit");
       AO_INVARIANT(title.stringValue.length == 0 && [title.placeholderString isEqualToString:mixedPlaceholder] == 0,
                    "The explicit clear marker must replace the mixed-value placeholder");
       fixture.finish();
 
-      requireAdmission(model.beginProperties({tracks[0], tracks[1]}), "Classic properties must begin editing");
+      requireAdmission(
+        model.beginProperties(std::array{tracks[0], tracks[1]}), "Classic properties must begin editing");
       fixture.present(NO);
       AO_INVARIANT(fixture.editor().window.frame.size.width <= fixture.window().contentView.bounds.size.width,
                    "The Classic editor must fit its parent window");
@@ -1317,7 +1698,8 @@ namespace ao::appkit::test
       captureView(fixture.editor().window.contentView, stateRoot / "properties-classic.png");
       fixture.finish();
 
-      requireAdmission(model.beginProperties({tracks[0], tracks[1]}), "Bulk properties must reopen after cancellation");
+      requireAdmission(
+        model.beginProperties(std::array{tracks[0], tracks[1]}), "Bulk properties must reopen after cancellation");
       fixture.present();
       editText(fixture.editor().window, @"genre", @"Native authoring verified");
       editText(fixture.editor().window, @"year", @"70000");
@@ -1380,9 +1762,12 @@ namespace ao::appkit::test
       auto& session = fixture.session();
       auto& model = fixture.model();
       session.select({tracks[0], tracks[1]});
-      requireAdmission(model.beginProperties({tracks[0], tracks[1]}), "The stale properties draft must begin");
+      requireAdmission(
+        model.beginProperties(std::array{tracks[0], tracks[1]}), "The stale properties draft must begin");
       fixture.present();
       editText(fixture.editor().window, @"genre", @"Keep this stale candidate");
+      auto* const genreMenu = fieldMenu(requireTextField(fixture, @"genre"));
+      restoreItemIndex(genreMenu, session.catalog(), true);
       editText(fixture.editor().window, @"shared-tags", @"pending_stale_tag");
       auto* const activeTags = requireTextField(fixture, @"shared-tags");
       AO_INVARIANT(activeTags.currentEditor != nil, "The stale regression requires an uncommitted token candidate");
@@ -1410,10 +1795,12 @@ namespace ao::appkit::test
       AO_INVARIANT([genre.stringValue isEqualToString:@"Keep this stale candidate"] != 0,
                    "Stale rendering must preserve the user's visible genre candidate");
       auto const savedTags = model.state().tags;
+      restoreItemIndex(genreMenu, session.catalog(), false);
+      model.restoreField(static_cast<std::size_t>(genre.tag));
       model.editField(static_cast<std::size_t>(genre.tag), "Rejected stale input");
-      model.editTags({"rejected_stale_tag"});
-      AO_INVARIANT(model.state().fields.at(static_cast<std::size_t>(genre.tag)).text == "Keep this stale candidate" &&
-                     model.state().tags == savedTags,
+      auto const acceptedTags = model.tryEditTags({"rejected_stale_tag"});
+      AO_INVARIANT(!acceptedTags && model.state().tags == savedTags &&
+                     model.state().fields.at(static_cast<std::size_t>(genre.tag)).text == "Keep this stale candidate",
                    "A stale model must reject subsequent field and tag edits");
       auto* const frozenTags = requireTextField(fixture, @"shared-tags");
       AO_INVARIANT(
@@ -1439,7 +1826,7 @@ namespace ao::appkit::test
       auto& session = fixture.session();
       auto& model = fixture.model();
       session.select({tracks[0]});
-      requireAdmission(model.beginProperties({tracks[0]}), "The stale close properties draft must begin");
+      requireAdmission(model.beginProperties(std::array{tracks[0]}), "The stale close properties draft must begin");
       fixture.present();
       editText(fixture.editor().window, @"genre", @"Keep this transitioning draft");
       auto* const genre = requireTextField(fixture, @"genre");
@@ -1625,11 +2012,17 @@ namespace ao::appkit::test
       // Metadata dictionary completion runs through the artist field's real
       // fixture vocabulary; the inserted text is expected from the scanned
       // fixture metadata, not from any shared completion algorithm.
-      requireAdmission(model.beginProperties({tracks[0]}), "The completion properties draft must begin");
+      requireAdmission(model.beginProperties(std::array{tracks[0]}), "The completion properties draft must begin");
       fixture.present();
       auto* const artist = requireTextField(fixture, @"artist");
+      auto const fieldIndex = static_cast<std::size_t>(artist.tag);
+      AO_INVARIANT(model.state().fields.at(fieldIndex).text == "Aobus Fixture Artist" && !model.state().dirty,
+                   "The artist completion target must begin with the fixture's stored artist");
       editText(fixture.editor().window, @"artist", @"Aobus");
       settleNativeCallbacks();
+      auto const& prefix = model.state().fields.at(fieldIndex);
+      AO_INVARIANT(prefix.text == "Aobus" && prefix.changed && model.state().dirty,
+                   "The incomplete prefix must be a real edit before accepting a suggestion");
       auto* const table = findShownCompletionTable();
       AO_INVARIANT(
         table != nil && table.numberOfRows >= 1, "An artist dictionary prefix must open the completion list");
@@ -1642,12 +2035,12 @@ namespace ao::appkit::test
       settleNativeCallbacks();
       AO_INVARIANT([artistEditor.string isEqualToString:@"Aobus Fixture Artist"] != 0,
                    "Tab acceptance must insert the fixture's real artist value");
-      auto const artistField = model.state().fields.at(static_cast<std::size_t>(artist.tag));
+      auto const& artistField = model.state().fields.at(fieldIndex);
       AO_INVARIANT(
         artistEditor.selectedRange.location == artistEditor.string.length && artistEditor.selectedRange.length == 0,
         "Acceptance must leave the caret at the end of the inserted value");
-      AO_INVARIANT(artistField.text == "Aobus Fixture Artist" && artistField.changed && model.state().dirty,
-                   "Acceptance must publish the edited artist value into the model");
+      AO_INVARIANT(artistField.text == "Aobus Fixture Artist" && !artistField.changed && !model.state().dirty,
+                   "Accepting the stored artist must withdraw the prefix edit in the model");
       AO_INVARIANT(findShownCompletionTable() == nil, "Acceptance must dismiss the completion popover");
       fixture.finish();
 
@@ -1776,10 +2169,23 @@ namespace ao::appkit::test
     {
       auto& session = fixture.session();
       auto& model = fixture.model();
+      requireAdmission(model.beginList(kInvalidListId, ListId{9999}), "A draft can outlive its parent list");
+      fixture.present();
+      editText(fixture.editor().window, @"Name", @"Unavailable parent");
+      [fixture.editor() save:nil];
+      requireWaitUntil([&] { return !model.state().busy && !model.state().error.empty(); },
+                       "A missing parent must return a list save error");
+      [fixture.editor() refresh];
+      AO_INVARIANT(model.state().dirty && !model.state().listExpressionError &&
+                     requireTextField(fixture, @"Expression").accessibilityHelp == nil,
+                   "Non-query failures belong on the form, not the expression field");
+      fixture.finish();
+
       requireAdmission(model.beginList(listId), "The concurrently created list must reopen for editing");
       fixture.present();
       editText(fixture.editor().window, @"Name", @"Native Authoring List");
-      editText(fixture.editor().window, @"Expression", @"#invalid-list-expression");
+      // A valid syntax tree that is not a Boolean filter fails compilation, not parsing.
+      editText(fixture.editor().window, @"Expression", @"$year");
       auto* const listSection = static_cast<NSButton*>(findControl(fixture.editor().window.contentView, @"section-0"));
       AO_INVARIANT(listSection != nil, "The expression field must belong to a visible disclosure section");
       [listSection performClick:nil];
@@ -1820,7 +2226,7 @@ namespace ao::appkit::test
                      optList->expression == "#aobus_authoring_membership",
                    "The repaired list draft must persist its name, description, and expression");
 
-      requireAdmission(model.beginMembership({tracks[0], tracks[1]}, listId, false),
+      requireAdmission(model.beginMembership(std::array{tracks[0], tracks[1]}, listId, false),
                        "Adding captured tracks to the saved list must begin");
       fixture.present();
       requireWaitUntil([&] { return model.state().completed; }, "Adding list membership must complete");
@@ -1830,8 +2236,8 @@ namespace ao::appkit::test
                               "aobus_authoring_membership"),
         "Both captured tracks must gain the saved-list membership tag");
 
-      requireAdmission(
-        model.beginMembership({tracks[0]}, listId, true), "Removing one captured track from the saved list must begin");
+      requireAdmission(model.beginMembership(std::array{tracks[0]}, listId, true),
+                       "Removing one captured track from the saved list must begin");
       fixture.present();
       requireWaitUntil([&] { return model.state().completed; }, "Removing list membership must complete");
       finishCompletedEditor(fixture);
@@ -1984,8 +2390,8 @@ namespace ao::appkit::test
       };
 
       // Applied add: the busy contract settles into completed with one exact post.
-      requireAdmission(
-        model.beginMembership({tracks[0], tracks[1]}, probeListId, false), "The applied add membership must begin");
+      requireAdmission(model.beginMembership(std::array{tracks[0], tracks[1]}, probeListId, false),
+                       "The applied add membership must begin");
       AO_INVARIANT(model.state().busy, "A membership edit must enter the busy state on admission");
       requireWaitUntil([&] { return model.state().completed; }, "The applied add must complete");
       requirePosted(1);
@@ -1996,7 +2402,7 @@ namespace ao::appkit::test
 
       // Applied remove of one captured track.
       requireAdmission(
-        model.beginMembership({tracks[0]}, probeListId, true), "The applied remove membership must begin");
+        model.beginMembership(std::array{tracks[0]}, probeListId, true), "The applied remove membership must begin");
       requireWaitUntil([&] { return model.state().completed; }, "The applied remove must complete");
       requirePosted(2);
       requireLastPosted(
@@ -2007,14 +2413,15 @@ namespace ao::appkit::test
 
       // A genuine no-op re-add still completes and posts its shared no-op text.
       requireAdmission(
-        model.beginMembership({tracks[1]}, probeListId, false), "The no-op re-add membership must begin");
+        model.beginMembership(std::array{tracks[1]}, probeListId, false), "The no-op re-add membership must begin");
       requireWaitUntil([&] { return model.state().completed; }, "The no-op re-add must complete");
       requirePosted(3);
       requireLastPosted(expectedNotification(uimodel::ListMembershipOperation::Add, rt::AuthoringStatus::NoOp, 1));
       model.cancel();
 
       // A failed authoring result publishes its editor error without any feed post.
-      requireAdmission(model.beginMembership({tracks[0]}, ListId{9999}, false), "The failed membership must begin");
+      requireAdmission(
+        model.beginMembership(std::array{tracks[0]}, ListId{9999}, false), "The failed membership must begin");
       requireWaitUntil([&] { return !model.state().busy && !model.state().error.empty(); },
                        "The failed membership must return its authoring error");
       AO_INVARIANT(
@@ -2024,7 +2431,7 @@ namespace ao::appkit::test
       // Live positive control on a separately owned model borrowing the same runtime.
       auto controlPtr = std::make_shared<LibraryEditorModel>(session.runtime(), session.catalog(), [] {});
       requireAdmission(
-        controlPtr->beginMembership({tracks[0]}, probeListId, false), "The control membership must begin");
+        controlPtr->beginMembership(std::array{tracks[0]}, probeListId, false), "The control membership must begin");
       requireWaitUntil([&] { return controlPtr->state().completed; }, "The control membership must complete");
       requirePosted(4);
       requireLastPosted(expectedNotification(uimodel::ListMembershipOperation::Add, rt::AuthoringStatus::Applied, 1));
@@ -2035,7 +2442,7 @@ namespace ao::appkit::test
       // A shutdown before the callback lands retires the completed edit: no post.
       auto retiredPtr = std::make_shared<LibraryEditorModel>(session.runtime(), session.catalog(), [] {});
       requireAdmission(
-        retiredPtr->beginMembership({tracks[1]}, probeListId, true), "The retired membership must begin");
+        retiredPtr->beginMembership(std::array{tracks[1]}, probeListId, true), "The retired membership must begin");
       retiredPtr->shutdown();
       fixture.retainMembershipModel(retiredPtr);
       requireWaitUntil(
@@ -2060,8 +2467,8 @@ namespace ao::appkit::test
                                                                });
       *reentrantBorrowPtr = reentrantPtr;
       fixture.retainMembershipModel(reentrantPtr);
-      requireAdmission(
-        reentrantPtr->beginMembership({tracks[1]}, probeListId, false), "The reentrant membership must begin");
+      requireAdmission(reentrantPtr->beginMembership(std::array{tracks[1]}, probeListId, false),
+                       "The reentrant membership must begin");
       requireWaitUntil([&] { return trackHasProbeTag(tracks[1]) && *shutdownObservedPtr; },
                        "The committed membership must reach its reentrant shutdown callback");
       settleNativeCallbacks();
@@ -2078,9 +2485,12 @@ namespace ao::appkit::test
     verifyDeferredCloseAfterSave(fixture);
     auto const tracks = firstThreeTracks(fixture.session());
     verifyPendingTagClose(fixture, tracks[0]);
+    verifyPendingTagSave(fixture, tracks[0]);
     verifyCallbackExecutorSubmission(fixture, tracks[0]);
     verifyRecordingDateProperty(fixture, tracks[0]);
     verifyNativeRecordingDateControl(fixture, tracks[0]);
+    verifyBatchAlbumIntent(fixture, tracks);
+    verifyPropertyOccurrenceCount(fixture, tracks[0]);
     verifyPropertyAuthoring(fixture, tracks, stateRoot);
     auto const listId = verifyStaleDraft(fixture, tracks, stateRoot);
     verifyStaleCloseContract(fixture, tracks, listId);
@@ -2088,6 +2498,7 @@ namespace ao::appkit::test
     verifyCompletionRanges(fixture);
     verifyEntryCompletion(fixture, tracks);
     verifyMembershipNotifications(fixture, tracks);
+    verifyRejectedTitleRecovery(fixture, tracks[0]);
     return 0;
   }
 
@@ -2108,7 +2519,7 @@ namespace ao::appkit::test
     auto const expected =
       std::vector<library::Credit>{{.name = "Ada", .role = "piano"}, {.name = "Ada", .role = "piano"}};
     auto& model = fixture.model();
-    requireAdmission(model.beginProperties({tracks[0]}), "Preview preserved-segment arrangement must begin");
+    requireAdmission(model.beginProperties(std::array{tracks[0]}), "Preview preserved-segment arrangement must begin");
     requireAdmission(model.beginCreditsEdit(uimodel::allTrackCreditKinds()), "Preview Credits arrangement must begin");
 
     for (std::size_t index = 0; index < expected.size(); ++index)
@@ -2125,7 +2536,7 @@ namespace ao::appkit::test
     auto const optCredits = fixture.session().runtime().library().snapshot().trackCredits(tracks[0]);
     AO_INVARIANT(optCredits && *optCredits == expected,
                  "Preview isolation must preserve the original nonempty duplicate-Performer oracle");
-    verifyNativeCreditPreviews(fixture, tracks[0]);
+    verifyNativeCreditPreviews(fixture, tracks[0], tracks[1]);
     return 0;
   }
 } // namespace ao::appkit::test

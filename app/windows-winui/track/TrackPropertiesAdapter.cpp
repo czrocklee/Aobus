@@ -6,65 +6,73 @@
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/library/Credits.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/completion/CompletionService.h>
 #include <ao/rt/completion/CompletionVocabulary.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
-#include <ao/uimodel/library/track/TrackAuthoring.h>
 
 #include <cstddef>
+#include <expected>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace ao::winui
 {
-  TrackPropertyControlKind trackPropertyControlKind(uimodel::TrackPropertiesFormEditorKind const kind) noexcept
-  {
-    switch (kind)
-    {
-      case uimodel::TrackPropertiesFormEditorKind::Text: return TrackPropertyControlKind::Text;
-      case uimodel::TrackPropertiesFormEditorKind::Number: return TrackPropertyControlKind::Number;
-      case uimodel::TrackPropertiesFormEditorKind::Date: return TrackPropertyControlKind::Date;
-      case uimodel::TrackPropertiesFormEditorKind::ReadonlyText: return TrackPropertyControlKind::ReadonlyText;
-    }
-
-    AO_FATAL("Unknown track-property editor kind");
-  }
-
   TrackPropertyRowProjection projectTrackPropertyRow(uimodel::TrackPropertiesFormRow const& row,
                                                      uimodel::TrackPropertiesFormRowView const& view)
   {
-    auto const controlKind = trackPropertyCreditKind(row.field) ? TrackPropertyControlKind::ReadonlyText
-                                                                : trackPropertyControlKind(row.editorKind);
+    using Kind = uimodel::TrackPropertiesFormEditorKind;
+    auto const controlKind = rt::creditKindForTrackField(row.field) ? Kind::ReadonlyText : row.editorKind;
+    auto const placeholderOnly = view.mixed && controlKind != Kind::ReadonlyText;
     return TrackPropertyRowProjection{
       .field = row.field,
       .label = row.label,
-      .text = view.text,
+      .text = placeholderOnly ? std::string{} : view.text,
+      .placeholder = placeholderOnly ? view.text : std::string{},
       .controlKind = controlKind,
-      .mixed = view.mixed,
-      .enabled = view.editable && !view.mixed && controlKind != TrackPropertyControlKind::ReadonlyText,
+      .enabled = view.editable && controlKind != Kind::ReadonlyText,
     };
   }
 
-  Result<uimodel::TrackFieldEditValue> parseTrackPropertyEdit(TrackPropertyControlKind const kind,
-                                                              std::string_view const text)
+  Result<> synchronizeTrackPropertyInput(uimodel::TrackPropertiesFormModel& form,
+                                         TrackPropertyRowProjection const& row,
+                                         std::string_view const text,
+                                         bool const clear)
   {
-    switch (kind)
+    if (!row.enabled)
     {
-      case TrackPropertyControlKind::Text: return uimodel::parseTextEditValue(text);
-      case TrackPropertyControlKind::Number: return uimodel::parseUint16EditValue(text);
-      case TrackPropertyControlKind::Date: return uimodel::parseRecordingDateEditValue(text);
-      case TrackPropertyControlKind::ReadonlyText:
-        return makeError(Error::Code::InvalidState, "A read-only property cannot be edited.");
+      return {};
     }
 
-    AO_FATAL("Unknown native track-property control kind");
+    if (clear)
+    {
+      form.clearFieldEdit(row.field);
+    }
+    else if (text == row.text)
+    {
+      // Hydration, including a mixed placeholder, is never input.
+      form.restoreFieldEdit(row.field);
+    }
+    else
+    {
+      auto valueRes = uimodel::parseTrackPropertiesFieldInput(row.controlKind, text);
+
+      if (!valueRes)
+      {
+        form.restoreFieldEdit(row.field);
+        return std::unexpected{valueRes.error()};
+      }
+
+      form.setFieldInput(row.field, std::move(*valueRes));
+    }
+
+    return {};
   }
 
   std::vector<std::string> trackPropertyVocabularySuggestions(std::span<rt::VocabularyEntry const> const vocabulary,
@@ -93,11 +101,6 @@ namespace ao::winui
     return !form.creditsEditor().isEditing() && (form.canSave() || auxiliaryDirty);
   }
 
-  std::optional<library::CreditKind> trackPropertyCreditKind(rt::TrackField const field) noexcept
-  {
-    return rt::creditKindForTrackField(field);
-  }
-
   bool needsCustomMetadataValueUpdate(bool const existed,
                                       std::optional<std::string> const& optOriginalValue,
                                       std::string_view const value) noexcept
@@ -105,17 +108,33 @@ namespace ao::winui
     return !existed || !optOriginalValue || *optOriginalValue != value;
   }
 
-  TrackPropertiesCommitState projectTrackPropertiesCommitState(rt::AuthoringStatus const status) noexcept
+  TrackPropertiesCommitState projectTrackPropertiesCommitState(rt::AuthoringStatus const status,
+                                                               bool const bindingCurrent) noexcept
   {
     switch (status)
     {
       case rt::AuthoringStatus::Applied:
       case rt::AuthoringStatus::NoOp: return TrackPropertiesCommitState::Accepted;
-      case rt::AuthoringStatus::Busy: return TrackPropertiesCommitState::Busy;
+      case rt::AuthoringStatus::Busy:
+        return bindingCurrent ? TrackPropertiesCommitState::Busy : TrackPropertiesCommitState::Stale;
       case rt::AuthoringStatus::Stale: return TrackPropertiesCommitState::Stale;
       case rt::AuthoringStatus::Unavailable: return TrackPropertiesCommitState::Unavailable;
     }
 
     AO_FATAL("Unknown track-authoring status");
+  }
+
+  TrackPropertiesRetryFeedback projectTrackPropertiesRetryFeedback(TrackPropertiesRetryFeedback const previous,
+                                                                   bool const bindingCurrent,
+                                                                   TrackPropertiesRetryDraft const draft) noexcept
+  {
+    if (!bindingCurrent || previous == TrackPropertiesRetryFeedback::None ||
+        draft == TrackPropertiesRetryDraft::Unchanged)
+    {
+      return TrackPropertiesRetryFeedback::None;
+    }
+
+    return draft == TrackPropertiesRetryDraft::SubmitReady ? TrackPropertiesRetryFeedback::Visible
+                                                           : TrackPropertiesRetryFeedback::Deferred;
   }
 } // namespace ao::winui

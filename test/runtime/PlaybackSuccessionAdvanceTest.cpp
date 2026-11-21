@@ -473,7 +473,7 @@ namespace ao::rt::test
     fakeit::Verify(Method(backend, open)).Once();
     REQUIRE(announcements.size() == 1);
     CHECK(announcements.front().trackId == fixture.secondTrackId);
-    CHECK(announcements.front().optPreparedNextToken.has_value());
+    CHECK(announcements.front().optPreparedNextToken);
   }
 
   TEST_CASE("PlaybackSuccession - switching output after a prepared successor ends settles that successor once",
@@ -619,7 +619,7 @@ namespace ao::rt::test
     else
     {
       REQUIRE(secondTrackEvents.size() == 1);
-      CHECK(secondTrackEvents.front().optPreparedNextToken.has_value());
+      CHECK(secondTrackEvents.front().optPreparedNextToken);
     }
   }
 

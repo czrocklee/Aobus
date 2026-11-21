@@ -23,16 +23,20 @@
 #include <gtkmm/notebook.h>
 #include <gtkmm/scrolledwindow.h>
 #include <gtkmm/widget.h>
+#include <sigc++/scoped_connection.h>
 
 #include <cstdint>
+#include <deque>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string_view>
 #include <vector>
 
 namespace Gtk
 {
   class Button;
+  class ToggleButton;
 }
 
 namespace ao::rt
@@ -60,7 +64,7 @@ namespace ao::gtk
                           rt::CompletionService& completion,
                           i18n::MessageCatalog textCatalog,
                           TrackRowCache& rowCache,
-                          std::vector<TrackId> trackIds);
+                          std::span<TrackId const> trackIds);
     ~TrackPropertiesDialog() override;
 
     TrackPropertiesDialog(TrackPropertiesDialog const&) = delete;
@@ -80,6 +84,9 @@ namespace ao::gtk
     {
       rt::TrackField field = rt::TrackField::Title;
       Gtk::Widget* widget = nullptr;
+      uimodel::TrackPropertiesFormEditorKind kind = uimodel::TrackPropertiesFormEditorKind::ReadonlyText;
+      Gtk::ToggleButton* clearButton = nullptr;
+      bool invalid = false;
     };
 
     struct CompletionControllerBinding final
@@ -91,13 +98,16 @@ namespace ao::gtk
     void buildUi();
     void buildMetadataTab();
     void buildPropertiesTab();
-    Result<> prepareEditing();
+    Result<> prepareEditing(std::span<TrackId const> trackIds);
     void applyLoadedFields();
     void handleSaveClicked();
     void setInteractionState(InteractionState state);
     void updateEditorSensitivity();
     void updateSaveEnabled();
-    void updateEditorValue(rt::TrackField field, Gtk::Widget* widget);
+    void bindEditor(FieldEditor& editor);
+    void updateEntryValue(FieldEditor& editor, Gtk::Entry& entry);
+    void toggleFieldClear(FieldEditor& editor, Gtk::Entry& entry);
+    bool hasInvalidInput() const;
     bool hasUnsavedCredits() const noexcept;
     void promptDiscardCredits();
 
@@ -105,18 +115,14 @@ namespace ao::gtk
     Gtk::Widget* createReadonlyWidget(rt::TrackField field);
     void applyRowView(Gtk::Widget* widget, uimodel::TrackPropertiesFormRowView const& view);
     void setWidgetValue(Gtk::Widget* widget, std::string_view value);
-    void setEditorMixed(Gtk::Widget* widget, std::string_view text);
 
     rt::Library& _library;
     async::Runtime& _asyncRuntime;
     rt::CompletionService& _completion;
     i18n::MessageCatalog _textCatalog;
     TrackRowCache& _rowCache;
-    std::vector<TrackId> _trackIds;
     std::optional<uimodel::TrackAuthoringSession> _optEditSession;
     async::Subscription _editSessionInvalidatedSubscription;
-    bool _multipleTracks = false;
-    bool _hasInvalidRecordingDate = false;
     uimodel::TrackPropertiesFormModel _formModel;
     uimodel::TrackPropertiesFormSpec _formSpec;
     Gtk::Button* _saveButton = nullptr;
@@ -136,9 +142,12 @@ namespace ao::gtk
     Gtk::Box _propertiesBox{Gtk::Orientation::VERTICAL};
 
     layout::TrackCreditsEditor _creditsEditor;
-    std::vector<FieldEditor> _editors;
+    // End insertion preserves references captured by the scoped editor connections; do not erase or insert in the
+    // middle.
+    std::deque<FieldEditor> _editors;
     std::vector<FieldEditor> _readonlyRows;
     std::vector<CompletionControllerBinding> _completionControllers;
+    std::vector<sigc::scoped_connection> _editorConnections;
     async::LifetimeScope _tasks;
     MainContextCallbackScope _callbackScope;
   };

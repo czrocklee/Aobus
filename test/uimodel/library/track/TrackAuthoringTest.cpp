@@ -94,6 +94,13 @@ namespace ao::uimodel::test
     CHECK(*parsedText == "New Title");
   }
 
+  TEST_CASE("TrackAuthoring - distinguishes absent edits from literal whitespace")
+  {
+    CHECK(isEmptyTrackFieldEdit(TrackFieldEditValue{std::monostate{}}));
+    CHECK(isEmptyTrackFieldEdit(makeTextEditValue("")));
+    CHECK_FALSE(isEmptyTrackFieldEdit(makeTextEditValue(" ")));
+  }
+
   TEST_CASE("TrackAuthoring - parses uint16 edit text")
   {
     SECTION("valid number")

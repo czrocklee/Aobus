@@ -253,6 +253,8 @@ It provides pages for `Metadata`, `Tags`, read-only `Properties`, and (for multi
 | `Ctrl-R`                                    | re-read every captured target and replace the draft baselines                                                                              |
 | `Esc`                                       | close completion popup; clear a non-empty tag query; close editor (prompts confirmation if dirty)                                          |
 
+In a multi-track edit, erasing a replacement withdraws that field edit: each track keeps its own value. To remove the field from every target, use `Ctrl-D` on the editable field, then `Ctrl-S`. If a completion popup or diagnostic hides the batch Clear action, dismiss it before clearing. Typing a new value after `Ctrl-D` replaces the clear. Erasing that replacement keeps the original values; it does not reapply the clear. `Ctrl-G` restores the field without discarding other edits.
+
 With Mouse control enabled, click tabs, fields, tag rows, or completion candidates; click within a text value to place the caret.
 Wheel input navigates the active page or completion.
 Footer controls and `×` follow the same validation, submission, and confirmation rules as their keys.

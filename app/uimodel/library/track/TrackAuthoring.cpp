@@ -111,6 +111,26 @@ namespace ao::uimodel
     return TrackFieldEditValue{*dateRes};
   }
 
+  bool isEmptyTrackFieldEdit(TrackFieldEditValue const& value) noexcept
+  {
+    if (auto const* text = std::get_if<std::string>(&value); text != nullptr)
+    {
+      return text->empty();
+    }
+
+    if (auto const* number = std::get_if<std::uint16_t>(&value); number != nullptr)
+    {
+      return *number == 0;
+    }
+
+    if (auto const* date = std::get_if<library::RecordingDate>(&value); date != nullptr)
+    {
+      return !date->isPresent();
+    }
+
+    return true;
+  }
+
   bool canWriteTrackFieldPatch(rt::TrackField field) noexcept
   {
     using F = rt::TrackField;

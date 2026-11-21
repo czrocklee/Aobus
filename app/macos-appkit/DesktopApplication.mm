@@ -1786,12 +1786,17 @@ namespace ao::appkit
 
 - (void)presentEditor
 {
-  auto const cover = _sessionPtr->state().selectedCover.view();
   NSImage* artwork = nil;
 
-  if (_sessionPtr->editor().state().trackIds.size() == 1 && !cover.empty())
+  if (auto const optTarget = _sessionPtr->editor().singlePropertyTarget(); optTarget)
   {
-    artwork = [[NSImage alloc] initWithData:[NSData dataWithBytes:cover.data() length:cover.size()]];
+    auto const selection = _sessionPtr->selection();
+    // The cached cover belongs to the live selection, not necessarily the action's captured track.
+    if (auto const cover = _sessionPtr->state().selectedCover.view();
+        selection.size() == 1 && selection.front() == *optTarget && !cover.empty())
+    {
+      artwork = [[NSImage alloc] initWithData:[NSData dataWithBytes:cover.data() length:cover.size()]];
+    }
   }
 
   _libraryEditor = [[AobusLibraryEditor alloc] initWithModel:_sessionPtr->editor()

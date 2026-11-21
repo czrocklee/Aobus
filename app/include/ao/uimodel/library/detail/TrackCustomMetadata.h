@@ -7,6 +7,7 @@
 #include <ao/rt/projection/TrackDetailSnapshot.h>
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -24,6 +25,8 @@ namespace ao::uimodel
 
   CustomMetadataAddValidation validateCustomMetadataAddition(rt::TrackDetailSnapshot const& snap, std::string_view key);
 
+  /// Stage one custom key without replacing other fields. A present empty string is a value, not a deletion.
+  void setCustomMetadataPatchEntry(rt::MetadataPatch& patch, std::string_view key, std::optional<std::string> optValue);
   rt::MetadataPatch makeCustomMetadataUpdatePatch(std::string_view key, std::string_view value);
   rt::MetadataPatch makeCustomMetadataDeletePatch(std::string_view key);
 } // namespace ao::uimodel

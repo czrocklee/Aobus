@@ -59,7 +59,6 @@ namespace ao::winui
     _reloadButton.Visibility(Visibility::Collapsed);
     _discardClickRevokers.push_back(_reloadButton.Click(
       winrt::auto_revoke, [this](IInspectable const&, RoutedEventArgs const&) { requestDiscard(true); }));
-    content.Children().Append(_reloadButton);
     _discardPrompt = StackPanel{};
     _discardPrompt.Spacing(kCreditsSectionSpacing);
     _discardPrompt.Visibility(Visibility::Collapsed);
@@ -72,13 +71,8 @@ namespace ao::winui
       discard.Click(winrt::auto_revoke, [this](IInspectable const&, RoutedEventArgs const&) { confirmDiscard(); }));
     _discardPrompt.Children().Append(discard);
     auto cancel = textButton(i18n::requiredText(_textCatalog, MessageId::WinUiTrackPropertiesKeepEditing));
-    _discardClickRevokers.push_back(cancel.Click(winrt::auto_revoke,
-                                                 [this](IInspectable const&, RoutedEventArgs const&)
-                                                 {
-                                                   _discardPrompt.Visibility(Visibility::Collapsed);
-                                                   updateEditorEnabled();
-                                                   updateSaveEnabled();
-                                                 }));
+    _discardClickRevokers.push_back(
+      cancel.Click(winrt::auto_revoke, [this](IInspectable const&, RoutedEventArgs const&) { cancelDiscard(); }));
     _discardPrompt.Children().Append(cancel);
     content.Children().Append(_discardPrompt);
   }
@@ -147,7 +141,7 @@ namespace ao::winui
 
     if (auto beginRes = _formModel.beginCreditsEdit(scope); !beginRes)
     {
-      setError(beginRes.error().message);
+      updateDialogFeedback(beginRes.error().message);
       return;
     }
 
@@ -160,7 +154,7 @@ namespace ao::winui
     _creditsHost.Children().Append(_creditsControlPtr->element());
     _creditsHost.Visibility(Visibility::Visible);
     updateEditorEnabled();
-    updateSaveEnabled();
+    updateDialogFeedback();
   }
 
   void TrackPropertiesCoordinator::finishCreditsEdit(bool const accept)
@@ -174,7 +168,7 @@ namespace ao::winui
 
       if (auto acceptedRes = _formModel.acceptCreditsEdit(); !acceptedRes)
       {
-        setError(acceptedRes.error().message);
+        updateDialogFeedback(acceptedRes.error().message);
         return;
       }
     }
@@ -187,7 +181,7 @@ namespace ao::winui
     _creditsHost.Visibility(Visibility::Collapsed);
     refreshCreditsPreview();
     updateEditorEnabled();
-    updateSaveEnabled();
+    updateDialogFeedback();
     std::ignore = _creditsPreview.Children().GetAt(0).as<Button>().Focus(FocusState::Programmatic);
   }
 
@@ -200,8 +194,16 @@ namespace ao::winui
 
     _reloadAfterDiscard = reload;
     _discardPrompt.Visibility(Visibility::Visible);
-    _dialog.IsPrimaryButtonEnabled(false);
+    updateEditorEnabled();
+    updateDialogFeedback();
     std::ignore = _discardPrompt.Children().GetAt(1).as<Button>().Focus(FocusState::Programmatic);
+  }
+
+  void TrackPropertiesCoordinator::cancelDiscard()
+  {
+    _discardPrompt.Visibility(Visibility::Collapsed);
+    updateEditorEnabled();
+    updateDialogFeedback();
   }
 
   void TrackPropertiesCoordinator::confirmDiscard()
@@ -222,39 +224,19 @@ namespace ao::winui
     _creditsControlPtr.reset();
     _formModel.cancelCreditsEdit();
 
-    if (auto preparedRes = prepareSession(); !preparedRes)
+    auto const preparedRes = prepareSession();
+    _sessionInvalid = !preparedRes;
+
+    // Replace the discarded controls even if the requested tracks cannot be rebound.
+    // Reuse the already-presented ContentDialog rather than nesting ShowAsync.
+    buildDialogContent();
+
+    if (!preparedRes)
     {
-      _sessionInvalid = true;
-      setError(preparedRes.error().message);
-      updateEditorEnabled();
-      return;
+      _optFrozenError = preparedRes.error().message;
     }
 
-    // Preserve the already-presented ContentDialog rather than nesting ShowAsync.
-    _building = true;
-    _fieldEditors.clear();
-    _customEditors.clear();
-    auto content = StackPanel{};
-    constexpr double kReloadedDialogSectionSpacing = 12.0;
-    content.Spacing(kReloadedDialogSectionSpacing);
-    _errorText = TextBlock{};
-    _errorText.TextWrapping(TextWrapping::Wrap);
-    _errorText.Visibility(Visibility::Collapsed);
-    content.Children().Append(_errorText);
-    buildCreditsSection(content);
-    buildMetadataSection(content);
-    buildTagsSection(content);
-    buildCustomMetadataSection(content);
-    buildTechnicalSection(content);
-    auto scroll = ScrollViewer{};
-    constexpr double kReloadedDialogMaxHeight = 640.0;
-    scroll.MaxHeight(kReloadedDialogMaxHeight);
-    scroll.HorizontalScrollBarVisibility(ScrollBarVisibility::Disabled);
-    scroll.VerticalScrollBarVisibility(ScrollBarVisibility::Auto);
-    scroll.Content(content);
-    _dialog.Content(scroll);
-    _building = false;
     updateEditorEnabled();
-    updateSaveEnabled();
+    updateDialogFeedback();
   }
 } // namespace ao::winui

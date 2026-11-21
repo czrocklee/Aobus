@@ -5,6 +5,7 @@
 
 #include "test/MessageCatalogTestSupport.h"
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/library/RecordingDate.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
 #include <ao/rt/TrackMutation.h>
@@ -230,6 +231,44 @@ namespace ao::uimodel::test
     CHECK(*patch.optAlbum == "New");
     REQUIRE(patch.optYear);
     CHECK(*patch.optYear == 0);
+  }
+
+  TEST_CASE("TrackPropertiesFormModel - erasing batch input withdraws only that field's pending edit")
+  {
+    using F = rt::TrackField;
+    auto form = TrackPropertiesFormModel{ao::test::englishMessageCatalog(), 2};
+    form.addField(F::Album, true);
+    form.addField(F::Year, true);
+    form.addField(F::RecordingDate, true);
+    form.addField(F::FilePath, false);
+    form.loadFirstTrackField(F::Album, textRaw("First"));
+    REQUIRE(form.tryMergeTrackField(F::Album, textRaw("Second")));
+    form.loadFirstTrackField(F::Year, numberRaw(1985));
+    form.loadFirstTrackField(F::RecordingDate, library::RecordingDate{1985, 4, 0});
+    form.setFieldInput(F::Album, textEdit("First"));
+    form.clearFieldEdit(F::Year);
+    form.clearFieldEdit(F::RecordingDate);
+    form.clearFieldEdit(F::FilePath);
+    auto const pending = form.buildPatch();
+    CHECK(pending.optAlbum == "First");
+    CHECK(pending.optYear == 0);
+    REQUIRE(pending.optRecordingDate);
+    CHECK_FALSE(pending.optRecordingDate->isPresent());
+
+    form.setFieldInput(F::Year, numberEdit(0));
+    form.setFieldInput(F::RecordingDate, library::RecordingDate{});
+    CHECK_FALSE(form.buildPatch().optYear);
+    CHECK_FALSE(form.buildPatch().optRecordingDate);
+    CHECK(form.buildPatch().optAlbum == "First");
+
+    form.setFieldInput(F::Album, textEdit(""));
+    CHECK_FALSE(form.canSave());
+    CHECK_FALSE(form.buildPatch().optAlbum);
+    form.clearFieldEdit(F::Album);
+    CHECK(form.buildPatch().optAlbum == "");
+    form.restoreFieldEdit(F::Album);
+    CHECK_FALSE(form.canSave());
+    CHECK(form.rowView(F::Album).mixed);
   }
 
   TEST_CASE("TrackPropertiesFormModel - explicit replacement omits a common no-op and rejects read-only fields")

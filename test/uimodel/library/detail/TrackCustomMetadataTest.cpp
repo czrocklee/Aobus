@@ -4,6 +4,7 @@
 #include <ao/uimodel/library/detail/TrackCustomMetadata.h>
 
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackMutation.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
 
 #include <catch2/catch_message.hpp>
@@ -70,6 +71,17 @@ namespace ao::uimodel::test
     CHECK(validateCustomMetadataAddition(snap, "title") == CustomMetadataAddValidation::DuplicateCustomMetadata);
     CHECK(validateCustomMetadataAddition(snap, "credits") == CustomMetadataAddValidation::DuplicateCustomMetadata);
     CHECK(validateCustomMetadataAddition(snap, "artist") == CustomMetadataAddValidation::ReservedKey);
+  }
+
+  TEST_CASE("TrackCustomMetadata - composing an empty replacement and a deletion preserves other draft fields")
+  {
+    auto patch = rt::MetadataPatch{.optAlbum = "New album"};
+    setCustomMetadataPatchEntry(patch, "Notes", std::string{});
+    setCustomMetadataPatchEntry(patch, "Mood", std::nullopt);
+
+    CHECK(patch.optAlbum == "New album");
+    CHECK(patch.customUpdates.at("Notes") == std::optional<std::string>{""});
+    CHECK_FALSE(patch.customUpdates.at("Mood").has_value());
   }
 
   TEST_CASE("TrackCustomMetadata - patch helpers write update and delete payloads")

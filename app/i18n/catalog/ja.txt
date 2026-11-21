@@ -41,7 +41,8 @@ ja:table {
     track_credit_kind_summary { "{kind}: {summary}" }
     track_credit_kind_value { "分類: {kind}" }
     track_credit_name_role { "{name}（{role}）" }
-    track_recording_date_invalid { "有効な日付を YYYY、YYYY-MM、YYYY-MM-DD の形式で入力してください。空欄にするとクリアします。" }
+    track_recording_date_invalid { "有効な日付を YYYY、YYYY-MM、YYYY-MM-DD の形式で入力してください。" }
+    track_number_invalid { "0～65535 の整数を入力してください。" }
     tui_go_to_back { "戻る" }
     tui_go_to_forward { "進む" }
     tui_go_to_cancel { "キャンセル" }
@@ -699,7 +700,6 @@ ja:table {
     tui_editor_tab_tracks { "対象曲" }
     tui_editor_clear_for_all { "{count, plural, other {# 曲}}すべてを空にする" }
     tui_editor_apply_action { "{count, plural, other {# 曲}}に適用" }
-    tui_editor_invalid_number { "整数を入力してください" }
     tui_editor_discard_prompt { "変更を破棄しますか? Enter で破棄、Escape で編集を続行" }
     tui_editor_hint_page { "ページ" }
     tui_editor_hint_select { "選択" }
@@ -765,7 +765,9 @@ ja:table {
     winui_track_properties_add { "追加" }
     winui_track_properties_editing_unavailable { "編集できません: {detail}" }
     winui_track_properties_save_failed { "保存に失敗しました: {detail}" }
-    winui_track_properties_stale { "このダイアログを開いている間にライブラリが変更されました。プロパティを開き直して再試行してください。" }
+    winui_track_properties_stale { "このダイアログを開いている間にライブラリが変更されました。「再読み込み」を選択して現在の値を確認してください。" }
+    track_properties_unstaged_input_hint { "保存する前に、タグまたはカスタムフィールドを追加するか、未完了の入力を消去してください。" }
+    track_properties_text_normalization_failed { "テキストを正規化できませんでした。タグまたはカスタムフィールド名を確認して、もう一度お試しください。" }
     winui_track_properties_invalid_value { "値が無効です: {detail}" }
     winui_track_properties_reload { "再読み込み" }
     winui_track_properties_discard_question { "これらの変更を破棄しますか？" }
@@ -867,6 +869,7 @@ ja:table {
     track_tags_stale { "タグエディターが開いている間にライブラリが変更されました。再読み込みして再試行してください。" }
     track_edit_stale { "この編集が開いている間にライブラリが変更されました。値を再読み込みして再試行してください。" }
     track_editing_unavailable { "現在ライブラリを編集できません。" }
+    track_clear_field_for_tracks { "{count, plural, other {# 曲}}の「{field}」をクリア" }
     gtk_track_properties_title { "プロパティ" }
     gtk_track_properties_selected_title { "プロパティ — {count, plural, one {# 曲} other {# 曲}}を選択中" }
     gtk_track_editing_unavailable { "編集不可: {detail}" }
@@ -1160,6 +1163,7 @@ ja:table {
     appkit_keep_open { "開いたままにする" }
     appkit_discard_changes { "変更を破棄" }
     appkit_clear_selected_field { "選択した曲のこの項目をクリア" }
+    appkit_restore_field_value { "元の値に戻す" }
     appkit_edit_tracks { "{count, plural, other {# 曲}}を編集" }
     appkit_updating_tracks { "選択した {count, plural, other {# 曲}}を更新中" }
     appkit_deleting_lists { "{count, plural, other {# 件のリストが削除されます}}" }

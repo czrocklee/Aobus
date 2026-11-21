@@ -50,7 +50,7 @@ namespace ao::tui::test
     {
       auto const spec = uimodel::buildTrackPropertiesFormSpec(textCatalog);
       auto preparation = TrackEditorPreparation{
-        .baseline = uimodel::TrackPropertiesFormModel{textCatalog},
+        .baseline = uimodel::TrackPropertiesFormModel{textCatalog, tracks.size()},
         .tagCounts = std::move(tagCounts),
         .tagSuggestions = std::move(tagSuggestions),
       };

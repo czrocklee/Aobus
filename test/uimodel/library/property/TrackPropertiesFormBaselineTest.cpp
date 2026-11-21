@@ -221,6 +221,42 @@ namespace ao::uimodel::test
     CHECK(form.rowView(rt::TrackField::Title).text == "Original");
   }
 
+  TEST_CASE("TrackPropertiesFormModel - only a successful baseline load changes the scope of empty input")
+  {
+    auto fixture = BaselineFixture{};
+    auto const trackId = fixture.addTrack({.title = "Original", .uri = "present.flac"});
+    auto const spec = buildTrackPropertiesFormSpec(ao::test::englishMessageCatalog());
+    auto form = TrackPropertiesFormModel{ao::test::englishMessageCatalog()};
+    auto snapshot = fixture.commands.library().snapshot();
+    auto const field = rt::TrackField::Title;
+
+    CHECK(form.targetCount() == 0);
+
+    // The bound sequence retains duplicates: even a common value can be a batch baseline.
+    REQUIRE(loadTrackPropertiesFormBaseline(snapshot, std::array{trackId, trackId}, spec, form));
+    CHECK(form.targetCount() == 2);
+    form.setFieldInput(field, textEdit("Replacement"));
+    REQUIRE_FALSE(loadTrackPropertiesFormBaseline(snapshot, std::array{TrackId{999999}}, spec, form));
+    CHECK(form.targetCount() == 2);
+    CHECK(form.buildPatch().optTitle == "Replacement");
+    form.setFieldInput(field, textEdit(""));
+    CHECK_FALSE(form.buildPatch().optTitle);
+
+    REQUIRE(loadTrackPropertiesFormBaseline(snapshot, std::array{trackId}, spec, form));
+    CHECK(form.targetCount() == 1);
+    form.setFieldInput(field, textEdit(""));
+    CHECK(form.buildPatch().optTitle == "");
+
+    form.clear();
+    CHECK(form.targetCount() == 0);
+    form.addField(field, true);
+    form.loadFirstTrackField(field, std::string{"Unbound"});
+    form.setFieldInput(field, textEdit("Not a replacement"));
+    CHECK_FALSE(form.buildPatch().optTitle);
+    form.clearFieldEdit(field);
+    CHECK_FALSE(form.buildPatch().optTitle);
+  }
+
   TEST_CASE("loadTrackPropertiesFormBaseline replaces prepopulated edits on a repeated successful load")
   {
     auto fixture = BaselineFixture{};
@@ -251,6 +287,7 @@ namespace ao::uimodel::test
     auto const duplicateIds = std::array{secondId, secondId, secondId};
 
     REQUIRE(loadTrackPropertiesFormBaseline(snapshot, duplicateIds, spec, form));
+    CHECK(form.targetCount() == 3);
     CHECK(form.rowView(rt::TrackField::Title).text == "Second");
     CHECK_FALSE(form.rowView(rt::TrackField::Title).mixed);
     form.setEditValue(rt::TrackField::Title, textEdit("Second"));

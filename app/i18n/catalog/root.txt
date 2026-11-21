@@ -41,7 +41,8 @@ root:table {
     track_credit_kind_summary { "{kind}: {summary}" }
     track_credit_kind_value { "Kind: {kind}" }
     track_credit_name_role { "{name} ({role})" }
-    track_recording_date_invalid { "Enter YYYY, YYYY-MM, or YYYY-MM-DD using a valid calendar date, or leave empty to clear." }
+    track_recording_date_invalid { "Enter a valid date as YYYY, YYYY-MM, or YYYY-MM-DD." }
+    track_number_invalid { "Enter a whole number from 0 to 65535." }
     tui_go_to_back { "Back" }
     tui_go_to_forward { "Forward" }
     tui_go_to_cancel { "Cancel" }
@@ -701,7 +702,6 @@ root:table {
     tui_editor_tab_tracks { "Tracks" }
     tui_editor_clear_for_all { "Clear for {count, plural, one {# track} other {all # tracks}}" }
     tui_editor_apply_action { "Apply to {count, plural, one {# track} other {# tracks}}" }
-    tui_editor_invalid_number { "Whole number required" }
     tui_editor_discard_prompt { "Discard changes? Enter to discard, Escape to keep editing" }
     tui_editor_hint_page { "page" }
     tui_editor_hint_select { "select" }
@@ -767,7 +767,9 @@ root:table {
     winui_track_properties_add { "Add" }
     winui_track_properties_editing_unavailable { "Editing unavailable: {detail}" }
     winui_track_properties_save_failed { "Save failed: {detail}" }
-    winui_track_properties_stale { "The library changed while this dialog was open. Reopen Properties and try again." }
+    winui_track_properties_stale { "The library changed while this dialog was open. Select Reload to see the current values." }
+    track_properties_unstaged_input_hint { "Add the tag or custom field, or erase the unfinished input before saving." }
+    track_properties_text_normalization_failed { "Text could not be normalized. Check the tag or custom field name and try again." }
     winui_track_properties_invalid_value { "Invalid value: {detail}" }
     winui_track_properties_reload { "Reload" }
     winui_track_properties_discard_question { "Discard these changes?" }
@@ -869,6 +871,7 @@ root:table {
     track_tags_stale { "Library changed while the tag editor was open. Reload and try again." }
     track_edit_stale { "Library changed while this edit was open. Reload the value and try again." }
     track_editing_unavailable { "Library editing is currently unavailable." }
+    track_clear_field_for_tracks { "Clear {field} for {count, plural, one {# track} other {# tracks}}" }
     gtk_track_properties_title { "Properties" }
     gtk_track_properties_selected_title { "Properties — {count, plural, one {# track selected} other {# tracks selected}}" }
     gtk_track_editing_unavailable { "Editing unavailable: {detail}" }
@@ -1162,6 +1165,7 @@ root:table {
     appkit_keep_open { "Keep Open" }
     appkit_discard_changes { "Discard Changes" }
     appkit_clear_selected_field { "Clear for Selected Tracks" }
+    appkit_restore_field_value { "Restore Original Values" }
     appkit_edit_tracks { "Edit {count, plural, one {# Track} other {# Tracks}}" }
     appkit_updating_tracks { "Updating {count, plural, one {# selected track} other {# selected tracks}}" }
     appkit_deleting_lists { "{count, plural, one {# list will be removed} other {# lists will be removed}}" }

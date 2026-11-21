@@ -41,7 +41,8 @@ zh_Hant:table {
     track_credit_kind_summary { "{kind}：{summary}" }
     track_credit_kind_value { "類別：{kind}" }
     track_credit_name_role { "{name}（{role}）" }
-    track_recording_date_invalid { "請輸入有效的 YYYY、YYYY-MM 或 YYYY-MM-DD 日期，留空則清除。" }
+    track_recording_date_invalid { "請輸入有效的日期，格式為 YYYY、YYYY-MM 或 YYYY-MM-DD。" }
+    track_number_invalid { "請輸入 0 至 65535 的整數。" }
     tui_go_to_back { "後退" }
     tui_go_to_forward { "前進" }
     tui_go_to_cancel { "取消" }
@@ -699,7 +700,6 @@ zh_Hant:table {
     tui_editor_tab_tracks { "曲目" }
     tui_editor_clear_for_all { "清空全部 {count, plural, other {# 首曲目}}" }
     tui_editor_apply_action { "套用至 {count, plural, other {# 首曲目}}" }
-    tui_editor_invalid_number { "需要輸入整數" }
     tui_editor_discard_prompt { "放棄變更？Enter 放棄，Escape 繼續編輯" }
     tui_editor_hint_page { "頁面" }
     tui_editor_hint_select { "選取" }
@@ -765,7 +765,9 @@ zh_Hant:table {
     winui_track_properties_add { "新增" }
     winui_track_properties_editing_unavailable { "無法編輯：{detail}" }
     winui_track_properties_save_failed { "儲存失敗：{detail}" }
-    winui_track_properties_stale { "開啟此對話框期間，音樂庫已發生變更。請重新開啟屬性後再試一次。" }
+    winui_track_properties_stale { "開啟此對話框期間，音樂庫已發生變更。請選擇「重新載入」查看最新值。" }
+    track_properties_unstaged_input_hint { "儲存前，請新增標籤或自訂欄位，或清除未完成的輸入。" }
+    track_properties_text_normalization_failed { "無法正規化文字。請檢查標籤或自訂欄位名稱，然後再試一次。" }
     winui_track_properties_invalid_value { "值無效：{detail}" }
     winui_track_properties_reload { "重新載入" }
     winui_track_properties_discard_question { "捨棄這些修改？" }
@@ -867,6 +869,7 @@ zh_Hant:table {
     track_tags_stale { "標籤編輯器開啟期間，音樂庫已變更。請重新載入後再試一次。" }
     track_edit_stale { "編輯此項目期間，音樂庫已變更。請重新載入值後再試一次。" }
     track_editing_unavailable { "目前無法編輯音樂庫。" }
+    track_clear_field_for_tracks { "清除 {count, plural, other {# 首曲目}}的「{field}」" }
     gtk_track_properties_title { "屬性" }
     gtk_track_properties_selected_title { "屬性 — 已選取 {count, plural, one {# 首曲目} other {# 首曲目}}" }
     gtk_track_editing_unavailable { "無法編輯：{detail}" }
@@ -1160,6 +1163,7 @@ zh_Hant:table {
     appkit_keep_open { "保持開啟" }
     appkit_discard_changes { "捨棄修改" }
     appkit_clear_selected_field { "清除所選曲目的此欄位" }
+    appkit_restore_field_value { "還原各曲目的原值" }
     appkit_edit_tracks { "編輯 {count, plural, other {# 首曲目}}" }
     appkit_updating_tracks { "正在更新所選的 {count, plural, other {# 首曲目}}" }
     appkit_deleting_lists { "{count, plural, other {將移除 # 個列表}}" }

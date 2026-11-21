@@ -40,12 +40,9 @@ The non-interactive CLI may bind command-selected ids immediately before invokin
   The revision follows the [captured-read revision semantics](../library/track-detail-projection.md#which-revision-does-a-snapshot-represent), not a guarantee of the latest library revision.
 - Synthetic display fields and tags are excluded from the built-in field grid; tags have their own editing surface.
 - Technical fields are never editable through metadata UI policy.
-- Mixed built-in/custom values display the shared `<Multiple Values>` marker, and that literal cannot be committed as a custom value.
-- `TrackPropertiesFormModel::setEditValue()` still omits mixed fields from `buildPatch()`.
-  `setExplicitFieldEdit()` records a replacement that `buildPatch()` writes even when the field is mixed or equals the first target's value; a replacement equal to a common original is omitted.
-  Both setters replace the same current edit value; a later `setEditValue()` clears explicit replacement intent and restores ordinary mixed-field preservation. `rowView()` continues to describe the captured baseline.
+- Mixed values use the shared localized marker for display, not as edit text. GTK's inline custom-value editor rejects the exact marker as a replacement.
+- Untouched Properties fields preserve each track's value; their baseline display is independent of staged edits.
 - Updating a custom key applies the value to every selected target; deletion removes it from every selected target.
-- A custom key cannot be added when already present in the snapshot. Runtime metadata and Properties commands reject writes to `credits` or any exact TrackField id after NFC normalization, before mutation or interning, including previews with no targets. Matching is case-sensitive and does not accept query aliases. Deleting an existing reserved custom key remains available for cleanup; it never deletes the built-in field or structured Credits.
 - Built-in metadata can be cleared but not structurally deleted.
 - A tag edit with no selected ids or no additions/removals is a no-op.
 - One open editor owns one move-only `TrackAuthoringSession` value; changing selection or recycling a row cannot retarget that session.
@@ -82,17 +79,9 @@ Operational failure, stale or unavailable status, maintenance observed during su
 
 ### Preparing a coherent Properties baseline
 
-A frontend must prepare the form from the same target sequence and committed revision that its authoring session bound:
+Open one short-lived `LibrarySnapshot` from the target runtime's Core storage. The [shared Properties preparation](../../../app/include/ao/uimodel/library/property/TrackPropertiesPreparation.h) binds the exact nonempty target sequence and loads the form from that same snapshot. Runtime validates every id and stamps the binding with the snapshot revision and runtime identity. Ordering and duplicate target occurrences are retained. After binding, the form's target count determines whether edits apply to one track or to a batch. If opening fails, a dialog can still report the size of the requested selection without offering batch actions. A foreign snapshot is `InvalidInput`; a retained old snapshot or unavailable authoring state is `InvalidState`, not a request to rebind at a newer revision.
 
-1. Open one short-lived `LibrarySnapshot` from the target runtime's Core storage.
-2. Pass that snapshot and the exact non-empty target sequence to the snapshot-aware `TrackAuthoringSession::begin()` overload.
-   Runtime validates every id through that same snapshot, preserving order and duplicates, and stamps the binding with its revision and the current runtime identity.
-   A snapshot from different Core storage is `InvalidInput`; a retained old snapshot or unavailable authoring state is `InvalidState` rather than a request to rebind at a newer revision.
-3. Call `loadTrackPropertiesFormBaseline()` with that snapshot and the shared form specification.
-   The loader validates every target before aggregating ordinary fields and complete per-kind Credits; success replaces the complete supplied form, while an empty or incomplete target set fails without changing it.
-4. Read any editable shared tags from that same snapshot.
-   Custom metadata uses its separate projection only when both the projection's exact target sequence and library revision match the binding.
-5. Release the read snapshot before publishing native UI state, attach the session invalidation observer, and perform the final `isCurrent()` check before installing the baseline.
+The baseline loader validates all targets before replacing the form with its captured count, ordinary fields, and complete per-kind Credits. Failure leaves the supplied form unchanged. Read any editable tag baseline from the same snapshot. When custom metadata comes from a separate detail projection, use the same explicit target sequence and require that projection's revision to match the binding. Release the snapshot before publishing native UI state, attach the session invalidation observer, and check `isCurrent()` before installing the baseline.
 
 The session retains only the validated binding and its normal availability subscription, never the caller's read snapshot.
 Coherent preparation does not prevent a commit after binding; the final current check and submission-time stale guard remain mandatory.
@@ -105,7 +94,14 @@ Session ownership, subscriptions, native installation, and teardown remain front
 
 ### Built-in metadata
 
-The frontend decodes edit text through the shared field codec and creates a typed `MetadataPatch`.
+The shared field codec decodes input, and the form builds a typed `MetadataPatch` from accepted edits. `rowView()` still describes the captured baseline. An ordinary model edit without replacement intent never writes a mixed field. A user-entered replacement does, even if it equals the first target's value; a replacement equal to a common original is omitted.
+
+In a multi-track draft, empty text, numeric zero, or an absent recording date withdraws the replacement for that field, whether its baseline was common or mixed. The blank editor can still show the captured value or mixed marker as a placeholder; losing focus must not promote that placeholder to input. Only a distinct Clear action naming the field and target count stages a clear on every bound track. It supersedes earlier input for that field. Restoring the field discards its replacement or clear and preserves other draft edits; it never restores the superseded text.
+
+Text fields preserve whitespace: a title consisting of spaces is a replacement, not empty input. Number and date fields ignore surrounding ASCII whitespace, so spaces alone withdraw a batch edit in those fields.
+
+These rules apply to writable built-in fields in multi-track Properties. For one track, erasing a value clears the field. A valid spelling that decodes to the original value (for example, `02003` for year `2003`) is not an edit and does not enable Save on its own. Staging or withdrawing an edit writes nothing until Save. Inline editors, Credits scopes, and custom metadata have separate rules.
+
 Applying the patch through the retained authoring session updates the complete bound target set or none of it.
 The result is `Applied`, `NoOp`, `Busy`, `Stale`, or `Unavailable`; `Result` errors remain operational or validation failures.
 An empty metadata display value remains hidden by default unless show-empty is active or its editor is open.
@@ -157,8 +153,11 @@ GTK detail provides that offer and its shared timer/settlement behavior; WinUI, 
 
 ### Custom metadata
 
-Addition first validates duplicate and reserved-key conflicts.
-Update creates `customUpdates[key] = value`; delete creates `customUpdates[key] = nullopt`.
+Adding a key in GTK detail or WinUI Properties compares the trimmed, NFC-normalized spelling against the captured selection. A key already present on even one target is not new. WinUI also checks live staged keys; adding a key that the draft already marked deleted restores that row rather than creating a duplicate.
+
+Runtime metadata and Properties commands reject writes to `credits` or any exact TrackField id after NFC normalization, before mutation or interning, including previews with no targets. Matching is case-sensitive and does not accept query aliases. Deleting an existing reserved custom key remains available for cleanup; it never deletes the built-in field or structured Credits.
+
+An update carries a value even when it is empty; deletion carries no value.
 An empty `changes` list is a no-op; each applied entry identifies its track and changed fields or tags.
 
 UIModel builds that delete patch and does not compute or return a custom-delete undo value.
@@ -176,6 +175,8 @@ Any intervening effective commit makes an offered session stale instead of overw
 Its result reuses `AuthoringStatus` and carries display text only when the frontend has something to report.
 Suggested tags are a presentation aid; only the final add/remove command is authoritative.
 
+Common-tag editors in WinUI and AppKit normalize additions to NFC before checking for duplicates and diffing against the baseline. Adding a tag that only some targets carry promotes it to all targets; leaving it untouched preserves partial membership. TUI keeps partial membership explicit in its [tag draft](../frontend/tui-track-authoring.md#tags-page).
+
 The library reader ranks suggestions by descending frequency, then raw NFC bytes; the CLI uses that result without a locale. With an interactive ordering policy, GTK and TUI insert the locale key between those two comparisons. Key derivation is independent per tag: GTK treats a failure on an admitted tag as an invariant violation, whereas TUI keeps the tag and sorts it with an empty key, ignoring any partial output.
 
 GTK first caps its candidate pool at 50, then excludes common tags and tags with pending edits from that pool. TUI separates all tags carried by any target from suggestions and searches the full vocabulary before applying its suggestion display cap.
@@ -188,14 +189,13 @@ policy, the UIModel helper retains name-byte order followed by `ListId`.
 
 ### Combined Properties save
 
-A Properties coordinator owns ordinary fields, tags, and Credits under one captured authoring session.
+A Properties coordinator owns ordinary fields, Credits, and any tags or custom metadata that its surface exposes under one captured authoring session.
 It permits one active Credits child; accepting that child stages the parent draft rather than writing the database.
 Sequential accepted scopes overlay one pending replacement: union masks, replace newly edited segments, and retain previously staged other segments. Full-scope acceptance replaces all staged segments.
 Reopening reads pending values where staged and the captured baseline elsewhere; child Cancel preserves prior accepted scopes and ordinary dirty fields without rereading storage.
 An active child blocks parent Save and programmatic patch submission, including when only ordinary metadata or tags are dirty.
-After the child is accepted, Save submits one composed `TrackPropertiesPatch` through the retained session.
-Runtime applies metadata, Credits, and tags in one write transaction and publishes at most one revision and changeset.
-The form closes only after that command returns `Applied` or `NoOp`; `Busy`, stale/unavailable state, and `Result` errors leave the form open or disabled according to the session state without representing either part as committed.
+Save submits the staged changes through the retained session. When the form exposes tags, it submits one composed `TrackPropertiesPatch`: runtime applies metadata, Credits, and tags in one transaction and publishes at most one revision and changeset. GTK Properties submits metadata and Credits without a tag patch; the GTK tag editor is separate.
+The form closes after a submitted `Applied` or `NoOp`. `Busy` preserves the draft for retry; a stale or unavailable session cannot retry with the same binding. A `Result` error leaves the failed draft available for inspection without representing any part as committed.
 
 ## Failure and cancellation
 
@@ -226,15 +226,9 @@ A frontend may distinguish no selection, mixed values, partial custom-key presen
 It may choose inline, form, or command interaction for ordinary scalar fields while using the same schema, codec, validation, and runtime writer authority.
 Credits always use the shared scoped list editor. GTK, TUI, WinUI, and AppKit have native controls for name/role editing, add/delete, within-kind reorder, and all-kind reclassification; their detail routes reach that editor directly or through Properties.
 
-WinUI presents one native `ContentDialog` for a captured single- or multi-track selection.
-The dialog exposes editable built-in metadata, tags common to every target, custom metadata, and read-only technical properties.
-It opens from the row context menu, an ordinary shell menu, or the window-local `Alt+Enter` accelerator; right-clicking an unselected row selects that row before opening its menu.
-Save is disabled while the draft is unchanged or invalid, remains open across `Busy` and recoverable failures, and closes only after the combined Properties submission is accepted.
-A stale session disables submission and preserves the draft. Its Reload action requires a discard decision before rebuilding the baseline and binding for the captured targets; declining keeps the draft.
-WinUI detail category/all-kind actions open Properties with the requested child scope.
-AppKit inspector **Edit Properties** opens its [native Properties workflow](../frontend/appkit-track-properties.md), including from the compact inspector sheet; it has no direct scoped Credits action in the inspector.
-Inspector display uses the [detail projection's aggregation and missing-track rules](../library/track-detail-projection.md#aggregation), while opening an editor still requires every captured target.
-Stale recovery is confirmed close and reopen, not an inline reload.
+Unstaged native input must not disappear when another field is saved. [WinUI Properties](../frontend/windows.md#commands-and-transitions) blocks Save while unadded tag or custom key/value text remains; [AppKit Properties](../frontend/appkit-track-properties.md) first attempts to finish native tag editing and keeps the draft open if it cannot. WinUI’s mixed or partially present custom rows do not seed an editable replacement.
+
+Detail views follow the [projection's aggregation and missing-track rules](../library/track-detail-projection.md#aggregation). Opening Properties still requires every captured target. Native entry points and close/reload interactions belong to the frontend workflows.
 
 Custom keys are queryable through the custom-variable syntax in the predicate language; presentation does not reinterpret or restrict that grammar.
 Locale ordering affects only suggestion and chooser position. It never changes
@@ -246,7 +240,7 @@ tag equality, matching, stored tag bytes, or mutation semantics.
 - [`TrackDetailProjection.cpp`](../../../app/runtime/projection/TrackDetailProjection.cpp) builds and observes live snapshots.
 - [`TrackFieldGrid.cpp`](../../../app/uimodel/library/detail/TrackFieldGrid.cpp) and [`TrackFieldGrid.h`](../../../app/include/ao/uimodel/library/detail/TrackFieldGrid.h) own field selection and visibility.
 - [`TrackAuthoring.h`](../../../app/include/ao/uimodel/library/track/TrackAuthoring.h) owns edit decoding, writable-field classification, patch construction, and inline mixed-value protection.
-- [`TrackPropertiesFormModel.h`](../../../app/include/ao/uimodel/library/property/TrackPropertiesFormModel.h) and [`TrackPropertiesFormSpec.h`](../../../app/include/ao/uimodel/library/property/TrackPropertiesFormSpec.h) own compact form state, all-or-none standard-field baseline loading, mixed-value policy, explicit replacement intent, editor kinds, and patch construction.
+- [`TrackPropertiesFormModel.h`](../../../app/include/ao/uimodel/library/property/TrackPropertiesFormModel.h) owns baseline and draft state, per-field replacement and clear, and patch construction. [`TrackPropertiesFormSpec.h`](../../../app/include/ao/uimodel/library/property/TrackPropertiesFormSpec.h) owns editor kinds and input decoding.
 - [`TrackCustomMetadata.cpp`](../../../app/uimodel/library/detail/TrackCustomMetadata.cpp) owns display, validation, and update/delete patches. It has no undo API.
 - [`TrackCredits.h`](../../../app/include/ao/uimodel/library/detail/TrackCredits.h) owns shared scoped list editing, typed row validation and localized messages, complete per-kind baselines, detail/summary formatting, and common-scope clear-undo eligibility. It does not own the pending offer.
 - [`TagEdit.cpp`](../../../app/uimodel/library/property/TagEdit.cpp) owns tag mutation submission and status text.
@@ -260,7 +254,7 @@ tag equality, matching, stored tag bytes, or mutation semantics.
 - Runtime projection tests under [`test/runtime/projection/`](../../../test/runtime/projection) protect aggregation and refresh.
 - [`TrackFieldGridSchemaTest.cpp`](../../../test/uimodel/library/detail/TrackFieldGridSchemaTest.cpp) and [`TrackFieldGridVisibilityTest.cpp`](../../../test/uimodel/library/detail/TrackFieldGridVisibilityTest.cpp) protect field/visibility policy.
 - [`TrackAuthoringTest.cpp`](../../../test/uimodel/library/track/TrackAuthoringTest.cpp) protects edit decoding, writable-field coverage, patch construction, and mixed-value sentinels.
-- [`TrackPropertiesFormModelTest.cpp`](../../../test/uimodel/library/property/TrackPropertiesFormModelTest.cpp) protects mixed-value omission, explicit mixed-field replacement, and common no-op omission.
+- [`TrackPropertiesFormModelTest.cpp`](../../../test/uimodel/library/property/TrackPropertiesFormModelTest.cpp) protects per-field patch behavior, including withdrawal and explicit clear.
 - [`TrackPropertiesFormBaselineTest.cpp`](../../../test/uimodel/library/property/TrackPropertiesFormBaselineTest.cpp) protects all-target validation, unchanged output on failure, ordered duplicate targets, empty and numeric-zero values, mixed aggregation, and read-only exclusion from patches.
 - [`TrackCustomMetadataTest.cpp`](../../../test/uimodel/library/detail/TrackCustomMetadataTest.cpp) protects validation, patches, and mixed values. It has no undo case.
 - [`TrackCreditsTest.cpp`](../../../test/uimodel/library/detail/TrackCreditsTest.cpp) protects scoped editing, typed validation and localized one-based row messages, complete equality, draft-change detection, mixed replacement intent, attribute preservation, and common-scope clear-undo eligibility.

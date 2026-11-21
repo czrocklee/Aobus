@@ -49,7 +49,7 @@ namespace ao::tui
   struct TrackEditorPreparation final
   {
     std::vector<TrackEditorTarget> targets{};
-    /// The aggregate baseline: common values, mixed markers, and read-only rows; empty in tags-only preparation.
+    /// Captured count and aggregate fields; tags-only preparation omits the fields, not the count.
     uimodel::TrackPropertiesFormModel baseline;
     /// Per-tag counts on the captured tracks: tag and how many tracks carry it.
     std::vector<std::pair<std::string, std::size_t>> tagCounts{};
@@ -118,7 +118,7 @@ namespace ao::tui
                           TrackEditorMode mode = TrackEditorMode::Properties,
                           TrackCreditsEditor::CompletionProvider creditCompletionProvider = {});
 
-    std::size_t targetCount() const noexcept { return _targets.size(); }
+    std::size_t targetCount() const noexcept { return _metadataEditor.targetCount(); }
     /// The captured targets, in the order they will be written.
     std::vector<TrackEditorTarget> const& targets() const noexcept { return _targets; }
     TrackEditorMode mode() const noexcept { return _mode; }
@@ -166,10 +166,12 @@ namespace ao::tui
     void cycleTab(std::int32_t delta);
     std::vector<TrackEditorTab> availableTabs() const;
     bool tryHandleConfirmationEvent(ftxui::Event const& event);
-    bool hasTracksTab() const noexcept { return _targets.size() > 1; }
+    bool tryHandleHiddenBatchClear(ftxui::Event const& event);
+    bool hasTracksTab() const noexcept { return targetCount() > 1; }
     ftxui::Element renderTabStrip() const;
     ftxui::Element renderTargetBody() const;
     ftxui::Element renderFooter() const;
+    ftxui::Element renderMetadataClearAction(std::vector<ftxui::Element>& inlineChips) const;
     ftxui::Element renderSaveSummary() const;
 
     i18n::MessageCatalog _textCatalog;

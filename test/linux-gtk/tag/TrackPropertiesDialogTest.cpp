@@ -38,6 +38,7 @@
 #include <sigc++/scoped_connection.h>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -335,7 +336,7 @@ namespace ao::gtk::test
                                           runtime.completion(),
                                           ao::test::englishMessageCatalog(),
                                           cache,
-                                          {trackId1}};
+                                          std::array{trackId1}};
       drainGtkEvents();
 
       auto const entries = collectAll<Gtk::Entry>(dialog);
@@ -356,8 +357,13 @@ namespace ao::gtk::test
     SECTION("multi-track selection marks differing fields as mixed")
     {
       auto const& textCatalog = ao::test::englishMessageCatalog();
-      auto dialog = TrackPropertiesDialog{
-        window, runtime.async(), runtime.library(), runtime.completion(), textCatalog, cache, {trackId1, trackId2}};
+      auto dialog = TrackPropertiesDialog{window,
+                                          runtime.async(),
+                                          runtime.library(),
+                                          runtime.completion(),
+                                          textCatalog,
+                                          cache,
+                                          std::array{trackId1, trackId2}};
       drainGtkEvents();
 
       CHECK(dialog.get_title() == "Properties — 2 tracks selected");
@@ -378,15 +384,37 @@ namespace ao::gtk::test
       REQUIRE(albumEntry != nullptr);
       CHECK(titleEntry->get_text().empty());
       CHECK(titleEntry->get_placeholder_text().raw() == mixedText);
-      CHECK_FALSE(titleEntry->get_sensitive());
+      CHECK(titleEntry->get_sensitive());
       CHECK(artistEntry->get_text().empty());
       CHECK(artistEntry->get_placeholder_text().raw() == mixedText);
-      CHECK_FALSE(artistEntry->get_sensitive());
+      CHECK(artistEntry->get_sensitive());
       CHECK(albumEntry->get_text() == "Album 1");
       CHECK(albumEntry->get_sensitive());
       auto* const saveButton = findButtonByLabel(dialog, "Save");
       REQUIRE(saveButton != nullptr);
       CHECK_FALSE(saveButton->get_sensitive());
+    }
+
+    SECTION("two occurrences of the same track use batch editing rules")
+    {
+      auto dialog = TrackPropertiesDialog{window,
+                                          runtime.async(),
+                                          runtime.library(),
+                                          runtime.completion(),
+                                          ao::test::englishMessageCatalog(),
+                                          cache,
+                                          std::array{trackId1, trackId1}};
+      CHECK(dialog.get_title() == "Properties — 2 tracks selected");
+      auto* const title = findEntryForLabel(dialog, "Title");
+      auto* const save = findButtonByLabel(dialog, "Save");
+      auto* const clear = findButtonByLabel(dialog, "Clear Title for 2 tracks");
+      REQUIRE(title != nullptr);
+      REQUIRE(save != nullptr);
+      REQUIRE(clear != nullptr);
+      title->set_text("");
+      CHECK_FALSE(save->get_sensitive());
+      emitClicked(*clear);
+      CHECK(save->get_sensitive());
     }
 
     SECTION("an incomplete selection shows no partial writable baseline")
@@ -399,6 +427,8 @@ namespace ao::gtk::test
                                           ao::test::englishMessageCatalog(),
                                           cache,
                                           targetIds};
+      CHECK(dialog.get_title() == (targetIds.size() == 1 ? "Properties" : "Properties — 2 tracks selected"));
+      CHECK(findButtonByLabel(dialog, "Clear Title for 2 tracks") == nullptr);
 
       auto const labels = collectAll<Gtk::Label>(dialog);
       auto const errorLabelIter = std::ranges::find_if(
@@ -418,6 +448,182 @@ namespace ao::gtk::test
     }
   }
 
+  TEST_CASE("TrackPropertiesDialog - batch scalar actions preserve, replace or clear both bound tracks")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto ids = std::vector<TrackId>{};
+    auto fixture = GtkRuntimeFixture{[&](library::MusicLibrary& storage)
+                                     {
+                                       ids.push_back(library::test::addTrackWithUniqueFixtureUri(
+                                         storage, {.album = "First", .genre = "Jazz", .year = 1960}));
+                                       ids.push_back(library::test::addTrackWithUniqueFixtureUri(
+                                         storage, {.album = "Second", .genre = "Jazz", .year = 1970}));
+                                     }};
+    auto& runtime = fixture.runtime();
+    auto const& catalog = ao::test::englishMessageCatalog();
+    auto cache = TrackRowCache{runtime.library(), catalog};
+    auto parent = Gtk::Window{};
+    auto dialog =
+      TrackPropertiesDialog{parent, runtime.async(), runtime.library(), runtime.completion(), catalog, cache, ids};
+    dialog.present();
+    drainGtkEvents();
+    using i18n::MessageId;
+    auto const fieldLabel = [&](MessageId id) { return std::string{i18n::requiredText(catalog, id)}; };
+    auto const clearLabel = [&](MessageId id)
+    {
+      return i18n::requiredFormat(
+        catalog, MessageId::TrackClearFieldForTracks, {{"field", fieldLabel(id)}, {"count", 2}});
+    };
+    auto* const save = findButtonByLabel(dialog, fieldLabel(MessageId::GtkCommonSave));
+    auto* const album = findEntryForLabel(dialog, fieldLabel(MessageId::TrackFieldAlbum));
+    auto* const genre = findEntryForLabel(dialog, fieldLabel(MessageId::TrackFieldGenre));
+    REQUIRE(save != nullptr);
+    REQUIRE(album != nullptr);
+    REQUIRE(genre != nullptr);
+    auto checkTracks = [&](std::string_view firstAlbum, std::string_view secondAlbum, std::string_view expectedGenre)
+    {
+      auto const first = rt::test::runtimeTrackSpec(runtime, ids.front());
+      auto const second = rt::test::runtimeTrackSpec(runtime, ids.back());
+      CHECK(first.album == firstAlbum);
+      CHECK(second.album == secondAlbum);
+      CHECK(first.genre == expectedGenre);
+      CHECK(second.genre == expectedGenre);
+      CHECK(first.year == 1960);
+      CHECK(second.year == 1970);
+    };
+    auto saveAndWait = [&]
+    {
+      REQUIRE(save->is_sensitive());
+      emitClicked(*save);
+      REQUIRE(tryPumpGtkEventsUntil([&dialog] { return !dialog.get_visible(); }));
+    };
+
+    SECTION("opening and submitting an untouched form does not copy the first album or the marker")
+    {
+      CHECK_FALSE(save->is_sensitive());
+      CHECK(findButtonByLabel(dialog, clearLabel(MessageId::TrackFieldFilePath)) == nullptr);
+      CHECK(findButtonByLabel(dialog, clearLabel(MessageId::TrackFieldConductor)) == nullptr);
+      dialog.response(Gtk::ResponseType::OK);
+      REQUIRE(tryPumpGtkEventsUntil([&dialog] { return !dialog.get_visible(); }));
+      checkTracks("First", "Second", "Jazz");
+    }
+
+    SECTION("editing a different field preserves both albums")
+    {
+      genre->set_text("Classical");
+      saveAndWait();
+      checkTracks("First", "Second", "Classical");
+    }
+
+    SECTION("a mixed album can be replaced without writing before Save")
+    {
+      REQUIRE(album->is_sensitive());
+      REQUIRE(album->get_editable());
+      album->set_text("Together");
+      checkTracks("First", "Second", "Jazz");
+      saveAndWait();
+      checkTracks("Together", "Together", "Jazz");
+    }
+
+    SECTION("erasing mixed and common replacements restores both baselines")
+    {
+      album->set_text("Temporary");
+      album->set_text("");
+      genre->set_text("Temporary");
+      genre->set_text("");
+      CHECK_FALSE(save->is_sensitive());
+      auto* const title = findEntryForLabel(dialog, fieldLabel(MessageId::TrackFieldTitle));
+      REQUIRE(title != nullptr);
+      title->set_text("Renamed");
+      saveAndWait();
+      checkTracks("First", "Second", "Jazz");
+    }
+
+    SECTION("invalid batch numeric text cannot be clamped and written")
+    {
+      genre->set_text("Classical");
+      auto* const year = findEntryForLabel(dialog, fieldLabel(MessageId::TrackFieldYear));
+      REQUIRE(year != nullptr);
+      year->set_text("65536");
+      genre->grab_focus();
+      CHECK_FALSE(save->is_sensitive());
+      dialog.response(Gtk::ResponseType::OK);
+      drainGtkEvents();
+      REQUIRE(dialog.get_visible());
+      checkTracks("First", "Second", "Jazz");
+      year->set_text("");
+      saveAndWait();
+      checkTracks("First", "Second", "Classical");
+    }
+
+    SECTION("leaving a withdrawn numeric draft displays its baseline instead of zero")
+    {
+      auto* const year = findEntryForLabel(dialog, fieldLabel(MessageId::TrackFieldYear));
+      auto* const disc = findEntryForLabel(dialog, fieldLabel(MessageId::TrackFieldDiscNumber));
+      REQUIRE(year != nullptr);
+      REQUIRE(disc != nullptr);
+      REQUIRE(year->grab_focus());
+      year->set_text("0");
+      CHECK(year->get_text() == "0");
+      year->set_text("02003");
+      REQUIRE(disc->grab_focus());
+      CHECK(year->get_text() == "02003");
+      CHECK(save->is_sensitive());
+      disc->set_text("0");
+      REQUIRE(year->grab_focus());
+      CHECK(disc->get_text().empty());
+      CHECK(disc->get_placeholder_text() == "1");
+      year->set_text("00");
+      REQUIRE(genre->grab_focus());
+      CHECK(year->get_text().empty());
+      CHECK(year->get_placeholder_text().raw() == fieldLabel(MessageId::TrackMultipleValues));
+      CHECK_FALSE(save->is_sensitive());
+      genre->set_text("Classical");
+      saveAndWait();
+      checkTracks("First", "Second", "Classical");
+      CHECK(rt::test::runtimeTrackSpec(runtime, ids.front()).discNumber == 1);
+      CHECK(rt::test::runtimeTrackSpec(runtime, ids.back()).discNumber == 1);
+    }
+
+    SECTION("explicitly clearing a named field on two tracks is a staged action")
+    {
+      auto const label = clearLabel(MessageId::TrackFieldAlbum);
+      auto* const clear = findButtonByLabel(dialog, label);
+      REQUIRE(clear != nullptr);
+      CHECK(hasAccessibleLabel(*clear, label));
+      REQUIRE(clear->is_sensitive());
+      REQUIRE(clear->get_visible());
+      album->set_text("Draft");
+      emitClicked(*clear);
+      REQUIRE(save->is_sensitive());
+      checkTracks("First", "Second", "Jazz");
+
+      SECTION("cancel keeps both originals")
+      {
+        dialog.response(Gtk::ResponseType::CANCEL);
+        REQUIRE(tryPumpGtkEventsUntil([&dialog] { return !dialog.get_visible(); }));
+        checkTracks("First", "Second", "Jazz");
+      }
+
+      SECTION("unchecking Clear withdraws the old replacement as well as the clear")
+      {
+        emitClicked(*clear);
+        CHECK(album->get_editable());
+        CHECK(album->get_text().empty());
+        CHECK_FALSE(save->is_sensitive());
+        genre->set_text("Classical");
+        saveAndWait();
+        checkTracks("First", "Second", "Classical");
+      }
+
+      SECTION("save clears both originals")
+      {
+        saveAndWait();
+        checkTracks("", "", "Jazz");
+      }
+    }
+  }
+
   TEST_CASE("TrackPropertiesDialog - keeps a presented draft until save settlement", "[concurrency]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
@@ -433,17 +639,18 @@ namespace ao::gtk::test
 
     REQUIRE(trackId != kInvalidTrackId);
 
+    auto dialog = TrackPropertiesDialog{window,
+                                        runtime.async(),
+                                        runtime.library(),
+                                        runtime.completion(),
+                                        ao::test::englishMessageCatalog(),
+                                        cache,
+                                        std::array{trackId}};
+    dialog.present();
+    drainGtkEvents();
+
     SECTION("accepted save keeps the exact pending draft and closes only after readback is committed")
     {
-      auto dialog = TrackPropertiesDialog{window,
-                                          runtime.async(),
-                                          runtime.library(),
-                                          runtime.completion(),
-                                          ao::test::englishMessageCatalog(),
-                                          cache,
-                                          {trackId}};
-      dialog.present();
-      drainGtkEvents();
       REQUIRE(dialog.get_visible());
 
       auto* const titleEntry = findEntryByText(dialog, "Before save");
@@ -495,16 +702,6 @@ namespace ao::gtk::test
 
     SECTION("repeated Save preserves the admitted draft without starting another submission")
     {
-      auto dialog = TrackPropertiesDialog{window,
-                                          runtime.async(),
-                                          runtime.library(),
-                                          runtime.completion(),
-                                          ao::test::englishMessageCatalog(),
-                                          cache,
-                                          {trackId}};
-      dialog.present();
-      drainGtkEvents();
-
       auto* const titleEntry = findEntryByText(dialog, "Before save");
       auto* const saveButton = findButtonByLabel(dialog, "Save");
       REQUIRE(titleEntry != nullptr);
@@ -536,16 +733,6 @@ namespace ao::gtk::test
 
     SECTION("stale settlement keeps the exact submitted draft open with its error")
     {
-      auto dialog = TrackPropertiesDialog{window,
-                                          runtime.async(),
-                                          runtime.library(),
-                                          runtime.completion(),
-                                          ao::test::englishMessageCatalog(),
-                                          cache,
-                                          {trackId}};
-      dialog.present();
-      drainGtkEvents();
-
       auto* const titleEntry = findEntryByText(dialog, "Before save");
       auto* const saveButton = findButtonByLabel(dialog, "Save");
       REQUIRE(titleEntry != nullptr);

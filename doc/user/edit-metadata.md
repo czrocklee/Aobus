@@ -10,6 +10,18 @@ The selected tracks contain the intended metadata and tags, and lists, searches,
 
 ## Steps
 
+### Change a field on several tracks
+
+Select several tracks and open **Properties**. To give them the same album, type its name in **Album**, even if the field shows `<Multiple Values>`. Leave the field alone, or erase the replacement before saving, to keep each track's original album. Erase every character: spaces count as text and will replace the selected albums.
+
+To remove the album from every selected track instead, use the field's clear action:
+
+- **GTK or Windows:** Turn on **Clear Album for 3 tracks** (the count matches your selection). Turn it off to keep the original albums.
+- **macOS:** Open the field's actions menu and choose the clear action. Choose **Restore Original Values** to keep the original albums.
+- **TUI:** Focus **Album** and press Ctrl+D to clear or Ctrl+G to restore.
+
+On macOS and in the TUI, typing after Clear replaces it. If you then erase that text, each track keeps its original album. Restoring one field leaves your other edits intact. Save to apply the draft, or cancel to discard it. Read-only audio properties cannot be cleared.
+
 ### Edit from the GTK detail surface
 
 1. Select one track, or select several tracks for a shared edit.
@@ -33,12 +45,12 @@ Differences outside the cleared scope do not prevent **Undo**.
 
 1. Select one or more track rows.
 2. Right-click a row and choose **Properties...**, choose **More > Properties...** in Modern, choose **View > Properties...** in Classic, or press `Alt+Enter`.
-3. Edit ordinary built-in fields that have one value across the selection.
-   `<Multiple Values>` identifies a field whose selected tracks disagree; it is not written back as metadata.
+3. Edit the writable built-in fields you want to replace across the selection.
    To edit names and optional roles, choose a category button such as **Credits scope: Conductor**. Its kind is fixed; choose **Credits scope: All credit kinds** to change kinds. The details pane can open **Properties** directly at a scope.
 4. Add or remove tags, and add, edit, or delete custom metadata.
    The tag list starts with the tags shared by all the tracks selected when you opened **Properties**.
    When you save, custom metadata changes apply to all of those tracks, even if the selection changes afterward.
+   If **Save** is disabled because you have unfinished text in the tag, new key, or new value box, choose **Add** or erase that input. You do not need to discard your other edits.
 5. Review the read-only **Audio Properties**, then choose **Save**.
    **Save** becomes available only after a valid change, and saving closes the dialog only after the library accepts the change.
 

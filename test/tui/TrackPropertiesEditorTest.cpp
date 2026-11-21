@@ -5,10 +5,13 @@
 
 #include "RenderTestSupport.h"
 #include "TrackPropertiesEditorTestSupport.h"
+#include "test/MessageCatalogTestSupport.h"
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/library/RecordingDate.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <ftxui/component/event.hpp>
+#include <ftxui/component/mouse.hpp>
 
 #include <cstddef>
 #include <cstdint>
@@ -180,6 +183,17 @@ namespace ao::tui::test
       CHECK_FALSE(typed.contains("Clear for all 2 tracks"));
     }
 
+    SECTION("Erasing a replacement does not reactivate the clear")
+    {
+      typeText(editor, "x");
+      editor.tryHandleEvent(ftxui::Event::Backspace);
+
+      CHECK_FALSE(editor.isDirty());
+      CHECK_FALSE(editor.canApply());
+      CHECK_FALSE(editor.buildPatch().metadata.optTitle);
+      CHECK(frame(editor).contains("<Multiple Values>"));
+    }
+
     SECTION("Restoring returns the row to the aggregate baseline")
     {
       typeText(editor, "New");
@@ -216,6 +230,40 @@ namespace ao::tui::test
     CHECK(restored.contains("Kind of Blue"));
   }
 
+  TEST_CASE("TrackPropertiesEditor - the batch clear chip names and clears only the focused scalar")
+  {
+    auto editor = makeEditor({
+      TrackFixture{.title = "So What", .album = "Kind of Blue"},
+      TrackFixture{.title = "Blue in Green", .album = "Kind of Blue"},
+    });
+    auto const& textCatalog = ao::test::englishMessageCatalog();
+    auto const clearChip = [&](std::string_view const field)
+    {
+      return "Ctrl-D " + i18n::requiredFormat(
+                           textCatalog, i18n::MessageId::TrackClearFieldForTracks, {{"field", field}, {"count", 2}});
+    };
+
+    focusRow(editor, "Title");
+    CHECK(frame(editor).contains(clearChip("Title")));
+
+    focusRow(editor, "Album");
+    auto const rendered = renderElement(editor.render(), kTerminalColumns, kTerminalRows);
+    REQUIRE(rendered.text.contains(clearChip("Album")));
+    auto const optChip = findTextCells(rendered.screen, "Ctrl-D");
+    REQUIRE(optChip);
+    CHECK_FALSE(rendered.text.contains(clearChip("Title")));
+
+    editor.tryHandleEvent(ftxui::Event::Mouse(
+      "",
+      ftxui::Mouse{
+        .button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = optChip->x_min, .y = optChip->y_min}));
+    CHECK(editor.buildPatch().metadata.optAlbum == "");
+    CHECK_FALSE(editor.buildPatch().metadata.optTitle);
+
+    focusRow(editor, "Conductor");
+    CHECK_FALSE(frame(editor).contains("Ctrl-D"));
+  }
+
   TEST_CASE("TrackPropertiesEditor - reports an included number it cannot parse")
   {
     auto editor = makeEditor({TrackFixture{.title = "So What", .album = "Kind of Blue", .year = 1959}});
@@ -225,15 +273,16 @@ namespace ao::tui::test
     editor.tryHandleEvent(ftxui::Event::Backspace);
     typeText(editor, "0x");
 
+    auto const hint = i18n::requiredText(ao::test::englishMessageCatalog(), i18n::MessageId::TrackNumberInvalid);
     CHECK(editor.isDirty());
-    CHECK(frame(editor).contains("Whole number required"));
+    CHECK(frame(editor).contains(hint));
 
     SECTION("Removing the bad character clears the error and keeps the intent")
     {
       editor.tryHandleEvent(ftxui::Event::Backspace);
 
       CHECK(editor.isDirty());
-      CHECK_FALSE(frame(editor).contains("Whole number required"));
+      CHECK_FALSE(frame(editor).contains(hint));
     }
   }
 
@@ -533,8 +582,9 @@ namespace ao::tui::test
       REQUIRE(editor.isDirty());
       CHECK_FALSE(editor.canApply());
       auto const text = frame(editor);
-      CHECK(text.contains("Enter YYYY"));
-      CHECK_FALSE(text.contains("Whole number required"));
+      CHECK(text.contains("YYYY-MM"));
+      CHECK_FALSE(
+        text.contains(i18n::requiredText(ao::test::englishMessageCatalog(), i18n::MessageId::TrackNumberInvalid)));
 
       editor.tryHandleEvent(applyEvent());
       CHECK(editor.takeRequest() == TrackEditorRequest::None);

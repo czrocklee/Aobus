@@ -5,11 +5,11 @@
 
 #include "app/AppDialog.h"
 #include "app/FormBuilder.h"
+#include "common/AccessibleLabel.h"
 #include "common/UiWorkflow.h"
 #include "completion/EntryCompletionController.h"
 #include "i18n/GtkText.h"
 #include "layout/LayoutConstants.h"
-#include "track/TrackFieldUi.h"
 #include "track/TrackRowCache.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -22,6 +22,7 @@
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
+#include <ao/uimodel/library/property/TrackPropertiesPreparation.h>
 #include <ao/uimodel/library/track/TrackAuthoring.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 
@@ -32,11 +33,13 @@
 #include <gtkmm/editable.h>
 #include <gtkmm/entry.h>
 #include <gtkmm/enums.h>
+#include <gtkmm/eventcontrollerfocus.h>
 #include <gtkmm/label.h>
 #include <gtkmm/notebook.h>
 #include <gtkmm/object.h>
 #include <gtkmm/scrolledwindow.h>
 #include <gtkmm/spinbutton.h>
+#include <gtkmm/togglebutton.h>
 #include <gtkmm/widget.h>
 #include <pangomm/layout.h>
 #include <sigc++/adaptors/track_obj.h>
@@ -46,10 +49,10 @@
 #include <cstdint>
 #include <expected>
 #include <memory>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
-#include <vector>
 
 namespace ao::gtk
 {
@@ -66,6 +69,24 @@ namespace ao::gtk
     constexpr int kMinScrollContentWidth = 480;
     constexpr int kMaxScrollContentWidth = 640;
     constexpr int kMaxScrollContentHeight = 520;
+
+    void revealWithdrawnInputPlaceholder(Gtk::Entry& entry, uimodel::TrackPropertiesFormEditorKind const kind)
+    {
+      auto const text = entry.get_text().raw();
+
+      if (text.empty() || !entry.get_editable())
+      {
+        return;
+      }
+
+      // Zero (including a partial leading zero while typing) withdraws a batch number.
+      // Wait for focus to leave before showing the baseline placeholder again.
+      if (auto const inputRes = uimodel::parseTrackPropertiesFieldInput(kind, text);
+          inputRes && uimodel::isEmptyTrackFieldEdit(*inputRes))
+      {
+        entry.set_text("");
+      }
+    }
   } // namespace
 
   TrackPropertiesDialog::TrackPropertiesDialog(Gtk::Window& parent,
@@ -74,22 +95,23 @@ namespace ao::gtk
                                                rt::CompletionService& completion,
                                                i18n::MessageCatalog textCatalog,
                                                TrackRowCache& rowCache,
-                                               std::vector<TrackId> trackIds)
+                                               std::span<TrackId const> const trackIds)
     : AppDialog{}
     , _library{library}
     , _asyncRuntime{asyncRuntime}
     , _completion{completion}
     , _textCatalog{std::move(textCatalog)}
     , _rowCache{rowCache}
-    , _trackIds{std::move(trackIds)}
-    , _multipleTracks{_trackIds.size() > 1}
     , _formModel{_textCatalog}
     , _formSpec{uimodel::buildTrackPropertiesFormSpec(_textCatalog)}
     , _creditsEditor{_completion, _textCatalog, _formModel, [this] { updateSaveEnabled(); }}
   {
+    auto const prepareRes = prepareEditing(trackIds);
+    // A failed open still identifies the requested selection, but offers no batch edit actions.
+    auto const titleCount = prepareRes ? _formModel.targetCount() : trackIds.size();
     auto const title =
-      _multipleTracks
-        ? i18n::requiredFormat(_textCatalog, MessageId::GtkTrackPropertiesSelectedTitle, {{"count", _trackIds.size()}})
+      titleCount > 1
+        ? i18n::requiredFormat(_textCatalog, MessageId::GtkTrackPropertiesSelectedTitle, {{"count", titleCount}})
         : gtkText(_textCatalog, MessageId::GtkTrackPropertiesTitle);
 
     set_title(title);
@@ -98,16 +120,15 @@ namespace ao::gtk
 
     buildUi();
 
-    if (auto const prepareRes = prepareEditing(); !prepareRes)
+    if (prepareRes)
+    {
+      applyLoadedFields();
+    }
+    else
     {
       _sessionErrorLabel.set_text(i18n::requiredFormat(
         _textCatalog, MessageId::GtkTrackEditingUnavailable, {{"detail", prepareRes.error().message}}));
       _sessionErrorLabel.set_visible(true);
-
-      for (auto const& editor : _editors)
-      {
-        editor.widget->set_sensitive(false);
-      }
     }
 
     updateEditorSensitivity();
@@ -199,16 +220,40 @@ namespace ao::gtk
     for (auto const& row : _formSpec.metadataRows)
     {
       // The Credits surface owns these scoped previews and their edit actions.
-      if (row.field == rt::TrackField::Conductor || row.field == rt::TrackField::Ensemble ||
-          row.field == rt::TrackField::Soloist)
+      if (rt::creditKindForTrackField(row.field))
       {
         continue;
       }
 
       auto* const widget = createEditorWidget(row.field, row.editorKind);
-      list->addRow(std::string{row.label}, *widget);
+      setAccessibleLabel(*widget, row.label);
+      auto editor = FieldEditor{.field = row.field, .widget = widget, .kind = row.editorKind};
 
-      _editors.push_back(FieldEditor{.field = row.field, .widget = widget});
+      if (_formModel.targetCount() > 1 && row.editorKind != uimodel::TrackPropertiesFormEditorKind::ReadonlyText)
+      {
+        auto* const controls = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, layout::kSpacingSmall);
+        controls->append(*widget);
+        auto const clearLabel = i18n::requiredFormat(_textCatalog,
+                                                     MessageId::TrackClearFieldForTracks,
+                                                     {{"field", row.label}, {"count", _formModel.targetCount()}});
+        editor.clearButton = Gtk::make_managed<Gtk::ToggleButton>(clearLabel);
+
+        if (auto* const label = dynamic_cast<Gtk::Label*>(editor.clearButton->get_child()); label != nullptr)
+        {
+          label->set_wrap(true);
+          label->set_wrap_mode(Pango::WrapMode::WORD_CHAR);
+        }
+
+        setAccessibleLabel(*editor.clearButton, clearLabel);
+        controls->append(*editor.clearButton);
+        list->addRow(row.label, *controls);
+      }
+      else
+      {
+        list->addRow(row.label, *widget);
+      }
+
+      _editors.push_back(editor);
     }
 
     _metadataBox.append(*list);
@@ -248,7 +293,12 @@ namespace ao::gtk
   Gtk::Widget* TrackPropertiesDialog::createEditorWidget(rt::TrackField field,
                                                          uimodel::TrackPropertiesFormEditorKind editorKind)
   {
-    if (editorKind == uimodel::TrackPropertiesFormEditorKind::Number)
+    if (editorKind == uimodel::TrackPropertiesFormEditorKind::ReadonlyText)
+    {
+      return createReadonlyWidget(field);
+    }
+
+    if (editorKind == uimodel::TrackPropertiesFormEditorKind::Number && _formModel.targetCount() == 1)
     {
       auto* const spin = Gtk::make_managed<Gtk::SpinButton>();
       spin->set_range(kSpinMin, kSpinMax);
@@ -256,13 +306,17 @@ namespace ao::gtk
       spin->set_numeric(true);
       spin->set_digits(kSpinDigits);
       spin->set_hexpand(true);
-      spin->signal_value_changed().connect([this, field, spin] { updateEditorValue(field, spin); });
       return spin;
     }
 
     auto* const entry = Gtk::make_managed<Gtk::Entry>();
     entry->set_hexpand(true);
-    entry->signal_changed().connect([this, field, entry] { updateEditorValue(field, entry); });
+
+    if (editorKind == uimodel::TrackPropertiesFormEditorKind::Number)
+    {
+      // Batch input must retain empty and out-of-range drafts across focus changes, not clamp them.
+      entry->set_input_purpose(Gtk::InputPurpose::DIGITS);
+    }
 
     if (rt::supportsTrackFieldValueCompletion(field))
     {
@@ -287,25 +341,13 @@ namespace ao::gtk
     return label;
   }
 
-  Result<> TrackPropertiesDialog::prepareEditing()
+  Result<> TrackPropertiesDialog::prepareEditing(std::span<TrackId const> const trackIds)
   {
     auto baseline = uimodel::TrackPropertiesFormModel{_textCatalog};
     auto sessionRes = [&] -> Result<uimodel::TrackAuthoringSession>
     {
       auto snapshot = _library.snapshot();
-      auto boundRes = uimodel::TrackAuthoringSession::begin(_library, _trackIds, snapshot);
-
-      if (!boundRes)
-      {
-        return std::unexpected{boundRes.error()};
-      }
-
-      if (auto res = uimodel::loadTrackPropertiesFormBaseline(snapshot, _trackIds, _formSpec, baseline); !res)
-      {
-        return std::unexpected{res.error()};
-      }
-
-      return std::move(*boundRes);
+      return uimodel::prepareTrackProperties(_library, snapshot, trackIds, _formSpec, baseline);
     }();
 
     if (!sessionRes)
@@ -330,7 +372,6 @@ namespace ao::gtk
     _optEditSession.emplace(std::move(session));
     _editSessionInvalidatedSubscription = std::move(invalidatedSub);
     _formModel = std::move(baseline);
-    applyLoadedFields();
     return {};
   }
 
@@ -341,6 +382,8 @@ namespace ao::gtk
     for (auto& editor : _editors)
     {
       applyRowView(editor.widget, _formModel.rowView(editor.field));
+      // Only input after hydration can stage a field edit.
+      bindEditor(editor);
     }
 
     for (auto& row : _readonlyRows)
@@ -364,34 +407,21 @@ namespace ao::gtk
 
       _propertiesBox.append(*list);
     }
-
-    updateEditorSensitivity();
-    updateSaveEnabled();
   }
 
   void TrackPropertiesDialog::handleSaveClicked()
   {
-    if (_interactionState != InteractionState::Editing || _trackIds.empty() || _formModel.creditsEditor().isEditing())
+    if (_interactionState != InteractionState::Editing || !_optEditSession || _formModel.creditsEditor().isEditing())
     {
       return;
     }
 
-    for (auto const& editor : _editors)
-    {
-      updateEditorValue(editor.field, editor.widget);
-    }
-
-    if (_hasInvalidRecordingDate)
+    if (hasInvalidInput())
     {
       return;
     }
 
     auto const patch = _formModel.buildPatch();
-
-    if (!_optEditSession)
-    {
-      return;
-    }
 
     auto submission = _optEditSession->submitMetadataAsync(std::move(patch));
     setInteractionState(InteractionState::Submitting);
@@ -522,7 +552,14 @@ namespace ao::gtk
     for (auto const& editor : _editors)
     {
       auto const view = _formModel.rowView(editor.field);
-      auto const canEdit = sessionCanEdit && interactionCanEdit && view.editable && !view.mixed;
+      auto const writable = sessionCanEdit && interactionCanEdit && view.editable;
+
+      if (editor.clearButton != nullptr)
+      {
+        editor.clearButton->set_sensitive(writable);
+      }
+
+      auto const canEdit = writable && (editor.clearButton == nullptr || !editor.clearButton->get_active());
       editor.widget->set_sensitive(canEdit);
 
       if (auto* const editable = dynamic_cast<Gtk::Editable*>(editor.widget); editable != nullptr)
@@ -539,67 +576,121 @@ namespace ao::gtk
     {
       auto const sessionCanSave = _optEditSession && _optEditSession->isCurrent();
       _saveButton->set_sensitive(_interactionState == InteractionState::Editing && sessionCanSave &&
-                                 !_hasInvalidRecordingDate && _formModel.canSave());
+                                 !hasInvalidInput() && _formModel.canSave());
     }
   }
 
-  void TrackPropertiesDialog::updateEditorValue(rt::TrackField field, Gtk::Widget* widget)
+  bool TrackPropertiesDialog::hasInvalidInput() const
   {
-    if (_interactionState != InteractionState::Editing)
+    return std::ranges::any_of(_editors, &FieldEditor::invalid);
+  }
+
+  void TrackPropertiesDialog::bindEditor(FieldEditor& editor)
+  {
+    if (auto* const entry = dynamic_cast<Gtk::Entry*>(editor.widget); entry != nullptr)
+    {
+      _editorConnections.emplace_back(
+        entry->signal_changed().connect([this, &editor, entry] { updateEntryValue(editor, *entry); }));
+
+      if (_formModel.targetCount() > 1 && editor.kind != uimodel::TrackPropertiesFormEditorKind::Text)
+      {
+        auto focusPtr = Gtk::EventControllerFocus::create();
+        _editorConnections.emplace_back(focusPtr->signal_leave().connect(
+          [this, entry, kind = editor.kind]
+          {
+            if (_interactionState == InteractionState::Editing)
+            {
+              revealWithdrawnInputPlaceholder(*entry, kind);
+            }
+          }));
+        entry->add_controller(focusPtr);
+      }
+
+      if (editor.clearButton != nullptr)
+      {
+        _editorConnections.emplace_back(
+          editor.clearButton->signal_toggled().connect([this, &editor, entry] { toggleFieldClear(editor, *entry); }));
+      }
+    }
+    else if (auto* const spin = dynamic_cast<Gtk::SpinButton*>(editor.widget); spin != nullptr)
+    {
+      _editorConnections.emplace_back(spin->signal_value_changed().connect(
+        [this, &editor, spin]
+        {
+          if (_interactionState == InteractionState::Editing && spin->get_editable())
+          {
+            _formModel.setFieldInput(editor.field, static_cast<std::uint16_t>(spin->get_value_as_int()));
+            updateSaveEnabled();
+          }
+        }));
+    }
+  }
+
+  void TrackPropertiesDialog::updateEntryValue(FieldEditor& editor, Gtk::Entry& entry)
+  {
+    if (_interactionState != InteractionState::Editing || !entry.get_editable())
     {
       return;
     }
 
-    if (auto* const entry = dynamic_cast<Gtk::Entry*>(widget); entry != nullptr)
+    auto const text = entry.get_text().raw();
+    auto inputRes = uimodel::parseTrackPropertiesFieldInput(editor.kind, text);
+    editor.invalid = !inputRes;
+
+    if (inputRes)
     {
-      if (field == rt::TrackField::RecordingDate)
-      {
-        // Mixed properties remain unchanged; their placeholder is not date input.
-        if (_formModel.rowView(field).mixed)
-        {
-          return;
-        }
+      entry.remove_css_class("error");
+      entry.set_tooltip_text("");
+      _formModel.setFieldInput(editor.field, std::move(*inputRes));
+    }
+    else
+    {
+      entry.add_css_class("error");
+      entry.set_tooltip_text(std::string{uimodel::trackPropertiesInputHint(_textCatalog, editor.kind)});
+      _formModel.restoreFieldEdit(editor.field);
+    }
 
-        auto dateRes = uimodel::parseRecordingDateEditValue(entry->get_text().raw());
-        _hasInvalidRecordingDate = !dateRes;
+    updateSaveEnabled();
+  }
 
-        if (dateRes)
-        {
-          entry->remove_css_class("error");
-          entry->set_tooltip_text("");
-          _formModel.setEditValue(field, std::move(*dateRes));
-        }
-        else
-        {
-          entry->add_css_class("error");
-          entry->set_tooltip_text(gtkText(_textCatalog, MessageId::TrackRecordingDateInvalid));
-          _formModel.setEditValue(field, uimodel::makeTextEditValue(entry->get_text().raw()));
-        }
-      }
-      else
-      {
-        _formModel.setEditValue(field, uimodel::makeTextEditValue(entry->get_text().raw()));
-      }
-
-      updateSaveEnabled();
+  void TrackPropertiesDialog::toggleFieldClear(FieldEditor& editor, Gtk::Entry& entry)
+  {
+    if (_interactionState != InteractionState::Editing || !editor.clearButton->get_sensitive())
+    {
       return;
     }
 
-    if (auto* const spin = dynamic_cast<Gtk::SpinButton*>(widget); spin != nullptr)
+    if (editor.clearButton->get_active())
     {
-      _formModel.setEditValue(
-        field,
-        TrackFieldEditValue{std::in_place_type<std::uint16_t>, static_cast<std::uint16_t>(spin->get_value_as_int())});
-      updateSaveEnabled();
+      updateEditorSensitivity();
+      editor.invalid = false;
+      entry.remove_css_class("error");
+      entry.set_tooltip_text("");
+      entry.set_placeholder_text("");
+      setWidgetValue(&entry, "");
+      _formModel.clearFieldEdit(editor.field);
     }
+    else
+    {
+      _formModel.restoreFieldEdit(editor.field);
+      applyRowView(&entry, _formModel.rowView(editor.field));
+      updateEditorSensitivity();
+    }
+
+    updateSaveEnabled();
   }
 
   void TrackPropertiesDialog::applyRowView(Gtk::Widget* widget, uimodel::TrackPropertiesFormRowView const& view)
   {
-    if (view.mixed)
+    if (_formModel.targetCount() > 1)
     {
-      setEditorMixed(widget, view.text);
-      return;
+      if (auto* const entry = dynamic_cast<Gtk::Entry*>(widget); entry != nullptr)
+      {
+        // Empty ordinary input preserves the baseline; only a checked clear action removes it.
+        entry->set_placeholder_text(view.text);
+        setWidgetValue(entry, view.mixed ? std::string_view{} : std::string_view{view.text});
+        return;
+      }
     }
 
     setWidgetValue(widget, view.text);
@@ -638,29 +729,6 @@ namespace ao::gtk
     if (auto* const label = dynamic_cast<Gtk::Label*>(widget); label != nullptr)
     {
       label->set_text(std::string{value});
-    }
-  }
-
-  void TrackPropertiesDialog::setEditorMixed(Gtk::Widget* widget, std::string_view const text)
-  {
-    widget->set_sensitive(false);
-
-    if (auto* const entry = dynamic_cast<Gtk::Entry*>(widget); entry != nullptr)
-    {
-      entry->set_text("");
-      entry->set_placeholder_text(std::string{text});
-      return;
-    }
-
-    if (auto* const spin = dynamic_cast<Gtk::SpinButton*>(widget); spin != nullptr)
-    {
-      spin->set_value(0.0);
-      return;
-    }
-
-    if (auto* const label = dynamic_cast<Gtk::Label*>(widget); label != nullptr)
-    {
-      label->set_text(std::string{text});
     }
   }
 } // namespace ao::gtk
