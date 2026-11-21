@@ -19,6 +19,10 @@ Your library reflects the supported audio files beneath its root, and frequently
 A scan adds new supported files, refreshes technical properties for changed files, reconnects recognized moves when identity is available, and records which files are missing.
 Curated library metadata remains authoritative after initial import; rescanning a changed file does not replace those edits with file tags.
 
+For a filename rename that changes only ASCII letter case, the scan can detect a spelling change by confirming that both names refer to the same file.
+If neither spelling yields a stable file ID, the scan can instead report a move: only the new name may be listed among those spellings, both lookups must reach regular files without redirection, and the audio fingerprint must uniquely match the missing library entry to the new file.
+A pending fingerprint, conflicting name, or ambiguous match does not qualify for this fallback.
+
 ### Disc images and CUE sheets
 
 A UTF-8 `.cue` file beside a FLAC or WAV of the same name splits that file into one track per CUE audio track.
@@ -42,6 +46,8 @@ The [CUE sheet reference](../reference/media/cue-sheet.md) defines the accepted 
 
 Windows applies scan changes together. A failed scan leaves the same folder open for retry. If another scan is already running, wait for its result before requesting the next scan; a second request is not queued.
 
+If a case-only rename reports `Scan spelling lookup reached a reparse point`, Windows exposed that filename as a reparse point. This can happen with a cloud placeholder, such as a OneDrive file. The scan leaves the existing Track alone rather than guessing that the two names refer to the same file. If practical, restore the filename already stored for that Track, then rescan.
+
 ### Preview and apply a scan from the CLI
 
 1. Inspect the plan without changing the library:
@@ -50,12 +56,16 @@ Windows applies scan changes together. A failed scan leaves the same folder open
    aobus -C /music scan --dry-run --verbose
    ```
 
-2. Review the `new`, `changed`, `moved`, `missing`, `missing-segments`, and `errors` counts. `missing-segments` means a split file will regain a CUE track that is no longer in the library.
+2. Review the planned changes and any `errors` or `warnings`. Both `spelling-changed` and `moved` show `old -> new` and reconnect the existing Track without creating a duplicate. A `missing-segments` item means a split file will regain a CUE track that is no longer in the library.
 3. Apply the scan only when the plan targets the intended root:
 
    ```bash
    aobus -C /music scan
    ```
+
+If a case-only rename qualifies for fingerprint matching but the audio fingerprint is pending, check whether the old spelling still opens the intended file.
+If it does, run `aobus -C /music lib fingerprint --pending`, then preview the scan again. Look for `moved` from the old name to the new one before applying.
+Fingerprinting only processes available entries whose file size and modification time still match the library. Waiting will not fill the fingerprint for a missing entry or a file whose size or modification time has changed.
 
 ### Filter and save a List on the desktop
 
@@ -84,7 +94,7 @@ Kana suggestions use romanized Kana; Han-only values use a Mandarin-pinyin alias
 
 ## Verify the result
 
-- A second dry-run scan reports no actionable file changes after a successful apply.
+- Run another dry-run scan to check for remaining file changes. If the scan skipped a new-file item because another spelling was registered during the scan, a later scan reevaluates the item and may not import it.
 - Selecting the saved List reproduces the intended filtered result.
 - After you successfully save a metadata edit that affects a List's filter, its results update automatically; you don't need to reopen the List.
 

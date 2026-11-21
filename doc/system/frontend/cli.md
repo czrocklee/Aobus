@@ -89,13 +89,16 @@ Cancellation propagates through the task cancellation channel and emits no succe
 
 ### Scan and verify
 
-Scan builds a runtime `ScanPlan`, emits summary/optional item output, then applies unless dry-run.
+Scan builds a runtime `ScanPlan`, emits the summary and any dry-run items, then applies unless dry-run.
+Dry-run output names the source and destination of both `moved` and `spelling-changed` items; the [command reference](../../reference/cli/command.md#plain-scanstatus-text) defines the fields and text. An eligible filename spelling pair matched by audio identity is `moved`.
 `--defer-fingerprint` imports new metadata and leaves new manifest identity pending for later fingerprinting.
 Per-item apply failures are diagnostic rows and fail the command with exit `1`, because a partial apply is not a successful scan; plain output also counts them in the apply summary. A transaction-level failure rejects the command.
+Ordinary stale items are skipped, not failed. A later scan reclassifies a skipped new-file item and need not import it.
 A notice, such as a CUE sheet beside a whole-file import, is not a failure: scan writes it to stderr as a `warning:` line, counts it under `warnings`, and still exits `0`.
 
 Verify builds but does not apply a scan plan.
-Changed, moved, and notice rows are reported; missing or error rows make verification fail.
+Changed, missing-segment, moved, spelling-change, and notice rows are reported; missing or error rows make verification fail.
+Explicit relink selects unresolved audio-identity pairs, not spelling changes recognized by the scan.
 
 ### Structured output
 

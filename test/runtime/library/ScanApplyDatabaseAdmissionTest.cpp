@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Aobus Contributors
 
 #include "runtime/library/ScanApplyOperation.h"
+#include "test/FilesystemTestSupport.h"
 #include "test/TestFixtureSupport.h"
 #include "test/audio/AudioFixtureSupport.h"
 #include "test/library/MusicLibraryTestSupport.h"
@@ -26,6 +27,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -224,6 +226,95 @@ namespace ao::rt::test
     CHECK(optManifest->audioSignature() == replacementSignature);
   }
 
+  TEST_CASE("ScanApplyOperation - a spelling inserted after planning stales only its new file", "[concurrency]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const musicRoot = temp.path() / "music";
+    std::filesystem::create_directories(musicRoot);
+    writeScanFlacMetadataFixture(musicRoot / "song.flac", {"TITLE=Song"});
+    writeScanFlacMetadataFixture(musicRoot / "other.flac", {"TITLE=Other"});
+    auto library = library::test::makeTestMusicLibrary(musicRoot, temp.path() / "db");
+    auto plan = ao::test::requireValue(LibraryScan{library}.buildPlan());
+    REQUIRE(plan.count(ScanClassification::New) == 2);
+    auto operation = ScanApplyOperation{library, std::move(plan), {}, {}};
+    requirePrepared(operation);
+
+    auto const peerId = library::test::addTrack(library, library::test::makeEmptyTrackSpec("Song.flac"));
+    auto const result = ao::test::requireValue(operation.run());
+
+    CHECK(result.staleCount == 1);
+    CHECK(result.failureCount == 0);
+    REQUIRE(result.insertedIds.size() == 1);
+    auto transaction = library.readTransaction();
+    auto const manifest = library.manifest().reader(transaction);
+    auto const optPeer = manifest.get("Song.flac");
+    REQUIRE(optPeer);
+    CHECK(optPeer->trackId() == peerId);
+    CHECK_FALSE(manifest.get("song.flac"));
+    auto const optOther = manifest.get("other.flac");
+    REQUIRE(optOther);
+    CHECK(optOther->trackId() == result.insertedIds.front());
+  }
+
+  TEST_CASE("ScanApplyOperation - existing distinct spellings allow new files after an unrelated write",
+            "[concurrency]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const musicRoot = temp.path() / "music";
+    std::filesystem::create_directories(musicRoot);
+    writeScanFlacMetadataFixture(musicRoot / "Song.flac", {"TITLE=Original"});
+
+    if (std::filesystem::exists(musicRoot / "song.flac"))
+    {
+      SKIP("The temporary music directory is case-insensitive");
+    }
+
+    auto library = library::test::makeTestMusicLibrary(musicRoot, temp.path() / "db");
+    auto const peerId = importOne(library);
+    auto optLink = std::optional<ao::test::SymlinkFixture>{};
+    auto peerClass = ScanClassification::Unchanged;
+
+    SECTION("the stored peer is readable")
+    {
+      peerClass = ScanClassification::Unchanged;
+    }
+
+    SECTION("the stored peer is a planning error")
+    {
+      // The scanner cannot resolve this entry, but its exact manifest key
+      // was already present when it planned the independent New files.
+      auto const outside = temp.path() / "outside.flac";
+      auto const original = musicRoot / "Song.flac";
+      std::filesystem::rename(original, outside);
+      optLink.emplace(outside, original, ao::test::SymlinkType::File);
+      peerClass = ScanClassification::Error;
+    }
+
+    writeScanFlacMetadataFixture(musicRoot / "song.flac", {"TITLE=Second"});
+    writeScanFlacMetadataFixture(musicRoot / "SONG.flac", {"TITLE=Third"});
+    auto plan = ao::test::requireValue(LibraryScan{library}.buildPlan());
+    REQUIRE(plan.count(ScanClassification::New) == 2);
+    REQUIRE(plan.count(peerClass) == 1);
+    auto operation = ScanApplyOperation{library, std::move(plan), {}, {}};
+    auto const expectedFailures = peerClass == ScanClassification::Error ? 1 : 0;
+    auto const prepared = ao::test::requireValue(operation.prepare());
+    REQUIRE(prepared.failureCount == expectedFailures);
+
+    library::test::addTrack(library, library::test::makeEmptyTrackSpec("unrelated.flac"));
+    auto const result = ao::test::requireValue(operation.run());
+
+    CHECK(result.staleCount == 0);
+    CHECK(result.failureCount == expectedFailures);
+    CHECK(result.insertedIds.size() == 2);
+    auto transaction = library.readTransaction();
+    auto const manifest = library.manifest().reader(transaction);
+    auto const optPeer = manifest.get("Song.flac");
+    REQUIRE(optPeer);
+    CHECK(optPeer->trackId() == peerId);
+    CHECK(manifest.get("song.flac"));
+    CHECK(manifest.get("SONG.flac"));
+  }
+
   TEST_CASE("ScanApplyOperation - an occupied moved destination aborts all co-planned writes", "[concurrency]")
   {
     auto const temp = ao::test::TempDir{};
@@ -243,7 +334,19 @@ namespace ao::rt::test
     auto operation = ScanApplyOperation{library, std::move(plan), {}, failures.callback()};
     requirePrepared(operation);
 
-    auto occupier = library::test::makeEmptyTrackSpec("renamed.flac");
+    auto occupiedUri = std::string{};
+
+    SECTION("the exact destination was inserted")
+    {
+      occupiedUri = "renamed.flac";
+    }
+
+    SECTION("another spelling of the destination was inserted")
+    {
+      occupiedUri = "Renamed.flac";
+    }
+
+    auto occupier = library::test::makeEmptyTrackSpec(occupiedUri);
     occupier.title = "Concurrent destination";
     auto const occupyingTrackId = library::test::addTrack(library, occupier);
     requireRevalidation(operation, 0, 0);
@@ -262,9 +365,11 @@ namespace ao::rt::test
     REQUIRE(optOriginal);
     CHECK(optOriginal->property().uri() == "song.flac");
     CHECK(trackReader.get(occupyingTrackId));
-    CHECK(library.manifest().reader(transaction).get("song.flac"));
-    CHECK(library.manifest().reader(transaction).get("renamed.flac"));
-    CHECK_FALSE(library.manifest().reader(transaction).get("peer.flac"));
+    auto const manifest = library.manifest().reader(transaction);
+    CHECK(manifest.get("song.flac"));
+    CHECK(manifest.get(occupiedUri));
+    CHECK(manifest.get("renamed.flac").has_value() == (occupiedUri == "renamed.flac"));
+    CHECK_FALSE(manifest.get("peer.flac"));
   }
 
   TEST_CASE("ScanApplyOperation - a deleted moved source aborts all co-planned writes", "[concurrency]")

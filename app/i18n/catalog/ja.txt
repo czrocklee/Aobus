@@ -251,7 +251,8 @@ ja:table {
     library_task_updating_compact { "ライブラリを更新中" }
     library_scan_up_to_date { "ライブラリは最新です" }
     library_scan_complete { "ライブラリスキャン完了" }
-    library_scan_relinked { "{count, plural, one {移動されたファイル # 件を再リンクしました} other {移動されたファイル # 件を再リンクしました}}" }
+    library_scan_notices_need_review { "ライブラリのスキャンで確認が必要な項目が見つかりました。詳細はログを参照してください。" }
+    library_scan_relinked { "{count, plural, one {ファイル # 件を再リンクしました} other {ファイル # 件を再リンクしました}}" }
     library_scan_missing { "{count, plural, one {見つからないファイル # 件を確認する必要があります} other {見つからないファイル # 件を確認する必要があります}}" }
     library_scan_changes_combined { "{relinked}; {missing}" }
     library_scan_completed_with_errors { "{hasChanges, select, yes {エラー付きでスキャン完了; {changes}} other {エラー付きでスキャン完了}}" }
@@ -835,7 +836,7 @@ ja:table {
     library_scan_cue_whole_file { "{uri}: すでにファイル全体として取り込まれています。分割するにはトラックを削除して再スキャンしてください。" }
     library_scan_cue_missing { "{uri}: このファイルを分割する CUE シートがありません。取り込み済みのセグメントは保持されました。" }
     library_scan_cue_layout_mismatch { "{uri}: CUE の区間が無効か、取り込み済みの範囲と異なります。シートを確認して再スキャンしてください。既存の範囲を置き換える場合は、先に取り込み済みのトラックを削除してください。" }
-    library_scan_cue_carrier_mismatch { "{uri}: ファイルのフレーム数またはサンプルレートが取り込み済みのセグメントと異なります。取り込み済みのトラックは変更されていません。" }
+    library_scan_cue_carrier_mismatch { "{uri}: ファイルのフレーム数とサンプルレートが取り込み済みのセグメントと一致することを確認できませんでした。取り込み済みのトラックは変更されていません。" }
     library_scan_cue_detail { " 詳細: {detail}" }
     library_scan_cue_additional_issues { "{count, plural, other {ほかに # 件の CUE の問題があります。詳細はログを確認してください。}}" }
     track_cue_number { "CUE トラック番号" }

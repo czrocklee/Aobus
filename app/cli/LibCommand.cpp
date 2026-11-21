@@ -444,6 +444,7 @@ namespace ao::cli
       return !item.errorMessage.empty() || item.classification == rt::ScanClassification::Changed ||
              item.classification == rt::ScanClassification::MissingSegments ||
              item.classification == rt::ScanClassification::Moved ||
+             item.classification == rt::ScanClassification::SpellingChanged ||
              item.classification == rt::ScanClassification::Missing ||
              item.classification == rt::ScanClassification::Error;
     }

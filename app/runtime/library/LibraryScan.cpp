@@ -5,6 +5,8 @@
 
 #include "CueBinding.h"
 #include "MediaTrack.h"
+#include "ScanMoveMatching.h"
+#include "ScanSpelling.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -33,6 +35,7 @@
 #include <format>
 #include <functional>
 #include <map>
+#include <memory>
 #include <optional>
 #include <set>
 #include <span>
@@ -43,6 +46,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ao::rt
@@ -269,6 +273,7 @@ namespace ao::rt
                                    ManifestSnapshot const& manifest,
                                    std::unordered_set<std::string>& seenUris,
                                    std::unordered_set<std::string>& blockedUriPrefixes,
+                                   std::vector<std::string>& unrepresentedNames,
                                    std::vector<ScanItem>& items)
     {
       auto const& entryPath = entry.path();
@@ -357,6 +362,14 @@ namespace ao::rt
         return std::unexpected{res.error()};
       }
 
+      // Canonical imports use the target URI. A redirect or non-file still occupies
+      // its raw name and must not leave an aliasing manifest eligible for an audio move.
+      if (relativePath == uriRes->value() && media::file::File::isSupported(entryPath) &&
+          (relativePath != canonicalUriRes->value() || !seenUris.contains(relativePath)))
+      {
+        unrepresentedNames.push_back(relativePath);
+      }
+
       return true;
     }
 
@@ -436,6 +449,263 @@ namespace ao::rt
       }
     }
 
+    struct SpellingCandidate final
+    {
+      std::string_view uri;
+      std::optional<std::size_t> optItem;
+    };
+
+    struct SpellingCandidates final
+    {
+      std::vector<std::size_t> missing;
+      std::vector<SpellingCandidate> present;
+    };
+
+    struct PlannedSpellings final
+    {
+      ScanSpellingEvidence evidence;
+      ScanSpellingFallbackPairs fallbackPairs;
+      std::unordered_set<std::string> consumed;
+    };
+
+    void classifySpellingGroup(ScanSpellingInspection& inspection,
+                               SpellingCandidates const& group,
+                               std::span<ScanItem> items,
+                               PlannedSpellings& spellings,
+                               std::stop_token stopToken);
+
+    PlannedSpellings classifySpellingEntries(std::filesystem::path const& root,
+                                             std::span<std::string const> unrepresentedNames,
+                                             std::vector<ScanItem>& items,
+                                             std::stop_token stopToken)
+    {
+      auto groups = std::unordered_map<std::string, SpellingCandidates>{};
+
+      for (std::size_t i = 0; i < items.size(); ++i)
+      {
+        async::throwIfStopRequested(stopToken);
+
+        if (items[i].classification == ScanClassification::Missing)
+        {
+          groups[scanSpellingKey(items[i].uri)].missing.push_back(i);
+        }
+      }
+
+      if (groups.empty())
+      {
+        return {};
+      }
+
+      auto const addCandidate = [&groups](SpellingCandidate candidate)
+      {
+        if (auto found = groups.find(scanSpellingKey(candidate.uri)); found != groups.end())
+        {
+          found->second.present.push_back(candidate);
+        }
+      };
+
+      for (std::size_t i = 0; i < items.size(); ++i)
+      {
+        async::throwIfStopRequested(stopToken);
+
+        if (auto const& item = items[i]; item.classification != ScanClassification::Missing)
+        {
+          addCandidate({.uri = item.uri, .optItem = i});
+        }
+      }
+
+      for (auto const& name : unrepresentedNames)
+      {
+        async::throwIfStopRequested(stopToken);
+        addCandidate({.uri = name, .optItem = std::nullopt});
+      }
+
+      auto spellings = PlannedSpellings{};
+      auto inspection = ScanSpellingInspection{root, stopToken};
+
+      for (auto const& [key, group] : groups)
+      {
+        async::throwIfStopRequested(stopToken);
+        classifySpellingGroup(inspection, group, items, spellings, stopToken);
+      }
+
+      std::erase_if(
+        items,
+        [&spellings](ScanItem const& item)
+        { return item.classification == ScanClassification::Missing && spellings.consumed.contains(item.uri); });
+      return spellings;
+    }
+
+    struct SpellingMatches final
+    {
+      std::set<std::size_t> sources;
+      std::set<std::size_t> destinations;
+      std::optional<ScanSpellingObservation> optObservation;
+      std::string error;
+
+      void reject(std::string reason)
+      {
+        // A group's diagnostic must not depend on the filesystem's enumeration order.
+        if (error.empty() || reason < error)
+        {
+          error = std::move(reason);
+        }
+      }
+
+      void record(ScanSpellingObservation const& observation)
+      {
+        if (optObservation && *optObservation != observation)
+        {
+          reject("Inconsistent file identities while inspecting filename spellings");
+        }
+
+        optObservation = observation;
+      }
+    };
+
+    SpellingMatches inspectSpellingGroup(ScanSpellingInspection& inspection,
+                                         SpellingCandidates const& group,
+                                         std::span<ScanItem const> items,
+                                         std::stop_token stopToken)
+    {
+      auto matches = SpellingMatches{};
+
+      for (auto const oldIndex : group.missing)
+      {
+        for (auto const& [uri, optIndex] : group.present)
+        {
+          async::throwIfStopRequested(stopToken);
+
+          // An exact name is not a spelling change. Leave canonical symlink imports and
+          // ordinary fingerprint moves to their own classifiers.
+          if (uri == items[oldIndex].uri)
+          {
+            continue;
+          }
+
+          auto const proofRes = inspection.inspect(items[oldIndex].uri, uri);
+
+          if (proofRes && std::holds_alternative<DistinctScanSpellings>(*proofRes))
+          {
+            continue;
+          }
+
+          matches.sources.insert(oldIndex);
+
+          if (optIndex)
+          {
+            matches.destinations.insert(*optIndex);
+          }
+
+          if (!proofRes)
+          {
+            matches.reject(
+              std::format("Cannot compare '{}' and '{}': {}", items[oldIndex].uri, uri, proofRes.error().message));
+          }
+          else if (!optIndex)
+          {
+            matches.reject(std::format("Filename '{}' does not identify a scannable directory entry", uri));
+          }
+          else if (auto const& item = items[*optIndex]; item.classification == ScanClassification::Error)
+          {
+            matches.reject(std::format("Cannot inspect '{}': {}", uri, item.errorMessage));
+          }
+          else
+          {
+            matches.record(*proofRes);
+          }
+        }
+      }
+
+      return matches;
+    }
+
+    std::string spellingBindingLabel(ScanItem const& item)
+    {
+      return item.trackId == kInvalidTrackId ? std::format("carrier '{}'", item.uri)
+                                             : std::format("Track {} ('{}')", item.trackId.raw(), item.uri);
+    }
+
+    void classifySpellingGroup(ScanSpellingInspection& inspection,
+                               SpellingCandidates const& group,
+                               std::span<ScanItem> items,
+                               PlannedSpellings& spellings,
+                               std::stop_token stopToken)
+    {
+      auto [sources, destinations, optObservation, error] = inspectSpellingGroup(inspection, group, items, stopToken);
+
+      if (sources.empty())
+      {
+        return;
+      }
+
+      if (error.empty() && destinations.size() == 1)
+      {
+        AO_INVARIANT(optObservation);
+        auto& destination = items[*destinations.begin()];
+
+        if (std::holds_alternative<ScanFileIdentity>(*optObservation) && destination.optManifestEvidence)
+        {
+          // The actual spelling already has an owner. Report each proven alias without
+          // offering it as a Missing source for automatic or manual relinking.
+          for (auto index : sources)
+          {
+            auto& source = items[index];
+            source.classification = ScanClassification::Notice;
+            source.errorMessage =
+              std::format("{} and {} refer to the same file; review these library records before removing either",
+                          spellingBindingLabel(source),
+                          spellingBindingLabel(destination));
+          }
+
+          return;
+        }
+
+        if (sources.size() == 1 && destination.classification == ScanClassification::New)
+        {
+          auto& source = items[*sources.begin()];
+          spellings.evidence.byDestination.emplace(destination.uri, *optObservation);
+
+          if (std::holds_alternative<ScanSpellingNeedsFingerprint>(*optObservation))
+          {
+            spellings.fallbackPairs.emplace(source.uri, destination.uri);
+            return;
+          }
+
+          destination.classification = ScanClassification::SpellingChanged;
+          destination.oldUri = source.uri;
+          destination.trackId = source.trackId;
+          destination.optManifestEvidence = std::move(source.optManifestEvidence);
+          spellings.consumed.insert(source.uri);
+          return;
+        }
+      }
+
+      // A suspected alias must not fall through to a new import or identity move. An exact match still owns its URI.
+      if (error.empty())
+      {
+        error =
+          optObservation && std::holds_alternative<ScanSpellingNeedsFingerprint>(*optObservation)
+            ? "Native file identity is unavailable; filename spellings do not identify a unique unbound destination"
+            : "Conflicting filename spellings; cannot uniquely rebind this track";
+      }
+
+      for (auto const index : sources)
+      {
+        items[index].classification = ScanClassification::Error;
+        items[index].errorMessage = error;
+      }
+
+      for (auto const index : destinations)
+      {
+        if (items[index].classification == ScanClassification::New)
+        {
+          items[index].classification = ScanClassification::Error;
+          items[index].errorMessage = error;
+        }
+      }
+    }
+
     bool tryValidateMovedCarrier(ScanItem& destination, ScanItem const& source)
     {
       if (!source.optManifestEvidence || source.optManifestEvidence->members.empty())
@@ -461,7 +731,9 @@ namespace ao::rt
                                                               destination.sampleRate != expected.sampleRate)
       {
         destination.classification = ScanClassification::Error;
-        destination.errorMessage = "Moved carrier extent or sample rate differs from imported segments";
+        destination.errorMessage = destination.hasExactMediaFacts
+                                     ? "Moved carrier extent or sample rate differs from imported segments"
+                                     : "Cannot determine the moved carrier's exact frame count";
         destination.cueDiagnostic = ScanCueDiagnostic::CarrierFactsMismatch;
         return false;
       }
@@ -469,8 +741,40 @@ namespace ao::rt
       return true;
     }
 
-    // Returns the paired Missing sources it removed from the plan.
-    std::vector<ScanItem> classifyMovedEntries(std::vector<ScanItem>& items, std::stop_token const stopToken)
+    bool tryPairAudioMove(ScanItem& destination,
+                          ScanItem const& source,
+                          ScanSpellingFallbackPairs const& fallbackPairs,
+                          std::unordered_set<std::string_view> const& reservedDestinations)
+    {
+      // A reserved source cannot move to an unrelated copy, nor can a different source claim the reserved name.
+      if (auto const reserved = fallbackPairs.find(source.uri); reserved != fallbackPairs.end())
+      {
+        if (reserved->second != destination.uri)
+        {
+          return false;
+        }
+      }
+      else if (reservedDestinations.contains(destination.uri))
+      {
+        return false;
+      }
+
+      if (!tryValidateMovedCarrier(destination, source))
+      {
+        return false;
+      }
+
+      destination.classification = ScanClassification::Moved;
+      destination.oldUri = source.uri;
+      destination.trackId = source.trackId;
+      destination.optManifestEvidence = source.optManifestEvidence;
+      return true;
+    }
+
+    std::vector<ScanItem> matchAudioMoves(std::vector<ScanItem>& items,
+                                          ScanSpellingFallbackPairs const& fallbackPairs,
+                                          std::unordered_set<std::string_view> const& reservedDestinations,
+                                          std::stop_token const stopToken)
     {
       auto missingByLength = std::unordered_map<std::uint64_t, std::vector<std::size_t>>{};
       auto missingByIdentity = std::unordered_map<AudioIdentityKey, std::vector<std::size_t>, AudioIdentityKeyHasher>{};
@@ -561,19 +865,11 @@ namespace ao::rt
           continue;
         }
 
-        auto& newItem = items[newIndices.front()];
-        auto const& missingItem = items[missingIndices.front()];
-
-        if (!tryValidateMovedCarrier(newItem, missingItem))
+        if (auto const missingIndex = missingIndices.front();
+            tryPairAudioMove(items[newIndices.front()], items[missingIndex], fallbackPairs, reservedDestinations))
         {
-          continue;
+          matchedMissingIndices.insert(missingIndex);
         }
-
-        newItem.classification = ScanClassification::Moved;
-        newItem.oldUri = missingItem.uri;
-        newItem.trackId = missingItem.trackId;
-        newItem.optManifestEvidence = missingItem.optManifestEvidence;
-        matchedMissingIndices.insert(missingIndices.front());
       }
 
       if (matchedMissingIndices.empty())
@@ -607,13 +903,16 @@ namespace ao::rt
     // A move refused after pairing applies nothing, so its source is still
     // absent. Restoring that Missing item lets apply mark the row and a later
     // scan pair the files again; the destination keeps only its own failure.
-    void restoreRefusedMoveSources(std::vector<ScanItem>& items, std::vector<ScanItem> sources)
+    void restoreRefusedMoveSources(std::vector<ScanItem>& items,
+                                   std::vector<ScanItem> sources,
+                                   ScanSpellingEvidence const& evidence)
     {
       auto refusedSourceUris = std::unordered_set<std::string>{};
 
       for (auto& item : items)
       {
-        if (item.oldUri.empty() || item.classification == ScanClassification::Moved)
+        if (item.oldUri.empty() || item.classification == ScanClassification::Moved ||
+            evidence.byDestination.contains(item.uri))
         {
           continue;
         }
@@ -630,6 +929,48 @@ namespace ao::rt
           items.push_back(std::move(source));
         }
       }
+    }
+
+    std::vector<std::string> snapshotSpellingPeers(ManifestSnapshot const& manifest,
+                                                   std::span<ScanItem const> items,
+                                                   std::stop_token stopToken)
+    {
+      if (manifest.entries().empty())
+      {
+        return {};
+      }
+
+      auto candidateKeys = std::unordered_set<std::string>{};
+
+      for (auto const& item : items)
+      {
+        async::throwIfStopRequested(stopToken);
+
+        // Snapshot ordinary write destinations as well as errors that can become explicit relinks.
+        if (item.classification == ScanClassification::New || item.classification == ScanClassification::Moved ||
+            isRelinkDestination(item))
+        {
+          candidateKeys.insert(scanSpellingKey(item.uri));
+        }
+      }
+
+      auto peers = std::vector<std::string>{};
+
+      if (!candidateKeys.empty())
+      {
+        // Manifest iteration is byte-sorted, even for rows the filesystem walk could not inspect.
+        for (auto const& entry : manifest.entries())
+        {
+          async::throwIfStopRequested(stopToken);
+
+          if (candidateKeys.contains(scanSpellingKey(entry.uri)))
+          {
+            peers.push_back(entry.uri);
+          }
+        }
+      }
+
+      return peers;
     }
 
     bool needsCueBinding(ScanItem const& item) noexcept
@@ -675,9 +1016,9 @@ namespace ao::rt
       auto const candidates = cueEvidenceFor(audioName, sheets);
       auto const& optStored = item.optManifestEvidence;
       auto const isCarrier = optStored && !optStored->members.empty();
+      auto const noExternalSheet = candidates.general.empty() && candidates.extensionSpecific.empty();
 
-      if (!isCarrier && item.classification == ScanClassification::Unchanged && candidates.general.empty() &&
-          candidates.extensionSpecific.empty())
+      if (!isCarrier && item.classification == ScanClassification::Unchanged && noExternalSheet)
       {
         // Admission already recorded this whole file's embedded result. Matching
         // file facts preserve that empty evidence without reopening the file.
@@ -691,10 +1032,13 @@ namespace ao::rt
 
       if (!mediaRes)
       {
-        if (!isCarrier && candidates.general.empty() && candidates.extensionSpecific.empty())
+        auto const needsSpellingRefresh =
+          item.classification == ScanClassification::SpellingChanged && !isPlainSpelling(item);
+
+        if (!isCarrier && noExternalSheet && !needsSpellingRefresh)
         {
-          // Whole-file planning historically needs file facts only; media
-          // parse failures remain preparation failures when no sheet applies.
+          // Ordinary whole-file imports without a sheet report parse failures in preparation.
+          // A spelling refresh must reject known bad media before it promises a paired relink.
           item.cueEvidence = candidates;
           return;
         }
@@ -786,6 +1130,39 @@ namespace ao::rt
     }
   } // namespace
 
+  std::vector<ScanItem> classifyMovedEntries(std::vector<ScanItem>& items,
+                                             ScanSpellingFallbackPairs const& fallbackPairs,
+                                             std::stop_token stopToken)
+  {
+    auto reservedDestinations = std::unordered_set<std::string_view>{};
+
+    for (auto const& [source, destination] : fallbackPairs)
+    {
+      async::throwIfStopRequested(stopToken);
+      reservedDestinations.insert(destination);
+    }
+
+    auto sources = matchAudioMoves(items, fallbackPairs, reservedDestinations, stopToken);
+
+    if (!fallbackPairs.empty())
+    {
+      for (auto& item : items)
+      {
+        async::throwIfStopRequested(stopToken);
+
+        if ((item.classification == ScanClassification::Missing && fallbackPairs.contains(item.uri)) ||
+            (item.classification == ScanClassification::New && reservedDestinations.contains(item.uri)))
+        {
+          item.classification = ScanClassification::Error;
+          item.errorMessage =
+            "Native file identity is unavailable and audio identity cannot uniquely match the two filename spellings";
+        }
+      }
+    }
+
+    return sources;
+  }
+
   LibraryScan::LibraryScan(library::MusicLibrary const& library)
     : _library{library}
   {
@@ -832,6 +1209,7 @@ namespace ao::rt
     // A present entry that cannot be inspected safely prevents both that URI
     // and its descendants from being classified as missing.
     auto blockedUriPrefixes = std::unordered_set<std::string>{};
+    auto unrepresentedNames = std::vector<std::string>{};
 
     // 1. Walk Filesystem
     auto ec = std::error_code{};
@@ -868,8 +1246,8 @@ namespace ao::rt
 
       // The returned bool is the descent permission: false means the entry
       // was classified as unsafe, so the walk must not descend into it.
-      auto const canDescendRes =
-        classifyWalkEntry(entry, root, resolvedRoot, snapshot.manifest, seenUris, blockedUriPrefixes, items);
+      auto const canDescendRes = classifyWalkEntry(
+        entry, root, resolvedRoot, snapshot.manifest, seenUris, blockedUriPrefixes, unrepresentedNames, items);
 
       if (!canDescendRes)
       {
@@ -889,7 +1267,8 @@ namespace ao::rt
 
     // 2. Identify MISSING (In manifest but not on disk)
     addMissingEntries(items, snapshot.manifest, seenUris, blockedUriPrefixes, stopToken);
-    auto pairedSources = classifyMovedEntries(items, stopToken);
+    auto spellings = classifySpellingEntries(resolvedRoot, unrepresentedNames, items, stopToken);
+    auto pairedSources = classifyMovedEntries(items, spellings.fallbackPairs, stopToken);
 
     auto const sheetsByDirectory = readPlanCueDirectories(resolvedRoot, items, std::move(sheetDirectories), stopToken);
 
@@ -925,8 +1304,16 @@ namespace ao::rt
       bindPlanItem(item, *found->second);
     }
 
-    restoreRefusedMoveSources(items, std::move(pairedSources));
+    restoreRefusedMoveSources(items, std::move(pairedSources), spellings.evidence);
     appendUnmatchedSheetReports(items, sheetsByDirectory, resolvedRoot, stopToken);
-    return ScanPlan{snapshot.libraryId, snapshot.libraryRevision, std::move(items)};
+    auto knownSpellingPeers = snapshotSpellingPeers(snapshot.manifest, items, stopToken);
+    auto evidencePtr = spellings.evidence.byDestination.empty()
+                         ? nullptr
+                         : std::make_unique<ScanSpellingEvidence>(std::move(spellings.evidence));
+    return ScanPlan{snapshot.libraryId,
+                    snapshot.libraryRevision,
+                    std::move(items),
+                    std::move(knownSpellingPeers),
+                    std::move(evidencePtr)};
   }
 } // namespace ao::rt

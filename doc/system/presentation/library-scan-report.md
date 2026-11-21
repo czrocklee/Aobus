@@ -31,20 +31,24 @@ the injected catalog.
 | `Failed`              | The workflow failed, or an actionable plan returned no apply result.                                                                                                                     | Error    | History   |
 
 Anything requiring attention remains in history; a clean confirmation is
-transient. Relinking moved files is informational rather than a warning.
+transient. Relinking moved files or updating a filename's spelling is
+informational rather than a warning; both contribute to the same relink count.
 Application failures outrank missing files when choosing a verdict, while both
 missing and relinked counts remain available to the formatter. A `NeedsReview`
-result that planned nothing to apply is worded as an up-to-date library, followed
-by its CUE issues. Every verdict must produce nonempty text. Exact English and
-translated sentences belong to the
-[catalog assets](../../../app/i18n/catalog/root.txt), not to a second table here.
+result with nothing to apply reports the library as up to date if all notices
+are CUE issues. For other notices, the report directs readers to the log instead
+of showing raw notice text. This guidance replaces the up-to-date line on a
+notice-only plan and follows the result and any change counts otherwise.
+Every verdict must produce nonempty text. Exact English and translated sentences
+belong to the [catalog assets](../../../app/i18n/catalog/root.txt).
 
 An unknown verdict follows conservative failure formatting without inventing an
 error reason. Paths and diagnostic reasons remain external values passed into
 a catalog pattern.
 
 The formatted scan result stays within the runtime's default notification text budget.
-It preserves the verdict and includes at most five CUE issues, followed by a localized count of omitted CUE issues when necessary.
+It preserves the verdict and any notice guidance. It includes at most five CUE
+issues, followed by a localized count of omitted CUE issues when necessary.
 A separate UTF-8 byte budget may show fewer issues; a long path or diagnostic must not cause the notification service to reject the entire result.
 The outcome and diagnostic log retain all issues even when the notification shows only a summary.
 Malformed-sheet and layout issues retain their detail: the parser or range-resolver message, or the first imported range that the sheet no longer reproduces.

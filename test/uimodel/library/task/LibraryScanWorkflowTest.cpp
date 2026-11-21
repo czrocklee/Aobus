@@ -221,6 +221,43 @@ namespace ao::uimodel::test
     CHECK(fixture.storage.library().libraryRevision(transaction) == apply.libraryRevision);
   }
 
+  TEST_CASE("LibraryScanWorkflow - a spelling-only plan applies as one relink without an audio identity")
+  {
+    auto fixture = LibraryScanWorkflowFixture{};
+    auto const oldPath = fixture.storage.root() / "Song.flac";
+    auto const newPath = fixture.storage.root() / "song.flac";
+    std::filesystem::copy_file(audio::test::requireAudioFixture("basic_metadata.flac"), oldPath);
+
+    if (!std::filesystem::exists(newPath))
+    {
+      SKIP("The temporary music directory is case-sensitive");
+    }
+
+    auto const scan = [&fixture]
+    {
+      return rt::test::runQueuedTask(
+        fixture.commandsFixture.runtime(),
+        fixture.executor,
+        runLibraryScanWorkflowAsync(&fixture.commandsFixture.library().jobs(), LibraryScanMode::FastBootstrap));
+    };
+    auto const first = scan();
+    REQUIRE(first);
+    REQUIRE(first->optApplyResult);
+    REQUIRE(first->optApplyResult->insertedIds.size() == 1);
+    auto const intermediate = fixture.storage.root() / "intermediate";
+    std::filesystem::rename(oldPath, intermediate);
+    std::filesystem::rename(intermediate, newPath);
+
+    auto const renamed = scan();
+    REQUIRE(renamed);
+    CHECK(renamed->disposition == LibraryScanPlanDisposition::Actionable);
+    CHECK(renamed->summary == LibraryScanPlanSummary{.movedCount = 1});
+    REQUIRE(renamed->optApplyResult);
+    CHECK(renamed->optApplyResult->relinkedFileCount == 1);
+    CHECK(renamed->optApplyResult->relinkedIds == first->optApplyResult->insertedIds);
+    CHECK(renamed->optApplyResult->insertedIds.empty());
+  }
+
   TEST_CASE("LibraryScanWorkflow - a missing root returns an exact planning failure")
   {
     auto temp = ao::test::TempDir{};

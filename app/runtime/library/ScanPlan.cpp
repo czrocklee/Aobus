@@ -4,6 +4,7 @@
 #include <ao/rt/library/ScanPlan.h>
 
 #include "CueBinding.h"
+#include "ScanSpelling.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -12,6 +13,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -80,15 +82,25 @@ namespace ao::rt
 
   ScanPlan::ScanPlan(std::array<std::byte, 16> libraryId,
                      std::uint64_t const libraryRevision,
-                     std::vector<ScanItem> items) noexcept
-    : _libraryId{libraryId}, _libraryRevision{libraryRevision}, _items{std::move(items)}
+                     std::vector<ScanItem> items,
+                     std::vector<std::string> knownSpellingPeers,
+                     std::unique_ptr<ScanSpellingEvidence> spellingEvidencePtr) noexcept
+    : _libraryId{libraryId}
+    , _libraryRevision{libraryRevision}
+    , _items{std::move(items)}
+    , _knownSpellingPeers{std::move(knownSpellingPeers)}
+    , _spellingEvidencePtr{std::move(spellingEvidencePtr)}
   {
   }
+
+  ScanPlan::~ScanPlan() = default;
 
   ScanPlan::ScanPlan(ScanPlan&& other) noexcept
     : _libraryId{other._libraryId}
     , _libraryRevision{other._libraryRevision}
     , _items{std::move(other._items)}
+    , _knownSpellingPeers{std::move(other._knownSpellingPeers)}
+    , _spellingEvidencePtr{std::move(other._spellingEvidencePtr)}
     , _executable{std::exchange(other._executable, false)}
   {
     other._libraryId = {};
@@ -102,6 +114,8 @@ namespace ao::rt
       _libraryId = other._libraryId;
       _libraryRevision = other._libraryRevision;
       _items = std::move(other._items);
+      _knownSpellingPeers = std::move(other._knownSpellingPeers);
+      _spellingEvidencePtr = std::move(other._spellingEvidencePtr);
       _executable = std::exchange(other._executable, false);
       other._libraryId = {};
       other._libraryRevision = 0;
@@ -182,7 +196,8 @@ namespace ao::rt
     _libraryId = {};
     _libraryRevision = 0;
     _items.clear();
+    _spellingEvidencePtr.reset();
     _executable = false;
-    return ScanPlan{libraryId, libraryRevision, std::move(items)};
+    return ScanPlan{libraryId, libraryRevision, std::move(items), std::move(_knownSpellingPeers), nullptr};
   }
 } // namespace ao::rt

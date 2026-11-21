@@ -5,6 +5,7 @@
 
 #include "CueBinding.h"
 #include "MediaTrack.h"
+#include "ScanSpelling.h"
 #include "TrackBuilderSnapshot.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
@@ -38,9 +39,11 @@
 #include <format>
 #include <memory>
 #include <optional>
+#include <span>
 #include <stop_token>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -89,6 +92,12 @@ namespace ao::rt
         .size = size,
         .optMtime = *timestampRes,
       };
+    }
+
+    bool isRelink(ScanItem const& item) noexcept
+    {
+      return item.classification == ScanClassification::Moved ||
+             item.classification == ScanClassification::SpellingChanged;
     }
 
     bool matchesPersistedEvidence(library::TrackWriter const& trackWriter,
@@ -157,14 +166,32 @@ namespace ao::rt
     }
   } // namespace
 
+  // Filesystem evidence may be shared within one phase, never across the
+  // boundary between preparation and the command's final pre-transaction turn.
+  struct ScanApplyOperation::InspectionPhase final
+  {
+    std::filesystem::path const& root;
+    std::stop_token stopToken;
+    ScanSpellingInspection spelling{root, stopToken};
+    std::unordered_map<std::filesystem::path, Result<std::vector<CueSheetSnapshot>>> directories{};
+
+    Result<std::vector<CueSheetSnapshot>> const& sheetsFor(std::filesystem::path const& directory)
+    {
+      auto found = directories.find(directory);
+
+      if (found == directories.end())
+      {
+        found = directories.emplace(directory, readCueDirectory(root, directory)).first;
+      }
+
+      return found->second;
+    }
+  };
+
   struct ScanApplyOperation::PreparedScanItem final
   {
-    explicit PreparedScanItem(TrackBuilderSnapshot source, std::optional<library::AudioIdentity> optIdentityValue)
-      : builder{std::move(source)}, optIdentity{std::move(optIdentityValue)}
-    {
-    }
-
-    TrackBuilderSnapshot builder;
+    // A spelling-only relink has no replacement media facts.
+    std::optional<TrackBuilderSnapshot> optBuilder;
     std::optional<library::AudioIdentity> optIdentity;
     std::vector<TrackBuilderSnapshot> segments;
   };
@@ -200,6 +227,14 @@ namespace ao::rt
     AO_INVARIANT(!_skippedItems[itemIndex], "Scan item was already skipped");
     _skippedItems[itemIndex] = true;
     ++_result.staleCount;
+  }
+
+  void ScanApplyOperation::finishCancelled() noexcept
+  {
+    _cancelled = true;
+    _result = ScanApplyResult{};
+    _manifestMutated = false;
+    _state = State::Terminal;
   }
 
   Result<ScanApplyResult> ScanApplyOperation::run(std::stop_token stopToken)
@@ -289,7 +324,7 @@ namespace ao::rt
 
     _preparedItems.resize(_plan.size());
     _skippedItems.assign(_plan.size(), false);
-    auto directories = CueDirectorySheets{};
+    auto phase = InspectionPhase{.root = _ml.rootPath(), .stopToken = stopToken};
 
     for (std::size_t i = 0; i < _plan.size(); ++i)
     {
@@ -299,9 +334,16 @@ namespace ao::rt
         break;
       }
 
-      if (auto itemRes = prepareItem(i, directories, stopToken); !itemRes)
+      if (auto itemRes = prepareItem(i, phase); !itemRes)
       {
         return std::unexpected{itemRes.error()};
+      }
+
+      // A relink consumes a pair. Never apply the rest of the batch if either
+      // its filesystem proof or its required replacement media could not be prepared.
+      if (isRelink(_plan.items()[i]) && !_preparedItems[i])
+      {
+        _abortTransaction = true;
       }
 
       if (_cancelled || _abortTransaction)
@@ -312,9 +354,7 @@ namespace ao::rt
 
     if (_cancelled)
     {
-      _result.staleCount = 0;
-      _result.failureCount = 0;
-      _state = State::Terminal;
+      finishCancelled();
     }
     else
     {
@@ -324,9 +364,7 @@ namespace ao::rt
     return _result;
   }
 
-  Result<> ScanApplyOperation::prepareItem(std::size_t itemIndex,
-                                           CueDirectorySheets& directories,
-                                           std::stop_token stopToken)
+  Result<> ScanApplyOperation::prepareItem(std::size_t itemIndex, InspectionPhase& phase)
   {
     auto const& item = _plan.items()[itemIndex];
     reportProgress(item, itemIndex, ScanApplyProgressStage::Updating, 0.0);
@@ -358,8 +396,20 @@ namespace ao::rt
       return {};
     }
 
-    if (!tryValidatePathProvenance(itemIndex, *fullPathRes))
+    if (!tryValidatePathProvenance(itemIndex, *fullPathRes, phase))
     {
+      return {};
+    }
+
+    if (item.optManifestEvidence && item.optManifestEvidence->members.empty() && isPlainSpelling(item))
+    {
+      revalidatePreparedCueSheets(itemIndex, *fullPathRes, phase);
+
+      if (!_abortTransaction)
+      {
+        _preparedItems[itemIndex] = std::make_unique<PreparedScanItem>();
+      }
+
       return {};
     }
 
@@ -370,15 +420,7 @@ namespace ao::rt
       return {};
     }
 
-    auto const directory = fullPathRes->parent_path();
-    auto found = directories.find(directory);
-
-    if (found == directories.end())
-    {
-      found = directories.emplace(directory, readCueDirectory(_ml.rootPath(), directory)).first;
-    }
-
-    auto const& sheetsRes = found->second;
+    auto const& sheetsRes = phase.sheetsFor(fullPathRes->parent_path());
 
     if (!sheetsRes)
     {
@@ -394,14 +436,22 @@ namespace ao::rt
       return {};
     }
 
+    if (isPlainSpelling(item))
+    {
+      // Carrier extent and rate were proven above. Relink its live members
+      // without taking replacement properties or covers from the file.
+      _preparedItems[itemIndex] = std::make_unique<PreparedScanItem>();
+      return {};
+    }
+
     auto optIdentity = cachedAudioIdentity(item);
 
     if (!optIdentity && shouldFingerprintDuringPreparation(item))
     {
-      optIdentity = fingerprintAudioPayload(item, optMediaTrack->file(), itemIndex, true, stopToken);
+      optIdentity = fingerprintAudioPayload(item, optMediaTrack->file(), itemIndex, true, phase.stopToken);
     }
 
-    if (_cancelled || stopToken.stop_requested())
+    if (_cancelled || phase.stopToken.stop_requested())
     {
       _cancelled = true;
       return {};
@@ -419,7 +469,9 @@ namespace ao::rt
       return std::unexpected{snapshotRes.error()};
     }
 
-    auto preparedPtr = std::make_unique<PreparedScanItem>(std::move(*snapshotRes), std::move(optIdentity));
+    auto preparedPtr = std::make_unique<PreparedScanItem>();
+    preparedPtr->optBuilder = std::move(*snapshotRes);
+    preparedPtr->optIdentity = std::move(optIdentity);
 
     if (auto membersRes = prepareCarrierMembers(itemIndex, *optMediaTrack, binding, *preparedPtr); !membersRes)
     {
@@ -442,7 +494,7 @@ namespace ao::rt
 
     if (binding.evidence != item.cueEvidence)
     {
-      if (item.classification == ScanClassification::Moved)
+      if (isRelink(item))
       {
         reportFailure(item.uri, "relink", "CUE sheets changed after planning");
         _abortTransaction = true;
@@ -459,7 +511,7 @@ namespace ao::rt
     {
       reportFailure(item.uri, "read carrier", "Carrier extent or sample rate changed");
 
-      if (item.classification == ScanClassification::Moved)
+      if (isRelink(item))
       {
         _abortTransaction = true;
       }
@@ -542,16 +594,18 @@ namespace ao::rt
     return uriRes->resolveUnder(_ml.rootPath());
   }
 
-  bool ScanApplyOperation::tryValidatePathProvenance(std::size_t const itemIndex, std::filesystem::path const& fullPath)
+  bool ScanApplyOperation::tryValidatePathProvenance(std::size_t const itemIndex,
+                                                     std::filesystem::path const& fullPath,
+                                                     InspectionPhase& phase)
   {
     auto const& item = _plan.items()[itemIndex];
 
     if (fullPath == item.fullPath)
     {
-      return true;
+      return tryValidateSpelling(item, phase);
     }
 
-    if (item.classification == ScanClassification::Moved)
+    if (isRelink(item))
     {
       reportFailure(item.uri, "relink", "Resolved media path changed after planning");
       _abortTransaction = true;
@@ -561,6 +615,75 @@ namespace ao::rt
       skipStaleItem(itemIndex);
     }
 
+    return false;
+  }
+
+  bool ScanApplyOperation::needsSpellingProof(ScanItem const& item) const
+  {
+    return item.classification == ScanClassification::SpellingChanged ||
+           (item.classification == ScanClassification::Moved && _plan._spellingEvidencePtr &&
+            _plan._spellingEvidencePtr->byDestination.contains(item.uri));
+  }
+
+  bool ScanApplyOperation::tryValidateSpelling(ScanItem const& item, InspectionPhase& phase)
+  {
+    if (!needsSpellingProof(item))
+    {
+      return true;
+    }
+
+    auto observationRes = Result<ScanSpellingObservation>{};
+
+    try
+    {
+      observationRes = phase.spelling.inspect(item.oldUri, item.uri);
+    }
+    catch (async::OperationCancelled const&)
+    {
+      _cancelled = true;
+      return false;
+    }
+
+    if (phase.stopToken.stop_requested())
+    {
+      _cancelled = true;
+      return false;
+    }
+
+    if (observationRes)
+    {
+      auto const* const identity = std::get_if<ScanFileIdentity>(&*observationRes);
+
+      if (item.classification == ScanClassification::Moved)
+      {
+        // Planning alone can grant the fingerprint fallback. A live native
+        // identity also supports that pair, but does not waive any move checks.
+        if (identity != nullptr || std::holds_alternative<ScanSpellingNeedsFingerprint>(*observationRes))
+        {
+          return true;
+        }
+      }
+      else if (identity != nullptr && _plan._spellingEvidencePtr)
+      {
+        auto const& byDestination = _plan._spellingEvidencePtr->byDestination;
+
+        if (auto const found = byDestination.find(item.uri); found != byDestination.end())
+        {
+          auto const* const plannedIdentity = std::get_if<ScanFileIdentity>(&found->second);
+
+          if (plannedIdentity != nullptr && *plannedIdentity == *identity)
+          {
+            return true;
+          }
+        }
+      }
+    }
+
+    reportFailure(
+      item.uri,
+      "validate spelling",
+      observationRes ? "Filesystem spelling or file identity changed after planning" : observationRes.error().message);
+    _abortTransaction = true;
     return false;
   }
 
@@ -574,7 +697,7 @@ namespace ao::rt
       return _result;
     }
 
-    auto directories = CueDirectorySheets{};
+    auto phase = InspectionPhase{.root = _ml.rootPath(), .stopToken = stopToken};
 
     for (std::size_t i = 0; i < _plan.size(); ++i)
     {
@@ -589,7 +712,7 @@ namespace ao::rt
         continue;
       }
 
-      revalidatePreparedItem(i, directories, stopToken);
+      revalidatePreparedItem(i, phase);
 
       if (_cancelled || _abortTransaction)
       {
@@ -599,14 +722,7 @@ namespace ao::rt
 
     if (_cancelled)
     {
-      _result.insertedIds.clear();
-      _result.mutatedIds.clear();
-      _result.relinkedIds.clear();
-      _result.relinkedFileCount = 0;
-      _result.missingCount = 0;
-      _result.staleCount = 0;
-      _result.failureCount = 0;
-      _state = State::Terminal;
+      finishCancelled();
     }
     else if (_abortTransaction)
     {
@@ -620,9 +736,7 @@ namespace ao::rt
     return _result;
   }
 
-  void ScanApplyOperation::revalidatePreparedItem(std::size_t itemIndex,
-                                                  CueDirectorySheets& directories,
-                                                  std::stop_token stopToken)
+  void ScanApplyOperation::revalidatePreparedItem(std::size_t itemIndex, InspectionPhase& phase)
   {
     auto const& item = _plan.items()[itemIndex];
 
@@ -640,14 +754,8 @@ namespace ao::rt
 
     auto const isMoved = item.classification == ScanClassification::Moved;
 
-    if (auto const* const preparedItem = _preparedItems[itemIndex].get();
-        preparedItem == nullptr || (isMoved && !preparedItem->optIdentity))
+    if (!_preparedItems[itemIndex])
     {
-      if (isMoved)
-      {
-        _abortTransaction = true;
-      }
-
       return;
     }
 
@@ -655,10 +763,10 @@ namespace ao::rt
 
     if (!fullPathRes)
     {
-      auto const* const stage = isMoved ? "resolve moved destination for" : "revalidate file";
+      auto const* const stage = isRelink(item) ? "resolve relink destination for" : "revalidate file";
       reportFailure(item.uri, stage, fullPathRes.error().message);
 
-      if (isMoved)
+      if (isRelink(item))
       {
         _abortTransaction = true;
       }
@@ -670,20 +778,18 @@ namespace ao::rt
       return;
     }
 
-    if (!tryValidatePathProvenance(itemIndex, *fullPathRes))
+    if (!tryValidatePathProvenance(itemIndex, *fullPathRes, phase))
     {
       return;
     }
 
     // Keep physical and sheet proof on the same admitted path. Sheets use a
     // fresh phase-local cache only after the file facts and moved identity.
-    if (isMoved)
+    revalidatePreparedRegularFile(itemIndex, *fullPathRes);
+
+    if (isMoved && !_abortTransaction)
     {
-      revalidateMovedFile(itemIndex, *fullPathRes, stopToken);
-    }
-    else
-    {
-      revalidatePreparedRegularFile(itemIndex, *fullPathRes);
+      revalidateMovedFile(itemIndex, *fullPathRes, phase.stopToken);
     }
 
     if (_cancelled || _abortTransaction || _skippedItems[itemIndex])
@@ -691,29 +797,21 @@ namespace ao::rt
       return;
     }
 
-    revalidatePreparedCueSheets(itemIndex, *fullPathRes, directories);
+    revalidatePreparedCueSheets(itemIndex, *fullPathRes, phase);
   }
 
   void ScanApplyOperation::revalidatePreparedCueSheets(std::size_t itemIndex,
                                                        std::filesystem::path const& fullPath,
-                                                       CueDirectorySheets& directories)
+                                                       InspectionPhase& phase)
   {
     auto const& item = _plan.items()[itemIndex];
-    auto const directory = fullPath.parent_path();
-    auto found = directories.find(directory);
-
-    if (found == directories.end())
-    {
-      found = directories.emplace(directory, readCueDirectory(_ml.rootPath(), directory)).first;
-    }
-
-    auto const& sheetsRes = found->second;
+    auto const& sheetsRes = phase.sheetsFor(fullPath.parent_path());
 
     if (!sheetsRes)
     {
-      reportFailure(item.uri, "revalidate CUE directory", sheetsRes.error().message);
+      reportFailure(item.uri, "read CUE directory", sheetsRes.error().message);
 
-      if (item.classification == ScanClassification::Moved)
+      if (isRelink(item))
       {
         _abortTransaction = true;
       }
@@ -728,9 +826,9 @@ namespace ao::rt
     if (cueEvidenceFor(utility::pathToGenericUtf8(utility::pathFromUtf8(item.uri).filename()), *sheetsRes) !=
         item.cueEvidence)
     {
-      if (item.classification == ScanClassification::Moved)
+      if (isRelink(item))
       {
-        reportFailure(item.uri, "relink", "CUE sheets changed after preparation");
+        reportFailure(item.uri, "relink", "CUE sheets no longer match the plan");
         _abortTransaction = true;
         return;
       }
@@ -747,7 +845,12 @@ namespace ao::rt
 
     if (!factsRes)
     {
-      if (factsRes.error().code == Error::Code::NotFound)
+      if (isRelink(item))
+      {
+        reportFailure(item.uri, "revalidate relink destination", factsRes.error().message);
+        _abortTransaction = true;
+      }
+      else if (factsRes.error().code == Error::Code::NotFound)
       {
         skipStaleItem(itemIndex);
       }
@@ -762,7 +865,16 @@ namespace ao::rt
 
     if (factsRes->size != item.fileSize || factsRes->optMtime != item.optMtime)
     {
-      skipStaleItem(itemIndex);
+      if (isRelink(item))
+      {
+        reportFailure(
+          item.uri, "revalidate relink destination", "file size or modification time changed after preparation");
+        _abortTransaction = true;
+      }
+      else
+      {
+        skipStaleItem(itemIndex);
+      }
     }
   }
 
@@ -801,23 +913,6 @@ namespace ao::rt
 
     if (!preparedItem.optIdentity)
     {
-      _abortTransaction = true;
-      return;
-    }
-
-    auto factsRes = inspectRegularFile(fullPath);
-
-    if (!factsRes)
-    {
-      reportFailure(item.uri, "revalidate moved destination", factsRes.error().message);
-      _abortTransaction = true;
-      return;
-    }
-
-    if (factsRes->size != item.fileSize || factsRes->optMtime != item.optMtime)
-    {
-      reportFailure(
-        item.uri, "revalidate moved destination", "file size or modification time changed after preparation");
       _abortTransaction = true;
       return;
     }
@@ -881,6 +976,14 @@ namespace ao::rt
 
     admitItemsAgainstDatabase(trackWriter, stopToken);
 
+    // The writer exposes its candidate commit revision, one past the committed
+    // snapshot. Since this transaction has no staged writes yet, a matching
+    // revision means the spelling groups are unchanged since planning.
+    if (!_cancelled && !_abortTransaction && _ml.libraryRevision(write) != _plan._libraryRevision + 1U)
+    {
+      admitSpellingGroups(write, stopToken);
+    }
+
     if (!_cancelled && !_abortTransaction)
     {
       for (std::size_t i = 0; i < _plan.size(); ++i)
@@ -905,15 +1008,7 @@ namespace ao::rt
 
     if (_cancelled || stopToken.stop_requested())
     {
-      _cancelled = true;
-      _result.insertedIds.clear();
-      _result.mutatedIds.clear();
-      _result.relinkedIds.clear();
-      _result.relinkedFileCount = 0;
-      _result.missingCount = 0;
-      _result.staleCount = 0;
-      _result.failureCount = 0;
-      _manifestMutated = false;
+      finishCancelled();
       return _result;
     }
 
@@ -972,12 +1067,16 @@ namespace ao::rt
         }
 
         case ScanClassification::Moved:
+        case ScanClassification::SpellingChanged:
         {
-          if (!matchesPersistedEvidence(trackWriter, item, item.oldUri, true))
+          // Only audio-identity moves rely on the source fingerprint. A spelling-only
+          // update preserves a live backfill, just as a changed file retains live curation.
+          if (!matchesPersistedEvidence(
+                trackWriter, item, item.oldUri, item.classification == ScanClassification::Moved))
           {
             reportFailure(item.uri,
                           "validate library evidence",
-                          "the stored source manifest or Track no longer matches the planned move");
+                          "the stored source manifest or Track no longer matches the planned relink");
             _skippedItems[i] = true;
             _abortTransaction = true;
             return;
@@ -985,7 +1084,7 @@ namespace ao::rt
 
           if (trackWriter.manifest(item.uri))
           {
-            reportFailure(item.uri, "validate library evidence", "the moved destination manifest now exists");
+            reportFailure(item.uri, "validate library evidence", "the relink destination already has a manifest entry");
             _skippedItems[i] = true;
             _abortTransaction = true;
             return;
@@ -998,6 +1097,102 @@ namespace ao::rt
         case ScanClassification::Error:
         case ScanClassification::Notice: break;
       }
+    }
+  }
+
+  void ScanApplyOperation::admitSpellingGroups(library::LibraryWrite const& write, std::stop_token stopToken)
+  {
+    auto spellingSources = std::unordered_map<std::string, std::size_t>{};
+    auto destinations = std::unordered_map<std::string, std::vector<std::size_t>>{};
+
+    for (std::size_t i = 0; i < _plan.size(); ++i)
+    {
+      if (stopToken.stop_requested())
+      {
+        _cancelled = true;
+        return;
+      }
+
+      if (_skippedItems[i] || !_preparedItems[i])
+      {
+        continue;
+      }
+
+      if (auto const& item = _plan.items()[i]; needsSpellingProof(item))
+      {
+        spellingSources.emplace(scanSpellingKey(item.oldUri), i);
+      }
+      else if (item.classification == ScanClassification::New || item.classification == ScanClassification::Moved)
+      {
+        destinations[scanSpellingKey(item.uri)].push_back(i);
+      }
+    }
+
+    if (spellingSources.empty() && destinations.empty())
+    {
+      return;
+    }
+
+    // Exact source/destination checks already passed. Check every affected
+    // group in one walk, before mutating any rows.
+    for (auto const& row : _ml.manifest().reader(write))
+    {
+      if (stopToken.stop_requested())
+      {
+        _cancelled = true;
+        return;
+      }
+
+      auto const key = scanSpellingKey(row.first);
+
+      if (auto const found = spellingSources.find(key); found != spellingSources.end())
+      {
+        if (auto const& item = _plan.items()[found->second]; row.first != item.oldUri)
+        {
+          reportFailure(
+            item.uri, "validate library evidence", "another stored spelling now matches the planned source");
+          _abortTransaction = true;
+          return;
+        }
+      }
+
+      auto const found = destinations.find(key);
+
+      if (found == destinations.end() || std::ranges::binary_search(_plan._knownSpellingPeers, row.first))
+      {
+        continue;
+      }
+
+      rejectLateSpellingPeer(found->second, stopToken);
+
+      if (_cancelled || _abortTransaction)
+      {
+        return;
+      }
+
+      destinations.erase(found);
+    }
+  }
+
+  void ScanApplyOperation::rejectLateSpellingPeer(std::span<std::size_t const> destinations, std::stop_token stopToken)
+  {
+    for (auto const index : destinations)
+    {
+      if (stopToken.stop_requested())
+      {
+        _cancelled = true;
+        return;
+      }
+
+      if (auto const& item = _plan.items()[index]; item.classification == ScanClassification::Moved)
+      {
+        reportFailure(
+          item.uri, "validate library evidence", "another stored spelling now matches the moved destination");
+        _abortTransaction = true;
+        return;
+      }
+
+      skipStaleItem(index);
     }
   }
 
@@ -1046,12 +1241,19 @@ namespace ao::rt
       return {};
     }
 
+    if (isPlainSpelling(item))
+    {
+      applyPlainSpelling(item, trackWriter, dictionary);
+      return {};
+    }
+
     if ((item.optManifestEvidence && !item.optManifestEvidence->members.empty()) || !preparedItem->segments.empty())
     {
       return applyCarrierItem(item, *preparedItem, trackWriter, dictionary);
     }
 
-    auto builder = preparedItem->builder.makeBuilder();
+    AO_INVARIANT(preparedItem->optBuilder, "Prepared media refresh has no builder");
+    auto builder = preparedItem->optBuilder->makeBuilder();
     auto const& optIdentity = preparedItem->optIdentity;
     builder.property().uri(item.uri);
 
@@ -1065,11 +1267,11 @@ namespace ao::rt
       return applyChangedItem(item, trackWriter, dictionary, builder, *optIdentity);
     }
 
-    if (item.classification == ScanClassification::Moved)
+    if (isRelink(item))
     {
       _abortTransaction = true;
 
-      if (optIdentity && tryApplyMovedItem(item, trackWriter, dictionary, builder, *optIdentity))
+      if (optIdentity && tryApplyRefreshedRelink(item, trackWriter, dictionary, builder, *optIdentity))
       {
         _abortTransaction = false;
       }
@@ -1113,7 +1315,7 @@ namespace ao::rt
       return true;
     }
 
-    // A failure was reported during preparation; a notice names no library file.
+    // Preparation reported failures; standalone notices have no write to apply.
     return item.classification == ScanClassification::Error || item.classification == ScanClassification::Notice;
   }
 
@@ -1188,6 +1390,7 @@ namespace ao::rt
   {
     switch (item.classification)
     {
+      case ScanClassification::SpellingChanged: return !isPlainSpelling(item);
       case ScanClassification::Moved:
       case ScanClassification::Changed: return true;
       case ScanClassification::New: return _options.audioIdentityPolicy == AudioIdentityPolicy::Eager;
@@ -1277,28 +1480,74 @@ namespace ao::rt
     return {};
   }
 
-  bool ScanApplyOperation::tryApplyMovedItem(ScanItem const& item,
-                                             library::TrackWriter& trackWriter,
-                                             library::DictionaryStore const& dictionary,
-                                             library::TrackBuilder& builder,
-                                             library::AudioIdentity const& identity)
+  void ScanApplyOperation::applyPlainSpelling(ScanItem const& item,
+                                              library::TrackWriter& writer,
+                                              library::DictionaryStore const& dictionary)
+  {
+    auto const optManifest = writer.manifest(item.oldUri);
+    AO_INVARIANT(optManifest, "Admitted spelling source lost its manifest inside the write transaction");
+    auto manifest = library::FileManifestBuilder::fromView(*optManifest);
+    AO_INVARIANT(item.optManifestEvidence, "A spelling-only relink has no source manifest evidence");
+
+    if (auto const& members = item.optManifestEvidence->members; !members.empty())
+    {
+      if (auto res = writer.relinkCarrier(item.oldUri, item.uri, std::move(manifest)); !res)
+      {
+        reportFailure(item.uri, "relink carrier", res.error().message);
+        _abortTransaction = true;
+        return;
+      }
+
+      for (auto const& member : members)
+      {
+        _result.relinkedIds.push_back(member.trackId);
+      }
+    }
+    else
+    {
+      auto const optTrack = writer.get(item.trackId, library::TrackStore::Reader::LoadMode::Both);
+      AO_INVARIANT(optTrack, "Admitted spelling source lost its Track inside the write transaction");
+      auto merged = library::TrackBuilder::fromCompleteView(*optTrack, dictionary);
+      merged.property().uri(item.uri);
+
+      if (auto res = writer.relink(item.trackId, merged, std::move(manifest)); !res)
+      {
+        reportFailure(item.uri, "relink", res.error().message);
+        _abortTransaction = true;
+        return;
+      }
+
+      _result.relinkedIds.push_back(item.trackId);
+    }
+
+    ++_result.relinkedFileCount;
+  }
+
+  bool ScanApplyOperation::tryApplyRefreshedRelink(ScanItem const& item,
+                                                   library::TrackWriter& trackWriter,
+                                                   library::DictionaryStore const& dictionary,
+                                                   library::TrackBuilder& builder,
+                                                   library::AudioIdentity const& identity)
   {
     if (item.trackId == kInvalidTrackId || item.oldUri.empty())
     {
-      reportFailure(item.uri, "relink", "moved scan item is missing its previous track identity");
+      reportFailure(item.uri, "relink", "relink is missing its previous track identity");
       return false;
     }
 
-    if (!hasAudioIdentity(item))
+    if (item.classification == ScanClassification::Moved)
     {
-      reportFailure(item.uri, "relink", "moved scan item is missing its planned audio identity");
-      return false;
-    }
+      if (!hasAudioIdentity(item))
+      {
+        reportFailure(item.uri, "relink", "moved scan item is missing its planned audio identity");
+        return false;
+      }
 
-    if (item.audioPayloadLength != identity.payloadLength || item.audioSignature != identity.signature)
-    {
-      reportFailure(item.uri, "relink", "audio identity changed before apply");
-      return false;
+      if (item.audioPayloadLength != identity.payloadLength || item.audioSignature != identity.signature)
+      {
+        reportFailure(item.uri, "relink", "audio identity changed before apply");
+        return false;
+      }
     }
 
     auto optExisting = trackWriter.get(item.trackId, library::TrackStore::Reader::LoadMode::Both);
@@ -1387,6 +1636,8 @@ namespace ao::rt
                                                 library::TrackWriter& writer,
                                                 library::DictionaryStore const& dictionary)
   {
+    AO_INVARIANT(prepared.optBuilder, "Prepared carrier has no media builder");
+
     if (item.classification == ScanClassification::New || item.classification == ScanClassification::MissingSegments)
     {
       return insertCarrierSegments(item, prepared, writer);
@@ -1394,9 +1645,8 @@ namespace ao::rt
 
     AO_INVARIANT(item.optManifestEvidence, "An existing carrier has no manifest evidence");
     auto const& expected = *item.optManifestEvidence;
-    auto parsed = prepared.builder.makeBuilder();
+    auto parsed = prepared.optBuilder->makeBuilder();
     auto manifest = makeAvailableManifest(item, prepared.optIdentity);
-    auto const isMoved = item.classification == ScanClassification::Moved;
 
     // Rate, range and derived duration belong to the immutable carrier structure.
     auto const mergeMember = [&](TrackId const trackId)
@@ -1414,8 +1664,9 @@ namespace ao::rt
       return merged;
     };
 
-    if (isMoved && (!prepared.optIdentity || prepared.optIdentity->payloadLength != item.audioPayloadLength ||
-                    prepared.optIdentity->signature != item.audioSignature))
+    if (item.classification == ScanClassification::Moved &&
+        (!prepared.optIdentity || prepared.optIdentity->payloadLength != item.audioPayloadLength ||
+         prepared.optIdentity->signature != item.audioSignature))
     {
       reportFailure(item.uri, "relink carrier", "Audio identity changed before apply");
       _abortTransaction = true;
@@ -1430,12 +1681,12 @@ namespace ao::rt
     {
       if (!tryValidateTrack(mergeMember(member.trackId), writer, item.uri))
       {
-        _abortTransaction = isMoved;
+        _abortTransaction = isRelink(item);
         return {};
       }
     }
 
-    if (isMoved)
+    if (isRelink(item))
     {
       if (auto res = writer.relinkCarrier(item.oldUri, item.uri, manifest); !res)
       {
@@ -1454,7 +1705,7 @@ namespace ao::rt
         return std::unexpected{res.error()};
       }
 
-      if (isMoved)
+      if (isRelink(item))
       {
         _result.relinkedIds.push_back(member.trackId);
       }
@@ -1464,7 +1715,7 @@ namespace ao::rt
       }
     }
 
-    if (!isMoved)
+    if (!isRelink(item))
     {
       if (auto res = writer.updateManifest(item.uri, manifest); !res)
       {

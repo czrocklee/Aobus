@@ -19,10 +19,10 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <span>
 #include <stop_token>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 #include <vector>
 
 namespace ao::library
@@ -64,7 +64,8 @@ namespace ao::rt
     Result<ScanApplyResult> run(std::stop_token stopToken = {});
     // Runtime composition prepares before submitting its background command,
     // then performs final filesystem revalidation during that command's active
-    // pre-transaction turn. apply performs no filesystem reads or audio hashing.
+    // pre-transaction turn. apply requires a write transaction with no staged
+    // mutations and performs no filesystem reads or audio hashing.
     Result<ScanApplyResult> prepare(std::stop_token stopToken = {});
     Result<ScanApplyResult> revalidatePreparedFiles(std::stop_token stopToken = {});
     Result<ScanApplyResult> apply(library::LibraryWrite& write, std::stop_token stopToken = {});
@@ -74,6 +75,7 @@ namespace ao::rt
 
   private:
     struct PreparedScanItem;
+    struct InspectionPhase;
 
     enum class State : std::uint8_t
     {
@@ -84,8 +86,7 @@ namespace ao::rt
       Terminal,
     };
 
-    using CueDirectorySheets = std::unordered_map<std::filesystem::path, Result<std::vector<CueSheetSnapshot>>>;
-    Result<> prepareItem(std::size_t itemIndex, CueDirectorySheets& directories, std::stop_token stopToken);
+    Result<> prepareItem(std::size_t itemIndex, InspectionPhase& phase);
     bool tryValidatePreparedBinding(std::size_t itemIndex, MediaTrack const& media, CueBinding const& binding);
     Result<> prepareCarrierMembers(std::size_t itemIndex,
                                    MediaTrack const& media,
@@ -93,12 +94,18 @@ namespace ao::rt
                                    PreparedScanItem& prepared);
     Result<> validatePlan() const;
     void admitItemsAgainstDatabase(library::TrackWriter const& trackWriter, std::stop_token stopToken);
+    void admitSpellingGroups(library::LibraryWrite const& write, std::stop_token stopToken);
+    void rejectLateSpellingPeer(std::span<std::size_t const> destinations, std::stop_token stopToken);
     Result<std::filesystem::path> resolveItemPath(ScanItem const& item) const;
-    bool tryValidatePathProvenance(std::size_t itemIndex, std::filesystem::path const& fullPath);
-    void revalidatePreparedItem(std::size_t itemIndex, CueDirectorySheets& directories, std::stop_token stopToken);
+    bool tryValidatePathProvenance(std::size_t itemIndex,
+                                   std::filesystem::path const& fullPath,
+                                   InspectionPhase& phase);
+    void revalidatePreparedItem(std::size_t itemIndex, InspectionPhase& phase);
     void revalidatePreparedCueSheets(std::size_t itemIndex,
                                      std::filesystem::path const& fullPath,
-                                     CueDirectorySheets& directories);
+                                     InspectionPhase& phase);
+    bool needsSpellingProof(ScanItem const& item) const;
+    bool tryValidateSpelling(ScanItem const& item, InspectionPhase& phase);
     void revalidatePreparedRegularFile(std::size_t itemIndex, std::filesystem::path const& fullPath);
     void revalidateMissingPath(std::size_t itemIndex);
     void revalidateMovedFile(std::size_t itemIndex, std::filesystem::path const& fullPath, std::stop_token stopToken);
@@ -118,6 +125,7 @@ namespace ao::rt
 
     void reportFailure(std::string_view uri, std::string_view stage, std::string_view message);
     void skipStaleItem(std::size_t itemIndex) noexcept;
+    void finishCancelled() noexcept;
 
     void applyMissingItem(ScanItem const& item, library::TrackWriter& trackWriter);
 
@@ -127,11 +135,15 @@ namespace ao::rt
                               library::TrackBuilder& builder,
                               library::AudioIdentity const& identity);
 
-    bool tryApplyMovedItem(ScanItem const& item,
-                           library::TrackWriter& trackWriter,
-                           library::DictionaryStore const& dictionary,
-                           library::TrackBuilder& builder,
-                           library::AudioIdentity const& identity);
+    void applyPlainSpelling(ScanItem const& item,
+                            library::TrackWriter& writer,
+                            library::DictionaryStore const& dictionary);
+
+    bool tryApplyRefreshedRelink(ScanItem const& item,
+                                 library::TrackWriter& trackWriter,
+                                 library::DictionaryStore const& dictionary,
+                                 library::TrackBuilder& builder,
+                                 library::AudioIdentity const& identity);
 
     Result<> applyCarrierItem(ScanItem const& item,
                               PreparedScanItem const& prepared,

@@ -253,7 +253,8 @@ root:table {
     library_task_updating_compact { "Updating library" }
     library_scan_up_to_date { "Library is up to date" }
     library_scan_complete { "Library scan complete" }
-    library_scan_relinked { "{count, plural, one {Relinked # moved file} other {Relinked # moved files}}" }
+    library_scan_notices_need_review { "Library scan found items that need review. See the log for details." }
+    library_scan_relinked { "{count, plural, one {Relinked # file} other {Relinked # files}}" }
     library_scan_missing { "{count, plural, one {# missing file needs review} other {# missing files need review}}" }
     library_scan_changes_combined { "{relinked}; {missing}" }
     library_scan_completed_with_errors { "{hasChanges, select, yes {Scan completed with errors; {changes}} other {Scan completed with errors}}" }
@@ -837,7 +838,7 @@ root:table {
     library_scan_cue_whole_file { "{uri}: Already imported as a whole file. Remove the Track and scan again to split it." }
     library_scan_cue_missing { "{uri}: No CUE sheet divides this file. Imported segments were kept." }
     library_scan_cue_layout_mismatch { "{uri}: The CUE layout is invalid or differs from imported ranges. Check the sheet and scan again. To replace existing ranges, first remove the imported Tracks." }
-    library_scan_cue_carrier_mismatch { "{uri}: The file''s frame count or sample rate differs from the imported segments. The imported Tracks were not changed." }
+    library_scan_cue_carrier_mismatch { "{uri}: Could not confirm that the file''s frame count and sample rate match the imported segments. The imported Tracks were not changed." }
     library_scan_cue_detail { " Details: {detail}" }
     library_scan_cue_additional_issues { "{count, plural, one {# additional CUE issue; see the log for details.} other {# additional CUE issues; see the log for details.}}" }
     track_cue_number { "CUE Track Number" }
