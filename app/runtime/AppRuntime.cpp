@@ -288,19 +288,12 @@ namespace ao::rt
       return makeError(Error::Code::InvalidState, "No track view is focused");
     }
 
-    auto const stateRes = _implPtr->viewService.findTrackListState(focus.activeViewId);
+    auto const trackId = _implPtr->viewService.firstVisibleSelectedTrack(focus.activeViewId);
 
-    if (!stateRes)
+    if (trackId == kInvalidTrackId)
     {
-      return std::unexpected{stateRes.error()};
+      return makeError(Error::Code::NotFound, "The focused track view has no playback target");
     }
-
-    if (stateRes->selection.empty())
-    {
-      return makeError(Error::Code::NotFound, "The focused track view has no selection");
-    }
-
-    auto const trackId = stateRes->selection.front();
 
     if (auto const playedRes = _implPtr->playback.commands().startFromView(focus.activeViewId, trackId); !playedRes)
     {

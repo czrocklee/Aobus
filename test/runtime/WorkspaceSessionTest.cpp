@@ -18,8 +18,11 @@
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/utility/Uuid.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -481,6 +484,71 @@ namespace ao::rt::test
     auto const backRes = runtimePtr->workspace().goBack();
     REQUIRE_FALSE(backRes);
     CHECK(backRes.error().code == Error::Code::NotFound);
+  }
+
+  TEST_CASE("WorkspaceService - reentrant navigation during failed restore does not adopt rollback views")
+  {
+    auto tempDir = TempDir{};
+    auto runtimePtr = makeStateOnlyRuntime(tempDir);
+    auto& workspace = runtimePtr->workspace();
+    auto& views = runtimePtr->views();
+    auto const targetListId = createList(*runtimePtr, "Reentrant target");
+    auto const departureListId = createList(*runtimePtr, "Already open");
+    auto const oldTargetViewId = requireValue(workspace.navigate({.target = targetListId}));
+    auto const departureViewId = requireValue(workspace.navigate({.target = departureListId}));
+    REQUIRE(workspace.closeView(oldTargetViewId));
+    REQUIRE(workspace.canGoBack());
+    REQUIRE_FALSE(workspace.canGoForward());
+    auto const before = workspace.snapshot();
+    auto const configPath = tempDir.path() / "partial.yaml";
+    // Whichever candidate is destroyed first, the other still matches the navigation target.
+    writeWorkspaceConfig(configPath, libraryIdOf(*runtimePtr), {targetListId.raw(), targetListId.raw(), 999999}, 0);
+    auto store = ConfigStore{configPath, ConfigStore::OpenMode::ReadOnly};
+    auto const replayHistory = GENERATE(false, true);
+    CAPTURE(replayHistory);
+    auto destroyed = std::vector<ViewId>{};
+    auto duringRollback = WorkspaceSnapshot{};
+    bool navigated = false;
+    auto const sub = views.onViewDestroyed(
+      [&](ViewService::ViewDestroyed const& event)
+      {
+        destroyed.push_back(event.viewId);
+
+        if (destroyed.size() == 1)
+        {
+          duringRollback = workspace.snapshot();
+          navigated =
+            replayHistory ? workspace.goBack().has_value() : workspace.navigate({.target = targetListId}).has_value();
+        }
+      });
+
+    auto const restoreRes = workspace.restoreSession(store);
+
+    REQUIRE_FALSE(restoreRes);
+    CHECK(restoreRes.error().code == Error::Code::NotFound);
+    REQUIRE(destroyed.size() == 2);
+    CHECK(duringRollback == before);
+    REQUIRE(navigated);
+    auto const after = workspace.snapshot();
+    CHECK_FALSE(std::ranges::contains(destroyed, after.activeViewId));
+    CHECK(after.openViews == std::vector{departureViewId, after.activeViewId});
+    CHECK(after.revision == before.revision + 1);
+    auto const stateRes = views.findTrackListState(after.activeViewId);
+    REQUIRE(stateRes);
+    CHECK(stateRes->listId == targetListId);
+
+    if (replayHistory)
+    {
+      CHECK_FALSE(workspace.canGoBack());
+      REQUIRE(workspace.goForward());
+    }
+    else
+    {
+      CHECK_FALSE(workspace.canGoForward());
+      REQUIRE(workspace.goBack());
+    }
+
+    CHECK(workspace.snapshot().activeViewId == departureViewId);
   }
 
   TEST_CASE("WorkspaceService - restore rejects unsupported or unknown presentation vocabulary")

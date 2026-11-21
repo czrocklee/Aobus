@@ -277,11 +277,14 @@ same AppKit implementation as the shipping bundle, which does not accept
 `--scenario`. Both entry points follow the
 [AppKit restoration and geometry contract](../system/session-lifecycle.md#appkit).
 
-The scenarios that start playback (`desktop`, `presentation`, `media`) need a
-live Core Audio output; a [software HAL output](#silent-core-audio-test-output)
-is sufficient. The authoring and Credits scenarios do not drive playback, but
-their session fixtures honor the optional Core Audio UID. The isolated
-`quality-presentation` scenario needs no session, runtime, or audio endpoint.
+`desktop` and `media` need a live Core Audio output; a
+[software HAL output](#silent-core-audio-test-output) is sufficient.
+`presentation` uses a silent test provider for playback, including its check
+that Play resumes the paused track after selecting another track in a different
+List. Its separate preference sessions honor the optional Core Audio UID. The
+authoring and Credits fixtures also honor that UID but do not drive playback.
+The isolated `quality-presentation` scenario needs no session, runtime, or
+audio endpoint.
 
 | Scenario               | Direct evidence                                                                                                                                                                                                                                                                       |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -390,9 +393,9 @@ If the variable is set, an empty, unknown, or ambiguous UID fails instead of
 skipping or falling back to the default output. Display names, case differences,
 and surrounding whitespace do not match. With the variable unset, there is no
 selection override. The native AUHAL open and run-state cases skip if there is
-no live output; the native fatal reentry probe and playback smoke scenarios
-require one. Take the UID from native device enumeration; numeric device IDs
-do not survive a Core Audio reload.
+no live output; the native fatal reentry probe and the `desktop` and `media`
+smoke scenarios require one. Take the UID from native device enumeration;
+numeric device IDs do not survive a Core Audio reload.
 
 GUI or service launches that do not inherit the shell environment need the
 setting passed explicitly. To exercise normal output with this test override

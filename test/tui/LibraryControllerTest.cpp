@@ -687,7 +687,7 @@ namespace ao::tui::test
 
     auto controller = fixture.makeController();
 
-    CHECK(controller.revealTrack(secondId) == "Revealed Second");
+    CHECK(ao::test::requireValue(controller.revealTrack(secondId)) == "Revealed Second");
     CHECK(controller.selectedTrack() == 1);
     REQUIRE(controller.selectedTrackView().track != nullptr);
     CHECK(controller.selectedTrackView().track->id == secondId);
@@ -701,13 +701,15 @@ namespace ao::tui::test
 
     auto controller = fixture.makeController();
 
-    CHECK(controller.revealTrack(kInvalidTrackId) == "No current track");
+    auto const invalidRes = controller.revealTrack(kInvalidTrackId);
+    REQUIRE_FALSE(invalidRes);
+    CHECK(invalidRes.error().message == "No current track");
 
     controller.setFilterDraft("First");
     CHECK(requireAppliedFilter(controller) == "Quick filter matched 1 track");
     auto const filteredView = controller.activeViewId();
     auto const expression = fixture.runtimePtr->views().trackListState(filteredView).filterExpression;
-    CHECK(controller.revealTrack(hiddenId) == "Revealed Hidden");
+    CHECK(ao::test::requireValue(controller.revealTrack(hiddenId)) == "Revealed Hidden");
     CHECK(controller.activeViewId() != filteredView);
     CHECK(controller.tracks()[controller.selectedTrack()].id == hiddenId);
     CHECK(fixture.runtimePtr->views().trackListState(filteredView).filterExpression == expression);
@@ -717,6 +719,50 @@ namespace ao::tui::test
     CHECK(controller.tracks().front().row.title == "First");
     REQUIRE(controller.navigateHistory(true));
     CHECK(controller.tracks().size() == 2);
+  }
+
+  TEST_CASE(
+    "LibraryController - in-place playback reveal follows live rows without discarding the filter draft or marks")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const target = fixture.addTrack(library::test::TrackSpec{.title = "Alpha", .album = "Z"});
+    auto const other = fixture.addTrack(library::test::TrackSpec{.title = "Beta", .album = "A"});
+    auto controller = fixture.makeController();
+    REQUIRE(controller.setPresentation("songs"));
+    REQUIRE(controller.tracks().size() == 2);
+    REQUIRE(controller.tracks().front().id == target);
+    auto const viewId = controller.activeViewId();
+    auto& views = fixture.runtimePtr->views();
+    std::int32_t expectedRow = 0;
+
+    SECTION("A replaced projection makes a hidden track visible again")
+    {
+      controller.setFilterDraft("Beta");
+      REQUIRE(controller.applyFilter());
+      REQUIRE(controller.tracks().size() == 1);
+      REQUIRE(controller.tracks().front().id == other);
+      controller.toggleFocusedMark();
+      REQUIRE(views.setFilter(viewId, ""));
+    }
+
+    SECTION("An in-place presentation change reorders and groups the still-visible target")
+    {
+      controller.setSelectedTrackIndex(1);
+      controller.toggleFocusedMark();
+      auto const* albums = rt::builtinTrackPresentationPreset("albums");
+      REQUIRE(albums != nullptr);
+      REQUIRE(views.setPresentation(viewId, albums->spec));
+      expectedRow = 1;
+    }
+
+    controller.setFilterDraft("unfinished");
+    CHECK(ao::test::requireValue(controller.revealPlayingTrack(target, rt::kAllTracksListId)) == "Revealed Alpha");
+    REQUIRE(controller.tracks().size() == 2);
+    CHECK(controller.selectedTrack() == expectedRow);
+    CHECK(controller.tracks()[controller.selectedTrack()].id == target);
+    CHECK(controller.filterDraft() == "unfinished");
+    CHECK(controller.markedIds() == std::unordered_set{other});
+    CHECK(controller.activeViewId() == viewId);
   }
 
   TEST_CASE("LibraryController - revealTrack selects a track after presentation reorder")
@@ -748,7 +794,7 @@ namespace ao::tui::test
     CHECK(controller.tracks()[1].id == secondId);
     CHECK(controller.tracks()[2].id == lastId);
 
-    CHECK(controller.revealTrack(targetId) == "Revealed A One");
+    CHECK(ao::test::requireValue(controller.revealTrack(targetId)) == "Revealed A One");
     CHECK(controller.selectedTrack() == 0);
     REQUIRE(controller.selectedTrackView().track != nullptr);
     CHECK(controller.selectedTrackView().track->id == targetId);
@@ -1561,7 +1607,7 @@ namespace ao::tui::test
     auto controller = fixture.makeController();
     controller.toggleVisualSelection();
     REQUIRE(controller.markedIds() == std::unordered_set<TrackId>{first});
-    CHECK(controller.revealTrack(second) == "Revealed Second");
+    CHECK(ao::test::requireValue(controller.revealTrack(second)) == "Revealed Second");
     CHECK_FALSE(controller.isVisualSelectionActive());
     CHECK(controller.markedIds() == std::unordered_set<TrackId>{first});
     CHECK(controller.tracks()[controller.selectedTrack()].id == second);
@@ -1583,7 +1629,7 @@ namespace ao::tui::test
 
     SECTION("An existing source view is reused")
     {
-      CHECK(controller.revealTrack(target, plainSource, sourceList) == "Revealed Target");
+      CHECK(ao::test::requireValue(controller.revealTrack(target, plainSource, sourceList)) == "Revealed Target");
       CHECK(controller.activeViewId() == plainSource);
       REQUIRE(controller.navigateHistory(false));
       CHECK(controller.activeViewId() == filteredView);
@@ -1592,7 +1638,7 @@ namespace ao::tui::test
     SECTION("A closed source view falls back without changing the filtered view")
     {
       REQUIRE(fixture.runtimePtr->workspace().closeView(plainSource));
-      CHECK(controller.revealTrack(target, plainSource, kInvalidListId) == "Revealed Target");
+      CHECK(ao::test::requireValue(controller.revealTrack(target, plainSource, kInvalidListId)) == "Revealed Target");
       CHECK(controller.currentListId() == rt::kAllTracksListId);
       CHECK_FALSE(fixture.runtimePtr->views().trackListState(sourceView).filterExpression.empty());
     }
@@ -1607,8 +1653,32 @@ namespace ao::tui::test
     auto const selected = controller.selectedTrackIds();
     REQUIRE(selected == std::vector{firstId});
 
-    CHECK(controller.revealTrack(TrackId{999999}) == "Could not locate the current track in the library");
+    controller.setFilterDraft("unfinished");
+    controller.toggleVisualSelection();
+    auto const rowsRevision = controller.trackRowsRevision();
+    bool selectionChanged = false;
+    auto sub = fixture.runtimePtr->views().onSelectionChanged([&](rt::ViewService::SelectionChanged const&)
+                                                              { selectionChanged = true; });
 
+    SECTION("Direct track lookup")
+    {
+      auto const res = controller.revealTrack(TrackId{999999});
+      REQUIRE_FALSE(res);
+      CHECK(res.error().message == "Could not locate the current track in the library");
+    }
+
+    SECTION("Playback source lookup")
+    {
+      auto const res = controller.revealPlayingTrack(TrackId{999999}, rt::kAllTracksListId);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::NotFound);
+      CHECK(res.error().message == "Could not locate the current track in the library");
+    }
+
+    CHECK_FALSE(selectionChanged);
+    CHECK(controller.filterDraft() == "unfinished");
+    CHECK(controller.isVisualSelectionActive());
+    CHECK(controller.trackRowsRevision() == rowsRevision);
     CHECK(fixture.runtimePtr->workspace().snapshot() == before);
     CHECK(controller.activeViewId() == before.activeViewId);
     CHECK(controller.selectedTrackIds() == selected);

@@ -616,13 +616,8 @@ namespace ao::rt
       subscriptions.push_back(transport.onMutedChanged([this](bool) { onSourceChanged(); }));
       subscriptions.push_back(
         transport.onSeekUpdate([this](PlaybackTransport::SeekUpdate const& update) { onSeekUpdate(update); }));
-      subscriptions.push_back(transport.onRevealTrackRequested(
-        [this](PlaybackTransport::RevealTrackRequested const& request)
-        {
-          onRevealTrackRequested(PlaybackRevealTrackRequest{.trackId = request.trackId,
-                                                            .preferredViewId = request.preferredViewId,
-                                                            .preferredListId = request.preferredListId});
-        }));
+      subscriptions.push_back(transport.onRevealTrackRequested([this](PlaybackRevealTrackRequest const& request)
+                                                               { onRevealTrackRequested(request); }));
 
       subscriptions.push_back(succession.onChanged([this](PlaybackSuccessionState const&) { onSourceChanged(); }));
       subscriptions.push_back(succession.onExplicitStartSettled(
@@ -929,6 +924,7 @@ namespace ao::rt
           PlaybackTransportSnapshot{
             .transport = transportState.transport,
             .ready = transportState.ready,
+            .hasDeferredResume = transport.hasDeferredResume(),
             .occurrenceId = transportState.occurrenceId,
             .positionRevision = PlaybackPositionRevision{.value = positionRevisionCounter},
             .finalSeekRevision = PlaybackFinalSeekRevision{.value = finalSeekRevisionCounter},

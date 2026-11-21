@@ -101,7 +101,7 @@ The adapter lives under `app/systemmedia/linux/`; it adds no GTK dependency to t
 - Column drag previews a per-list terminal-cell layout; only normal release commits it, while any interruption rolls the preview back.
 - Ordinary terminal styling inherits the terminal background; semantic roles add accents without painting broad application backgrounds.
 
-Reveal uses the shared playback reveal request. It focuses the subject in the current view if present; otherwise it prefers a matching open source view and falls back to an unfiltered All Tracks view. It verifies membership, finishes any visual range before moving focus, leaves prior filters and saved List predicates intact, and reports the outcome. The previous live filter/presentation is checkpointed in workspace history; `:back` and `:forward` traverse that history without starting playback.
+For current-track reveal, the TUI attaches the view returned by [source-first workspace navigation](../workspace/navigation.md#navigate-to-the-playback-source), resolves the row in that view, and reports the outcome. It finishes any live visual range before focusing the revealed row. Reveal, `:back`, and `:forward` leave playback unchanged.
 
 Browse overlays admit only play/pause, stop, sequence navigation, mode toggles, seek, and volume after local navigation/activation/toggle handling. Search, shell input, Settings, and editors retain exclusive input ownership. Help closes on its effective Help shortcut as well as Escape.
 
@@ -332,7 +332,7 @@ Only painted text has a hit region. Hover highlights the pointed field without c
 **Adjust volume.** Click the volume label to toggle mute, or use the wheel over it to adjust gain by the configured step. The localized mute label replaces the percentage without changing the stored level.
 
 The Soul control toggles playback on click; hover shows quality detail without opening a modal overlay.
-Soul and the effective `playback.playPause` shortcut (Space by default) pause active playback, but cannot resume paused playback while a requested output is pending. From Idle they resume a restored track that succession still owns. Otherwise, with a ready output, Idle or Error can request a new start from the track selection.
+Soul and the effective `playback.playPause` shortcut (Space by default) follow [primary Play policy](../playback/application-commit.md#primary-play). They pause active playback even with a pending output request, but cannot resume a held track on an unavailable output. Only when there is no subject to resume can they start a track under the cursor; marks do not substitute for the cursor.
 Stop is an idempotent silent no-op when playback is already Idle.
 
 Seek press begins a shared `SeekInteraction` gesture and captures the current playback occurrence and duration. Pointer motion publishes guarded queued preview seeks, and release publishes the matching guarded queued final seek through `PlaybackPositionViewModel`.

@@ -121,7 +121,7 @@ A column-header sort creates a temporary presentation labeled with localized
 Only that synthetic presentation is relabeled; opaque unknown identifiers remain
 data. The button's tooltip and accessible name retain the complete label when
 its allocated layout space constrains the painted text.
-The existing `Ctrl+L` keymap action and native Now Playing/menu command submit a playback reveal request; WinUI follows its preferred view/List hints, selects and scrolls the visible row, and does nothing when the track remains hidden by the active projection or was removed.
+The Reveal Current Track command (default `Ctrl+L`) uses [source-first workspace navigation](../workspace/navigation.md#navigate-to-the-playback-source). WinUI adopts the destination view before selecting the track and resolving its scroll position. If the track has been removed, it cannot be revealed. An explicit view-targeted reveal instead uses the supplied destination; it does not bypass that view's filter to scroll a hidden row.
 
 Quick Filter adapts the shared completion and filtering policy. Its [Create List action](windows-library-workflows.md#create-and-edit-lists) enters the ordinary List workflow with the resolved expression.
 
@@ -162,7 +162,7 @@ When no group-heading or Inspector entity exists, both placeholder and decoded c
 
 The Classic playback strip is ordered Soul, Play/Pause, Stop, Seek, Time, Volume. Clicking Classic Soul opens output selection, right-clicking opens the system menu, holding opens a full-screen Soul surface, and hovering describes the audio pipeline.
 
-Modern Soul answers the same right-click, hold, and hover, and its click plays or pauses because Modern offers no separate Play/Pause button. Hovering either Soul describes the audio pipeline.
+Modern Soul handles right-click, hold, and hover like Classic Soul. Its click instead follows [primary Play policy](../playback/application-commit.md#primary-play), as does Classic's separate Play/Pause button.
 
 Enabled, engaged shuffle and repeat icons use a live accent theme resource in
 their element's resource scope. The icon style keeps the accent independent of
@@ -190,7 +190,7 @@ Each later snapshot advertises Play and Pause from `PlaybackActions::isCapable()
 Stop, Next, and Previous instead use `isEnabled()` because their availability depends on current playback state.
 Buttons outside this supported command set are ignored.
 
-A button press is dispatched through the shared playback command surface, whose `tryExecute()` rechecks availability on the execution turn rather than trusting the earlier native button state.
+The dispatcher delivers a button press to `PlaybackActions` with the system-media origin. It rechecks the live state on that turn. Like the window's Play control, system Play resumes a held track first; with no held track it starts the first selected track still in the focused projection, or does nothing if there is none.
 Availability and playback-status/metadata updates use independent optional-WinRT boundaries: failure to update one does not suppress the other.
 Playback observations update transport state and asynchronously replace system title, artist, album, and artwork metadata.
 

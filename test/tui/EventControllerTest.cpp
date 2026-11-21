@@ -70,6 +70,7 @@
 #include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
+#include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
@@ -2304,17 +2305,93 @@ namespace ao::tui::test
                                         .motion = ftxui::Mouse::Pressed,
                                         .x = hitRegions.soulButtonBox.x_min,
                                         .y = hitRegions.soulButtonBox.y_min};
+    REQUIRE(library.selectedTrack() == 0);
+    REQUIRE(library.selectedTrackView().track != nullptr);
+    auto const initialTrack = library.selectedTrackView().track->id;
     CHECK(controller.tryHandleEvent(ftxui::Event::Mouse("", clickSoulButton)));
-    REQUIRE(fixture.tryWaitForPlayback(library.tracks()[library.selectedTrack()].id));
+    REQUIRE(fixture.tryWaitForPlayback(initialTrack));
     CHECK(currentPlayback(fixture).transport.transport == audio::Transport::Playing);
-    CHECK(currentPlayback(fixture).transport.nowPlaying.trackId == library.tracks()[library.selectedTrack()].id);
+    CHECK(currentPlayback(fixture).transport.nowPlaying.trackId == initialTrack);
 
     CHECK(controller.tryHandleEvent(ftxui::Event::Mouse("", clickSoulButton)));
     CHECK(currentPlayback(fixture).transport.transport == audio::Transport::Paused);
 
     CHECK(controller.tryHandleEvent(ftxui::Event::Mouse("", clickSoulButton)));
     CHECK(currentPlayback(fixture).transport.transport == audio::Transport::Playing);
-    CHECK(currentPlayback(fixture).transport.nowPlaying.trackId == library.tracks()[library.selectedTrack()].id);
+    CHECK(currentPlayback(fixture).transport.nowPlaying.trackId == initialTrack);
+  }
+
+  TEST_CASE("EventController - primary play is unavailable while the filter leaves no track cursor")
+  {
+    auto fixture = EventControllerFixture{};
+    fixture.addReadyAudioProvider();
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    REQUIRE_FALSE(library.tracks().empty());
+
+    auto& actions = controller.playbackActions();
+    REQUIRE(actions.isEnabled(uimodel::PlaybackCommand::PlayPause));
+    library.setFilterDraft("No such track");
+    REQUIRE(library.applyFilter());
+    REQUIRE(library.tracks().empty());
+    CHECK_FALSE(actions.isEnabled(uimodel::PlaybackCommand::PlayPause));
+    CHECK_FALSE(actions.tryExecute(uimodel::PlaybackCommand::Play));
+
+    library.clearFilterDraft();
+    REQUIRE(library.applyFilter());
+    REQUIRE(actions.isEnabled(uimodel::PlaybackCommand::PlayPause));
+    REQUIRE(library.selectedTrackView().track != nullptr);
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character(" ")));
+    REQUIRE(fixture.tryWaitForPlayback(library.selectedTrackView().track->id));
+  }
+
+  TEST_CASE("EventController - primary play resumes its subject and offset while browsing another list")
+  {
+    auto fixture = EventControllerFixture{};
+    auto const browsingList = fixture.addList("Other list");
+    auto library = fixture.makeLibrary();
+    auto const sourceList = library.currentListId();
+    REQUIRE(browsingList != sourceList);
+    prepareSeekablePlayback(fixture, library);
+    auto controller = fixture.makeEvents(library);
+    auto& playback = fixture.runtimePtr->playback();
+    auto const subject = playback.snapshot().transport.nowPlaying.trackId;
+    auto const offset = playback.snapshot().transport.duration / 2;
+    playback.commands().pause();
+    playback.commands().seek(offset);
+    REQUIRE(playback.snapshot().transport.elapsed == offset);
+    REQUIRE(library.openList(browsingList));
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::ArrowDown));
+    REQUIRE(library.selectedTrackView().track != nullptr);
+    auto const browsedTrack = library.selectedTrackView().track->id;
+    REQUIRE(browsedTrack != subject);
+
+    SECTION("Paused")
+    {
+      REQUIRE(playback.snapshot().transport.transport == audio::Transport::Paused);
+    }
+
+    SECTION("Restored")
+    {
+      REQUIRE(fixture.runtimePtr->savePlaybackSession());
+      playback.commands().stop();
+      auto const restoredRes = fixture.runtimePtr->restorePlaybackSession();
+      REQUIRE(restoredRes);
+      REQUIRE(restoredRes->restored);
+      REQUIRE(playback.snapshot().transport.transport == audio::Transport::Idle);
+    }
+
+    REQUIRE(library.currentListId() == browsingList);
+    REQUIRE(playback.snapshot().transport.nowPlaying.sourceListId == sourceList);
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character(" ")));
+    REQUIRE(fixture.executor->tryDrainUntil(
+      [&] { return playback.snapshot().transport.transport == audio::Transport::Playing; }, std::chrono::seconds{10}));
+    CHECK(playback.snapshot().transport.nowPlaying.trackId == subject);
+    CHECK(playback.snapshot().transport.nowPlaying.sourceListId == sourceList);
+    CHECK(playback.snapshot().transport.elapsed == offset);
+    CHECK(library.currentListId() == browsingList);
+    REQUIRE(library.selectedTrackView().track != nullptr);
+    CHECK(library.selectedTrackView().track->id == browsedTrack);
   }
 
   TEST_CASE("EventController - unavailable transport command is gated and reported")

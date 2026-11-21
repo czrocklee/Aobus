@@ -6,8 +6,11 @@
 #include "app/macos-appkit/AppKitText.h"
 #include "test/audio/backend/CoreAudioTestSupport.h"
 #include "test/media/wav/TestWav.h"
+#include "test/runtime/AppRuntimeTestSupport.h"
 #include <ao/Contract.h>
 #include <ao/audio/BackendIds.h>
+#include <ao/audio/BackendProvider.h>
+#include <ao/audio/Device.h>
 #include <ao/audio/OutputDeviceSelection.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/utility/Path.h>
@@ -18,6 +21,8 @@
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <memory>
+#include <optional>
 #include <print>
 #include <string>
 #include <string_view>
@@ -301,25 +306,50 @@ namespace ao::appkit::test
     AO_INVARIANT(written != 0, "The native capture must be writable");
   }
 
-  SessionFixture::SessionFixture(std::filesystem::path const& musicRoot, std::filesystem::path const& stateRoot)
+  SessionFixture::SessionFixture(std::filesystem::path const& musicRoot,
+                                 std::filesystem::path const& stateRoot,
+                                 AudioOutput const output)
   {
-    auto outputRes = audio::test::requestedCoreAudioTestOutput();
-    auto const outputError = outputRes ? std::string{} : outputRes.error().message;
-    AO_INVARIANT(outputRes, "The requested Core Audio test output must be available: {}", outputError);
+    auto optOutput = std::optional<audio::Device>{};
+    LibrarySession::AudioProviderFactory createProviders = audio::createPlatformBackendProviders;
+
+    if (output == AudioOutput::Silent)
+    {
+      optOutput = rt::test::makeReadyAudioStatus().devices.front();
+      createProviders = []
+      {
+        auto providers = std::vector<std::unique_ptr<audio::BackendProvider>>{};
+        providers.push_back(rt::test::makeReadyAudioProvider());
+        return providers;
+      };
+    }
+    else
+    {
+      auto outputRes = audio::test::requestedCoreAudioTestOutput();
+      auto const outputError = outputRes ? std::string{} : outputRes.error().message;
+      AO_INVARIANT(outputRes, "The requested Core Audio test output must be available: {}", outputError);
+      optOutput = std::move(*outputRes);
+    }
+
     auto catalogRes = i18n::MessageCatalog::create("en");
     AO_INVARIANT(catalogRes);
-    auto sessionRes =
-      LibrarySession::create(musicRoot, stateRoot, false, std::move(*catalogRes), [](DesktopInvalidation) {});
+    auto sessionRes = LibrarySession::create(
+      musicRoot, stateRoot, false, std::move(*catalogRes), [](DesktopInvalidation) {}, createProviders);
     AO_INVARIANT(sessionRes, "The native fixture must acquire its isolated library");
     _sessionPtr = std::move(*sessionRes);
 
-    if (auto const& optOutput = *outputRes; optOutput)
+    if (optOutput)
     {
       auto const selection = audio::OutputDeviceSelection{
         .backendId = optOutput->backendId, .deviceId = optOutput->id, .profileId = audio::kProfileShared};
       _sessionPtr->selectOutput(selection);
       requireWaitUntil(
-        [&] { return _sessionPtr->runtime().playback().snapshot().transport.output.selectedDevice == selection; },
+        [&]
+        {
+          auto const& transport = _sessionPtr->runtime().playback().snapshot().transport;
+          return transport.ready && transport.output.selectedDevice == selection &&
+                 !transport.output.optPendingOutputSelection;
+        },
         "The native fixture must acknowledge the exact requested output without default fallback");
       std::println("AppKit fixture test output selected: backend={} uid={} profile={}",
                    selection.backendId.raw(),

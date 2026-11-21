@@ -43,7 +43,7 @@ namespace ao::winui::layout
     winrt::Microsoft::UI::Xaml::FrameworkElement titleBarElement{nullptr};
 
     /// Retiring the generation disconnects its menu items and buttons from the session.
-    std::vector<async::Subscription> rescanAvailabilitySubs{};
+    std::vector<async::Subscription> controlAvailabilitySubs{};
   };
 
   /**

@@ -204,6 +204,7 @@ namespace ao::appkit
       registerCommands();
       snapshotSub =
         playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) { handleSnapshot(snapshot); });
+      availabilitySub = actions.onAvailabilityChanged([this] { refreshCommandAvailability(playback.snapshot()); });
       handleSnapshot(playback.snapshot());
     }
 
@@ -427,10 +428,10 @@ namespace ao::appkit
       }
 
       auto const optCommand = playbackCommand(admitted.command);
-      return optCommand && actions.tryExecute(*optCommand);
+      return optCommand && actions.tryExecute(*optCommand, uimodel::PlaybackActionOrigin::SystemMedia);
     }
 
-    void handleSnapshot(rt::PlaybackSnapshot const& snapshot)
+    void refreshCommandAvailability(rt::PlaybackSnapshot const& snapshot)
     {
       AO_EXPECTS(NSThread.isMainThread);
 
@@ -444,11 +445,12 @@ namespace ao::appkit
       nextAdmission.occurrenceId = transport.occurrenceId;
       nextAdmission.duration = transport.duration;
       nextAdmission.available[commandIndex(MediaRemoteCommand::Play)] =
-        isActiveTransport(transport.transport) || actions.isEnabled(uimodel::PlaybackCommand::Play);
+        isActiveTransport(transport.transport) ||
+        actions.isEnabled(uimodel::PlaybackCommand::Play, uimodel::PlaybackActionOrigin::SystemMedia);
       nextAdmission.available[commandIndex(MediaRemoteCommand::Pause)] =
         transport.transport == audio::Transport::Paused || actions.isEnabled(uimodel::PlaybackCommand::Pause);
       nextAdmission.available[commandIndex(MediaRemoteCommand::PlayPause)] =
-        actions.isEnabled(uimodel::PlaybackCommand::PlayPause);
+        actions.isEnabled(uimodel::PlaybackCommand::PlayPause, uimodel::PlaybackActionOrigin::SystemMedia);
       nextAdmission.available[commandIndex(MediaRemoteCommand::Previous)] =
         actions.isEnabled(uimodel::PlaybackCommand::Previous);
       nextAdmission.available[commandIndex(MediaRemoteCommand::Next)] =
@@ -469,6 +471,19 @@ namespace ao::appkit
         auto* const command = nativeSession.commands[index].command;
         command.enabled = static_cast<BOOL>(nextAdmission.available[index]);
       }
+    }
+
+    void handleSnapshot(rt::PlaybackSnapshot const& snapshot)
+    {
+      AO_EXPECTS(NSThread.isMainThread);
+
+      if (retired)
+      {
+        return;
+      }
+
+      refreshCommandAvailability(snapshot);
+      auto const& transport = snapshot.transport;
 
       auto const clockChanged = !hasLastSnapshot || transport.transport != lastSnapshot.transport.transport ||
                                 transport.positionRevision != lastSnapshot.transport.positionRevision ||
@@ -582,6 +597,7 @@ namespace ao::appkit
       retired = true;
 
       nativeSession.retire();
+      availabilitySub.reset();
       snapshotSub.reset();
       artworkRequest.reset();
       displayedCoverId = kInvalidResourceId;
@@ -608,6 +624,7 @@ namespace ao::appkit
     std::shared_ptr<AdmissionGate> gatePtr;
     NativeSession nativeSession;
     async::Subscription snapshotSub;
+    async::Subscription availabilitySub;
     rt::ResourceByteMemoryCache::Request artworkRequest;
     rt::PlaybackSnapshot lastSnapshot{};
     std::chrono::steady_clock::time_point clockReceiptTime{};

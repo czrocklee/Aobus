@@ -5,6 +5,8 @@
 
 #include "app/ThemeCoordinator.h"
 #include "list/ListNavigationController.h"
+#include "runtime/PlaybackSessionState.h"
+#include "runtime/PlaybackSessionYamlSchema.h"
 #include "tag/TagEditController.h"
 #include "test/MessageCatalogTestSupport.h"
 #include "test/TestFixtureSupport.h"
@@ -15,6 +17,7 @@
 #include "test/runtime/AppRuntimeTestSupport.h"
 #include "track/TrackRowCache.h"
 #include <ao/CoreIds.h>
+#include <ao/rt/ConfigStore.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
@@ -25,6 +28,7 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryCommands.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
@@ -40,6 +44,26 @@
 
 namespace ao::gtk::test
 {
+  namespace
+  {
+    TrackId restoreRevealTarget(rt::AppRuntime& runtime)
+    {
+      auto const trackId = addRuntimeTrack(runtime, {.title = "Restored reveal target"});
+      runtime.sources().reloadAllTracks();
+      auto const snapshot = runtime.library().snapshot();
+      auto const optUri = snapshot.trackUri(trackId);
+      REQUIRE(optUri);
+      auto const session = rt::PlaybackSessionState{.libraryId = snapshot.libraryId(),
+                                                    .sourceListId = rt::kAllTracksListId,
+                                                    .currentTrackId = trackId,
+                                                    .currentTrackUri = *optUri};
+      REQUIRE(
+        runtime.workspaceConfigStore().save(rt::kPlaybackSessionConfigGroup, session, rt::PlaybackSessionYamlSchema{}));
+      REQUIRE(ao::test::requireValue(runtime.restorePlaybackSession()).restored);
+      return trackId;
+    }
+  } // namespace
+
   TEST_CASE("TrackPageHost - binds runtime pages to the GTK stack")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
@@ -248,6 +272,102 @@ namespace ao::gtk::test
       CHECK(snapshot.succession.currentTrackId == trackId);
       CHECK(snapshot.succession.sourceListId == rt::kAllTracksListId);
       CHECK(snapshot.transport.nowPlaying.trackId == trackId);
+    }
+
+    SECTION("reveal playing track opens its missing source page and selects the restored row")
+    {
+      auto const trackId = restoreRevealTarget(runtime);
+      host.rebuild(cache);
+      REQUIRE(host.currentVisible() == nullptr);
+
+      runtime.playback().commands().revealPlayingTrack();
+      drainGtkEvents();
+
+      auto const* const page = host.currentVisible();
+      REQUIRE(page != nullptr);
+      CHECK(page->pagePtr->listId() == rt::kAllTracksListId);
+      CHECK(page->pagePtr->selectionController().selectedTrackIds() == std::vector{trackId});
+      CHECK(runtime.views().trackListState(page->viewId).selection == std::vector{trackId});
+    }
+
+    SECTION("reveal reconciles a stale runtime selection when the row is already selected")
+    {
+      auto const trackId = restoreRevealTarget(runtime);
+      auto const viewId = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
+      auto const storedSelection = std::vector{trackId, TrackId{9999}};
+      REQUIRE(runtime.views().setSelection(viewId, storedSelection));
+      host.rebuild(cache);
+      drainGtkEvents();
+      auto const* const page = host.currentVisible();
+      REQUIRE(page != nullptr);
+      REQUIRE(page->pagePtr->selectionController().selectedTrackIds() == std::vector{trackId});
+      REQUIRE(runtime.views().trackListState(viewId).selection == storedSelection);
+
+      SECTION("Playback source reveal")
+      {
+        runtime.playback().commands().revealPlayingTrack();
+      }
+
+      SECTION("Explicit track reveal")
+      {
+        runtime.playback().commands().revealTrack(trackId, viewId, rt::kAllTracksListId);
+      }
+
+      drainGtkEvents();
+
+      CHECK(page->pagePtr->selectionController().selectedTrackIds() == std::vector{trackId});
+      CHECK(runtime.views().trackListState(viewId).selection == std::vector{trackId});
+    }
+
+    SECTION("reveal selects the newly visible track before queued filter replacements arrive")
+    {
+      auto const trackId = restoreRevealTarget(runtime);
+      auto const viewId = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
+      REQUIRE(runtime.views().setFilter(viewId, R"($title = "Hidden")"));
+      host.rebuild(cache);
+      auto mount = GtkWindowFixture{};
+      mount.mount(stack);
+      mount.present();
+      auto const* const page = host.currentVisible();
+      REQUIRE(page != nullptr);
+      REQUIRE(page->pagePtr->get_mapped());
+      REQUIRE_FALSE(page->modelPtr->indexOf(trackId));
+
+      // Leave both the superseded replacement and the final, unfiltered one queued.
+      REQUIRE(runtime.views().setFilter(viewId, R"($title = "Another title")"));
+      REQUIRE(runtime.views().setFilter(viewId, ""));
+      runtime.playback().commands().revealPlayingTrack();
+      CHECK(page->pagePtr->selectionController().selectedTrackIds() == std::vector{trackId});
+      drainGtkEvents();
+
+      REQUIRE(host.currentVisible() == page);
+      CHECK(page->pagePtr->selectionController().selectedTrackIds() == std::vector{trackId});
+      CHECK(runtime.views().trackListState(viewId).selection == std::vector{trackId});
+    }
+
+    SECTION("a hidden page's queued filter reset keeps the revealed page focused")
+    {
+      auto const trackId = restoreRevealTarget(runtime);
+      auto const viewId = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
+      host.rebuild(cache);
+      drainGtkEvents();
+      auto const* const oldPage = host.currentVisible();
+      REQUIRE(oldPage != nullptr);
+      oldPage->pagePtr->selectionController().selectTrack(trackId);
+      REQUIRE(runtime.views().trackListState(viewId).selection == std::vector{trackId});
+
+      auto const* const filter = R"($title = "Hidden")";
+      REQUIRE(runtime.views().setFilter(viewId, filter));
+      runtime.playback().commands().revealPlayingTrack();
+      auto const newView = runtime.workspace().snapshot().activeViewId;
+      REQUIRE(newView != viewId);
+      drainGtkEvents();
+
+      REQUIRE(host.currentVisible() != nullptr);
+      CHECK(host.currentVisible()->viewId == newView);
+      CHECK(runtime.workspace().snapshot().activeViewId == newView);
+      CHECK(runtime.views().trackListState(viewId).filterExpression == filter);
+      CHECK(runtime.views().trackListState(newView).selection == std::vector{trackId});
     }
 
     SECTION("reveal synchronizes a missing workspace page before selecting the track")

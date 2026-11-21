@@ -63,7 +63,7 @@ Aobus installs no TUI desktop file, so the TUI omits the optional `DesktopEntry`
 | `Seek(offset)`                 | queued occurrence-guarded relative positioning; execution-time live elapsed determines final seek or guarded past-end Next |
 | `SetPosition(track, position)` | queued final seek for the current occurrence-qualified track path and valid range, revalidated at execution                |
 
-A successful method reply acknowledges accepted submission, not eventual audio completion.
+A successful player-method reply acknowledges a recognized request. It may have done nothing or submitted a command; it does not confirm that playback changed or audio started.
 Root `Quit` submits its reply before the deferred host callback runs; shutdown still provides no unconditional peer-receipt guarantee.
 
 ## Player properties
@@ -123,6 +123,7 @@ A memoized path is validated as a regular file with the recorded byte size; it i
 ## Signals
 
 The adapter emits `org.freedesktop.DBus.Properties.PropertiesChanged` for affected player fields, including `Metadata` when playback occurrence changes with otherwise repeated track metadata.
+It includes capability fields only when their exported values change.
 It emits `org.mpris.MediaPlayer2.Player.Seeked(position)` in microseconds for non-preview runtime seek updates.
 For a new cover resource, the first `Metadata` change may omit `mpris:artUrl`; successful completion for the still-current resource emits a later `Metadata` change containing it.
 

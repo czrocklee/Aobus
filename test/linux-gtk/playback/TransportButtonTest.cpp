@@ -4,10 +4,16 @@
 #include "playback/TransportButton.h"
 
 #include "test/MessageCatalogTestSupport.h"
+#include "test/TestFixtureSupport.h"
+#include "test/library/TrackTestSupport.h"
 #include "test/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/runtime/AppRuntimeTestSupport.h"
+#include <ao/rt/ViewService.h>
+#include <ao/rt/VirtualListIds.h>
+#include <ao/rt/WorkspaceService.h>
+#include <ao/rt/source/TrackSourceCache.h>
 #include <ao/uimodel/playback/command/PlaybackActions.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -60,15 +66,22 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
-    auto& playback = fixture.runtime().playback();
-    rt::test::addReadyAudioProvider(fixture.runtime());
+    auto& runtime = fixture.runtime();
+    auto& playback = runtime.playback();
+    rt::test::addReadyAudioProvider(runtime);
+    auto const trackId = addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Selected track"});
+    runtime.sources().reloadAllTracks();
+    auto const viewId = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
+    REQUIRE(runtime.views().setSelection(viewId, {trackId}));
     drainGtkEvents();
     std::int32_t playSelectionCalls = 0;
     auto actions = uimodel::PlaybackActions{playback, [&] { ++playSelectionCalls; }};
+    actions.bindFocusedSelection(runtime.workspace(), runtime.views());
     auto button =
       TransportButton{playback, actions, ao::test::englishMessageCatalog(), TransportButton::Action::Play, false};
     auto* const gtkButton = dynamic_cast<Gtk::Button*>(&button.widget());
     REQUIRE(gtkButton != nullptr);
+    REQUIRE(gtkButton->get_sensitive());
     REQUIRE(playSelectionCalls == 0);
 
     emitClicked(*gtkButton);

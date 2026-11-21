@@ -294,7 +294,7 @@ namespace ao::winui::layout
       {
         if (auto const backRes = _workspace.goBack(); !backRes)
         {
-          report(formatResource("winui_navigation_failed", backRes.error().message));
+          report(formatResource("navigation_failed", backRes.error().message));
         }
       }
 
@@ -307,7 +307,7 @@ namespace ao::winui::layout
 
         if (auto const navigatedRes = _trackList.navigateTo(listId); !navigatedRes)
         {
-          report(formatResource("winui_navigation_failed", navigatedRes.error().message));
+          report(formatResource("navigation_failed", navigatedRes.error().message));
           return;
         }
 

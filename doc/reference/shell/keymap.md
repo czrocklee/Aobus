@@ -92,7 +92,7 @@ Other actions have no shipped global shortcut.
 
 The TUI Go to action opens a modal menu (default `g`, command `:goto`). Its fixed suffixes are `t` for the playing track, `a` for its artist, `b` for its album, `[` for previous view, and `]` for next view. Suffixes are menu input rather than persisted multi-chord bindings. Escape or unrelated input cancels; arrows/j/k and Enter select and activate. There is no timeout.
 
-The prefix and each root navigation action can be rebound separately. Effective direct shortcuts take precedence in discovery hints; otherwise Help and the Command Palette show the effective prefix plus the suffix. Unbinding the prefix removes that fallback hint but leaves `:goto` available. Existing action descriptors precede the newly introduced navigation descriptors when resolving projected collisions, preserving existing custom bindings.
+The prefix and each root navigation action can be rebound separately. Effective direct shortcuts take precedence in discovery hints; otherwise Help and the Command Palette show the effective prefix plus the suffix. Unbinding the prefix removes that fallback hint but leaves `:goto` available. When two bindings project to one terminal event, the earlier descriptor wins; a Go to binding cannot displace an earlier claimant.
 
 ### TUI defaults
 
@@ -152,9 +152,9 @@ The defaults below use canonical chord spelling: `C` is lowercase `c`, and `Shif
 | `playback.cycleRepeat`                | `R`                     |
 | `workspace.revealCurrentTrack`        | `C`                     |
 
-The stored `tui.*` ids identify terminal actions; `tui.library.playSelection` deliberately differs from shared `playback.play`, because it starts a sequence from the selected row rather than resuming the current playback subject.
+`tui.library.playSelection` (default Return at the root) requests a start from the track under the cursor. It does not resume another track or play the marked set. `playback.playPause` (default Space) follows [primary Play](../../system/playback/application-commit.md#primary-play).
 
-The TUI workspace focus action `tui.workspace.switchFocus` defaults to Tab and Shift+Tab and is appended after existing actions for collision resolution. It operates only in workspace scope; completion/editor Tab remains local, and active List search always uses Tab/Shift+Tab to clear search and return to Tracks.
+The TUI workspace focus action `tui.workspace.switchFocus` defaults to Tab and Shift+Tab. Earlier descriptors take precedence if they claim the same terminal event. It operates only in workspace scope; completion/editor Tab remains local, and active List search always uses Tab/Shift+Tab to clear search and return to Tracks.
 
 In the TUI, Shift+Left/Right are fixed contextual keys for moving the focused Lists or Detail divider. They are not editable action bindings; Tracks, text inputs, and popovers retain their own input ownership.
 
@@ -170,11 +170,14 @@ The rebindable `tui.workspace.beginPanelResize` action (default Ctrl+W) starts a
 | `track.orderMove*`                      | installed  | installed                                                     | installed             |
 | `tui.*`                                 | no handler | installed when projectable                                    | no handler            |
 
+GTK binds `Ctrl+P`, `Media:Play` and `Media:Pause` to `win.playback.playPause` by default. When GTK receives one of these accelerators, it toggles playback under the [local transport policy](../../system/playback/application-commit.md#primary-play); it does not issue a distinct [MPRIS Play or Pause](../../system/frontend/mpris.md#command-and-state-invariants). Separately from the editable keymap, the GTK window handles unmodified Space as Play/Pause outside text-editing focus when the key reaches the window handler.
+
 The Windows shell installs an accelerator only when it has a handler for the action, the action does not present from an anchor, the chord is not a media key, and Windows has a key for the chord; anything else is skipped and logged rather than installed dead.
 
-Media chords are the shell's one deliberate omission. Windows delivers the transport keys to whichever application registered for system media control, which this shell does, so those keys already run their command from anywhere - including while another application has focus. An accelerator on the same key would run it a second time whenever the window happened to be focused. `playback.stop` therefore has no Windows accelerator at all, since `Media:Stop` is its only shipped chord.
+Windows handles system transport through SMTC, which can receive commands while the window is unfocused. Skipping media accelerators avoids handling the same key twice when the window has focus. With the shipped map, `playback.stop` therefore has no Windows accelerator: `Media:Stop` is its only chord. Installing a GTK accelerator or enabling system media controls does not guarantee that the desktop delivers a physical media key to Aobus.
 
-GTK installs its media chords, because there the physical key reaches the focused window and its MPRIS interface answers a different caller.
+AppKit uses native track-table input rather than this accelerator map. Space toggles playback unless it continues a type selection; Return requests playback of the selected track.
+
 The four order shortcuts act only when the active saved List is flat and unsorted.
 GTK accepts one command per physical key-down/key-up cycle, so OS auto-repeat while a key remains held does not produce repeated full-order commits.
 

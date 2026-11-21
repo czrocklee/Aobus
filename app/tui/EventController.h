@@ -290,6 +290,7 @@ namespace ao::tui
     HoveredButton _hoveredButton = HoveredButton::None;
     std::optional<ftxui::Mouse> _optLastMouse;
     std::uint64_t _filterDebounceGeneration = 0;
+    async::Subscription _trackCursorSub;
     async::Subscription _revealSub;
     // Declared last so teardown requests stop before any callback target is destroyed.
     async::TaskHandle _filterDebounceTask{};

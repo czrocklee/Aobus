@@ -832,14 +832,23 @@ namespace ao::systemmedia::test
     auto const firstTrack = addRuntimeTrack(fixture, library::test::TrackSpec{.title = "First", .uri = fixturePath});
     auto const secondTrack = addRuntimeTrack(fixture, library::test::TrackSpec{.title = "Second", .uri = fixturePath});
     auto const viewId = prepareAllTracksView(runtime);
-    std::int32_t playSelectionCount = 0;
-    auto actions = uimodel::PlaybackActions{playback, [&playSelectionCount] { ++playSelectionCount; }};
+    std::int32_t systemMediaStartCount = 0;
+    auto actions = uimodel::PlaybackActions{
+      playback,
+      [] {},
+      uimodel::SystemMediaPlayHandler{.play =
+                                        [&systemMediaStartCount]
+                                      {
+                                        ++systemMediaStartCount;
+                                        return true;
+                                      }},
+    };
     auto callbacks = MprisBridge::Callbacks{};
     auto endpoint = MprisPlaybackEndpoint{playback, actions, callbacks};
 
     CHECK(endpoint.tryDispatchPlayerMethod("PlayPause"));
     CHECK(endpoint.tryDispatchPlayerMethod("Play"));
-    CHECK(playSelectionCount == 2);
+    CHECK(systemMediaStartCount == 2);
 
     REQUIRE(playback.commands().startFromView(viewId, firstTrack));
     REQUIRE(tryWaitForPlayback(fixture, firstTrack));

@@ -16,6 +16,7 @@
 #include "test/runtime/AsyncTestSupport.h"
 #include "test/runtime/ExecutorTestSupport.h"
 #include "test/runtime/PlaybackTestSupport.h"
+#include "test/runtime/PlaybackUiTestSupport.h"
 #include "test/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/CoreIds.h>
@@ -40,6 +41,8 @@
 #include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/library/LibrarySnapshot.h>
+#include <ao/rt/playback/PlaybackCommands.h>
+#include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/rt/source/TrackSourceCache.h>
@@ -56,6 +59,7 @@
 #include <string_view>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 namespace ao::rt::test
 {
@@ -366,6 +370,61 @@ namespace ao::rt::test
     auto const withoutSelectionRes = appPtr->playSelectionInFocusedView();
     REQUIRE_FALSE(withoutSelectionRes);
     CHECK(withoutSelectionRes.error().code == Error::Code::NotFound);
+  }
+
+  TEST_CASE("AppRuntime - focused playback skips a hidden first selection and starts the next selected track")
+  {
+    auto fixture = PlaybackUiFixture{};
+    fixture.makePlaybackReady();
+    auto const hiddenId = fixture.addPlayableTrack("Hidden A");
+    auto const shownId = fixture.addPlayableTrack("Visible B");
+    auto& runtime = fixture.runtime();
+    auto const selection = std::vector{hiddenId, shownId};
+    REQUIRE(runtime.views().setSelection(fixture.viewId, selection));
+    REQUIRE(runtime.views().setFilter(fixture.viewId, R"($title = "Visible B")"));
+    fixture.executor->drain();
+
+    CHECK(requireValue(runtime.playSelectionInFocusedView()) == shownId);
+    REQUIRE(fixture.tryWaitForPlayback(shownId));
+    CHECK(runtime.playback().snapshot().succession.currentTrackId == shownId);
+    CHECK(runtime.views().trackListState(fixture.viewId).selection == selection);
+  }
+
+  TEST_CASE("AppRuntime - playSelectionInFocusedView rejects hidden selection before playback admission")
+  {
+    auto tempDir = TempDir{};
+    auto executorPtr = std::make_unique<QueuedExecutor>();
+    auto* const executor = executorPtr.get();
+    auto runtimePtr = makeRuntime(tempDir, std::move(executorPtr));
+    auto const hiddenTrackId = addRuntimeTrack(*runtimePtr, {.title = "Selected"});
+    auto const shownTrackId = addRuntimeTrack(*runtimePtr, {.title = "Unselected"});
+    auto const viewId = requireValue(runtimePtr->workspace().navigate({.target = GlobalViewKind::AllTracks}));
+    auto& views = runtimePtr->views();
+    REQUIRE(views.setSelection(viewId, {hiddenTrackId}));
+    REQUIRE(views.setFilter(viewId, R"($title = "Unselected")"));
+    executor->drain();
+    auto const projectionPtr = requireValue(views.findTrackListProjection(viewId));
+    REQUIRE(projectionPtr->size() == 1);
+    REQUIRE(projectionPtr->trackIdAt(0) == shownTrackId);
+    REQUIRE(views.trackListState(viewId).selection == std::vector{hiddenTrackId});
+
+    auto& playback = runtimePtr->playback();
+    auto const before = playback.snapshot();
+    auto optPlayRes = std::optional<Result<TrackId>>{};
+    auto const sub =
+      playback.events().onRevealTrackRequested([&](PlaybackRevealTrackRequest const&) noexcept
+                                               { optPlayRes.emplace(runtimePtr->playSelectionInFocusedView()); });
+
+    // An observer-issued start would queue successfully, even if its track was later rejected by the playback layer.
+    playback.commands().revealTrack(shownTrackId);
+
+    auto const hasPlayRes = optPlayRes.has_value();
+    REQUIRE(hasPlayRes);
+    REQUIRE_FALSE(*optPlayRes);
+    CHECK(optPlayRes->error().code == Error::Code::NotFound);
+    CHECK(executor->queuedCount() == 0);
+    CHECK(playback.snapshot() == before);
+    CHECK(views.trackListState(viewId).selection == std::vector{hiddenTrackId});
   }
 
   TEST_CASE("CoreRuntime - shutdown retires a queued library publication", "[concurrency]")

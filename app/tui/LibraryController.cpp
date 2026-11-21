@@ -185,15 +185,15 @@ namespace ao::tui
     return fallback->spec;
   }
 
-  SelectedTrackView LibraryController::selectedTrackView() const
+  SelectedTrackView LibraryController::selectedTrackView() const noexcept
   {
-    if (_tracks.empty())
+    if (_selectedTrack < 0 || static_cast<std::size_t>(_selectedTrack) >= _tracks.size())
     {
       return {};
     }
 
-    auto const selectedIndex = clampSelection(static_cast<std::size_t>(std::max(0, _selectedTrack)), _tracks.size());
-    return {.track = &_tracks[selectedIndex], .coverArtId = _tracks[selectedIndex].coverArtId};
+    auto const& track = _tracks[static_cast<std::size_t>(_selectedTrack)];
+    return {.track = &track, .coverArtId = track.coverArtId};
   }
 
   uimodel::TrackCreditSections const& LibraryController::focusedCredits() const
@@ -231,14 +231,13 @@ namespace ao::tui
   {
     auto ids = std::vector<TrackId>{};
 
-    if (_tracks.empty())
-    {
-      return ids;
-    }
-
     if (_markedIds.empty())
     {
-      ids.push_back(_tracks[clampSelection(static_cast<std::size_t>(std::max(0, _selectedTrack)), _tracks.size())].id);
+      if (auto const id = focusedTrackId(); id != kInvalidTrackId)
+      {
+        ids.push_back(id);
+      }
+
       return ids;
     }
 
@@ -544,12 +543,8 @@ namespace ao::tui
 
   TrackId LibraryController::focusedTrackId() const noexcept
   {
-    if (_tracks.empty())
-    {
-      return kInvalidTrackId;
-    }
-
-    return _tracks[clampSelection(static_cast<std::size_t>(std::max(0, _selectedTrack)), _tracks.size())].id;
+    auto const* track = selectedTrackView().track;
+    return track == nullptr ? kInvalidTrackId : track->id;
   }
 
   void LibraryController::invalidateFocusedCredits() noexcept
@@ -618,6 +613,12 @@ namespace ao::tui
 
   void LibraryController::publishSelection()
   {
+    if (auto const available = focusedTrackId() != kInvalidTrackId;
+        std::exchange(_trackCursorAvailable, available) != available)
+    {
+      _trackCursorAvailableSignal.emit(available);
+    }
+
     if (_activeViewId == rt::kInvalidViewId)
     {
       return;
@@ -675,18 +676,19 @@ namespace ao::tui
     }
   }
 
-  std::string LibraryController::revealTrack(TrackId const trackId,
-                                             rt::ViewId const preferredViewId,
-                                             ListId const preferredListId)
+  Result<std::string> LibraryController::revealTrack(TrackId const trackId,
+                                                     rt::ViewId const preferredViewId,
+                                                     ListId const preferredListId)
   {
     if (trackId == kInvalidTrackId)
     {
-      return chromeText(_textCatalog, i18n::MessageId::TuiLibraryNoCurrentTrack);
+      return makeError(Error::Code::InvalidInput, chromeText(_textCatalog, i18n::MessageId::TuiLibraryNoCurrentTrack));
     }
 
     if (!_library.snapshot().containsTrack(trackId))
     {
-      return chromeText(_textCatalog, i18n::MessageId::TuiLibraryCurrentTrackNotInView);
+      return makeError(
+        Error::Code::NotFound, chromeText(_textCatalog, i18n::MessageId::TuiLibraryCurrentTrackNotInView));
     }
 
     if (!containsTrackId(trackId))
@@ -717,9 +719,14 @@ namespace ao::tui
       // presentation and filter in the existing workspace history before leaving.
       auto const stateRes = _views.findTrackListState(_activeViewId);
 
-      if (!stateRes || !_workspace.setActivePresentation(stateRes->presentation))
+      if (!stateRes)
       {
-        return chromeText(_textCatalog, i18n::MessageId::TuiLibraryCurrentTrackNotInView);
+        return std::unexpected{formatNavigationFailedError(stateRes.error())};
+      }
+
+      if (auto const res = _workspace.setActivePresentation(stateRes->presentation); !res)
+      {
+        return std::unexpected{formatNavigationFailedError(res.error())};
       }
 
       commitVisualSelection();
@@ -748,19 +755,104 @@ namespace ao::tui
 
       if (!navigationRes)
       {
-        return chromeText(_textCatalog, i18n::MessageId::TuiLibraryCurrentTrackNotInView);
+        recoverWorkspaceView();
+        return std::unexpected{formatNavigationFailedError(navigationRes.error())};
       }
     }
 
-    commitVisualSelection();
+    return revealLoadedTrack(trackId);
+  }
 
-    if (trySetSelectedTrackById(trackId))
+  Result<std::string> LibraryController::revealPlayingTrack(TrackId const trackId, ListId const sourceListId)
+  {
+    if (trackId == kInvalidTrackId)
     {
-      afterFocusMove();
-      return libraryRevealedTrack(_textCatalog, trackDisplayTitle(_textCatalog, _tracks[_selectedTrack].row));
+      return makeError(Error::Code::InvalidInput, chromeText(_textCatalog, i18n::MessageId::TuiLibraryNoCurrentTrack));
     }
 
-    return chromeText(_textCatalog, i18n::MessageId::TuiLibraryCurrentTrackNotInView);
+    auto const previousActiveView = _workspace.snapshot().activeViewId;
+    auto const targetRes = _workspace.navigateToTrackSource(
+      trackId, sourceListId, [this](ListId const listId) { return presentationForList(listId); });
+
+    if (!targetRes)
+    {
+      // A rejected workspace command did not navigate or replace any rows.
+      if (_workspace.snapshot().activeViewId != _activeViewId)
+      {
+        recoverWorkspaceView();
+      }
+
+      if (targetRes.error().code == Error::Code::NotFound && !_library.snapshot().containsTrack(trackId))
+      {
+        return makeError(
+          Error::Code::NotFound, chromeText(_textCatalog, i18n::MessageId::TuiLibraryCurrentTrackNotInView));
+      }
+
+      return std::unexpected{formatNavigationFailedError(targetRes.error())};
+    }
+
+    if (auto const res = syncRevealView(*targetRes); !res)
+    {
+      if (*targetRes != previousActiveView && _workspace.snapshot().activeViewId == *targetRes &&
+          _workspace.canGoBack())
+      {
+        std::ignore = _workspace.goBack();
+      }
+
+      recoverWorkspaceView();
+      return std::unexpected{formatNavigationFailedError(res.error())};
+    }
+
+    return revealLoadedTrack(trackId);
+  }
+
+  Result<> LibraryController::syncRevealView(rt::ViewId const viewId)
+  {
+    if (viewId != _activeViewId)
+    {
+      return attachView(viewId);
+    }
+
+    // A filter can replace the projection without replacing its view. A sort,
+    // grouping or library change can instead mutate the loaded projection.
+    auto const projectionRes = _views.findTrackListProjection(viewId);
+
+    if (!projectionRes)
+    {
+      return std::unexpected{projectionRes.error()};
+    }
+
+    if (_loadedRowsDirty || _loadedProjectionPtr.lock() != *projectionRes)
+    {
+      auto const previousTrackId = focusedTrackId();
+
+      if (auto res = refreshActiveView(); !res)
+      {
+        return res;
+      }
+
+      // Commit the existing range, not a new range in the new order.
+      endVisualSelection();
+      restoreSelection(previousTrackId);
+      syncSelectedPresentation(activePresentationId());
+    }
+
+    return {};
+  }
+
+  Result<std::string> LibraryController::revealLoadedTrack(TrackId const trackId)
+  {
+    endVisualSelection();
+    auto const found = trySetSelectedTrackById(trackId);
+    publishSelection();
+
+    if (!found)
+    {
+      return makeError(
+        Error::Code::NotFound, chromeText(_textCatalog, i18n::MessageId::TuiLibraryCurrentTrackNotInView));
+    }
+
+    return libraryRevealedTrack(_textCatalog, trackDisplayTitle(_textCatalog, _tracks[_selectedTrack].row));
   }
 
   bool LibraryController::canNavigateBack() const
@@ -893,9 +985,7 @@ namespace ao::tui
       AO_FATAL("TUI could not materialize a view after changing its presentation: {}", snapshotRes.error().message);
     }
 
-    _tracks = std::move(snapshotRes->tracks);
-    _sections = std::move(snapshotRes->sections);
-    ++_trackRowsRevision;
+    installRows(std::move(*snapshotRes));
     syncSelectedPresentation(spec.id);
 
     _listPresentations.setPresentationIdForList(_currentListId, spec.id);
@@ -968,20 +1058,7 @@ namespace ao::tui
     {
       if (_workspace.snapshot().activeViewId != _activeViewId)
       {
-        if (auto const attachedRes = attachActiveWorkspaceView();
-            (!attachedRes || !*attachedRes) && !navigateToList(rt::kAllTracksListId))
-        {
-          _tracks.clear();
-          _sections.clear();
-          ++_trackRowsRevision;
-          clearMarkState();
-          _activeViewId = rt::kInvalidViewId;
-          _currentListId = kInvalidListId;
-          _viewSyncError = i18n::requiredFormat(
-            _textCatalog, i18n::MessageId::TuiNavigationSyncFailed, {{"detail", res.error().message}});
-        }
-
-        publishSelection();
+        recoverWorkspaceView();
       }
 
       return std::unexpected{res.error()};
@@ -991,47 +1068,85 @@ namespace ao::tui
     return true;
   }
 
-  std::string LibraryController::reloadActiveList()
+  Error LibraryController::formatNavigationFailedError(Error const& error) const
   {
-    auto const selectedBefore = selectedTrackView();
-    auto const previousTrackId = selectedBefore.track == nullptr ? kInvalidTrackId : selectedBefore.track->id;
-    auto const previousSelectedTrack = _selectedTrack;
+    return Error{
+      .code = error.code,
+      .message = i18n::requiredFormat(_textCatalog, i18n::MessageId::NavigationFailed, {{"detail", error.message}}),
+    };
+  }
 
-    if (auto reloadRes = refreshActiveView(); !reloadRes)
+  void LibraryController::recoverWorkspaceView(bool const tryKeepCurrentView)
+  {
+    // Navigation can commit before the TUI checks the destination's library rows.
+    // Follow the actual workspace if possible, without consuming Back. If its
+    // target vanished, the still-mounted view can keep its draft, cursor and marks.
+    if (auto const active = _workspace.snapshot().activeViewId;
+        active != _activeViewId && active != rt::kInvalidViewId && attachView(active))
     {
-      APP_LOG_WARN(
-        "TUI active view is no longer available; opening a workspace fallback: {}", reloadRes.error().message);
-      auto const workspaceActiveViewId = _workspace.snapshot().activeViewId;
-
-      if (workspaceActiveViewId != rt::kInvalidViewId && workspaceActiveViewId != _activeViewId)
-      {
-        reloadRes = attachView(workspaceActiveViewId);
-      }
-
-      if (!reloadRes)
-      {
-        reloadRes = navigateToList(rt::kAllTracksListId);
-      }
-
-      if (!reloadRes)
-      {
-        APP_LOG_ERROR("TUI could not recover an active workspace view: {}", reloadRes.error().message);
-        return libraryReloadedTracks(_textCatalog, _tracks.size());
-      }
+      publishSelection();
+      return;
     }
-    else
-    {
-      if (!trySetSelectedTrackById(previousTrackId))
-      {
-        _selectedTrack = moveSelection(previousSelectedTrack, 0, _tracks.size());
-      }
 
-      // The recovery paths above attach or navigate, which reconcile marks
-      // themselves; only the plain reload still owes that to the restored focus.
-      reconcileMarks();
+    if (tryKeepCurrentView && refreshKeepingSelection() && _workspace.focusView(_activeViewId))
+    {
+      publishSelection();
+      return;
+    }
+
+    if (auto const fallbackRes = navigateToList(rt::kAllTracksListId); !fallbackRes)
+    {
+      _loadedProjectionSub.reset();
+      _loadedProjectionPtr.reset();
+      _tracks.clear();
+      _sections.clear();
+      ++_trackRowsRevision;
+      clearMarkState();
+      _activeViewId = rt::kInvalidViewId;
+      _currentListId = kInvalidListId;
+      _filterDraft.clear();
+      _filterError.clear();
+      _viewSyncError = i18n::requiredFormat(
+        _textCatalog, i18n::MessageId::TuiNavigationSyncFailed, {{"detail", fallbackRes.error().message}});
     }
 
     publishSelection();
+  }
+
+  Result<> LibraryController::refreshKeepingSelection()
+  {
+    auto const previousTrackId = focusedTrackId();
+
+    if (auto res = refreshActiveView(); !res)
+    {
+      return res;
+    }
+
+    restoreSelection(previousTrackId);
+    return {};
+  }
+
+  void LibraryController::restoreSelection(TrackId const previousTrackId)
+  {
+    if (!trySetSelectedTrackById(previousTrackId))
+    {
+      _selectedTrack = moveSelection(_selectedTrack, 0, _tracks.size());
+    }
+
+    reconcileMarks();
+  }
+
+  std::string LibraryController::reloadActiveList()
+  {
+    if (auto res = refreshKeepingSelection(); !res)
+    {
+      recoverWorkspaceView(false);
+    }
+    else
+    {
+      publishSelection();
+    }
+
     return libraryReloadedTracks(_textCatalog, _tracks.size());
   }
 
@@ -1072,9 +1187,7 @@ namespace ao::tui
       AO_FATAL("TUI could not materialize a view after applying its filter: {}", snapshotRes.error().message);
     }
 
-    _tracks = std::move(snapshotRes->tracks);
-    _sections = std::move(snapshotRes->sections);
-    ++_trackRowsRevision;
+    installRows(std::move(*snapshotRes));
 
     if (resolved.expression == previousExpression)
     {
@@ -1160,7 +1273,7 @@ namespace ao::tui
 
     auto const& projectionPtr = *foundProjectionRes;
     auto const reader = _library.snapshot();
-    auto snapshot = TrackItemsSnapshot{};
+    auto snapshot = TrackItemsSnapshot{.projectionPtr = projectionPtr};
     snapshot.tracks.reserve(projectionPtr->size());
     snapshot.sections.reserve(projectionPtr->groupCount());
 
@@ -1205,6 +1318,21 @@ namespace ao::tui
     return snapshot;
   }
 
+  void LibraryController::installRows(TrackItemsSnapshot snapshot)
+  {
+    if (_loadedProjectionPtr.lock() != snapshot.projectionPtr)
+    {
+      _loadedProjectionPtr = snapshot.projectionPtr;
+      _loadedProjectionSub = snapshot.projectionPtr->subscribe([this](rt::TrackListProjectionDeltaBatch const&)
+                                                               { _loadedRowsDirty = true; });
+    }
+
+    _tracks = std::move(snapshot.tracks);
+    _sections = std::move(snapshot.sections);
+    ++_trackRowsRevision;
+    _loadedRowsDirty = false;
+  }
+
   Result<> LibraryController::refreshActiveView()
   {
     invalidateFocusedCredits();
@@ -1236,9 +1364,7 @@ namespace ao::tui
     }
 
     _filterError = std::move(filterError);
-    _tracks = std::move(snapshotRes->tracks);
-    _sections = std::move(snapshotRes->sections);
-    ++_trackRowsRevision;
+    installRows(std::move(*snapshotRes));
 
     // Marks stay for the caller to reconcile: a running visual range is derived
     // from the focused row, and the focus this view keeps is only restored once
@@ -1285,9 +1411,7 @@ namespace ao::tui
     _selectedTrack = 0;
     _filterDraft = stateRes->filterExpression;
     _filterError = std::move(filterError);
-    _tracks = std::move(snapshotRes->tracks);
-    _sections = std::move(snapshotRes->sections);
-    ++_trackRowsRevision;
+    installRows(std::move(*snapshotRes));
 
     if (!sameView)
     {

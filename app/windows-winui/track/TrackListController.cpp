@@ -22,6 +22,7 @@
 #include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibrarySnapshot.h>
+#include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackColumnDefaults.h>
@@ -226,15 +227,16 @@ namespace ao::winui
       {
         if (changed.viewId == _viewId)
         {
-          resetProjection(changed.projectionPtr);
+          adoptWorkspaceView(_viewId);
         }
       });
     _workspaceSub = _workspace.onChanged(
-      [this](rt::WorkspaceChanged const& changed)
+      [this](rt::WorkspaceChanged const&)
       {
-        if (changed.snapshot.activeViewId != _viewId)
+        // A synchronous reveal may already have adopted a later commit.
+        if (auto const active = _workspace.snapshot().activeViewId; active != _viewId)
         {
-          adoptWorkspaceView(changed.snapshot.activeViewId);
+          adoptWorkspaceView(active);
         }
       });
     reload();
@@ -716,27 +718,29 @@ namespace ao::winui
 
   void TrackListController::adoptWorkspaceView(rt::ViewId const viewId)
   {
-    _viewId = viewId;
+    auto projectionPtr = std::shared_ptr<rt::TrackListProjection const>{};
 
-    if (viewId == rt::kInvalidViewId)
+    if (viewId != rt::kInvalidViewId)
     {
-      resetProjection(nullptr);
-      return;
+      if (auto const projectionRes = _views.findTrackListProjection(viewId); projectionRes)
+      {
+        projectionPtr = *projectionRes;
+      }
     }
 
-    auto const foundProjectionRes = _views.findTrackListProjection(viewId);
-    resetProjection(foundProjectionRes ? *foundProjectionRes : nullptr);
+    // Projection replacement is posted too. Bind the live identity, not an
+    // obsolete event payload, and do not reset an already-revealed table.
+    if (_viewId != viewId || _projectionPtr != projectionPtr)
+    {
+      _viewId = viewId;
+      resetProjection(std::move(projectionPtr));
+    }
   }
 
-  Result<> TrackListController::revealTrack(TrackId const trackId,
-                                            rt::ViewId const preferredViewId,
-                                            ListId const preferredListId)
+  Result<rt::ViewId> TrackListController::focusExplicitReveal(rt::PlaybackRevealTrackRequest const& request)
   {
-    if (trackId == kInvalidTrackId)
-    {
-      return {};
-    }
-
+    auto const preferredViewId = request.preferredViewId;
+    auto const preferredListId = request.preferredListId;
     auto const snapshot = _workspace.snapshot();
     auto targetViewId = rt::kInvalidViewId;
 
@@ -761,34 +765,59 @@ namespace ao::winui
       {
         if (auto openedRes = navigateTo(preferredListId); !openedRes)
         {
-          return openedRes;
+          return std::unexpected{openedRes.error()};
         }
 
         targetViewId = _viewId;
       }
     }
 
+    if (targetViewId != rt::kInvalidViewId)
+    {
+      if (auto focusedRes = _workspace.focusView(targetViewId); !focusedRes)
+      {
+        return std::unexpected{focusedRes.error()};
+      }
+    }
+
+    return targetViewId;
+  }
+
+  Result<> TrackListController::revealTrack(rt::PlaybackRevealTrackRequest const& request)
+  {
+    if (request.trackId == kInvalidTrackId)
+    {
+      return {};
+    }
+
+    auto const viewRes =
+      request.fromPlaybackSource
+        ? _workspace.navigateToTrackSource(request.trackId,
+                                           request.preferredListId,
+                                           [this](ListId listId)
+                                           { return _listPresentations.presentationForList(listId, _library); })
+        : focusExplicitReveal(request);
+
+    if (!viewRes)
+    {
+      return std::unexpected{viewRes.error()};
+    }
+
+    auto const targetViewId = *viewRes;
+
     if (targetViewId == rt::kInvalidViewId)
     {
       return {};
     }
 
-    if (auto focusedRes = _workspace.focusView(targetViewId); !focusedRes)
-    {
-      return focusedRes;
-    }
+    adoptWorkspaceView(targetViewId);
 
-    if (_viewId != targetViewId)
-    {
-      adoptWorkspaceView(targetViewId);
-    }
-
-    if (auto selectedRes = _views.setSelection(targetViewId, {trackId}); !selectedRes)
+    if (auto selectedRes = _views.setSelection(targetViewId, {request.trackId}); !selectedRes)
     {
       return selectedRes;
     }
 
-    recordTrackRevealIntent(_revealIntent, targetViewId, trackId);
+    recordTrackRevealIntent(_revealIntent, targetViewId, request.trackId);
     _changed.emit();
     return {};
   }

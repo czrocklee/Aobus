@@ -4,11 +4,15 @@
 #include "test/library/TrackTestSupport.h"
 #include "test/runtime/ViewServiceTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/rt/TrackField.h>
 #include <ao/rt/ViewIds.h>
+#include <ao/rt/ViewService.h>
+#include <ao/rt/source/TrackSourceCache.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
+#include <vector>
 
 namespace ao::rt::test
 {
@@ -47,6 +51,28 @@ namespace ao::rt::test
     {
       CHECK(service.selectionDuration(ViewId{999}) == std::chrono::milliseconds{0});
     }
+  }
+
+  TEST_CASE("ViewService - firstVisibleSelectedTrack skips filtered rows without changing selection order")
+  {
+    auto fixture = ViewServiceFixture{};
+    auto const firstSelected = fixture.addTrack({.title = "Zulu"});
+    auto const nextSelected = fixture.addTrack({.title = "Alpha"});
+    fixture.cachePtr->reloadAllTracks();
+    auto const viewId = fixture.requireView({.sortBy = {{.field = TrackSortField::Title, .ascending = true}}});
+    auto& views = fixture.service;
+    auto const selection = std::vector{firstSelected, nextSelected};
+    REQUIRE(views.setSelection(viewId, selection));
+    auto const originalProjectionPtr = fixture.requireProjection(viewId);
+    REQUIRE(originalProjectionPtr->size() == 2);
+    REQUIRE(originalProjectionPtr->trackIdAt(0) == nextSelected);
+    CHECK(views.firstVisibleSelectedTrack(viewId) == firstSelected);
+
+    REQUIRE(views.setFilter(viewId, R"($title = "Alpha")"));
+    fixture.drainCallbacks();
+
+    CHECK(views.firstVisibleSelectedTrack(viewId) == nextSelected);
+    CHECK(views.trackListState(viewId).selection == selection);
   }
 
   TEST_CASE("ViewService - selection mutation reports missing views")

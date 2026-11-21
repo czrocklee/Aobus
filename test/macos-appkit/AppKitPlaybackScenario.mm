@@ -5,6 +5,7 @@
 
 #include "AppKitScenarioSupport.h"
 #include "app/macos-appkit/AppKitText.h"
+#include "app/macos-appkit/LibraryEditorModel.h"
 #include "app/macos-appkit/LibrarySession.h"
 #include "app/macos-appkit/PlaybackBar.h"
 #include "app/macos-appkit/SoulButton.h"
@@ -17,6 +18,8 @@
 #include <ao/audio/flow/Graph.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/PlaybackState.h>
+#include <ao/rt/ViewService.h>
+#include <ao/rt/WorkspaceService.h>
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackService.h>
@@ -1095,14 +1098,67 @@ namespace ao::appkit::test
     AO_INVARIANT(tracks.size() == 2, "Seek regression requires two fixture tracks");
     auto const firstId = tracks[0];
     auto const secondId = tracks[1];
-    session.play(firstId);
+    auto& runtime = session.runtime();
+    auto activeList = [&]
+    { return runtime.views().trackListState(runtime.workspace().snapshot().activeViewId).listId; };
+    auto const sourceList = activeList();
+    auto& editor = session.editor();
+    auto const draftRes = editor.beginList();
+    AO_INVARIANT(draftRes);
+    auto const optSecondIndex = session.displayIndexOf(secondId);
+    AO_INVARIANT(optSecondIndex);
+    auto const* secondRow = session.rowAt(*optSecondIndex);
+    AO_INVARIANT(secondRow != nullptr);
+    editor.editList("Browse during paused playback", "", std::format("$title = \"{}\"", secondRow->title));
+    editor.save();
+    requireWaitUntil([&] { return editor.state().completed; }, "The playback browse List must be saved");
+    auto const browseList = editor.state().savedListId;
+    AO_INVARIANT(browseList != kInvalidListId && browseList != sourceList);
+    editor.cancel();
+    runtime.playback().commands().stop();
+    session.select({});
+    [playback renderState:session.state() modern:YES];
+    AO_INVARIANT(soul.enabled == NO, "Visible rows are not an implicit primary Play target");
+    session.select({firstId});
+    AO_INVARIANT(activeList() == sourceList && session.selection() == std::vector{firstId});
+    [playback renderState:session.state() modern:YES];
+    AO_INVARIANT(soul.enabled != NO, "An explicit row must enable primary Play");
+    [soul performClick:nil];
     requireWaitUntil(
       [&]
       {
         auto const& transport = session.runtime().playback().snapshot().transport;
         return transport.nowPlaying.trackId == firstId && transport.transport == audio::Transport::Playing;
       },
-      "Seek regression requires active playback");
+      "The native primary Play action must start the explicit row");
+    auto const occurrence = runtime.playback().snapshot().transport.occurrenceId;
+    [playback renderState:session.state() modern:YES];
+    [soul performClick:nil];
+    requireWaitUntil([&] { return runtime.playback().snapshot().transport.transport == audio::Transport::Paused; },
+                     "The primary transport must pause track A");
+    runtime.playback().commands().seek(250ms);
+    session.navigate(browseList);
+    requireWaitUntil(
+      [&]
+      { return activeList() == browseList && session.displayIndexOf(secondId) && !session.displayIndexOf(firstId); },
+      "The second List must show the browsed track");
+    session.select({secondId});
+    AO_INVARIANT(session.selection() == std::vector{secondId} &&
+                 runtime.playback().snapshot().transport.elapsed == 250ms);
+    [playback renderState:session.state() modern:YES];
+    [soul performClick:nil];
+    requireWaitUntil(
+      [&]
+      {
+        auto const& transport = runtime.playback().snapshot().transport;
+        return transport.transport == audio::Transport::Playing && transport.nowPlaying.trackId == firstId &&
+               transport.occurrenceId == occurrence && transport.elapsed == 250ms;
+      },
+      "Browsing a different List must not replace the paused occurrence or reset its position");
+    AO_INVARIANT(activeList() == browseList && session.selection() == std::vector{secondId});
+    session.navigate(sourceList);
+    requireWaitUntil([&] { return activeList() == sourceList && session.displayIndexOf(firstId).has_value(); },
+                     "Return to the seek fixture's source List");
     exerciseSeekGesture(session, playback, target, window, secondId);
     exerciseSeekGesture(session, playback, target, window, secondId);
     exerciseSeekGesture(session, playback, target, window, kInvalidTrackId);

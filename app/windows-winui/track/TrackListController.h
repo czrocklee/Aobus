@@ -39,6 +39,7 @@ namespace ao::rt
   class ViewService;
   class WorkspaceService;
   struct NavigationPresentation;
+  struct PlaybackRevealTrackRequest;
   struct TrackListProjectionDeltaBatch;
 }
 
@@ -87,7 +88,7 @@ namespace ao::winui
     Result<> toggleSort(rt::TrackSortField field);
     Result<> navigateTo(ListId listId);
     Result<> navigateTo(ListId listId, rt::NavigationPresentation presentation);
-    Result<> revealTrack(TrackId trackId, rt::ViewId preferredViewId, ListId preferredListId);
+    Result<> revealTrack(rt::PlaybackRevealTrackRequest const& request);
     std::optional<TrackRevealTarget> revealTarget() const noexcept;
     Result<> resizeColumn(std::string_view fieldId, double horizontalChange);
     Result<> moveColumn(std::string_view fieldId, std::int32_t offset);
@@ -121,6 +122,7 @@ namespace ao::winui
     void refreshRows();
     void refreshColumns();
     void adoptWorkspaceView(rt::ViewId viewId);
+    Result<rt::ViewId> focusExplicitReveal(rt::PlaybackRevealTrackRequest const& request);
     void storeColumnSpecs(ListId listId, std::span<uimodel::TrackColumnSolveSpec const> specs);
     void resetProjection(std::shared_ptr<rt::TrackListProjection const> projectionPtr);
     i18n::MessageCatalog _textCatalog;

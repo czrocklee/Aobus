@@ -14,6 +14,7 @@
 #include <ao/compat/MoveOnlyFunction.h>
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -87,6 +88,11 @@ namespace ao::rt
 
     Result<> focusView(ViewId viewId);
     Result<ViewId> navigate(NavigationRequest const& request);
+    /// Focus the track's source list (or All Tracks if it is no longer a member), without editing a view's filter.
+    /// Only a new view asks for a presentation. The caller owns row selection and scrolling.
+    Result<ViewId> navigateToTrackSource(TrackId trackId,
+                                         ListId sourceListId,
+                                         std::function<TrackPresentationSpec(ListId)> const& newViewPresentation = {});
     Result<> closeView(ViewId viewId);
 
     Result<> setActivePresentation(TrackPresentationSpec const& presentation, PresentationChangeOptions options = {});

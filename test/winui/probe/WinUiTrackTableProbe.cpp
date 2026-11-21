@@ -62,6 +62,7 @@
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/playback/PlaybackCommands.h>
+#include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -1258,8 +1259,9 @@ namespace
       _revealTrackId = _seededTrackIds[30];
       clearSelectionPublications();
 
-      auto const revealRes =
-        _trackListPtr->revealTrack(_revealTrackId, _trackListPtr->viewId(), _trackListPtr->activeListId());
+      auto const revealRes = _trackListPtr->revealTrack({.trackId = _revealTrackId,
+                                                         .preferredViewId = _trackListPtr->viewId(),
+                                                         .preferredListId = _trackListPtr->activeListId()});
 
       if (!revealRes)
       {
@@ -1336,6 +1338,77 @@ namespace
       _report.check(
         _selectionPublications.empty(), "the later source replacement published no runtime selection change");
 
+      enqueueStep(&WinUiTrackTableProbeApplication::playingRevealStep);
+    }
+
+    void playingRevealStep()
+    {
+      _report.beginScenario("queued navigation and projection changes do not undo a playing-track reveal");
+      auto const items = _trackListPtr->items();
+      auto const lastIndex = items.Size() - 1;
+      auto const lastRow = items.GetAt(lastIndex).as<ProjectedTrackRow>();
+
+      if (lastRow.IsGroupHeader() || isDisplayIndexVisible(lastIndex))
+      {
+        failSetup("the fallback view's final track row must start offscreen");
+        return;
+      }
+
+      _revealTrackId = TrackId{lastRow.TrackId()};
+      auto const viewId = _trackListPtr->viewId();
+      auto& workspace = _runtimePtr->workspace();
+      // Both projection replacements and the temporary empty source view's
+      // focus are still queued when Reveal consumes the live All Tracks view.
+      if (!_runtimePtr->views().setFilter(viewId, "$title ~ \"Missing\"") ||
+          !_runtimePtr->views().setFilter(viewId, ""))
+      {
+        failSetup("could not queue the filtered and restored projections");
+        return;
+      }
+
+      auto const openedRes = workspace.navigate({.target = _membershipListId, .recordHistory = false});
+
+      if (!openedRes || !workspace.focusView(viewId))
+      {
+        failSetup("could not queue the source view change and return to All Tracks");
+        return;
+      }
+
+      clearSelectionPublications();
+      auto const revealRes = _trackListPtr->revealTrack(ao::rt::PlaybackRevealTrackRequest{
+        .trackId = _revealTrackId, .preferredListId = _membershipListId, .fromPlaybackSource = true});
+
+      if (!revealRes)
+      {
+        failSetup(revealRes.error().message);
+        return;
+      }
+
+      if (!workspace.closeView(*openedRes))
+      {
+        failSetup("could not retire the temporary source view");
+        return;
+      }
+
+      afterPostedNotifications(&WinUiTrackTableProbeApplication::playingRevealLayoutStep);
+    }
+
+    void playingRevealLayoutStep()
+    {
+      afterNextLayoutStep(&WinUiTrackTableProbeApplication::playingRevealVisibleStep);
+      _root.InvalidateArrange();
+    }
+
+    void playingRevealVisibleStep()
+    {
+      auto const optRevealIndex = _trackListPtr->displayIndexOfTrack(_revealTrackId);
+      _report.check(_trackListPtr->activeListId() == ao::rt::kAllTracksListId && optRevealIndex &&
+                      isDisplayIndexVisible(*optRevealIndex),
+                    "the offscreen fallback row is visible after posted changes and layout");
+      _report.check(
+        selectedNativeTrackIds() == std::vector{_revealTrackId}, "the native table selects the revealed row");
+      _report.check(_selectionPublications.size() == 1 && _selectionPublications.front() == std::vector{_revealTrackId},
+                    "the fallback reveal publishes only its visible row");
       enqueueStep(&WinUiTrackTableProbeApplication::a15PresentationStep);
     }
 

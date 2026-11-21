@@ -110,6 +110,8 @@ The parser accepts only known prefixes and exact aliases. The palette also searc
 | `settings`, `config`                     | open global TUI Settings                                                                        |
 | `quit`                                   | request normal checkpoint-and-stop exit                                                         |
 
+`:current` reveals the playing track in its [source List](../../system/workspace/navigation.md#navigate-to-the-playback-source) without starting playback. `:play` requests a start from the track under the cursor, even when a different track is paused. `:pause`, `:toggle` and `:space` all invoke [primary Play/Pause](../../system/playback/application-commit.md#primary-play); `:pause` is not a pause-only command.
+
 The `list` commands draft against the Lists-navigation cursor while the docked Lists pane owns focus, otherwise the active List; `list edit` and `list delete` refuse All Tracks, while `list new` parents a new List at the library root instead. Inside the docked Lists pane, the `tui.library.editProperties` key (`e` by default) edits the List under the cursor and the fixed `Delete` key starts its deletion; creating a List has no key because it has no focused object. The [TUI List-authoring specification](../../system/frontend/tui-list-authoring.md) owns their workflow.
 
 ### Workspace keys

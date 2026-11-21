@@ -6,6 +6,7 @@
 #include "test/runtime/PlaybackUiTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/async/Subscription.h>
+#include <ao/audio/Transport.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/playback/PlaybackEvents.h>
@@ -159,15 +160,20 @@ namespace ao::systemmedia::test
     auto& playback = fixture.runtime().playback();
     fixture.makePlaybackReady();
     auto const ownerThread = std::this_thread::get_id();
-    std::int32_t playSelectionCount = 0;
-    bool playSelectionOnOwner = false;
-    auto actions = uimodel::PlaybackActions{playback,
-                                            [&]
-                                            {
-                                              ++playSelectionCount;
-                                              playSelectionOnOwner = std::this_thread::get_id() == ownerThread &&
-                                                                     fixture.executor->isCurrent();
-                                            }};
+    std::int32_t systemMediaStartCount = 0;
+    bool systemMediaOnOwner = false;
+    auto actions = uimodel::PlaybackActions{
+      playback,
+      [] {},
+      uimodel::SystemMediaPlayHandler{.play =
+                                        [&]
+                                      {
+                                        ++systemMediaStartCount;
+                                        systemMediaOnOwner =
+                                          std::this_thread::get_id() == ownerThread && fixture.executor->isCurrent();
+                                        return true;
+                                      }},
+    };
     std::int32_t raiseCount = 0;
     bool raiseOnOwner = false;
     auto bridge = MprisBridge{*fixture.executor,
@@ -260,8 +266,34 @@ namespace ao::systemmedia::test
       client.callAsync(destination, kPlayerInterface, "Play", ::g_variant_new("()"), G_VARIANT_TYPE("()"));
     auto playReply = awaitCall(playCall, *fixture.executor);
     requireUnitReply(playReply);
-    CHECK(playSelectionCount == 1);
-    CHECK(playSelectionOnOwner);
+    CHECK(systemMediaStartCount == 1);
+    CHECK(systemMediaOnOwner);
+  }
+
+  TEST_CASE("MprisBridge private bus - idle Play without a selection or fallback replies without starting")
+  {
+    auto bus = PrivateBus{};
+    auto fixture = rt::test::PlaybackUiFixture{};
+    fixture.makePlaybackReady();
+    auto& playback = fixture.runtime().playback();
+    std::int32_t selectionStartCount = 0;
+    auto actions = uimodel::PlaybackActions{playback, [&selectionStartCount] { ++selectionStartCount; }};
+    auto bridge = MprisBridge{*fixture.executor, playback, actions, {}, optionsFor(bus)};
+    startAndAwait(bridge, *fixture.executor);
+    auto const destination = std::string{bridge.busName()};
+    auto client = BusClient{bus.address()};
+
+    auto canPlayCall = getProperty(client, destination, kPlayerInterface, "CanPlay");
+    auto const canPlayPtr = getReplyValue(awaitCall(canPlayCall, *fixture.executor));
+    REQUIRE(::g_variant_is_of_type(canPlayPtr.get(), G_VARIANT_TYPE_BOOLEAN) == TRUE);
+    CHECK(::g_variant_get_boolean(canPlayPtr.get()) == TRUE);
+
+    auto const* const method = GENERATE("Play", "PlayPause");
+    auto call = client.callAsync(destination, kPlayerInterface, method, ::g_variant_new("()"), G_VARIANT_TYPE("()"));
+    requireUnitReply(awaitCall(call, *fixture.executor));
+    CHECK(selectionStartCount == 0);
+    CHECK(playback.snapshot().transport.transport == audio::Transport::Idle);
+    CHECK(playback.snapshot().transport.nowPlaying.trackId == kInvalidTrackId);
   }
 
   TEST_CASE("MprisBridge private bus - DesktopEntry is available only when configured")

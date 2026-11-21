@@ -48,6 +48,8 @@ namespace ao::rt
   {
     audio::Transport transport = audio::Transport::Idle;
     bool ready = false;
+    /// The transport holds a resume request and offset, independently of the succession cursor.
+    bool hasDeferredResume = false;
     PlaybackOccurrenceId occurrenceId{};
     PlaybackPositionRevision positionRevision{};
     PlaybackFinalSeekRevision finalSeekRevision{};
@@ -64,10 +66,11 @@ namespace ao::rt
      */
     bool operator==(PlaybackTransportSnapshot const& other) const
     {
-      return transport == other.transport && ready == other.ready && occurrenceId == other.occurrenceId &&
-             positionRevision == other.positionRevision && finalSeekRevision == other.finalSeekRevision &&
-             duration == other.duration && nowPlaying == other.nowPlaying && volume == other.volume &&
-             output == other.output && quality == other.quality;
+      return transport == other.transport && ready == other.ready && hasDeferredResume == other.hasDeferredResume &&
+             occurrenceId == other.occurrenceId && positionRevision == other.positionRevision &&
+             finalSeekRevision == other.finalSeekRevision && duration == other.duration &&
+             nowPlaying == other.nowPlaying && volume == other.volume && output == other.output &&
+             quality == other.quality;
     }
   };
 

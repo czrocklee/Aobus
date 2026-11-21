@@ -10,6 +10,7 @@
 #include "TrackSection.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/NotificationState.h>
@@ -20,6 +21,7 @@
 
 #include <cstdint>
 #include <expected>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -29,6 +31,7 @@
 namespace ao::rt
 {
   class Library;
+  class TrackListProjection;
   class ViewService;
   class WorkspaceService;
   struct NavigationRequest;
@@ -87,7 +90,8 @@ namespace ao::tui
     // Borrowed from the active view (or the process-stable default); consume
     // before the active view can be replaced or destroyed.
     rt::TrackPresentationSpec const& activePresentation() const;
-    SelectedTrackView selectedTrackView() const;
+    SelectedTrackView selectedTrackView() const noexcept;
+    async::Signal<bool>& signalTrackCursorAvailable() noexcept { return _trackCursorAvailableSignal; }
 
     /// Borrowed owning credit sections for the focused track. Valid only for synchronous use
     /// in the current turn; the next focus change, reload, reset, deletion,
@@ -113,9 +117,10 @@ namespace ao::tui
 
     std::string jumpToAdjacentSection(std::int32_t delta);
     std::string selectSection(std::int32_t sectionIndex);
-    std::string revealTrack(TrackId trackId,
-                            rt::ViewId preferredViewId = rt::kInvalidViewId,
-                            ListId preferredListId = kInvalidListId);
+    Result<std::string> revealTrack(TrackId trackId,
+                                    rt::ViewId preferredViewId = rt::kInvalidViewId,
+                                    ListId preferredListId = kInvalidListId);
+    Result<std::string> revealPlayingTrack(TrackId trackId, ListId sourceListId);
     bool canNavigateBack() const;
     bool canNavigateForward() const;
     Result<> navigateHistory(bool forward);
@@ -135,6 +140,7 @@ namespace ao::tui
     Result<std::string> applyFilter();
 
   private:
+    Result<std::string> revealLoadedTrack(TrackId trackId);
     bool trySetSelectedTrackById(TrackId trackId);
     TrackId focusedTrackId() const noexcept;
     void invalidateFocusedCredits() noexcept;
@@ -154,12 +160,19 @@ namespace ao::tui
     void refreshNavigationTree();
     struct TrackItemsSnapshot final
     {
+      std::shared_ptr<rt::TrackListProjection const> projectionPtr{};
       std::vector<TrackListEntry> tracks{};
       std::vector<TrackSection> sections{};
     };
 
     Result<TrackItemsSnapshot> materializeView(rt::ViewId viewId);
+    void installRows(TrackItemsSnapshot snapshot);
     Result<> refreshActiveView();
+    Result<> refreshKeepingSelection();
+    void restoreSelection(TrackId previousTrackId);
+    void recoverWorkspaceView(bool tryKeepCurrentView = true);
+    Error formatNavigationFailedError(Error const& error) const;
+    Result<> syncRevealView(rt::ViewId viewId);
     Result<> attachView(rt::ViewId viewId);
     Result<bool> attachActiveWorkspaceView();
     rt::TrackPresentationSpec presentationForList(ListId listId) const;
@@ -180,10 +193,14 @@ namespace ao::tui
     std::vector<TrackListEntry> _tracks{};
     std::vector<TrackSection> _sections{};
     std::uint64_t _trackRowsRevision = 0;
+    std::weak_ptr<rt::TrackListProjection const> _loadedProjectionPtr;
+    bool _loadedRowsDirty = false;
     ListId _currentListId{rt::kAllTracksListId};
     rt::ViewId _activeViewId{rt::kInvalidViewId};
     std::int32_t _selectedPresentation = 0;
     std::int32_t _selectedTrack = 0;
+    bool _trackCursorAvailable = false;
+    async::Signal<bool> _trackCursorAvailableSignal;
     std::unordered_set<TrackId> _markedIds{};
     // Set while a visual selection is running; the base holds the mark set the
     // selection started from so cancelling can restore it exactly.
@@ -200,6 +217,7 @@ namespace ao::tui
     mutable std::uint64_t _observedLibraryRevision = 0;
     mutable bool _focusedCreditsPopulated = false;
     mutable uimodel::TrackCreditSections _focusedCredits{};
+    async::Subscription _loadedProjectionSub;
     async::Subscription _customPresetsSub;
     async::Subscription _libraryChangesSub;
   };

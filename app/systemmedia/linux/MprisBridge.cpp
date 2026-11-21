@@ -30,7 +30,9 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <array>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <format>
@@ -106,6 +108,10 @@ namespace ao::systemmedia
 
     using MetadataVariantMap = std::map<Glib::ustring, Glib::VariantBase>;
     using PropertiesChangedPayload = std::tuple<Glib::ustring, MetadataVariantMap, std::vector<Glib::ustring>>;
+
+    constexpr auto kActionCapabilityNames =
+      std::to_array<std::string_view>({"CanPlay", "CanPause", "CanGoNext", "CanGoPrevious"});
+    using ActionCapabilities = std::array<bool, kActionCapabilityNames.size()>;
 
     MprisBridge::PlaybackSource playbackSourceFor(rt::PlaybackService& playback)
     {
@@ -226,6 +232,7 @@ namespace ao::systemmedia
     bool started = false;
     bool retired = false;
     std::vector<async::Subscription> subscriptions;
+    ActionCapabilities lastActionCapabilities{};
     rt::PlaybackSnapshot lastSnapshot;
     MprisArtUrlSession artUrlSession;
 
@@ -377,10 +384,10 @@ namespace ao::systemmedia
 
     void subscribePlayback()
     {
-      subscriptions.push_back(actions.onAvailabilityChanged(
-        [this] { emitPlayerPropertiesChanged({"CanPlay", "CanPause", "CanGoNext", "CanGoPrevious"}); }));
       lastSnapshot = playbackSource.snapshot();
-      subscriptions.push_back(playbackSource.onSnapshot(
+      lastActionCapabilities = actionCapabilities(lastSnapshot.transport);
+      subscriptions.push_back(actions.onAvailabilityChanged([this] { publishActionCapabilityChanges(); }));
+      auto snapshotSubscription = playbackSource.onSnapshot(
         [this](rt::PlaybackSnapshot const& snapshot)
         {
           if (retired)
@@ -401,7 +408,17 @@ namespace ao::systemmedia
 
           if (MprisBridge::shouldEmitMetadataChanged(lastSnapshot.transport, snapshot.transport))
           {
-            emitPlayerPropertiesChanged({"Metadata", "CanSeek"});
+            auto const seekChanged = endpoint.playerCapabilityProperty("CanSeek", lastSnapshot.transport) !=
+                                     endpoint.playerCapabilityProperty("CanSeek", snapshot.transport);
+
+            if (seekChanged)
+            {
+              emitPlayerPropertiesChanged({"Metadata", "CanSeek"});
+            }
+            else
+            {
+              emitPlayerPropertiesChanged({"Metadata"});
+            }
           }
 
           if (MprisBridge::shouldEmitSeeked(lastSnapshot.transport, snapshot.transport))
@@ -427,10 +444,55 @@ namespace ao::systemmedia
           }
 
           lastSnapshot = snapshot;
-        }));
+        });
+
+      // A synchronous snapshot delivery may already have retired the bridge.
+      if (retired)
+      {
+        return;
+      }
+
+      subscriptions.push_back(std::move(snapshotSubscription));
       // Synchronous cover completion may retire the bridge on a failed signal;
       // all subscriptions must already exist so retirement cannot resurrect one.
       artUrlSession.refresh(lastSnapshot.transport.nowPlaying.coverArtId);
+    }
+
+    ActionCapabilities actionCapabilities(rt::PlaybackTransportSnapshot const& state) const
+    {
+      auto capabilities = ActionCapabilities{};
+
+      for (std::size_t index = 0; index < capabilities.size(); ++index)
+      {
+        auto const name = kActionCapabilityNames[index];
+        auto const optCapability = endpoint.playerCapabilityProperty(name, state);
+        AO_INVARIANT(optCapability, "MPRIS action capability '{}' must be mapped by the endpoint", name);
+        capabilities[index] = *optCapability;
+      }
+
+      return capabilities;
+    }
+
+    void publishActionCapabilityChanges()
+    {
+      if (retired)
+      {
+        return;
+      }
+
+      auto const capabilities = actionCapabilities(playbackSource.snapshot().transport);
+      auto const before = std::exchange(lastActionCapabilities, capabilities);
+      auto changed = MetadataVariantMap{};
+
+      for (std::size_t index = 0; index < capabilities.size(); ++index)
+      {
+        if (before[index] != capabilities[index])
+        {
+          changed.emplace(toUString(kActionCapabilityNames[index]), Glib::Variant<bool>::create(capabilities[index]));
+        }
+      }
+
+      emitPlayerPropertyValuesChanged(std::move(changed));
     }
 
     void emitPlayerPropertiesChanged(std::initializer_list<std::string_view> propertyNames)
@@ -450,6 +512,11 @@ namespace ao::systemmedia
         }
       }
 
+      emitPlayerPropertyValuesChanged(std::move(changed));
+    }
+
+    void emitPlayerPropertyValuesChanged(MetadataVariantMap changed)
+    {
       if (!changed.empty())
       {
         auto const payload = Glib::Variant<PropertiesChangedPayload>::create(

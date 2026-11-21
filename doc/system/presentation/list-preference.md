@@ -83,7 +83,7 @@ Reuse ignores that default and retains the view's exact active presentation; cre
 A filtered view over the same list is not a reusable plain target, so `WorkspaceService` creates the plain view with the resolved default and does not alter the filtered view.
 
 A restored workspace view retains its exact presentation; Back and Forward also restore the recorded spec, even if the picker would not offer it today. Neither operation consults or edits the preference for that view. For fallback navigation when a view or List cannot be restored, see [workspace navigation](../workspace/navigation.md).
-GTK playback-session restoration uses `NewViewDefault` for its plain target.
+GTK playback-session restoration uses `NewViewDefault` for its plain target. [Revealing the currently playing track](../workspace/navigation.md#navigate-to-the-playback-source) likewise resolves a default only for a newly created plain destination.
 A normal named choice installs the runtime spec before the frontend updates the base List's preference. In WinUI, a rejected [presentation-menu choice](../frontend/windows.md#commands-and-transitions) reports the error and leaves the view, history, and preference unchanged.
 When a committed `LibraryChangeSet` deletes Lists, the shared preference lifecycle erases every corresponding key before a frontend persists its next state.
 A full library reset carries no incremental List ids, so it clears the complete preference map and emits every removed key.

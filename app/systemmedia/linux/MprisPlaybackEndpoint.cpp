@@ -36,7 +36,7 @@ namespace ao::systemmedia
       return false;
     }
 
-    _actions.tryExecute(*optCommand);
+    _actions.tryExecute(*optCommand, uimodel::PlaybackActionOrigin::SystemMedia);
     return true;
   }
 

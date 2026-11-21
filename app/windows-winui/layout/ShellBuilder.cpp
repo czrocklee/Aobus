@@ -360,9 +360,14 @@ namespace ao::winui::layout
                  appendItem(items, "winui_shell_reload_theme", _config.commands.reloadTheme);
                });
     appendMenu("winui_shell_menu_playback",
-               [this](auto const& items)
+               [this, &ctx](auto const& items)
                {
-                 appendItem(items, "winui_shell_play_pause", _config.commands.playPause);
+                 if (auto const play = appendItem(items, "winui_shell_play_pause", _config.commands.playPause);
+                     play && ctx.bindPlayPauseControl)
+                 {
+                   ctx.bindPlayPauseControl(play);
+                 }
+
                  appendItem(items, "winui_shell_stop", _config.commands.stop);
                  appendItem(items, "winui_shell_reveal_current_track", _config.commands.revealCurrentTrack);
                });
@@ -419,7 +424,7 @@ namespace ao::winui::layout
           [this, &generation](Control const& control)
         {
           control.IsEnabled(_session.canRescan());
-          generation.rescanAvailabilitySubs.push_back(
+          generation.controlAvailabilitySubs.push_back(
             subscribeUiUpdate(_session.signalRescanAvailabilityChanged(),
                               "Rescan control",
                               [weak = winrt::make_weak(control), &session = _session]
@@ -429,6 +434,21 @@ namespace ao::winui::layout
                                   live.IsEnabled(session.canRescan());
                                 }
                               }));
+        },
+        .bindPlayPauseControl =
+          [this, &generation](Control const& control)
+        {
+          auto& actions = _session.playbackActions();
+          auto refresh = [weak = winrt::make_weak(control), &actions]
+          {
+            if (auto const live = weak.get(); live)
+            {
+              live.IsEnabled(actions.isEnabled(uimodel::PlaybackCommand::PlayPause));
+            }
+          };
+          refresh();
+          generation.controlAvailabilitySubs.push_back(actions.onAvailabilityChanged(
+            uimodel::PlaybackCommand::PlayPause, [refresh] { applyUiUpdate("Play/Pause menu", refresh); }));
         },
       };
 

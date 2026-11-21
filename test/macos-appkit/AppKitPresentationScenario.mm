@@ -1355,7 +1355,7 @@ namespace ao::appkit::test
     exerciseSoulOcclusion();
 
     {
-      auto fixture = SessionFixture{musicRoot, stateRoot};
+      auto fixture = SessionFixture{musicRoot, stateRoot, SessionFixture::AudioOutput::Silent};
       auto& session = fixture.session();
       browser = [[AobusLibraryBrowser alloc] initWithSession:session delegate:browserDelegate];
       browser.listScroll.frame = NSMakeRect(20, 100, 190, 540);

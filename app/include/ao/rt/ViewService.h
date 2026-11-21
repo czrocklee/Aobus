@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
@@ -124,6 +124,9 @@ namespace ao::rt
     // an empty selection, or selected ids missing from the library.
     std::chrono::milliseconds selectionDuration(ViewId viewId) const;
 
+    /// First selected track in selection order that belongs to the projection, independent of scrolling.
+    TrackId firstVisibleSelectedTrack(ViewId viewId) const;
+
     Result<std::shared_ptr<TrackListProjection const>> findTrackListProjection(ViewId viewId) const;
     std::unique_ptr<TrackListProjection> createTransientTrackListProjection(TrackSourceLease sourceLease,
                                                                             TrackOrderSpec const& order = {}) const;
@@ -136,9 +139,9 @@ namespace ao::rt
   private:
     friend class WorkspaceService;
 
+    Result<bool> listContainsTrack(ListId listId, TrackId trackId) const;
     Result<ViewId> createView(TrackListViewConfig const& initial);
     void destroyView(ViewId viewId);
-    std::vector<ViewId> listViews() const;
     std::unique_ptr<TrackDetailProjection> detailProjection(DetailTarget const& target,
                                                             WorkspaceService& workspace,
                                                             LibraryChanges const& changes);

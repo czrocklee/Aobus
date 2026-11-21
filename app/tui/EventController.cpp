@@ -37,7 +37,6 @@
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/PlaybackMode.h>
-#include <ao/rt/ViewIds.h>
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackService.h>
@@ -87,20 +86,6 @@ namespace ao::tui
       }
 
       return false;
-    }
-
-    bool tryPlaySelected(rt::PlaybackCommands& commands,
-                         std::vector<TrackListEntry> const& tracks,
-                         std::int32_t const selected,
-                         rt::ViewId const sourceViewId)
-    {
-      if (tracks.empty())
-      {
-        return false;
-      }
-
-      auto const index = clampSelection(static_cast<std::size_t>(std::max(0, selected)), tracks.size());
-      return static_cast<bool>(commands.startFromView(sourceViewId, tracks[index].id));
     }
 
     bool containsTrackColumnResizeEdge(TrackColumnResizeHandle const& handle,
@@ -195,18 +180,26 @@ namespace ao::tui
     , _filterCompletionCallback{std::move(bindings.filterCompletionCallback)}
     , _requestLayoutCheckpoint{std::move(bindings.requestLayoutCheckpoint)}
   {
+    _playbackActions.setSelectionAvailable(_library.selectedTrackView().track != nullptr);
+    _trackCursorSub = _library.signalTrackCursorAvailable().connect(
+      [this](bool const available) { _playbackActions.setSelectionAvailable(available); });
     _revealSub = _playback.events().onRevealTrackRequested(
       [this](rt::PlaybackRevealTrackRequest const& request)
       {
-        postActivityNotification(
-          rt::NotificationSeverity::Info,
-          _library.revealTrack(request.trackId, request.preferredViewId, request.preferredListId));
+        auto res = request.fromPlaybackSource
+                     ? _library.revealPlayingTrack(request.trackId, request.preferredListId)
+                     : _library.revealTrack(request.trackId, request.preferredViewId, request.preferredListId);
 
-        if (request.trackId != kInvalidTrackId && _library.selectedTrackView().track != nullptr &&
-            _library.selectedTrackView().track->id == request.trackId)
+        if (!res)
         {
-          leaveNavigation();
+          auto const severity =
+            request.trackId == kInvalidTrackId ? rt::NotificationSeverity::Info : rt::NotificationSeverity::Warning;
+          postActivityNotification(severity, std::move(res.error().message));
+          return;
         }
+
+        postActivityNotification(rt::NotificationSeverity::Info, std::move(*res));
+        leaveNavigation();
       });
   }
 
@@ -647,7 +640,8 @@ namespace ao::tui
 
   void EventController::playSelectedTrack()
   {
-    if (!tryPlaySelected(_playback.commands(), _library.tracks(), _library.selectedTrack(), _library.activeViewId()))
+    if (auto const* track = _library.selectedTrackView().track;
+        track == nullptr || !_playback.commands().startFromView(_library.activeViewId(), track->id))
     {
       postActivityNotification(
         rt::NotificationSeverity::Warning,

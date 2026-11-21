@@ -5,12 +5,17 @@
 #include "test/runtime/ExecutorTestSupport.h"
 #include "test/runtime/PlaybackUiTestSupport.h"
 #include <ao/Contract.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/Device.h>
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/ViewService.h>
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/systemmedia/linux/MprisBridge.h>
 #include <ao/uimodel/playback/command/PlaybackActions.h>
+#include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/utility/ScopedRegistration.h>
 
 #include <catch2/catch_approx.hpp>
@@ -21,18 +26,22 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <string_view>
 #include <tuple>
+#include <utility>
 #include <vector>
 
 namespace ao::systemmedia::test
 {
   namespace
   {
+    constexpr auto kPlayerInterface = "org.mpris.MediaPlayer2.Player";
+    constexpr auto kPropertiesInterface = "org.freedesktop.DBus.Properties";
+
     struct WireEvent final
     {
       bool reply = false;
-      bool valid = false;
-      double volume = 0;
+      VariantPtr bodyPtr;
     };
 
     struct WireLog final
@@ -60,41 +69,23 @@ namespace ao::systemmedia::test
           return message;
         }
 
-        auto event = WireEvent{};
-        auto* const body = ::g_dbus_message_get_body(message);
+        auto const type = ::g_dbus_message_get_message_type(message);
+        auto const reply = type == G_DBUS_MESSAGE_TYPE_METHOD_RETURN;
 
-        if (auto const type = ::g_dbus_message_get_message_type(message); type == G_DBUS_MESSAGE_TYPE_METHOD_RETURN)
-        {
-          event.reply = true;
-          event.valid = body != nullptr && ::g_variant_is_of_type(body, G_VARIANT_TYPE("(v)")) == TRUE;
-        }
-        else if (type == G_DBUS_MESSAGE_TYPE_SIGNAL &&
-                 ::g_strcmp0(::g_dbus_message_get_member(message), "PropertiesChanged") == 0)
-        {
-          event.valid = body != nullptr && ::g_variant_is_of_type(body, G_VARIANT_TYPE("(sa{sv}as)")) == TRUE;
-
-          if (event.valid)
-          {
-            auto fieldsPtr = takeVariant(::g_variant_get_child_value(body, 1));
-            auto volumePtr = takeVariant(::g_variant_lookup_value(fieldsPtr.get(), "Volume", G_VARIANT_TYPE_DOUBLE));
-
-            if (!volumePtr)
-            {
-              return message;
-            }
-
-            event.volume = ::g_variant_get_double(volumePtr.get());
-          }
-        }
-        else
+        if (!reply && (type != G_DBUS_MESSAGE_TYPE_SIGNAL ||
+                       ::g_strcmp0(::g_dbus_message_get_interface(message), kPropertiesInterface) != 0 ||
+                       ::g_strcmp0(::g_dbus_message_get_member(message), "PropertiesChanged") != 0))
         {
           return message;
         }
 
+        auto* const body = ::g_dbus_message_get_body(message);
+        auto event =
+          WireEvent{.reply = reply, .bodyPtr = takeVariant(body != nullptr ? ::g_variant_ref(body) : nullptr)};
         auto const publicationLock = std::scoped_lock{wirePublicationMutex()};
         auto const& logPtr = *static_cast<std::shared_ptr<WireLog>*>(data);
         auto const lock = std::scoped_lock{logPtr->mutex};
-        logPtr->events.push_back(event);
+        logPtr->events.push_back(std::move(event));
       }
       catch (...)
       {
@@ -103,22 +94,39 @@ namespace ao::systemmedia::test
 
       return message;
     }
+
+    VariantPtr requireSingleChangedProperty(WireEvent const& event, char const* name, ::GVariantType const* type)
+    {
+      REQUIRE_FALSE(event.reply);
+      REQUIRE(event.bodyPtr);
+      REQUIRE(::g_variant_is_of_type(event.bodyPtr.get(), G_VARIANT_TYPE("(sa{sv}as)")) == TRUE);
+      auto const interfacePtr = takeVariant(::g_variant_get_child_value(event.bodyPtr.get(), 0));
+      CHECK(std::string_view{::g_variant_get_string(interfacePtr.get(), nullptr)} == kPlayerInterface);
+      auto const fieldsPtr = takeVariant(::g_variant_get_child_value(event.bodyPtr.get(), 1));
+      REQUIRE(::g_variant_n_children(fieldsPtr.get()) == 1);
+      auto propertyPtr = takeVariant(::g_variant_lookup_value(fieldsPtr.get(), name, type));
+      REQUIRE(propertyPtr);
+      return propertyPtr;
+    }
   } // namespace
 
   TEST_CASE("MprisBridge private bus - changed properties precede a later live query on the wire", "[concurrency]")
   {
-    constexpr auto kPlayerInterface = "org.mpris.MediaPlayer2.Player";
     auto bus = PrivateBus{};
     auto fixture = rt::test::PlaybackUiFixture{};
-    fixture.makePlaybackReady();
-    auto& playback = fixture.runtime().playback();
+    auto& runtime = fixture.runtime();
+    auto& playback = runtime.playback();
     auto actions = uimodel::PlaybackActions{playback, [] {}};
+    actions.bindFocusedSelection(runtime.workspace(), runtime.views());
     auto bridge = MprisBridge{
       *fixture.executor,
       playback,
       actions,
       {},
       MprisBridgeOptions{.busName = "org.mpris.MediaPlayer2.aobus.signals", .optBusAddress = bus.address()}};
+    // Acquisition must seed its signal baseline from live state, not construction state.
+    fixture.makePlaybackReady();
+    REQUIRE(playback.snapshot().transport.ready);
     bridge.start();
     REQUIRE(fixture.executor->tryDrainUntil([&bridge] { return bridge.isActive(); }));
     auto const destination = std::string{bridge.busName()};
@@ -164,35 +172,66 @@ namespace ao::systemmedia::test
     auto const registration = utility::ScopedRegistration{
       [&client, filterId] { ::g_dbus_connection_remove_filter(client.nativeConnection(), filterId); }};
 
-    playback.commands().setVolume(0.25F);
-    REQUIRE(
-      fixture.executor->tryDrainUntil([&playback] { return playback.snapshot().transport.volume.level == 0.25F; }));
-    playback.commands().setVolume(0.75F);
-    REQUIRE(
-      fixture.executor->tryDrainUntil([&playback] { return playback.snapshot().transport.volume.level == 0.75F; }));
-    auto query = client.callAsync(destination,
-                                  "org.freedesktop.DBus.Properties",
-                                  "Get",
-                                  ::g_variant_new("(ss)", kPlayerInterface, "Volume"),
-                                  G_VARIANT_TYPE("(v)"));
-    auto reply = awaitCall(query, *fixture.executor);
-    REQUIRE(reply);
-    auto boxPtr = takeVariant(::g_variant_get_child_value(reply.value(), 0));
-    auto valuePtr = takeVariant(::g_variant_get_variant(boxPtr.get()));
-    REQUIRE(::g_variant_is_of_type(valuePtr.get(), G_VARIANT_TYPE_DOUBLE) == TRUE);
-    CHECK(::g_variant_get_double(valuePtr.get()) == Catch::Approx{0.75});
+    // The filter sees each reply before the call completes, so Get also
+    // establishes that all earlier signals from this connection arrived.
+    auto const getProperty = [&](char const* name, ::GVariantType const* type)
+    {
+      auto query = client.callAsync(destination,
+                                    kPropertiesInterface,
+                                    "Get",
+                                    ::g_variant_new("(ss)", kPlayerInterface, name),
+                                    G_VARIANT_TYPE("(v)"));
+      auto const reply = awaitCall(query, *fixture.executor);
+      REQUIRE(reply);
+      auto const boxPtr = takeVariant(::g_variant_get_child_value(reply.value(), 0));
+      auto valuePtr = takeVariant(::g_variant_get_variant(boxPtr.get()));
+      REQUIRE(::g_variant_is_of_type(valuePtr.get(), type) == TRUE);
+      return valuePtr;
+    };
 
-    // The filter sees the reply before the client call completes. All earlier
-    // signals from this connection must already be present; no settling sleep.
-    auto const lock = std::scoped_lock{logPtr->mutex};
-    REQUIRE(logPtr->events.size() == 3);
-    CHECK(logPtr->events[0].valid);
-    CHECK_FALSE(logPtr->events[0].reply);
-    CHECK(logPtr->events[0].volume == Catch::Approx{0.25});
-    CHECK(logPtr->events[1].valid);
-    CHECK_FALSE(logPtr->events[1].reply);
-    CHECK(logPtr->events[1].volume == Catch::Approx{0.75});
-    CHECK(logPtr->events[2].valid);
-    CHECK(logPtr->events[2].reply);
+    SECTION("Volume changes arrive in order")
+    {
+      playback.commands().setVolume(0.25F);
+      REQUIRE(
+        fixture.executor->tryDrainUntil([&playback] { return playback.snapshot().transport.volume.level == 0.25F; }));
+      playback.commands().setVolume(0.75F);
+      REQUIRE(
+        fixture.executor->tryDrainUntil([&playback] { return playback.snapshot().transport.volume.level == 0.75F; }));
+      auto const volumePtr = getProperty("Volume", G_VARIANT_TYPE_DOUBLE);
+      CHECK(::g_variant_get_double(volumePtr.get()) == Catch::Approx{0.75});
+
+      auto const lock = std::scoped_lock{logPtr->mutex};
+      REQUIRE(logPtr->events.size() == 3);
+      auto const firstPtr = requireSingleChangedProperty(logPtr->events[0], "Volume", G_VARIANT_TYPE_DOUBLE);
+      auto const secondPtr = requireSingleChangedProperty(logPtr->events[1], "Volume", G_VARIANT_TYPE_DOUBLE);
+      CHECK(::g_variant_get_double(firstPtr.get()) == Catch::Approx{0.25});
+      CHECK(::g_variant_get_double(secondPtr.get()) == Catch::Approx{0.75});
+      CHECK(logPtr->events[2].reply);
+    }
+
+    SECTION("Output readiness changes CanPlay but focused selection does not")
+    {
+      auto const trackId = fixture.addPlayableTrack("Selected Track");
+      REQUIRE(runtime.views().setSelection(fixture.viewId, {trackId}));
+      REQUIRE(actions.isEnabled(uimodel::PlaybackCommand::Play));
+      REQUIRE(runtime.views().setSelection(fixture.viewId, {}));
+      REQUIRE_FALSE(actions.isEnabled(uimodel::PlaybackCommand::Play));
+      auto const readyPtr = getProperty("CanPlay", G_VARIANT_TYPE_BOOLEAN);
+      CHECK(::g_variant_get_boolean(readyPtr.get()) == TRUE);
+
+      playback.commands().setOutputDevice(audio::OutputDeviceSelection{.backendId = audio::BackendId{"usb"},
+                                                                       .deviceId = audio::DeviceId{"missing"},
+                                                                       .profileId = audio::kProfileShared});
+      REQUIRE(fixture.executor->tryDrainUntil([&playback] { return !playback.snapshot().transport.ready; }));
+      auto const unreadyPtr = getProperty("CanPlay", G_VARIANT_TYPE_BOOLEAN);
+      CHECK(::g_variant_get_boolean(unreadyPtr.get()) == FALSE);
+
+      auto const lock = std::scoped_lock{logPtr->mutex};
+      REQUIRE(logPtr->events.size() == 3);
+      CHECK(logPtr->events[0].reply);
+      auto const changedPtr = requireSingleChangedProperty(logPtr->events[1], "CanPlay", G_VARIANT_TYPE_BOOLEAN);
+      CHECK(::g_variant_get_boolean(changedPtr.get()) == FALSE);
+      CHECK(logPtr->events[2].reply);
+    }
   }
 } // namespace ao::systemmedia::test

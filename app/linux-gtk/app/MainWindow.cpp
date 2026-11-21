@@ -40,6 +40,7 @@
 #include <ao/rt/ListNode.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationService.h>
+#include <ao/rt/NotificationState.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
@@ -94,7 +95,18 @@ namespace ao::gtk
       , trackRowCache{runtime.library(), catalog}
       , imageCache{100}
       , resourceImageLoader{runtime.resourceBytes(), imageCache, runtime.async()}
-      , playbackActions{runtime.playback(), [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }}
+      , playbackActions{runtime.playback(),
+                        [this, &runtime]
+                        {
+                          if (auto const res = runtime.playSelectionInFocusedView(); !res)
+                          {
+                            runtime.notifications().post(
+                              rt::NotificationSeverity::Error,
+                              i18n::requiredFormat(
+                                textCatalog, i18n::MessageId::PlaybackFailed, {{"detail", res.error().message}}),
+                              rt::NotificationLifetime::history());
+                          }
+                        }}
       , textCatalog{std::move(catalog)}
       , trackPresentationCatalog{runtime.workspace(), textCatalog}
       , listPresentations{trackPresentationCatalog, runtime.library().changes()}
@@ -128,17 +140,26 @@ namespace ao::gtk
                                      return std::nullopt;
                                    }},
                                  themeCoordinator}
-      , trackPageHost{stack,
-                      runtime.async(),
-                      runtime.library(),
-                      runtime.playback(),
-                      runtime.views(),
-                      runtime.workspace(),
-                      tagEditController,
-                      listNavigationController,
-                      trackColumnLayouts,
-                      textCatalog,
-                      runtime.resourceBytes()}
+      , trackPageHost{
+          stack,
+          runtime.async(),
+          runtime.library(),
+          runtime.playback(),
+          runtime.views(),
+          runtime.workspace(),
+          tagEditController,
+          listNavigationController,
+          trackColumnLayouts,
+          textCatalog,
+          runtime.resourceBytes(),
+          [this, &runtime](ListId listId) { return listPresentations.presentationForList(listId, runtime.library()); },
+          [this, &runtime](Error const& error)
+          {
+            runtime.notifications().post(
+              rt::NotificationSeverity::Error,
+              i18n::requiredFormat(textCatalog, i18n::MessageId::NavigationFailed, {{"detail", error.message}}),
+              rt::NotificationLifetime::history());
+          }}
       , importExportCoordinator{window,
                                 runtime.async(),
                                 runtime.library(),
@@ -150,6 +171,7 @@ namespace ao::gtk
                                 themeCoordinator}
     {
       tagEditController.setDataProvider(&trackRowCache);
+      playbackActions.bindFocusedSelection(runtime.workspace(), runtime.views());
     }
 
     Result<rt::ViewId> navigateToList(ListId listId, rt::AppRuntime& runtime) const

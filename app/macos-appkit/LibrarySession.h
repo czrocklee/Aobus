@@ -6,12 +6,14 @@
 #include "LibraryEditorModel.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/audio/BackendProvider.h>
 #include <ao/audio/OutputDeviceSelection.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackRow.h>
+#include <ao/rt/ViewIds.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/rt/resource/ResourceBytes.h>
 #include <ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h>
@@ -83,11 +85,15 @@ namespace ao::appkit
   class [[nodiscard]] LibrarySession final
   {
   public:
-    static Result<std::unique_ptr<LibrarySession>> create(std::filesystem::path const& root,
-                                                          std::filesystem::path const& stateRoot,
-                                                          bool restorePlayback,
-                                                          i18n::MessageCatalog catalog,
-                                                          std::function<void(DesktopInvalidation)> onInvalidated);
+    using AudioProviderFactory = decltype(&audio::createPlatformBackendProviders);
+
+    static Result<std::unique_ptr<LibrarySession>> create(
+      std::filesystem::path const& root,
+      std::filesystem::path const& stateRoot,
+      bool restorePlayback,
+      i18n::MessageCatalog catalog,
+      std::function<void(DesktopInvalidation)> onInvalidated,
+      AudioProviderFactory createProviders = audio::createPlatformBackendProviders);
     ~LibrarySession();
     LibrarySession(LibrarySession const&) = delete;
     LibrarySession& operator=(LibrarySession const&) = delete;
@@ -128,13 +134,18 @@ namespace ao::appkit
     LibrarySession(i18n::MessageCatalog catalog, std::function<void(DesktopInvalidation)> onInvalidated);
     Result<> initialize(std::filesystem::path const& root,
                         std::filesystem::path const& stateRoot,
-                        bool restorePlayback);
+                        bool restorePlayback,
+                        AudioProviderFactory createProviders);
     void onLibraryChanged(rt::LibraryChangeSet const& changeSet);
     void bindProjection();
     void rebuildRows();
     void refreshSelection();
     void updateSelection(std::vector<TrackId> ids);
     void refreshSelectedCover();
+    TrackId remotePlayTarget(rt::ViewId viewId) const;
+    bool canPlayFromRemoteCommand() const;
+    bool tryPlayFromRemoteCommand() const;
+    bool tryPlayFromView(rt::ViewId viewId, TrackId trackId) const;
     struct Storage;
     std::unique_ptr<Storage> _storagePtr;
   };
