@@ -134,7 +134,7 @@ Only a complete trustworthy metadata chain and completely inspectable comment bl
 | Zero, partial, excess, reserved-bit, or `SPEAKER_ALL` declaration                                                                    | `0`, `Unknown`; never trimmed or replaced with a default. |
 | Nonfirst STREAMINFO, incomplete comments, or inability to inspect optional positions, marker, or native-boundary cross-checks safely | `0`, `Unknown`.                                           |
 
-A short comment payload, out-of-bounds entry length, or unaccounted trailing bytes withholds identity without newly rejecting otherwise-valid STREAMINFO and audio.
+A short comment payload, out-of-bounds entry length, or unaccounted trailing bytes withholds identity but does not by itself reject otherwise-valid STREAMINFO and audio.
 Unknown is absorbing for this inspection: neither an earlier valid candidate nor a later good declaration repairs malformed, conflicting, unsupported, or incomplete evidence.
 Optional inspection may stop once identity is unknown; it must never resume at a suffix and publish that suffix as complete evidence.
 This is not a blanket decode-error recovery rule: native metadata processing, I/O, required STREAMINFO, precision, frame, timeline, and EOF faults retain their failures.
@@ -169,8 +169,8 @@ That version does not automatically turn a zero WAV mask into an explicit FLAC-z
 
 [`FlacDecoderSession.cpp`](../../../lib/audio/FlacDecoderSession.cpp) owns this playback interpretation.
 Sharing the raw comment walker does not change library import's atomic publication or format-specific trailing-byte semantics.
-The existing precision-preserving output adaptation, PCM slot order, seek, flush, EOF, and decoding-error contracts remain unchanged.
-Replacing the earlier zero-mask producer means a native route can now apply a same-set slot permutation or refuse a known role contradiction instead of treating the source as unpositioned.
+Output adaptation preserves PCM slot order and signal precision; the [decoder session contract](decoder-session.md#failure-behavior) defines FLAC seek, flush, EOF, and error handling.
+A nonzero FLAC source mask lets the backend check roles and may lead to a private same-set slot permutation or refusal, depending on the backend and its observations.
 For a nonzero source identity and a complete valid current ALSA map, the speaker set must match, not the ordinal order: a same-set private permutation remains available in [`AlsaChannelMap.cpp`](../../../lib/audio/backend/detail/AlsaChannelMap.cpp).
 For example, three-channel FLAC's default FL/FR/FC (`0x7`) conflicts with native FL/FR/LFE (`0xB`); seven-channel FLAC's default FL/FR/FC/LFE/BC/SL/SR (`0x70F`) conflicts with FL/FR/FC/LFE/BL/BR/BC (`0x13F`).
 Missing native positions still do not manufacture evidence or alone require refusal; known contradictory slots in a partial map can still cause refusal, and source identity does not prove native mapping or physical routing.
@@ -200,10 +200,9 @@ In particular, exact tag `0x00710003` is ambiguous between ALAC and generic Core
 The [ALAC channel-order reference](../../reference/media/channel-order.md#alac) owns accepted declaration grammars, representative permutations, and source references.
 
 Normalization copies whole native sample-storage bytes before the precision-preserving adapter; it changes neither numerical precision nor frame geometry.
-Unknown layouts keep the old ordinal bytes and can still misroute multichannel content.
-Known identities remain subject to strict backend role admission; publishing identity is not a native mapping or physical-routing guarantee.
-Optional layout inspection adds no file-rejection gate and does not soften existing required container, cookie, configuration, provider, or requested-precision errors.
-This policy changes neither the distinct FLAC source policy nor native/backend/quality policy.
+Unknown layouts keep the decoder provider's channel order, so playback can still misroute multichannel content.
+Known identities constrain [backend role admission](audio-execution.md#channel-compatibility-and-native-evidence) but do not establish native mapping or physical routing.
+Unusable optional layout metadata withholds identity rather than rejecting the file; it does not bypass [required initialization or requested-output checks](decoder-error.md#alac-required-errors-versus-optional-identity).
 
 ### MP3 source interpretation
 
@@ -213,7 +212,7 @@ The [channel-order reference](../../reference/media/channel-order.md#mp3) owns t
 Source and output masks agree at successful open.
 A nonzero mask is `Identified`; zero is `Unknown`.
 Read and seek never rewrite that identity or promote an unknown stream.
-Existing backend admission, splice eligibility, native observation, quality-analysis, and format-equality rules are unchanged; identity does not prove native mapping or physical routing.
+MP3 follows the common backend admission, splice eligibility, native observation, quality-analysis, and format-equality rules; identity does not prove native mapping or physical routing.
 MP3 remains a 16-bit lossy decoded signal, so it does not extend the Engine splice whitelist.
 Native seek placement, in-frame seek skips, and gapless trim belong to the [decoder session](decoder-session.md); they are not part of this identity coverage.
 Output adaptation and `PcmBlock` validity are unchanged.
@@ -315,7 +314,9 @@ Unknown identity alone adds no initialization refusal and never hides required c
 
 AAC remains lossy and exposes the same 16-bit decoded integer domain and lossless output encodings.
 Normalization changes slot order, not sample values or precision; explicitly disabling the native default downmix is a channel-preservation change, not a numerical decoder replacement.
-A newly identified AAC source participates in existing backend role checks and may permit a same-set native permutation or expose a contradiction previously left unassigned.
+An identified AAC source supplies roles for the [backend's channel checks](audio-execution.md#channel-compatibility-and-native-evidence).
+Depending on the backend and its observations, those roles may permit a private same-set permutation or cause a refusal.
+A zero mask supplies no source roles and does not guarantee transport.
 Source identity proves neither native delivery nor physical routing, and it adds no AAC delay/padding trimming or splice eligibility.
 
 ### PCM encoding

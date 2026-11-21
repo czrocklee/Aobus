@@ -144,7 +144,7 @@ A silent first block is still valid PCM, and a one-packet stream needs no second
 ConfigRaw may succeed with zero output rate/count/frame size, so neither those provisional fields nor an ASC fallback is the published format.
 The first successful frame supplies actual positive geometry, within the supported eight-channel and 2048-frame bounds, and copied ordered output-role evidence.
 The [AAC role map](../../reference/media/channel-order.md#aac) resolves a complete plan before the single output-adapter configuration; source and output masks agree at successful open.
-Unsupported or unavailable roles yield zero / `Unknown`, not a new layout refusal, partial identity, count default, or `Inferred` fallback.
+Unsupported or unavailable roles yield zero / `Unknown` rather than a layout refusal, partial identity, count default, or `Inferred` fallback.
 Known noncanonical slots normalize by moving whole native 16-bit samples before encoding adaptation; canonical known and unknown layouts bypass that permutation.
 Decoding uses bounded native scratch storage; normalization and adaptation receive only the active decoded samples, never its unused tail.
 
@@ -172,25 +172,25 @@ For a successful nonzero-packet target, it adopts the fresh handle and only then
 Compressed-buffer clearing is not a cold decoder reset: these two paths preserve initial-seek PCM history rather than decoding a target on the handle already warmed by private priming.
 A preparation failure returns `SeekFailed` with its original diagnostic context and location, without losing pending PCM.
 
-Healthy `flush()` retains the cached block and uses only the existing native `AAC_TPDEC_CLEAR_BUFFER` operation.
-After the pending block has been consumed or discarded, existing packet-source seek plus native-clear history semantics remain unchanged, with subsequent decoded frames still checked against the initial signature.
-MP4 duration and packet-level covering `firstFrameIndex` semantics remain unchanged; this is not a new sample-exact seek or later-seek pristine-PCM replay guarantee.
+Healthy `flush()` retains the cached block and requests only `AAC_TPDEC_CLEAR_BUFFER` on the native handle.
+After the pending block has been consumed or discarded, seek uses the MP4 packet source and, on success, requests that buffer clear on the current handle. Subsequent decoded frames are still checked against the initial signature.
+The session uses MP4 duration; when a seek lands on a covering packet, the block reports that packet's `firstFrameIndex`. Seeking is not sample-exact, and a later seek does not guarantee the same PCM as a fresh decoder.
 Priming neither trims AAC delay/padding nor makes AAC gapless-capable.
 Native default algorithmic delay remains the selected provider's behavior; the cached first block can contain silence or nonzero PCM, and is preserved in either case.
 
 ## ALAC metadata and PCM
 
-ALAC first preserves the existing required MP4 track/table/extradata parsing, mandatory compact-cookie/configuration validation, and provider initialization.
+ALAC initialization requires successful MP4 track, sample-table, and extradata parsing, compact cookie and configuration validation, and provider initialization.
 The initialized ALAC configuration, not sample-entry channel/rate/sample-size fields or `chan`, owns PCM geometry and precision.
 Optional channel inspection then resolves the final effective mask and slot plan before the single output-adapter configuration.
 Source and output masks agree at successful open, with no first-packet read to discover identity.
-A failed candidate is never published; requested precision-loss errors remain errors even when optional identity is unavailable.
 
 The raw [`Demuxer`](../../../include/ao/media/mp4/Demuxer.h) exposes a borrowed ALAC sample-entry view only when that declared entry contains the actual selected-cookie span.
-Legacy lookup can still obtain a later physical entry's cookie despite a declared single entry; if association cannot be proved, the optional view is withheld rather than taken from the wrong entry or made a new decode failure.
+The required cookie lookup can select a later physical entry's cookie even when `stsd` declares one entry.
+If association cannot be proved, the demuxer withholds the optional view rather than borrowing from the wrong entry or rejecting playback on that basis.
 Optional inspection understands only version-0 sound descriptions.
 A missing association or another version leaves identity `Unknown` even for mono/stereo; neither case proves complete absence of channel declarations.
-AAC extradata bytes and routing are unchanged.
+The optional ALAC view does not affect MP4 routing or extradata selection for AAC.
 [`Mp4PacketSource`](../../../lib/audio/detail/Mp4PacketSource.h) forwards the view while owning the mapped file; the mapping outlives its demuxer, and borrows expire at close, the next open, or destruction.
 Media exposes raw structure only; codec layout policy stays in audio.
 
@@ -198,11 +198,11 @@ Trustworthy complete absence identifies mono FC and stereo FL/FR only.
 Absent multichannel roles remain unassigned, and unsupported, ambiguous, conflicting, or uninspectable optional metadata remains `Unknown`, never a WAV/reference count inference.
 The [channel-order reference](../../reference/media/channel-order.md#alac) owns the bounded declarations, collision rules, and requirement that duplicates agree on order as well as set.
 Any bad declaration is terminal for identity; a later good one cannot repair it.
-Required-prefix/container/configuration/provider failures retain their existing errors; optional inspection adds no new file gate.
+Unknown identity alone does not prevent a ready session. If required parsing or initialization fails, or the requested PCM output is unsupported or loses precision, [`open()` returns an error](decoder-error.md#alac-required-errors-versus-optional-identity) without publishing a session.
 
 Initialization caches whether the final known slot plan needs permutation; canonical and `Unknown` layouts bypass normalization without rescanning their slots on each block.
 For a known layout needing permutation, each decoded block's raw provider-arrival slots normalize to ascending WAVE bits by copying whole 2-, 3-, or 4-byte native samples through fixed per-frame scratch before output adaptation.
-Unknown layouts retain legacy ordinal bytes.
+Unknown layouts preserve the decoder provider's PCM slot order.
 This changes neither the numerical decoder nor seeking, flush, packet progression, frame positions, or stable EOF semantics.
 It does not establish native delivery or guarantee every ALAC coding profile.
 
@@ -233,12 +233,13 @@ Unknown codecs remain `Unknown`, and every lossy decoder reports lossy.
 The current engine splice gate accepts only lossless FLAC, lossless ALAC, and WAV sessions whose canonical PCM modes satisfy the backend's [installed-transport reuse contract](audio-execution.md#prepared-lookahead).
 Exact equality is the default; bounded backend proof may additionally admit stereo mask `0` versus FL/FR `0x3` without changing either track's identity.
 Source layout origin is not part of mode equality; successor adoption publishes its own evidence even when an inferred and an identified layout share the same effective mask.
-The already-open mode and any retained confirmed endpoint must preserve the successor signal; otherwise the transition drains and reopens.
-This also bounds FLAC↔FLAC transitions: known↔`Unknown` mono or 3–8-channel modes and different nonzero role sets drain/reopen, while equal zero masks may reuse without proving the original roles; stereo `0`/`0x3` has only the backend-specific exceptions above.
-The [lookahead contract](audio-execution.md#prepared-lookahead) records the conditional identity-boundary gapless-eligibility losses and equal-identity reuse for WAV, FLAC, and ALAC.
-Trustworthy absent-layout mono/stereo ALAC now matches ordinary FLAC/WAV identity for strict reuse; supported explicit ALAC layouts can likewise match canonical identities after slot normalization.
-Absent-mask five/six-channel FLAC drains against otherwise-compatible inferred WAV identity, but may reuse zero/zero with untagged multichannel ALAC or unknown FLAC; this is not a universal splice or native-routing guarantee.
-Lossy and unknown-codec sessions use the drain path until delay/padding trim is parsed and fixture-tested; `Unknown` channel confidence alone does not exclude lossless FLAC.
+The already-open mode and any retained confirmed endpoint must preserve the successor signal; otherwise the current track drains and a separate successor start needs a fresh open.
+ALAC identifies mono as FC and stereo as FL/FR when it can establish that layout metadata is absent.
+These roles match ordinary mono and stereo FLAC and WAV for strict reuse; supported explicit ALAC layouts can likewise match canonical identities after slot normalization.
+Absent-mask five/six-channel FLAC drains against otherwise-compatible inferred WAV identity, but may reuse a zero-mask mode with untagged multichannel ALAC or unknown FLAC.
+These identity matches do not guarantee a splice or native routing. Equal zero masks do not establish either source's original roles.
+Lossy and unknown-codec sessions take the drain path even if the decoder already trims delay or end padding. Matching PCM modes would not suffice for future lossy splice support: the decoder would also need to account for codec-specific delay and end padding, with fixtures verifying the decoded PCM across the transition.
+An `Unknown` channel layout alone does not exclude lossless FLAC.
 
 ## Failure behavior
 
@@ -252,10 +253,12 @@ Initialization preserves that recorded required-STREAMINFO diagnostic before gen
 The write callback also guards raw-frame delivery before STREAMINFO, retaining the same cause without touching an unconfigured adapter.
 Normal junk/ID3-prefix `LOST_SYNC` notices remain ignored for native resynchronization; valid STREAMINFO with implicit code-zero frame fields remains ordinary valid input, including 48000 Hz / 16-bit audio.
 End of stream alone does not establish the raw-frame cause: an actual native metadata-processing failure without that cause, including truncated STREAMINFO, retains `Failed to read FLAC metadata`.
-FLAC preserves native metadata, header, frame, CRC, missing-frame, and premature-end failures as `DecodeFailed`; a failed native processing call remains a hard failure even without an error callback, while a standalone loss-of-sync notice may remain recoverable for resynchronization.
+FLAC must report native metadata, header, frame, CRC, missing-frame, and premature-end failures as `DecodeFailed`, even when a failed native processing call produces no error callback. A standalone loss-of-sync notice may still allow resynchronization.
+**Known limitation:** When STREAMINFO declares no total sample count, a truncated final frame header can appear to the caller as normal EOF. This happens if `process_single` returns false with `END_OF_STREAM` and no callback error was recorded.
 Internally unreadable VORBIS_COMMENT payloads are a distinct compatibility case: the session leaves those blocks unrequested through libFLAC and scans bounded views from the same file mapping outside C callbacks.
-Such comment damage alone does not newly refuse otherwise-valid audio, but prevents publication of a hard source identity even if another readable declaration is valid.
-The [FLAC source policy](pcm-format.md#flac-source-interpretation) likewise leaves recognized invalid declarations and optional position/marker/cross-check inability unknown instead of refusing playback; it never suppresses I/O, required STREAMINFO, actual outer metadata-boundary, or native audio errors.
+Such comment damage alone does not refuse otherwise-valid audio, but prevents publication of a hard source identity even if another readable declaration is valid.
+Under the [FLAC source policy](pcm-format.md#flac-source-interpretation), the decoder also leaves speaker identity `Unknown` if it finds an invalid recognized declaration or cannot verify the metadata chain from the native first-block STREAMINFO evidence. That check uses the recorded block position to locate the mapped header, compares the header with the native report, and bounds the chain by the native metadata end.
+This best-effort identity scan does not suppress I/O errors, required STREAMINFO failures, actual outer metadata-boundary failures, or native audio errors.
 Unknown admission is best-effort transport, not a role-safety or native-routing guarantee; numerical bit-perfectness is independent of channel confidence.
 Delivered frame sample positions must continue the decoded timeline, or begin at the requested seek target.
 A missing-sample gap or additional write over pending PCM is rejected before any incorrectly positioned block is returned, even when libFLAC suppresses its missing-frame notice or the total sample count is unknown.
@@ -308,7 +311,7 @@ Decoder session and malformed-input tests under [`test/audio/`](../../../test/au
 [`DecoderErrorTest.cpp`](../../../test/audio/DecoderErrorTest.cpp) mechanically rejects direct concrete construction and instance `close()` operations.
 [`DecoderFactoryTest.cpp`](../../../test/audio/DecoderFactoryTest.cpp) locks ready construction, routing, and initialization failure.
 [`DecoderOutputAdapterTest.cpp`](../../../test/audio/detail/DecoderOutputAdapterTest.cpp) directly locks rejection of precision loss, pass-through behavior, exact byte conversion, and reset.
-[`WavDecoderChannelLayoutTest.cpp`](../../../test/audio/WavDecoderChannelLayoutTest.cpp) locks effective WAV identity, interpretation origin, refusal precedence, output adaptation, and unchanged PCM/seek/EOF behavior.
+[`WavDecoderChannelLayoutTest.cpp`](../../../test/audio/WavDecoderChannelLayoutTest.cpp) checks effective WAV identity, interpretation origin, refusal precedence, output adaptation, and PCM preservation across reads and seeks through EOF.
 [`Mp3DecoderChannelLayoutTest.cpp`](../../../test/audio/Mp3DecoderChannelLayoutTest.cpp) is the channel-layout test authority for uniform mono and stereo/joint identity, dual and mixed-role withholding, same-count stereo/dual unknown admission without promotion, factory parity, exact zero PCM extent, output adaptation, seek/flush/EOF behavior, and refusal of geometry changes before contradictory PCM.
 [`Mp3DecoderTrailingTagTest.cpp`](../../../test/audio/Mp3DecoderTrailingTagTest.cpp) covers supported APEv2/Lyrics3v2/ID3v1 suffixes, read-only descriptor agreement, APEv1 identity withholding, malformed and overlapping candidates, and PCM/seek/EOF preservation after input-boundary selection.
 It also guards ID3v1-only scan reuse against a leading-junk lookahead failure and keeps a same-sized APE-only suffix on the rescan path.
@@ -318,12 +321,12 @@ The encoded MP3 cases in [`Mp3DecoderSessionTest.cpp`](../../../test/audio/Mp3De
 [`AlacDecoderChannelLayoutTest.cpp`](../../../test/audio/AlacDecoderChannelLayoutTest.cpp) covers ALAC ready-session identity, concrete/factory parity, literal PCM normalization, adaptation, seek-to-zero/flush, and EOF.
 [`AacDecoderChannelLayoutTest.cpp`](../../../test/audio/AacDecoderChannelLayoutTest.cpp) covers final actual-output identity before the first public read, concrete/factory parity, unchanged literal FDK reference windows with a one-native-signed-16-LSB cross-implementation bound at their measured delay-relative phase, exact same-host native PCM and encoding adaptation, all supported encodings, unknown eight-channel output, and independent raw-native packet comparisons for cached first blocks, contiguous output, flush, and pristine initial seeks, plus stable EOF.
 [`AacDecoderMalformedMp4Test.cpp`](../../../test/audio/AacDecoderMalformedMp4Test.cpp) distinguishes rejected zero-sample tables from admitted samples with empty payloads, and covers first-payload failures at open, required-error/request-preflight precedence, and later-payload read failures.
-Linux-only [`AacAlsaChannelLayoutTest.cpp`](../../../test/audio/backend/AacAlsaChannelLayoutTest.cpp) drives real mono AAC PCM through controlled ALSA parsed observations, covering FC, ambiguous/missing positions, confirmed conflicts and the former zero-mask format-value control without opening hardware.
-[`DemuxerAlacLayoutTest.cpp`](../../../test/media/mp4/DemuxerAlacLayoutTest.cpp) covers borrowed-entry association and preservation of required extradata/container behavior.
-[`AlacChannelMetadataTest.cpp`](../../../test/audio/AlacChannelMetadataTest.cpp) covers the ALAC metadata matrix, and [`EngineAlacChannelLayoutTest.cpp`](../../../test/audio/EngineAlacChannelLayoutTest.cpp) covers Engine transitions; this map is not an execution record.
-Existing [`AlacDecoderMalformedMp4Test.cpp`](../../../test/audio/AlacDecoderMalformedMp4Test.cpp) retains malformed-input coverage, and [`EngineStereoReuseTest.cpp`](../../../test/audio/EngineStereoReuseTest.cpp) keeps an explicitly unsupported ALAC `chan` fixture for the zero-mask stereo-alias contract.
+Linux-only [`AacAlsaChannelLayoutTest.cpp`](../../../test/audio/backend/AacAlsaChannelLayoutTest.cpp) uses real mono AAC PCM and controlled ALSA observations to check FC, ambiguous or missing positions, confirmed conflicts, and a zero-mask format-value control without opening hardware.
+[`DemuxerAlacLayoutTest.cpp`](../../../test/media/mp4/DemuxerAlacLayoutTest.cpp) covers borrowed-entry association, extradata selection, and required container failures.
+[`AlacChannelMetadataTest.cpp`](../../../test/audio/AlacChannelMetadataTest.cpp) covers the ALAC metadata matrix, and [`EngineAlacChannelLayoutTest.cpp`](../../../test/audio/EngineAlacChannelLayoutTest.cpp) covers Engine transitions.
+[`AlacDecoderMalformedMp4Test.cpp`](../../../test/audio/AlacDecoderMalformedMp4Test.cpp) distinguishes malformed configuration at open from invalid sample data at read.
 [`EngineWavChannelLayoutTest.cpp`](../../../test/audio/EngineWavChannelLayoutTest.cpp) locks real-WAV mode reuse versus drain/reopen, successor evidence publication, recoverable layout refusal before backend open, and rejected `setNext()` preservation of current playback while clearing old lookahead.
-[`FlacDecoderChannelLayoutTest.cpp`](../../../test/audio/FlacDecoderChannelLayoutTest.cpp) locks FLAC default and declared identities, exact field-name matching, strict value parsing and duplicate resolution, unknown admission for invalid declarations, output adaptation, and unchanged PCM/seek/flush/EOF behavior.
+[`FlacDecoderChannelLayoutTest.cpp`](../../../test/audio/FlacDecoderChannelLayoutTest.cpp) checks FLAC default and declared identities, exact field-name matching, strict value parsing and duplicate resolution, unknown admission for invalid declarations, output adaptation, and PCM preservation across reads, seeks, and flush through EOF.
 [`FlacMetadataInitializationTest.cpp`](../../../test/audio/FlacMetadataInitializationTest.cpp) covers initialization diagnostics for raw frames without STREAMINFO, including implicit rate/precision headers, with valid-STREAMINFO, prefix-tolerance, and truncated-metadata controls.
 [`FlacCommentCompatibilityTest.cpp`](../../../test/audio/FlacCommentCompatibilityTest.cpp) protects bounded comment inspection, absorbing unknown identity after structural damage or invalid declarations, native-prefix first-block STREAMINFO anchoring, unknown identity for nonfirst STREAMINFO even with early valid declarations or fake padding markers, native outer-boundary failures, and large comment counts with literal PCM.
 [`FlacWavMaskCompatibilityTest.cpp`](../../../test/audio/FlacWavMaskCompatibilityTest.cpp) compares WAV identity with retained reference-FLAC output bytes, pinning trimmed WAV identity versus unknown FLAC for excess masks and literal PCM preservation without a runtime encoder dependency.
@@ -331,13 +334,14 @@ Existing [`AlacDecoderMalformedMp4Test.cpp`](../../../test/audio/AlacDecoderMalf
 It also covers successor evidence publication, different-role drain/reopen, recoverable malformed-outer-metadata failure before backend open, and rejected `setNext()` preservation of current playback while clearing old lookahead.
 [`EngineFlacTransitionTest.cpp`](../../../test/audio/EngineFlacTransitionTest.cpp) covers six-channel real-FLAC producer transitions: equal known and equal unknown reuse controls, known↔unknown drain/reopen, different nonzero roles, captured PCM, and successor evidence publication.
 [`FlacAlsaPipeWireRouteTest.cpp`](../../../test/audio/backend/FlacAlsaPipeWireRouteTest.cpp) drives real five/six-channel decoders through controlled ALSA and PipeWire parsed-map boundaries: untagged sources retain ordinal bytes across back/side observations, while explicit identities keep strict role checks and same-set permutations. It does not open hardware.
-Linux-only [`OpusAlsaChannelLayoutTest.cpp`](../../../test/audio/backend/OpusAlsaChannelLayoutTest.cpp) drives actual mono and six-channel Opus decodes through the controlled ALSA parsed-map boundary: conflicting current roles are refused where the former zero-mask publication was eligible, same-set native orders are privately permuted, and missing or compatible partial observations retain eligibility.
+Linux-only [`OpusAlsaChannelLayoutTest.cpp`](../../../test/audio/backend/OpusAlsaChannelLayoutTest.cpp) uses real mono and six-channel Opus decodes with controlled ALSA parsed observations. It checks role-conflict refusals, same-set private permutations, and eligibility with missing or compatible partial observations.
+For the complete role-conflict comparisons, the fixture sets only the copied format value's speaker mask to zero; the same observations then permit transport without permutation. No alternative decoder is involved.
 Mono `MONO` observations remain unassigned rather than being relabelled FC, and accepted mono maps retain one-channel PCM bytes. These tests do not open hardware or establish stereo-only-device support.
 [`OpusDecoderChannelLayoutTest.cpp`](../../../test/audio/OpusDecoderChannelLayoutTest.cpp) locks family 0/1/255 identity publication with literal per-count masks and exact per-slot PCM comparisons against family-255 ordinal decodes using independently declared RFC speaker roles.
 It covers silent and repeated mapping patterns, including distinguishable seven/eight-channel controls, six-channel family-255 ordinal order, concrete/factory parity and unsupported-family refusal, adaptation, and immutable stream information through reads/seek/flush/EOF.
 The generic borrowed-block byte-validity case across seek/flush until the next read is covered by [`OpusDecoderSessionTest.cpp`](../../../test/audio/OpusDecoderSessionTest.cpp), independent of channel-role identification.
 [`VorbisCommentTest.cpp`](../../../test/media/VorbisCommentTest.cpp) protects the shared raw grammar, borrowed order and bytes, malformed prefixes/tails, visitor abort and exception behavior, large counts, and atomic import collection.
-[`EngineStereoReuseTest.cpp`](../../../test/audio/EngineStereoReuseTest.cpp) retains the real WAV/ALAC stereo fixture and also checks FLAC/ALAC stereo opt-in splicing versus strict draining in both directions, with literal PCM and source-identity publication.
+[`EngineStereoReuseTest.cpp`](../../../test/audio/EngineStereoReuseTest.cpp) covers WAV/ALAC stereo aliasing and FLAC/ALAC stereo opt-in splicing versus strict draining in both directions, with literal PCM and source-identity publication. An unsupported ALAC `chan` declaration supplies the zero-mask stereo fixture.
 These controlled Engine cases do not certify native routing or audible gaplessness.
 [`SegmentDecoderSessionTest.cpp`](../../../test/audio/SegmentDecoderSessionTest.cpp) covers range PCM, exact and millisecond seeks, stable EOF, early EOF, structural mismatches, and both decoder openings.
 [`CarrierPlaybackTest.cpp`](../../../test/runtime/CarrierPlaybackTest.cpp) verifies the stored second segment through final runtime PCM and a nonempty zero-millisecond segment.

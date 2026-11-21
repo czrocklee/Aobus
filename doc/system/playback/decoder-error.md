@@ -63,7 +63,8 @@ That cause makes the next read callback abort and takes precedence over generic 
 Normal prefix `LOST_SYNC` remains tolerated, and end of stream alone is not a missing-STREAMINFO cause marker.
 Without the recorded cause, an actual native metadata failure such as truncated STREAMINFO retains `Failed to read FLAC metadata`; a failed native processing call remains a hard failure even without an error callback.
 The [initialization failure contract](decoder-session.md#failure-behavior) owns these phase and precedence rules.
-Its [source-identity policy](pcm-format.md#flac-source-interpretation) treats absent exact mask keys for five/six channels, malformed recognized channel-mask declarations, conflicting duplicates, zero/partial/excess/reserved/wildcard assignments, nonfirst STREAMINFO, incomplete comments, and optional position/marker/cross-check inability as unknown identity, not new `NotSupported` or `DecodeFailed` gates.
+Under the [source-identity policy](pcm-format.md#flac-source-interpretation), five or six channels without exact mask keys have unknown identity, as do malformed recognized channel-mask declarations, conflicting duplicates, and zero, partial, excess, reserved-bit, or wildcard assignments.
+Nonfirst STREAMINFO, incomplete comments, and inability to verify optional position, marker, or cross-check evidence also leave identity unknown rather than returning `NotSupported` or `DecodeFailed`.
 Otherwise-valid audio may open with aligned zero source/output masks and `Unknown` origin; later valid declarations never repair that inspection.
 Required I/O, native metadata, STREAMINFO, frame, timeline, and premature-EOF faults retain their error behavior, including actual outer metadata truncation rejected by native processing.
 Requested-output precision errors remain required failures with their existing precedence over final STREAMINFO geometry validation; optional unknown evidence never hides them.
@@ -74,21 +75,22 @@ The diagnostic identifies the inspected and conflicting frame properties; a seek
 
 ### ALAC required errors versus optional identity
 
-ALAC retains required MP4 track, sample-table, and extradata errors and their existing initialization translation above.
-Its mandatory cookie must still contain the compact `alac` header and complete configuration; malformed configuration, invalid frame length/version/bit depth/channel count/rate, or provider initialization failure remains `InitFailed`.
+ALAC `open()` returns an error if required MP4 track, sample-table, or extradata processing fails, with the packet-source translation described above.
+The mandatory cookie must contain the compact `alac` header and complete configuration.
+A malformed cookie, invalid configuration fields (frame length, version, bit depth, channel count, or rate), or failed provider initialization makes `open()` return `InitFailed`.
 The validated ALAC configuration owns geometry and precision, not sample-entry geometry or optional `chan` fields.
-Requested unsupported or precision-losing output remains `NotSupported` at output-adapter configuration; no partially initialized session is published.
+An unsupported or precision-losing output request returns `NotSupported` from output-adapter configuration; no partially initialized session is published.
 
-Optional layout inspection adds no rejection gate.
-Malformed, unsupported, conflicting, ambiguous, or uninspectable optional metadata yields zero mask and `Unknown` interpretation, preserving legacy ordinal PCM rather than inventing roles or returning a layout error.
+Malformed, unsupported, conflicting, ambiguous, or uninspectable optional layout metadata yields a zero mask and `Unknown` interpretation.
+The session keeps the decoder provider's PCM slot order; optional identity inspection does not itself reject the file.
 This includes exact colliding tag `0x00710003`, conflicting declaration order at an equal mask, and an unavailable associated-entry view.
 A later good declaration never repairs an earlier bad one.
 The [ALAC declaration reference](../../reference/media/channel-order.md#alac) owns the bounded grammar and completeness rules.
 
-This is not parser relaxation: invalid atoms encountered on the existing required cookie/container lookup path still fail.
-A malformed or nested size-zero optional tail not previously visited by required parsing withholds identity only.
-Neither metadata failure nor metadata absence bypasses required cookie/configuration/provider checks or precision-loss rejection.
-Read-time provider failures and invalid decoded frame counts remain `DecodeFailed`; normalization does not replace the numerical decoder.
+An invalid atom encountered during required container or cookie lookup makes `open()` return an error.
+A malformed or nested size-zero tail that only optional inspection visits withholds identity instead.
+Neither unusable nor absent optional metadata bypasses the required checks above.
+Read-time provider failures and invalid decoded frame counts return `DecodeFailed`; normalization does not replace the numerical decoder.
 
 End of stream is `PcmBlock{.endOfStream = true}` rather than an error.
 Unopened and closed states are not part of the public `DecoderSession` surface.
