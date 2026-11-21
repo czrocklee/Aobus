@@ -15,11 +15,13 @@
 #include <ao/query/PlanEvaluator.h>
 #include <ao/query/detail/Bytecode.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <format>
 #include <span>
 #include <string_view>
 
@@ -183,6 +185,14 @@ namespace ao::query::test
                     .missingArtistMatches = false},
     };
 
+    SECTION("An absent artist matches the empty substring")
+    {
+      auto const plan = compileOk(parseOk("$artist ~ ''"));
+      auto const binding = PlanBinding{plan, dictionaryContext};
+      CHECK(evaluator.matchesFullPlan(binding, missingArtistTrack));
+      CHECK_FALSE(evaluator.matchesFullPlan(compileOk(parseOk("$artist?")), missingArtistTrack));
+    }
+
     for (auto const& testCase : cases)
     {
       DYNAMIC_SECTION(testCase.expression)
@@ -195,23 +205,6 @@ namespace ao::query::test
         CHECK(evaluator.matchesFullPlan(binding, missingArtistTrack) == testCase.missingArtistMatches);
       }
     }
-  }
-
-  TEST_CASE("PlanEvaluator - nested comparison does not leak a dictionary constant into its parent")
-  {
-    auto dictionaryFixture = DictionaryFixture{};
-    auto transaction = dictionaryFixture.writeTransaction();
-    auto const bachId = ao::test::requireValue(physicalDictionary(transaction).intern("Bach"));
-    auto const otherId = ao::test::requireValue(physicalDictionary(transaction).intern("Other"));
-    REQUIRE(transaction.commit());
-
-    auto spec = TrackSpec{};
-    spec.albumId = bachId.raw();
-    spec.artistId = otherId.raw();
-    auto track = TestTrack{spec, &dictionaryFixture.dictionary()};
-    auto const plan = compileOk(parseOk(R"($album = ($artist = "Bach"))"));
-
-    CHECK(matchesFullPlanWithDictionary(PlanEvaluator{}, plan, track.view(), dictionaryFixture.dictionary()) == false);
   }
 
   TEST_CASE("PlanEvaluator - matches dictionary-backed metadata and property fields")
@@ -298,6 +291,8 @@ namespace ao::query::test
     {
       auto plan = compileOk(parseOk("@codec = FLAC"));
       CHECK(evaluator.matchesFullPlan(plan, track.view()) == true);
+      CHECK(evaluator.matchesFullPlan(compileOk(parseOk("@codec = 1")), track.view()));
+      CHECK(evaluator.matchesFullPlan(compileOk(parseOk("@codec in [MP3, 1]")), track.view()));
     }
 
     SECTION("Numeric Metadata Fields")
@@ -427,6 +422,18 @@ namespace ao::query::test
       CHECK_FALSE(evaluate(plan, adele));
     }
 
+    SECTION("Orders two fields by text rather than dictionary id")
+    {
+      REQUIRE(zappaId.raw() < adeleId.raw());
+      auto data = makeHotOnlyTrack(zappaId, adeleId);
+      auto track = library::TrackView{data, std::span<std::byte const>{}};
+
+      CHECK(evaluate(compileOk(parseOk("$artist > $album")), track));
+      CHECK_FALSE(evaluate(compileOk(parseOk("$artist < $album")), track));
+      CHECK_FALSE(evaluate(compileOk(parseOk("$artist <= $album")), track));
+      CHECK(evaluate(compileOk(parseOk("$artist >= $album")), track));
+    }
+
     SECTION("NotEqualStillComparesById")
     {
       auto plan = compileOk(parseOk("$artist != Mozart"));
@@ -448,6 +455,20 @@ namespace ao::query::test
     }
   }
 
+  TEST_CASE("PlanEvaluator - dictionary field equality retains missing id semantics")
+  {
+    auto bothMissing = TrackFixture{TrackSpec{.artist = "", .album = ""}};
+    auto oneMissing = TrackFixture{TrackSpec{.artist = "Bach", .album = ""}};
+    auto const evaluator = PlanEvaluator{};
+    auto const equal = compileOk(parseOk("$artist = $album"));
+    auto const notEqual = compileOk(parseOk("$artist != $album"));
+
+    CHECK(matchesFullPlanWithDictionary(evaluator, equal, bothMissing.view(), bothMissing.dictionary()));
+    CHECK_FALSE(matchesFullPlanWithDictionary(evaluator, notEqual, bothMissing.view(), bothMissing.dictionary()));
+    CHECK_FALSE(matchesFullPlanWithDictionary(evaluator, equal, oneMissing.view(), oneMissing.dictionary()));
+    CHECK(matchesFullPlanWithDictionary(evaluator, notEqual, oneMissing.view(), oneMissing.dictionary()));
+  }
+
   TEST_CASE("PlanEvaluator - matches partial LIKE patterns on dictionary-backed fields")
   {
     auto const spec = TrackSpec{.artist = "Johann Sebastian Bach"};
@@ -459,7 +480,7 @@ namespace ao::query::test
     CHECK(matchesFullPlanWithDictionary(evaluator, plan, track.view(), track.dictionary()) == true);
   }
 
-  TEST_CASE("PlanEvaluator - unresolved comparison symbols have explicit missing semantics")
+  TEST_CASE("PlanEvaluator - unresolved dictionary literals have explicit missing semantics")
   {
     auto track = TrackFixture{};
     auto const evaluator = PlanEvaluator{};
@@ -468,15 +489,45 @@ namespace ao::query::test
     auto const notEqualPlan = compileOk(parseOk("$artist != 'never interned'"));
     CHECK_FALSE(matchesFullPlanWithDictionary(evaluator, equalPlan, track.view(), track.dictionary()));
     CHECK(matchesFullPlanWithDictionary(evaluator, notEqualPlan, track.view(), track.dictionary()));
+  }
 
-    auto const customEqual = compileOk(parseOk("%missing = ''"));
-    auto const customNotEqual = compileOk(parseOk("%missing != ''"));
-    auto const customLike = compileOk(parseOk("%missing ~ ''"));
-    auto const customIn = compileOk(parseOk("%missing in ['']"));
-    CHECK_FALSE(matchesFullPlanWithDictionary(evaluator, customEqual, track.view(), track.dictionary()));
-    CHECK(matchesFullPlanWithDictionary(evaluator, customNotEqual, track.view(), track.dictionary()));
-    CHECK_FALSE(matchesFullPlanWithDictionary(evaluator, customLike, track.view(), track.dictionary()));
-    CHECK_FALSE(matchesFullPlanWithDictionary(evaluator, customIn, track.view(), track.dictionary()));
+  TEST_CASE("PlanEvaluator - distinguishes missing custom values from empty text in literal predicates")
+  {
+    // The artist interns the key without giving this track a custom value for it.
+    auto track = TrackFixture{TrackSpec{.artist = "future", .customPairs = {{"empty", ""}}}};
+    auto const& dictionary = track.dictionary();
+    REQUIRE_FALSE(dictionary.findId("missing"));
+    REQUIRE(dictionary.findId("future"));
+
+    auto const evaluator = PlanEvaluator{};
+    auto const matches = [&](std::string_view expression)
+    {
+      auto const plan = compileOk(parseOk(expression));
+      return matchesFullPlanWithDictionary(evaluator, plan, track.view(), dictionary);
+    };
+
+    struct Case final
+    {
+      std::string_view key;
+      bool present;
+    };
+    auto const cases = std::array{
+      Case{.key = "missing", .present = false},
+      Case{.key = "future", .present = false},
+      Case{.key = "empty", .present = true},
+    };
+
+    for (auto const& [key, present] : cases)
+    {
+      CAPTURE(key);
+      CHECK(matches(std::format("%{} = ''", key)) == present);
+      CHECK(matches(std::format("'' = %{}", key)) == present);
+      CHECK(matches(std::format("%{} != ''", key)) == !present);
+      CHECK(matches(std::format("%{} <= ''", key)) == present);
+      CHECK(matches(std::format("'' >= %{}", key)) == present);
+      CHECK(matches(std::format("%{} in ['', 'other']", key)) == present);
+      CHECK(matches(std::format("%{} ~ ''", key)) == present);
+    }
   }
 
   TEST_CASE("PlanEvaluator - dictionary literal binding does not leak into later field comparisons")

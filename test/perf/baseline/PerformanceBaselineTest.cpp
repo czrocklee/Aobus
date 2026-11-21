@@ -864,26 +864,18 @@ namespace ao::rt::test
           .op = query::OpCode::LoadField,
           .field = static_cast<std::uint8_t>(query::Field::Year),
           .operand = nextReg++,
-          .constValue = 0,
-          .size = 0,
-          .data = nullptr,
         });
         plan.instructions.push_back(query::Instruction{
           .op = query::OpCode::LoadConstant,
           .field = 0,
           .operand = nextReg++,
           .constValue = static_cast<std::int64_t>(1990 + index),
-          .size = 0,
-          .data = nullptr,
         });
 
         plan.instructions.push_back(query::Instruction{
           .op = query::OpCode::Eq,
           .field = static_cast<std::uint8_t>(query::Field::Year),
           .operand = nextReg - 1,
-          .constValue = 0,
-          .size = 0,
-          .data = nullptr,
         });
         --nextReg;
 
@@ -895,11 +887,7 @@ namespace ao::rt::test
 
         plan.instructions.push_back(query::Instruction{
           .op = query::OpCode::Or,
-          .field = 0,
           .operand = nextReg - 1,
-          .constValue = 0,
-          .size = 0,
-          .data = nullptr,
         });
         --nextReg;
       }
@@ -922,17 +910,11 @@ namespace ao::rt::test
         .op = query::OpCode::LoadField,
         .field = static_cast<std::uint8_t>(query::Field::Year),
         .operand = 0,
-        .constValue = 0,
-        .size = 0,
-        .data = nullptr,
       });
       plan.instructions.push_back(query::Instruction{
         .op = query::OpCode::InSet,
         .field = static_cast<std::uint8_t>(query::Field::Year),
         .operand = 0,
-        .constValue = 0,
-        .size = 0,
-        .data = nullptr,
       });
 
       return plan;

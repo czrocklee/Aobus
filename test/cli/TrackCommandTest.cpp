@@ -619,6 +619,32 @@ namespace ao::cli::test
     CHECK(yaml::scalarView(tree.rootref()["tagChanges"][0]["trackId"]) == std::to_string(thirdId.raw()));
   }
 
+  TEST_CASE("CLI - track update rejects an ill-typed filter without changing either track")
+  {
+    auto fixture = CliFixture{};
+    auto const missingYear = fixture.addTrack(library::test::TrackSpec{.title = "007", .uri = "007.flac", .year = 0});
+    auto const dated = fixture.addTrack(library::test::TrackSpec{.title = "Dated", .uri = "dated.flac", .year = 2024});
+    constexpr auto kFilter = std::string_view{R"($year = "x")"};
+
+    SECTION("preview")
+    {
+      checkDomainFailure(
+        fixture.run({"track", "update", "--dry-run", "--filter", kFilter, "--title", "Changed"}), "filter error:");
+    }
+
+    SECTION("commit")
+    {
+      checkDomainFailure(fixture.run({"track", "update", "--filter", kFilter, "--title", "Changed"}), "filter error:");
+    }
+
+    auto const first = fixture.run({"track", "show", std::to_string(missingYear.raw()), "--format", "$title"});
+    REQUIRE(first.status == 0);
+    CHECK(first.out == "007\n");
+    auto const second = fixture.run({"track", "show", std::to_string(dated.raw()), "--format", "$title"});
+    REQUIRE(second.status == 0);
+    CHECK(second.out == "Dated\n");
+  }
+
   TEST_CASE("CLI - track update reports a zero-match filter as a no-op")
   {
     auto fixture = CliFixture{};

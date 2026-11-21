@@ -155,8 +155,9 @@ namespace ao::query::test
 
     SECTION("Rejects MissingNumericFieldContext")
     {
-      // A top-level unit constant expression like "3m" should fail
+      // Units require a direct numeric field on the left, not the right.
       std::ignore = compileError(parseOk("3m"));
+      CHECK(compileError(parseOk("3m = @duration")).message.contains("on the left"));
     }
   }
 } // namespace ao::query::test

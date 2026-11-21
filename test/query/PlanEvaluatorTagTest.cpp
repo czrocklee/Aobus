@@ -15,6 +15,7 @@
 #include <ao/query/PlanEvaluator.h>
 #include <ao/query/detail/Bytecode.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
@@ -23,6 +24,7 @@
 #include <format>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ao::query::test
@@ -78,6 +80,33 @@ namespace ao::query::test
 
     CHECK(matchesWithDictionary(evaluator, plan, present.view(), present.dictionary()));
     CHECK_FALSE(matchesWithDictionary(evaluator, plan, absent.view(), absent.dictionary()));
+  }
+
+  TEST_CASE("PlanEvaluator - compares tag membership as a boolean even when the tag is missing")
+  {
+    auto present = TrackFixture{TrackSpec{.tags = {"rock"}}};
+    auto absent = TrackFixture{TrackSpec{.artist = "rock"}};
+    auto unresolved = TrackFixture{};
+    auto const evaluator = PlanEvaluator{};
+    auto const checkMatches = [&](std::string_view expression, bool matchesPresent, bool matchesMissing)
+    {
+      CAPTURE(expression);
+      auto const plan = compileOk(parseOk(expression));
+      CHECK(matchesWithDictionary(evaluator, plan, present.view(), present.dictionary()) == matchesPresent);
+      CHECK(matchesWithDictionary(evaluator, plan, absent.view(), absent.dictionary()) == matchesMissing);
+      CHECK(matchesWithDictionary(evaluator, plan, unresolved.view(), unresolved.dictionary()) == matchesMissing);
+    };
+
+    checkMatches("#rock = true", true, false);
+    checkMatches("#rock != false", true, false);
+    checkMatches("#rock = false", false, true);
+    checkMatches("false = #rock", false, true);
+    checkMatches("#rock != true", false, true);
+    checkMatches("#rock > false", true, false);
+    checkMatches("#rock < true", false, true);
+    checkMatches("#rock in [false]", false, true);
+    checkMatches("#rock in true..true", true, false);
+    checkMatches("#rock in false..true", true, true);
   }
 
   TEST_CASE("PlanEvaluator - matches numeric tag names and quoted custom keys")

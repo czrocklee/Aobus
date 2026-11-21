@@ -157,6 +157,10 @@ namespace ao::query
        .aliases = std::span{kNoAliases}},
     });
 
+    // TagBloom also encodes a literal operand in query bytecode; no public name may resolve to it.
+    static_assert(!std::ranges::contains(kMetadataDescriptors, Field::TagBloom, &QueryVariableDescriptor::field));
+    static_assert(!std::ranges::contains(kPropertyDescriptors, Field::TagBloom, &QueryVariableDescriptor::field));
+
     constexpr auto kEmptyDescriptors = std::array<QueryVariableDescriptor, 0>{};
 
     bool matchesCatalogName(QueryVariableDescriptor const& descriptor, std::string_view name)

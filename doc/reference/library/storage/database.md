@@ -560,10 +560,11 @@ A development library therefore moves between such builds only through YAML, exp
 The [YAML reference](../format/yaml.md) separately defines the accepted interchange schema. Neither format provides a dual reader or layout autodetection.
 The current application interpretation belongs to the [predicate language reference](../../query/predicate-language.md), and membership behavior belongs to the [predicate evaluation specification](../../../system/query/predicate-evaluation.md).
 The database version also names the predicate language of stored List filters, which carry no version of their own.
-A grammar, field-binding, or evaluation change that alters the outcome of filter text the current language accepts therefore increments `kLibraryVersion`, so that a later migration can tell which language a stored filter was written in; a change that only gives meaning to text the language rejects does not, as the [predicate language reference](../../query/predicate-language.md#compatibility-and-versioning) explains.
+A grammar, field-binding, or evaluation change that alters the outcome of accepted filter text is therefore incompatible; a change that only gives meaning to rejected text is not, as the [predicate language reference](../../query/predicate-language.md#compatibility-and-versioning) explains.
+Version 1 is unreleased and may be amended; after release, incompatible changes follow the versioning and upgrade policy below.
 Admission still never parses a filter, and stored text that does not parse or compile is an application expression error rather than corrupt storage.
 
-Any incompatible key, record, enum encoding, slot meaning, signature algorithm, List byte layout, or saved-order representation change must increment `kLibraryVersion`.
+Incompatible changes to keys, records, enum encodings, slot meanings, signature algorithms, List byte layout, or saved-order representation follow the same amendment and versioning policy.
 After the first release, a version is incremented at most once per release and a released number is never reused; a later release brings every earlier released library forward through an explicit, confirmed upgrade, as [decision 0020](../../../decision/0020-versioning-and-upgrade-policy.md) records.
 No upgrade exists yet. Open accepts only version 1 and never relabels, rewrites, or deletes a library of another version automatically.
 `MusicLibrary.cpp` asserts at compile time that the current version is 1, so incrementing `kLibraryVersion` does not build until open gains the upgrade path for the older version.

@@ -5,6 +5,7 @@
 #include <ao/query/Field.h>
 #include <ao/query/detail/Bytecode.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
@@ -114,6 +115,21 @@ namespace ao::query::test
     }
   }
 
+  TEST_CASE("ExecutionPlan - rejects list members incompatible with the left operand")
+  {
+    for (auto const* expression : {"$year in [2020, '2021']",
+                                   "$title in ['2020', 2021]",
+                                   "$artist in ['Bach', 1]",
+                                   "'2020' in [2020]",
+                                   "2020 in ['2020']",
+                                   "$year in [2020, true]",
+                                   "#rock in [true, 1]"})
+    {
+      CAPTURE(expression);
+      std::ignore = compileError(parseOk(expression));
+    }
+  }
+
   TEST_CASE("ExecutionPlan - compiles in ranges")
   {
     SECTION("CompilesRangeAsClosedBounds")
@@ -159,6 +175,19 @@ namespace ao::query::test
       auto const plan = compileOk(parseOk("$title in apple..zoo"));
       CHECK(plan.stringConstants == std::vector<std::string>{"apple", "zoo"});
       checkClosedRange(plan, Field::Title, 0, 1);
+    }
+  }
+
+  TEST_CASE("ExecutionPlan - rejects either range bound when its type is incompatible")
+  {
+    for (auto const* expression : {"$year in '1990'..2000",
+                                   "$year in 1990..'2000'",
+                                   "$title in 1990..'2000'",
+                                   "$title in '1990'..2000",
+                                   "#rock in false..1"})
+    {
+      CAPTURE(expression);
+      std::ignore = compileError(parseOk(expression));
     }
   }
 

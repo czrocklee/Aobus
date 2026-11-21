@@ -175,7 +175,9 @@ No operator splits a stored value into names; only the [credit selectors](#credi
 | `@bitDepth`        | `@bd` |
 | `@codec`           | None  |
 
-`@codec` constants are `UNKNOWN`, `FLAC`, `ALAC`, `WAV`, `AAC`, `MP3`, and `Opus`, matched case-insensitively.
+With `@codec` directly on the left, codec names `UNKNOWN`, `FLAC`, `ALAC`, `WAV`, `AAC`, `MP3`, and `Opus` are matched case-insensitively.
+Raw integer codec representations are also accepted, including in lists mixing names and integers; Booleans are not integers.
+Codec names receive no codec conversion in other operand contexts; write `@codec = FLAC`, not `FLAC = @codec`.
 
 ### Unit literals
 
@@ -186,6 +188,7 @@ No operator splits a stored value into names; only the [credit selectors](#credi
 | `@sampleRate`      | `k`, `m`            | Thousand, million                     |
 
 Unit suffixes are case-insensitive.
+Put the field on the left to supply the unit context, as in `@duration > 3m`, not `3m < @duration`.
 Duration may concatenate unit segments, as in `2m30s`.
 A fractional literal is accepted only when scaling produces an integer, so `44.1k` is valid for sample rate while `1.5ms` is invalid for duration.
 
@@ -193,9 +196,10 @@ A fractional literal is accepted only when scaling produces an integer, so `44.1
 
 `~` performs locale-independent Unicode-caseless substring containment over user-visible text.
 It uses Unicode default full case folding, so expansions such as `Straße` matching `STRASSE` are supported, while accents remain significant.
-Its left operand must be a direct text or URI field, or a credit member field, and its right operand must be a direct string constant.
-Title, custom metadata, and dictionary-backed metadata use the Unicode-caseless semantic; filesystem URI values retain byte-exact containment without Unicode normalization.
-The [predicate evaluation specification](../../system/query/predicate-evaluation.md) owns normalization, caching, and truth behavior.
+Its left operand must be a direct text or credit member field, and its right operand must be a direct string constant.
+Use `$artist?`, not `$artist ~ ''`, to select tracks with an artist: a missing artist also matches the empty substring.
+Neither `$uri` nor `@uri` is a public query field.
+The [predicate evaluation specification](../../system/query/predicate-evaluation.md#comparison) details normalization and matching for absent fields and empty credit selections.
 
 ### Recording-date predicates
 
@@ -281,8 +285,11 @@ Member predicates never compare the joined display string or only the first entr
 - Lists are non-empty constant lists and are executable only as the right operand of `in`.
 - Ranges contain two required constant bounds and are executable only as the right operand of `in`.
 - Predicate compilation rejects the shared parser's `+` and adjacency concatenation nodes.
-- Ordered comparisons over dictionary-backed metadata require string operands.
-- Substring `~` requires a direct text, URI, or credit member field and a direct string constant.
+- Equality and ordering require compatible text, numeric, or Boolean operands; mismatches are rejected during compilation, including list elements and range bounds. Strings are not numbers, dictionary ids, or string-constant indices.
+- Ordinary text fields, including custom and dictionary-backed fields, and string literals compare their actual contents; ordering is case-sensitive and lexicographic. Missing values follow the [evaluation rules](../../system/query/predicate-evaluation.md#comparison); recording dates and credit selectors follow their specialized rules above.
+- Bare tags, existence tests, and nested predicates produce Boolean values comparable to `true` and `false`; Booleans are not implicitly integers, and `false < true`.
+- A missing custom key matches inequality but not equality, positive list membership, ordering, or substring comparisons, regardless of dictionary binding. Use `%key = ''` for a stored empty value, `!%key?` for an absent key, or `%key = '' or !%key?` for either.
+- Substring `~` requires a direct text or credit member field and a direct string constant.
 - `$recordingDate` comparisons, lists, and range bounds require canonical date strings or integer years `1..9999`; no field operand or substring conversion is accepted.
 - Credit member comparisons and lists require direct string literals and a direct left member field; ordering, ranges, roles, coercions, reversed comparisons, and field operands are rejected.
 - Unit kinds must match the left field; compound unit segments are supported only for duration.
@@ -300,13 +307,13 @@ The grammar and catalog in this reference, together with the truth behavior in t
 - the [library database](../library/storage/database.md#compatibility-and-versioning) version names the language of saved List filters;
 - the [library YAML](../library/format/yaml.md) version names the language of document filters.
 
-A change that alters the outcome of filter text the current language accepts, meaning text that parses and compiles, increments both versions, so that a later migration can tell which language a filter was written in.
+A change that alters the outcome of accepted filter text, meaning text that parses and compiles, is incompatible for both formats.
 The changes listed above are such changes, and so is a new keyword that a bare string spells today: `like` as an operator would invalidate `$genre = like`.
-No upgrade exists yet, so neither format reads an earlier version.
-After the first release, such a change ships the upgrade steps that rewrite stored and document filters, as [decision 0020](../../decision/0020-versioning-and-upgrade-policy.md) records.
+Both formats' version 1 is unreleased, so changes amend it without an increment or upgrade step.
+After a release, the first incompatible change in a cycle increments both versions and ships upgrade steps that rewrite stored and document filters; later changes amend that unreleased version, as the [format change guide](../../development/library-format-changes.md) and [decision 0020](../../decision/0020-versioning-and-upgrade-policy.md) record.
 
 A change that only gives meaning to text the current language rejects, such as a new variable or alias, increments neither version.
-Every filter that an earlier build of the version accepts means the same in later builds.
+This preserves the meaning of filters accepted by earlier released builds.
 An earlier build reports a filter that uses the addition as an expression error and keeps its text, and a stored filter that was rejected when written takes on the new meaning.
 Incrementing for such a change would force every library and backup through an upgrade without protecting any accepted filter.
 
@@ -353,7 +360,7 @@ Representative invalid forms are:
 | `$year`                         | A non-tag variable is not a predicate.                 |
 | `!$year`                        | Missing-field syntax requires `!$year?`.               |
 | `$title + $artist = x`          | Predicate compilation rejects concatenation.           |
-| `@duration ~ "three"`           | Substring applies only to text and URI fields.         |
+| `@duration ~ "three"`           | Substring requires a text or credit member field.      |
 | `@duration >= 10k`              | `k` is not a duration unit.                            |
 | `@codec = VORBIS`               | `VORBIS` is not a supported codec constant.            |
 | `$recordingDate = 1981-05`      | A hyphenated date requires quotes.                     |

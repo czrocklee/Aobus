@@ -66,27 +66,36 @@ The canonical missing-value form is a negated existence predicate such as `!$yea
 
 ### Comparison
 
-Plain text and custom metadata comparisons use the stored string.
-Equality and `in` lists over dictionary metadata resolve the expression constant to its dictionary id and compare ids.
+Present ordinary text operands, including plain text, custom metadata, dictionary-backed fields, and string literals, compare their actual contents, including field-to-field comparisons; missing values follow the exceptions below.
+Equality and `in` lists over dictionary metadata may resolve a direct expression constant to its dictionary id and compare ids without changing text equality.
 Substring and ordered comparisons over dictionary metadata resolve the track id back to text.
 Library text and its compiled constants are both NFC, so canonically equivalent source spellings compare identically without making any comparison case-insensitive.
-Only a direct string-constant operand contributes a dictionary symbol to its comparison; a nested comparison contributes its scalar boolean result and cannot leak an inner literal into the parent instruction.
+Only a direct string-constant operand contributes a value-lookup dictionary symbol to its comparison; a custom-field variable contributes its key symbol on either side.
+A nested comparison contributes its scalar Boolean result and cannot leak an inner literal into the parent instruction.
 
 An unresolved tag never matches membership or existence.
-When a current binding cannot resolve a custom key or dictionary equality constant, equality and membership do not match while inequality matches.
-An unresolved custom key also makes existence, ordered, and substring comparisons non-matching rather than treating the missing key as an empty stored value.
+When a current binding cannot resolve a dictionary equality constant, equality and membership do not match while inequality matches.
+A custom key with no value on this track, whether globally bound or not, never matches equality, positive list membership, ordering, or substring comparisons, and matches inequality in ordinary supported comparisons.
+This applies to field-to-field and field-to-literal comparisons alike; an explicitly stored empty value is instead a string and is compared as such.
+Use `%key?` to test whether the key is present, including an empty value.
 A later binding may resolve the same plan-owned symbol after a committed dictionary generation advance.
+For field-to-field equality, a missing dictionary id does not equal an empty string, but two missing dictionary ids are equal.
+Ordering treats a missing dictionary id as an empty string.
+Dictionary substring matching also treats a missing id as empty text: `$artist ~ ''` is true for a missing artist, although `$artist?` is false; a nonempty needle does not match it.
 
-`~` requires a direct text field, filesystem URI field, or credit member-name field, and a direct string constant.
+In the public query language, `~` requires a direct text or credit member-name field and a direct string constant.
 For title, custom metadata, and dictionary-backed metadata it performs locale-independent Unicode-caseless substring containment.
 Compilation validates the literal, normalizes it to NFC, applies Unicode default full case folding, normalizes the result to NFC, and stores that key once in the plan.
 Evaluation derives the field key through the same operation and performs substring containment over the two keys.
 Full folding permits length-changing equivalence such as `Straße` matching `STRASSE` and maps Greek final sigma consistently; it does not remove accents or apply Turkish or other locale tailoring.
-For filesystem URI values, `~` preserves the existing byte-exact substring behavior and performs neither normalization nor case folding.
+For internal filesystem URI values, evaluator bytecode `~` uses byte-exact substring behavior and performs neither normalization nor case folding; the public query catalog exposes neither `$uri` nor `@uri`.
 Credit member-name substring uses the same Unicode-caseless comparison as title and dictionary text, not that byte-exact rule. It does not apply to roles or joined names.
 Ordered text comparison is case-sensitive lexicographic order.
 Numeric fields compare their scaled integer values.
-Codec constants compile to their stored codec values.
+With `@codec` directly on the left, codec names compile to their stored codec values; raw integer representations are also accepted, including lists mixing names and integers.
+Codec names are not converted in other operand contexts, and Booleans are not integers.
+Compilation rejects incompatible text, numeric, and Boolean operands before evaluation; it never interprets strings as numbers, dictionary ids, or string-constant indices.
+Bare tags, existence tests, and nested predicates yield Boolean values comparable to `true` and `false`, without implicit integer conversion; Boolean ordering is `false < true`.
 
 RecordingDate and credit member selectors are typed predicate fields, not scalar conversion operands.
 RecordingDate constants are canonical partial-date strings or integer years; comparison uses each literal's precision, with unknown stored month/day retained as zero.
@@ -113,11 +122,10 @@ The evaluator and its caches are synchronous and never run on an audio realtime 
 
 ### Lists and ranges
 
-List elements use the ordinary equality conversion for the left field; credit member lists require strings, and recording-date lists require admitted date literals.
-Other fields may mix literal kinds where their equality conversion permits it.
+List elements obey the same compatibility and equality rules as scalar comparisons; credit member lists require strings, and recording-date lists require admitted date literals.
 The compiler may use a set representation without changing equality semantics.
 
-Ranges are inclusive.
+Ranges are inclusive, and both bounds obey the same compatibility and ordering rules as scalar comparisons.
 Dictionary-backed ranges require string bounds and compare resolved text rather than dictionary insertion order.
 
 ### Units
@@ -171,7 +179,7 @@ Longer-running source rebuild cancellation and atomic publication belong to the 
 
 The boolean evaluation API has no insufficient-data result.
 Callers that choose load mode must use the plan access profile and provide the required hot/cold tiers; violating that precondition is a caller contract failure, not a non-match.
-Ordinary missing values inside a present tier remain non-matching according to the field rules.
+Ordinary missing values inside a present tier follow the field rules above, including their matching exceptions.
 
 ## Persistence and versioning
 
@@ -180,7 +188,7 @@ Saved List records store scalar-valid UTF-8 local expression text byte-exactly, 
 
 A predicate change must consider retained expressions even when no record byte changes.
 Saved-List text is not admitted by the physical library database, which stores it opaquely, but the database version names its predicate language.
-A grammar, binding, or truth-semantics change that could turn retained valid text into an expression error or change its resulting membership therefore increments `ao::library::kLibraryVersion` and the library YAML version, as the [predicate language reference](../../reference/query/predicate-language.md#compatibility-and-versioning) states; retained text that does not parse or compile still leaves the database structurally valid.
+A grammar, binding, or truth-semantics change that could turn retained valid text into an expression error or change its resulting membership is incompatible for both formats, subject to the unreleased-version amendment and post-release versioning rules in the [predicate language reference](../../reference/query/predicate-language.md#compatibility-and-versioning); retained text that does not parse or compile still leaves the database structurally valid.
 The [library database reference](../../reference/library/storage/database.md) owns versioning for the List record layout and other physical storage representations.
 
 Runtime view filters use the compatibility policy of the workspace, playback-session, or CLI surface that retains or accepts them.

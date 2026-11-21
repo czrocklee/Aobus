@@ -43,6 +43,7 @@ namespace ao::query
     Like,
     Exists,
     InSet,
+    CompareText,
   };
 
   // An ordered comparison resolves dictionary IDs back to text before comparing;
@@ -54,6 +55,10 @@ namespace ao::query
   }
 
   inline constexpr std::uint32_t kNoDictionarySymbol = std::numeric_limits<std::uint32_t>::max();
+
+  // This shares the compiler's kNoFieldContext encoding; the operand kind distinguishes a text literal there.
+  // In CompareText it denotes a string-constant index in the operand register, not a track's tag bloom filter.
+  inline constexpr Field kTextLiteralField = Field::TagBloom;
 
   enum class InSetValueKind : std::uint8_t
   {
@@ -75,7 +80,8 @@ namespace ao::query
    *
    * Field-bearing ops (LoadField, the comparisons, Like, Exists, InSet) carry their
    * left Field directly in `field`, so the evaluator never has to scan back for the
-   * nearest LoadField to recover an operand's type.
+   * nearest LoadField to recover an operand's type. CompareText also carries the
+   * right operand's field and the relation to apply to the two text values.
    */
   struct Instruction final
   {
@@ -84,6 +90,11 @@ namespace ao::query
     // Left field for field-bearing ops; 0/unused for logical ops (And/Or/Not) and
     // LoadConstant.
     std::uint8_t field = 0;
+
+    // CompareText resolves both operands as text before applying Eq/Ne/Lt/Le/Gt/Ge.
+    // Either field can be kTextLiteralField to read a literal from its register.
+    Field rightTextField = kTextLiteralField;
+    OpCode textRelation = OpCode::Eq;
 
     // Binary/compare ops: register of the right operand (the result is written to
     // operand - 1). Load/Exists/InSet: target register.
@@ -94,11 +105,12 @@ namespace ao::query
     // Unused by other field-bearing ops.
     std::int64_t constValue = 0;
 
-    // Reserved for bytecode payloads that require an additional 32-bit value.
-    std::uint32_t size = 0;
+    // CompareText: custom-key symbol for the right field, if any.
+    std::uint32_t rightDictionarySymbol = kNoDictionarySymbol;
 
     // Plan-owned dictionary symbol used by tag/custom operations or dictionary-backed
-    // equality. kNoDictionarySymbol means the instruction has no dictionary operand.
+    // equality. kNoDictionarySymbol means there is no symbol in this slot;
+    // CompareText may still need a right-hand key or an ID-to-text lookup.
     std::uint32_t dictionarySymbol = kNoDictionarySymbol;
     char const* data = nullptr;
   };

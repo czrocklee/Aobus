@@ -62,21 +62,22 @@ namespace ao::query::test
     {
       std::string name;
       Field expected;
+      std::string literal = "'x'";
     };
-    auto cases = {Case{.name = "year", .expected = Field::Year},
-                  Case{.name = "y", .expected = Field::Year},
-                  Case{.name = "trackNumber", .expected = Field::TrackNumber},
-                  Case{.name = "tn", .expected = Field::TrackNumber},
-                  Case{.name = "trackTotal", .expected = Field::TrackTotal},
-                  Case{.name = "tt", .expected = Field::TrackTotal},
-                  Case{.name = "discNumber", .expected = Field::DiscNumber},
-                  Case{.name = "dn", .expected = Field::DiscNumber},
-                  Case{.name = "discTotal", .expected = Field::DiscTotal},
-                  Case{.name = "td", .expected = Field::DiscTotal},
-                  Case{.name = "movementNumber", .expected = Field::MovementNumber},
-                  Case{.name = "mn", .expected = Field::MovementNumber},
-                  Case{.name = "movementTotal", .expected = Field::MovementTotal},
-                  Case{.name = "mt", .expected = Field::MovementTotal},
+    auto cases = {Case{.name = "year", .expected = Field::Year, .literal = "0"},
+                  Case{.name = "y", .expected = Field::Year, .literal = "0"},
+                  Case{.name = "trackNumber", .expected = Field::TrackNumber, .literal = "0"},
+                  Case{.name = "tn", .expected = Field::TrackNumber, .literal = "0"},
+                  Case{.name = "trackTotal", .expected = Field::TrackTotal, .literal = "0"},
+                  Case{.name = "tt", .expected = Field::TrackTotal, .literal = "0"},
+                  Case{.name = "discNumber", .expected = Field::DiscNumber, .literal = "0"},
+                  Case{.name = "dn", .expected = Field::DiscNumber, .literal = "0"},
+                  Case{.name = "discTotal", .expected = Field::DiscTotal, .literal = "0"},
+                  Case{.name = "td", .expected = Field::DiscTotal, .literal = "0"},
+                  Case{.name = "movementNumber", .expected = Field::MovementNumber, .literal = "0"},
+                  Case{.name = "mn", .expected = Field::MovementNumber, .literal = "0"},
+                  Case{.name = "movementTotal", .expected = Field::MovementTotal, .literal = "0"},
+                  Case{.name = "mt", .expected = Field::MovementTotal, .literal = "0"},
                   Case{.name = "artist", .expected = Field::ArtistId},
                   Case{.name = "a", .expected = Field::ArtistId},
                   Case{.name = "album", .expected = Field::AlbumId},
@@ -89,8 +90,8 @@ namespace ao::query::test
                   Case{.name = "ensemble", .expected = Field::Ensemble},
                   Case{.name = "albumArtist", .expected = Field::AlbumArtistId},
                   Case{.name = "aa", .expected = Field::AlbumArtistId},
-                  Case{.name = "coverArt", .expected = Field::CoverArtId},
-                  Case{.name = "ca", .expected = Field::CoverArtId},
+                  Case{.name = "coverArt", .expected = Field::CoverArtId, .literal = "0"},
+                  Case{.name = "ca", .expected = Field::CoverArtId, .literal = "0"},
                   Case{.name = "title", .expected = Field::Title},
                   Case{.name = "t", .expected = Field::Title},
                   Case{.name = "work", .expected = Field::WorkId},
@@ -105,7 +106,7 @@ namespace ao::query::test
     {
       DYNAMIC_SECTION("Field: " << c.name)
       {
-        auto expr = parseOk("$" + c.name + " = 'x'");
+        auto expr = parseOk("$" + c.name + " = " + c.literal);
         auto plan = compileOk(expr);
         REQUIRE_FALSE(plan.instructions.empty());
         CHECK(plan.instructions[0].op == OpCode::LoadField);
