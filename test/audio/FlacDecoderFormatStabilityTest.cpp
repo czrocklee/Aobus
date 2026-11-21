@@ -127,7 +127,9 @@ namespace ao::audio::test
       auto const offendingRes = decoder.readNextBlock();
       REQUIRE_FALSE(offendingRes);
       CHECK(offendingRes.error().code == Error::Code::DecodeFailed);
-      CHECK_FALSE(offendingRes.error().message.empty());
+      // The concrete format callback failure takes precedence over a generic
+      // native failure or the shortfall against the declared total.
+      CHECK(offendingRes.error().message.contains("does not match the stream format"));
       CHECK(offendingRes.error().message.contains(expectedContext));
 
       // The failure is sticky: later reads report the same recorded error
@@ -439,39 +441,31 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("FlacDecoderSession - seek failure without a stored format cause repeats without flush")
+  TEST_CASE("FlacDecoderSession - a read after a failed seek does not change the next seek failure")
   {
-    // The STREAMINFO-only stream declares samples but contains no frames, so
-    // seeking has no frame to land on and records no format cause: the
-    // failure must stay a generic seek failure instead of turning into a
-    // success or a stuck decoder.
+    // STREAMINFO declares samples but there are no frames to seek to.
     auto const temp = ao::test::TempFile{buildFlacStreaminfoBytes(kTotalSamples), ".flac"};
     auto decoderPtr = ao::test::requireValue(FlacDecoderSession::open(temp.path, std::nullopt));
     auto& decoder = *decoderPtr;
 
     auto const info = decoder.streamInfo();
 
-    auto const seekRes = decoder.seek(std::chrono::milliseconds{0});
+    auto const seekRes = decoder.seekFrame(0);
     REQUIRE_FALSE(seekRes);
     CHECK(seekRes.error().code == Error::Code::SeekFailed);
     CHECK_FALSE(seekRes.error().message.empty());
 
-    // Another seek without flush cannot turn the failure into a success.
-    auto const repeatSeekRes = decoder.seek(std::chrono::milliseconds{0});
+    // The read fails because the decoder is already in a seek-error state.
+    // It has not discovered a new media failure for later seeks to report.
+    auto const readRes = decoder.readNextBlock();
+    REQUIRE_FALSE(readRes);
+    CHECK(readRes.error().code == Error::Code::DecodeFailed);
+    CHECK_FALSE(readRes.error().message.empty());
+
+    auto const repeatSeekRes = decoder.seekFrame(0);
     REQUIRE_FALSE(repeatSeekRes);
     CHECK(repeatSeekRes.error().code == Error::Code::SeekFailed);
     CHECK_FALSE(repeatSeekRes.error().message.empty());
-
-    CHECK(decoder.streamInfo() == info);
-
-    // Reads keep failing instead of looping or producing a fake end of stream.
-    for (std::uint32_t repeat = 0; repeat < 2; ++repeat)
-    {
-      auto const readRes = decoder.readNextBlock();
-      REQUIRE_FALSE(readRes);
-      CHECK(readRes.error().code == Error::Code::DecodeFailed);
-      CHECK_FALSE(readRes.error().message.empty());
-    }
 
     CHECK(decoder.streamInfo() == info);
   }
