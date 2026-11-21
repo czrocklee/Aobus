@@ -1072,9 +1072,11 @@ Release instead uses its governed platform flags.
 - The Unix `profile` flavor is a sampling configuration: `-O2` with debug
   information and frame pointers, no IPO. It is not PGO, and no PGO workflow
   exists.
-- Execution tools resolve their own ordinary unprofiled optimized interfaces
-  independently of a Release or profile target; imported SDK interfaces
-  follow the consumer's actual compilation mode.
+- Imported SDK interfaces follow the consumer's compilation mode. Release
+  requires `@aobus_environment//:release_platform` as the target; a derived
+  platform is not admitted. The `release_profile` constraint also matches a
+  native execution platform for tests, but does not supply Release target
+  flags. The ordinary unprofiled platform remains first for build tools.
 
 The compile-contract verification checks effective
 compile, link and archive arguments — including frame-pointer and no-LTO

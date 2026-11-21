@@ -1,0 +1,127 @@
+name: Release validation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: Linux / Release check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+        with:
+          enable_kvm: false
+      - name: Check Release
+        run: ./ao check --config release --path "$RUNNER_TEMP/aobus-bazel-release"
+      - name: Preserve failure diagnostics
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-linux-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/aobus-bazel-release/checks/release/check-*/tests.bep.json
+            ${{ runner.temp }}/aobus-bazel-release/checks/release/check-*/test.log
+            ${{ runner.temp }}/aobus-bazel-release/state/output/execroot/_main/bazel-out/*/testlogs/**/test.log
+            ${{ runner.temp }}/aobus-bazel-release/state/output/execroot/_main/bazel-out/*/testlogs/**/test.xml
+          if-no-files-found: warn
+
+  macos:
+    name: macOS ${{ matrix.label }} / Release check
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Intel
+            runner: macos-15-intel
+            arch: x86_64
+          - label: ARM64
+            runner: macos-15
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Prepare native toolchain
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: |
+          test "$(uname -m)" = "$EXPECTED_ARCH"
+          if [[ "$(stat -f '%Su' /dev/console)" == root ]]; then
+            echo 'Release checks need a logged-in console user for Core Audio tests.' >&2
+            exit 1
+          fi
+          brew install llvm@22 cmake ninja pkgconf python@3.14 autoconf autoconf-archive automake libtool
+      - name: Prepare Release dependencies and check tools
+        run: |
+          ./ao setup bazel
+          ./ao setup deps --config release --path "$RUNNER_TEMP/aobus-bazel-release"
+          ./ao setup buildifier
+          ./ao setup prettier
+      - name: Check Release
+        run: ./ao check --config release --path "$RUNNER_TEMP/aobus-bazel-release"
+      - name: Preserve failure diagnostics
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-macos-${{ matrix.arch }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/aobus-bazel-release/checks/release/check-*/tests.bep.json
+            ${{ runner.temp }}/aobus-bazel-release/checks/release/check-*/test.log
+            ${{ runner.temp }}/aobus-bazel-release/state/output/execroot/_main/bazel-out/*/testlogs/**/test.log
+            ${{ runner.temp }}/aobus-bazel-release/state/output/execroot/_main/bazel-out/*/testlogs/**/test.xml
+          if-no-files-found: warn
+
+  windows:
+    name: Windows / Release check
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 360
+    env:
+      AOBUS_STATE_ROOT: C:\aobus-state
+      RELEASE_TREE: D:/aobus-bazel-release
+      AOBUS_BAZEL_DISK_CACHE: D:\aobus-bazel-cache
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Preflight WinUI build prerequisites
+        shell: cmd
+        run: call ao.bat check winui --build-only
+      - name: Prepare runtime and Bazel
+        shell: cmd
+        run: |
+          call ao.bat setup winui-runtime || exit /b 1
+          call ao.bat setup bazel || exit /b 1
+      - name: Provision Release dependencies and check tools
+        shell: cmd
+        run: |
+          call ao.bat setup deps --config release --path "%RELEASE_TREE%" || exit /b 1
+          call ao.bat setup buildifier || exit /b 1
+          call ao.bat setup prettier || exit /b 1
+      - name: Check Release
+        shell: cmd
+        run: call ao.bat check --config release --path "%RELEASE_TREE%"
+      - name: Preserve failure diagnostics
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-windows-${{ github.run_attempt }}
+          path: |
+            ${{ env.RELEASE_TREE }}/vcpkg-install.log
+            ${{ env.RELEASE_TREE }}/nuget-restore.log
+            ${{ env.RELEASE_TREE }}/checks/release/check-*/tests.bep.json
+            ${{ env.RELEASE_TREE }}/checks/release/check-*/test.log
+            ${{ env.RELEASE_TREE }}/state/output/execroot/_main/bazel-out/*/testlogs/**/test.log
+            ${{ env.RELEASE_TREE }}/state/output/execroot/_main/bazel-out/*/testlogs/**/test.xml
+          if-no-files-found: warn

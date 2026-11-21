@@ -109,9 +109,10 @@ A Release completion gate is the direct IPO evidence:
 ./ao check --config release
 ```
 
-Run that complete check, including its graph-owned lint and formatting tests, on every affected native platform. On macOS,
-AppKit GUI scenarios remain separate from `check`; run the applicable scenario
-from the Release configuration when native UI behavior changed.
+Run the full check on every affected native platform, locally or through
+[manual Release validation](test/validation-and-review.md#manual-release-validation).
+A Release build alone does not establish that Release tests ran. On macOS,
+run the applicable AppKit GUI scenarios in Release when native UI behavior changes.
 
 Smoke each affected executable from its Release configuration.
 

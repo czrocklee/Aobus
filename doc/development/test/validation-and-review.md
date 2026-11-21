@@ -204,6 +204,18 @@ Repository rulesets choose which checks block merging. For a build-system
 migration, require successful results from the full affected native matrix
 regardless of the ruleset.
 
+### Manual Release validation
+
+Once the [Release workflow](../../../.github/workflows/release.yml) is on the
+default branch, select the branch to check in **Actions → Release validation → Run workflow**.
+Each platform uses the full `./ao check --config release`
+(`ao.bat check --config release` on Windows), not the daily fastbuild partition.
+Windows desktop UI Automation remains a daily CI check. For a slow Windows
+run, compare dependency preparation with **Check Release** in the job
+timings: the workflow does not restore caches from earlier runs. On failure,
+download the job's diagnostics from the workflow run. The workflow does not
+sign or publish products, tag commits, or create a release.
+
 ## Common smells to fix while writing tests
 
 - The test name only says the class name.

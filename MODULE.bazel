@@ -44,9 +44,12 @@ use_repo(coverage_tools, "remote_coverage_tools")
 dependencies = use_extension("//bazel:dependencies.bzl", "dependencies")
 use_repo(dependencies, "aobus_environment", "aobus_native_deps", "aobus_native_tools", "aobus_test_deps", "aobus_toolchain", "aobus_winui_sdk")
 
-# Bazel resets --compiler in execution transitions. The native execution
-# platform selects GCC for Linux tools; target --compiler remains independent.
-register_execution_platforms("@aobus_environment//:native_execution")
+# Execution transitions reset --compiler. Prefer native_execution (GCC on Linux)
+# unless the test toolchain requires the Release constraint.
+register_execution_platforms(
+    "@aobus_environment//:native_execution",
+    "@aobus_environment//:release_test_execution",
+)
 
 # The official Python toolchain wraps the admitted native host interpreter
 # declared by the host-tools repository; tests run on the installed SDK.
