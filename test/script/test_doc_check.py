@@ -21,11 +21,13 @@ class DocCheckTest(unittest.TestCase):
         return "\n".join(lines) + "\n"
 
     def _valid_tree(self, root: Path) -> tuple[Path, Path]:
-        self._write(root, "doc/README.md", "# Documentation\n\n[System guide](system/guide.md)\n")
+        self._write(root, "doc/README.md", "# Documentation\n\n[System guide](system/README.md)\n")
+        self._write(root, "doc/system/architecture/README.md", "[Playback](playback.md)\n")
         guide = self._write(
             root,
-            "doc/system/guide.md",
-            "# System guide\n\n[Playback details](architecture/playback.md#storage--compatibility)\n",
+            "doc/system/README.md",
+            "# System guide\n\n[Architecture](architecture/README.md): "
+            "[Playback details](architecture/playback.md#storage--compatibility)\n",
         )
         topic = self._write(
             root,
@@ -43,7 +45,7 @@ class DocCheckTest(unittest.TestCase):
 
         self.assertEqual(issues, [])
 
-    def test_accepts_unrestricted_directory_names_and_no_direct_index_registration(self):
+    def test_system_index_cannot_substitute_for_subsystem_hub(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             guide, _ = self._valid_tree(root)
@@ -51,7 +53,7 @@ class DocCheckTest(unittest.TestCase):
                 guide.read_text(encoding="utf-8") + "\n[Plural area](specifications/player.md)\n",
                 encoding="utf-8",
             )
-            self._write(
+            player = self._write(
                 root,
                 "doc/system/specifications/player.md",
                 "# Player behavior\n\n## Any useful section\n\nThe guide is its only incoming link.\n",
@@ -59,7 +61,7 @@ class DocCheckTest(unittest.TestCase):
 
             issues = doc_check.check_tree(root)
 
-        self.assertEqual(issues, [])
+        self.assertEqual([(issue.path, issue.kind) for issue in issues], [(player, "hub-link")])
 
     def test_accepts_optional_and_historical_metadata_without_schema_gates(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -106,11 +108,11 @@ class DocCheckTest(unittest.TestCase):
             self._write(
                 root,
                 "doc/README.md",
-                "# Documentation\n\n[Proposal](system/proposal.md)\n[Legacy RFC](rfc/0042-legacy.md)\n",
+                "# Documentation\n\n[Proposal](proposal.md)\n[Legacy RFC](rfc/0042-legacy.md)\n",
             )
             self._write(
                 root,
-                "doc/system/proposal.md",
+                "doc/proposal.md",
                 "# Proposal\n\n## Motivation\n\nA normal proposal with no dependency section.\n",
             )
             self._write(
@@ -238,7 +240,7 @@ class DocCheckTest(unittest.TestCase):
 
     def test_wrapped_links_and_reference_labels_preserve_reachability(self):
         for link in (
-            "[System\nguide](system/guide.md)",
+            "[System\nguide](guide.md)",
             "[System\nguide][system guide]",
             "[Guide][system\nguide]",
             "[System\nguide][]",
@@ -246,8 +248,8 @@ class DocCheckTest(unittest.TestCase):
         ):
             with self.subTest(link=link), tempfile.TemporaryDirectory() as temp_dir:
                 root = Path(temp_dir)
-                self._write(root, "doc/README.md", f"# Documentation\n\n{link}\n\n[system guide]: system/guide.md\n")
-                self._write(root, "doc/system/guide.md", "# Guide\n")
+                self._write(root, "doc/README.md", f"# Documentation\n\n{link}\n\n[system guide]: guide.md\n")
+                self._write(root, "doc/guide.md", "# Guide\n")
 
                 self.assertEqual(doc_check.check_tree(root), [])
 
@@ -353,11 +355,11 @@ class DocCheckTest(unittest.TestCase):
             self._write(
                 root,
                 "doc/README.md",
-                "# Documentation\n\n[Guide][system guide]\n\n[system guide]: system/guide.md\n",
+                "# Documentation\n\n[Guide][system guide]\n\n[system guide]: system/README.md\n",
             )
             self._write(
                 root,
-                "doc/system/guide.md",
+                "doc/system/README.md",
                 "# Guide\n\n[Topic][]\n\n[Topic]: topic.md#repeated-1\n",
             )
             self._write(
@@ -453,10 +455,10 @@ class DocCheckTest(unittest.TestCase):
     def test_shortcut_references_and_inline_code_keep_their_existing_link_behavior(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
-            self._write(root, "doc/README.md", "# Documentation\n\n[Guide]\n\n[Guide]: system/guide.md\n")
+            self._write(root, "doc/README.md", "# Documentation\n\n[Guide]\n\n[Guide]: guide.md\n")
             self._write(
                 root,
-                "doc/system/guide.md",
+                "doc/guide.md",
                 "# Guide\n\n`[Not a link](absent.md)`\n\n[Missing][target]\n\n[target]: absent.md\n",
             )
 
@@ -515,21 +517,21 @@ class DocCheckTest(unittest.TestCase):
 
     def test_escaped_image_markers_preserve_document_navigation(self):
         for link in (
-            "![Guide](user/guide.md)",
-            "![System\nguide](user/guide.md)",
-            "![System\nguide][target]\n\n[target]: user/guide.md",
-            "![System\nguide][]\n\n[System guide]: user/guide.md",
-            "![System\nguide]\n\n[System guide]: user/guide.md",
-            "![Guide][target]\n\n[target]: user/guide.md",
-            "![Guide][]\n\n[Guide]: user/guide.md",
-            "![Guide]\n\n[Guide]: user/guide.md",
+            "![Guide](guide.md)",
+            "![System\nguide](guide.md)",
+            "![System\nguide][target]\n\n[target]: guide.md",
+            "![System\nguide][]\n\n[System guide]: guide.md",
+            "![System\nguide]\n\n[System guide]: guide.md",
+            "![Guide][target]\n\n[target]: guide.md",
+            "![Guide][]\n\n[Guide]: guide.md",
+            "![Guide]\n\n[Guide]: guide.md",
         ):
             for backslashes in range(5):
                 with self.subTest(link=link, backslashes=backslashes), tempfile.TemporaryDirectory() as temp_dir:
                     root = Path(temp_dir).resolve()
                     prefix = "\\" * backslashes
                     self._write(root, "doc/README.md", "# Documentation\n\n" + prefix + link + "\n")
-                    guide = self._write(root, "doc/user/guide.md", "# Guide\n")
+                    guide = self._write(root, "doc/guide.md", "# Guide\n")
 
                     issues = doc_check.check_tree(root)
 
@@ -629,7 +631,7 @@ class DocCheckTest(unittest.TestCase):
             for folder in ("tool", "app", "asset"):
                 self._write(root, f"{folder}/nested/README.md", "# Component\n")
             index.write_text(
-                "# Documentation\n\n[Guide](system/guide.md)\n"
+                "# Documentation\n\n[Guide](system/README.md)\n"
                 + "".join(f"[{folder}](/{folder}/nested/README.md#missing)\n" for folder in ("tool", "app", "asset")),
                 encoding="utf-8",
             )
@@ -659,10 +661,10 @@ class DocCheckTest(unittest.TestCase):
     def test_accepts_quoted_metadata_and_angle_links(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
-            self._write(root, "doc/README.md", "# Documentation\n\n[Topic](<system/topic.md>)\n")
+            self._write(root, "doc/README.md", "# Documentation\n\n[Topic](<topic.md>)\n")
             self._write(
                 root,
-                "doc/system/topic.md",
+                "doc/topic.md",
                 self._metadata(id="'system.topic'", status='"current"') + "# Topic\n",
             )
 

@@ -24,15 +24,15 @@ On supported Linux builds, `App.cpp` optionally composes the shared `ao::systemm
 
 ### Startup options
 
-| Option                  | Default/meaning                                                                                                                                                                            |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `-l, --library <root>`  | music library root; default current directory; normalized absolute path                                                                                                                    |
-| `--database <path>`     | default `<root>/.aobus/library`; normalized absolute path                                                                                                                                  |
-| `--config <path>`       | workspace/playback-session file; default `<root>/.aobus/tui-workspace.yaml`; normalized absolute path; does not relocate the layout file and must not alias another TUI managed-state file |
-| `--cover-art-mode <auto | kitty                                                                                                                                                                                      | blocks                                                                                                        | off>` | session override of the saved cover renderer; omitted uses the preference (default `auto`) |
-| `--system-media <auto   | off>`                                                                                                                                                                                      | system media controls; default `auto`; `off` constructs no adapter, native thread, or MPRIS artwork interests |
-| `--log-level <trace     | debug                                                                                                                                                                                      | info                                                                                                          | warn  | error                                                                                      | critical | off>` | case-insensitive runtime log level |
-| `--version`             | prints `Aobus TUI <version>` and exits                                                                                                                                                     |
+| Option                    | Default/meaning                                                                                                                                                                            |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `-l, --library <root>`    | music library root; default current directory; normalized absolute path                                                                                                                    |
+| `--database <path>`       | default `<root>/.aobus/library`; normalized absolute path                                                                                                                                  |
+| `--config <path>`         | workspace/playback-session file; default `<root>/.aobus/tui-workspace.yaml`; normalized absolute path; does not relocate the layout file and must not alias another TUI managed-state file |
+| `--cover-art-mode <mode>` | `auto`, `kitty`, `blocks`, or `off`; overrides the saved cover renderer for this session. When omitted, uses the preference (default `auto`).                                              |
+| `--system-media <mode>`   | `auto` (default) or `off`; `off` constructs no adapter, native thread, or MPRIS artwork interests.                                                                                         |
+| `--log-level <level>`     | `trace`, `debug`, `info`, `warn`, `error`, `critical`, or `off`; case-insensitive.                                                                                                         |
+| `--version`               | prints `Aobus TUI <version>` and exits                                                                                                                                                     |
 
 Per-library List navigation visibility, column layouts, and presentation preferences always use `<root>/.aobus/tui_layout.yaml`; there is no startup override for that file. Startup rejects a `--config` path that aliases this document or the global TUI application-preference document so one `ConfigStore` remains authoritative for each physical file.
 Startup also exits with a diagnostic when it cannot prepare the selected workspace configuration directory.
@@ -127,9 +127,9 @@ Except for rows marked **fixed protocol**, each action is configurable through i
 | `<` / `>`, `Ctrl+Left` / `Ctrl+Right` | previous/next playback track                                                                                                                | configurable                                                               |
 | `S`                                   | toggle shuffle                                                                                                                              | configurable                                                               |
 | `r`                                   | cycle repeat Off → All → One → Off                                                                                                          | configurable                                                               |
-| `Left` / `Right`, `[` / `]`           | seek -/+ 5 seconds                                                                                                                          | configurable                                                               |
+| `Left` / `Right`, `[` / `]`           | seek back/forward by the configured step (default: 5 seconds)                                                                               | configurable                                                               |
 | `{` / `}`                             | previous/next presentation group                                                                                                            | configurable                                                               |
-| `-` / `+` / `=`                       | volume -/+ 5 percentage points                                                                                                              | configurable                                                               |
+| `-` / `+` / `=`                       | lower/raise volume by the configured step (default: 5 percentage points)                                                                    | configurable                                                               |
 | `l`                                   | focus docked Lists, or toggle the button-anchored chooser when undocked                                                                     | configurable                                                               |
 | `L`                                   | toggle pinned Lists; pinning the chooser promotes it into the sidebar                                                                       | configurable                                                               |
 | `d`                                   | toggle the persistent Detail sidebar                                                                                                        | configurable                                                               |
@@ -301,7 +301,7 @@ All track-table gestures below remain available while the detail inspector is op
 
 | Target/gesture                                | Action                                                                                                              |
 | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| track-table wheel                             | move selection by three tracks                                                                                      |
+| track-table wheel                             | move selection by the configured wheel step (default: three tracks)                                                 |
 | table scrollbar press/drag                    | map visual row to selected track                                                                                    |
 | header column edge drag/release               | preview a terminal-cell width, then persist the current list's canonical layout on release; interruption rolls back |
 | group header click                            | select first track in section                                                                                       |
@@ -344,7 +344,7 @@ Changing a default key, alias, option, or default path requires updating this re
 ## Examples
 
 ```text
-:filter $composer == "Bach"
+:filter $composer = "Bach"
 :view classical-works
 :scan
 :scan cancel

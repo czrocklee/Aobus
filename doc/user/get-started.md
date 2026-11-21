@@ -27,7 +27,7 @@ The current scan recognizes the formats listed in the [audio-file reference](../
 2. Open **File → Open Library...** and choose the folder that contains your music.
    Aobus activates that folder as the one current library.
    Choosing another folder later replaces the active library in the same application window; it does not open a second independent library window.
-3. If the root has no existing Aobus database, wait for the bootstrap scan to finish.
+3. If the root has no existing Aobus database, wait for the initial scan to finish.
    The activity status shows scan progress and the final result.
 4. If you opened an existing database and want to reconcile it with the files on disk, choose **File → Scan Library**.
 5. Select a track and press Enter, or activate it with the pointer, to start playback from the current track view.

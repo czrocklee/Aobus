@@ -289,28 +289,27 @@ PipeWire proves the same exact FL/FR offer, installed permutation, and later-for
 ALSA additionally requires a healthy installed mode whose current map is exactly unflagged FL,FR in that order; missing, partial, reversed, silent, or flagged observations cannot prove reuse.
 The null sink discards either representation identically.
 Core Audio keeps the strict default: an initial identity plan does not prove that later layout refresh using the original client mask remains safe for the other source identity.
-Its cross-codec `0`/`0x3` transition therefore still drains and reopens when one source remains unidentified.
+Its cross-codec `0`/`0x3` transition therefore requires a fresh open for the successor when one source remains unidentified.
 Default FLAC and WAV effective identities match for counts 1/2/3/4/7/8, so exact canonical mode equality permits reuse even on Core Audio, subject to the same rate, channel geometry, installed encoding, and retained endpoint precision constraints.
 Different source interpretation origins do not defeat that equality: these FLAC defaults are `Identified`, while WAV's multichannel compatibility defaults are `Inferred`.
 ALAC's [bounded source interpretation](pcm-format.md#alac-source-interpretation) establishes the same canonical mono/stereo identity as ordinary FLAC and WAV when layout absence is trustworthy, enabling strict exact-mode reuse, including on Core Audio, under the same requirements.
 Complete supported agreeing explicit ALAC layouts can likewise enable equal-identity reuse after decoder slot normalization; codec names or channel counts alone never guarantee a splice.
 ALAC's declared four-, seven-, and eight-channel reference layouts differ from the WAV compatibility sets; their respective `0x107`, `0x13F`, and `0xFF` masks are not replaced with WAV count defaults.
 
-Absent exact mask keys, five/six-channel FLAC reports zero / `Unknown` because back/side geometry is unresolved; otherwise-compatible inferred WAV retains a nonzero effective identity, so that boundary drains and reopens on every current backend.
+Absent exact mask keys, five/six-channel FLAC reports zero / `Unknown` because back/side geometry is unresolved; otherwise-compatible inferred WAV retains a nonzero effective identity, so that boundary requires a fresh open for the successor on every current backend.
 Complete supported agreeing explicit FLAC back masks `0x37`/`0x3F` can still match WAV's compatibility identities; explicit side masks `0x607`/`0x60F` remain different roles.
 A FLAC session with nonfirst STREAMINFO or malformed, conflicting, unsupported, incomplete, or safely uninspectable optional identity evidence also retains zero/`Unknown` under its [source policy](pcm-format.md#flac-source-interpretation).
-Untagged ALAC above two channels and ALAC with bad or uninspectable optional declarations retain zero/`Unknown` and legacy ordinal bytes.
-Withholding absent-mask five/six-channel FLAC identity can permit otherwise-compatible zero/zero reuse with untagged multichannel ALAC or unknown FLAC, unlike the earlier count-derived `Identified` back-mask interpretation.
+Untagged ALAC above two channels and ALAC with bad or uninspectable optional declarations retain zero/`Unknown` and keep the decoder provider's PCM slot order.
+Absent-mask five/six-channel FLAC can therefore reuse an otherwise-compatible zero-mask mode with untagged multichannel ALAC or unknown FLAC.
 Zero/zero reuse proves neither track's original speaker intent nor native routing; ordinal/default transport can still misroute content.
 
-Relative to the earlier all-zero FLAC producer, same-codec FLAC↔FLAC known↔`Unknown` mono and 3–8-channel pairs, or pairs with different nonzero role sets, lose otherwise-equal splice eligibility in both directions.
-The same identity boundary conditionally loses FLAC↔ALAC eligibility relative to their earlier all-zero producers: identified FLAC versus unknown ALAC, or unknown FLAC versus identified ALAC, drains and reopens for mono and multichannel modes.
-Stereo known FL/FR `0x3` versus zero has only the bounded backend exceptions above; Core Audio remains strict, ALSA requires its healthy installed canonical unflagged FL,FR proof, and PipeWire, WASAPI, and null retain their opt-ins.
-Other different stereo role sets do not acquire an alias.
-Equal known masks and equal zero/zero masks remain eligible under the ordinary geometry, encoding, and retained-endpoint checks.
-Forgiving optional tags admits more tracks without restoring every clean-track↔unknown-track splice; uncertainty never authorizes a mask wildcard or bypasses reuse checks.
-These are conditional gapless-eligibility differences, not universal playback failures or a universal WAV↔FLAC/ALAC splice promise.
-Explicitly different role sets still drain and reopen, and a fresh native open may refuse an incompatible route; public source facts are never rewritten by backend observations.
+For FLAC↔FLAC and FLAC↔ALAC in either direction, no current backend authorizes reuse if one mask is known and the other is zero in mono or 3–8-channel modes, or if both masks are nonzero and name different roles.
+For stereo, only the backend-specific `0`/`0x3` proof above can admit unequal masks; other stereo role sets are not aliases.
+When the backend refuses reuse, Engine selects drain fallback instead of arming the successor. The current track drains, and starting the successor requires a fresh open.
+Equal known masks and equal zero masks can permit reuse, subject to the ordinary geometry, encoding, and retained-endpoint checks.
+Accepting unusable optional tags for playback does not make zero a mask wildcard or bypass those checks.
+A drain fallback is not a playback failure, and switching between WAV and FLAC or ALAC does not by itself promise a splice.
+A fresh native open can still refuse an incompatible route; backend observations never rewrite public source facts.
 
 Preparation and adoption both validate the successor's own canonical mode against the confirmed endpoint retained for this native open; promotion refreshes source interpretation without replacing that endpoint bound.
 Native mapping evidence remains tied to this open and its actual observations, so it may stay more conservative than a fresh successor open would report.
@@ -346,16 +345,18 @@ Source activation installs the Engine error callback and starts the decode threa
 For `startFromView`, Player captures a move-only preparation value from Engine and runs inspection on the async worker pool.
 The first callback-executor resumption checks cancellation and owner lifetime before the short Engine/Backend hint query; the value then returns to a worker for optional decoder open, seek, and preroll.
 Across both worker phases that value owns copied device, backend/profile, input, decoder factory, generation evidence, inspection, and prepared-source values and holds no Player, Engine, runtime, frontend, or Backend reference.
-Final completion resumes on Player's executor through another stop-token checkpoint and then checks the upper acceptance predicate.
-Engine revalidates playback generation, start context, and route before it returns the staged token.
-Player retires the applicable task handle before invoking acceptance. Acceptance
+Final completion resumes on Player's executor through another stop-token checkpoint.
+Player retires the applicable task handle before invoking the upper acceptance predicate. Acceptance
 and completion are outward publications; after acceptance Player rechecks its
 callback gate and reacquires the owner, then computes the complete adoption or
 error result before invoking completion without later Player access.
 When the gate remains open, an acceptance veto completes exactly once with
 `Conflict`. The same rule applies to worker lookahead and callback-executor
 logical `DrainFallback` lookahead.
+To adopt an accepted preparation, Engine revalidates playback generation, start context, and route before producing the staged start token for commit.
 An evidence mismatch returns `Conflict`; upper playback owners discard that stale preparation without presenting it as a media-open or route failure.
+The staged start token is separate from the application's [prepared-next token](cursor.md#prepared-next), which correlates a successor with its succession commitment.
+The [application commit contract](application-commit.md#explicit-start-and-navigation) owns acceptance of explicit starts and navigation.
 The old source remains active through worker preparation and token adoption; backend stop/close/open and the transport subject change occur only at commit.
 Once commit begins replacing the old render target, a backend-open or final-decoder failure closes the newly opened backend and leaves Engine in Error rather than resurrecting the retired source.
 That validated attempt has still advanced the audio generation: Player raises its callback floor and resets the route graph, while PlaybackTransport clears prepared requests covered by the new generation and refreshes its Error state.
@@ -455,9 +456,11 @@ an empty lossless encoding set, including zero source precision, is an explicit
 `TrackRouteIncompatible` refusal. Neither decision is inferred from the `Error` code.
 Deterministic source refusal precedes that backend's own close/native configuration where possible. Engine already closes
 its old stream before invoking open, so these guards do not retain or resurrect
-Engine's previous playback. Application succession keeps its existing
-three-consecutive-failure limit and resets it only on a real successful start;
-initial staging, prepared-token and explicit-navigation ownership is unchanged.
+Engine's previous playback.
+
+[Application succession](cursor.md#failure-and-cancellation) stops after three consecutive unplayable candidates.
+An accepted automatic start attempt resets the streak only if playback actually starts, not merely because the backend opened or Engine accepted the attempt.
+An accepted explicit launch starts a fresh streak even if final setup fails; manual Next and Previous reset the streak before resolving navigation in an active session.
 
 The `clientFormat` must preserve the source precision whether or not endpoint evidence exists.
 When a `ConfirmedEndpoint` is present, its rate, channels, sample domain, and effective precision must agree with the configured client mode and preserve the source as well.
@@ -466,18 +469,21 @@ An absent endpoint means only that the backend could not inspect a direct endpoi
 #### Channel compatibility and native evidence
 
 WAV's [source interpretation](pcm-format.md#wav-source-interpretation), FLAC's distinct [source interpretation](pcm-format.md#flac-source-interpretation), ALAC's [bounded metadata policy](pcm-format.md#alac-source-interpretation), and AAC's [actual-output policy](pcm-format.md#aac-source-interpretation) activate canonical PCM with effective speaker identities without a blanket multichannel ban.
-WAV's `Identified` or `Inferred` history and FLAC's, ALAC's, and AAC's `Identified` histories do not establish native mapping or physical routing.
 FLAC with absent exact mask keys at five/six channels, nonfirst STREAMINFO, or malformed, conflicting, unsupported, incomplete, or safely uninspectable optional identity evidence retains zero masks and `Unknown` rather than a guessed identity.
-ALAC above two channels without a declaration, or at any count with bad or uninspectable optional metadata, likewise retains zero/`Unknown`, not a new source-open refusal; mandatory container/configuration and precision errors remain unchanged.
+ALAC above two channels without a declaration, or at any count with bad or uninspectable optional layout metadata, likewise retains a zero mask and `Unknown` interpretation.
+Optional layout evidence alone does not make the decoder's `open()` return an error; [required ALAC checks](decoder-error.md#alac-required-errors-versus-optional-identity) still do when they fail.
 AAC with unavailable, incomplete, or unsupported output-role groups likewise retains zero/`Unknown` and FDK output-index order; source count alone never supplies roles, and unknown eight-channel output is not downmixed to six channels.
-That best-effort playback admission is not a role-safety or native-routing guarantee: zero-mask paths can use ordinal/default transport through different speaker roles, and native open can still fail.
-Numerical bit-perfectness is independent of channel confidence.
 MP3 publishes FC or FL/FR only when its [source policy](pcm-format.md#mp3-source-interpretation) identifies a uniform mono or stereo/joint stream from complete native-index header coverage; dual-channel, mixed roles, and incomplete coverage remain zero / `Unknown`.
 Opus identifies the output roles declared by mapping families 0 and 1, while family 255 remains zero / `Unknown`, under the [Opus family policy](../../reference/media/channel-order.md#opus).
-The codec-independent backend admission, splice eligibility, native observation, quality-analysis, and format-equality predicates are unchanged, but unchanged predicates do not mean unchanged acceptance for a given AAC or Opus file: where the former zero-mask publication passed as unpositioned transport, a newly identified source can now be privately permuted onto a same-set native order or refused for a confirmed role conflict.
-Missing or compatible partial native observations are not blanket refusals, and the published identity proves neither native mapping nor physical routing.
+
+AAC and Opus use the same codec-independent backend admission, splice eligibility, native observation, quality-analysis, and format-equality rules as other codecs.
+Publishing a nonzero mask instead of zero can change admission or slot order for the same PCM geometry: depending on the backend and its observations, the source roles can permit a private same-set permutation or cause a refusal for a role conflict.
+A backend may admit transport with missing or compatible partial native observations.
+A zero source mask declares no roles; transport may be ordinal or use backend defaults, which can misroute content, and native open can still fail.
+For example, [PipeWire offers FL/FR even for zero-mask stereo](#pipewire-client-channel-contract): NA/NA readback fails as `OutputFailure`, while FR/FL is accepted with a private slot swap.
 Neither WAV compatibility sets nor FLAC defaults are AAC, ALAC, or backend defaults.
-AAC and ALAC slot normalization introduces no new backend admission rule, native observation, or quality-analysis policy.
+AAC and ALAC decoder slot normalization puts identified roles in canonical PCM order; it does not establish native admission or delivery.
+Source interpretation proves neither native mapping nor physical routing; numerical bit-perfectness is independent of channel confidence.
 
 Source admission and native delivery evidence are separate decisions.
 A backend may admit transport without proving every speaker relationship; the returned canonical client mask must still retain the source identity.

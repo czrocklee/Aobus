@@ -45,10 +45,9 @@ reorganization is `docs`, not `refactor`.
 
 Use a scope when it helps locate the change. Prefer existing project boundaries:
 
-- product layers: `core`, `runtime`, `uimodel`, `gtk`, `cli`
-- repository tools: `ao`, `cmake`, `nix`, `lint`
-- documentation areas: `dev`, `design`, `agents`
-- test areas: `core`, `gtk`, `tooling`
+- product layers and frontends: `core`, `runtime`, `uimodel`, `audio`, `i18n`, `cli`, `tui`, `gtk`, `winui`, `appkit`
+- build and tooling: `ao`, `bazel`, `lint`, `ci`, `tooling`
+- documentation areas: `dev`, `user`, `agents`
 
 Omit the scope only when the change is genuinely cross-cutting and no short
 scope would make the subject clearer.

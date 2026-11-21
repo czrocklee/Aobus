@@ -84,7 +84,7 @@ If the tag is restored later, the track returns to that position.
    | Move to Top    | `Alt+Home` |
    | Move to Bottom | `Alt+End`  |
 
-GTK accepts one order mutation per physical key press.
+GTK accepts at most one move per physical key press.
 Holding a shortcut key does not repeat the move through OS auto-repeat; release it and press again for another committed step.
 
 With a quick filter active, hidden rows make relative gaps ambiguous.

@@ -28,7 +28,7 @@ You can initialize, inspect, scan, query, and mutate a library from a shell with
 4. Query tracks using either explicit ids or a filter:
 
    ```bash
-   aobus -C /music track show --filter '$artist == "Miles Davis"'
+   aobus -C /music track show --filter '$artist = "Miles Davis"'
    ```
 
 5. Add `-O json` or `-O yaml` when another program consumes the result:

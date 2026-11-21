@@ -6,16 +6,15 @@ id: user.backup-and-restore
 
 ## Outcome
 
-You have a portable YAML backup of the selected library data and can preview and apply it with an explicit restore or merge policy.
+You have a portable YAML backup of the library data you chose to save and can use it to restore or merge that data.
 
 ## Understand the boundary
 
-A library YAML export contains Aobus metadata, lists, cover references, and mode-dependent technical or manifest facts.
+Depending on the export mode, a library YAML export can include Aobus metadata, lists, cover references, audio properties, and file details such as size and modification time.
 It does not copy the audio files themselves, and it never contains a cover image: a **Full** export records each cover's identity, and Aobus reads the picture back out of your music files.
 Back up the music files separately and preserve their paths relative to the music root; without them, a restored library keeps its cover references but may have no picture to show.
 
 `restore` replaces the payload-selected target scope; `merge` preserves target entities absent from the payload and adds imported lists as new lists.
-GTK and the Windows desktop prepare a restore preview and require confirmation before changing the library.
 CLI import defaults to merge; committing a restore requires an explicit mode and destructive-confirmation flag.
 
 Backups are version 1 YAML, the first supported format, and only version 1 is accepted.
@@ -29,7 +28,9 @@ A disc image that a CUE sheet splits is several tracks with one path. A backup r
 A **Lists only** backup names a split track by its path and CUE number.
 
 Track paths belong to the selected music root.
-Symlinks whose existing targets remain inside that root are supported, while dangling symlinks and symlinks into another tree are rejected during export, import baselining, scanning, and playback.
+When Aobus resolves an audio path on disk, it accepts symlinks to existing targets inside that root and rejects dangling symlinks or links that lead outside the root.
+An import does not always need to resolve the path.
+For example, a **Full** merge can update an existing track matched by its relative path even if its audio file has been replaced by a dangling symlink: the merge uses the library's saved file record without following the link.
 
 ## Steps
 
@@ -37,7 +38,7 @@ Symlinks whose existing targets remain inside that root are supported, while dan
 
 1. In GTK, choose **File → Export Library Data...**. On Windows, choose **More → Export Library Data...** in Modern mode or **File → Export Library Data...** in Classic mode.
 2. Choose the payload you need:
-   **Full** includes curated metadata, technical and manifest facts, cover references, and lists; **Metadata** omits technical statistics and cover references; **Delta** records edits relative to readable files; **Lists only** contains lists without track records.
+   **Full** includes curated metadata, audio properties, file sizes and recorded modification times, cover references, and lists; **Metadata** omits technical statistics and cover references; **Delta** records edits relative to readable files; **Lists only** contains lists without track records.
 3. Choose a `.yaml` file and wait for **Library exported successfully**. On Windows, Modern's activity surface names the file while export is running; switching to Classic leaves the transfer running and its status bar reports completion.
 
 The CLI equivalent for a complete library-data backup is:
@@ -48,7 +49,7 @@ aobus -C /music lib export /backup/library.yaml --mode full
 
 ### Preview an import
 
-Run the same mode you intend to commit:
+From the CLI, run a dry run in the same mode you intend to apply:
 
 ```bash
 aobus -C /target -O json lib import /backup/library.yaml --mode restore --dry-run
@@ -72,9 +73,15 @@ For an additive import that preserves target tracks and lists outside the payloa
 aobus -C /target lib import /backup/library.yaml --mode merge
 ```
 
-GTK **File → Import Library Data...** and Windows **More/File → Import Library Data...** both use the same prepared-plan contract.
-Choose **Merge** to preserve records outside the backup and apply the prepared plan, or **Restore** to preview its scope and counts before explicitly selecting **Restore Library** or **Restore Lists**.
-Windows defaults to Merge; canceling its mode dialog or picker, or rejecting its restore preview, leaves the target unchanged.
+- **GTK:** Choose **File → Import Library Data...** and select a backup. GTK imports only in Restore mode.
+  Review the scope and counts, then choose **Restore Library** or **Restore Lists** to apply it.
+- **Windows:** Choose **More → Import Library Data...** in Modern mode or **File → Import Library Data...** in Classic mode.
+  Choose the import mode, then select a backup.
+  - **Merge** is the default. After you choose the file, Aobus applies the merge automatically, without showing a preview or asking for further confirmation.
+    To preview a merge, use the CLI dry run above with `--mode merge`.
+  - **Restore** shows the scope and counts. Review them, then choose **Restore Library** or **Restore Lists** to apply it.
+
+Canceling the file picker, the restore preview, or the Windows mode dialog leaves the target unchanged.
 
 ## Verify the result
 

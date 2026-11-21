@@ -85,8 +85,14 @@ def check_tree(root: Path = PROJECT_ROOT) -> list[Issue]:
         for path, document in documents.items()
     }
     issues.extend(_check_unique_ids(documents.values()))
-    issues.extend(_check_links(documents, parsed, root))
-    issues.extend(_check_reachability(documents, parsed, root))
+    link_issues, edges = _check_links(documents, parsed, root)
+    issues.extend(link_issues)
+    issues.extend(_check_navigation(edges, root))
+    for path, facts in parsed.items():
+        if facts.invalid_related_line is not None:
+            issues.append(
+                Issue(path, facts.invalid_related_line, "related-documents", "only link lists belong in this section")
+            )
     issues.extend(_check_naming_contract(documents, root))
     return sorted(issues, key=lambda issue: (issue.path.as_posix(), issue.line, issue.kind, issue.message))
 
@@ -224,32 +230,29 @@ def _check_unique_ids(documents: Iterable[Document]) -> list[Issue]:
     return issues
 
 
-def _check_links(documents: dict[Path, Document], parsed: dict[Path, _MarkdownFacts], root: Path) -> list[Issue]:
+def _check_links(
+    documents: dict[Path, Document], parsed: dict[Path, _MarkdownFacts], root: Path
+) -> tuple[list[Issue], dict[Path, set[Path]]]:
     issues: list[Issue] = []
-    for path, document in documents.items():
-        facts = parsed[path]
+    edges: dict[Path, set[Path]] = {key: set() for key in parsed}
+    for key, facts in parsed.items():
+        path = documents[key].path
         for line_number, label in facts.undefined_references:
-            issues.append(
-                Issue(document.path, line_number, "broken-reference", f"reference label is not defined: {label}")
-            )
-        for line_number, target, _ in facts.links:
-            resolved, fragment = _resolve_link(document.path, target, root)
+            issues.append(Issue(path, line_number, "broken-reference", f"reference label is not defined: {label}"))
+        for line_number, target, is_image in facts.links:
+            resolved, fragment = _resolve_link(path, target, root)
             if resolved is None:
                 continue
             if not _is_under(resolved, root):
-                issues.append(
-                    Issue(document.path, line_number, "external-local-link", "local target is outside the repository")
-                )
+                issues.append(Issue(path, line_number, "external-local-link", "local target is outside the repository"))
                 continue
             if _is_under(resolved, root / "doc" / "plan"):
-                issues.append(
-                    Issue(document.path, line_number, "plan-link", "tracked documentation must not link to doc/plan")
-                )
+                issues.append(Issue(path, line_number, "plan-link", "tracked documentation must not link to doc/plan"))
                 continue
             if not resolved.exists():
                 issues.append(
                     Issue(
-                        document.path,
+                        path,
                         line_number,
                         "broken-link",
                         f"target does not exist: {urllib.parse.unquote(target)}",
@@ -257,23 +260,43 @@ def _check_links(documents: dict[Path, Document], parsed: dict[Path, _MarkdownFa
                 )
                 continue
             resolved_key = absolute_path(resolved)
-            if fragment and resolved_key in parsed and fragment not in parsed[resolved_key].anchors:
-                target_name = urllib.parse.unquote(target.split("#", 1)[0]) or document.path.name
+            if resolved_key not in parsed:
+                continue
+            if not is_image and resolved_key != key:
+                edges[key].add(resolved_key)
+            if fragment and fragment not in parsed[resolved_key].anchors:
+                target_name = urllib.parse.unquote(target.split("#", 1)[0]) or path.name
                 issues.append(
                     Issue(
-                        document.path,
+                        path,
                         line_number,
                         "broken-anchor",
                         f"anchor '#{fragment}' does not exist in {target_name}",
                     )
                 )
-    return issues
+    return issues, edges
 
 
-def _check_reachability(documents: dict[Path, Document], parsed: dict[Path, _MarkdownFacts], root: Path) -> list[Issue]:
-    start = absolute_path(root / "doc" / "README.md")
-    if start not in documents:
-        return [Issue(root / "doc" / "README.md", 1, "index", "documentation root index is missing")]
+def _topic_hubs(relative: Path) -> tuple[Path, ...]:
+    """Return eligible hubs relative to doc/, excluding the entry pages themselves."""
+    pillar = Path(relative.parts[0])
+    hubs: tuple[Path, ...]
+    if pillar.name == "system" and len(relative.parts) > 2:
+        hubs = (pillar / relative.parts[1] / "README.md",)
+    elif pillar.name == "development":
+        hubs = tuple(pillar / name for name in ("README.md", "test.md", "linting.md"))
+    elif pillar.name in {"user", "reference", "decision", "system"}:
+        hubs = (pillar / "README.md",)
+    else:
+        return ()
+    return () if relative in hubs else hubs
+
+
+def _check_navigation(edges: dict[Path, set[Path]], root: Path) -> list[Issue]:
+    doc_root = root / "doc"
+    start = absolute_path(doc_root / "README.md")
+    if start not in edges:
+        return [Issue(start, 1, "index", "documentation root index is missing")]
 
     reachable: set[Path] = set()
     pending = deque([start])
@@ -282,28 +305,18 @@ def _check_reachability(documents: dict[Path, Document], parsed: dict[Path, _Mar
         if current in reachable:
             continue
         reachable.add(current)
-        document = documents[current]
-        for _, target, is_image in parsed[current].links:
-            if is_image:
-                continue
-            resolved, _ = _resolve_link(document.path, target, root)
-            if resolved is None:
-                continue
-            key = absolute_path(resolved)
-            if key in documents and key not in reachable:
-                pending.append(key)
+        pending.extend(edges[current] - reachable)
 
     issues: list[Issue] = []
-    doc_root = root / "doc"
-    for path, document in documents.items():
-        try:
-            relative = path.relative_to(doc_root)
-        except ValueError:
-            continue
-        if relative.parts[:1] == ("plan",):
+    for path in edges:
+        if not path.is_relative_to(doc_root):
             continue
         if path not in reachable:
-            issues.append(Issue(document.path, 1, "orphan", "document is not reachable from doc/README.md"))
+            issues.append(Issue(path, 1, "orphan", "document is not reachable from doc/README.md"))
+        hubs = _topic_hubs(path.relative_to(doc_root))
+        if hubs and not any(path in edges.get(doc_root / hub, ()) for hub in hubs):
+            choices = " or ".join(f"doc/{hub.as_posix()}" for hub in hubs)
+            issues.append(Issue(path, 1, "hub-link", f"document needs a direct link from {choices}"))
     return issues
 
 
@@ -313,6 +326,7 @@ class _MarkdownFacts:
     links: tuple[tuple[int, str, bool], ...]
     undefined_references: tuple[tuple[int, str], ...]
     anchors: frozenset[str]
+    invalid_related_line: int | None
 
 
 def _undefined_reference(state: StateInline, start: int) -> str | None:
@@ -395,6 +409,7 @@ def _parse_markdown(lines: tuple[str, ...]) -> _MarkdownFacts:
             block_undefined.clear()
             children: list[Token] = []
             parser.inline.parse(token.content, parser, environment, children)
+            token.children = children
             links.extend(
                 (first_line + token.content.count("\n", 0, offset), target, is_image)
                 for offset, target, is_image in sorted(block_links)
@@ -412,7 +427,42 @@ def _parse_markdown(lines: tuple[str, ...]) -> _MarkdownFacts:
                 counts[base] += 1
                 anchors.add(base if index == 0 else f"{base}-{index}")
     custom.close()
-    return _MarkdownFacts(tuple(links), tuple(undefined), frozenset(anchors | custom.anchors))
+    return _MarkdownFacts(
+        tuple(links), tuple(undefined), frozenset(anchors | custom.anchors), _invalid_related_line(tokens)
+    )
+
+
+def _invalid_related_line(tokens: list[Token]) -> int | None:
+    # Headings consist of heading_open, inline, heading_close. Quoted headings
+    # and examples are not page sections; reference definitions are not blocks
+    # of rendered content, so they may supply links even after the list.
+    for heading_index, token in enumerate(tokens):
+        if token.type == "heading_open" and token.tag == "h2" and token.level == 0:
+            title = _inline_text(tokens[heading_index + 1].children or [])
+            if " ".join(title.split()).casefold() == "related documents":
+                break
+    else:
+        return None
+
+    tail_start = heading_index + 3
+    if tail_start == len(tokens):
+        heading_lines = tokens[heading_index].map
+        assert heading_lines is not None
+        return heading_lines[0] + 1
+
+    for index in range(tail_start, len(tokens)):
+        token = tokens[index]
+        if token.nesting < 0 or token.type in {"bullet_list_open", "ordered_list_open"}:
+            continue
+        if token.type == "list_item_open" and tokens[index + 1].type == "paragraph_open":
+            continue
+        if token.type == "paragraph_open" and tokens[index - 1].type == "list_item_open":
+            continue
+        if token.type == "inline" and any(child.type == "link_open" for child in token.children or []):
+            continue
+        assert token.map is not None
+        return token.map[0] + 1
+    return None
 
 
 def _inline_text(tokens: list[Token]) -> str:

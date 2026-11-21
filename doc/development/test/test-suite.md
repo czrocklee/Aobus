@@ -60,31 +60,17 @@ cases in an owning binary, use `--test_filter='[concurrency]~[.]'`; use
 `ao check --tsan` for managed whole-scope sanitizer validation.
 
 Bazel owns scheduling, output, result caching, and repetition. For example,
-`--runs_per_test=20 --nocache_test_results` requests repeated fresh executions;
-it is not the retired wrapper's stop-on-first-failure behavior. Repetition is a
-stress aid, not a substitute for deterministic synchronization. `--test_arg`
+`--runs_per_test=20 --nocache_test_results` requests 20 fresh runs of each
+selected test. By default, a test failure does not stop the remaining runs;
+`--notest_keep_going` requests an early stop instead. Repetition is a stress
+aid, not a substitute for deterministic synchronization. `--test_arg`
 passes native Catch2 options. Running a previously built executable directly
 is diagnosis only: the current checkout does not establish that binary's
 source provenance or prepared runtime.
 
 ## Complete validation and native prerequisites
 
-`./ao check` (`ao.bat check` on Windows) is complete local and CI validation: it
-prepares the ready native environment and runs one `bazel test //...` over the
-selected tree, so the graph also owns documentation, formatting, source
-guardrails, Ruff/mypy, one target per tooling module, the native-policy audits
-and the whole-graph lint test. `--ci` adds the repository CI configuration;
-`check` has no `--commit` selector and always checks the complete source
-snapshot. See the [completion gate](../bazel.md#completion-gate).
-
-Wildcard discovery selects every non-`manual` test and then expands the selected
-test suites. The GTK, native-backend and lint-fixture tests carry `manual`, so a
-bare label wildcard does not pick them up, but the non-manual `//:check_tests`
-suite lists them and completion's wildcard expansion runs them. The wildcard
-builds platform products and manual GUI/performance harnesses without launching
-them; Windows runs the two unattended native console probes and, under
-`--config=ci`, the declared WinUI automation test. Ordinary `bazel test //:tests`
-remains the portable default selection.
+Use `bazel test //:tests` for the ordinary portable selection; the [completion gate](../bazel.md#completion-gate) defines which suites `./ao check` runs and which products and harnesses it only builds.
 
 Explicit native targets retain native prerequisites:
 
@@ -92,8 +78,8 @@ Explicit native targets retain native prerequisites:
   context-specific wrapper starts only the fixtures that context requests —
   here the owned headless display, private no-activation session bus, GTK
   environment profile and private audio stack. An explicit label therefore
-  needs only the ready native tools and SDK, not a hand-started display or
-  session bus. Never set ownership markers on personal desktop endpoints. See
+  needs the [Linux fixture tools and SDK](../bazel.md#direct-bazel-without-the-portal),
+  not a hand-started display or session bus. Never set ownership markers on personal desktop endpoints. See
   [GTK process isolation](uimodel-and-gtk.md#process-isolation-and-diagnostics).
 - `//test:backend_test` owns live endpoint/service contracts and PipeWire
   admission cases with five link-interposed stream calls. Hardware and
@@ -101,10 +87,7 @@ Explicit native targets retain native prerequisites:
   physical playback. Windows currently has only hidden cases and permits an
   empty unattended selection; choose an exact case only after preparing its
   hardware prerequisites.
-- AppKit GUI scenarios and WinUI GUI probes are explicit manual executions;
-  see [macOS](../macos.md#appkit-smoke-scenarios) and
-  [Windows](../windows.md#ui-automation-naming-gate). No test aggregate proves
-  an interactive desktop session, physical input, or audible output.
+- [AppKit GUI scenarios](../macos.md#appkit-smoke-scenarios) and most WinUI GUI probes run only on explicit request. Windows CI also runs the [UI Automation probe](../windows.md#ui-automation-naming-gate), which requires an authenticated interactive console. Building a GUI harness does not prove it ran, and none of these probes establishes physical input or audible output.
 
 `//:instrumentation_tests` is the Linux-only graph suite for the sanitizer
 compile/link canaries and coverage analysis; it never executes a sanitizer suite
@@ -144,8 +127,10 @@ physical Git-state reads or dynamic whole-tree scans stay tagged `local` and
 they use. Live unit and check targets pass a declared `VERSION.txt` anchor and
 always re-execute from the physical checkout on every OS; the child receives
 its arguments without the anchor flag, which is what closes the re-execution
-loop. Their host tools come from the inherited PATH and the installed native
-`py_runtime` — an honest non-hermetic tool closure, not a sandbox claim.
+loop. They use the installed native `py_runtime`. Host-backed unit modules and
+the `format` and `bazel_lint` checks inherit `PATH` on their own targets for
+host tools such as Git. Other live checks
+do not acquire the caller's `PATH` merely because they read the checkout.
 `workflows` is Linux-only and consumes the pinned actionlint through
 `AO_NIX_ACTIONLINT`. Do not substitute ambient Python, Ruff, or mypy. On macOS,
 only the [SDK selection and remote-cache modules](../macos.md) run.
@@ -191,7 +176,9 @@ list, not product PCH flags, ambient `CXX`, or `g++`. Empty include-list entries
 are ignored; unused nonexistent entries do not invalidate remaining providers,
 but missing required headers fail. Objective-C++ fixtures are explicitly
 platform-incompatible on Windows, not counted as tested. Unix uses the governed
-plugin/host and macOS SDK/deployment/shim context. Fixture implementation lives
+plugin/host. On macOS the fixture rule supplies the declared shim header
+alongside the SDK and deployment settings; native lint reports replay the
+translation unit's compile context. Fixture implementation lives
 in `script/ao/graph/lint_test.py` and `script/ao/graph/bazel_lint_fixture.py`.
 See [fixture authoring](../lint/checker-development.md#fixture-contract).
 

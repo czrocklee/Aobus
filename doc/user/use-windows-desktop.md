@@ -27,7 +27,7 @@ The Windows frontend keeps its database beneath the selected music root. Network
    Aobus opens an existing index directly.
    For a folder without an Aobus index, the new process activates the folder and
    then runs the initial scan. If scanning fails, that folder stays open so
-   **Rescan** can retry it.
+   **More → Rescan Library** in Modern or **File → Rescan** in Classic can retry it.
 3. Use **Folders**, **Albums**, **Artists**, **Genres**, or a list below
    **Playlists** in the navigation pane. Use the presentation button above the
    table to switch between songs, albums, artists, genres, years, classical
@@ -44,18 +44,18 @@ The Windows frontend keeps its database beneath the selected music root. Network
    Columns** in Modern or **View > Columns** in Classic to show or hide fields.
    See [filtering and suggestions](manage-library.md#understand-filtering-and-suggestions) for Quick versus Expression mode and why romanized suggestions must be accepted to search their original text.
    When the current filter is non-empty and valid, choose **Create List from current filter** to open the List editor with the resolved expression already filled in.
-   Right-click a selected row and choose **Properties...**, choose the same command from **More** or Classic's **View** menu, or press `Alt+Enter` to edit built-in metadata, tags, and custom metadata for the captured selection.
-   Use category or Full Credits actions to edit complete name/kind/role lists, not the compact first-name `+N` preview.
-   **Save credits** stages the child draft; finish it before Properties Save submits metadata, Credits, and tags together.
-   Mixed scopes require explicit replacement or clear intent; other categories retain each track's values.
-   Technical audio properties remain read-only, and Save becomes available only after a valid change.
+   To edit built-in metadata, tags, and custom metadata, right-click a selected row and choose **Properties...**, choose the same command from **More** in Modern or **View** in Classic, or press `Alt+Enter`.
+   **Properties** edits the tracks selected when it opens, even if the selection changes afterward.
+   Use a category **Credits scope:** button to edit its full list of names and optional roles, not the `+N` preview. The category kind is fixed; choose **Credits scope: All credit kinds** to change kinds. If the tracks differ in that scope, choose **Replace this scope on all selected tracks** or **Clear this scope**; credits outside it stay as they are.
+   Choose **Save credits** to keep the edit in **Properties** without writing it to the library, or **Cancel** to discard just that Credits edit. Then choose **Save** to apply pending metadata, Credits, and tags together. See [Edit Credits](edit-metadata.md#edit-credits).
+   **Audio Properties** remain read-only, and **Save** becomes available only after a valid change.
    The same row menu can add tracks to eligible Playlists or explicitly remove them from the active tag-backed Playlist.
    On a saved List using a flat unsorted presentation, its **Manual Order** submenu moves the selection up, down, to the top, or to the bottom and can reset saved positions; the movement shortcuts are `Alt+Up`, `Alt+Down`, `Alt+Home`, and `Alt+End`.
 5. Inspect the selected track in the details pane. Drag either inline pane
    boundary to resize navigation or details; Aobus remembers both widths. On
    medium or narrow windows, use the details button to open it as an overlay;
    the navigation pane becomes compact or minimal automatically.
-   Credits show every name, kind, and optional role; category/all-kind edit actions open Properties at that scope.
+   When the selected tracks have the same list of credits for a kind, the details pane shows every name and optional role. If the lists differ, it shows `<Multiple Values>` instead. The **Credits scope:** buttons open **Properties** directly at that scope.
    Missing artwork uses a monogram in group headings and a transparent vinyl placeholder in the details pane; these Windows choices are fixed in this version.
 6. Use the persistent Now Playing controls for previous, play/pause, next, shuffle, repeat, seeking, volume, and output.
    Choose **Reveal Current Track** or press `Ctrl+L` to select and scroll the playing track into view when it is visible in its target presentation.
@@ -67,11 +67,14 @@ The Windows frontend keeps its database beneath the selected music root. Network
 7. Choose **Classic Mode** to use the dense menu, tree, property, status, and GTK-compatible playback layout. Choose **Modern Mode** to return. Playback, the active library, list, and presentation continue across the switch.
 8. In Modern mode, click Soul to play or pause. In Classic mode, click Soul to choose an output device.
    In either mode, right-click Soul for the system menu, hold it for full-screen Soul, or hover it to inspect the audio pipeline. See [interpreting playback quality](play-music.md#inspect-playback-quality) to distinguish source fidelity, pipeline changes, and incomplete evidence.
-9. Choose **Rescan** after files change. A failed scan leaves the active library open and retryable. Another Rescan while one is active starts nothing; choosing a different library instead closes the current process and cancels its work during teardown.
+9. Choose **More → Rescan Library** in Modern or **File → Rescan** in Classic after files change. A failed scan leaves the active library open and retryable. Another Rescan while one is active starts no new scan; if you switch to a different library, the closing process requests cancellation and waits for its work to settle.
 10. To back up portable library data, choose **More → Export Library Data...** in Modern mode or **File → Export Library Data...** in Classic mode, select Delta, Metadata, Full, or Lists only, and save a `.yaml` file.
-    To import one, use the matching **Import Library Data...** command and choose Merge to retain records outside the backup or Restore to replace the reported scope.
-    Restore shows the payload version, mode, scope, change counts, ignored references, and kept invalid List filters before enabling the scope-specific destructive action; Cancel remains the default.
-    Modern shows transfer progress in its ordinary activity surface. Switching to Classic leaves an admitted transfer running and reports its terminal status there; closing its dialog, picker, or the window cancels the unfinished workflow.
+    To import one, choose **Import Library Data...** from the same menu. Select **Merge (keep records outside the backup)** or **Restore (replace the backup scope after preview)**, choose **Next**, then select the backup file.
+    The restore preview shows the backup version, mode, scope, change counts, and the number of ignored references and invalid List filters kept.
+    To continue after reviewing the preview, choose **Restore Library** or **Restore Lists**, depending on the scope. **Cancel** is the default on that preview.
+    The window lets you start only one import or export workflow at a time, and not while **Properties** or a List dialog is open.
+    Modern shows transfer progress in its activity strip. Switching to Classic while a transfer is running does not cancel or restart it; Classic's status bar shows whether it succeeded or failed.
+    Canceling the mode dialog or file picker, or declining the restore preview, leaves the library unchanged. Closing the window requests cancellation, not rollback. An import already submitted for applying may still commit.
 11. To apply a custom theme, create `%LOCALAPPDATA%\Aobus\windows-theme.yaml` using the exact reference schema, then choose **Reload Theme**. Omit or remove the file to follow built-in and system appearance.
 
 ## Verify the result
@@ -80,11 +83,12 @@ The status area reports the selected library as ready, rows remain keyboard navi
 
 ## Troubleshooting
 
-- If a selected folder cannot be opened, the successor process reports startup failure and exits; start Aobus normally to return to the previously saved library. A scan failure instead leaves the selected library open and retryable.
+- If Aobus restarts but cannot open the folder you chose, it reports **Aobus could not start:** and exits. A normal launch can reopen the previously saved library if it is still available. If only the scan fails, the folder stays open; choose **More → Rescan Library** in Modern or **File → Rescan** in Classic to retry.
 - If the root is on a network share, switching between a mapped drive letter and UNC spelling does not make it a supported database location. Use local storage; a remote desktop connection to Windows does not itself make that host's local disk a network filesystem.
 - If theme reload fails, correct the reported field, type, or color. The last valid theme remains visible. Removing the file and choosing **Reload Theme** restores the Windows appearance.
-- If Properties becomes stale after another library change, use Reload and confirm discarding the draft, or close and reopen it. Busy retains the draft for retry.
-- If an import is rejected, review the notification detail for malformed YAML, an unsupported version, an unsafe path, or source/target evidence that changed after preview. The target remains unchanged when import fails before commit.
+- If the library changes while **Properties** is open, choose **Reload**, then **Discard Changes**, or close and reopen **Properties**. If you see **Library is busy. Try again.**, the dialog keeps your draft so you can retry.
+- If you see **Import failed:**, check the notification details in Modern or the status bar in Classic (hover for the full message) for malformed YAML, an unsupported version, an unsafe path, or changes to the backup file or the library you are importing into since Aobus prepared the preview.
+  If the import fails before Aobus saves it, none of the import's changes are applied.
 - If no audio device appears, confirm that Windows Audio is running and that the desired endpoint is enabled.
 - If media keys do not work in a remote session, verify them once in an interactive console or RDP desktop; redirected keys may be consumed by the client.
 
