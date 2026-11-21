@@ -54,6 +54,93 @@ class DocCheckBoundaryTest(unittest.TestCase):
 
             self.assertEqual([(issue.path, issue.kind) for issue in issues], [(target, "orphan")])
 
+    def test_hub_link_is_direct_and_uses_the_rendered_reference_destination(self):
+        for hub, topic in (
+            ("user/README.md", "user/tasks/play.md"),
+            ("reference/README.md", "reference/media/README.md"),
+            ("decision/README.md", "decision/format.md"),
+            ("system/README.md", "system/overview.md"),
+            ("system/playback/README.md", "system/playback/audio/session.md"),
+            ("development/README.md", "development/build.md"),
+            ("development/test.md", "development/test/scope.md"),
+            ("development/linting.md", "development/lint/naming.md"),
+        ):
+            with self.subTest(hub=hub), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary).resolve()
+                docs = root / "doc"
+                target = docs / topic
+                target.parent.mkdir(parents=True)
+                target.write_text("# Details\n", encoding="utf-8")
+                (docs / "README.md").write_text(f"[Hub]({hub})\n", encoding="utf-8")
+                (docs / "bridge.md").write_text(f"[Topic](/doc/{topic})\n", encoding="utf-8")
+                entry = docs / hub
+                entry.write_text(
+                    f"# Hub\n\n[Bridge](/doc/bridge.md)\n![Image](/doc/{topic}) and [Here](#hub)\n",
+                    encoding="utf-8",
+                )
+
+                issues = doc_check.check_tree(root)
+
+                self.assertEqual([(issue.path, issue.kind) for issue in issues], [(target, "hub-link")])
+                with entry.open("a", encoding="utf-8") as stream:
+                    stream.write(f"\n[Topic][details]\n\n[details]: /doc/{topic}#details\n")
+                self.assertEqual(doc_check.check_tree(root), [])
+
+    def test_related_documents_accepts_annotated_and_grouped_list_links(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            docs = root / "doc"
+            docs.mkdir()
+            (docs / "README.md").write_text(
+                "# Index\n\n```markdown\n## Related documents\n```\n\n> ## Related documents\n\n"
+                "Body before the real section.\n\nRelated documents\n-----------------\n\n"
+                "1. [Index][home] owns the\n   documentation entrance.\n"
+                "2. [Home](#index) and [this section](#related-documents)\n"
+                "   - [Nested entry][home]\n\n[home]: #index\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(doc_check.check_tree(root), [])
+
+    def test_related_documents_reports_first_non_link_list_content_on_its_physical_line(self):
+        for tail in (
+            "A key can be rebound.\n\nAnother rule.",
+            "See [the index](#index).",
+            "  Keep the selection on failure. See [Home](#index).",
+            "### More",
+            "```md\n- [Example](#index)\n```",
+            "- `not [a link](#index)`",
+            "- ![Image](README.md)",
+            "  > Quoted paragraphs are not link lists.",
+        ):
+            with self.subTest(tail=tail), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary).resolve()
+                docs = root / "doc"
+                docs.mkdir()
+                path = docs / "README.md"
+                path.write_text(
+                    "---\nid: docs\n---\n# Index\n\n## Related documents\n\n- [Home](#index)\n\n" + tail + "\n",
+                    encoding="utf-8",
+                )
+
+                issues = doc_check.check_tree(root)
+
+                self.assertEqual(
+                    [(issue.path, issue.line, issue.kind) for issue in issues], [(path, 10, "related-documents")]
+                )
+
+    def test_related_documents_requires_a_rendered_link_list(self):
+        for tail in ("", "\n[unused]: #index\n"):
+            with self.subTest(tail=tail), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary).resolve()
+                path = root / "doc/README.md"
+                path.parent.mkdir()
+                path.write_text("# Index\n\n## Related documents\n" + tail, encoding="utf-8")
+
+                issues = doc_check.check_tree(root)
+
+                self.assertEqual([(issue.line, issue.kind) for issue in issues], [(3, "related-documents")])
+
     def test_diagnostics_display_readable_local_targets(self):
         for source, expected in (
             ("[Missing](<not here.md>)", "not here.md"),

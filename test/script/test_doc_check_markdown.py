@@ -95,9 +95,9 @@ class DocCheckMarkdownRegressionTest(unittest.TestCase):
             self._write(
                 root,
                 "doc/README.md",
-                "# Documentation\n\n![Wrapped\nlogo](missing.png) and [Guide](system/guide.md).\n",
+                "# Documentation\n\n![Wrapped\nlogo](missing.png) and [Guide](guide.md).\n",
             )
-            self._write(root, "doc/system/guide.md", "# Guide\n")
+            self._write(root, "doc/guide.md", "# Guide\n")
 
             issues = doc_check.check_tree(root)
 
@@ -109,7 +109,7 @@ class DocCheckMarkdownRegressionTest(unittest.TestCase):
         # closing bracket, a stray closer, and an unclosed fence at the end of
         # the document are literal text or trailing code; the earlier inline
         # link, the earlier definition, and the shortcut that uses it must
-        # all survive, keeping the guide reachable and the tree clean.
+        # all survive, keeping both destinations reachable and the tree clean.
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             self._write(
@@ -117,9 +117,9 @@ class DocCheckMarkdownRegressionTest(unittest.TestCase):
                 "doc/README.md",
                 "# Documentation\n"
                 "\n"
-                "[Good](system/guide.md)\n"
+                "[Good](guide.md)\n"
                 "\n"
-                "[Good]: system/guide.md\n"
+                "[Good]: reference.md\n"
                 "\n"
                 "[Bad: not-a-definition\n"
                 "\n"
@@ -132,7 +132,8 @@ class DocCheckMarkdownRegressionTest(unittest.TestCase):
                 "```text\n"
                 "never closed\n",
             )
-            self._write(root, "doc/system/guide.md", "# Guide\n")
+            self._write(root, "doc/guide.md", "# Guide\n")
+            self._write(root, "doc/reference.md", "# Reference\n")
 
             issues = doc_check.check_tree(root)
 

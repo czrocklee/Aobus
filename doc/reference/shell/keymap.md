@@ -156,6 +156,10 @@ The stored `tui.*` ids identify terminal actions; `tui.library.playSelection` de
 
 The TUI workspace focus action `tui.workspace.switchFocus` defaults to Tab and Shift+Tab and is appended after existing actions for collision resolution. It operates only in workspace scope; completion/editor Tab remains local, and active List search always uses Tab/Shift+Tab to clear search and return to Tracks.
 
+In the TUI, Shift+Left/Right are fixed contextual keys for moving the focused Lists or Detail divider. They are not editable action bindings; Tracks, text inputs, and popovers retain their own input ownership.
+
+The rebindable `tui.workspace.beginPanelResize` action (default Ctrl+W) starts a temporary layout adjustment from Tracks, Lists, or Detail only when a divider is visible. Tab switches between visible dividers; Left/Right move the active divider, Enter applies, and Escape cancels. In text input, including active List search, Ctrl+W still deletes a word.
+
 ### Coverage per shell
 
 | Action family                           | GTK        | TUI                                                           | Windows               |
@@ -286,7 +290,3 @@ There is no explicit migration table for renamed actions or key tokens.
 - [Keyboard shortcut specification](../../system/shell/keyboard-shortcut.md)
 - [GTK layout schema and action reference](layout-schema.md)
 - [Application managed-state surface](../persistence/application-config.md)
-
-In the TUI, Shift+Left/Right are fixed contextual keys for moving the focused Lists or Detail divider. They are not editable action bindings; Tracks, text inputs, and popovers retain their own input ownership.
-
-`tui.workspace.beginPanelResize` defaults to Ctrl+W and is rebindable in the TUI. From Tracks, Lists, or Detail it enters a temporary layout adjustment; Tab switches visible dividers, arrows move, Enter applies, and Escape cancels. Text inputs keep their Ctrl+W word-deletion behavior.
