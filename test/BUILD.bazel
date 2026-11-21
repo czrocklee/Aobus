@@ -129,8 +129,17 @@ windows_utf8_manifest_checks(
     target_compatible_with = ["@platforms//os:windows"],
 )
 
+# Linux's fixture runner searches the pinned Nix shell for PipeWire,
+# WirePlumber and (for GTK) Xvfb. Native audio on other hosts does not use it.
+LINUX_TEST_SERVICE_ENV = select({
+    "@platforms//os:linux": ["PATH"],
+    "//conditions:default": [],
+})
+
 # Native process smokes reuse the shipping TUI and the existing WinUI probes.
 # The wrappers add execution only; they do not compile product sources twice.
+# The two console probes resolve the App Runtime natively and carry the staged
+# SDK DLLs beside their executables; neither searches the caller's PATH.
 native_test(
     name = "tui_help_smoke",
     size = "small",
@@ -172,6 +181,8 @@ native_test(
     timeout = "long",
     context = ["uia"],
     data = ["//:VERSION.txt"],
+    # The UIA runner queries the current user's App Runtime via PowerShell.
+    env_inherit = ["PATH"],
     exe = "//app/windows-winui:ao_winui_automation_probe",
     tags = [
         "exclusive",
@@ -898,6 +909,7 @@ cc_test(
         ":ao_audio_fatal_probe",
         "//test/data/audio:audio_fixtures",
     ],
+    env_inherit = LINUX_TEST_SERVICE_ENV,
     tags = ["external"],
     deps = [
         ":async_test_support",
@@ -1009,6 +1021,7 @@ cc_test(
         "@platforms//os:macos": [":ao_coreaudio_output_probe"],
         "//conditions:default": [],
     }),
+    env_inherit = LINUX_TEST_SERVICE_ENV,
     tags = ["external"],
     deps = [
         ":audio_platform_test_support",
@@ -1308,6 +1321,7 @@ cc_test(
         "@aobus_native_tools//:dbus_daemon",
     ],
     env = {"AOBUS_TEST_DBUS_DAEMON": TEST_TOOLS.get("dbus_daemon", "")},
+    env_inherit = LINUX_TEST_SERVICE_ENV,
     local_defines = ["AOBUS_BAZEL_TUI_EXECUTABLE"],
     tags = ["external"],
     target_compatible_with = select({
@@ -1584,6 +1598,7 @@ cc_test(
         "@aobus_native_tools//:dbus_daemon",
     ],
     env = {"AOBUS_TEST_DBUS_DAEMON": TEST_TOOLS.get("dbus_daemon", "")},
+    env_inherit = LINUX_TEST_SERVICE_ENV,
     local_defines = select({
         "//bazel:linux_system_media_enabled": ["AOBUS_HAS_SYSTEM_MEDIA=1"],
         "//conditions:default": [],
@@ -1645,6 +1660,7 @@ cc_test(
         ":ao_audio_fatal_probe",
         "//test/data/audio:audio_fixtures",
     ],
+    env_inherit = LINUX_TEST_SERVICE_ENV,
     linkopts = select({
         "@platforms//os:linux": [
             "-Wl,--wrap=pw_stream_add_listener",

@@ -2,6 +2,7 @@
 
 load("@aobus_lint_sdk//:flags.bzl", "LINT_SDK_HOST")
 load("@aobus_native_tools//:python_action_tools.bzl", "PYTHON_ACTION_TOOLS")
+load("@bazel_skylib//rules/directory:providers.bzl", "DirectoryInfo")
 load("@rules_cc//cc:find_cc_toolchain.bzl", "use_cc_toolchain")
 load(":lint.bzl", "LintVerificationInfo", "native_environment")
 
@@ -65,12 +66,17 @@ def _fixture_impl(ctx):
         args.add_all(["--plugin", verification.plugin])
     args.add_all(["--report", report, "--log", log, "--work", work], expand_directories = False)
     args.add_all(["--jobs", str(_FIXTURE_JOBS)])
+    shim_inputs = []
+    if LINT_SDK_HOST == "macos":
+        shim = ctx.attr._expected_include[DirectoryInfo]
+        args.add("--expected-include", shim.path)
+        shim_inputs.append(shim.transitive_files)
     ctx.actions.run(
         executable = PYTHON_ACTION_TOOLS["python"],
         arguments = [args],
         inputs = depset(
             [ctx.file._helper, verification.result],
-            transitive = [verification.inputs, ctx.attr._modules[DefaultInfo].files, ctx.attr._fixtures[DefaultInfo].files, ctx.attr._project_headers[DefaultInfo].files],
+            transitive = [verification.inputs, ctx.attr._modules[DefaultInfo].files, ctx.attr._fixtures[DefaultInfo].files, ctx.attr._project_headers[DefaultInfo].files] + shim_inputs,
         ),
         outputs = [report, log, work],
         env = native_environment(ctx, portal = True),
@@ -110,7 +116,7 @@ lint_fixture_test = rule(
         "_project_headers": attr.label(default = Label("//include:common_headers")),
         "_modules": attr.label(default = Label("//:ao_lint_fixture_sources")),
         "_python_tools": attr.label(default = Label("@aobus_native_tools//:python_action_tools"), cfg = config.exec("test")),
-    },
+    } | ({"_expected_include": attr.label(default = Label("@aobus_toolchain//:expected_include"), providers = [DirectoryInfo])} if LINT_SDK_HOST == "macos" else {}),
     fragments = ["cpp"],
     toolchains = use_cc_toolchain(),
     # The launcher needs the admitted native OS/CPU, not the product profile's

@@ -2,6 +2,8 @@
 
 load("@apple_support//rules:apple_genrule.bzl", "apple_genrule")
 load("@apple_support//toolchain:cc_toolchain.bzl", apple_cc_toolchain = "cc_toolchain")
+load("@bazel_skylib//rules/directory:directory.bzl", "directory")
+load("@bazel_skylib//rules/directory:subdirectory.bzl", "subdirectory")
 load("@rules_cc//cc/toolchains:args.bzl", "cc_args")
 load("@rules_cc//cc/toolchains:feature.bzl", "cc_feature")
 load("@rules_cc//cc/toolchains:feature_constraint.bzl", "cc_feature_constraint")
@@ -27,7 +29,7 @@ def _shell_argument(value):
     # Preserve data through Bazel make-variable expansion and the POSIX shell.
     return "'" + value.replace("$", "$$").replace("'", "'\"'\"'") + "'"
 
-def macos_toolchain(llvm, llvm_real, llvm_version, sdk, shim, linker, developer_dir, deployment, cpu, constraint_cpu, tools):
+def macos_toolchain(llvm, llvm_real, llvm_version, sdk, linker, developer_dir, deployment, cpu, constraint_cpu, tools):
     """Keep native facts and project policy local; delegate Apple mechanics.
 
     Args:
@@ -35,7 +37,6 @@ def macos_toolchain(llvm, llvm_real, llvm_version, sdk, shim, linker, developer_
         llvm_real: Resolved LLVM installation root admitted for native include paths.
         llvm_version: Observed LLVM version passed to the Apple toolchain rules.
         sdk: Selected macOS SDK root used as the compile and link sysroot.
-        shim: Governed libc++ compatibility include directory.
         linker: Selected native linker executable path.
         developer_dir: Selected Apple developer directory used in native action environments.
         deployment: Admitted minimum macOS version for target and execution actions.
@@ -49,9 +50,11 @@ def macos_toolchain(llvm, llvm_real, llvm_version, sdk, shim, linker, developer_
         "runtime/libLTO.dylib",
         "include/__expected/expected.h",
     ] + tools.values())
+    directory(name = "shim_files", srcs = ["include/__expected/expected.h"])
+    subdirectory(name = "expected_include", parent = ":shim_files", path = "include")
     native.filegroup(
         name = "identity",
-        srcs = ["identity.json", "native_paths.bzl", "runtime/libLTO.dylib", "include/__expected/expected.h"],
+        srcs = ["identity.json", "native_paths.bzl", "runtime/libLTO.dylib", ":expected_include"],
     )
     constraints = ["@platforms//os:macos", "@platforms//cpu:" + constraint_cpu]
     native.platform(
@@ -195,7 +198,8 @@ def macos_toolchain(llvm, llvm_real, llvm_version, sdk, shim, linker, developer_
     cc_args(
         name = "native_inputs",
         actions = ["@rules_cc//cc/toolchains/actions:all_actions"],
-        allowlist_absolute_include_directories = [llvm, llvm_real, sdk, shim],
+        allowlist_absolute_include_directories = [llvm, llvm_real, sdk],
+        allowlist_include_directories = [":expected_include"],
         env = {
             "DEVELOPER_DIR": developer_dir,
             "SDKROOT": sdk,
@@ -209,7 +213,8 @@ def macos_toolchain(llvm, llvm_real, llvm_version, sdk, shim, linker, developer_
     cc_args(
         name = "cpp_policy",
         actions = _COMPILE + ["@rules_cc//cc/toolchains/actions:linkstamp_compile"],
-        args = CPP_POLICY_ARGS + ["-isystem", shim],
+        args = CPP_POLICY_ARGS + ["-isystem", "{shim}"],
+        format = {"shim": ":expected_include"},
     )
     cc_args(
         name = "selected_linker",

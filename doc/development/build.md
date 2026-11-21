@@ -7,6 +7,8 @@ The four public commands are `setup` (explicit preparation), `format` (rewriting
 `check` (read-only validation), and `measure` (coverage, performance, and concepts).
 The [Bazel build system](bazel.md) owns the graph, toolchain, profile, and cache
 contracts, including [native executable and SDK setup](bazel.md#direct-bazel-without-the-portal).
+Both entry points share the [same local action cache](bazel.md#shared-local-action-cache);
+its size budget applies across checkouts.
 
 ## Project commands
 

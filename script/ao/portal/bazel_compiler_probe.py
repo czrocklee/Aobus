@@ -31,8 +31,11 @@ def probe_compiler(host: str) -> dict[str, Any]:
         }
         identity: dict[str, Any] = {compiler: _compiler_identity(host, compiler) for compiler in _LINUX_COMPILERS}
     elif host == "macos":
-        sdk = _macos_sdk()
+        # The generated header's staging path is a repository input locator, not
+        # an installed SDK selection. Its projected bytes are real toolchain inputs.
+        sdk, shim_header = _macos_sdk()
         identity = {"schema": 2, "platform": host, "sdk": sdk}
+        return {"platform": host, "sdk": sdk, "identity": identity, "shim_header": str(shim_header)}
     else:
         raise native.BazelWorkspaceError(f"unsupported native toolchain platform: {host}")
     return {"platform": host, "sdk": sdk, "identity": identity}
@@ -101,7 +104,7 @@ def _linux_sdk(compiler: str) -> dict[str, Any]:
     return sdk
 
 
-def _macos_sdk() -> dict[str, Any]:
+def _macos_sdk() -> tuple[dict[str, Any], Path]:
     llvm = Path(os.environ.get("AOBUS_LLVM_ROOT", ""))
     shim = Path(os.environ.get("AOBUS_LIBCXX_EXPECTED_SHIM", ""))
     if not llvm.is_absolute() or not (llvm / "bin/clang++").is_file() or not shim.is_absolute():
@@ -153,7 +156,8 @@ def _macos_sdk() -> dict[str, Any]:
         check=True,
     ).stdout.strip()
     liblto = llvm / "lib/libLTO.dylib"
-    for path in (liblto, shim / "__expected/expected.h"):
+    shim_header = shim / "__expected/expected.h"
+    for path in (liblto, shim_header):
         if not native.probe(path).is_file():
             raise native.BazelWorkspaceError(f"selected macOS compiler input is missing: {path}")
     deployment = native.read_json(native.PROJECT_ROOT / "script/ao/macos-toolchain.json")["deploymentTarget"]
@@ -166,12 +170,11 @@ def _macos_sdk() -> dict[str, Any]:
         "sdk_version": sdk_version,
         "sdk_build_version": sdk_build_version,
         "liblto": str(liblto),
-        "shim": str(shim),
         "linker": str(linker),
         "developer_dir": str(developer_dir),
         "deployment": deployment,
         "tools": {role: str(tool) for role, tool in tools.items()},
-    }
+    }, shim_header
 
 
 def _macos_tool(name: str, xcrun: Path) -> Path:

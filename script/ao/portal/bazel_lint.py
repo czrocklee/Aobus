@@ -434,7 +434,7 @@ def _run_process(argv: Sequence[str], stdout: Path, stderr: Path) -> int:
         result = subprocess.run(
             list(argv),
             cwd=PROJECT_ROOT,
-            env=native.child_environment(isolate_rc=True),
+            env=bazel_workspace.client_environment(isolate_rc=True),
             stdout=out,
             stderr=err,
             check=False,

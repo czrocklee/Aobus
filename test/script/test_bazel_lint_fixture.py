@@ -379,14 +379,22 @@ class BazelFixtureTransportTest(unittest.TestCase):
                 "-isysroot",
                 "/native SDK",
                 "-mmacosx-version-min=26.0",
-                "-isystem/shim",
             ],
         }
+        self.args.expected_include = self.root / "declared shim"
+        with self.assertRaisesRegex(ValueError, "declared libc\\+\\+ expected header"):
+            bazel_lint_fixture._fixture_tools(self.args, macos, str(self.tidy))
+        header = self.args.expected_include / "__expected/expected.h"
+        header.parent.mkdir(parents=True)
+        header.touch()
         tools = bazel_lint_fixture._fixture_tools(self.args, macos, str(self.tidy))
-        self.assertEqual(tools.flags, (*macos["fixture_arguments"], *macos["analysis_arguments"]))
+        self.assertEqual(
+            tools.flags,
+            (*macos["fixture_arguments"], "-isystem", str(self.args.expected_include), *macos["analysis_arguments"]),
+        )
         self.assertNotIn("-isystem/native/include", tools.flags)
         macos.pop("fixture_arguments")
-        with self.assertRaisesRegex(ValueError, "SDK/deployment/shim"):
+        with self.assertRaisesRegex(ValueError, "SDK/deployment"):
             bazel_lint_fixture._fixture_tools(self.args, macos, str(self.tidy))
 
     def test_windows_profile_reuses_verified_sdk_manifest_and_native_include_without_cmake(self):

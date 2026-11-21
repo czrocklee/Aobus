@@ -158,7 +158,9 @@ The Bazel environment repository materializes its own shim copy under its
 repository-local `_state`; ordinary portal tooling uses the managed-state copy.
 Both use the same fail-closed transform over the selected LLVM header.
 
-`AOBUS_STATE_ROOT` replaces that base. `VCPKG_ROOT` is a diagnostic override for
+`AOBUS_STATE_ROOT` replaces that base, but does not relocate the [Bazel action
+cache](bazel.md#shared-local-action-cache) shared with bare builds.
+`VCPKG_ROOT` is a diagnostic override for
 a complete pre-bootstrapped checkout; registry and manifest locks still apply.
 `./ao setup deps` installs the selected tree's vcpkg manifest.
 

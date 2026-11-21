@@ -337,7 +337,7 @@ def verify(
             result = subprocess.run(
                 stage["argv"],
                 cwd=PROJECT_ROOT,
-                env=native.child_environment(isolate_rc=isolate_rc),
+                env=workspace.client_environment(isolate_rc=isolate_rc),
                 stdout=out,
                 stderr=err,
             )

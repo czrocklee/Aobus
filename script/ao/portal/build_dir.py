@@ -9,7 +9,7 @@ import sys
 import time
 import uuid
 from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 
 from ao.core.paths import PROJECT_ROOT
@@ -21,8 +21,6 @@ def linux_build_root(*, environ: Mapping[str, str] | None = None, project_root: 
     base = Path(environment.get("AOBUS_BUILD_ROOT") or "/tmp/build")
     return base / project_root.name
 
-
-BUILD_ROOT = linux_build_root()
 
 _CHECKOUT_ID_FILE = "aobus-checkout-id"
 _CHECKOUT_KEY_LENGTH = 12
@@ -175,46 +173,32 @@ def windows_build_root(
     return base / windows_checkout_key(project_root, environ=environment, create_id=create_id)
 
 
-# Compatibility snapshot for callers that only need profile metadata. Native
-# path selection goes through ``platform_profile()`` and remains dynamic.
-WINDOWS_BUILD_ROOT = windows_build_root(create_id=False)
-
-
 @dataclass(frozen=True)
 class PlatformProfile:
     name: str
-    build_root: Path
+
+    @property
+    def build_root(self) -> Path:
+        """Resolve storage only when requested; identifying a host needs no home or checkout ID."""
+        return windows_build_root() if self.name == "windows" else linux_build_root()
 
 
-# Profiles select host-local storage only. Product and test membership belongs
-# to the Bazel graph rather than a parallel Python suite inventory.
-LINUX_PROFILE = PlatformProfile(
-    name="linux",
-    build_root=BUILD_ROOT,
-)
-
-MACOS_PROFILE = PlatformProfile(
-    name="macos",
-    build_root=BUILD_ROOT,
-)
-
-WINDOWS_PROFILE = PlatformProfile(
-    name="windows",
-    build_root=WINDOWS_BUILD_ROOT,
-)
+LINUX_PROFILE = PlatformProfile("linux")
+MACOS_PROFILE = PlatformProfile("macos")
+WINDOWS_PROFILE = PlatformProfile("windows")
 
 
 def platform_profile(os_name: str | None = None) -> PlatformProfile:
     """Return the native development profile for an ``os.name`` value."""
     if (os.name if os_name is None else os_name) == "nt":
-        return replace(WINDOWS_PROFILE, build_root=windows_build_root())
+        return WINDOWS_PROFILE
     # os.name is "posix" for both Linux and macOS, so the two are separated by
     # sys.platform. An explicit os_name still selects the Linux profile, which
     # keeps cross-profile queries working from any host.
     if os_name is None and sys.platform == "darwin":
-        return replace(MACOS_PROFILE, build_root=linux_build_root())
+        return MACOS_PROFILE
     if os_name is None and sys.platform != "linux":
         raise RuntimeError(
             f"Aobus native development supports Linux, macOS, and Windows; there is no profile for {sys.platform!r}."
         )
-    return replace(LINUX_PROFILE, build_root=linux_build_root())
+    return LINUX_PROFILE

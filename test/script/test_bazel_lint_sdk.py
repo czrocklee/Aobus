@@ -248,7 +248,7 @@ class PosixSdkProjectionTest(unittest.TestCase):
         self.macos_sdk = self.root / "MacOSX.sdk"
         _write(self.macos_sdk / "SDKSettings.json", "{}")
         self.shim = self.root / "expected-shim"
-        _write(self.shim / "expected")
+        _write(self.shim / "__expected/expected.h")
         self.tidy = _write(self.clang_out / "bin/clang-tidy")
         self.llvm_header = _write(
             self.llvm_dev / "include/llvm/Config/llvm-config.h", '#define LLVM_VERSION_STRING "31.2.3"\n'
@@ -314,6 +314,19 @@ class PosixSdkProjectionTest(unittest.TestCase):
             return sdk.discover_sdk(
                 host, self.environment, self.root / "unused-windows.json", self.root / "unused-macos.json"
             )
+
+    def test_macos_lint_arguments_do_not_publish_the_shim_staging_path(self):
+        self.environment.update(AOBUS_LLVM_ROOT=str(self.llvm_dev), AOBUS_LIBCXX_EXPECTED_SHIM=str(self.shim))
+        _write(
+            self.root / "unused-macos.json",
+            json.dumps({"homebrew": {"llvmMajorVersion": "31"}, "deploymentTarget": "15.0"}),
+        )
+        projection = self.discover("macos")
+        self.assertFalse(
+            any(str(self.shim) in arg for arg in projection.system_arguments + projection.fixture_arguments)
+        )
+        self.assertIn(str(self.macos_sdk), projection.fixture_arguments)
+        self.assertIn("-mmacosx-version-min=15.0", projection.fixture_arguments)
 
     def test_the_cli_payload_carries_flat_admitted_facts_only(self):
         projection = self.discover()

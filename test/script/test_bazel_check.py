@@ -87,7 +87,15 @@ class CheckCommandTest(unittest.TestCase):
 
     def test_personal_rc_and_ambient_repo_selectors_cannot_filter_managed_checks(self):
         with (
-            mock.patch.dict(os.environ, {"BAZELRC": "personal", "AOBUS_BAZEL_CONFIGURATION": "unrelated"}),
+            tempfile.TemporaryDirectory() as temp,
+            mock.patch.dict(
+                os.environ,
+                {
+                    "BAZELRC": "personal",
+                    "AOBUS_BAZEL_CONFIGURATION": "unrelated",
+                    "AOBUS_STATE_ROOT": str(Path(temp) / "state"),
+                },
+            ),
             mock.patch.object(bazel_workspace, "_linux_server_javabase", return_value=Path("jdk")),
         ):
             argv = bazel_workspace.invocation(Path("bazel"), Path("selected"), isolate_rc=True)

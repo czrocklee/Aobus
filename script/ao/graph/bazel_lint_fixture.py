@@ -28,14 +28,21 @@ def _fixture_tools(args: argparse.Namespace, sdk: dict[str, Any], host: str) -> 
         )
         return lint_test._windows_fixture_tools(args.work, toolchain)
     # These are driver flags, not product TU/PCH options or clang-tidy extras.
-    # macOS's prepared fixture profile owns SDK/deployment/libc++ shim selection.
+    # macOS's prepared fixture profile owns SDK and deployment selection.
     fixture_arguments = sdk.get("fixture_arguments", sdk["system_arguments"])
     if sdk["platform"] == "macos" and "fixture_arguments" not in sdk:
-        raise ValueError("macOS fixture execution requires the prepared SDK/deployment/shim arguments")
+        raise ValueError("macOS fixture execution requires the prepared SDK/deployment arguments")
     if not isinstance(fixture_arguments, list) or any(
         not isinstance(arg, str) or not arg or "\x00" in arg or arg.startswith("@") for arg in fixture_arguments
     ):
         raise ValueError("SDK fixture_arguments must be an array of nonempty driver arguments")
+    if sdk["platform"] == "macos":
+        # Some fixture subprocesses change directory. Anchor the declared exec path
+        # before launching them, without resolving the symlink into repository state.
+        shim = args.expected_include
+        if shim is None or not (shim / "__expected/expected.h").is_file():
+            raise ValueError("macOS lint fixtures require the declared libc++ expected header")
+        fixture_arguments = [*fixture_arguments, "-isystem", str(shim.absolute())]
     return lint_test.FixtureTools(
         tidy=host,
         flags=tuple([*fixture_arguments, *sdk["analysis_arguments"]]),
@@ -67,6 +74,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("policy", "sdk", "verification", "tidy", "work", "report", "log"):
         parser.add_argument(f"--{name}", type=Path, required=True)
+    parser.add_argument("--expected-include", type=Path)
     parser.add_argument("--plugin", type=Path)
     parser.add_argument("--jobs", type=int, default=2)
     args = parser.parse_args(argv)
