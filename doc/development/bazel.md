@@ -8,11 +8,9 @@ Bazel owns the complete native product build: Core, CLI, TUI, Linux GTK,
 incremental macOS AppKit and the bounded native Windows WinUI product. The
 ordinary workflow uses pinned native `bazel build`, `bazel test`, and
 `bazel run` from the checkout root; see [native setup](#direct-bazel-without-the-portal).
-`./ao check` is the complete local and CI validation entry: it prepares the
-ready native environment and runs one `bazel test //...` over the selected tree,
-so the graph itself owns products, tests, repository checks and the whole-graph
-lint test. Standalone `./ao check lint`, `./ao check format`, and
-`./ao check docs` remain task-specific checks; documentation semantics are global.
+Run `./ao check` for the full local [completion gate](#completion-gate). See
+[validation and review](test/validation-and-review.md) to choose checks and
+understand [CI routing](test/validation-and-review.md#continuous-integration).
 The public portal has four commands: `setup` explicitly prepares components,
 `format` rewrites source, `check` validates, and `measure` collects coverage,
 performance, or concept metrics. There are no
@@ -32,8 +30,7 @@ test, with the same STRICT/RELAXED policy. Explicit scoped sanitizer and
 coverage instrumentation routes exist beside the ordinary fastbuild/Release
 modes and explicit Debug instrumentation; [sanitizer and coverage
 instrumentation](#sanitizer-and-coverage-instrumentation) owns their commands,
-profile design and boundaries. Daily CI runs the graph's Linux-only
-instrumentation tests, not instrumentation runtime acceptance.
+profile design and boundaries.
 
 ## Setup and commands
 
@@ -98,8 +95,7 @@ explicitly provisions vcpkg/NuGet/LLVM, and `./ao check contracts` runs
 [compile-contract analysis](#compile-contract-verification). `./ao check`
 accepts `--config fastbuild|debug|release` and
 optional `--asan`/`--tsan`, whose normal completion defaults to fastbuild.
-`--ci` adds the repository CI configuration, `--fresh` disables test-result
-caching, and the graph always checks the complete source snapshot.
+See [completion](#completion-gate) for CI selections and evidence.
 Common project-command options include `--path`, `--vcpkg-prefix`, `--jobs`,
 `--remote-cache`, and the Linux target-compiler selector `--compiler=gcc|clang`
 (no `--clang` alias); availability depends on the command.
@@ -111,15 +107,10 @@ Use native `query`/`cquery`/`aquery`/`fetch` for graph inspection.
 
 Catch2 receives native Bazel `--test_filter` as a test spec through
 `TESTBRIDGE_TEST_ONLY`; its support reads that variable because the native
-test setup exports `BAZEL_TEST=1`. A selected test binary with no matching
-case fails, so filter one owning executable rather than an aggregate.
+test setup exports `BAZEL_TEST=1`. Filter the executable that owns the case,
+not an aggregate.
 See [test suites](test/test-suite.md) for native filtering, repetition, and
-caller-owned runtime prerequisites. Managed validation output goes to the
-selected tree's `build.log`; each `ao check` attempt keeps its own
-`tests.bep.json`, `test.log` and Bazel profile under
-`<tree>/checks/<config>/check-*`. The test stream lives on the caller's stderr;
-managed sanitizer, coverage and compile-contract attempts keep their own phase
-files and receipts.
+caller-owned runtime prerequisites.
 
 ### Python package architecture
 
@@ -165,7 +156,7 @@ into `ao check lint` command code.
 
 Public command parsers adapt to shared Portal execution services rather than
 calling other command modules: [completion](../../script/ao/portal/completion.py)
-owns full-graph completion, [source_format](../../script/ao/portal/source_format.py)
+owns managed test selections and evidence admission, [source_format](../../script/ao/portal/source_format.py)
 owns formatting, [source_lint](../../script/ao/portal/source_lint.py) owns scoped
 diagnostics, audits, and workflow lint, and
 [source_analyzer](../../script/ao/portal/source_analyzer.py) owns path-sensitive analysis.
@@ -250,6 +241,12 @@ including its host tools and both Debug and Release artifacts. An invalid
 explicit prefix fails; there is no fallback. Export it or pass it through a
 standard local Bazel `--repo_env` configuration; the repository tracks no
 absolute-path configuration.
+
+On macOS, bare `bazel test //test/script:format_docs` and `//test/script:format`
+need the state root where `./ao setup prettier` installed the formatter. For
+the default location, run `export AOBUS_STATE_ROOT="$HOME/Library/Caches/Aobus"`
+in the invoking shell; use your configured location otherwise. `--repo_env`
+alone does not reach tests. Managed `./ao check` sets the state root for you.
 
 On Windows, bare commands resolve C++ through rules_cc's official default MSVC
 auto-configuration ([Windows compiler
@@ -484,11 +481,9 @@ subsystem convenience suites. Aggregate membership is non-configurable;
 platform compatibility belongs to the member executables.
 [test/BUILD.bazel](../../test/BUILD.bazel) declares test membership by module.
 Ordinary tests use `bazel test //:tests`; products are selected by their
-native labels. [Compile-contract verification](#compile-contract-verification)
-analyzes the broader completion roots.
-`ao check` runs the wildcard `//...` graph, not only the ordinary aggregate, and
-the declared completion roots remain the selections the sanitizer, concept and
-lint routes read. Raw sanitizer labels remain explicitly selected,
+native labels. The broader [completion roots](#completion-gate) supply selections
+for compile-contract analysis, sanitizers, concept measurement and lint.
+Raw sanitizer labels remain explicitly selected,
 caller-owned runs ([sanitizer scope](#sanitizer-profiles)), excluding the
 uninstrumented lint host. Runtime keeps its
 fatal self-reentering main; catalog and shared desktop contracts have their
@@ -1077,9 +1072,11 @@ Release instead uses its governed platform flags.
 - The Unix `profile` flavor is a sampling configuration: `-O2` with debug
   information and frame pointers, no IPO. It is not PGO, and no PGO workflow
   exists.
-- Execution tools resolve their own ordinary unprofiled optimized interfaces
-  independently of a Release or profile target; imported SDK interfaces
-  follow the consumer's actual compilation mode.
+- Imported SDK interfaces follow the consumer's compilation mode. Release
+  requires `@aobus_environment//:release_platform` as the target; a derived
+  platform is not admitted. The `release_profile` constraint also matches a
+  native execution platform for tests, but does not supply Release target
+  flags. The ordinary unprofiled platform remains first for build tools.
 
 The compile-contract verification checks effective
 compile, link and archive arguments — including frame-pointer and no-LTO
@@ -1344,13 +1341,8 @@ and left to the owning host's policy test. Compatible orphans fail.
 Bazel exposes explicit, scoped sanitizer and coverage instrumentation beside
 the ordinary fastbuild/Debug/Release modes. `./ao check lint` and
 `./ao setup deps` accept these ordinary configurations, not sanitizer profiles.
-An instrumentation run never substitutes for the ordinary completion a change
-still requires: it is not a default or
-the whole-project ownership gate. The graph declares Linux-only
-[native instrumentation tests](#native-instrumentation-tests) for the sanitizer
-canaries and coverage analysis, and daily CI runs them inside the same
-`ao check --ci`; neither is instrumentation runtime acceptance. Task-level validation
-guidance lives in [concurrency and sanitizer
+Instrumentation does not substitute for ordinary completion. Task-level
+validation guidance lives in [concurrency and sanitizer
 validation](test/concurrency-and-sanitizer.md) and the [coverage
 workflow](test/coverage-workflow.md). Sanitizer and coverage profiles use the
 same `--path`/`BUILD_DIR` selection; without an explicit selection the
@@ -1387,11 +1379,12 @@ Bare commands select a profile through the repository rc, not a compilation
 mode: `-c asan` is invalid because Bazel accepts only `dbg|opt|fastbuild`.
 
 ```bash
-bazel build -c dbg --config=asan //:asan_tests
+bazel build -c dbg --config=asan //:asan_tests //test:sanitizer_profile
 bazel test -c dbg --config=tsan //:tsan_tests
 ```
 
-A bare sanitizer run gets none of the managed runtime admission below — no
+The bare suites do not include the compiler probe. A bare run gets none of
+the managed runtime admission below — no
 frozen rc, forced report status or suppression merge; context-bearing tests
 still start their own fixtures. The caller owns the remaining runtime, and a
 bare success is not a managed gate result.
@@ -1473,41 +1466,11 @@ interface root as a compiler include root under Linux TSan; the managed test
 runs the same phase before building. It performs no compilation or linking and
 does not examine sanitizer flags.
 
-Building the [sanitizer profile canary](../../test/core/SanitizerProfileTest.cpp)
-checks compiler sanitizer selection; runtime behavior requires executing native
-tests. The canary is part of
-`//test:utility_test`, which the ordinary and ASan test selections compile on
-every host and the TSan selection on Linux and macOS. [Test BUILD](../../test/BUILD.bazel) passes the
-selected profile as local defines — AddressSanitizer for `//bazel:asan`,
-UndefinedBehaviorSanitizer for its Linux and macOS variants, ThreadSanitizer
-for `//bazel:tsan` — and the canary's `STATIC_REQUIRE`s compare them with the
-compiler's own facts: the `__has_feature(address_sanitizer)`,
-`undefined_behavior_sanitizer` and `thread_sanitizer` spellings GCC and Clang
-report, and MSVC's
-`__SANITIZE_ADDRESS__`. A profile whose compiler did not instrument that
-translation unit — for example because a rule-based toolchain silently ignores
-an unknown feature name — fails to build, as does a normal profile that is
-unexpectedly instrumented; linking the instrumented object also requires the
-sanitizer runtime.
-
-The canary proves instrumentation for one first-party target-configuration
-translation unit per profile, not every action. The Linux-only
-[native instrumentation tests](#native-instrumentation-tests) inspect the
-configured compile and link actions of that utility test target; they do not
-execute it. The sanitizer-specific checks do not independently verify frame
-pointers or non-recovering UBSan (`-fno-sanitize-recover`) on instrumented
-compiles, the Linux TSan `-isystem` interface root on every target C++ compile,
-MSVC `/Z7`, `/INCREMENTAL:NO` and `_DISABLE_STL_ANNOTATION`, or the absence
-of sanitizer flags on execution-tool and archive command lines. The Debug
-compile-contract oracle requires no optimization, debug information and no
-`NDEBUG` on first-party target compiles of the folded test and product roots,
-and optimized execution-tool compiles. On Windows it also requires `/MDd` for
-Debug target compiles and `/MD` for optimized execution-tool compiles. The
-managed runtime still forces UBSan
-`halt_on_error=1`. The fastbuild compile-contract oracle likewise requires no
-optimization, no full compile-time debug flags, no `NDEBUG` and enabled GSL
-checking on first-party target compiles. Non-recovering UBSan code generation has no compiler fact
-the canary could observe without executing undefined behavior.
+For a compile-only check, build `//test:sanitizer_profile` with the desired
+`--config`. Its [static assertions](../../test/helper/SanitizerProfile.cpp)
+compare the selected profile with the compiler's instrumentation for one
+translation unit. The managed sanitizer build includes this probe; its test
+phase runs the selected test suites, not the probe.
 
 Sanitizer runtime compatibility and symbolization require [native
 validation](#completion); compile and analysis checks alone are not acceptance.
@@ -1537,6 +1500,8 @@ consumer-specific native cold-build route, not support for arbitrary Java source
 builds or a repair of the generic Java SDK. No Java header-extraction flag or
 compiler toolchain is overridden.
 
+<a id="ci-instrumentation"></a>
+
 ### Native instrumentation tests
 
 The root [instrumentation macro](../../bazel/instrumentation_tests.bzl) declares
@@ -1545,13 +1510,12 @@ the Linux-only `//:instrumentation_tests` suite with the standard bazel_skylib
 invocation, query/aquery receipt or coverage execution. The suite contains five
 verdicts:
 
-- The two build tests compile and link `//test:utility_test` under
+- The two build tests compile and link `//test:sanitizer_profile` under
   each profile without executing it, so the profile still produces a linkable
   binary.
 - The two compile tests inspect the configured `CppCompile` and `CppLink`
   command lines: the required `-fsanitize` flags, Debug mode with enabled debug
-  information and no `NDEBUG`, and the profile's expectation defines, while
-  rejecting cross-profile, coverage and IPO flags.
+  information and no `NDEBUG`, and no cross-profile, coverage or IPO flags.
 - The coverage test inspects the configured coverage graph over
   `//:coverage_default_tests`: instrumented sources, `.gcno` metadata, the
   standard source-mapping and instrumentation-manifest inputs of each
@@ -1561,27 +1525,13 @@ verdicts:
   configurations. It requires the declared rules_java runtime and stock merger
   payload; `shell.nix` exports `JAVA_HOME` from the same Bazel JDK.
 
-A passing analysis test proves the configured action and provider facts; the
-separate build tests prove the canary compiles and links. None executes a
-sanitizer suite or produces a coverage report, and the managed routes above
-retain those runtime boundaries.
+The daily sanitizer links cover only the probe, not the libraries linked by
+`//test:utility_test` or other test binaries. To catch sanitizer-specific link
+or runtime failures in those suites, run `./ao check --asan --fresh` or
+`./ao check --tsan --fresh` on a [supported host](#sanitizer-profiles).
+The coverage analysis does not produce a coverage report.
 
-### CI instrumentation
-
-Daily native jobs run one `ao check --ci`, whose graph includes the Linux-only
-[native instrumentation tests](#native-instrumentation-tests). The build tests
-compile and link the utility canary under each sanitizer profile, the compile
-tests check the configured flags, and the coverage test checks the configured
-coverage graph. None executes a sanitizer suite or produces a coverage report.
-Use `ao check contracts` or `ao check instrumentation` for focused analysis;
-use `ao measure coverage` to collect actual coverage.
-
-The instrumentation tests require the prepared native toolchain: they do not
-belong to the lightweight documentation prerequisite job. A failure is fatal to
-that native job and prevents disk-cache publication. The checks do not replace
-product builds, whole-graph lint or explicit Release validation. They provide
-Linux analysis and bounded sanitizer canary builds, not an all-platform
-sanitizer/coverage build or runtime matrix.
+### Focused instrumentation analysis
 
 `check instrumentation` is Linux Debug analysis with `--suite` selection and the
 normal compiler, tree, jobs, and cache controls. It reuses the action oracle:
@@ -1997,45 +1947,36 @@ Ruff/mypy, preserving Bazel interpreter and cache identity. See
 
 ## Completion gate
 
-`./ao check` is complete local and CI validation. It prepares the ready native
-environment and runs one `bazel test //...` in the selected tree, so the
-graph a developer invokes directly is also the gate: native products and tests,
-the repository checks (documentation, formatting, Buildifier lint, lexical source
-guardrails, test and class naming audits, Linux-only workflow lint, Ruff, mypy and one target per
-tooling module), the native process tests, the root `//:native_policy`
-native-policy test on every host, the Linux-only `//:native_driver_policy`
-wrapper diagnostic and [instrumentation analysis
-tests](#native-instrumentation-tests), and the declared whole-graph lint test.
-Standalone `ao check docs`, `ao check format`, and `ao check lint` remain
-task-specific entries. `--config release` selects Release; `--asan`/`--tsan` add the [instrumented scope](#sanitizer-profiles) after normal completion. Common selectors include `--path`, `--jobs`,
-`--vcpkg-prefix`, `--remote-cache`, `--clean`, `--ci` and `--fresh`
-([test-result cache admission](#test-result-cache-admission)). There is no
-`--commit` selector: the graph always checks
-the complete source snapshot, so it never narrows native tests, repository
-checks or the C++ lint test. `--ci` adds `--config=ci`, which keeps going and
-enables the Windows desktop tests; it is valid only with fastbuild. The gate
-accepts no targets, forwarded Bazel arguments, or test filters: there is no
-partial native completion selection. Completion loads only the checked-in
-repository rc and the tree's generated launch rc, ignoring system and personal
-Bazel rc files. Isolated Bazel clients also remove the `BAZELRC` environment
-entry, including Windows key-case variants; the no-system/home/workspace
-startup flags alone would not disable that separate rc channel. A personal
-filter cannot silently narrow completion. Managed sanitizer admission, including
-its compile-contract phase, and coverage use the same isolation. Standalone
-`check contracts` must apply it too. Ordinary build/test invocations retain
-their personal-rc behavior.
+Use `./ao check` (`ao.bat check` on Windows) for full local validation. To
+reproduce a [daily CI lane](test/validation-and-review.md#continuous-integration)
+locally, select its command explicitly. Each command runs one Bazel test graph
+and verifies the required suite expansions in the Build Event Protocol (BEP):
 
-**Standalone analysis limitation:** The standalone `check contracts` launcher
-neither excludes personal rc files nor removes `BAZELRC`, so its verdict can
-reflect personal settings. The isolated policy checks inside `./ao check` and
-the managed sanitizer checks are completion results, not a standalone report,
-and completion rejects the sampling profile.
+| Command                 | Bazel test selection                               | Required BEP suite expansions                                 |
+| ----------------------- | -------------------------------------------------- | ------------------------------------------------------------- |
+| `./ao check`            | `//...`                                            | `//:check_tests` and `//test/script:repository_checks`        |
+| `./ao check --ci`       | `//...` minus `//test/script:ci_repository_checks` | `//:check_tests` and `//test/script:native_repository_checks` |
+| `./ao check repository` | `//test/script:ci_repository_checks` only          | `//test/script:ci_repository_checks`                          |
 
-```bash
-./ao check
-./ao check --ci --path /tmp/build/aobus-ci
-./ao check --config release --path /tmp/build/aobus-bazel-release
-```
+The native selections build the products and run the applicable tests, the
+[native-policy checks](#in-graph-native-policy) and whole-graph C++ lint.
+Both also require `//:instrumentation_tests` on Linux. `--ci` requires fastbuild
+and adds `--config=ci` to keep going after failures and enable Windows desktop
+tests. `check repository` runs on Linux in the pinned shell, keeps going after
+failures and accepts only `--path` (honoring `BUILD_DIR`) and `--jobs`.
+The [tooling BUILD](../../test/script/BUILD.bazel) owns suite membership;
+`//test/script:format` checks both the documentation inventory and the
+remaining source files.
+
+Use ordinary `check --config release` for the full Release graph. `--asan` and
+`--tsan` add the [instrumented scope](#sanitizer-profiles) after normal completion.
+No completion command takes a diff, targets, forwarded Bazel arguments or test
+filters. Checks lock the selected tree and use `--lockfile_mode=error` to avoid
+rewriting the module lock. They load only the checked-in repository rc and the
+tree's launch rc, excluding system and personal rc files and removing `BAZELRC`
+(including Windows case variants) so local options cannot silently filter tests.
+Standalone `check contracts`, managed sanitizer admission and coverage use the
+same isolation. Ordinary build/test invocations retain their personal rc behavior.
 
 The [root BUILD](../../BUILD.bazel) declares the completion roots other
 tools select. `//:check_tests` groups the portable default aggregate with the
@@ -2068,19 +2009,20 @@ also independently requires `//test/winui/projection:winui_projection_test` and
 `//bazel/windows_header_share:mode_interfaces_test`. The latter analyzes the
 public RapidYAML import in all three modes and verifies that only Debug depends
 on the Release header helper. These requirements do not apply on other hosts.
-`--config=ci` additionally enables
-`//test:winui_uia_test`, the real automation probe with the Windows App Runtime and
-interactive-console admission. The other
-GUI probes and performance harnesses remain build-only in wildcard completion.
-Manual interactive scenarios stay outside the gate. The UIA exception does not
-establish physical input, physical playback, or hardware admission.
+`--config=ci` additionally enables the [WinUI automation probe](windows.md#ui-automation-naming-gate),
+which requires the Windows App Runtime and an authenticated interactive console.
+Other GUI probes and performance harnesses remain build-only in wildcard
+completion; the gate does not certify manual scenarios, performance, coverage
+or distribution.
 
 Linux private fixtures are owned per test, not per gate. There is no global
 `--run_under` rc entry: only context-bearing `cc_test` targets are wrapped by
 the thin [`native_context_test`](../../bazel/testing.bzl) rule. Its inner
 `cc_test` is tagged `manual` and owns compilation, coverage instrumentation
-and aspect facts. The wrapper supplies the public test label, owns Bazel's
-scheduling, and re-exports `InstrumentedFilesInfo` unchanged. It merges the wrapped
+and aspect facts. The GTK and backend tests use `local = True` for both the
+public and wrapped TestRunners, and `external` forces fresh test execution.
+Their compile, link and lint actions remain cacheable. The wrapper supplies
+the public test label, re-exports `InstrumentedFilesInfo`, merges the wrapped
 test's runfiles and forwards its run environment with the wrapper's context
 and executable settings. On Windows the Python launcher opens the `.zip` (or unzipped
 bootstrap) beside the wrapper executable. That file is a declared test input,
@@ -2100,35 +2042,28 @@ place and fails. Windows native process tests resolve their own runfiles, and
 the UIA probe's smoke entrypoint performs the Windows App Runtime and
 interactive-session admission itself.
 
-The gate uses `--lockfile_mode=error` instead of rewriting the shared
-checkout's module lock, and it loads the tracked repository rc and generated
-launch rc. On Linux the isolated launcher selects the pinned Nix JDK through
-`AOBUS_BAZEL_SERVER_JAVABASE`. The extra per-attempt rc snapshots belong to
-managed sanitizer and coverage runs, not the ordinary completion attempt.
-Fixtures remain owned by individual tests.
+On Linux the isolated launcher selects the pinned Nix JDK through
+`AOBUS_BAZEL_SERVER_JAVABASE`. Managed sanitizer and coverage runs keep their
+own per-attempt rc snapshots.
 
-Each attempt holds the tree lock and writes its evidence under
-`<tree>/checks/<config>/check-*/`: `tests.bep.json`, `test.log` and
-`profile.json.gz`, with the test stream also copied to `build.log`. A failed
-attempt keeps that terminal evidence; an interrupted controller does not
-establish that native writers have stopped. The native completion attempt does
-not certify manual GUI scenarios, performance runs, coverage, or distribution. Desktop-enabled Windows CI requires the UIA test specifically, not the other GUI probes.
-Optional sanitizers have their own receipts. After Bazel succeeds, `check`
-uses the same invocation's BEP suite expansions to require a passing summary
-for every applicable member of `//:check_tests`, `//test/script:repository_checks`
-and, on Linux, `//:instrumentation_tests`. In particular, dropping the manual
-backend or enabled Linux GTK test from discovery does not turn the build green.
-A required label with no passing summary still fails: a same-label non-aspect
-`targetCompleted` `SKIPPED` abort is reported with its configuration, and every
-other absence stays missing. Linux system-media is required when enabled; Windows UIA
-is required in CI.
-AppKit GUI smoke remains build-only. Cached passes count unless `--fresh` is
-selected. No second `cquery` or test invocation is needed.
+Each attempt writes `tests.bep.json`, `profile.json.gz` and `test.log` under
+`<tree>/checks/<config>/check-*` or, for `check repository`,
+`<tree>/checks/fastbuild/repository-*`. The test stream goes to stderr and
+is copied to `build.log`. Failed attempts retain their evidence; interruption
+alone does not establish that native writers have stopped.
+
+After Bazel exits successfully, the launcher requires complete BEP evidence
+from that invocation. Every applicable suite member and independently required
+check must have one passing configured test summary. Removing the backend or an enabled GTK or system-media
+test from its suite cannot silently drop it; WinUI automation is required on
+Windows under `--ci`. Missing or skipped required checks fail, and a Bazel
+`SKIPPED` abort reports the skipped configuration. No second query or test
+invocation is needed.
 
 ### Test-result cache admission
 
-A passing Bazel test summary counts toward completion whether the test ran on
-this host or its result came from a [trusted cache](#native-hosts-and-caching).
+A passing Bazel test summary counts toward local or CI completion whether the
+test ran on this host or its result came from a [trusted cache](#native-hosts-and-caching).
 Another checkout can reuse the result, not just the executable, when Bazel's
 declared inputs, options and relevant environment match. The repository rc does
 not forward the caller's `PATH`, `AOBUS_STATE_ROOT`, `LOCALAPPDATA` or `CI` to
@@ -2193,9 +2128,8 @@ platform policy or by an explicitly reported disabled-frontend
 boundary (`gtk_enabled`/`system_media_enabled`), with the reason printed;
 compatible orphans always fail. Deferral follows the configured scope, so each
 native policy test catches orphans applicable to its analyzed host. The
-[configured native CI matrix](#ci-product-gates-and-r2-validation) includes
-all three host families; Linux does not reconcile every host's paths in one
-unconfigured run. The audit combines the declared sources from the supplied
+[configured native CI matrix](test/validation-and-review.md#continuous-integration)
+covers the paths that a single host's policy test cannot reconcile. The audit combines the declared sources from the supplied
 configured graphs, including their `select()` results; diagnostics name the
 source or label, not a per-source configuration matrix. Source ownership is not a line-coverage claim. The
 managed sanitizer route uses the test ownership helper's configured-target
@@ -2217,15 +2151,6 @@ plaintext root [VERSION.txt](../../VERSION.txt) file: the build reads those byte
 directly and never parses CMake syntax.
 The `.txt` suffix avoids shadowing the standard C++
 `<version>` header on case-insensitive filesystems.
-
-### Scope boundaries
-
-Ordinary fastbuild completion implies no sanitizer, GUI-performance, Release,
-cache-portability, or distribution acceptance; optional sanitizer checks and
-explicit Release checks certify only their own selected profiles.
-`ao check` runs formatting, documentation, lexical audits, and naming audits as
-graph tests. On Linux it also runs workflow lint. Standalone `ao check docs`,
-`ao check format`, and `ao check lint` remain available for task-specific checks.
 
 ## Generated files and runtime data
 
@@ -2426,84 +2351,37 @@ not establish that the test result was reused.
 invocations of the default aggregate. Cached results from other tests are not
 fresh binary executions.
 
-The [Linux workflow](../../.github/workflows/ci.yml) runs
-`ao check --ci` (fastbuild) as its complete native-host gate, so the same graph
-covers documentation, Linux tooling, native tests, the native-policy audits and
-the whole-graph lint test. Ordinary CI admits matching passing test results
-from Bazel's cache;
-`--fresh` remains available when new executions are needed for diagnosis.
-Tests tagged `external` retain their native rerun behavior. The independent
-documentation job remains responsible for docs-only routing.
+Only `Linux / native` archives its Bazel disk cache across runs. The portal,
+bare Bazel lint build and cache steps share `$RUNNER_TEMP/aobus-state/cache/bazel`;
+Windows's job-local disk cache is `D:\aobus-bazel-cache`. Tool and dependency
+archives are separate. The OS, architecture, pin contract and commit identify
+candidate archives, with fallback to the same pin contract. Bazel action keys
+still decide reuse. PRs may restore the main archive subject to GitHub's cache
+access rules, but only pushes to `main` can save, after native completion and
+its scoped lint build pass.
 
-Only the Linux job archives its Bazel disk cache across runs. It selects
-`$RUNNER_TEMP/aobus-state/cache/bazel` explicitly for the portal, the bare
-Bazel smoke and the archive restore, trim and save steps; it does not depend
-on `$HOME`. Windows keeps its job-local Bazel cache on `D:\aobus-bazel-cache`,
-separate from its build trees and managed state. Neither Windows nor macOS
-archives that Bazel disk cache; their tool and dependency archives are separate.
-The versioned OS/architecture/pin-contract/commit key and same-contract fallback
-select candidate archives, not ABI compatibility; Bazel action keys decide reuse.
-Only a successful push build on `refs/heads/main` may save, after both the
-fastbuild completion check and the direct Bazel smoke succeed. PRs and manual dispatches never publish
-this archive. The restore step can request a main archive on PRs, subject to
-GitHub's cache access rules. After restore and before the completion check the
-workflow marks the time outside the cache. Exact archive hits need neither
-trimming nor saving. On an eligible non-exact restore, trimming removes only
-files whose mtime is not newer than the marker, retaining the current run's
-used/produced working set rather than accumulating old blobs through the
-fallback archive. This uses the pinned Bazel's cache-access mtime behavior;
-it is not a fixed archive-size quota, and CI does not wait for idle GC. A failed
-restore, marker or trim prevents saving without bypassing the required gates.
-Transport failure is optional, not failure of those gates.
-The archive excludes servers, install bases, output trees, repositories, provider
-installations and Nix state; it adds no remote endpoint or dependency manager.
+A marker outside the cache records when restore finished. Exact hits need no
+trim or save. Before saving, trim deletes only `ac/` and `cas/` files whose
+mtime is not newer than the marker, preserving `gc/lock` and `tmp/`. Bazel
+updates mtime on cache access, so this retains the run's working set rather
+than imposing a size quota or waiting for idle GC. A failed restore, marker or
+trim prevents saving; cache transport is optional and does not waive validation.
+Restore and save select only `ac/` and `cas/`; locks and in-progress writes
+stay on the runner.
 
 ### CI product gates and R2 validation
 
-The [CI workflow](../../.github/workflows/ci.yml) owns product compilation,
-tests and check work through the Bazel completion gate. Its native job
-identities are Linux / check, macOS Intel / check, macOS ARM64 / check and
-Windows / check. Repository rulesets, not the workflow, select which status
-checks block merging. A passing Linux job alone is not evidence that the native
-macOS and Windows gates passed. A build-system migration requires successful
-results from the full affected native matrix before merging, independently of
-which status checks block merges.
-A separate unconditional documentation job runs `ao check docs` and
-`ao check format --docs` with host Python outside Nix/SDK setup, preserving the
-docs-only routing and the failed-prerequisite behavior. Each native job runs
-`ao check --ci` in fastbuild; the graph covers live documentation,
-host-compatible tooling, native tests, the native-policy audits and the
-whole-graph lint test ([lint reports](#lint-reports)). Matching passing test results may be cached,
-and the CI summary reports the BEP test summaries of the attempt. After a
-successful Linux completion check, the workflow runs
-`bazel test //test:utility_test` and uses a [Python reader](../../test/lint/check_scoped_reports.py)
-to request and verify the index and one paired header's CLI-aspect output group.
-The reader requires the header report, not a report for its companion source,
-and rejects a compiler-error result. Both commands may use the disk cache.
-This exercises direct Bazel without the portal launch rc or R2 binding; it is
-not a second whole-graph lint pass or a guarantee of fresh test execution.
+See [CI routing](test/validation-and-review.md#continuous-integration) for job
+selection and required verdicts.
 
-The workflow does not run Release validation. Manual dispatch accepts only the
-`r2` boolean for remote-cache validation. The native jobs run `ao setup bazel`;
-macOS and Windows also use `ao setup deps` (`ao.bat` on Windows). Package
-providers and isolated tooling fixtures may still use CMake internally; CI
-configures or builds no Aobus CMake product graph. These checks do not establish
-sanitizer or coverage runtime, GUI-performance, release or full Release matrix
-acceptance.
+After native completion passes on Linux, a [scoped lint build](../../test/lint/check_scoped_reports.py)
+checks bare Bazel bootstrap and delivery of a usable paired-header report
+without the portal launch rc or R2. It can reuse the disk cache. This daily
+step does not run a bare `TestRunner`; to check that boundary directly, run
+`bazel test --nocache_test_results //:tests` with the [native prerequisites](#direct-bazel-without-the-portal).
 
-The check keeps its graph scope ([Completion gate](#completion-gate)): the
-portable suites and the native process tests run, manual GUI and performance
-harnesses are built rather than run, and Windows additionally runs the two
-unattended native console probes plus, under `--config=ci`, the real WinUI
-automation probe with its Windows App Runtime and interactive-console requirements
-and no login or system bypass. AppKit GUI smoke scenarios remain explicit and
-are not daily acceptance. The Linux job's single check includes the
-[instrumentation tests](#native-instrumentation-tests); that analysis and canary
-build is not sanitizer or coverage runtime execution.
-
-CI retains each attempt's check BEP, test log and profile on every attempt;
-Windows keeps its separate artifact roots.
-Each native job also appends a best-effort summary of the attempt's evidence to
+The daily Bazel jobs upload attempt evidence and per-target test logs even
+when checks fail. Each native job also appends a best-effort summary to
 `GITHUB_STEP_SUMMARY`: the standard BEP verdict and admitted test counts of the
 check attempt, per-invocation Bazel timing and action-cache counters, and
 available R2 stop accounting. Nested phase times overlap and are not additive job time.
@@ -2519,22 +2397,17 @@ tools only after their preparation checks pass; Windows keys the LLVM SDK
 separately and checks its completion marker before saving. For local timing
 and evidence, see [phase capture](build.md#measure-native-validation).
 
-The Bazel disk archive keeps its trusted-main key, fallback, marker, trim and
-save contract ([native hosts and caching](#native-hosts-and-caching)): only
-trusted main pushes publish, after the check succeeds. With
-`AOBUS_BAZEL_R2_CACHE_AUTHORIZED=true`, trusted main pushes write the shared
+With `AOBUS_BAZEL_R2_CACHE_AUTHORIZED=true`, trusted main pushes write the shared
 `bazel-v1/` prefix and same-repository PRs consume it with proxy uploaders
 disabled. Fork PRs receive no R2 binding; secretless runs keep their local cache.
 Only CI supplies this R2 binding; local commands retain their disk-cache
-default. A manual `r2=true` dispatch explicitly trusts the selected checkout: native
-Linux/macOS/Windows jobs use run/attempt-isolated `bazel-ci-validation/` prefixes, separate from
-the automatic main cache's `bazel-v1/` prefix, require a strictly nonempty
-proxy URL and a successful drain, and fail rather than silently passing with
-local cache only. It uses the `R2_SCCACHE_ENDPOINT`,
+default. A manual `r2=true` dispatch trusts the selected checkout and uses
+run/attempt-isolated `bazel-ci-validation/` prefixes. It requires a nonempty
+proxy URL and a successful drain, so local-cache fallback cannot pass. It uses
+the `R2_SCCACHE_ENDPOINT`,
 `R2_SCCACHE_ACCESS_KEY_ID` and `R2_SCCACHE_SECRET_ACCESS_KEY` secrets and the
 `aobus-sccache` bucket; it needs no other bucket or credential.
 
-Manual selection explicitly trusts the chosen workflow and checkout.
 Same-repository PR consumers use the same credentials with proxy uploads
 disabled; they do not receive a backend read-only token. Reused bucket-level
 writer credentials retain their write rights, including in an upload-disabled
@@ -2571,7 +2444,8 @@ distribution, and the call that carries them never echoes shell output.
 process and unregisters the distribution. This depends on the hosted
 `windows-2025-vs2026` image's WSL2; where the import or start fails, an
 automatic run keeps its local Bazel cache and a manual `r2=true` run fails.
-The Windows job publishes no Bazel disk archive.
+
+<a id="scope-boundaries"></a>
 
 ## Completion
 
@@ -2580,13 +2454,8 @@ executable validation is an artifact contract, not a general quality gate;
 ordinary tests do not replace tooling, lint, hygiene, documentation,
 physical-output, or product acceptance. Raw sanitizer profiles are
 caller-owned scoped instrumentation, not managed completion substitutes;
-coverage keeps its separate project-specific route. Select checks through
-[validation and review](test/validation-and-review.md). `./ao check` is complete
-local and CI validation ([Completion gate](#completion-gate)): one wildcard test
-graph that includes live documentation, tooling on supported hosts, native tests
-and the whole-graph lint test.
-Action checks do not transfer the graph's full ownership or replace native
-tests.
+coverage keeps its separate project-specific route. Select completion checks
+by changed behavior in [validation and review](test/validation-and-review.md).
 Tests of the Bazel support layer follow the
 [Bazel support test boundary](test.md#bazel-support-tests): generators, integration
 mechanisms and specific failure contracts, not a second representation of the

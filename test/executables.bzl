@@ -16,8 +16,11 @@ load("//bazel:testing.bzl", "context_environment", "native_context_test")
 load("//bazel:windows_utf8_manifest.bzl", "WINDOWS_UTF8_LINKER_INPUTS", "WINDOWS_UTF8_LINKOPTS")
 
 _INNER_SUFFIX = ".native"
-_SCHEDULING_ATTRIBUTES = ("size", "timeout", "flaky", "local", "shard_count", "exec_properties")
-_SHARED_ATTRIBUTES = ("tags", "target_compatible_with", "testonly", "visibility")
+_SCHEDULING_ATTRIBUTES = ("size", "timeout", "flaky", "shard_count", "exec_properties")
+
+# `local = True` constrains both TestRunners (including explicit .native runs)
+# without propagating the `local` tag to compile, link, and lint actions.
+_SHARED_ATTRIBUTES = ("local", "tags", "target_compatible_with", "testonly", "visibility")
 
 def cc_binary(name, additional_linker_inputs = [], linkopts = [], **kwargs):
     """Declare a cc_binary with the Windows UTF-8 manifest pair applied.

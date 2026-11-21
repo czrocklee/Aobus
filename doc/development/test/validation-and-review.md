@@ -92,17 +92,11 @@ For changes requiring complete native validation, run:
 
 ```bash
 ./ao check
-# CI supplies its own configuration:
-./ao check --ci
 ```
 
-The [completion gate](../bazel.md#completion-gate) checks the whole source snapshot,
-regardless of the diff. It accepts cached passing test results; use `--fresh`
-when the change needs new executions, not to select a different scope. For
-documentation-only changes use the two checks in the table above;
-[CI routing](#continuous-integration) selects the documentation job. If you
-instead run `./ao check`, you still pay the analysis cost of
-[whole-graph lint](../linting.md#bazel-backed-reports) on a cold cache.
+The [completion gate](../bazel.md#completion-gate) checks the whole source
+snapshot. Use `--fresh` when you need new test executions, not a different
+scope. For documentation-only changes, use the two checks in the table above.
 
 `check lint` remains a useful standalone semantic check: source audits and
 Python checks for files in scope, plus native clang-tidy coverage for selected
@@ -131,9 +125,8 @@ bazel test //test:query_test --test_filter='Component - behavior'
 bazel test //test:uimodel_test --test_filter='Component - behavior'
 ```
 
-Use the actual owning executable: a selected binary with no matching case
-fails. On Linux, the wrapper starts only the private fixtures declared by the
-selected test. Before running an explicit GTK or backend test, check the
+Filter the executable that owns the case. On Linux, the wrapper starts only the
+private fixtures declared by the selected test. Before running an explicit GTK or backend test, check the
 [Linux fixture prerequisites](../bazel.md#direct-bazel-without-the-portal);
 do not start the services yourself.
 Focused results do not replace a full gate required by the table.
@@ -183,52 +176,45 @@ for the new inputs.
 
 ### Continuous integration
 
-The existing Linux, macOS Intel/ARM64, and Windows check identities are
-retained. A separate unconditional documentation job resolves the event's
-verified comparison base once, then runs `ao check docs` and
-`ao check format --docs` for
-documentation-only, code-only, and mixed changes before native build work.
-A successful, nonempty Markdown-only change in the recognized root-document,
-`doc/`, `.agents/skills/`, `tool/`, `app/`, or `asset/` paths skips native jobs.
-The documentation gate includes naming vocabulary and referenced lint-check
-contracts, so prose changes cannot bypass their semantic validation.
-The ignored local `doc/plan/` tree remains outside documentation discovery;
-its path classification does not make it a supported tracked-document location.
-The documentation job prepares the Python version from
-`script/ao/toolchain.json`, installs the hash-locked documentation parser from
-`script/ao/docs-requirements.txt` with `--require-hashes`,
-`--only-binary=:all:`, and `--no-deps`, then prepares the hash-pinned Node/Prettier
-closure with `python -m ao setup prettier`. It invokes
-`python -m ao check docs` and `python -m ao check format --docs` with
-`PYTHONPATH=script`; setup and both checks use host Python, outside Nix and
-without preparing a native SDK.
-Unknown paths, script or workflow changes, empty comparisons, and manual
-`workflow_dispatch` runs select the full native matrix.
-Renames are compared as deletion plus addition so moving code into a Markdown
-path cannot bypass native validation.
-If classification or documentation validation fails, the existing native jobs
-are still scheduled and run a failing prerequisite step before native setup or
-compilation, rather than appearing successfully skipped.
-This changes workflow routing without changing repository branch-protection rules.
-The native jobs run `ao check --ci` in fastbuild: the same graph covers live
-documentation, host-compatible tooling, native tests, the native-policy audits
-and the whole-graph lint test. Linux and Windows run the full tooling suite. macOS
-uses the existing jobs and `bazel test //...`, not ordinary `//:tests` and not a
-new job. From the tooling modules it selects `test_bazel_remote_cache`,
-`test_bazel_appkit_deps`, and `test_bazel_environment` only.
-`test_bazel_appkit_deps` reads real host contract
-runfiles and projects a fixture SDK; that is not a native Debug build. macOS does
-not test exact Homebrew Python patch parity or the full tooling suite. Ordinary CI admits matching passing Bazel test
-results from cache; use
-`--fresh` when new executions are required for diagnosis ([CI product
-gates](../bazel.md#ci-product-gates-and-r2-validation)). Daily CI is fastbuild
-only. Linux also checks the bare Bazel entry with one test target and one
-paired-header lint report. Both may use the shared disk cache; this is not a
-second whole-graph lint pass or evidence of fresh execution. This workflow does not validate Release builds. The Linux job's graph includes the
-[instrumentation tests](../bazel.md#native-instrumentation-tests) inside the same
-check. Those tests require the native SDK; they do not expand the documentation
-job or certify sanitizer or coverage runtime execution. CI runs the same Bazel completion route as the
-local commands above.
+In [CI](../../../.github/workflows/ci.yml), `Change scope` verifies the event's
+comparison base and classifies the final change. Documentation-only changes
+must touch at least one path, limited to `AGENTS.md`, `CONTRIBUTING.md`,
+`README.md`, or Markdown under `doc/`, `.agents/skills/`, `tool/`, `app/` or `asset/`.
+`doc/plan/` is ignored and outside documentation discovery. Renames count as
+deletion plus addition so moving code into a Markdown path cannot bypass
+native validation. Empty comparisons, other paths and manual runs take the
+full daily route.
+
+- **Documentation-only:** `Repository / check` runs `ao check docs` and
+  `ao check format --docs` using pinned host Python and the
+  [hash-locked parser and formatter](../dependency-governance.md#repository-tooling),
+  without Nix, Bazel or a native SDK. Native jobs are skipped.
+- **Full daily route:** `Repository / check` runs `./ao check repository` on
+  Linux. `Linux / native`, `macOS Intel / check`, `macOS ARM64 / check` and
+  `Windows / check` run fastbuild `ao check --ci` in parallel with it. See
+  [Bazel selections](../bazel.md#completion-gate) for local reproduction and
+  [CI evidence and caches](../bazel.md#ci-product-gates-and-r2-validation) for diagnosis.
+  A manual **CI** run can request live R2 validation with `r2=true`.
+
+The required `Linux / check` reports a joint verdict, not another build. It
+passes only when classification and `Repository / check` succeed and
+`Linux / native` passes on the full route or is skipped on the documentation-only
+route. Native jobs depend on scope, not on the repository result.
+Repository rulesets choose which checks block merging. For a build-system
+migration, require successful results from the full affected native matrix
+regardless of the ruleset.
+
+### Manual Release validation
+
+Once the [Release workflow](../../../.github/workflows/release.yml) is on the
+default branch, select the branch to check in **Actions → Release validation → Run workflow**.
+Each platform uses the full `./ao check --config release`
+(`ao.bat check --config release` on Windows), not the daily fastbuild partition.
+Windows desktop UI Automation remains a daily CI check. For a slow Windows
+run, compare dependency preparation with **Check Release** in the job
+timings: the workflow does not restore caches from earlier runs. On failure,
+download the job's diagnostics from the workflow run. The workflow does not
+sign or publish products, tag commits, or create a release.
 
 ## Common smells to fix while writing tests
 

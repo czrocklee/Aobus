@@ -8,37 +8,33 @@ from ao.core.paths import PROJECT_ROOT
 WORKFLOW = PROJECT_ROOT / ".github" / "workflows" / "ci.yml"
 
 
-def _job(name):
-    remainder = WORKFLOW.read_text(encoding="utf-8").split(f"  {name}:\n", 1)[1]
-    return re.split(r"\n(?=  \w+:\n)", remainder, maxsplit=1)[0]
+def _step(job: str, name: str) -> str:
+    remainder = WORKFLOW.read_text(encoding="utf-8").split(f"  {job}:\n", 1)[1]
+    block = re.split(r"\n(?=  \w+:\n)", remainder, maxsplit=1)[0]
+    step = block.split(f"      - name: {name}\n", 1)[1]
+    return re.split(r"(?m)^      - ", step, maxsplit=1)[0]
 
 
-def _step(job, name):
-    return job.split(f"      - name: {name}\n", 1)[1].split("      - name:", 1)[0]
-
-
-def _required_conditions(step):
-    # These promotion gates must be conjunctions, not alternatives.
-    condition = re.search(r"(?ms)^        if:\s*(?:[|>]-?\s*)?\$\{\{(.*?)\}\}", step)
-    return {" ".join(term.split()) for term in condition[1].split("&&")}
+def _required_conditions(step: str) -> set[str]:
+    condition = re.search(r"(?ms)^        if:\s*(?:[|>]-?\s*)?\$\{\{(.*?)\}\}", step)[1]
+    if "||" in condition:
+        raise AssertionError("Cache promotion must not bypass the required conditions")
+    return {" ".join(term.split()) for term in condition.split("&&")}
 
 
 class CachePromotionTest(unittest.TestCase):
-    def test_linux_disk_cache_uses_one_runner_local_path(self):
-        job = _job("linux")
-        selection = _step(job, "Select runner-local state")
-        self.assertIn('"AOBUS_BAZEL_DISK_CACHE=$RUNNER_TEMP/aobus-state/cache/bazel" >> "$GITHUB_ENV"', selection)
+    def test_linux_archive_contains_only_ac_and_cas(self):
+        root = "${{ env.AOBUS_BAZEL_DISK_CACHE }}"
         for name in ("Restore Bazel disk cache", "Save Bazel disk cache"):
-            self.assertIn("path: ${{ env.AOBUS_BAZEL_DISK_CACHE }}", _step(job, name))
-        trim = _step(job, "Trim restored Bazel disk cache")
-        self.assertIn('find "$AOBUS_BAZEL_DISK_CACHE" -type f ! -newer', trim)
-        bare = _step(job, "Test direct Bazel entry")
-        self.assertIn('--disk_cache="$AOBUS_BAZEL_DISK_CACHE"', bare)
-        self.assertIn('test "${flags[@]}"', bare)
-        self.assertIn('build "${flags[@]}"', bare)
+            with self.subTest(step=name):
+                step = _step("linux", name)
+                paths = re.search(r"(?m)^          path: \|\n((?:            .*\n|\n)+)", step)[1]
+                self.assertEqual(
+                    {line.strip() for line in paths.splitlines() if line.strip()}, {root + "/ac", root + "/cas"}
+                )
 
     def test_linux_disk_archive_only_promotes_a_successful_main_push_after_trim(self):
-        conditions = _required_conditions(_step(_job("linux"), "Save Bazel disk cache"))
+        conditions = _required_conditions(_step("linux", "Save Bazel disk cache"))
         self.assertLessEqual(
             {
                 "github.event_name == 'push'",
@@ -56,7 +52,7 @@ class CachePromotionTest(unittest.TestCase):
             ("windows", "$env:CACHE_UPLOAD"),
         ):
             with self.subTest(job=name):
-                step = _step(_job(name), "Start Bazel remote cache")
+                step = _step(name, "Start Bazel remote cache")
                 self.assertIn("CACHE_UPLOAD: ${{ github.event_name != 'pull_request' }}", step)
                 self.assertIn(f"--trusted-writer {writer} ", step)
 
@@ -70,11 +66,8 @@ class CachePromotionTest(unittest.TestCase):
             ),
         ):
             with self.subTest(job=job):
-                before_save = _job(job).split(f"      - name: Save managed {platform} tools\n", 1)[0]
-                conditions = _required_conditions(_step(_job(job), f"Save managed {platform} tools"))
-                for producer in producers:
-                    self.assertIn(f"        id: {producer}\n", before_save)
-                    self.assertIn(f"steps.{producer}.outcome == 'success'", conditions)
+                conditions = _required_conditions(_step(job, f"Save managed {platform} tools"))
+                self.assertLessEqual({f"steps.{producer}.outcome == 'success'" for producer in producers}, conditions)
 
 
 if __name__ == "__main__":

@@ -48,6 +48,10 @@ def _admission_impl(_target, ctx):
             fail("The sampling profile is not supported by the selected MSVC Windows toolchain")
         constraint = ctx.attr._sampling_profile
     else:
+        # The test execution platform also satisfies release_profile, but lacks
+        # the target flags (including Windows IPO) that a Release build requires.
+        if ctx.fragments.platform.platform != Label("@aobus_environment//:release_platform"):
+            fail("Release requires @aobus_environment//:release_platform as the target platform")
         constraint = ctx.attr._release_profile
     if not ctx.target_platform_has_constraint(constraint[platform_common.ConstraintValueInfo]):
         fail("A native profile request requires its governed target platform")
@@ -61,7 +65,7 @@ def _admission_impl(_target, ctx):
 
 profile_admission = aspect(
     implementation = _admission_impl,
-    fragments = ["cpp"],
+    fragments = ["cpp", "platform"],
     attrs = {
         "_release_ipo": attr.label(default = Label("//bazel:release_ipo_enabled")),
         "_sampling": attr.label(default = Label("//bazel:sampling_enabled")),
@@ -110,6 +114,15 @@ def build_profile_platforms(host_constraints, vc_tools_version = None, deploymen
         name = "native_execution",
         constraint_values = host_constraints,
         flags = ["--compiler=gcc"] if linux else [],
+    )
+
+    # Bazel's default test toolchain matches every target-platform constraint.
+    # This host can run Release tests without applying Release target flags to
+    # tools built for the execution platform (in particular MSVC /GL and /LTCG).
+    native.platform(
+        name = "release_test_execution",
+        parents = [":native_execution"],
+        constraint_values = ["@aobus//bazel:release_profile"],
     )
 
     # The mode-neutral default target platform. Unlike the release/profile

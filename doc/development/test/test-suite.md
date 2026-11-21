@@ -40,9 +40,9 @@ foreign-platform test available.
 
 Executables own cases by runtime and link needs, not directory; see
 [Decision 0021](../../decision/0021-own-test-executables-by-runtime-needs.md).
-Use a single owning executable for a focused Catch2 filter. A selected binary
-with no matching case fails; an aggregate filter is not a promise to skip
-unmatched binaries. Catch2 receives Bazel's `--test_filter` through
+Use a single owning executable for a focused Catch2 filter. Most binaries fail
+when no case matches; the [Windows backend](../windows.md#native-tests-and-sanitizers)
+permits empty selections. Catch2 receives Bazel's `--test_filter` through
 `TESTBRIDGE_TEST_ONLY` and its native test setup.
 
 An unescaped comma separates alternative Catch2 filters; shell quotes alone
@@ -110,37 +110,23 @@ prerequisite. Native macOS does not claim exact Homebrew Python patch parity.
 
 ## Tooling and lint fixtures
 
-The graph runs repository tooling as ordinary `py_test` targets: one unit
-module per module under `test/script`, plus the live repository checks
-`docs`, `format`, `guardrails`, `test_audit`, `name_audit`, `workflows`,
-`bazel_lint`, `ruff` and `mypy`. Bazel owns their
-scheduling and parallelism, each target runs exactly one module through the
-shared standard-library entry, and none installs
-or repairs a tool: `bazel_lint` and `format` select ready Buildifier/Prettier only and fail
-when one is missing. A per-module input audit classifies each unit target:
-modules whose only inputs are declared sources, imported support modules and
-library dependencies — plus a short explicit data list where a module reads
-repository files — are cacheable over those declared inputs, with no
-checkout-root graft; modules whose audit observed host-process spawns,
-physical Git-state reads or dynamic whole-tree scans stay tagged `local` and
-`external`, because no cached result can stand in for the checkout or tools
-they use. Live unit and check targets pass a declared `VERSION.txt` anchor and
-always re-execute from the physical checkout on every OS; the child receives
-its arguments without the anchor flag, which is what closes the re-execution
-loop. They use the installed native `py_runtime`. Host-backed unit modules and
-the `format` and `bazel_lint` checks inherit `PATH` on their own targets for
-host tools such as Git. Other live checks
-do not acquire the caller's `PATH` merely because they read the checkout.
-`workflows` is Linux-only and consumes the pinned actionlint through
-`AO_NIX_ACTIONLINT`. Do not substitute ambient Python, Ruff, or mypy. On macOS,
-only the [SDK selection and remote-cache modules](../macos.md) run.
-
-A standalone tooling run uses the declared Bazel suite in the ready pinned
-native environment; no separate portal command orchestrates it:
+[The tooling BUILD](../../../test/script/BUILD.bazel) declares one `py_test`
+per unit module, separate from live repository checks. Run the standalone
+unit suite in the ready pinned environment:
 
 ```bash
 bazel test //test/script:tooling_tests
 ```
+
+Tests with only declared inputs can reuse cached results. Host-backed units
+and live checks resolve the declared `VERSION.txt` anchor and re-execute
+from the physical checkout under the installed native `py_runtime`; their
+`local` and `external` tags keep them unsandboxed and force fresh results.
+Tests opt into `PATH` only when needed for host tools. The Markdown formatter
+uses pinned Prettier without inheriting `PATH`. The Linux-only workflow check
+gets pinned actionlint through `AO_NIX_ACTIONLINT`. Graph tests require ready
+tools; they do not install or repair them. See the [macOS guide](../macos.md)
+for host-compatible tooling selection.
 
 Tooling validates pinned versions and the Windows hash
 lock, and tests the document checker against isolated fixtures. The `docs`

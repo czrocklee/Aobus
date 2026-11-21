@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import xml.etree.ElementTree as ET
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -105,6 +106,48 @@ def _bep_stream(path: Path) -> tuple[dict[str, Any], dict[tuple[str, str], dict[
     return events, summaries, "ok" if last_message else "truncated"
 
 
+def wasapi_case_note(bep: Path, tree: Path) -> str:
+    """Read this invocation's Catch2 output while the tree still belongs to it."""
+    unavailable = "WASAPI hardware cases: unavailable (no unambiguous Catch2 report)."
+    try:
+        with bep.open(encoding="utf-8") as stream:
+            (result,) = (
+                event["testResult"]
+                for event in map(json.loads, stream)
+                if _configured_label(event.get("id", {}).get("testResult", {}).get("label", ""))
+                == "//test:backend_test"
+            )
+        status = result.get("status")
+        if not isinstance(status, str) or not status:
+            return unavailable
+        if status != "PASSED":
+            return f"WASAPI hardware cases: not evaluated (Bazel result: {_cell(status)})."
+        (uri,) = (out["uri"] for out in result["testActionOutput"] if out.get("name") == "test.xml")
+        if not uri.startswith("file:///"):
+            return unavailable
+        report = Path.from_uri(uri)
+        if not report.is_relative_to(tree) or ".." in report.parts:
+            return unavailable
+        (suite,) = ET.parse(report).getroot().findall("testsuite")
+        if (
+            suite.get("name") != "backend_test.native.exe"
+            or suite.find("properties/property[@name='random-seed']") is None
+        ):
+            return unavailable  # Neither another binary's XML nor Bazel's synthetic wrapper is a backend report.
+        cases = suite.findall("testcase")
+        if not cases:
+            return "WASAPI hardware cases: not run (no cases selected)." if suite.get("tests") == "0" else unavailable
+        if any(not case.get("name") or case.get("status") != "run" for case in cases):
+            return unavailable
+        outcomes = (
+            f"{_cell(case.attrib['name'])} ({'skipped' if case.find('skipped') is not None else 'ran'})"
+            for case in cases
+        )
+        return "WASAPI hardware cases: " + "; ".join(outcomes) + "."
+    except OSError, ValueError, LookupError, TypeError, AttributeError, ET.ParseError:
+        return unavailable
+
+
 def _outcome(finished: Any, state: str) -> str:
     if state in ("missing", "unreadable"):
         return "unavailable"
@@ -177,7 +220,7 @@ def _receipt_lines(tree: Path, path: Path, receipt: dict[str, Any]) -> list[str]
     if isinstance(summary, dict):
         lines.append(
             f"- Admitted tests: {_known(summary.get('passed'))} passed target(s), "
-            f"{_known(summary.get('executed_runs'))} executed run(s), "
+            f"{_known(summary.get('executed_runs'))} uncached Bazel test run(s), "
             f"{_known(summary.get('cached_runs'))} cached run(s)"
         )
     else:
@@ -224,22 +267,33 @@ def _test_summary_line(summaries: dict[tuple[str, str], dict[str, Any]]) -> str:
     parts = [f"{passed} passed target(s)"]
     if not_passed:
         parts.append(f"{len(recorded) - passed} not passed ({', '.join(not_passed)})")
-    parts += [f"{_known(executed)} executed run(s)", f"{_known(cached)} cached run(s)"]
+    parts += [f"{_known(executed)} uncached Bazel test run(s)", f"{_known(cached)} cached run(s)"]
     return "Admitted tests: " + ", ".join(parts)
 
 
-def _check_attempt_lines(tree: Path, directory: Path) -> list[str]:
+def _check_attempt_lines(tree: Path, directory: Path, *, expect_wasapi: bool) -> list[str]:
     """A native check attempt reports the standard BEP verdict and its test summaries."""
     path = directory / _CHECK_BEP
     events, summaries, state = _bep_stream(path)
-    return [
+    lines = [
         f"#### `{_cell(path.relative_to(tree).as_posix())}`",
         f"- status **{_cell(_outcome(events.get('finished'), state))}**",
         f"- {_test_summary_line(summaries)}",
     ]
+    # testlogs can be overwritten by the next invocation on the same tree.
+    try:
+        note = (directory / "wasapi.txt").read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        if not expect_wasapi:
+            return lines
+        note = "WASAPI hardware cases: unavailable (no attempt note)."
+    except OSError, UnicodeDecodeError:
+        note = ""
+    lines.append("- " + (note or "WASAPI hardware cases: unavailable (unreadable attempt note)."))
+    return lines
 
 
-def _completion(tree: Path) -> list[str]:
+def _completion(tree: Path, *, expect_wasapi: bool) -> list[str]:
     lines = [f"### Bazel completion — `{_cell(tree)}`", ""]
     receipts = sorted(tree.glob(_RECEIPT_GLOB))
     attempts = [
@@ -259,7 +313,7 @@ def _completion(tree: Path) -> list[str]:
             continue
         lines += _receipt_lines(tree, path, receipt)
     for directory in attempts:
-        lines += _check_attempt_lines(tree, directory)
+        lines += _check_attempt_lines(tree, directory, expect_wasapi=expect_wasapi)
     return [*lines, ""]
 
 
@@ -348,9 +402,8 @@ def _notes() -> list[str]:
         "such as `disk cache hit` and `remote cache hit` count spawns by runner or strategy. `total` is not a "
         "compiler denominator, and no compiler or backend hit rate is implied.",
         "- Completion receipts render their recorded phase table. In historical receipts with a `native-context` "
-        "wrapper phase, its elapsed time overlaps the inner phases. A native check attempt without a receipt is "
-        "read from its `tests.bep.json` only. Admitted test counts cover the completion attempt's own test summaries; "
-        "documentation, tooling and hygiene run as separate checks.",
+        "wrapper phase, its elapsed time overlaps the inner phases. Native check counts come from the attempt's "
+        "BEP test summaries and count targets, not test cases.",
         "- Remote-cache download counts are whole-job backend blob operations observed by the proxy, not Bazel "
         "action-cache or test-result hits; a ready proxy does not by itself prove backend access, and a published "
         "URL says only that the start step advertised it.",
@@ -361,7 +414,7 @@ def _notes() -> list[str]:
 def render(args: argparse.Namespace) -> str:
     lines = ["## CI evidence summary", ""]
     for tree in dict.fromkeys(args.tree):
-        lines += _completion(tree)
+        lines += _completion(tree, expect_wasapi=args.expect_wasapi)
         lines += _invocations(tree)
     lines += _remote(args)
     lines += _notes()
@@ -371,6 +424,7 @@ def render(args: argparse.Namespace) -> str:
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Render CI evidence as a Markdown summary")
     parser.add_argument("--tree", type=Path, action="append", default=[], help="CI Bazel output root; repeatable")
+    parser.add_argument("--expect-wasapi", action="store_true", help="report missing WASAPI notes for Windows attempts")
     parser.add_argument("--remote-start", default=UNKNOWN, help="remote-cache start step outcome")
     parser.add_argument(
         "--remote-bound", choices=("true", "false"), help="whether the cache URL was published to later steps"

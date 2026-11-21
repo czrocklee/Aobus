@@ -25,6 +25,7 @@ def check(request: bazel_workflows.NativeRequest) -> int:
             prepared,
             "debug" if config in bazel_sanitizers.SANITIZER_CONFIGS else config,
             jobs=request.jobs,
+            isolate_rc=True,
             compiler_include_roots=bazel_sanitizers.compiler_include_roots(
                 config, host, compiler=bazel_workflows.selected_compiler(request)
             ),

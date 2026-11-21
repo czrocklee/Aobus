@@ -150,7 +150,7 @@ Before adding or widening a suppression:
 Use the [managed checks above](#sanitizer-findings) to validate a fix. See [sanitizer profiles](../bazel.md#sanitizer-profiles) for graph selection and admission rules.
 
 `check contracts --config asan|tsan` checks only the Debug compile contracts of the
-sanitizer-configured graph, not runtime behavior. The [profile canary](../../../test/core/SanitizerProfileTest.cpp) proves instrumentation in one first-party translation unit, not every per-action flag.
+sanitizer-configured graph, not runtime behavior. The [profile canary](../../../test/helper/SanitizerProfile.cpp) uses compile-time assertions to check instrumentation in one first-party translation unit, not every per-action flag.
 
 `check lint` accepts fastbuild, Debug, or Release, not sanitizer profiles;
 `./ao setup deps` does not select instrumentation. Explicit native

@@ -96,7 +96,7 @@ chooses its channel from the [error-handling rules](../coding-style.md#error-han
 
 Prefer, in order: making the failure impossible through types, construction or
 one source of truth; a compile-time assertion under the real toolchain, as the
-[sanitizer profile canary](../../../test/core/SanitizerProfileTest.cpp) does for
+[sanitizer profile canary](../../../test/helper/SanitizerProfile.cpp) does for
 compiler facts; the failing build or test of a real target; a small test of
 owned logic; and a runtime check at a trust boundary. Re-deriving behavior from
 query or action-graph output is the last resort, kept in one place.

@@ -174,8 +174,18 @@ namespace ao::rt::test
     // writer that was still in flight.
     CHECK(entryCount(temp.path()) <= kBudgetEntries + kThreadCount);
 
-    // A settled same-cache control prevents an implementation that always misses
-    // or never stores from satisfying only the permissive concurrent observations.
+    // Avoid an eviction tie between the survivors and the final write on coarse clocks.
+    auto const coldTime = std::filesystem::file_time_type::clock::now() - std::chrono::hours{24};
+
+    for (auto const& entry : std::filesystem::recursive_directory_iterator{coverCacheDirectory(temp.path())})
+    {
+      if (entry.is_regular_file())
+      {
+        std::filesystem::last_write_time(entry.path(), coldTime);
+      }
+    }
+
+    // Concurrent reads may all miss; this settled write must be readable.
     auto const retainedBytes = filled(kEntryBytes, std::byte{0xFE});
     auto const retainedDigest = utility::computeSha256(retainedBytes);
     cache.store(retainedDigest, retainedBytes);

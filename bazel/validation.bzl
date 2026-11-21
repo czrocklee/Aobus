@@ -184,7 +184,9 @@ def native_validation_tests(
         # Linux shell report or the Windows toolset version, respectively.
         env_inherit = ["PATH"] + select({
             "@platforms//os:linux": ["AOBUS_NIX_DEPENDENCY_REPORT"],
-            "@platforms//os:windows": ["VCToolsVersion"],
+            # Bazel inherits exact client spellings: Python uppercases the name
+            # for the managed launch; a direct developer-shell launch need not.
+            "@platforms//os:windows": ["VCTOOLSVERSION", "VCToolsVersion"],
             "//conditions:default": [],
         }),
         main_module = "ao.portal.bazel_validation",

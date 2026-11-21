@@ -146,6 +146,6 @@ test --test_output=errors
 # Tests that use installed host tools inherit their inputs on the target.
 # Do not key ordinary TestRunner actions on portal state or the caller's PATH.
 
-# CI uses the same graph, adding only the explicitly required desktop gate.
+# completion.py selects the daily native targets; this config does not partition the graph.
 build:ci --keep_going
 build:ci --//bazel:desktop_tests=true

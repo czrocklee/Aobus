@@ -71,9 +71,7 @@ filegroup(
     srcs = LINT_FIXTURE_SOURCES,
 )
 
-# Existing Linux compile-only sanitizer canaries and coverage analysis. These
-# do not run sanitizer suites or collect a coverage report.
-instrumentation_tests()
+instrumentation_tests(sanitizer_target = "//test:sanitizer_profile")
 
 # Project-specific native oracles consume folded aspect facts, never runtime Bazel.
 native_validation_tests(python = "ao_python_validation")
@@ -344,6 +342,7 @@ filegroup(
         "//test:backend_test",
         "//test:cli_test",
         "//test:lint_test",
+        "//test:sanitizer_profile",
         "//test:tui_test",
     ] + select({
         "@platforms//os:linux": [

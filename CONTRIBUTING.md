@@ -2,9 +2,9 @@
 
 Work from the repository root. Use pinned native `bazel build`, `bazel test`,
 and `bazel run` for ordinary development; start tests with `bazel test //:tests`.
-Use `./ao check` (`ao.bat check` on Windows) for complete local and CI validation:
-the [completion gate](doc/development/bazel.md#completion-gate) runs the repository's `bazel test //...` graph. `ao check lint` remains a scoped semantic check;
-use `ao check format` for read-only formatting verification.
+Use `./ao check` (`ao.bat check` on Windows) for the full local
+[completion gate](doc/development/bazel.md#completion-gate). `ao check lint`
+checks scoped source rules; `ao check format` verifies formatting without rewriting.
 Start with [build and setup](doc/development/build.md); read the [macOS](doc/development/macos.md) or [Windows](doc/development/windows.md) guide before native work.
 
 ## Make a change

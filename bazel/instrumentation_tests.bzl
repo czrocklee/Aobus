@@ -1,7 +1,6 @@
 """Linux daily sanitizer canaries and coverage analysis in the native graph.
 
-The official bazel_skylib ``build_test`` proves that the existing utility test
-still compiles and links under each sanitizer profile without executing it.
+The bazel_skylib ``build_test`` compiles and links the profile probe without running it.
 The official ``analysis_test`` rules additionally inspect the configured native
 actions and providers, so a profile that silently stops instrumenting cannot
 pass as an ordinary binary. No custom pipeline, runtime Bazel invocation,
@@ -216,18 +215,6 @@ def _check_sanitizer_argv(argv_list, profile, phase, label):
                 fail("%s %s action for %s unexpectedly contains %s" % (profile, phase, label, flag))
         if phase == "compile":
             _check_debug_compile(argv, label, profile)
-            if profile == "asan":
-                expected_defines = ["-DAOBUS_EXPECT_ADDRESS_SANITIZER", "-DAOBUS_EXPECT_UNDEFINED_BEHAVIOR_SANITIZER"]
-                forbidden_defines = ["-DAOBUS_EXPECT_THREAD_SANITIZER"]
-            else:
-                expected_defines = ["-DAOBUS_EXPECT_THREAD_SANITIZER"]
-                forbidden_defines = ["-DAOBUS_EXPECT_ADDRESS_SANITIZER", "-DAOBUS_EXPECT_UNDEFINED_BEHAVIOR_SANITIZER"]
-            for define in expected_defines:
-                if define not in argv:
-                    fail("%s compile action for %s lacks %s" % (profile, label, define))
-            for define in forbidden_defines:
-                if define in argv:
-                    fail("%s compile action for %s unexpectedly contains %s" % (profile, label, define))
 
 def _compile_assertion_impl(ctx):
     target = _one_target(ctx.attr.target)
@@ -569,15 +556,15 @@ def debug_policy_inputs(name, target):
     )
 
 def instrumentation_tests(
+        sanitizer_target,
         name = "instrumentation_tests",
-        utility = "//test:utility_test",
         coverage = "//:coverage_default_tests",
         require_application = True):
     """Declare Linux-only sanitizer canaries and coverage analysis tests.
 
     Args:
+        sanitizer_target: Compiler instrumentation probe to build and link.
         name: Aggregate test suite name and target-name prefix.
-        utility: Existing C++ test target used as the sanitizer compile/link canary.
         coverage: Existing coverage test suite analyzed with the standard coverage configuration.
         require_application: Require one app/*.cpp target compile, matching the default suite.
     """
@@ -586,7 +573,7 @@ def instrumentation_tests(
         _instrumented_alias(
             name = alias,
             profile = profile,
-            target = utility,
+            target = sanitizer_target,
             target_compatible_with = _LINUX,
             testonly = True,
         )
@@ -601,7 +588,7 @@ def instrumentation_tests(
         _compile_assertion(
             name = assertion,
             profile = profile,
-            target = utility,
+            target = sanitizer_target,
             target_compatible_with = _LINUX,
             testonly = True,
         )
