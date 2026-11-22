@@ -46,7 +46,8 @@ namespace ao::rt
     explicit LibraryYamlImportOperation(LibraryYamlImporter& importer) noexcept;
 
     Result<PreparedImport> prepare(std::filesystem::path const& path, ImportMode mode, bool buildChangeSet);
-    Result<> revalidateSource(PreparedImport const& prepared) const;
+    Result<> checkPreviewBindings(PreparedImport const& prepared) const;
+    // Apply and preview own the root operation in a fresh write transaction.
     Result<ImportReport> apply(PreparedImport const& prepared, library::LibraryWrite& write);
     LibraryChangeSet buildChangeSet(PreparedImport const& prepared, library::LibraryWrite const& write) const;
     Result<ImportReport> preview(PreparedImport const& prepared, library::LibraryWrite& write);

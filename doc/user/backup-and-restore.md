@@ -102,6 +102,16 @@ Restoring into a new library keeps that library's own **Library ID**, which `aob
 Settings that an earlier library saved, such as those left in the same music root's `.aobus` folder, record that library's ID, so the new library ignores everything in them that names a track or list: open list views, per-list column layouts and presentation choices, and the playback position.
 Custom presentation presets and the **All Tracks** layout name no record and still apply.
 
+A track already listed as missing stays missing after a merge. If the merge changes a file's recorded size or modification time, Aobus discards the old audio fingerprint; otherwise it keeps it. Tracks split from one disc image share that fingerprint.
+If you rename a file with no fingerprint, a scan may add it as new and leave your edited tracks listed as missing under the old name.
+
+If the fingerprint is pending and you plan to rename the file, take these steps while it is still at its original path:
+
+- If Aobus lists the track as missing or the file's size or modification time differs from the library's record, run `aobus -C /target scan` to refresh the record.
+- If the fingerprint is still pending, run `aobus -C /target lib fingerprint --pending`. It only processes files marked available whose size and modification time exactly match the library's record. The command can succeed even if it skips the file.
+
+After renaming, [preview the scan](manage-library.md#preview-and-apply-a-scan-from-the-cli) and check that it will reconnect the existing tracks rather than add new ones.
+
 ## Related documents
 
 - [Library YAML transfer specification](../system/library/yaml-transfer.md)

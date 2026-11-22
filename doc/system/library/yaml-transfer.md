@@ -61,18 +61,17 @@ The application import path has two operations:
 
 ```text
 prepare(path, import mode)
-  -> enter sequenced Import Maintenance
+  -> enter sequenced Import Maintenance and capture the runtime instance
   -> read exact source bytes
   -> parse and validate version 1
-  -> prepare track/list data
-  -> capture target runtime + library id + committed revision
+  -> capture target library id + committed revision and prepare target data from one read snapshot
   -> run exact preview in one generation-bound lane turn and abort
   -> exit Maintenance and deliver Available
   -> return LibraryImportPlan + ImportReport
 
 explicit authorization
-  -> enter a new sequenced Import Maintenance interval
   -> consume LibraryImportPlan
+  -> enter a new sequenced Import Maintenance interval
   -> recheck runtime + library id + committed revision
   -> reread and compare exact source bytes
   -> run prepared mutation path in one generation-bound lane turn
@@ -84,9 +83,14 @@ explicit authorization
 Rejecting or dropping a plan performs no persistent mutation.
 A plan has no time-based expiry; its source and target bindings make stale plans unusable.
 
-The synchronous offline importer is a separate lower-level capability and test surface.
-It performs preparation, acquires its own writable-library lease, previews or commits one transaction, and returns the report directly.
-It does not reuse a nullable branch inside the live operation and is not the frontend authorization boundary.
+### Prepared target binding
+
+Preparation binds the import to the target library ID and the whole-library committed revision of its read snapshot.
+Before staging records or clearing any Restore scope, preview and apply compare that binding with the fresh write transaction's library ID and base revision (the committed revision at writer entry). A mismatch at this point returns `InvalidState`. Live `LibraryJobs` [checks for a stale plan earlier](#failure-and-cancellation) and reports `Conflict` before rereading the source.
+Any intervening committed library write makes the preparation stale, even an unrelated edit or an edit to a carrier member not named in the payload. This holds for both Merge and Restore, including `list-only` payloads.
+Aborted writes and previews do not advance the committed revision.
+
+The synchronous offline methods prepare the import before acquiring their own writable-library lease. They then preview or commit one transaction and return the report directly.
 
 ## Commands and transitions
 
@@ -148,7 +152,6 @@ Merge validates the final carrier, not only the document, and fails the whole im
 A payload carrier meeting a target carrier first requires the target's extent and sample rate, whether or not any ordinal matches.
 It then matches by `(uri, ordinal)`, requires equal ranges for a matched segment, and may add an unmatched ordinal only when the final ranges stay inside the extent and do not overlap.
 Merge never edits a stored range. File facts must agree across the payload records of one URI.
-The same check runs again inside the write transaction against the complete prepare-time member set, so a member deleted or added after preparation, including an ordinal the payload does not touch, makes the import stale rather than committing a partial carrier. The offline importer reports that membership change as `InvalidState`. A live `LibraryJobs` apply still rejects any target revision change as `Conflict` before applying.
 
 Merge does not match or update existing lists.
 Every payload list is created as a new target list, after which parent IDs are remapped.
@@ -166,7 +169,9 @@ Collections use replacement semantics:
 
 A recognized codec token replaces the baseline codec; any other token rejects the payload.
 Manifest file facts follow the import mode, not a single old-target baseline.
-Merge starts from the existing target manifest row when the canonical URI matches. A carrier row keeps its audio identity and status. A whole-file row contributes its stored file size and modification time. The payload then overlays those facts.
+When the canonical URI matches, Merge overlays the payload's file facts on the target row and keeps the target's last observed file status. Merge does not mark a missing file as available.
+The fingerprint belongs to the physical audio file, whether it represents one Track or a carrier shared by several CUE segments. Merge keeps that fingerprint if the recorded size and optional modification time are unchanged. If either changes, Merge clears both the audio payload length and the signature, leaving the identity pending. A one-nanosecond difference counts, as does a change between absent and present time.
+Equal facts preserve existing evidence; they do not establish that the file contents match. Merge does not compute a fingerprint.
 Restore does not consult the target row it clears. It starts from the no-row baseline: a present `file-size` or `mtime` wins; an omitted permitted fact is seeded from the filesystem when that path is present; absent media leaves an omitted fact as a zero file size and no stored modification time. An unmatched URI uses that same no-row baseline in either mode.
 Restore does not inherit audio identity or status from the old target, including a carrier, and it does not fingerprint the file. Identity stays pending: zero payload length and an all-zero signature. Status stays the builder default `Available`, which is not a claim that an absent file is physically available.
 A present `file-size` field overrides the selected baseline.
@@ -249,8 +254,8 @@ Merge publishes `libraryReset: false` with newly inserted tracks, matched tracks
 File-read failures report `IoError`.
 Malformed YAML, unsupported versions, closed-schema violations, invalid values, and unsafe URIs report `FormatRejected` as defined by the [format validation rules](../../reference/library/format/yaml.md#validation-rules).
 Malformed UTF-8 in library text and custom keys that collide after NFC normalization are invalid values under that rule; neither is repaired with a replacement character.
-Applying a plan to different source bytes, another runtime, another library identity, or another target revision reports `Conflict`.
-Every apply attempt consumes the plan, including an attempt that returns a pre-commit error; replay reports `InvalidState` and a retry requires a fresh preview.
+Applying a live plan to another runtime, another library identity, or another target revision reports `Conflict` before its source is reread. Changed source bytes also report `Conflict`.
+Every live apply attempt consumes its move-only plan, including an attempt that returns a pre-commit error. Retrying requires a fresh preview; passing a moved-from plan violates the API precondition.
 
 Any failure before commit leaves target content, metadata identity, and revision unchanged and publishes no content change.
 Commit failure likewise publishes no change set.
@@ -327,6 +332,8 @@ The apply step still revalidates source and target evidence, so the flag cannot 
 - [`LibraryExportImportListTest.cpp`](../../../test/runtime/library/LibraryExportImportListTest.cpp) proves list-only transfer, references, remapping, and dangling counts.
 - [`LibraryYamlSchemaTest.cpp`](../../../test/runtime/library/LibraryYamlSchemaTest.cpp) proves closed-schema, scope, enum, URI, duplicate-key, list-semantic, and storage-limit rejection.
 - [`CueYamlTest.cpp`](../../../test/runtime/CueYamlTest.cpp) proves segment emission, offline restore, contradictory duration and sample rate, and atomic carrier merge.
+- [`CueYamlBaselineTest.cpp`](../../../test/runtime/CueYamlBaselineTest.cpp) checks the file facts Restore seeds and when Merge preserves or invalidates the fingerprint of a whole file or CUE carrier.
+- [`CueYamlPreparationTest.cpp`](../../../test/runtime/CueYamlPreparationTest.cpp) checks prepared-import staleness and preservation of intervening writes.
 - [`LibraryExportImportErrorTest.cpp`](../../../test/runtime/library/LibraryExportImportErrorTest.cpp) proves scalar rejection and transactional rollback.
 - [`LibraryYamlImporterTest.cpp`](../../../test/runtime/library/LibraryYamlImporterTest.cpp) proves recording-date and credit preflight admission and whole-document rejection.
 - [`LibraryYamlExporterTest.cpp`](../../../test/runtime/library/LibraryYamlExporterTest.cpp) proves recording-date and credits emission and delta baselines.

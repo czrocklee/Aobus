@@ -6,6 +6,8 @@
 #include <ao/library/ListWriter.h>
 #include <ao/library/TrackWriter.h>
 
+#include <cstdint>
+
 namespace ao::lmdb
 {
   class WriteTransaction;
@@ -42,6 +44,9 @@ namespace ao::library
     LibraryWrite& operator=(LibraryWrite const&) = delete;
     LibraryWrite(LibraryWrite&&) = delete;
     LibraryWrite& operator=(LibraryWrite&&) = delete;
+
+    // Durable revision before this transaction began, not its candidate commit revision.
+    std::uint64_t baseRevision() const;
 
     TrackWriter tracks();
     ListWriter lists();

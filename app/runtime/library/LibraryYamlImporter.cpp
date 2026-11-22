@@ -23,7 +23,9 @@
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/ListWriter.h>
+#include <ao/library/MetadataLayout.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/library/ReadTransaction.h>
 #include <ao/library/RecordingDate.h>
 #include <ao/library/ResourceLayout.h>
 #include <ao/library/TrackBuilder.h>
@@ -139,8 +141,6 @@ namespace ao::rt
       std::string uri;
       std::optional<TrackId> optExistingTrackId;
       std::optional<SegmentFacts> optSegment;
-      // Own the complete target membership, including ordinals outside this payload.
-      std::vector<TrackId> carrierTrackIds{};
       TrackBuilderSnapshot builder;
       library::FileManifestBuilder manifest;
     };
@@ -532,29 +532,14 @@ namespace ao::rt
 
     Result<> validatePreparedCarrierMember(PreparedTrack const& member,
                                            PreparedTrack const& first,
-                                           std::optional<library::FileManifestView> const& optManifest,
-                                           library::TrackStore::Reader const& trackReader,
                                            std::vector<library::TrackSegment>& segments)
     {
-      auto const optCurrentId =
-        optManifest ? findTrack(*optManifest, segmentOrdinal(member.optSegment), trackReader) : std::nullopt;
-
-      if (optCurrentId != member.optExistingTrackId)
-      {
-        return makeError(Error::Code::InvalidState, "Library changed after preparing YAML track");
-      }
-
-      if (!member.optSegment)
-      {
-        return {};
-      }
-
       if (member.manifest.serialize() != first.manifest.serialize())
       {
         return makeError(Error::Code::FormatRejected, "Carrier records disagree on file facts");
       }
 
-      auto const& segment = member.optSegment->segment;
+      auto const& segment = carrierFacts(member).segment;
       auto const found = std::ranges::find(segments, segment.ordinal, &library::TrackSegment::ordinal);
 
       if (found == segments.end())
@@ -578,70 +563,60 @@ namespace ao::rt
       auto const optManifest = mode == ImportMode::Merge ? manifestReader.get(first.uri) : std::nullopt;
       auto segments = std::vector<library::TrackSegment>{};
 
-      if (mode == ImportMode::Merge && first.optSegment)
-      {
-        auto const currentIds = optManifest ? optManifest->segmentTrackIds() : std::span<TrackId const>{};
-
-        if (!std::ranges::equal(first.carrierTrackIds, currentIds))
-        {
-          return makeError(
-            Error::Code::InvalidState, std::format("Carrier '{}' changed after preparing YAML import", first.uri));
-        }
-      }
-
       if (optManifest)
       {
-        if ((optManifest->segmentCount() != 0) != first.optSegment.has_value())
+        auto segmentsRes = readTargetCarrierSegments(*optManifest, carrierFacts(first), trackReader);
+
+        if (!segmentsRes)
         {
-          return makeError(Error::Code::FormatRejected, "YAML whole-file/carrier form conflicts with target");
+          return std::unexpected{segmentsRes.error()};
         }
 
-        if (first.optSegment)
-        {
-          auto segmentsRes = readTargetCarrierSegments(*optManifest, *first.optSegment, trackReader);
-
-          if (!segmentsRes)
-          {
-            return std::unexpected{segmentsRes.error()};
-          }
-
-          segments = std::move(*segmentsRes);
-        }
+        segments = std::move(*segmentsRes);
       }
 
       for (auto const* member : members)
       {
-        if (auto res = validatePreparedCarrierMember(*member, first, optManifest, trackReader, segments); !res)
+        if (auto res = validatePreparedCarrierMember(*member, first, segments); !res)
         {
           return res;
         }
       }
 
-      if (first.optSegment)
-      {
-        return validateCarrierRanges(std::move(segments), first.optSegment->totalFrames);
-      }
-
-      return {};
+      return validateCarrierRanges(std::move(segments), carrierFacts(first).totalFrames);
     }
 
-    // Validate the final aggregate before staging any Track, including when
-    // every payload ordinal is new. Reused at apply to close offline preparation races.
-    Result<> validatePreparedCarriers(std::vector<PreparedTrack> const& tracks,
-                                      library::TrackStore::Reader const& trackReader,
-                                      library::FileManifestStore::Reader const& manifestReader,
-                                      ImportMode mode)
+    std::unordered_map<std::string_view, std::vector<PreparedTrack const*>> groupCarrierMembers(
+      std::vector<PreparedTrack> const& tracks)
     {
       auto groups = std::unordered_map<std::string_view, std::vector<PreparedTrack const*>>{};
 
       for (auto const& track : tracks)
       {
-        groups[track.uri].push_back(&track);
+        if (track.optSegment)
+        {
+          groups[track.uri].push_back(&track);
+        }
       }
+
+      return groups;
+    }
+
+    Result<> validatePreparedCarriers(std::vector<PreparedTrack> const& tracks,
+                                      library::TrackStore::Reader const& trackReader,
+                                      library::FileManifestStore::Reader const& manifestReader,
+                                      ImportMode mode)
+    {
+      auto const groups = groupCarrierMembers(tracks);
 
       // Validate groups in record order so the reported error does not depend on hashing.
       for (auto const& track : tracks)
       {
+        if (!track.optSegment)
+        {
+          continue;
+        }
+
         auto const& group = groups.at(track.uri);
 
         if (group.front() != &track)
@@ -1442,6 +1417,13 @@ namespace ao::rt
     {
     }
 
+    bool matchesTarget(library::MetadataHeader const& header, std::uint64_t revision) const noexcept
+    {
+      return header.libraryId == targetLibraryId && revision == targetRevision;
+    }
+
+    std::array<std::byte, 16> targetLibraryId{};
+    std::uint64_t targetRevision = 0;
     std::filesystem::path sourcePath;
     ImportMode mode = ImportMode::Restore;
     bool buildChangeSet = false;
@@ -1470,15 +1452,18 @@ namespace ao::rt
                                   ImportReport& report) const;
     LibraryChangeSet buildPreparedChangeSet(LibraryYamlImportOperation::PreparedImport::Impl const& prepared,
                                             library::LibraryWrite const& transaction) const;
-    Result<std::vector<PreparedTrack>> prepareTracks(ValidatedImport const& validated, ImportMode mode) const;
+    Result<std::vector<PreparedTrack>> prepareTracks(ValidatedImport const& validated,
+                                                     ImportMode mode,
+                                                     library::ReadTransaction const& transaction) const;
     Result<PreparedTrack> prepareTrackRecord(ValidatedTrack const& track,
                                              ExportMode payloadMode,
                                              ValidatedResourceMap const& resources,
-                                             ImportMode mode,
                                              library::TrackStore::Reader const& trackReader,
-                                             library::FileManifestStore::Reader const& manifestReader) const;
+                                             std::optional<library::FileManifestView> const& optManifest) const;
 
-    void populateDeletionStats(ValidatedImport const& val, ImportReport& rep) const;
+    void populateDeletionStats(ValidatedImport const& val,
+                               library::ReadTransaction const& transaction,
+                               ImportReport& rep) const;
     Result<> clearDatabase(ValidatedImport const& val, library::LibraryWrite& writeTransaction) const;
 
     Result<ValidatedImport> validate(ryml::ConstNodeRef const& root) const;
@@ -1492,14 +1477,12 @@ namespace ao::rt
     Result<> importTracks(std::vector<PreparedTrack> const& tracks,
                           library::LibraryWrite& transaction,
                           std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId,
-                          ImportMode strategy,
                           ImportReport& report) const;
     Result<> importTrackRecord(PreparedTrack const& preparedTrack,
                                library::TrackWriter& trackWriter,
-                               library::FileManifestStore::Reader const& manifestReader,
-                               ImportMode strategy,
                                std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId,
                                ImportReport& report) const;
+
     Result<> loadTrackBaseline(std::string_view uriStr,
                                std::optional<TrackId> const& optExistingTrackId,
                                ExportMode payloadMode,
@@ -1518,8 +1501,7 @@ namespace ao::rt
                           library::TrackBuilder& builder) const;
     Result<> applyFileMetadata(ryml::ConstNodeRef const& trackNode,
                                std::string_view uriStr,
-                               ImportMode mode,
-                               library::FileManifestStore::Reader const& manifestReader,
+                               std::optional<library::FileManifestView> const& optManifest,
                                library::FileManifestBuilder& manifestBuilder) const;
     Result<> buildListOrder(library::ListBuilder& builder,
                             ValidatedList const& importedList,
@@ -1668,29 +1650,32 @@ namespace ao::rt
                                                ? ImportTargetScope::Lists
                                                : ImportTargetScope::Library;
 
+    auto const& ml = _importer._implPtr->ml;
+    auto readTransaction = ml.readTransaction();
+    preparedPtr->targetLibraryId = ml.metadataHeader(readTransaction).libraryId;
+    preparedPtr->targetRevision = ml.libraryRevision(readTransaction);
+
     if (mode == ImportMode::Restore)
     {
-      _importer._implPtr->populateDeletionStats(preparedPtr->validated, preparedPtr->initialReport);
+      _importer._implPtr->populateDeletionStats(preparedPtr->validated, readTransaction, preparedPtr->initialReport);
     }
 
     if (buildChangeSet && mode == ImportMode::Merge)
     {
-      auto readTransaction = _importer._implPtr->ml.readTransaction();
-
-      for (auto const [trackId, view] : _importer._implPtr->ml.tracks().reader(readTransaction).hot())
+      for (auto const [trackId, view] : ml.tracks().reader(readTransaction).hot())
       {
         std::ignore = view;
         preparedPtr->beforeTrackIds.push_back(trackId);
       }
 
-      for (auto const [listId, view] : _importer._implPtr->ml.lists().reader(readTransaction))
+      for (auto const [listId, view] : ml.lists().reader(readTransaction))
       {
         std::ignore = view;
         preparedPtr->beforeListIds.push_back(listId);
       }
     }
 
-    auto tracksRes = _importer._implPtr->prepareTracks(preparedPtr->validated, mode);
+    auto tracksRes = _importer._implPtr->prepareTracks(preparedPtr->validated, mode, readTransaction);
 
     if (!tracksRes)
     {
@@ -1701,8 +1686,18 @@ namespace ao::rt
     return PreparedImport{std::move(preparedPtr)};
   }
 
-  Result<> LibraryYamlImportOperation::revalidateSource(PreparedImport const& prepared) const
+  Result<> LibraryYamlImportOperation::checkPreviewBindings(PreparedImport const& prepared) const
   {
+    {
+      auto const& ml = _importer._implPtr->ml;
+      auto read = ml.readTransaction();
+
+      if (!prepared._implPtr->matchesTarget(ml.metadataHeader(read), ml.libraryRevision(read)))
+      {
+        return makeError(Error::Code::Conflict, "Target library changed after the import preview");
+      }
+    }
+
     auto currentBytesRes = yaml::readFileResult(prepared._implPtr->sourcePath);
 
     if (!currentBytesRes)
@@ -1757,7 +1752,7 @@ namespace ao::rt
 
     if (!prepared.tracks.empty())
     {
-      if (auto res = importTracks(prepared.tracks, transaction, yamlTrackIdToInternalId, prepared.mode, report); !res)
+      if (auto res = importTracks(prepared.tracks, transaction, yamlTrackIdToInternalId, report); !res)
       {
         return res;
       }
@@ -1822,6 +1817,11 @@ namespace ao::rt
     LibraryYamlImportOperation::PreparedImport::Impl const& prepared,
     library::LibraryWrite& transaction) const
   {
+    if (!prepared.matchesTarget(ml.metadataHeader(transaction), transaction.baseRevision()))
+    {
+      return makeError(Error::Code::InvalidState, "Target library changed after preparing YAML import");
+    }
+
     auto report = prepared.initialReport;
     auto applyRes = applyPreparedRecords(prepared, transaction, report);
 
@@ -1833,10 +1833,10 @@ namespace ao::rt
     return report;
   }
 
-  void LibraryYamlImporter::Impl::populateDeletionStats(ValidatedImport const& val, ImportReport& rep) const
+  void LibraryYamlImporter::Impl::populateDeletionStats(ValidatedImport const& val,
+                                                        library::ReadTransaction const& readTransaction,
+                                                        ImportReport& rep) const
   {
-    auto readTransaction = ml.readTransaction();
-
     if (val.payloadMode != ExportMode::ListOnly)
     {
       rep.tracksDeleted = ml.tracks().reader(readTransaction).entryCount();
@@ -2289,19 +2289,20 @@ namespace ao::rt
     return {};
   }
 
-  Result<std::vector<PreparedTrack>> LibraryYamlImporter::Impl::prepareTracks(ValidatedImport const& validated,
-                                                                              ImportMode mode) const
+  Result<std::vector<PreparedTrack>> LibraryYamlImporter::Impl::prepareTracks(
+    ValidatedImport const& validated,
+    ImportMode mode,
+    library::ReadTransaction const& transaction) const
   {
     auto preparedTracks = std::vector<PreparedTrack>{};
     preparedTracks.reserve(validated.tracks.size());
-    auto transaction = ml.readTransaction();
     auto trackReader = ml.tracks().reader(transaction);
     auto manifestReader = ml.manifest().reader(transaction);
 
     for (auto const& track : validated.tracks)
     {
-      auto trackRes =
-        prepareTrackRecord(track, validated.payloadMode, validated.resources, mode, trackReader, manifestReader);
+      auto const optManifest = mode == ImportMode::Merge ? manifestReader.get(track.uri) : std::nullopt;
+      auto trackRes = prepareTrackRecord(track, validated.payloadMode, validated.resources, trackReader, optManifest);
 
       if (!trackRes)
       {
@@ -2323,29 +2324,19 @@ namespace ao::rt
     ValidatedTrack const& validatedTrack,
     ExportMode payloadMode,
     ValidatedResourceMap const& resources,
-    ImportMode mode,
     library::TrackStore::Reader const& trackReader,
-    library::FileManifestStore::Reader const& manifestReader) const
+    std::optional<library::FileManifestView> const& optManifest) const
   {
     auto optExistingTrackId = std::optional<TrackId>{};
-    auto carrierTrackIds = std::vector<TrackId>{};
 
-    if (mode == ImportMode::Merge)
+    if (optManifest)
     {
-      if (auto const optManifest = manifestReader.get(validatedTrack.uri); optManifest)
+      if ((optManifest->segmentCount() != 0) != validatedTrack.optSegment.has_value())
       {
-        if ((optManifest->segmentCount() != 0) != validatedTrack.optSegment.has_value())
-        {
-          return makeError(Error::Code::FormatRejected, "YAML whole-file/carrier form conflicts with target");
-        }
-
-        optExistingTrackId = findTrack(*optManifest, segmentOrdinal(validatedTrack.optSegment), trackReader);
-
-        if (validatedTrack.optSegment)
-        {
-          carrierTrackIds.assign_range(optManifest->segmentTrackIds());
-        }
+        return makeError(Error::Code::FormatRejected, "YAML whole-file/carrier form conflicts with target");
       }
+
+      optExistingTrackId = findTrack(*optManifest, segmentOrdinal(validatedTrack.optSegment), trackReader);
     }
 
     auto optMediaTrack = std::optional<MediaTrack>{};
@@ -2403,8 +2394,7 @@ namespace ao::rt
 
     auto manifestBuilder = library::FileManifestBuilder::makeEmpty();
 
-    if (auto metadataRes =
-          applyFileMetadata(validatedTrack.node, validatedTrack.uri, mode, manifestReader, manifestBuilder);
+    if (auto metadataRes = applyFileMetadata(validatedTrack.node, validatedTrack.uri, optManifest, manifestBuilder);
         !metadataRes)
     {
       return std::unexpected{metadataRes.error()};
@@ -2421,7 +2411,6 @@ namespace ao::rt
                          .uri = validatedTrack.uri,
                          .optExistingTrackId = optExistingTrackId,
                          .optSegment = validatedTrack.optSegment,
-                         .carrierTrackIds = std::move(carrierTrackIds),
                          .builder = std::move(*snapshotRes),
                          .manifest = std::move(manifestBuilder)};
   }
@@ -2429,37 +2418,17 @@ namespace ao::rt
   Result<> LibraryYamlImporter::Impl::importTracks(std::vector<PreparedTrack> const& tracks,
                                                    library::LibraryWrite& transaction,
                                                    std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId,
-                                                   ImportMode strategy,
                                                    ImportReport& report) const
   {
     auto trackWriter = transaction.tracks();
     auto manifestReader = ml.manifest().reader(transaction);
-    auto trackReader = ml.tracks().reader(transaction);
-
-    if (auto res = validatePreparedCarriers(tracks, trackReader, manifestReader, strategy); !res)
-    {
-      return res;
-    }
-
-    auto carrierGroups = std::unordered_map<std::string_view, std::vector<PreparedTrack const*>>{};
-
-    for (auto const& track : tracks)
-    {
-      if (track.optSegment)
-      {
-        carrierGroups[track.uri].push_back(&track);
-      }
-    }
-
-    auto importedUris = std::unordered_set<std::string_view>{};
+    auto const carrierGroups = groupCarrierMembers(tracks);
 
     for (auto const& preparedTrack : tracks)
     {
       if (!preparedTrack.optSegment)
       {
-        if (auto res =
-              importTrackRecord(preparedTrack, trackWriter, manifestReader, strategy, yamlTrackIdToInternalId, report);
-            !res)
+        if (auto res = importTrackRecord(preparedTrack, trackWriter, yamlTrackIdToInternalId, report); !res)
         {
           return res;
         }
@@ -2467,14 +2436,14 @@ namespace ao::rt
         continue;
       }
 
-      if (!importedUris.insert(preparedTrack.uri).second)
+      auto const& group = carrierGroups.at(preparedTrack.uri);
+
+      if (group.front() != &preparedTrack)
       {
         continue;
       }
 
-      if (auto res = importCarrierGroup(
-            carrierGroups.at(preparedTrack.uri), trackWriter, manifestReader, yamlTrackIdToInternalId, report);
-          !res)
+      if (auto res = importCarrierGroup(group, trackWriter, manifestReader, yamlTrackIdToInternalId, report); !res)
       {
         return res;
       }
@@ -2486,30 +2455,11 @@ namespace ao::rt
   Result<> LibraryYamlImporter::Impl::importTrackRecord(
     PreparedTrack const& preparedTrack,
     library::TrackWriter& trackWriter,
-    library::FileManifestStore::Reader const& manifestReader,
-    ImportMode strategy,
     std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId,
     ImportReport& report) const
   {
     auto const& uri = preparedTrack.uri;
-    auto optExistingTrackId = preparedTrack.optExistingTrackId;
-
-    if (strategy == ImportMode::Merge)
-    {
-      auto optCurrentTrackId = std::optional<TrackId>{};
-
-      if (auto const optManifest = manifestReader.get(uri); optManifest)
-      {
-        optCurrentTrackId = optManifest->trackId();
-      }
-
-      if (optCurrentTrackId != optExistingTrackId)
-      {
-        return makeError(
-          Error::Code::InvalidState, std::format("Library changed after preparing YAML track '{}'", uri));
-      }
-    }
-
+    auto const optExistingTrackId = preparedTrack.optExistingTrackId;
     auto builder = preparedTrack.builder.makeBuilder();
     auto manifestBuilder = preparedTrack.manifest;
     auto targetTrackId = kInvalidTrackId;
@@ -2619,28 +2569,15 @@ namespace ao::rt
 
   Result<> LibraryYamlImporter::Impl::applyFileMetadata(ryml::ConstNodeRef const& trackNode,
                                                         std::string_view uriStr,
-                                                        ImportMode mode,
-                                                        library::FileManifestStore::Reader const& manifestReader,
+                                                        std::optional<library::FileManifestView> const& optManifest,
                                                         library::FileManifestBuilder& manifestBuilder) const
   {
     auto const fileSizeNode = yaml::findChild(trackNode, "file-size");
     auto const mtimeNode = yaml::findChild(trackNode, "mtime");
 
-    auto const optManifest = mode == ImportMode::Merge ? manifestReader.get(uriStr) : std::nullopt;
-
     if (optManifest)
     {
-      if (optManifest->segmentCount() != 0)
-      {
-        // Carrier membership is append-only here; retain the one physical
-        // file's identity and status while overlaying its portable facts.
-        manifestBuilder = library::FileManifestBuilder::fromView(*optManifest);
-      }
-      else
-      {
-        manifestBuilder.fileSize(optManifest->fileSize());
-        manifestBuilder.mtime(optManifest->mtime());
-      }
+      manifestBuilder = library::FileManifestBuilder::fromView(*optManifest);
     }
     else
     {
@@ -2682,6 +2619,9 @@ namespace ao::rt
       }
     }
 
+    bool sizeChanged = false;
+    bool mtimeChanged = false;
+
     if (fileSizeNode.readable())
     {
       auto fileSizeRes = requireScalarAs<std::uint64_t>(fileSizeNode, "Track record.file-size");
@@ -2691,6 +2631,7 @@ namespace ao::rt
         return std::unexpected{fileSizeRes.error()};
       }
 
+      sizeChanged = optManifest && *fileSizeRes != optManifest->fileSize();
       manifestBuilder.fileSize(*fileSizeRes);
     }
 
@@ -2706,7 +2647,15 @@ namespace ao::rt
       // The overlay is the rule the preflight already enforced: a map carries
       // the document's instant, an explicit null clears the fact, and nothing
       // here rebuilds an absent key from a filesystem the document never saw.
+      mtimeChanged = optManifest && *mtimeRes != optManifest->mtime();
       manifestBuilder.mtime(*mtimeRes);
+    }
+
+    if (sizeChanged || mtimeChanged)
+    {
+      // The fingerprint belongs to the physical file, including one shared by
+      // CUE segments. A fact override invalidates it without observing availability.
+      manifestBuilder.audioPayloadLength(0).audioSignature({});
     }
 
     return {};

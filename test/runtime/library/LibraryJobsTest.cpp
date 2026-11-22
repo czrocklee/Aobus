@@ -533,11 +533,21 @@ namespace ao::rt::test
       CHECK(res.error().code == Error::Code::Conflict);
     }
 
-    SECTION("changed target revision is rejected")
+    SECTION("a missing source reports an I/O error when the target is unchanged")
+    {
+      REQUIRE(std::filesystem::remove(yamlPath));
+      auto res = runQueuedTask(runtime, executor, jobs.applyLibraryImportPlanAsync(std::move(*planRes)));
+
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::IoError);
+    }
+
+    SECTION("a changed target revision takes precedence over a missing source")
     {
       auto deleteRes = runQueuedTask(runtime, executor, runtimeLibrary.commands().deleteTrackAsync(existingTrackId));
       INFO((deleteRes ? "target changed" : deleteRes.error().message));
       REQUIRE(deleteRes);
+      REQUIRE(std::filesystem::remove(yamlPath));
       auto res = runQueuedTask(runtime, executor, jobs.applyLibraryImportPlanAsync(std::move(*planRes)));
 
       REQUIRE_FALSE(res);
