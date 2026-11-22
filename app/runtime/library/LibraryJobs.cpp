@@ -20,9 +20,7 @@
 #include <ao/async/Task.h>
 #include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/LibraryWrite.h>
-#include <ao/library/MetadataLayout.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/library/ReadTransaction.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/library/AudioIdentityIndex.h>
 #include <ao/rt/library/LibraryAuthoring.h>
@@ -36,7 +34,6 @@
 #include <ao/utility/ThreadName.h>
 
 #include <algorithm>
-#include <array>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -60,24 +57,18 @@ namespace ao::rt
     Impl(LibraryYamlImportOperation::PreparedImport preparedValue,
          ImportReport reportValue,
          std::filesystem::path sourcePathValue,
-         std::array<std::byte, 16> targetLibraryIdValue,
-         std::uint64_t runtimeInstanceIdValue,
-         std::uint64_t targetRevisionValue)
+         std::uint64_t runtimeInstanceIdValue)
       : prepared{std::move(preparedValue)}
       , report{reportValue}
       , sourcePath{std::move(sourcePathValue)}
-      , targetLibraryId{targetLibraryIdValue}
       , runtimeInstanceId{runtimeInstanceIdValue}
-      , targetRevision{targetRevisionValue}
     {
     }
 
     LibraryYamlImportOperation::PreparedImport prepared;
     ImportReport report;
     std::filesystem::path sourcePath{};
-    std::array<std::byte, 16> targetLibraryId{};
     std::uint64_t runtimeInstanceId = 0;
-    std::uint64_t targetRevision = 0;
   };
 
   LibraryImportPlan::LibraryImportPlan(std::unique_ptr<Impl> implPtr)
@@ -633,15 +624,6 @@ namespace ao::rt
       }
       else
       {
-        auto targetLibraryId = std::array<std::byte, 16>{};
-        std::uint64_t targetRevision = 0;
-
-        {
-          auto readTransaction = _implPtr->library.readTransaction();
-          targetLibraryId = _implPtr->library.metadataHeader(readTransaction).libraryId;
-          targetRevision = _implPtr->library.libraryRevision(readTransaction);
-        }
-
         auto mutationRes = co_await LibraryWriteLane::beginMaintenanceMutationAsync(
           _implPtr->writeLane.captureSubmission(), maintenance);
 
@@ -664,7 +646,7 @@ namespace ao::rt
             auto report = std::move(*reportRes);
             mutation.abort();
             optRes.emplace(LibraryImportPlan{std::make_unique<LibraryImportPlan::Impl>(
-              std::move(*preparedRes), report, path, targetLibraryId, availability.runtimeInstanceId, targetRevision)});
+              std::move(*preparedRes), report, path, availability.runtimeInstanceId)});
           }
         }
       }
@@ -751,68 +733,51 @@ namespace ao::rt
       }
       else
       {
-        bool bindingMatches = false;
+        auto importer = ao::rt::LibraryYamlImporter{_implPtr->library};
+        auto importOperation = LibraryYamlImportOperation{importer};
+        auto bindingRes = importOperation.checkPreviewBindings(binding.prepared);
 
+        if (!bindingRes)
         {
-          auto readTransaction = _implPtr->library.readTransaction();
-          auto const header = _implPtr->library.metadataHeader(readTransaction);
-          bindingMatches = header.libraryId == binding.targetLibraryId &&
-                           _implPtr->library.libraryRevision(readTransaction) == binding.targetRevision;
-        }
-
-        if (!bindingMatches)
-        {
-          optRes.emplace(makeError(Error::Code::Conflict, "Target library changed after the import preview"));
+          optRes.emplace(std::unexpected{bindingRes.error()});
         }
         else
         {
-          auto importer = ao::rt::LibraryYamlImporter{_implPtr->library};
-          auto importOperation = LibraryYamlImportOperation{importer};
-          auto sourceRes = importOperation.revalidateSource(binding.prepared);
+          auto mutationRes = co_await LibraryWriteLane::beginMaintenanceMutationAsync(
+            _implPtr->writeLane.captureSubmission(), maintenance);
 
-          if (!sourceRes)
+          if (!mutationRes)
           {
-            optRes.emplace(std::unexpected{sourceRes.error()});
+            optRes.emplace(std::unexpected{mutationRes.error()});
           }
           else
           {
-            auto mutationRes = co_await LibraryWriteLane::beginMaintenanceMutationAsync(
-              _implPtr->writeLane.captureSubmission(), maintenance);
+            auto mutation = std::move(*mutationRes);
+            auto executionRes = co_await mutation.executeAsync(
+              [&importOperation, &binding](library::LibraryWrite& transaction) -> Result<OperationOutcome<ImportReport>>
+              {
+                auto importRes = importOperation.apply(binding.prepared, transaction);
 
-            if (!mutationRes)
+                if (!importRes)
+                {
+                  return std::unexpected{importRes.error()};
+                }
+
+                auto changeSet = importOperation.buildChangeSet(binding.prepared, transaction);
+                return Changed<ImportReport>{
+                  .value = std::move(*importRes),
+                  .changeSet = std::move(changeSet),
+                };
+              },
+              "Import library YAML");
+
+            if (!executionRes)
             {
-              optRes.emplace(std::unexpected{mutationRes.error()});
+              optRes.emplace(std::unexpected{executionRes.error()});
             }
             else
             {
-              auto mutation = std::move(*mutationRes);
-              auto executionRes = co_await mutation.executeAsync(
-                [&importOperation,
-                 &binding](library::LibraryWrite& transaction) -> Result<OperationOutcome<ImportReport>>
-                {
-                  auto importRes = importOperation.apply(binding.prepared, transaction);
-
-                  if (!importRes)
-                  {
-                    return std::unexpected{importRes.error()};
-                  }
-
-                  auto changeSet = importOperation.buildChangeSet(binding.prepared, transaction);
-                  return Changed<ImportReport>{
-                    .value = std::move(*importRes),
-                    .changeSet = std::move(changeSet),
-                  };
-                },
-                "Import library YAML");
-
-              if (!executionRes)
-              {
-                optRes.emplace(std::unexpected{executionRes.error()});
-              }
-              else
-              {
-                optRes.emplace(std::move(executionRes->value));
-              }
+              optRes.emplace(std::move(executionRes->value));
             }
           }
         }

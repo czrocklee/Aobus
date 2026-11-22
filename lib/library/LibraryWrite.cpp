@@ -8,6 +8,8 @@
 #include <ao/library/WriteTransaction.h>
 #include <ao/lmdb/Transaction.h>
 
+#include <cstdint>
+
 namespace ao::library
 {
   LibraryWrite::LibraryWrite(WriteTransaction& transaction) noexcept
@@ -19,6 +21,11 @@ namespace ao::library
   {
     _transaction->requireOperationActive();
     return *_transaction;
+  }
+
+  std::uint64_t LibraryWrite::baseRevision() const
+  {
+    return _transaction->baseRevision();
   }
 
   TrackWriter LibraryWrite::tracks()

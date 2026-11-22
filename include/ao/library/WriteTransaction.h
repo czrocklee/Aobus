@@ -162,6 +162,7 @@ namespace ao::library
     // staged; it equals the Track mark a commit at this point would record.
     std::uint32_t lastAllocatedTrackId() const;
     std::uint64_t libraryRevision(detail::LibraryIdentity const& identity) const;
+    std::uint64_t baseRevision() const;
     MetadataHeader metadataHeader(detail::LibraryIdentity const& identity) const;
     void requireOperationActive() const;
 

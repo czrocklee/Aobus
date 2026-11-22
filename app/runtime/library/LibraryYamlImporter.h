@@ -18,7 +18,7 @@ namespace ao::rt
 {
   class LibraryYamlImportOperation;
 
-  /** Source-private parser behind LibraryJobs and the offline CLI path. */
+  /** Source-private YAML importer shared by LibraryJobs and the synchronous offline operations. */
   class LibraryYamlImporter final
   {
   public:

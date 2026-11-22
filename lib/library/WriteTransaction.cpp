@@ -268,6 +268,12 @@ namespace ao::library
     return _implPtr->candidateRevision;
   }
 
+  std::uint64_t WriteTransaction::baseRevision() const
+  {
+    requireOperationActive();
+    return _implPtr->previousRevision;
+  }
+
   MetadataHeader WriteTransaction::metadataHeader(detail::LibraryIdentity const& identity) const
   {
     AO_EXPECTS(_implPtr != nullptr, "Library write transaction is no longer active");

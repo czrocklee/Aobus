@@ -18,7 +18,9 @@
 #include <ao/utility/Sha256.h>
 #include <ao/yaml/RymlAdapter.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <array>
 #include <chrono>
@@ -955,6 +957,75 @@ library:
     result = target.run({"lib", "stats"});
     REQUIRE(result.status == 0);
     CHECK(contains(result.out, "tracks: 2"));
+  }
+
+  TEST_CASE("CLI - scan relinks a curated track after merge while its file is missing")
+  {
+    auto const* const mode = GENERATE("metadata", "full", "delta");
+    CAPTURE(mode);
+    auto fixture = CliFixture{};
+    fixture.copyAudio("basic_metadata.flac", "track.flac");
+    REQUIRE(fixture.run({"scan"}).status == 0);
+
+    auto const initial = fixture.run({"-O", "yaml", "track", "show"});
+    REQUIRE(initial.status == 0);
+    auto const initialTree = parseYaml(initial.out);
+    auto const initialTracks = initialTree.rootref()["tracks"];
+    REQUIRE(initialTracks.num_children() == 1);
+    auto const trackId = std::string{yaml::scalarView(initialTracks[0]["id"])};
+    REQUIRE_FALSE(trackId.empty());
+    auto const curated =
+      fixture.run({"track", "update", trackId, "--title", "Curated Title", "--album", "Merged Album"});
+    REQUIRE(curated.status == 0);
+
+    // Export from the same row so full carries matching file facts. The later tag exists only in the target.
+    auto const documentPath = fixture.root() / "backup.yaml";
+    REQUIRE(fixture.run({"lib", "export", documentPath.string(), "--mode", mode}).status == 0);
+    REQUIRE(fixture.run({"track", "update", trackId, "--album", "Local Album", "--add-tag", "fav"}).status == 0);
+    auto const local = fixture.run({"-O", "json", "track", "show", trackId});
+    REQUIRE(local.status == 0);
+    auto const localTree = parseYaml(local.out);
+    REQUIRE(yaml::scalarView(localTree.rootref()["album"]) == "Local Album");
+
+    REQUIRE(fs::remove(fixture.root() / "track.flac"));
+    auto const missing = fixture.run({"-O", "yaml", "scan"});
+    REQUIRE(missing.status == 0);
+    auto const missingTree = parseYaml(missing.out);
+    REQUIRE(yaml::scalarView(missingTree.rootref()["missing"]) == "1");
+
+    auto const merged = fixture.run({"-O", "yaml", "lib", "import", "--mode", "merge", documentPath.string()});
+    REQUIRE(merged.status == 0);
+    auto const mergeTree = parseYaml(merged.out);
+    CHECK(yaml::scalarView(mergeTree.rootref()["payloadMode"]) == mode);
+    REQUIRE(yaml::scalarView(mergeTree.rootref()["tracksUpdated"]) == "1");
+
+    auto const manifest = fixture.run({"-O", "yaml", "lib", "dump", "--manifest"});
+    REQUIRE(manifest.status == 0);
+    auto const manifestTree = parseYaml(manifest.out);
+    auto const rows = manifestTree.rootref()["manifest"];
+    REQUIRE(rows.num_children() == 1);
+    CHECK(yaml::scalarView(rows[0]["status"]) == "Missing");
+
+    fixture.copyAudio("basic_metadata.flac", "renamed.flac");
+    auto const moved = fixture.run({"-O", "yaml", "scan"});
+    REQUIRE(moved.status == 0);
+    auto const movedTree = parseYaml(moved.out);
+    CHECK(yaml::scalarView(movedTree.rootref()["moved"]) == "1");
+
+    // A separate invocation reopens the library and reads every track.
+    auto const reopened = fixture.run({"-O", "yaml", "track", "show"});
+    REQUIRE(reopened.status == 0);
+    auto const reopenedTree = parseYaml(reopened.out);
+    auto const tracks = reopenedTree.rootref()["tracks"];
+    REQUIRE(tracks.num_children() == 1);
+    auto const track = tracks[0];
+    CHECK(yaml::scalarView(track["id"]) == trackId);
+    CHECK(yaml::scalarView(track["uri"]) == "renamed.flac");
+    CHECK(yaml::scalarView(track["title"]) == "Curated Title");
+    CHECK(yaml::scalarView(track["album"]) == "Merged Album");
+    auto const tags = track["tags"];
+    REQUIRE(tags.num_children() == 1);
+    CHECK(yaml::scalarView(tags[0]) == "fav");
   }
 
   TEST_CASE("CLI - lib domain failures use stderr and exit non-zero")
