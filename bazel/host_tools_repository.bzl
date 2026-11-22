@@ -22,6 +22,14 @@ def _link(ctx, source, destination, links):
     links.append({"source": str(path), "destination": destination})
     return destination
 
+def _fixture_inputs(ctx, test_tools, names, links):
+    # The installed Nix runtime remains at its immutable store paths. Only
+    # the selected executables are declared as runfile inputs.
+    return [
+        _link(ctx, test_tools[name], "test-tools/bin/" + _basename(test_tools[name]), links)
+        for name in names
+    ]
+
 def materialize_host_tools(ctx, data):
     """Project admitted native paths and SDK bytes into the fixed tool interface.
 
@@ -58,18 +66,23 @@ def materialize_host_tools(ctx, data):
         for index, source in enumerate(resource["runtime"] + resource["evidence"]):
             resource_inputs.append(_link(ctx, source, "resource-tools/runtime/%s/" % index + _basename(source), links))
 
+    test_tools = data["test_tools"]
     dbus_inputs = []
-    dbus = data.get("dbus")
-    if dbus != None:
+    pipewire_inputs = []
+    xvfb_inputs = []
+    if ctx.os.name == "linux":
+        dbus = data["dbus"]
         for index, source in enumerate(dbus["artifacts"]):
             dbus_inputs.append(_link(ctx, source, "test-tools/%s/" % index + _basename(source), links))
         ctx.file("test-tools.json", json.encode(dbus["identity"]) + "\n", executable = False)
         dbus_inputs.append("test-tools.json")
+        pipewire_inputs = _fixture_inputs(ctx, test_tools, ["pipewire", "pw_cli", "wireplumber"], links)
+        xvfb_inputs = _fixture_inputs(ctx, test_tools, ["xvfb"], links)
 
     ctx.file("windows_manifest_tools.bzl", "WINDOWS_MANIFEST_TOOLS = %s\n" % repr(data["manifest_tools"]), executable = False)
     ctx.file("catalog_tools.bzl", "CATALOG_TOOLS = %s\n" % repr(catalog["tools"]), executable = False)
     ctx.file("python_action_tools.bzl", "PYTHON_ACTION_TOOLS = %s\n" % repr(python["tools"]), executable = False)
-    ctx.file("test_tools.bzl", "TEST_TOOLS = %s\n" % repr(data["test_tools"]), executable = False)
+    ctx.file("test_tools.bzl", "TEST_TOOLS = %s\n" % repr(test_tools), executable = False)
     ctx.file("app_version.bzl", "APP_VERSION = %s\n" % repr(data["app_version"]), executable = False)
     ctx.file("host_tools_data.bzl", "HOST_TOOLS = %s\n" % repr({
         "gperf": executable,
@@ -80,6 +93,8 @@ def materialize_host_tools(ctx, data):
         "resource_executable": resource_executable,
         "resource_inputs": resource_inputs,
         "dbus_inputs": dbus_inputs,
+        "pipewire_inputs": pipewire_inputs,
+        "xvfb_inputs": xvfb_inputs,
         "python": data["python"],
     }), executable = False)
     ctx.file("manifest.json", json.encode({

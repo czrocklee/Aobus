@@ -273,7 +273,10 @@ let
       alsa-lib = dependencyEntry pkgs.alsa-lib;
       pipewire = dependencyEntry pkgs.pipewire;
       udev = dependencyEntry pkgs.udev;
-      # Linux GTK test imports and their already selected Xvfb/private-bus tools.
+      # Test-only executables for private audio sessions and headless GTK displays.
+      wireplumber = dependencyEntry pkgs.wireplumber;
+      xvfb = dependencyEntry pkgs.xvfb;
+      # Linux GTK test imports.
       libX11 = dependencyEntry pkgs.libX11;
       libXi = dependencyEntry pkgs.libXi;
       libXtst = dependencyEntry pkgs.libXtst;

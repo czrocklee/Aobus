@@ -739,6 +739,76 @@ class BazelWorkspaceTests(unittest.TestCase):
         ):
             host_tools._linux_gperf()
 
+    def linux_fixture_tool_report(self):
+        pipewire, split, wireplumber, xvfb = (self.root / name for name in ("pipewire", "pipewire-bin", "wp", "xvfb"))
+        tools = {
+            "pipewire": pipewire / "bin/pipewire",
+            "pw_cli": split / "bin/pw-cli",
+            "wireplumber": wireplumber / "bin/wireplumber",
+            "xvfb": xvfb / "bin/Xvfb",
+        }
+        for path in tools.values():
+            path.parent.mkdir(parents=True)
+            path.touch(mode=0o755)
+        report = self.root / "fixture-report.json"
+        self.write_json(
+            report,
+            {
+                "schemaVersion": 1,
+                "nixpkgsRevision": native.read_json(native.PROJECT_ROOT / "nixpkgs.json")["rev"],
+                "dependencies": {
+                    "pipewire": self.nix_entry(pipewire, "1.2.3", {"out": pipewire, "bin": split}),
+                    "wireplumber": self.nix_entry(wireplumber, "4.5.6", {"out": wireplumber}),
+                    "xvfb": self.nix_entry(xvfb, "7.8.9", {"out": xvfb}),
+                },
+            },
+        )
+        return tools, report, [pipewire, split, wireplumber, xvfb]
+
+    @unittest.skipIf(os.name == "nt", "POSIX executable and symlink fixture")
+    def test_linux_fixture_tools_publish_installed_paths_and_watch_split_outputs(self):
+        tools, report, roots = self.linux_fixture_tool_report()
+        client = tools["pw_cli"]
+        target = client.with_name(".pw-cli-wrapped")
+        client.rename(target)
+        client.symlink_to(target.name)
+        files, directories, probes = set(), set(), set()
+        with (
+            patch.dict(os.environ, {"AOBUS_NIX_DEPENDENCY_REPORT": str(report), "PATH": ""}),
+            self.nix_paths(roots),
+            native.capture_probes(probes.add),
+        ):
+            selected = host_tools._linux_fixture_tools(files, directories)
+        self.assertEqual(selected, {name: str(path) for name, path in tools.items()})
+        self.assertLessEqual({report, native.PROJECT_ROOT / "nixpkgs.json", target, *tools.values()}, files)
+        self.assertEqual(directories, {path.parent for path in tools.values()})
+        self.assertIn(tools["pipewire"].with_name("pw-cli"), probes)
+
+    @unittest.skipIf(os.name == "nt", "POSIX executable and symlink fixture")
+    def test_linux_fixture_tools_reject_missing_duplicate_unowned_or_nonexecutable_files(self):
+        tools, report, roots = self.linux_fixture_tool_report()
+        client = tools["pw_cli"]
+        duplicate = tools["pipewire"].with_name("pw-cli")
+        unowned = tools["wireplumber"].with_name("pw-cli")
+        unowned.touch(mode=0o755)
+        with (
+            patch.dict(os.environ, {"AOBUS_NIX_DEPENDENCY_REPORT": str(report), "PATH": str(unowned.parent)}),
+            self.nix_paths(roots),
+        ):
+            duplicate.touch(mode=0o755)
+            with self.assertRaisesRegex(native.BazelWorkspaceError, "ambiguous pw-cli"):
+                host_tools._linux_fixture_tools(set(), set())
+            duplicate.unlink()
+            client.chmod(0o644)
+            with self.assertRaisesRegex(native.BazelWorkspaceError, "not executable: .*pw-cli"):
+                host_tools._linux_fixture_tools(set(), set())
+            client.unlink()
+            with self.assertRaisesRegex(native.BazelWorkspaceError, "missing/ambiguous pw-cli"):
+                host_tools._linux_fixture_tools(set(), set())
+            client.symlink_to(unowned)
+            with self.assertRaisesRegex(native.BazelWorkspaceError, "pw-cli escapes"):
+                host_tools._linux_fixture_tools(set(), set())
+
     def native_gperf(self, host="windows"):
         installed = self.root / "installed"
         target = installed / ("x64-windows" if host == "windows" else "arm64-target")
@@ -881,6 +951,10 @@ class BazelWorkspaceTests(unittest.TestCase):
                 patch.object(host_tools, '_catalog_sdk', return_value=sdk),
                 patch.object(host_tools, '_python_action_sdk', return_value=python_action),
                 patch.object(host_tools, '_linux_dbus', return_value=dbus),
+                patch.object(host_tools, '_linux_fixture_tools', return_value={
+                    'pipewire': str(fixtures / 'bin/pipewire'), 'pw_cli': str(fixtures / 'bin/pw-cli'),
+                    'wireplumber': str(fixtures / 'bin/wireplumber'), 'xvfb': str(fixtures / 'bin/Xvfb'),
+                }),
                 patch.object(host_tools, '_linux_gresource', return_value=resource),
                 patch.object(host_tools, '_python_runtime', return_value=python_runtime),
                 patch.object(host_tools, '_app_version', return_value='1.2.3'),
@@ -963,6 +1037,10 @@ class BazelWorkspaceTests(unittest.TestCase):
                 "dbus_daemon": str(fixtures / "bin/dbus-daemon"),
                 "dbus_daemon_directory": str(fixtures / "bin"),
                 "tooling_python": str(fixtures / "bin/python3"),
+                "pipewire": str(fixtures / "bin/pipewire"),
+                "wireplumber": str(fixtures / "bin/wireplumber"),
+                "pw_cli": str(fixtures / "bin/pw-cli"),
+                "xvfb": str(fixtures / "bin/Xvfb"),
             },
         )
         self.assertEqual(facts["python"]["executable"], str(fixtures / "bin/python3"))

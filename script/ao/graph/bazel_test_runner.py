@@ -1,12 +1,12 @@
 """Run one wrapped native test under owned private Linux fixtures.
 
 The runner is the executable of the thin ``native_context_test`` wrapper: it
-starts only the fixtures requested by ``AOBUS_TEST_CONTEXT``, launches the
-wrapped native test executable that the wrapper declares in runfiles, and
-returns the child status. Private service logs use Bazel's
-``TEST_UNDECLARED_OUTPUTS_DIR`` when present so standard testlogs retain their
-diagnostics. No installation, desktop bypass or remote-session setup happens
-here.
+starts only the fixtures requested by ``AOBUS_TEST_CONTEXT`` using the
+wrapper's declared fixture executables, launches the wrapped native test
+executable declared in runfiles, and returns the child status. Private service
+logs use Bazel's ``TEST_UNDECLARED_OUTPUTS_DIR`` when present so testlogs
+retain their diagnostics. No installation, desktop bypass or remote-session
+setup happens here.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ import subprocess
 import sys
 import tempfile
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -27,7 +27,6 @@ from ao.graph import bazel_test_context as test_context
 from ao.graph import bazel_test_services as services
 
 _EXECUTABLE_ENV = "AOBUS_TEST_EXECUTABLE"
-_DBUS_DAEMON_ENV = "AOBUS_TEST_DBUS_DAEMON"
 _IPC_TMPDIR = "/tmp"
 
 
@@ -82,6 +81,17 @@ def _service_logs(environment: Mapping[str, str]) -> Path:
     return path
 
 
+def _fixture_executable(environment: Mapping[str, str], variable: str) -> str:
+    value = environment.get(variable)
+    if not value:
+        raise RuntimeError(f"Linux test fixtures require {variable} to declare an absolute executable path")
+    if not Path(value).is_absolute():
+        raise RuntimeError(f"{variable} must be an absolute executable path: {value!r}")
+    if not Path(value).is_file() or not os.access(value, os.X_OK):
+        raise RuntimeError(f"{variable} must name an executable file: {value!r}")
+    return value
+
+
 @contextmanager
 def _fixture_environment(
     selected: frozenset[str], environment: Mapping[str, str], check_cancelled: Callable[[], None]
@@ -90,6 +100,18 @@ def _fixture_environment(
     if not selected & test_context.LINUX_CONTEXTS:
         yield {}
         return
+    # Validate every required declaration before starting any fixture.
+    dbus_daemon = _fixture_executable(environment, "AOBUS_TEST_DBUS_DAEMON")
+    xvfb = _fixture_executable(environment, "AOBUS_TEST_XVFB") if "gtk" in selected else None
+    audio = None
+    if selected & {"audio", "gtk"}:
+        tools = services.PipeWireTools(
+            pipewire=_fixture_executable(environment, "AOBUS_TEST_PIPEWIRE"),
+            wireplumber=_fixture_executable(environment, "AOBUS_TEST_WIREPLUMBER"),
+            pw_cli=_fixture_executable(environment, "AOBUS_TEST_PW_CLI"),
+        )
+        audio = tools, _service_logs(environment)
+
     # Bazel's per-test temp path can exceed the Unix socket limit. Keep only
     # fixture IPC here, and retire services before removing this invocation's root.
     root = Path(tempfile.mkdtemp(prefix="aobus-test-", dir=_IPC_TMPDIR))
@@ -101,32 +123,29 @@ def _fixture_environment(
         if not runtime.exists():
             shutil.rmtree(root)
 
-    with services.cleanup_after(remove_ipc_root):
+    with services.cleanup_after(remove_ipc_root), ExitStack() as fixtures:
         root.chmod(0o700)
-        dbus_daemon = environment.get(_DBUS_DAEMON_ENV) or "dbus-daemon"
-        if "gtk" in selected:
-            # GTK owns its private Xvfb display, session bus and audio stack.
-            gtk_logs = _service_logs(environment)
-            with services.virtual_gtk_displays(
-                1, ipc_root=root / "gtk-bus", dbus_daemon=dbus_daemon, check_cancelled=check_cancelled
-            ) as displays:
-                with services.private_pipewire(
-                    gtk_logs, displays[0], runtime_root=runtime, check_cancelled=check_cancelled
-                ) as audio:
-                    yield displays[0] | audio
-            return
-        # Audio and plain D-Bus contexts own a private session bus, never a display.
-        logs = _service_logs(environment) if "audio" in selected else None
-        with services.private_session_bus(
-            ipc_root=root / "session-bus", dbus_daemon=dbus_daemon, check_cancelled=check_cancelled
-        ) as bus:
-            if logs is not None:
-                with services.private_pipewire(
-                    logs, bus, runtime_root=runtime, check_cancelled=check_cancelled
-                ) as audio:
-                    yield bus | audio
-            else:
-                yield bus
+        if xvfb is not None:
+            session = fixtures.enter_context(
+                services.virtual_gtk_displays(
+                    ipc_root=root / "gtk-bus", dbus_daemon=dbus_daemon, xvfb=xvfb, check_cancelled=check_cancelled
+                )
+            )[0]
+        else:
+            session = fixtures.enter_context(
+                services.private_session_bus(
+                    ipc_root=root / "session-bus", dbus_daemon=dbus_daemon, check_cancelled=check_cancelled
+                )
+            )
+        if audio is not None:
+            tools, logs = audio
+            audio_environment = fixtures.enter_context(
+                services.private_pipewire(
+                    logs, session, tools=tools, runtime_root=runtime, check_cancelled=check_cancelled
+                )
+            )
+            session = session | audio_environment
+        yield session
 
 
 def _run_linux(arguments: Sequence[str], environment: Mapping[str, str], selected: frozenset[str]) -> int:

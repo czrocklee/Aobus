@@ -13,6 +13,7 @@ import tempfile
 import time
 from collections.abc import Callable, Generator, Mapping
 from contextlib import ExitStack, contextmanager, nullcontext
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -23,6 +24,15 @@ _READY_TIMEOUT = 10.0
 _PROBE_TIMEOUT = 2.0
 _STOP_TIMEOUT = 1.0
 _POLL_INTERVAL = 0.05
+
+
+@dataclass(frozen=True)
+class PipeWireTools:
+    """The declared executable paths for the private audio stack."""
+
+    pipewire: str
+    wireplumber: str
+    pw_cli: str
 
 
 def _ignore_cancellation() -> None:
@@ -105,15 +115,15 @@ def recreate_private_root(path: Path) -> None:
     path.chmod(0o700)
 
 
-def _start_xvfb() -> subprocess.Popen[bytes]:
+def _start_xvfb(executable: str) -> subprocess.Popen[bytes]:
     try:
         return subprocess.Popen(
-            ["Xvfb", "-displayfd", "1", "-screen", "0", "1280x1024x24", "-nolisten", "tcp"],
+            [executable, "-displayfd", "1", "-screen", "0", "1280x1024x24", "-nolisten", "tcp"],
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
         )
-    except FileNotFoundError as exc:
-        raise native.BazelWorkspaceError("GTK tests require Xvfb. Enter the project nix-shell.") from exc
+    except OSError as error:
+        raise native.BazelWorkspaceError(f"Cannot start private Xvfb from {executable!r}: {error}") from error
 
 
 def _start_session_bus(config: Path, daemon: str) -> subprocess.Popen[bytes]:
@@ -124,10 +134,8 @@ def _start_session_bus(config: Path, daemon: str) -> subprocess.Popen[bytes]:
             # Preserve startup diagnostics without an unread pipe.
             stderr=None,
         )
-    except FileNotFoundError as exc:
-        raise native.BazelWorkspaceError(
-            f"Private D-Bus session tests require {daemon}. Enter the project nix-shell."
-        ) from exc
+    except OSError as error:
+        raise native.BazelWorkspaceError(f"Cannot start private D-Bus from {daemon!r}: {error}") from error
 
 
 def _daemon_ready(server: subprocess.Popen[bytes], label: str, check_cancelled: Callable[[], None]) -> str:
@@ -220,7 +228,7 @@ def _owned_bus_address(
 def private_session_bus(
     ipc_root: Path | None = None,
     *,
-    dbus_daemon: str = "dbus-daemon",
+    dbus_daemon: str,
     check_cancelled: Callable[[], None] = _ignore_cancellation,
 ) -> Generator[dict[str, str]]:
     """Own one private D-Bus session bus; never a display server or audio.
@@ -245,7 +253,8 @@ def virtual_gtk_displays(
     count: int = 1,
     *,
     ipc_root: Path | None = None,
-    dbus_daemon: str = "dbus-daemon",
+    dbus_daemon: str,
+    xvfb: str,
     check_cancelled: Callable[[], None] = _ignore_cancellation,
 ) -> Generator[list[dict[str, str]]]:
     """Own Xvfb and private session buses without exposing the caller's desktop.
@@ -257,7 +266,7 @@ def virtual_gtk_displays(
     with _private_bus_directory(ipc_root) as directory, owned_processes() as servers:
         for _ in range(count):
             check_cancelled()
-            servers.append(_start_xvfb())
+            servers.append(_start_xvfb(xvfb))
 
         displays = []
         for server in servers:
@@ -288,6 +297,7 @@ def private_pipewire(
     log_dir: Path,
     session_environment: Mapping[str, str],
     *,
+    tools: PipeWireTools,
     runtime_root: Path | None = None,
     check_cancelled: Callable[[], None] = _ignore_cancellation,
 ) -> Generator[dict[str, str]]:
@@ -384,7 +394,6 @@ def private_pipewire(
                         for key in ("TMPDIR", "XDG_RUNTIME_DIR", "PIPEWIRE_RUNTIME_DIR", "PIPEWIRE_REMOTE")
                     },
                 }
-                tools = {name: native.executable(name, nix=True) for name in ("pipewire", "wireplumber", "pw-cli")}
 
                 def start(name: str, argv: list[str]) -> tuple[subprocess.Popen[bytes], dict[str, Any]]:
                     check_cancelled()
@@ -434,7 +443,7 @@ def private_pipewire(
                                 f"diagnostics: {lifecycle_path}"
                             )
                         attempt += 1
-                        probe, record = start(f"{prefix}-{attempt}", [tools["pw-cli"], *arguments])
+                        probe, record = start(f"{prefix}-{attempt}", [tools.pw_cli, *arguments])
                         probe_deadline = min(deadline, time.monotonic() + _PROBE_TIMEOUT)
                         while observe(probe, record) is None:
                             check_cancelled()
@@ -462,11 +471,11 @@ def private_pipewire(
                             time.sleep(min(_POLL_INTERVAL, remaining))
 
                 save()
-                services.append(start("pipewire", [tools["pipewire"]]))
+                services.append(start("pipewire", [tools.pipewire]))
                 # WirePlumber does not retry an initial refused connection. A
                 # live daemon process is not yet a listening PipeWire server.
                 wait_ready("pipewire-connect-probe", ["info", "0"])
-                services.append(start("wireplumber", [tools["wireplumber"], "--profile=policy"]))
+                services.append(start("wireplumber", [tools.wireplumber, "--profile=policy"]))
                 attempt = wait_ready("pipewire-probe", ["ls", "Metadata"], metadata=True)
                 lifecycle.update(status="ready", readiness_attempts=attempt)
                 save()

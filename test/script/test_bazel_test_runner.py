@@ -29,6 +29,15 @@ class BazelTestRunnerTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
         self.environment = {"PATH": "/bin", "TEST_TMPDIR": str(self.root / "test-tmp")}
+        self.bus_tools = {"AOBUS_TEST_DBUS_DAEMON": str(self.root / "dbus-daemon")}
+        self.audio_tools = self.bus_tools | {
+            "AOBUS_TEST_PIPEWIRE": str(self.root / "pipewire"),
+            "AOBUS_TEST_WIREPLUMBER": str(self.root / "wireplumber"),
+            "AOBUS_TEST_PW_CLI": str(self.root / "pw-cli"),
+        }
+        for path in self.audio_tools.values():
+            Path(path).touch()
+            Path(path).chmod(0o755)
         # Exercise Linux selection without installing handlers or starting services.
         self.enterContext(mock.patch.object(runner, "_IPC_TMPDIR", str(self.root)))
         self.enterContext(mock.patch.object(runner.sys, "platform", "linux"))
@@ -39,7 +48,8 @@ class BazelTestRunnerTests(unittest.TestCase):
         self.popen = self.enterContext(mock.patch.object(runner.subprocess, "Popen", return_value=self.child))
 
     @contextlib.contextmanager
-    def _bus(self, **kwargs):
+    def _bus(self, *, dbus_daemon, **kwargs):
+        self.assertEqual(dbus_daemon, self.bus_tools["AOBUS_TEST_DBUS_DAEMON"])
         yield {"DBUS_SESSION_BUS_ADDRESS": "unix:path=/owned/bus"}
 
     def test_empty_context_forwards_command_and_environment_without_allocating_ipc(self):
@@ -49,8 +59,16 @@ class BazelTestRunnerTests(unittest.TestCase):
 
     def test_audio_and_dbus_contexts_use_the_private_bus_without_a_display(self):
         @contextlib.contextmanager
-        def audio(log_dir, session, **kwargs):
+        def audio(log_dir, session, *, tools, **kwargs):
             self.assertEqual(session["DBUS_SESSION_BUS_ADDRESS"], "unix:path=/owned/bus")
+            self.assertEqual(
+                tools,
+                runner.services.PipeWireTools(
+                    pipewire=self.audio_tools["AOBUS_TEST_PIPEWIRE"],
+                    wireplumber=self.audio_tools["AOBUS_TEST_WIREPLUMBER"],
+                    pw_cli=self.audio_tools["AOBUS_TEST_PW_CLI"],
+                ),
+            )
             yield {"AOBUS_REQUIRE_PIPEWIRE": "1"}
 
         for context in ("audio", "dbus"):
@@ -62,12 +80,49 @@ class BazelTestRunnerTests(unittest.TestCase):
                 ),
                 mock.patch.object(runner.services, "virtual_gtk_displays", _unexpected_fixture),
             ):
-                environment = self.environment | {"AOBUS_TEST_CONTEXT": context}
+                tools = self.audio_tools if context == "audio" else self.bus_tools
+                environment = self.environment | tools | {"AOBUS_TEST_CONTEXT": context}
                 self.assertEqual(runner.run(["probe"], environment), 0)
                 child = self.popen.call_args.kwargs["env"]
                 self.assertEqual(child["DBUS_SESSION_BUS_ADDRESS"], "unix:path=/owned/bus")
                 self.assertEqual(child.get("AOBUS_REQUIRE_PIPEWIRE"), "1" if context == "audio" else None)
                 self.assertNotIn("DISPLAY", child)
+
+    def test_selected_context_needs_its_declarations_before_starting_any_process(self):
+        cases = (
+            ("dbus", {}, "AOBUS_TEST_DBUS_DAEMON"),
+            ("audio", self.bus_tools, "AOBUS_TEST_PIPEWIRE"),
+            ("gtk", self.audio_tools, "AOBUS_TEST_XVFB"),
+        )
+        for context, tools, missing in cases:
+            with self.subTest(context=context), self.assertRaisesRegex(RuntimeError, missing):
+                runner.run(["probe"], self.environment | tools | {"AOBUS_TEST_CONTEXT": context})
+        self.popen.assert_not_called()
+
+    def test_stale_declarations_fail_before_allocating_ipc(self):
+        variable = "AOBUS_TEST_PW_CLI"
+        kinds = ("missing", "directory", "non-executable") if os.name == "posix" else ("missing", "directory")
+        for kind in kinds:
+            with self.subTest(kind=kind):
+                path = self.root / kind
+                if kind == "directory":
+                    path.mkdir()
+                elif kind == "non-executable":
+                    path.touch()
+                    path.chmod(0o644)
+                environment = self.environment | self.audio_tools | {"AOBUS_TEST_CONTEXT": "audio", variable: str(path)}
+                with mock.patch.object(runner.tempfile, "mkdtemp", _unexpected_fixture):
+                    with self.assertRaises(RuntimeError) as error:
+                        runner.run(["probe"], environment)
+                self.assertIn(variable, str(error.exception))
+                self.assertIn(str(path), str(error.exception))
+        self.popen.assert_not_called()
+
+    def test_bus_declaration_must_be_an_absolute_path(self):
+        environment = self.environment | {"AOBUS_TEST_CONTEXT": "dbus", "AOBUS_TEST_DBUS_DAEMON": "dbus-daemon"}
+        with self.assertRaisesRegex(RuntimeError, "AOBUS_TEST_DBUS_DAEMON"):
+            runner.run(["probe"], environment)
+        self.popen.assert_not_called()
 
     def test_overlapping_fixtures_clean_only_their_own_root_even_on_exception(self):
         @contextlib.contextmanager
@@ -83,10 +138,10 @@ class BazelTestRunnerTests(unittest.TestCase):
 
         selected = frozenset({"dbus"})
         with mock.patch.object(runner.services, "private_session_bus", bus):
-            with runner._fixture_environment(selected, {}, lambda: None) as first:
+            with runner._fixture_environment(selected, self.bus_tools, lambda: None) as first:
                 first_root = Path(first["marker"]).parents[1]
                 with self.assertRaises(OSError):
-                    with runner._fixture_environment(selected, {}, lambda: None) as second:
+                    with runner._fixture_environment(selected, self.bus_tools, lambda: None) as second:
                         second_root = Path(second["marker"]).parents[1]
                         self.assertNotEqual(first_root, second_root)
                         raise OSError("fixture failure")
@@ -104,11 +159,11 @@ class BazelTestRunnerTests(unittest.TestCase):
             self.assertEqual(runner.run(["probe"], environment), 7)
 
     def test_uncertain_pipewire_runtime_survives_wrapper_teardown(self):
-        self.environment["AOBUS_TEST_CONTEXT"] = "audio"
+        environment = self.environment | self.audio_tools | {"AOBUS_TEST_CONTEXT": "audio"}
         runtimes = []
 
         @contextlib.contextmanager
-        def audio(log_dir, session, *, runtime_root, check_cancelled):
+        def audio(log_dir, session, *, tools, runtime_root, check_cancelled):
             runtimes.append(runtime_root)
             runtime_root.mkdir()
             yield {}
@@ -119,7 +174,7 @@ class BazelTestRunnerTests(unittest.TestCase):
             mock.patch.object(runner.services, "private_pipewire", audio),
             self.assertRaisesRegex(RuntimeError, "cleanup uncertain"),
         ):
-            runner.run(["probe"], self.environment)
+            runner.run(["probe"], environment)
         self.assertTrue(runtimes[0].is_dir())
 
     def test_unknown_context_fails_instead_of_running_without_fixtures(self):
@@ -129,7 +184,7 @@ class BazelTestRunnerTests(unittest.TestCase):
             runner.run(["probe"], self.environment)
 
     def test_child_exit_status_is_not_replaced_by_fixture_cleanup_failure(self):
-        self.environment["AOBUS_TEST_CONTEXT"] = "dbus"
+        environment = self.environment | self.bus_tools | {"AOBUS_TEST_CONTEXT": "dbus"}
         self.child.poll.return_value = 7
 
         def fail_cleanup():
@@ -141,7 +196,7 @@ class BazelTestRunnerTests(unittest.TestCase):
                 yield {}
 
         with mock.patch.object(runner.services, "private_session_bus", bus), contextlib.redirect_stderr(io.StringIO()):
-            self.assertEqual(runner.run(["probe"], self.environment), 7)
+            self.assertEqual(runner.run(["probe"], environment), 7)
 
     def test_missing_executable_returns_127(self):
         self.popen.side_effect = FileNotFoundError("probe")
@@ -216,9 +271,13 @@ class BazelTestRunnerProcessTests(unittest.TestCase):
         environment = os.environ | {
             "AOBUS_TEST_CONTEXT": "gtk",
             "AOBUS_TEST_DBUS_DAEMON": str(self.root / "declared-bus"),
+            "AOBUS_TEST_PIPEWIRE": str(self.root / "pipewire"),
+            "AOBUS_TEST_WIREPLUMBER": str(self.root / "wireplumber"),
+            "AOBUS_TEST_PW_CLI": str(self.root / "pw-cli"),
+            "AOBUS_TEST_XVFB": str(self.root / "Xvfb"),
             "TEST_TMPDIR": str(self.root / ("long-base-" + "x" * 100) / "test-tmp"),
             "TEST_UNDECLARED_OUTPUTS_DIR": str(self.root / "outputs"),
-            "PATH": str(self.root) + os.pathsep + os.defpath,
+            "PATH": str(self.root / "no-path-tools"),
             "PYTHONPATH": str(Path(runner.__file__).absolute().parents[2]),
         }
         command = textwrap.dedent(
@@ -229,7 +288,6 @@ class BazelTestRunnerProcessTests(unittest.TestCase):
             from ao.graph import bazel_test_runner as runner
 
             root = Path(sys.argv[1])
-            runner.services.native.executable = lambda name, *, nix: str(root / name)
             raise SystemExit(runner.run([str(root / "child")], os.environ))
             """
         )

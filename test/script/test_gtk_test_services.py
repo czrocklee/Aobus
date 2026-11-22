@@ -14,6 +14,11 @@ from unittest import mock
 from ao.core.bazel_native import BazelWorkspaceError
 from ao.graph import bazel_test_services as services
 
+_TOOLS = {
+    "xvfb": str(Path.cwd() / "declared-display"),
+    "dbus_daemon": str(Path.cwd() / "declared-session-bus"),
+}
+
 
 class GtkTestServicesTests(unittest.TestCase):
     def setUp(self):
@@ -41,7 +46,7 @@ class GtkTestServicesTests(unittest.TestCase):
         with (
             mock.patch.object(services.subprocess, "Popen", side_effect=[first, FileNotFoundError("Xvfb")]),
             self.assertRaises(BazelWorkspaceError),
-            services.virtual_gtk_displays(2),
+            services.virtual_gtk_displays(2, **_TOOLS),
         ):
             self.fail("partial display startup was admitted")
         self._assert_stopped(first)
@@ -58,7 +63,7 @@ class GtkTestServicesTests(unittest.TestCase):
             mock.patch.dict(os.environ, host),
             mock.patch.object(services, "_start_xvfb", side_effect=[self._daemon("40"), self._daemon("41")]),
             mock.patch.object(services, "_start_session_bus", side_effect=start_bus),
-            services.virtual_gtk_displays(2) as environments,
+            services.virtual_gtk_displays(2, **_TOOLS) as environments,
         ):
             self.assertEqual([env["DISPLAY"] for env in environments], [":40", ":41"])
             buses = [env["DBUS_SESSION_BUS_ADDRESS"] for env in environments]
@@ -84,7 +89,7 @@ class GtkTestServicesTests(unittest.TestCase):
                 mock.patch.dict(os.environ, {"TMPDIR": str(inherited)}),
                 mock.patch.object(services, "_start_xvfb", return_value=self._daemon("40")),
                 mock.patch.object(services, "_start_session_bus", side_effect=start_bus),
-                services.virtual_gtk_displays(),
+                services.virtual_gtk_displays(**_TOOLS),
             ):
                 self.assertEqual(os.environ["TMPDIR"], str(inherited))
 
@@ -93,7 +98,7 @@ class GtkTestServicesTests(unittest.TestCase):
         with (
             mock.patch.object(services.subprocess, "Popen", side_effect=daemons),
             self.assertRaises(BazelWorkspaceError),
-            services.virtual_gtk_displays(2),
+            services.virtual_gtk_displays(2, **_TOOLS),
         ):
             self.fail("partial bus startup was admitted")
         self._assert_stopped(*daemons)
@@ -125,7 +130,7 @@ class GtkDaemonProcessTests(unittest.TestCase):
         with (
             mock.patch.object(services, "_start_xvfb", return_value=display),
             mock.patch.object(services, "_start_session_bus", return_value=bus),
-            services.virtual_gtk_displays() as environments,
+            services.virtual_gtk_displays(**_TOOLS) as environments,
         ):
             self.assertEqual(environments[0]["DISPLAY"], ":42")
             self.assertEqual(environments[0]["DBUS_SESSION_BUS_ADDRESS"], "unix:path=/private/bus")
@@ -144,7 +149,7 @@ class GtkDaemonProcessTests(unittest.TestCase):
             mock.patch.object(services, "_READY_TIMEOUT", 0.1),
             self.assertRaisesRegex(BazelWorkspaceError, "Xvfb did not report readiness"),
         ):
-            with services.virtual_gtk_displays():
+            with services.virtual_gtk_displays(**_TOOLS):
                 self.fail("tests cannot run while the display handshake is incomplete")
         bus.assert_not_called()
         self._assert_retired(display)
@@ -159,7 +164,7 @@ class GtkDaemonProcessTests(unittest.TestCase):
                     raise original
 
             with self.assertRaises(KeyboardInterrupt) as raised:
-                with services.virtual_gtk_displays(check_cancelled=check_cancelled):
+                with services.virtual_gtk_displays(check_cancelled=check_cancelled, **_TOOLS):
                     self.fail("tests cannot run after startup has been cancelled")
         self.assertIs(raised.exception, original)
         self._assert_retired(display)

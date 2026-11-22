@@ -96,16 +96,23 @@ def _native_gperf(prefix: Path, host: str) -> tuple[dict[str, Any], Path, list[P
     )
 
 
+def _owned_nix_executable(name: str, outputs: list[Path]) -> tuple[Path, Path]:
+    candidates = {path.resolve(): path for root in outputs if native.probe(path := root / "bin" / name).is_file()}
+    if len(candidates) != 1:
+        raise native.BazelWorkspaceError(f"missing/ambiguous {name} in selected Nix outputs")
+    resolved, executable = next(iter(candidates.items()))
+    if providers.nix_root(resolved) not in outputs:
+        raise native.BazelWorkspaceError(f"{name} escapes selected Nix outputs")
+    if not os.access(executable, os.X_OK):
+        raise native.BazelWorkspaceError(f"selected Nix fixture tool is not executable: {executable}")
+    return executable, resolved
+
+
 def _linux_dbus() -> tuple[dict[str, Any], Path, list[Path], list[Path]]:
     """Only the already selected private-bus test tool; no ambient PATH lookup."""
     report, report_path, revision = providers.nix_report()
     _, version, derivation, outputs = providers.nix_dependency(report, "dbus")
-    candidates = {path.resolve(): path for root in outputs if native.probe(path := root / "bin/dbus-daemon").is_file()}
-    if len(candidates) != 1:
-        raise native.BazelWorkspaceError("missing/ambiguous dbus-daemon in selected Nix outputs")
-    resolved, executable = next(iter(candidates.items()))
-    if providers.nix_root(resolved) not in outputs:
-        raise native.BazelWorkspaceError("dbus-daemon escapes selected Nix outputs")
+    executable, _ = _owned_nix_executable("dbus-daemon", outputs)
     runtime = sorted({path.resolve() for root in outputs for path in (root / "lib").glob("libdbus-1.so*")})
     if any(not path.is_file() or providers.nix_root(path) not in outputs for path in runtime):
         raise native.BazelWorkspaceError("D-Bus runtime escapes selected Nix outputs")
@@ -122,6 +129,25 @@ def _linux_dbus() -> tuple[dict[str, Any], Path, list[Path], list[Path]]:
         runtime,
         [report_path, native.PROJECT_ROOT / "nixpkgs.json"],
     )
+
+
+def _linux_fixture_tools(files: set[Path], directories: set[Path]) -> dict[str, str]:
+    """Select fixture executables, trusting the installed immutable Nix runtime."""
+    report, report_path, _ = providers.nix_report()
+    files.update({report_path, native.PROJECT_ROOT / "nixpkgs.json"})
+    tools = {}
+    for package, binaries in (
+        ("pipewire", (("pipewire", "pipewire"), ("pw_cli", "pw-cli"))),
+        ("wireplumber", (("wireplumber", "wireplumber"),)),
+        ("xvfb", (("xvfb", "Xvfb"),)),
+    ):
+        _, _, _, outputs = providers.nix_dependency(report, package)
+        directories.update(root / "bin" for root in outputs)
+        for key, name in binaries:
+            executable, resolved = _owned_nix_executable(name, outputs)
+            files.update({executable, resolved})
+            tools[key] = str(executable)
+    return tools
 
 
 def _linux_gresource() -> tuple[dict[str, Any], Path, list[Path], list[Path]]:
@@ -616,6 +642,7 @@ def resolve_host_tools(tree: Path, prefix: Path | None, host: str, *, source: ob
         }
         dbus_identity, daemon, dbus_runtime, dbus_evidence = _linux_dbus()
         result["test_tools"].update({"dbus_daemon": str(daemon), "dbus_daemon_directory": str(daemon.parent)})
+        result["test_tools"].update(_linux_fixture_tools(files, directories))
         result["dbus"] = {"identity": dbus_identity, "artifacts": _paths([daemon, *dbus_runtime, *dbus_evidence])}
         for path in [compiler, *resource_runtime, *resource_evidence, daemon, *dbus_runtime, *dbus_evidence]:
             files.update({path.absolute(), path.resolve()})

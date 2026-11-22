@@ -78,7 +78,7 @@ Explicit native targets retain native prerequisites:
   context-specific wrapper starts only the fixtures that context requests —
   here the owned headless display, private no-activation session bus, GTK
   environment profile and private audio stack. An explicit label therefore
-  needs the [Linux fixture tools and SDK](../bazel.md#direct-bazel-without-the-portal),
+  uses the [pinned Linux fixture inputs and SDK](../bazel.md#direct-bazel-without-the-portal),
   not a hand-started display or session bus. Never set ownership markers on personal desktop endpoints. See
   [GTK process isolation](uimodel-and-gtk.md#process-isolation-and-diagnostics).
 - `//test:backend_test` owns live endpoint/service contracts and PipeWire
