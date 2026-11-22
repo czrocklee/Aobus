@@ -73,6 +73,31 @@ namespace ao::winui::test
     CHECK(state.expandedById == expectedExpansion);
   }
 
+  TEST_CASE("List tree restoration - expands only known ancestors when parent links are malformed")
+  {
+    auto const parentId = ListId{30};
+    auto const activeId = ListId{31};
+    auto projection = uimodel::ListTreeProjection{};
+    projection.rootIds = {parentId};
+    projection.rowsById.emplace(parentId, uimodel::ListTreeProjectionRow{.id = parentId, .name = "Parent"});
+    projection.rowsById.emplace(
+      activeId, uimodel::ListTreeProjectionRow{.id = activeId, .parentId = parentId, .name = "Child"});
+
+    SECTION("The chain cycles back to the active List")
+    {
+      projection.rowsById.at(parentId).parentId = activeId;
+    }
+
+    SECTION("The chain ends at a missing grandparent")
+    {
+      projection.rowsById.at(parentId).parentId = ListId{99};
+    }
+
+    auto const state = restoreListTreeState(projection, activeId, {});
+    CHECK(state.selectedListId == activeId);
+    CHECK(state.expandedById == std::map<ListId, bool>{{parentId, true}, {activeId, false}});
+  }
+
   TEST_CASE("List tree restoration - reveals an active nested List beneath a previously collapsed parent")
   {
     auto projection = uimodel::ListTreeProjection{};

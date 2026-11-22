@@ -212,6 +212,8 @@ A fallback or later plain-list navigation supplies that list's saved or recommen
 A successful user presentation choice records the current base list's preference, while filtering and exact workspace attachment do not.
 Reload follows the same direct materialization path; if the controller's view disappeared, it attaches a different active workspace view when available and otherwise opens All Tracks.
 
+Views and `:view` (including aliases) share the [List eligibility rule](../presentation/list-preference.md#resolution). On All Tracks, confirming the disabled Manual Order row keeps Views open; the command gives the same reason. Neither rejection changes the presentation, history, or saved preference. Custom flat unsorted presentations are not the built-in Manual Order preset and remain eligible.
+
 #### Fit Lists beside Tracks
 
 Lists starts pinned by default with keyboard focus on Tracks. Pinning is a layout preference, not a focus or popup state. Each frame lays out Detail, if visible, and docks Lists only if the remaining space meets these budgets:
@@ -386,7 +388,8 @@ Short terminals keep the dock to one row before reducing track-table height furt
 
 ## Failure and cancellation
 
-Unavailable actions post warning notifications rather than inventing terminal-only error state; the idempotent Idle Stop exception remains silent.
+Unavailable playback actions post warning notifications rather than inventing terminal-only error state; the idempotent Idle Stop exception remains silent.
+An ineligible or unknown presentation choice posts transient Info. If the displayed view is no longer the workspace's active view, both Views and the command warn instead of changing another view. Reopening the intended List reattaches it even if the terminal still shows its rows. An unexpected failure to apply a presentation logs the diagnostic and posts a localized Warning in history.
 Stale section/output rows are rejected and reported.
 Submitting a filter calls the typed runtime view boundary before replacing terminal rows.
 On Error, `LibraryController` preserves the draft, active source/view, rows, sections, and selection; `EventController` logs the failure and posts an Error notification instead of reloading.

@@ -3,6 +3,14 @@
 
 #include <ao/uimodel/library/track/TrackDisplayIndex.h>
 
+#include "test/library/TrackTestSupport.h"
+#include "test/runtime/RuntimeLibraryTestSupport.h"
+#include "test/runtime/projection/TrackListProjectionTestSupport.h"
+#include <ao/rt/TrackField.h>
+#include <ao/rt/TrackPresentation.h>
+#include <ao/rt/ViewIds.h>
+#include <ao/rt/projection/TrackListProjection.h>
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
@@ -61,6 +69,33 @@ namespace ao::uimodel::test
     CHECK(index.displayIndexOfSourceRow(3) == 5);
     CHECK(index.displayIndexOfSourceRow(4) == 6);
     CHECK_FALSE(index.displayIndexOfSourceRow(5));
+  }
+
+  TEST_CASE("TrackDisplayIndex - rebuilds grouped and flat coordinates from the same projection")
+  {
+    auto fixture = rt::test::TrackListProjectionFixture{};
+    auto const first = fixture.libraryFixture.addTrack(library::test::TrackSpec{.title = "First", .artist = "A"});
+    auto const second = fixture.libraryFixture.addTrack(library::test::TrackSpec{.title = "Second", .artist = "A"});
+    auto const last = fixture.libraryFixture.addTrack(library::test::TrackSpec{.title = "Last", .artist = "B"});
+    fixture.setupFiltered({{first, second, last}});
+    auto projection = fixture.createProjection(rt::ViewId{1});
+    projection.setPresentation(rt::TrackPresentationSpec{
+      .groupBy = rt::TrackGroupKey::Artist, .sortBy = {{.field = rt::TrackSortField::Artist, .ascending = true}}});
+
+    auto index = TrackDisplayIndex{};
+    REQUIRE(index.tryReset(projection));
+    CHECK(index.displayCount() == 5);
+    CHECK(index.itemAt(3) ==
+          TrackDisplayItem{.kind = TrackDisplayItemKind::GroupHeader, .sourceIndex = 2, .groupIndex = 1});
+    auto const optRow = index.itemAt(4);
+    REQUIRE(optRow);
+    CHECK(optRow->kind == TrackDisplayItemKind::TrackRow);
+    CHECK(projection.trackIdAt(optRow->sourceIndex) == last);
+
+    projection.setPresentation({});
+    REQUIRE(index.tryReset(projection));
+    CHECK(index.displayCount() == 3);
+    CHECK(index.displayIndexOfSourceRow(2) == 2);
   }
 
   TEST_CASE("TrackDisplayIndex - rejects malformed sections without replacing the valid mapping")

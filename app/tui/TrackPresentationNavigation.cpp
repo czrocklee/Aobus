@@ -3,13 +3,16 @@
 
 #include "TrackPresentationNavigation.h"
 
+#include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackPresentation.h>
+#include <ao/uimodel/library/presentation/TrackPresentationPickerViewModel.h>
 #include <ao/uimodel/library/presentation/TrackPresentationText.h>
 
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace ao::tui
@@ -18,6 +21,7 @@ namespace ao::tui
 
   std::vector<TrackPresentationNavEntry> makeTrackPresentationNavigation(
     i18n::MessageCatalog const& textCatalog,
+    ListId const listId,
     std::span<rt::TrackPresentationPreset const> const builtinPresets,
     std::span<rt::CustomTrackPresentationPreset const> const customPresets)
   {
@@ -44,6 +48,17 @@ namespace ao::tui
             ? std::string{i18n::requiredText(textCatalog, MessageId::TuiPresentationCustom)}
             : i18n::requiredFormat(textCatalog, MessageId::TuiPresentationCustomFrom, {{"id", preset.basePresetId}}),
       });
+    }
+
+    for (auto& item : items)
+    {
+      auto eligibility = uimodel::trackPresentationEligibility(textCatalog, listId, item.id);
+      item.enabled = eligibility.enabled;
+
+      if (!item.enabled)
+      {
+        item.detail = std::move(eligibility.disabledReason);
+      }
     }
 
     return items;

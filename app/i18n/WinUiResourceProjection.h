@@ -75,7 +75,6 @@ namespace ao::i18n::detail
     {.resourceId = "ColumnLayoutPolicyMissing", .text = "The requested track column has no layout policy"},
     {.resourceId = "NoPlayableTrackRow", .text = "No playable Windows track row is active"},
     {.resourceId = "NoTrackViewActive", .text = "No Windows track view is active"},
-    {.resourceId = "UnknownPresentationFormat", .text = "Unknown track presentation '{0}'"},
     {.resourceId = "StartupHresultDetailFormat", .text = "{0} (HRESULT 0x{1:08X})"},
   });
 } // namespace ao::i18n::detail

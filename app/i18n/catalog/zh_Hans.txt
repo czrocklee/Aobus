@@ -647,6 +647,8 @@ zh_Hans:table {
     tui_library_current_track_not_in_view { "无法在音乐库中定位当前曲目" }
     tui_library_no_active_track_view { "当前没有曲目视图" }
     tui_library_no_views_available { "无可用视图" }
+    tui_library_presentation_view_changed { "曲目视图已变更。请先打开所需列表，再选择视图。" }
+    tui_library_presentation_apply_failed { "无法应用此视图。" }
     tui_library_filter_cleared { "筛选条件已清除" }
     tui_library_filter_applied { "筛选条件已应用" }
     tui_library_empty_scan { "暂无已索引的曲目。运行 {command} 扫描此音乐库。" }

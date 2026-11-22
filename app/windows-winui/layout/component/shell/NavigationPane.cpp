@@ -18,7 +18,6 @@
 #include <ao/async/Subscription.h>
 #include <ao/compat/MoveOnlyFunction.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/WorkspaceSnapshot.h>
@@ -44,7 +43,6 @@
 #include <functional>
 #include <map>
 #include <memory>
-#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -206,7 +204,6 @@ namespace ao::winui::layout
                         rt::WorkspaceService& workspace,
                         std::function<uimodel::ListTreeProjection()> listTreeProjection,
                         std::function<async::Subscription(compat::MoveOnlyFunction<void()>)> subscribeListTreeChanged,
-                        std::function<std::optional<rt::TrackPresentationSpec>(ListId)> preferredPresentation,
                         std::function<void(ListId, std::string)> createList,
                         std::function<void(ListId)> editList,
                         std::function<void(ListId, bool)> deleteList,
@@ -217,7 +214,6 @@ namespace ao::winui::layout
         , _workspace{workspace}
         , _listTreeProjection{std::move(listTreeProjection)}
         , _subscribeListTreeChanged{std::move(subscribeListTreeChanged)}
-        , _preferredPresentation{std::move(preferredPresentation)}
         , _createList{std::move(createList)}
         , _editList{std::move(editList)}
         , _deleteList{std::move(deleteList)}
@@ -302,7 +298,6 @@ namespace ao::winui::layout
         }
       }
 
-      /// Move the workspace to @p listId, restoring the presentation that list was last shown with.
       void navigate(ListId const listId, std::string const& label)
       {
         if (listId == kInvalidListId || !uimodel::isGenerationActive(_gatePtr))
@@ -314,15 +309,6 @@ namespace ao::winui::layout
         {
           report(formatResource("winui_navigation_failed", navigatedRes.error().message));
           return;
-        }
-
-        if (auto const optPresentation = _preferredPresentation(listId); optPresentation)
-        {
-          if (auto const selectedRes = _trackList.selectPresentation(*optPresentation); !selectedRes)
-          {
-            report(formatResource("winui_presentation_failed", selectedRes.error().message));
-            return;
-          }
         }
 
         report(formatResource("winui_list_status", label));
@@ -341,7 +327,6 @@ namespace ao::winui::layout
       rt::WorkspaceService& _workspace;
       std::function<uimodel::ListTreeProjection()> _listTreeProjection;
       std::function<async::Subscription(compat::MoveOnlyFunction<void()>)> _subscribeListTreeChanged;
-      std::function<std::optional<rt::TrackPresentationSpec>(ListId)> _preferredPresentation;
       std::function<void(ListId, std::string)> _createList;
       std::function<void(ListId)> _editList;
       std::function<void(ListId, bool)> _deleteList;
@@ -801,7 +786,6 @@ namespace ao::winui::layout
     rt::WorkspaceService& workspace,
     std::function<uimodel::ListTreeProjection()> listTreeProjection,
     std::function<async::Subscription(compat::MoveOnlyFunction<void()>)> subscribeListTreeChanged,
-    std::function<std::optional<rt::TrackPresentationSpec>(ListId)> preferredPresentation,
     std::function<void(ListId, std::string)> createList,
     std::function<void(ListId)> editList,
     std::function<void(ListId, bool)> deleteList,
@@ -816,7 +800,6 @@ namespace ao::winui::layout
        &workspace,
        listTreeProjection = std::move(listTreeProjection),
        subscribeListTreeChanged = std::move(subscribeListTreeChanged),
-       preferredPresentation = std::move(preferredPresentation),
        createList = std::move(createList),
        editList = std::move(editList),
        deleteList = std::move(deleteList),
@@ -830,7 +813,6 @@ namespace ao::winui::layout
                                          workspace,
                                          listTreeProjection,
                                          subscribeListTreeChanged,
-                                         preferredPresentation,
                                          createList,
                                          editList,
                                          deleteList,

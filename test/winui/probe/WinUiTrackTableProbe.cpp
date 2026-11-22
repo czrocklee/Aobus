@@ -51,6 +51,7 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryPaths.h>
@@ -624,10 +625,15 @@ namespace
       // Publish the borrow only after the runtime owns the executor in final storage.
       _executor = runtimeExecutor;
       _columnLayoutsPtr = std::make_unique<ao::uimodel::TrackColumnLayouts>(_runtimePtr->library().changes());
+      _presentationCatalogPtr =
+        std::make_unique<ao::uimodel::TrackPresentationCatalog>(_runtimePtr->workspace(), *controllerCatalogRes);
+      _listPresentationsPtr =
+        std::make_unique<ao::uimodel::ListPresentations>(*_presentationCatalogPtr, _runtimePtr->library().changes());
       _trackListPtr = std::make_unique<ao::winui::TrackListController>(_runtimePtr->views(),
                                                                        _runtimePtr->workspace(),
                                                                        _runtimePtr->library(),
                                                                        *_columnLayoutsPtr,
+                                                                       *_listPresentationsPtr,
                                                                        std::move(*controllerCatalogRes));
       _selectionSub =
         _runtimePtr->views().onSelectionChanged([this](ao::rt::ViewService::SelectionChanged const& change)
@@ -673,16 +679,104 @@ namespace
       enqueueStep(&WinUiTrackTableProbeApplication::buildAndPublishStep);
     }
 
+    void verifyColumnLayoutEdits()
+    {
+      _report.beginScenario("column edits preserve hidden sizing and order");
+      using ao::rt::TrackField;
+      using ao::uimodel::TrackColumnState;
+      auto const listId = _trackListPtr->activeListId();
+      auto const hiddenDuration = TrackColumnState{.field = TrackField::Duration, .width = 123, .visible = false};
+      auto const unavailableAlbum = TrackColumnState{.field = TrackField::Album, .weight = 4.0};
+      auto const numberFieldId = ao::rt::trackFieldId(TrackField::DisplayTrackNumber);
+      _columnLayoutsPtr->updateLayout(listId,
+                                      {TrackColumnState{.field = TrackField::Title, .weight = 3.0},
+                                       hiddenDuration,
+                                       unavailableAlbum,
+                                       TrackColumnState{.field = TrackField::DisplayTrackNumber, .width = 91}});
+      _trackListPtr->setViewportWidth(800.0, 0.0);
+
+      _report.check(_trackListPtr->setColumnVisible("artist", false).has_value(),
+                    "hiding an unrecorded Artist materializes column state");
+      _report.check(_trackListPtr->moveColumn("title", 1).has_value(), "Title moves past the track number");
+      _report.check(_trackListPtr->resizeColumn(numberFieldId, 36.0).has_value(), "track number resizes by 36 DIP");
+      auto const expected = std::vector{
+        TrackColumnState{.field = TrackField::DisplayTrackNumber, .width = 127},
+        hiddenDuration,
+        TrackColumnState{.field = TrackField::Title, .weight = 1.0},
+        TrackColumnState{.field = TrackField::Artist, .weight = 2.0, .visible = false},
+        unavailableAlbum,
+      };
+      _report.check(_columnLayoutsPtr->layoutForList(listId) == expected,
+                    "reorder and resize preserve hidden and unavailable state while saving canonical dimensions");
+
+      auto const resizedHeaders = _trackListPtr->headers();
+      _report.check(resizedHeaders.Size() == 2, "only the track number and Title remain visible after resize");
+
+      if (resizedHeaders.Size() == 2)
+      {
+        auto const number = resizedHeaders.GetAt(0).as<winrt::Aobus::TrackCellItem>();
+        auto const title = resizedHeaders.GetAt(1).as<winrt::Aobus::TrackCellItem>();
+        _report.check(number.FieldId() == winrt::to_hstring(numberFieldId) && number.Width() == 127.0,
+                      "the moved track number has its resized width in the projected header");
+        _report.check(title.FieldId() == L"title" && title.Width() == 673.0,
+                      "the remaining flexible Title header receives the rest of the viewport");
+      }
+
+      _report.check(_trackListPtr->setColumnVisible("duration", true).has_value(), "Duration can be shown again");
+      auto const headers = _trackListPtr->headers();
+      _report.check(headers.Size() == 3, "showing Duration restores only that hidden header");
+
+      if (headers.Size() == 3)
+      {
+        auto const duration = headers.GetAt(1).as<winrt::Aobus::TrackCellItem>();
+        _report.check(duration.FieldId() == L"duration" && duration.Width() == 123.0,
+                      "the restored Duration header has its stored position and width in DIP");
+      }
+
+      _report.beginScenario("column edits respect an external hide with stale headers");
+      auto const hideDurationInStore = [this, listId, &expected]
+      {
+        // Change the store without refreshing the controller.
+        _columnLayoutsPtr->updateLayout(listId, expected);
+        auto const cachedHeaders = _trackListPtr->headers();
+        _report.check(cachedHeaders.Size() == 3 &&
+                        cachedHeaders.GetAt(1).as<winrt::Aobus::TrackCellItem>().FieldId() == L"duration",
+                      "the controller still projects Duration immediately after the external hide");
+      };
+
+      hideDurationInStore();
+      _report.check(_trackListPtr->moveColumn("title", -1).has_value(), "Title moves left with a stale header");
+      auto moved = expected;
+      std::swap(moved[0], moved[2]);
+      _report.check(_columnLayoutsPtr->layoutForList(listId) == moved,
+                    "Title swaps with the track number, leaving Duration hidden at 123 DIP in its stored slot");
+
+      // Reseed before resize: move refreshes the cache, even if it revives Duration.
+      _columnLayoutsPtr->updateLayout(listId, expected);
+      _report.check(_trackListPtr->setColumnVisible("duration", true).has_value(), "Duration is shown before resize");
+      hideDurationInStore();
+      _report.check(
+        _trackListPtr->resizeColumn(numberFieldId, 36.0).has_value(), "the track number resizes with a stale header");
+      auto resized = expected;
+      resized[0].width = 163;
+      _report.check(_columnLayoutsPtr->layoutForList(listId) == resized,
+                    "the track number reaches 163 DIP while Duration remains hidden at 123 DIP");
+
+      // The loaded-table scenarios use the original layout and viewport.
+      _columnLayoutsPtr->restore({}, {});
+      _trackListPtr->setViewportWidth(1200.0, 0.0);
+    }
+
     void buildAndPublishStep()
     {
-      auto const groupedRes = _trackListPtr->selectPresentation("albums");
-
-      if (!groupedRes)
+      if (_trackListPtr->activeListId() != ao::rt::kAllTracksListId ||
+          _trackListPtr->activePresentationId() != "albums" || !_listPresentationsPtr->snapshot().empty())
       {
-        failSetup(std::format("grouped presentation selection failed: {}", groupedRes.error().message));
+        failSetup("the fresh All Tracks view must open in Albums without writing a pin");
         return;
       }
 
+      verifyColumnLayoutEdits();
       _hostPtr = std::make_unique<ao::winui::layout::LayoutHost>(_hostBorder);
       _gatePtr = _hostPtr->stage();
       _focusedDetailPtr = std::make_shared<ao::winui::layout::FocusedDetail>();
@@ -1349,10 +1443,6 @@ namespace
       }
 
       _themeCoordinatorPtr = std::make_unique<ao::winui::ThemeCoordinator>(_optTempRoot->root() / "probe-theme.yaml");
-      _presentationCatalogPtr =
-        std::make_unique<ao::uimodel::TrackPresentationCatalog>(_runtimePtr->workspace(), *trackCatalogRes);
-      _listPresentationsPtr =
-        std::make_unique<ao::uimodel::ListPresentations>(*_presentationCatalogPtr, _runtimePtr->library().changes());
       _playbackActionsPtr = std::make_unique<ao::uimodel::PlaybackActions>(_runtimePtr->playback(), [] {});
 
       ao::winui::layout::registerTrackComponents(*_registryPtr,
@@ -1400,11 +1490,11 @@ namespace
                     "the table scenarios left the synthetic column-sort presentation id");
       checkPresentationButton("Column sort");
 
-      auto const albumsRes = _trackListPtr->selectPresentation("albums");
+      auto const albumsRes = _runtimePtr->workspace().setActivePresentation("albums", {.recordHistory = false});
 
       if (!albumsRes)
       {
-        failSetup(std::format("selectPresentation(albums) failed: {}", albumsRes.error().message));
+        failSetup(std::format("the Albums baseline failed: {}", albumsRes.error().message));
         return;
       }
 
@@ -1481,11 +1571,11 @@ namespace
       _report.check(_listPresentationsPtr->snapshot() == _presentationsBefore,
                     "the raw service transition changed no per-list presentation preference");
 
-      auto const namedRes = _trackListPtr->selectPresentation("albums");
+      auto const namedRes = _runtimePtr->workspace().setActivePresentation("albums", {.recordHistory = false});
 
       if (!namedRes)
       {
-        failSetup(std::format("the closing selectPresentation(albums) failed: {}", namedRes.error().message));
+        failSetup(std::format("the closing Albums baseline failed: {}", namedRes.error().message));
         return;
       }
 
@@ -1663,8 +1753,7 @@ namespace
           return;
         }
 
-        // The original history point predates the raw Albums selection. Restore
-        // that named presentation without introducing another history entry.
+        // Set up the named baseline for the next scenario without recording history.
         auto const albumsRes = _runtimePtr->workspace().setActivePresentation("albums", {.recordHistory = false});
 
         if (!albumsRes)
@@ -2065,7 +2154,6 @@ namespace
         {},
         {},
         {},
-        {},
         std::move(*catalogRes),
         ao::winui::layout::PaneSettingsAccess{},
         _shellStateChanged,
@@ -2440,13 +2528,13 @@ namespace
         _transportButtonPtr.reset();
         _presentationButtonPtr.reset();
         _playbackActionsPtr.reset();
-        _listPresentationsPtr.reset();
-        _presentationCatalogPtr.reset();
         _themeCoordinatorPtr.reset();
 
         _registryPtr.reset();
         _schemaPtr.reset();
         _trackListPtr.reset();
+        _listPresentationsPtr.reset();
+        _presentationCatalogPtr.reset();
         _columnLayoutsPtr.reset();
         _resources = nullptr;
 
@@ -2539,13 +2627,13 @@ namespace
     // AppRuntime owns this borrow through executor closing and runtime destruction.
     ao::winui::DispatcherQueueExecutor* _executor = nullptr;
     std::unique_ptr<ao::uimodel::TrackColumnLayouts> _columnLayoutsPtr;
+    std::unique_ptr<ao::uimodel::TrackPresentationCatalog> _presentationCatalogPtr;
+    std::unique_ptr<ao::uimodel::ListPresentations> _listPresentationsPtr;
     std::unique_ptr<ao::winui::TrackListController> _trackListPtr;
     ao::async::Subscription _selectionSub;
     std::vector<std::vector<TrackId>> _selectionPublications;
     std::vector<std::string> _statusMessages;
 
-    std::unique_ptr<ao::uimodel::TrackPresentationCatalog> _presentationCatalogPtr;
-    std::unique_ptr<ao::uimodel::ListPresentations> _listPresentationsPtr;
     std::unique_ptr<ao::winui::ThemeCoordinator> _themeCoordinatorPtr;
     std::unique_ptr<ao::uimodel::PlaybackActions> _playbackActionsPtr;
     ao::async::Signal<ao::winui::ShellState> _shellStateChanged;

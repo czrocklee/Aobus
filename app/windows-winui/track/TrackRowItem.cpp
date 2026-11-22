@@ -11,12 +11,9 @@
 #include "TrackRowItem.g.cpp"
 #endif
 
-#include <ao/library/RecordingDate.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackRow.h>
-#include <ao/uimodel/field/TrackFieldFormatter.h>
-#include <ao/uimodel/library/detail/TrackCredits.h>
-#include <ao/utility/Path.h>
+#include <ao/uimodel/field/TrackRowField.h>
 
 #include <concepts>
 #include <cstdint>
@@ -41,63 +38,12 @@ namespace winrt::Aobus::implementation
 
     std::string trackTitle(ao::rt::TrackRow const& row)
     {
-      if (!row.title.empty())
+      if (auto optTitle = ao::uimodel::trackTitleOrFilename(row); optTitle)
       {
-        return row.title;
-      }
-
-      if (row.optUriPath)
-      {
-        return ao::utility::pathToUtf8(row.optUriPath->filename());
+        return std::move(*optTitle);
       }
 
       return ao::winui::formatResource("track_fallback", row.id.raw());
-    }
-
-    std::string cellText(ao::i18n::MessageCatalog const& textCatalog,
-                         ao::rt::TrackRow const& row,
-                         ao::rt::TrackField const field)
-    {
-      using F = ao::rt::TrackField;
-      using namespace ao::uimodel;
-
-      switch (field)
-      {
-        case F::Title: return trackTitle(row);
-        case F::Artist: return row.artist;
-        case F::Album: return row.album;
-        case F::AlbumArtist: return row.albumArtist;
-        case F::Genre: return row.genre;
-        case F::Composer: return row.composer;
-        case F::Conductor: return formatTrackCreditSummary(textCatalog, row.conductor, row.conductorCount);
-        case F::Ensemble: return formatTrackCreditSummary(textCatalog, row.ensemble, row.ensembleCount);
-        case F::Work: return row.work;
-        case F::Movement: return row.movement;
-        case F::Soloist: return formatTrackCreditSummary(textCatalog, row.soloist, row.soloistCount);
-        case F::RecordingDate: return ao::library::formatRecordingDate(row.recordingDate);
-        case F::Year: return formatUint16(row.year);
-        case F::DiscNumber: return formatUint16(row.discNumber);
-        case F::DiscTotal: return formatUint16(row.discTotal);
-        case F::TrackNumber: return formatUint16(row.trackNumber);
-        case F::TrackTotal: return formatUint16(row.trackTotal);
-        case F::MovementNumber: return formatUint16(row.movementNumber);
-        case F::MovementTotal: return formatUint16(row.movementTotal);
-        case F::Duration: return formatDuration(row.duration);
-        case F::Tags: return row.tags;
-        case F::FilePath: return row.optUriPath ? ao::utility::pathToGenericUtf8(*row.optUriPath) : std::string{};
-        case F::Codec: return formatCodec(row.codec);
-        case F::SampleRate: return formatSampleRate(row.sampleRate);
-        case F::Channels: return formatChannels(textCatalog, row.channels);
-        case F::BitDepth: return formatBitDepth(row.bitDepth);
-        case F::Bitrate: return formatBitrate(row.bitrate);
-        case F::FileSize: return formatFileSize(row.fileSize);
-        case F::ModifiedTime: return formatTime(row.optModifiedTime);
-        case F::DisplayTrackNumber: return formatDisplayTrackNumber(row.discNumber, row.discTotal, row.trackNumber);
-        case F::TechnicalSummary: return formatTechnicalSummary(row.codec, row.sampleRate, row.bitDepth, row.bitrate);
-        case F::Quality: return {};
-      }
-
-      return {};
     }
 
     void appendCell(Windows::Foundation::Collections::IVector<Windows::Foundation::IInspectable> const& cells,
@@ -147,8 +93,12 @@ namespace winrt::Aobus::implementation
     for (auto const& column : columns)
     {
       auto const* definition = ao::rt::trackFieldDefinition(column.field);
+      auto text = column.field == ao::rt::TrackField::Title
+                    ? _title
+                    : to_hstring(ao::uimodel::formatTrackRowField(
+                        textCatalog, row, column.field, ao::uimodel::TrackRowPathFormat::Generic));
       appendCell(_cells,
-                 to_hstring(cellText(textCatalog, row, column.field)),
+                 std::move(text),
                  ao::rt::trackFieldId(column.field),
                  column.width,
                  definition != nullptr && definition->optSortField);

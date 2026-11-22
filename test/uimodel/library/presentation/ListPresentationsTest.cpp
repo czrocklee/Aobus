@@ -5,6 +5,7 @@
 
 #include "test/TestFixtureSupport.h"
 #include "test/library/TrackTestSupport.h"
+#include "test/runtime/ExecutorTestSupport.h"
 #include "test/runtime/RuntimeLibraryTestSupport.h"
 #include "test/uimodel/library/presentation/TrackPresentationTestSupport.h"
 #include <ao/CoreIds.h>
@@ -92,59 +93,68 @@ namespace ao::uimodel::test
     CHECK(events[1] == rt::kAllTracksListId);
   }
 
-  TEST_CASE(
-    "ListPresentations - resolves custom list-presentation preferences and preserves unknown ids while falling back")
+  TEST_CASE("ListPresentations - All Tracks rejects a persisted List Order pin but accepts a flat unsorted custom pin")
   {
     auto fixture = TrackPresentationFixture{};
+    auto commandsFixture = rt::test::LibraryCommandsFixture{fixture.libraryFixture.library(), fixture.changes};
+    auto const& library = commandsFixture.library();
     auto& store = fixture.listPresentations;
-    fixture.catalog.addCustomPresentation(rt::CustomTrackPresentationPreset{
-      .label = "Tag Audit",
-      .basePresetId = std::string{rt::kDefaultTrackPresentationId},
-      .spec =
-        rt::TrackPresentationSpec{.id = "tag-audit", .visibleFields = {rt::TrackField::Title, rt::TrackField::Tags}},
-    });
 
-    auto const allTracksContext = ListPresentationContext{
-      .listId = rt::kAllTracksListId,
-      .sourceKind = ListPresentationSourceKind::AllTracks,
+    store.restore({{rt::kAllTracksListId, std::string{rt::kListOrderTrackPresentationId}}}, {});
+    CHECK(store.presentationForList(rt::kAllTracksListId, library).id == "albums");
+    CHECK(store.presentationIdForList(rt::kAllTracksListId) == rt::kListOrderTrackPresentationId);
+
+    auto const flatSpec = rt::TrackPresentationSpec{
+      .id = "tag-audit",
+      .groupBy = rt::TrackGroupKey::None,
+      .visibleFields = {rt::TrackField::Title, rt::TrackField::Tags},
     };
+    fixture.catalog.addCustomPresentation(rt::CustomTrackPresentationPreset{
+      .label = "Tag Audit", .basePresetId = std::string{rt::kDefaultTrackPresentationId}, .spec = flatSpec});
+    store.setPresentationIdForList(rt::kAllTracksListId, flatSpec.id);
 
-    store.setPresentationIdForList(rt::kAllTracksListId, "tag-audit");
-    CHECK(store.presentationForList(allTracksContext).id == "tag-audit");
-
-    store.setPresentationIdForList(rt::kAllTracksListId, "missing-preset");
-    CHECK(store.presentationForList(allTracksContext).id == "albums");
-    CHECK(store.presentationIdForList(rt::kAllTracksListId) == "missing-preset");
+    CHECK(store.presentationForList(rt::kAllTracksListId, library) == flatSpec);
   }
 
-  TEST_CASE("ListPresentations - resolves saved-list defaults after preference lookup")
+  TEST_CASE("ListPresentations - saved list recommends from its local expression when no pin resolves")
   {
     auto fixture = TrackPresentationFixture{};
+    auto executor = rt::test::QueuedExecutor{};
+    auto& storage = fixture.libraryFixture.library();
+    auto changes = rt::test::makeLibraryChanges(executor, storage);
+    auto commandsFixture = rt::test::LibraryCommandsFixture{storage, changes, executor};
+    auto& commands = commandsFixture.commands();
+    auto const& library = commandsFixture.library();
+    auto store = ListPresentations{fixture.catalog, changes};
+    auto const parentId = ao::test::requireValue(commandsFixture.runTask(
+      commands.createListAsync(rt::ListDraft{.name = "Works", .expression = "$work = \"Concerto\""})));
+    auto const childId = ao::test::requireValue(commandsFixture.runTask(commands.createListAsync(
+      rt::ListDraft{.parentId = parentId, .name = "Bach", .expression = "$composer = \"Bach\""})));
+
+    // The inherited work would outrank the child expression if included.
+    CHECK(store.presentationForList(childId, library).id == "classical-composers");
+
+    store.setPresentationIdForList(childId, rt::kListOrderTrackPresentationId);
+    CHECK(store.presentationForList(childId, library).id == rt::kListOrderTrackPresentationId);
+
+    store.setPresentationIdForList(childId, "missing-preset");
+    CHECK(store.presentationForList(childId, library).id == "classical-composers");
+    CHECK(store.presentationIdForList(childId) == "missing-preset");
+  }
+
+  TEST_CASE("ListPresentations - missing list uses the All Tracks recommendation but keeps its own pin identity")
+  {
+    auto fixture = TrackPresentationFixture{};
+    auto commandsFixture = rt::test::LibraryCommandsFixture{fixture.libraryFixture.library(), fixture.changes};
+    auto const& library = commandsFixture.library();
     auto& store = fixture.listPresentations;
-    auto const savedListId = ListId{42};
-    auto const emptySavedContext = ListPresentationContext{
-      .listId = savedListId,
-      .sourceKind = ListPresentationSourceKind::SavedList,
-    };
-    auto const expressionContext = ListPresentationContext{
-      .listId = ListId{43},
-      .sourceKind = ListPresentationSourceKind::SavedList,
-      .listExpression = "$composer = \"Bach\"",
-    };
-    auto const allTracksContext = ListPresentationContext{
-      .listId = rt::kAllTracksListId,
-      .sourceKind = ListPresentationSourceKind::AllTracks,
-    };
+    auto const missingListId = ListId{42};
+    store.setPresentationIdForList(rt::kAllTracksListId, "artists");
 
-    CHECK(store.presentationForList(emptySavedContext).id == "albums");
-    CHECK(store.presentationForList(expressionContext).id == "classical-composers");
-    CHECK(store.presentationForList(allTracksContext).id == "albums");
+    CHECK(store.presentationForList(missingListId, library).id == "albums");
 
-    store.setPresentationIdForList(savedListId, rt::kListOrderTrackPresentationId);
-    CHECK(store.presentationForList(emptySavedContext).id == rt::kListOrderTrackPresentationId);
-
-    store.setPresentationIdForList(savedListId, "missing-preset");
-    CHECK(store.presentationForList(emptySavedContext).id == "albums");
+    store.setPresentationIdForList(missingListId, rt::kListOrderTrackPresentationId);
+    CHECK(store.presentationForList(missingListId, library).id == rt::kListOrderTrackPresentationId);
   }
 
   TEST_CASE("ListPresentations - bulk state emits only when changed")

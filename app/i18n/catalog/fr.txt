@@ -646,6 +646,8 @@ fr:table {
     tui_library_current_track_not_in_view { "Impossible de trouver le morceau actuel dans la bibliothèque" }
     tui_library_no_active_track_view { "Aucune vue de morceau active" }
     tui_library_no_views_available { "Aucune vue disponible" }
+    tui_library_presentation_view_changed { "La vue des morceaux a changé. Ouvrez la liste voulue, puis choisissez une vue." }
+    tui_library_presentation_apply_failed { "Impossible d’appliquer cette vue." }
     tui_library_filter_cleared { "Filtre effacé" }
     tui_library_filter_applied { "Filtre appliqué" }
     tui_library_empty_scan { "Aucune piste indexée. Lancez {command} pour analyser cette bibliothèque." }

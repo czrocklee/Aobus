@@ -25,10 +25,8 @@
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
-#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
-#include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryJobs.h>
@@ -519,28 +517,6 @@ namespace ao::winui
   std::filesystem::path const& LibrarySession::stateRoot() const noexcept
   {
     return _storagePtr->stateRoot;
-  }
-
-  rt::TrackPresentationSpec LibrarySession::presentationForList(ListId const listId) const
-  {
-    auto context = uimodel::ListPresentationContext{
-      .listId = listId,
-      .sourceKind = uimodel::ListPresentationSourceKind::AllTracks,
-    };
-    auto& graph = _storagePtr->requireRuntimeGraph();
-    auto& listPresentations = graph.requireInteractiveBorrowers().listPresentations;
-
-    if (!rt::isVirtualListId(listId))
-    {
-      if (auto const optNode = graph.runtime.library().snapshot().listNode(listId); optNode)
-      {
-        context.sourceKind = uimodel::ListPresentationSourceKind::SavedList;
-        context.listExpression = optNode->expression;
-        return listPresentations.presentationForList(context);
-      }
-    }
-
-    return listPresentations.presentationForList(context);
   }
 
   Result<> LibrarySession::saveSettings()

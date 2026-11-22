@@ -27,14 +27,12 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
-#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
 #include <ao/uimodel/library/list/ListTreeProjection.h>
-#include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/playback/command/PlaybackActions.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
@@ -202,15 +200,6 @@ namespace ao::winui::layout
           }
         });
     };
-    auto preferredPresentation = [session](ListId const listId) -> std::optional<rt::TrackPresentationSpec>
-    {
-      if (!session->listPresentations().presentationIdForList(listId))
-      {
-        return std::nullopt;
-      }
-
-      return session->presentationForList(listId);
-    };
     auto playTrack = [session](rt::ViewId const viewId, TrackId const trackId)
     { return session->playTrack(viewId, trackId); };
 
@@ -231,7 +220,6 @@ namespace ao::winui::layout
                                     runtime.workspace(),
                                     std::move(listTreeProjection),
                                     std::move(subscribeListTreeChanged),
-                                    std::move(preferredPresentation),
                                     _config.listCommands.createList,
                                     _config.listCommands.editList,
                                     _config.listCommands.deleteList,

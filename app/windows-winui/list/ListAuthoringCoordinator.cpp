@@ -15,6 +15,7 @@
 #include <ao/rt/ListNode.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/VirtualListIds.h>
+#include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibrarySnapshot.h>
@@ -454,23 +455,16 @@ namespace ao::winui
 
     auto const name = _nameInput ? winrt::to_string(_nameInput.Text()) : std::string{};
     auto const expression = _filterInput ? winrt::to_string(_filterInput.Text()) : std::string{};
-    auto const presentation = resolveListAuthoringPresentation(_listPresentations, *res, expression);
+    auto presentation =
+      rt::NavigationPresentation{.mode = rt::NavigationPresentationMode::Override,
+                                 .spec = resolveListAuthoringPresentation(_listPresentations, *res, expression)};
 
-    if (auto const navigatedRes = _trackList.navigateTo(*res); !navigatedRes)
+    if (auto const navigatedRes = _trackList.navigateTo(*res, std::move(presentation)); !navigatedRes)
     {
       if (_reportStatus)
       {
         _reportStatus(i18n::requiredFormat(
           _textCatalog, i18n::MessageId::WinUiError, {i18n::MessageArgument{"detail", navigatedRes.error().message}}));
-      }
-    }
-    else if (auto const selectedRes = _trackList.selectPresentation(presentation); !selectedRes)
-    {
-      if (_reportStatus)
-      {
-        _reportStatus(i18n::requiredFormat(_textCatalog,
-                                           i18n::MessageId::WinUiPresentationFailed,
-                                           {i18n::MessageArgument{"detail", selectedRes.error().message}}));
       }
     }
     else if (_reportStatus)

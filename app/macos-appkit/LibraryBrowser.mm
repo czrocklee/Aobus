@@ -13,7 +13,7 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibrarySnapshot.h>
-#include <ao/uimodel/field/TrackFieldFormatter.h>
+#include <ao/uimodel/field/TrackRowField.h>
 #include <ao/uimodel/library/list/ListTreeProjection.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 #include <ao/uimodel/library/track/TrackDisplayIndex.h>
@@ -535,17 +535,16 @@ namespace
       _refreshing = YES;
       auto* const ancestors = [NSMutableArray<NSNumber*> array];
 
-      for (auto row = _listTree.rowsById.find(viewRes->listId); row != _listTree.rowsById.end();
-           row = _listTree.rowsById.find(row->second.parentId))
+      for (auto const parentId : ao::uimodel::listTreeAncestorIds(_listTree, viewRes->listId))
       {
-        auto* const parent = _listItems[@(row->second.parentId.raw())];
+        auto* const parent = _listItems[@(parentId.raw())];
 
         if (parent == nil)
         {
           break;
         }
 
-        [ancestors insertObject:parent atIndex:0];
+        [ancestors addObject:parent];
       }
 
       if (selectedItem != nil &&
@@ -553,9 +552,11 @@ namespace
       {
         [_lists expandItem:viewRes->listId == ao::rt::kAllTracksListId ? @"Library" : @"Saved Lists"];
 
-        for (NSUInteger index = 0; index < ancestors.count; ++index)
+        // Objective-C fast enumeration assigns parent before each iteration.
+        // NOLINTNEXTLINE(aobus-modernize-local-initialization-style,cppcoreguidelines-init-variables)
+        for (NSNumber* parent in ancestors.reverseObjectEnumerator)
         {
-          [_lists expandItem:ancestors[index]];
+          [_lists expandItem:parent];
         }
 
         _revealedListItem = selectedItem;
@@ -1110,30 +1111,28 @@ namespace
         return;
       }
 
-      auto text = std::string{};
       auto* const identifier = column.identifier;
+      auto columnField = ao::rt::TrackField::DisplayTrackNumber;
 
       if ([identifier isEqual:@"Title"] != NO)
       {
-        text = track->title;
+        columnField = ao::rt::TrackField::Title;
       }
       else if ([identifier isEqual:@"Artist"] != NO)
       {
-        text = track->artist;
+        columnField = ao::rt::TrackField::Artist;
       }
       else if ([identifier isEqual:@"Album"] != NO)
       {
-        text = track->album;
+        columnField = ao::rt::TrackField::Album;
       }
       else if ([identifier isEqual:@"Duration"] != NO)
       {
-        text = ao::uimodel::formatDuration(track->duration);
-      }
-      else
-      {
-        text = ao::uimodel::formatDisplayTrackNumber(track->discNumber, track->discTotal, track->trackNumber);
+        columnField = ao::rt::TrackField::Duration;
       }
 
+      auto const text = ao::uimodel::formatTrackRowField(
+        _session->catalog(), *track, columnField, ao::uimodel::TrackRowPathFormat::Native);
       auto const height = [self tableView:table heightOfRow:row];
       auto* const trackCell = cell(identifier, height, column.width);
       auto* const field = trackCell.textField;

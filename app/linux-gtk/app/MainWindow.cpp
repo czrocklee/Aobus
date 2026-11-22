@@ -40,7 +40,6 @@
 #include <ao/rt/ListNode.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationService.h>
-#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
@@ -153,38 +152,9 @@ namespace ao::gtk
       tagEditController.setDataProvider(&trackRowCache);
     }
 
-    rt::TrackPresentationSpec presentationForList(ListId listId, rt::AppRuntime& runtime) const
-    {
-      auto const fallback = [this, listId]
-      {
-        return listPresentations.presentationForList(uimodel::ListPresentationContext{
-          .listId = listId,
-          .sourceKind = uimodel::ListPresentationSourceKind::AllTracks,
-        });
-      };
-
-      if (rt::isVirtualListId(listId))
-      {
-        return fallback();
-      }
-
-      auto const optNode = runtime.library().snapshot().listNode(listId);
-
-      if (!optNode)
-      {
-        return fallback();
-      }
-
-      return listPresentations.presentationForList(uimodel::ListPresentationContext{
-        .listId = listId,
-        .sourceKind = uimodel::ListPresentationSourceKind::SavedList,
-        .listExpression = optNode->expression,
-      });
-    }
-
     Result<rt::ViewId> navigateToList(ListId listId, rt::AppRuntime& runtime) const
     {
-      auto const spec = presentationForList(listId, runtime);
+      auto const spec = listPresentations.presentationForList(listId, runtime.library());
       return runtime.workspace().navigate({
         .target = listId,
         .optPresentation =

@@ -100,6 +100,7 @@ In the successor, native window and process-wide playback adapters become active
 There is no live-runtime exchange inside `LibrarySession`. Initial scan, Rescan, and scan cancellation during a root switch follow the [active-session scan workflow](windows-library-workflows.md#scan); scan failure does not roll back an active root.
 
 Both shells expose the same [import/export](windows-library-workflows.md#import-and-export), [List tree and navigation](windows-library-workflows.md#list-tree-and-navigation), and [List authoring](windows-library-workflows.md#create-and-edit-lists) workflows. Shell switching preserves admitted work, and committed library publication—not an optimistic native refresh—updates their results.
+At startup WinUI attaches the restored active view, including its exact presentation. Only when there is no restored active view does it open All Tracks using the [ordinary sidebar default](windows-library-workflows.md#list-tree-and-navigation).
 
 The track list supports extended selection, keyboard navigation supplied by
 `ListView`, double-click playback, native recycling, and sortable headers backed
@@ -120,9 +121,10 @@ Group headers are not selectable tracks. A header-only native selection keeps th
 Runtime-selected tracks; mixed selection and Select All retain only valid tracks,
 while a genuine clear still empties the selection.
 The presentation menu resolves built-in and restored custom presets through the shared catalog and picker policy.
-It saves a per-List preference only after the complete selected specification is accepted by Runtime.
+An explicit named choice submits the complete spec to Workspace with history recording.
+Only after Runtime accepts it does the picker pin that choice for the base List. Rejection reports an error and changes neither view, history, nor pin. Back and Forward restore the recorded spec, not the current pin.
 A column-header sort creates a temporary presentation labeled with localized
-“Column sort” text, without replacing the saved named-presentation preference.
+“Column sort” text; it neither adds a history entry nor replaces the saved preference.
 Only that synthetic presentation is relabeled; opaque unknown identifiers remain
 data. The button's tooltip and accessible name retain the complete label when
 its allocated layout space constrains the painted text.
@@ -313,8 +315,8 @@ UIModel supplies style, monogram, and deterministic monogram foreground-color va
   protects Windows startup resolution and the deferred-checkpoint preference update.
 - [`DesktopSettingsYamlSchemaTest.cpp`](../../../test/winui/DesktopSettingsYamlSchemaTest.cpp) and [`ThemeTest.cpp`](../../../test/winui/ThemeTest.cpp) protect strict persistence and fallback.
 - [`TrackPropertiesAdapterTest.cpp`](../../../test/winui/track/TrackPropertiesAdapterTest.cpp) protects control-kind projection, mixed-state preservation, edit parsing, command eligibility, commit outcomes, and vocabulary suggestions on every host.
-- [`WinUiActivityStatusProbe.cpp`](../../../test/winui/probe/WinUiActivityStatusProbe.cpp) builds the registered `status.activity` component — real chrome, adapter, and runtime — with the actual `MainWindow` compiled style resources and invokes its native automation providers, protecting empty-action rejection, null inactive tooltips, Light/Dark foreground updates, retained-detail access, live enablement, and popup teardown. These are native-property regressions, not shipping screenshot or assistive-technology acceptance.
-- [`WinUiAutomationProbe.cpp`](../../../test/winui/probe/WinUiAutomationProbe.cpp) audits loaded Modern/Classic shells and visited popups through native automation peers. Role-and-scope landmarks require critical controls and two synthetic track rows with an album heading to reach that same audit, with effective-width expectations for responsive panes. Naming, removal, Raw-view, role, and scope canaries guard the auditor itself. The Windows CI naming gate runs this explicit desktop suite; unvisited dialogs and rows beyond this small materialized fixture remain outside its coverage.
+- [`WinUiActivityStatusProbe.cpp`](../../../test/winui/probe/WinUiActivityStatusProbe.cpp) checks the native activity component's enabled states, theme resources, retained details, and flyout retirement.
+- [`WinUiAutomationProbe.cpp`](../../../test/winui/probe/WinUiAutomationProbe.cpp) checks loaded controls in both shells and visited popups, including the presentation picker and workspace history. Its history checks call workspace commands, not keyboard or pointer gestures. The [native naming gate](../../development/windows.md#ui-automation-naming-gate) covers materialized controls, not unvisited UI, visual appearance, or assistive-technology acceptance.
 - [`WinUiCreditsProbe.cpp`](../../../test/winui/probe/WinUiCreditsProbe.cpp) exercises native Credits controls, including automation-driven kind dropdown choice and row command names, parent staging, and guarded submission; the shared scoped editor/form tests own replacement and overlay semantics.
 - [Library workflow tests](windows-library-workflows.md#test-map) cover scan decisions, transfer reports, committed List refresh, and native saved-order accelerators.
 - Tests under [`test/desktop/`](../../../test/desktop) protect shared
@@ -344,5 +346,6 @@ UIModel supplies style, monogram, and deterministic monogram foreground-color va
 - [Desktop successor protocol reference](../../reference/application/desktop-successor-protocol.md)
 - [Playback session persistence specification](../playback/session-persistence.md)
 - [Presentation architecture](../presentation/README.md)
+- [List presentation preference](../presentation/list-preference.md)
 - [Windows desktop state reference](../../reference/windows/desktop-state.md)
 - [Use the Windows desktop](../../user/use-windows-desktop.md)

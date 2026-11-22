@@ -327,15 +327,7 @@ namespace ao::gtk
     }
 
     auto const& stored = _columnLayouts.layoutForList(_listId);
-    auto visibleLayout = std::vector<uimodel::TrackColumnState>{};
-    visibleLayout.reserve(specs.size());
-
-    for (auto const& spec : specs)
-    {
-      visibleLayout.push_back(uimodel::canonicalTrackColumnState(spec));
-    }
-
-    _columnLayouts.updateLayout(_listId, uimodel::mergeVisibleTrackColumnLayout(stored, visibleLayout));
+    _columnLayouts.updateLayout(_listId, uimodel::mergeVisibleTrackColumnSpecs(stored, specs));
 
     if (viewportWidth > 0)
     {

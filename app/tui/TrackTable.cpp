@@ -11,17 +11,12 @@
 #include "TrackListEntry.h"
 #include "TrackSection.h"
 #include <ao/CoreIds.h>
-#include <ao/FileTimestamp.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/library/RecordingDate.h>
 #include <ao/rt/TrackField.h>
-#include <ao/rt/TrackFieldValue.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/TrackRow.h>
-#include <ao/uimodel/field/TrackFieldFormatter.h>
-#include <ao/uimodel/library/detail/TrackCredits.h>
+#include <ao/uimodel/field/TrackRowField.h>
 #include <ao/uimodel/library/presentation/TrackColumnDefaults.h>
-#include <ao/utility/Path.h>
 
 #include <ftxui/dom/elements.hpp>
 
@@ -29,7 +24,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
-#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -79,69 +73,6 @@ namespace ao::tui
       return ftxui::text(std::string{kTrackTableTrailingColumnSeparator}) | ftxui::dim;
     }
 
-    rt::TrackFieldRawValue rawValueForField(i18n::MessageCatalog const& textCatalog,
-                                            rt::TrackField const field,
-                                            rt::TrackRow const& row)
-    {
-      using F = rt::TrackField;
-
-      switch (field)
-      {
-        case F::Title:
-          return rt::TrackFieldRawValue{std::in_place_type<std::string>, trackDisplayTitle(textCatalog, row)};
-        case F::Artist: return rt::TrackFieldRawValue{std::in_place_type<std::string>, row.artist};
-        case F::Album: return rt::TrackFieldRawValue{std::in_place_type<std::string>, row.album};
-        case F::AlbumArtist: return rt::TrackFieldRawValue{std::in_place_type<std::string>, row.albumArtist};
-        case F::Genre: return rt::TrackFieldRawValue{std::in_place_type<std::string>, row.genre};
-        case F::Composer: return rt::TrackFieldRawValue{std::in_place_type<std::string>, row.composer};
-        case F::Conductor: return rt::TrackFieldRawValue{std::in_place_type<std::string>, row.conductor};
-        case F::Ensemble: return rt::TrackFieldRawValue{std::in_place_type<std::string>, row.ensemble};
-        case F::Work: return rt::TrackFieldRawValue{std::in_place_type<std::string>, row.work};
-        case F::Movement: return rt::TrackFieldRawValue{std::in_place_type<std::string>, row.movement};
-        case F::Soloist: return rt::TrackFieldRawValue{std::in_place_type<std::string>, row.soloist};
-        case F::Year: return rt::TrackFieldRawValue{std::in_place_type<std::uint16_t>, row.year};
-        case F::DiscNumber: return rt::TrackFieldRawValue{std::in_place_type<std::uint16_t>, row.discNumber};
-        case F::DiscTotal: return rt::TrackFieldRawValue{std::in_place_type<std::uint16_t>, row.discTotal};
-        case F::TrackNumber: return rt::TrackFieldRawValue{std::in_place_type<std::uint16_t>, row.trackNumber};
-        case F::TrackTotal: return rt::TrackFieldRawValue{std::in_place_type<std::uint16_t>, row.trackTotal};
-        case F::MovementNumber: return rt::TrackFieldRawValue{std::in_place_type<std::uint16_t>, row.movementNumber};
-        case F::MovementTotal: return rt::TrackFieldRawValue{std::in_place_type<std::uint16_t>, row.movementTotal};
-        case F::RecordingDate:
-          return rt::TrackFieldRawValue{std::in_place_type<library::RecordingDate>, row.recordingDate};
-        case F::Duration: return rt::TrackFieldRawValue{std::in_place_type<rt::TrackFieldDuration>, row.duration};
-        case F::Tags: return rt::TrackFieldRawValue{std::in_place_type<std::string>, row.tags};
-        case F::FilePath:
-          return rt::TrackFieldRawValue{
-            std::in_place_type<std::string>, row.optUriPath ? utility::pathToUtf8(*row.optUriPath) : std::string{}};
-        case F::Codec: return rt::TrackFieldRawValue{std::in_place_type<std::string>, uimodel::formatCodec(row.codec)};
-        case F::SampleRate: return rt::TrackFieldRawValue{std::in_place_type<std::uint32_t>, row.sampleRate};
-        case F::Channels: return rt::TrackFieldRawValue{std::in_place_type<std::uint32_t>, row.channels};
-        case F::BitDepth: return rt::TrackFieldRawValue{std::in_place_type<std::uint32_t>, row.bitDepth};
-        case F::Bitrate: return rt::TrackFieldRawValue{std::in_place_type<std::uint32_t>, row.bitrate};
-        case F::FileSize: return rt::TrackFieldRawValue{std::in_place_type<std::uint64_t>, row.fileSize};
-        case F::ModifiedTime:
-        {
-          if (row.optModifiedTime)
-          {
-            return rt::TrackFieldRawValue{std::in_place_type<FileTimestamp>, *row.optModifiedTime};
-          }
-
-          return rt::TrackFieldRawValue{};
-        }
-        case F::DisplayTrackNumber:
-          return rt::TrackFieldRawValue{
-            std::in_place_type<std::string>,
-            uimodel::formatDisplayTrackNumber(row.discNumber, row.discTotal, row.trackNumber)};
-        case F::TechnicalSummary:
-          return rt::TrackFieldRawValue{
-            std::in_place_type<std::string>,
-            uimodel::formatTechnicalSummary(row.codec, row.sampleRate, row.bitDepth, row.bitrate)};
-        case F::Quality: return rt::TrackFieldRawValue{};
-      }
-
-      return rt::TrackFieldRawValue{};
-    }
-
     // Cell text plus whether the underlying value is missing. Every field
     // formatter renders a missing value as empty text, so only the shared dash
     // placeholder is dimmed; a value that legitimately reads "-" keeps its own
@@ -156,21 +87,9 @@ namespace ao::tui
                                             rt::TrackField const field,
                                             rt::TrackRow const& row)
     {
-      auto value = uimodel::formatTrackFieldRawValue(textCatalog, field, rawValueForField(textCatalog, field, row));
-
-      switch (field)
-      {
-        case rt::TrackField::Conductor:
-          value = uimodel::formatTrackCreditSummary(textCatalog, row.conductor, row.conductorCount);
-          break;
-        case rt::TrackField::Ensemble:
-          value = uimodel::formatTrackCreditSummary(textCatalog, row.ensemble, row.ensembleCount);
-          break;
-        case rt::TrackField::Soloist:
-          value = uimodel::formatTrackCreditSummary(textCatalog, row.soloist, row.soloistCount);
-          break;
-        default: break;
-      }
+      auto value = field == rt::TrackField::Title
+                     ? trackDisplayTitle(textCatalog, row)
+                     : uimodel::formatTrackRowField(textCatalog, row, field, uimodel::TrackRowPathFormat::Native);
 
       if (value.empty())
       {

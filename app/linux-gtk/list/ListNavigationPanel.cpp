@@ -10,6 +10,7 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/Library.h>
+#include <ao/uimodel/library/list/ListTreeProjection.h>
 
 #include <gdk/gdk.h>
 #include <gdkmm/graphene_point.h>
@@ -33,13 +34,12 @@
 #include <pangomm/layout.h>
 #include <sigc++/functors/mem_fun.h>
 
-#include <algorithm>
 #include <cstdint>
 #include <format>
 #include <limits>
 #include <memory>
+#include <ranges>
 #include <utility>
-#include <vector>
 
 namespace ao::gtk
 {
@@ -112,7 +112,7 @@ namespace ao::gtk
   {
     auto result = ListTreeModelBuilder::build(reads, _textCatalog);
     _selectionChangedConnection.disconnect();
-    _nodesById = std::move(result.nodesById);
+    _projection = std::move(result.projection);
     _listTreeStorePtr = std::move(result.storePtr);
     _treeListModelPtr = std::move(result.treeModelPtr);
     _listSelectionModelPtr = std::move(result.selectionModelPtr);
@@ -148,12 +148,8 @@ namespace ao::gtk
 
   bool ListNavigationPanel::hasListChildren(ListId listId) const
   {
-    if (auto it = _nodesById.find(listId); it != _nodesById.end())
-    {
-      return it->second->hasChildren();
-    }
-
-    return false;
+    auto const it = _projection.rowsById.find(listId);
+    return it != _projection.rowsById.end() && !it->second.childIds.empty();
   }
 
   ListId ListNavigationPanel::selectedListId() const
@@ -374,50 +370,12 @@ namespace ao::gtk
     return kInvalidListPosition;
   }
 
-  std::vector<ListId> ListNavigationPanel::collectAncestorIds(ListId listId) const
-  {
-    auto ancestors = std::vector<ListId>{};
-    auto currentId = listId;
-
-    // The builder mirrors the single-parent, acyclic forest enforced by
-    // uimodel::buildListTreeProjection, so each step advances toward a root.
-    while (currentId != kInvalidListId)
-    {
-      auto const parentIt = std::ranges::find_if(_nodesById,
-                                                 [currentId](auto const& entry)
-                                                 {
-                                                   auto const& children = entry.second->children();
-
-                                                   for (guint index = 0; index < children->get_n_items(); ++index)
-                                                   {
-                                                     if (auto const childPtr = children->get_item(index);
-                                                         childPtr && childPtr->listId() == currentId)
-                                                     {
-                                                       return true;
-                                                     }
-                                                   }
-
-                                                   return false;
-                                                 });
-
-      if (parentIt == _nodesById.end())
-      {
-        break;
-      }
-
-      ancestors.push_back(parentIt->first);
-      currentId = parentIt->first;
-    }
-
-    // Start at the root-most ancestor so deeper rows are materialized before
-    // they are searched. Autoexpand may already have expanded those rows.
-    std::ranges::reverse(ancestors);
-    return ancestors;
-  }
-
   void ListNavigationPanel::expandAncestorsOf(ListId listId)
   {
-    for (auto const ancestorId : collectAncestorIds(listId))
+    // Materialize outer rows before looking up their children in GTK's flat model.
+    auto const ancestors = uimodel::listTreeAncestorIds(_projection, listId);
+
+    for (auto const ancestorId : std::views::reverse(ancestors))
     {
       auto const position = findListPosition(ancestorId);
 

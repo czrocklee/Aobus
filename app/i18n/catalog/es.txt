@@ -646,6 +646,8 @@ es:table {
     tui_library_current_track_not_in_view { "No se pudo localizar la pista actual en la biblioteca" }
     tui_library_no_active_track_view { "Sin vista de pista activa" }
     tui_library_no_views_available { "No hay vistas disponibles" }
+    tui_library_presentation_view_changed { "La vista de pistas cambió. Abre la lista que quieras y luego elige una vista." }
+    tui_library_presentation_apply_failed { "No se pudo aplicar esta vista." }
     tui_library_filter_cleared { "Filtro borrado" }
     tui_library_filter_applied { "Filtro aplicado" }
     tui_library_empty_scan { "No hay pistas indexadas. Ejecuta {command} para escanear esta biblioteca." }

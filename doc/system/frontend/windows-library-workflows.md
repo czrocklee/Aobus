@@ -99,12 +99,9 @@ library. Teardown follows the shared modal and callback-settlement rules above.
 
 ## List tree and navigation
 
-Navigation exposes Folders, Albums, Artists, Genres, and Playlists in both
-shells. Albums, Artists, and Genres apply matching built-in presentations to All
-Tracks; Playlists contains the shared List-tree projection. Built-in entries are
-read-only. All Tracks and saved-List context menus can create a root or derived
-List. Saved Lists additionally expose Edit and either single-node or subtree
-Delete according to descendants.
+Modern's `NavigationView` and Classic's `TreeView` both display All Tracks and the saved-List hierarchy from the shared [List projection](../presentation/list-tree.md). All Tracks is read-only; its context menu can create a root List. A saved List's menu can create a child, edit the List, or delete it (with its subtree if it has descendants).
+
+A sidebar selection passes the [List's preferred or recommended presentation](../presentation/list-preference.md#resolution) to workspace as `NewViewDefault`: a new plain view uses it, a reused one keeps its exact presentation. Browsing never writes or clears the pin. Navigation failure is reported and leaves the active view unchanged.
 
 The tree rebuilds only from committed library reset, List-upsert, and
 List-deletion publications. Native replacement suppresses selection publication,
@@ -116,7 +113,8 @@ optimistic tree mutation.
 Modern exposes the native navigation-back affordance. Both shells route
 `Alt+Left`, `Alt+Right`, and mouse back/forward through shared workspace history,
 rereading availability after workspace changes rather than keeping a parallel
-stack. Modal workflows apply the admission rule above.
+stack. Replay restores the recorded presentation without consulting or changing
+the pin. Modal workflows apply the admission rule above.
 
 ## Create and edit Lists
 
@@ -127,11 +125,9 @@ Create or Save. Recoverable validation, maintenance, stale-binding, or storage
 failure leaves the draft open with a visible error and does not retarget the
 captured selection or mutate the tree optimistically.
 
-After successful save, WinUI navigates to the authored List and applies its newly
-saved explicit presentation or resolved automatic recommendation, even if that
-List was already active. Accepted List definitions use normal library mutation;
-the accepted presentation choice uses the shared per-List presentation store
-rather than becoming a List field.
+Once the List save succeeds, the editor pins the selected named presentation, or clears the pin for Auto or no valid selection. An unavailable stored id opens as Auto: saving in that state clears the pin; merely browsing to the List does not. A failed List save leaves the preference untouched.
+
+The editor then navigates with an `Override` so the history point records the resolved presentation. Even a rename reapplies the choice to a reused view, replacing a temporary header sort. If navigation fails, the editor reports the error and closes; the saved List and its preference remain.
 
 Quick Filter shows **Create List from current filter** beside the native
 suggestion box only when shared filter state has a non-empty valid resolved
@@ -170,8 +166,9 @@ state are not persisted. Accepted List definitions, tags, membership, and saved
 order use their normal library mutation contracts. Per-List presentation and
 column preferences use shared `trackView.presentations` and
 `trackView.columnLayouts`; workspace owns the active view's current presentation
-and sorting. Windows desktop paths and schema details remain in the
-[Windows desktop state reference](../../reference/windows/desktop-state.md).
+and sorting. A failed preference-file write is logged and does not roll back the
+List save or the in-memory preference. Windows desktop paths and schema details
+remain in the [Windows desktop state reference](../../reference/windows/desktop-state.md).
 
 ## Implementation map
 

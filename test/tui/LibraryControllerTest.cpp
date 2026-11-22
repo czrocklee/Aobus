@@ -13,7 +13,9 @@
 #include "tui/TrackPresentationNavigation.h"
 #include <ao/CoreIds.h>
 #include <ao/i18n/IcuTextOrdering.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/ListMutation.h>
+#include <ao/rt/NotificationState.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
@@ -21,6 +23,7 @@
 #include <ao/rt/ViewState.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryCommands.h>
 #include <ao/uimodel/library/presentation/ListPresentations.h>
@@ -94,7 +97,7 @@ namespace ao::tui::test
     fixture.runtimePtr->setTextOrderingPolicy(
       std::shared_ptr<rt::TextOrderingPolicy const>{ao::test::requireValue(i18n::createIcuTextOrderingPolicy("de"))});
     auto controller = fixture.makeController();
-    controller.setPresentation("songs");
+    REQUIRE(controller.setPresentation("songs"));
     controller.setSelectedTrackIndex(0);
     REQUIRE(controller.selectedTrackView().track->id == umlaut);
     controller.toggleFocusedMark();
@@ -204,10 +207,66 @@ namespace ao::tui::test
                                         presentations};
     auto const activeBefore = controller.activePresentationId();
 
-    CHECK(controller.setPresentation("missing-presentation") == "Unknown view missing-presentation");
+    auto const missingRes = controller.setPresentation("missing-presentation");
+    REQUIRE_FALSE(missingRes);
+    CHECK(missingRes.error().message == "Unknown view missing-presentation");
 
     CHECK(controller.activePresentationId() == activeBefore);
     CHECK(presentations.snapshot().at(rt::kAllTracksListId) == "albums");
+  }
+
+  TEST_CASE("LibraryController - a stale presentation choice cannot change either view or pin")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const listId = fixture.addList("Saved");
+    fixture.listPresentations.setPresentationIdForList(rt::kAllTracksListId, "artists");
+    fixture.listPresentations.setPresentationIdForList(listId, "songs");
+    auto controller = fixture.makeController();
+    auto const textCatalog = ao::test::messageCatalog("zh-Hans");
+    controller.setTextCatalog(textCatalog);
+    auto& workspace = fixture.runtimePtr->workspace();
+    auto& views = fixture.runtimePtr->views();
+    auto const allTracksViewId = controller.activeViewId();
+    REQUIRE(controller.openList(listId));
+    auto const savedViewId = controller.activeViewId();
+
+    // Another workspace owner replayed All Tracks without reattaching the TUI.
+    REQUIRE(workspace.goBack());
+    auto const workspaceBefore = workspace.snapshot();
+    REQUIRE(workspaceBefore.activeViewId == allTracksViewId);
+    REQUIRE(controller.activeViewId() == savedViewId);
+    REQUIRE(controller.currentListId() == listId);
+    REQUIRE(workspace.canGoForward());
+    auto const allTracksBefore = views.trackListState(allTracksViewId).presentation;
+    auto const savedBefore = views.trackListState(savedViewId).presentation;
+    auto const pinsBefore = fixture.listPresentations.snapshot();
+
+    auto const staleRes = controller.setPresentation(rt::kListOrderTrackPresentationId);
+    REQUIRE_FALSE(staleRes);
+    CHECK(staleRes.error().severity == rt::NotificationSeverity::Warning);
+    CHECK(staleRes.error().message ==
+          i18n::requiredText(textCatalog, i18n::MessageId::TuiLibraryPresentationViewChanged));
+
+    CHECK(controller.activeViewId() == savedViewId);
+    CHECK(controller.currentListId() == listId);
+    CHECK(views.trackListState(allTracksViewId).presentation == allTracksBefore);
+    CHECK(views.trackListState(savedViewId).presentation == savedBefore);
+    CHECK(fixture.listPresentations.snapshot() == pinsBefore);
+    CHECK(workspace.snapshot() == workspaceBefore);
+    REQUIRE(workspace.goForward());
+    CHECK(workspace.snapshot().activeViewId == savedViewId);
+    CHECK(views.trackListState(savedViewId).presentation == savedBefore);
+    REQUIRE(workspace.goBack());
+
+    auto const reopenedRes = controller.openList(listId);
+    REQUIRE(reopenedRes);
+    REQUIRE(*reopenedRes);
+    CHECK(workspace.snapshot().activeViewId == savedViewId);
+    REQUIRE(controller.setPresentation(rt::kListOrderTrackPresentationId));
+    CHECK(views.trackListState(savedViewId).presentation.id == rt::kListOrderTrackPresentationId);
+    CHECK(fixture.listPresentations.presentationIdForList(listId) == rt::kListOrderTrackPresentationId);
+    CHECK(views.trackListState(allTracksViewId).presentation == allTracksBefore);
+    CHECK(fixture.listPresentations.presentationIdForList(rt::kAllTracksListId) == "artists");
   }
 
   TEST_CASE("LibraryController - persisted preference does not replace an exact restored active view")
@@ -704,7 +763,9 @@ namespace ao::tui::test
 
     CHECK(controller.setPresentation("albums") == "View: albums");
     CHECK(fixture.runtimePtr->views().trackListState(controller.activeViewId()).presentation.id == "albums");
-    CHECK(controller.setPresentation("missing-preset") == "Unknown view missing-preset");
+    auto const missingRes = controller.setPresentation("missing-preset");
+    REQUIRE_FALSE(missingRes);
+    CHECK(missingRes.error().message == "Unknown view missing-preset");
     CHECK(fixture.runtimePtr->views().trackListState(controller.activeViewId()).presentation.id == "albums");
   }
 

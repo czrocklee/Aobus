@@ -57,58 +57,11 @@ namespace ao::tui
       prefix.append(name);
       return prefix;
     }
-
-    std::vector<ListId> oldAncestorIds(uimodel::ListTreeProjection const& tree, ListId id)
-    {
-      auto ancestors = std::vector<ListId>{};
-      auto visited = std::set{id};
-      auto rowIt = tree.rowsById.find(id);
-
-      while (rowIt != tree.rowsById.end())
-      {
-        auto const parentId = rowIt->second.parentId;
-
-        if (parentId == kInvalidListId || !visited.insert(parentId).second)
-        {
-          break;
-        }
-
-        ancestors.push_back(parentId);
-        rowIt = tree.rowsById.find(parentId);
-      }
-
-      return ancestors;
-    }
-
-    bool isDescendantOf(uimodel::ListTreeProjection const& tree, ListId id, ListId const ancestorId)
-    {
-      auto visited = std::set{id};
-      auto rowIt = tree.rowsById.find(id);
-
-      while (rowIt != tree.rowsById.end())
-      {
-        auto const parentId = rowIt->second.parentId;
-
-        if (parentId == ancestorId)
-        {
-          return true;
-        }
-
-        if (parentId == kInvalidListId || !visited.insert(parentId).second)
-        {
-          break;
-        }
-
-        rowIt = tree.rowsById.find(parentId);
-      }
-
-      return false;
-    }
   } // namespace
 
   void ListNavigationModel::setTree(uimodel::ListTreeProjection tree, ListId const activeId)
   {
-    auto const ancestors = oldAncestorIds(_tree, _cursor);
+    auto const ancestors = uimodel::listTreeAncestorIds(_tree, _cursor);
     _tree = std::move(tree);
     rebuildProjection();
 
@@ -314,7 +267,7 @@ namespace ao::tui
     {
       _expandedIds.erase(id);
 
-      if (isDescendantOf(_tree, _cursor, id))
+      if (std::ranges::contains(uimodel::listTreeAncestorIds(_tree, _cursor), id))
       {
         _cursor = id;
       }
@@ -400,24 +353,12 @@ namespace ao::tui
 
   void ListNavigationModel::expandAncestors(ListId const id)
   {
-    auto visited = std::set{id};
-    auto rowIt = _tree.rowsById.find(id);
-
-    while (rowIt != _tree.rowsById.end())
+    for (auto const parentId : uimodel::listTreeAncestorIds(_tree, id))
     {
-      auto const parentId = rowIt->second.parentId;
-
-      if (parentId == kInvalidListId || !visited.insert(parentId).second)
-      {
-        break;
-      }
-
-      if (_tree.rowsById.contains(parentId))
+      if (isNavigable(parentId))
       {
         _expandedIds.insert(parentId);
       }
-
-      rowIt = _tree.rowsById.find(parentId);
     }
   }
 
@@ -535,6 +476,7 @@ namespace ao::tui
     }
 
     auto matchingIds = std::set<ListId>{};
+    // Context follows the displayed preorder, not logical parentIds that may disagree with child edges.
     auto traversalParentIds = std::map<ListId, ListId>{};
 
     for (auto const& item : _projection)

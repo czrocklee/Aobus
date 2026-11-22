@@ -193,23 +193,10 @@ namespace ao::appkit
       listPresentationsPtr->restore(std::move(preferences), knownListIds);
     }
 
-    // A virtual id, or a saved id whose List is gone, recommends as All Tracks.
     rt::TrackPresentationSpec presentationForList(ListId const listId)
     {
       AO_INVARIANT(optRuntime);
-      auto context = uimodel::ListPresentationContext{.listId = listId};
-
-      if (!rt::isVirtualListId(listId))
-      {
-        if (auto const optNode = optRuntime->library().snapshot().listNode(listId); optNode)
-        {
-          context.sourceKind = uimodel::ListPresentationSourceKind::SavedList;
-          context.listExpression = optNode->expression;
-          return listPresentationsPtr->presentationForList(context);
-        }
-      }
-
-      return listPresentationsPtr->presentationForList(context);
+      return listPresentationsPtr->presentationForList(listId, optRuntime->library());
     }
 
     // Storage stays alive through runtime shutdown and the final executor drain.
@@ -578,15 +565,7 @@ namespace ao::appkit
   {
     auto& storage = *_storagePtr;
     auto const& projectionPtr = storage.projectionPtr;
-    auto sections = std::vector<uimodel::TrackDisplaySection>{};
-
-    for (std::size_t index = 0; index < projectionPtr->groupCount(); ++index)
-    {
-      auto const group = projectionPtr->groupAt(index);
-      sections.push_back({.start = group.rows.start, .count = group.rows.count});
-    }
-
-    auto const displayReset = storage.displayIndex.tryReset(projectionPtr->size(), sections);
+    auto const displayReset = storage.displayIndex.tryReset(*projectionPtr);
     AO_INVARIANT(displayReset);
     storage.rows.reset(
       projectionPtr->size(),

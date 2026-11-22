@@ -38,8 +38,13 @@ namespace ao::rt
   class TrackListProjection;
   class ViewService;
   class WorkspaceService;
-  struct TrackPresentationSpec;
+  struct NavigationPresentation;
   struct TrackListProjectionDeltaBatch;
+}
+
+namespace ao::uimodel
+{
+  class ListPresentations;
 }
 
 namespace ao::winui
@@ -63,6 +68,7 @@ namespace ao::winui
                         rt::WorkspaceService& workspace,
                         rt::Library& library,
                         uimodel::TrackColumnLayouts& columnLayouts,
+                        uimodel::ListPresentations const& listPresentations,
                         i18n::MessageCatalog textCatalog);
     ~TrackListController();
 
@@ -78,10 +84,9 @@ namespace ao::winui
     std::vector<TrackId> selection() const;
     std::optional<std::size_t> displayIndexOfTrack(TrackId trackId) const noexcept;
     Result<> play(TrackId trackId, std::function<Result<>(rt::ViewId, TrackId)> const& playTrack);
-    Result<> selectPresentation(std::string_view presentationId);
-    Result<> selectPresentation(rt::TrackPresentationSpec const& presentation);
     Result<> toggleSort(rt::TrackSortField field);
     Result<> navigateTo(ListId listId);
+    Result<> navigateTo(ListId listId, rt::NavigationPresentation presentation);
     Result<> revealTrack(TrackId trackId, rt::ViewId preferredViewId, ListId preferredListId);
     std::optional<TrackRevealTarget> revealTarget() const noexcept;
     Result<> resizeColumn(std::string_view fieldId, double horizontalChange);
@@ -116,13 +121,14 @@ namespace ao::winui
     void refreshRows();
     void refreshColumns();
     void adoptWorkspaceView(rt::ViewId viewId);
-    Result<> storeColumnSpecs(std::vector<uimodel::TrackColumnSolveSpec> const& specs);
+    void storeColumnSpecs(ListId listId, std::span<uimodel::TrackColumnSolveSpec const> specs);
     void resetProjection(std::shared_ptr<rt::TrackListProjection const> projectionPtr);
     i18n::MessageCatalog _textCatalog;
     rt::ViewService& _views;
     rt::WorkspaceService& _workspace;
     rt::Library& _library;
     uimodel::TrackColumnLayouts& _columnLayouts;
+    uimodel::ListPresentations const& _listPresentations;
     rt::ViewId _viewId{rt::kInvalidViewId};
     std::shared_ptr<rt::TrackListProjection const> _projectionPtr;
     std::shared_ptr<void> _bindingLifetimePtr;

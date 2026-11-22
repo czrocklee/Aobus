@@ -16,6 +16,7 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/library/Credits.h>
 #include <ao/rt/ViewService.h>
+#include <ao/rt/WorkspaceService.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/shell/ShellGenerationSequence.h>
 #include <ao/uimodel/library/list/ListActions.h>
@@ -166,7 +167,6 @@ namespace ao::winui::layout
     {
     public:
       PresentationButtonComponent(LayoutBuildContext& ctx,
-                                  TrackListController& trackList,
                                   rt::ViewService& views,
                                   rt::WorkspaceService& workspace,
                                   uimodel::TrackPresentationCatalog& presentationCatalog,
@@ -174,7 +174,7 @@ namespace ao::winui::layout
                                   i18n::MessageCatalog const& textCatalog,
                                   std::function<void(std::string)> reportStatus,
                                   bool const compact)
-        : _trackList{trackList}
+        : _workspace{workspace}
         , _views{views}
         , _gatePtr{ctx.gatePtr}
         , _reportStatus{std::move(reportStatus)}
@@ -311,7 +311,7 @@ namespace ao::winui::layout
           return;
         }
 
-        if (auto const selectedRes = _trackList.selectPresentation(optSelection->spec); !selectedRes)
+        if (auto const selectedRes = _workspace.setActivePresentation(optSelection->spec); !selectedRes)
         {
           if (_reportStatus)
           {
@@ -326,7 +326,7 @@ namespace ao::winui::layout
 
       Button _button{};
       MenuFlyout _flyout{nullptr};
-      TrackListController& _trackList;
+      rt::WorkspaceService& _workspace;
       rt::ViewService& _views;
       std::weak_ptr<uimodel::ShellGenerationGate> _gatePtr;
       std::function<void(std::string)> _reportStatus;
@@ -364,12 +364,11 @@ namespace ao::winui::layout
 
     registry.registerComponent(
       "track.presentationButton",
-      [&trackList, &views, &workspace, &presentationCatalog, &listPresentations, textCatalog, reportStatus](
+      [&views, &workspace, &presentationCatalog, &listPresentations, textCatalog, reportStatus](
         LayoutBuildContext& ctx, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
       {
         return std::make_unique<PresentationButtonComponent>(
           ctx,
-          trackList,
           views,
           workspace,
           presentationCatalog,

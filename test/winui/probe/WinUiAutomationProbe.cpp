@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-// Audit resolved native UIA names on the loaded shipping shells, not spelling
-// of SetName calls. Canary controls prove that bypassing makeNamed is detected.
+// Audit the loaded shipping shells: resolved UIA names, presentation picker
+// history, and list navigation. Canary controls check the naming audit itself.
 #include <windows.h>
 
 // Keep the Win32 macro out of the XAML projections.
@@ -15,6 +15,7 @@
 #include "platform/NamedControl.h"
 #include "platform/ResourceLanguage.h"
 #include "platform/WinRtStringResources.h"
+#include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
@@ -24,6 +25,8 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/LibraryWrite.h>
+#include <ao/library/ListBuilder.h>
+#include <ao/library/ListWriter.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackWriter.h>
@@ -33,6 +36,12 @@
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
+#include <ao/rt/TrackField.h>
+#include <ao/rt/TrackPresentation.h>
+#include <ao/rt/ViewIds.h>
+#include <ao/rt/ViewService.h>
+#include <ao/rt/ViewState.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/completion/CompletionAliasPolicy.h>
 #include <ao/rt/library/LibraryPaths.h>
@@ -302,6 +311,13 @@ namespace
                            });
   }
 
+  template<typename T>
+  T findVisualById(DependencyObject const& root, winrt::hstring const& id)
+  {
+    return findVisualIf<T>(
+      root, [&id](T const& element) { return AutomationProperties::GetAutomationId(element) == id; });
+  }
+
   Controls::MenuFlyoutItem findMenuItem(
     winrt::Windows::Foundation::Collections::IVector<Controls::MenuFlyoutItemBase> const& items,
     wchar_t const* resourceId)
@@ -319,7 +335,13 @@ namespace
     return nullptr;
   }
 
-  ao::Result<> seedLibrary(std::filesystem::path const& root)
+  struct SeededLists final
+  {
+    ao::ListId bachId{};
+    ao::ListId pinnedBachId{};
+  };
+
+  ao::Result<SeededLists> seedLibrary(std::filesystem::path const& root)
   {
     auto const databasePath = ao::rt::LibraryPaths{root}.databasePath();
     std::filesystem::create_directories(databasePath);
@@ -339,12 +361,12 @@ namespace
 
     auto transaction = writableRes->writeTransaction();
     auto applyRes = transaction.apply(
-      [](ao::library::LibraryWrite& write) -> ao::Result<>
+      [](ao::library::LibraryWrite& write) -> ao::Result<SeededLists>
       {
         for (auto const* title : {"Audit Alpha", "Audit Beta"})
         {
           auto builder = ao::library::TrackBuilder::makeEmpty();
-          builder.metadata().title(title).artist("Audit Artist").album("Audit Album");
+          builder.metadata().title(title).artist("Audit Artist").album("Audit Album").composer("Bach");
           // Both rescans report these two absent files, without playing audio
           // or removing the tracks the shell displays.
           auto const uri = std::format("probe/{}.flac", title);
@@ -357,7 +379,25 @@ namespace
           }
         }
 
-        return {};
+        auto const createComposerList = [&write](std::string_view name)
+        {
+          return write.lists().create(ao::library::ListBuilder::makeEmpty().name(name).filter("$composer = \"Bach\""));
+        };
+        auto const bachRes = createComposerList("Bach");
+
+        if (!bachRes)
+        {
+          return std::unexpected{bachRes.error()};
+        }
+
+        auto const pinnedBachRes = createComposerList("Pinned Bach");
+
+        if (!pinnedBachRes)
+        {
+          return std::unexpected{pinnedBachRes.error()};
+        }
+
+        return SeededLists{.bachId = *bachRes, .pinnedBachId = *pinnedBachRes};
       });
 
     if (!applyRes)
@@ -366,7 +406,12 @@ namespace
     }
 
     // Close the writer and storage before the real runtime opens this library.
-    return transaction.commit();
+    if (auto commitRes = transaction.commit(); !commitRes)
+    {
+      return std::unexpected{commitRes.error()};
+    }
+
+    return *applyRes;
   }
 
   class WinUiAutomationProbe : public ApplicationT<WinUiAutomationProbe, Markup::IXamlMetadataProvider>
@@ -404,21 +449,58 @@ namespace
                  std::format("aobus-uia-audit-{}", std::chrono::steady_clock::now().time_since_epoch().count());
       auto const libraryRoot = _scratch / "library";
 
-      if (auto seedRes = seedLibrary(libraryRoot); !seedRes)
+      auto const seedRes = seedLibrary(libraryRoot);
+
+      if (!seedRes)
       {
         fail(seedRes.error().message);
         finish();
         return;
       }
 
+      _lists = *seedRes;
       _window = winrt::make<winrt::Aobus::implementation::MainWindow>();
-      auto sessionRes = ao::winui::LibrarySession::create(
-        _scratch,
-        _window.DispatcherQueue(),
-        std::move(*catalogRes),
-        *_orderingPtr,
-        *_aliasesPtr,
-        ao::desktop::LibrarySwitchRequest{.libraryRoot = libraryRoot, .scanAfterOpen = false});
+      auto const createSession = [&]
+      {
+        return ao::winui::LibrarySession::create(
+          _scratch,
+          _window.DispatcherQueue(),
+          *catalogRes,
+          *_orderingPtr,
+          *_aliasesPtr,
+          ao::desktop::LibrarySwitchRequest{.libraryRoot = libraryRoot, .scanAfterOpen = false});
+      };
+      // Save an exact, flat view distinct from both the pin and the All Tracks recommendation.
+      // Reopen through the shipping session so binding the frame must not replace this restored spec.
+      {
+        auto priorRes = createSession();
+
+        if (!priorRes)
+        {
+          fail(priorRes.error().message);
+          finish();
+          return;
+        }
+
+        _sessionPtr = std::move(*priorRes);
+        _sessionPtr->listPresentations().setPresentationIdForList(ao::rt::kAllTracksListId, "artists");
+        _sessionPtr->listPresentations().setPresentationIdForList(_lists.pinnedBachId, "technical");
+        auto viewRes = _sessionPtr->runtime().workspace().navigate({
+          .target = ao::rt::GlobalViewKind::AllTracks,
+          .optPresentation = ao::rt::NavigationPresentation{.spec = _restoredSpec},
+        });
+
+        if (!viewRes)
+        {
+          fail(viewRes.error().message);
+          finish();
+          return;
+        }
+
+        _sessionPtr.reset();
+      }
+
+      auto sessionRes = createSession();
 
       if (!sessionRes)
       {
@@ -765,9 +847,227 @@ namespace
       peer.GetPattern(PatternInterface::Invoke).as<Automation::Provider::IInvokeProvider>().Invoke();
     }
 
+    ao::rt::TrackListViewState activeState() const
+    {
+      auto& runtime = _sessionPtr->runtime();
+      return runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
+    }
+
+    // Select a realized shipping sidebar row, driving its SelectionChanged handler.
+    void selectSidebarList(winrt::hstring const& name, Step next)
+    {
+      auto const pane = findVisualById<Controls::NavigationView>(_root, L"modern-navigation");
+      auto const row = pane ? findVisual<Controls::NavigationViewItem>(pane, name) : nullptr;
+
+      if (!row || !row.IsLoaded() || !pane.IsPaneOpen())
+      {
+        fail(std::format("shipping sidebar row '{}' is not available in the open pane", winrt::to_string(name)));
+        finish();
+        return;
+      }
+
+      pane.SelectedItem(row);
+      afterFrame(next);
+    }
+
     void modern()
     {
-      auditShell("Modern");
+      auditShell("Modern restored tracks");
+      auto const state = activeState();
+      check(state.listId == ao::rt::kAllTracksListId && state.presentation == _restoredSpec,
+            "binding the window replaced the exact restored view with a default or pin");
+      check(_sessionPtr->listPresentations().presentationIdForList(state.listId) == "artists",
+            "restoring the workspace rewrote the independent saved pin");
+
+      _stage = "first sidebar visit to a pinned saved List";
+      auto& runtime = _sessionPtr->runtime();
+      _viewsBeforePinnedList = runtime.workspace().snapshot().openViews;
+
+      if (std::ranges::any_of(_viewsBeforePinnedList,
+                              [this, &runtime](ao::rt::ViewId id)
+                              { return runtime.views().trackListState(id).listId == _lists.pinnedBachId; }))
+      {
+        fail("Pinned Bach already has a workspace view before its first sidebar visit");
+        finish();
+        return;
+      }
+
+      if (_sessionPtr->listPresentations().presentationIdForList(_lists.pinnedBachId) != "technical")
+      {
+        fail("the Technical pin was not restored for the unopened List");
+        finish();
+        return;
+      }
+
+      selectSidebarList(L"Pinned Bach", &WinUiAutomationProbe::pinnedComposerOpened);
+    }
+
+    void pinnedComposerOpened()
+    {
+      auto const state = activeState();
+      auto const* technical = ao::rt::builtinTrackPresentationPreset("technical");
+
+      if (state.listId != _lists.pinnedBachId || !state.filterExpression.empty() ||
+          std::ranges::contains(_viewsBeforePinnedList, state.id))
+      {
+        fail("first sidebar visit did not create a new plain view for Pinned Bach");
+        finish();
+        return;
+      }
+
+      check(technical != nullptr && state.presentation == technical->spec,
+            "the new view did not use its saved Technical pin instead of the composer recommendation");
+      check(_sessionPtr->listPresentations().presentationIdForList(_lists.pinnedBachId) == "technical",
+            "first sidebar visit changed the saved pin");
+      selectSidebarList(L"Bach", &WinUiAutomationProbe::composerOpened);
+    }
+
+    void composerOpened()
+    {
+      _stage = "unpinned composer list opened from Modern sidebar";
+      auto const state = activeState();
+
+      if (state.listId != _lists.bachId)
+      {
+        fail("sidebar did not switch from Pinned Bach to the unpinned Bach List");
+        finish();
+        return;
+      }
+
+      _composerViewId = state.id;
+      checkComposerPreset("classical-composers", std::nullopt);
+      auto const picker = findVisualById<Button>(_root, L"modern-presentation-button");
+
+      if (!picker)
+      {
+        fail("shipping presentation button missing");
+        finish();
+        return;
+      }
+
+      invoke(picker);
+      afterFrame(&WinUiAutomationProbe::pickTechnical);
+    }
+
+    void pickTechnical()
+    {
+      _stage = "Technical menu choice";
+      auto const label = winrt::to_hstring(
+        ao::i18n::requiredText(_sessionPtr->textCatalog(), ao::i18n::MessageId::TrackPresentationTechnical));
+
+      for (auto const& popup : Media::VisualTreeHelper::GetOpenPopupsForXamlRoot(_root.XamlRoot()))
+      {
+        if (auto const item = findVisual<Controls::MenuFlyoutItem>(popup.Child(), label); item && item.IsEnabled())
+        {
+          invoke(item);
+          afterFrame(&WinUiAutomationProbe::pickedTechnical);
+          return;
+        }
+      }
+
+      fail("shipping picker did not expose an enabled Technical item");
+      finish();
+    }
+
+    void checkComposerState(ao::rt::TrackPresentationSpec const& expected, std::optional<std::string_view> const optPin)
+    {
+      auto const state = activeState();
+      check(state.id == _composerViewId && state.listId == _lists.bachId && state.presentation == expected,
+            std::format("expected exact '{}' on the original composer view, observed '{}' on view {}",
+                        expected.id,
+                        state.presentation.id,
+                        state.id.raw()));
+      check(_sessionPtr->listPresentations().presentationIdForList(_lists.bachId) == optPin,
+            std::format("expected composer pin '{}'", optPin.value_or("Auto")));
+    }
+
+    void checkComposerPreset(std::string_view id, std::optional<std::string_view> const optPin)
+    {
+      if (auto const* preset = ao::rt::builtinTrackPresentationPreset(id); preset != nullptr)
+      {
+        checkComposerState(preset->spec, optPin);
+      }
+      else
+      {
+        fail(std::format("missing builtin preset '{}'", id));
+      }
+    }
+
+    void pickedTechnical()
+    {
+      _stage = "Technical presentation and pin after picker choice";
+      checkComposerPreset("technical", "technical");
+
+      if (auto backRes = _sessionPtr->runtime().workspace().goBack(); !backRes)
+      {
+        fail("Back was unavailable after the picker command");
+        finish();
+        return;
+      }
+
+      afterFrame(&WinUiAutomationProbe::pickerBack);
+    }
+
+    void pickerBack()
+    {
+      _stage = "Back after picker choice";
+      checkComposerPreset("classical-composers", "technical");
+
+      if (auto forwardRes = _sessionPtr->runtime().workspace().goForward(); !forwardRes)
+      {
+        fail("Forward was unavailable after replaying the previous composer presentation");
+        finish();
+        return;
+      }
+
+      afterFrame(&WinUiAutomationProbe::pickerForward);
+    }
+
+    void pickerForward()
+    {
+      _stage = "Forward after picker choice";
+      checkComposerPreset("technical", "technical");
+      auto const title = findVisual<Button>(_root, L"Title");
+
+      if (!title)
+      {
+        fail("Technical view has no Title column header to sort");
+        finish();
+        return;
+      }
+
+      invoke(title);
+      afterFrame(&WinUiAutomationProbe::leaveSortedComposer);
+    }
+
+    void leaveSortedComposer()
+    {
+      _stage = "temporary composer sort";
+      _sortedSpec = activeState().presentation;
+      check(_sortedSpec.id == "windows-column-sort", "the Title header did not install a temporary presentation");
+      checkComposerState(_sortedSpec, "technical");
+      selectSidebarList(L"All Tracks", &WinUiAutomationProbe::revisitComposer);
+    }
+
+    void revisitComposer()
+    {
+      _stage = "reused All Tracks with different pin";
+      auto const state = activeState();
+      check(state.listId == ao::rt::kAllTracksListId && state.presentation == _restoredSpec,
+            "sidebar navigation did not return to the restored All Tracks presentation");
+      selectSidebarList(L"Bach", &WinUiAutomationProbe::composerReused);
+    }
+
+    void composerReused()
+    {
+      _stage = "pinned composer list reused after temporary sort";
+      checkComposerState(_sortedSpec, "technical");
+      selectSidebarList(L"All Tracks", &WinUiAutomationProbe::groupModern);
+    }
+
+    void groupModern()
+    {
+      check(activeState().listId == ao::rt::kAllTracksListId, "did not return to All Tracks for the grouped audit");
       auto presentationRes = _sessionPtr->runtime().workspace().setActivePresentation("albums");
       check(static_cast<bool>(presentationRes), "could not select the real album-grouped presentation");
 
@@ -1202,6 +1502,15 @@ namespace
     std::unique_ptr<ao::winui::LibrarySession> _sessionPtr;
     ao::async::Subscription _rescanSub;
     std::size_t _scanStarts = 0;
+    SeededLists _lists{};
+    std::vector<ao::rt::ViewId> _viewsBeforePinnedList;
+    ao::rt::ViewId _composerViewId{};
+    ao::rt::TrackPresentationSpec const _restoredSpec{
+      .id = "windows-column-sort",
+      .sortBy = {{.field = ao::rt::TrackSortField::Year, .ascending = false}},
+      .visibleFields = {ao::rt::TrackField::Title, ao::rt::TrackField::Year},
+    };
+    ao::rt::TrackPresentationSpec _sortedSpec;
     winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer _timeout{nullptr};
     FrameworkElement::Loaded_revoker _loaded{};
     Media::CompositionTarget::Rendering_revoker _rendering{};

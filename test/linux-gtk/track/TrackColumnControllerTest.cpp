@@ -220,30 +220,32 @@ namespace ao::gtk::test
       CHECK(columnLayouts.snapshot().empty());
     }
 
-    SECTION("stored hidden columns remain hidden and survive a visible-column resize")
+    SECTION("a native fixed-width resize writes pixels without moving or resizing a hidden column")
     {
-      columnLayouts.restore(
-        {{rt::kAllTracksListId,
-          {
-            uimodel::TrackColumnState{.field = rt::TrackField::Album, .weight = 1.0, .visible = false},
-          }}},
-        {});
+      auto const hiddenAlbum =
+        uimodel::TrackColumnState{.field = rt::TrackField::Album, .weight = 1.75, .visible = false};
+      auto const seeded = std::vector{
+        uimodel::TrackColumnState{.field = rt::TrackField::Title, .weight = 3.0},
+        hiddenAlbum,
+        uimodel::TrackColumnState{.field = rt::TrackField::Duration, .width = 96},
+      };
+      columnLayouts.restore({{rt::kAllTracksListId, seeded}}, {});
       controller.configureColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
-      controller.syncLayout(std::vector{rt::TrackField::Title, rt::TrackField::Artist, rt::TrackField::Album});
+      controller.syncLayout(std::vector{rt::TrackField::Title, rt::TrackField::Duration, rt::TrackField::Album});
 
       auto const albumColumnPtr = columnForField(columnView, rt::TrackField::Album);
-      auto const titleColumnPtr = columnForField(columnView, rt::TrackField::Title);
+      auto const durationColumnPtr = columnForField(columnView, rt::TrackField::Duration);
       REQUIRE(albumColumnPtr);
-      REQUIRE(titleColumnPtr);
+      REQUIRE(durationColumnPtr);
       CHECK_FALSE(albumColumnPtr->get_visible());
 
-      titleColumnPtr->set_fixed_width(333);
+      durationColumnPtr->set_fixed_width(133);
       drainGtkEvents();
 
       auto const& stored = columnLayouts.layoutForList(rt::kAllTracksListId);
-      auto const* albumState = stateForField(stored, rt::TrackField::Album);
-      REQUIRE(albumState != nullptr);
-      CHECK_FALSE(albumState->visible);
+      REQUIRE(stored.size() == 3);
+      CHECK(stored[1] == hiddenAlbum);
+      CHECK(stored[2] == uimodel::TrackColumnState{.field = rt::TrackField::Duration, .width = 133});
     }
   }
 

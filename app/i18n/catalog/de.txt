@@ -646,6 +646,8 @@ de:table {
     tui_library_current_track_not_in_view { "Der aktuelle Titel konnte in der Bibliothek nicht gefunden werden" }
     tui_library_no_active_track_view { "Keine aktive Titelansicht" }
     tui_library_no_views_available { "Keine Ansichten verfügbar" }
+    tui_library_presentation_view_changed { "Die Titelansicht hat sich geändert. Öffnen Sie die gewünschte Liste, bevor Sie eine Ansicht wählen." }
+    tui_library_presentation_apply_failed { "Diese Ansicht konnte nicht angewendet werden." }
     tui_library_filter_cleared { "Filter gelöscht" }
     tui_library_filter_applied { "Filter angewendet" }
     tui_library_empty_scan { "Keine indizierten Titel. Mit {command} diese Bibliothek scannen." }

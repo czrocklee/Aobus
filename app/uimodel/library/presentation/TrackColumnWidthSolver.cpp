@@ -505,4 +505,18 @@ namespace ao::uimodel
 
     return TrackColumnState{.field = spec.field, .width = -1, .weight = roundedWeight(effectiveWeight(spec))};
   }
+
+  std::vector<TrackColumnState> mergeVisibleTrackColumnSpecs(std::span<TrackColumnState const> storedLayout,
+                                                             std::span<TrackColumnSolveSpec const> visibleSpecs)
+  {
+    auto visibleLayout = std::vector<TrackColumnState>{};
+    visibleLayout.reserve(visibleSpecs.size());
+
+    for (auto const& spec : visibleSpecs)
+    {
+      visibleLayout.push_back(canonicalTrackColumnState(spec));
+    }
+
+    return mergeVisibleTrackColumnLayout(storedLayout, visibleLayout);
+  }
 } // namespace ao::uimodel

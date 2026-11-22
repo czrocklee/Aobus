@@ -60,11 +60,9 @@ The preference map is a default-selection authority, not a mirror of every activ
 
 ## Resolution
 
-Presentation resolution for a list follows this order:
+Resolve an eligible saved id through the current built-in and custom preset catalog. If the id is absent, unavailable, or ineligible, use the source-aware recommendation without changing the stored id. Recommendation resolves its result through the same catalog and falls back to the first built-in spec if needed.
 
-1. Resolve a saved presentation id through the current built-in/custom catalog.
-2. If no saved id exists or the id is unavailable, use source-aware recommendation.
-3. Recommendation resolves its selected id through the same available catalog and falls back to the first built-in spec if needed.
+The eligibility rule excludes only built-in `list-order` (Manual Order) on All Tracks, not a custom flat unsorted spec. A picker or preset command checks eligibility before changing the view, history, or preference. The map can still contain an ineligible id, and a captured view can still contain the exact spec: neither reading a default nor replaying a view is a picker action.
 
 Current source-aware recommendation is:
 
@@ -72,37 +70,30 @@ Current source-aware recommendation is:
 - saved List with an empty expression: `albums`;
 - All Tracks: `albums`.
 
-An invalid saved-List expression falls back to `albums` recommendation and does not change source membership or error state.
+An invalid saved-List expression falls back to the `albums` recommendation and does not change source membership or error state. If the List record cannot be found, resolution still checks the requested List's own preference, but uses the All Tracks recommendation when it needs a fallback; this does not make the missing List navigable.
 `Manual Order` is an explicit user preference rather than a recommendation inferred from List storage.
 The New Playlist template selects that preference when it creates a tag-backed List.
 
 ## Commands and transitions
 
-When GTK, TUI, or AppKit opens a plain list target, it resolves the preferred or recommended presentation and submits it to `WorkspaceService` as `NewViewDefault` intent.
+Ordinary plain-list navigation in GTK, TUI, WinUI, and AppKit submits the preferred or recommended presentation to `WorkspaceService` as `NewViewDefault` intent.
+Resolving a default does not write or clear a preference, even when the stored id is unavailable.
 `WorkspaceService` alone decides whether an existing unfiltered view is reusable.
 Reuse ignores that default and retains the view's exact active presentation; creation applies the resolved default to the new plain view.
 A filtered view over the same list is not a reusable plain target, so `WorkspaceService` creates the plain view with the resolved default and does not alter the filtered view.
 
-Workspace restoration installs the exact presentation stored with each view and does not apply the preference map afterward.
-Navigation-history replay likewise restores the recorded exact presentation without resolving a new default.
-GTK playback restoration submits the same `NewViewDefault` request as ordinary GTK navigation: an existing plain view keeps its exact presentation, while a newly created plain view receives the preference or recommendation.
-Changing the presentation through a normal user-selection path installs the new runtime spec and, after runtime acceptance, updates the base list's saved preference.
+A restored workspace view retains its exact presentation; Back and Forward also restore the recorded spec, even if the picker would not offer it today. Neither operation consults or edits the preference for that view. For fallback navigation when a view or List cannot be restored, see [workspace navigation](../workspace/navigation.md).
+GTK playback-session restoration uses `NewViewDefault` for its plain target.
+A normal named choice installs the runtime spec before the frontend updates the base List's preference. In WinUI, a rejected [presentation-menu choice](../frontend/windows.md#commands-and-transitions) reports the error and leaves the view, history, and preference unchanged.
 When a committed `LibraryChangeSet` deletes Lists, the shared preference lifecycle erases every corresponding key before a frontend persists its next state.
 A full library reset carries no incremental List ids, so it clears the complete preference map and emits every removed key.
 That lifecycle covers only deletions the owner observed while it was alive, so `restore()` takes the library's live list ids and drops every preference naming a list that no longer exists; a virtual list id is retained without appearing among them.
 Because a library never reuses a list id, that pruning also retires preferences for lists a restore replaced; a document saved for another library keeps only its virtual-list preferences when loaded, since that library's ids may name unrelated lists here.
 
-WinUI retains one `ListPresentations` for the active library session and resolves every saved id through `presentationForList()` before applying it to a newly bound or navigated view.
-An unavailable id therefore applies the source-aware recommendation without deleting or rewriting the opaque saved id.
-If applying the resolved `TrackPresentationSpec` returns an Error, WinUI presents the Error and retains both the current active presentation and the saved preference.
-Its presentation menu uses the shared picker model and catalog, including restored custom presets, and checkpoints a changed preference only after the runtime accepts the complete specification.
+[WinUI startup without a restored view](../frontend/windows.md#commands-and-transitions) uses `NewViewDefault` for All Tracks. Its presentation menu records the accepted spec in workspace history before pinning it; a temporary column sort does neither.
+A [WinUI List editor save](../frontend/windows-library-workflows.md#create-and-edit-lists) has a different commit order: it updates the preference after the List mutation succeeds, then navigates with an `Override` carrying the resolved spec. Auto clears the pin and supplies the recommendation; even a reused view receives that spec. A navigation failure does not undo the List save or the preference change.
 
-Applying a quick filter changes only `filterExpression` and active source/projection resources.
-It does not create a new preference or rerun list recommendation.
-If the list was displayed as albums before filtering, it remains displayed as albums unless a separate presentation command changes it.
-
-Navigation history stores the exact presentation snapshot alongside base list and filter text.
-Back/forward restoration applies that snapshot as replay and must not reinterpret it as a preference edit.
+Applying a quick filter changes the active source and filter text, not the active presentation or the preference. It does not rerun recommendation.
 
 ## Failure and cancellation
 

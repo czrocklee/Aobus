@@ -7,6 +7,7 @@
 #include "test/TestFixtureSupport.h"
 #include "test/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/linux-gtk/GtkRuntimeTestSupport.h"
+#include <ao/CoreIds.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/VirtualListIds.h>
@@ -21,6 +22,7 @@
 
 #include <memory>
 #include <utility>
+#include <vector>
 
 namespace ao::gtk::test
 {
@@ -75,6 +77,22 @@ namespace ao::gtk::test
       CHECK(itemCPtr->listId() == idC);
     }
 
+    SECTION("Returned projection retains list relationships")
+    {
+      auto const& projection = result.projection;
+      CHECK(projection.rootIds == std::vector{rt::kAllTracksListId, idA, idC});
+      REQUIRE(projection.rowsById.contains(rt::kAllTracksListId));
+      CHECK(projection.rowsById.at(rt::kAllTracksListId).childIds.empty());
+      REQUIRE(projection.rowsById.contains(idA));
+      REQUIRE(projection.rowsById.contains(idB));
+      REQUIRE(projection.rowsById.contains(idC));
+      CHECK(projection.rowsById.at(idA).childIds == std::vector{idB});
+      CHECK(projection.rowsById.at(idB).parentId == idA);
+      CHECK(projection.rowsById.at(idB).childIds.empty());
+      CHECK(projection.rowsById.at(idC).parentId == kInvalidListId);
+      CHECK(projection.rowsById.at(idC).childIds.empty());
+    }
+
     SECTION("Models are created")
     {
       REQUIRE(result.treeModelPtr);
@@ -107,15 +125,6 @@ namespace ao::gtk::test
       CHECK(result.sectionModelPtr->get_n_items() == 4);
       CHECK(result.selectionModelPtr->get_n_items() == 4);
       CHECK(result.sectionModelPtr->get_section(2) == std::make_pair(::guint{1}, ::guint{4}));
-    }
-
-    SECTION("NodesById mapping")
-    {
-      CHECK(result.nodesById.contains(rt::kAllTracksListId));
-      CHECK(result.nodesById.contains(idA));
-      CHECK(result.nodesById.contains(idB));
-      CHECK(result.nodesById.contains(idC));
-      CHECK(result.nodesById.at(idA)->listId() == idA);
     }
   }
 } // namespace ao::gtk::test
