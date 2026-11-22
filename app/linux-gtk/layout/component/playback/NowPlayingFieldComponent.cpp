@@ -30,11 +30,13 @@ namespace ao::gtk::layout
     public:
       NowPlayingFieldComponent(rt::PlaybackService& playback,
                                rt::WorkspaceService& workspace,
+                               PlaybackActions* playbackActions,
                                i18n::MessageCatalog const& textCatalog,
                                LayoutNode const& node,
                                rt::TrackField const field)
         : _label{playback,
                  workspace,
+                 playbackActions,
                  textCatalog,
                  field,
                  [action = node.propertyOr<std::string>("action", "none")]
@@ -69,6 +71,7 @@ namespace ao::gtk::layout
   void registerNowPlayingFieldComponent(ComponentRegistry& registry,
                                         rt::PlaybackService& playback,
                                         rt::WorkspaceService& workspace,
+                                        PlaybackActions* playbackActions,
                                         i18n::MessageCatalog const& textCatalog)
   {
     registry.registerComponent(
@@ -82,10 +85,10 @@ namespace ao::gtk::layout
                        .enumValues = {"none", "reveal", "playPause", "filterByField"}}},
        .minChildren = 0,
        .optMaxChildren = 0},
-      [&playback, &workspace, textCatalog](LayoutBuildContext const& /*ctx*/, LayoutNode const& node)
+      [&playback, &workspace, playbackActions, textCatalog](LayoutBuildContext const& /*ctx*/, LayoutNode const& node)
       {
         return std::make_unique<NowPlayingFieldComponent>(
-          playback, workspace, textCatalog, node, rt::TrackField::Title);
+          playback, workspace, playbackActions, textCatalog, node, rt::TrackField::Title);
       });
 
     registry.registerComponent(
@@ -99,10 +102,10 @@ namespace ao::gtk::layout
                        .enumValues = {"none", "reveal", "playPause", "filterByField"}}},
        .minChildren = 0,
        .optMaxChildren = 0},
-      [&playback, &workspace, textCatalog](LayoutBuildContext const& /*ctx*/, LayoutNode const& node)
+      [&playback, &workspace, playbackActions, textCatalog](LayoutBuildContext const& /*ctx*/, LayoutNode const& node)
       {
         return std::make_unique<NowPlayingFieldComponent>(
-          playback, workspace, textCatalog, node, rt::TrackField::Artist);
+          playback, workspace, playbackActions, textCatalog, node, rt::TrackField::Artist);
       });
   }
 } // namespace ao::gtk::layout

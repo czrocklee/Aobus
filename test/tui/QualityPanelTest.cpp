@@ -7,6 +7,7 @@
 #include "test/tui/KeymapTestSupport.h"
 #include "test/tui/RenderTestSupport.h"
 #include "tui/TextCell.h"
+#include <ao/audio/BackendIds.h>
 #include <ao/audio/ChannelDeliveryEvidence.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/OutputDeviceSelection.h>
@@ -177,6 +178,73 @@ namespace ao::tui::test
     CHECK(text.contains("[Device] DAC"));
     CHECK(text.contains("Software volume attenuation"));
     CHECK(text.contains("Pipeline intervention"));
+  }
+
+  TEST_CASE("QualityPanel - shows the device from the selected backend when IDs collide")
+  {
+    auto const state = rt::PlaybackTransportSnapshot{
+      .output =
+        rt::OutputState{
+          .selectedDevice = {.backendId = audio::kBackendPipeWire, .deviceId = audio::DeviceId{"dac"}},
+          .availableBackends =
+            {
+              {.id = audio::kBackendAlsa, .devices = {{.id = audio::DeviceId{"dac"}, .displayName = "Other DAC"}}},
+              {.id = audio::kBackendPipeWire,
+               .devices = {{.id = audio::DeviceId{"dac"}, .displayName = "Selected Studio Digital Audio Converter"}}},
+            },
+        },
+    };
+
+    auto const text = renderText(englishQualityPanel(state), 96);
+    auto const titleLine = std::string_view{text}.substr(0, text.find('\n'));
+
+    CHECK(titleLine.contains("─ Pipeline ─ Selected Studio Digital Audio Converter "));
+    CHECK_FALSE(titleLine.contains("Other DAC"));
+  }
+
+  TEST_CASE("QualityPanel - localizes the selected unnamed system default")
+  {
+    auto const textCatalog = ao::test::messageCatalog("de-DE");
+    auto const state = rt::PlaybackTransportSnapshot{
+      .output =
+        rt::OutputState{
+          .selectedDevice = {.backendId = audio::kBackendPipeWire},
+          .availableBackends = {{.id = audio::kBackendPipeWire, .devices = {{.isDefault = true}}}},
+        },
+    };
+
+    auto const text = renderText(qualityPanel(textCatalog, state, defaultKeymapPlan(), 0), 96);
+    auto const titleLine = std::string_view{text}.substr(0, text.find('\n'));
+
+    CHECK(titleLine.contains("─ Audiokette ─ Systemstandard "));
+  }
+
+  TEST_CASE("QualityPanel - does not show another backend's default for a missing route")
+  {
+    auto state = rt::PlaybackTransportSnapshot{
+      .output =
+        rt::OutputState{
+          .availableBackends = {{.id = audio::kBackendCoreAudio,
+                                 .devices = {{.displayName = "Other backend default", .isDefault = true}}}},
+        },
+    };
+
+    SECTION("disabled output")
+    {
+      state.output.selectedDevice.backendId = audio::kBackendNone;
+    }
+
+    SECTION("unavailable selected backend")
+    {
+      state.output.selectedDevice.backendId = audio::kBackendPipeWire;
+    }
+
+    auto const text = renderText(englishQualityPanel(state), 96);
+    auto const titleLine = std::string_view{text}.substr(0, text.find('\n'));
+
+    CHECK(titleLine.contains("─ Pipeline ──"));
+    CHECK_FALSE(titleLine.contains("Other backend default"));
+    CHECK_FALSE(titleLine.contains("System Default"));
   }
 
   TEST_CASE("QualityPanel - localizes semantic copy and preserves external names")

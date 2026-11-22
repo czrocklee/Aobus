@@ -280,6 +280,10 @@ Lists has two presentations. `l` / `:lists` focuses the pinned tree when docked,
 | Notifications  | effective toggle (default `n`), `x` hide compact/local entry when eligible, `Esc` close                                                                   |
 | Help           | effective toggle (defaults `?` and F1), `Esc` close; navigation keys scroll the body within its fixed frame                                               |
 
+Output opens on the confirmed device/profile when it is listed. A pending request or a missing named PipeWire route leaves focus clear rather than highlighting a substitute or the checkbox. Return does nothing while no row is focused; use navigation keys or click a row to make an explicit choice.
+
+Return on a device/profile row selects it and closes the panel. Return on **Let system use other outputs** toggles permission for that named PipeWire route and leaves the panel open.
+
 ### Playback mode codes
 
 The playback bar uses four ASCII characters in every locale.

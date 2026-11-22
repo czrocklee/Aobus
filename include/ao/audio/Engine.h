@@ -11,6 +11,7 @@
 #include <ao/audio/RouteAnchor.h>
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/Transport.h>
+#include <ao/utility/StrongType.h>
 
 #include <chrono>
 #include <cstdint>
@@ -19,6 +20,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <variant>
 
 namespace ao::audio
 {
@@ -39,6 +41,16 @@ namespace ao::audio
   class Engine final
   {
   public:
+    using PlaybackItemId = utility::StrongType<std::uint64_t, struct PlaybackItemIdTag>;
+
+    struct NaturalEndReceipt final
+    {
+      PlaybackItemId itemId;
+      std::uint64_t generation = 0;
+
+      bool operator==(NaturalEndReceipt const&) const = default;
+    };
+
     /**
      * @brief Thread-tolerant playback coordinator.
      *
@@ -54,10 +66,11 @@ namespace ao::audio
      * commands.
      *
      * Synchronous backend/provider graph subscribers may use these state-only
-     * queries, but must not call status(), control methods, shutdown(), or
-     * synchronously destroy Engine or wait for those operations. Such work must
-     * be deferred until after the graph callback returns; graph delivery can
-     * run under control serialization or a provider callback gate.
+     * queries, but must not call status(), takeRetiredTerminalReceipt(), control
+     * methods, shutdown(), or synchronously destroy Engine or wait for those
+     * operations. Defer such work until after the graph callback returns;
+     * graph delivery can run under control serialization or a provider callback
+     * gate.
      *
      * User callbacks registered through setOnStateChanged(), setOnTrackEnded(),
      * setOnTrackAdvanced(), setOnPlaybackFailure(), and setOnRouteChanged() are
@@ -98,13 +111,6 @@ namespace ao::audio
       std::uint64_t generation = 0;
 
       bool operator==(RouteStatus const&) const = default;
-    };
-
-    struct PlaybackItemId final
-    {
-      std::uint64_t value = 0;
-
-      bool operator==(PlaybackItemId const&) const = default;
     };
 
     struct PlaybackItem final
@@ -213,6 +219,8 @@ namespace ao::audio
       bool recoverable = false;
     };
 
+    using TerminalReceipt = std::variant<NaturalEndReceipt, PlaybackFailure>;
+
     using OnRouteChanged = std::function<void(RouteStatus const&)>;
     using OnTrackEnded = std::function<void(TrackEnded const&)>;
     using OnTrackAdvanced = std::function<void(TrackAdvanced const&)>;
@@ -256,6 +264,12 @@ namespace ao::audio
     /// handoff. Rejection leaves playback running and yields no barrier; Error
     /// rejects as for trySeek(). An accepted stop fences obsolete callbacks.
     std::optional<PreparedCancellationBarrier> tryStopWithBarrier(PlaybackItemId expectedItemId);
+
+    /// Takes the latest settled terminal outcome once, at a command boundary,
+    /// if it matches the requested generation and that generation is strictly
+    /// older than the current one. A miss leaves the receipt intact. This
+    /// neither changes callback generation floors nor reports realtime position.
+    std::optional<TerminalReceipt> takeRetiredTerminalReceipt(std::uint64_t generation);
 
     void play(PlaybackItem const& item, std::chrono::milliseconds initialOffset = {});
     Result<PreparedNextResult> setNext(PlaybackItem const& item);

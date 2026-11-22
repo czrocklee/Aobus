@@ -9,6 +9,7 @@
 #include <ao/Contract.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
+#include <ao/i18n/MessageCatalog.h>
 
 #include <CoreFoundation/CFRunLoop.h>
 
@@ -34,6 +35,7 @@ namespace
   enum class Stage : std::uint8_t
   {
     WaitForWindow,
+    ChooseTestOutput,
     WaitForLibrary,
     SelectAlbums,
     WaitForAlbums,
@@ -120,6 +122,7 @@ namespace
   NSWindow* _occluder;
   NSTableView* _table;
   NSControl* _emptyAction;
+  NSString* _pendingOutputStatus;
   NSString* _selectedIdentity;
   NSString* _idleTransportText;
   NSString* _playingTransportText;
@@ -140,7 +143,9 @@ namespace
   BOOL _completed;
   BOOL _checkingTestOutput;
 }
-- (instancetype)initWithLaunch:(ao::appkit::DesktopLaunch const&)launch successor:(BOOL)successor;
+- (instancetype)initWithLaunch:(ao::appkit::DesktopLaunch const&)launch
+                     successor:(BOOL)successor
+           pendingOutputStatus:(NSString*)pendingOutputStatus;
 - (void)start;
 - (void)stop;
 - (BOOL)completed;
@@ -148,7 +153,9 @@ namespace
 @end
 
 @implementation AobusDesktopScenarioDriver
-- (instancetype)initWithLaunch:(ao::appkit::DesktopLaunch const&)launch successor:(BOOL)successor
+- (instancetype)initWithLaunch:(ao::appkit::DesktopLaunch const&)launch
+                     successor:(BOOL)successor
+           pendingOutputStatus:(NSString*)pendingOutputStatus
 {
   self = [super init];
 
@@ -168,6 +175,7 @@ namespace
     }
 
     _launch = launch;
+    _pendingOutputStatus = [pendingOutputStatus copy];
     _successorRoot = launch.stateRoot / "successor-library";
     _successor = successor;
     _stage = Stage::WaitForWindow;
@@ -381,7 +389,7 @@ namespace
   AO_INVARIANT(sent != 0, "Native control action failed for {}", obligation.UTF8String);
 }
 
-- (BOOL)hasSelectedTestOutput
+- (BOOL)inspectTestOutputChoosingReplacement:(BOOL)chooseReplacement
 {
   if (!_optTestOutput)
   {
@@ -396,8 +404,10 @@ namespace
   }
 
   auto const expectedOutput = *_optTestOutput;
+  auto* const pendingStatus = _pendingOutputStatus;
   __block BOOL observed = NO;
   __block BOOL matched = NO;
+  __block NSMenuItem* replacement = nil;
   _checkingTestOutput = YES;
   auto const observer = [NSNotificationCenter.defaultCenter
     addObserverForName:NSMenuDidBeginTrackingNotification
@@ -419,16 +429,37 @@ namespace
 
               for (std::size_t itemIndex = 0; itemIndex < items.count; ++itemIndex)
               {
-                if (auto* const item = items[itemIndex]; item.action == ::NSSelectorFromString(@"selectOutput:") &&
-                                                         item.enabled != NO && item.state == NSControlStateValueOn)
+                auto* const item = items[itemIndex];
+
+                auto const isTestOutput = item.action == ::NSSelectorFromString(@"selectOutput:") &&
+                                          item.enabled != NO &&
+                                          matchesTestOutput(item.representedObject, expectedOutput);
+
+                if (isTestOutput && chooseReplacement != NO)
+                {
+                  replacement = item;
+                }
+
+                if (item.state == NSControlStateValueOn)
                 {
                   ++checkedCount;
-                  requestedOutputChecked = matchesTestOutput(item.representedObject, expectedOutput);
+                  requestedOutputChecked = isTestOutput;
                 }
               }
 
-              // These checkmarks come from the engine-confirmed snapshot, not desktop.plist.
-              matched = static_cast<BOOL>(checkedCount == 1 && requestedOutputChecked);
+              if (chooseReplacement != NO)
+              {
+                auto* const status = items.firstObject;
+                matched = static_cast<BOOL>(checkedCount == 0 && replacement != nil && status != nil &&
+                                            status.enabled == NO && [status.title isEqual:pendingStatus] != NO &&
+                                            [control.toolTip isEqual:pendingStatus] != NO);
+              }
+              else
+              {
+                // These checkmarks come from the engine-confirmed snapshot, not desktop.plist.
+                matched = static_cast<BOOL>(checkedCount == 1 && requestedOutputChecked);
+              }
+
               // Popup tracking is synchronous. Dismiss on its own run-loop mode,
               // after the tracking notification returns, even for a wrong route.
               ::CFRunLoopPerformBlock(::CFRunLoopGetMain(), (__bridge ::CFStringRef)NSEventTrackingRunLoopMode, ^{
@@ -441,7 +472,12 @@ namespace
   _checkingTestOutput = NO;
   AO_INVARIANT(observed != NO, "The native output action must open its observable menu");
 
-  if (matched != NO)
+  if (matched != NO && chooseReplacement != NO)
+  {
+    // Send only the exact verified test UID's action after nested menu tracking has finished.
+    activateMenuItem(replacement, @"choose the available test output instead of the missing DAC");
+  }
+  else if (matched != NO)
   {
     std::println("AppKit desktop test output confirmed: backend={} uid={} profile={} successor={}",
                  expectedOutput.backendId.raw(),
@@ -667,7 +703,7 @@ namespace
   {
     requireSavedTestOutput(_launch.stateRoot, *_optTestOutput);
 
-    if ([self hasSelectedTestOutput] == NO)
+    if ([self inspectTestOutputChoosingReplacement:NO] == NO)
     {
       return;
     }
@@ -721,7 +757,7 @@ namespace
       AO_INVARIANT(_table != nil, "The production window must expose its native track table");
       _emptyAction = findActionControl(_window.contentView, ::NSSelectorFromString(@"emptyAction:"));
       AO_INVARIANT(_emptyAction != nil, "The production window must expose its native empty-state action");
-      _stage = Stage::WaitForLibrary;
+      _stage = _optTestOutput && _successor == NO ? Stage::ChooseTestOutput : Stage::WaitForLibrary;
     }
 
     if (_successor != NO)
@@ -732,6 +768,19 @@ namespace
 
     switch (_stage)
     {
+      case Stage::ChooseTestOutput:
+      {
+        auto* const saved = [NSDictionary dictionaryWithContentsOfFile:nativePath(_launch.stateRoot / "desktop.plist")];
+        AO_INVARIANT([saved[@"output"] isEqual:missingOutputRoute()] != NO,
+                     "Restoring an unavailable DAC must preserve its complete request until an explicit pick");
+
+        if ([self inspectTestOutputChoosingReplacement:YES] != NO)
+        {
+          _stage = Stage::WaitForLibrary;
+        }
+
+        break;
+      }
       case Stage::WaitForLibrary:
       {
         if (auto* const soul = [self control:@"playback.soul"];
@@ -742,7 +791,7 @@ namespace
           {
             requireSavedTestOutput(_launch.stateRoot, *_optTestOutput);
 
-            if ([self hasSelectedTestOutput] == NO)
+            if ([self inspectTestOutputChoosingReplacement:NO] == NO)
             {
               break;
             }
@@ -1292,8 +1341,10 @@ namespace ao::appkit::test
     }
 
     auto const stateRoot = launch.stateRoot;
+    auto* const pendingStatus = catalogText(catalog, i18n::MessageId::OutputDevicePendingStatus);
     auto* const driver = [[AobusDesktopScenarioDriver alloc] initWithLaunch:launch
-                                                                  successor:static_cast<BOOL>(successor)];
+                                                                  successor:static_cast<BOOL>(successor)
+                                                        pendingOutputStatus:pendingStatus];
     auto const terminationObserver = [NSNotificationCenter.defaultCenter
       addObserverForName:NSApplicationWillTerminateNotification
                   object:NSApp

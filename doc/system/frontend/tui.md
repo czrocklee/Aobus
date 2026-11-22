@@ -332,8 +332,7 @@ Only painted text has a hit region. Hover highlights the pointed field without c
 **Adjust volume.** Click the volume label to toggle mute, or use the wheel over it to adjust gain by the configured step. The localized mute label replaces the percentage without changing the stored level.
 
 The Soul control toggles playback on click; hover shows quality detail without opening a modal overlay.
-The effective `playback.playPause` shortcut (shipped with Space first) and the Soul control pause active playback and resume paused playback even while an output-device selection is pending.
-From Idle, they resume a restored sequence-owned current track; otherwise they start the selected track.
+Soul and the effective `playback.playPause` shortcut (Space by default) pause active playback, but cannot resume paused playback while a requested output is pending. From Idle they resume a restored track that succession still owns. Otherwise, with a ready output, Idle or Error can request a new start from the track selection.
 Stop is an idempotent silent no-op when playback is already Idle.
 
 Seek press begins a shared `SeekInteraction` gesture and captures the current playback occurrence and duration. Pointer motion publishes guarded queued preview seeks, and release publishes the matching guarded queued final seek through `PlaybackPositionViewModel`.

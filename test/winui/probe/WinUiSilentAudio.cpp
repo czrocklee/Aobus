@@ -74,9 +74,14 @@ namespace ao::winui::test
             .backendId = audio::BackendId{"winui-transport-probe"}};
   }
 
-  void addSilentAudioOutput(rt::AppRuntime& runtime)
+  void registerSilentAudioProvider(rt::AppRuntime& runtime)
   {
     runtime.addAudioProvider(std::make_unique<SilentProvider>());
+  }
+
+  void addSilentAudioOutput(rt::AppRuntime& runtime)
+  {
+    registerSilentAudioProvider(runtime);
     auto const device = silentAudioDevice();
     runtime.playback().commands().setOutputDevice(device.backendId, device.id, audio::ProfileId{audio::kProfileShared});
   }

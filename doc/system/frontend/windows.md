@@ -56,15 +56,8 @@ narrow tier the Now Playing artwork and text yield their space to transport,
 time, volume, and overflow commands.
 
 Library reads, playback, runtime resources, commands, and activity status always derive from the same active runtime.
-After audio providers are registered, startup resolves and resubmits the stored
-desktop output preference before controllers bind. The shared pure UIModel policy
-requires non-empty backend and profile ids and rejects a profile known to be
-unsupported by a published backend. A non-empty device may be submitted before
-catalog publication or while temporarily unavailable so Runtime can retain
-pending intent; an empty device is valid only when the published catalog
-advertises a compatible empty-id default. WASAPI therefore requires a concrete device id. Intent that cannot be
-submitted leaves the stored preference intact and the runtime-selected default
-in effect; either outcome is non-fatal.
+After registering providers and before binding controls, WinUI submits the saved output preference if it identifies a backend, endpoint, and profile. WASAPI has no empty-id default. An incomplete WASAPI preference leaves normal discovery in effect without erasing the setting or failing startup.
+A complete request for an unavailable route remains binding: a track start cannot substitute another endpoint, but the picker allows an explicit change. Runtime owns the [pending route and interrupted playback](../playback/application-commit.md#snapshot-borrowing-and-output-intent).
 An ordinary startup starts playback-session observation and restores listening
 intent after workspace and providers are ready but before controllers bind. A
 successor startup instead begins in `AwaitingRootCommit`; commit success moves

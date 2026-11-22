@@ -135,6 +135,7 @@ namespace ao::gtk::layout
   void registerNowPlayingFieldComponent(ComponentRegistry& registry,
                                         rt::PlaybackService& playback,
                                         rt::WorkspaceService& workspace,
+                                        uimodel::PlaybackActions* playbackActions,
                                         i18n::MessageCatalog const& textCatalog);
   void registerSeekSliderComponent(ComponentRegistry& registry,
                                    rt::PlaybackService& playback,

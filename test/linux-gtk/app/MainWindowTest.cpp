@@ -12,6 +12,7 @@
 #include "app/WindowState.h"
 #include "i18n/GtkText.h"
 #include "list/ListNavigationController.h"
+#include "playback/OutputDevicePopover.h"
 #include "portal/ImportExportCoordinator.h"
 #include "portal/LibraryImportExportWorkflow.h"
 #include "runtime/PlaybackSessionState.h"
@@ -28,6 +29,7 @@
 #include <ao/CoreIds.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/audio/Transport.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/library/MusicLibrary.h>
@@ -60,9 +62,12 @@
 #include <giomm/actionmap.h>
 #include <glibmm/ustring.h>
 #include <gsl-lite/gsl-lite.hpp>
+#include <gtkmm/button.h>
 #include <gtkmm/dialog.h>
+#include <gtkmm/listbox.h>
 #include <gtkmm/menubutton.h>
 #include <gtkmm/popovermenubar.h>
+#include <gtkmm/switch.h>
 #include <gtkmm/window.h>
 #include <sigc++/connection.h>
 
@@ -72,6 +77,7 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -866,6 +872,252 @@ namespace ao::gtk::test
     CHECK(selected.backendId == audio::BackendId{"test_backend"});
     CHECK(selected.deviceId == audio::DeviceId{"test_device"});
     CHECK(selected.profileId == audio::kProfileShared);
+  }
+
+  namespace
+  {
+    OutputDevicePopover& openOutputPicker(MainWindow& window)
+    {
+      window.present();
+      auto* button = static_cast<Gtk::Button*>(nullptr);
+      REQUIRE(tryPumpGtkEventsUntil(
+        [&]
+        {
+          button = findWidgetByClass<Gtk::Button>(window, "ao-output-device-selector-modern");
+          return button != nullptr;
+        }));
+      emitClicked(*button);
+      drainGtkEvents();
+      auto* const popover = findWidget<OutputDevicePopover>(*button);
+      REQUIRE(popover != nullptr);
+      return *popover;
+    }
+
+    audio::OutputDeviceSelection savedOutputPreference(std::filesystem::path const& configPath)
+    {
+      auto prefs = rt::AppPrefsState{};
+      AppConfigStore{configPath}.loadAppPrefs(prefs);
+      return prefs.preferredOutputSelection;
+    }
+  } // namespace
+
+  TEST_CASE("MainWindow - a disconnected preferred DAC survives restart and never plays through the last output")
+  {
+    [[maybe_unused]] auto const appPtr = ensureRegisteredGtkApplication();
+    auto tempDir = ao::test::TempDir{};
+    auto const configPath = tempDir.path() / "app.yaml";
+    auto const& catalog = ao::test::englishMessageCatalog();
+    auto const dac = audio::OutputDeviceSelection{.backendId = audio::BackendId{"usb"},
+                                                  .deviceId = audio::DeviceId{"studio-dac"},
+                                                  .profileId = audio::kProfileShared};
+    auto const fallback = audio::OutputDeviceSelection{
+      .backendId = audio::BackendId{"speakers"}, .deviceId = {}, .profileId = audio::kProfileShared};
+    auto const provider = [](audio::OutputDeviceSelection const& selection,
+                             std::string name,
+                             std::shared_ptr<rt::test::SilentRouteCounts> countsPtr)
+    {
+      return rt::test::makeReadyAudioProvider(
+        {.descriptor = {.id = selection.backendId, .supportedProfiles = {{.id = selection.profileId}}},
+         .devices = {{.id = selection.deviceId,
+                      .displayName = std::move(name),
+                      .isDefault = selection.deviceId.empty(),
+                      .backendId = selection.backendId}}},
+        std::move(countsPtr));
+    };
+    // Activate a row in the window's real layout picker; do not write the preference as test setup.
+    auto const selectOutput = [](MainWindow& window, std::string const& name)
+    {
+      auto& popover = openOutputPicker(window);
+      auto* const list = findWidget<Gtk::ListBox>(popover);
+      REQUIRE(list != nullptr);
+      auto const rows = collectAll<Gtk::ListBoxRow>(*list);
+      auto const found = std::ranges::find_if(rows, [&](auto* row) { return findLabelByText(*row, name) != nullptr; });
+      REQUIRE(found != rows.end());
+      emitRowActivated(*list, **found);
+      drainGtkEvents();
+    };
+    auto const preferredOnDisk = [&] { return savedOutputPreference(configPath); };
+    auto const offset = std::chrono::milliseconds{250};
+    auto track = kInvalidTrackId;
+    {
+      auto storePtr = std::make_shared<AppConfigStore>(configPath);
+      auto prefs = rt::AppPrefsState{};
+      prefs.lastLayoutPreset = "modern";
+      storePtr->saveAppPrefs(prefs);
+      auto runtimePtr =
+        rt::test::makeRuntime(tempDir, std::make_unique<GtkMainContextExecutor>(), &storePtr->playbackSessionStore());
+      runtimePtr->addAudioProvider(provider(fallback, "Room speakers", {}));
+      runtimePtr->addAudioProvider(provider(dac, "Studio DAC", {}));
+      track = addRuntimeTrack(
+        *runtimePtr,
+        {.title = "Saved subject", .uri = audio::test::requireAudioFixture("basic_metadata.flac").string()});
+      auto window =
+        MainWindow{*runtimePtr, storePtr, std::make_shared<ShellLayoutStore>(tempDir.path() / "layouts"), catalog};
+      REQUIRE(window.prepareSession());
+      REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::Restore));
+      selectOutput(window, "Studio DAC");
+      REQUIRE(preferredOnDisk() == dac);
+      auto& playback = window.playback();
+      REQUIRE(playback.snapshot().transport.output.selectedDevice == dac);
+      REQUIRE(playback.commands().startFromView(runtimePtr->workspace().snapshot().activeViewId, track));
+      REQUIRE(tryWaitForPlaybackSettlement(*runtimePtr, track));
+      playback.commands().pause();
+      playback.commands().seek(offset);
+      window.saveSession();
+    }
+    drainGtkEvents();
+
+    auto storePtr = std::make_shared<AppConfigStore>(configPath);
+    // GTK has a second, independent shutdown record. Make it a viable but unwanted route.
+    auto savedSession = rt::AppSessionState{};
+    storePtr->loadAppSession(savedSession);
+    REQUIRE(savedSession.lastOutputSelection == dac);
+    savedSession.lastOutputSelection = fallback;
+    REQUIRE(storePtr->saveAppSession(savedSession));
+    auto runtimePtr =
+      rt::test::makeRuntime(tempDir, std::make_unique<GtkMainContextExecutor>(), &storePtr->playbackSessionStore());
+    auto const fallbackCountsPtr = std::make_shared<rt::test::SilentRouteCounts>();
+    runtimePtr->addAudioProvider(provider(fallback, "Room speakers", fallbackCountsPtr));
+    drainGtkEvents();
+    auto window =
+      MainWindow{*runtimePtr, storePtr, std::make_shared<ShellLayoutStore>(tempDir.path() / "layouts"), catalog};
+    REQUIRE(window.prepareSession());
+    REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::Restore));
+    auto& playback = window.playback();
+    REQUIRE(playback.snapshot().transport.nowPlaying.trackId == track);
+    REQUIRE(playback.snapshot().transport.elapsed == offset);
+    CHECK(playback.snapshot().transport.output.optPendingOutputSelection == dac);
+    playback.commands().resume();
+    drainGtkEvents();
+    CHECK(fallbackCountsPtr->opens.load() == 0);
+    CHECK(fallbackCountsPtr->starts.load() == 0);
+    REQUIRE(playback.snapshot().transport.transport == audio::Transport::Idle);
+    CHECK(playback.snapshot().transport.elapsed == offset);
+    window.saveSession();
+    CHECK(preferredOnDisk() == dac);
+
+    SECTION("late DAC discovery does not replay the rejected resume")
+    {
+      auto const dacCountsPtr = std::make_shared<rt::test::SilentRouteCounts>();
+      runtimePtr->addAudioProvider(provider(dac, "Studio DAC", dacCountsPtr));
+      REQUIRE(tryPumpGtkEventsUntil([&] { return playback.snapshot().transport.output.selectedDevice == dac; }));
+      CHECK_FALSE(playback.snapshot().transport.output.optPendingOutputSelection);
+      CHECK(dacCountsPtr->opens.load() == 0);
+      CHECK(dacCountsPtr->starts.load() == 0);
+      playback.commands().resume();
+      drainGtkEvents();
+      CHECK(dacCountsPtr->starts.load() == 1);
+      CHECK(fallbackCountsPtr->opens.load() == 0);
+      CHECK(preferredOnDisk() == dac);
+    }
+
+    SECTION("explicitly choosing system default permits resume and replaces the saved intent")
+    {
+      selectOutput(window, "Room speakers");
+      REQUIRE(preferredOnDisk() == fallback);
+      REQUIRE_FALSE(playback.snapshot().transport.output.optPendingOutputSelection);
+      playback.commands().resume();
+      drainGtkEvents();
+      CHECK(fallbackCountsPtr->starts.load() == 1);
+    }
+
+    CHECK(playback.snapshot().transport.transport == audio::Transport::Playing);
+    CHECK(playback.snapshot().transport.nowPlaying.trackId == track);
+    CHECK(playback.snapshot().transport.elapsed == offset);
+  }
+
+  TEST_CASE("MainWindow - PipeWire rerouting consent survives restart and revocation restores silence")
+  {
+    [[maybe_unused]] auto const appPtr = ensureRegisteredGtkApplication();
+    auto tempDir = ao::test::TempDir{};
+    auto const configPath = tempDir.path() / "app.yaml";
+    // A legacy preference names the disconnected DAC but predates the permission field.
+    std::ofstream{configPath} << "runtime:\n"
+                                 "  version: 1\n"
+                                 "  lastLayoutPreset: modern\n"
+                                 "  lastOutputBackendId: pipewire\n"
+                                 "  lastOutputDeviceId: node:studio-dac\n"
+                                 "  lastOutputProfileId: shared\n";
+    auto const fixed = audio::OutputDeviceSelection{.backendId = audio::kBackendPipeWire,
+                                                    .deviceId = audio::DeviceId{"node:studio-dac"},
+                                                    .profileId = audio::kProfileShared};
+    auto allowed = fixed;
+    allowed.routingPolicy = audio::OutputRoutingPolicy::AllowSystemReroute;
+    auto track = kInvalidTrackId;
+    auto const runStartup =
+      [&](audio::OutputDeviceSelection const& expected, std::optional<audio::OutputDeviceSelection> const& optNext)
+    {
+      auto storePtr = std::make_shared<AppConfigStore>(configPath);
+      auto runtimePtr =
+        rt::test::makeRuntime(tempDir, std::make_unique<GtkMainContextExecutor>(), &storePtr->playbackSessionStore());
+      // The only published sink is node:device1, not node:studio-dac. This provider opens only silent backends.
+      auto const countsPtr = std::make_shared<rt::test::SilentRouteCounts>();
+      runtimePtr->addAudioProvider(rt::test::makeReadyAudioProvider(rt::test::makePipeWireOutputStatus(), countsPtr));
+
+      if (track == kInvalidTrackId)
+      {
+        track = addRuntimeTrack(
+          *runtimePtr,
+          {.title = "Reroute consent", .uri = audio::test::requireAudioFixture("basic_metadata.flac").string()});
+      }
+
+      drainGtkEvents();
+      auto window = MainWindow{*runtimePtr,
+                               storePtr,
+                               std::make_shared<ShellLayoutStore>(tempDir.path() / "layouts"),
+                               ao::test::englishMessageCatalog()};
+      REQUIRE(window.prepareSession());
+      REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::Restore));
+      drainGtkEvents();
+      auto& playback = window.playback();
+      REQUIRE(savedOutputPreference(configPath) == expected);
+      REQUIRE(countsPtr->opens.load() == 0);
+      auto const startRes = playback.commands().startFromView(runtimePtr->workspace().snapshot().activeViewId, track);
+
+      if (expected == allowed)
+      {
+        REQUIRE(startRes);
+        REQUIRE(
+          tryPumpGtkEventsUntil([&] { return playback.snapshot().transport.transport == audio::Transport::Playing; }));
+        CHECK(countsPtr->opens.load() == 1);
+        CHECK(countsPtr->starts.load() == 1);
+        CHECK(playback.snapshot().transport.output.selectedDevice == allowed);
+      }
+      else
+      {
+        REQUIRE_FALSE(startRes);
+        CHECK(playback.snapshot().transport.output.optPendingOutputSelection == fixed);
+        CHECK(playback.snapshot().transport.transport != audio::Transport::Playing);
+        CHECK(countsPtr->opens.load() == 0);
+        CHECK(countsPtr->starts.load() == 0);
+      }
+
+      window.saveSession();
+      REQUIRE(savedOutputPreference(configPath) == expected);
+
+      if (optNext)
+      {
+        auto& popover = openOutputPicker(window);
+        auto* const toggle = findWidget<Gtk::Switch>(popover);
+        REQUIRE(toggle != nullptr);
+        REQUIRE(toggle->get_active() == (expected == allowed));
+        REQUIRE(toggle->activate());
+        // The switch applies after signal dispatch and may be replaced by its own publication.
+        REQUIRE(tryPumpGtkEventsUntil(
+          [&]
+          {
+            auto const& output = playback.snapshot().transport.output;
+            return *optNext == allowed ? !output.optPendingOutputSelection && output.selectedDevice == allowed
+                                       : output.optPendingOutputSelection == fixed;
+          }));
+        window.saveSession();
+        REQUIRE(savedOutputPreference(configPath) == *optNext);
+      }
+    };
+
+    runStartup(fixed, allowed);
+    runStartup(allowed, fixed);
+    runStartup(fixed, std::nullopt);
   }
 
   TEST_CASE("MainWindow - restores a playback session as idle sequence state")

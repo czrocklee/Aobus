@@ -12,7 +12,9 @@
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/Transport.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <array>
 #include <atomic>
@@ -27,6 +29,7 @@
 #include <semaphore>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ao::audio::test
@@ -384,7 +387,7 @@ namespace ao::audio::test
 
     SECTION("active-item admission observes the realtime winner before notification")
     {
-      CHECK_FALSE(engine.isCurrentPlaybackItem({}));
+      CHECK_FALSE(engine.isCurrentPlaybackItem(Engine::PlaybackItemId{}));
       CHECK_FALSE(engine.isCurrentPlaybackItem(firstItem.id));
       CHECK(engine.isCurrentPlaybackItem(secondItem.id));
       CHECK(secondDecoder->seekCount() == 0);
@@ -982,6 +985,7 @@ namespace ao::audio::test
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
+    auto* const backend = backendPtr.get();
     auto const format = PcmFormat{.sampleRate = 44100, .channels = 2, .encoding = SampleEncoding::Signed16Le};
     auto const factory = [format](std::filesystem::path const& path, std::optional<SampleEncoding> optOutputEncoding)
     {
@@ -989,26 +993,43 @@ namespace ao::audio::test
       info.outputFormat = pcmFormat(info.sourceFormat, optOutputEncoding.value_or(format.encoding));
       auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
 
-      if (auto data = std::vector<std::byte>(100000, std::byte{0}); path == "prepared-failure.flac")
+      if (path == "prepared-failure.flac")
       {
         decoderPtr->setReadScript(
-          {{.data = data, .endOfStream = false},
+          {{.data = std::vector<std::byte>(100000), .endOfStream = false},
            {.endOfStream = false,
             .res = std::unexpected{Error{.code = Error::Code::IoError, .message = "prepared decode failed"}}}});
       }
       else
       {
-        decoderPtr->setReadScript({{.data = std::move(data), .endOfStream = false}, {.endOfStream = true}});
+        decoderPtr->setReadScript({{.data = std::vector<std::byte>(4)}, {.endOfStream = true}});
       }
 
       return decoderPtr;
     };
-    auto engine = Engine{std::move(backendPtr), device, factory};
     auto failurePromise = std::promise<Engine::PlaybackFailure>{};
     auto failureFuture = failurePromise.get_future();
+    auto ended = CallbackLatch{};
+    auto engine = Engine{std::move(backendPtr), device, factory};
     engine.setOnPlaybackFailure([&failurePromise](Engine::PlaybackFailure const& failure)
                                 { failurePromise.set_value(failure); });
-    engine.play(makePlaybackItem(PlaybackInput{.filePath = "current.flac"}));
+    engine.setOnTrackEnded([&](Engine::TrackEnded const&) { ended.notify(); });
+
+    // Leave a real terminal receipt pending while a later generation prepares lookahead.
+    auto const firstItem = makePlaybackItem("first.flac");
+    engine.play(firstItem);
+    auto const firstGeneration = engine.playbackGeneration();
+    auto* const target = backend->target();
+    REQUIRE(target != nullptr);
+    auto output = std::array<std::byte, 4>{};
+    REQUIRE(target->renderPcm(output).bytesWritten == output.size());
+    REQUIRE(target->renderPcm(output).drained);
+    backend->emitDrainComplete();
+    REQUIRE(ended.tryWaitForCount(1));
+    CHECK_FALSE(engine.takeRetiredTerminalReceipt(firstGeneration));
+
+    auto const currentItem = makePlaybackItem("current.flac");
+    engine.play(currentItem);
     auto const preparedItem = makePlaybackItem(PlaybackInput{.filePath = "prepared-failure.flac"});
     auto const preparedRes = engine.setNext(preparedItem);
     REQUIRE(preparedRes);
@@ -1021,7 +1042,18 @@ namespace ao::audio::test
     CHECK(failure.error.message == "prepared decode failed");
     CHECK(failure.recoverable);
     CHECK(engine.transport() == Transport::Playing);
+    CHECK(engine.isCurrentPlaybackItem(currentItem.id));
     CHECK_FALSE(engine.clearNext());
+
+    REQUIRE(engine.stopWithBarrier().covers(preparedRes->generation));
+    CHECK_FALSE(engine.takeRetiredTerminalReceipt(preparedRes->generation));
+    auto const optReceipt = engine.takeRetiredTerminalReceipt(firstGeneration);
+    REQUIRE(optReceipt);
+    auto const* receipt = std::get_if<Engine::NaturalEndReceipt>(&*optReceipt);
+    REQUIRE(receipt != nullptr);
+    CHECK(receipt->itemId == firstItem.id);
+    CHECK(receipt->generation == firstGeneration);
+    CHECK_FALSE(engine.takeRetiredTerminalReceipt(firstGeneration));
   }
 
   TEST_CASE("Engine - a claimed successor advances before its queued source failure", "[concurrency]")
@@ -1112,7 +1144,8 @@ namespace ao::audio::test
     REQUIRE(workerEntered.try_acquire_for(std::chrono::seconds{5}));
 
     auto const successor = makePlaybackItem("successor.flac");
-    REQUIRE(engine.setNext(successor));
+    auto const preparedRes = engine.setNext(successor);
+    REQUIRE(preparedRes);
     REQUIRE(decodeExitFuture.wait_for(std::chrono::seconds{5}) == std::future_status::ready);
     engine.defer([&] { earlierCallbackRan = true; });
     auto output = std::array<std::byte, 8>{};
@@ -1163,6 +1196,19 @@ namespace ao::audio::test
       CHECK(advancedBeforeFailure);
       CHECK(failedId == successor.id);
       CHECK(engine.transport() == Transport::Error);
+
+      auto const generation = preparedRes->generation;
+      CHECK_FALSE(engine.takeRetiredTerminalReceipt(generation));
+      REQUIRE(engine.stopWithBarrier().covers(generation));
+      auto const optReceipt = engine.takeRetiredTerminalReceipt(generation);
+      REQUIRE(optReceipt);
+      auto const* receipt = std::get_if<Engine::PlaybackFailure>(&*optReceipt);
+      REQUIRE(receipt != nullptr);
+      CHECK(receipt->kind == Engine::PlaybackFailureKind::Decode);
+      CHECK(receipt->itemId == successor.id);
+      CHECK(receipt->generation == generation);
+      CHECK(receipt->recoverable);
+      CHECK_FALSE(engine.takeRetiredTerminalReceipt(generation));
     }
 
     if (settledByControl)
@@ -1171,6 +1217,97 @@ namespace ao::audio::test
     }
 
     CHECK(currentWhenAdvanced);
+  }
+
+  TEST_CASE("Engine - a claimed successor advances before queued backend failure", "[concurrency]")
+  {
+    using Event = std::variant<Engine::TrackAdvanced, Engine::PlaybackFailure>;
+    struct Observation
+    {
+      std::vector<Event> callbacks;
+      bool gateReleased = false;
+    };
+
+    auto const stopOnAdvance = GENERATE(false, true);
+    CAPTURE(stopOnAdvance);
+
+    auto workerEntered = std::binary_semaphore{0};
+    auto workerRelease = std::binary_semaphore{0};
+    auto observed = Observation{};
+    auto settled = std::promise<Observation>{};
+    auto settledFuture = settled.get_future();
+    auto const current = makePlaybackItem("current.flac");
+    auto const successor = makePlaybackItem("successor.flac");
+    auto const info = makeScriptedStreamInfo(makeEngineTestFormat());
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
+    auto* const backend = backendPtr.get();
+    auto engine = Engine{std::move(backendPtr),
+                         makeEngineTestDevice(),
+                         makePathScriptedDecoderFactory({
+                           {.path = current.input.filePath, .info = info, .data = std::vector(4, std::byte{0x11})},
+                           {.path = successor.input.filePath, .info = info, .data = std::vector(4, std::byte{0x22})},
+                         })};
+    auto releaseGuard = WorkerReleaseGuard{workerRelease};
+    engine.setOnTrackAdvanced(
+      [&](Engine::TrackAdvanced const& event)
+      {
+        observed.callbacks.emplace_back(event);
+
+        if (stopOnAdvance)
+        {
+          engine.stop();
+        }
+      });
+    engine.setOnPlaybackFailure([&](Engine::PlaybackFailure const& event) { observed.callbacks.emplace_back(event); });
+    engine.play(current);
+    auto const preparedRes = engine.setNext(successor);
+    REQUIRE(preparedRes);
+    REQUIRE(preparedRes->transition == Engine::PreparedTransitionMode::Gapless);
+    auto* const target = backend->target();
+    REQUIRE(target != nullptr);
+
+    engine.defer(
+      [&]
+      {
+        workerEntered.release();
+        observed.gateReleased = workerRelease.try_acquire_for(std::chrono::seconds{10});
+      });
+    REQUIRE(workerEntered.try_acquire_for(std::chrono::seconds{5}));
+
+    // Queue the error first, then let control settle the render handoff so its
+    // advance callback is deferred behind that error while the worker is parked.
+    backend->emitBackendError("device lost during splice");
+    auto output = std::array<std::byte, 8>{};
+    REQUIRE(target->renderPcm(output).bytesWritten == output.size());
+    CHECK(output.back() == std::byte{0x22});
+    REQUIRE(engine.isCurrentPlaybackItem(successor.id));
+
+    // Observe both the queued work and a retry posted while processing it.
+    engine.defer([&] { engine.defer([&] { settled.set_value(observed); }); });
+    releaseGuard.release();
+    REQUIRE(settledFuture.wait_for(std::chrono::seconds{5}) == std::future_status::ready);
+    auto const result = settledFuture.get();
+    REQUIRE(result.gateReleased);
+    REQUIRE(result.callbacks.size() == (stopOnAdvance ? 1U : 2U));
+    auto const* advance = std::get_if<Engine::TrackAdvanced>(&result.callbacks.front());
+    REQUIRE(advance != nullptr);
+    CHECK(advance->itemId == successor.id);
+    CHECK(advance->generation == preparedRes->generation);
+
+    if (stopOnAdvance)
+    {
+      CHECK(engine.playbackGeneration() > preparedRes->generation);
+      CHECK(engine.transport() == Transport::Idle);
+    }
+    else
+    {
+      auto const* failure = std::get_if<Engine::PlaybackFailure>(&result.callbacks.back());
+      REQUIRE(failure != nullptr);
+      CHECK(failure->kind == Engine::PlaybackFailureKind::DeviceLost);
+      CHECK(failure->itemId == successor.id);
+      CHECK(failure->generation == preparedRes->generation);
+      CHECK(engine.transport() == Transport::Error);
+    }
   }
 
   namespace

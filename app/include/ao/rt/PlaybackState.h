@@ -15,6 +15,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -77,7 +78,8 @@ namespace ao::rt
 
   struct OutputState final
   {
-    audio::OutputDeviceSelection selectedDevice{};
+    audio::OutputDeviceSelection selectedDevice{}; // Engine-confirmed configuration, not a persisted request.
+    std::optional<audio::OutputDeviceSelection> optPendingOutputSelection{};
     std::vector<OutputBackendSnapshot> availableBackends{};
 
     bool operator==(OutputState const&) const = default;

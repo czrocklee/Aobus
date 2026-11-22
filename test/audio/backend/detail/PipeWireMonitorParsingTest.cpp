@@ -136,7 +136,7 @@ namespace ao::audio::backend::detail::test
     auto const items =
       std::to_array<::spa_dict_item>({::spa_dict_item{.key = PW_KEY_MEDIA_CLASS, .value = "Audio/Sink"},
                                       ::spa_dict_item{.key = PW_KEY_NODE_NAME, .value = "test-node"},
-                                      ::spa_dict_item{.key = PW_KEY_OBJECT_SERIAL, .value = "1234"},
+                                      ::spa_dict_item{.key = PW_KEY_OBJECT_SERIAL, .value = "4294967303"},
                                       ::spa_dict_item{.key = "node.driver-id", .value = "5678"}});
     auto const dict = makeDict(items);
 
@@ -144,8 +144,17 @@ namespace ao::audio::backend::detail::test
     CHECK(record.version == 1);
     CHECK(record.mediaClass == "Audio/Sink");
     CHECK(record.nodeName == "test-node");
-    CHECK(record.optObjectSerial == 1234);
+    CHECK(record.optObjectSerial == 4294967303ULL);
     CHECK(record.optDriverId == 5678);
+  }
+
+  TEST_CASE("PipeWireMonitorParsing - object serial rejects an invalid low 32-bit tag")
+  {
+    auto const items =
+      std::to_array<::spa_dict_item>({::spa_dict_item{.key = PW_KEY_OBJECT_SERIAL, .value = "8589934591"}});
+    auto const dict = makeDict(items);
+
+    CHECK(pipeWireObjectSerial(&dict) == std::nullopt);
   }
 
   TEST_CASE("SinkProps::classifyVolume - zero channel gain remains the range minimum regardless of order")

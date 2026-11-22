@@ -362,11 +362,12 @@ required. The portal's default Bazel test environment does not forward the
 shell UID override, so a green completion gate alone cannot certify the
 requested disposable device.
 
-For an AppKit smoke launch, put the UID in the launcher's environment:
+To check recovery from a missing saved output in the AppKit desktop, set the
+UID to an approved silent software output in the smoke launcher's environment:
 
 ```bash
 smoke_root=$(mktemp -d /tmp/aobus-appkit.XXXXXX) &&
-AOBUS_TEST_COREAUDIO_DEVICE_UID="$testOutputUid" bazel run //app/macos-appkit:ao_appkit_smoke -- --scenario presentation \
+AOBUS_TEST_COREAUDIO_DEVICE_UID="$testOutputUid" bazel run //app/macos-appkit:ao_appkit_smoke -- --scenario desktop \
   --state-root "$smoke_root/state" --library "$smoke_root/music"
 ```
 
@@ -375,13 +376,15 @@ production device ordering, or system defaults.
 
 - Core Audio backend cases open the matching live output instead of the first
   enumerated device.
-- AppKit component fixtures select it and wait until the playback snapshot
-  reports that backend, device, and the shared profile.
-- The `desktop` scenario seeds the request in its isolated `desktop.plist`,
-  checks that the parent and its successor keep it, and opens each process's
-  native output menu to verify the exact checked backend, device, and profile.
-  The checkmark reflects the engine-confirmed selection, independently of the
-  saved request; it is not a readback of the AudioUnit route or rendered PCM.
+- AppKit component fixtures using platform audio select the UID and wait for
+  the playback snapshot to confirm that backend, device, and shared profile.
+- With the UID set, `desktop` starts with a missing device in its private
+  `desktop.plist`. The saved request must survive startup; the native menu
+  shows a disabled advisory without checking an alternate route. Before
+  playback, the probe chooses the verified test output. Both parent and
+  successor must preserve that choice and check the engine-confirmed backend,
+  device, and profile in the menu. This is not a physical unplug, a readback of
+  the AudioUnit route, or evidence of rendered PCM.
 
 If the variable is set, an empty, unknown, or ambiguous UID fails instead of
 skipping or falling back to the default output. Display names, case differences,

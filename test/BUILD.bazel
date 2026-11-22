@@ -989,6 +989,7 @@ cc_test(
             "audio/backend/detail/AlsaPrewarmCacheTest.cpp",
             "audio/backend/detail/PipeWireFormatParsingTest.cpp",
             "audio/backend/detail/PipeWireMonitorParsingTest.cpp",
+            "audio/backend/detail/PipeWireTargetLookupTest.cpp",
         ],
         "@platforms//os:macos": [
             "audio/backend/CoreAudioBackendFatalProbeTest.cpp",
@@ -1620,6 +1621,7 @@ cc_test(
     deps = [
         ":fatal_probe_support",
         ":gtk_test_support",
+        ":media_test_support",
         "//app/systemmedia:test_headers",
         "@aobus_native_deps//:giomm",
         "@aobus_native_deps//:gtkmm",

@@ -70,7 +70,7 @@ namespace ao::audio::test
   {
     static auto nextId = std::atomic<std::uint64_t>{1};
     return Engine::PlaybackItem{
-      .id = Engine::PlaybackItemId{.value = nextId.fetch_add(1, std::memory_order_relaxed)},
+      .id = Engine::PlaybackItemId{nextId.fetch_add(1, std::memory_order_relaxed)},
       .input = PlaybackInput{.filePath = std::move(path)},
     };
   }
@@ -79,7 +79,7 @@ namespace ao::audio::test
   {
     static auto nextId = std::atomic<std::uint64_t>{100000};
     return Engine::PlaybackItem{
-      .id = Engine::PlaybackItemId{.value = nextId.fetch_add(1, std::memory_order_relaxed)},
+      .id = Engine::PlaybackItemId{nextId.fetch_add(1, std::memory_order_relaxed)},
       .input = std::move(input),
     };
   }

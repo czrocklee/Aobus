@@ -9,11 +9,17 @@
 
 #include <gtkmm/label.h>
 #include <gtkmm/widget.h>
+#include <sigc++/scoped_connection.h>
 
 namespace ao::rt
 {
   class PlaybackService;
   class WorkspaceService;
+}
+
+namespace ao::uimodel
+{
+  class PlaybackActions;
 }
 
 namespace ao::gtk
@@ -25,6 +31,7 @@ namespace ao::gtk
 
     NowPlayingFieldLabel(rt::PlaybackService& playback,
                          rt::WorkspaceService& workspace,
+                         uimodel::PlaybackActions* playbackActions,
                          i18n::MessageCatalog const& textCatalog,
                          rt::TrackField field,
                          Action action = Action::None);
@@ -37,10 +44,12 @@ namespace ao::gtk
 
     rt::PlaybackService& _playback;
     rt::WorkspaceService& _workspace;
+    uimodel::PlaybackActions* _playbackActions;
     rt::TrackField _field;
     Action _action;
     Gtk::Label _label;
 
     uimodel::NowPlayingViewModel _nowPlayingViewModel;
+    sigc::scoped_connection _pressedConnection;
   };
 } // namespace ao::gtk

@@ -15,6 +15,7 @@
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/Engine.h>
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/audio/QualityAnalyzer.h>
 #include <ao/audio/Transport.h>
 #include <ao/audio/flow/Graph.h>
@@ -63,13 +64,6 @@ namespace ao::audio
       std::unique_ptr<BackendProvider> providerPtr;
       utility::ScopedRegistration subscription;
       std::vector<Device> devices;
-    };
-
-    struct PendingOutputDeviceSelection
-    {
-      BackendId backend;
-      DeviceId deviceId;
-      ProfileId profile;
     };
 
     // Teardown gate shared by executor-marshalled callbacks. Foreign threads
@@ -228,7 +222,8 @@ namespace ao::audio
     std::atomic<std::uint64_t> audioCallbackGenerationFloor{1};
     std::shared_ptr<OutwardPublicationState> outwardPublicationStatePtr;
     std::vector<std::unique_ptr<ProviderRecord>> providers;
-    std::optional<PendingOutputDeviceSelection> optPendingOutputDeviceSelection;
+    std::optional<OutputDeviceSelection> optPendingOutputDeviceSelection;
+    OutputRoutingPolicy routingPolicy = OutputRoutingPolicy::Fixed;
     BackendProvider* activeBackendProvider = nullptr;
     utility::ScopedRegistration graphSubscription;
     std::shared_ptr<GraphObservation> graphObservationPtr;
@@ -263,7 +258,8 @@ namespace ao::audio
     void handleSystemGraphChanged(std::shared_ptr<GraphObservation> observationPtr, std::uint64_t generation);
     void finishGraphObservation(std::shared_ptr<GraphObservation> observationPtr, std::uint64_t generation);
     void handleRouteChanged(Engine::RouteStatus const& status, std::uint64_t generation);
-    Result<> setOutputDevice(BackendId const& backend, DeviceId const& deviceId, ProfileId const& profile);
+    void holdOutputRequest(OutputDeviceSelection const& selection);
+    Result<> setOutputDevice(OutputDeviceSelection selection);
     Player::Status snapshot() const;
     bool isReady() const;
     void updateMergedGraph();
@@ -634,8 +630,7 @@ namespace ao::audio
     if (optPendingOutputDeviceSelection)
     {
       // Try to apply pending output
-      auto const pending = PendingOutputDeviceSelection{*optPendingOutputDeviceSelection};
-      std::ignore = setOutputDevice(pending.backend, pending.deviceId, pending.profile);
+      std::ignore = setOutputDevice(*optPendingOutputDeviceSelection);
     }
 
     auto snapshot = cachedBackends;
@@ -703,14 +698,39 @@ namespace ao::audio
                   { self.handleSystemGraphChanged(std::move(observationPtr), generation); });
   }
 
-  Result<> Player::Impl::setOutputDevice(BackendId const& backend, DeviceId const& deviceId, ProfileId const& profile)
+  void Player::Impl::holdOutputRequest(OutputDeviceSelection const& selection)
+  {
+    if (optPendingOutputDeviceSelection == selection)
+    {
+      return;
+    }
+
+    optPendingOutputDeviceSelection = selection;
+
+    // Retire the old item as well as the stream: discovery may configure the requested
+    // backend later, but Engine::setBackend must not restart playback on it.
+    acceptAudioBarrier(enginePtr->stopWithBarrier());
+    std::ignore = resetPlaybackGraph();
+
+    dispatchOutward(&Impl::onStateChanged);
+  }
+
+  Result<> Player::Impl::setOutputDevice(OutputDeviceSelection selection)
   {
     ensureOnExecutor();
 
-    if (auto const currentSnap = enginePtr->status();
-        backend == currentSnap.backendId && profile == currentSnap.profileId && deviceId == currentSnap.currentDeviceId)
+    if (!supportsOutputRoutingPolicy(selection))
     {
-      optPendingOutputDeviceSelection.reset();
+      selection.routingPolicy = OutputRoutingPolicy::Fixed;
+    }
+
+    auto const& [backend, deviceId, profile, policy] = selection;
+
+    // A held request leaves the old identity in Engine. It is not evidence that discovery still lists that device.
+    if (auto const currentSnap = enginePtr->status();
+        !optPendingOutputDeviceSelection && backend == currentSnap.backendId && profile == currentSnap.profileId &&
+        deviceId == currentSnap.currentDeviceId && policy == routingPolicy)
+    {
       dispatchOutward(&Impl::onStateChanged);
       return {};
     }
@@ -720,29 +740,45 @@ namespace ao::audio
 
     if (recordIt == providers.end())
     {
+      holdOutputRequest(selection);
       return makeError(Error::Code::NotFound, "No provider registered for backend " + backend.raw());
     }
 
-    auto const allDevicesCopy = allDevices;
+    auto const profiles = (*recordIt)->providerPtr->status().descriptor.supportedProfiles;
+
+    if (!profiles.empty() && !std::ranges::contains(profiles, profile, &BackendProvider::ProfileDescriptor::id))
+    {
+      holdOutputRequest(selection);
+      return makeError(Error::Code::NotSupported, "Output profile is unavailable: " + profile.raw());
+    }
 
     auto const it = std::ranges::find_if(
-      allDevicesCopy, [&](Device const& dev) { return dev.backendId == backend && dev.id == deviceId; });
+      allDevices, [&](Device const& dev) { return dev.backendId == backend && dev.id == deviceId; });
 
-    if (it == allDevicesCopy.end())
+    bool const allowReroute = policy == OutputRoutingPolicy::AllowSystemReroute;
+
+    if (it == allDevices.end() && !allowReroute)
     {
-      optPendingOutputDeviceSelection =
-        PendingOutputDeviceSelection{.backend = backend, .deviceId = deviceId, .profile = profile};
-      dispatchOutward(&Impl::onStateChanged);
+      holdOutputRequest(selection);
       return {};
     }
 
+    // Keep the requested identity even when the session manager is allowed to choose the physical sink.
+    auto const device = it == allDevices.end() ? Device{.id = deviceId, .backendId = backend} : *it;
+    auto& provider = *(*recordIt)->providerPtr;
+    auto newBackendPtr =
+      allowReroute ? provider.createReroutableBackend(device, profile) : provider.createBackend(device, profile);
+
+    if (!newBackendPtr)
+    {
+      holdOutputRequest(selection);
+      return makeError(Error::Code::NotSupported, "Output routing mode is unavailable for backend " + backend.raw());
+    }
+
     optPendingOutputDeviceSelection.reset();
-
-    auto const& device = *it;
-    auto newBackendPtr = (*recordIt)->providerPtr->createBackend(device, profile);
     std::ignore = resetPlaybackGraph();
-
-    activeBackendProvider = (*recordIt)->providerPtr.get();
+    activeBackendProvider = &provider;
+    routingPolicy = policy;
     enginePtr->setBackend(std::move(newBackendPtr), device);
     acceptAudioBarrier(Engine::PreparedCancellationBarrier{.generation = enginePtr->playbackGeneration()});
     return {};
@@ -759,6 +795,8 @@ namespace ao::audio
     }
 
     playerStatus.availableBackends = cachedBackends;
+    playerStatus.optPendingOutputSelection = optPendingOutputDeviceSelection;
+    playerStatus.routingPolicy = routingPolicy;
 
     playerStatus.flow = mergedGraph;
     playerStatus.sourceQuality = qualityRes.sourceQuality;
@@ -1254,12 +1292,12 @@ namespace ao::audio
     return _implPtr->enginePtr->clearNext();
   }
 
-  Result<> Player::setOutputDevice(BackendId const& backend, DeviceId const& deviceId, ProfileId const& profile)
+  Result<> Player::setOutputDevice(OutputDeviceSelection selection)
   {
     _implPtr->ensureOnExecutor();
     _implPtr->cancelStartPreparation();
     _implPtr->cancelLookaheadPreparation();
-    return _implPtr->setOutputDevice(backend, deviceId, profile);
+    return _implPtr->setOutputDevice(std::move(selection));
   }
 
   void Player::pause()
@@ -1271,7 +1309,11 @@ namespace ao::audio
   void Player::resume()
   {
     _implPtr->ensureOnExecutor();
-    _implPtr->enginePtr->resume();
+
+    if (!_implPtr->optPendingOutputDeviceSelection)
+    {
+      _implPtr->enginePtr->resume();
+    }
   }
 
   Engine::PreparedCancellationBarrier Player::stopWithBarrier()
@@ -1301,6 +1343,12 @@ namespace ao::audio
     _implPtr->acceptAudioBarrier(*optBarrier);
     std::ignore = _implPtr->resetPlaybackGraph();
     return optBarrier;
+  }
+
+  std::optional<Engine::TerminalReceipt> Player::takeRetiredTerminalReceipt(std::uint64_t const generation)
+  {
+    _implPtr->ensureOnExecutor();
+    return _implPtr->enginePtr->takeRetiredTerminalReceipt(generation);
   }
 
   void Player::stop()

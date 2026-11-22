@@ -19,6 +19,7 @@
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/Engine.h>
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/Property.h>
@@ -240,7 +241,7 @@ namespace ao::audio::test
 
     Device pipeWireDevice(std::string displayName = "System Default")
     {
-      return Device{.id = DeviceId{"system-default"},
+      return Device{.id = DeviceId{},
                     .displayName = std::move(displayName),
                     .description = "PipeWire",
                     .isDefault = true,
@@ -624,8 +625,8 @@ namespace ao::audio::test
     auto player = Player{executor};
     player.addProvider(std::make_unique<MockProviderProxy>(mockProvider.get()));
 
-    // 1. Call setOutputDevice before devices are available
-    CHECK(player.setOutputDevice(kBackendPipeWire, DeviceId{"system-default"}, kProfileShared));
+    auto const dacId = DeviceId{"node:studio-dac"};
+    CHECK(player.setOutputDevice(kBackendPipeWire, dacId, kProfileShared));
 
     // Verify that it's NOT yet active (engine still has null backend/default device)
     auto const snapBefore = player.status();
@@ -633,37 +634,195 @@ namespace ao::audio::test
 
     // 1b. Call play while pending - should be ignored
     CHECK_FALSE(player.play(Engine::PlaybackItem{
-      .id = Engine::PlaybackItemId{.value = 1},
+      .id = Engine::PlaybackItemId{1},
       .input = PlaybackInput{.filePath = "song.flac"},
     }));
     CHECK(player.status().engine.transport == Transport::Idle);
 
     // 2. Simulate devices being discovered
     REQUIRE(onOutputDevicesChanged);
-    onOutputDevicesChanged({Device{.id = DeviceId{"system-default"},
-                                   .displayName = "System Default",
-                                   .description = "PipeWire",
-                                   .isDefault = true,
-                                   .backendId = kBackendPipeWire}});
+    onOutputDevicesChanged({Device{.id = dacId, .displayName = "Studio DAC", .backendId = kBackendPipeWire}});
 
     // 3. Verify that the output was automatically restored
     auto const snapAfter = player.status();
-    CHECK(snapAfter.engine.currentDeviceId == "system-default");
+    CHECK(snapAfter.engine.currentDeviceId == dacId);
     CHECK(snapAfter.engine.backendId == kBackendPipeWire);
     CHECK(player.isReady() == true);
 
     // Updated device evidence must keep the selected output and refresh its public description.
-    onOutputDevicesChanged({Device{.id = DeviceId{"system-default"},
-                                   .displayName = "System Default (Updated)",
-                                   .description = "PipeWire",
-                                   .isDefault = true,
-                                   .backendId = kBackendPipeWire}});
+    onOutputDevicesChanged({Device{.id = dacId, .displayName = "Studio DAC (Updated)", .backendId = kBackendPipeWire}});
     auto const updated = player.status();
     REQUIRE(updated.availableBackends.size() == 1);
     REQUIRE(updated.availableBackends.front().devices.size() == 1);
-    CHECK(updated.availableBackends.front().devices.front().displayName == "System Default (Updated)");
+    CHECK(updated.availableBackends.front().devices.front().displayName == "Studio DAC (Updated)");
     CHECK(updated.engine.backendId == kBackendPipeWire);
-    CHECK(updated.engine.currentDeviceId == "system-default");
+    CHECK(updated.engine.currentDeviceId == dacId);
+  }
+
+  TEST_CASE("Player - requesting a missing output stops fixed playback until a new play command")
+  {
+    auto probePtr = std::make_shared<BarrierBackendProbe>();
+    auto executor = QueuedExecutor{};
+    auto player = Player{executor};
+    player.addProvider(std::make_unique<BarrierProvider>(probePtr));
+    executor.drain();
+    auto const speakers = Device{.id = DeviceId{"barrier-device"}, .backendId = kBarrierBackend};
+    auto const dac = Device{.id = DeviceId{"studio-dac"}, .backendId = kBarrierBackend};
+    REQUIRE(player.setOutputDevice(kBarrierBackend, speakers.id, kProfileShared));
+    auto const item = Engine::PlaybackItem{
+      .id = Engine::PlaybackItemId{1}, .input = {.filePath = requireAudioFixture("basic_metadata.flac")}};
+    REQUIRE(player.play(item));
+    REQUIRE(player.transport() == Transport::Playing);
+    REQUIRE(probePtr->target() != nullptr);
+    REQUIRE(player.prepareNext({.id = Engine::PlaybackItemId{2}, .input = item.input}));
+
+    auto const request =
+      OutputDeviceSelection{.backendId = kBarrierBackend, .deviceId = dac.id, .profileId = kProfileShared};
+    REQUIRE(player.setOutputDevice(request));
+    executor.drain();
+    CHECK(player.status().optPendingOutputSelection == request);
+    CHECK(player.transport() == Transport::Idle);
+    CHECK(probePtr->target() == nullptr);
+    CHECK_FALSE(player.clearPreparedNext());
+    player.resume();
+    CHECK(player.transport() == Transport::Idle);
+
+    auto const generation = player.audioPlaybackGeneration();
+    probePtr->emitDevices({speakers});
+    executor.drain();
+    CHECK(player.audioPlaybackGeneration() == generation);
+    probePtr->emitDevices({speakers, dac});
+    executor.drain();
+    REQUIRE(player.isReady());
+    CHECK(player.status().engine.currentDeviceId == dac.id);
+    CHECK(player.transport() == Transport::Idle);
+    CHECK(probePtr->target() == nullptr);
+
+    REQUIRE(player.play(item));
+    CHECK(player.transport() == Transport::Playing);
+    CHECK(probePtr->target() != nullptr);
+  }
+
+  TEST_CASE("Player - replacing a pending request with the old configured device still requires discovery")
+  {
+    auto probePtr = std::make_shared<BarrierBackendProbe>();
+    auto executor = QueuedExecutor{};
+    auto player = Player{executor};
+    player.addProvider(std::make_unique<BarrierProvider>(probePtr));
+    executor.drain();
+    auto const speakers = OutputDeviceSelection{
+      .backendId = kBarrierBackend, .deviceId = DeviceId{"barrier-device"}, .profileId = kProfileShared};
+    REQUIRE(player.setOutputDevice(speakers));
+    REQUIRE(player.isReady());
+
+    auto const dac = OutputDeviceSelection{
+      .backendId = kBarrierBackend, .deviceId = DeviceId{"studio-dac"}, .profileId = kProfileShared};
+    REQUIRE(player.setOutputDevice(dac));
+    REQUIRE(player.status().optPendingOutputSelection == dac);
+    probePtr->emitDevices({});
+    executor.drain();
+    REQUIRE(player.status().engine.currentDeviceId == speakers.deviceId);
+
+    REQUIRE(player.setOutputDevice(speakers));
+    REQUIRE(player.status().optPendingOutputSelection == speakers);
+    CHECK_FALSE(player.isReady());
+    probePtr->emitDevices({Device{.id = dac.deviceId, .backendId = dac.backendId}});
+    executor.drain();
+    CHECK(player.status().optPendingOutputSelection == speakers);
+    CHECK_FALSE(player.isReady());
+
+    probePtr->emitDevices({Device{.id = speakers.deviceId, .backendId = speakers.backendId}});
+    executor.drain();
+    CHECK_FALSE(player.status().optPendingOutputSelection);
+    CHECK(player.isReady());
+    CHECK(player.status().engine.currentDeviceId == speakers.deviceId);
+    CHECK(player.transport() == Transport::Idle);
+  }
+
+  TEST_CASE("Player - a provider refusing rerouting keeps the requested route pending")
+  {
+    auto mock = Mock<BackendProvider>{};
+    When(Method(mock, status)).AlwaysReturn(pipeWireStatus());
+    When(Method(mock, subscribeDevices)).AlwaysDo([](auto const&) { return utility::ScopedRegistration{}; });
+    When(Method(mock, createReroutableBackend))
+      .AlwaysDo([](Device const&, ProfileId const&) { return std::unique_ptr<Backend>{}; });
+
+    auto executor = rt::test::InlineExecutor{};
+    auto player = Player{executor};
+    player.addProvider(std::make_unique<MockProviderProxy>(mock.get()));
+    auto const request = OutputDeviceSelection{.backendId = kBackendPipeWire,
+                                               .deviceId = DeviceId{"node:studio-dac"},
+                                               .profileId = kProfileShared,
+                                               .routingPolicy = OutputRoutingPolicy::AllowSystemReroute};
+    auto const res = player.setOutputDevice(request);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::NotSupported);
+    CHECK(player.status().optPendingOutputSelection == request);
+    CHECK_FALSE(player.isReady());
+    Verify(Method(mock, createBackend)).Never();
+  }
+
+  TEST_CASE("Player - requiring a preferred PipeWire output respects current discovery")
+  {
+    auto mock = Mock<BackendProvider>{};
+    auto devicesChanged = BackendProvider::OnDevicesChangedCallback{};
+    When(Method(mock, status)).AlwaysReturn(pipeWireStatus());
+    When(Method(mock, subscribeDevices))
+      .AlwaysDo(
+        [&](auto const& callback)
+        {
+          devicesChanged = callback;
+          return utility::ScopedRegistration{};
+        });
+    auto const makeBackend = [](Device const& device, ProfileId const& profile)
+    { return std::make_unique<FakeBackend>(device.backendId, profile); };
+    When(Method(mock, createReroutableBackend)).AlwaysDo(makeBackend);
+    When(Method(mock, createBackend)).AlwaysDo(makeBackend);
+
+    auto executor = rt::test::InlineExecutor{};
+    auto player = Player{executor};
+    player.addProvider(std::make_unique<MockProviderProxy>(mock.get()));
+    auto selection = OutputDeviceSelection{.backendId = kBackendPipeWire,
+                                           .deviceId = DeviceId{"node:absent-dac"},
+                                           .profileId = kProfileShared,
+                                           .routingPolicy = OutputRoutingPolicy::AllowSystemReroute};
+    REQUIRE(player.setOutputDevice(selection));
+    REQUIRE(player.isReady());
+    REQUIRE(player.play(
+      {.id = Engine::PlaybackItemId{1}, .input = {.filePath = requireAudioFixture("basic_metadata.flac")}}));
+    REQUIRE(player.transport() == Transport::Playing);
+    CHECK(player.status().engine.currentDeviceId == selection.deviceId);
+
+    SECTION("Revoking rerouting while the DAC is missing stops the stream")
+    {
+      selection.routingPolicy = OutputRoutingPolicy::Fixed;
+      REQUIRE(player.setOutputDevice(selection));
+      CHECK(player.status().optPendingOutputSelection == selection);
+      CHECK_FALSE(player.isReady());
+      CHECK(player.transport() == Transport::Idle);
+      player.resume();
+      CHECK(player.transport() == Transport::Idle);
+      Verify(Method(mock, createBackend)).Never();
+    }
+
+    SECTION("Reselecting the returning DAC leaves consent intact; revoking it reopens fixed")
+    {
+      auto const generation = player.audioPlaybackGeneration();
+      REQUIRE(devicesChanged);
+      devicesChanged({Device{.id = selection.deviceId, .backendId = selection.backendId}});
+      REQUIRE(player.setOutputDevice(selection));
+      CHECK(player.status().routingPolicy == OutputRoutingPolicy::AllowSystemReroute);
+      CHECK(player.audioPlaybackGeneration() == generation);
+      Verify(Method(mock, createBackend)).Never();
+
+      selection.routingPolicy = OutputRoutingPolicy::Fixed;
+      REQUIRE(player.setOutputDevice(selection));
+      CHECK(player.status().routingPolicy == OutputRoutingPolicy::Fixed);
+      CHECK(player.transport() == Transport::Playing);
+      Verify(Method(mock, createBackend)).Once();
+    }
+
+    Verify(Method(mock, createReroutableBackend)).Once();
   }
 
   TEST_CASE("Player - setOutputDevice rejects unknown backend")
@@ -742,11 +901,11 @@ namespace ao::audio::test
     auto const snap = player.status();
     REQUIRE(snap.availableBackends.size() == 1);
     REQUIRE(snap.availableBackends.front().devices.size() == 1);
-    CHECK(snap.availableBackends.front().devices.front().id == DeviceId{"system-default"});
+    CHECK(snap.availableBackends.front().devices.front().id.empty());
     CHECK(deviceSignals == 1);
     REQUIRE(observedStatuses.size() == 1);
     REQUIRE(observedStatuses.front().devices.size() == 1);
-    CHECK(observedStatuses.front().devices.front().id == DeviceId{"system-default"});
+    CHECK(observedStatuses.front().devices.front().id.empty());
   }
 
   TEST_CASE("Player - queued provider callback is ignored after teardown", "[concurrency]")
@@ -1114,7 +1273,7 @@ namespace ao::audio::test
     onOutputDevicesChanged({pipeWireDevice()});
     executor.drain();
 
-    CHECK(player.setOutputDevice(kBackendPipeWire, DeviceId{"system-default"}, kProfileShared));
+    CHECK(player.setOutputDevice(kBackendPipeWire, DeviceId{}, kProfileShared));
     auto route = createBaseEngineRoute();
     route.optAnchor = RouteAnchor{.backend = kBackendPipeWire, .id = "mock-stream-id"};
     player.handleRouteChanged(route, player.playbackGeneration());
@@ -1158,12 +1317,12 @@ namespace ao::audio::test
     REQUIRE(player.setOutputDevice(kBarrierBackend, DeviceId{"barrier-device"}, kProfileShared));
 
     auto const currentItem =
-      Engine::PlaybackItem{.id = Engine::PlaybackItemId{.value = 1}, .input = PlaybackInput{.filePath = fixturePath}};
+      Engine::PlaybackItem{.id = Engine::PlaybackItemId{1}, .input = PlaybackInput{.filePath = fixturePath}};
     REQUIRE(player.play(currentItem));
     executor.drain();
 
     auto const nextItem =
-      Engine::PlaybackItem{.id = Engine::PlaybackItemId{.value = 2}, .input = PlaybackInput{.filePath = fixturePath}};
+      Engine::PlaybackItem{.id = Engine::PlaybackItemId{2}, .input = PlaybackInput{.filePath = fixturePath}};
     auto const preparedNextRes = player.prepareNext(nextItem);
     REQUIRE(preparedNextRes);
     auto const audioGeneration = player.audioPlaybackGeneration();
@@ -1171,7 +1330,7 @@ namespace ao::audio::test
     REQUIRE(preparedNextRes->generation == audioGeneration);
 
     auto candidateRes = player.stagePlayback(Engine::PlaybackItem{
-      .id = Engine::PlaybackItemId{.value = 3}, .input = PlaybackInput{.filePath = "/missing/staged.flac"}});
+      .id = Engine::PlaybackItemId{3}, .input = PlaybackInput{.filePath = "/missing/staged.flac"}});
     REQUIRE_FALSE(candidateRes);
     CHECK(player.audioPlaybackGeneration() == audioGeneration);
     CHECK(player.playbackGeneration() == graphGeneration);
@@ -1188,14 +1347,13 @@ namespace ao::audio::test
     player.addProvider(std::make_unique<BarrierProvider>(probePtr));
     executor.drain();
     REQUIRE(player.setOutputDevice(kBarrierBackend, DeviceId{"barrier-device"}, kProfileShared));
-    REQUIRE(player.play(Engine::PlaybackItem{
-      .id = Engine::PlaybackItemId{.value = 100}, .input = PlaybackInput{.filePath = "current.flac"}}));
+    REQUIRE(player.play(
+      Engine::PlaybackItem{.id = Engine::PlaybackItemId{100}, .input = PlaybackInput{.filePath = "current.flac"}}));
     executor.drain();
 
     bool completionCalled = false;
     REQUIRE(player.stagePlaybackAsync(
-      Engine::PlaybackItem{
-        .id = Engine::PlaybackItemId{.value = 101}, .input = PlaybackInput{.filePath = "blocked.flac"}},
+      Engine::PlaybackItem{.id = Engine::PlaybackItemId{101}, .input = PlaybackInput{.filePath = "blocked.flac"}},
       {},
       [] { return true; },
       [&](Result<Engine::PreparedPlaybackStart>) { completionCalled = true; }));
@@ -1268,15 +1426,14 @@ namespace ao::audio::test
     player.addProvider(std::make_unique<BarrierProvider>(probePtr));
     executor.drain();
     REQUIRE(player.setOutputDevice(kBarrierBackend, DeviceId{"barrier-device"}, kProfileShared));
-    REQUIRE(player.play(Engine::PlaybackItem{
-      .id = Engine::PlaybackItemId{.value = 201}, .input = PlaybackInput{.filePath = "current.flac"}}));
+    REQUIRE(player.play(
+      Engine::PlaybackItem{.id = Engine::PlaybackItemId{201}, .input = PlaybackInput{.filePath = "current.flac"}}));
     executor.drain();
 
     bool acceptanceCalled = false;
     bool completionCalled = false;
     REQUIRE(player.stagePlaybackAsync(
-      Engine::PlaybackItem{
-        .id = Engine::PlaybackItemId{.value = 202}, .input = PlaybackInput{.filePath = candidatePath}},
+      Engine::PlaybackItem{.id = Engine::PlaybackItemId{202}, .input = PlaybackInput{.filePath = candidatePath}},
       {},
       [&]
       {
@@ -1320,8 +1477,7 @@ namespace ao::audio::test
     bool acceptanceCalled = false;
     bool completionCalled = false;
     REQUIRE(player.stagePlaybackAsync(
-      Engine::PlaybackItem{
-        .id = Engine::PlaybackItemId{.value = 102}, .input = PlaybackInput{.filePath = "blocked-start.flac"}},
+      Engine::PlaybackItem{.id = Engine::PlaybackItemId{102}, .input = PlaybackInput{.filePath = "blocked-start.flac"}},
       {},
       [&]
       {
@@ -1354,13 +1510,12 @@ namespace ao::audio::test
     player.addProvider(std::make_unique<BarrierProvider>(probePtr));
     executor.drain();
     REQUIRE(player.setOutputDevice(kBarrierBackend, DeviceId{"barrier-device"}, kProfileShared));
-    REQUIRE(player.play(Engine::PlaybackItem{
-      .id = Engine::PlaybackItemId{.value = 103}, .input = PlaybackInput{.filePath = "current.flac"}}));
+    REQUIRE(player.play(
+      Engine::PlaybackItem{.id = Engine::PlaybackItemId{103}, .input = PlaybackInput{.filePath = "current.flac"}}));
     bool acceptanceCalled = false;
     bool completionCalled = false;
     REQUIRE(player.prepareNextAsync(
-      Engine::PlaybackItem{
-        .id = Engine::PlaybackItemId{.value = 104}, .input = PlaybackInput{.filePath = "blocked-next.flac"}},
+      Engine::PlaybackItem{.id = Engine::PlaybackItemId{104}, .input = PlaybackInput{.filePath = "blocked-next.flac"}},
       [&]
       {
         acceptanceCalled = true;
@@ -1392,11 +1547,11 @@ namespace ao::audio::test
     player.addProvider(std::make_unique<BarrierProvider>(probePtr));
     executor.drain();
     REQUIRE(player.setOutputDevice(kBarrierBackend, DeviceId{"barrier-device"}, kProfileShared));
-    REQUIRE(player.play(Engine::PlaybackItem{
-      .id = Engine::PlaybackItemId{.value = 105}, .input = PlaybackInput{.filePath = "current.flac"}}));
+    REQUIRE(player.play(
+      Engine::PlaybackItem{.id = Engine::PlaybackItemId{105}, .input = PlaybackInput{.filePath = "current.flac"}}));
 
-    auto const successor = Engine::PlaybackItem{
-      .id = Engine::PlaybackItemId{.value = 106}, .input = PlaybackInput{.filePath = "same-next.flac"}};
+    auto const successor =
+      Engine::PlaybackItem{.id = Engine::PlaybackItemId{106}, .input = PlaybackInput{.filePath = "same-next.flac"}};
     bool firstAccepted = false;
     bool firstCompleted = false;
     REQUIRE(player.prepareNextAsync(
@@ -1450,8 +1605,7 @@ namespace ao::audio::test
     auto completions = std::vector<Result<Engine::PreparedPlaybackStart>>{};
 
     REQUIRE(player.stagePlaybackAsync(
-      Engine::PlaybackItem{
-        .id = Engine::PlaybackItemId{.value = 107}, .input = PlaybackInput{.filePath = "vetoed-start.flac"}},
+      Engine::PlaybackItem{.id = Engine::PlaybackItemId{107}, .input = PlaybackInput{.filePath = "vetoed-start.flac"}},
       {},
       [&]
       {
@@ -1479,14 +1633,13 @@ namespace ao::audio::test
     player.addProvider(std::make_unique<BarrierProvider>(probePtr));
     executor.drain();
     REQUIRE(player.setOutputDevice(kBarrierBackend, DeviceId{"barrier-device"}, kProfileShared));
-    REQUIRE(player.play(Engine::PlaybackItem{
-      .id = Engine::PlaybackItemId{.value = 108}, .input = PlaybackInput{.filePath = "current.flac"}}));
+    REQUIRE(player.play(
+      Engine::PlaybackItem{.id = Engine::PlaybackItemId{108}, .input = PlaybackInput{.filePath = "current.flac"}}));
     std::uint32_t acceptanceCount = 0;
     auto completions = std::vector<Result<Engine::PreparedNextResult>>{};
 
     REQUIRE(player.prepareNextAsync(
-      Engine::PlaybackItem{
-        .id = Engine::PlaybackItemId{.value = 109}, .input = PlaybackInput{.filePath = "vetoed-next.flac"}},
+      Engine::PlaybackItem{.id = Engine::PlaybackItemId{109}, .input = PlaybackInput{.filePath = "vetoed-next.flac"}},
       [&]
       {
         ++acceptanceCount;
@@ -1524,14 +1677,13 @@ namespace ao::audio::test
     player.addProvider(std::make_unique<BarrierProvider>(probePtr));
     executor.drain();
     REQUIRE(player.setOutputDevice(kBarrierBackend, DeviceId{"barrier-device"}, kProfileShared));
-    REQUIRE(player.play(Engine::PlaybackItem{
-      .id = Engine::PlaybackItemId{.value = 110}, .input = PlaybackInput{.filePath = "current.mp3"}}));
+    REQUIRE(player.play(
+      Engine::PlaybackItem{.id = Engine::PlaybackItemId{110}, .input = PlaybackInput{.filePath = "current.mp3"}}));
     std::uint32_t acceptanceCount = 0;
     auto completions = std::vector<Result<Engine::PreparedNextResult>>{};
 
     REQUIRE(player.prepareNextAsync(
-      Engine::PlaybackItem{
-        .id = Engine::PlaybackItemId{.value = 111}, .input = PlaybackInput{.filePath = "fallback.flac"}},
+      Engine::PlaybackItem{.id = Engine::PlaybackItemId{111}, .input = PlaybackInput{.filePath = "fallback.flac"}},
       [&]
       {
         ++acceptanceCount;
@@ -1558,7 +1710,7 @@ namespace ao::audio::test
     auto optCompletion = std::optional<Result<Engine::PreparedPlaybackStart>>{};
     REQUIRE(player.stagePlaybackAsync(
       Engine::PlaybackItem{
-        .id = Engine::PlaybackItemId{.value = 105}, .input = PlaybackInput{.filePath = "device-evidence.flac"}},
+        .id = Engine::PlaybackItemId{105}, .input = PlaybackInput{.filePath = "device-evidence.flac"}},
       {},
       [] { return true; },
       [&](Result<Engine::PreparedPlaybackStart> prepared) { optCompletion.emplace(std::move(prepared)); }));
@@ -1602,8 +1754,8 @@ namespace ao::audio::test
     player.addProvider(std::make_unique<BarrierProvider>(probePtr));
     executor.drain();
     REQUIRE(player.setOutputDevice(kBarrierBackend, DeviceId{"barrier-device"}, kProfileShared));
-    REQUIRE(player.play(Engine::PlaybackItem{
-      .id = Engine::PlaybackItemId{.value = 110}, .input = PlaybackInput{.filePath = "current.flac"}}));
+    REQUIRE(player.play(
+      Engine::PlaybackItem{.id = Engine::PlaybackItemId{110}, .input = PlaybackInput{.filePath = "current.flac"}}));
     executor.drain();
     auto const oldGeneration = player.audioPlaybackGeneration();
     auto* const oldTarget = probePtr->target();
@@ -1611,8 +1763,7 @@ namespace ao::audio::test
     bool accepted = false;
     bool committed = false;
     REQUIRE(player.stagePlaybackAsync(
-      Engine::PlaybackItem{
-        .id = Engine::PlaybackItemId{.value = 111}, .input = PlaybackInput{.filePath = "replacement.flac"}},
+      Engine::PlaybackItem{.id = Engine::PlaybackItemId{111}, .input = PlaybackInput{.filePath = "replacement.flac"}},
       {},
       [&]
       {
@@ -1656,8 +1807,7 @@ namespace ao::audio::test
     bool completionCalled = false;
 
     REQUIRE(player.stagePlaybackAsync(
-      Engine::PlaybackItem{
-        .id = Engine::PlaybackItemId{.value = 120}, .input = PlaybackInput{.filePath = "blocked.flac"}},
+      Engine::PlaybackItem{.id = Engine::PlaybackItemId{120}, .input = PlaybackInput{.filePath = "blocked.flac"}},
       {},
       [] { return true; },
       [&](Result<Engine::PreparedPlaybackStart>) { completionCalled = true; }));
@@ -1690,8 +1840,7 @@ namespace ao::audio::test
     bool acceptanceCalled = false;
     bool completionCalled = false;
     REQUIRE(playerPtr->stagePlaybackAsync(
-      Engine::PlaybackItem{
-        .id = Engine::PlaybackItemId{.value = 121}, .input = PlaybackInput{.filePath = "queued.flac"}},
+      Engine::PlaybackItem{.id = Engine::PlaybackItemId{121}, .input = PlaybackInput{.filePath = "queued.flac"}},
       {},
       [&]
       {
@@ -1725,10 +1874,10 @@ namespace ao::audio::test
     executor.drain();
     REQUIRE(player.setOutputDevice(kBarrierBackend, DeviceId{"barrier-device"}, kProfileShared));
 
-    auto const currentItem = Engine::PlaybackItem{
-      .id = Engine::PlaybackItemId{.value = 4}, .input = PlaybackInput{.filePath = "current.flac"}};
+    auto const currentItem =
+      Engine::PlaybackItem{.id = Engine::PlaybackItemId{4}, .input = PlaybackInput{.filePath = "current.flac"}};
     auto const nextItem =
-      Engine::PlaybackItem{.id = Engine::PlaybackItemId{.value = 5}, .input = PlaybackInput{.filePath = "next.flac"}};
+      Engine::PlaybackItem{.id = Engine::PlaybackItemId{5}, .input = PlaybackInput{.filePath = "next.flac"}};
     REQUIRE(player.play(currentItem));
     executor.drain();
     REQUIRE(player.prepareNext(nextItem));
@@ -1738,7 +1887,7 @@ namespace ao::audio::test
     REQUIRE(activeTarget != nullptr);
 
     auto candidateRes = player.stagePlayback(Engine::PlaybackItem{
-      .id = Engine::PlaybackItemId{.value = 6},
+      .id = Engine::PlaybackItemId{6},
       .input = PlaybackInput{.filePath = "candidate-failure.flac"},
     });
     REQUIRE(candidateRes);
@@ -1769,8 +1918,8 @@ namespace ao::audio::test
     player.addProvider(std::make_unique<BarrierProvider>(probePtr));
     executor.drain();
     REQUIRE(player.setOutputDevice(kBarrierBackend, DeviceId{"barrier-device"}, kProfileShared));
-    REQUIRE(player.play(Engine::PlaybackItem{
-      .id = Engine::PlaybackItemId{.value = 10}, .input = PlaybackInput{.filePath = fixturePath}}));
+    REQUIRE(player.play(
+      Engine::PlaybackItem{.id = Engine::PlaybackItemId{10}, .input = PlaybackInput{.filePath = fixturePath}}));
     executor.drain();
 
     std::size_t failureCount = 0;
@@ -1785,8 +1934,8 @@ namespace ao::audio::test
 
     SECTION("successful explicit play")
     {
-      auto candidateRes = player.stagePlayback(Engine::PlaybackItem{
-        .id = Engine::PlaybackItemId{.value = 11}, .input = PlaybackInput{.filePath = fixturePath}});
+      auto candidateRes = player.stagePlayback(
+        Engine::PlaybackItem{.id = Engine::PlaybackItemId{11}, .input = PlaybackInput{.filePath = fixturePath}});
       REQUIRE(candidateRes);
       auto receiptRes = player.commitPlayback(std::move(*candidateRes));
       REQUIRE(receiptRes);
@@ -1814,11 +1963,11 @@ namespace ao::audio::test
     executor.drain();
     REQUIRE(player.setOutputDevice(kBarrierBackend, DeviceId{"barrier-device"}, kProfileShared));
 
-    REQUIRE(player.play(Engine::PlaybackItem{
-      .id = Engine::PlaybackItemId{.value = 201}, .input = PlaybackInput{.filePath = "current.flac"}}));
+    REQUIRE(player.play(
+      Engine::PlaybackItem{.id = Engine::PlaybackItemId{201}, .input = PlaybackInput{.filePath = "current.flac"}}));
     executor.drain();
-    auto candidateRes = player.stagePlayback(Engine::PlaybackItem{
-      .id = Engine::PlaybackItemId{.value = 202}, .input = PlaybackInput{.filePath = "replacement.flac"}});
+    auto candidateRes = player.stagePlayback(
+      Engine::PlaybackItem{.id = Engine::PlaybackItemId{202}, .input = PlaybackInput{.filePath = "replacement.flac"}});
     REQUIRE(candidateRes);
 
     auto const oldAudioGeneration = player.audioPlaybackGeneration();
@@ -1849,8 +1998,8 @@ namespace ao::audio::test
     player.addProvider(std::make_unique<BarrierProvider>(probePtr));
     executor.drain();
     REQUIRE(player.setOutputDevice(kBarrierBackend, DeviceId{"barrier-device"}, kProfileShared));
-    REQUIRE(player.play(Engine::PlaybackItem{
-      .id = Engine::PlaybackItemId{.value = 30}, .input = PlaybackInput{.filePath = fixturePath}}));
+    REQUIRE(player.play(
+      Engine::PlaybackItem{.id = Engine::PlaybackItemId{30}, .input = PlaybackInput{.filePath = fixturePath}}));
     executor.drain();
 
     auto const oldGeneration = player.audioPlaybackGeneration();
@@ -1863,8 +2012,8 @@ namespace ao::audio::test
 
     SECTION("successful explicit play")
     {
-      auto candidateRes = player.stagePlayback(Engine::PlaybackItem{
-        .id = Engine::PlaybackItemId{.value = 31}, .input = PlaybackInput{.filePath = fixturePath}});
+      auto candidateRes = player.stagePlayback(
+        Engine::PlaybackItem{.id = Engine::PlaybackItemId{31}, .input = PlaybackInput{.filePath = fixturePath}});
       REQUIRE(candidateRes);
       auto receiptRes = player.commitPlayback(std::move(*candidateRes));
       REQUIRE(receiptRes);
@@ -1895,8 +2044,8 @@ namespace ao::audio::test
     player.addProvider(std::make_unique<BarrierProvider>(probePtr));
     executor.drain();
     REQUIRE(player.setOutputDevice(kBarrierBackend, DeviceId{"barrier-device"}, kProfileShared));
-    REQUIRE(player.play(Engine::PlaybackItem{
-      .id = Engine::PlaybackItemId{.value = 40}, .input = PlaybackInput{.filePath = "current.flac"}}));
+    REQUIRE(player.play(
+      Engine::PlaybackItem{.id = Engine::PlaybackItemId{40}, .input = PlaybackInput{.filePath = "current.flac"}}));
     executor.drain();
 
     std::size_t endedCount = 0;
@@ -1914,8 +2063,8 @@ namespace ao::audio::test
 
     SECTION("successful explicit play")
     {
-      auto candidateRes = player.stagePlayback(Engine::PlaybackItem{
-        .id = Engine::PlaybackItemId{.value = 41}, .input = PlaybackInput{.filePath = "replacement.flac"}});
+      auto candidateRes = player.stagePlayback(
+        Engine::PlaybackItem{.id = Engine::PlaybackItemId{41}, .input = PlaybackInput{.filePath = "replacement.flac"}});
       REQUIRE(candidateRes);
       auto receiptRes = player.commitPlayback(std::move(*candidateRes));
       REQUIRE(receiptRes);
@@ -1947,14 +2096,14 @@ namespace ao::audio::test
     player.addProvider(std::make_unique<SynchronousGraphProvider>(probePtr));
     executor.drain();
     REQUIRE(player.setOutputDevice(kSynchronousGraphBackend, DeviceId{"route-a"}, kProfileShared));
-    REQUIRE(player.play(Engine::PlaybackItem{
-      .id = Engine::PlaybackItemId{.value = 50}, .input = PlaybackInput{.filePath = "first.flac"}}));
+    REQUIRE(player.play(
+      Engine::PlaybackItem{.id = Engine::PlaybackItemId{50}, .input = PlaybackInput{.filePath = "first.flac"}}));
     REQUIRE(executor.tryDrainUntil([&] { return probePtr->subscriptionCount() == 1; }, std::chrono::seconds{5}));
 
     bool advanced = false;
     player.setOnTrackAdvanced([&](Engine::TrackAdvanced const&) { advanced = true; });
-    auto const preparedRes = player.prepareNext(Engine::PlaybackItem{
-      .id = Engine::PlaybackItemId{.value = 51}, .input = PlaybackInput{.filePath = "second.flac"}});
+    auto const preparedRes = player.prepareNext(
+      Engine::PlaybackItem{.id = Engine::PlaybackItemId{51}, .input = PlaybackInput{.filePath = "second.flac"}});
     REQUIRE(preparedRes);
     REQUIRE(preparedRes->transition == Engine::PreparedTransitionMode::Gapless);
     auto* const target = probePtr->target();
@@ -2004,14 +2153,14 @@ namespace ao::audio::test
     player.addProvider(std::make_unique<BarrierProvider>(probePtr));
     executor.drain();
     REQUIRE(player.setOutputDevice(kBarrierBackend, DeviceId{"barrier-device"}, kProfileShared));
-    REQUIRE(player.play(Engine::PlaybackItem{
-      .id = Engine::PlaybackItemId{.value = 20}, .input = PlaybackInput{.filePath = "current.flac"}}));
+    REQUIRE(player.play(
+      Engine::PlaybackItem{.id = Engine::PlaybackItemId{20}, .input = PlaybackInput{.filePath = "current.flac"}}));
     executor.drain();
 
     auto failures = std::vector<Engine::PlaybackFailure>{};
     player.setOnPlaybackFailure([&](Engine::PlaybackFailure const& failure) { failures.push_back(failure); });
     auto const preparedItem = Engine::PlaybackItem{
-      .id = Engine::PlaybackItemId{.value = 21}, .input = PlaybackInput{.filePath = "prepared-failure.flac"}};
+      .id = Engine::PlaybackItemId{21}, .input = PlaybackInput{.filePath = "prepared-failure.flac"}};
     auto const preparedRes = player.prepareNext(preparedItem);
     REQUIRE(preparedRes);
     REQUIRE(executor.tryDrainUntil([&] { return !failures.empty(); }, std::chrono::seconds{5}));

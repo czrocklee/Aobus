@@ -22,6 +22,7 @@
 #include "tui/TrackEditController.h"
 #include <ao/CoreIds.h>
 #include <ao/audio/BackendProvider.h>
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
@@ -40,6 +41,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace ao::library::test
 {
@@ -63,9 +65,12 @@ namespace ao::tui::test
     std::int32_t layoutCheckpointCount = 0;
     uimodel::TrackColumnLayouts trackColumnLayouts{runtimePtr->library().changes()};
     TrackColumnResizePreview trackColumnResizePreview{};
-    OutputDeviceController outputDevices{runtimePtr->playback(),
-                                         ao::test::englishMessageCatalog(),
-                                         uimodel::OutputDeviceIntent::discarded()};
+    std::vector<audio::OutputDeviceSelection> recordedOutputSelections{};
+    OutputDeviceController outputDevices{
+      runtimePtr->playback(),
+      ao::test::englishMessageCatalog(),
+      uimodel::OutputDeviceIntent::recordedBy([this](audio::OutputDeviceSelection const& selection)
+                                              { recordedOutputSelections.push_back(selection); })};
     uimodel::ActivityStatusViewModel activityStatusViewModel{runtimePtr->notifications(),
                                                              ao::test::englishMessageCatalog(),
                                                              [](uimodel::ActivityStatusViewState const&) {}};

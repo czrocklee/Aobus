@@ -29,6 +29,7 @@ namespace ao::appkit::test::desktop
   NSSearchField* findSearchField(NSWindow* window);
   bool hasSavedLibrary(std::filesystem::path const& stateRoot, std::filesystem::path const& expected);
   void writeMarker(std::filesystem::path const& path, NSString* contents);
+  NSDictionary* missingOutputRoute();
   void preseedSettings(DesktopLaunch const& launch);
   bool hasUnknownSetting(std::filesystem::path const& stateRoot);
 } // namespace ao::appkit::test::desktop

@@ -29,6 +29,7 @@
 #include <ao/audio/SignalFormat.h>
 #include <ao/audio/Transport.h>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -39,6 +40,7 @@
 #include <exception>
 #include <expected>
 #include <functional>
+#include <iterator>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -264,6 +266,25 @@ namespace ao::audio
         _eventSignal.release();
       }
 
+      // Device loss retires the stream immediately. If control already reduced
+      // a splice, deliver the failure after that winner, not as a failed lookahead.
+      void orderNotificationsAfterSplice(std::uint64_t const sourceGeneration, Notifications& notifications)
+      {
+        if (sourceGeneration == 0)
+        {
+          return;
+        }
+
+        auto const lock = std::scoped_lock{_playbackEventMutex};
+
+        if (auto const it = findPendingSplice(sourceGeneration); it != _playbackEvents.end())
+        {
+          auto& advance = std::get<DeferredNotifications>(*it).notifications;
+          std::ranges::move(notifications, std::back_inserter(advance));
+          notifications.clear();
+        }
+      }
+
       // Called by the sole event worker with control serialized. Only delay
       // a raw decoder error if its own advance is still awaiting delivery.
       // Earlier materialized callbacks keep their FIFO order, and a reentrant
@@ -272,16 +293,12 @@ namespace ao::audio
       {
         auto const lock = std::scoped_lock{_playbackEventMutex};
 
-        for (auto it = _playbackEvents.begin(); it != _playbackEvents.end(); ++it)
+        if (auto const it = findPendingSplice(error.sourceGeneration); it != _playbackEvents.end())
         {
-          if (auto const* batch = std::get_if<DeferredNotifications>(&*it);
-              batch != nullptr && batch->spliceSourceGeneration == error.sourceGeneration)
-          {
-            // There is at most one failure per live decode attempt. Do not
-            // let later, unrelated FIFO entries overtake the retry.
-            _playbackEvents.emplace(it + 1, error);
-            return true;
-          }
+          // There is at most one failure per live decode attempt. Do not
+          // let later, unrelated FIFO entries overtake the retry.
+          _playbackEvents.emplace(it + 1, error);
+          return true;
         }
 
         return false;
@@ -325,6 +342,16 @@ namespace ao::audio
       }
 
     private:
+      std::deque<PlaybackEvent>::iterator findPendingSplice(std::uint64_t const sourceGeneration)
+      {
+        return std::ranges::find_if(_playbackEvents,
+                                    [sourceGeneration](PlaybackEvent const& event)
+                                    {
+                                      auto const* batch = std::get_if<DeferredNotifications>(&event);
+                                      return batch != nullptr && batch->spliceSourceGeneration == sourceGeneration;
+                                    });
+      }
+
       mutable std::mutex _playbackEventMutex;
       std::deque<PlaybackEvent> _playbackEvents;
       detail::EngineRtSignalRing<RtSignal> _rtSignalRing;
@@ -447,6 +474,9 @@ namespace ao::audio
     // waits for that thread to quiesce.
     mutable std::mutex controlMutex;
     std::condition_variable shutdownCv;
+    // Owned by controlMutex. A gapless splice can change the terminal item's
+    // identity without changing its playback generation.
+    std::optional<TerminalReceipt> optLastTerminal;
 
     enum class LifecycleState : std::uint8_t
     {
@@ -1128,6 +1158,8 @@ namespace ao::audio
         auto const lock = std::scoped_lock{stateMutex};
         retireRenderTarget();
         onRouteChangedCallback = onRouteChanged;
+        AO_INVARIANT(optCurrentItem, "Natural completion requires a current playback item");
+        optLastTerminal = NaturalEndReceipt{.itemId = optCurrentItem->id, .generation = playbackGeneration};
         resetPlaybackStatePreservingOutput();
         onTrackEndedCallback = onTrackEnded;
         stateChanged = onStateChanged;
@@ -1278,6 +1310,16 @@ namespace ao::audio
       }
     }
 
+    // Requires controlMutex. Prepared-only failures use the notification
+    // builder directly: they never terminate the current item.
+    void appendTerminalFailureNotification(Notifications& notifications,
+                                           OnPlaybackFailure callback,
+                                           PlaybackFailure failure)
+    {
+      optLastTerminal = failure;
+      appendPlaybackFailureNotification(notifications, std::move(callback), std::move(failure));
+    }
+
     // ── Render Signal Reducers ─────────────────────────────────────
     // Complete a gapless splice on the event thread. The render thread already
     // made `session`'s source active; here we install the owning shared_ptr,
@@ -1356,16 +1398,19 @@ namespace ao::audio
     // ── Playback Event Reducers ────────────────────────────────────
     Notifications processBackendErrorEvent(BackendErrorEvent const& event)
     {
+      if (!isActiveRenderTarget(event.generation))
+      {
+        return {};
+      }
+
+      // Decide which item owned the failed stream before resetting the timeline.
+      clearPreparedNext();
+      auto const sourceGeneration = timeline.activeSourceGeneration();
       auto stateChanged = std::function<void()>{};
       auto failureCallback = OnPlaybackFailure{};
       auto optFailedItem = std::optional<PlaybackItem>{};
       {
         auto const lock = std::scoped_lock{stateMutex};
-
-        if (!isActiveRenderTarget(event.generation))
-        {
-          return {};
-        }
 
         optFailedItem = optCurrentItem;
         retireRenderTarget();
@@ -1383,7 +1428,7 @@ namespace ao::audio
 
       if (optFailedItem)
       {
-        appendPlaybackFailureNotification(notifications,
+        appendTerminalFailureNotification(notifications,
                                           std::move(failureCallback),
                                           PlaybackFailure{
                                             .kind = PlaybackFailureKind::DeviceLost,
@@ -1396,6 +1441,7 @@ namespace ao::audio
       }
 
       appendStateChangedNotification(notifications, std::move(stateChanged));
+      eventQueue.orderNotificationsAfterSplice(sourceGeneration, notifications);
       return notifications;
     }
 
@@ -1485,7 +1531,7 @@ namespace ao::audio
           failureError.message = message;
         }
 
-        appendPlaybackFailureNotification(notifications,
+        appendTerminalFailureNotification(notifications,
                                           std::move(failureCallback),
                                           PlaybackFailure{
                                             .kind = PlaybackFailureKind::Decode,
@@ -1673,9 +1719,15 @@ namespace ao::audio
 
     void synchronizeCallbackBarrier() const { auto const deliveryLock = std::scoped_lock{callbackDeliveryMutex}; }
 
+    enum class PlaybackStartMode : std::uint8_t
+    {
+      Explicit,
+      Reopen,
+    };
+
     void setBackendUnlocked(std::unique_ptr<Backend> nextBackendPtr, Device const& device);
     void updateDeviceUnlocked(Device const& device);
-    void playUnlocked(PlaybackItem const& item, std::chrono::milliseconds initialOffset = {});
+    void playUnlocked(PlaybackItem const& item, std::chrono::milliseconds initialOffset, PlaybackStartMode mode);
     std::optional<PlaybackItemId> clearNextUnlocked();
     void pauseUnlocked();
     void resumeUnlocked();
@@ -1693,8 +1745,8 @@ namespace ao::audio
 
     // Marks an accepted playback-start attempt failed with Error transport
     // state and the caller-selected failure kind and recoverability. Caller
-    // must hold stateMutex and own any side cleanup (render target teardown,
-    // transition reset) before invoking.
+    // must hold controlMutex and stateMutex and own any side cleanup (render
+    // target teardown, transition reset) before invoking.
     void markPlaybackStartFailureUnlocked(Notifications& notifications,
                                           PlaybackItem const& item,
                                           std::uint64_t playbackGeneration,
@@ -1943,7 +1995,7 @@ namespace ao::audio
 
     if (state.optItem)
     {
-      playUnlocked(*state.optItem, state.elapsed);
+      playUnlocked(*state.optItem, state.elapsed, PlaybackStartMode::Reopen);
 
       if (!state.wasPlaying)
       {
@@ -1974,7 +2026,7 @@ namespace ao::audio
     resetPlaybackStatePreservingOutput();
     status.transport = Transport::Error;
     status.statusText = error.message;
-    appendPlaybackFailureNotification(notifications,
+    appendTerminalFailureNotification(notifications,
                                       onPlaybackFailure,
                                       PlaybackFailure{
                                         .kind = kind,
@@ -1986,7 +2038,9 @@ namespace ao::audio
                                       });
   }
 
-  void Engine::Impl::playUnlocked(PlaybackItem const& item, std::chrono::milliseconds const initialOffset)
+  void Engine::Impl::playUnlocked(PlaybackItem const& item,
+                                  std::chrono::milliseconds const initialOffset,
+                                  PlaybackStartMode const mode)
   {
     auto inspectionRes = detail::TrackSession::inspect(item.input, decoderFactory);
 
@@ -1999,16 +2053,25 @@ namespace ao::audio
         failureCallback = onPlaybackFailure;
       }
 
-      appendPlaybackFailureNotification(notifications,
-                                        std::move(failureCallback),
-                                        PlaybackFailure{
-                                          .kind = PlaybackFailureKind::TrackOpen,
-                                          .itemId = item.id,
-                                          .input = item.input,
-                                          .generation = currentPlaybackGeneration.load(std::memory_order_acquire),
-                                          .error = inspectionRes.error(),
-                                          .recoverable = true,
-                                        });
+      auto failure = PlaybackFailure{
+        .kind = PlaybackFailureKind::TrackOpen,
+        .itemId = item.id,
+        .input = item.input,
+        .generation = currentPlaybackGeneration.load(std::memory_order_acquire),
+        .error = inspectionRes.error(),
+        .recoverable = true,
+      };
+
+      // Explicit inspection failure leaves the active playback untouched. A
+      // reopen has already retired that playback and was trying to restore it.
+      if (mode == PlaybackStartMode::Reopen)
+      {
+        appendTerminalFailureNotification(notifications, std::move(failureCallback), std::move(failure));
+      }
+      else
+      {
+        appendPlaybackFailureNotification(notifications, std::move(failureCallback), std::move(failure));
+      }
 
       if (!notifications.empty())
       {
@@ -2823,7 +2886,7 @@ namespace ao::audio
     {
       auto const controlLock = _implPtr->lockControl();
 
-      if (!controlLock || expectedItemId.value == 0)
+      if (!controlLock || expectedItemId == PlaybackItemId{})
       {
         return std::nullopt;
       }
@@ -2858,6 +2921,26 @@ namespace ao::audio
 
     _implPtr->synchronizeCallbackBarrier();
     return PreparedCancellationBarrier{.generation = generation};
+  }
+
+  std::optional<Engine::TerminalReceipt> Engine::takeRetiredTerminalReceipt(std::uint64_t const generation)
+  {
+    auto const controlLock = std::scoped_lock{_implPtr->controlMutex};
+
+    if (!_implPtr->optLastTerminal || generation >= _implPtr->currentPlaybackGeneration.load(std::memory_order_acquire))
+    {
+      return std::nullopt;
+    }
+
+    auto const receiptGeneration =
+      std::visit([](auto const& receipt) { return receipt.generation; }, *_implPtr->optLastTerminal);
+
+    if (receiptGeneration != generation)
+    {
+      return std::nullopt;
+    }
+
+    return std::exchange(_implPtr->optLastTerminal, std::nullopt);
   }
 
   Transport Engine::transport() const
@@ -2910,7 +2993,7 @@ namespace ao::audio
         return;
       }
 
-      _implPtr->playUnlocked(item, initialOffset);
+      _implPtr->playUnlocked(item, initialOffset, Impl::PlaybackStartMode::Explicit);
       played = true;
     }
 
@@ -3029,7 +3112,7 @@ namespace ao::audio
   {
     auto const controlLock = _implPtr->lockControl();
 
-    if (!controlLock || expectedItemId.value == 0)
+    if (!controlLock || expectedItemId == PlaybackItemId{})
     {
       return false;
     }

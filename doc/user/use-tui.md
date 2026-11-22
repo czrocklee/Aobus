@@ -104,6 +104,10 @@ Use these shipped shortcuts:
 | `g`           | Go to current track, artist, album, or workspace history |
 | `c`           | reveal the playing track directly                        |
 
+On Linux, press `o` to choose a named PipeWire device. When you reopen **Output Devices**, the picker highlights the current device if it is listed. If your requested device is unavailable and awaiting discovery, no row is highlighted, so pressing Enter alone does nothing.
+
+By default Aobus won't play on another output if your named device is missing. To allow rerouting, navigate to **Let system use other outputs** and press Enter, or click the checkbox. See [what happens if a PipeWire device disappears](play-music.md#choose-what-happens-if-a-pipewire-device-disappears) before enabling it in **Exclusive Mode**.
+
 Detail stays beside the track table while you browse. Escape closes temporary overlays but does not hide Detail.
 Credits show complete names, kinds, and optional roles. With Detail focused, Ctrl+K opens all Credits for the current selection: every marked track, or the focused track when none is marked. `1` through `9` open one of the first nine kinds, Conductor through Engineer, for the same tracks; edit Mixer, DJ-mixer, and Remixer with Ctrl+K.
 Table category columns stay compact and count duplicate entries; detail and editor show the complete lists. The quality conclusion describes the active playback path, not metadata stored on the track. See [interpreting playback quality](play-music.md#inspect-playback-quality) for source fidelity, pipeline changes, and incomplete evidence.

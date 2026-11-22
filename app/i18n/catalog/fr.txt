@@ -219,6 +219,16 @@ fr:table {
     audio_profile_exclusive { "Mode exclusif" }
     audio_profile_exclusive_description { "Accès direct au périphérique matériel" }
     system_default_output_device { "Périphérique par défaut du système" }
+    output_device_pending_summary { "Choisir une sortie" }
+    output_device_pending_status { "Sortie demandée indisponible" }
+    output_device_pending_named_status { "Sortie demandée indisponible : {device}" }
+    output_device_invalid_pipewire_status { "Sélectionnez à nouveau la sortie PipeWire. Le choix enregistré n’est pas valide." }
+    output_device_routing_policy_toggle { "Autoriser une autre sortie" }
+    output_device_routing_policy_fixed { "Activez cette option pour autoriser une autre sortie si ce périphérique est indisponible au démarrage ou s’il est déconnecté. Sinon, seul ce périphérique est utilisé." }
+    output_device_routing_policy_allowed { "Le système peut utiliser une autre sortie si ce périphérique est indisponible au démarrage ou s’il est déconnecté." }
+    output_device_routing_policy_exclusive { "{rerouting, select, allowed {} other {Option désactivée : uniquement ce périphérique. }}Option activée : le système peut ouvrir une autre sortie, toujours en mode exclusif, si ce périphérique est absent au démarrage ou se déconnecte. La lecture peut échouer si la sortie est occupée. Tant qu’Aobus la réserve, les autres applis risquent de ne pas y avoir accès." }
+    output_device_reroute_status { "Le système peut utiliser une autre sortie" }
+    output_device_preferred_status { "Sortie préférée (le système peut en changer) : {route}" }
     completion_field { "champ" }
     completion_alias { "alias" }
     completion_operator { "opérateur" }

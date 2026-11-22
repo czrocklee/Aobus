@@ -14,7 +14,7 @@ namespace ao::uimodel
   bool canRestoreOutputDeviceSelection(audio::OutputDeviceSelection const& selection,
                                        rt::OutputState const& output) noexcept;
 
-  /** Resolve preferred intent or a complete last-active fallback without issuing a command. */
+  /** Preserve an explicit endpoint (or a supported follow-system route) before considering a last-active fallback. */
   std::optional<audio::OutputDeviceSelection> resolveOutputDeviceSelectionToRestore(
     audio::OutputDeviceSelection const& preferred,
     audio::OutputDeviceSelection const& fallback,

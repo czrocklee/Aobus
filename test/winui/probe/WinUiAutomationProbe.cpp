@@ -24,6 +24,8 @@
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
 #include <ao/async/Task.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/desktop/LibrarySwitch.h>
 #include <ao/i18n/IcuCompletionAliases.h>
 #include <ao/i18n/IcuTextOrdering.h>
@@ -42,6 +44,7 @@
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
+#include <ao/rt/PlaybackState.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
@@ -56,6 +59,8 @@
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/ordering/TextOrderingPolicy.h>
+#include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/utility/ScopedRegistration.h>
 #include <ao/winui/DesktopSettingsYamlSchema.h>
 #include <ao/winui/layout/ShellState.h>
@@ -118,6 +123,13 @@ namespace
   using Controls::Primitives::FlyoutBase;
   using Controls::Primitives::Popup;
   using Controls::Primitives::Thumb;
+
+  ao::audio::OutputDeviceSelection missingOutput()
+  {
+    return {.backendId = ao::audio::kBackendWasapi,
+            .deviceId = ao::audio::DeviceId{"unavailable-probe-device"},
+            .profileId = ao::audio::kProfileShared};
+  }
 
   constexpr std::size_t kProbeTrackCount = 12;
   constexpr auto kComposerFilter = R"($composer = "Bach")";
@@ -493,8 +505,10 @@ namespace
   class WinUiAutomationProbe : public ApplicationT<WinUiAutomationProbe, Markup::IXamlMetadataProvider>
   {
   public:
-    WinUiAutomationProbe(std::int32_t& result, std::optional<std::string_view> const optListPreviewLocale)
-      : _result{result}, _optListPreviewLocale{optListPreviewLocale}
+    WinUiAutomationProbe(std::int32_t& result,
+                         std::optional<std::string_view> const optListPreviewLocale,
+                         bool const classicOutput)
+      : _result{result}, _optListPreviewLocale{optListPreviewLocale}, _classicOutput{classicOutput}
     {
       UnhandledException(
         [this](Item const&, UnhandledExceptionEventArgs const& args)
@@ -577,6 +591,20 @@ namespace
           return;
         }
 
+        _sessionPtr->setPreferredOutputSelection(missingOutput());
+
+        if (_classicOutput)
+        {
+          _sessionPtr->settings().shellMode = ao::winui::ShellMode::Classic;
+        }
+
+        if (auto savedRes = _sessionPtr->saveSettings(); !savedRes)
+        {
+          fail(savedRes.error().message);
+          finish();
+          return;
+        }
+
         _sessionPtr.reset();
       }
 
@@ -590,10 +618,15 @@ namespace
       }
 
       _sessionPtr = std::move(*sessionRes);
-      ao::winui::test::addSilentAudioOutput(_sessionPtr->runtime());
 
-      if (!_optListPreviewLocale)
+      if (_optListPreviewLocale)
       {
+        ao::winui::test::addSilentAudioOutput(_sessionPtr->runtime());
+      }
+      else
+      {
+        // Offer a safe choice without replacing the route the shipping session just restored.
+        ao::winui::test::registerSilentAudioProvider(_sessionPtr->runtime());
         // Selection is not restored from storage. Supply a live zero-duration
         // selection before binding the shipping shell, so no event can initialize its summary.
         auto& runtime = _sessionPtr->runtime();
@@ -628,11 +661,35 @@ namespace
                              [this](auto const&, auto const&)
                              {
                                _loaded.revoke();
-                               afterFrame(_optListPreviewLocale ? &WinUiAutomationProbe::sizeListPreviewWindow
-                                                                : &WinUiAutomationProbe::constrainWindow);
+
+                               if (_classicOutput)
+                               {
+                                 afterFrame(&WinUiAutomationProbe::openPendingOutputPicker);
+                               }
+                               else
+                               {
+                                 afterFrame(_optListPreviewLocale ? &WinUiAutomationProbe::sizeListPreviewWindow
+                                                                  : &WinUiAutomationProbe::constrainWindow);
+                               }
                              });
       _window.Activate();
-      // Activation of SMTC/playback adapters is deliberately not requested.
+      // Only the separate Classic mode activates frame-owned playback adapters (including SMTC).
+      // Its private library has no audio files; the probe never issues a playback command.
+      if (_classicOutput)
+      {
+        if (_sessionPtr->runtime().playback().snapshot().transport.output.optPendingOutputSelection != missingOutput())
+        {
+          fail("refusing native adapter activation without the held output request");
+          finish();
+          return;
+        }
+
+        if (auto res = implementation()->activate(); !res)
+        {
+          fail(res.error().message);
+          finish();
+        }
+      }
     }
 
     Markup::IXamlType GetXamlType(winrt::Windows::UI::Xaml::Interop::TypeName const& type)
@@ -872,7 +929,7 @@ namespace
                         client.Height));
       std::cerr << std::format("System size-limit witness: lifted client={}x{}px\n", client.Width, client.Height);
       resizeForLayout(1200, 800);
-      afterFrame(&WinUiAutomationProbe::modern);
+      afterFrame(&WinUiAutomationProbe::openPendingOutputPicker);
     }
 
     void requireControl(Audit const& audit,
@@ -1023,6 +1080,87 @@ namespace
       check(activeState().selection.empty(), "the runtime did not receive the native clear");
       checkSelectionSummary("native clear", "");
       rows.SelectedItem(rows.ItemFromContainer(alpha));
+    }
+
+    void openPendingOutputPicker()
+    {
+      _stage = _classicOutput ? "Classic shell-owned output picker" : "Modern restored missing output";
+      auto const& output = _sessionPtr->runtime().playback().snapshot().transport.output;
+      check(output.optPendingOutputSelection == missingOutput(), "runtime lost the pending output request");
+
+      check(_sessionPtr->settings().preferredOutputSelection == missingOutput(),
+            "startup replaced the saved DAC preference");
+      auto const picker = findVisualById<Button>(_root, _classicOutput ? L"classic-soul" : L"modern-output-device");
+
+      if (!picker || !picker.IsEnabled())
+      {
+        fail("output picker unavailable when the saved endpoint is absent");
+        finish();
+        return;
+      }
+
+      if (!_classicOutput)
+      {
+        auto const tooltip = winrt::unbox_value_or<winrt::hstring>(Controls::ToolTipService::GetToolTip(picker), {});
+        check(tooltip == pendingOutputStatus(), "output button tooltip did not explain the unavailable request");
+      }
+
+      invoke(picker);
+      afterFrame(&WinUiAutomationProbe::chooseSilentOutput);
+    }
+
+    winrt::hstring pendingOutputStatus() const
+    {
+      return winrt::to_hstring(
+        ao::i18n::requiredText(_sessionPtr->textCatalog(), ao::i18n::MessageId::OutputDevicePendingStatus));
+    }
+
+    void chooseSilentOutput()
+    {
+      auto const silent = ao::winui::test::silentAudioDevice();
+
+      for (auto const& popup : Media::VisualTreeHelper::GetOpenPopupsForXamlRoot(_root.XamlRoot()))
+      {
+        auto const root = popup.Child();
+        auto const choice = findVisual<Controls::MenuFlyoutItem>(root, winrt::to_hstring(silent.displayName));
+
+        if (!choice || !choice.IsEnabled())
+        {
+          continue;
+        }
+
+        auto const status = findVisual<Controls::MenuFlyoutItem>(root, pendingOutputStatus());
+        check(status && !status.IsEnabled(), "the picker must explain the unavailable DAC in a disabled item");
+        auto const checked = findVisualIf<Controls::MenuFlyoutItem>(
+          root, [](auto const& item) { return std::wstring_view{item.Text()}.starts_with(L"✓ "); });
+        check(!checked, "the picker checked a different device while waiting for the requested endpoint");
+        invoke(choice);
+        afterFrame(&WinUiAutomationProbe::confirmSilentOutput);
+        return;
+      }
+
+      fail("the open output picker did not offer the discard-only endpoint");
+      finish();
+    }
+
+    void confirmSilentOutput()
+    {
+      auto const silent = ao::winui::test::silentAudioDevice();
+      auto const wanted = ao::audio::OutputDeviceSelection{
+        .backendId = silent.backendId, .deviceId = silent.id, .profileId = ao::audio::kProfileShared};
+      auto const& output = _sessionPtr->runtime().playback().snapshot().transport.output;
+      check(!output.optPendingOutputSelection && output.selectedDevice == wanted &&
+              _sessionPtr->settings().preferredOutputSelection == wanted,
+            "the native output choice must replace the pending request and select the discard-only endpoint");
+
+      if (_classicOutput)
+      {
+        finish();
+      }
+      else
+      {
+        modern();
+      }
     }
 
     void modern()
@@ -2363,6 +2501,7 @@ namespace
 
     std::int32_t& _result;
     std::optional<std::string_view> const _optListPreviewLocale;
+    bool const _classicOutput;
     std::size_t _failures = 0;
     bool _finished = false;
     bool _grouped = false;
@@ -2427,7 +2566,9 @@ int main(int argc, char** argv)
 {
   auto optListPreviewLocale = std::optional<std::string_view>{};
 
-  if (argc != 1)
+  auto const classicOutput = argc == 2 && std::string_view{argv[1]} == "--classic-output";
+
+  if (argc != 1 && !classicOutput)
   {
     if (argc == 3 && std::string_view{argv[1]} == "--list-preview")
     {
@@ -2440,7 +2581,7 @@ int main(int argc, char** argv)
 
     if (!optListPreviewLocale)
     {
-      std::cerr << "Usage: ao_winui_automation_probe.exe [--list-preview <packaged locale, e.g. zh-Hans or zh-Hant>]\n"
+      std::cerr << "Usage: ao_winui_automation_probe.exe [--classic-output | --list-preview <packaged locale>]\n"
                    "The optional mode leaves the dialog open for capture; choose Cancel after LIST_PREVIEW_READY.\n";
       return 2;
     }
@@ -2457,8 +2598,9 @@ int main(int argc, char** argv)
   {
     winrt::init_apartment(winrt::apartment_type::single_threaded);
     std::int32_t result = 1;
-    Application::Start([&result, optListPreviewLocale](auto&&)
-                       { std::ignore = winrt::make<WinUiAutomationProbe>(result, optListPreviewLocale); });
+    Application::Start(
+      [&result, optListPreviewLocale, classicOutput](auto&&)
+      { std::ignore = winrt::make<WinUiAutomationProbe>(result, optListPreviewLocale, classicOutput); });
     return result;
   }
   catch (winrt::hresult_error const& error)

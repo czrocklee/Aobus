@@ -139,7 +139,9 @@ namespace ao::rt
                 .backendId = status.engine.backendId,
                 .deviceId = status.engine.currentDeviceId,
                 .profileId = status.engine.profileId,
+                .routingPolicy = status.routingPolicy,
               },
+            .optPendingOutputSelection = status.optPendingOutputSelection,
             .availableBackends = std::move(outputBackends),
           },
         .quality =
@@ -296,13 +298,14 @@ namespace ao::rt
     {
       APP_LOG_INFO(
         "Audio output device switched: previous_backend={} previous_device={} previous_profile={} backend={} "
-        "device={} profile={}",
+        "device={} profile={} allow_system_reroute={}",
         previous.backendId,
         previous.deviceId,
         previous.profileId,
         current.backendId,
         current.deviceId,
-        current.profileId);
+        current.profileId,
+        current.routingPolicy == audio::OutputRoutingPolicy::AllowSystemReroute);
     }
 
     void logOutputDeviceTransition(audio::OutputDeviceSelection const& previous,
@@ -451,6 +454,12 @@ namespace ao::rt
     {};
     struct IdleEvent final
     {};
+    struct RetiredTerminalEvent final
+    {
+      PlaybackOccurrenceId occurrenceId;
+      std::optional<PreparedNextToken> optWinningToken{};
+      audio::Engine::TerminalReceipt terminal;
+    };
     struct StoppedEvent final
     {};
     struct OutputDevicesChangedEvent final
@@ -467,6 +476,7 @@ namespace ao::rt
                                        StartedEvent,
                                        PausedEvent,
                                        IdleEvent,
+                                       RetiredTerminalEvent,
                                        StoppedEvent,
                                        OutputDevicesChangedEvent,
                                        PlaybackTransport::NowPlayingChanged,
@@ -602,6 +612,10 @@ namespace ao::rt
             {
               idleSignal.emit();
             }
+            else if constexpr (std::same_as<Value, RetiredTerminalEvent>)
+            {
+              deliverRetiredTerminal(value);
+            }
             else if constexpr (std::same_as<Value, StoppedEvent>)
             {
               stoppedSignal.emit();
@@ -708,7 +722,7 @@ namespace ao::rt
 
       auto const status = playerPtr->status();
 
-      if (status.availableBackends.empty())
+      if (status.optPendingOutputSelection || status.availableBackends.empty())
       {
         return;
       }
@@ -734,10 +748,11 @@ namespace ao::rt
       }
     }
 
-    void refreshState()
+    void refreshState() { refreshState(playerPtr->status()); }
+
+    void refreshState(audio::Player::Status const& status)
     {
       auto const previousState = state;
-      auto const status = playerPtr->status();
 
       state = buildPlaybackState(status);
       state.occurrenceId = currentOccurrenceId;
@@ -812,7 +827,7 @@ namespace ao::rt
     audio::Engine::PlaybackItem makePlaybackItem(audio::PlaybackInput input)
     {
       return audio::Engine::PlaybackItem{
-        .id = audio::Engine::PlaybackItemId{.value = nextPlaybackItemId++},
+        .id = audio::Engine::PlaybackItemId{nextPlaybackItemId++},
         .input = std::move(input),
       };
     }
@@ -1122,7 +1137,7 @@ namespace ao::rt
       {
         APP_LOG_WARN("Dropping stale playback failure kind={} item={} generation={} reason={}",
                      static_cast<std::uint32_t>(translated.kind),
-                     failure.itemId.value,
+                     failure.itemId,
                      failure.generation,
                      playbackFailureReason(translated.error));
         return;
@@ -1137,6 +1152,15 @@ namespace ao::rt
       if (translated.optPreparedNextToken)
       {
         std::ignore = takePreparedRequest(failure.itemId, failure.generation);
+      }
+      else
+      {
+        // A current-item failure is terminal. Retire its ownership before recovery
+        // or observers can reenter; a later output barrier must not report it again.
+        currentPlaybackItemId = {};
+        currentPlaybackGeneration = 0;
+        currentOccurrenceId = {};
+        state.occurrenceId = {};
       }
 
       publishPlaybackFailure(std::move(translated));
@@ -1174,29 +1198,133 @@ namespace ao::rt
 
       if (!optDisarmedRequest)
       {
-        APP_LOG_WARN("Prepared-next disarm acknowledged unknown item={}", optDisarmedItemId->value);
+        APP_LOG_WARN("Prepared-next disarm acknowledged unknown item={}", *optDisarmedItemId);
         return std::nullopt;
       }
 
       return optDisarmedRequest->token;
     }
 
+    std::optional<PreparedNextToken> adoptPreparedWinner(audio::Engine::PlaybackItemId const itemId,
+                                                         std::uint64_t const issuedGeneration,
+                                                         std::uint64_t const currentGeneration)
+    {
+      auto const optWinner = takePreparedRequest(itemId, issuedGeneration);
+
+      if (!optWinner)
+      {
+        return std::nullopt;
+      }
+
+      publishCurrentRequest(optWinner->request, optWinner->sourceListId, itemId, currentGeneration);
+      return optWinner->token;
+    }
+
     void handleTrackAdvanced(audio::Engine::TrackAdvanced const& event)
     {
-      auto const optPrepared = takePreparedRequest(event.itemId, event.generation);
+      auto const optWinningToken = adoptPreparedWinner(event.itemId, event.generation, event.generation);
 
-      if (!optPrepared)
+      if (!optWinningToken)
       {
-        APP_LOG_WARN(
-          "Dropping unknown prepared transition item={} generation={}", event.itemId.value, event.generation);
+        APP_LOG_WARN("Dropping unknown prepared transition item={} generation={}", event.itemId, event.generation);
         return;
       }
 
-      auto const winningToken = optPrepared->token;
       discardPreparedRequests();
-      publishCurrentRequest(optPrepared->request, optPrepared->sourceListId, optPrepared->itemId, event.generation);
       refreshState();
-      announceNowPlaying(optPrepared->request, optPrepared->sourceListId, winningToken);
+      announceNowPlaying(currentRequest, currentRequest.item.sourceListId, optWinningToken);
+    }
+
+    struct OutputChangeCursor final
+    {
+      audio::Engine::PlaybackItemId itemId;
+      std::uint64_t generation;
+      std::chrono::milliseconds elapsed;
+      std::chrono::milliseconds duration;
+      bool wasPaused;
+    };
+
+    std::optional<OutputChangeCursor> outputChangeCursor()
+    {
+      auto itemId = currentPlaybackItemId;
+
+      if (itemId == audio::Engine::PlaybackItemId{} || !playerPtr->isCurrentPlaybackItem(itemId))
+      {
+        // clearPreparedNext disarmed future items, but the renderer may already
+        // have advanced to one whose notification has not reached this executor.
+        auto const it = std::ranges::find_if(
+          preparedRequests, [this](auto const& prepared) { return playerPtr->isCurrentPlaybackItem(prepared.itemId); });
+
+        if (it == preparedRequests.end())
+        {
+          return std::nullopt;
+        }
+
+        itemId = it->itemId;
+      }
+
+      auto const& engine = playerPtr->status().engine;
+      return OutputChangeCursor{.itemId = itemId,
+                                .generation = playerPtr->audioPlaybackGeneration(),
+                                .elapsed = engine.elapsed,
+                                .duration = engine.duration,
+                                .wasPaused = engine.transport == audio::Transport::Paused};
+    }
+
+    void settleOutputChange(OutputChangeCursor const& cursor)
+    {
+      auto const generation = playerPtr->audioPlaybackGeneration();
+
+      if (generation == cursor.generation || cursor.generation != currentPlaybackGeneration)
+      {
+        return;
+      }
+
+      auto optWinningToken = std::optional<PreparedNextToken>{};
+
+      if (cursor.itemId != currentPlaybackItemId)
+      {
+        optWinningToken = adoptPreparedWinner(cursor.itemId, cursor.generation, generation);
+
+        if (!optWinningToken)
+        {
+          return;
+        }
+      }
+
+      clearPreparedRequestsCoveredBy({.generation = generation});
+
+      if (state.output.optPendingOutputSelection)
+      {
+        // The engine is idle. Only an explicit Resume may reopen this track.
+        optDeferredResume = DeferredResumeRequest{
+          .request = currentRequest, .sourceListId = currentRequest.item.sourceListId, .elapsed = cursor.elapsed};
+        optDeferredResume->request.input.duration = cursor.duration;
+        currentPlaybackItemId = {};
+        currentPlaybackGeneration = 0;
+        state.transport = audio::Transport::Paused;
+      }
+      else
+      {
+        // Engine reopens the same item under a new generation. Its native open
+        // failure, if any, must still resolve to this track rather than go stale.
+        currentPlaybackGeneration = generation;
+      }
+
+      refreshState();
+
+      auto const occurrence = currentOccurrenceId;
+
+      if (optWinningToken)
+      {
+        announceNowPlaying(currentRequest, currentRequest.item.sourceListId, optWinningToken);
+      }
+
+      if (!cursor.wasPaused && !isClosing() && currentOccurrenceId == occurrence &&
+          state.transport == audio::Transport::Paused)
+      {
+        enqueueOutbound(PausedEvent{});
+      }
     }
 
     bool hasDeferredPlayback() const noexcept
@@ -1304,10 +1432,8 @@ namespace ao::rt
       return true;
     }
 
-    void handleTrackEnded()
+    void publishTrackEnd()
     {
-      refreshState();
-
       if (isTerminalTrackTransport(state.transport))
       {
         if (state.transport == audio::Transport::Idle && !optDeferredResume)
@@ -1318,6 +1444,83 @@ namespace ao::rt
 
         enqueueOutbound(IdleEvent{});
       }
+    }
+
+    void handleTrackEnded()
+    {
+      refreshState();
+      publishTrackEnd();
+    }
+
+    bool trySettleRetiredTerminal(audio::Player::Status const& status, std::uint64_t const generation)
+    {
+      if (currentOccurrenceId == PlaybackOccurrenceId{} || optDeferredResume ||
+          status.engine.transport != audio::Transport::Idle || currentPlaybackGeneration >= generation)
+      {
+        return false;
+      }
+
+      auto optTerminal = playerPtr->takeRetiredTerminalReceipt(currentPlaybackGeneration);
+
+      if (!optTerminal)
+      {
+        return false;
+      }
+
+      // The barrier can retire both the splice and the terminal notification.
+      // An active winner's failure belongs to that track, not to a future candidate.
+      auto const itemId = std::visit([](auto const& terminal) { return terminal.itemId; }, *optTerminal);
+      auto optWinningToken = std::optional<PreparedNextToken>{};
+
+      if (itemId != currentPlaybackItemId)
+      {
+        optWinningToken = adoptPreparedWinner(itemId, currentPlaybackGeneration, currentPlaybackGeneration);
+
+        if (!optWinningToken)
+        {
+          return false;
+        }
+      }
+
+      clearPreparedRequestsCoveredBy({.generation = generation});
+      refreshState(status);
+      enqueueOutbound(RetiredTerminalEvent{
+        .occurrenceId = currentOccurrenceId, .optWinningToken = optWinningToken, .terminal = std::move(*optTerminal)});
+      return true;
+    }
+
+    void deliverRetiredTerminal(RetiredTerminalEvent const& event)
+    {
+      // A reentrant command can replace the occurrence before delivery, or an
+      // observer of the recovered winner can stop it before the end is published.
+      if (currentOccurrenceId != event.occurrenceId)
+      {
+        return;
+      }
+
+      if (event.optWinningToken)
+      {
+        nowPlayingChangedSignal.emit(
+          PlaybackTransport::NowPlayingChanged{.trackId = currentRequest.item.trackId,
+                                               .sourceListId = currentRequest.item.sourceListId,
+                                               .optPreparedNextToken = event.optWinningToken});
+      }
+
+      if (isClosing() || currentOccurrenceId != event.occurrenceId || state.transport != audio::Transport::Idle ||
+          optDeferredResume)
+      {
+        return;
+      }
+
+      if (auto const* failure = std::get_if<audio::Engine::PlaybackFailure>(&event.terminal); failure != nullptr)
+      {
+        handlePlaybackFailure(*failure);
+        return;
+      }
+
+      currentOccurrenceId = {};
+      state.occurrenceId = {};
+      idleSignal.emit();
     }
 
     explicit Impl(async::Executor& callbackExecutor,
@@ -1391,8 +1594,9 @@ namespace ao::rt
             return;
           }
 
-          // Auto-select first available default output device if none is selected yet.
-          if (!state.output.selectedDevice.backendId.empty() || state.output.availableBackends.empty())
+          // Initial discovery may choose an output only while no explicit request is waiting.
+          if (state.output.optPendingOutputSelection || !state.output.selectedDevice.backendId.empty() ||
+              state.output.availableBackends.empty())
           {
             enqueueOutbound(OutputDevicesChangedEvent{});
             return;
@@ -1406,9 +1610,7 @@ namespace ao::rt
             return;
           }
 
-          if (auto const res =
-                playerPtr->setOutputDevice(optSelection->backendId, optSelection->deviceId, optSelection->profileId);
-              !res)
+          if (auto const res = playerPtr->setOutputDevice(*optSelection); !res)
           {
             APP_LOG_ERROR("Failed to select audio output device: {}", res.error().message);
           }
@@ -1955,6 +2157,11 @@ namespace ao::rt
   {
     auto* const impl = checkedImpl();
 
+    if (impl->state.output.optPendingOutputSelection)
+    {
+      return;
+    }
+
     // Deferred playback also represents a paused end whose audio route was
     // released. Consume its end intent without opening a decoder at the end.
     if (impl->hasDeferredPlayback())
@@ -2051,7 +2258,7 @@ namespace ao::rt
       return true;
     }
 
-    return impl->currentPlaybackItemId.value != 0 &&
+    return impl->currentPlaybackItemId != audio::Engine::PlaybackItemId{} &&
            impl->playerPtr->isCurrentPlaybackItem(impl->currentPlaybackItemId);
   }
 
@@ -2091,15 +2298,14 @@ namespace ao::rt
     return impl->tryFinalSeek(elapsed, true);
   }
 
-  void PlaybackTransport::setOutputDevice(audio::BackendId const& backendId,
-                                          audio::DeviceId const& deviceId,
-                                          audio::ProfileId const& profileId)
+  void PlaybackTransport::setOutputDevice(audio::OutputDeviceSelection const& selection)
   {
     auto* const impl = checkedImpl();
 
     std::ignore = impl->clearPreparedNext();
+    auto const optCursor = impl->outputChangeCursor();
 
-    if (auto const res = impl->playerPtr->setOutputDevice(backendId, deviceId, profileId); !res)
+    if (auto const res = impl->playerPtr->setOutputDevice(selection); !res)
     {
       APP_LOG_ERROR("Failed to set audio output device: {}", res.error().message);
     }
@@ -2109,12 +2315,19 @@ namespace ao::rt
       return;
     }
 
-    impl->refreshState();
-    // Publish the engine-confirmed selection from the refreshed state, not the
-    // raw request. This keeps the signal consistent with the auto-select path in
-    // onOutputDevicesChanged (which emits state.output.selectedDevice) and reports what the
-    // engine actually selected. The two coincide while Engine::setBackend is
-    // synchronous; if it ever becomes async, this still reflects reality.
+    if (auto const status = impl->playerPtr->status();
+        !impl->trySettleRetiredTerminal(status, impl->playerPtr->audioPlaybackGeneration()))
+    {
+      impl->refreshState(status);
+
+      if (optCursor)
+      {
+        impl->settleOutputChange(*optCursor);
+      }
+    }
+
+    // While a request is pending, the configured device can still be the old one.
+    // Never publish the requested device as an engine-confirmed selection.
     impl->enqueueOutbound(impl->state.output.selectedDevice);
   }
 

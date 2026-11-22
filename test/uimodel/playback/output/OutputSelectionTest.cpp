@@ -31,7 +31,7 @@ namespace ao::uimodel::test
                     .backendId = audio::BackendId{"pipewire"},
                   },
                   {
-                    .id = audio::DeviceId{"device1"},
+                    .id = audio::DeviceId{"node:device1"},
                     .displayName = "Built-in Audio",
                     .backendId = audio::BackendId{"pipewire"},
                   },
@@ -60,7 +60,7 @@ namespace ao::uimodel::test
                                              .profileId = audio::kProfileShared},
                                             output));
       CHECK_FALSE(canRestoreOutputDeviceSelection({.backendId = audio::BackendId{"pipewire"},
-                                                   .deviceId = audio::DeviceId{"device1"},
+                                                   .deviceId = audio::DeviceId{"node:device1"},
                                                    .profileId = audio::ProfileId{"unsupported"}},
                                                   output));
     }
@@ -68,7 +68,7 @@ namespace ao::uimodel::test
     SECTION("a named device remains pending intent before the catalog is published")
     {
       CHECK(canRestoreOutputDeviceSelection({.backendId = audio::BackendId{"pipewire"},
-                                             .deviceId = audio::DeviceId{"device1"},
+                                             .deviceId = audio::DeviceId{"node:device1"},
                                              .profileId = audio::kProfileShared},
                                             {}));
     }
@@ -76,7 +76,7 @@ namespace ao::uimodel::test
     SECTION("an unavailable named device remains restorable intent")
     {
       CHECK(canRestoreOutputDeviceSelection({.backendId = audio::BackendId{"pipewire"},
-                                             .deviceId = audio::DeviceId{"temporarily-unavailable"},
+                                             .deviceId = audio::DeviceId{"node:temporarily-unavailable"},
                                              .profileId = audio::kProfileExclusive},
                                             output));
     }
@@ -108,7 +108,7 @@ namespace ao::uimodel::test
     auto const output = outputCatalog();
     auto const fallback = audio::OutputDeviceSelection{
       .backendId = audio::BackendId{"pipewire"},
-      .deviceId = audio::DeviceId{"device1"},
+      .deviceId = audio::DeviceId{"node:device1"},
       .profileId = audio::kProfileShared,
     };
 
@@ -116,7 +116,7 @@ namespace ao::uimodel::test
     {
       auto const preferred = audio::OutputDeviceSelection{
         .backendId = audio::BackendId{"pipewire"},
-        .deviceId = audio::DeviceId{"temporarily-unavailable"},
+        .deviceId = audio::DeviceId{"node:temporarily-unavailable"},
         .profileId = audio::kProfileExclusive,
       };
 
@@ -124,6 +124,20 @@ namespace ao::uimodel::test
 
       REQUIRE(optSelection);
       CHECK(*optSelection == preferred);
+    }
+
+    SECTION("a concrete preference with an unavailable profile does not select the last active route")
+    {
+      auto preferred = fallback;
+      preferred.profileId = audio::ProfileId{"retired-profile"};
+      CHECK(resolveOutputDeviceSelectionToRestore(preferred, fallback, output) == preferred);
+    }
+
+    SECTION("a PipeWire system-default preference waits for catalog publication instead of selecting a named fallback")
+    {
+      auto preferred = fallback;
+      preferred.deviceId = {};
+      CHECK(resolveOutputDeviceSelectionToRestore(preferred, fallback, {}) == preferred);
     }
 
     SECTION("incomplete preferred intent falls back to the last active selection")

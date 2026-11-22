@@ -64,7 +64,14 @@ namespace ao::uimodel
     audio::OutputDeviceSelection const& fallback,
     rt::OutputState const& output)
   {
-    if (canRestoreOutputDeviceSelection(preferred, output))
+    // A complete concrete preference is binding, even if its backend or profile is unavailable.
+    // PipeWire also has a stable empty-ID shared route; discovery need not have published it yet.
+    bool const hasConcretePreference =
+      !preferred.deviceId.empty() && !preferred.backendId.empty() && !preferred.profileId.empty();
+    bool const followsPipeWireDefault = preferred.backendId == audio::kBackendPipeWire && preferred.deviceId.empty() &&
+                                        preferred.profileId == audio::kProfileShared;
+
+    if (hasConcretePreference || followsPipeWireDefault || canRestoreOutputDeviceSelection(preferred, output))
     {
       return preferred;
     }

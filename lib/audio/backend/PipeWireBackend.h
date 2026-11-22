@@ -6,6 +6,7 @@
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/Property.h>
 #include <ao/audio/SignalFormat.h>
@@ -29,7 +30,9 @@ namespace ao::audio::backend
   {
   public:
     struct Impl;
-    explicit PipeWireBackend(Device const& device, ProfileId const& profile);
+    explicit PipeWireBackend(Device const& device,
+                             ProfileId const& profile,
+                             OutputRoutingPolicy routingPolicy = OutputRoutingPolicy::Fixed);
     ~PipeWireBackend() override;
 
     PipeWireBackend(PipeWireBackend const&) = delete;
@@ -57,6 +60,7 @@ namespace ao::audio::backend
   private:
     std::unique_ptr<Impl> _implPtr;
     std::string _targetDeviceId;
+    OutputRoutingPolicy _routingPolicy;
     bool _exclusiveMode = false;
   };
 } // namespace ao::audio::backend

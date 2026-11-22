@@ -4,8 +4,10 @@
 #include <ao/rt/AppState.h>
 
 #include <ao/Error.h>
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
+#include <ao/yaml/RymlAdapter.h>
 #include <ao/yaml/Serialization.h>
 
 #include <array>
@@ -26,13 +28,21 @@ namespace ao::rt
 
       Result<> serialize(ryml::NodeRef node, AppPrefsState const& state) const
       {
+        auto const& selection = state.preferredOutputSelection;
         auto writer = yaml::MapWriter{node};
         writer.scalar("version", kVersion)
-          .scalar("lastOutputBackendId", state.preferredOutputSelection.backendId)
-          .scalar("lastOutputProfileId", state.preferredOutputSelection.profileId)
-          .scalar("lastOutputDeviceId", state.preferredOutputSelection.deviceId)
+          .scalar("lastOutputBackendId", selection.backendId)
+          .scalar("lastOutputProfileId", selection.profileId)
+          .scalar("lastOutputDeviceId", selection.deviceId)
           .scalar("lastLayoutPreset", state.lastLayoutPreset)
           .scalar("lastThemePreset", state.lastThemePreset);
+
+        if (audio::supportsOutputRoutingPolicy(selection))
+        {
+          auto const allowsRerouting = selection.routingPolicy == audio::OutputRoutingPolicy::AllowSystemReroute;
+          writer.scalar("allowSystemOutputReroute", allowsRerouting);
+        }
+
         return {};
       }
 
@@ -68,15 +78,33 @@ namespace ao::rt
                                                                 "lastOutputProfileId",
                                                                 "lastOutputDeviceId",
                                                                 "lastLayoutPreset",
-                                                                "lastThemePreset"});
+                                                                "lastThemePreset",
+                                                                "allowSystemOutputReroute"});
 
         auto state = seed;
+        auto& selection = state.preferredOutputSelection;
+        bool allowsRerouting = false;
         auto reader = yaml::MapReader{node, kKeys, kContext, yaml::UnknownKeyPolicy::Allow};
-        reader.optionalScalar("lastOutputBackendId", state.preferredOutputSelection.backendId)
-          .optionalScalar("lastOutputProfileId", state.preferredOutputSelection.profileId)
-          .optionalScalar("lastOutputDeviceId", state.preferredOutputSelection.deviceId)
+        reader.optionalScalar("lastOutputBackendId", selection.backendId)
+          .optionalScalar("lastOutputProfileId", selection.profileId)
+          .optionalScalar("lastOutputDeviceId", selection.deviceId)
           .optionalScalar("lastLayoutPreset", state.lastLayoutPreset)
-          .optionalScalar("lastThemePreset", state.lastThemePreset);
+          .optionalScalar("lastThemePreset", state.lastThemePreset)
+          .optionalValue("allowSystemOutputReroute",
+                         allowsRerouting,
+                         [](ryml::ConstNodeRef child, std::string_view) -> Result<bool>
+                         {
+                           // A malformed permission must not discard a valid fixed route.
+                           return child.has_val() && !child.is_val_quoted() && yaml::readBoolOr(child);
+                         });
+
+        // A partial preference can retain seeded identity, but cannot grant permission to a seeded route.
+        auto const hasStoredRoute = yaml::findChild(node, "lastOutputBackendId").readable() &&
+                                    yaml::findChild(node, "lastOutputDeviceId").readable() &&
+                                    yaml::findChild(node, "lastOutputProfileId").readable();
+        selection.routingPolicy = allowsRerouting && hasStoredRoute && audio::supportsOutputRoutingPolicy(selection)
+                                    ? audio::OutputRoutingPolicy::AllowSystemReroute
+                                    : audio::OutputRoutingPolicy::Fixed;
         return std::move(reader).finish(std::move(state));
       }
     };
@@ -110,22 +138,29 @@ namespace ao::rt
     };
 
     template<typename T, ConfigSchema<T> Schema>
-    void loadState(ConfigStore& store,
-                   std::string_view group,
-                   T& state,
-                   Schema const& schema,
-                   std::string_view description)
+    bool tryLoadState(ConfigStore& store,
+                      std::string_view group,
+                      T& state,
+                      Schema const& schema,
+                      std::string_view description)
     {
-      if (auto const res = store.load(group, state, schema); !res && res.error().code != Error::Code::NotFound)
+      auto const res = store.load(group, state, schema);
+
+      if (!res && res.error().code != Error::Code::NotFound)
       {
         APP_LOG_DEBUG("AppState: Failed to load {}: {}", description, res.error().message);
       }
+
+      return res.value_or(false);
     }
   } // namespace
 
   void loadAppPrefs(ConfigStore& store, AppPrefsState& state)
   {
-    loadState(store, kAppPrefsConfigGroup, state, AppPrefsStateYamlSchema{}, "application preferences");
+    if (!tryLoadState(store, kAppPrefsConfigGroup, state, AppPrefsStateYamlSchema{}, "application preferences"))
+    {
+      state.preferredOutputSelection.routingPolicy = audio::OutputRoutingPolicy::Fixed;
+    }
   }
 
   Result<> saveAppPrefs(ConfigStore& store, AppPrefsState const& state)
@@ -135,7 +170,10 @@ namespace ao::rt
 
   void loadAppSession(ConfigStore& store, AppSessionState& state)
   {
-    loadState(store, kAppSessionConfigGroup, state, AppSessionStateYamlSchema{}, "application session");
+    std::ignore =
+      tryLoadState(store, kAppSessionConfigGroup, state, AppSessionStateYamlSchema{}, "application session");
+    // The last active output was an observation, not permission to reroute.
+    state.lastOutputSelection.routingPolicy = audio::OutputRoutingPolicy::Fixed;
   }
 
   Result<> saveAppSession(ConfigStore& store, AppSessionState const& state)

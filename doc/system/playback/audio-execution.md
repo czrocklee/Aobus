@@ -278,7 +278,7 @@ Explicit `play`, `stop`, and output-device changes clear unconsumed lookahead.
 A seek clears lookahead only after passing its initial Error and expected-item admission checks.
 An `updateDevice` call carrying the unchanged device snapshot is a no-op and
 does not invalidate pending starts or prepared lookahead.
-Prepared-source failure clears lookahead without changing the current track. If render has already claimed that successor, Engine settles the handoff and delivers its advance before reducing the failure against the new current item. If an advance callback starts another item or seeks the same source, the displaced item's or decode attempt's error is discarded. A stale error cannot disarm an unrelated successor.
+Prepared-source failure clears lookahead without changing the current track. If render has already claimed that successor, Engine settles the handoff and delivers its advance before reducing the failure against the new current item. If an advance callback starts another item or seeks the same source, the displaced item's or decode attempt's error is discarded. A stale error cannot disarm an unrelated successor. Backend loss retires the failed stream immediately. If a splice already made its successor current, observers receive that successor's advance before its device-loss notification; a newer start or stop can still supersede delivery.
 
 A splice requires both sessions to be gapless-capable and `Backend::canReuseFormat` to authorize the successor's canonical PCM mode, both before preparation and again at adoption.
 The default is exact mode equality, including the speaker mask; this query performs no native I/O, reconfiguration, or outward callback.

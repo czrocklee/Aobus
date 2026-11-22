@@ -60,17 +60,16 @@ command queue while borrowing the runtime-internal `PlaybackTransport` and
 - A command issued by a playback observer never executes on that observer stack.
 - Once the deferred queue is non-empty, later public commands join its tail; no
   synchronous command overtakes it.
-- Stop, replacement start, next, previous, restore, output-route change, clear,
-  and shutdown supersede older queued start/navigation commands. Orthogonal
+- Stop, replacement start, admitted next/previous, restore, output-route change, clear,
+  and shutdown supersede older queued start/navigation commands. When output is unavailable, Next and Previous are rejected before they can supersede an earlier command. Queued navigation checks readiness again before touching succession. Orthogonal
   volume, mute, pause, resume, seek, shuffle, and repeat commands remain FIFO;
   occurrence-guarded seeks perform their own execution-time identity check.
 - Elapsed clock drift alone is not semantic content and causes no publication.
   `elapsed()` samples nonnegative live position without publishing, bounded by the committed duration when positive.
   Runtime/audio occurrence checks before and after the sample keep it correlated to the last committed snapshot; a mismatch falls back to that snapshot's anchor.
 - Every installed explicit start, replay, natural advance, and deferred restore
-  receives a new nonzero playback occurrence; refresh, pause, resume, and seeks inside a Track
-  preserve it, and Stop invalidates it. An end-of-Track seek follows natural completion.
-  Natural terminal Idle without deferred resume ownership also invalidates it, while a natural successor keeps its newly installed identity.
+  receives a new nonzero playback occurrence. Refresh, pausing and resuming the same open audio item, and seeks inside a Track preserve it. Resuming a deferred subject at its held offset installs a new occurrence if the start commits. Stop invalidates the occurrence. An end-of-Track seek follows natural completion.
+  Natural terminal Idle without deferred resume ownership and failure of the current audio item also invalidate it. A natural successor keeps its newly installed identity; a failed lookahead does not retire the current occurrence.
 - An unexpected command or settlement exception terminally closes the service, retains the last committed snapshot, and abandons the queued backlog.
 - Shutdown closes command admission and makes deferred service tasks safe to
   drop before transport callback producers are quiesced.
@@ -94,10 +93,19 @@ A snapshot reference borrows the last coherent transport and succession state on
 Copy it before retaining an old value across any command or callback that may publish.
 Semantic equality excludes the correlated elapsed sample: the clock anchor is the tuple of transport state, position revision, and duration, not the time of a metadata-only publication.
 
-Runtime owns the selected `audio::OutputDeviceSelection` and available route catalog.
-An empty device id denotes a default only when the provider advertises a compatible empty-id device; it is not a universal default route.
-The neutral selection type has no persistence lifecycle of its own.
-UIModel owns interactive restore admission, and frontend composition owns durable schema, submission, and checkpoint timing; see [presentation](../presentation/README.md).
+Runtime publishes the provider catalog and the engine-confirmed `output.selectedDevice`. Neither proves that a stream is open. Initial discovery may choose an available device and compatible profile when there is no configured route or pending request. If Player cannot configure a requested route, `output.optPendingOutputSelection` names the request; `selectedDevice` can still name the old route, but playback cannot use it as a fallback.
+
+Entering pending stops audio on the old route and disarms lookahead. If the switch interrupted a track, transport holds that track and its elapsed position as Paused while Engine is idle. A seek within the held track can change its resume position. While the output is unavailable, Next, Previous, and a relative seek past the end cannot advance or discard that track. A rejected replacement leaves the held track intact. Stop discards the held track but not the output request.
+
+If the active item ends or fails before the output change takes effect, Engine retains its terminal outcome, item ID, and generation. A gapless successor shares its predecessor's generation. If the route change retires both the advance and terminal notifications, Transport announces the matching prepared successor before settling its outcome. A natural end advances from the track that finished or, when the output is unavailable, saves it as the last one played. A failure is reported once for the track that failed; it does not become a paused track for Resume, and an unavailable route does not count against a healthy successor. A failure while preparing a future track is not a terminal outcome for the current track.
+
+Reselecting the old fixed device while pending must pass discovery again. Discovery can configure the requested route but cannot restart the interrupted track; it takes an explicit resume. A device that is listed but refuses to open reports the backend failure instead. A live unplug on a fixed PipeWire stream is likewise an output failure, not a request to play on a substitute.
+
+An empty device id denotes a provider-defined default only for a compatible route. For a named PipeWire sink, `Fixed` forbids both startup fallback and later moves. On open, PipeWire resolves `node:<node.name>` on the stream's own connection and uses the unique sink's current serial as `target.object`. This lookup and PCM negotiation share a single wait deadline; neither runs on the render thread, but the synchronous open can still block its caller. A missing or ambiguous name cannot open a fixed stream. Neither a matching display label nor a recycled registry id or serial identifies that sink. The name identifies a logical route, not hardware: a returning sink can have a new serial, and a reassigned name can denote a different sink.
+
+With explicit `AllowSystemReroute`, Player can configure the named PipeWire request before the sink is enumerated. The session manager may route to another sink at startup or later; the configured name is not evidence of the physical destination. An exclusive request stays exclusive and may fail on a busy alternate. Rerouting requires provider support and does not authorize substitution by another backend.
+
+The neutral selection type owns no persistence lifecycle. UIModel resolves interactive restore intent; the frontend submits it and owns checkpoint timing. See the [application configuration](../../reference/persistence/application-config.md#global-runtime-preference-group) for the saved identity, numeric-id compatibility and consent fields.
 
 ## Live Now Playing metadata
 
@@ -167,7 +175,7 @@ command FIFO has a backlog. Otherwise it runs through normal commit settlement
 without changing the command-invalidating generation and returns whether
 Transport and Engine accepted the expected occurrence/audio-item chain.
 
-`tryNext` is likewise synchronous-only. It first validates the nonzero runtime
+`tryNext` is likewise synchronous-only. It requires a ready output and validates the nonzero runtime
 occurrence and subject. Active playback then asks Player and Engine whether the
 settled realtime timeline still exposes Transport's expected audio item; an
 exact deferred occurrence (restored Idle or a held paused position) is the no-active-audio exception. Only a

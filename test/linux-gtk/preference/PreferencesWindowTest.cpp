@@ -29,6 +29,7 @@
 #include <glib.h>
 #include <gtkmm/dialog.h>
 #include <gtkmm/listbox.h>
+#include <gtkmm/listboxrow.h>
 #include <gtkmm/scrolledwindow.h>
 #include <gtkmm/stack.h>
 
@@ -195,7 +196,9 @@ namespace ao::gtk::test
       return dynamic_cast<Gtk::ListBox*>(viewport->get_first_child());
     }
 
-    void activateOutputDeviceRow(PreferencesWindow& window, int const index)
+    void activateOutputDeviceRow(PreferencesWindow& window,
+                                 std::string const& deviceName,
+                                 audio::ProfileId const& profileId)
     {
       auto* const selector = window.outputSelector();
       REQUIRE(selector != nullptr);
@@ -204,11 +207,20 @@ namespace ao::gtk::test
 
       auto* const listBox = outputSelectorListBox(window);
       REQUIRE(listBox != nullptr);
-      auto* const row = listBox->get_row_at_index(index);
-      REQUIRE(row != nullptr);
-      emitRowActivated(*listBox, *row);
-      // Activation may replace or retire the selector synchronously.
-      drainGtkEvents();
+
+      for (auto* const row : collectAll<Gtk::ListBoxRow>(*listBox))
+      {
+        if (row->get_activatable() && findLabelByText(*row, deviceName) != nullptr &&
+            (findLabelByText(*row, "[E]") != nullptr) == (profileId == audio::kProfileExclusive))
+        {
+          emitRowActivated(*listBox, *row);
+          // Activation may replace or retire the selector synchronously.
+          drainGtkEvents();
+          return;
+        }
+      }
+
+      FAIL("Missing output row for " << deviceName << " (" << profileId.raw() << ')');
     }
 
     audio::BackendProvider::Status makeAlsaOutputStatus()
@@ -216,6 +228,7 @@ namespace ao::gtk::test
       auto status = rt::test::makePipeWireOutputStatus();
       status.descriptor.id = audio::BackendId{"alsa"};
       status.devices[0].backendId = audio::BackendId{"alsa"};
+      status.devices[0].id = audio::DeviceId{"device1"};
       return status;
     }
   } // namespace
@@ -408,11 +421,11 @@ namespace ao::gtk::test
     CHECK(window.outputDeviceLabelText() == "test_backend");
     CHECK(persisted.empty());
 
-    activateOutputDeviceRow(window, 3); // PipeWire shared, after the ready backend's header and row.
+    activateOutputDeviceRow(window, "Built-in Audio", audio::kProfileShared);
     REQUIRE(persisted.size() == 1);
     auto const pipewireSelection = audio::OutputDeviceSelection{
       .backendId = audio::BackendId{"pipewire"},
-      .deviceId = audio::DeviceId{"device1"},
+      .deviceId = audio::DeviceId{"node:device1"},
       .profileId = audio::kProfileShared,
     };
     CHECK(persisted[0].preferredOutputSelection == pipewireSelection);
@@ -420,7 +433,7 @@ namespace ao::gtk::test
     CHECK(persisted[0].lastLayoutPreset == "classic");
     CHECK(window.outputDeviceLabelText() == "PW");
 
-    activateOutputDeviceRow(window, 1); // Ready backend's shared device.
+    activateOutputDeviceRow(window, "Test Device", audio::kProfileShared);
     REQUIRE(persisted.size() == 2);
     auto const readySelection = audio::OutputDeviceSelection{
       .backendId = audio::BackendId{"test_backend"},
@@ -569,11 +582,16 @@ namespace ao::gtk::test
     window.refreshPreferences(rt::AppPrefsState{}, &oldFixture.runtime().playback());
     REQUIRE(window.outputDeviceLabelText() == "PW");
 
+    auto const exclusiveSelection = audio::OutputDeviceSelection{
+      .backendId = audio::kBackendPipeWire,
+      .deviceId = audio::DeviceId{"node:device1"},
+      .profileId = audio::kProfileExclusive,
+    };
     bool rebound = false;
     auto const rebindSub = oldFixture.runtime().playback().events().onSnapshot(
       [&](rt::PlaybackSnapshot const& snapshot)
       {
-        if (!rebound && snapshot.transport.output.selectedDevice.profileId == audio::kProfileExclusive)
+        if (!rebound && snapshot.transport.output.selectedDevice == exclusiveSelection)
         {
           rebound = true;
           window.refreshPreferences(rt::AppPrefsState{}, &newFixture.runtime().playback());
@@ -581,12 +599,12 @@ namespace ao::gtk::test
       });
 
     // The command publishes its snapshot before the old selector reaches its recorder.
-    activateOutputDeviceRow(window, 2); // PipeWire exclusive.
+    activateOutputDeviceRow(window, "Built-in Audio", audio::kProfileExclusive);
     REQUIRE(rebound);
     CHECK(persisted.empty());
     CHECK(window.outputDeviceLabelText() == "ALSA");
 
-    activateOutputDeviceRow(window, 1); // ALSA shared on the replacement binding.
+    activateOutputDeviceRow(window, "Built-in Audio", audio::kProfileShared);
     REQUIRE(persisted.size() == 1);
     CHECK(persisted[0].preferredOutputSelection == audio::OutputDeviceSelection{
                                                      .backendId = audio::BackendId{"alsa"},

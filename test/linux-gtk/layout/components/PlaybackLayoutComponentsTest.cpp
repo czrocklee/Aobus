@@ -24,6 +24,7 @@
 #include <gtkmm/enums.h>
 #include <gtkmm/label.h>
 #include <gtkmm/listbox.h>
+#include <gtkmm/listboxrow.h>
 #include <gtkmm/popover.h>
 #include <gtkmm/scale.h>
 #include <gtkmm/widget.h>
@@ -318,14 +319,17 @@ namespace ao::gtk::layout::test
     ao::gtk::test::drainGtkEvents();
     auto* const listBox = ao::gtk::test::findWidget<Gtk::ListBox>(*popover);
     REQUIRE(listBox != nullptr);
-    auto* const exclusiveRow = listBox->get_row_at_index(2);
+    auto* const exclusiveBadge = ao::gtk::test::findLabelByText(*listBox, "[E]");
+    REQUIRE(exclusiveBadge != nullptr);
+    auto* const exclusiveRow =
+      dynamic_cast<Gtk::ListBoxRow*>(exclusiveBadge->get_ancestor(Gtk::ListBoxRow::get_base_type()));
     REQUIRE(exclusiveRow != nullptr);
 
     ao::gtk::test::emitRowActivated(*listBox, *exclusiveRow);
 
     REQUIRE(optRequested);
     CHECK(optRequested->backendId == audio::BackendId{"pipewire"});
-    CHECK(optRequested->deviceId == audio::DeviceId{"device1"});
+    CHECK(optRequested->deviceId == audio::DeviceId{"node:device1"});
     CHECK(optRequested->profileId == audio::kProfileExclusive);
   }
 

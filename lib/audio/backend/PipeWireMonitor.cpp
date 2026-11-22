@@ -25,6 +25,7 @@ extern "C"
 #include <ao/audio/ChannelDeliveryEvidence.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/PcmFormat.h>
+#include <ao/audio/PipeWireTargetIdentity.h>
 #include <ao/audio/flow/Graph.h>
 #include <ao/utility/CallbackStackScope.h>
 #include <ao/utility/ScopedRegistration.h>
@@ -35,6 +36,7 @@ extern "C"
 #include <atomic>
 #include <bit>
 #include <condition_variable>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <exception>
@@ -1105,22 +1107,26 @@ namespace ao::audio::backend
 
     auto devices = std::vector<Device>{};
 
-    for (auto const& [id, node] : nodes)
+    // A display label or a recycled registry number cannot identify a saved output.
+    // Do not offer a name shared by two sinks, even if just one has a usable serial.
+    auto nameCounts = std::unordered_map<std::string_view, std::size_t>{};
+
+    for (auto const& node : nodes | std::views::values)
     {
-      if (isSinkMediaClass(node.mediaClass))
+      if (!node.nodeName.empty() && isSinkMediaClass(node.mediaClass))
       {
-        auto const deviceId = node.optObjectSerial ? std::format("{}", *node.optObjectSerial) : std::format("{}", id);
-        auto displayName = node.nodeNick;
+        ++nameCounts[node.nodeName];
+      }
+    }
 
-        if (displayName.empty())
-        {
-          displayName = node.nodeName.empty() ? node.objectPath : node.nodeName;
-        }
-
-        auto const description = (node.nodeNick.empty() ? "" : node.nodeName);
-        devices.push_back({.id = DeviceId{deviceId},
-                           .displayName = displayName,
-                           .description = description,
+    for (auto const& node : nodes | std::views::values)
+    {
+      if (node.optObjectSerial && !node.nodeName.empty() && isSinkMediaClass(node.mediaClass) &&
+          nameCounts.at(node.nodeName) == 1)
+      {
+        devices.push_back({.id = DeviceId{std::format("{}{}", kPipeWireNodePrefix, node.nodeName)},
+                           .displayName = node.nodeNick.empty() ? node.nodeName : node.nodeNick,
+                           .description = node.nodeNick.empty() ? "" : node.nodeName,
                            .isDefault = false,
                            .backendId = kBackendPipeWire});
       }

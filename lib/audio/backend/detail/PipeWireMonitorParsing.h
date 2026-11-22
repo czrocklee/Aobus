@@ -30,7 +30,7 @@ namespace ao::audio::backend::detail
     std::string nodeNick;
     std::string nodeDescription;
     std::string objectPath;
-    std::optional<std::uint32_t> optObjectSerial;
+    std::optional<std::uint64_t> optObjectSerial;
     std::optional<std::uint32_t> optDriverId;
   };
 
@@ -95,6 +95,9 @@ namespace ao::audio::backend::detail
    * @brief Parses a PipeWire decimal uint32 string.
    */
   std::optional<std::uint32_t> parsePipeWireUint32(char const* value) noexcept;
+
+  /** @brief Reads a live 64-bit object serial suitable for native target selection. */
+  std::optional<std::uint64_t> pipeWireObjectSerial(::spa_dict const* props) noexcept;
 
   /**
    * @brief Parses a NodeRecord from PipeWire registry events.

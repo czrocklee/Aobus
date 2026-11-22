@@ -5,6 +5,7 @@
 
 #include "test/MessageCatalogTestSupport.h"
 #include "test/tui/RenderTestSupport.h"
+#include <ao/CoreIds.h>
 #include <ao/audio/Quality.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/PlaybackState.h>
@@ -102,13 +103,20 @@ namespace ao::tui::test
   {
     auto const german = ao::test::messageCatalog("de-DE");
     auto state = rt::PlaybackTransportSnapshot{
-      .nowPlaying = rt::NowPlayingInfo{.title = "誰か、海を。"}, .volume = rt::VolumeState{.level = 0.42F}};
+      .nowPlaying = rt::NowPlayingInfo{.trackId = TrackId{42}, .title = "誰か、海を。"},
+      .volume = rt::VolumeState{.level = 0.42F},
+    };
     auto text = renderText(playbackBar(german, {.playbackState = &state}), 96);
 
     CHECK(text.contains("誰か、海を。"));
     CHECK(text.contains("Lautst. 42%"));
 
     state.nowPlaying.title.clear();
+    text = renderText(playbackBar(german, {.playbackState = &state}), 96);
+    CHECK(text.contains("Titel 42"));
+    CHECK_FALSE(text.contains("Kein aktiver Titel"));
+
+    state.nowPlaying.trackId = kInvalidTrackId;
     text = renderText(playbackBar(german, {.playbackState = &state}), 96);
     CHECK(text.contains("Kein aktiver Titel"));
   }

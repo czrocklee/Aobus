@@ -12,6 +12,9 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/BackendProvider.h>
+#include <ao/audio/Device.h>
 #include <ao/audio/OpenedPcmMode.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/RenderTarget.h>
@@ -21,6 +24,7 @@
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/PreparedPlayback.h>
+#include <ao/rt/playback/PlaybackService.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -367,6 +371,55 @@ namespace ao::rt::test
     CHECK(report.templateId == NotificationReportTemplate::PlaybackRouteActivationFailed);
     CHECK(report.trackId == fixture.firstTrackId);
     CHECK(report.detail == "scripted output route refusal");
+  }
+
+  TEST_CASE("PlaybackSuccession - selecting a listed output reports failure when its native open fails")
+  {
+    auto disconnectedDac = PlaybackFixtureSpyBackend{};
+    auto fixture = PlaybackSuccessionTransportFixture{};
+    auto const trackId = fixture.addPlayableTrack("Playing Track");
+    fixture.openManualView(std::array{trackId});
+    auto playback = fixture.createPlayback();
+    auto& transport = fixture.transport;
+    auto const original = transport.status.devices.front();
+    auto const dac = audio::Device{.id = audio::DeviceId{"disconnected-dac"}, .backendId = original.backendId};
+    fakeit::When(Method(disconnectedDac.mock(), backendId)).AlwaysReturn(dac.backendId);
+    fakeit::When(Method(disconnectedDac.mock(), profileId)).AlwaysReturn(audio::kProfileShared);
+    fakeit::When(Method(disconnectedDac.mock(), open))
+      .AlwaysReturn(std::unexpected{audio::BackendOpenFailure{
+        .error = Error{.code = Error::Code::DeviceNotFound, .message = "DAC disconnected"},
+        .cause = audio::BackendOpenFailure::Cause::OutputFailure,
+      }});
+    fakeit::When(Method(transport.mockProvider, createBackend))
+      .AlwaysDo([&transport, &disconnectedDac, dacId = dac.id](audio::Device const& device, audio::ProfileId const&)
+                { return device.id == dacId ? disconnectedDac.makeProxy() : transport.spyBackendPtr->makeProxy(); });
+    transport.onDevicesChangedCb({original, dac});
+    transport.executor.drain();
+    REQUIRE(playback.commands().startFromView(fixture.viewId, trackId));
+    REQUIRE(transport.executor.tryDrainUntil(
+      [&] { return playback.snapshot().transport.transport == audio::Transport::Playing; }));
+    REQUIRE(playback.snapshot().transport.output.selectedDevice.deviceId == original.id);
+    REQUIRE(transport.notificationService.feed().entries.empty());
+
+    playback.commands().setOutputDevice(dac.backendId, dac.id, audio::kProfileShared);
+
+    fakeit::Verify(Method(disconnectedDac.mock(), open)).Once();
+    fakeit::Verify(Method(disconnectedDac.mock(), start)).Never();
+    auto const failed = playback.snapshot().transport;
+    CHECK(failed.output.selectedDevice.deviceId == dac.id);
+    CHECK(failed.ready);
+    CHECK(failed.transport == audio::Transport::Error);
+    CHECK(failed.nowPlaying.trackId == trackId);
+
+    REQUIRE(transport.executor.tryDrainUntil([&] { return !transport.notificationService.feed().entries.empty(); }));
+    auto const feed = transport.notificationService.feed();
+    REQUIRE(feed.entries.size() == 1);
+    CHECK(feed.entries.front().severity == NotificationSeverity::Error);
+    REQUIRE(std::holds_alternative<NotificationReport>(feed.entries.front().message));
+    auto const& report = std::get<NotificationReport>(feed.entries.front().message);
+    CHECK(report.templateId == NotificationReportTemplate::PlaybackRouteActivationFailed);
+    CHECK(report.trackId == trackId);
+    CHECK(report.detail == "DAC disconnected");
   }
 
   TEST_CASE("PlaybackSuccession - prepared drain fallback preserves typed backend refusal semantics", "[concurrency]")

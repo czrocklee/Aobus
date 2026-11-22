@@ -47,7 +47,9 @@
 #include <gtkmm/applicationwindow.h>
 #include <gtkmm/comboboxtext.h>
 #include <gtkmm/dialog.h>
+#include <gtkmm/label.h>
 #include <gtkmm/listbox.h>
+#include <gtkmm/listboxrow.h>
 #include <gtkmm/paned.h>
 #include <gtkmm/treeview.h>
 #include <gtkmm/window.h>
@@ -223,14 +225,17 @@ namespace ao::gtk::test
     drainGtkEvents();
     auto* const listBox = findWidget<Gtk::ListBox>(*popover);
     REQUIRE(listBox != nullptr);
-    auto* const exclusiveRow = listBox->get_row_at_index(2);
+    auto* const exclusiveBadge = findLabelByText(*listBox, "[E]");
+    REQUIRE(exclusiveBadge != nullptr);
+    auto* const exclusiveRow =
+      dynamic_cast<Gtk::ListBoxRow*>(exclusiveBadge->get_ancestor(Gtk::ListBoxRow::get_base_type()));
     REQUIRE(exclusiveRow != nullptr);
 
     emitRowActivated(*listBox, *exclusiveRow);
 
     REQUIRE(optOutputSelectionRequested);
     CHECK(optOutputSelectionRequested->backendId == audio::BackendId{"pipewire"});
-    CHECK(optOutputSelectionRequested->deviceId == audio::DeviceId{"device1"});
+    CHECK(optOutputSelectionRequested->deviceId == audio::DeviceId{"node:device1"});
     CHECK(optOutputSelectionRequested->profileId == audio::kProfileExclusive);
   }
 

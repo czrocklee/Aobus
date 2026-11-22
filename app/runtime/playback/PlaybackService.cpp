@@ -12,9 +12,8 @@
 #include <ao/async/Executor.h>
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
-#include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
-#include <ao/audio/Device.h>
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/DictionaryStore.h>
@@ -187,7 +186,7 @@ namespace ao::rt
 
     void next() override
     {
-      submitPositioning([this] { return succession.tryMoveNext(); }, true, true);
+      submitNavigation([this] { return succession.tryMoveNext(); });
     }
 
     bool tryNext(PlaybackOccurrenceId const expectedOccurrenceId) override
@@ -206,7 +205,7 @@ namespace ao::rt
         .staleWhenSuperseded = false,
         .operation = [this, expectedOccurrenceId, generation, &admitted] -> Result<bool>
         {
-          if (!transport.canAdvanceFrom(expectedOccurrenceId))
+          if (!transport.state().ready || !transport.canAdvanceFrom(expectedOccurrenceId))
           {
             return false;
           }
@@ -222,7 +221,7 @@ namespace ao::rt
 
     void previous() override
     {
-      submitPositioning([this] { return succession.tryMovePrevious(); }, true, true);
+      submitNavigation([this] { return succession.tryMovePrevious(); });
     }
 
     void clearSequence() override
@@ -309,8 +308,8 @@ namespace ao::rt
           if (endBehavior == PlaybackRelativeSeekEndBehavior::Next && delta > std::chrono::milliseconds{0} &&
               delta > duration - elapsed)
           {
-            return succession.state().hasNext && transport.canAdvanceFrom(expectedOccurrenceId) &&
-                   succession.tryMoveNext();
+            return transport.state().ready && succession.state().hasNext &&
+                   transport.canAdvanceFrom(expectedOccurrenceId) && succession.tryMoveNext();
           }
 
           auto const targetElapsed = elapsed + std::clamp(delta, -elapsed, duration - elapsed);
@@ -344,13 +343,9 @@ namespace ao::rt
       return issued;
     }
 
-    void setOutputDevice(audio::BackendId const& backendId,
-                         audio::DeviceId const& deviceId,
-                         audio::ProfileId const& profileId) override
+    void setOutputDevice(audio::OutputDeviceSelection const& selection) override
     {
-      submitVoid([this, backendId, deviceId, profileId] { transport.setOutputDevice(backendId, deviceId, profileId); },
-                 true,
-                 false);
+      submitVoid([this, selection] { transport.setOutputDevice(selection); }, true, false);
     }
 
     void setVolume(float const volume) override
@@ -439,6 +434,26 @@ namespace ao::rt
                                  invalidatesOlderCommand,
                                  staleWhenSuperseded,
                                  location);
+    }
+
+    void submitNavigation(compat::MoveOnlyFunction<bool()> operation,
+                          std::source_location location = std::source_location::current())
+    {
+      ensureOnExecutor(location);
+
+      // A rejected navigation must not supersede older queued commands.
+      if (closed || !transport.state().ready)
+      {
+        return;
+      }
+
+      // An earlier queued output change may make the route unavailable before
+      // execution. Do not enter succession's cancellation or recovery paths.
+      submitPositioning([this, operation = std::move(operation)] mutable
+                        { return transport.state().ready && operation(); },
+                        true,
+                        true,
+                        location);
     }
 
     Result<> executeCommand(QueuedCommand& command)

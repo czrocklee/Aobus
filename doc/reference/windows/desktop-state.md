@@ -61,14 +61,9 @@ falls back to the seed the caller supplied. The theme maps require every field.
 Window size must be at least 640 by 480.
 Navigation width must be finite and in the inclusive range 120 through 360.
 Inspector width must be finite and in the inclusive range 160 through 480.
-The three output-selection fields accept arbitrary strings. Restore requires
-non-empty backend and profile ids and rejects a profile known to be unsupported
-by a published backend. A non-empty device id remains preferred and may be
-submitted before catalog publication or while that endpoint is temporarily
-unavailable. An empty device id is restorable only when the published selected
-backend advertises a compatible empty-id default. WASAPI advertises concrete endpoint ids
-and therefore requires a non-empty device id. Intent that cannot be submitted
-leaves the Runtime default in effect without clearing the stored preference.
+The three output-selection fields accept arbitrary strings; availability is not a schema check. Windows restores a request with nonempty backend, profile, and device ids even before the catalog is published or when the provider, endpoint, or profile is unavailable. The request stays pending rather than selecting another output. Pending and confirmed outputs are distinct, and restoring a request does not rewrite it on disk.
+
+An empty device id is not a wildcard. WASAPI advertises concrete endpoint ids, so an empty WASAPI id is not a follow-system request. The shared resolver accepts an empty id for a compatible published empty-id default, with a special case for PipeWire Shared before publication; neither supplies a WASAPI default. When no request can be restored, Windows leaves normal runtime output discovery in effect without clearing the saved fields. This Windows schema has no system-rerouting permission field. See [playback commits](../../system/playback/application-commit.md) for transport behavior when a requested route is unavailable.
 The shared presentation groups apply their own recursive list-id, field-id, ordering, dimension, and version validation.
 
 `fontFamily` must be non-empty. Every color must be `#RRGGBB` or `#AARRGGBB` with hexadecimal digits. `classic.chrome` rejects values other than `system` and `retro`.

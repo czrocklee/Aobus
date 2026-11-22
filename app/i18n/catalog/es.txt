@@ -219,6 +219,16 @@ es:table {
     audio_profile_exclusive { "Modo exclusivo" }
     audio_profile_exclusive_description { "Acceso directo al dispositivo de hardware" }
     system_default_output_device { "Predeterminado del sistema" }
+    output_device_pending_summary { "Elegir salida" }
+    output_device_pending_status { "Salida solicitada no disponible" }
+    output_device_pending_named_status { "Salida solicitada no disponible: {device}" }
+    output_device_invalid_pipewire_status { "Vuelve a elegir la salida de PipeWire. La selección guardada no es válida." }
+    output_device_routing_policy_toggle { "Permitir otra salida del sistema" }
+    output_device_routing_policy_fixed { "Activa esta opción para permitir otra salida si este dispositivo no está disponible al iniciar o se desconecta. Si está desactivada, solo se usa este dispositivo." }
+    output_device_routing_policy_allowed { "El sistema puede usar otra salida si este dispositivo no está disponible al iniciar o si se desconecta." }
+    output_device_routing_policy_exclusive { "{rerouting, select, allowed {} other {Opción desactivada: solo este dispositivo. }}Opción activada: el sistema puede abrir otra salida, también en modo exclusivo, si este dispositivo no está disponible al iniciar o se desconecta. Si la salida está ocupada, la reproducción puede fallar. Mientras Aobus la reserve, otras aplicaciones podrían no poder usarla." }
+    output_device_reroute_status { "El sistema puede usar otra salida" }
+    output_device_preferred_status { "Salida preferida (el sistema puede cambiarla): {route}" }
     completion_field { "campo" }
     completion_alias { "alias" }
     completion_operator { "operador" }

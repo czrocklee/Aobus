@@ -9,6 +9,7 @@
 #include <ao/audio/ChannelDeliveryEvidence.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/Engine.h>
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/audio/Quality.h>
 #include <ao/audio/QualityAnalyzer.h>
 #include <ao/audio/Transport.h>
@@ -58,6 +59,8 @@ namespace ao::audio
     {
       Engine::Status engine;
       std::vector<BackendProvider::Status> availableBackends;
+      std::optional<OutputDeviceSelection> optPendingOutputSelection{};
+      OutputRoutingPolicy routingPolicy = OutputRoutingPolicy::Fixed;
       flow::Graph flow;
       Quality sourceQuality = Quality::Unknown;
       Quality pipelineQuality = Quality::Unknown;
@@ -116,14 +119,22 @@ namespace ao::audio
     void cancelStartPreparation();
     void cancelLookaheadPreparation();
     std::optional<Engine::PlaybackItemId> clearPreparedNext();
-    /// @brief Selects the output device. Returns `NotFound` when no provider is
-    /// registered for `backend`. A not-yet-discovered device is stored as pending
-    /// and reported as success.
-    Result<> setOutputDevice(BackendId const& backend, DeviceId const& deviceId, ProfileId const& profile);
+    /// An unconfigurable request stays pending and stops playback on the old route.
+    /// Discovery may configure the requested output but does not replay the interrupted item.
+    /// A missing provider or unsupported profile also returns an error.
+    Result<> setOutputDevice(OutputDeviceSelection selection);
+    Result<> setOutputDevice(BackendId const& backend, DeviceId const& deviceId, ProfileId const& profile)
+    {
+      return setOutputDevice({.backendId = backend, .deviceId = deviceId, .profileId = profile});
+    }
     void pause();
     void resume();
     Engine::PreparedCancellationBarrier stopWithBarrier();
     std::optional<Engine::PreparedCancellationBarrier> tryStopWithBarrier(Engine::PlaybackItemId expectedItemId);
+    /// Takes Engine's latest matching retired terminal outcome once, on the
+    /// executor at a command boundary. Does not change callback floors or
+    /// report realtime position.
+    std::optional<Engine::TerminalReceipt> takeRetiredTerminalReceipt(std::uint64_t generation);
     void stop();
     void seek(std::chrono::milliseconds offset);
     /// Returns true when the expected current item matched and the seek was

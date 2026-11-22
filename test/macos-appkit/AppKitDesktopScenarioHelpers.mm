@@ -317,6 +317,15 @@ namespace ao::appkit::test::desktop
     AO_INVARIANT(written != 0, "Could not write scenario marker: {}", diagnostic.UTF8String);
   }
 
+  NSDictionary* missingOutputRoute()
+  {
+    return @{
+      @"backend": nativeText(audio::kBackendCoreAudio.raw()),
+      @"device": @"aobus-smoke-missing-DAC",
+      @"profile": nativeText(audio::kProfileShared.raw())
+    };
+  }
+
   void preseedSettings(DesktopLaunch const& launch)
   {
     AO_INVARIANT(launch.optRequest, "The desktop smoke requires an initial library request");
@@ -337,13 +346,10 @@ namespace ao::appkit::test::desktop
     auto const outputError = outputRes ? std::string{} : outputRes.error().message;
     AO_INVARIANT(outputRes, "The requested Core Audio desktop test output must be available: {}", outputError);
 
-    if (auto const& optOutput = *outputRes; optOutput)
+    if (*outputRes)
     {
-      settings[@"output"] = @{
-        @"backend": nativeText(optOutput->backendId.raw()),
-        @"device": nativeText(optOutput->id.raw()),
-        @"profile": nativeText(audio::kProfileShared.raw())
-      };
+      // The parent must recover using the native picker before the first Play action.
+      settings[@"output"] = missingOutputRoute();
     }
 
     settings[@"libraryRoot"] = nativePath(launch.optRequest->libraryRoot);

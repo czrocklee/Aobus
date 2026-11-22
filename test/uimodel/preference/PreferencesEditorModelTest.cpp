@@ -101,7 +101,7 @@ namespace ao::uimodel::test
 
     auto const requested = audio::OutputDeviceSelection{
       .backendId = audio::BackendId{"pipewire"},
-      .deviceId = audio::DeviceId{"system-default"},
+      .deviceId = audio::DeviceId{},
       .profileId = audio::kProfileShared,
     };
     model.setPreferredOutputDevice(requested);
@@ -163,7 +163,7 @@ namespace ao::uimodel::test
     current.lastThemePreset = "classic";
     current.lastLayoutPreset = "modern";
     current.preferredOutputSelection.backendId = audio::BackendId{"pipewire"};
-    current.preferredOutputSelection.deviceId = audio::DeviceId{"current-device"};
+    current.preferredOutputSelection.deviceId = audio::DeviceId{"node:current-device"};
     current.preferredOutputSelection.profileId = audio::kProfileShared;
 
     auto requested = rt::AppPrefsState{};
@@ -180,7 +180,7 @@ namespace ao::uimodel::test
       CHECK(merged.lastThemePreset == "modern");
       CHECK(merged.lastLayoutPreset == "modern");
       CHECK(merged.preferredOutputSelection.backendId == "pipewire");
-      CHECK(merged.preferredOutputSelection.deviceId == "current-device");
+      CHECK(merged.preferredOutputSelection.deviceId == "node:current-device");
       CHECK(merged.preferredOutputSelection.profileId == audio::kProfileShared.raw());
     }
 
@@ -191,7 +191,7 @@ namespace ao::uimodel::test
       CHECK(merged.lastThemePreset == "classic");
       CHECK(merged.lastLayoutPreset == "classic");
       CHECK(merged.preferredOutputSelection.backendId == "pipewire");
-      CHECK(merged.preferredOutputSelection.deviceId == "current-device");
+      CHECK(merged.preferredOutputSelection.deviceId == "node:current-device");
       CHECK(merged.preferredOutputSelection.profileId == audio::kProfileShared.raw());
     }
 

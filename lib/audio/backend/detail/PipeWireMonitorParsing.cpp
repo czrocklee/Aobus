@@ -45,25 +45,36 @@ namespace ao::audio::backend::detail
     return value != nullptr ? std::string{value} : std::string{};
   }
 
+  namespace
+  {
+    template<typename UInt>
+    std::optional<UInt> parseUnsigned(char const* value) noexcept
+    {
+      if (value == nullptr || *value == '\0')
+      {
+        return std::nullopt;
+      }
+
+      auto const text = std::string_view{value};
+      UInt parsed = 0;
+      auto const* const begin = text.data();
+      auto const* const end = begin + text.size();
+      auto const [ptr, ec] = std::from_chars(begin, end, parsed);
+      return ec == std::errc{} && ptr == end ? std::optional{parsed} : std::nullopt;
+    }
+  } // namespace
+
   std::optional<std::uint32_t> parsePipeWireUint32(char const* value) noexcept
   {
-    if (value == nullptr || *value == '\0')
-    {
-      return std::nullopt;
-    }
+    return parseUnsigned<std::uint32_t>(value);
+  }
 
-    auto const text = std::string_view{value};
-    std::uint32_t parsed = 0;
-    auto const* const begin = text.data();
-    auto const* const end = begin + text.size();
-    auto const [ptr, ec] = std::from_chars(begin, end, parsed);
-
-    if (ec != std::errc{} || ptr != end)
-    {
-      return std::nullopt;
-    }
-
-    return parsed;
+  std::optional<std::uint64_t> pipeWireObjectSerial(::spa_dict const* props) noexcept
+  {
+    auto const optSerial =
+      parseUnsigned<std::uint64_t>(props != nullptr ? ::spa_dict_lookup(props, PW_KEY_OBJECT_SERIAL) : nullptr);
+    // PipeWire reserves SPA_ID_INVALID in the low 32 bits, but the serial itself is 64-bit.
+    return optSerial && static_cast<std::uint32_t>(*optSerial) != kPwIdAny ? optSerial : std::nullopt;
   }
 
   NodeRecord parseNodeRecord(std::uint32_t version, ::spa_dict const* props) noexcept
@@ -76,10 +87,7 @@ namespace ao::audio::backend::detail
     record.nodeDescription = lookupProperty(props, PW_KEY_NODE_DESCRIPTION);
     record.objectPath = lookupProperty(props, PW_KEY_OBJECT_PATH);
 
-    if (auto const optSerial = parsePipeWireUint32(::spa_dict_lookup(props, PW_KEY_OBJECT_SERIAL)); optSerial)
-    {
-      record.optObjectSerial = optSerial;
-    }
+    record.optObjectSerial = pipeWireObjectSerial(props);
 
     if (auto const optId = parsePipeWireUint32(::spa_dict_lookup(props, "node.driver-id")); optId)
     {

@@ -219,6 +219,16 @@ zh_Hant:table {
     audio_profile_exclusive { "獨佔模式" }
     audio_profile_exclusive_description { "直接存取音訊裝置" }
     system_default_output_device { "系統預設" }
+    output_device_pending_summary { "選取輸出" }
+    output_device_pending_status { "所選輸出無法使用" }
+    output_device_pending_named_status { "所選輸出無法使用：{device}" }
+    output_device_invalid_pipewire_status { "請重新選取 PipeWire 輸出。儲存的選擇無效。" }
+    output_device_routing_policy_toggle { "允許系統使用其他輸出" }
+    output_device_routing_policy_fixed { "開啟後，如果此裝置在啟動時無法使用或中斷連線，系統可以使用其他輸出。關閉時僅使用此裝置。" }
+    output_device_routing_policy_allowed { "如果此裝置在啟動時無法使用或中斷連線，系統可以使用其他輸出。" }
+    output_device_routing_policy_exclusive { "{rerouting, select, allowed {} other {關閉時僅使用此裝置。}}開啟後，如果啟動時找不到此裝置或裝置中斷連線，系統可能改用其他輸出，但仍以獨佔模式開啟。輸出遭佔用時可能無法播放。Aobus 佔用該輸出期間，其他應用程式可能無法使用它。" }
+    output_device_reroute_status { "系統可能使用其他輸出" }
+    output_device_preferred_status { "偏好輸出（系統可能切換）：{route}" }
     completion_field { "欄位" }
     completion_alias { "別名" }
     completion_operator { "運算子" }

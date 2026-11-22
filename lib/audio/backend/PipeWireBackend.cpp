@@ -6,6 +6,7 @@
 #include "backend/detail/AudioBackendVolumeMath.h"
 #include "backend/detail/PipeWireFormatParsing.h"
 #include "backend/detail/PipeWireRuntime.h"
+#include "backend/detail/PipeWireTargetLookup.h"
 #include "backend/detail/SpeakerSet.h"
 #include "detail/DecoderOutput.h"
 #include "detail/OpenedModeValidation.h"
@@ -16,6 +17,7 @@
 #include <ao/audio/ChannelDeliveryEvidence.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/OpenedPcmMode.h>
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/Property.h>
 #include <ao/audio/RenderTarget.h>
@@ -606,8 +608,11 @@ namespace ao::audio::backend
     ::pw_stream_set_control(streamPtr.get(), SPA_PROP_mute, 1, &mutedFloat, 0U);
   }
 
-  PipeWireBackend::PipeWireBackend(Device const& device, ProfileId const& profile)
-    : _implPtr{std::make_unique<Impl>()}, _targetDeviceId{device.id}, _exclusiveMode{profile == kProfileExclusive}
+  PipeWireBackend::PipeWireBackend(Device const& device, ProfileId const& profile, OutputRoutingPolicy routingPolicy)
+    : _implPtr{std::make_unique<Impl>()}
+    , _targetDeviceId{device.id}
+    , _routingPolicy{routingPolicy}
+    , _exclusiveMode{profile == kProfileExclusive}
   {
     _implPtr->threadLoopPtr.reset(::pw_thread_loop_new("PipeWireBackend", nullptr));
 
@@ -616,13 +621,10 @@ namespace ao::audio::backend
       _implPtr->contextPtr.reset(
         ::pw_context_new(::pw_thread_loop_get_loop(_implPtr->threadLoopPtr.get()), nullptr, 0));
 
-      if (_implPtr->contextPtr)
+      if (_implPtr->contextPtr && ::pw_thread_loop_start(_implPtr->threadLoopPtr.get()) >= 0)
       {
-        ::pw_thread_loop_start(_implPtr->threadLoopPtr.get());
-        {
-          auto guard = PwThreadLoopGuard{_implPtr->threadLoopPtr.get()};
-          _implPtr->corePtr.reset(::pw_context_connect(_implPtr->contextPtr.get(), nullptr, 0));
-        }
+        auto guard = PwThreadLoopGuard{_implPtr->threadLoopPtr.get()};
+        _implPtr->corePtr.reset(::pw_context_connect(_implPtr->contextPtr.get(), nullptr, 0));
       }
     }
   }
@@ -714,6 +716,41 @@ namespace ao::audio::backend
     auto optRouteAnchor = std::optional<std::string>{};
     {
       auto guard = PwThreadLoopGuard{_implPtr->threadLoopPtr.get()};
+      // PipeWire's property constructor is a variadic C API terminated by null keys.
+      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
+      auto propsPtr = utility::makeUniquePtr<::pw_properties_free>(::pw_properties_new(nullptr, nullptr));
+
+      if (!propsPtr)
+      {
+        return std::unexpected{BackendOpenFailure{
+          .error = makeError(Error::Code::InitFailed, "Failed to allocate PipeWire stream properties").error()}};
+      }
+
+      // Target discovery and PCM negotiation spend the same native wait budget.
+      auto deadline = ::timespec{};
+
+      if (::pw_thread_loop_get_time(_implPtr->threadLoopPtr.get(), &deadline, kOpenTimeoutNanoseconds) < 0)
+      {
+        return std::unexpected{BackendOpenFailure{
+          .error = makeError(Error::Code::InitFailed, "Failed to establish PipeWire open deadline").error()}};
+      }
+
+      if (!_targetDeviceId.empty())
+      {
+        if (auto targetRes = setPipeWireNamedTarget(*_implPtr->corePtr,
+                                                    *_implPtr->threadLoopPtr,
+                                                    deadline,
+                                                    *propsPtr,
+                                                    _targetDeviceId,
+                                                    _routingPolicy,
+                                                    useExclusive);
+            !targetRes)
+        {
+          return std::unexpected{BackendOpenFailure{
+            .error = std::move(targetRes.error()), .cause = BackendOpenFailure::Cause::OutputFailure}};
+        }
+      }
+
       _implPtr->renderTarget = &target;
       _implPtr->sourceFormat = sourceFormat;
       _implPtr->format = {};
@@ -726,9 +763,6 @@ namespace ao::audio::backend
       _implPtr->routeAnchorReported = false;
       _implPtr->opening = true;
 
-      // PipeWire's property constructor is a variadic C API terminated by null keys.
-      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
-      auto propsPtr = utility::makeUniquePtr<::pw_properties_free>(::pw_properties_new(nullptr, nullptr));
       ::pw_properties_set(propsPtr.get(), PW_KEY_MEDIA_TYPE, "Audio");
       ::pw_properties_set(propsPtr.get(), PW_KEY_MEDIA_CATEGORY, "Playback");
       ::pw_properties_set(propsPtr.get(), PW_KEY_MEDIA_ROLE, "Music");
@@ -736,16 +770,6 @@ namespace ao::audio::backend
       ::pw_properties_set(propsPtr.get(), PW_KEY_APP_ID, "io.github.Aobus");
       ::pw_properties_set(propsPtr.get(), PW_KEY_NODE_NAME, "Aobus Playback");
       ::pw_properties_set(propsPtr.get(), PW_KEY_NODE_RATE, std::format("1/{}", sourceFormat.sampleRate).c_str());
-
-      if (!_targetDeviceId.empty())
-      {
-        ::pw_properties_set(propsPtr.get(), PW_KEY_TARGET_OBJECT, _targetDeviceId.c_str());
-
-        if (useExclusive)
-        {
-          ::pw_properties_set(propsPtr.get(), PW_KEY_NODE_EXCLUSIVE, "true");
-        }
-      }
 
       _implPtr->streamPtr.reset(::pw_stream_new(_implPtr->corePtr.get(), "Aobus Playback", propsPtr.release()));
 
@@ -791,9 +815,6 @@ namespace ao::audio::backend
             // An inactive PipeWire stream is not guaranteed to negotiate its
             // Format param. Activate it while render admission remains closed,
             // then return it to the prepared state before decoder setup.
-            auto deadline = ::timespec{};
-            ::pw_thread_loop_get_time(_implPtr->threadLoopPtr.get(), &deadline, kOpenTimeoutNanoseconds);
-
             while (!_implPtr->optOpenFailure && (_implPtr->format.encoding == SampleEncoding::Unknown ||
                                                  (_implPtr->streamState != PW_STREAM_STATE_PAUSED &&
                                                   _implPtr->streamState != PW_STREAM_STATE_STREAMING)))

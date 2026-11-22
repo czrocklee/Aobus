@@ -688,8 +688,7 @@ namespace ao::gtk
 
     if (optOutputSelection)
     {
-      playback.commands().setOutputDevice(
-        optOutputSelection->backendId, optOutputSelection->deviceId, optOutputSelection->profileId);
+      playback.commands().setOutputDevice(*optOutputSelection);
     }
 
     _implPtr->themeCoordinator.load(*_configStorePtr);

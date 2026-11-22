@@ -1,10 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "lib/audio/NullBackend.h"
 #include "test/audio/AudioFixtureSupport.h"
+#include "test/audio/BackendTestSupport.h"
 #include "test/audio/ScriptedDecoderSession.h"
 #include "test/runtime/ExecutorTestSupport.h"
 #include "test/runtime/PlaybackTransportTestSupport.h"
+#include <ao/CoreIds.h>
+#include <ao/Error.h>
+#include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/ChannelDeliveryEvidence.h>
@@ -25,8 +30,10 @@
 
 #include <chrono>
 #include <cstddef>
+#include <expected>
 #include <memory>
 #include <optional>
+#include <tuple>
 #include <vector>
 
 namespace ao::rt::test
@@ -281,6 +288,148 @@ namespace ao::rt::test
     CHECK(fixture.playbackTransport.state().transport == audio::Transport::Paused);
     CHECK(qualityEvents.back().ready);
     CHECK(qualityEvents.back().quality.pipelineQuality == audio::Quality::LinearIntervention);
+  }
+
+  TEST_CASE("PlaybackTransport - a restored concrete output cannot start the alternative route")
+  {
+    // The DAC refuses native open, independently of whether discovery still lists it.
+    // The other backend instance represents a working system-default output.
+    auto dac = PlaybackFixtureSpyBackend{};
+    auto fixture = PlaybackTransportFixture<QueuedExecutor>{};
+    auto const backend = fixture.status.descriptor.id;
+    auto const dacId = audio::DeviceId{"studio-dac"};
+    auto const systemDefault = audio::Device{.id = {}, .isDefault = true, .backendId = backend};
+    fakeit::When(Method(dac.mock(), backendId)).AlwaysReturn(backend);
+    fakeit::When(Method(dac.mock(), open))
+      .AlwaysReturn(std::unexpected{
+        audio::BackendOpenFailure{.error = Error{.code = Error::Code::DeviceNotFound, .message = "DAC disconnected"}}});
+    fakeit::When(Method(fixture.mockProvider, createBackend))
+      .AlwaysDo([&](audio::Device const& device, audio::ProfileId const&)
+                { return device.id == dacId ? dac.makeProxy() : fixture.spyBackendPtr->makeProxy(); });
+
+    bool expectDacOpen = false;
+
+    SECTION("the DAC is requested before the first discovery callback")
+    {
+      fixture.playbackTransport.setOutputDevice(backend, dacId, audio::kProfileShared);
+      fixture.onDevicesChangedCb({systemDefault});
+      fixture.executor.drain();
+    }
+
+    SECTION("the default was already configured before the DAC was restored")
+    {
+      fixture.onDevicesChangedCb({systemDefault});
+      fixture.executor.drain();
+      fixture.playbackTransport.setOutputDevice(backend, dacId, audio::kProfileShared);
+    }
+
+    SECTION("the restored backend is not installed on this machine")
+    {
+      fixture.onDevicesChangedCb({systemDefault});
+      fixture.executor.drain();
+      fixture.playbackTransport.setOutputDevice(audio::BackendId{"absent-backend"}, dacId, audio::kProfileShared);
+    }
+
+    SECTION("the restored device is present but its preferred profile is unsupported")
+    {
+      fixture.onDevicesChangedCb({systemDefault, audio::Device{.id = dacId, .backendId = backend}});
+      fixture.executor.drain();
+      fixture.playbackTransport.setOutputDevice(backend, dacId, audio::kProfileExclusive);
+      auto const request =
+        audio::OutputDeviceSelection{.backendId = backend, .deviceId = dacId, .profileId = audio::kProfileExclusive};
+      CHECK(fixture.playbackTransport.state().output.optPendingOutputSelection == request);
+    }
+
+    SECTION("a stale discovery result still lists the disconnected DAC")
+    {
+      fixture.onDevicesChangedCb({systemDefault, audio::Device{.id = dacId, .backendId = backend}});
+      fixture.executor.drain();
+      fixture.playbackTransport.setOutputDevice(backend, dacId, audio::kProfileShared);
+      expectDacOpen = true;
+    }
+
+    auto const file = audio::test::requireAudioFixture("basic_metadata.flac");
+    auto const request = playbackRequest(TrackId{1}, file.string(), "Track", "Artist", std::chrono::minutes{2});
+    // Command admission alone is not evidence of playback: native open can fail after commit.
+    std::ignore = fixture.playbackTransport.play(request, ListId{1});
+    fixture.executor.drain();
+    CHECK(fixture.playbackTransport.state().transport != audio::Transport::Playing);
+    fakeit::Verify(Method(fixture.spyBackendPtr->mock(), open)).Never();
+    fakeit::Verify(Method(fixture.spyBackendPtr->mock(), start)).Never();
+    fakeit::Verify(Method(dac.mock(), start)).Never();
+
+    if (expectDacOpen)
+    {
+      fakeit::Verify(Method(dac.mock(), open)).AtLeastOnce();
+    }
+
+    // Explicit selection, not a failed playback attempt, releases the alternative output.
+    fixture.playbackTransport.setOutputDevice(backend, {}, audio::kProfileShared);
+    REQUIRE(fixture.playbackTransport.play(request, ListId{1}));
+    fixture.executor.drain();
+    CHECK(fixture.playbackTransport.state().transport == audio::Transport::Playing);
+    CHECK(fixture.playbackTransport.state().output.selectedDevice.deviceId.empty());
+    fakeit::Verify(Method(fixture.spyBackendPtr->mock(), start)).AtLeastOnce();
+  }
+
+  TEST_CASE("PlaybackTransport - a held output preserves the track and position for explicit resume")
+  {
+    auto fixture = PlaybackTransportFixture<QueuedExecutor>{};
+    auto& transport = fixture.playbackTransport;
+    fixture.onDevicesChangedCb(fixture.status.devices);
+    fixture.executor.drain();
+    auto const file = audio::test::requireAudioFixture("basic_metadata.flac");
+    // Stale library duration must not turn the interrupted position into an end-of-track command.
+    auto const request = playbackRequest(TrackId{1}, file.string(), "Track", "Artist", std::chrono::milliseconds{100});
+    REQUIRE(transport.play(request, ListId{1}, std::chrono::milliseconds{250}));
+    fixture.executor.drain();
+    auto const elapsed = transport.elapsed();
+    REQUIRE(elapsed > request.input.duration);
+    REQUIRE(elapsed < transport.state().duration);
+
+    auto const dac = audio::Device{.id = audio::DeviceId{"studio-dac"}, .backendId = fixture.status.descriptor.id};
+    transport.setOutputDevice(dac.backendId, dac.id, audio::kProfileShared);
+    transport.resume();
+    fixture.executor.drain();
+    REQUIRE(transport.state().transport == audio::Transport::Paused);
+    CHECK(transport.elapsed() == elapsed);
+
+    SECTION("A rejected replacement leaves the held track available for Resume")
+    {
+      auto const other = playbackRequest(TrackId{2}, file.string(), "Other", "Artist", std::chrono::minutes{2});
+      CHECK_FALSE(transport.play(other, ListId{1}));
+      fixture.onDevicesChangedCb({dac});
+      fixture.executor.drain();
+      REQUIRE(transport.state().ready);
+      CHECK(transport.state().transport == audio::Transport::Paused);
+      CHECK(transport.state().nowPlaying.trackId == request.item.trackId);
+      fakeit::Verify(Method(fixture.spyBackendPtr->mock(), open)).Once();
+
+      transport.resume();
+      fixture.executor.drain();
+      CHECK(transport.state().transport == audio::Transport::Playing);
+      CHECK(transport.state().output.selectedDevice.deviceId == dac.id);
+      CHECK(transport.elapsed() == elapsed);
+      fakeit::Verify(Method(fixture.spyBackendPtr->mock(), open)).Exactly(2);
+    }
+
+    SECTION("Stop releases the held track but keeps the requested route")
+    {
+      auto const optPending = transport.state().output.optPendingOutputSelection;
+      REQUIRE(optPending);
+      std::ignore = transport.stop();
+      REQUIRE(transport.state().output.optPendingOutputSelection == optPending);
+      CHECK(transport.state().nowPlaying.trackId == kInvalidTrackId);
+
+      fixture.onDevicesChangedCb({dac});
+      fixture.executor.drain();
+      REQUIRE(transport.state().ready);
+      CHECK(transport.state().output.selectedDevice.deviceId == dac.id);
+      transport.resume();
+      fixture.executor.drain();
+      CHECK(transport.state().transport == audio::Transport::Idle);
+      fakeit::Verify(Method(fixture.spyBackendPtr->mock(), open)).Once();
+    }
   }
 
   TEST_CASE("PlaybackTransport output device - auto-select notifies device list subscribers")

@@ -28,7 +28,7 @@ namespace ao::audio::backend::test
 
     if (deviceId == nullptr || *deviceId == '\0')
     {
-      SKIP("Select an existing PipeWire sink with AOBUS_TEST_PIPEWIRE_DEVICE_ID");
+      SKIP("Select an existing PipeWire sink with AOBUS_TEST_PIPEWIRE_DEVICE_ID=node:<node.name>");
     }
 
     auto const device = Device{.id = DeviceId{std::string{deviceId}},

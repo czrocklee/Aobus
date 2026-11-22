@@ -23,6 +23,21 @@ For other frontends, see [Use the Windows desktop](use-windows-desktop.md) or [U
 5. Use the volume button for precision control, scroll over it for two-percentage-point changes, or middle-click it to toggle mute.
 6. Open **Edit → Preferences... → Playback/Output** to choose an output device.
 
+### Choose what happens if a PipeWire device disappears
+
+In the output chooser, select your named PipeWire device, such as a USB DAC. Leave **Let system use other outputs** off (the default) if you don't want audio to play through speakers when the DAC is absent at startup or disconnects during playback.
+
+If you request an unavailable output while music is playing, Aobus holds the track and its position. Trying to play another track while the output is unavailable does not replace the held track. Stop discards the held track, but keeps the output choice. Reconnect the device or choose an available output, then press Play; making the output available does not itself resume the track. If a listed device fails to open, check the playback error and choose a working output before retrying.
+
+If the chooser says the saved PipeWire choice is invalid, select the intended device again. This can happen after upgrading from a version that saved only a device number. Reconnecting alone cannot restore that choice.
+If the device is simply unavailable, check that it is connected. If its name changed, select it again. Aobus does not guess a match from a device number or from a name shared by multiple devices.
+
+Turn on **Let system use other outputs** to allow PipeWire to choose a substitute at startup or after disconnection. If your DAC returns while music is playing elsewhere, selecting its highlighted row again does not force the stream back: the row shows your preference, not the current speakers. To require the DAC, turn **Let system use other outputs** off.
+
+With **Exclusive Mode**, Aobus still requests exclusive access: playback can fail if the substitute is busy, and other apps may be unable to use it while Aobus holds it.
+
+Choose **System Default** to follow system routing without preferring a particular device. The rerouting switch is available only for named PipeWire outputs.
+
 ### Inspect playback quality
 
 Open the quality or pipeline surface while a track is active.

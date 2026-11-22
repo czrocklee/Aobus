@@ -1,22 +1,35 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include "runtime/PlaybackSessionPersistence.h"
+#include "runtime/PlaybackSessionState.h"
+#include "runtime/PlaybackSessionYamlSchema.h"
 #include "runtime/playback/PlaybackSuccession.h"
 #include "runtime/playback/PlaybackTransport.h"
+#include "test/audio/BackendTestSupport.h"
 #include "test/audio/EngineTestSupport.h"
 #include "test/runtime/PlaybackSuccessionBaseTestSupport.h"
 #include "test/runtime/PlaybackSuccessionSeekTestSupport.h"
 #include "test/runtime/PlaybackSuccessionTransportTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
+#include <ao/audio/Device.h>
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/audio/RenderTarget.h>
 #include <ao/audio/Transport.h>
+#include <ao/rt/ConfigStore.h>
+#include <ao/rt/NotificationState.h>
 #include <ao/rt/PlaybackMode.h>
+#include <ao/rt/PlaybackState.h>
+#include <ao/rt/playback/PlaybackService.h>
 #include <ao/utility/ScopedRegistration.h>
 #include <ao/utility/ThreadName.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
+#include <fakeit.hpp>
 
 #include <array>
 #include <atomic>
@@ -24,7 +37,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <thread>
+#include <tuple>
+#include <variant>
 #include <vector>
 
 namespace ao::rt::test
@@ -52,7 +68,8 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("PlaybackSuccession - idle fallback advances without a prepared successor")
+  TEST_CASE("PlaybackSuccession - natural end without a prepared successor respects output availability",
+            "[concurrency]")
   {
     auto fixture = PlaybackSuccessionTransportFixture{};
     fixture.buildThreeTrackManualView();
@@ -63,30 +80,48 @@ namespace ao::rt::test
     REQUIRE(fixture.transport.renderTarget != nullptr);
 
     auto output = std::array<std::byte, 4096>{};
-    bool drained = false;
+    auto& executor = fixture.transport.executor;
+    REQUIRE(executor.tryDrainUntil([&] { return fixture.transport.renderTarget->renderPcm(output).drained; }));
+    executor.drain();
 
-    for (std::int32_t attempt = 0; attempt < 100000 && !drained; ++attempt)
+    SECTION("a ready route advances to the next track")
     {
-      drained = fixture.transport.renderTarget->renderPcm(output).drained;
+      fixture.transport.renderTarget->handleDrainComplete();
+      REQUIRE(
+        executor.tryDrainUntil([&] { return fixture.successionPtr->state().currentTrackId == fixture.secondTrackId; }));
+      CHECK(playbackTransport.state().nowPlaying.trackId == fixture.secondTrackId);
+      CHECK(playbackTransport.state().transport == audio::Transport::Playing);
     }
 
-    REQUIRE(drained);
-    fixture.transport.renderTarget->handleDrainComplete();
+    SECTION("a missing route retires the sequence without skipping or replaying on rediscovery")
+    {
+      auto const occurrence = playbackTransport.state().occurrenceId;
+      auto missing = playbackTransport.state().output.selectedDevice;
+      missing.deviceId = audio::DeviceId{"missing"};
+      std::size_t idleCount = 0;
+      auto idleSub = playbackTransport.onIdle([&] { ++idleCount; });
 
-    // The drain only enqueues a render-thread signal, so the advance lands an
-    // executor hop after the first queued task. Waiting for the advance itself
-    // rather than for a queued task keeps the pump thread out of the race.
-    REQUIRE(fixture.transport.executor.tryDrainUntil(
-      [&]
-      {
-        return fixture.successionPtr->state().currentTrackId == fixture.secondTrackId &&
-               playbackTransport.state().transport == audio::Transport::Playing;
-      },
-      std::chrono::seconds{10}));
+      // Discovery will run *before* the queued terminal notifications, but
+      // cannot make the requested route available until we deliver that turn.
+      fixture.transport.onDevicesChangedCb({audio::Device{.id = missing.deviceId, .backendId = missing.backendId}});
+      fixture.transport.renderTarget->handleDrainComplete();
+      REQUIRE(executor.tryWaitUntilQueuedCount(4)); // discovery, state, route, end
+      REQUIRE_FALSE(playbackTransport.canAdvanceFrom(occurrence));
+      playbackTransport.setOutputDevice(missing);
+      REQUIRE(playbackTransport.state().output.optPendingOutputSelection == missing);
+      REQUIRE_FALSE(playbackTransport.state().ready);
+      executor.drain();
 
-    CHECK(fixture.successionPtr->state().currentTrackId == fixture.secondTrackId);
-    CHECK(playbackTransport.state().nowPlaying.trackId == fixture.secondTrackId);
-    CHECK(playbackTransport.state().transport == audio::Transport::Playing);
+      CHECK(fixture.successionPtr->state().sourceState == PlaybackSuccessionSourceState::Inactive);
+      REQUIRE(playbackTransport.state().ready);
+      CHECK(playbackTransport.state().output.selectedDevice == missing);
+      playbackTransport.resume();
+      executor.drain();
+      CHECK(playbackTransport.state().transport == audio::Transport::Idle);
+      CHECK(playbackTransport.state().occurrenceId == PlaybackOccurrenceId{});
+      CHECK(idleCount == 1);
+    }
+
     CHECK(fixture.transport.notificationService.feed().entries.empty());
   }
 
@@ -118,6 +153,31 @@ namespace ao::rt::test
     CHECK(*optReplacementToken != *optFirstToken);
     CHECK(fixture.successionPtr->state().currentTrackId == fixture.firstTrackId);
     CHECK(playbackTransport.state().transport == audio::Transport::Playing);
+  }
+
+  TEST_CASE("PlaybackSuccession - waiting for output preserves the shuffle successor until resume")
+  {
+    auto fixture = PlaybackSuccessionTransportFixture{};
+    fixture.buildThreeTrackManualView();
+    auto& succession = *fixture.successionPtr;
+    auto& transport = fixture.transport.playbackTransport;
+    succession.setShuffleMode(ShuffleMode::On);
+    REQUIRE(fixture.playAndWait(fixture.firstTrackId));
+    auto const optSuccessor = succession.state().optResolvedSuccessor;
+    REQUIRE(optSuccessor);
+
+    auto const selected = transport.state().output.selectedDevice;
+    transport.setOutputDevice(selected.backendId, audio::DeviceId{"missing"}, selected.profileId);
+    REQUIRE_FALSE(transport.state().ready);
+    CHECK(succession.state().optResolvedSuccessor == optSuccessor);
+
+    transport.setOutputDevice(selected);
+    REQUIRE(transport.state().ready);
+    REQUIRE(transport.state().transport == audio::Transport::Paused);
+    CHECK(succession.state().optResolvedSuccessor == optSuccessor);
+    transport.resume();
+    REQUIRE(succession.tryMoveNext());
+    CHECK(transport.state().nowPlaying.trackId == *optSuccessor);
   }
 
   TEST_CASE("PlaybackSuccession - paired mode update replaces lookahead once from the final state", "[concurrency]")
@@ -313,6 +373,256 @@ namespace ao::rt::test
     CHECK(fixture.transport.playbackTransport.state().transport == audio::Transport::Playing);
   }
 
+  TEST_CASE("PlaybackSuccession - switching to missing output settles a failed prepared winner once", "[concurrency]")
+  {
+    auto const expectedReport =
+      GENERATE(NotificationReportTemplate::PlaybackDeviceLost, NotificationReportTemplate::PlaybackStoppedForTrack);
+    CAPTURE(expectedReport);
+    auto const decodeFailure = expectedReport == NotificationReportTemplate::PlaybackStoppedForTrack;
+    auto const* const deviceLostDetail = "device lost after gapless advance";
+    auto failureGate = audio::test::StagedFailureGate{};
+    auto renderMutex = std::mutex{};
+    auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
+      .stagedFailureFileName = "transport-playable-1.flac",
+      .stagedFailureGate = decodeFailure ? &failureGate : nullptr,
+    }};
+    auto releaseGuard = audio::test::StagedFailureReleaseGuard{failureGate};
+    fixture.buildThreeTrackManualView();
+    auto& transport = fixture.transport.playbackTransport;
+    auto& executor = fixture.transport.executor;
+    auto& backend = fixture.transport.spyBackendPtr->mock();
+    fakeit::When(Method(backend, close))
+      .AlwaysDo(
+        [&]
+        {
+          // Engine destroys the borrowed render target after the backend closes.
+          auto const lock = std::scoped_lock{renderMutex};
+          fixture.transport.renderTarget = nullptr;
+        });
+    REQUIRE(fixture.playAndWait(fixture.firstTrackId));
+    auto const firstOccurrence = transport.state().occurrenceId;
+
+    auto announcements = std::vector<PlaybackTransport::NowPlayingChanged>{};
+    std::size_t startedCount = 0;
+    auto const nowPlayingSub = transport.onNowPlayingChanged(
+      [&](PlaybackTransport::NowPlayingChanged const& event)
+      {
+        if (event.trackId != kInvalidTrackId)
+        {
+          announcements.push_back(event);
+        }
+      });
+    auto const startedSub = transport.onStarted([&] { ++startedCount; });
+
+    fixture.queueNaturalAdvance();
+    REQUIRE(executor.tryWaitUntilQueuedCount(3)); // advance, state, route
+    REQUIRE_FALSE(transport.canAdvanceFrom(firstOccurrence));
+
+    if (decodeFailure)
+    {
+      // Fail only after B's splice, so this is not a failed lookahead.
+      REQUIRE(failureGate.tryWaitForRead());
+      releaseGuard.release();
+    }
+    else
+    {
+      auto const lock = std::scoped_lock{renderMutex};
+      REQUIRE(fixture.transport.renderTarget != nullptr);
+      fixture.transport.renderTarget->handleBackendError(deviceLostDetail);
+    }
+
+    // Engine has closed B and queued failure and state (and end for Decode).
+    REQUIRE(executor.tryWaitUntilQueuedCount(decodeFailure ? 6 : 5));
+
+    if (decodeFailure)
+    {
+      // Let one unexpected reopen of B fail instead of hanging at the decoder gate.
+      failureGate.release();
+    }
+
+    REQUIRE(transport.state().nowPlaying.trackId == fixture.firstTrackId);
+    REQUIRE(announcements.empty());
+    REQUIRE(fixture.transport.notificationService.feed().entries.empty());
+
+    auto missing = transport.state().output.selectedDevice;
+    missing.deviceId = audio::DeviceId{"missing"};
+    transport.setOutputDevice(missing);
+    executor.drain();
+    CHECK(transport.state().output.optPendingOutputSelection == missing);
+    CHECK(fixture.successionPtr->state().sourceState == PlaybackSuccessionSourceState::Inactive);
+    REQUIRE(transport.state().transport == audio::Transport::Idle);
+
+    auto const feed = fixture.transport.notificationService.feed();
+    REQUIRE(feed.entries.size() == 1);
+    CHECK(feed.entries.front().severity == NotificationSeverity::Error);
+    auto const* report = std::get_if<NotificationReport>(&feed.entries.front().message);
+    REQUIRE(report != nullptr);
+    CHECK(report->templateId == expectedReport);
+    CHECK(report->trackId == fixture.secondTrackId);
+    CHECK(report->detail == (decodeFailure ? "gated staged decode failure" : deviceLostDetail));
+
+    fixture.transport.onDevicesChangedCb({audio::Device{.id = missing.deviceId, .backendId = missing.backendId}});
+    executor.drain();
+    REQUIRE(transport.state().ready);
+    transport.resume();
+    executor.drain();
+
+    CHECK(transport.state().transport == audio::Transport::Idle);
+    CHECK(transport.state().occurrenceId == PlaybackOccurrenceId{});
+    CHECK(startedCount == 0);
+    fakeit::Verify(Method(backend, open)).Once();
+    REQUIRE(announcements.size() == 1);
+    CHECK(announcements.front().trackId == fixture.secondTrackId);
+    CHECK(announcements.front().optPreparedNextToken.has_value());
+  }
+
+  TEST_CASE("PlaybackSuccession - switching output after a prepared successor ends settles that successor once",
+            "[concurrency]")
+  {
+    auto fixture = PlaybackSuccessionTransportFixture{};
+    fixture.buildThreeTrackManualView();
+    auto& transport = fixture.transport.playbackTransport;
+    auto& executor = fixture.transport.executor;
+    auto& succession = *fixture.successionPtr;
+    auto alternate = transport.state().output.selectedDevice;
+    alternate.deviceId = audio::DeviceId{"alternate"};
+    auto devices = fixture.transport.status.devices;
+    devices.push_back(audio::Device{.id = alternate.deviceId, .backendId = alternate.backendId});
+    fixture.transport.onDevicesChangedCb(devices);
+    executor.drain();
+    REQUIRE(fixture.playAndWait(fixture.firstTrackId));
+    auto const firstOccurrence = transport.state().occurrenceId;
+
+    auto secondTrackEvents = std::vector<PlaybackTransport::NowPlayingChanged>{};
+    auto const subscription = transport.onNowPlayingChanged(
+      [&](PlaybackTransport::NowPlayingChanged const& event)
+      {
+        if (event.trackId == fixture.secondTrackId)
+        {
+          secondTrackEvents.push_back(event);
+        }
+      });
+    fixture.queueNaturalAdvance();
+    // Render B to EOF without running the executor: succession cannot yet arm C.
+    auto output = std::array<std::byte, 4096>{};
+    auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{10};
+    auto drained = fixture.transport.renderTarget->renderPcm(output).drained;
+
+    while (!drained && std::chrono::steady_clock::now() < deadline)
+    {
+      std::this_thread::yield();
+      drained = fixture.transport.renderTarget->renderPcm(output).drained;
+    }
+
+    REQUIRE(drained);
+    REQUIRE_FALSE(transport.canAdvanceFrom(firstOccurrence));
+    fixture.transport.renderTarget->handleDrainComplete();
+    // Splice (advance/state/route) and EOF (state/route/end) await delivery.
+    REQUIRE(executor.tryWaitUntilQueuedCount(6));
+    REQUIRE(transport.state().nowPlaying.trackId == fixture.firstTrackId);
+    REQUIRE(secondTrackEvents.empty());
+    bool supersededByNext = false;
+
+    SECTION("a ready route plays C rather than replaying B")
+    {
+      transport.setOutputDevice(alternate);
+      executor.drain();
+      CHECK(transport.state().output.selectedDevice == alternate);
+      CHECK(transport.state().transport == audio::Transport::Playing);
+      CHECK(transport.state().nowPlaying.trackId == fixture.thirdTrackId);
+      CHECK(succession.state().currentTrackId == fixture.thirdTrackId);
+    }
+
+    SECTION("a missing route retains B only as the last restorable track")
+    {
+      auto missing = alternate;
+      missing.deviceId = audio::DeviceId{"missing"};
+      transport.setOutputDevice(missing);
+      executor.drain();
+      REQUIRE(transport.state().output.optPendingOutputSelection == missing);
+      CHECK(succession.state().sourceState == PlaybackSuccessionSourceState::Inactive);
+
+      devices.push_back(audio::Device{.id = missing.deviceId, .backendId = missing.backendId});
+      fixture.transport.onDevicesChangedCb(devices);
+      executor.drain();
+      REQUIRE(transport.state().ready);
+      transport.resume();
+      executor.drain();
+      CHECK(transport.state().transport == audio::Transport::Idle);
+      CHECK(transport.state().occurrenceId == PlaybackOccurrenceId{});
+
+      auto playback = fixture.createPlayback();
+      CHECK(playback.snapshot().transport.nowPlaying.trackId == fixture.secondTrackId);
+      auto store = ConfigStore{fixture.transport.libraryFixture.root() / "session.yaml"};
+      auto persistence = PlaybackSessionPersistence{
+        store, fixture.commandsFixture.library(), succession, transport, playback, fixture.asyncRuntime};
+      REQUIRE(persistence.checkpoint());
+      auto saved = PlaybackSessionState{};
+      auto const loadedRes = store.load(kPlaybackSessionConfigGroup, saved, PlaybackSessionYamlSchema{});
+      REQUIRE(loadedRes);
+      REQUIRE(*loadedRes);
+      CHECK(saved.currentTrackId == fixture.secondTrackId);
+      CHECK(saved.anchorIndex == 1);
+    }
+
+    SECTION("Stop from B's deferred now-playing observer prevents C from starting")
+    {
+      bool stoppedFromB = false;
+      auto const stopSubscription = transport.onNowPlayingChanged(
+        [&](PlaybackTransport::NowPlayingChanged const& event)
+        {
+          if (event.trackId == fixture.secondTrackId && event.optPreparedNextToken)
+          {
+            stoppedFromB = true;
+            std::ignore = transport.stop();
+          }
+        });
+      // Switch outputs while Transport is already draining its notifications.
+      auto const volumeSubscription = transport.onVolumeChanged([&](float) { transport.setOutputDevice(alternate); });
+      transport.setVolume(0.5F);
+      executor.drain();
+
+      CHECK(stoppedFromB);
+      CHECK(transport.state().output.selectedDevice == alternate);
+      CHECK(transport.state().transport == audio::Transport::Idle);
+      CHECK(transport.state().occurrenceId == PlaybackOccurrenceId{});
+      CHECK(transport.state().nowPlaying.trackId == kInvalidTrackId);
+      CHECK(succession.state().sourceState == PlaybackSuccessionSourceState::Inactive);
+    }
+
+    SECTION("Next from the outer observer supersedes the queued prepared notice")
+    {
+      auto const volumeSubscription = transport.onVolumeChanged(
+        [&](float)
+        {
+          transport.setOutputDevice(alternate);
+          supersededByNext = succession.tryMoveNext();
+        });
+      transport.setVolume(0.5F);
+      executor.drain();
+
+      CHECK(supersededByNext);
+      CHECK(transport.state().output.selectedDevice == alternate);
+      CHECK(transport.state().transport == audio::Transport::Playing);
+      CHECK(transport.state().nowPlaying.trackId != fixture.firstTrackId);
+      CHECK(transport.state().nowPlaying.trackId == succession.state().currentTrackId);
+    }
+
+    if (supersededByNext)
+    {
+      for (auto const& event : secondTrackEvents)
+      {
+        // An explicit replay of B is allowed, but not the retired prepared notice.
+        CHECK_FALSE(event.optPreparedNextToken);
+      }
+    }
+    else
+    {
+      REQUIRE(secondTrackEvents.size() == 1);
+      CHECK(secondTrackEvents.front().optPreparedNextToken.has_value());
+    }
+  }
+
   TEST_CASE("PlaybackSuccession - positioning commands retain a naturally advanced winner", "[concurrency]")
   {
     auto fixture = PlaybackSuccessionTransportFixture{};
@@ -442,6 +752,29 @@ namespace ao::rt::test
     CHECK_FALSE(succession.state().hasPrevious);
     CHECK(playbackTransport.elapsed() == std::chrono::milliseconds{0});
     CHECK(playbackTransport.state().transport == audio::Transport::Playing);
+  }
+
+  TEST_CASE("PlaybackSuccession - Previous restarts a resumed interrupted track beyond three seconds")
+  {
+    auto fixture = PlaybackSuccessionSeekFixture{};
+    fixture.buildSingleTrackManualView();
+    auto& succession = *fixture.successionPtr;
+    auto& transport = *fixture.transportPtr;
+    REQUIRE(fixture.playAndWait(fixture.firstTrackId));
+    auto const offset = std::chrono::milliseconds{3001};
+    transport.seek(offset);
+    auto const selected = transport.state().output.selectedDevice;
+    transport.setOutputDevice(selected.backendId, audio::DeviceId{"missing"}, selected.profileId);
+    REQUIRE(transport.state().transport == audio::Transport::Paused);
+    REQUIRE(transport.elapsed() == offset);
+
+    transport.setOutputDevice(selected);
+    transport.resume();
+    REQUIRE(transport.state().transport == audio::Transport::Playing);
+    REQUIRE(transport.elapsed() == offset);
+    REQUIRE(succession.tryMovePrevious());
+    CHECK(transport.state().nowPlaying.trackId == fixture.firstTrackId);
+    CHECK(transport.elapsed() == std::chrono::milliseconds{0});
   }
 
   TEST_CASE("PlaybackSuccession - Next and Previous follow the cursor")
