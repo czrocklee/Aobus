@@ -14,12 +14,16 @@
 #include "test/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/linux-gtk/GtkWidgetTestSupport.h"
+#include "test/runtime/ExecutorTestSupport.h"
 #include "test/runtime/source/TrackSourceTestSupport.h"
+#include "track/TrackListItem.h"
 #include "track/TrackListModel.h"
 #include "track/TrackRowBinding.h"
 #include "track/TrackRowCache.h"
+#include "track/TrackRowObject.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/Runtime.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/MusicLibrary.h>
@@ -28,12 +32,15 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackMutation.h>
 #include <ao/rt/TrackPresentation.h>
+#include <ao/rt/TrackRow.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/projection/TrackListProjection.h>
@@ -41,9 +48,12 @@
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/utility/Raii.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <gdk/gdk.h>
+#include <giomm/listmodel.h>
 #include <glib-object.h>
+#include <glibmm/ustring.h>
 #include <glibmm/value.h>
 #include <gtkmm/box.h>
 #include <gtkmm/columnview.h>
@@ -51,11 +61,13 @@
 #include <gtkmm/droptarget.h>
 #include <gtkmm/entry.h>
 #include <gtkmm/enums.h>
+#include <gtkmm/label.h>
 #include <gtkmm/stack.h>
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -261,14 +273,14 @@ namespace ao::gtk::test
     auto sourcePtr = rt::test::makeMutableTrackSource(trackIds);
     auto projectionPtr = std::shared_ptr<rt::TrackListProjection>{
       runtime.views().createTransientTrackListProjection(rt::TrackSourceLease{sourcePtr})};
-    auto rowCache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
-    auto modelPtr = TrackListModel::create(rowCache);
-    modelPtr->bindProjection(projectionPtr);
     auto imageCache = ImageCache{200};
     auto thumbnailLoader = ResourceImageLoader{runtime.resourceBytes(), imageCache, runtime.async()};
 
     auto materializedRowsForPage = [&]
     {
+      auto rowCache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
+      auto modelPtr = TrackListModel::create(rowCache);
+      modelPtr->bindProjection(projectionPtr);
       auto columnLayouts = uimodel::TrackColumnLayouts{runtime.library().changes()};
       auto page = TrackViewPage{rt::kAllTracksListId,
                                 modelPtr,
@@ -294,7 +306,6 @@ namespace ao::gtk::test
     CHECK(ungroupedRows > 0);
     CHECK(ungroupedRows < kMaximumPrefetchedRows);
 
-    rowCache.clearCache();
     projectionPtr->setPresentation(rt::TrackPresentationSpec{
       .groupBy = rt::TrackGroupKey::Album,
       .sortBy = {{.field = rt::TrackSortField::Album}},
@@ -529,6 +540,104 @@ namespace ao::gtk::test
         auto* const label = findLabelByText(page, "Moved 1 track in Manual Order.");
         return label != nullptr && label->get_visible();
       }));
+  }
+
+  TEST_CASE("TrackViewPage - late inline completion preserves the newer published title")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto trackId = kInvalidTrackId;
+    auto fixture = GtkRuntimeFixture{
+      [&](library::MusicLibrary& musicLibrary)
+      { trackId = library::test::addTrackWithUniqueFixtureUri(musicLibrary, {.title = "Initial title"}); }};
+    auto& runtime = fixture.runtime();
+    auto& library = runtime.library();
+    auto sourcePtr = std::make_shared<rt::test::MutableTrackSource>();
+    sourcePtr->addInitial(trackId);
+    auto const& textCatalog = ao::test::englishMessageCatalog();
+    auto rowCache = TrackRowCache{library, textCatalog};
+    auto modelPtr = TrackListModel::create(rowCache);
+    modelPtr->bindProjection(runtime.views().createTransientTrackListProjection(rt::TrackSourceLease{sourcePtr}));
+    auto columnLayouts = uimodel::TrackColumnLayouts{library.changes()};
+    auto imageCache = ImageCache{200};
+    auto thumbnailLoader = ResourceImageLoader{runtime.resourceBytes(), imageCache, runtime.async()};
+    // The manual executor can hold the page completion without holding LibraryChanges on GTK's executor.
+    auto pageCallbacks = rt::test::ManualExecutor{};
+    auto pageRuntime = async::Runtime{pageCallbacks, 1};
+    auto page = TrackViewPage{rt::kAllTracksListId,
+                              modelPtr,
+                              columnLayouts,
+                              textCatalog,
+                              pageRuntime,
+                              library,
+                              runtime.views(),
+                              thumbnailLoader};
+    auto window = GtkWindowFixture{};
+    window.window().set_default_size(720, 320);
+    window.mount(page);
+    window.present();
+
+    auto const itemPtr = std::dynamic_pointer_cast<TrackListItem>(modelPtr->get_object(0));
+    REQUIRE(itemPtr);
+    REQUIRE(itemPtr->trackId() == trackId);
+    auto const rowPtr = modelPtr->trackRow(trackId);
+    REQUIRE(rowPtr);
+    REQUIRE(rowPtr->fieldText(rt::TrackField::Title) == "Initial title");
+    auto* const titleLabel = findWidgetByClass<Gtk::Label>(page, "ao-track-title-cell");
+    REQUIRE(titleLabel != nullptr);
+    REQUIRE(titleLabel->get_mapped());
+    REQUIRE(titleLabel->get_text() == "Initial title");
+    auto* const titleStack = dynamic_cast<Gtk::Stack*>(titleLabel->get_parent());
+    REQUIRE(titleStack != nullptr);
+    auto* const entry = dynamic_cast<Gtk::Entry*>(titleStack->get_child_by_name("edit"));
+    REQUIRE(entry != nullptr);
+
+    titleStack->set_visible_child("edit");
+    REQUIRE(tryEmitFocusEnter(*entry));
+    entry->set_text("Inline title");
+    emitActivate(*entry);
+    REQUIRE(titleStack->get_visible_child() == titleLabel);
+    CHECK(titleLabel->get_text() == "Initial title");
+
+    page.setStatusMessage("Awaiting inline completion");
+    auto* const statusLabel = findLabelByText(page, "Awaiting inline completion");
+    REQUIRE(statusLabel != nullptr);
+    auto const checkTitle = [&](char const* phase, char const* expected)
+    {
+      INFO(phase);
+      // Read the held row directly: a cache lookup could refresh it and hide a rollback.
+      CHECK(rowPtr->fieldText(rt::TrackField::Title) == expected);
+      CHECK(modelPtr->get_object(0) == itemPtr);
+      auto* const currentLabel = findWidgetByClass<Gtk::Label>(page, "ao-track-title-cell");
+      REQUIRE(currentLabel != nullptr);
+      CHECK(currentLabel == titleLabel);
+      CHECK(currentLabel->get_mapped());
+      CHECK(currentLabel->get_text() == expected);
+      auto const optStoredTrack = library.snapshot().trackRow(trackId);
+      REQUIRE(optStoredTrack);
+      CHECK(optStoredTrack->title == expected);
+    };
+
+    REQUIRE(pageCallbacks.tryWaitUntilQueued());
+    REQUIRE(pageCallbacks.tryRunOne());
+    REQUIRE(tryPumpGtkEventsUntil([&pageCallbacks] { return pageCallbacks.queuedCount() != 0; }));
+    REQUIRE(statusLabel->get_visible());
+    checkTitle("After the inline edit publishes", "Inline title");
+
+    auto const targetsRes = library.bindTrackTargets(std::array{trackId});
+    REQUIRE(targetsRes);
+    constexpr auto kLaterTitle = "Later published title";
+    auto const laterEditRes = runGtkTask(
+      runtime, library.commands().updateMetadataAsync(*targetsRes, rt::MetadataPatch{.optTitle = kLaterTitle}));
+    REQUIRE(laterEditRes);
+    REQUIRE(laterEditRes->status == rt::AuthoringStatus::Applied);
+    REQUIRE(pageCallbacks.queuedCount() != 0);
+    REQUIRE(statusLabel->get_visible());
+    checkTitle("After the newer edit publishes", kLaterTitle);
+
+    // Only the page's Applied handler clears the sentinel; an ignored completion cannot pass.
+    REQUIRE(pageCallbacks.tryDrainUntil([statusLabel] { return !statusLabel->get_visible(); }));
+    window.drain();
+    checkTitle("After the late Applied completion", kLaterTitle);
   }
 
   TEST_CASE("TrackViewPage - an intervening revision cancels inline metadata without changing the row")

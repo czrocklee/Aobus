@@ -19,6 +19,7 @@
 #include <ao/CoreIds.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/ListMutation.h>
+#include <ao/rt/TrackField.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/ViewState.h>
@@ -30,6 +31,7 @@
 #include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
@@ -184,6 +186,41 @@ namespace ao::gtk::test
       CHECK(workspaceChangeCount == 0);
       CHECK(runtime.workspace().snapshot().activeViewId == workspaceBefore.activeViewId);
       CHECK(runtime.workspace().snapshot().revision == workspaceBefore.revision);
+    }
+
+    SECTION("title edits preserve selected track IDs when All Tracks reorders")
+    {
+      auto const editedTrackId = addRuntimeTrack(runtime, {.title = "Song A"});
+      addRuntimeTrack(runtime, {.title = "Song B"});
+      auto const neighborTrackId = addRuntimeTrack(runtime, {.title = "Song C"});
+      auto const viewId = ao::test::requireValue(runtime.workspace().navigate({
+        .target = rt::GlobalViewKind::AllTracks,
+        .optPresentation = rt::NavigationPresentation{.spec = {.sortBy = {{.field = rt::TrackSortField::Title}}}},
+      }));
+      auto const storedSelection = std::vector{editedTrackId, neighborTrackId};
+      REQUIRE(runtime.views().setSelection(viewId, storedSelection));
+      host.rebuild(cache);
+      drainGtkEvents();
+
+      auto const* const entry = host.find(viewId);
+      REQUIRE(entry != nullptr);
+      REQUIRE(entry->pagePtr);
+      auto const& selection = entry->pagePtr->selectionController();
+      REQUIRE(selection.selectedTrackIds() == storedSelection);
+
+      std::size_t selectionChangeCount = 0;
+      auto selectionSubscription =
+        runtime.views().onSelectionChanged([&](rt::ViewService::SelectionChanged const&) { ++selectionChangeCount; });
+
+      updateRuntimeTrack(runtime, editedTrackId, [](library::test::TrackSpec& spec) { spec.title = "Song D"; });
+      drainGtkEvents();
+
+      auto const* const projection = entry->pagePtr->projection();
+      REQUIRE(projection != nullptr);
+      CHECK(projection->indexOf(editedTrackId) == 2);
+      CHECK(selection.selectedTrackIds() == std::vector{neighborTrackId, editedTrackId});
+      CHECK(runtime.views().trackListState(viewId).selection == storedSelection);
+      CHECK(selectionChangeCount == 0);
     }
 
     SECTION("rebuild tolerates a selection naming a track absent from the projection")

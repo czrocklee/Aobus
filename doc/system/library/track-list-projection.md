@@ -27,7 +27,8 @@ Its public boundary is `app/include/ao/rt/projection/`, its implementation is `a
 
 - A projection publishes only after its complete final rows, lookup index, and group sections are visible.
 - Every regular batch transforms the subscriber's preceding row sequence into the already-installed final sequence.
-- Row-range coordinates are interpreted after preceding ranges in the same batch.
+- Regular ranges are interpreted after preceding ranges in the same batch: removes have descending starts, followed by inserts and then updates, each in ascending non-overlapping ranges.
+  Insert and update coordinates also refer to the final state, since no later edit shifts a completed insertion; remove coordinates do not.
 - Reset and source invalidation are valid only as singleton batches.
 - Empty presentation sort preserves source order exactly.
 - Equal sort keys retain their relative order in the current source, including after source moves and incremental merges.
@@ -73,6 +74,7 @@ Malformed coordinates, duplicate identities, or a reducer mirror that diverges f
 The active `TrackPresentationSpec` determines sort terms, grouping, visible fields, and redundant fields.
 A projection never parses a filter expression; its source already owns the resulting membership before presentation shape is applied.
 A section identity, order, or section-metadata change publishes `ProjectionReset`; membership-count-only changes may remain regular row deltas.
+When a regular source edit causes a section reset, the reset carries the inserted and updated track IDs. Consumers still replace all row coordinates, but need not reload fields for the other tracks. A removal-only edit can therefore produce a reset with an empty ID list. A reset without an ID list makes no such guarantee.
 
 Changing presentation or receiving source reset performs a complete rebuild.
 Source invalidation clears rows, lookup indexes, group sections, and arena-backed views before publishing one terminal invalidation batch and no later reset.

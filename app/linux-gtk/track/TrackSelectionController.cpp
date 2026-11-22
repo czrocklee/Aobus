@@ -4,9 +4,9 @@
 #include "track/TrackSelectionController.h"
 
 #include "track/TrackFieldUi.h"
+#include "track/TrackListItem.h"
 #include "track/TrackListModel.h"
 #include "track/TrackRowBinding.h"
-#include "track/TrackRowObject.h"
 #include <ao/CoreIds.h>
 
 #include <gdk/gdk.h>
@@ -272,21 +272,8 @@ namespace ao::gtk
       return kInvalidTrackId;
     }
 
-    auto const itemPtr = _selectionModelPtr->get_object(position);
-
-    if (!itemPtr)
-    {
-      return kInvalidTrackId;
-    }
-
-    auto const rowPtr = std::dynamic_pointer_cast<TrackRowObject>(itemPtr);
-
-    if (!rowPtr)
-    {
-      return kInvalidTrackId;
-    }
-
-    return rowPtr->trackId();
+    auto const itemPtr = std::dynamic_pointer_cast<TrackListItem>(_selectionModelPtr->get_object(position));
+    return itemPtr ? itemPtr->trackId() : kInvalidTrackId;
   }
 
   std::size_t TrackSelectionController::selectedTrackCount() const noexcept

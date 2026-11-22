@@ -4,6 +4,7 @@
 #include "app/linux-gtk/track/TrackFieldUi.h"
 
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackMutation.h>
 #include <ao/uimodel/library/track/TrackAuthoring.h>
 
 #include <catch2/catch_message.hpp>
@@ -33,7 +34,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("TrackFieldUi - registry wires inline-edit hooks for editable metadata fields")
+  TEST_CASE("TrackFieldUi - inline parsers produce patch values for editable metadata fields")
   {
     for (auto const& rtDef : kAllFields)
     {
@@ -47,9 +48,11 @@ namespace ao::gtk::test
 
       if (canWritePatch)
       {
-        CHECK(def->parseInlineEdit != nullptr);
-        CHECK(def->readRowEditValue != nullptr);
-        CHECK(def->applyRowEditValue != nullptr);
+        REQUIRE(def->parseInlineEdit != nullptr);
+        auto const parsedRes = def->parseInlineEdit("2025");
+        REQUIRE(parsedRes);
+        auto patch = MetadataPatch{};
+        CHECK(uimodel::tryWriteTrackFieldPatch(patch, rtDef.field, *parsedRes));
       }
     }
   }

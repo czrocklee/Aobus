@@ -4,6 +4,7 @@
 #include "track/TrackColumnFactoryBuilder.h"
 
 #include "track/TrackFieldUi.h"
+#include "track/TrackListItem.h"
 #include "track/TrackListModel.h"
 #include "track/TrackRowBinding.h"
 #include "track/TrackRowObject.h"
@@ -17,7 +18,9 @@
 #include <gdkmm/enums.h>
 #include <glib-object.h>
 #include <glibmm/main.h>
+#include <glibmm/quark.h>
 #include <glibmm/refptr.h>
+#include <glibmm/ustring.h>
 #include <gtkmm/entry.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/eventcontrollerfocus.h>
@@ -44,16 +47,22 @@ namespace ao::gtk
   {
     struct CellBindingState final
     {
-      // Both connections are established once at setup and held for the cell's
-      // lifetime; the scoped_connections auto-disconnect when this struct (owned
-      // by the ListItem) is destroyed. Neither is touched by bind/unbind: the
-      // slots resolve the currently-bound row lazily from listItem->get_item(),
-      // so a recycled cell needs no reconnect.
-      sigc::scoped_connection commitConnection;         // inline-edit commit (Enter)
-      sigc::scoped_connection playingChangedConnection; // now-playing highlight
+      // The ListItem owns these widgets, created once at setup. Static cells
+      // have only the display label.
+      Gtk::Label* displayLabel = nullptr;
+      Gtk::Stack* editorStack = nullptr;
+      Gtk::Entry* editorEntry = nullptr;
+
+      // Setup-time handlers use the binding current at invocation.
+      sigc::scoped_connection commitConnection;
+      sigc::scoped_connection playingChangedConnection;
       std::optional<uimodel::TrackAuthoringSession> optEditSession;
       async::Subscription editSessionInvalidatedSubscription;
       sigc::scoped_connection editSessionInvalidationIdleConnection;
+      // Native list items carry only identity; keep the materialized fields
+      // alive for this binding and disconnect its signal before releasing it.
+      Glib::RefPtr<TrackRowObject> boundRowPtr;
+      sigc::scoped_connection fieldsChangedConnection;
 
       void clearEditSession()
       {
@@ -62,6 +71,17 @@ namespace ao::gtk
         optEditSession.reset();
       }
     };
+
+    Glib::Quark const& cellBindingStateKey()
+    {
+      static auto const kKey = Glib::Quark{"cell-binding-state"};
+      return kKey;
+    }
+
+    CellBindingState& cellBindingState(Gtk::ListItem& item)
+    {
+      return *static_cast<CellBindingState*>(item.get_data(cellBindingStateKey()));
+    }
 
     bool isLabelTextEllipsized(Gtk::Label const& label)
     {
@@ -160,9 +180,9 @@ namespace ao::gtk
       }
     }
 
-    void updateStatusStyles(Glib::RefPtr<Gtk::ListItem> const& listItemPtr, Glib::RefPtr<TrackRowObject> const& rowPtr)
+    void updateStatusStyles(Gtk::ListItem& listItem, bool missing)
     {
-      if (auto* const child = listItemPtr->get_child(); child != nullptr)
+      if (auto* const child = listItem.get_child(); child != nullptr)
       {
         auto* const cell = child->get_parent();
 
@@ -178,7 +198,7 @@ namespace ao::gtk
           return;
         }
 
-        if (rowPtr->status() == library::FileStatus::Missing)
+        if (missing)
         {
           rowWidget->add_css_class("ao-missing-row");
         }
@@ -189,215 +209,204 @@ namespace ao::gtk
       }
     }
 
-    void handleTextColumnBindStatic(Glib::RefPtr<Gtk::ListItem> const& listItemPtr,
-                                    rt::TrackField field,
-                                    Glib::RefPtr<TrackRowObject> const& rowPtr)
+    void refreshCellDisplay(Gtk::ListItem& item,
+                            CellBindingState const& bindingState,
+                            rt::TrackField field,
+                            TrackRowObject const* row)
     {
-      auto* const label = dynamic_cast<Gtk::Label*>(listItemPtr->get_child());
+      static Glib::ustring const kEmpty;
+      auto const* const text = row != nullptr ? row->displayText(field) : nullptr;
+      auto const& displayText = text != nullptr ? *text : kEmpty;
+      bindingState.displayLabel->set_text(displayText);
 
-      if (label != nullptr)
+      // The label tracks publications even while the visible entry holds a draft.
+      if (auto* const stack = bindingState.editorStack;
+          stack != nullptr && stack->get_visible_child() != bindingState.editorEntry)
       {
-        // displayText() hands back a cached string by pointer for both text-backed
-        // and computed fields, so this bind copies straight into the label with no
-        // intermediate ustring materialization.
-        auto const* const text = rowPtr->displayText(field);
-        auto const& displayText = text != nullptr ? *text : Glib::ustring{};
-        label->set_text(displayText);
+        bindingState.editorEntry->set_text(displayText);
+      }
+
+      updateStatusStyles(item, row != nullptr && row->status() == library::FileStatus::Missing);
+    }
+
+    void restylePlayingFromModel(Gtk::ListItem& listItem, rt::TrackField field, TrackListModel const& model)
+    {
+      auto const trackItemPtr = std::dynamic_pointer_cast<TrackListItem>(listItem.get_item());
+
+      if (trackItemPtr != nullptr)
+      {
+        updatePlayingStyles(listItem, field, trackItemPtr->trackId() == model.playingTrackId());
       }
     }
 
-    bool isRowPlaying(TrackRowObject const& row, TrackListModel const& playingModel)
+    void handleTextColumnBind(Gtk::ListItem& item, rt::TrackField field, TrackListModel const& model)
     {
-      return row.trackId() == playingModel.playingTrackId();
-    }
+      auto const trackItemPtr = std::dynamic_pointer_cast<TrackListItem>(item.get_item());
 
-    // Restyles a (possibly unbound) cell from the model's current playing track.
-    // Invoked by the per-cell playing-changed subscription established at setup.
-    void restylePlayingFromModel(Gtk::ListItem& listItem, rt::TrackField field, TrackListModel const& playingModel)
-    {
-      auto const rowPtr = std::dynamic_pointer_cast<TrackRowObject>(listItem.get_item());
-
-      if (rowPtr == nullptr)
+      if (trackItemPtr == nullptr)
       {
         return;
       }
 
-      updatePlayingStyles(listItem, field, isRowPlaying(*rowPtr, playingModel));
-    }
+      auto& bindingState = cellBindingState(item);
+      auto const trackId = trackItemPtr->trackId();
+      auto const rowPtr = model.trackRow(trackId);
+      // GTK unbinds before reuse; unbind retires the prior field observer and row together.
+      bindingState.boundRowPtr = rowPtr;
 
-    void handleTextColumnBind(Glib::RefPtr<Gtk::ListItem> const& listItemPtr,
-                              rt::TrackField field,
-                              bool editable,
-                              TrackListModel const& playingModel)
-    {
-      auto const itemPtr = listItemPtr->get_item();
-      auto const rowPtr = std::dynamic_pointer_cast<TrackRowObject>(itemPtr);
+      refreshCellDisplay(item, bindingState, field, rowPtr.get());
+      updatePlayingStyles(item, field, trackId == model.playingTrackId());
 
-      if (rowPtr == nullptr)
-      {
-        return;
-      }
-
-      if (!editable)
-      {
-        handleTextColumnBindStatic(listItemPtr, field, rowPtr);
-      }
-      else
-      {
-        auto* const stack = dynamic_cast<Gtk::Stack*>(listItemPtr->get_child());
-
-        if (stack != nullptr)
-        {
-          stack->set_visible_child("display");
-
-          auto* const label = dynamic_cast<Gtk::Label*>(stack->get_child_by_name("display"));
-          auto* const entry = dynamic_cast<Gtk::Entry*>(stack->get_child_by_name("edit"));
-
-          if (label != nullptr && entry != nullptr)
-          {
-            // The commit handler is wired once at setup, so a (re)bind only
-            // refreshes the displayed text.
-            auto const* const text = rowPtr->displayText(field);
-            auto const& displayText = text != nullptr ? *text : Glib::ustring{};
-            label->set_text(displayText);
-            entry->set_text(displayText);
-          }
-        }
-      }
-
-      // Status and playing styling for this (re)bind — handles a recycled cell
-      // landing on a different row during scroll. In-place playing-state changes
-      // (the same cell staying bound while the track switches) are handled by the
-      // setup-time subscription to TrackListModel::signalPlayingChanged, because
-      // the shared cached row objects make GTK skip the rebind on items_changed.
-      updateStatusStyles(listItemPtr, rowPtr);
-      updatePlayingStyles(*listItemPtr, field, isRowPlaying(*rowPtr, playingModel));
-
-      if (auto* const child = listItemPtr->get_child(); child != nullptr)
+      if (auto* const child = item.get_child(); child != nullptr)
       {
         ::g_object_set_data(
-          G_OBJECT(child->gobj()), kBoundTrackIdDataKey, GUINT_TO_POINTER(static_cast<guint>(rowPtr->trackId().raw())));
+          G_OBJECT(child->gobj()), kBoundTrackIdDataKey, GUINT_TO_POINTER(static_cast<guint>(trackId.raw())));
+      }
+
+      if (rowPtr != nullptr)
+      {
+        bindingState.fieldsChangedConnection = rowPtr->signalFieldsChanged().connect(
+          [itemRaw = &item, bindingStateRaw = &bindingState, field, rowRaw = rowPtr.get()]
+          { refreshCellDisplay(*itemRaw, *bindingStateRaw, field, rowRaw); });
       }
     }
 
-    void handleTextColumnUnbind(Glib::RefPtr<Gtk::ListItem> const& listItemPtr)
+    void closeInlineEditor(CellBindingState& bindingState)
     {
-      if (auto* const child = listItemPtr->get_child(); child != nullptr)
+      bindingState.clearEditSession();
+
+      if (auto* const stack = bindingState.editorStack; stack != nullptr)
+      {
+        bindingState.editorEntry->set_text(bindingState.displayLabel->get_text());
+        stack->set_visible_child(*bindingState.displayLabel);
+      }
+    }
+
+    void handleTextColumnUnbind(Gtk::ListItem& item)
+    {
+      auto& bindingState = cellBindingState(item);
+      bindingState.fieldsChangedConnection.disconnect();
+
+      if (auto* const child = item.get_child(); child != nullptr)
       {
         ::g_object_set_data(G_OBJECT(child->gobj()), kBoundTrackIdDataKey, nullptr);
       }
+
+      // GTK may unbind a cell without delivering focus leave to its entry.
+      closeInlineEditor(bindingState);
+      bindingState.boundRowPtr.reset();
     }
 
-    void closeInlineEditor(Gtk::Stack& stack, CellBindingState& bindingState)
-    {
-      bindingState.clearEditSession();
-      stack.set_visible_child("display");
-    }
-
-    void handleEditSessionInvalidated(Gtk::ListItem& item, Gtk::Stack& stack, CellBindingState& bindingState)
+    void handleEditSessionInvalidated(Gtk::ListItem& item, CellBindingState& bindingState)
     {
       // Defer teardown until the invalidation callback has unwound: the subscription
       // being reset owns this callback. Tracking the ListItem prevents deferred
       // raw-state access after cell destruction; replacing the edit session
       // disconnects this exact idle callback.
       bindingState.editSessionInvalidationIdleConnection = Glib::signal_idle().connect(sigc::track_object(
-        [stackRaw = &stack, bindingStateRaw = &bindingState]
+        [bindingStateRaw = &bindingState]
         {
-          closeInlineEditor(*stackRaw, *bindingStateRaw);
+          closeInlineEditor(*bindingStateRaw);
           return false;
         },
         item));
     }
 
+    Glib::RefPtr<TrackRowObject> currentBoundRow(Gtk::ListItem& item, CellBindingState const& bindingState)
+    {
+      auto const trackItemPtr = std::dynamic_pointer_cast<TrackListItem>(item.get_item());
+      auto const& rowPtr = bindingState.boundRowPtr;
+
+      if (trackItemPtr != nullptr && rowPtr != nullptr && trackItemPtr->trackId() == rowPtr->trackId())
+      {
+        return rowPtr;
+      }
+
+      return nullptr;
+    }
+
+    bool isEditSessionTargetRow(uimodel::TrackAuthoringSession const& editSession, TrackRowObject const& row)
+    {
+      auto const ids = editSession.targetIds();
+      return ids.size() == 1 && ids.front() == row.trackId();
+    }
+
     void beginInlineEdit(Gtk::ListItem& item,
-                         Gtk::Stack& stack,
                          CellBindingState& bindingState,
                          MetadataEditSessionFn const& beginEditSession)
     {
       bindingState.clearEditSession();
-      auto const rowPtr = std::dynamic_pointer_cast<TrackRowObject>(item.get_item());
+      auto const rowPtr = currentBoundRow(item, bindingState);
 
       if (rowPtr == nullptr || !beginEditSession)
       {
-        stack.set_visible_child("display");
+        closeInlineEditor(bindingState);
         return;
       }
 
       auto sessionRes = beginEditSession(rowPtr);
 
-      if (!sessionRes)
+      if (!sessionRes || !isEditSessionTargetRow(*sessionRes, *rowPtr))
       {
-        stack.set_visible_child("display");
+        closeInlineEditor(bindingState);
         return;
       }
 
       bindingState.optEditSession.emplace(std::move(*sessionRes));
-      bindingState.editSessionInvalidatedSubscription = bindingState.optEditSession->onInvalidated(
-        [itemRaw = &item, stackRaw = &stack, bindingStateRaw = &bindingState] noexcept
-        { handleEditSessionInvalidated(*itemRaw, *stackRaw, *bindingStateRaw); });
+      bindingState.editSessionInvalidatedSubscription =
+        bindingState.optEditSession->onInvalidated([itemRaw = &item, bindingStateRaw = &bindingState] noexcept
+                                                   { handleEditSessionInvalidated(*itemRaw, *bindingStateRaw); });
     }
 
     void installInlineEditControllers(Gtk::ListItem& item,
-                                      Gtk::Stack& stack,
                                       Gtk::Entry& entry,
                                       CellBindingState& bindingState,
                                       MetadataEditSessionFn const& beginEditSession)
     {
       auto const keyControllerPtr = Gtk::EventControllerKey::create();
       keyControllerPtr->signal_key_pressed().connect(
-        [stackRaw = &stack, bindingStateRaw = &bindingState](
-          std::uint32_t keyval, std::uint32_t /*keycode*/, Gdk::ModifierType /*state*/)
+        [bindingStateRaw = &bindingState](std::uint32_t keyval, std::uint32_t /*keycode*/, Gdk::ModifierType /*state*/)
         {
           if (keyval != GDK_KEY_Escape)
           {
             return false;
           }
 
-          closeInlineEditor(*stackRaw, *bindingStateRaw);
+          closeInlineEditor(*bindingStateRaw);
           return true;
         },
         false);
       entry.add_controller(keyControllerPtr);
 
       auto const focusControllerPtr = Gtk::EventControllerFocus::create();
-      focusControllerPtr->signal_enter().connect(
-        [itemRaw = &item, stackRaw = &stack, bindingStateRaw = &bindingState, beginEditSession]
-        { beginInlineEdit(*itemRaw, *stackRaw, *bindingStateRaw, beginEditSession); });
-      focusControllerPtr->signal_leave().connect([stackRaw = &stack, bindingStateRaw = &bindingState]
-                                                 { closeInlineEditor(*stackRaw, *bindingStateRaw); });
+      focusControllerPtr->signal_enter().connect([itemRaw = &item, bindingStateRaw = &bindingState, beginEditSession]
+                                                 { beginInlineEdit(*itemRaw, *bindingStateRaw, beginEditSession); });
+      focusControllerPtr->signal_leave().connect([bindingStateRaw = &bindingState]
+                                                 { closeInlineEditor(*bindingStateRaw); });
       entry.add_controller(focusControllerPtr);
     }
 
-    bool isEditSessionTargetRow(uimodel::TrackAuthoringSession const& editSession, TrackRowObject const& row)
-    {
-      return editSession.targetIds().size() == 1 && editSession.targetIds().front() == row.trackId();
-    }
-
     void commitInlineEdit(Gtk::ListItem& item,
-                          Gtk::Stack& stack,
-                          Gtk::Entry& entry,
-                          Gtk::Label& label,
                           CellBindingState& bindingState,
                           rt::TrackField field,
                           MetadataCommitFn const& commitFn)
     {
-      auto const rowPtr = std::dynamic_pointer_cast<TrackRowObject>(item.get_item());
+      auto const rowPtr = currentBoundRow(item, bindingState);
 
       if (rowPtr == nullptr || !bindingState.optEditSession ||
           !isEditSessionTargetRow(*bindingState.optEditSession, *rowPtr))
       {
-        closeInlineEditor(stack, bindingState);
+        closeInlineEditor(bindingState);
         return;
       }
 
-      commitFn(rowPtr, field, entry.get_text().raw(), *bindingState.optEditSession);
-      auto const synced = rowPtr->fieldText(field);
-      label.set_text(synced);
-      entry.set_text(synced);
-      closeInlineEditor(stack, bindingState);
+      auto draft = bindingState.editorEntry->get_text().raw();
+      auto session = std::move(*bindingState.optEditSession);
+      closeInlineEditor(bindingState);
+      commitFn(rowPtr, field, std::move(draft), session);
     }
 
-    void setupStaticCell(Gtk::ListItem& item, rt::TrackField field)
+    void setupStaticCell(Gtk::ListItem& item, CellBindingState& bindingState, rt::TrackField field)
     {
       auto* const label = Gtk::make_managed<Gtk::Label>("");
       configureTrackCellLabel(*label, field);
@@ -418,6 +427,7 @@ namespace ao::gtk
       }
 
       item.set_child(*label);
+      bindingState.displayLabel = label;
     }
 
     void setupEditableCell(Gtk::ListItem& item,
@@ -445,19 +455,22 @@ namespace ao::gtk
 
       auto* const entry = Gtk::make_managed<Gtk::Entry>();
       entry->add_css_class("ao-inline-editor-entry");
-      installInlineEditControllers(item, *stack, *entry, bindingState, beginEditSession);
+      bindingState.displayLabel = label;
+      bindingState.editorStack = stack;
+      bindingState.editorEntry = entry;
+      installInlineEditControllers(item, *entry, bindingState, beginEditSession);
       stack->add(*entry, "edit");
       item.set_child(*stack);
 
-      bindingState.commitConnection = entry->signal_activate().connect(
-        [itemRaw = &item, stack, entry, label, bindingStateRaw = &bindingState, field, commitFn]
-        { commitInlineEdit(*itemRaw, *stack, *entry, *label, *bindingStateRaw, field, commitFn); });
+      bindingState.commitConnection =
+        entry->signal_activate().connect([itemRaw = &item, bindingStateRaw = &bindingState, field, commitFn]
+                                         { commitInlineEdit(*itemRaw, *bindingStateRaw, field, commitFn); });
     }
 
     CellBindingState& installCellBindingState(Gtk::ListItem& item)
     {
       auto* const bindingState = new CellBindingState{};
-      item.set_data(Glib::Quark{"cell-binding-state"},
+      item.set_data(cellBindingStateKey(),
                     bindingState,
                     [](void* rawBindingState) { delete static_cast<CellBindingState*>(rawBindingState); });
       return *bindingState;
@@ -468,7 +481,7 @@ namespace ao::gtk
                              bool editable,
                              MetadataEditSessionFn const& beginEditSession,
                              MetadataCommitFn const& commitFn,
-                             TrackListModel& playingModel)
+                             TrackListModel& model)
     {
       auto& bindingState = installCellBindingState(item);
 
@@ -478,21 +491,20 @@ namespace ao::gtk
       }
       else
       {
-        setupStaticCell(item, field);
+        setupStaticCell(item, bindingState, field);
       }
 
-      // The handler captures the raw ListItem because the connection is owned by
-      // bindingState, which is itself owned by the ListItem.
-      bindingState.playingChangedConnection =
-        playingModel.signalPlayingChanged().connect([itemRaw = &item, field, playingModelRaw = &playingModel]
-                                                    { restylePlayingFromModel(*itemRaw, field, *playingModelRaw); });
+      // This observer spans cell reuse and reads the item currently bound.
+      // The ListItem owns the state, so the connection cannot outlive itemRaw.
+      bindingState.playingChangedConnection = model.signalPlayingChanged().connect(
+        [itemRaw = &item, field, modelRaw = &model] { restylePlayingFromModel(*itemRaw, field, *modelRaw); });
     }
   } // namespace
 
   Glib::RefPtr<Gtk::SignalListItemFactory> buildColumnFactory(rt::TrackField field,
                                                               MetadataEditSessionFn const& beginEditSession,
                                                               MetadataCommitFn const& commitFn,
-                                                              TrackListModel& playingModel)
+                                                              TrackListModel& model)
   {
     auto factoryPtr = Gtk::SignalListItemFactory::create();
 
@@ -501,16 +513,16 @@ namespace ao::gtk
     // definition table on every setup and bind.
     auto const* const uiDef = trackFieldUiDefinition(field);
     bool const editable = uiDef != nullptr && canInlineEdit(*uiDef);
-    auto* const playingModelRaw = &playingModel;
+    auto* const modelRaw = &model;
 
     factoryPtr->signal_setup().connect(
-      [field, editable, beginEditSession, commitFn, playingModelRaw](Glib::RefPtr<Gtk::ListItem> const& listItemPtr)
-      { setupTextColumnCell(*listItemPtr, field, editable, beginEditSession, commitFn, *playingModelRaw); });
+      [field, editable, beginEditSession, commitFn, modelRaw](Glib::RefPtr<Gtk::ListItem> const& listItemPtr)
+      { setupTextColumnCell(*listItemPtr, field, editable, beginEditSession, commitFn, *modelRaw); });
 
-    factoryPtr->signal_bind().connect([field, editable, playingModelRaw](Glib::RefPtr<Gtk::ListItem> const& listItemPtr)
-                                      { handleTextColumnBind(listItemPtr, field, editable, *playingModelRaw); });
+    factoryPtr->signal_bind().connect([field, modelRaw](Glib::RefPtr<Gtk::ListItem> const& listItemPtr)
+                                      { handleTextColumnBind(*listItemPtr, field, *modelRaw); });
     factoryPtr->signal_unbind().connect([](Glib::RefPtr<Gtk::ListItem> const& listItemPtr)
-                                        { handleTextColumnUnbind(listItemPtr); });
+                                        { handleTextColumnUnbind(*listItemPtr); });
 
     return factoryPtr;
   }

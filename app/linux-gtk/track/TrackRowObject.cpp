@@ -4,25 +4,21 @@
 #include "track/TrackRowObject.h"
 
 #include "track/TrackFieldUi.h"
-#include <ao/AudioCodec.h>
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
-#include <ao/FileTimestamp.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/library/FileManifestLayout.h>
-#include <ao/library/RecordingDate.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackRow.h>
 #include <ao/uimodel/library/detail/TrackCredits.h>
+#include <ao/utility/Path.h>
 
 #include <glibmm/objectbase.h>
 #include <glibmm/refptr.h>
 #include <glibmm/ustring.h>
 
-#include <array>
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <optional>
+#include <string>
 #include <utility>
 
 namespace ao::gtk
@@ -53,13 +49,8 @@ namespace ao::gtk
     }
   } // namespace
 
-  TrackRowObject::TrackRowObject()
-    : Glib::ObjectBase{"TrackRowObject"}
-  {
-  }
-
-  TrackRowObject::TrackRowObject(i18n::MessageCatalog const& textCatalog)
-    : Glib::ObjectBase{"TrackRowObject"}, _optTextCatalog{textCatalog}
+  TrackRowObject::TrackRowObject(i18n::MessageCatalog textCatalog)
+    : Glib::ObjectBase{"TrackRowObject"}, _textCatalog{std::move(textCatalog)}
   {
   }
 
@@ -68,17 +59,6 @@ namespace ao::gtk
     auto objPtr = Glib::make_refptr_for_instance<TrackRowObject>(new TrackRowObject{textCatalog});
     objPtr->_id = id;
     return objPtr;
-  }
-
-  ::GType TrackRowObject::objectType()
-  {
-    static auto const kType = []
-    {
-      auto const objPtr = Glib::make_refptr_for_instance<TrackRowObject>(new TrackRowObject{});
-      // G_OBJECT_TYPE is a GLib function-like macro with an unavoidable C cast.
-      return G_OBJECT_TYPE(objPtr->gobj());
-    }();
-    return kType;
   }
 
   Glib::ustring const* TrackRowObject::stringField(rt::TrackField field) const noexcept
@@ -93,96 +73,53 @@ namespace ao::gtk
     return &_text.at(index);
   }
 
-  bool TrackRowObject::trySetStringField(rt::TrackField field, Glib::ustring const& value)
+  void TrackRowObject::populate(rt::TrackRow row)
   {
-    auto const index = static_cast<std::size_t>(field);
+    AO_EXPECTS(row.id == trackId(), "Cannot populate a row with another track's metadata");
 
-    if (index >= _text.size() || !isTextBackedField(field) || field == rt::TrackField::Conductor ||
-        field == rt::TrackField::Ensemble || field == rt::TrackField::Soloist)
-    {
-      return false;
-    }
+    auto const& catalog = textCatalog();
+    _creditSummaries = {
+      Glib::ustring{uimodel::formatTrackCreditSummary(catalog, row.conductor, row.conductorCount)},
+      Glib::ustring{uimodel::formatTrackCreditSummary(catalog, row.ensemble, row.ensembleCount)},
+      Glib::ustring{uimodel::formatTrackCreditSummary(catalog, row.soloist, row.soloistCount)},
+    };
 
-    _text.at(index) = value;
-    return true;
-  }
+    _text[static_cast<std::size_t>(rt::TrackField::Title)] = Glib::ustring{std::move(row.title)};
+    _text[static_cast<std::size_t>(rt::TrackField::Artist)] = Glib::ustring{std::move(row.artist)};
+    _text[static_cast<std::size_t>(rt::TrackField::Album)] = Glib::ustring{std::move(row.album)};
+    _text[static_cast<std::size_t>(rt::TrackField::AlbumArtist)] = Glib::ustring{std::move(row.albumArtist)};
+    _text[static_cast<std::size_t>(rt::TrackField::Genre)] = Glib::ustring{std::move(row.genre)};
+    _text[static_cast<std::size_t>(rt::TrackField::Composer)] = Glib::ustring{std::move(row.composer)};
+    _text[static_cast<std::size_t>(rt::TrackField::Conductor)] = Glib::ustring{std::move(row.conductor)};
+    _text[static_cast<std::size_t>(rt::TrackField::Ensemble)] = Glib::ustring{std::move(row.ensemble)};
+    _text[static_cast<std::size_t>(rt::TrackField::Work)] = Glib::ustring{std::move(row.work)};
+    _text[static_cast<std::size_t>(rt::TrackField::Movement)] = Glib::ustring{std::move(row.movement)};
+    _text[static_cast<std::size_t>(rt::TrackField::Soloist)] = Glib::ustring{std::move(row.soloist)};
+    _text[static_cast<std::size_t>(rt::TrackField::FilePath)] =
+      Glib::ustring{row.optUriPath ? utility::pathToUtf8(*row.optUriPath) : std::string{}};
 
-  void TrackRowObject::populate(Glib::ustring title,
-                                Glib::ustring artist,
-                                Glib::ustring album,
-                                Glib::ustring albumArtist,
-                                Glib::ustring genre,
-                                Glib::ustring composer,
-                                Glib::ustring conductor,
-                                Glib::ustring ensemble,
-                                Glib::ustring work,
-                                Glib::ustring movement,
-                                Glib::ustring soloist,
-                                Glib::ustring tags,
-                                Glib::ustring filePath,
-                                std::chrono::milliseconds duration,
-                                std::uint16_t year,
-                                std::uint16_t discNumber,
-                                std::uint16_t discTotal,
-                                std::uint16_t trackNumber,
-                                std::uint16_t trackTotal,
-                                std::uint16_t movementNumber,
-                                std::uint16_t movementTotal,
-                                std::uint32_t sampleRate,
-                                std::uint8_t channels,
-                                std::uint8_t bitDepth,
-                                AudioCodec codec,
-                                std::uint32_t bitrate,
-                                std::uint64_t fileSize,
-                                std::optional<FileTimestamp> optModifiedTime,
-                                library::FileStatus status,
-                                library::RecordingDate recordingDate,
-                                std::array<std::uint16_t, 3> creditCounts)
-  {
-    _text[static_cast<std::size_t>(rt::TrackField::Title)] = std::move(title);
-    _text[static_cast<std::size_t>(rt::TrackField::Artist)] = std::move(artist);
-    _text[static_cast<std::size_t>(rt::TrackField::Album)] = std::move(album);
-    _text[static_cast<std::size_t>(rt::TrackField::AlbumArtist)] = std::move(albumArtist);
-    _text[static_cast<std::size_t>(rt::TrackField::Genre)] = std::move(genre);
-    _text[static_cast<std::size_t>(rt::TrackField::Composer)] = std::move(composer);
-    _text[static_cast<std::size_t>(rt::TrackField::Conductor)] = std::move(conductor);
-    _text[static_cast<std::size_t>(rt::TrackField::Ensemble)] = std::move(ensemble);
-    _text[static_cast<std::size_t>(rt::TrackField::Work)] = std::move(work);
-    _text[static_cast<std::size_t>(rt::TrackField::Movement)] = std::move(movement);
-    _text[static_cast<std::size_t>(rt::TrackField::Soloist)] = std::move(soloist);
-    _text[static_cast<std::size_t>(rt::TrackField::FilePath)] = std::move(filePath);
+    _tags = Glib::ustring{std::move(row.tags)};
+    _duration = row.duration;
+    _year = row.year;
+    _recordingDate = row.recordingDate;
+    _discNumber = row.discNumber;
+    _discTotal = row.discTotal;
+    _trackNumber = row.trackNumber;
+    _trackTotal = row.trackTotal;
+    _movementNumber = row.movementNumber;
+    _movementTotal = row.movementTotal;
 
-    _creditCounts = creditCounts;
-    auto const creditFields = std::array{rt::TrackField::Conductor, rt::TrackField::Ensemble, rt::TrackField::Soloist};
+    _sampleRate = row.sampleRate;
+    _channels = row.channels;
+    _bitDepth = row.bitDepth;
+    _codec = row.codec;
+    _bitrate = row.bitrate;
+    _fileSize = row.fileSize;
+    _optModifiedTime = row.optModifiedTime;
+    _status = row.status;
 
-    for (std::size_t i = 0; i < creditFields.size(); ++i)
-    {
-      _creditSummaries[i] =
-        uimodel::formatTrackCreditSummary(textCatalog(), stringField(creditFields[i])->raw(), _creditCounts[i]);
-    }
-
-    _tags = std::move(tags);
-    _duration = duration;
-    _year = year;
-    _recordingDate = recordingDate;
-    _discNumber = discNumber;
-    _discTotal = discTotal;
-    _trackNumber = trackNumber;
-    _trackTotal = trackTotal;
-    _movementNumber = movementNumber;
-    _movementTotal = movementTotal;
-
-    _sampleRate = sampleRate;
-    _channels = channels;
-    _bitDepth = bitDepth;
-    _codec = codec;
-    _bitrate = bitrate;
-    _fileSize = fileSize;
-    _optModifiedTime = optModifiedTime;
-    _status = status;
-
-    // Drop computed strings whenever row data is populated.
-    invalidateComputedCache();
+    _computedFilled = 0;
+    _fieldsChanged.emit();
   }
 
   Glib::ustring const* TrackRowObject::displayText(rt::TrackField field) const
@@ -238,55 +175,6 @@ namespace ao::gtk
 
   i18n::MessageCatalog const& TrackRowObject::textCatalog() const
   {
-    AO_INVARIANT(_optTextCatalog, "The GObject type-registration sentinel cannot format row text");
-    return *_optTextCatalog;
-  }
-
-  void TrackRowObject::setYear(std::uint16_t year)
-  {
-    _year = year;
-    invalidateComputedCache();
-  }
-
-  void TrackRowObject::setRecordingDate(library::RecordingDate date)
-  {
-    _recordingDate = date;
-    invalidateComputedCache();
-  }
-
-  void TrackRowObject::setDiscNumber(std::uint16_t discNumber)
-  {
-    _discNumber = discNumber;
-    invalidateComputedCache();
-  }
-
-  void TrackRowObject::setDiscTotal(std::uint16_t discTotal)
-  {
-    _discTotal = discTotal;
-    invalidateComputedCache();
-  }
-
-  void TrackRowObject::setTrackNumber(std::uint16_t trackNumber)
-  {
-    _trackNumber = trackNumber;
-    invalidateComputedCache();
-  }
-
-  void TrackRowObject::setTrackTotal(std::uint16_t trackTotal)
-  {
-    _trackTotal = trackTotal;
-    invalidateComputedCache();
-  }
-
-  void TrackRowObject::setMovementNumber(std::uint16_t movementNumber)
-  {
-    _movementNumber = movementNumber;
-    invalidateComputedCache();
-  }
-
-  void TrackRowObject::setMovementTotal(std::uint16_t movementTotal)
-  {
-    _movementTotal = movementTotal;
-    invalidateComputedCache();
+    return _textCatalog;
   }
 } // namespace ao::gtk

@@ -10,7 +10,6 @@
 #include "test/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/runtime/RuntimeLibraryTestSupport.h"
-#include "track/TrackRowCache.h"
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
@@ -91,7 +90,6 @@ namespace ao::gtk::test
       [&](library::MusicLibrary& musicLibrary)
       { trackId = library::test::addTrackWithUniqueFixtureUri(musicLibrary, {.title = "Before Save"}); }};
     auto& runtime = fixture.runtime();
-    auto cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
     auto parent = Gtk::Window{};
     parent.present();
 
@@ -100,7 +98,6 @@ namespace ao::gtk::test
                                                                   runtime.library(),
                                                                   runtime.completion(),
                                                                   ao::test::englishMessageCatalog(),
-                                                                  cache,
                                                                   std::vector{trackId});
     dialog->present();
     drainGtkEvents();
@@ -143,11 +140,10 @@ namespace ao::gtk::test
       { trackId = library::test::addTrackWithUniqueFixtureUri(musicLibrary, {.title = "Stale Save"}); }};
     auto& runtime = fixture.runtime();
     auto const& textCatalog = ao::test::englishMessageCatalog();
-    auto cache = TrackRowCache{runtime.library(), textCatalog};
     auto parent = Gtk::Window{};
     parent.present();
     auto* const dialog = Gtk::make_managed<TrackPropertiesDialog>(
-      parent, runtime.async(), runtime.library(), runtime.completion(), textCatalog, cache, std::vector{trackId});
+      parent, runtime.async(), runtime.library(), runtime.completion(), textCatalog, std::vector{trackId});
     dialog->present();
     drainGtkEvents();
 
@@ -200,7 +196,6 @@ namespace ao::gtk::test
       [&](library::MusicLibrary& musicLibrary)
       { trackId = library::test::addTrackWithUniqueFixtureUri(musicLibrary, {.title = "Owner Before"}); }};
     auto& runtime = fixture.runtime();
-    auto cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
     auto parentPtr = std::make_unique<Gtk::Window>();
     parentPtr->present();
     auto* const dialog = Gtk::make_managed<TrackPropertiesDialog>(*parentPtr,
@@ -208,7 +203,6 @@ namespace ao::gtk::test
                                                                   runtime.library(),
                                                                   runtime.completion(),
                                                                   ao::test::englishMessageCatalog(),
-                                                                  cache,
                                                                   std::vector{trackId});
     dialog->present();
     drainGtkEvents();
@@ -332,7 +326,6 @@ namespace ao::gtk::test
                         }};
     auto& runtime = fixture.runtime();
     auto const& catalog = ao::test::englishMessageCatalog();
-    auto cache = TrackRowCache{runtime.library(), catalog};
     auto window = Gtk::Window{};
 
     REQUIRE(trackId1 != kInvalidTrackId);
@@ -341,7 +334,7 @@ namespace ao::gtk::test
     SECTION("dialog creation and data loading")
     {
       auto dialog = TrackPropertiesDialog{
-        window, runtime.async(), runtime.library(), runtime.completion(), catalog, cache, std::array{trackId1}};
+        window, runtime.async(), runtime.library(), runtime.completion(), catalog, std::array{trackId1}};
       drainGtkEvents();
 
       CHECK(findButtonByLabel(dialog, clearFieldLabel(catalog, i18n::MessageId::TrackFieldAlbum, 1)) == nullptr);
@@ -363,13 +356,8 @@ namespace ao::gtk::test
     SECTION("multi-track selection marks differing fields as mixed")
     {
       auto const& textCatalog = ao::test::englishMessageCatalog();
-      auto dialog = TrackPropertiesDialog{window,
-                                          runtime.async(),
-                                          runtime.library(),
-                                          runtime.completion(),
-                                          textCatalog,
-                                          cache,
-                                          std::array{trackId1, trackId2}};
+      auto dialog = TrackPropertiesDialog{
+        window, runtime.async(), runtime.library(), runtime.completion(), textCatalog, std::array{trackId1, trackId2}};
       drainGtkEvents();
 
       CHECK(dialog.get_title() == "Properties — 2 tracks selected");
@@ -408,7 +396,6 @@ namespace ao::gtk::test
                                           runtime.library(),
                                           runtime.completion(),
                                           ao::test::englishMessageCatalog(),
-                                          cache,
                                           std::array{trackId1, trackId1}};
       CHECK(dialog.get_title() == "Properties — 2 tracks selected");
       auto* const title = findEntryForLabel(dialog, "Title");
@@ -427,8 +414,8 @@ namespace ao::gtk::test
     {
       auto const targetIds =
         GENERATE_COPY(std::vector<TrackId>{}, std::vector{TrackId{999999}}, std::vector{trackId1, TrackId{999999}});
-      auto dialog = TrackPropertiesDialog{
-        window, runtime.async(), runtime.library(), runtime.completion(), catalog, cache, targetIds};
+      auto dialog =
+        TrackPropertiesDialog{window, runtime.async(), runtime.library(), runtime.completion(), catalog, targetIds};
       CHECK(dialog.get_title() == (targetIds.size() > 1 ? "Properties — 2 tracks selected" : "Properties"));
       CHECK(findButtonByLabel(dialog, clearFieldLabel(catalog, i18n::MessageId::TrackFieldTitle, 0)) == nullptr);
       CHECK(findButtonByLabel(dialog, clearFieldLabel(catalog, i18n::MessageId::TrackFieldTitle, 1)) == nullptr);
@@ -489,10 +476,9 @@ namespace ao::gtk::test
     auto const ordinaryTitles = std::vector{wouldRecordClear(firstId), wouldRecordClear(secondId)};
     checkClearPreview(ordinaryTitles);
 
-    auto cache = TrackRowCache{runtime.library(), catalog};
     auto parent = Gtk::Window{};
-    auto dialog = TrackPropertiesDialog{
-      parent, runtime.async(), runtime.library(), runtime.completion(), catalog, cache, targetIds};
+    auto dialog =
+      TrackPropertiesDialog{parent, runtime.async(), runtime.library(), runtime.completion(), catalog, targetIds};
     dialog.present();
     drainGtkEvents();
     auto const label = clearFieldLabel(catalog, MessageId::TrackFieldTitle, targetIds.size());
@@ -543,10 +529,8 @@ namespace ao::gtk::test
                                      }};
     auto& runtime = fixture.runtime();
     auto const& catalog = ao::test::englishMessageCatalog();
-    auto cache = TrackRowCache{runtime.library(), catalog};
     auto parent = Gtk::Window{};
-    auto dialog =
-      TrackPropertiesDialog{parent, runtime.async(), runtime.library(), runtime.completion(), catalog, cache, ids};
+    auto dialog = TrackPropertiesDialog{parent, runtime.async(), runtime.library(), runtime.completion(), catalog, ids};
     dialog.present();
     drainGtkEvents();
     using i18n::MessageId;
@@ -712,7 +696,6 @@ namespace ao::gtk::test
                                          musicLibrary, {.title = "Before save", .artist = "Settlement Artist"});
                                      }};
     auto& runtime = fixture.runtime();
-    auto cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
     auto window = Gtk::Window{};
 
     REQUIRE(trackId != kInvalidTrackId);
@@ -722,7 +705,6 @@ namespace ao::gtk::test
                                         runtime.library(),
                                         runtime.completion(),
                                         ao::test::englishMessageCatalog(),
-                                        cache,
                                         std::array{trackId}};
     dialog.present();
     drainGtkEvents();
@@ -864,11 +846,10 @@ namespace ao::gtk::test
       }};
     auto& runtime = fixture.runtime();
     auto catalog = ao::test::englishMessageCatalog();
-    auto cache = TrackRowCache{runtime.library(), catalog};
     auto parent = Gtk::Window{};
     parent.present();
     auto* dialog = Gtk::make_managed<TrackPropertiesDialog>(
-      parent, runtime.async(), runtime.library(), runtime.completion(), catalog, cache, std::vector{trackId});
+      parent, runtime.async(), runtime.library(), runtime.completion(), catalog, std::vector{trackId});
     dialog->present();
     drainGtkEvents();
     auto entries = collectAll<Gtk::Entry>(*dialog);
@@ -918,11 +899,10 @@ namespace ao::gtk::test
       { trackId = library::test::addTrackWithUniqueFixtureUri(storage, {.title = "Before", .credits = before}); }};
     auto& runtime = fixture.runtime();
     auto catalog = ao::test::englishMessageCatalog();
-    auto cache = TrackRowCache{runtime.library(), catalog};
     auto parent = Gtk::Window{};
     parent.present();
     auto* dialog = Gtk::make_managed<TrackPropertiesDialog>(
-      parent, runtime.async(), runtime.library(), runtime.completion(), catalog, cache, std::vector{trackId});
+      parent, runtime.async(), runtime.library(), runtime.completion(), catalog, std::vector{trackId});
     dialog->present();
     drainGtkEvents();
     auto const promptTitle = std::string{"Discard the Credits changes?"};
@@ -1009,11 +989,10 @@ namespace ao::gtk::test
       { trackId = library::test::addTrackWithUniqueFixtureUri(storage, {.title = "Before", .credits = before}); }};
     auto& runtime = fixture.runtime();
     auto catalog = ao::test::englishMessageCatalog();
-    auto cache = TrackRowCache{runtime.library(), catalog};
     auto parent = Gtk::Window{};
     parent.present();
     auto* dialog = Gtk::make_managed<TrackPropertiesDialog>(
-      parent, runtime.async(), runtime.library(), runtime.completion(), catalog, cache, std::vector{trackId});
+      parent, runtime.async(), runtime.library(), runtime.completion(), catalog, std::vector{trackId});
     dialog->present();
     drainGtkEvents();
     auto* edit = findWidgetByClass<Gtk::Button>(*dialog, "ao-credits-edit");

@@ -207,7 +207,11 @@ The form closes after a submitted `Applied` or `NoOp`. `Busy` preserves the draf
 Runtime mutation failure rejects the edit and exposes the recoverable diagnostic to the frontend workflow.
 For a combined Properties save, failure after either part has staged changes aborts the complete write transaction, so reusing the unchanged form draft cannot resubmit an already committed metadata half.
 No partial frontend state is treated as committed merely because an editor closed.
-GTK table inline edits place parsing, operational, stale, and unavailable failures in the table's existing status surface and update the row only after `Applied`.
+GTK table inline edits report parsing, operational, stale, and unavailable failures in the table's status surface.
+The row displays published library metadata. A field refresh does not overwrite text in an active inline editor.
+Enter closes the editor and attempts to commit the captured draft. The cell returns to its published display while the draft is validated and any write settles.
+Escape or leaving the editor without submitting discards the draft; reopening starts from the published value. Recycling the cell retires its edit session.
+An `Applied` reply clears the status but does not write the submitted text back to the row: a later edit may already be visible.
 GTK detail-grid parsing and submission failures create an error notification and restore the pre-edit display value; the backing library remains unchanged on rejection.
 Detail undo returns a stale, unavailable, or operational terminal failure, clears that same opportunity, and the undo bar publishes that failure as an error notification. A completion bound to a displaced opportunity does not clear its replacement. A `Busy` result reports temporary resource contention without clearing the pending undo.
 The current synchronous mutation boundary has no cancellation token; cancellation before submission discards the local draft, while a returned successful mutation is committed.

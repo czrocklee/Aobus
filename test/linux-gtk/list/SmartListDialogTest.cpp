@@ -172,6 +172,44 @@ namespace ao::gtk::test
     CHECK(findLabelByText(dialog, "Showing all matches: 1") != nullptr);
   }
 
+  TEST_CASE("SmartListDialog - a title edit refreshes the mapped preview label")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    auto const trackId = addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Original"});
+    auto window = Gtk::Window{};
+    auto cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
+    auto dialog = SmartListDialog{window,
+                                  runtime.library(),
+                                  runtime.views(),
+                                  runtime.sources(),
+                                  runtime.completion(),
+                                  runtime.workspace().customPresets(),
+                                  ao::test::englishMessageCatalog(),
+                                  rt::kAllTracksListId,
+                                  cache};
+    dialog.setLocalExpression(R"($artist = "Artist")");
+    dialog.present();
+
+    auto* const preview = findWidget<Gtk::ColumnView>(dialog);
+    REQUIRE(preview != nullptr);
+    REQUIRE(tryPumpGtkEventsUntil(
+      [&]
+      {
+        auto* const label = findLabelByText(*preview, "Original - Artist (Album)");
+        return label != nullptr && label->get_mapped();
+      }));
+    REQUIRE(previewRows(dialog)->get_n_items() == 1);
+
+    updateRuntimeTrack(runtime, trackId, [](library::test::TrackSpec& spec) { spec.title = "Edited"; });
+
+    CHECK(previewRows(dialog)->get_n_items() == 1);
+    auto* const editedLabel = findLabelByText(*preview, "Edited - Artist (Album)");
+    REQUIRE(editedLabel != nullptr);
+    CHECK(editedLabel->get_mapped());
+  }
+
   TEST_CASE("SmartListDialog - populating an Auto edit immediately refreshes its filter preview")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();

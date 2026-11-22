@@ -8,7 +8,6 @@
 #include "test/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/runtime/RuntimeLibraryTestSupport.h"
-#include "track/TrackRowCache.h"
 #include <ao/CoreIds.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/RecordingDate.h>
@@ -51,10 +50,9 @@ namespace ao::gtk::test
                         }};
     auto& runtime = fixture.runtime();
     auto const& catalog = ao::test::englishMessageCatalog();
-    auto cache = TrackRowCache{runtime.library(), catalog};
     auto parent = Gtk::Window{};
     auto dialog = TrackPropertiesDialog{
-      parent, runtime.async(), runtime.library(), runtime.completion(), catalog, cache, std::vector{trackId}};
+      parent, runtime.async(), runtime.library(), runtime.completion(), catalog, std::vector{trackId}};
     parent.present();
     dialog.present();
     drainGtkEvents();
@@ -103,10 +101,8 @@ namespace ao::gtk::test
                         }};
     auto& runtime = fixture.runtime();
     auto const& catalog = ao::test::englishMessageCatalog();
-    auto cache = TrackRowCache{runtime.library(), catalog};
     auto parent = Gtk::Window{};
-    auto dialog =
-      TrackPropertiesDialog{parent, runtime.async(), runtime.library(), runtime.completion(), catalog, cache, ids};
+    auto dialog = TrackPropertiesDialog{parent, runtime.async(), runtime.library(), runtime.completion(), catalog, ids};
     parent.present();
     dialog.present();
     drainGtkEvents();

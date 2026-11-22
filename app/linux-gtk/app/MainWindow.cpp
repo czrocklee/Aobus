@@ -170,7 +170,6 @@ namespace ao::gtk
                                   .onTitleChanged = [&window](std::string const& title) { window.set_title(title); }},
                                 themeCoordinator}
     {
-      tagEditController.setDataProvider(&trackRowCache);
       playbackActions.bindFocusedSelection(runtime.workspace(), runtime.views());
     }
 

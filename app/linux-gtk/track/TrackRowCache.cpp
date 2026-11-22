@@ -10,119 +10,203 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibrarySnapshot.h>
-#include <ao/utility/Path.h>
+#include <ao/rt/projection/TrackListProjection.h>
 
 #include <glibmm/refptr.h>
-#include <glibmm/ustring.h>
 
-#include <string>
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <optional>
 #include <utility>
+#include <variant>
+#include <vector>
 
 namespace ao::gtk
 {
-  namespace
-  {
-    Glib::ustring toUString(std::string&& value)
-    {
-      return Glib::ustring{std::move(value)};
-    }
-  }
-
   TrackRowCache::TrackRowCache(rt::Library const& reads, i18n::MessageCatalog textCatalog)
     : _reads{reads}, _textCatalog{std::move(textCatalog)}
   {
     _changesSub = _reads.changes().onChanged(
       [this](rt::LibraryChangeSet const& changeSet)
       {
+        _observedRevision = changeSet.libraryRevision;
+        auto bound = std::vector<TrackId>{};
+
         if (changeSet.libraryReset)
         {
-          clearCache();
-          return;
+          for (auto& pair : _rowCache)
+          {
+            markStale(pair.second, _observedRevision, bound);
+          }
+        }
+        else
+        {
+          for (auto const trackId : changeSet.tracksDeleted)
+          {
+            _rowCache.erase(trackId);
+          }
+
+          auto const mark = [&](TrackId id) { markCachedRow(id, _observedRevision, bound); };
+          std::ranges::for_each(changeSet.tracksInserted, mark);
+          std::ranges::for_each(changeSet.tracksMutated, mark);
         }
 
-        for (auto const trackId : changeSet.tracksInserted)
+        for (auto const id : bound)
         {
-          invalidate(trackId);
+          trackRow(id);
         }
 
-        for (auto const trackId : changeSet.tracksDeleted)
+        if (changeSet.libraryReset)
         {
-          invalidate(trackId);
-        }
-
-        for (auto const trackId : changeSet.tracksMutated)
-        {
-          invalidate(trackId);
+          // A list-only Restore also publishes a reset. Keep bindings that
+          // already resolved surviving tracks in the new revision.
+          boost::unordered::erase_if(
+            _rowCache, [this](auto const& pair) { return pair.second.loadedRevision < _observedRevision; });
         }
       });
   }
 
-  Glib::RefPtr<TrackRowObject> TrackRowCache::createRowObject(rt::TrackRow row) const
+  Glib::RefPtr<TrackRowObject> TrackRowCache::trackRow(TrackId id) const
   {
-    auto const rowPtr = TrackRowObject::create(row.id, _textCatalog);
+    auto it = _rowCache.find(id);
 
-    rowPtr->populate(toUString(std::move(row.title)),
-                     toUString(std::move(row.artist)),
-                     toUString(std::move(row.album)),
-                     toUString(std::move(row.albumArtist)),
-                     toUString(std::move(row.genre)),
-                     toUString(std::move(row.composer)),
-                     toUString(std::move(row.conductor)),
-                     toUString(std::move(row.ensemble)),
-                     toUString(std::move(row.work)),
-                     toUString(std::move(row.movement)),
-                     toUString(std::move(row.soloist)),
-                     toUString(std::move(row.tags)),
-                     toUString(row.optUriPath ? utility::pathToUtf8(*row.optUriPath) : std::string{}),
-                     row.duration,
-                     row.year,
-                     row.discNumber,
-                     row.discTotal,
-                     row.trackNumber,
-                     row.trackTotal,
-                     row.movementNumber,
-                     row.movementTotal,
-                     row.sampleRate,
-                     row.channels,
-                     row.bitDepth,
-                     row.codec,
-                     row.bitrate,
-                     row.fileSize,
-                     row.optModifiedTime,
-                     row.status,
-                     row.recordingDate,
-                     {row.conductorCount, row.ensembleCount, row.soloistCount});
+    if (it != _rowCache.end() && !it->second.stale)
+    {
+      return it->second.rowPtr;
+    }
 
+    auto optRow = std::optional<rt::TrackRow>{};
+    {
+      auto scope = _reads.snapshot();
+      auto const revision = scope.revision();
+
+      ++_rowLoadCount;
+      optRow = scope.trackRow(id);
+
+      if (!optRow)
+      {
+        _rowCache.erase(id);
+        return nullptr;
+      }
+
+      if (it == _rowCache.end())
+      {
+        it = _rowCache.emplace(id, Entry{.rowPtr = TrackRowObject::create(id, _textCatalog)}).first;
+      }
+
+      it->second.loadedRevision = revision;
+      it->second.stale = false;
+    }
+
+    // No transaction or map entry is borrowed by the cell callbacks fired by populate().
+    auto const rowPtr = it->second.rowPtr;
+    rowPtr->populate(std::move(*optRow));
     return rowPtr;
   }
 
-  Glib::RefPtr<TrackRowObject> TrackRowCache::trackRow(TrackId id) const
+  void TrackRowCache::markStale(Entry& entry, std::uint64_t revision, std::vector<TrackId>& bound)
+  {
+    if (entry.loadedRevision >= revision)
+    {
+      return;
+    }
+
+    entry.stale = true;
+
+    if (!entry.rowPtr->signalFieldsChanged().empty())
+    {
+      bound.push_back(entry.rowPtr->trackId());
+    }
+  }
+
+  void TrackRowCache::markCachedRow(TrackId id, std::uint64_t revision, std::vector<TrackId>& bound) const
   {
     if (auto const it = _rowCache.find(id); it != _rowCache.end())
     {
-      return it->second;
+      markStale(it->second, revision, bound);
     }
+  }
 
-    auto scope = _reads.snapshot();
-    auto optRow = scope.trackRow(id);
-
-    if (!optRow)
+  void TrackRowCache::markCachedRange(rt::TrackListProjection const& projection,
+                                      rt::TrackRowRange range,
+                                      std::uint64_t revision,
+                                      std::vector<TrackId>& bound) const
+  {
+    // Walk the smaller side: a large insertion or reset may cover very few
+    // cached rows, while a single edit may hit a large warm cache.
+    if (range.count <= _rowCache.size())
     {
-      return nullptr;
+      for (std::size_t offset = 0; offset < range.count; ++offset)
+      {
+        markCachedRow(projection.trackIdAt(range.start + offset), revision, bound);
+      }
+
+      return;
     }
 
-    auto const rowPtr = createRowObject(std::move(*optRow));
-    _rowCache.emplace(id, rowPtr);
-    return rowPtr;
+    for (auto& [id, entry] : _rowCache)
+    {
+      if (auto const optIndex = projection.indexOf(id);
+          optIndex && range.start <= *optIndex && *optIndex - range.start < range.count)
+      {
+        markStale(entry, revision, bound);
+      }
+    }
   }
 
-  void TrackRowCache::invalidate(TrackId id) const
+  void TrackRowCache::prepareNotification(rt::TrackListProjection const& projection,
+                                          rt::TrackListProjectionDeltaBatch const& batch) const
   {
-    _rowCache.erase(id);
-  }
+    if (_rowCache.empty() ||
+        std::ranges::all_of(
+          batch.deltas, [](auto const& delta) { return std::holds_alternative<rt::ProjectionRemoveRange>(delta); }))
+    {
+      return;
+    }
 
-  void TrackRowCache::clearCache()
-  {
-    _rowCache.clear();
+    auto const revision = _reads.snapshot().revision();
+
+    if (revision == _observedRevision)
+    {
+      return;
+    }
+
+    auto bound = std::vector<TrackId>{};
+
+    // The projection already has its final order. A move or filter entry may
+    // have an insertion but no update.
+    for (auto const& delta : batch.deltas)
+    {
+      if (auto const* reset = std::get_if<rt::ProjectionReset>(&delta); reset != nullptr)
+      {
+        if (reset->optAffectedTrackIds)
+        {
+          for (auto const id : *reset->optAffectedTrackIds)
+          {
+            markCachedRow(id, revision, bound);
+          }
+        }
+        else
+        {
+          markCachedRange(projection, {.start = 0, .count = projection.size()}, revision, bound);
+        }
+      }
+      else if (auto const* insert = std::get_if<rt::ProjectionInsertRange>(&delta); insert != nullptr)
+      {
+        markCachedRange(projection, insert->range, revision, bound);
+      }
+      else if (auto const* update = std::get_if<rt::ProjectionUpdateRange>(&delta); update != nullptr)
+      {
+        markCachedRange(projection, update->range, revision, bound);
+      }
+    }
+
+    // A cell callback may look up another row. Mark the entire batch first,
+    // and never keep an iterator into the cache across such a callback.
+    for (auto const id : bound)
+    {
+      trackRow(id);
+    }
   }
 } // namespace ao::gtk

@@ -764,6 +764,25 @@ namespace ao::rt
 
       return true;
     }
+
+    ProjectionReset makeSectionReset(delta::RegularTrackEditScript const& script)
+    {
+      auto affectedIds = std::vector<TrackId>{};
+
+      for (auto const& edit : script.edits)
+      {
+        if (auto const* insert = std::get_if<delta::InsertRange>(&edit); insert != nullptr)
+        {
+          affectedIds.append_range(insert->trackIds);
+        }
+        else if (auto const* update = std::get_if<delta::UpdateRange>(&edit); update != nullptr)
+        {
+          affectedIds.append_range(update->trackIds);
+        }
+      }
+
+      return {.optAffectedTrackIds = std::move(affectedIds)};
+    }
   } // namespace
 
   struct TrackListProjection::Impl final
@@ -1489,9 +1508,11 @@ namespace ao::rt
       changedSignal.emit(batch);
     }
 
-    void publishReset(std::size_t previousSize)
+    void publishReset(std::size_t previousSize, ProjectionReset reset = {})
     {
-      publishBatch(TrackListProjectionDeltaBatch{.deltas = {ProjectionReset{}}}, previousSize);
+      auto batch = TrackListProjectionDeltaBatch{};
+      batch.deltas.emplace_back(std::move(reset));
+      publishBatch(std::move(batch), previousSize);
     }
 
     void publishSourceInvalidated()
@@ -1610,7 +1631,7 @@ namespace ao::rt
 
       if (previousSections != sectionFingerprint())
       {
-        publishReset(previousSize);
+        publishReset(previousSize, makeSectionReset(script));
         return;
       }
 

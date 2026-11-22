@@ -10,10 +10,10 @@
 #include "test/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/linux-gtk/track/TrackSelectionControllerTestSupport.h"
 #include "test/runtime/source/TrackSourceTestSupport.h"
+#include "track/TrackListItem.h"
 #include "track/TrackListModel.h"
 #include "track/TrackRowBinding.h"
 #include "track/TrackRowCache.h"
-#include "track/TrackRowObject.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/TrackField.h>
@@ -54,10 +54,9 @@ namespace ao::gtk::test
   namespace
   {
     // One-consumer editable cell factory for the long-press section: each cell
-    // is a Gtk::Stack whose "display" page is a label bound to the row's track
-    // id and whose "edit" page is an entry, mirroring the inline-edit stack the
-    // production long-press handler switches. Local to this test because only
-    // the long-press regression exercises it.
+    // is a Gtk::Stack whose "display" page is a label bound to the item's
+    // track id and whose "edit" page is an entry, mirroring the inline-edit
+    // stack the production long-press handler switches.
     Glib::RefPtr<Gtk::SignalListItemFactory> createEditableCellFactory()
     {
       auto const factoryPtr = Gtk::SignalListItemFactory::create();
@@ -72,12 +71,12 @@ namespace ao::gtk::test
         });
 
       factoryPtr->signal_bind().connect(
-        [](Glib::RefPtr<Gtk::ListItem> const& itemPtr)
+        [](Glib::RefPtr<Gtk::ListItem> const& listItemPtr)
         {
-          auto* const stack = dynamic_cast<Gtk::Stack*>(itemPtr->get_child());
-          auto const rowPtr = std::dynamic_pointer_cast<TrackRowObject>(itemPtr->get_item());
+          auto* const stack = dynamic_cast<Gtk::Stack*>(listItemPtr->get_child());
+          auto const itemPtr = std::dynamic_pointer_cast<TrackListItem>(listItemPtr->get_item());
 
-          if (stack == nullptr || rowPtr == nullptr)
+          if (stack == nullptr || itemPtr == nullptr)
           {
             return;
           }
@@ -87,7 +86,7 @@ namespace ao::gtk::test
             display->set_text("title");
             ::g_object_set_data(G_OBJECT(display->gobj()),
                                 kBoundTrackIdDataKey,
-                                GUINT_TO_POINTER(static_cast<guint>(rowPtr->trackId().raw())));
+                                GUINT_TO_POINTER(static_cast<guint>(itemPtr->trackId().raw())));
           }
 
           stack->set_visible_child("display");

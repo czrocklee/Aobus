@@ -139,7 +139,9 @@ namespace ao::rt::test
 
     REQUIRE(batches.size() == 1);
     REQUIRE(batches.front().deltas.size() == 1);
-    CHECK(std::holds_alternative<ProjectionReset>(batches.front().deltas.front()));
+    auto const* reset = std::get_if<ProjectionReset>(&batches.front().deltas.front());
+    REQUIRE(reset != nullptr);
+    CHECK_FALSE(reset->optAffectedTrackIds);
     CHECK(projectionTrackIds(projection) == std::vector{second, third, fourth});
   }
 

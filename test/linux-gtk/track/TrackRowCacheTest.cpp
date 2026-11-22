@@ -21,6 +21,8 @@
 #include <ao/library/TrackStore.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryCommands.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <glibmm/refptr.h>
@@ -103,7 +105,6 @@ namespace ao::gtk::test
     auto utf8Id = kInvalidTrackId;
     auto helperId = kInvalidTrackId;
     auto cachingId = kInvalidTrackId;
-    auto invalidationId = kInvalidTrackId;
     auto fixture = GtkRuntimeFixture{[&](library::MusicLibrary& musicLibrary)
                                      {
                                        auto spec1 = library::test::TrackSpec{};
@@ -146,8 +147,6 @@ namespace ao::gtk::test
                                        helperId = library::test::addTrackWithUniqueFixtureUri(musicLibrary, helperSpec);
                                        cachingId = library::test::addTrackWithUniqueFixtureUri(
                                          musicLibrary, library::test::TrackSpec{.uri = "cache.flac"});
-                                       invalidationId = library::test::addTrackWithUniqueFixtureUri(
-                                         musicLibrary, library::test::TrackSpec{.uri = "invalidation.flac"});
                                      }};
     auto& runtime = fixture.runtime();
 
@@ -171,7 +170,6 @@ namespace ao::gtk::test
       CHECK(row2Ptr->fieldText(rt::TrackField::Title) == "Track 2");
       CHECK(row2Ptr->duration() == std::chrono::minutes{4});
 
-      CHECK_FALSE(row1Ptr->isPlaying());
       CHECK(row1Ptr->sampleRate() == 44100);
       CHECK(row1Ptr->channels() == 2);
       CHECK(row1Ptr->bitDepth() == 16);
@@ -198,11 +196,11 @@ namespace ao::gtk::test
       CHECK(rowPtr->tags() == "夜, ライブ");
     }
 
-    SECTION("Lookup retains rows until selective invalidation or whole-cache clearing")
+    SECTION("Lookup retains and shares cached rows")
     {
       auto provider = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
-      auto const ids = std::array{helperId, cachingId, invalidationId};
-      auto rows = std::array<Glib::RefPtr<TrackRowObject>, 3>{};
+      auto const ids = std::array{helperId, cachingId};
+      auto rows = std::array<Glib::RefPtr<TrackRowObject>, 2>{};
       CHECK(provider.cachedRowCount() == 0);
 
       for (std::size_t index = 0; index < ids.size(); ++index)
@@ -212,29 +210,6 @@ namespace ao::gtk::test
         CHECK(rows[index]->trackId() == ids[index]);
         CHECK(provider.cachedRowCount() == index + 1);
         CHECK(provider.trackRow(ids[index]) == rows[index]);
-        CHECK(provider.cachedRowCount() == index + 1);
-      }
-
-      provider.invalidate(invalidationId);
-      CHECK(provider.cachedRowCount() == 2);
-      CHECK(provider.trackRow(helperId) == rows[0]);
-      CHECK(provider.trackRow(cachingId) == rows[1]);
-      auto const reloadedInvalidatedRowPtr = provider.trackRow(invalidationId);
-      REQUIRE(reloadedInvalidatedRowPtr);
-      CHECK(reloadedInvalidatedRowPtr->trackId() == invalidationId);
-      CHECK(reloadedInvalidatedRowPtr != rows[2]);
-      CHECK(provider.cachedRowCount() == 3);
-
-      auto const rowsBeforeClear = std::array{rows[0], rows[1], reloadedInvalidatedRowPtr};
-      provider.clearCache();
-      CHECK(provider.cachedRowCount() == 0);
-
-      for (std::size_t index = 0; index < ids.size(); ++index)
-      {
-        auto const rowPtr = provider.trackRow(ids[index]);
-        REQUIRE(rowPtr);
-        CHECK(rowPtr->trackId() == ids[index]);
-        CHECK(rowPtr != rowsBeforeClear[index]);
         CHECK(provider.cachedRowCount() == index + 1);
       }
     }
@@ -261,27 +236,45 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("TrackRowCache - a library mutation invalidates the cached row it changed")
+  TEST_CASE("TrackRowCache - library changes refresh edited rows and drop deleted rows")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
     auto const cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
+    auto const trackId = addRuntimeTrack(runtime, {.title = "Original title", .year = 2020});
+    auto const rowPtr = cache.trackRow(trackId);
+    REQUIRE(rowPtr);
 
-    // The cache keeps itself coherent, so nothing above it has to hold a
-    // library subscription or remember to invalidate after a mutation.
-    auto const trackId = addRuntimeTrack(runtime, {.title = "Before Import"});
-    auto const rowBeforePtr = cache.trackRow(trackId);
-    REQUIRE(rowBeforePtr);
-    CHECK(rowBeforePtr->fieldText(rt::TrackField::Title) == "Before Import");
+    SECTION("The next lookup refreshes an unbound row in place")
+    {
+      REQUIRE(rowPtr->fieldText(rt::TrackField::Title) == "Original title");
+      REQUIRE(rowPtr->fieldText(rt::TrackField::Year) == "2020");
+      updateRuntimeTrack(runtime,
+                         trackId,
+                         [](library::test::TrackSpec& spec)
+                         {
+                           spec.title = "Edited title";
+                           spec.year = 2025;
+                         });
 
-    updateRuntimeTrack(runtime, trackId, [](library::test::TrackSpec& spec) { spec.title = "After Import"; });
+      CHECK(rowPtr->fieldText(rt::TrackField::Title) == "Original title");
+      CHECK(cache.rowLoadCount() == 1);
+      CHECK(cache.trackRow(trackId) == rowPtr);
+      CHECK(cache.rowLoadCount() == 2);
+      CHECK(rowPtr->fieldText(rt::TrackField::Title) == "Edited title");
+      CHECK(rowPtr->fieldText(rt::TrackField::Year) == "2025");
+    }
 
-    auto const rowAfterPtr = cache.trackRow(trackId);
-    REQUIRE(rowAfterPtr);
-    CHECK(rowAfterPtr != rowBeforePtr);
-    CHECK(rowAfterPtr->fieldText(rt::TrackField::Title) == "After Import");
-    CHECK(rowBeforePtr->fieldText(rt::TrackField::Title) == "Before Import");
+    SECTION("Deleting a track drops its cache entry despite an external row reference")
+    {
+      REQUIRE(cache.cachedRowCount() == 1);
+      REQUIRE(runGtkTask(runtime, runtime.library().commands().deleteTrackAsync(trackId)));
+      drainGtkEvents();
+
+      CHECK(cache.cachedRowCount() == 0);
+      CHECK_FALSE(cache.trackRow(trackId));
+    }
   }
 
   TEST_CASE("TrackRowCache - retained rows preserve bind text across repeated lookup")
@@ -409,7 +402,5 @@ namespace ao::gtk::test
     CHECK(rowPtr->stringField(rt::TrackField::Conductor)->raw() == "First");
     CHECK(rowPtr->fieldText(rt::TrackField::Conductor) == "First +2");
     CHECK(rowPtr->fieldText(rt::TrackField::Ensemble).empty());
-    CHECK_FALSE(rowPtr->trySetStringField(rt::TrackField::Conductor, "Scalar replacement"));
-    CHECK(rowPtr->fieldText(rt::TrackField::Conductor) == "First +2");
   }
 } // namespace ao::gtk::test

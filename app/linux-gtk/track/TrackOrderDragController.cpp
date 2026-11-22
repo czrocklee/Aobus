@@ -6,8 +6,8 @@
 #include "common/AccessibleLabel.h"
 #include "common/UiWorkflow.h"
 #include "i18n/GtkText.h"
+#include "track/TrackListItem.h"
 #include "track/TrackRowBinding.h"
-#include "track/TrackRowObject.h"
 #include "track/TrackSelectionController.h"
 #include <ao/CoreIds.h>
 #include <ao/async/LifetimeScope.h>
@@ -182,18 +182,19 @@ namespace ao::gtk
         return {};
       }
 
-      auto const rowPtr = std::dynamic_pointer_cast<TrackRowObject>(listItem.get_item());
+      auto const itemPtr = std::dynamic_pointer_cast<TrackListItem>(listItem.get_item());
 
-      if (rowPtr == nullptr)
+      if (itemPtr == nullptr)
       {
         return {};
       }
 
+      auto const trackId = itemPtr->trackId();
       auto selected = selectionController.selectedTrackIds();
 
-      if (!std::ranges::contains(selected, rowPtr->trackId()))
+      if (!std::ranges::contains(selected, trackId))
       {
-        selectionController.selectTrack(rowPtr->trackId());
+        selectionController.selectTrack(trackId);
         selected = selectionController.selectedTrackIds();
       }
 
@@ -207,7 +208,7 @@ namespace ao::gtk
 
       clearActiveDrag();
       optSession.emplace(std::move(*sessionRes));
-      selectedTrackIds = uimodel::listOrderDragSelection(rowPtr->trackId(), selected, optSession->effectiveTrackIds());
+      selectedTrackIds = uimodel::listOrderDragSelection(trackId, selected, optSession->effectiveTrackIds());
 
       if (selectedTrackIds.empty())
       {
@@ -462,13 +463,13 @@ namespace ao::gtk
     factoryPtr->signal_bind().connect(
       [](Glib::RefPtr<Gtk::ListItem> const& listItemPtr)
       {
-        auto const rowPtr = std::dynamic_pointer_cast<TrackRowObject>(listItemPtr->get_item());
+        auto const itemPtr = std::dynamic_pointer_cast<TrackListItem>(listItemPtr->get_item());
 
-        if (auto* const child = listItemPtr->get_child(); child != nullptr && rowPtr != nullptr)
+        if (auto* const child = listItemPtr->get_child(); child != nullptr && itemPtr != nullptr)
         {
           ::g_object_set_data(G_OBJECT(child->gobj()),
                               kBoundTrackIdDataKey,
-                              GUINT_TO_POINTER(static_cast<guint>(rowPtr->trackId().raw())));
+                              GUINT_TO_POINTER(static_cast<guint>(itemPtr->trackId().raw())));
         }
       });
 
