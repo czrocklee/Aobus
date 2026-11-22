@@ -1,0 +1,27 @@
+---
+name: deslop-changes
+description: Use for deslop or patch cleanup requests, or to find leftovers from repeated edits in code, tests, and docs. Not for general PR or documentation reviews, lint-only work, or build-failure diagnosis.
+---
+
+# Deslop a change
+
+Use the user's goal or the PR description to identify the intended behavior. Review the whole patch against its intended base, not just the last fixup; include relevant unpublished work in a local review. If a guard, test, or documented guarantee disappeared, identify what still protects the behavior or which agreed requirement superseded it. If neither is clear, report what callers lose. Rewriting the docs and tests to match the code does not by itself establish intent.
+
+A cleanup review is read-only. An explicit request to clean up the patch authorizes in-scope edits that preserve observable behavior. If the user only names the skill or the request is ambiguous, report first. Get agreement before changing behavior or a public contract.
+
+For each proposed deletion, ask **what would we lose?** A one-caller API, repeated check, or long test is a lead, not a finding. There is no deletion quota.
+
+## Checklist
+
+- [ ] **Iteration residue:** Can each changed file, flag, helper, dependency, and fixture be traced to the final approach? Check callers and build registrations before calling code dead. Flag stray probes or unrelated churn in the patch. An untracked probe may be the user's unfinished work: inspecting it does not authorize changing or deleting it.
+- [ ] **Duplicate state or machinery:** Is a second set, cache, wrapper, or public accessor doing work an existing owner already does? Name the owner that would take over. Does it live long enough and expose the state each caller actually needs? See [reviewing simplification](../../../doc/development/design-review.md#reviewing-simplification).
+- [ ] **Guards and fallbacks:** What untrusted input or change can reach this [runtime check](../../../doc/development/test/scope.md#runtime-checks)? Look for a redundant check when every path already validated the same condition and its inputs cannot have changed. Before proposing removal, check what failure the caller would see and when. A preview can report a conflict early, but it cannot prevent a later write from committing stale data; the write-time check still has work to do. Treat a catch or fallback that turns failure into success as a possible bug, not cosmetic clutter.
+- [ ] **False greens:** What wrong implementation would still pass? Does an update test start from a different value and read back the result? For a batch operation, what shows that the intended item changed? Exit zero or a nonzero total may say nothing about that item; a preview is not a commit.
+- [ ] **Test overlap:** For each case proposed for removal, name the failure it catches and the retained case or cheaper check that would still catch it. Equal expected outputs can exercise different writers; absent and zero need not mean the same thing. If nothing replaces the coverage, it is not duplication: use the [admission](../../../doc/development/test/scope.md#the-admission-rule) and [removal](../../../doc/development/test/scope.md#removal) rules to justify any loss.
+- [ ] **Docs and comments:** Does the text give the reader the current rule, or just recount how it was written? Keep ordered steps when the order matters to the user, not because it was the order of implementation. For a command, check its prerequisites, what it can skip, and how to recognize success. Keep comments that explain a non-obvious constraint. If code and a documented guarantee disagree, report the discrepancy rather than deleting the guarantee. See [writing a page](../../../doc/development/documentation.md#writing-a-page) and [facts and evidence](../../../doc/development/documentation.md#facts-and-evidence).
+
+## Report or fix
+
+Report findings, not a work diary. Group by consequence, not by file or by the order of edits and test runs. For each finding, cite the line or removed hunk, the evidence, and the smallest safe change. Distinguish what the patch introduced from pre-existing issues it exposed; leave the latter out of the fix unless requested. Label suspicions as unverified. Say why a tempting deletion should stay when that prevents repeating the same review debate. "No findings" is a valid result.
+
+For findings about tests or documentation, consult [write-tests](../write-tests/SKILL.md) or [write-docs](../write-docs/SKILL.md) even in a read-only review. If cleanup is authorized, verify the behavior it could affect using [validation and review](../../../doc/development/test/validation-and-review.md#validation). Distinguish inspected source from executed checks; do not present evidence from an older patch as a run on the new one. Cleanup alone does not authorize staging, committing, or publishing.
