@@ -29,6 +29,8 @@
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
+#include <ao/rt/ViewService.h>
+#include <ao/rt/ViewState.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/completion/CompletionService.h>
 #include <ao/rt/library/Library.h>
@@ -224,6 +226,9 @@ namespace
       planScenarios();
       planFeedbackScenarios();
       planWorkflowScenarios();
+      planBatchPropertiesScenarios();
+      planFailedPropertiesSave();
+      planFailedPropertiesReload();
       _window.Activate();
       next();
     }
@@ -753,7 +758,8 @@ namespace
         {
           auto const credits = expectedCredits("Conductor", "Anne");
           auto builder = ao::library::TrackBuilder::makeEmpty();
-          builder.metadata().title("Original title").credits(credits);
+          builder.metadata().title("Original title").album("First album").year(1997).credits(credits);
+          builder.customMetadata().add("Café", "Original partial value");
           builder.property().uri("offline-probe.flac");
           auto createdRes = write.tracks().create(builder, ao::library::FileManifestBuilder::makeEmpty());
 
@@ -764,6 +770,7 @@ namespace
 
           _trackId = *createdRes;
           auto emptyBuilder = ao::library::TrackBuilder::makeEmpty();
+          emptyBuilder.metadata().album("Second album").year(1997);
           emptyBuilder.property().uri("empty-probe.flac");
           auto emptyRes = write.tracks().create(emptyBuilder, ao::library::FileManifestBuilder::makeEmpty());
 
@@ -773,6 +780,24 @@ namespace
           }
 
           _emptyTrackId = *emptyRes;
+          auto outside = ao::library::TrackBuilder::makeEmpty();
+          auto additionalSoloists = std::vector<Credit>{};
+
+          for (std::int32_t index = 0; index < 13; ++index)
+          {
+            additionalSoloists.push_back({.name = std::format("Anz {}", index), .kind = CreditKind::Soloist});
+          }
+
+          outside.metadata().album("Outside album").credits(additionalSoloists);
+          outside.property().uri("outside-probe.flac");
+          auto outsideRes = write.tracks().create(outside, ao::library::FileManifestBuilder::makeEmpty());
+
+          if (!outsideRes)
+          {
+            return std::unexpected{outsideRes.error()};
+          }
+
+          _outsideTrackId = *outsideRes;
           return {};
         });
 
@@ -895,9 +920,9 @@ namespace
       return names.front();
     }
 
-    TextBox titleInput()
+    TextBox textField(ao::rt::TrackField field) const
     {
-      auto const label = winrt::to_hstring(ao::uimodel::trackFieldLabel(*_optCatalog, ao::rt::TrackField::Title));
+      auto const label = winrt::to_hstring(ao::uimodel::trackFieldLabel(*_optCatalog, field));
 
       for (auto const& input : controls<TextBox>())
       {
@@ -907,12 +932,15 @@ namespace
         }
       }
 
-      throw winrt::hresult_invalid_argument{L"Properties title input is missing"};
+      throw winrt::hresult_invalid_argument{L"Properties text input is missing"};
     }
 
-    void setTitle(winrt::hstring const& text)
+    TextBox titleInput() const { return textField(ao::rt::TrackField::Title); }
+
+    void setTitle(winrt::hstring const& text) { setText(titleInput(), text); }
+
+    void setText(TextBox const& input, winrt::hstring const& text)
     {
-      auto input = titleInput();
       auto const index = _textObservations.size();
       _textObservations.push_back(false);
       _fieldTextRevokers.push_back(input.TextChanged(winrt::auto_revoke,
@@ -967,37 +995,43 @@ namespace
             check(ids == std::vector{_trackId}, "shipping detail action captures the projected target");
             check(scope == ao::uimodel::trackCreditScope(CreditKind::Soloist),
                   "shipping detail action routes the exact requested category");
-            _coordinatorPtr =
-              std::make_unique<ao::winui::TrackPropertiesCoordinator>(ao::winui::TrackPropertiesCoordinatorConfig{
-                .xamlRoot = _scroll.XamlRoot(),
-                .asyncRuntime = _runtimePtr->async(),
-                .library = _runtimePtr->library(),
-                .workspace = _runtimePtr->workspace(),
-                .completion = _runtimePtr->completion(),
-                .textCatalog = *_optCatalog,
-                .trackIds = std::move(ids),
-                .optCreditsScope = scope,
-              });
-
-            if (auto presentRes = _coordinatorPtr->present(); !presentRes)
-            {
-              throw winrt::hresult_invalid_argument{winrt::to_hstring(presentRes.error().message)};
-            }
-
-            _workflowDialog = _coordinatorPtr->element();
-            _dialogLayoutRevoker =
-              _workflowDialog.LayoutUpdated(winrt::auto_revoke, [this](auto const&, auto const&) { next(); });
-            _dialogClosedRevoker = _workflowDialog.Closed(winrt::auto_revoke,
-                                                          [this](auto const&, auto const&)
-                                                          {
-                                                            _dialogClosed = true;
-                                                            next();
-                                                          });
-            _expectDialog = true;
+            openProperties(std::move(ids), scope);
           },
         },
         _runtimePtr->workspace().detailProjection(ao::rt::ExplicitSelectionTarget{std::move(ids)}));
       _ready = [rows] { return rows.IsLoaded() && rows.ActualWidth() > 0.0; };
+    }
+
+    void openProperties(std::vector<ao::TrackId> ids,
+                        std::optional<std::bitset<ao::library::kCreditKindCount>> optScope = std::nullopt)
+    {
+      _coordinatorPtr =
+        std::make_unique<ao::winui::TrackPropertiesCoordinator>(ao::winui::TrackPropertiesCoordinatorConfig{
+          .xamlRoot = _scroll.XamlRoot(),
+          .asyncRuntime = _runtimePtr->async(),
+          .library = _runtimePtr->library(),
+          .workspace = _runtimePtr->workspace(),
+          .completion = _runtimePtr->completion(),
+          .textCatalog = *_optCatalog,
+          .trackIds = std::move(ids),
+          .optCreditsScope = optScope,
+        });
+
+      if (auto presentRes = _coordinatorPtr->present(); !presentRes)
+      {
+        throw winrt::hresult_invalid_argument{winrt::to_hstring(presentRes.error().message)};
+      }
+
+      _workflowDialog = _coordinatorPtr->element();
+      _dialogLayoutRevoker =
+        _workflowDialog.LayoutUpdated(winrt::auto_revoke, [this](auto const&, auto const&) { next(); });
+      _dialogClosedRevoker = _workflowDialog.Closed(winrt::auto_revoke,
+                                                    [this](auto const&, auto const&)
+                                                    {
+                                                      _dialogClosed = true;
+                                                      next();
+                                                    });
+      _expectDialog = true;
     }
 
     void releaseClosedDialog()
@@ -1011,17 +1045,18 @@ namespace
       _dialogClosed = false;
     }
 
-    static ao::async::Task<void> mutateExternallyAsync(
-      AobusCreditsProbeApplication* owner,
-      ao::async::Task<ao::Result<ao::rt::TrackAuthoringResult<ao::rt::UpdateTrackMetadataReply>>> submission,
-      std::stop_token stopToken)
+    template<typename Reply, typename IsAccepted>
+    static ao::async::Task<void> mutateExternallyAsync(AobusCreditsProbeApplication* owner,
+                                                       ao::async::Task<ao::Result<Reply>> submission,
+                                                       IsAccepted isAccepted,
+                                                       std::stop_token stopToken)
     {
       auto res = co_await std::move(submission);
       co_await owner->_runtimePtr->async().resumeOnCallbackExecutorAsync(stopToken);
 
       if (!owner->_finished)
       {
-        owner->_externalAccepted = res && res->status == ao::rt::AuthoringStatus::Applied;
+        owner->_externalAccepted = res && isAccepted(*res);
         owner->_externalCompleted = true;
         owner->next();
       }
@@ -1029,6 +1064,7 @@ namespace
 
     void mutateExternally()
     {
+      _externalCompleted = false;
       auto bindingRes = _runtimePtr->library().bindTrackTargets(std::vector{_trackId});
 
       if (!bindingRes)
@@ -1041,8 +1077,29 @@ namespace
       _runtimePtr->async().spawnWithLifetime(
         _workflowTasks,
         [this, submission = std::move(submission)](std::stop_token stopToken) mutable
-        { return mutateExternallyAsync(this, std::move(submission), stopToken); },
+        {
+          return mutateExternallyAsync(
+            this,
+            std::move(submission),
+            [](auto const& reply) { return reply.status == ao::rt::AuthoringStatus::Applied; },
+            stopToken);
+        },
         "Credits probe external revision");
+      _ready = [this] { return _externalCompleted; };
+    }
+
+    void deleteCapturedTrack(ao::TrackId id)
+    {
+      _externalCompleted = false;
+      auto submission = _runtimePtr->library().commands().deleteTrackAsync(id);
+      _runtimePtr->async().spawnWithLifetime(
+        _workflowTasks,
+        [this, id, submission = std::move(submission)](std::stop_token stopToken) mutable
+        {
+          return mutateExternallyAsync(
+            this, std::move(submission), [id](auto const& reply) { return reply.trackId == id; }, stopToken);
+        },
+        "Credits probe captured track deletion");
       _ready = [this] { return _externalCompleted; };
     }
 
@@ -1305,6 +1362,7 @@ namespace
           auto input = inputs(MessageId::TrackCreditName)[2];
           check(input.IsSuggestionListOpen() && input.ItemsSource(), "UserInput retains category completion");
           bool hasAnne = false;
+          std::size_t candidates = 0;
 
           if (input.ItemsSource())
           {
@@ -1312,10 +1370,12 @@ namespace
                  input.ItemsSource()
                    .as<winrt::Windows::Foundation::Collections::IIterable<winrt::Windows::Foundation::IInspectable>>())
             {
+              ++candidates;
               hasAnne = hasAnne || winrt::unbox_value<winrt::hstring>(item) == L"Anne";
             }
           }
 
+          check(candidates == 12, "native Credits suggestions retain the twelve-item window");
           check(hasAnne, "soloist completion uses the reclassified row kind and seeded native runtime vocabulary");
           check(_typingBox.SelectionStart() == 2 && _typingBox.SelectionLength() == 0 && isFocusedWithin(input),
                 "deferred input/completion retains actual focus and caret");
@@ -1443,6 +1503,8 @@ namespace
 
     void planWorkflowScenarios()
     {
+      auto const reloadQuestion =
+        winrt::to_hstring(ao::i18n::requiredText(*_optCatalog, MessageId::WinUiTrackPropertiesDiscardQuestion));
       _steps.emplace_back([this] { showDetail(); });
       _steps.emplace_back([this] { invokeScope(CreditKind::Soloist); });
       _steps.emplace_back(
@@ -1529,6 +1591,7 @@ namespace
         {
           setText(singleCreditName(), L"Stale draft");
           setTitle(L"Stale title draft");
+          setText(textField(ao::rt::TrackField::Year), L"invalid stale year");
         });
       _steps.emplace_back([this] { mutateExternally(); });
       _steps.emplace_back(
@@ -1541,21 +1604,70 @@ namespace
           check(!titleInput().IsEnabled() && titleInput().Text() == L"Stale title draft",
                 "stale ordinary draft remains visible and disabled");
           check(!_workflowDialog.IsPrimaryButtonEnabled(), "stale parent cannot submit");
-          invoke(MessageId::WinUiTrackPropertiesReload);
+          invokeDialogButton(L"CloseButton");
         });
-      _steps.emplace_back([this] { invoke(MessageId::WinUiTrackPropertiesKeepEditing); });
+      _steps.emplace_back(
+        [this, reloadQuestion]
+        {
+          auto const stale =
+            winrt::to_hstring(ao::i18n::requiredText(*_optCatalog, MessageId::WinUiTrackPropertiesStale));
+          check(std::ranges::any_of(
+                  controls<TextBlock>(), [&stale](TextBlock const& label) { return label.Text() == stale; }),
+                "discard detection preserves the stale diagnostic even with invalid scalar input");
+          invoke(MessageId::WinUiTrackPropertiesKeepEditing);
+          _ready = [this, reloadQuestion] { return _dialogClosed || !isTextVisible(reloadQuestion); };
+        });
+      _steps.emplace_back(
+        [this, reloadQuestion]
+        {
+          if (_dialogClosed)
+          {
+            fail("Keep Editing must leave stale Properties open");
+            return;
+          }
+
+          invoke(MessageId::WinUiTrackPropertiesReload);
+          _ready = [this, reloadQuestion] { return isTextVisible(reloadQuestion); };
+        });
+      _steps.emplace_back(
+        [this, reloadQuestion]
+        {
+          invokeDialogButton(L"CloseButton");
+          _ready = [this, reloadQuestion] { return _dialogClosed || !isTextVisible(reloadQuestion); };
+        });
+      _steps.emplace_back(
+        [this, reloadQuestion]
+        {
+          if (_dialogClosed)
+          {
+            fail("native Close must dismiss the reload confirmation, not Properties");
+            return;
+          }
+
+          check(_coordinatorPtr->isActive() && !isTextVisible(reloadQuestion),
+                "native Close cancels the reload confirmation");
+          check(singleCreditName().Text() == L"Stale draft" && titleInput().Text() == L"Stale title draft" &&
+                  textField(ao::rt::TrackField::Year).Text() == L"invalid stale year",
+                "cancelling reload preserves child and ordinary drafts");
+          check(!_workflowDialog.IsPrimaryButtonEnabled(), "cancelling reload does not silently rebind");
+          invoke(MessageId::WinUiTrackPropertiesReload);
+          _ready = [this, reloadQuestion] { return isTextVisible(reloadQuestion); };
+        });
+      _steps.emplace_back(
+        [this, reloadQuestion]
+        {
+          invoke(MessageId::WinUiTrackPropertiesDiscard);
+          _ready = [this, reloadQuestion] { return _dialogClosed || !isTextVisible(reloadQuestion); };
+        });
       _steps.emplace_back(
         [this]
         {
-          check(singleCreditName().Text() == L"Stale draft" && titleInput().Text() == L"Stale title draft",
-                "declining reload preserves child and ordinary drafts");
-          check(!_workflowDialog.IsPrimaryButtonEnabled(), "declining reload does not silently rebind");
-          invoke(MessageId::WinUiTrackPropertiesReload);
-        });
-      _steps.emplace_back([this] { invoke(MessageId::WinUiTrackPropertiesDiscard); });
-      _steps.emplace_back(
-        [this]
-        {
+          if (_dialogClosed)
+          {
+            fail("confirming reload must rebind Properties in the open dialog");
+            return;
+          }
+
           check(inputs(MessageId::TrackCreditName).empty(), "confirmed reload discards active child");
           check(titleInput().Text() == L"External title" && titleInput().IsEnabled(),
                 "confirmed reload replaces ordinary draft from committed revision");
@@ -1579,6 +1691,637 @@ namespace
         [this]
         {
           checkStored("External title", expectedCredits("Staged conductor", "Reloaded soloist"), 3);
+          releaseClosedDialog();
+        });
+    }
+
+    AutoSuggestBox suggestedField(ao::rt::TrackField field) const
+    {
+      auto const label = winrt::to_hstring(ao::uimodel::trackFieldLabel(*_optCatalog, field));
+
+      for (auto const& input : controls<AutoSuggestBox>())
+      {
+        if (input.Header() && winrt::unbox_value<winrt::hstring>(input.Header()) == label)
+        {
+          return input;
+        }
+      }
+
+      throw winrt::hresult_invalid_argument{L"Properties suggestion input is missing"};
+    }
+
+    AutoSuggestBox albumInput() const { return suggestedField(ao::rt::TrackField::Album); }
+
+    AutoSuggestBox auxiliaryInput(MessageId id) const
+    {
+      auto const label = winrt::to_hstring(ao::i18n::requiredText(*_optCatalog, id));
+
+      for (auto const& input : controls<AutoSuggestBox>())
+      {
+        if (input.PlaceholderText() == label)
+        {
+          return input;
+        }
+      }
+
+      throw winrt::hresult_invalid_argument{L"Missing Properties Add input"};
+    }
+
+    TextBox pendingCustomValue() const
+    {
+      auto const key = auxiliaryInput(MessageId::WinUiTrackPropertiesCustomKey);
+
+      for (auto const& child : key.Parent().as<Grid>().Children())
+      {
+        if (auto input = child.try_as<TextBox>(); input)
+        {
+          return input;
+        }
+      }
+
+      throw winrt::hresult_invalid_argument{L"Missing pending custom value input"};
+    }
+
+    bool isTextVisible(winrt::hstring const& expected) const
+    {
+      return std::ranges::any_of(
+        controls<TextBlock>(), [&expected](TextBlock const& text) { return text.Text() == expected; });
+    }
+
+    winrt::hstring customKeyRejection(std::string_view key) const
+    {
+      return winrt::to_hstring(
+        ao::i18n::requiredFormat(*_optCatalog, MessageId::WinUiTrackPropertiesInvalidValue, {{"detail", key}}));
+    }
+
+    bool isUnstagedInputHintVisible() const
+    {
+      return isTextVisible(
+        winrt::to_hstring(ao::i18n::requiredText(*_optCatalog, MessageId::TrackPropertiesUnstagedInputHint)));
+    }
+
+    void stageAuxiliaryInput(MessageId id, std::string_view rejectedKey = {})
+    {
+      auto input = auxiliaryInput(id);
+      check(!_workflowDialog.IsPrimaryButtonEnabled(), "Save cannot drop an unadded input");
+
+      for (auto const& child : input.Parent().as<Grid>().Children())
+      {
+        if (auto add = child.try_as<Button>(); add)
+        {
+          invokeButton(add);
+
+          if (rejectedKey.empty())
+          {
+            _ready = [input] { return input.Text().empty(); };
+          }
+          else
+          {
+            auto const error = customKeyRejection(rejectedKey);
+            _ready = [this, input, error] { return input.Text().empty() || isTextVisible(error); };
+          }
+
+          return;
+        }
+      }
+
+      throw winrt::hresult_invalid_argument{L"Missing Add action for the input"};
+    }
+
+    void toggleFieldClear(ao::rt::TrackField selectedField, bool checked)
+    {
+      auto const field = ao::uimodel::trackFieldLabel(*_optCatalog, selectedField);
+      auto const label = winrt::to_hstring(
+        ao::i18n::requiredFormat(*_optCatalog, MessageId::TrackClearFieldForTracks, {{"field", field}, {"count", 2}}));
+
+      for (auto const& input : controls<CheckBox>())
+      {
+        if (auto text = input.Content().try_as<TextBlock>(); text && text.Text() == label && input.IsEnabled())
+        {
+          auto peer = Automation::Peers::CheckBoxAutomationPeer{input};
+          check(peer.GetName() == label, "clear action exposes its field and count to automation");
+          check(input.IsChecked().GetBoolean() != checked, "clear gesture starts in the expected state");
+          peer.GetPattern(Automation::Peers::PatternInterface::Toggle)
+            .as<Automation::Provider::IToggleProvider>()
+            .Toggle();
+          _ready = [input, checked] { return input.IsChecked().GetBoolean() == checked; };
+          return;
+        }
+      }
+
+      throw winrt::hresult_invalid_argument{L"Missing clear action naming the field and both targets"};
+    }
+
+    void stageAlbumClear() { toggleFieldClear(ao::rt::TrackField::Album, true); }
+
+    void saveProperties()
+    {
+      invokeDialogButton(L"PrimaryButton");
+      _ready = [this] { return _dialogClosed; };
+    }
+
+    void checkAlbums(std::string const& first,
+                     std::string const& second,
+                     std::string const& outside,
+                     std::uint64_t commits)
+    {
+      auto snapshot = _runtimePtr->library().snapshot();
+      check(snapshot.trackField(_trackId, ao::rt::TrackField::Album) == ao::rt::TrackFieldRawValue{first},
+            "durable first album matches the captured edit");
+      check(snapshot.trackField(_emptyTrackId, ao::rt::TrackField::Album) == ao::rt::TrackFieldRawValue{second},
+            "durable second album matches its own edit");
+      check(snapshot.trackField(_outsideTrackId, ao::rt::TrackField::Album) == ao::rt::TrackFieldRawValue{outside},
+            "durable third album matches its own edit");
+      check(snapshot.revision() == _batchBaseline + commits && _publications.size() == _batchPublications + commits,
+            "one durable publication per batch save, none on no-op, staging or discard");
+    }
+
+    void planBatchPropertiesScenarios()
+    {
+      _steps.emplace_back(
+        [this]
+        {
+          _batchBaseline = _runtimePtr->library().snapshot().revision();
+          _batchPublications = _publications.size();
+          openProperties({_trackId, _emptyTrackId});
+        });
+      _steps.emplace_back(
+        [this]
+        {
+          auto album = albumInput();
+          check(album.IsEnabled() && album.Text().empty() &&
+                  album.PlaceholderText() ==
+                    winrt::to_hstring(ao::i18n::requiredText(*_optCatalog, MessageId::TrackMultipleValues)),
+                "mixed album is a writable placeholder, not text");
+          check(!_workflowDialog.IsPrimaryButtonEnabled(), "native Save is disabled for a no-op");
+          invokeDialogButton(L"CloseButton");
+          _ready = [this] { return _dialogClosed; };
+        });
+      _steps.emplace_back(
+        [this]
+        {
+          releaseClosedDialog();
+          checkAlbums("First album", "Second album", "Outside album", 0);
+          openProperties({_trackId, _emptyTrackId});
+        });
+      _steps.emplace_back([this] { setTitle(L"Only title"); });
+      _steps.emplace_back([this] { saveProperties(); });
+      _steps.emplace_back(
+        [this]
+        {
+          releaseClosedDialog();
+          checkAlbums("First album", "Second album", "Outside album", 1);
+
+          for (auto id : {_trackId, _emptyTrackId})
+          {
+            check(_runtimePtr->library().snapshot().trackField(id, ao::rt::TrackField::Title) ==
+                    ao::rt::TrackFieldRawValue{std::string{"Only title"}},
+                  "other field saved on both targets");
+          }
+
+          openProperties({_trackId, _emptyTrackId});
+        });
+      _steps.emplace_back([this] { setText(albumInput(), L"Temporary"); });
+      _steps.emplace_back(
+        [this]
+        {
+          check(_workflowDialog.IsPrimaryButtonEnabled(), "mixed replacement admits Save");
+          setText(albumInput(), L"");
+        });
+      _steps.emplace_back(
+        [this]
+        {
+          check(!_workflowDialog.IsPrimaryButtonEnabled(), "erasing the proposed album revokes its replacement");
+          setTitle(L"After erase");
+        });
+      _steps.emplace_back([this] { saveProperties(); });
+      _steps.emplace_back(
+        [this]
+        {
+          releaseClosedDialog();
+          checkAlbums("First album", "Second album", "Outside album", 2);
+          openProperties({_trackId, _emptyTrackId});
+        });
+      _steps.emplace_back([this] { stageAlbumClear(); });
+      _steps.emplace_back(
+        [this]
+        {
+          checkAlbums("First album", "Second album", "Outside album", 2);
+          invokeDialogButton(L"CloseButton");
+        });
+      _steps.emplace_back(
+        [this]
+        {
+          invoke(MessageId::WinUiTrackPropertiesDiscard);
+          _ready = [this] { return _dialogClosed; };
+        });
+      _steps.emplace_back(
+        [this]
+        {
+          releaseClosedDialog();
+          checkAlbums("First album", "Second album", "Outside album", 2);
+          openProperties({_trackId, _emptyTrackId});
+        });
+      _steps.emplace_back([this] { setText(albumInput(), L"Superseded album"); });
+      _steps.emplace_back([this] { stageAlbumClear(); });
+      _steps.emplace_back([this] { toggleFieldClear(ao::rt::TrackField::Album, false); });
+      _steps.emplace_back(
+        [this]
+        {
+          auto const album = albumInput();
+          check(album.Text().empty() && !album.IsSuggestionListOpen() && !_workflowDialog.IsPrimaryButtonEnabled(),
+                "withdrawing clear restores the mixed album placeholder, not superseded input");
+          setText(textField(ao::rt::TrackField::Year), L"bad year");
+        });
+      _steps.emplace_back([this] { toggleFieldClear(ao::rt::TrackField::Year, true); });
+      _steps.emplace_back(
+        [this]
+        {
+          check(_workflowDialog.IsPrimaryButtonEnabled(), "explicit clear supersedes invalid year input");
+          toggleFieldClear(ao::rt::TrackField::Year, false);
+        });
+      _steps.emplace_back(
+        [this]
+        {
+          check(textField(ao::rt::TrackField::Year).Text() == L"1997" && !_workflowDialog.IsPrimaryButtonEnabled(),
+                "withdrawing clear restores the common year, not its old validation error");
+          auto year = textField(ao::rt::TrackField::Year);
+          check(year.Focus(FocusState::Programmatic), "batch numeric editor takes focus");
+          setText(year, L"00");
+        });
+      _steps.emplace_back(
+        [this]
+        {
+          check(textField(ao::rt::TrackField::Year).Text() == L"00" && !_workflowDialog.IsPrimaryButtonEnabled(),
+                "ordinary typing can continue after a numeric zero without staging a clear");
+          check(suggestedField(ao::rt::TrackField::Genre).Focus(FocusState::Programmatic),
+                "focus leaves the numeric editor");
+        });
+      _steps.emplace_back(
+        [this]
+        {
+          check(textField(ao::rt::TrackField::Year).Text() == L"1997",
+                "a withdrawn batch zero displays the captured year on blur");
+          setText(suggestedField(ao::rt::TrackField::Genre), L"Jazz");
+        });
+      _steps.emplace_back([this] { saveProperties(); });
+      _steps.emplace_back(
+        [this]
+        {
+          releaseClosedDialog();
+          checkAlbums("First album", "Second album", "Outside album", 3);
+
+          for (auto id : {_trackId, _emptyTrackId})
+          {
+            auto snapshot = _runtimePtr->library().snapshot();
+            check(
+              snapshot.trackField(id, ao::rt::TrackField::Year) == ao::rt::TrackFieldRawValue{std::uint16_t{1997}} &&
+                snapshot.trackField(id, ao::rt::TrackField::Genre) == ao::rt::TrackFieldRawValue{std::string{"Jazz"}},
+              "only the unrelated genre edit was saved on each original target");
+          }
+
+          auto viewRes = _runtimePtr->workspace().navigate({.target = ao::rt::GlobalViewKind::AllTracks});
+
+          if (!viewRes || !_runtimePtr->views().setSelection(*viewRes, {_trackId, _emptyTrackId}))
+          {
+            throw winrt::hresult_invalid_argument{L"Could not select the original two targets"};
+          }
+
+          openProperties(_runtimePtr->views().trackListState(*viewRes).selection);
+        });
+      _steps.emplace_back([this] { setText(albumInput(), L"Together"); });
+      _steps.emplace_back([this] { setText(auxiliaryInput(MessageId::WinUiTrackPropertiesTags), L"The\u0301"); });
+      _steps.emplace_back(
+        [this]
+        {
+          check(isUnstagedInputHintVisible() && !_workflowDialog.IsPrimaryButtonEnabled(),
+                "pending tag text explains why a staged album cannot be saved yet");
+          setText(pendingCustomValue(), L"Unadded value");
+        });
+      _steps.emplace_back([this] { stageAuxiliaryInput(MessageId::WinUiTrackPropertiesTags); });
+      _steps.emplace_back(
+        [this]
+        {
+          check(isUnstagedInputHintVisible() && !_workflowDialog.IsPrimaryButtonEnabled(),
+                "adding the tag leaves the hint while the custom value alone is pending");
+          setText(pendingCustomValue(), L"");
+        });
+      _steps.emplace_back(
+        [this]
+        {
+          check(!isUnstagedInputHintVisible() && _workflowDialog.IsPrimaryButtonEnabled(),
+                "erasing the last pending input hides the hint and restores Save for other edits");
+          setText(auxiliaryInput(MessageId::WinUiTrackPropertiesTags), L"Thé");
+        });
+      _steps.emplace_back([this] { stageAuxiliaryInput(MessageId::WinUiTrackPropertiesTags); });
+      _steps.emplace_back(
+        [this]
+        {
+          auto const labels = controls<TextBlock>();
+          check(std::ranges::count_if(labels, [](TextBlock const& text) { return text.Text() == L"Thé"; }) == 1 &&
+                  std::ranges::none_of(labels, [](TextBlock const& text) { return text.Text() == L"The\u0301"; }),
+                "equivalent tag spellings stage exactly one canonical native row before Save");
+          setText(auxiliaryInput(MessageId::WinUiTrackPropertiesCustomKey), L"Edition");
+        });
+      _steps.emplace_back(
+        [this]
+        {
+          check(isUnstagedInputHintVisible(), "pending custom key alone explains disabled Save");
+          stageAuxiliaryInput(MessageId::WinUiTrackPropertiesCustomKey);
+        });
+      _steps.emplace_back(
+        [this]
+        {
+          check(!isUnstagedInputHintVisible() && _workflowDialog.IsPrimaryButtonEnabled(),
+                "adding the last pending input dismisses the hint");
+          setText(auxiliaryInput(MessageId::WinUiTrackPropertiesCustomKey), L" Cafe\u0301 ");
+          setText(pendingCustomValue(), L"Corrected value");
+        });
+      _steps.emplace_back([this] { stageAuxiliaryInput(MessageId::WinUiTrackPropertiesCustomKey, "Café"); });
+      _steps.emplace_back(
+        [this]
+        {
+          auto input = auxiliaryInput(MessageId::WinUiTrackPropertiesCustomKey);
+          check(input.Text() == L" Cafe\u0301 " && pendingCustomValue().Text() == L"Corrected value" &&
+                  !_workflowDialog.IsPrimaryButtonEnabled(),
+                "equivalent partial key is rejected without losing either input");
+          check(!isUnstagedInputHintVisible(), "the Add rejection takes precedence over the pending-input hint");
+          setText(input, L"Re\u0301sume\u0301");
+        });
+      _steps.emplace_back([this] { stageAuxiliaryInput(MessageId::WinUiTrackPropertiesCustomKey); });
+      _steps.emplace_back(
+        [this]
+        {
+          setText(auxiliaryInput(MessageId::WinUiTrackPropertiesCustomKey), L"Résumé");
+          setText(pendingCustomValue(), L"Another value");
+        });
+      _steps.emplace_back([this] { stageAuxiliaryInput(MessageId::WinUiTrackPropertiesCustomKey, "Résumé"); });
+      _steps.emplace_back(
+        [this]
+        {
+          auto input = auxiliaryInput(MessageId::WinUiTrackPropertiesCustomKey);
+          check(input.Text() == L"Résumé" && pendingCustomValue().Text() == L"Another value" &&
+                  !_workflowDialog.IsPrimaryButtonEnabled(),
+                "equivalent staged key is also rejected and correctable");
+          setText(textField(ao::rt::TrackField::Year), L"2010x");
+        });
+      _steps.emplace_back(
+        [this]
+        {
+          check(isTextVisible(customKeyRejection("Résumé")), "unrelated scalar validation does not hide Add rejection");
+          setText(textField(ao::rt::TrackField::Year), L"1997");
+        });
+      _steps.emplace_back(
+        [this]
+        {
+          check(isTextVisible(customKeyRejection("Résumé")), "correcting the scalar does not dismiss Add rejection");
+          setText(auxiliaryInput(MessageId::WinUiTrackPropertiesCustomKey), L"Another key");
+        });
+      _steps.emplace_back([this] { stageAuxiliaryInput(MessageId::WinUiTrackPropertiesCustomKey); });
+      _steps.emplace_back(
+        [this]
+        {
+          auto const view = _runtimePtr->workspace().snapshot().activeViewId;
+          check(static_cast<bool>(_runtimePtr->views().setSelection(view, {_outsideTrackId})),
+                "live selection changed before Save");
+          saveProperties();
+        });
+      _steps.emplace_back(
+        [this]
+        {
+          releaseClosedDialog();
+          checkAlbums("Together", "Together", "Outside album", 4);
+
+          {
+            auto snapshot = _runtimePtr->library().snapshot();
+
+            for (auto id : {_trackId, _emptyTrackId})
+            {
+              check(snapshot.selectionTags(std::array{id}) == std::vector<std::string>{"Thé"},
+                    "one canonical tag on each original target");
+              check(snapshot.trackCustomMetadataValue(id, "Edition") == "",
+                    "empty custom value is present, not a deletion");
+              check(snapshot.trackCustomMetadataValue(id, "Résumé") == "Corrected value" &&
+                      snapshot.trackCustomMetadataValue(id, "Another key") == "Another value",
+                    "corrected keys commit their retained inputs without overwriting one another");
+            }
+
+            check(snapshot.trackCustomMetadataValue(_trackId, "Café") == "Original partial value" &&
+                    !snapshot.trackCustomMetadataValue(_emptyTrackId, "Café"),
+                  "rejected canonical alias never changes the partial key");
+
+            check(!snapshot.trackCustomMetadataValue(_outsideTrackId, "Edition") &&
+                    snapshot.selectionTags(std::array{_outsideTrackId}).empty(),
+                  "no auxiliary edits reached the newly selected track");
+          }
+
+          openProperties({_trackId, _emptyTrackId});
+        });
+      _steps.emplace_back([this] { setText(albumInput(), L"Temporary common"); });
+      _steps.emplace_back([this] { setText(albumInput(), L""); });
+      _steps.emplace_back(
+        [this]
+        {
+          check(!_workflowDialog.IsPrimaryButtonEnabled(), "erasing a common batch input also preserves originals");
+          setTitle(L"After common erase");
+        });
+      _steps.emplace_back([this] { saveProperties(); });
+      _steps.emplace_back(
+        [this]
+        {
+          releaseClosedDialog();
+          checkAlbums("Together", "Together", "Outside album", 5);
+          // A new mixed pair exercises clear/save without reseeding or bypassing the coordinator.
+          openProperties({_trackId, _outsideTrackId});
+        });
+      _steps.emplace_back([this] { stageAlbumClear(); });
+      _steps.emplace_back([this] { saveProperties(); });
+      _steps.emplace_back(
+        [this]
+        {
+          releaseClosedDialog();
+          checkAlbums("", "Together", "", 6);
+          openProperties({_trackId, _emptyTrackId});
+        });
+      _steps.emplace_back([this] { setText(textField(ao::rt::TrackField::Year), L"2010"); });
+      _steps.emplace_back(
+        [this]
+        {
+          check(_workflowDialog.IsPrimaryButtonEnabled(), "valid year is the only staged edit");
+          setText(textField(ao::rt::TrackField::Year), L"2010x");
+        });
+      _steps.emplace_back(
+        [this]
+        {
+          check(!_workflowDialog.IsPrimaryButtonEnabled(), "the invalid year blocks Save");
+          mutateExternally();
+        });
+      _steps.emplace_back(
+        [this]
+        {
+          auto year = textField(ao::rt::TrackField::Year);
+          check(_externalAccepted && !year.IsEnabled() && year.Text() == L"2010x", "stale input remains frozen");
+          invokeDialogButton(L"CloseButton");
+        });
+      _steps.emplace_back(
+        [this]
+        {
+          auto const stale =
+            winrt::to_hstring(ao::i18n::requiredText(*_optCatalog, MessageId::WinUiTrackPropertiesStale));
+          check(std::ranges::any_of(
+                  controls<TextBlock>(), [&stale](TextBlock const& text) { return text.Text() == stale; }),
+                "a discard check on the sole invalid field must not overwrite the stale diagnostic");
+          invoke(MessageId::WinUiTrackPropertiesDiscard);
+          _ready = [this] { return _dialogClosed; };
+        });
+      _steps.emplace_back(
+        [this]
+        {
+          releaseClosedDialog();
+          auto snapshot = _runtimePtr->library().snapshot();
+
+          for (auto id : {_trackId, _emptyTrackId})
+          {
+            check(snapshot.trackField(id, ao::rt::TrackField::Year) == ao::rt::TrackFieldRawValue{std::uint16_t{1997}},
+                  "discarding the invalid year must not write its previous valid replacement");
+          }
+        });
+    }
+
+    bool hasPropertiesErrorDetail(std::string_view detail) const
+    {
+      return std::ranges::any_of(controls<TextBlock>(),
+                                 [detail](TextBlock const& text)
+                                 { return winrt::to_string(text.Text()).contains(detail); });
+    }
+
+    void planFailedPropertiesSave()
+    {
+      // A three-byte UTF-8 character reaches the storage limit while keeping the native text short enough.
+      auto const oversizedTitle = winrt::hstring{std::wstring(21'846, L'\u2014')};
+      auto const reloadLabel =
+        winrt::to_hstring(ao::i18n::requiredText(*_optCatalog, MessageId::WinUiTrackPropertiesReload));
+      auto const question =
+        winrt::to_hstring(ao::i18n::requiredText(*_optCatalog, MessageId::WinUiTrackPropertiesDiscardQuestion));
+      _steps.emplace_back([this] { openProperties({_trackId}); });
+      _steps.emplace_back([this, oversizedTitle] { setTitle(oversizedTitle); });
+      _steps.emplace_back(
+        [this, reloadLabel]
+        {
+          invokeDialogButton(L"PrimaryButton");
+          _ready = [this, reloadLabel]
+          {
+            auto const reloadAvailable = [&reloadLabel](Button const& candidate)
+            {
+              auto const label = candidate.Content().try_as<TextBlock>();
+              return label && label.Text() == reloadLabel && candidate.IsEnabled();
+            };
+            return _dialogClosed || std::ranges::any_of(controls<Button>(), reloadAvailable);
+          };
+        });
+      _steps.emplace_back(
+        [this, oversizedTitle, question]
+        {
+          if (_dialogClosed)
+          {
+            fail("a rejected title write must leave Properties open");
+            return;
+          }
+
+          check(
+            hasPropertiesErrorDetail("Hot title length 65538"), "real write rejection keeps the exact failure visible");
+          check(!_workflowDialog.IsPrimaryButtonEnabled() && !titleInput().IsEnabled() &&
+                  titleInput().Text() == oversizedTitle,
+                "write failure freezes the uncommitted draft and forbids retry");
+          invokeDialogButton(L"CloseButton");
+          _ready = [this, question] { return _dialogClosed || isTextVisible(question); };
+        });
+      _steps.emplace_back(
+        [this]
+        {
+          if (_dialogClosed)
+          {
+            fail("closing a rejected write must ask whether to discard its draft");
+            return;
+          }
+
+          check(hasPropertiesErrorDetail("Hot title length 65538"),
+                "discard validation cannot replace the failed-write diagnostic");
+          invoke(MessageId::WinUiTrackPropertiesDiscard);
+          _ready = [this] { return _dialogClosed; };
+        });
+      _steps.emplace_back(
+        [this]
+        {
+          releaseClosedDialog();
+          check(_runtimePtr->library().snapshot().trackField(_trackId, ao::rt::TrackField::Title) ==
+                  ao::rt::TrackFieldRawValue{std::string{"External title"}},
+                "discarding a rejected write leaves the stored title unchanged");
+        });
+    }
+
+    void planFailedPropertiesReload()
+    {
+      // Delete a seeded fixture only after all other scenarios have finished using the captured tracks.
+      auto const draft = winrt::hstring{L"Discard this draft before reload"};
+      auto const question =
+        winrt::to_hstring(ao::i18n::requiredText(*_optCatalog, MessageId::WinUiTrackPropertiesDiscardQuestion));
+      _steps.emplace_back([this] { openProperties({_trackId, _emptyTrackId}); });
+      _steps.emplace_back([this, draft] { setTitle(draft); });
+      _steps.emplace_back(
+        [this]
+        {
+          check(_workflowDialog.IsPrimaryButtonEnabled() && !controls<CheckBox>().empty(),
+                "bound batch has a staged edit and available Clear controls");
+          deleteCapturedTrack(_emptyTrackId);
+        });
+      _steps.emplace_back(
+        [this, question]
+        {
+          check(_externalAccepted && !_runtimePtr->library().snapshot().containsTrack(_emptyTrackId),
+                "the external command removed one captured target");
+          invoke(MessageId::WinUiTrackPropertiesReload);
+          _ready = [this, question] { return isTextVisible(question); };
+        });
+      _steps.emplace_back(
+        [this, question]
+        {
+          invoke(MessageId::WinUiTrackPropertiesDiscard);
+          _ready = [this, question] { return _dialogClosed || !isTextVisible(question); };
+        });
+      _steps.emplace_back(
+        [this, draft, question]
+        {
+          if (_dialogClosed)
+          {
+            fail("failed reload must leave unbound Properties open");
+            return;
+          }
+
+          auto const bindingRes = _runtimePtr->library().bindTrackTargets(std::array{_trackId, _emptyTrackId});
+
+          if (bindingRes || bindingRes.error().code != ao::Error::Code::NotFound)
+          {
+            fail("deleted Properties target must fail binding");
+            return;
+          }
+
+          check(
+            hasPropertiesErrorDetail(bindingRes.error().message), "failed reload exposes the missing target detail");
+          check(!isTextVisible(question) && controls<CheckBox>().empty(),
+                "failed reload discards the old confirmation and batch Clear controls");
+          check(
+            std::ranges::none_of(controls<TextBox>(), [&draft](TextBox const& input) { return input.Text() == draft; }),
+            "failed reload does not retain the confirmed discarded draft");
+          check(!_workflowDialog.IsPrimaryButtonEnabled() && button(MessageId::WinUiTrackPropertiesReload).IsEnabled(),
+                "failed reload disables Save but keeps Reload available");
+          invokeDialogButton(L"CloseButton");
+          _ready = [this, question] { return _dialogClosed || isTextVisible(question); };
+        });
+      _steps.emplace_back(
+        [this]
+        {
+          check(_dialogClosed, "failed reload closes without a second discard confirmation");
           releaseClosedDialog();
         });
     }
@@ -1921,6 +2664,9 @@ namespace
     std::unique_ptr<ao::winui::TrackPropertiesCoordinator> _coordinatorPtr;
     ao::TrackId _trackId{};
     ao::TrackId _emptyTrackId{};
+    ao::TrackId _outsideTrackId{};
+    std::uint64_t _batchBaseline = 0;
+    std::size_t _batchPublications = 0;
     Button _detailMetadataHeader{nullptr};
     Button _detailShowEmpty{nullptr};
     std::vector<ao::TrackId> _detailExpectedIds;

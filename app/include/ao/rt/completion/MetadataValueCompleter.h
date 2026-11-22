@@ -17,8 +17,11 @@ namespace ao::rt
   class CompletionService;
 
   /** The vocabulary service must outlive either returned credit provider. */
-  CompletionProvider makeCreditNameCompletionProvider(CompletionService& vocabulary, library::CreditKind kind);
-  CompletionProvider makeCreditRoleCompletionProvider(CompletionService& vocabulary);
+  CompletionProvider makeCreditNameCompletionProvider(CompletionService& vocabulary,
+                                                      library::CreditKind kind,
+                                                      std::size_t limit = kCompletionResultLimit);
+  CompletionProvider makeCreditRoleCompletionProvider(CompletionService& vocabulary,
+                                                      std::size_t limit = kCompletionResultLimit);
 
   class MetadataValueCompleter final
   {

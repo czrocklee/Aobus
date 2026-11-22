@@ -757,7 +757,7 @@ namespace ao::gtk
                   {
                     case rt::AuthoringStatus::NoOp: return;
                     case rt::AuthoringStatus::Busy:
-                      owner->setStatusMessage(gtkText(owner->_textCatalog, i18n::MessageId::TrackEditingUnavailable));
+                      owner->setStatusMessage(gtkText(owner->_textCatalog, i18n::MessageId::LibraryBusyTryAgain));
                       return;
                     case rt::AuthoringStatus::Stale:
                       owner->setStatusMessage(gtkText(owner->_textCatalog, i18n::MessageId::TrackEditStale));

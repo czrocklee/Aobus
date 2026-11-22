@@ -65,8 +65,8 @@ Page editors retain their own baseline and draft values rather than borrowing th
 Metadata editing uses direct keyboard input without checkboxes.
 A passive changed indicator (`*`) marks edited rows, while an active indicator (`>`) highlights the focused row.
 Typing into a field marks it for replacement; typing a common field back to its baseline removes the pending change.
-Deleting an edited field to empty marks it for explicit clear.
-For mixed-value fields, empty input remains untouched mixed preservation until an edit is made: `Ctrl-D` records an explicit clear across all targets, while `Ctrl-G` restores baseline or mixed preservation.
+Erasing the input clears an edited single-track field. In a batch it withdraws the replacement: each track keeps its original value, whether the field was common or mixed.
+`Ctrl-D` stages a clear of the focused writable field. In a batch, the editor must show the field and target count; a stale-state diagnostic hiding that scope also blocks the shortcut. `Ctrl-G` restores just that field.
 `Ctrl-U` and `Ctrl-K` delete text before or after the caret, and `Ctrl-W` deletes the preceding ASCII-space-delimited word.
 Those edits preserve an untouched mixed field when its input is already empty; explicit clearing remains `Ctrl-D`.
 

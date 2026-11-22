@@ -10,7 +10,6 @@
 #include <ao/async/Task.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/library/Credits.h>
-#include <ao/query/Parser.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/NotificationService.h>
@@ -21,8 +20,10 @@
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/uimodel/library/detail/TrackCredits.h>
 #include <ao/uimodel/library/list/ListAuthoring.h>
+#include <ao/uimodel/library/property/TagEdit.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
+#include <ao/uimodel/library/property/TrackPropertiesPreparation.h>
 #include <ao/uimodel/library/track/TrackAuthoring.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 
@@ -32,6 +33,7 @@
 #include <expected>
 #include <functional>
 #include <optional>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -57,7 +59,22 @@ namespace ao::appkit
     return _catalog;
   }
 
-  Result<> LibraryEditorModel::beginProperties(std::vector<TrackId> ids)
+  std::size_t LibraryEditorModel::propertyTargetCount() const noexcept
+  {
+    return _state.kind == LibraryEditorKind::Properties ? _form.targetCount() : 0;
+  }
+
+  std::optional<TrackId> LibraryEditorModel::singlePropertyTarget() const noexcept
+  {
+    if (propertyTargetCount() == 1 && _optTrackSession)
+    {
+      return _optTrackSession->targetIds().front();
+    }
+
+    return std::nullopt;
+  }
+
+  Result<> LibraryEditorModel::beginProperties(std::span<TrackId const> const ids)
   {
     if (auto res = canBegin(); !res)
     {
@@ -73,7 +90,7 @@ namespace ao::appkit
     {
       auto snapshot = _runtime.library().snapshot();
 
-      auto sessionRes = uimodel::TrackAuthoringSession::begin(_runtime.library(), ids, snapshot);
+      auto sessionRes = uimodel::prepareTrackProperties(_runtime.library(), snapshot, ids, spec, baseline);
 
       if (!sessionRes)
       {
@@ -81,11 +98,6 @@ namespace ao::appkit
       }
 
       optSession.emplace(std::move(*sessionRes));
-
-      if (auto res = uimodel::loadTrackPropertiesFormBaseline(snapshot, ids, spec, baseline); !res)
-      {
-        return res;
-      }
 
       auto rows = spec.metadataRows;
       rows.append_range(spec.propertyRows);
@@ -97,7 +109,7 @@ namespace ao::appkit
         fields.push_back({.spec = row, .text = value.mixed ? "" : value.text, .mixed = value.mixed});
       }
 
-      tags = snapshot.selectionTags(ids);
+      tags = snapshot.selectionTags(optSession->targetIds());
     }
 
     auto& session = *optSession;
@@ -120,17 +132,18 @@ namespace ao::appkit
       return makeError(Error::Code::InvalidState, "The library changed while Track Properties was opening");
     }
 
-    _state = {
+    auto state = LibraryEditorState{
       .kind = LibraryEditorKind::Properties,
-      .title = i18n::requiredFormat(_catalog, i18n::MessageId::AppKitPropertiesSelection, {{"count", ids.size()}}),
+      .title =
+        i18n::requiredFormat(_catalog, i18n::MessageId::AppKitPropertiesSelection, {{"count", baseline.targetCount()}}),
       .fields = std::move(fields),
       .tags = tags,
-      .trackIds = std::move(ids),
     };
     _form = std::move(baseline);
     _originalTags = std::move(tags);
     _optTrackSession.emplace(std::move(session));
     _invalidatedSub = std::move(invalidatedSub);
+    _state = std::move(state);
     publishChange();
     return {};
   }
@@ -185,7 +198,7 @@ namespace ao::appkit
     return {};
   }
 
-  Result<> LibraryEditorModel::beginMembership(std::vector<TrackId> ids, ListId listId, bool remove)
+  Result<> LibraryEditorModel::beginMembership(std::span<TrackId const> const ids, ListId listId, bool remove)
   {
     if (auto res = canBegin(); !res)
     {
@@ -202,7 +215,7 @@ namespace ao::appkit
     _state = {.kind = LibraryEditorKind::Membership,
               .title = std::string{i18n::requiredText(
                 _catalog, remove ? i18n::MessageId::AppKitRemoveFromList : i18n::MessageId::ListAddToPlaylist)},
-              .trackIds = std::move(ids),
+              .membershipTargetCount = sessionRes->targetIds().size(),
               .busy = true};
     publishChange();
     _runtime.async().spawnLogged(
@@ -212,7 +225,32 @@ namespace ao::appkit
 
   void LibraryEditorModel::editField(std::size_t index, std::string text)
   {
-    if (_state.busy || _state.stale || _closing)
+    updateField(index, std::move(text), FieldAction::Input);
+  }
+
+  void LibraryEditorModel::clearField(std::size_t index)
+  {
+    updateField(index, {}, FieldAction::Clear);
+  }
+
+  bool LibraryEditorModel::canRestoreField(std::size_t index) const noexcept
+  {
+    return propertyTargetCount() > 1 && !_state.busy && !_state.stale && !_state.completed && !_closing &&
+           !_form.creditsEditor().isEditing() && index < _state.fields.size() && _state.fields[index].changed &&
+           _state.fields[index].spec.editorKind != uimodel::TrackPropertiesFormEditorKind::ReadonlyText;
+  }
+
+  void LibraryEditorModel::restoreField(std::size_t index)
+  {
+    if (canRestoreField(index))
+    {
+      updateField(index, {}, FieldAction::Restore);
+    }
+  }
+
+  void LibraryEditorModel::updateField(std::size_t index, std::string text, FieldAction action)
+  {
+    if (_state.kind != LibraryEditorKind::Properties || _state.busy || _state.stale || _state.completed || _closing)
     {
       return;
     }
@@ -227,23 +265,105 @@ namespace ao::appkit
     if (_state.optInvalidField == field.spec.field)
     {
       _state.optInvalidField.reset();
-      _state.error.clear();
+      _state.error = _tagInputError;
     }
 
-    field.text = std::move(text);
+    field.optInputError.reset();
     field.changed = true;
-    _state.dirty = true;
+    field.text = std::move(text);
+
+    if (action == FieldAction::Clear)
+    {
+      _form.clearFieldEdit(field.spec.field);
+    }
+    else if (action == FieldAction::Restore)
+    {
+      _form.restoreFieldEdit(field.spec.field);
+      field.changed = false;
+    }
+    else if (auto valueRes = uimodel::parseTrackPropertiesFieldInput(field.spec.editorKind, field.text); valueRes)
+    {
+      _form.setFieldInput(field.spec.field, std::move(*valueRes));
+      field.changed = _form.hasFieldChange(field.spec.field);
+    }
+    else
+    {
+      // Retain invalid native text for correction, never the previous valid replacement for retry.
+      _form.restoreFieldEdit(field.spec.field);
+      field.optInputError.emplace(uimodel::trackPropertiesInputHint(_catalog, field.spec.editorKind));
+    }
+
+    if (!field.changed)
+    {
+      field.text = field.mixed ? "" : _form.rowView(field.spec.field).text;
+    }
+
+    updatePropertiesDirty();
     publishChange();
   }
 
-  void LibraryEditorModel::editTags(std::vector<std::string> tags)
+  void LibraryEditorModel::updatePropertiesDirty()
   {
-    if (!_state.busy && !_state.stale && !_closing)
+    auto const hasInvalidInput = std::ranges::any_of(
+      _state.fields, [](LibraryEditorField const& field) { return field.optInputError.has_value(); });
+    _state.dirty = _tagInputPending || !_tagInputError.empty() || hasInvalidInput || _form.hasEffectiveChanges() ||
+                   !uimodel::diffCommonTags(_originalTags, _state.tags).empty();
+  }
+
+  void LibraryEditorModel::markTagInputPending(std::string error)
+  {
+    if (_state.kind == LibraryEditorKind::Properties && !_state.busy && !_state.stale && !_state.completed && !_closing)
     {
-      _state.tags = std::move(tags);
-      _state.dirty = true;
+      _tagInputPending = true;
+
+      if (!error.empty())
+      {
+        setTagInputError(std::move(error));
+      }
+
+      updatePropertiesDirty();
       publishChange();
     }
+  }
+
+  void LibraryEditorModel::setTagInputError(std::string error)
+  {
+    // A scalar diagnostic belongs to its row. Clearing a tag error must not erase an unrelated diagnostic.
+    if (!_state.optInvalidField && (!error.empty() || _state.error == _tagInputError))
+    {
+      _state.error = error;
+    }
+
+    _tagInputError = std::move(error);
+  }
+
+  bool LibraryEditorModel::tryEditTags(std::vector<std::string> tags)
+  {
+    if (_state.kind != LibraryEditorKind::Properties || _state.busy || _state.stale || _state.completed || _closing)
+    {
+      return false;
+    }
+
+    _tagInputPending = false;
+    auto canonical = std::vector<std::string>{};
+    bool accepted = true;
+
+    for (auto const& tag : tags)
+    {
+      if (!uimodel::appendCommonTag(canonical, tag).has_value())
+      {
+        accepted = false;
+        break;
+      }
+    }
+
+    setTagInputError(
+      accepted ? std::string{}
+               : std::string{i18n::requiredText(_catalog, i18n::MessageId::TrackPropertiesTextNormalizationFailed)});
+    _state.tags = accepted ? std::move(canonical) : std::move(tags);
+    updatePropertiesDirty();
+    publishChange();
+    return accepted;
   }
 
   void LibraryEditorModel::editList(std::string name, std::string description, std::string expression)
@@ -309,7 +429,7 @@ namespace ao::appkit
 
     if (res)
     {
-      _state.dirty = _state.dirty || _form.canSave();
+      updatePropertiesDirty();
     }
 
     publishChange();
@@ -324,7 +444,10 @@ namespace ao::appkit
 
   void LibraryEditorModel::save()
   {
-    if (_state.busy || _state.stale || _closing || _state.completed || _form.creditsEditor().isEditing())
+    // A token still in the native field editor has not entered the patch. Only tryEditTags at
+    // end-edit can release this guard; leave any validation error visible in the meantime.
+    if (_state.busy || _state.stale || _closing || _state.completed || _form.creditsEditor().isEditing() ||
+        _tagInputPending)
     {
       return;
     }
@@ -357,50 +480,26 @@ namespace ao::appkit
 
     for (auto const& field : _state.fields)
     {
-      if (!field.changed)
-      {
-        continue;
-      }
-
-      auto valueRes = [&] -> Result<uimodel::TrackFieldEditValue>
-      {
-        switch (field.spec.editorKind)
-        {
-          case uimodel::TrackPropertiesFormEditorKind::Number: return uimodel::parseUint16EditValue(field.text);
-          case uimodel::TrackPropertiesFormEditorKind::Date: return uimodel::parseRecordingDateEditValue(field.text);
-          case uimodel::TrackPropertiesFormEditorKind::Text:
-          case uimodel::TrackPropertiesFormEditorKind::ReadonlyText: return uimodel::parseTextEditValue(field.text);
-        }
-      }();
-
-      if (!valueRes)
+      if (field.optInputError)
       {
         _state.optInvalidField = field.spec.field;
-        _state.error = valueRes.error().message;
+        _state.error = *field.optInputError;
         publishChange();
         return;
       }
-
-      _form.setExplicitFieldEdit(field.spec.field, std::move(*valueRes));
     }
 
-    auto patch = rt::TrackPropertiesPatch{.metadata = _form.buildPatch()};
-
-    for (auto const& tag : _state.tags)
+    if (!_tagInputError.empty())
     {
-      if (!std::ranges::contains(_originalTags, tag))
-      {
-        patch.tagsToAdd.push_back(tag);
-      }
+      _state.error = _tagInputError;
+      publishChange();
+      return;
     }
 
-    for (auto const& tag : _originalTags)
-    {
-      if (!std::ranges::contains(_state.tags, tag))
-      {
-        patch.tagsToRemove.push_back(tag);
-      }
-    }
+    auto changes = uimodel::diffCommonTags(_originalTags, _state.tags);
+    auto patch = rt::TrackPropertiesPatch{.metadata = _form.buildPatch(),
+                                          .tagsToAdd = std::move(changes.tagsToAdd),
+                                          .tagsToRemove = std::move(changes.tagsToRemove)};
 
     _state.busy = true;
     publishChange();
@@ -414,6 +513,8 @@ namespace ao::appkit
     _invalidatedSub.reset();
     _optTrackSession.reset();
     _state = {};
+    _tagInputPending = false;
+    _tagInputError.clear();
     _form.clear();
     publishChange();
   }
@@ -493,6 +594,11 @@ namespace ao::appkit
         {
           owner->_state.error = res.error().message;
         }
+        else if (!res.error().message.empty())
+        {
+          // Invalidation already supplied the reopen instruction. Keep the write failure as its cause.
+          owner->_state.error = res.error().message + '\n' + owner->_state.error;
+        }
 
         owner->publishChange();
       }
@@ -518,8 +624,8 @@ namespace ao::appkit
         if (!owner->_state.stale)
         {
           owner->_state.error = res.error().message;
-          auto const& expression = owner->_state.list.expression;
-          owner->_state.listExpressionError = !query::parse(expression.empty() ? "true" : expression);
+          // List authoring preserves the query parser/compiler's FormatRejected code.
+          owner->_state.listExpressionError = res.error().code == Error::Code::FormatRejected;
         }
 
         owner->publishChange();

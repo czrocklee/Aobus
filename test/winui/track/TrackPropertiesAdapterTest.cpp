@@ -6,7 +6,6 @@
 #include "test/MessageCatalogTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/Credits.h>
-#include <ao/library/RecordingDate.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/completion/CompletionService.h>
 #include <ao/rt/library/LibraryAuthoring.h>
@@ -46,12 +45,12 @@ namespace ao::winui::test
       CHECK(projected.field == rt::TrackField::Title);
       CHECK(projected.label == "Title");
       CHECK(projected.text == "曲名");
-      CHECK(projected.controlKind == TrackPropertyControlKind::Text);
+      CHECK(projected.controlKind == uimodel::TrackPropertiesFormEditorKind::Text);
       CHECK(projected.enabled);
-      CHECK_FALSE(projected.mixed);
+      CHECK(projected.placeholder.empty());
     }
 
-    SECTION("mixed value remains visible but cannot be edited")
+    SECTION("mixed markers are placeholders rather than native input")
     {
       auto const projected = projectTrackPropertyRow(row,
                                                      uimodel::TrackPropertiesFormRowView{
@@ -61,18 +60,41 @@ namespace ao::winui::test
                                                        .editable = true,
                                                      });
 
-      CHECK(projected.text == "<Multiple Values>");
-      CHECK(projected.mixed);
-      CHECK_FALSE(projected.enabled);
+      CHECK(projected.placeholder == "<Multiple Values>");
+      CHECK(projected.text.empty());
+      CHECK(projected.enabled);
     }
   }
 
-  TEST_CASE("TrackPropertiesAdapter - number, date, and readonly control kinds stay distinct")
+  TEST_CASE("TrackPropertiesAdapter - batch album inputs preserve until replaced or explicitly cleared")
   {
-    CHECK(trackPropertyControlKind(uimodel::TrackPropertiesFormEditorKind::Number) == TrackPropertyControlKind::Number);
-    CHECK(trackPropertyControlKind(uimodel::TrackPropertiesFormEditorKind::Date) == TrackPropertyControlKind::Date);
-    CHECK(trackPropertyControlKind(uimodel::TrackPropertiesFormEditorKind::ReadonlyText) ==
-          TrackPropertyControlKind::ReadonlyText);
+    auto form = uimodel::TrackPropertiesFormModel{ao::test::englishMessageCatalog(), 2};
+    auto const field = rt::TrackField::Album;
+    form.addField(field, true);
+    form.loadFirstTrackField(field, std::string{"First"});
+
+    SECTION("different albums")
+    {
+      REQUIRE(form.tryMergeTrackField(field, std::string{"Second"}));
+    }
+
+    SECTION("common album")
+    {
+      REQUIRE_FALSE(form.tryMergeTrackField(field, std::string{"First"}));
+    }
+
+    auto const row = projectTrackPropertyRow({.field = field, .label = "Album"}, form.rowView(field));
+    REQUIRE(row.enabled);
+    REQUIRE(synchronizeTrackPropertyInput(form, row, row.text, false));
+    CHECK_FALSE(form.buildPatch().optAlbum);
+    REQUIRE(synchronizeTrackPropertyInput(form, row, "Together", false));
+    CHECK(form.buildPatch().optAlbum == "Together");
+    REQUIRE(synchronizeTrackPropertyInput(form, row, "", false));
+    CHECK_FALSE(form.buildPatch().optAlbum);
+    REQUIRE(synchronizeTrackPropertyInput(form, row, "", true));
+    CHECK(form.buildPatch().optAlbum == "");
+    REQUIRE(synchronizeTrackPropertyInput(form, row, "", false));
+    CHECK_FALSE(form.buildPatch().optAlbum);
   }
 
   TEST_CASE("TrackPropertiesAdapter - projects date rows like editable text metadata")
@@ -93,12 +115,12 @@ namespace ao::winui::test
                                                        .editable = true,
                                                      });
 
-      CHECK(projected.controlKind == TrackPropertyControlKind::Date);
+      CHECK(projected.controlKind == uimodel::TrackPropertiesFormEditorKind::Date);
       CHECK(projected.enabled);
-      CHECK_FALSE(projected.mixed);
+      CHECK(projected.placeholder.empty());
     }
 
-    SECTION("mixed value stays visible but cannot be edited")
+    SECTION("mixed date accepts a replacement without parsing the placeholder")
     {
       auto const projected = projectTrackPropertyRow(row,
                                                      uimodel::TrackPropertiesFormRowView{
@@ -108,41 +130,64 @@ namespace ao::winui::test
                                                        .editable = true,
                                                      });
 
-      CHECK(projected.controlKind == TrackPropertyControlKind::Date);
-      CHECK(projected.mixed);
-      CHECK_FALSE(projected.enabled);
+      CHECK(projected.controlKind == uimodel::TrackPropertiesFormEditorKind::Date);
+      CHECK(projected.enabled);
+      CHECK(projected.text.empty());
+      CHECK(projected.placeholder == "<Multiple Values>");
     }
   }
 
-  TEST_CASE("TrackPropertiesAdapter - parses native edits")
+  TEST_CASE("TrackPropertiesAdapter - batch numeric zero does not implicitly clear a stored number")
   {
-    auto const textRes = parseTrackPropertyEdit(TrackPropertyControlKind::Text, "Björk");
-    REQUIRE(textRes);
-    CHECK(std::get<std::string>(*textRes) == "Björk");
+    auto form = uimodel::TrackPropertiesFormModel{ao::test::englishMessageCatalog(), 2};
+    auto const field = rt::TrackField::Year;
+    form.addField(field, true);
+    form.loadFirstTrackField(field, std::uint16_t{1981});
+    auto const row = projectTrackPropertyRow(
+      {.field = field, .label = "Year", .editorKind = uimodel::TrackPropertiesFormEditorKind::Number},
+      form.rowView(field));
+    CHECK_FALSE(synchronizeTrackPropertyInput(form, row, "20x6", false));
+    REQUIRE(synchronizeTrackPropertyInput(form, row, "2026", false));
+    CHECK(form.buildPatch().optYear == 2026);
+    REQUIRE(synchronizeTrackPropertyInput(form, row, " 0 ", false));
+    CHECK_FALSE(form.buildPatch().optYear);
+    REQUIRE(synchronizeTrackPropertyInput(form, row, row.text, true));
+    CHECK(form.buildPatch().optYear == 0);
 
-    auto const numberRes = parseTrackPropertyEdit(TrackPropertyControlKind::Number, " 2026 ");
-    REQUIRE(numberRes);
-    CHECK(std::get<std::uint16_t>(*numberRes) == 2026);
+    auto single = uimodel::TrackPropertiesFormModel{ao::test::englishMessageCatalog(), 1};
+    single.addField(field, true);
+    single.loadFirstTrackField(field, std::uint16_t{1981});
+    REQUIRE(synchronizeTrackPropertyInput(single, row, "", false));
+    CHECK(single.buildPatch().optYear == 0);
+  }
 
-    auto const fullDateRes = parseTrackPropertyEdit(TrackPropertyControlKind::Date, "1981-05-12");
-    REQUIRE(fullDateRes);
-    CHECK(std::get<library::RecordingDate>(*fullDateRes) ==
-          library::RecordingDate{.year = 1981, .month = 5, .day = 12});
+  TEST_CASE("TrackPropertiesAdapter - invalid input withdraws only its prior field edit")
+  {
+    auto form = uimodel::TrackPropertiesFormModel{ao::test::englishMessageCatalog(), 1};
+    constexpr auto kYear = rt::TrackField::Year;
+    constexpr auto kTitle = rt::TrackField::Title;
+    form.addField(kYear, true);
+    form.loadFirstTrackField(kYear, std::uint16_t{2003});
+    form.addField(kTitle, true);
+    form.loadFirstTrackField(kTitle, std::string{"Before"});
+    auto const year = projectTrackPropertyRow(
+      {.field = kYear, .label = "Year", .editorKind = uimodel::TrackPropertiesFormEditorKind::Number},
+      form.rowView(kYear));
+    auto const title = projectTrackPropertyRow({.field = kTitle, .label = "Title"}, form.rowView(kTitle));
 
-    auto const yearDateRes = parseTrackPropertyEdit(TrackPropertyControlKind::Date, " 1981 ");
-    REQUIRE(yearDateRes);
-    CHECK(std::get<library::RecordingDate>(*yearDateRes) == library::RecordingDate{.year = 1981});
+    REQUIRE(synchronizeTrackPropertyInput(form, title, "After", false));
+    REQUIRE(synchronizeTrackPropertyInput(form, year, "2010", false));
+    REQUIRE(form.buildPatch().optYear == 2010);
 
-    // An empty editor input explicitly clears the recording date; zero is the
-    // shared absence sentinel, not an admitted year.
-    auto const clearDateRes = parseTrackPropertyEdit(TrackPropertyControlKind::Date, " ");
-    REQUIRE(clearDateRes);
-    CHECK_FALSE(std::get<library::RecordingDate>(*clearDateRes).isPresent());
+    REQUIRE_FALSE(synchronizeTrackPropertyInput(form, year, "2010x", false));
+    auto const invalid = form.buildPatch();
+    CHECK_FALSE(invalid.optYear);
+    CHECK(invalid.optTitle == "After");
 
-    CHECK_FALSE(parseTrackPropertyEdit(TrackPropertyControlKind::Number, "20x6"));
-    CHECK_FALSE(parseTrackPropertyEdit(TrackPropertyControlKind::Date, "1981-13"));
-    CHECK_FALSE(parseTrackPropertyEdit(TrackPropertyControlKind::Date, "81"));
-    CHECK_FALSE(parseTrackPropertyEdit(TrackPropertyControlKind::ReadonlyText, "ignored"));
+    REQUIRE(synchronizeTrackPropertyInput(form, year, "2011", false));
+    auto const corrected = form.buildPatch();
+    CHECK(corrected.optYear == 2011);
+    CHECK(corrected.optTitle == "After");
   }
 
   TEST_CASE("TrackPropertiesAdapter - presentation requires a nonempty selection")
@@ -151,14 +196,45 @@ namespace ao::winui::test
     CHECK(canPresentTrackProperties(std::array{TrackId{7}}));
   }
 
-  TEST_CASE("TrackPropertiesAdapter - projects authoring commit states")
+  TEST_CASE("TrackPropertiesAdapter - projects authoring commit states for a current binding")
   {
-    CHECK(projectTrackPropertiesCommitState(rt::AuthoringStatus::Applied) == TrackPropertiesCommitState::Accepted);
-    CHECK(projectTrackPropertiesCommitState(rt::AuthoringStatus::NoOp) == TrackPropertiesCommitState::Accepted);
-    CHECK(projectTrackPropertiesCommitState(rt::AuthoringStatus::Busy) == TrackPropertiesCommitState::Busy);
-    CHECK(projectTrackPropertiesCommitState(rt::AuthoringStatus::Stale) == TrackPropertiesCommitState::Stale);
-    CHECK(projectTrackPropertiesCommitState(rt::AuthoringStatus::Unavailable) ==
+    CHECK(projectTrackPropertiesCommitState(rt::AuthoringStatus::Applied, true) ==
+          TrackPropertiesCommitState::Accepted);
+    CHECK(projectTrackPropertiesCommitState(rt::AuthoringStatus::NoOp, true) == TrackPropertiesCommitState::Accepted);
+    CHECK(projectTrackPropertiesCommitState(rt::AuthoringStatus::Busy, true) == TrackPropertiesCommitState::Busy);
+    CHECK(projectTrackPropertiesCommitState(rt::AuthoringStatus::Stale, true) == TrackPropertiesCommitState::Stale);
+    CHECK(projectTrackPropertiesCommitState(rt::AuthoringStatus::Unavailable, true) ==
           TrackPropertiesCommitState::Unavailable);
+  }
+
+  TEST_CASE("TrackPropertiesAdapter - Busy needs reload when the binding is no longer current")
+  {
+    CHECK(projectTrackPropertiesCommitState(rt::AuthoringStatus::Busy, false) == TrackPropertiesCommitState::Stale);
+  }
+
+  TEST_CASE("TrackPropertiesAdapter - blocked input defers Busy retry until the draft is submit ready")
+  {
+    using Feedback = TrackPropertiesRetryFeedback;
+    using Draft = TrackPropertiesRetryDraft;
+    auto const deferred = projectTrackPropertiesRetryFeedback(Feedback::Visible, true, Draft::Blocked);
+    REQUIRE(deferred == Feedback::Deferred);
+
+    SECTION("correcting invalid input restores retry for the remaining edit")
+    {
+      CHECK(projectTrackPropertiesRetryFeedback(deferred, true, Draft::SubmitReady) == Feedback::Visible);
+    }
+
+    SECTION("reverting the only edit retires retry even if a new edit follows")
+    {
+      auto const cleared = projectTrackPropertiesRetryFeedback(deferred, true, Draft::Unchanged);
+      REQUIRE(cleared == Feedback::None);
+      CHECK(projectTrackPropertiesRetryFeedback(cleared, true, Draft::SubmitReady) == Feedback::None);
+    }
+
+    SECTION("a noncurrent binding retires the deferred retry even if the draft is valid")
+    {
+      CHECK(projectTrackPropertiesRetryFeedback(deferred, false, Draft::SubmitReady) == Feedback::None);
+    }
   }
 
   TEST_CASE("TrackPropertiesAdapter - projects tag and custom-key vocabulary")
@@ -194,23 +270,17 @@ namespace ao::winui::test
       auto const projected = projectTrackPropertyRow(
         {.field = field, .label = "Credit", .editorKind = uimodel::TrackPropertiesFormEditorKind::Text},
         {.field = field, .text = "First +2", .editable = true});
-      CHECK(projected.controlKind == TrackPropertyControlKind::ReadonlyText);
+      CHECK(projected.controlKind == uimodel::TrackPropertiesFormEditorKind::ReadonlyText);
       CHECK_FALSE(projected.enabled);
       CHECK(projected.text == "First +2");
     }
 
-    CHECK(trackPropertyCreditKind(rt::TrackField::Conductor) == library::CreditKind::Conductor);
-    CHECK(trackPropertyCreditKind(rt::TrackField::Ensemble) == library::CreditKind::Ensemble);
-    CHECK(trackPropertyCreditKind(rt::TrackField::Soloist) == library::CreditKind::Soloist);
-    CHECK_FALSE(trackPropertyCreditKind(rt::TrackField::Artist));
-    CHECK_FALSE(trackPropertyCreditKind(rt::TrackField::Composer));
-    CHECK_FALSE(trackPropertyCreditKind(static_cast<rt::TrackField>(255)));
     auto const composer =
       projectTrackPropertyRow({.field = rt::TrackField::Composer,
                                .label = "Composer",
                                .editorKind = uimodel::TrackPropertiesFormEditorKind::Text},
                               {.field = rt::TrackField::Composer, .text = "Bach", .editable = true});
-    CHECK(composer.controlKind == TrackPropertyControlKind::Text);
+    CHECK(composer.controlKind == uimodel::TrackPropertiesFormEditorKind::Text);
     CHECK(composer.enabled);
     CHECK(composer.text == "Bach");
   }

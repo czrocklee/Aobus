@@ -41,7 +41,8 @@ de:table {
     track_credit_kind_summary { "{kind}: {summary}" }
     track_credit_kind_value { "Kategorie: {kind}" }
     track_credit_name_role { "{name} ({role})" }
-    track_recording_date_invalid { "Geben Sie ein gültiges Datum als YYYY, YYYY-MM oder YYYY-MM-DD ein, oder lassen Sie das Feld zum Löschen leer." }
+    track_recording_date_invalid { "Geben Sie ein gültiges Datum im Format YYYY, YYYY-MM oder YYYY-MM-DD ein." }
+    track_number_invalid { "Geben Sie eine ganze Zahl von 0 bis 65535 ein." }
     tui_go_to_back { "Zurück" }
     tui_go_to_forward { "Vorwärts" }
     tui_go_to_cancel { "Abbrechen" }
@@ -699,7 +700,6 @@ de:table {
     tui_editor_tab_tracks { "Titel" }
     tui_editor_clear_for_all { "Für {count, plural, one {# Titel} other {alle # Titel}} leeren" }
     tui_editor_apply_action { "Auf {count, plural, one {# Titel} other {# Titel}} anwenden" }
-    tui_editor_invalid_number { "Ganze Zahl erforderlich" }
     tui_editor_discard_prompt { "Änderungen verwerfen? Eingabe zum Verwerfen, Escape zum Weiterbearbeiten" }
     tui_editor_hint_page { "Seite" }
     tui_editor_hint_select { "auswählen" }
@@ -765,7 +765,9 @@ de:table {
     winui_track_properties_add { "Hinzufügen" }
     winui_track_properties_editing_unavailable { "Bearbeitung nicht verfügbar: {detail}" }
     winui_track_properties_save_failed { "Speichern fehlgeschlagen: {detail}" }
-    winui_track_properties_stale { "Die Bibliothek wurde geändert, während dieses Dialogfeld geöffnet war. Öffnen Sie die Eigenschaften erneut und versuchen Sie es noch einmal." }
+    winui_track_properties_stale { "Die Bibliothek wurde geändert, während dieses Dialogfeld geöffnet war. Wählen Sie „Neu laden“, um die aktuellen Werte anzuzeigen." }
+    track_properties_unstaged_input_hint { "Fügen Sie das Tag oder das benutzerdefinierte Feld hinzu oder löschen Sie die unvollständige Eingabe vor dem Speichern." }
+    track_properties_text_normalization_failed { "Der Text konnte nicht normalisiert werden. Überprüfen Sie das Tag oder den Namen des benutzerdefinierten Feldes und versuchen Sie es erneut." }
     winui_track_properties_invalid_value { "Ungültiger Wert: {detail}" }
     winui_track_properties_reload { "Neu laden" }
     winui_track_properties_discard_question { "Diese Änderungen verwerfen?" }
@@ -867,6 +869,7 @@ de:table {
     track_tags_stale { "Die Bibliothek wurde geändert, während der Tag-Editor geöffnet war. Laden Sie neu und versuchen Sie es erneut." }
     track_edit_stale { "Die Bibliothek wurde während dieser Bearbeitung geändert. Laden Sie den Wert neu und versuchen Sie es erneut." }
     track_editing_unavailable { "Die Bearbeitung der Bibliothek ist derzeit nicht verfügbar." }
+    track_clear_field_for_tracks { "„{field}“ für {count, plural, one {# Titel} other {# Titel}} leeren" }
     gtk_track_properties_title { "Eigenschaften" }
     gtk_track_properties_selected_title { "Eigenschaften — {count, plural, one {# Titel ausgewählt} other {# Titel ausgewählt}}" }
     gtk_track_editing_unavailable { "Bearbeitung nicht verfügbar: {detail}" }
@@ -1160,6 +1163,7 @@ de:table {
     appkit_keep_open { "Geöffnet lassen" }
     appkit_discard_changes { "Änderungen verwerfen" }
     appkit_clear_selected_field { "Für ausgewählte Titel leeren" }
+    appkit_restore_field_value { "Ursprüngliche Werte wiederherstellen" }
     appkit_edit_tracks { "{count, plural, one {# Titel} other {# Titel}} bearbeiten" }
     appkit_updating_tracks { "{count, plural, one {# ausgewählter Titel wird} other {# ausgewählte Titel werden}} aktualisiert" }
     appkit_deleting_lists { "{count, plural, one {# Liste wird entfernt} other {# Listen werden entfernt}}" }

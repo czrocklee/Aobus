@@ -590,9 +590,10 @@ loss of runtime readiness; a silent provider enables those checks without
 playing media.
 
 The Credits probe checks native event delivery and reads committed values and
-revisions back from the database after a composed Save. It does not check
-`MainWindow` modal-root admission or multi-target Properties coordinator
-workflows. These programmatic observations do not certify physical input,
+revisions back from the database after a composed Save. In batch Properties,
+withdrawing a field edit must preserve each original value, even when other
+edits are saved. The probe hosts the coordinator, not `MainWindow`'s modal
+root. These programmatic observations do not certify physical input,
 shipping-template paint, live shipping theme changes, or audible playback;
 inspect the shipping window separately for those claims.
 

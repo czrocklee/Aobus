@@ -9,6 +9,7 @@
 #include "NativeCallback.h"
 #include "TrackCreditsEditor.h"
 #include <ao/Contract.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/completion/CompletionService.h>
@@ -120,7 +121,8 @@ namespace
 }
 @end
 
-@interface AobusLibraryEditor ()
+@interface AobusLibraryEditor ()<NSMenuItemValidation>
+- (void)restoreField:(NSMenuItem*)sender;
 - (NSString*)text:(MessageId)message;
 - (void)buildProperties;
 - (void)buildList;
@@ -263,14 +265,14 @@ namespace
 
       if (state.kind == ao::appkit::LibraryEditorKind::Properties)
       {
-        title.stringValue = state.trackIds.size() == 1
-                              ? [self text:MessageId::AppKitTrackDetails]
-                              : ao::appkit::catalogFormat(
-                                  _model->catalog(), MessageId::AppKitEditTracks, {{"count", state.trackIds.size()}});
+        auto const count = _model->propertyTargetCount();
+        title.stringValue =
+          count == 1 ? [self text:MessageId::AppKitTrackDetails]
+                     : ao::appkit::catalogFormat(_model->catalog(), MessageId::AppKitEditTracks, {{"count", count}});
         auto const album =
           std::ranges::find(state.fields, TrackField::Album, [](auto const& field) { return field.spec.field; });
 
-        if (state.trackIds.size() == 1)
+        if (count == 1)
         {
           auto const track =
             std::ranges::find(state.fields, TrackField::Title, [](auto const& field) { return field.spec.field; });
@@ -301,7 +303,7 @@ namespace
         else if (state.kind == ao::appkit::LibraryEditorKind::Membership)
         {
           summary = ao::appkit::catalogFormat(
-            _model->catalog(), MessageId::AppKitUpdatingTracks, {{"count", state.trackIds.size()}});
+            _model->catalog(), MessageId::AppKitUpdatingTracks, {{"count", state.membershipTargetCount}});
         }
       }
 
@@ -343,7 +345,7 @@ namespace
       separator.translatesAutoresizingMaskIntoConstraints = NO;
       [_content addSubview:separator];
       _message = textLabel(@"", kCaptionSize, YES);
-      _message.maximumNumberOfLines = 2;
+      _message.identifier = @"editor-status";
       _message.translatesAutoresizingMaskIntoConstraints = NO;
       [_content addSubview:_message];
       _cancel = [NSButton buttonWithTitle:[self text:MessageId::AppKitCancel] target:self action:@selector(cancel:)];
@@ -507,6 +509,27 @@ namespace
         ao::appkit::catalogFormat(_model->catalog(), MessageId::AppKitFieldActionsFor, {{"field", utf8(label)}});
       action.accessibilityLabel = action.toolTip;
       action.identifier = @"field-actions";
+      auto const count = _model->propertyTargetCount();
+      auto* const clearTitle = count > 1 ? ao::appkit::catalogFormat(_model->catalog(),
+                                                                     MessageId::TrackClearFieldForTracks,
+                                                                     {{"field", utf8(label)}, {"count", count}})
+                                         : [self text:MessageId::AppKitClearSelectedField];
+      // Only the field-actions gesture tracks this menu; NSView.menu would also install a context menu.
+      auto* const menu = [[NSMenu alloc] initWithTitle:action.toolTip];
+      action.cell.representedObject = menu;
+      auto* const item = [menu addItemWithTitle:clearTitle action:@selector(clearField:) keyEquivalent:@""];
+      item.target = self;
+      item.tag = field.tag;
+
+      if (count > 1)
+      {
+        auto* const restore = [menu addItemWithTitle:[self text:MessageId::AppKitRestoreFieldValue]
+                                              action:@selector(restoreField:)
+                                       keyEquivalent:@""];
+        restore.target = self;
+        restore.tag = field.tag;
+      }
+
       [action.widthAnchor constraintEqualToConstant:kActionWidth].active = YES;
       [line addArrangedSubview:action];
       [_fieldButtons addObject:action];
@@ -851,6 +874,8 @@ namespace
     [_panel makeFirstResponder:_cancel];
   }
 
+  // A failed write may show both its diagnostic and a separate reopen instruction.
+  _message.maximumNumberOfLines = state.stale ? 4 : 2;
   _message.stringValue = state.optInvalidField || state.listExpressionError ? @"" : nativeText(state.error);
   _message.textColor = NSColor.systemRedColor;
 
@@ -922,7 +947,13 @@ namespace
           _model->catalog(), sections[static_cast<std::size_t>(*optKind)]));
       }
 
-      field.placeholderString = value.mixed && !value.changed ? [self text:MessageId::TrackMultipleValues] : @"—";
+      field.placeholderString = @"—";
+
+      if (!value.changed && _model->propertyTargetCount() > 1)
+      {
+        // A withdrawn batch input preserves the captured value(s), even while its editor is empty.
+        field.placeholderString = value.mixed ? [self text:MessageId::TrackMultipleValues] : nativeText(value.text);
+      }
 
       if (value.changed && value.text.empty())
       {
@@ -1022,11 +1053,14 @@ namespace
   nativeCallback(
     [&]
     {
+      if (_panel == nil)
+      {
+        return;
+      }
+
       if (notification.object == _tags)
       {
-        // Record edit intent even while the uncommitted token remains native state.
-        // Equal committed tags must still dirty the draft before close admission.
-        _model->editTags(_model->state().tags);
+        _model->markTagInputPending();
       }
       else if (_model->state().kind == ao::appkit::LibraryEditorKind::Properties)
       {
@@ -1063,12 +1097,36 @@ namespace
 
 - (void)controlTextDidEndEditing:(NSNotification*)notification
 {
+  if (_panel == nil)
+  {
+    return;
+  }
+
   nativeCallback(
     [&]
     {
       if (auto* const controller = [self completionControllerForField:notification.object]; controller != nullptr)
       {
         controller->dismiss();
+      }
+
+      if (auto const& state = _model->state();
+          state.kind == ao::appkit::LibraryEditorKind::Properties && !state.busy && !state.stale && !state.completed)
+      {
+        // Completion can return the same field editor; never refill an erased input because its placeholder
+        // already shows the baseline. Reset nonempty no-ops, but leave readonly previews alone.
+        if (auto const index = [_fields indexOfObjectIdenticalTo:notification.object];
+            index != NSNotFound && _fields[index].editable && !state.fields.at(index).changed &&
+            _fields[index].stringValue.length != 0)
+        {
+          auto* const field = _fields[index];
+          auto* const baseline = nativeText(state.fields.at(index).text);
+
+          if (![field.stringValue isEqualToString:baseline])
+          {
+            field.stringValue = baseline;
+          }
+        }
       }
     });
 
@@ -1077,15 +1135,58 @@ namespace
     nativeCallback(
       [&]
       {
+        auto* const panel = _panel;
+
+        if (auto const& state = _model->state(); panel == nil ||
+                                                 state.kind != ao::appkit::LibraryEditorKind::Properties ||
+                                                 state.busy || state.stale || state.completed)
+        {
+          return;
+        }
+
         NSArray* const values = _tags.objectValue;
         auto tags = std::vector<std::string>{};
 
         for (NSUInteger index = 0; index < values.count; ++index)
         {
-          tags.push_back(utf8(values[index]));
+          NSString* const token = values[index];
+          auto const* bytes = token.UTF8String;
+
+          if (bytes == nullptr)
+          {
+            _model->markTagInputPending(std::string{
+              ao::i18n::requiredText(_model->catalog(), MessageId::TrackPropertiesTextNormalizationFailed)});
+
+            if (_panel == panel && _model->state().kind == ao::appkit::LibraryEditorKind::Properties)
+            {
+              [self refresh];
+            }
+
+            return;
+          }
+
+          tags.emplace_back(bytes, [token lengthOfBytesUsingEncoding:NSUTF8StringEncoding]);
         }
 
-        _model->editTags(std::move(tags));
+        auto const accepted = _model->tryEditTags(std::move(tags));
+
+        if (_panel != panel || _model->state().kind != ao::appkit::LibraryEditorKind::Properties)
+        {
+          return;
+        }
+
+        if (accepted)
+        {
+          auto* const canonical = [NSMutableArray array];
+
+          for (auto const& tag : _model->state().tags)
+          {
+            [canonical addObject:nativeText(tag)];
+          }
+
+          _tags.objectValue = canonical;
+        }
+
         [self refresh];
       });
   }
@@ -1227,16 +1328,62 @@ namespace
   nativeCallback(
     [&]
     {
-      if (_model->state().busy || _model->state().stale || _panel == nil)
+      if (_panel == nil || _confirmingDiscard != NO || _model->state().busy || _model->state().stale ||
+          _model->state().completed || _model->creditsEditor().isEditing())
       {
-        [self refresh];
         return;
       }
 
       auto* const field = _fields[static_cast<NSUInteger>(sender.tag)];
+
+      if (!field.editable || ![_panel makeFirstResponder:nil])
+      {
+        return;
+      }
+
       field.stringValue = @"";
-      _model->editField(static_cast<std::size_t>(sender.tag), "");
+      _model->clearField(static_cast<std::size_t>(sender.tag));
       [self refresh];
+    });
+}
+
+- (BOOL)validateMenuItem:(NSMenuItem*)item
+{
+  if (item.action == @selector(restoreField:))
+  {
+    return static_cast<BOOL>(_panel != nil && _confirmingDiscard == NO &&
+                             _model->canRestoreField(static_cast<std::size_t>(item.tag)));
+  }
+
+  return YES;
+}
+
+- (void)restoreField:(NSMenuItem*)sender
+{
+  nativeCallback(
+    [&]
+    {
+      if (sender.action != @selector(restoreField:) || ![self validateMenuItem:sender])
+      {
+        return;
+      }
+
+      auto const index = static_cast<std::size_t>(sender.tag);
+      auto* const field = _fields[index];
+
+      // End this row's active input first; its field editor must not later replay the superseded text.
+      if ((field.currentEditor != nil && ![_panel makeFirstResponder:nil]) || _panel == nil)
+      {
+        return;
+      }
+
+      _model->restoreField(index);
+
+      if (_panel != nil)
+      {
+        field.stringValue = nativeText(_model->state().fields.at(index).text);
+        [self refresh];
+      }
     });
 }
 
@@ -1245,21 +1392,16 @@ namespace
   nativeCallback(
     [&]
     {
-      if (_model->state().busy || _model->state().stale || _panel == nil)
+      if (_panel == nil || _confirmingDiscard != NO || _model->state().busy || _model->state().stale ||
+          _model->state().completed || _model->creditsEditor().isEditing())
       {
-        [self refresh];
         return;
       }
 
       [_panel makeFirstResponder:sender];
-      auto* const menu = [[NSMenu alloc] initWithTitle:[self text:MessageId::AppKitFieldActions]];
-      auto* const item = [menu addItemWithTitle:[self text:MessageId::AppKitClearSelectedField]
-                                         action:@selector(clearField:)
-                                  keyEquivalent:@""];
-      item.target = self;
-      item.tag = sender.tag;
       [self dismissCompletionControllers];
       _trackingFieldMenu = YES;
+      NSMenu* const menu = sender.cell.representedObject;
       [menu popUpMenuPositioningItem:nil atLocation:NSMakePoint(0, sender.bounds.size.height) inView:sender];
       _trackingFieldMenu = NO;
       [self refresh];
@@ -1282,7 +1424,12 @@ namespace
   nativeCallback(
     [&]
     {
-      [_panel makeFirstResponder:_save];
+      // End editing before submission, without requiring the Save button to accept key focus.
+      if (![_panel makeFirstResponder:nil] || _panel == nil)
+      {
+        return;
+      }
+
       _model->save();
       [self refresh];
     });

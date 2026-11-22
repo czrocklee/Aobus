@@ -183,6 +183,30 @@ namespace ao::rt::test
     }
   }
 
+  TEST_CASE("Credit completion - bounded editor providers retain best matches and full-entry replacement")
+  {
+    auto fixture = MusicLibraryFixture{};
+    std::ignore = fixture.addTrack(library::test::TrackSpec{
+      .title = "First",
+      .credits = {{.name = "Ann", .kind = Kind::Soloist, .role = "Viola"},
+                  {.name = "Anne", .kind = Kind::Soloist, .role = "Violin"}},
+    });
+    auto changes = makeStateOnlyLibraryChanges(fixture.library());
+    auto service = CompletionService{fixture.library(), changes};
+    auto nameProvider = makeCreditNameCompletionProvider(service, Kind::Soloist, 1);
+    auto roleProvider = makeCreditRoleCompletionProvider(service, 1);
+    auto const text = std::string{"an suffix"};
+    auto const optName = nameProvider(text, 2);
+    REQUIRE(optName);
+    CHECK(insertTexts(optName->items) == std::vector<std::string>{"Ann"});
+    CHECK(optName->replaceBegin == 0);
+    CHECK(optName->replaceEnd == text.size());
+    CHECK_FALSE(nameProvider(text, text.size()));
+    auto const optRole = roleProvider("vio", 3);
+    REQUIRE(optRole);
+    CHECK(insertTexts(optRole->items) == std::vector<std::string>{"Viola"});
+  }
+
   TEST_CASE("Credit completion - aliases survive category and role materialization and invalidation")
   {
     auto fixture = MusicLibraryFixture{};

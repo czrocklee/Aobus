@@ -12,6 +12,7 @@
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
+#include <ao/uimodel/library/property/TrackPropertiesPreparation.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -36,10 +37,8 @@ namespace ao::uimodel::test
     {
       auto snapshot = fixture.library().snapshot();
       baselineRevision = snapshot.revision();
-      auto sessionRes = TrackAuthoringSession::begin(fixture.library(), targetIds, snapshot);
+      auto sessionRes = prepareTrackProperties(fixture.library(), snapshot, targetIds, spec, form);
       REQUIRE(sessionRes);
-      CHECK(sessionRes->boundRevision() == snapshot.revision());
-      REQUIRE(loadTrackPropertiesFormBaseline(snapshot, sessionRes->targetIds(), spec, form));
       return std::move(*sessionRes);
     }();
 
@@ -63,10 +62,8 @@ namespace ao::uimodel::test
     auto session = [&]
     {
       auto snapshot = fixture.library().snapshot();
-      auto sessionRes = TrackAuthoringSession::begin(fixture.library(), fixture.trackIds(), snapshot);
+      auto sessionRes = prepareTrackProperties(fixture.library(), snapshot, fixture.trackIds(), spec, form);
       REQUIRE(sessionRes);
-      CHECK(sessionRes->boundRevision() == snapshot.revision());
-      REQUIRE(loadTrackPropertiesFormBaseline(snapshot, sessionRes->targetIds(), spec, form));
       return std::move(*sessionRes);
     }();
     auto const revision = session.boundRevision();
@@ -177,10 +174,15 @@ namespace ao::uimodel::test
     CHECK(optOldRow->title == "Old Title");
     CHECK(snapshot.revision() == revision);
 
-    auto const rejectedRes = TrackAuthoringSession::begin(fixture.library(), fixture.trackIds(), snapshot);
+    auto form = TrackPropertiesFormModel{ao::test::englishMessageCatalog()};
+    auto const spec = buildTrackPropertiesFormSpec(ao::test::englishMessageCatalog());
+    REQUIRE(loadTrackPropertiesFormBaseline(snapshot, fixture.trackIds(), spec, form));
+    form.setEditValue(rt::TrackField::Title, std::string{"Unsaved draft"});
+    auto const rejectedRes = prepareTrackProperties(fixture.library(), snapshot, fixture.trackIds(), spec, form);
 
     REQUIRE_FALSE(rejectedRes);
     CHECK(rejectedRes.error().code == Error::Code::InvalidState);
+    CHECK(form.buildPatch().optTitle == "Unsaved draft");
     CHECK(sessionRes->isCurrent());
     CHECK(sessionRes->boundRevision() == revision + 1);
     CHECK(fixture.title(fixture.trackIds().front()) == "Newer");

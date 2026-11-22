@@ -6,33 +6,18 @@
 #include "common/AccessibleLabel.h"
 #include "i18n/GtkText.h"
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/utility/String.h>
+#include <ao/utility/UnicodeText.h>
 
 #include <gtkmm/enums.h>
 #include <gtkmm/popover.h>
 #include <sigc++/signal.h>
 
 #include <string>
-#include <string_view>
 #include <utility>
 
 namespace ao::gtk::layout::track_field_grid
 {
-  namespace
-  {
-    std::string trimmedCopy(std::string_view text)
-    {
-      auto const first = text.find_first_not_of(" \t\n\r\f\v");
-
-      if (first == std::string_view::npos)
-      {
-        return {};
-      }
-
-      auto const last = text.find_last_not_of(" \t\n\r\f\v");
-      return std::string{text.substr(first, last - first + 1)};
-    }
-  } // namespace
-
   AddCustomMetadataButton::AddCustomMetadataButton(i18n::MessageCatalog const& textCatalog)
   {
     _button.set_icon_name("list-add-symbolic");
@@ -143,12 +128,12 @@ namespace ao::gtk::layout::track_field_grid
     auto const keyText = _keyEntry.get_text();
     auto const valueText = _valueEntry.get_text();
 
-    auto key = trimmedCopy(keyText.raw());
+    auto keyRes = utility::normalizeUtf8Nfc(utility::trim(keyText.raw()));
     auto value = std::string{valueText.raw()};
 
     bool hasError = false;
 
-    if (key.empty())
+    if (!keyRes || keyRes->empty())
     {
       markKeyError();
       hasError = true;
@@ -165,6 +150,6 @@ namespace ao::gtk::layout::track_field_grid
       return;
     }
 
-    _addRequested.emit(std::move(key), std::move(value));
+    _addRequested.emit(std::move(*keyRes), std::move(value));
   }
 } // namespace ao::gtk::layout::track_field_grid

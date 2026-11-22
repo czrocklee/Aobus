@@ -1365,6 +1365,63 @@ namespace ao::gtk::layout::test
     fixture.window().unset_child();
   }
 
+  TEST_CASE("TrackFieldGrid - adding an equivalent partial custom key preserves both tracks and permits correction")
+  {
+    auto first = kInvalidTrackId;
+    auto second = kInvalidTrackId;
+    auto fixture = LayoutRuntimeFixture{"io.github.aobus.detail_add_custom_nfc_test",
+                                        [&](library::MusicLibrary& musicLibrary)
+                                        {
+                                          first = library::test::addTrackWithUniqueFixtureUri(
+                                            musicLibrary, {.customMetadata = {{"Café", "Original"}}});
+                                          second = library::test::addTrackWithUniqueFixtureUri(musicLibrary, {});
+                                        }};
+    auto& runtime = fixture.runtime();
+    auto const viewId = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
+    REQUIRE(runtime.views().setSelection(viewId, {first, second}));
+    drainGtkEvents();
+
+    auto const compPtr =
+      fixture.create(LayoutNode{.type = "track.detailScope", .children = {LayoutNode{.type = "track.fieldGrid"}}});
+    REQUIRE(compPtr != nullptr);
+    auto& root = compPtr->widget();
+    fixture.window().set_child(root);
+    fixture.window().present();
+    drainGtkEvents();
+
+    auto* const addButton = findWidgetByClass<Gtk::Button>(root, "ao-detail-add-custom-metadata-button");
+    REQUIRE(addButton != nullptr);
+    emitClicked(*addButton);
+    auto* const popover = findWidget<Gtk::Popover>(*addButton);
+    REQUIRE(popover != nullptr);
+    auto const entries = collectAll<Gtk::Entry>(*popover);
+    REQUIRE(entries.size() == 2);
+    auto* const submitButton = findButtonByLabel(*popover, "Add");
+    REQUIRE(submitButton != nullptr);
+
+    entries[0]->set_text(" Cafe\u0301 ");
+    entries[1]->set_text("New value");
+    emitClicked(*submitButton);
+    REQUIRE(entries[0]->has_css_class("error"));
+    CHECK(popover->get_visible());
+    CHECK(entries[0]->get_text().raw() == " Cafe\u0301 ");
+    CHECK(entries[1]->get_text() == "New value");
+    auto const original = std::pair{std::string{"Café"}, std::string{"Original"}};
+    CHECK(trackSpecFor(runtime, first).customMetadata == std::vector{original});
+    CHECK(trackSpecFor(runtime, second).customMetadata.empty());
+
+    entries[0]->set_text(" Re\u0301gion ");
+    emitClicked(*submitButton);
+    REQUIRE(tryPumpGtkEventsUntil([&] { return entries[0]->get_text().empty(); }));
+    auto const added = std::pair{std::string{"Région"}, std::string{"New value"}};
+    auto const firstMetadata = trackSpecFor(runtime, first).customMetadata;
+    CHECK(firstMetadata.size() == 2);
+    CHECK(std::ranges::contains(firstMetadata, original));
+    CHECK(std::ranges::contains(firstMetadata, added));
+    CHECK(trackSpecFor(runtime, second).customMetadata == std::vector{added});
+    fixture.window().unset_child();
+  }
+
   TEST_CASE("track.quickFilter - wires create smart list action")
   {
     [[maybe_unused]] auto const appPtr = ao::gtk::test::ensureGtkApplication();

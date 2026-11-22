@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <functional>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -41,6 +42,7 @@ namespace ao::appkit
   {
     uimodel::TrackPropertiesFormRow spec;
     std::string text;
+    std::optional<std::string> optInputError{};
     bool mixed = false;
     bool changed = false;
   };
@@ -53,7 +55,7 @@ namespace ao::appkit
     std::optional<rt::TrackField> optInvalidField{};
     std::vector<LibraryEditorField> fields{};
     std::vector<std::string> tags{};
-    std::vector<TrackId> trackIds{};
+    std::size_t membershipTargetCount = 0;
     rt::ListDraft list{};
     std::optional<rt::DeleteListSubtreeReply> optDeletion{};
     ListId savedListId = kInvalidListId;
@@ -79,12 +81,19 @@ namespace ao::appkit
 
     LibraryEditorState const& state() const noexcept;
     i18n::MessageCatalog const& catalog() const noexcept;
-    Result<> beginProperties(std::vector<TrackId> ids);
+    std::size_t propertyTargetCount() const noexcept;
+    std::optional<TrackId> singlePropertyTarget() const noexcept;
+    Result<> beginProperties(std::span<TrackId const> ids);
     Result<> beginList(ListId listId = kInvalidListId, ListId parentId = kInvalidListId);
     Result<> beginDeletion(ListId listId);
-    Result<> beginMembership(std::vector<TrackId> ids, ListId listId, bool remove);
+    Result<> beginMembership(std::span<TrackId const> ids, ListId listId, bool remove);
     void editField(std::size_t index, std::string text);
-    void editTags(std::vector<std::string> tags);
+    void clearField(std::size_t index);
+    bool canRestoreField(std::size_t index) const noexcept;
+    void restoreField(std::size_t index);
+    void markTagInputPending(std::string error = {});
+    // True only when the canonical tags may replace the native draft.
+    bool tryEditTags(std::vector<std::string> tags);
     void editList(std::string name, std::string description, std::string expression);
     uimodel::TrackCreditSections creditSections() const;
     std::vector<uimodel::TrackSegmentDisplayRow> const& segmentRows() const noexcept;
@@ -97,7 +106,17 @@ namespace ao::appkit
     void shutdown();
 
   private:
+    enum class FieldAction : std::uint8_t
+    {
+      Input,
+      Clear,
+      Restore,
+    };
+
     Result<> canBegin() const;
+    void updateField(std::size_t index, std::string text, FieldAction action);
+    void setTagInputError(std::string error);
+    void updatePropertiesDirty();
     void publishChange() const;
     void finishStatus(rt::AuthoringStatus status);
     static async::Task<void> submitPropertiesAsync(
@@ -118,6 +137,8 @@ namespace ao::appkit
     std::vector<std::string> _originalTags;
     std::optional<uimodel::TrackAuthoringSession> _optTrackSession;
     async::Subscription _invalidatedSub;
+    std::string _tagInputError;
+    bool _tagInputPending = false;
     bool _closing = false;
   };
 } // namespace ao::appkit

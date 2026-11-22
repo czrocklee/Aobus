@@ -65,6 +65,13 @@ namespace ao::uimodel::test
     CHECK(spec.propertyRows == expected);
   }
 
+  TEST_CASE("TrackPropertiesFormSpec - rejects text input for read-only rows")
+  {
+    auto const res = parseTrackPropertiesFieldInput(TrackPropertiesFormEditorKind::ReadonlyText, "replacement");
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::InvalidInput);
+  }
+
   TEST_CASE("TrackPropertiesFormSpec - owns labels from a temporary locale catalog")
   {
     auto const spec = buildTrackPropertiesFormSpec(ao::test::messageCatalog("de-DE"));

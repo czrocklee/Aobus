@@ -41,7 +41,8 @@ zh_Hans:table {
     track_credit_kind_summary { "{kind}：{summary}" }
     track_credit_kind_value { "类别：{kind}" }
     track_credit_name_role { "{name}（{role}）" }
-    track_recording_date_invalid { "请输入有效的 YYYY、YYYY-MM 或 YYYY-MM-DD 日期，留空则清除。" }
+    track_recording_date_invalid { "请输入有效的日期，格式为 YYYY、YYYY-MM 或 YYYY-MM-DD。" }
+    track_number_invalid { "请输入 0 至 65535 的整数。" }
     tui_go_to_back { "后退" }
     tui_go_to_forward { "前进" }
     tui_go_to_cancel { "取消" }
@@ -700,7 +701,6 @@ zh_Hans:table {
     tui_editor_tab_tracks { "曲目" }
     tui_editor_clear_for_all { "清空全部 {count, plural, other {# 首曲目}}" }
     tui_editor_apply_action { "应用于 {count, plural, other {# 首曲目}}" }
-    tui_editor_invalid_number { "需要输入整数" }
     tui_editor_discard_prompt { "放弃更改？Enter 放弃，Escape 继续编辑" }
     tui_editor_hint_page { "页面" }
     tui_editor_hint_select { "选择" }
@@ -766,7 +766,9 @@ zh_Hans:table {
     winui_track_properties_add { "添加" }
     winui_track_properties_editing_unavailable { "无法编辑：{detail}" }
     winui_track_properties_save_failed { "保存失败：{detail}" }
-    winui_track_properties_stale { "打开此对话框期间，音乐库已发生更改。请重新打开属性后重试。" }
+    winui_track_properties_stale { "打开此对话框期间，音乐库已发生更改。请选择“重新加载”查看最新值。" }
+    track_properties_unstaged_input_hint { "保存前，请添加标签或自定义字段，或者清除未完成的输入。" }
+    track_properties_text_normalization_failed { "无法规范化文本。请检查标签或自定义字段名称，然后重试。" }
     winui_track_properties_invalid_value { "值无效：{detail}" }
     winui_track_properties_reload { "重新加载" }
     winui_track_properties_discard_question { "放弃这些修改？" }
@@ -868,6 +870,7 @@ zh_Hans:table {
     track_tags_stale { "在标签编辑器打开期间音乐库已更改。请重新加载后重试。" }
     track_edit_stale { "在编辑此项期间音乐库已更改。请重新加载值后重试。" }
     track_editing_unavailable { "当前无法编辑音乐库。" }
+    track_clear_field_for_tracks { "清空 {count, plural, other {# 首曲目}}的“{field}”" }
     gtk_track_properties_title { "属性" }
     gtk_track_properties_selected_title { "属性 — 已选择 {count, plural, one {# 首曲目} other {# 首曲目}}" }
     gtk_track_editing_unavailable { "无法编辑：{detail}" }
@@ -1161,6 +1164,7 @@ zh_Hans:table {
     appkit_keep_open { "保持打开" }
     appkit_discard_changes { "放弃修改" }
     appkit_clear_selected_field { "清除所选曲目的此字段" }
+    appkit_restore_field_value { "还原各曲目的原值" }
     appkit_edit_tracks { "编辑 {count, plural, other {# 首曲目}}" }
     appkit_updating_tracks { "正在更新所选的 {count, plural, other {# 首曲目}}" }
     appkit_deleting_lists { "{count, plural, other {将移除 # 个列表}}" }

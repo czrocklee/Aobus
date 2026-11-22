@@ -41,7 +41,8 @@ es:table {
     track_credit_kind_summary { "{kind}: {summary}" }
     track_credit_kind_value { "Categoría: {kind}" }
     track_credit_name_role { "{name} ({role})" }
-    track_recording_date_invalid { "Introduzca una fecha válida como YYYY, YYYY-MM o YYYY-MM-DD, o deje el campo vacío para borrarla." }
+    track_recording_date_invalid { "Introduzca una fecha válida en formato YYYY, YYYY-MM o YYYY-MM-DD." }
+    track_number_invalid { "Introduzca un número entero entre 0 y 65535." }
     tui_go_to_back { "Atrás" }
     tui_go_to_forward { "Adelante" }
     tui_go_to_cancel { "Cancelar" }
@@ -699,7 +700,6 @@ es:table {
     tui_editor_tab_tracks { "Pistas" }
     tui_editor_clear_for_all { "Vaciar en {count, plural, one {# pista} other {las # pistas}}" }
     tui_editor_apply_action { "Aplicar a {count, plural, one {# pista} other {# pistas}}" }
-    tui_editor_invalid_number { "Se requiere un número entero" }
     tui_editor_discard_prompt { "¿Descartar los cambios? Intro para descartar, Escape para seguir editando" }
     tui_editor_hint_page { "página" }
     tui_editor_hint_select { "seleccionar" }
@@ -765,7 +765,9 @@ es:table {
     winui_track_properties_add { "Añadir" }
     winui_track_properties_editing_unavailable { "Edición no disponible: {detail}" }
     winui_track_properties_save_failed { "Error al guardar: {detail}" }
-    winui_track_properties_stale { "La biblioteca cambió mientras este cuadro de diálogo estaba abierto. Vuelve a abrir Propiedades e inténtalo de nuevo." }
+    winui_track_properties_stale { "La biblioteca cambió mientras este cuadro de diálogo estaba abierto. Selecciona «Recargar» para ver los valores actuales." }
+    track_properties_unstaged_input_hint { "Añade la etiqueta o el campo personalizado, o borra la entrada incompleta antes de guardar." }
+    track_properties_text_normalization_failed { "No se pudo normalizar el texto. Comprueba la etiqueta o el nombre del campo personalizado y vuelve a intentarlo." }
     winui_track_properties_invalid_value { "Valor no válido: {detail}" }
     winui_track_properties_reload { "Recargar" }
     winui_track_properties_discard_question { "¿Descartar estos cambios?" }
@@ -867,6 +869,7 @@ es:table {
     track_tags_stale { "La biblioteca cambió mientras el editor de etiquetas estaba abierto. Recarga e inténtalo de nuevo." }
     track_edit_stale { "La biblioteca cambió mientras esta edición estaba abierta. Recarga el valor e inténtalo de nuevo." }
     track_editing_unavailable { "La edición de la biblioteca no está disponible actualmente." }
+    track_clear_field_for_tracks { "Borrar «{field}» en {count, plural, one {# pista} other {# pistas}}" }
     gtk_track_properties_title { "Propiedades" }
     gtk_track_properties_selected_title { "Propiedades — {count, plural, one {# pista seleccionada} other {# pistas seleccionadas}}" }
     gtk_track_editing_unavailable { "Edición no disponible: {detail}" }
@@ -1160,6 +1163,7 @@ es:table {
     appkit_keep_open { "Mantener abierto" }
     appkit_discard_changes { "Descartar cambios" }
     appkit_clear_selected_field { "Borrar en las pistas seleccionadas" }
+    appkit_restore_field_value { "Restaurar los valores originales" }
     appkit_edit_tracks { "Editar {count, plural, one {# pista} other {# pistas}}" }
     appkit_updating_tracks { "Actualizando {count, plural, one {# pista seleccionada} other {# pistas seleccionadas}}" }
     appkit_deleting_lists { "{count, plural, one {Se eliminará # lista} other {Se eliminarán # listas}}" }

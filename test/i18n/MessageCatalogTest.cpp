@@ -175,6 +175,60 @@ namespace ao::i18n::test
     }
   }
 
+  TEST_CASE("MessageCatalog - scalar editing hints resolve without fallback")
+  {
+    for (auto const& locale : availableCatalogLocales())
+    {
+      INFO(locale.tag);
+      auto const catalogRes = MessageCatalog::create(locale.tag);
+      REQUIRE(catalogRes);
+
+      auto const dateRes = catalogRes->format(MessageId::TrackRecordingDateInvalid);
+      auto const numberRes = catalogRes->format(MessageId::TrackNumberInvalid);
+      REQUIRE(dateRes);
+      REQUIRE(numberRes);
+      CHECK(dateRes->locale == locale.tag);
+      CHECK(numberRes->locale == locale.tag);
+      CHECK(dateRes->text.contains("YYYY-MM-DD"));
+      CHECK(numberRes->text.contains("65535"));
+
+      if (locale.tag == "en")
+      {
+        CHECK(dateRes->text == "Enter a valid date as YYYY, YYYY-MM, or YYYY-MM-DD.");
+        CHECK(numberRes->text == "Enter a whole number from 0 to 65535.");
+      }
+    }
+  }
+
+  TEST_CASE("MessageCatalog - field clear names the field and track count in every maintained locale")
+  {
+    for (auto const& locale : availableCatalogLocales())
+    {
+      INFO(locale.tag);
+      auto const catalogRes = MessageCatalog::create(locale.tag);
+      REQUIRE(catalogRes);
+      auto const field = requiredText(*catalogRes, MessageId::TrackFieldRecordingDate);
+
+      for (auto const count : {1, 2})
+      {
+        CAPTURE(count);
+        auto const messageRes =
+          catalogRes->format(MessageId::TrackClearFieldForTracks, {{"field", field}, {"count", count}});
+        REQUIRE(messageRes);
+        CHECK(messageRes->locale == locale.tag);
+        CHECK(messageRes->text.contains(field));
+        CHECK(messageRes->text.contains(std::to_string(count)));
+
+        if (locale.tag == "en")
+        {
+          auto const* const expected =
+            count == 1 ? "Clear Recording Date for 1 track" : "Clear Recording Date for 2 tracks";
+          CHECK(messageRes->text == expected);
+        }
+      }
+    }
+  }
+
   TEST_CASE("MessageCatalog - selectable locales resolve packaged translations without fallback")
   {
     auto const locales = availableCatalogLocales();
@@ -208,7 +262,6 @@ namespace ao::i18n::test
 
     auto const messages = std::vector<CreditMessage>{
       {MessageId::TrackFieldRecordingDate, {}},
-      {MessageId::TrackRecordingDateInvalid, {}},
       {MessageId::TrackCreditsHeading, {}},
       {MessageId::TrackCreditPerformer, {}},
       {MessageId::TrackCreditLyricist, {}},

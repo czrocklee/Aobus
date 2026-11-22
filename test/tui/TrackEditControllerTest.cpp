@@ -14,6 +14,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/Credits.h>
+#include <ao/library/RecordingDate.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/NotificationService.h>
@@ -36,6 +37,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace ao::tui::test
@@ -543,6 +545,242 @@ namespace ao::tui::test
     CHECK(fixture.trackSpec(secondId).title == "Second");
   }
 
+  TEST_CASE("TrackEditController - batch scalar edits preserve originals unless explicitly replaced or cleared")
+  {
+    using library::RecordingDate;
+    auto fixture = EditFixture{};
+    auto const firstDate = RecordingDate{.year = 1981, .month = 5, .day = 12};
+    auto const firstId =
+      fixture.addTrack({.album = "Old", .recordingDate = firstDate, .uri = "first.flac", .year = 1959});
+    auto const secondId = fixture.addTrack({.album = "Older", .uri = "second.flac", .year = 0});
+    auto controller = fixture.makeController();
+    REQUIRE(controller.tryOpen({firstId, secondId}));
+
+    auto const replacements = std::array{std::pair{"Album", "Unified"},
+                                         std::pair{"Artist", "New artist"},
+                                         std::pair{"Year", "2025"},
+                                         std::pair{"Recording Date", "2025-02"}};
+    auto const checkOriginals = [&]
+    {
+      auto const first = fixture.trackSpec(firstId);
+      auto const second = fixture.trackSpec(secondId);
+      CHECK(first.album == "Old");
+      CHECK(second.album == "Older");
+      CHECK(first.artist == "Artist");
+      CHECK(second.artist == "Artist");
+      CHECK(first.year == 1959);
+      CHECK(second.year == 0);
+      CHECK(first.recordingDate == firstDate);
+      CHECK_FALSE(second.recordingDate.isPresent());
+    };
+    auto const apply = [&]
+    {
+      REQUIRE(controller.activeEditor()->canApply());
+      controller.tryHandleEvent(applyEvent());
+      REQUIRE(controller.hasPendingSubmission());
+      REQUIRE(fixture.executor->tryDrainUntil([&] { return !controller.hasPendingSubmission(); }));
+      CHECK_FALSE(controller.isActive());
+      CHECK(fixture.settledCount == 1);
+    };
+    auto const applyGenre = [&]
+    {
+      replaceField(controller, "Genre", "Jazz");
+      apply();
+      CHECK(fixture.trackSpec(firstId).genre == "Jazz");
+      CHECK(fixture.trackSpec(secondId).genre == "Jazz");
+    };
+
+    SECTION("Apply without an edit does not submit")
+    {
+      controller.tryHandleEvent(applyEvent());
+      CHECK_FALSE(controller.hasPendingSubmission());
+      checkOriginals();
+    }
+
+    SECTION("Editing a different field preserves the scalar baselines")
+    {
+      applyGenre();
+      checkOriginals();
+    }
+
+    SECTION("Erasing temporary text withdraws replacement intent for common and mixed scalars")
+    {
+      for (auto const& [label, text] : replacements)
+      {
+        replaceField(controller, label, text);
+        replaceField(controller, label, "");
+      }
+
+      CHECK_FALSE(controller.activeEditor()->isDirty());
+      applyGenre();
+      checkOriginals();
+    }
+
+    SECTION("Spaces alone are a literal text replacement, not a withdrawn edit")
+    {
+      replaceField(controller, "Album", "   ");
+      apply();
+      CHECK(fixture.trackSpec(firstId).album == "   ");
+      CHECK(fixture.trackSpec(secondId).album == "   ");
+    }
+
+    SECTION("Typing the numeric and date absence sentinels does not clear a batch")
+    {
+      replaceField(controller, "Year", "0");
+      replaceField(controller, "Recording Date", " ");
+
+      CHECK_FALSE(controller.activeEditor()->canApply());
+      applyGenre();
+      checkOriginals();
+    }
+
+    SECTION("Restoring explicitly cleared fields withdraws clear intent")
+    {
+      for (auto const& [label, text] : replacements)
+      {
+        clearField(controller, label);
+        controller.tryHandleEvent(ftxui::Event::CtrlG);
+      }
+
+      CHECK_FALSE(controller.activeEditor()->isDirty());
+      applyGenre();
+      checkOriginals();
+    }
+
+    SECTION("Discarding staged clears never writes them")
+    {
+      for (auto const& [label, text] : replacements)
+      {
+        clearField(controller, label);
+      }
+
+      checkOriginals();
+      controller.tryHandleEvent(ftxui::Event::Escape);
+      REQUIRE(controller.activeEditor()->isConfirmingDiscard());
+      controller.tryHandleEvent(ftxui::Event::Return);
+      CHECK_FALSE(controller.isActive());
+      CHECK_FALSE(controller.hasPendingSubmission());
+      checkOriginals();
+    }
+
+    SECTION("Applying staged clears writes typed absence to every target")
+    {
+      for (auto const& [label, text] : replacements)
+      {
+        clearField(controller, label);
+      }
+
+      checkOriginals();
+      apply();
+
+      for (auto const trackId : {firstId, secondId})
+      {
+        auto const track = fixture.trackSpec(trackId);
+        CHECK(track.album.empty());
+        CHECK(track.artist.empty());
+        CHECK(track.year == 0);
+        CHECK_FALSE(track.recordingDate.isPresent());
+      }
+    }
+  }
+
+  TEST_CASE("TrackEditController - common batch scalar no-ops do not count as pending edits")
+  {
+    auto fixture = EditFixture{};
+    auto const firstId = fixture.addTrack({.title = "First", .album = "", .uri = "first.flac", .year = 2003});
+    auto const secondId = fixture.addTrack({.title = "Second", .album = "", .uri = "second.flac", .year = 2003});
+    auto controller = fixture.makeController();
+    REQUIRE(controller.tryOpen({firstId, secondId}));
+    auto const* const editor = controller.activeEditor();
+    REQUIRE(editor != nullptr);
+
+    auto const checkClean = [&]
+    {
+      CHECK_FALSE(editor->canApply());
+      CHECK_FALSE(editor->isDirty());
+      CHECK(editor->patchSummary() == TrackEditorPatchSummary{});
+      CHECK_FALSE(editor->buildPatch().metadata.optAlbum);
+      CHECK_FALSE(editor->buildPatch().metadata.optYear);
+
+      controller.tryHandleEvent(ftxui::Event::Escape);
+      CHECK_FALSE(controller.isActive());
+      CHECK_FALSE(controller.hasPendingSubmission());
+    };
+
+    SECTION("Clearing an already empty album leaves no pending clear")
+    {
+      clearField(controller, "Album");
+      CHECK_FALSE(renderElement(editor->render(), 80, 24).text.contains("Clear for all 2 tracks"));
+      checkClean();
+    }
+
+    SECTION("An equivalent numeric spelling remains editable without a change to save")
+    {
+      replaceField(controller, "Year", "02003");
+      CHECK(renderElement(editor->render(), 80, 24).text.contains("02003"));
+      checkClean();
+    }
+
+    SECTION("Invalid input is still kept for correction")
+    {
+      replaceField(controller, "Year", "02003x");
+      CHECK(editor->isDirty());
+      CHECK_FALSE(editor->canApply());
+      CHECK(renderElement(editor->render(), 80, 24).text.contains("02003x"));
+      controller.tryHandleEvent(ftxui::Event::Escape);
+      REQUIRE(editor->isConfirmingDiscard());
+      controller.tryHandleEvent(ftxui::Event::Escape);
+      controller.tryHandleEvent(ftxui::Event::Backspace);
+      checkClean();
+    }
+
+    SECTION("No-ops do not withdraw a mixed-field replacement equal to the first track's original")
+    {
+      replaceField(controller, "Title", "First");
+      clearField(controller, "Album");
+      replaceField(controller, "Year", "02003");
+
+      REQUIRE(editor->canApply());
+      CHECK(editor->patchSummary() == TrackEditorPatchSummary{.fieldCount = 1});
+      controller.tryHandleEvent(applyEvent());
+      REQUIRE(controller.hasPendingSubmission());
+      REQUIRE(fixture.executor->tryDrainUntil([&] { return !controller.hasPendingSubmission(); }));
+      CHECK_FALSE(controller.isActive());
+      CHECK(fixture.settledCount == 1);
+      CHECK(fixture.trackSpec(firstId).title == "First");
+      CHECK(fixture.trackSpec(secondId).title == "First");
+    }
+
+    for (auto const trackId : {firstId, secondId})
+    {
+      auto const track = fixture.trackSpec(trackId);
+      CHECK(track.album.empty());
+      CHECK(track.year == 2003);
+    }
+  }
+
+  TEST_CASE("TrackEditController - single-track scalars still clear when erased")
+  {
+    auto fixture = EditFixture{};
+    auto const trackId = fixture.addTrack({.album = "Old", .recordingDate = {2003, 5, 12}, .year = 2003});
+    auto controller = fixture.makeController();
+    REQUIRE(controller.tryOpen({trackId}));
+    replaceField(controller, "Album", "");
+    replaceField(controller, "Year", "");
+    replaceField(controller, "Recording Date", "");
+    REQUIRE(controller.activeEditor()->canApply());
+    CHECK(controller.activeEditor()->patchSummary() == TrackEditorPatchSummary{.fieldCount = 3, .clearCount = 3});
+
+    controller.tryHandleEvent(applyEvent());
+    REQUIRE(controller.hasPendingSubmission());
+    REQUIRE(fixture.executor->tryDrainUntil([&] { return !controller.hasPendingSubmission(); }));
+    CHECK_FALSE(controller.isActive());
+    auto const track = fixture.trackSpec(trackId);
+    CHECK(track.album.empty());
+    CHECK(track.year == 0);
+    CHECK_FALSE(track.recordingDate.isPresent());
+  }
+
   TEST_CASE("TrackEditController - submission starts on the callback executor before writing", "[concurrency]")
   {
     auto fixture = EditFixture{};
@@ -567,22 +805,94 @@ namespace ao::tui::test
     CHECK_FALSE(controller.isActive());
   }
 
-  TEST_CASE("TrackEditController - an included value every target already has reports no change")
+  TEST_CASE("TrackEditController - equivalent single-track scalars do not count as pending edits")
   {
     auto fixture = EditFixture{};
-    auto const trackId = fixture.addTrack({.title = "Only", .album = "", .uri = "only.flac"});
+    auto const originalDate = library::RecordingDate{.year = 2003, .month = 5, .day = 12};
+    auto const trackId = fixture.addTrack({.recordingDate = originalDate, .year = 2003});
     auto controller = fixture.makeController();
-
     REQUIRE(controller.tryOpen({trackId}));
-    clearField(controller, "Album");
-    REQUIRE(controller.activeEditor()->canApply());
-    controller.tryHandleEvent(applyEvent());
-    REQUIRE(controller.hasPendingSubmission());
-    REQUIRE(fixture.executor->tryDrainUntil([&] { return !controller.hasPendingSubmission(); }));
+    auto const* const editor = controller.activeEditor();
+    REQUIRE(editor != nullptr);
 
+    auto const checkClean = [&]
+    {
+      CHECK_FALSE(editor->isDirty());
+      CHECK_FALSE(editor->canApply());
+      CHECK(editor->patchSummary() == TrackEditorPatchSummary{});
+      CHECK_FALSE(editor->buildPatch().metadata.optYear);
+      CHECK_FALSE(editor->buildPatch().metadata.optRecordingDate);
+      controller.tryHandleEvent(applyEvent());
+      CHECK_FALSE(controller.hasPendingSubmission());
+    };
+
+    SECTION("Equivalent numbers and dates do not require discard")
+    {
+      replaceField(controller, "Year", "02003");
+      replaceField(controller, "Recording Date", " 2003-05-12 ");
+      checkClean();
+      controller.tryHandleEvent(ftxui::Event::Escape);
+      CHECK_FALSE(controller.isActive());
+      auto const track = fixture.trackSpec(trackId);
+      CHECK(track.year == 2003);
+      CHECK(track.recordingDate == originalDate);
+    }
+
+    SECTION("Correcting invalid input to an equivalent number leaves it editable for a real change")
+    {
+      replaceField(controller, "Recording Date", " 2003-05-12 ");
+      replaceField(controller, "Year", "02003x");
+      CHECK(editor->isDirty());
+      CHECK_FALSE(editor->canApply());
+      CHECK_FALSE(editor->buildPatch().metadata.optYear);
+      controller.tryHandleEvent(ftxui::Event::Escape);
+      REQUIRE(editor->isConfirmingDiscard());
+      controller.tryHandleEvent(ftxui::Event::Escape);
+
+      controller.tryHandleEvent(ftxui::Event::Backspace);
+      checkClean();
+      CHECK(renderElement(editor->render(), 80, 24).text.contains("02003"));
+      controller.tryHandleEvent(ftxui::Event::Backspace);
+      typeText(controller, "4");
+      CHECK(renderElement(editor->render(), 80, 24).text.contains("02004"));
+      REQUIRE(editor->canApply());
+      CHECK(editor->patchSummary() == TrackEditorPatchSummary{.fieldCount = 1});
+      CHECK(editor->buildPatch().metadata.optYear == 2004);
+      CHECK_FALSE(editor->buildPatch().metadata.optRecordingDate);
+
+      controller.tryHandleEvent(applyEvent());
+      REQUIRE(controller.hasPendingSubmission());
+      REQUIRE(fixture.executor->tryDrainUntil([&] { return !controller.hasPendingSubmission(); }));
+      CHECK_FALSE(controller.isActive());
+      auto const track = fixture.trackSpec(trackId);
+      CHECK(track.year == 2004);
+      CHECK(track.recordingDate == originalDate);
+    }
+  }
+
+  TEST_CASE("TrackEditController - single-track input that leaves scalars absent does not count as an edit")
+  {
+    auto fixture = EditFixture{};
+    auto const trackId = fixture.addTrack({.album = "", .year = 0});
+    auto controller = fixture.makeController();
+    REQUIRE(controller.tryOpen({trackId}));
+    auto const* const editor = controller.activeEditor();
+    REQUIRE(editor != nullptr);
+
+    clearField(controller, "Album");
+    replaceField(controller, "Year", "00");
+    replaceField(controller, "Recording Date", " ");
+    CHECK_FALSE(editor->isDirty());
+    CHECK_FALSE(editor->canApply());
+    CHECK(editor->patchSummary() == TrackEditorPatchSummary{});
+    auto const patch = editor->buildPatch().metadata;
+    CHECK_FALSE(patch.optAlbum);
+    CHECK_FALSE(patch.optYear);
+    CHECK_FALSE(patch.optRecordingDate);
+    controller.tryHandleEvent(applyEvent());
+    CHECK_FALSE(controller.hasPendingSubmission());
+    controller.tryHandleEvent(ftxui::Event::Escape);
     CHECK_FALSE(controller.isActive());
-    CHECK(fixture.lastMessage() == "No changes were needed");
-    CHECK(fixture.trackSpec(trackId).album.empty());
   }
 
   TEST_CASE("TrackEditController - an invalidated session goes stale and refuses to submit")
@@ -604,6 +914,27 @@ namespace ao::tui::test
     CHECK_FALSE(controller.hasPendingSubmission());
     CHECK(controller.activeEditor()->status() == TrackEditorStatus::Stale);
     CHECK(fixture.trackSpec(trackId).album == "Old");
+  }
+
+  TEST_CASE("TrackEditController - Ctrl-D does not stage a batch clear when the stale diagnostic hides its scope")
+  {
+    auto fixture = EditFixture{};
+    auto const firstId = fixture.addTrack({.title = "First", .uri = "first.flac"});
+    auto const secondId = fixture.addTrack({.title = "Second", .uri = "second.flac"});
+    auto controller = fixture.makeController();
+    REQUIRE(controller.tryOpen({firstId, secondId}));
+    replaceField(controller, "Title", "Draft");
+
+    fixture.commitUnrelatedChange();
+    auto const* const editor = controller.activeEditor();
+    REQUIRE(editor != nullptr);
+    REQUIRE(editor->status() == TrackEditorStatus::Stale);
+    CHECK_FALSE(renderElement(editor->render(), 80, 24).text.contains("Ctrl-D"));
+
+    controller.tryHandleEvent(ftxui::Event::CtrlD);
+
+    CHECK(editor->buildPatch().metadata.optTitle == "Draft");
+    CHECK_FALSE(controller.hasPendingSubmission());
   }
 
   TEST_CASE("TrackEditController - reload rebinds a stale editor and resets its draft")

@@ -29,6 +29,7 @@
 #include <ao/rt/ordering/TextOrderingPolicy.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
+#include <ao/uimodel/library/property/TrackPropertiesPreparation.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 #include <ao/utility/Path.h>
 
@@ -134,30 +135,19 @@ namespace ao::tui
       TrackEditorMode const mode)
     {
       auto const snapshot = library.snapshot();
-      auto sessionRes = uimodel::TrackAuthoringSession::begin(library, targetIds, snapshot);
-
-      if (!sessionRes)
-      {
-        // The bind is where a vanished target is actually found, so its own
-        // NotFound is the incomplete-selection report rather than a generic
-        // availability refusal.
-        auto const missing = sessionRes.error().code == Error::Code::NotFound;
-        return std::unexpected{PreparationError{
-          .messageId = missing ? MessageId::TuiEditorOpenIncomplete : MessageId::TuiEditorOpenUnavailable,
-          .detail = sessionRes.error().message}};
-      }
-
       // Tags need identities and membership, not per-field metadata aggregation.
       auto const spec = mode == TrackEditorMode::Properties ? uimodel::buildTrackPropertiesFormSpec(textCatalog)
                                                             : uimodel::TrackPropertiesFormSpec{};
       auto baseline = uimodel::TrackPropertiesFormModel{textCatalog};
 
-      if (auto res = uimodel::loadTrackPropertiesFormBaseline(snapshot, targetIds, spec, baseline); !res)
+      auto sessionRes = uimodel::prepareTrackProperties(library, snapshot, targetIds, spec, baseline);
+
+      if (!sessionRes)
       {
-        return std::unexpected{PreparationError{.messageId = res.error().code == Error::Code::NotFound
-                                                               ? MessageId::TuiEditorOpenIncomplete
-                                                               : MessageId::TuiEditorOpenUnavailable,
-                                                .detail = res.error().message}};
+        auto const missing = sessionRes.error().code == Error::Code::NotFound;
+        return std::unexpected{PreparationError{
+          .messageId = missing ? MessageId::TuiEditorOpenIncomplete : MessageId::TuiEditorOpenUnavailable,
+          .detail = sessionRes.error().message}};
       }
 
       auto targets = std::vector<TrackEditorTarget>{};

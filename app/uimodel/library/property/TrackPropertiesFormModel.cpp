@@ -131,7 +131,7 @@ namespace ao::uimodel
       return tryWriteTrackFieldPatch(patch, state.field, state.currentEditValue);
     }
 
-    bool hasFieldChange(TrackPropertiesFormFieldState const& state)
+    bool hasScalarEdit(TrackPropertiesFormFieldState const& state)
     {
       auto patch = rt::MetadataPatch{};
       return tryWriteTrackPropertiesFormEdit(patch, state);
@@ -167,9 +167,14 @@ namespace ao::uimodel
     };
   }
 
-  TrackPropertiesFormModel::TrackPropertiesFormModel(i18n::MessageCatalog textCatalog)
-    : _textCatalog{std::move(textCatalog)}
+  TrackPropertiesFormModel::TrackPropertiesFormModel(i18n::MessageCatalog textCatalog, std::size_t const targetCount)
+    : _textCatalog{std::move(textCatalog)}, _targetCount{targetCount}
   {
+  }
+
+  std::size_t TrackPropertiesFormModel::targetCount() const noexcept
+  {
+    return _targetCount;
   }
 
   void TrackPropertiesFormModel::addField(rt::TrackField field, bool editable)
@@ -180,6 +185,7 @@ namespace ao::uimodel
 
   void TrackPropertiesFormModel::clear()
   {
+    _targetCount = 0;
     _fields.clear();
     _capturedCredits = {};
     _segmentRows.clear();
@@ -220,6 +226,54 @@ namespace ao::uimodel
     {
       state->currentEditValue = std::move(value);
       state->explicitReplacement = true;
+    }
+  }
+
+  void TrackPropertiesFormModel::setFieldInput(rt::TrackField field, TrackFieldEditValue value)
+  {
+    if (_targetCount == 0)
+    {
+      return;
+    }
+
+    if (_targetCount > 1 && isEmptyTrackFieldEdit(value))
+    {
+      restoreFieldEdit(field);
+      return;
+    }
+
+    setExplicitFieldEdit(field, std::move(value));
+  }
+
+  void TrackPropertiesFormModel::restoreFieldEdit(rt::TrackField field)
+  {
+    if (auto* const state = findField(field); state != nullptr)
+    {
+      state->currentEditValue = editValueFromRawValue(state->originalRawValue);
+      state->explicitReplacement = false;
+    }
+  }
+
+  void TrackPropertiesFormModel::clearFieldEdit(rt::TrackField field)
+  {
+    auto const* def = rt::trackFieldDefinition(field);
+
+    if (_targetCount == 0 || def == nullptr || !canWriteTrackFieldPatch(field))
+    {
+      return;
+    }
+
+    if (def->valueKind == rt::TrackFieldValueKind::Number)
+    {
+      setExplicitFieldEdit(field, std::uint16_t{0});
+    }
+    else if (def->valueKind == rt::TrackFieldValueKind::RecordingDate)
+    {
+      setExplicitFieldEdit(field, library::RecordingDate{});
+    }
+    else
+    {
+      setExplicitFieldEdit(field, std::string{});
     }
   }
 
@@ -359,9 +413,20 @@ namespace ao::uimodel
     return _segmentRows;
   }
 
+  bool TrackPropertiesFormModel::hasFieldChange(rt::TrackField field) const
+  {
+    auto const* const state = findField(field);
+    return state != nullptr && hasScalarEdit(*state);
+  }
+
+  bool TrackPropertiesFormModel::hasEffectiveChanges() const
+  {
+    return _optPendingCredits || std::ranges::any_of(_fields, hasScalarEdit);
+  }
+
   bool TrackPropertiesFormModel::canSave() const
   {
-    return !_creditsEditor.isEditing() && (_optPendingCredits || std::ranges::any_of(_fields, hasFieldChange));
+    return !_creditsEditor.isEditing() && hasEffectiveChanges();
   }
 
   rt::MetadataPatch TrackPropertiesFormModel::buildPatch() const
@@ -434,7 +499,7 @@ namespace ao::uimodel
       return std::unexpected{creditsRes.error()};
     }
 
-    auto baseline = TrackPropertiesFormModel{form._textCatalog};
+    auto baseline = TrackPropertiesFormModel{form._textCatalog, targetIds.size()};
     baseline._capturedCredits = std::move(*creditsRes);
 
     if (targetIds.size() == 1)

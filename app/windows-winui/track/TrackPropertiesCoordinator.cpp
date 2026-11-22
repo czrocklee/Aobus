@@ -22,14 +22,19 @@
 #include <ao/rt/projection/TrackDetailSnapshot.h>
 #include <ao/uimodel/library/detail/TrackCredits.h>
 #include <ao/uimodel/library/detail/TrackCustomMetadata.h>
+#include <ao/uimodel/library/property/TagEdit.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
+#include <ao/uimodel/library/property/TrackPropertiesPreparation.h>
+#include <ao/uimodel/library/track/TrackAuthoring.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 #include <ao/utility/String.h>
+#include <ao/utility/UnicodeText.h>
 #include <ao/winui/CallbackAdmissionGate.h>
 #include <ao/winui/WinUiErrorBoundary.h>
 #include <ao/winui/track/TrackPropertiesAdapter.h>
 
+#include <winrt/Microsoft.UI.Xaml.Automation.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
@@ -59,6 +64,7 @@ namespace ao::winui
 
     constexpr double kDialogMinWidth = 320.0;
     constexpr double kDialogMaxContentHeight = 640.0;
+    constexpr double kDialogMaxFeedbackHeight = 120.0;
     constexpr double kSectionSpacing = 12.0;
     constexpr double kRowSpacing = 8.0;
     constexpr double kSectionHeadingFontSize = 18.0;
@@ -138,9 +144,9 @@ namespace ao::winui
     if (!sessionRes)
     {
       _sessionInvalid = true;
-      setError(i18n::requiredFormat(_textCatalog,
-                                    i18n::MessageId::WinUiTrackPropertiesEditingUnavailable,
-                                    {{"detail", sessionRes.error().message}}));
+      _optFrozenError = i18n::requiredFormat(_textCatalog,
+                                             i18n::MessageId::WinUiTrackPropertiesEditingUnavailable,
+                                             {{"detail", sessionRes.error().message}});
     }
 
     _ownerCallbackGate.renew();
@@ -152,7 +158,7 @@ namespace ao::winui
     }
 
     updateEditorEnabled();
-    updateSaveEnabled();
+    updateDialogFeedback();
 
     try
     {
@@ -186,19 +192,14 @@ namespace ao::winui
     auto sessionRes = [&] -> Result<uimodel::TrackAuthoringSession>
     {
       auto snapshot = _library.snapshot();
-      auto boundRes = uimodel::TrackAuthoringSession::begin(_library, _trackIds, snapshot);
+      auto boundRes = uimodel::prepareTrackProperties(_library, snapshot, _trackIds, _formSpec, baseline);
 
       if (!boundRes)
       {
         return std::unexpected{boundRes.error()};
       }
 
-      if (auto res = uimodel::loadTrackPropertiesFormBaseline(snapshot, _trackIds, _formSpec, baseline); !res)
-      {
-        return std::unexpected{res.error()};
-      }
-
-      tags = snapshot.selectionTags(_trackIds);
+      tags = snapshot.selectionTags(boundRes->targetIds());
       return std::move(*boundRes);
     }();
 
@@ -236,10 +237,6 @@ namespace ao::winui
 
   void TrackPropertiesCoordinator::buildDialog()
   {
-    _building = true;
-    _fieldEditors.clear();
-    _customEditors.clear();
-
     _dialog = ContentDialog{};
     _dialog.XamlRoot(_xamlRoot);
     _dialog.MinWidth(kDialogMinWidth);
@@ -249,35 +246,14 @@ namespace ao::winui
       winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiTrackPropertiesCancel)));
     _dialog.DefaultButton(ContentDialogButton::Primary);
 
-    auto const title =
-      _trackIds.size() > 1
-        ? i18n::requiredFormat(
-            _textCatalog, i18n::MessageId::WinUiTrackPropertiesSelectedTitle, {{"count", _trackIds.size()}})
-        : std::string{i18n::requiredText(_textCatalog, i18n::MessageId::WinUiTrackPropertiesTitle)};
+    auto const targetCount = _optSession ? _formModel.targetCount() : _trackIds.size();
+    auto const title = targetCount > 1
+                         ? i18n::requiredFormat(
+                             _textCatalog, i18n::MessageId::WinUiTrackPropertiesSelectedTitle, {{"count", targetCount}})
+                         : std::string{i18n::requiredText(_textCatalog, i18n::MessageId::WinUiTrackPropertiesTitle)};
     _dialog.Title(winrt::box_value(winrt::to_hstring(title)));
 
-    auto content = StackPanel{};
-    content.Spacing(kSectionSpacing);
-
-    _errorText = TextBlock{};
-    _errorText.TextWrapping(TextWrapping::Wrap);
-    _errorText.Visibility(Visibility::Collapsed);
-    _errorText.Opacity(kSupportingTextOpacity);
-    content.Children().Append(_errorText);
-
-    buildCreditsSection(content);
-    buildMetadataSection(content);
-    buildTagsSection(content);
-    buildCustomMetadataSection(content);
-    buildTechnicalSection(content);
-
-    auto scroll = ScrollViewer{};
-    scroll.MaxHeight(kDialogMaxContentHeight);
-    scroll.VerticalScrollBarVisibility(ScrollBarVisibility::Auto);
-    scroll.VerticalScrollMode(ScrollMode::Enabled);
-    scroll.HorizontalScrollBarVisibility(ScrollBarVisibility::Disabled);
-    scroll.Content(content);
-    _dialog.Content(scroll);
+    buildDialogContent();
 
     _primaryClickRevoker = _dialog.PrimaryButtonClick(
       winrt::auto_revoke,
@@ -296,7 +272,14 @@ namespace ao::winui
                                           return;
                                         }
 
-                                        if (_formModel.creditsEditor().hasDraftChanges() || hasPendingChanges())
+                                        if (_discardPrompt.Visibility() == Visibility::Visible)
+                                        {
+                                          args.Cancel(true);
+                                          cancelDiscard();
+                                          return;
+                                        }
+
+                                        if (needsDiscardDecision())
                                         {
                                           args.Cancel(true);
                                           requestDiscard(false);
@@ -304,6 +287,72 @@ namespace ao::winui
                                       });
     _closedRevoker = _dialog.Closed(
       winrt::auto_revoke, [this](ContentDialog const&, ContentDialogClosedEventArgs const&) { handleClosed(); });
+  }
+
+  void TrackPropertiesCoordinator::buildDialogContent()
+  {
+    _building = true;
+    _fieldEditors.clear();
+    _customEditors.clear();
+    _optFrozenError.reset();
+    _optAdditionRejection.reset();
+    _retryFeedback = TrackPropertiesRetryFeedback::None;
+
+    auto content = StackPanel{};
+    content.Spacing(kSectionSpacing);
+
+    buildCreditsSection(content);
+    buildMetadataSection(content);
+    buildTagsSection(content);
+    buildCustomMetadataSection(content);
+    buildTechnicalSection(content);
+
+    auto scroll = ScrollViewer{};
+    scroll.VerticalScrollBarVisibility(ScrollBarVisibility::Auto);
+    scroll.VerticalScrollMode(ScrollMode::Enabled);
+    scroll.HorizontalScrollBarVisibility(ScrollBarVisibility::Disabled);
+    scroll.Content(content);
+
+    auto layout = Grid{};
+    layout.MaxHeight(kDialogMaxContentHeight);
+    auto fieldsRow = RowDefinition{};
+    fieldsRow.Height(GridLength{.Value = 1.0, .GridUnitType = GridUnitType::Star});
+    auto feedbackRow = RowDefinition{};
+    feedbackRow.Height(GridLength{.Value = 0.0, .GridUnitType = GridUnitType::Auto});
+    layout.RowDefinitions().Append(fieldsRow);
+    layout.RowDefinitions().Append(feedbackRow);
+    auto recoveryRow = RowDefinition{};
+    recoveryRow.Height(GridLength{.Value = 0.0, .GridUnitType = GridUnitType::Auto});
+    layout.RowDefinitions().Append(recoveryRow);
+    layout.Children().Append(scroll);
+
+    // Keep the reason Save is blocked visible when the user is far down the form.
+    auto feedback = StackPanel{};
+    _errorText = TextBlock{};
+    _errorText.TextWrapping(TextWrapping::Wrap);
+    _errorText.Visibility(Visibility::Collapsed);
+    _errorText.Opacity(kSupportingTextOpacity);
+    feedback.Children().Append(_errorText);
+    _unstagedInputHint = TextBlock{};
+    _unstagedInputHint.Text(
+      winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::TrackPropertiesUnstagedInputHint)));
+    _unstagedInputHint.TextWrapping(TextWrapping::Wrap);
+    _unstagedInputHint.Margin(Thickness{.Left = 0.0, .Top = kRowSpacing, .Right = 0.0, .Bottom = 0.0});
+    _unstagedInputHint.Visibility(Visibility::Collapsed);
+    feedback.Children().Append(_unstagedInputHint);
+
+    // Long diagnostics can include user input. Keep the fields reachable without truncating the error.
+    auto feedbackScroll = ScrollViewer{};
+    feedbackScroll.MaxHeight(kDialogMaxFeedbackHeight);
+    feedbackScroll.HorizontalScrollBarVisibility(ScrollBarVisibility::Disabled);
+    feedbackScroll.VerticalScrollBarVisibility(ScrollBarVisibility::Auto);
+    feedbackScroll.Content(feedback);
+    Grid::SetRow(feedbackScroll, 1);
+    layout.Children().Append(feedbackScroll);
+    // Keep Reload reachable even when the form and its diagnostic are scrolled independently.
+    Grid::SetRow(_reloadButton, 2);
+    layout.Children().Append(_reloadButton);
+    _dialog.Content(layout);
     _building = false;
   }
 
@@ -343,14 +392,14 @@ namespace ao::winui
                                                      uimodel::TrackPropertiesFormRow const& row)
   {
     // Complete category lists and scoped edit actions live in the Credits section.
-    if (trackPropertyCreditKind(row.field))
+    if (rt::creditKindForTrackField(row.field))
     {
       return;
     }
 
     auto const projection = projectTrackPropertyRow(row, _formModel.rowView(row.field));
 
-    if (projection.controlKind == TrackPropertyControlKind::ReadonlyText)
+    if (projection.controlKind == uimodel::TrackPropertiesFormEditorKind::ReadonlyText)
     {
       auto value = TextBox{};
       value.Header(winrt::box_value(winrt::to_hstring(projection.label)));
@@ -360,47 +409,41 @@ namespace ao::winui
       return;
     }
 
-    auto editor = FieldEditor{
-      .field = projection.field,
-      .controlKind = projection.controlKind,
-      .enabled = projection.enabled && _optSession && !_sessionInvalid,
-    };
+    auto editor = FieldEditor{.row = projection};
+    auto const targetCount = _formModel.targetCount();
+    auto const placeholder =
+      targetCount > 1 && projection.placeholder.empty() ? projection.text : projection.placeholder;
 
-    if (projection.controlKind == TrackPropertyControlKind::Text &&
+    if (projection.controlKind == uimodel::TrackPropertiesFormEditorKind::Text &&
         rt::supportsTrackFieldValueCompletion(projection.field))
     {
       editor.suggestBox = AutoSuggestBox{};
       editor.suggestBox.Header(winrt::box_value(winrt::to_hstring(projection.label)));
       editor.suggestBox.UpdateTextOnSelect(true);
-      editor.suggestBox.IsEnabled(editor.enabled);
+      editor.suggestBox.PlaceholderText(winrt::to_hstring(placeholder));
+      editor.suggestBox.Text(winrt::to_hstring(projection.text));
 
-      if (projection.mixed)
-      {
-        editor.suggestBox.PlaceholderText(winrt::to_hstring(projection.text));
-      }
-      else
-      {
-        editor.suggestBox.Text(winrt::to_hstring(projection.text));
-      }
-
-      auto const field = editor.field;
+      auto const field = row.field;
       editor.suggestionChangedRevoker = editor.suggestBox.TextChanged(
         winrt::auto_revoke,
-        [this, field](AutoSuggestBox const&, AutoSuggestBoxTextChangedEventArgs const& args)
+        [this, field](AutoSuggestBox const& sender, AutoSuggestBoxTextChangedEventArgs const& args)
         {
           if (_building)
           {
             return;
           }
 
-          auto const iter = std::ranges::find(_fieldEditors, field, &FieldEditor::field);
+          auto const iter =
+            std::ranges::find_if(_fieldEditors, [field](FieldEditor const& item) { return item.row.field == field; });
 
-          if (iter != _fieldEditors.end() && args.Reason() == AutoSuggestionBoxTextChangeReason::UserInput)
+          if (iter != _fieldEditors.end() && iter->suggestBox == sender && sender.IsEnabled() &&
+              !iter->isClearRequested() && args.Reason() == AutoSuggestionBoxTextChangeReason::UserInput &&
+              args.CheckCurrent())
           {
             refreshMetadataSuggestions(*iter);
           }
 
-          updateSaveEnabled();
+          updateDialogFeedback();
         });
       content.Children().Append(editor.suggestBox);
     }
@@ -408,29 +451,122 @@ namespace ao::winui
     {
       editor.textBox = TextBox{};
       editor.textBox.Header(winrt::box_value(winrt::to_hstring(projection.label)));
-      editor.textBox.IsEnabled(editor.enabled);
-
-      if (projection.mixed)
-      {
-        editor.textBox.PlaceholderText(winrt::to_hstring(projection.text));
-      }
-      else
-      {
-        editor.textBox.Text(winrt::to_hstring(projection.text));
-      }
+      editor.textBox.PlaceholderText(winrt::to_hstring(placeholder));
+      editor.textBox.Text(winrt::to_hstring(projection.text));
 
       editor.textChangedRevoker = editor.textBox.TextChanged(winrt::auto_revoke,
                                                              [this](IInspectable const&, TextChangedEventArgs const&)
                                                              {
                                                                if (!_building)
                                                                {
-                                                                 updateSaveEnabled();
+                                                                 updateDialogFeedback();
                                                                }
                                                              });
+
+      if (targetCount > 1 && projection.enabled &&
+          (projection.controlKind == uimodel::TrackPropertiesFormEditorKind::Number ||
+           projection.controlKind == uimodel::TrackPropertiesFormEditorKind::Date))
+      {
+        editor.lostFocusRevoker = editor.textBox.LostFocus(winrt::auto_revoke,
+                                                           [this](IInspectable const& sender, RoutedEventArgs const&)
+                                                           { restoreWithdrawnInput(sender.as<TextBox>()); });
+      }
+
       content.Children().Append(editor.textBox);
     }
 
+    if (projection.enabled && targetCount > 1)
+    {
+      auto label = TextBlock{};
+      label.Text(winrt::to_hstring(i18n::requiredFormat(_textCatalog,
+                                                        i18n::MessageId::TrackClearFieldForTracks,
+                                                        {{"field", projection.label}, {"count", targetCount}})));
+      label.TextWrapping(TextWrapping::Wrap);
+      editor.clearCheck = CheckBox{};
+      editor.clearCheck.Content(label);
+      Automation::AutomationProperties::SetName(editor.clearCheck, label.Text());
+      auto toggled = [this](IInspectable const& sender, RoutedEventArgs const&)
+      { handleClearToggled(sender.as<CheckBox>()); };
+      editor.checkedRevoker = editor.clearCheck.Checked(winrt::auto_revoke, toggled);
+      editor.uncheckedRevoker = editor.clearCheck.Unchecked(winrt::auto_revoke, toggled);
+      content.Children().Append(editor.clearCheck);
+    }
+
     _fieldEditors.push_back(std::move(editor));
+  }
+
+  bool TrackPropertiesCoordinator::acceptsFieldGesture() const
+  {
+    return !_building && _active && _interactionState == InteractionState::Editing && !_sessionInvalid && _optSession &&
+           _optSession->isCurrent() && (!_discardPrompt || _discardPrompt.Visibility() != Visibility::Visible);
+  }
+
+  void TrackPropertiesCoordinator::restoreWithdrawnInput(TextBox const& source)
+  {
+    if (!acceptsFieldGesture() || !source.IsEnabled() || source.FocusState() != FocusState::Unfocused)
+    {
+      return;
+    }
+
+    auto const iter = std::ranges::find(_fieldEditors, source, &FieldEditor::textBox);
+
+    if (iter == _fieldEditors.end() || iter->isClearRequested())
+    {
+      return;
+    }
+
+    // A typed zero or whitespace-only date can withdraw a batch edit even though it
+    // hides the placeholder. Wait until focus leaves so ordinary typing is uninterrupted.
+    if (auto const text = winrt::to_string(source.Text()); text != iter->row.text)
+    {
+      auto const valueRes = uimodel::parseTrackPropertiesFieldInput(iter->row.controlKind, text);
+
+      if (valueRes && uimodel::isEmptyTrackFieldEdit(*valueRes))
+      {
+        source.Text(winrt::to_hstring(iter->row.text));
+      }
+    }
+  }
+
+  void TrackPropertiesCoordinator::handleClearToggled(CheckBox const& source)
+  {
+    if (!acceptsFieldGesture() || !source.IsEnabled())
+    {
+      return;
+    }
+
+    auto const iter = std::ranges::find(_fieldEditors, source, &FieldEditor::clearCheck);
+
+    if (iter == _fieldEditors.end())
+    {
+      return;
+    }
+
+    // Never replay a previous replacement (or invalid text). TextChanged sees only the final
+    // value, with the checkbox already checked for Clear or unchecked for the captured baseline.
+    auto const text = source.IsChecked().GetBoolean() ? winrt::hstring{} : winrt::to_hstring(iter->row.text);
+    auto const token = _ownerCallbackGate.token();
+
+    if (auto const input = iter->suggestBox; input)
+    {
+      input.Text(text);
+      input.IsSuggestionListOpen(false);
+    }
+    else
+    {
+      auto const textBox = iter->textBox;
+      textBox.Text(text);
+    }
+
+    if (token.accepts())
+    {
+      updateEditorEnabled();
+    }
+
+    if (token.accepts())
+    {
+      updateDialogFeedback();
+    }
   }
 
   void TrackPropertiesCoordinator::refreshMetadataSuggestions(FieldEditor const& editor)
@@ -440,7 +576,7 @@ namespace ao::winui
       return;
     }
 
-    auto completer = rt::MetadataValueCompleter{_completion, editor.field};
+    auto completer = rt::MetadataValueCompleter{_completion, editor.row.field};
     auto const completionItems = completer.complete(winrt::to_string(editor.suggestBox.Text()), kSuggestionLimit);
     auto suggestions = std::vector<std::string>{};
     suggestions.reserve(completionItems.size());
@@ -496,10 +632,17 @@ namespace ao::winui
       _tagInput.TextChanged(winrt::auto_revoke,
                             [this](AutoSuggestBox const&, AutoSuggestBoxTextChangedEventArgs const& args)
                             {
-                              if (!_building && args.Reason() == AutoSuggestionBoxTextChangeReason::UserInput)
+                              if (acceptsFieldGesture() && args.CheckCurrent())
                               {
-                                refreshTagSuggestions();
+                                clearAdditionRejection(Addition::Tag);
+
+                                if (args.Reason() == AutoSuggestionBoxTextChangeReason::UserInput)
+                                {
+                                  refreshTagSuggestions();
+                                }
                               }
+
+                              updateDialogFeedback();
                             });
     _tagSubmittedRevoker = _tagInput.QuerySubmitted(
       winrt::auto_revoke, [this](AutoSuggestBox const&, AutoSuggestBoxQuerySubmittedEventArgs const&) { addTag(); });
@@ -557,7 +700,7 @@ namespace ao::winui
 
                                                        std::erase(_currentTags, tag);
                                                        rebuildTagRows();
-                                                       updateSaveEnabled();
+                                                       updateDialogFeedback();
                                                      }));
       Grid::SetColumn(remove, 1);
       row.Children().Append(remove);
@@ -581,28 +724,33 @@ namespace ao::winui
 
   void TrackPropertiesCoordinator::addTag()
   {
-    if (!_tagInput || _sessionInvalid || _interactionState != InteractionState::Editing)
+    if (!_tagInput || !acceptsFieldGesture())
     {
       return;
     }
 
-    auto const inputText = winrt::to_string(_tagInput.Text());
-    auto const trimmed = utility::trim(inputText);
+    auto const input = winrt::to_string(_tagInput.Text());
 
-    if (trimmed.empty())
+    if (auto const trimmed = utility::trim(input); !trimmed.empty())
     {
-      return;
-    }
+      auto const addedRes = uimodel::appendCommonTag(_currentTags, trimmed);
 
-    if (!containsText(_currentTags, trimmed))
-    {
-      _currentTags.emplace_back(trimmed);
-      rebuildTagRows();
+      if (!addedRes)
+      {
+        updateDialogFeedback(
+          i18n::requiredText(_textCatalog, i18n::MessageId::TrackPropertiesTextNormalizationFailed), Addition::Tag);
+        return;
+      }
+
+      if (*addedRes)
+      {
+        rebuildTagRows();
+      }
     }
 
     _tagInput.Text(L"");
     setSuggestionItems(_tagInput, std::span<std::string const>{});
-    updateSaveEnabled();
+    updateDialogFeedback();
   }
 
   void TrackPropertiesCoordinator::buildCustomMetadataSection(StackPanel const& content)
@@ -638,10 +786,17 @@ namespace ao::winui
       _customKeyInput.TextChanged(winrt::auto_revoke,
                                   [this](AutoSuggestBox const&, AutoSuggestBoxTextChangedEventArgs const& args)
                                   {
-                                    if (!_building && args.Reason() == AutoSuggestionBoxTextChangeReason::UserInput)
+                                    if (acceptsFieldGesture() && args.CheckCurrent())
                                     {
-                                      refreshCustomKeySuggestions();
+                                      clearAdditionRejection(Addition::CustomMetadata);
+
+                                      if (args.Reason() == AutoSuggestionBoxTextChangeReason::UserInput)
+                                      {
+                                        refreshCustomKeySuggestions();
+                                      }
                                     }
+
+                                    updateDialogFeedback();
                                   });
     addRow.Children().Append(_customKeyInput);
 
@@ -649,6 +804,8 @@ namespace ao::winui
     _customValueInput.PlaceholderText(
       winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiTrackPropertiesCustomValue)));
     _customValueInput.IsEnabled(_optSession && !_sessionInvalid);
+    _customValueChangedRevoker = _customValueInput.TextChanged(
+      winrt::auto_revoke, [this](IInspectable const&, TextChangedEventArgs const&) { updateDialogFeedback(); });
     Grid::SetColumn(_customValueInput, 1);
     addRow.Children().Append(_customValueInput);
 
@@ -700,7 +857,7 @@ namespace ao::winui
                                                  {
                                                    if (!_building)
                                                    {
-                                                     updateSaveEnabled();
+                                                     updateDialogFeedback();
                                                    }
                                                  });
     _customEditors.push_back(CustomEditor{
@@ -751,52 +908,52 @@ namespace ao::winui
 
   void TrackPropertiesCoordinator::addCustomMetadata()
   {
-    if (!_customKeyInput || !_customValueInput || _sessionInvalid || _interactionState != InteractionState::Editing)
+    if (!_customKeyInput || !_customValueInput || !acceptsFieldGesture())
     {
       return;
     }
 
     auto const keyText = winrt::to_string(_customKeyInput.Text());
-    auto const keyView = utility::trim(keyText);
-    auto const existing =
-      std::ranges::find_if(_customEditors, [keyView](CustomEditor const& editor) { return editor.key == keyView; });
+    auto keyRes = utility::normalizeUtf8Nfc(utility::trim(keyText));
 
-    if (keyView.empty() || (existing != _customEditors.end() && !existing->deleted))
+    if (!keyRes)
     {
-      setError(i18n::requiredFormat(
-        _textCatalog, i18n::MessageId::WinUiTrackPropertiesInvalidValue, {{"detail", std::string{keyView}}}));
+      updateDialogFeedback(i18n::requiredText(_textCatalog, i18n::MessageId::TrackPropertiesTextNormalizationFailed),
+                           Addition::CustomMetadata);
       return;
     }
 
-    if (existing != _customEditors.end())
+    auto const existing = std::ranges::find(_customEditors, *keyRes, &CustomEditor::key);
+    auto const addingNew = existing == _customEditors.end();
+    auto const knownKey = !addingNew && existing->deleted;
+    auto const newKey = addingNew && uimodel::validateCustomMetadataAddition(_snapshot, *keyRes) ==
+                                       uimodel::CustomMetadataAddValidation::Accepted;
+
+    if (keyRes->empty() || (!knownKey && !newKey))
+    {
+      updateDialogFeedback(
+        i18n::requiredFormat(_textCatalog, i18n::MessageId::WinUiTrackPropertiesInvalidValue, {{"detail", *keyRes}}),
+        Addition::CustomMetadata);
+      return;
+    }
+
+    if (!addingNew)
     {
       existing->deleted = false;
       existing->editable = true;
       existing->panel.Visibility(Visibility::Visible);
       updateEditorEnabled();
       existing->value.Text(_customValueInput.Text());
-      _customKeyInput.Text(L"");
-      _customValueInput.Text(L"");
-      setSuggestionItems(_customKeyInput, std::span<std::string const>{});
-      clearError();
-      updateSaveEnabled();
-      return;
     }
-
-    auto const validation = uimodel::validateCustomMetadataAddition(_snapshot, keyView);
-
-    if (validation != uimodel::CustomMetadataAddValidation::Accepted)
+    else
     {
-      setError(i18n::requiredFormat(
-        _textCatalog, i18n::MessageId::WinUiTrackPropertiesInvalidValue, {{"detail", std::string{keyView}}}));
-      return;
+      appendNewCustomEditor(std::move(*keyRes), winrt::to_string(_customValueInput.Text()));
     }
 
-    appendNewCustomEditor(std::string{keyView}, winrt::to_string(_customValueInput.Text()));
     _customKeyInput.Text(L"");
     _customValueInput.Text(L"");
     setSuggestionItems(_customKeyInput, std::span<std::string const>{});
-    updateSaveEnabled();
+    updateDialogFeedback();
   }
 
   void TrackPropertiesCoordinator::deleteCustomMetadata(std::size_t const index)
@@ -810,50 +967,78 @@ namespace ao::winui
     editor.deleted = true;
     editor.panel.Visibility(Visibility::Collapsed);
     updateEditorEnabled();
-    updateSaveEnabled();
+    updateDialogFeedback();
   }
 
-  bool TrackPropertiesCoordinator::trySynchronizeFieldEdits()
+  std::optional<uimodel::TrackPropertiesFormEditorKind> TrackPropertiesCoordinator::synchronizeFieldEdits(
+    uimodel::TrackPropertiesFormModel& form) const
   {
+    auto optInvalidKind = std::optional<uimodel::TrackPropertiesFormEditorKind>{};
+
+    // Keep all typed edits current even when an earlier raw input is invalid.
     for (auto const& editor : _fieldEditors)
     {
-      if (!editor.enabled)
+      if (!editor.row.enabled)
       {
         continue;
       }
 
-      auto editRes = parseTrackPropertyEdit(editor.controlKind, editorText(editor));
+      auto const editRes =
+        synchronizeTrackPropertyInput(form, editor.row, editorText(editor), editor.isClearRequested());
 
-      if (!editRes)
+      if (!editRes && !optInvalidKind)
       {
-        setError(i18n::requiredFormat(
-          _textCatalog, i18n::MessageId::WinUiTrackPropertiesInvalidValue, {{"detail", editRes.error().message}}));
-        return false;
+        optInvalidKind = editor.row.controlKind;
       }
-
-      _formModel.setEditValue(editor.field, std::move(*editRes));
     }
 
-    clearError();
-    return true;
+    return optInvalidKind;
   }
 
-  bool TrackPropertiesCoordinator::hasPendingChanges() const
+  bool TrackPropertiesCoordinator::hasAuxiliaryChanges() const
   {
-    bool auxiliaryDirty = !tagsToAdd().empty() || !tagsToRemove().empty();
-
-    for (auto const& editor : _customEditors)
+    if (!uimodel::diffCommonTags(_originalTags, _currentTags).empty())
     {
-      if ((editor.deleted && editor.existed) ||
-          (!editor.deleted && editor.editable &&
-           needsCustomMetadataValueUpdate(
-             editor.existed, editor.optOriginalValue, winrt::to_string(editor.value.Text()))))
-      {
-        auxiliaryDirty = true;
-      }
+      return true;
     }
 
-    return canSubmitTrackProperties(_formModel, auxiliaryDirty);
+    return std::ranges::any_of(
+      _customEditors,
+      [](CustomEditor const& editor)
+      {
+        return editor.deleted
+                 ? editor.existed
+                 : editor.editable && needsCustomMetadataValueUpdate(
+                                        editor.existed, editor.optOriginalValue, winrt::to_string(editor.value.Text()));
+      });
+  }
+
+  bool TrackPropertiesCoordinator::hasUnstagedTagInput() const
+  {
+    return _tagInput && !_tagInput.Text().empty();
+  }
+
+  bool TrackPropertiesCoordinator::hasUnstagedCustomInput() const
+  {
+    return (_customKeyInput && !_customKeyInput.Text().empty()) ||
+           (_customValueInput && !_customValueInput.Text().empty());
+  }
+
+  bool TrackPropertiesCoordinator::hasUnstagedInput() const
+  {
+    return hasUnstagedTagInput() || hasUnstagedCustomInput();
+  }
+
+  bool TrackPropertiesCoordinator::needsDiscardDecision() const
+  {
+    if (hasUnstagedInput() || hasAuxiliaryChanges() || _formModel.creditsEditor().hasDraftChanges())
+    {
+      return true;
+    }
+
+    // Check late raw input without changing the live draft, even after the session is stale.
+    auto candidate = _formModel;
+    return synchronizeFieldEdits(candidate).has_value() || candidate.hasEffectiveChanges();
   }
 
   rt::MetadataPatch TrackPropertiesCoordinator::buildMetadataPatch() const
@@ -866,7 +1051,7 @@ namespace ao::winui
       {
         if (editor.existed)
         {
-          patch.customUpdates[editor.key] = std::nullopt;
+          uimodel::setCustomMetadataPatchEntry(patch, editor.key, std::nullopt);
         }
 
         continue;
@@ -880,41 +1065,11 @@ namespace ao::winui
       if (auto value = winrt::to_string(editor.value.Text());
           needsCustomMetadataValueUpdate(editor.existed, editor.optOriginalValue, value))
       {
-        patch.customUpdates[editor.key] = std::move(value);
+        uimodel::setCustomMetadataPatchEntry(patch, editor.key, std::move(value));
       }
     }
 
     return patch;
-  }
-
-  std::vector<std::string> TrackPropertiesCoordinator::tagsToAdd() const
-  {
-    auto result = std::vector<std::string>{};
-
-    for (auto const& tag : _currentTags)
-    {
-      if (!containsText(_originalTags, tag))
-      {
-        result.push_back(tag);
-      }
-    }
-
-    return result;
-  }
-
-  std::vector<std::string> TrackPropertiesCoordinator::tagsToRemove() const
-  {
-    auto result = std::vector<std::string>{};
-
-    for (auto const& tag : _originalTags)
-    {
-      if (!containsText(_currentTags, tag))
-      {
-        result.push_back(tag);
-      }
-    }
-
-    return result;
   }
 
   void TrackPropertiesCoordinator::setInteractionState(InteractionState const state)
@@ -943,12 +1098,31 @@ namespace ao::winui
     }
 
     updateEditorEnabled();
-    updateSaveEnabled();
+    updateDialogFeedback();
+  }
+
+  void TrackPropertiesCoordinator::FieldEditor::setEnabled(bool const enabled) const
+  {
+    if (clearCheck)
+    {
+      clearCheck.IsEnabled(enabled);
+    }
+
+    if (auto const inputEnabled = enabled && !isClearRequested(); suggestBox)
+    {
+      suggestBox.IsEnabled(inputEnabled);
+    }
+    else if (textBox)
+    {
+      textBox.IsEnabled(inputEnabled);
+    }
   }
 
   void TrackPropertiesCoordinator::updateEditorEnabled()
   {
-    auto const canEdit = _interactionState == InteractionState::Editing && _optSession && !_sessionInvalid;
+    auto const canInteract = _interactionState == InteractionState::Editing &&
+                             (!_discardPrompt || _discardPrompt.Visibility() != Visibility::Visible);
+    auto const canEdit = canInteract && _optSession && !_sessionInvalid;
 
     if (_creditsControlPtr)
     {
@@ -969,19 +1143,12 @@ namespace ao::winui
     if (_reloadButton)
     {
       _reloadButton.Visibility(_sessionInvalid ? Visibility::Visible : Visibility::Collapsed);
-      _reloadButton.IsEnabled(_interactionState == InteractionState::Editing);
+      _reloadButton.IsEnabled(canInteract);
     }
 
     for (auto const& editor : _fieldEditors)
     {
-      if (editor.suggestBox)
-      {
-        editor.suggestBox.IsEnabled(canEdit && editor.enabled);
-      }
-      else if (editor.textBox)
-      {
-        editor.textBox.IsEnabled(canEdit && editor.enabled);
-      }
+      editor.setEnabled(canEdit && editor.row.enabled);
     }
 
     if (_tagInput)
@@ -1021,44 +1188,129 @@ namespace ao::winui
     }
   }
 
-  void TrackPropertiesCoordinator::updateSaveEnabled()
+  TrackPropertiesCoordinator::DraftFeedback TrackPropertiesCoordinator::synchronizeDraftFeedback(
+    std::string_view const actionError,
+    std::optional<Addition> const optRejectedAddition)
   {
-    if (_building || !_dialog)
+    if (!acceptsFieldGesture())
     {
-      return;
+      return {};
     }
 
-    if (_interactionState != InteractionState::Editing ||
-        (_discardPrompt && _discardPrompt.Visibility() == Visibility::Visible))
+    auto const pendingTag = hasUnstagedTagInput();
+    auto const pendingCustom = hasUnstagedCustomInput();
+
+    if (optRejectedAddition)
     {
-      _dialog.IsPrimaryButtonEnabled(false);
-      return;
+      _optAdditionRejection = AdditionRejection{.kind = *optRejectedAddition, .message = std::string{actionError}};
+    }
+    else if (_optAdditionRejection && !(_optAdditionRejection->kind == Addition::Tag ? pendingTag : pendingCustom))
+    {
+      _optAdditionRejection.reset();
     }
 
-    auto const valid = !_sessionInvalid && _optSession && _optSession->isCurrent() && trySynchronizeFieldEdits();
-    _dialog.IsPrimaryButtonEnabled(valid && !_formModel.creditsEditor().isEditing() && hasPendingChanges());
+    auto const optRejected = _optAdditionRejection ? std::optional{_optAdditionRejection->kind} : std::nullopt;
+    auto draft = DraftFeedback{
+      .optInvalidKind = synchronizeFieldEdits(_formModel),
+      .showPendingHint =
+        (pendingTag && optRejected != Addition::Tag) || (pendingCustom && optRejected != Addition::CustomMetadata),
+    };
+
+    // Invalid raw input can withdraw the only staged change without making the draft clean.
+    if (draft.optInvalidKind)
+    {
+      return draft;
+    }
+
+    if (auto const auxiliaryDirty = hasAuxiliaryChanges();
+        !pendingTag && !pendingCustom && canSubmitTrackProperties(_formModel, auxiliaryDirty))
+    {
+      draft.retryDraft = TrackPropertiesRetryDraft::SubmitReady;
+    }
+    else if (!auxiliaryDirty && !_formModel.hasEffectiveChanges())
+    {
+      draft.retryDraft = TrackPropertiesRetryDraft::Unchanged;
+    }
+
+    return draft;
   }
 
-  void TrackPropertiesCoordinator::setError(std::string text)
+  winrt::hstring TrackPropertiesCoordinator::dialogFeedbackText(DraftFeedback const& draft,
+                                                                bool const bindingCurrent,
+                                                                std::string_view const actionError) const
   {
-    if (!_errorText)
+    if (_interactionState == InteractionState::Closing)
     {
-      return;
+      return {};
     }
 
-    _errorText.Text(winrt::to_hstring(text));
-    _errorText.Visibility(Visibility::Visible);
+    if (_optFrozenError)
+    {
+      return winrt::to_hstring(*_optFrozenError);
+    }
+
+    if (_sessionInvalid || (_optSession && !bindingCurrent))
+    {
+      return winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiTrackPropertiesStale));
+    }
+
+    if (!acceptsFieldGesture())
+    {
+      return {};
+    }
+
+    if (_optAdditionRejection)
+    {
+      return winrt::to_hstring(_optAdditionRejection->message);
+    }
+
+    if (draft.optInvalidKind)
+    {
+      auto const hint = uimodel::trackPropertiesInputHint(_textCatalog, *draft.optInvalidKind);
+      return winrt::to_hstring(
+        i18n::requiredFormat(_textCatalog, i18n::MessageId::WinUiTrackPropertiesInvalidValue, {{"detail", hint}}));
+    }
+
+    if (!actionError.empty())
+    {
+      return winrt::to_hstring(actionError);
+    }
+
+    if (_retryFeedback == TrackPropertiesRetryFeedback::Visible)
+    {
+      return winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::LibraryBusyTryAgain));
+    }
+
+    return {};
   }
 
-  void TrackPropertiesCoordinator::clearError()
+  TrackPropertiesRetryDraft TrackPropertiesCoordinator::updateDialogFeedback(
+    std::string_view const actionError,
+    std::optional<Addition> const optRejectedAddition)
   {
-    if (!_errorText || _sessionInvalid)
+    if (_building || !_dialog || !_errorText || !_unstagedInputHint)
     {
-      return;
+      return TrackPropertiesRetryDraft::Blocked;
     }
 
-    _errorText.Text(L"");
-    _errorText.Visibility(Visibility::Collapsed);
+    auto const draft = synchronizeDraftFeedback(actionError, optRejectedAddition);
+    auto const bindingCurrent = !_sessionInvalid && _optSession && _optSession->isCurrent();
+    _retryFeedback = projectTrackPropertiesRetryFeedback(_retryFeedback, bindingCurrent, draft.retryDraft);
+
+    auto const feedback = dialogFeedbackText(draft, bindingCurrent, actionError);
+    _errorText.Text(feedback);
+    _errorText.Visibility(feedback.empty() ? Visibility::Collapsed : Visibility::Visible);
+    _unstagedInputHint.Visibility(draft.showPendingHint ? Visibility::Visible : Visibility::Collapsed);
+    _dialog.IsPrimaryButtonEnabled(draft.retryDraft == TrackPropertiesRetryDraft::SubmitReady);
+    return draft.retryDraft;
+  }
+
+  void TrackPropertiesCoordinator::clearAdditionRejection(Addition const kind)
+  {
+    if (_optAdditionRejection && _optAdditionRejection->kind == kind)
+    {
+      _optAdditionRejection.reset();
+    }
   }
 
   void TrackPropertiesCoordinator::handleSessionInvalidated()
@@ -1069,9 +1321,8 @@ namespace ao::winui
     }
 
     _sessionInvalid = true;
-    setError(std::string{i18n::requiredText(_textCatalog, i18n::MessageId::WinUiTrackPropertiesStale)});
     updateEditorEnabled();
-    updateSaveEnabled();
+    updateDialogFeedback();
   }
 
   void TrackPropertiesCoordinator::handleSaveClicked(ContentDialogButtonClickEventArgs const& args)
@@ -1081,27 +1332,25 @@ namespace ao::winui
     // dialog open until the callback-executor completion says it was accepted.
     args.Cancel(true);
 
-    if (_interactionState != InteractionState::Editing || _sessionInvalid || !_optSession ||
-        _formModel.creditsEditor().isEditing() || !trySynchronizeFieldEdits() || !hasPendingChanges())
+    if (updateDialogFeedback() != TrackPropertiesRetryDraft::SubmitReady)
     {
-      updateSaveEnabled();
       return;
     }
 
     auto metadataPatch = buildMetadataPatch();
-    auto addTags = tagsToAdd();
-    auto removeTags = tagsToRemove();
+    auto tags = uimodel::diffCommonTags(_originalTags, _currentTags);
 
-    clearError();
+    _optAdditionRejection.reset();
+    _retryFeedback = TrackPropertiesRetryFeedback::None;
     setInteractionState(InteractionState::Submitting);
     AO_INVARIANT(_optSession, "A submitting Properties dialog must retain its authoring session");
     auto& session = *_optSession;
 
-    auto submission = submitChangesAsync(session.submitPropertiesAsync(rt::TrackPropertiesPatch{
+    auto submission = session.submitPropertiesAsync(rt::TrackPropertiesPatch{
       .metadata = std::move(metadataPatch),
-      .tagsToAdd = std::move(addTags),
-      .tagsToRemove = std::move(removeTags),
-    }));
+      .tagsToAdd = std::move(tags.tagsToAdd),
+      .tagsToRemove = std::move(tags.tagsToRemove),
+    });
     auto const token = _ownerCallbackGate.token();
     _asyncRuntime.spawnWithLifetime(
       _tasks,
@@ -1111,24 +1360,11 @@ namespace ao::winui
       "Windows track-properties save");
   }
 
-  async::Task<Result<TrackPropertiesCommitState>> TrackPropertiesCoordinator::submitChangesAsync(
-    async::Task<Result<uimodel::TrackPropertiesSubmitResult>> submission)
-  {
-    auto propertiesRes = co_await std::move(submission);
-
-    if (!propertiesRes)
-    {
-      co_return std::unexpected{propertiesRes.error()};
-    }
-
-    co_return projectTrackPropertiesCommitState(propertiesRes->status);
-  }
-
   async::Task<void> TrackPropertiesCoordinator::runSaveWorkflowAsync(
     async::Runtime* const runtime,
     TrackPropertiesCoordinator* const owner,
     CallbackAdmissionGate::Token token,
-    async::Task<Result<TrackPropertiesCommitState>> submission,
+    async::Task<Result<uimodel::TrackPropertiesSubmitResult>> submission,
     std::stop_token const stopToken)
   {
     auto res = co_await std::move(submission);
@@ -1140,7 +1376,7 @@ namespace ao::winui
     }
   }
 
-  void TrackPropertiesCoordinator::finishSave(Result<TrackPropertiesCommitState> res)
+  void TrackPropertiesCoordinator::finishSave(Result<uimodel::TrackPropertiesSubmitResult> res)
   {
     if (!_active)
     {
@@ -1149,13 +1385,16 @@ namespace ao::winui
 
     if (!res)
     {
+      _sessionInvalid = true;
+      _optFrozenError = i18n::requiredFormat(
+        _textCatalog, i18n::MessageId::WinUiTrackPropertiesSaveFailed, {{"detail", res.error().message}});
       setInteractionState(InteractionState::Editing);
-      setError(i18n::requiredFormat(
-        _textCatalog, i18n::MessageId::WinUiTrackPropertiesSaveFailed, {{"detail", res.error().message}}));
       return;
     }
 
-    switch (*res)
+    auto const bindingCurrent = !_sessionInvalid && _optSession && _optSession->isCurrent();
+
+    switch (projectTrackPropertiesCommitState(res->status, bindingCurrent))
     {
       case TrackPropertiesCommitState::Accepted:
         setInteractionState(InteractionState::Closing);
@@ -1167,14 +1406,13 @@ namespace ao::winui
 
         return;
       case TrackPropertiesCommitState::Busy:
+        _retryFeedback = TrackPropertiesRetryFeedback::Deferred;
         setInteractionState(InteractionState::Editing);
-        setError(std::string{i18n::requiredText(_textCatalog, i18n::MessageId::LibraryBusyTryAgain)});
         return;
       case TrackPropertiesCommitState::Stale:
       case TrackPropertiesCommitState::Unavailable:
         _sessionInvalid = true;
         setInteractionState(InteractionState::Editing);
-        setError(std::string{i18n::requiredText(_textCatalog, i18n::MessageId::WinUiTrackPropertiesStale)});
         return;
     }
   }
@@ -1205,6 +1443,7 @@ namespace ao::winui
     _tagRemoveClickRevokers.clear();
     _customKeyChangedRevoker.revoke();
     _customAddClickRevoker.revoke();
+    _customValueChangedRevoker.revoke();
     _showOperation = nullptr;
     _dialog = nullptr;
     _errorText = nullptr;
@@ -1215,6 +1454,7 @@ namespace ao::winui
     _customKeyInput = nullptr;
     _customValueInput = nullptr;
     _customAddButton = nullptr;
+    _unstagedInputHint = nullptr;
     _fieldEditors.clear();
     _customEditors.clear();
   }
@@ -1246,6 +1486,7 @@ namespace ao::winui
     _tagRemoveClickRevokers.clear();
     _customKeyChangedRevoker.revoke();
     _customAddClickRevoker.revoke();
+    _customValueChangedRevoker.revoke();
 
     if (_dialog)
     {
@@ -1264,6 +1505,7 @@ namespace ao::winui
     _customKeyInput = nullptr;
     _customValueInput = nullptr;
     _customAddButton = nullptr;
+    _unstagedInputHint = nullptr;
     _fieldEditors.clear();
     _customEditors.clear();
   }

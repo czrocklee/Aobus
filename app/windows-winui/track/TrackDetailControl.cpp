@@ -15,7 +15,6 @@
 #include <ao/uimodel/library/detail/TrackCustomMetadata.h>
 #include <ao/uimodel/library/detail/TrackFieldGrid.h>
 #include <ao/uimodel/library/presentation/TrackPresentationText.h>
-#include <ao/winui/track/TrackPropertiesAdapter.h>
 
 #include <winrt/Microsoft.UI.Xaml.Automation.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
@@ -369,7 +368,7 @@ namespace ao::winui
 
     for (auto const field : _schema.metadataFields)
     {
-      if (trackPropertyCreditKind(field))
+      if (rt::creditKindForTrackField(field))
       {
         continue;
       }

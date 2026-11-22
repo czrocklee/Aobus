@@ -1,9 +1,9 @@
 # AppKit Track Properties and Credits
 
-AppKit's inspector shows complete common credit sections with each entry's kind
+In the [AppKit development slice](appkit.md), the inspector shows complete common credit sections with each entry's kind
 and optional role, including duplicates. A short-lived [detail projection](../library/track-detail-projection.md#aggregation)
 supplies owning per-kind aggregates, with no read transaction retained while
-updating native controls. A mixed category displays “Multiple values”; common
+updating native controls. A mixed category displays `<Multiple Values>`; common
 categories remain visible independently.
 Missing selected tracks contribute no display values, so surviving tracks still
 supply their aggregates; when none resolve, Credits sections are absent. The
@@ -22,6 +22,10 @@ surviving-subset edit.
 complete credit sections from the same short-lived library snapshot. The native
 `AobusTrackCreditsEditor` is an inline child of that Properties draft, not an
 independent database writer.
+
+For a batch, the native text fields follow the [built-in metadata rules](../presentation/metadata-editing.md#built-in-metadata): entering a value stages a replacement, and erasing it preserves each track's original value. The field menu's Clear action names the field and shows how many tracks the sheet captured. **Restore Original Values** withdraws just that field's edit. After Clear, typing a replacement supersedes it. Erasing that replacement preserves the originals; it does not reinstate Clear.
+
+Properties Save first asks the active native control to finish editing. If a tag token cannot be committed, the sheet retains the input and the rest of the draft without submitting a partial patch.
 
 Properties offers read-only category summaries and scoped edit buttons, plus a
 Credits section with all-kind and category entry points. Summaries use the first
@@ -56,7 +60,8 @@ patch through the existing guarded authoring session once.
 Busy submission retains the draft. Any intervening revision makes the session
 stale and freezes its controls without changing the visible candidates. AppKit
 refreshes a stale authoring baseline by closing and reopening Properties; there
-is no in-place Reload action. Closing with ordinary changes or an active Credits
+is no in-place Reload action. If a failed submission also invalidates the binding,
+the editor shows the write diagnostic alongside the instruction to reopen. Closing with ordinary changes or an active Credits
 child whose draft differs from its baseline requires the native discard decision;
 an unchanged child closes with Properties. Keep Open retains the stale child;
 confirmed discard detaches completion adapters before retiring the model.

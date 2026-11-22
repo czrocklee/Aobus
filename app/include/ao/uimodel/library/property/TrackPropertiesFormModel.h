@@ -14,6 +14,7 @@
 #include <ao/uimodel/library/track/TrackAuthoring.h>
 
 #include <bitset>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <span>
@@ -63,15 +64,32 @@ namespace ao::uimodel
   class TrackPropertiesFormModel final
   {
   public:
-    explicit TrackPropertiesFormModel(i18n::MessageCatalog textCatalog);
+    /// Starts unbound unless given the occurrence count for a manually assembled baseline.
+    explicit TrackPropertiesFormModel(i18n::MessageCatalog textCatalog, std::size_t targetCount = 0);
 
-    void addField(rt::TrackField field, bool editable);
+    /// Captured target occurrences, including duplicates. Zero means the form is unbound.
+    std::size_t targetCount() const noexcept;
+    /// Resets the baseline and drafts, leaving the form unbound.
     void clear();
 
+    /// Stages scalar user input, even for mixed fields. Absence withdraws the edit in a batch.
+    /// Does nothing when unbound.
+    void setFieldInput(rt::TrackField field, TrackFieldEditValue value);
+    /// Withdraws the pending edit, preserving the captured value or mixed state.
+    void restoreFieldEdit(rt::TrackField field);
+    /// Stages the field's typed absence for Save. Does nothing when unbound.
+    void clearFieldEdit(rt::TrackField field);
+
+    // Manual baseline assembly; snapshot-backed forms use loadTrackPropertiesFormBaseline.
+    void addField(rt::TrackField field, bool editable);
     void loadFirstTrackField(rt::TrackField field, rt::TrackFieldRawValue rawValue);
     bool tryMergeTrackField(rt::TrackField field, rt::TrackFieldRawValue const& rawValue);
+
+    // Low-level typed edits bypass target-count and batch-absence policy. Use the input, restore,
+    // and clear operations above for user-facing edits.
+    /// Stages an edit that preserves mixed fields, even after an explicit replacement.
     void setEditValue(rt::TrackField field, TrackFieldEditValue editValue);
-    /// Replaces even a mixed baseline; a later setEditValue restores ordinary mixed-field preservation.
+    /// Stages an edit that can replace a mixed field, including with typed absence.
     void setExplicitFieldEdit(rt::TrackField field, TrackFieldEditValue value);
 
     // Credits baseline is captured with ordinary fields and the owner's binding.
@@ -86,6 +104,10 @@ namespace ao::uimodel
     /// The captured baseline, independent of pending edits.
     TrackPropertiesFormRowView rowView(rt::TrackField field) const;
     std::vector<TrackSegmentDisplayRow> const& segmentRows() const noexcept;
+    /// True when the named scalar would contribute to the patch, irrespective of other draft fields.
+    bool hasFieldChange(rt::TrackField field) const;
+    /// Accepted scalar and Credits edits, even while a child editor blocks submission.
+    bool hasEffectiveChanges() const;
     bool canSave() const;
     rt::MetadataPatch buildPatch() const;
 
@@ -99,6 +121,7 @@ namespace ao::uimodel
     TrackPropertiesFormFieldState const* findField(rt::TrackField field) const;
 
     i18n::MessageCatalog _textCatalog;
+    std::size_t _targetCount;
     std::vector<TrackPropertiesFormFieldState> _fields;
     TrackCreditSections _capturedCredits;
     std::vector<TrackSegmentDisplayRow> _segmentRows;

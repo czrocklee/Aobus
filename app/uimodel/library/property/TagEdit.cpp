@@ -9,10 +9,14 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
+#include <ao/utility/UnicodeText.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <expected>
+#include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -20,6 +24,22 @@ namespace ao::uimodel
 {
   namespace
   {
+    std::vector<std::string> tagsAbsentFrom(std::span<std::string const> const source,
+                                            std::span<std::string const> const other)
+    {
+      auto result = std::vector<std::string>{};
+
+      for (auto const& tag : source)
+      {
+        if (!std::ranges::contains(other, tag))
+        {
+          result.push_back(tag);
+        }
+      }
+
+      return result;
+    }
+
     async::Task<Result<TagEditResult>> finishTagEditAsync(async::Task<Result<TrackTagSubmitResult>> submission,
                                                           i18n::MessageCatalog textCatalog,
                                                           std::size_t const addedCount,
@@ -63,6 +83,30 @@ namespace ao::uimodel
       AO_FATAL("Tag edit returned an unknown authoring status");
     }
   } // namespace
+
+  Result<bool> appendCommonTag(std::vector<std::string>& tags, std::string_view const candidate)
+  {
+    auto normalizedRes = utility::normalizeUtf8Nfc(candidate);
+
+    if (!normalizedRes)
+    {
+      return std::unexpected{normalizedRes.error()};
+    }
+
+    if (std::ranges::contains(tags, *normalizedRes))
+    {
+      return false;
+    }
+
+    tags.push_back(std::move(*normalizedRes));
+    return true;
+  }
+
+  CommonTagChanges diffCommonTags(std::span<std::string const> const baseline,
+                                  std::span<std::string const> const current)
+  {
+    return {.tagsToAdd = tagsAbsentFrom(current, baseline), .tagsToRemove = tagsAbsentFrom(baseline, current)};
+  }
 
   async::Task<Result<TagEditResult>> applyTagEditAsync(TrackAuthoringSession& session,
                                                        i18n::MessageCatalog const& textCatalog,

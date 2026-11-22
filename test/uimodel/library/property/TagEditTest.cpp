@@ -7,10 +7,13 @@
 #include "test/runtime/AsyncTestSupport.h"
 #include "test/uimodel/library/track/TrackAuthoringTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/rt/ListMutation.h>
+#include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryCommands.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -34,6 +37,66 @@ namespace ao::uimodel::test
       return std::move(*res);
     }
   } // namespace
+
+  TEST_CASE("Common tag edits - reordered or reentered equivalent tokens are not additions or removals")
+  {
+    auto const baseline = std::vector<std::string>{"Old", "Café", "Live"};
+    auto current = std::vector<std::string>{"Live", "Old"};
+    REQUIRE(appendCommonTag(current, "Cafe\u0301"));
+    CHECK(diffCommonTags(baseline, current).empty());
+
+    std::erase(current, "Old");
+    REQUIRE(appendCommonTag(current, "Etude"));
+    REQUIRE(appendCommonTag(current, "E\u0301tude"));
+    auto const duplicateRes = appendCommonTag(current, "Étude");
+    REQUIRE(duplicateRes);
+    CHECK_FALSE(*duplicateRes);
+    auto const changes = diffCommonTags(baseline, current);
+    CHECK(changes.tagsToAdd == std::vector<std::string>{"Etude", "Étude"});
+    CHECK(changes.tagsToRemove == std::vector<std::string>{"Old"});
+  }
+
+  TEST_CASE("Common tag edits - promoting one partial tag leaves other partial memberships alone")
+  {
+    auto fixture = TrackAuthoringFixture{2};
+    auto const ids = fixture.trackIds();
+    auto first = beginSession(fixture, ids.first(1));
+    REQUIRE(fixture.runTask(first.submitTagsAsync({"Private", "Promote"}, {})));
+
+    auto baseline = std::vector<std::string>{};
+    auto session = [&]
+    {
+      auto snapshot = fixture.library().snapshot();
+      auto boundRes = TrackAuthoringSession::begin(fixture.library(), ids, snapshot);
+      REQUIRE(boundRes);
+      baseline = snapshot.selectionTags(boundRes->targetIds());
+      return std::move(*boundRes);
+    }();
+    auto current = baseline;
+    REQUIRE(appendCommonTag(current, "Promote"));
+    auto changes = diffCommonTags(baseline, current);
+    auto const revision = session.boundRevision();
+    auto patch = rt::TrackPropertiesPatch{.metadata = {.optTitle = "Both"},
+                                          .tagsToAdd = std::move(changes.tagsToAdd),
+                                          .tagsToRemove = std::move(changes.tagsToRemove)};
+    auto const res = fixture.runTask(session.submitPropertiesAsync(std::move(patch)));
+    REQUIRE(res);
+    CHECK(res->status == rt::AuthoringStatus::Applied);
+    CHECK(session.boundRevision() == revision + 1);
+    CHECK(fixture.title(ids.front()) == "Both");
+    CHECK(fixture.title(ids.back()) == "Both");
+    CHECK(fixture.tags(ids.front()) == std::vector<std::string>{"Private", "Promote"});
+    CHECK(fixture.tags(ids.back()) == std::vector<std::string>{"Promote"});
+  }
+
+  TEST_CASE("Common tag edits - invalid input leaves already admitted tags available for editing")
+  {
+    auto tags = std::vector<std::string>{"Keep"};
+    auto const res = appendCommonTag(tags, "Bad\x80");
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::InvalidInput);
+    CHECK(tags == std::vector<std::string>{"Keep"});
+  }
 
   TEST_CASE("applyTagEdit reports tag mutations for a bound authoring session", "[concurrency]")
   {

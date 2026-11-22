@@ -157,11 +157,11 @@ namespace ao::tui
     _mouseReady = true;
     auto rows = Elements{
       style::panelBody(
-        text(i18n::requiredFormat(_textCatalog, MessageId::TuiTagPopoverTitle, {{"count", _targets.size()}})) |
+        text(i18n::requiredFormat(_textCatalog, MessageId::TuiTagPopoverTitle, {{"count", targetCount()}})) |
         style::accent() | bold | xflex),
     };
 
-    if (_targets.size() == 1 && availableRows >= kTagPopoverNavigationRows)
+    if (targetCount() == 1 && availableRows >= kTagPopoverNavigationRows)
     {
       rows.push_back(style::panelBody(text(_targets.front().title) | xflex | dim));
     }

@@ -5,9 +5,9 @@
 
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/library/Credits.h>
-#include <ao/rt/completion/CompletionService.h>
+#include <ao/rt/completion/CompletionResult.h>
+#include <ao/rt/completion/MetadataValueCompleter.h>
 #include <ao/uimodel/library/detail/TrackCredits.h>
-#include <ao/winui/track/TrackPropertiesAdapter.h>
 
 #include <winrt/Microsoft.UI.Xaml.Automation.Peers.h>
 #include <winrt/Microsoft.UI.Xaml.Automation.h>
@@ -51,6 +51,7 @@ namespace ao::winui
       return kinds;
     }();
     constexpr double kSpacing = 8.0;
+    constexpr std::size_t kCreditSuggestionLimit = 12;
 
     bool isFocusedWithin(AutoSuggestBox const& input)
     {
@@ -533,17 +534,23 @@ namespace ao::winui
 
   void TrackCreditsEditorControl::suggest(AutoSuggestBox const& input, std::size_t const index, bool const role)
   {
-    auto const vocabulary = role ? _completion.creditRoles() : _completion.creditNames(_model.entries()[index].kind);
-    auto const suggestions = trackPropertyVocabularySuggestions(vocabulary, winrt::to_string(input.Text()), 12);
+    auto provider =
+      role ? rt::makeCreditRoleCompletionProvider(_completion, kCreditSuggestionLimit)
+           : rt::makeCreditNameCompletionProvider(_completion, _model.entries()[index].kind, kCreditSuggestionLimit);
+    // AutoSuggestBox filters and replaces the whole entry, not a prefix up to the caret.
+    auto const text = winrt::to_string(input.Text());
     auto items = winrt::single_threaded_observable_vector<IInspectable>();
 
-    for (auto const& suggestion : suggestions)
+    if (auto const optSuggestions = provider(text, text.size()); optSuggestions)
     {
-      items.Append(winrt::box_value(winrt::to_hstring(suggestion)));
+      for (auto const& item : optSuggestions->items)
+      {
+        items.Append(winrt::box_value(winrt::to_hstring(item.insertText)));
+      }
     }
 
     input.ItemsSource(items);
-    input.IsSuggestionListOpen(!suggestions.empty());
+    input.IsSuggestionListOpen(items.Size() != 0);
   }
 
   Button TrackCreditsEditorControl::makeButton(MessageId const id, std::function<void()> action)

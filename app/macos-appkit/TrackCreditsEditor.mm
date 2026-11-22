@@ -181,7 +181,7 @@ namespace
   [_stack addArrangedSubview:[NSTextField wrappingLabelWithString:ao::appkit::catalogFormat(
                                                                     _model->catalog(),
                                                                     MessageId::AppKitEditTracks,
-                                                                    {{"count", _model->state().trackIds.size()}})]];
+                                                                    {{"count", _model->propertyTargetCount()}})]];
 
   if (editor.isMixedReplacement())
   {
