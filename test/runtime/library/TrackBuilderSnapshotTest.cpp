@@ -24,6 +24,7 @@
 #include <ao/utility/Sha256.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <array>
 #include <chrono>
@@ -218,6 +219,28 @@ namespace ao::rt::test
     CHECK(ml.tracks().reader(readTransaction).entryCount() == 0);
     CHECK_FALSE(ml.manifest().reader(readTransaction).get("invalid.flac"));
     CHECK(ml.dictionary().size() == 0);
+  }
+
+  TEST_CASE("TrackBuilderSnapshot - preserves ordinary empty and explicitly cleared title after move")
+  {
+    bool const explicitlyCleared = GENERATE(false, true);
+    auto builder = library::TrackBuilder::makeEmpty();
+
+    if (explicitlyCleared)
+    {
+      builder.metadata().clearTitleExplicitly();
+    }
+    else
+    {
+      builder.metadata().title("");
+    }
+
+    auto snapshotRes = TrackBuilderSnapshot::make(builder);
+    REQUIRE(snapshotRes);
+    auto moved = std::move(*snapshotRes);
+    auto rebuilt = moved.makeBuilder();
+    CHECK(rebuilt.metadata().title().empty());
+    CHECK(rebuilt.metadata().isTitleExplicitlyCleared() == explicitlyCleared);
   }
 
   TEST_CASE("TrackBuilderSnapshot - whole builder round-trip keeps absent segment with owned source text")

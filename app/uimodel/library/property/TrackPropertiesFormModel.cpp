@@ -118,12 +118,19 @@ namespace ao::uimodel
 
     bool tryWriteTrackPropertiesFormEdit(rt::MetadataPatch& patch, TrackPropertiesFormFieldState const& state)
     {
-      if (!state.editable || !canWriteTrackFieldPatch(state.field) || (state.mixed && !state.explicitReplacement))
+      using EditIntent = TrackPropertiesFormFieldState::EditIntent;
+
+      if (!state.editable || !canWriteTrackFieldPatch(state.field) ||
+          (state.mixed && state.editIntent == EditIntent::Ordinary))
       {
         return false;
       }
 
-      if (!state.mixed && matchesOriginalEdit(state))
+      // A named title clear can record intent without changing the displayed text.
+      auto const explicitTitleClear =
+        state.field == rt::TrackField::Title && state.editIntent == EditIntent::ExplicitClear;
+
+      if (!state.mixed && !explicitTitleClear && matchesOriginalEdit(state))
       {
         return false;
       }
@@ -216,7 +223,7 @@ namespace ao::uimodel
     if (auto* const state = findField(field); state != nullptr)
     {
       state->currentEditValue = std::move(editValue);
-      state->explicitReplacement = false;
+      state->editIntent = TrackPropertiesFormFieldState::EditIntent::Ordinary;
     }
   }
 
@@ -225,7 +232,7 @@ namespace ao::uimodel
     if (auto* const state = findField(field); state != nullptr)
     {
       state->currentEditValue = std::move(value);
-      state->explicitReplacement = true;
+      state->editIntent = TrackPropertiesFormFieldState::EditIntent::ExplicitReplacement;
     }
   }
 
@@ -250,31 +257,34 @@ namespace ao::uimodel
     if (auto* const state = findField(field); state != nullptr)
     {
       state->currentEditValue = editValueFromRawValue(state->originalRawValue);
-      state->explicitReplacement = false;
+      state->editIntent = TrackPropertiesFormFieldState::EditIntent::Ordinary;
     }
   }
 
   void TrackPropertiesFormModel::clearFieldEdit(rt::TrackField field)
   {
     auto const* def = rt::trackFieldDefinition(field);
+    auto* const state = findField(field);
 
-    if (_targetCount == 0 || def == nullptr || !canWriteTrackFieldPatch(field))
+    if (_targetCount == 0 || def == nullptr || state == nullptr || !canWriteTrackFieldPatch(field))
     {
       return;
     }
 
     if (def->valueKind == rt::TrackFieldValueKind::Number)
     {
-      setExplicitFieldEdit(field, std::uint16_t{0});
+      state->currentEditValue = std::uint16_t{0};
     }
     else if (def->valueKind == rt::TrackFieldValueKind::RecordingDate)
     {
-      setExplicitFieldEdit(field, library::RecordingDate{});
+      state->currentEditValue = library::RecordingDate{};
     }
     else
     {
-      setExplicitFieldEdit(field, std::string{});
+      state->currentEditValue = std::string{};
     }
+
+    state->editIntent = TrackPropertiesFormFieldState::EditIntent::ExplicitClear;
   }
 
   std::optional<rt::CreditReplacement> const& TrackPropertiesFormModel::pendingCredits() const noexcept

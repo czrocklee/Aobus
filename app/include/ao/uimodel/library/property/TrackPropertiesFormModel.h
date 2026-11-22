@@ -32,10 +32,17 @@ namespace ao::uimodel
 
   struct TrackPropertiesFormFieldState final
   {
+    enum class EditIntent : std::uint8_t
+    {
+      Ordinary,
+      ExplicitReplacement,
+      ExplicitClear,
+    };
+
     rt::TrackField field = rt::TrackField::Title;
     rt::TrackFieldRawValue originalRawValue{};
     TrackFieldEditValue currentEditValue{};
-    bool explicitReplacement = false;
+    EditIntent editIntent = EditIntent::Ordinary;
     bool mixed = false;
     bool editable = false;
   };

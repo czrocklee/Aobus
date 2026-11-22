@@ -11,6 +11,7 @@
 #include <ao/library/RecordingDate.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackLayout.h>
+#include <ao/library/TrackView.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -27,43 +28,54 @@
 
 namespace ao::library::test
 {
-  TEST_CASE("TrackBuilder - hot serialization rejects values that exceed header fields")
+  TEST_CASE("TrackBuilder - hot serialization preserves title and tag limits")
   {
-    constexpr std::size_t kUint16Max = std::numeric_limits<std::uint16_t>::max();
-
     auto context = TrackSerializationFixture{};
+    auto builder = TrackBuilder::makeEmpty();
 
     SECTION("Title length")
     {
-      auto builder = TrackBuilder::makeEmpty();
-      auto const title = std::string(kUint16Max + 1, 't');
-      builder.metadata().title(title).artist("staged artist");
+      auto const title = std::string(65'536, 't');
+      auto const maxTitle = std::string_view{title}.substr(0, 65'535);
+      builder.metadata().title(maxTitle);
+      auto const hotRes = context.trySerializeHot(builder);
+      REQUIRE(hotRes);
+      REQUIRE(validateSerializedHotTrack(*hotRes));
+      auto const view = TrackView{*hotRes, {}};
+      REQUIRE(view.isHotValid());
+      CHECK(view.metadata().title() == maxTitle);
+      CHECK_FALSE(view.metadata().isTitleExplicitlyCleared());
 
+      builder.metadata().title(title).artist("staged artist");
       auto const res = context.trySerializeHot(builder);
       REQUIRE_FALSE(res);
       CHECK(res.error().code == Error::Code::ValueTooLarge);
       CHECK_FALSE(context.dictionary().findId("staged artist"));
     }
 
-    SECTION("Tag payload length")
+    SECTION("Tag count with an explicit title clear")
     {
-      constexpr std::size_t kOverflowTagCount = (kUint16Max / sizeof(DictionaryId)) + 1;
-
+      constexpr std::uint16_t kTagCount = 16'383;
       auto tagNames = std::vector<std::string>{};
-      tagNames.reserve(kOverflowTagCount);
+      tagNames.reserve(kTagCount);
+      builder.metadata().clearTitleExplicitly();
 
-      for (std::size_t i = 0; i < kOverflowTagCount; ++i)
+      for (std::uint16_t i = 0; i < kTagCount; ++i)
       {
         tagNames.push_back("tag" + std::to_string(i));
+        builder.tags().add(tagNames.back());
       }
 
-      auto builder = TrackBuilder::makeEmpty();
+      auto const hotRes = context.trySerializeHot(builder);
+      REQUIRE(hotRes);
+      REQUIRE(validateSerializedHotTrack(*hotRes));
+      auto const view = TrackView{*hotRes, {}};
+      REQUIRE(view.isHotValid());
+      CHECK(view.metadata().isTitleExplicitlyCleared());
+      REQUIRE(view.tags().count() == kTagCount);
+      CHECK(view.tags().id(kTagCount - 1) == DictionaryId{kTagCount});
 
-      for (auto const& tagName : tagNames)
-      {
-        builder.tags().add(tagName);
-      }
-
+      builder.tags().add("overflow tag");
       auto const res = context.trySerializeHot(builder);
       REQUIRE_FALSE(res);
       CHECK(res.error().code == Error::Code::ValueTooLarge);

@@ -207,6 +207,32 @@ namespace ao::tui::test
     }
   }
 
+  TEST_CASE("TrackPropertiesEditor - Ctrl-D on a blank single-track title submits an empty title")
+  {
+    auto editor = makeEditor({TrackFixture{.title = "", .album = "Album"}});
+    focusRow(editor, "Title");
+    editor.tryHandleEvent(clearEvent());
+
+    REQUIRE(editor.canApply());
+    CHECK(editor.buildPatch().metadata.optTitle == "");
+
+    SECTION("Applying submits the clear without a text change")
+    {
+      editor.tryHandleEvent(applyEvent());
+      CHECK(editor.takeRequest() == TrackEditorRequest::Apply);
+    }
+
+    SECTION("Typing and backspacing withdraws the clear instead of reaffirming it")
+    {
+      typeText(editor, "X");
+      REQUIRE(editor.buildPatch().metadata.optTitle == "X");
+      editor.tryHandleEvent(ftxui::Event::Backspace);
+      CHECK_FALSE(editor.buildPatch().metadata.optTitle);
+      editor.tryHandleEvent(applyEvent());
+      CHECK(editor.takeRequest() == TrackEditorRequest::None);
+    }
+  }
+
   TEST_CASE("TrackPropertiesEditor - Ctrl-D on a common field clears it, and Ctrl-G restores it")
   {
     auto editor = makeEditor({

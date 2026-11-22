@@ -58,14 +58,15 @@ namespace ao::library
     }
 
     auto const* header = utility::layout::view<TrackHotHeader>(bytes);
-    auto const logicalSize = sizeof(TrackHotHeader) + static_cast<std::size_t>(header->tagLength) + header->titleLength;
+    auto const tagPayloadBytes = trackHotTagPayloadBytes(header->tagLengthAndFlags);
+    auto const logicalSize = sizeof(TrackHotHeader) + tagPayloadBytes + header->titleLength;
 
     if (align4(logicalSize) != bytes.size() || !std::ranges::all_of(bytes.subspan(logicalSize), isZero))
     {
       return makeError(Error::Code::CorruptData, "Hot Track record has a non-canonical size or padding");
     }
 
-    auto const tagBytes = bytes.subspan(sizeof(TrackHotHeader), header->tagLength);
+    auto const tagBytes = bytes.subspan(sizeof(TrackHotHeader), tagPayloadBytes);
     auto const tags = utility::layout::viewArray<DictionaryId>(tagBytes);
     std::uint32_t expectedBloom = 0;
     auto seenTags = std::unordered_set<DictionaryId>{};

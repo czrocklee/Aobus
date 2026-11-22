@@ -24,7 +24,7 @@ Runtime and presentation consumers adapt these values without changing their sto
 
 | Field           | Logical type                                | Persisted representation                                                                  |
 | --------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| Title           | Text                                        | Inline UTF-8 hot title                                                                    |
+| Title           | Text with an optional explicit clear        | Inline UTF-8 hot title and a hot-header flag                                              |
 | Artist          | Text                                        | Hot `DictionaryId`                                                                        |
 | Album           | Text                                        | Hot `DictionaryId`                                                                        |
 | Album artist    | Text                                        | Hot `DictionaryId`                                                                        |
@@ -50,6 +50,9 @@ Credits are the only stored authority for credited participants of every kind: C
 Category fields are projections, not scalar storage mirrors; Composer, Artist, and AlbumArtist remain separate concepts.
 Neither block establishes a musical entity or a unique recording identity.
 All curated text is scalar-valid UTF-8 in NFC: title is normalized before inline persistence, and dictionary-backed values are normalized before interning.
+
+A title can be nonempty, ordinarily empty, or explicitly cleared. The clear is a per-Track instruction for [YAML transfer](../../../system/library/yaml-transfer.md#export-modes), not edit history or evidence of a previous audio tag. Display, sorting, and queries use the title text alone.
+Refresh, relink, and marking a Track missing preserve both its title and clear state. A fresh media or empty baseline records no clear, even for a new member of the same CUE carrier.
 
 ## Tags and custom metadata
 
@@ -135,6 +138,8 @@ URI and collection layout bounds are enforced before store writes.
 The music-root-relative URI is filesystem identity: it is neither Unicode-normalized nor case-folded by the text admission path.
 
 ### Metadata input values
+
+`MetadataBuilder::title()` with a text argument assigns an ordinary title, even for empty text; `clearTitleExplicitly()` sets empty text and records a clear. Hot and complete reconstruction preserve the text and the clear state together.
 
 Core supplies independent input-value contracts in [`RecordingDate.h`](../../../../include/ao/library/RecordingDate.h) and [`Credits.h`](../../../../include/ao/library/Credits.h), consumed by the persisted builder/view surface.
 `Credit` owns name/role text; `CreditView` borrows it. Both carry a fixed `CreditKind`.

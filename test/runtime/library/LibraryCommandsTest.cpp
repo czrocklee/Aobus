@@ -127,6 +127,57 @@ namespace ao::rt::test
     CHECK(mutated.empty());
   }
 
+  TEST_CASE("LibraryCommands - omitted title preserves a clear until text replaces it")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const cleared = libraryFixture.addTrack("");
+    auto const blank = libraryFixture.addTrack("");
+    auto& storage = libraryFixture.library();
+    auto changes = makeStateOnlyLibraryChanges(storage);
+    auto commandsFixture = LibraryCommandsFixture{storage, changes};
+    REQUIRE(commandsFixture.updateMetadata(std::array{cleared}, MetadataPatch{.optTitle = ""}));
+    REQUIRE(commandsFixture.updateMetadata(std::array{cleared, blank}, MetadataPatch{.optArtist = "New artist"}));
+
+    {
+      auto const transaction = storage.readTransaction();
+      auto const reader = storage.tracks().reader(transaction);
+      auto const optCleared = reader.get(cleared, library::TrackStore::Reader::LoadMode::Hot);
+      auto const optBlank = reader.get(blank, library::TrackStore::Reader::LoadMode::Hot);
+      REQUIRE(optCleared);
+      REQUIRE(optBlank);
+      CHECK(optCleared->metadata().title().empty());
+      CHECK(optCleared->metadata().isTitleExplicitlyCleared());
+      CHECK(optBlank->metadata().title().empty());
+      CHECK_FALSE(optBlank->metadata().isTitleExplicitlyCleared());
+    }
+
+    auto patch = MetadataPatch{};
+    auto expectedTitle = std::string{};
+
+    SECTION("Replacement text is NFC-normalized")
+    {
+      patch.optTitle = " Cafe\u0301 ";
+      expectedTitle = " Café ";
+    }
+
+    SECTION("Whitespace alone is still a nonempty title")
+    {
+      patch.optTitle = "  ";
+      expectedTitle = "  ";
+    }
+
+    auto const res = commandsFixture.updateMetadata(std::array{cleared}, patch);
+    REQUIRE(res);
+    auto const expected =
+      TrackChangeRecord{.trackId = cleared, .fields = {{.field = "title", .oldValue = "", .newValue = expectedTitle}}};
+    CHECK(res->changes == std::vector{expected});
+    auto const transaction = storage.readTransaction();
+    auto const optView = storage.tracks().reader(transaction).get(cleared, library::TrackStore::Reader::LoadMode::Hot);
+    REQUIRE(optView);
+    CHECK(optView->metadata().title() == expectedTitle);
+    CHECK_FALSE(optView->metadata().isTitleExplicitlyCleared());
+  }
+
   TEST_CASE("LibraryCommands - updateMetadata accepts complete metadata patches")
   {
     auto libraryFixture = MusicLibraryFixture{};

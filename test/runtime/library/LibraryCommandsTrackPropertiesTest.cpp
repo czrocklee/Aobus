@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include "test/library/TrackTestSupport.h"
 #include "test/runtime/RuntimeLibraryTestSupport.h"
+#include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/library/DictionaryStore.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/TrackMutation.h>
@@ -56,6 +59,89 @@ namespace ao::rt::test
     auto const track = library::TrackBuilder::fromHotView(*optTrack, storage.library().dictionary());
     CHECK(track.metadata().title() == "After");
     CHECK(std::ranges::contains(track.tags().names(), std::string_view{"Favorite"}));
+  }
+
+  TEST_CASE("LibraryCommands - track Properties records an explicit title clear while tags stay unchanged")
+  {
+    auto storage = MusicLibraryFixture{};
+    auto const trackId = storage.addTrack(library::test::TrackSpec{.title = "", .tags = {"Favorite"}});
+    auto changes = makeStateOnlyLibraryChanges(storage.library());
+    auto commandsFixture = LibraryCommandsFixture{storage.library(), changes};
+    auto publications = std::vector<LibraryChangeSet>{};
+    [[maybe_unused]] auto subscription = changes.onChanged([&publications](LibraryChangeSet const& changeSet) noexcept
+                                                           { publications.push_back(changeSet); });
+    auto const targets = commandsFixture.bind(std::array{trackId});
+    auto const revisionBefore = targets.revision();
+    auto const patch = TrackPropertiesPatch{.metadata = MetadataPatch{.optTitle = ""}, .tagsToAdd = {"Favorite"}};
+
+    auto const res = commandsFixture.runTask(commandsFixture.commands().updatePropertiesAsync(targets, patch));
+    REQUIRE(res);
+    CHECK(res->status == AuthoringStatus::Applied);
+    REQUIRE(res->reply.metadata.changes.size() == 1);
+    CHECK(res->reply.metadata.changes[0].trackId == trackId);
+    CHECK(res->reply.tags.changes.empty());
+
+    REQUIRE(res->optNextTargets);
+    auto const repeatRes =
+      commandsFixture.runTask(commandsFixture.commands().updatePropertiesAsync(*res->optNextTargets, patch));
+    REQUIRE(repeatRes);
+    CHECK(repeatRes->status == AuthoringStatus::NoOp);
+    CHECK(repeatRes->reply.metadata.changes.empty());
+    CHECK(repeatRes->reply.tags.changes.empty());
+    REQUIRE(publications.size() == 1);
+    CHECK(publications[0].tracksMutated == std::vector<TrackId>{trackId});
+    CHECK(publications[0].libraryRevision == revisionBefore + 1);
+
+    auto const transaction = storage.library().readTransaction();
+    CHECK(storage.library().libraryRevision(transaction) == revisionBefore + 1);
+    auto const optTrack =
+      storage.library().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
+    REQUIRE(optTrack);
+    CHECK(optTrack->metadata().isTitleExplicitlyCleared());
+    auto const optTagId = storage.library().dictionary().findId("Favorite");
+    REQUIRE(optTagId);
+    CHECK(optTrack->tags().has(*optTagId));
+  }
+
+  TEST_CASE("LibraryCommands - Properties rolls back a staged title clear if another target fails")
+  {
+    auto storage = MusicLibraryFixture{};
+    auto const first = storage.addTrack("");
+    auto spec = library::test::makeEmptyTrackSpec("nearly-full.flac");
+    spec.customMetadata.emplace_back("Existing", std::string(40'000, 'a'));
+    auto const second = storage.addTrack(spec);
+    auto changes = makeStateOnlyLibraryChanges(storage.library());
+    auto commandsFixture = LibraryCommandsFixture{storage.library(), changes};
+    std::size_t publicationCount = 0;
+    [[maybe_unused]] auto subscription =
+      changes.onChanged([&publicationCount](LibraryChangeSet const&) noexcept { ++publicationCount; });
+    auto const targets = commandsFixture.bind(std::array{first, second});
+    auto patch = TrackPropertiesPatch{.metadata = MetadataPatch{.optTitle = ""}, .tagsToAdd = {"Favorite"}};
+    // This fits on the first track but exceeds the second track's remaining cold record space.
+    patch.metadata.customUpdates.emplace("Additional", std::string(40'000, 'b'));
+
+    auto const res = commandsFixture.runTask(commandsFixture.commands().updatePropertiesAsync(targets, patch));
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::ValueTooLarge);
+    CHECK(publicationCount == 0);
+    CHECK_FALSE(storage.library().dictionary().findId("Favorite"));
+    CHECK_FALSE(storage.library().dictionary().findId("Additional"));
+
+    auto const transaction = storage.library().readTransaction();
+    CHECK(storage.library().libraryRevision(transaction) == targets.revision());
+    auto const reader = storage.library().tracks().reader(transaction);
+    auto const optFirst = reader.get(first, library::TrackStore::Reader::LoadMode::Both);
+    auto const optSecond = reader.get(second, library::TrackStore::Reader::LoadMode::Both);
+    REQUIRE(optFirst);
+    REQUIRE(optSecond);
+    CHECK(optFirst->metadata().title().empty());
+    CHECK(optSecond->metadata().title().empty());
+    CHECK_FALSE(optFirst->metadata().isTitleExplicitlyCleared());
+    CHECK_FALSE(optSecond->metadata().isTitleExplicitlyCleared());
+    CHECK(optFirst->tags().empty());
+    CHECK(optSecond->tags().empty());
+    CHECK(optFirst->customMetadata().empty());
+    CHECK(optSecond->customMetadata().count() == 1);
   }
 
   TEST_CASE("LibraryCommands - invalid tags reject Properties before metadata mutation")

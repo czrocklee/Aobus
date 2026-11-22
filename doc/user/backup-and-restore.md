@@ -41,6 +41,10 @@ For example, a **Full** merge can update an existing track matched by its relati
    **Full** includes curated metadata, audio properties, file sizes and recorded modification times, cover references, and lists; **Metadata** omits technical statistics and cover references; **Delta** records edits relative to readable files; **Lists only** contains lists without track records.
 3. Choose a `.yaml` file and wait for **Library exported successfully**. On Windows, Modern's activity surface names the file while export is running; switching to Classic leaves the transfer running and its status bar reports completion.
 
+**Delta**, **Metadata**, and **Full** carry [deliberately cleared titles](edit-metadata.md#keep-a-title-blank), even when the audio file is missing or its title is already blank. Import remembers those clears for later exports.
+An ordinary blank title is included only in **Delta**, when a readable audio file has a nonempty title. Import sets the title to blank without recording a clear.
+If a backup omits the title, **Merge** keeps the matching track's title and any recorded clear.
+
 The CLI equivalent for a complete library-data backup is:
 
 ```bash

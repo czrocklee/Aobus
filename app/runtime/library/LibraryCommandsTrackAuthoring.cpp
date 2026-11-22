@@ -31,6 +31,7 @@
 #include <ranges>
 #include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -204,18 +205,50 @@ namespace ao::rt
       changed = true;
     }
 
+    void applyTitlePatch(library::TrackBuilder::MetadataBuilder& metadata,
+                         std::optional<std::string> const& optTitle,
+                         PatchResult& result,
+                         std::vector<TrackFieldChange>& changes)
+    {
+      if (!optTitle)
+      {
+        return;
+      }
+
+      auto const current = metadata.title();
+      bool const explicitClear = optTitle->empty();
+
+      if (current == *optTitle && metadata.isTitleExplicitlyCleared() == explicitClear)
+      {
+        return;
+      }
+
+      auto change = TrackFieldChange{.field = "title", .oldValue = std::string{current}, .newValue = *optTitle};
+
+      if (explicitClear)
+      {
+        if (current.empty())
+        {
+          change.optReason = TrackFieldChangeReason::ExplicitClearRecorded;
+        }
+
+        metadata.clearTitleExplicitly();
+      }
+      else
+      {
+        metadata.title(*optTitle);
+      }
+
+      changes.push_back(std::move(change));
+      result.changedHot = true;
+    }
+
     void applyTextMetadataPatch(library::TrackBuilder::MetadataBuilder& metadata,
                                 MetadataPatch const& patch,
                                 PatchResult& result,
                                 std::vector<TrackFieldChange>& changes)
     {
-      applyStringPatch(
-        patch.optTitle,
-        "title",
-        metadata.title(),
-        [&metadata](std::string_view value) { metadata.title(value); },
-        result.changedHot,
-        changes);
+      applyTitlePatch(metadata, patch.optTitle, result, changes);
       applyStringPatch(
         patch.optArtist,
         "artist",

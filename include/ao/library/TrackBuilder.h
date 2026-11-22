@@ -78,8 +78,11 @@ namespace ao::library
     class MetadataBuilder
     {
     public:
-      // String setters
+      // Ordinary title assignment (including empty text) removes any explicit clear.
       MetadataBuilder& title(std::string_view text);
+      MetadataBuilder& clearTitleExplicitly();
+
+      // Other string setters
       MetadataBuilder& artist(std::string_view text);
       MetadataBuilder& album(std::string_view text);
       MetadataBuilder& albumArtist(std::string_view text);
@@ -103,6 +106,7 @@ namespace ao::library
 
       // Accessors
       std::string_view title() const { return _title; }
+      bool isTitleExplicitlyCleared() const { return _titleExplicitlyCleared; }
       std::string_view artist() const { return _artist; }
       std::string_view album() const { return _album; }
       std::string_view albumArtist() const { return _albumArtist; }
@@ -143,6 +147,7 @@ namespace ao::library
       std::uint16_t _discTotal = 0;
       std::uint16_t _movementNumber = 0;
       std::uint16_t _movementTotal = 0;
+      bool _titleExplicitlyCleared = false;
     };
 
     class PropertyBuilder
@@ -303,7 +308,7 @@ namespace ao::library
       SampleRate _sampleRate{};
       std::uint16_t _year = 0;
       std::uint16_t _titleLength = 0;
-      std::uint16_t _tagLength = 0;
+      std::uint16_t _tagLengthAndFlags = 0;
       BitDepth _bitDepth{};
       AudioCodec _codec{};
       std::size_t _size = 0;

@@ -95,6 +95,7 @@ Each track is a closed map.
 | `id`             | No.      | Unsigned 32-bit integer.                                                   | Always emitted; nonzero producer-local identity.                                                                                                      |
 | `uri`            | Yes.     | Library URI string.                                                        | Always emitted.                                                                                                                                       |
 | Metadata fields  | No.      | String or unsigned 16-bit integer according to the tables below.           | Mode-dependent.                                                                                                                                       |
+| `title`          | No.      | String or closed `{clear: true}` map.                                      | Mode-dependent; see [text metadata](#text-metadata).                                                                                                  |
 | `recording-date` | No.      | Canonical partial-date scalar, or empty scalar text that clears the value. | Mode-dependent; see [recording date](#recording-date).                                                                                                |
 | `credits`        | No.      | Sequence of closed `name`/`kind`/`role` maps.                              | Explicit sequence, including empty, in full/metadata; difference from the selected baseline in delta. See [Credits](#credits).                        |
 | `custom`         | No.      | Map of arbitrary scalar string keys to scalar string values.               | Emitted only when non-empty.                                                                                                                          |
@@ -122,11 +123,17 @@ Keys in one `custom` map must be unique both as YAML keys and after NFC normaliz
 
 The following fields are scalar strings, read as [library text scalars](#library-text-scalars):
 
-| Field          | Field      | Field      |
-| -------------- | ---------- | ---------- |
-| `title`        | `artist`   | `album`    |
-| `album-artist` | `genre`    | `composer` |
-| `work`         | `movement` |            |
+| Field      | Field      | Field          |
+| ---------- | ---------- | -------------- |
+| `artist`   | `album`    | `album-artist` |
+| `genre`    | `composer` | `work`         |
+| `movement` |            |                |
+
+A `title` scalar follows the [library text scalar rules](#library-text-scalars), replaces the title text, and removes any recorded clear. An empty scalar (`title: ""`, `title: ''`, or `title:`) sets an ordinary blank title.
+For example, `title: true` stores the text `true`; `null` and `~` are also literal text, and quoted whitespace is preserved.
+
+Only `title: {clear: true}` records a persistent clear. The closed map, in block or flow style, must contain exactly one `clear` key with scalar text `true` (lowercase, quoted or unquoted).
+The transfer specification defines [when export emits each form](../../../system/library/yaml-transfer.md#export-modes) and [what omission preserves on import](../../../system/library/yaml-transfer.md#track-overlays).
 
 ### Numeric metadata
 
@@ -348,7 +355,8 @@ There is no reader for an earlier schema, permissive unknown-field path, restore
 
 Changing a released field name, node kind, scalar width, accepted enum value, omission meaning, predicate interpretation, or rank-reference interpretation requires a new format version unless the change only narrows producer output within the accepted surface.
 Version 1 accepts only the schema defined here; alternative layouts are unsupported even when labeled version 1. There is no dual reader or layout autodetection.
-Version 1 has not been released. Until the first public release, a development build may change its schema or widen one of its limits without incrementing it, and an earlier development build then rejects a document that relies on the change.
+Version 1 has not been released and can still change without a version increment. Matching version numbers do not guarantee that a development build accepts or preserves another build's data.
+Earlier builds that accept only scalar titles reject the clear map. An old empty `title` scalar cannot distinguish an ordinary blank from a deliberate clear, so it imports as an ordinary blank. If the source library still has the recorded clear, export it again with a build that writes the clear map.
 After the first release, a version is incremented at most once per release, and every later release imports every released version without losing curation, as [decision 0020](../../../decision/0020-versioning-and-upgrade-policy.md) records.
 Payload versioning is independent of the database's `kLibraryVersion`, except that a predicate-language change that alters the outcome of accepted filter text is incompatible for both; each follows the amendment and versioning policy above.
 
@@ -433,7 +441,7 @@ library:
 - [`LibraryExportImportCoverArtTest.cpp`](../../../../test/runtime/library/LibraryExportImportCoverArtTest.cpp) covers the resource table's shape, ordering, determinism, closure rules, digest and length rejection, and each mode's cover terminal state.
 - [`LibraryYamlSchemaTest.cpp`](../../../../test/runtime/library/LibraryYamlSchemaTest.cpp) covers closed-schema, scope, enum, and URI rejection.
 - [`LibraryExportImportErrorTest.cpp`](../../../../test/runtime/library/LibraryExportImportErrorTest.cpp) covers scalar validation, duration boundary round trips, and transactional rollback for unrepresentable durations.
-- [`LibraryYamlImporterTest.cpp`](../../../../test/runtime/library/LibraryYamlImporterTest.cpp) covers recording-date and credit-entry admission, whole-document preflight rejection, and version gating before field interpretation.
+- [`LibraryYamlImporterTest.cpp`](../../../../test/runtime/library/LibraryYamlImporterTest.cpp) covers title-action, recording-date, and credit-entry admission, whole-document preflight rejection, and version gating before field interpretation.
 - [`LibraryYamlExporterTest.cpp`](../../../../test/runtime/library/LibraryYamlExporterTest.cpp) covers recording-date and credits emission, omission, and delta baselines.
 - [`LibraryYamlPerformanceMetadataTest.cpp`](../../../../test/runtime/library/LibraryYamlPerformanceMetadataTest.cpp) covers same-version round trips of date precision, list order and roles, clear forms, and merge overlay preservation.
 - [`LibraryYamlModeFixtureTest.cpp`](../../../../test/runtime/library/LibraryYamlModeFixtureTest.cpp) restores committed version-1 documents: [`v1-delta.yaml`](../../../../test/data/library/v1-delta.yaml) and [`v1-metadata.yaml`](../../../../test/data/library/v1-metadata.yaml) retain their loaded structure and scalar text on export, with independent restored-value and repeated-export checks. [`v1-list-only.yaml`](../../../../test/data/library/v1-list-only.yaml) replaces the Lists and ranks Tracks and segments by URI, and [`v1-scalars.yaml`](../../../../test/data/library/v1-scalars.yaml) checks that each field takes its meaning from this schema rather than from YAML implicit typing, both after the restore and after a restore of its export.

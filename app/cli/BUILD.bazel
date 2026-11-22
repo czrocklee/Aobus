@@ -42,7 +42,10 @@ cc_library(
         "ScanOutput.h",
         "TrackSelection.h",
     ],
-    implementation_deps = ["//include:app_version_header"],
+    implementation_deps = [
+        "//include:app_version_header",
+        "@aobus_native_deps//:rapidyaml",
+    ],
     includes = ["."],
     linkstatic = True,
     visibility = ["//test:__pkg__"],

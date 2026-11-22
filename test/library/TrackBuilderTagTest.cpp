@@ -49,7 +49,7 @@ namespace ao::library::test
     auto const [hotData, coldData] = serializeTestTrack(builder);
 
     auto const* header = reinterpret_cast<TrackHotHeader const*>(hotData.data());
-    CHECK(header->tagLength == 0);
+    CHECK(header->tagLengthAndFlags == 0);
     CHECK(header->tagBloom == 0);
   }
 
@@ -65,7 +65,7 @@ namespace ao::library::test
     auto const view = TrackView{hotData, coldData};
 
     auto const* header = reinterpret_cast<TrackHotHeader const*>(hotData.data());
-    CHECK(header->tagLength == 12); // 3 tags * 4 bytes each
+    CHECK(header->tagLengthAndFlags == 12); // Unmarked: 3 tags * 4 bytes each
     CHECK(header->tagBloom == 0x0000000EU);
     REQUIRE(view.tags().count() == 3);
     CHECK(view.tags().id(0) == DictionaryId{1});
@@ -88,7 +88,7 @@ namespace ao::library::test
     auto const view = TrackView{hotData, coldData};
 
     auto const* header = reinterpret_cast<TrackHotHeader const*>(hotData.data());
-    CHECK(header->tagLength == 4); // 1 tag * 4 bytes
+    CHECK(header->tagLengthAndFlags == 4); // Unmarked: 1 tag * 4 bytes
     CHECK(header->tagBloom == 0x00000002U);
     REQUIRE(view.tags().count() == 1);
     CHECK(view.tags().id(0) == DictionaryId{1});
@@ -107,7 +107,7 @@ namespace ao::library::test
     auto const view = TrackView{hotData, coldData};
 
     auto const* header = reinterpret_cast<TrackHotHeader const*>(hotData.data());
-    CHECK(header->tagLength == 20); // 5 tags * 4 bytes each
+    CHECK(header->tagLengthAndFlags == 20); // Unmarked: 5 tags * 4 bytes each
     CHECK(header->tagBloom == 0x0000003EU);
     REQUIRE(view.tags().count() == 5);
     constexpr auto kExpectedIds = std::to_array<DictionaryId>(
@@ -136,7 +136,7 @@ namespace ao::library::test
     REQUIRE(context.transaction().commit());
     auto const view = TrackView{hotData, std::span<std::byte const>{}};
     auto const* header = reinterpret_cast<TrackHotHeader const*>(hotData.data());
-    CHECK(header->tagLength == 8); // 2 tags * 4 bytes
+    CHECK(header->tagLengthAndFlags == 8); // Unmarked: 2 tags * 4 bytes
     CHECK(header->tagBloom == 0x00000006U);
     REQUIRE(view.tags().count() == 2);
     CHECK(view.tags().id(0) == DictionaryId{1});

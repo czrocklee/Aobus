@@ -96,7 +96,7 @@ The synchronous offline methods prepare the import before acquiring their own wr
 
 ### Export modes
 
-| Payload mode | Metadata                                                                        | Custom metadata              | Tags                              | Covers                                                                   | Technical and manifest facts     | Lists                                                                  |
+| Payload mode | Ordinary metadata                                                               | Custom metadata              | Tags                              | Covers                                                                   | Technical and manifest facts     | Lists                                                                  |
 | ------------ | ------------------------------------------------------------------------------- | ---------------------------- | --------------------------------- | ------------------------------------------------------------------------ | -------------------------------- | ---------------------------------------------------------------------- |
 | `delta`      | Fields different from a readable file baseline; otherwise all non-empty fields. | Complete map when non-empty. | Complete sequence when non-empty. | Never emitted.                                                           | Omitted.                         | Included.                                                              |
 | `metadata`   | All non-empty scalar metadata and explicit Credits sequence, including empty.   | Complete map when non-empty. | Complete sequence when non-empty. | Never emitted.                                                           | Omitted.                         | Included.                                                              |
@@ -112,8 +112,11 @@ A `full` export opens no audio file and needs none to succeed, because a descrip
 The exporter constructs the complete YAML tree before writing anything, then installs it under the [atomic file replacement](../persistence/atomic-replacement.md) contract; a destination below a directory that does not exist fails with `IoError` and creates nothing, because naming the directory is the caller's part.
 The destination therefore holds its previous content, or nothing, until one complete document replaces it: an export that fails or is cancelled costs the user nothing, which matters because the path an export names is usually the backup it is replacing.
 An export observes cancellation between records and installs no file when it stops; that is a cancelled task rather than an export failure.
-For `delta`, a missing, unsupported, or unreadable audio file means no baseline and causes emission of all applicable current values.
-A filesystem inspection error fails export with `IoError`.
+For `delta`, a missing, unsupported, or unreadable audio file means no baseline and causes emission of all applicable current values. For a segment Track, the baseline is the carrier audio file, not the external CUE sheet.
+An unsafe or otherwise unresolvable URI fails export; an error checking whether the resolved path exists fails with `IoError`.
+
+Every track-bearing mode emits `title: {clear: true}` for a stored [explicit title clear](../../reference/library/model/track.md#curated-metadata), regardless of the file baseline.
+For an ordinary blank title, `delta` emits an empty scalar only if a readable file baseline has a nonempty title. `metadata` and `full` omit ordinary blank titles.
 
 ### Restore
 
@@ -160,6 +163,9 @@ Every payload list is created as a new target list, after which parent IDs are r
 
 Present metadata and technical scalar fields replace the corresponding baseline value.
 Omitted scalar fields preserve it.
+
+For `title`, omission in a matched Merge preserves the target's text and clear state in every payload mode. Restore and unmatched Merge start with an ordinary title: the file's title in `delta` when readable, otherwise empty.
+A [title scalar](../../reference/library/format/yaml.md#text-metadata) replaces the text and removes any clear, even when the scalar is empty. The map form sets blank text and records a clear.
 
 Collections use replacement semantics:
 
@@ -327,7 +333,7 @@ The apply step still revalidates source and target evidence, so the flag cannot 
 ## Test map
 
 - [`LibraryExportImportTest.cpp`](../../../test/runtime/library/LibraryExportImportTest.cpp) proves mode baselines, overlays, reports, and preview equivalence.
-- [`LibraryExportImportDeltaTest.cpp`](../../../test/runtime/library/LibraryExportImportDeltaTest.cpp) proves delta behavior, library id retention, rollback, and change sets.
+- [`LibraryExportImportDeltaTest.cpp`](../../../test/runtime/library/LibraryExportImportDeltaTest.cpp) covers Delta relay, title clears in Full and Metadata Merge, library id retention, rollback, and change sets.
 - [`LibraryExportImportCoverArtTest.cpp`](../../../test/runtime/library/LibraryExportImportCoverArtTest.cpp) proves the resource table, reference closure, export determinism, and each mode's cover terminal state.
 - [`LibraryExportImportListTest.cpp`](../../../test/runtime/library/LibraryExportImportListTest.cpp) proves list-only transfer, references, remapping, and dangling counts.
 - [`LibraryYamlSchemaTest.cpp`](../../../test/runtime/library/LibraryYamlSchemaTest.cpp) proves closed-schema, scope, enum, URI, duplicate-key, list-semantic, and storage-limit rejection.
@@ -335,7 +341,7 @@ The apply step still revalidates source and target evidence, so the flag cannot 
 - [`CueYamlBaselineTest.cpp`](../../../test/runtime/CueYamlBaselineTest.cpp) checks the file facts Restore seeds and when Merge preserves or invalidates the fingerprint of a whole file or CUE carrier.
 - [`CueYamlPreparationTest.cpp`](../../../test/runtime/CueYamlPreparationTest.cpp) checks prepared-import staleness and preservation of intervening writes.
 - [`LibraryExportImportErrorTest.cpp`](../../../test/runtime/library/LibraryExportImportErrorTest.cpp) proves scalar rejection and transactional rollback.
-- [`LibraryYamlImporterTest.cpp`](../../../test/runtime/library/LibraryYamlImporterTest.cpp) proves recording-date and credit preflight admission and whole-document rejection.
+- [`LibraryYamlImporterTest.cpp`](../../../test/runtime/library/LibraryYamlImporterTest.cpp) proves title-action, recording-date, and credit preflight admission and whole-document rejection.
 - [`LibraryYamlExporterTest.cpp`](../../../test/runtime/library/LibraryYamlExporterTest.cpp) proves recording-date and credits emission and delta baselines.
 - [`LibraryYamlPerformanceMetadataTest.cpp`](../../../test/runtime/library/LibraryYamlPerformanceMetadataTest.cpp) proves date-precision and list round trips, clear forms, and merge overlay preservation.
 - [`LibraryJobsTest.cpp`](../../../test/runtime/library/LibraryJobsTest.cpp) proves source/target binding, one-shot plans, cancellation before maintenance, and mandatory callback completion after commit.

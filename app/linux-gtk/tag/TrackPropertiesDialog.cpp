@@ -216,6 +216,7 @@ namespace ao::gtk
     _metadataBox.set_valign(Gtk::Align::START);
 
     auto* const list = Gtk::make_managed<FormBoxedList>();
+    auto const targetCount = _formModel.targetCount();
 
     for (auto const& row : _formSpec.metadataRows)
     {
@@ -229,13 +230,13 @@ namespace ao::gtk
       setAccessibleLabel(*widget, row.label);
       auto editor = FieldEditor{.field = row.field, .widget = widget, .kind = row.editorKind};
 
-      if (_formModel.targetCount() > 1 && row.editorKind != uimodel::TrackPropertiesFormEditorKind::ReadonlyText)
+      if (row.editorKind != uimodel::TrackPropertiesFormEditorKind::ReadonlyText &&
+          (targetCount > 1 || (targetCount == 1 && row.field == rt::TrackField::Title)))
       {
         auto* const controls = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, layout::kSpacingSmall);
         controls->append(*widget);
-        auto const clearLabel = i18n::requiredFormat(_textCatalog,
-                                                     MessageId::TrackClearFieldForTracks,
-                                                     {{"field", row.label}, {"count", _formModel.targetCount()}});
+        auto const clearLabel = i18n::requiredFormat(
+          _textCatalog, MessageId::TrackClearFieldForTracks, {{"field", row.label}, {"count", targetCount}});
         editor.clearButton = Gtk::make_managed<Gtk::ToggleButton>(clearLabel);
 
         if (auto* const label = dynamic_cast<Gtk::Label*>(editor.clearButton->get_child()); label != nullptr)

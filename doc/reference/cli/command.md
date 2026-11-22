@@ -94,6 +94,8 @@ Brackets and commas are literal text, not a list or escape codec: `[live]`, `[]`
 Empty assignments and empty unset keys are rejected; empty custom values and empty tag text retain their ordinary meaning.
 A `--` ending one of these unlimited vectors is consumed before ordinary option parsing resumes.
 At least one field or tag option is required.
+`--title ''` records a clear even if the title is already blank. Repeating a recorded clear is not another change.
+Omitting `--title` preserves the title and its clear state; supplying nonempty text replaces the title and removes the clear. Whitespace is not trimmed.
 `--recording-date` accepts `YYYY`, `YYYY-MM`, or `YYYY-MM-DD`; surrounding whitespace is trimmed, an empty value explicitly clears the date, and an invalid literal is rejected with an InvalidInput error before any target is bound.
 Each `--credit` consumes exactly the next three literal process arguments: `KIND NAME ROLE`, including empty or option-like name and role text. Incomplete occurrences reject the command with CLI11 argument-mismatch status `114`.
 Only the space-separated triple grammar is supported; every attached `--credit=...` spelling, including boolean or empty values, is rejected with the same parse status.
@@ -198,6 +200,9 @@ Other change-record nested fields are defined by the runtime mutation reply type
 In that path `updated` and `trackIds` are the sorted, deduplicated union of tracks mutated by metadata or tag changes, while `changes` stays metadata-only.
 Plain output appends `added tag: <tag> to N track(s)` and `removed tag: <tag> from N track(s)` lines with the `tag add`/`tag remove` wording.
 When no tag option is supplied, `updated` and `trackIds` report metadata field changes only.
+Recording a clear without changing the title text counts as an update in both commit and dry-run reports.
+In YAML or JSON, only that `title` field change has `reason: explicitClearRecorded`, with `oldValue` and `newValue` both empty strings.
+Clearing a nonempty title omits `reason`. This diagnostic is not edit input.
 For `lib import`, `payloadMode` uses `delta`, `metadata`, `full`, or `list-only`, and `targetScope` uses exact lowercase `library` or `lists`.
 
 `lib stats` reports `resources` as the number of descriptor rows and `resourceBytes` as the summed described length of the descriptors tracks currently reference, counting each reachable descriptor once however many tracks name it.

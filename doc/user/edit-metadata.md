@@ -22,6 +22,19 @@ To remove the album from every selected track instead, use the field's clear act
 
 On macOS and in the TUI, typing after Clear replaces it. If you then erase that text, each track keeps its original album. Restoring one field leaves your other edits intact. Save to apply the draft, or cancel to discard it. Read-only audio properties cannot be cleared.
 
+### Keep a title blank
+
+To clear a title in single-track Properties, delete its text and save.
+For several tracks, use the [batch clear action](#change-a-field-on-several-tracks) for **Title** rather than just erasing the input.
+Aobus saves the clear in the library, not in the audio file's tags, and carries it in [library backups](backup-and-restore.md#create-a-backup).
+
+Leaving a blank title alone does not record a clear. To record one even when the title is already blank:
+
+- In GTK or Windows Properties, turn on **Clear Title for 1 track** (the count follows your selection), then save. Turn it off before saving to keep the original title.
+- In macOS Properties, open the actions menu beside **Title** and choose **Clear for Selected Tracks** for one track, or **Clear Title for 3 tracks** (with your selection count) for several tracks, then save.
+- In TUI Properties, focus **Title**, press `Ctrl+D`, then press `Ctrl+S` to save.
+- From the CLI, run `aobus -C /music track update 42 --title ''` for track 42.
+
 ### Edit from the GTK detail surface
 
 1. Select one track, or select several tracks for a shared edit.

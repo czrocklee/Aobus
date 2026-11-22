@@ -99,6 +99,35 @@ namespace ao::rt::test
     }
   } // namespace
 
+  TEST_CASE("LibraryYaml - a title action admits only the single clear key with scalar true")
+  {
+    constexpr auto kRejectedTitles = std::to_array<std::string_view>({
+      "[]",
+      "[{clear: true}]",
+      "{}",
+      "{set: true}",
+      "{clear: true, extra: true}",
+      "{clear: true, clear: true}",
+      "{clear: [true]}",
+      "{clear: {value: true}}",
+      "{clear: ''}",
+      "{clear: null}",
+      "{clear: false}",
+      "{clear: True}",
+      "{clear: 1}",
+      "{clear: yes}",
+      "{clear: 'true '}",
+    });
+
+    for (auto const value : kRejectedTitles)
+    {
+      CAPTURE(value);
+      auto const error = previewFailure(trackDocument(std::format("      title: {}\n", value)));
+      CHECK(error.code == Error::Code::FormatRejected);
+      CHECK_THAT(error.message, Catch::Matchers::ContainsSubstring("title"));
+    }
+  }
+
   TEST_CASE("LibraryYaml - recording-date admits only canonical partial dates")
   {
     SECTION("canonical literals are accepted")

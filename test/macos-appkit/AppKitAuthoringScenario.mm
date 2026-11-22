@@ -8,8 +8,12 @@
 #include "app/macos-appkit/LibrarySession.h"
 #include "app/macos-appkit/TrackInspector.h"
 #include "test/macos-appkit/AppKitScenarioSupport.h"
+#include "test/media/wav/TestWav.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
+#include <ao/async/Runtime.h>
+#include <ao/async/Task.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/library/Credits.h>
 #include <ao/library/RecordingDate.h>
@@ -18,16 +22,19 @@
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackMutation.h>
 #include <ao/rt/TrackRow.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/uimodel/library/detail/TrackCredits.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
+#include <ao/utility/AtomicFile.h>
 
 #import <AppKit/AppKit.h>
 
@@ -38,8 +45,11 @@
 #include <filesystem>
 #include <iterator>
 #include <memory>
+#include <optional>
 #include <ranges>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -2475,6 +2485,131 @@ namespace ao::appkit::test
       AO_INVARIANT(
         observationPtr->posted.size() == 4, "A reentrant shutdown must suppress the completed edit's notification");
     }
+
+    // Publish on the native callback executor so the bounded wait can read the reply on the same thread.
+    template<typename Reply>
+    async::Task<void> captureAuthoringReplyAsync(async::Runtime* runtime,
+                                                 async::Task<Result<Reply>> task,
+                                                 std::optional<Result<Reply>>* optReply)
+    {
+      auto reply = co_await std::move(task);
+      co_await runtime->resumeOnCallbackExecutorAsync();
+      optReply->emplace(std::move(reply));
+    }
+
+    template<typename Reply>
+    Reply requireAuthoringReply(async::Runtime& runtime, async::Task<Result<Reply>> task, char const* obligation)
+    {
+      auto optReply = std::optional<Result<Reply>>{};
+      runtime.spawnLogged(captureAuthoringReplyAsync(&runtime, std::move(task), &optReply), obligation);
+      requireWaitUntil([&] { return optReply.has_value(); }, obligation);
+      AO_INVARIANT(*optReply, "{}: {}", obligation, optReply->error().message);
+      return std::move(**optReply);
+    }
+
+    void verifyNativeBlankTitleClear(EditorFixture& fixture)
+    {
+      auto& runtime = fixture.session().runtime();
+      auto& library = runtime.library();
+      auto& commands = library.commands();
+      auto& model = fixture.model();
+      auto const importUntitled = [&](char const* name, std::size_t frameCount)
+      {
+        auto const path = runtime.musicRoot() / name;
+        auto const bytes =
+          ao::test::wav::makeWav({.sampleRate = 44'100, .audioData = std::vector<std::uint8_t>(frameCount * 2)});
+        requireAdmission(
+          utility::publishAtomically(path, std::string_view{reinterpret_cast<char const*>(bytes.data()), bytes.size()}),
+          "The never-titled WAV must be available for import");
+        auto const imported = requireAuthoringReply(
+          runtime.async(), commands.createTrackFromFileAsync(path), "The never-titled WAV must import");
+        AO_INVARIANT(imported.trackId != kInvalidTrackId && imported.title.empty(),
+                     "Import must assign a track ID without inventing a title");
+        return imported.trackId;
+      };
+      auto const first = importUntitled("appkit-untitled-a.wav", 44'100);
+      auto const second = importUntitled("appkit-untitled-b.wav", 44'101);
+      auto const targets = std::vector{first, second};
+      auto const wouldRecordClear = [](TrackId trackId)
+      {
+        return rt::TrackChangeRecord{
+          .trackId = trackId,
+          .fields = {{.field = "title",
+                      .oldValue = "",
+                      .newValue = "",
+                      .optReason = rt::TrackFieldChangeReason::ExplicitClearRecorded}},
+        };
+      };
+      // Only an ordinary blank still needs an authored clear; displayed text alone cannot tell them apart.
+      auto const requirePreview = [&](std::vector<rt::TrackChangeRecord> const& expected, char const* obligation)
+      {
+        auto const preview = requireAuthoringReply(runtime.async(),
+                                                   commands.previewUpdateMetadataAsync(targets, {.optTitle = ""}),
+                                                   "The blank-title clear preview must complete");
+        AO_INVARIANT(preview.changes == expected, "{}", obligation);
+      };
+      auto* const willClear = catalogText(fixture.session().catalog(), i18n::MessageId::AppKitWillClear);
+      auto const open = [&](std::vector<TrackId> ids)
+      {
+        requireAdmission(model.beginProperties(std::move(ids)), "The blank-title draft must begin");
+        fixture.present();
+        auto* const title = requireTextField(fixture, @"title");
+        AO_INVARIANT(title.stringValue.length == 0 && !model.state().dirty &&
+                       !model.state().fields.at(static_cast<std::size_t>(title.tag)).mixed,
+                     "The title must start as a common blank, not a mixed value or a draft");
+        return title;
+      };
+      auto const clear = [&](NSTextField* title)
+      {
+        [fieldMenu(title) performActionForItemAtIndex:0];
+        AO_INVARIANT(title.stringValue.length == 0 && [title.placeholderString isEqual:willClear] &&
+                       model.state().dirty && findControl(fixture.editor().window.contentView, @"save").enabled,
+                     "Clear must stage an edit and enable Save even when the title is already blank");
+      };
+      auto const save = [&]
+      {
+        [fixture.editor() save:nil];
+        requireWaitUntil([&] { return model.state().completed; }, "The blank-title draft must finish saving");
+        fixture.finish();
+      };
+
+      requirePreview({wouldRecordClear(first), wouldRecordClear(second)}, "Both imported blanks must be ordinary");
+      {
+        auto* const title = open({first});
+        [title selectText:nil];
+        AO_INVARIANT(title.currentEditor != nil, "The ordinary blank must receive native focus before leaving it");
+        [requireTextField(fixture, @"artist") selectText:nil];
+        AO_INVARIANT(
+          title.currentEditor == nil && !model.state().dirty, "Leaving an ordinary blank title must not stage an edit");
+        clear(title);
+        editText(fixture.editor().window, @"title", @"Temporary title");
+        auto* const editor = static_cast<NSTextView*>(title.currentEditor);
+        AO_INVARIANT(editor != nil, "Title withdrawal must use the native field editor");
+        editor.selectedRange = NSMakeRange(0, editor.string.length);
+        [editor deleteBackward:nil];
+        AO_INVARIANT(title.stringValue.length == 0, "Erasing the replacement must return to the blank title");
+        editText(fixture.editor().window, @"artist", @"Retained across title withdrawal");
+        save();
+        auto const optRow = library.snapshot().trackRow(first);
+        AO_INVARIANT(optRow && optRow->artist == "Retained across title withdrawal",
+                     "The Save after withdrawal must still commit the other edit");
+      }
+      requirePreview({wouldRecordClear(first), wouldRecordClear(second)}, "A withdrawn blank must remain ordinary");
+
+      clear(open({first}));
+      save();
+      requirePreview({wouldRecordClear(second)}, "Single-track Clear must mark only its captured blank");
+
+      clear(open(targets));
+      save();
+      requirePreview({}, "Common-blank batch Clear must also mark the remaining ordinary blank");
+
+      auto const snapshot = library.snapshot();
+      auto const optFirst = snapshot.trackRow(first);
+      auto const optSecond = snapshot.trackRow(second);
+      AO_INVARIANT(optFirst && optSecond && optFirst->title.empty() && optSecond->title.empty(),
+                   "Both cleared tracks must remain present with blank titles");
+    }
   } // namespace
 
   std::int32_t runAuthoringScenario(std::filesystem::path const& musicRoot, std::filesystem::path const& stateRoot)
@@ -2499,6 +2634,7 @@ namespace ao::appkit::test
     verifyEntryCompletion(fixture, tracks);
     verifyMembershipNotifications(fixture, tracks);
     verifyRejectedTitleRecovery(fixture, tracks[0]);
+    verifyNativeBlankTitleClear(fixture);
     return 0;
   }
 

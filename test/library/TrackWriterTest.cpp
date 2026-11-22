@@ -373,6 +373,71 @@ namespace ao::library::test
     CHECK(optManifest->status() == expectedStatus);
   }
 
+  TEST_CASE("TrackWriter - an explicit title clear survives tag rebuild and cold and full updates")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const databasePath = temp.path() / "db";
+    auto trackId = kInvalidTrackId;
+
+    {
+      auto library = makeTestMusicLibrary(temp.path(), databasePath);
+      trackId = addTrack(library, TrackSpec{.title = "Before", .uri = "cleared.flac", .tags = {"old"}});
+      auto transaction = writeTransaction(library);
+      REQUIRE(transaction.apply(
+        [&](LibraryWrite& write) -> Result<>
+        {
+          auto writer = write.tracks();
+
+          {
+            auto builder = builderFrom(library, writer, trackId);
+            builder.metadata().clearTitleExplicitly();
+            REQUIRE(writer.updateHot(trackId, builder));
+          }
+
+          auto const optHot = writer.get(trackId, TrackStore::Reader::LoadMode::Hot);
+          REQUIRE(optHot);
+          auto hot = TrackBuilder::fromHotView(*optHot, library.dictionary());
+          CHECK(hot.metadata().isTitleExplicitlyCleared());
+          hot.tags().clear().add("first").add("second");
+          return writer.updateHot(trackId, hot);
+        }));
+      REQUIRE(transaction.commit());
+
+      // Subsequent reconstruction can resolve the newly published tag IDs.
+      transaction = writeTransaction(library);
+      REQUIRE(transaction.apply(
+        [&](LibraryWrite& write) -> Result<>
+        {
+          auto writer = write.tracks();
+
+          {
+            auto cold = builderFrom(library, writer, trackId);
+            cold.metadata().title("Ignored by cold update");
+            cold.property().duration(std::chrono::seconds{225});
+            REQUIRE(writer.updateCold(trackId, cold));
+          }
+
+          auto complete = builderFrom(library, writer, trackId);
+          CHECK(complete.metadata().isTitleExplicitlyCleared());
+          complete.metadata().year(2001);
+          return writer.update(trackId, complete);
+        }));
+      REQUIRE(transaction.commit());
+    }
+
+    auto library = makeTestMusicLibrary(temp.path(), databasePath);
+    auto readTransaction = library.readTransaction();
+    auto const optTrack = library.tracks().reader(readTransaction).get(trackId, TrackStore::Reader::LoadMode::Both);
+    REQUIRE(optTrack);
+    CHECK(optTrack->metadata().title().empty());
+    CHECK(optTrack->metadata().isTitleExplicitlyCleared());
+    CHECK(optTrack->metadata().year() == 2001);
+    CHECK(optTrack->property().duration() == std::chrono::seconds{225});
+    REQUIRE(optTrack->tags().count() == 2);
+    CHECK(library.dictionary().get(optTrack->tags().id(0)) == "first");
+    CHECK(library.dictionary().get(optTrack->tags().id(1)) == "second");
+  }
+
   TEST_CASE("TrackWriter - ordinary updates preserve the URI and manifest binding")
   {
     auto const temp = ao::test::TempDir{};

@@ -71,6 +71,7 @@ namespace ao::rt
     AudioCodec _codec = AudioCodec::Unknown;
     Channels _channels{};
     BitDepth _bitDepth{};
+    bool _titleExplicitlyCleared = false;
     std::vector<std::string> _tags;
     std::vector<Cover> _covers;
     std::vector<std::pair<std::string, std::string>> _customMetadata;

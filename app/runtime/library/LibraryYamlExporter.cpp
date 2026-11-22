@@ -76,9 +76,6 @@ namespace ao::rt
     };
 
     constexpr auto kMetadataDispatch = std::to_array<MetadataDispatch>({
-      {.field = TrackField::Title,
-       .stringGetter = [](auto const& view, auto&) { return view.metadata().title(); },
-       .baseStringGetter = [](auto const& base) { return base.title(); }},
       {.field = TrackField::Artist,
        .stringGetter =
          [](auto const& view, auto& dictionary)
@@ -231,6 +228,21 @@ namespace ao::rt
       }
     }
 
+    void emitTrackTitle(ryml::NodeRef& node, library::TrackView::MetadataProxy metadata, std::string_view baselineTitle)
+    {
+      if (auto const key = trackFieldId(TrackField::Title); metadata.isTitleExplicitlyCleared())
+      {
+        auto titleNode = node.append_child();
+        yaml::setKey(titleNode, key);
+        titleNode.set_map();
+        appendString(titleNode, "clear", "true");
+      }
+      else if (auto const title = metadata.title(); title != baselineTitle)
+      {
+        appendString(node, key, title);
+      }
+    }
+
     Result<> emitTrackMetadata(ryml::NodeRef& node,
                                TrackId id,
                                library::TrackView const& view,
@@ -240,6 +252,8 @@ namespace ao::rt
     {
       auto const optBaselineMetadata = optBaseline ? std::optional{optBaseline->metadata()} : std::nullopt;
       auto const hasBaseline = optBaselineMetadata.has_value();
+
+      emitTrackTitle(node, view.metadata(), hasBaseline ? optBaselineMetadata->title() : std::string_view{});
 
       for (auto const& map : kMetadataDispatch)
       {

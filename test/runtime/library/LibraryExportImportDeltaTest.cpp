@@ -6,11 +6,13 @@
 #include "test/FilesystemTestSupport.h"
 #include "test/TestFixtureSupport.h"
 #include "test/audio/AudioFixtureDirectory.h"
+#include "test/audio/AudioFixtureSupport.h"
 #include "test/library/MusicLibraryTestSupport.h"
 #include "test/library/TrackTestSupport.h"
 #include "test/library/WritableLibraryTestSupport.h"
 #include "test/runtime/AsyncTestSupport.h"
 #include "test/runtime/ExecutorTestSupport.h"
+#include "test/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -26,9 +28,12 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackStore.h>
+#include <ao/library/TrackView.h>
 #include <ao/rt/CoreRuntime.h>
+#include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/library/LibraryImportPlan.h>
 #include <ao/rt/library/LibraryJobs.h>
 #include <ao/rt/library/LibrarySnapshot.h>
@@ -50,6 +55,8 @@
 #include <memory>
 #include <optional>
 #include <stdexcept>
+#include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -72,6 +79,60 @@ namespace ao::rt::test
       auto tree = ryml::Tree{yaml::callbacks()};
       REQUIRE(yaml::parseInPlace(tree, buffer, state));
       return tree;
+    }
+
+    void writeDeltaDocument(std::filesystem::path const& path, std::string_view trackRecords)
+    {
+      auto output = std::ofstream{path};
+      output << "version: 1\nexport-mode: delta\nlibrary:\n  tracks:\n" << trackRecords << "  lists: []\n";
+      output.close();
+      REQUIRE(output);
+    }
+
+    ryml::ConstNodeRef findExportedTitle(ryml::Tree const& tree, std::string_view uri)
+    {
+      CAPTURE(uri);
+      auto const tracks = tree.rootref()["library"]["tracks"];
+      REQUIRE(tracks.is_seq());
+
+      for (auto const track : tracks.children())
+      {
+        if (yaml::scalarView(track["uri"]) == uri)
+        {
+          return yaml::findChild(track, "title");
+        }
+      }
+
+      FAIL("Missing exported Track");
+    }
+
+    void checkTitleScalar(ryml::ConstNodeRef const& title, std::string_view text)
+    {
+      REQUIRE(title.readable());
+      REQUIRE(title.has_val());
+      CHECK(yaml::scalarView(title) == text);
+    }
+
+    void checkTitleClear(ryml::ConstNodeRef const& title)
+    {
+      REQUIRE(title.readable());
+      REQUIRE(title.is_map());
+      REQUIRE(title.num_children() == 1);
+      auto const action = title.first_child();
+      CHECK(yaml::keyView(action) == "clear");
+      checkTitleScalar(action, "true");
+    }
+
+    void checkStoredTitle(MusicLibrary const& library, std::string_view uri, std::string_view title, bool cleared)
+    {
+      CAPTURE(uri);
+      auto transaction = library.readTransaction();
+      auto const optEntry = library.manifest().reader(transaction).get(uri);
+      REQUIRE(optEntry);
+      auto const optTrack = library.tracks().reader(transaction).get(optEntry->trackId());
+      REQUIRE(optTrack);
+      CHECK(optTrack->metadata().title() == title);
+      CHECK(optTrack->metadata().isTitleExplicitlyCleared() == cleared);
     }
 
     Result<ImportReport> importThroughRuntime(CoreRuntime& core,
@@ -226,6 +287,241 @@ namespace ao::rt::test
       CHECK_FALSE(tracks[2].has_child("covers"));
       CHECK_FALSE(tracks[3].has_child("covers"));
       CHECK_FALSE(root["library"].has_child("resources"));
+    }
+  }
+
+  TEST_CASE("LibraryYaml - only an explicit title clear survives an offline delta relay")
+  {
+    auto const sourceTemp = ao::test::TempDir{};
+    auto const& root = sourceTemp.path();
+    auto const clearedUri = audio::test::installAudioFixture(root, "basic_metadata.mp3", "cleared.mp3");
+    auto const untitledUri = audio::test::installAudioFixture(root, "empty.mp3", "untitled.mp3");
+
+    {
+      auto source = library::test::makeTestMusicLibrary(root, root);
+      auto changes = makeStateOnlyLibraryChanges(source);
+      auto commands = LibraryCommandsFixture{source, changes};
+      auto const titled =
+        ao::test::requireValue(commands.runTask(commands.commands().createTrackFromFileAsync(root / clearedUri)));
+      auto const untitled =
+        ao::test::requireValue(commands.runTask(commands.commands().createTrackFromFileAsync(root / untitledUri)));
+      REQUIRE(titled.title == "Test Title");
+      REQUIRE(untitled.title.empty());
+      REQUIRE(commands.updateMetadata(std::array{titled.trackId}, MetadataPatch{.optTitle = ""}));
+    }
+
+    auto const overlayPath = root / "first-hop.yaml";
+    {
+      auto source = library::test::makeTestMusicLibrary(root, root);
+      checkStoredTitle(source, clearedUri, "", true);
+      checkStoredTitle(source, untitledUri, "", false);
+      auto exporter = LibraryYamlExporter{source};
+      auto const probePath = root / "baseline.yaml";
+
+      // Change only the media, not the stored titles. With two blank file
+      // baselines, the ordinary blank has no difference to export.
+      audio::test::installAudioFixture(root, "empty.mp3", clearedUri);
+      REQUIRE(exporter.exportToYaml(probePath, ExportMode::Delta));
+      {
+        auto buffer = std::vector<char>{};
+        auto const tree = loadTree(probePath, buffer);
+        checkTitleClear(findExportedTitle(tree, clearedUri));
+        CHECK_FALSE(findExportedTitle(tree, untitledUri).readable());
+      }
+
+      // A now-titled file baseline makes the same ordinary blank a delta.
+      audio::test::installAudioFixture(root, "basic_metadata.mp3", untitledUri);
+      REQUIRE(exporter.exportToYaml(overlayPath, ExportMode::Delta));
+      auto buffer = std::vector<char>{};
+      auto const tree = loadTree(overlayPath, buffer);
+      checkTitleClear(findExportedTitle(tree, clearedUri));
+      checkTitleScalar(findExportedTitle(tree, untitledUri), "");
+    }
+
+    auto const mergeIntoRecipient =
+      [&](std::filesystem::path const& targetRoot, std::filesystem::path const& input, std::string const& localTitle)
+    {
+      auto target = library::test::makeTestMusicLibrary(targetRoot, targetRoot);
+      library::test::addTrack(target, library::test::TrackSpec{.title = localTitle, .uri = clearedUri});
+      library::test::addTrack(target, library::test::TrackSpec{.title = localTitle, .uri = untitledUri});
+      auto const reportRes = LibraryYamlImporter{target}.importFromYamlOffline(input, ImportMode::Merge);
+      REQUIRE(reportRes);
+      CHECK(reportRes->tracksCreated == 0);
+      CHECK(reportRes->tracksUpdated == 2);
+    };
+
+    auto const relayTemp = ao::test::TempDir{};
+    auto const& relayRoot = relayTemp.path();
+    auto const relayedPath = relayRoot / "second-hop.yaml";
+    mergeIntoRecipient(relayRoot, overlayPath, "Relay title");
+    {
+      auto relay = library::test::makeTestMusicLibrary(relayRoot, relayRoot);
+      checkStoredTitle(relay, clearedUri, "", true);
+      checkStoredTitle(relay, untitledUri, "", false);
+
+      // Neither file exists at the relay, so its ordinary blank is equal to
+      // the fallback baseline and only the clear is exported again.
+      REQUIRE(LibraryYamlExporter{relay}.exportToYaml(relayedPath, ExportMode::Delta));
+      auto buffer = std::vector<char>{};
+      auto const tree = loadTree(relayedPath, buffer);
+      checkTitleClear(findExportedTitle(tree, clearedUri));
+      CHECK_FALSE(findExportedTitle(tree, untitledUri).readable());
+    }
+
+    auto const recipientTemp = ao::test::TempDir{};
+    auto const& recipientRoot = recipientTemp.path();
+    audio::test::installAudioFixture(recipientRoot, "basic_metadata.mp3", untitledUri);
+    mergeIntoRecipient(recipientRoot, relayedPath, "Recipient title");
+    auto recipient = library::test::makeTestMusicLibrary(recipientRoot, recipientRoot);
+    checkStoredTitle(recipient, clearedUri, "", true);
+    checkStoredTitle(recipient, untitledUri, "Recipient title", false);
+  }
+
+  TEST_CASE("LibraryYaml - a title clear survives backup restore and missing-media delta export")
+  {
+    auto const sourceTemp = ao::test::TempDir{};
+    auto const& sourceRoot = sourceTemp.path();
+    auto const seedPath = sourceRoot / "seed.yaml";
+    writeDeltaDocument(seedPath, R"(    - uri: cleared.mp3
+      title: {clear: true}
+    - uri: untitled.mp3
+      title: ""
+)");
+    auto source = library::test::makeTestMusicLibrary(sourceRoot, sourceRoot);
+    REQUIRE(LibraryYamlImporter{source}.importFromYamlOffline(seedPath, ImportMode::Restore));
+    checkStoredTitle(source, "cleared.mp3", "", true);
+    checkStoredTitle(source, "untitled.mp3", "", false);
+
+    for (auto const mode : std::array{ExportMode::Full, ExportMode::Metadata})
+    {
+      CAPTURE(mode);
+      auto const backupPath = sourceRoot / "backup.yaml";
+      REQUIRE(LibraryYamlExporter{source}.exportToYaml(backupPath, mode));
+      {
+        auto buffer = std::vector<char>{};
+        auto const tree = loadTree(backupPath, buffer);
+        checkTitleClear(findExportedTitle(tree, "cleared.mp3"));
+        CHECK_FALSE(findExportedTitle(tree, "untitled.mp3").readable());
+      }
+
+      auto const targetTemp = ao::test::TempDir{};
+      auto const& targetRoot = targetTemp.path();
+      // Metadata restore seeds technical facts from this file, not its title
+      // or a clear instruction for the omitted title.
+      auto const uri = audio::test::installAudioFixture(targetRoot, "basic_metadata.mp3", "untitled.mp3");
+      {
+        auto target = library::test::makeTestMusicLibrary(targetRoot, targetRoot);
+        REQUIRE(LibraryYamlImporter{target}.importFromYamlOffline(backupPath, ImportMode::Restore));
+      }
+
+      REQUIRE(std::filesystem::remove(targetRoot / uri));
+      auto target = library::test::makeTestMusicLibrary(targetRoot, targetRoot);
+      checkStoredTitle(target, "cleared.mp3", "", true);
+      checkStoredTitle(target, "untitled.mp3", "", false);
+      auto const deltaPath = targetRoot / "restored.yaml";
+      REQUIRE(LibraryYamlExporter{target}.exportToYaml(deltaPath, ExportMode::Delta));
+      auto buffer = std::vector<char>{};
+      auto const tree = loadTree(deltaPath, buffer);
+      checkTitleClear(findExportedTitle(tree, "cleared.mp3"));
+      CHECK_FALSE(findExportedTitle(tree, "untitled.mp3").readable());
+    }
+  }
+
+  TEST_CASE("LibraryYaml - runtime merge of full and metadata backups clears only the explicitly named title")
+  {
+    for (auto const mode : std::array{ExportMode::Full, ExportMode::Metadata})
+    {
+      CAPTURE(mode);
+      auto const temp = ao::test::TempDir{};
+      auto const& root = temp.path();
+      auto const backup = root / "backup.yaml";
+      {
+        auto yaml = std::ofstream{backup};
+        yaml << "version: 1\nexport-mode: " << exportModeName(mode) << "\nlibrary:\n";
+
+        if (mode == ExportMode::Full)
+        {
+          yaml << "  resources: []\n";
+        }
+
+        yaml << "  tracks:\n    - uri: clear.mp3\n      title: {clear: true}\n    - uri: keep.mp3\n  lists: []\n";
+        yaml.close();
+        REQUIRE(yaml);
+      }
+      {
+        auto target = library::test::makeTestMusicLibrary(root, root);
+        library::test::addTrack(target, {.title = "Clear me", .uri = "clear.mp3"});
+        library::test::addTrack(target, {.title = "Keep me", .uri = "keep.mp3"});
+      }
+
+      auto executorPtr = std::make_unique<QueuedExecutor>();
+      auto& executor = *executorPtr;
+      auto core = ao::test::requireValue(
+        CoreRuntime::create(std::move(executorPtr), root, root, {}, library::test::kTestMusicLibraryMapBytes));
+      auto const reportRes = importThroughRuntime(core, executor, backup, ImportMode::Merge);
+      REQUIRE(reportRes);
+      CHECK(reportRes->payloadMode == mode);
+      CHECK(reportRes->tracksCreated == 0);
+      CHECK(reportRes->tracksUpdated == 2);
+      checkStoredTitle(core.musicLibrary(), "clear.mp3", "", true);
+      checkStoredTitle(core.musicLibrary(), "keep.mp3", "Keep me", false);
+    }
+  }
+
+  TEST_CASE("LibraryYaml - omission preserves a title clear and scalar text replaces it on merge")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const& root = temp.path();
+    auto const overlayPath = root / "overlay.yaml";
+    auto target = library::test::makeTestMusicLibrary(root, root);
+    library::test::addTrack(target, library::test::TrackSpec{.title = "Before", .uri = "song.mp3"});
+
+    auto const merge = [&](std::string_view fields)
+    {
+      writeDeltaDocument(overlayPath, "    - uri: song.mp3\n" + std::string{fields});
+      REQUIRE(LibraryYamlImporter{target}.importFromYamlOffline(overlayPath, ImportMode::Merge));
+    };
+
+    merge("      title: {clear: \"true\"}\n");
+    checkStoredTitle(target, "song.mp3", "", true);
+
+    SECTION("omission preserves the clear")
+    {
+      merge("      year: 1984\n");
+      checkStoredTitle(target, "song.mp3", "", true);
+    }
+
+    constexpr auto kTitles = std::to_array<std::pair<std::string_view, std::string_view>>({
+      {"", ""},
+      {" ''", ""},
+      {" \"\"", ""},
+      {" null", "null"},
+      {" ~", "~"},
+      {" '  '", "  "},
+      {" '{clear: true}'", "{clear: true}"},
+    });
+
+    for (auto const& [scalar, text] : kTitles)
+    {
+      DYNAMIC_SECTION("scalar title:" << scalar)
+      {
+        merge("      title:" + std::string{scalar} + "\n");
+        checkStoredTitle(target, "song.mp3", text, false);
+
+        auto const exportedPath = root / "export.yaml";
+        REQUIRE(LibraryYamlExporter{target}.exportToYaml(exportedPath, ExportMode::Delta));
+        auto buffer = std::vector<char>{};
+        auto const tree = loadTree(exportedPath, buffer);
+
+        if (auto const title = findExportedTitle(tree, "song.mp3"); text.empty())
+        {
+          CHECK_FALSE(title.readable());
+        }
+        else
+        {
+          checkTitleScalar(title, text);
+        }
+      }
     }
   }
 

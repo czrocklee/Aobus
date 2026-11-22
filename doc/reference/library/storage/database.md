@@ -71,7 +71,7 @@ FAT32 is unsupported because it limits a file to 4 GiB: the data file grows with
 Opening does not detect the filesystem, so a FAT32 location is not refused before it fills.
 Integer keys and record fields are little-endian in LMDB's native word order, and the format is defined only for 64-bit hosts: [`MetadataLayout.h`](../../../../include/ao/library/MetadataLayout.h) refuses to compile for another byte order or word size, and every persisted struct asserts its size, field offsets, and absence of padding.
 
-A closed library moves between macOS, Linux x86-64, and Windows x64 when both builds use the same format version, because admission accepts exactly one version.
+A closed library moves between macOS, Linux x86-64, and Windows x64 when both builds use the same layout. Before the first release, matching version numbers alone do not guarantee the same layout.
 LMDB keeps the page size of the host that created the environment, so a library created with 16 KiB pages on Apple Silicon opens on a 4 KiB-page host and the reverse.
 The lock file's contents are host-specific, but LMDB reinitializes it at the first exclusive open, so it may travel with the data file or be left behind.
 A copy carries the library's id and id history, so a copy and its original must not both stay in use, as [the id space record](#metadata-records) explains.
@@ -192,8 +192,20 @@ A workspace view then shows that List, a layout entry applies to it, and playbac
 
 ## Track records
 
-`TrackHotHeader` is 36 bytes, four-byte aligned, and contains the filter/sort working set: tag bloom, artist/album/genre/album-artist/composer dictionary ids, sample rate, year, title length, tag-blob length, bit depth, and codec.
-The tag-id array follows the header, followed by title bytes.
+`TrackHotHeader` is 36 bytes, four-byte aligned, and contains the filter/sort working set: tag bloom, artist/album/genre/album-artist/composer dictionary ids, sample rate, year, title length, the packed tag count and flags, bit depth, and codec.
+The unsigned 16-bit `tagLengthAndFlags` word at byte offset 32 is encoded as follows:
+
+| Bits   | Meaning                                          |
+| ------ | ------------------------------------------------ |
+| `15:2` | Tag count, up to 16,383.                         |
+| `1`    | Reserved; must be zero.                          |
+| `0`    | Explicit title clear; title length must be zero. |
+
+The tag-id array starts at byte 36 and takes `(tagLengthAndFlags >> 2) * 4` bytes, four per `DictionaryId`.
+The 16-bit `titleLength` at offset 30 counts up to 65,535 title bytes after that array, with no terminator.
+Minimal zero padding rounds the record up to a four-byte multiple.
+The hot view rejects truncated slices, a nonzero reserved bit, or a clear flag with nonzero title length; write and open validation also require exact canonical size and zero padding.
+With the flag unset, the packed word equals the array's byte length. Opening a row with a zero-length title does not infer a clear or backfill the flag.
 
 `TrackColdHeader` is 32 bytes, four-byte aligned, and contains duration, bitrate, track/disc numbers and totals, five block offsets, URI offset/length, channels, and one reserved byte.
 Defined block slots are written in slot order:
@@ -556,6 +568,7 @@ Development builds made before the first release used the numbers 1 through 10 f
 Version 1 has not been released. Until the first public release, a development build may change its layout or widen one of its limits without incrementing it, and the result is an alternative layout to earlier development builds.
 An earlier build usually rejects such a database on open as `CorruptData`, and one that already has it open fails through the fatal facility when it reads an affected row.
 Rejection is not guaranteed across a layout change: when each credit entry gained its kind byte, some Credits blocks remained valid under both layouts with different credits.
+A build that interprets the packed hot word as a tag byte length rejects a marked title clear under its tag-alignment check, not at the version gate. Do not use different development layouts in the same open environment.
 A development library therefore moves between such builds only through YAML, exported by the build that wrote it and restored into a new library.
 The [YAML reference](../format/yaml.md) separately defines the accepted interchange schema. Neither format provides a dual reader or layout autodetection.
 The current application interpretation belongs to the [predicate language reference](../../query/predicate-language.md), and membership behavior belongs to the [predicate evaluation specification](../../../system/query/predicate-evaluation.md).

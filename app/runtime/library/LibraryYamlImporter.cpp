@@ -910,8 +910,32 @@ namespace ao::rt
       return {};
     }
 
+    Result<> validateTrackTitle(ryml::ConstNodeRef const& title)
+    {
+      if (!title.readable() || title.has_val())
+      {
+        return {};
+      }
+
+      if (title.is_map() && title.num_children() == 1)
+      {
+        if (auto const action = title.first_child();
+            yaml::keyView(action) == "clear" && yaml::scalarView(action) == "true")
+        {
+          return {};
+        }
+      }
+
+      return makeError(Error::Code::FormatRejected, "Track record.title must be a scalar or {clear: true}");
+    }
+
     Result<> validateTrackNestedSchema(ryml::ConstNodeRef const& trackNode)
     {
+      if (auto res = validateTrackTitle(yaml::findChild(trackNode, "title")); !res)
+      {
+        return res;
+      }
+
       if (auto const custom = yaml::findChild(trackNode, "custom"); custom.readable())
       {
         if (auto res = requireMap(custom, "Track record.custom"); !res)
@@ -2804,7 +2828,6 @@ namespace ao::rt
     };
 
     constexpr auto kMetadataDispatch = std::to_array<Dispatch>({
-      {.field = rt::TrackField::Title, .stringSetter = [](auto& metadata, auto value) { metadata.title(value); }},
       {.field = rt::TrackField::Artist, .stringSetter = [](auto& metadata, auto value) { metadata.artist(value); }},
       {.field = rt::TrackField::Album, .stringSetter = [](auto& metadata, auto value) { metadata.album(value); }},
       {.field = rt::TrackField::AlbumArtist,
@@ -2856,6 +2879,19 @@ namespace ao::rt
 
           map.numberSetter(builder.metadata(), *valueRes);
         }
+      }
+    }
+
+    if (auto const title = yaml::findChild(trackNode, "title"); title.readable())
+    {
+      if (title.is_map())
+      {
+        // Preflight admits only the explicit clear action as a title map.
+        builder.metadata().clearTitleExplicitly();
+      }
+      else
+      {
+        builder.metadata().title(yaml::scalarView(title));
       }
     }
 

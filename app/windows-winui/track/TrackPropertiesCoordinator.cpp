@@ -475,7 +475,7 @@ namespace ao::winui
       content.Children().Append(editor.textBox);
     }
 
-    if (projection.enabled && targetCount > 1)
+    if (projection.enabled && (targetCount > 1 || (targetCount == 1 && row.field == rt::TrackField::Title)))
     {
       auto label = TextBlock{};
       label.Text(winrt::to_hstring(i18n::requiredFormat(_textCatalog,

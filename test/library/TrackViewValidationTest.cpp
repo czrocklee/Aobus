@@ -4,6 +4,7 @@
 #include "lib/library/TrackRecordValidation.h"
 #include "test/library/TrackViewTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/PictureType.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/TrackLayout.h>
@@ -95,7 +96,7 @@ namespace ao::library::test
                0,
                TrackHotHeader{
                  .tagBloom = bloom,
-                 .tagLength = static_cast<std::uint16_t>(tagBytes),
+                 .tagLengthAndFlags = packTrackHotTagLengthAndFlags(tags.size(), false),
                });
       std::memcpy(data.data() + sizeof(TrackHotHeader), tags.data(), tagBytes);
       return data;
@@ -217,41 +218,67 @@ namespace ao::library::test
     CHECK(smallView.isHotValid() == false);
   }
 
-  TEST_CASE("TrackView hot gate - poisons records whose extents overrun the record")
+  TEST_CASE("TrackView - rejects unsafe hot extents and invalid title flags")
   {
-    SECTION("title length overruns the record")
+    auto data = makeMinimalHotTrackViewData();
+    auto header = makeMinimalTrackHotHeader();
+
+    SECTION("Title length overruns the record")
     {
-      auto data = makeMinimalHotTrackViewData();
-      auto header = makeMinimalTrackHotHeader();
       header.titleLength = 100;
-      writePod(data, 0, header);
-
-      auto const view = TrackView{data, std::span<std::byte const>{}};
-      CHECK_FALSE(view.isHotValid());
     }
 
-    SECTION("tag length overruns the record")
+    SECTION("Marked record has a truncated tag payload")
     {
-      auto data = makeMinimalHotTrackViewData();
-      auto header = makeMinimalTrackHotHeader();
-      header.tagLength = 64;
-      writePod(data, 0, header);
-
-      auto const view = TrackView{data, std::span<std::byte const>{}};
-      CHECK_FALSE(view.isHotValid());
+      header.tagLengthAndFlags = 5; // One tag and an explicit clear, but no payload.
     }
 
-    SECTION("tag region is not a whole number of tag IDs")
+    SECTION("Reserved bit is set")
     {
-      auto data = makeMinimalHotTrackViewData();
+      header.tagLengthAndFlags = 2;
+    }
+
+    SECTION("Explicit clear also carries title text")
+    {
+      data = makeHotTrackViewData("Text");
+      data.resize(sizeof(TrackHotHeader) + 4);
+      header.titleLength = 4;
+      header.tagLengthAndFlags = 1;
+    }
+
+    writePod(data, 0, header);
+    auto const view = TrackView{data, {}};
+    CHECK_FALSE(view.isHotValid());
+    auto const res = validateSerializedHotTrack(data);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::CorruptData);
+  }
+
+  TEST_CASE("TrackView - deep hot validation rejects noncanonical size and padding")
+  {
+    auto data = makeMinimalHotTrackViewData();
+    auto header = makeMinimalTrackHotHeader();
+
+    SECTION("An explicitly cleared title needs no padding")
+    {
+      header.tagLengthAndFlags = 1;
       data.resize(data.size() + 4, std::byte{0});
-      auto header = makeMinimalTrackHotHeader();
-      header.tagLength = 2;
-      writePod(data, 0, header);
-
-      auto const view = TrackView{data, std::span<std::byte const>{}};
-      CHECK_FALSE(view.isHotValid());
     }
+
+    SECTION("Padding after an ordinary title is nonzero")
+    {
+      header.titleLength = 1;
+      data.resize(data.size() + 4, std::byte{0});
+      data[sizeof(TrackHotHeader)] = std::byte{'x'};
+      data.back() = std::byte{1};
+    }
+
+    writePod(data, 0, header);
+    auto const view = TrackView{data, {}};
+    CHECK(view.isHotValid());
+    auto const res = validateSerializedHotTrack(data);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::CorruptData);
   }
 
   TEST_CASE("TrackView - validates cold buffers")

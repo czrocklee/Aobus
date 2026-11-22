@@ -29,6 +29,7 @@
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
+#include <ao/rt/TrackMutation.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/ViewState.h>
 #include <ao/rt/WorkspaceService.h>
@@ -1046,10 +1047,10 @@ namespace
     }
 
     template<typename Reply, typename IsAccepted>
-    static ao::async::Task<void> mutateExternallyAsync(AobusCreditsProbeApplication* owner,
-                                                       ao::async::Task<ao::Result<Reply>> submission,
-                                                       IsAccepted isAccepted,
-                                                       std::stop_token stopToken)
+    static ao::async::Task<void> observeCommandAsync(AobusCreditsProbeApplication* owner,
+                                                     ao::async::Task<ao::Result<Reply>> submission,
+                                                     IsAccepted isAccepted,
+                                                     std::stop_token stopToken)
     {
       auto res = co_await std::move(submission);
       co_await owner->_runtimePtr->async().resumeOnCallbackExecutorAsync(stopToken);
@@ -1062,9 +1063,21 @@ namespace
       }
     }
 
-    void mutateExternally()
+    template<typename Reply, typename IsAccepted>
+    void observeCommand(ao::async::Task<ao::Result<Reply>> submission, IsAccepted isAccepted, std::string_view context)
     {
       _externalCompleted = false;
+      _runtimePtr->async().spawnWithLifetime(
+        _workflowTasks,
+        [this, submission = std::move(submission), isAccepted = std::move(isAccepted)](
+          std::stop_token stopToken) mutable
+        { return observeCommandAsync(this, std::move(submission), std::move(isAccepted), stopToken); },
+        context);
+      _ready = [this] { return _externalCompleted; };
+    }
+
+    void mutateExternally()
+    {
       auto bindingRes = _runtimePtr->library().bindTrackTargets(std::vector{_trackId});
 
       if (!bindingRes)
@@ -1074,33 +1087,40 @@ namespace
 
       auto submission =
         _runtimePtr->library().commands().updateMetadataAsync(std::move(*bindingRes), {.optTitle = "External title"});
-      _runtimePtr->async().spawnWithLifetime(
-        _workflowTasks,
-        [this, submission = std::move(submission)](std::stop_token stopToken) mutable
-        {
-          return mutateExternallyAsync(
-            this,
-            std::move(submission),
-            [](auto const& reply) { return reply.status == ao::rt::AuthoringStatus::Applied; },
-            stopToken);
-        },
+      observeCommand(
+        std::move(submission),
+        [](auto const& reply) { return reply.status == ao::rt::AuthoringStatus::Applied; },
         "Credits probe external revision");
-      _ready = [this] { return _externalCompleted; };
     }
 
     void deleteCapturedTrack(ao::TrackId id)
     {
-      _externalCompleted = false;
-      auto submission = _runtimePtr->library().commands().deleteTrackAsync(id);
-      _runtimePtr->async().spawnWithLifetime(
-        _workflowTasks,
-        [this, id, submission = std::move(submission)](std::stop_token stopToken) mutable
-        {
-          return mutateExternallyAsync(
-            this, std::move(submission), [id](auto const& reply) { return reply.trackId == id; }, stopToken);
-        },
+      observeCommand(
+        _runtimePtr->library().commands().deleteTrackAsync(id),
+        [id](auto const& reply) { return reply.trackId == id; },
         "Credits probe captured track deletion");
-      _ready = [this] { return _externalCompleted; };
+    }
+
+    void previewTitleClear(bool const expectRecorded)
+    {
+      // Only a normally blank title still needs a persisted clear marker.
+      auto const clearRecord = [](ao::TrackId id)
+      {
+        return ao::rt::TrackChangeRecord{
+          .trackId = id,
+          .fields = {{.field = "title",
+                      .oldValue = "",
+                      .newValue = "",
+                      .optReason = ao::rt::TrackFieldChangeReason::ExplicitClearRecorded}},
+        };
+      };
+      auto expected = expectRecorded ? std::vector{clearRecord(_outsideTrackId)}
+                                     : std::vector{clearRecord(_emptyTrackId), clearRecord(_outsideTrackId)};
+      observeCommand(
+        _runtimePtr->library().commands().previewUpdateMetadataAsync(
+          {_emptyTrackId, _outsideTrackId}, {.optTitle = ""}),
+        [expected = std::move(expected)](auto const& reply) { return reply.changes == expected; },
+        "Credits probe blank Title clear preview");
     }
 
     // The all-kind action and the four performance kinds, or with Show Empty every kind.
@@ -1692,7 +1712,56 @@ namespace
         {
           checkStored("External title", expectedCredits("Staged conductor", "Reloaded soloist"), 3);
           releaseClosedDialog();
+          openProperties({_emptyTrackId});
+          previewTitleClear(false);
         });
+      _steps.emplace_back(
+        [this]
+        {
+          check(_externalAccepted, "both blank titles still need an explicit clear before Save");
+          check(titleInput().Text().empty() && !_workflowDialog.IsPrimaryButtonEnabled(),
+                "an ordinary blank Title starts unchanged");
+          auto const albumClear = fieldClearLabel(ao::rt::TrackField::Album, 1);
+          check(std::ranges::none_of(controls<CheckBox>(),
+                                     [&albumClear](CheckBox const& box)
+                                     { return Automation::AutomationProperties::GetName(box) == albumClear; }),
+                "single Properties does not offer the batch Album clear");
+          toggleFieldClear(ao::rt::TrackField::Title, true, 1);
+        });
+      _steps.emplace_back(
+        [this]
+        {
+          check(!titleInput().IsEnabled() && _workflowDialog.IsPrimaryButtonEnabled(),
+                "explicit Clear on a blank Title disables its text editor and admits Save");
+          toggleFieldClear(ao::rt::TrackField::Title, false, 1);
+        });
+      _steps.emplace_back(
+        [this]
+        {
+          check(titleInput().IsEnabled() && titleInput().Text().empty() && !_workflowDialog.IsPrimaryButtonEnabled(),
+                "unchecking Clear restores the ordinary blank draft");
+          check(_runtimePtr->library().snapshot().revision() == _baselineRevision + 3 && _publications.size() == 3,
+                "staging and withdrawing Title clear do not write");
+          toggleFieldClear(ao::rt::TrackField::Title, true, 1);
+        });
+      _steps.emplace_back([this] { saveProperties(); });
+      _steps.emplace_back(
+        [this]
+        {
+          releaseClosedDialog();
+          auto const snapshot = _runtimePtr->library().snapshot();
+          check(_publications.size() == 4 && _publications.back().tracksMutated == std::vector{_emptyTrackId} &&
+                  snapshot.revision() == _baselineRevision + 4,
+                "Title clear commits once for the one bound track");
+          check(snapshot.trackField(_emptyTrackId, ao::rt::TrackField::Album) ==
+                    ao::rt::TrackFieldRawValue{std::string{"Second album"}} &&
+                  snapshot.trackField(_emptyTrackId, ao::rt::TrackField::Year) ==
+                    ao::rt::TrackFieldRawValue{std::uint16_t{1997}},
+                "Title clear preserves unrelated fields on the bound track");
+          previewTitleClear(true);
+        });
+      _steps.emplace_back(
+        [this] { check(_externalAccepted, "only the unselected blank title still needs an explicit clear"); });
     }
 
     AutoSuggestBox suggestedField(ao::rt::TrackField field) const
@@ -1788,11 +1857,16 @@ namespace
       throw winrt::hresult_invalid_argument{L"Missing Add action for the input"};
     }
 
-    void toggleFieldClear(ao::rt::TrackField selectedField, bool checked)
+    winrt::hstring fieldClearLabel(ao::rt::TrackField selectedField, std::size_t count) const
     {
       auto const field = ao::uimodel::trackFieldLabel(*_optCatalog, selectedField);
-      auto const label = winrt::to_hstring(
-        ao::i18n::requiredFormat(*_optCatalog, MessageId::TrackClearFieldForTracks, {{"field", field}, {"count", 2}}));
+      return winrt::to_hstring(ao::i18n::requiredFormat(
+        *_optCatalog, MessageId::TrackClearFieldForTracks, {{"field", field}, {"count", count}}));
+    }
+
+    void toggleFieldClear(ao::rt::TrackField selectedField, bool checked, std::size_t count = 2)
+    {
+      auto const label = fieldClearLabel(selectedField, count);
 
       for (auto const& input : controls<CheckBox>())
       {
@@ -1809,7 +1883,7 @@ namespace
         }
       }
 
-      throw winrt::hresult_invalid_argument{L"Missing clear action naming the field and both targets"};
+      throw winrt::hresult_invalid_argument{L"Missing clear action naming the field and target count"};
     }
 
     void stageAlbumClear() { toggleFieldClear(ao::rt::TrackField::Album, true); }

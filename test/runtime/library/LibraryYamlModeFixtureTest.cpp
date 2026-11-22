@@ -193,6 +193,8 @@ namespace ao::rt::test
 
         auto const optIntro = findTrack(library, transaction, "Jazz/Example Quartet/Night Session (Live).wav");
         REQUIRE(optIntro);
+        CHECK(optIntro->metadata().title().empty());
+        CHECK(optIntro->metadata().isTitleExplicitlyCleared());
         REQUIRE(optIntro->property().segment());
         CHECK(optIntro->property().segment()->ordinal == 1);
         CHECK(optIntro->property().duration() == std::chrono::milliseconds{2000});

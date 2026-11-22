@@ -26,6 +26,7 @@ namespace ao::rt
 
   struct MetadataPatch final
   {
+    // Omission preserves the title state; a present empty string explicitly clears it.
     std::optional<std::string> optTitle{};
     std::optional<std::string> optArtist{};
     std::optional<std::string> optAlbum{};
@@ -54,11 +55,18 @@ namespace ao::rt
     std::map<std::string, std::optional<std::string>> customUpdates{};
   };
 
+  enum class TrackFieldChangeReason : std::uint8_t
+  {
+    ExplicitClearRecorded,
+  };
+
   struct TrackFieldChange final
   {
     std::string field;
     std::string oldValue;
     std::string newValue;
+    // Diagnostic for a change not shown by the text values alone.
+    std::optional<TrackFieldChangeReason> optReason{};
 
     bool operator==(TrackFieldChange const&) const = default;
   };
