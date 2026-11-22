@@ -40,7 +40,6 @@
 #include <ao/library/WritableMusicLibrary.h>
 #include <ao/library/WriteTransaction.h>
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/ListMutation.h>
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
@@ -1257,8 +1256,8 @@ namespace
         return;
       }
 
-      auto const parentName =
-        winrt::hstring{_optListPreviewLocale ? L"Bach" : (_liveParent ? L"Preview parent" : L"All Tracks")};
+      auto const* const auditParentName = _liveParent ? L"Preview parent" : L"All Tracks";
+      auto const parentName = winrt::hstring{_optListPreviewLocale ? L"Bach" : auditParentName};
       auto const row = pane ? findVisual<Controls::NavigationViewItem>(pane, parentName) : nullptr;
       auto const anchor = row ? row.Content().try_as<FrameworkElement>() : nullptr;
       _flyout = anchor ? anchor.ContextFlyout() : nullptr;
@@ -2282,7 +2281,7 @@ namespace
       _stage = "Classic Move: filtered Manual Order view";
       auto const* manual = ao::rt::builtinTrackPresentationPreset(ao::rt::kListOrderTrackPresentationId);
 
-      if (!manual)
+      if (manual == nullptr)
       {
         fail("Manual Order presentation missing");
         finish();
@@ -2310,7 +2309,7 @@ namespace
       auto const state = activeState();
       auto const* manual = ao::rt::builtinTrackPresentationPreset(ao::rt::kListOrderTrackPresentationId);
       return state.id == _moveViewId && state.listId == _seed.composerListId &&
-             state.filterExpression == kAlphaFilter && !state.optFilterError && manual &&
+             state.filterExpression == kAlphaFilter && !state.optFilterError && manual != nullptr &&
              state.presentation == manual->spec && state.selection == std::vector{_seed.summaryTracks.front()};
     }
 
@@ -2355,9 +2354,7 @@ namespace
         Controls::TextBlock::TextProperty(),
         [this, previous = status.Text()](DependencyObject const& sender, auto const&)
         {
-          auto const text = sender.as<Controls::TextBlock>().Text();
-
-          if (text == _movedText)
+          if (auto const text = sender.as<Controls::TextBlock>().Text(); text == _movedText)
           {
             _moveReported = true;
           }

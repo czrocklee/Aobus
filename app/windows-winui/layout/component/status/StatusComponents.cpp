@@ -297,9 +297,9 @@ namespace ao::winui::layout
             }
 
             auto const viewId = _trackList.viewId();
-            auto const selected = _views.selectedTrackIds(viewId);
 
-            if (uimodel::shouldRefreshTrackSelectionSummary(changed, selected))
+            if (auto const selected = _views.selectedTrackIds(viewId);
+                uimodel::shouldRefreshTrackSelectionSummary(changed, selected))
             {
               applyUiUpdate(
                 "SelectionInfoComponent", [this, viewId, count = selected.size()] { apply(viewId, count); });

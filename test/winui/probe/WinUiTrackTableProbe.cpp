@@ -2652,7 +2652,7 @@ namespace
       _report.beginScenario("order results and rejected relative moves in a filtered Manual Order view");
       auto const* manual = ao::rt::builtinTrackPresentationPreset(ao::rt::kListOrderTrackPresentationId);
 
-      if (!manual)
+      if (manual == nullptr)
       {
         failSetup("Manual Order preset is missing");
         return;
