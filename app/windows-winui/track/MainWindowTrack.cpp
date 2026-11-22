@@ -69,7 +69,7 @@ namespace winrt::Aobus::implementation
 
   void MainWindow::handleTrackPropertiesInvoked(
     Microsoft::UI::Xaml::Input::KeyboardAccelerator const& /*sender*/,
-    Microsoft::UI::Xaml::Input::KeyboardAcceleratorInvokedEventArgs const& args)
+    Microsoft::UI::Xaml::Input::KeyboardAcceleratorInvokedEventArgs const& args) const
   {
     args.Handled(tryInvokeShellAction("track.presentProperties"));
   }

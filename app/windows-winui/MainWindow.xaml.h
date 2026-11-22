@@ -86,8 +86,9 @@ namespace winrt::Aobus::implementation
                                    Microsoft::UI::Xaml::Input::KeyboardAcceleratorInvokedEventArgs const& args);
     void handleNavigateForwardInvoked(Microsoft::UI::Xaml::Input::KeyboardAccelerator const&,
                                       Microsoft::UI::Xaml::Input::KeyboardAcceleratorInvokedEventArgs const& args);
-    void handleTrackPropertiesInvoked(Microsoft::UI::Xaml::Input::KeyboardAccelerator const&,
-                                      Microsoft::UI::Xaml::Input::KeyboardAcceleratorInvokedEventArgs const& args);
+    void handleTrackPropertiesInvoked(
+      Microsoft::UI::Xaml::Input::KeyboardAccelerator const&,
+      Microsoft::UI::Xaml::Input::KeyboardAcceleratorInvokedEventArgs const& args) const;
     void handleColumnHeaderClicked(Windows::Foundation::IInspectable const& sender,
                                    Microsoft::UI::Xaml::RoutedEventArgs const&);
     void handleColumnResizeCompleted(Windows::Foundation::IInspectable const& sender,
