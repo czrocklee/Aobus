@@ -86,11 +86,7 @@ namespace ao::gtk
 
     void handleDeleteListActivated();
     void handleDeleteListSubtreeActivated();
-    void presentDeleteConfirmation(ListId listId,
-                                   bool deleteDescendants,
-                                   std::string title,
-                                   std::string message,
-                                   std::optional<rt::DeleteListReply::TagImpact> optTagImpact);
+    void presentDeleteConfirmation(ListId listId, bool deleteDescendants, rt::DeleteListSubtreeReply const& preview);
     void commitDeleteList(ListId listId, bool deleteDescendants, bool removeWritableTag);
     void showDeleteError(ListId listId, std::string_view message);
     void handleEditListActivated();

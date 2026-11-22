@@ -133,7 +133,7 @@ Because the box shows destination rather than origin, only partly carried tags a
 
 Library tags that no captured target carries follow the selection's own tags.
 They need no separate heading because the empty box already reports their selection state.
-At most the 50 highest-frequency suggestions are drawn, and truncation reports the number omitted.
+The editor draws at most 50 suggestions in [tag vocabulary order](../presentation/metadata-editing.md#tags) and reports how many it omitted.
 The cap applies only to displayed suggestions: draft-marked tags and exact query matches are exempt, so a lower-ranked or already edited tag remains reachable.
 
 The query above the list is always live rather than a second interaction mode.

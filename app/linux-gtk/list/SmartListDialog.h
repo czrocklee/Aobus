@@ -7,6 +7,7 @@
 #include "common/MainContextCallbackScope.h"
 #include "list/QueryExpressionBox.h"
 #include <ao/CoreIds.h>
+#include <ao/async/Subscription.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackPresentation.h>
@@ -20,7 +21,7 @@
 #include <gtkmm/label.h>
 #include <gtkmm/scrolledwindow.h>
 #include <gtkmm/window.h>
-#include <sigc++/connection.h>
+#include <sigc++/scoped_connection.h>
 
 #include <cstdint>
 #include <optional>
@@ -34,6 +35,7 @@ namespace Gtk
 {
   class Button;
   class ListBoxRow;
+  class SliceListModel;
   class StringList;
 }
 
@@ -108,13 +110,17 @@ namespace ao::gtk
     std::uint32_t unavailablePresentationRow() const;
     void buildPreview();
     void configurePreviewColumns();
-    void rebuildPreviewSource();
+    void acquirePreviewSource();
     void updateSourceLabels();
     void updatePlaylistExpression();
     void updatePlaylistTagFromName();
     uimodel::SmartListEditorViewState editorViewState() const;
     void updateDialogState();
-    void updatePreview();
+    void updateDialogState(uimodel::SmartListEditorViewState const& state);
+    void updateErrorLabel(uimodel::SmartListEditorViewState const& state);
+    void dismissSubmissionError();
+    void refreshDraftPreview();
+    void refreshPreview();
 
     Gtk::Entry _nameEntry;
     Gtk::Entry _descEntry;
@@ -134,8 +140,12 @@ namespace ao::gtk
     Gtk::ListBoxRow* _membershipTagRow = nullptr;
     Gtk::ScrolledWindow _previewScrolledWindow;
     Gtk::ColumnView _previewColumnView;
-    sigc::connection _exprTimeoutConnection;
-    sigc::connection _rebuildConnection;
+    sigc::scoped_connection _nameChangedConnection;
+    sigc::scoped_connection _descriptionChangedConnection;
+    sigc::scoped_connection _expressionChangedConnection;
+    sigc::scoped_connection _exprTimeoutConnection;
+    sigc::scoped_connection _previewSetupConnection;
+    sigc::scoped_connection _previewRefreshConnection;
 
     // Preview infrastructure
     rt::Library& _library;
@@ -149,9 +159,13 @@ namespace ao::gtk
     ListId _parentListId;
     TrackRowCache const& _trackRowCache;
     std::optional<rt::TrackSourceLease> _optPreviewSourceLease;
+    async::Subscription _previewSourceSubscription;
     Glib::RefPtr<TrackListModel> _previewModelPtr;
+    Glib::RefPtr<Gtk::SliceListModel> _previewSampleModelPtr;
+    std::string _previewAcquisitionError;
 
     // Edit mode state
+    std::string _submissionError;
     ListId _editListId{kInvalidListId};
     /// The opaque id of a stored presentation no longer present in the option
     /// snapshot, retained while the dialog's unavailable option exists so a

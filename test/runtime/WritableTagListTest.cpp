@@ -26,6 +26,15 @@ namespace ao::rt::test
     CHECK_FALSE(writableTagForListExpression("(").has_value());
   }
 
+  TEST_CASE("WritableTagList - serializes tag names without interpreting query syntax")
+  {
+    auto const tag = std::string{R"(旅程 "A"\B or #other)"};
+    CHECK(serializeTagExpression("rock") == "#rock");
+    auto const expression = serializeTagExpression(tag);
+    CHECK(writableTagForListExpression(expression) == tag);
+    CHECK_FALSE(hasListExpressionTagReference(expression, "other"));
+  }
+
   TEST_CASE("WritableTagList - finds tag references anywhere in a valid expression")
   {
     CHECK(hasListExpressionTagReference(R"(#"road-trip")", "road-trip"));

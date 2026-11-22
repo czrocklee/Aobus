@@ -5,6 +5,7 @@
 
 #include "test/MessageCatalogTestSupport.h"
 #include "test/TestFixtureSupport.h"
+#include "test/audio/AudioFixtureSupport.h"
 #include "test/library/TrackTestSupport.h"
 #include "test/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/linux-gtk/GtkRuntimeTestSupport.h"
@@ -16,11 +17,15 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryCommands.h>
+#include <ao/rt/library/LibraryJobs.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/label.h>
 
 #include <chrono>
+#include <filesystem>
+#include <utility>
+#include <vector>
 
 namespace ao::gtk::test
 {
@@ -31,7 +36,8 @@ namespace ao::gtk::test
     auto& runtime = fixture.runtime();
 
     auto const reply = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
-    auto label = SelectionInfoLabel{runtime.views(), runtime.workspace(), ao::test::englishMessageCatalog()};
+    auto label = SelectionInfoLabel{
+      runtime.views(), runtime.workspace(), runtime.library().changes(), ao::test::englishMessageCatalog()};
     auto const& text = dynamic_cast<Gtk::Label const&>(label.widget());
 
     CHECK(text.has_css_class("dim-label"));
@@ -68,7 +74,8 @@ namespace ao::gtk::test
     auto const secondViewId = ao::test::requireValue(runtime.workspace().navigate({.target = listId}));
     REQUIRE(firstViewId != secondViewId);
 
-    auto label = SelectionInfoLabel{runtime.views(), runtime.workspace(), ao::test::englishMessageCatalog()};
+    auto label = SelectionInfoLabel{
+      runtime.views(), runtime.workspace(), runtime.library().changes(), ao::test::englishMessageCatalog()};
     auto const& text = dynamic_cast<Gtk::Label const&>(label.widget());
     CHECK(text.get_text().empty());
 
@@ -76,7 +83,8 @@ namespace ao::gtk::test
     CHECK(text.get_text() == "1 item selected (3:00)");
 
     {
-      auto initialLabel = SelectionInfoLabel{runtime.views(), runtime.workspace(), ao::test::englishMessageCatalog()};
+      auto initialLabel = SelectionInfoLabel{
+        runtime.views(), runtime.workspace(), runtime.library().changes(), ao::test::englishMessageCatalog()};
       auto const& initialText = dynamic_cast<Gtk::Label const&>(initialLabel.widget());
       CHECK(initialText.get_text() == "1 item selected (3:00)");
     }
@@ -95,5 +103,46 @@ namespace ao::gtk::test
     REQUIRE(runtime.workspace().focusView(secondViewId));
     drainGtkEvents();
     CHECK(text.get_text() == "2 items selected (5:00)");
+  }
+
+  TEST_CASE("SelectionInfoLabel - committed rescan and deletion refresh duration without a selection change")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto selected = kInvalidTrackId;
+    auto other = kInvalidTrackId;
+    auto fixture = GtkRuntimeFixture{
+      [&](library::MusicLibrary& storage)
+      {
+        selected = library::test::addTrack(storage, {.uri = "selected.flac", .duration = std::chrono::minutes{2}});
+        other = library::test::addTrack(storage, {.uri = "other.flac", .duration = std::chrono::minutes{3}});
+      }};
+    auto& runtime = fixture.runtime();
+    auto const view = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
+    REQUIRE(runtime.views().setSelection(view, {selected}));
+    drainGtkEvents();
+    auto label = SelectionInfoLabel{
+      runtime.views(), runtime.workspace(), runtime.library().changes(), ao::test::englishMessageCatalog()};
+    auto const& text = dynamic_cast<Gtk::Label const&>(label.widget());
+    REQUIRE(text.get_text() == "1 item selected (2:00)");
+
+    bool selectionChanged = false;
+    auto const selectionSub = runtime.views().onSelectionChanged([&](auto const&) { selectionChanged = true; });
+    auto& commands = runtime.library().commands();
+    REQUIRE(runGtkTask(runtime, commands.deleteTrackAsync(other)));
+    CHECK(text.get_text() == "1 item selected (2:00)");
+
+    std::filesystem::copy_file(
+      audio::test::requireAudioFixture("basic_metadata.flac"), runtime.musicRoot() / "selected.flac");
+    auto& jobs = runtime.library().jobs();
+    auto plan = ao::test::requireValue(runGtkTask(runtime, jobs.buildScanPlanAsync()));
+    auto const result = ao::test::requireValue(runGtkTask(runtime, jobs.applyScanPlanAsync(std::move(plan))));
+    REQUIRE(result.mutatedIds == std::vector{selected});
+    CHECK(text.get_text() == "1 item selected (0:01)");
+
+    REQUIRE(runGtkTask(runtime, commands.deleteTrackAsync(selected)));
+    CHECK_FALSE(selectionChanged);
+    CHECK(runtime.workspace().snapshot().activeViewId == view);
+    CHECK(runtime.views().trackListState(view).selection == std::vector{selected});
+    CHECK(text.get_text() == "1 item selected");
   }
 } // namespace ao::gtk::test

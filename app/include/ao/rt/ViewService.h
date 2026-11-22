@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -114,6 +115,10 @@ namespace ao::rt
     // (filter/sort/selection) on the render path. Returns nullptr for an unknown
     // view. The pointer remains valid until the view is destroyed.
     TrackPresentationSpec const* findTrackListPresentation(ViewId viewId) const noexcept;
+
+    // Synchronous borrowed lookup; empty for an unknown view. Do not retain the span
+    // across selection or view changes, including callbacks that may make those changes.
+    std::span<TrackId const> selectedTrackIds(ViewId viewId) const noexcept;
 
     // Total playback duration of the view's current selection. Returns 0 for an unknown view,
     // an empty selection, or selected ids missing from the library.

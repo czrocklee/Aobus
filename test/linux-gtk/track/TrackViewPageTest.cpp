@@ -405,6 +405,11 @@ namespace ao::gtk::test
     CHECK_FALSE(page.hasOrderDragHandle());
     CHECK(page.orderCapabilities().disabledReason ==
           "Fix the List or quick-filter expression before changing its order.");
+
+    REQUIRE(runtime.workspace().closeView(viewId));
+    page.refreshOrderCapabilities();
+    CHECK_FALSE(page.hasOrderDragHandle());
+    CHECK(page.orderCapabilities().disabledReason == "This List is no longer available.");
   }
 
   TEST_CASE("TrackViewPage - dropping a drag handle preserves the order submission")
@@ -518,6 +523,12 @@ namespace ao::gtk::test
       }));
 
     CHECK(observedTrackIds == expectedTrackIds);
+    REQUIRE(tryPumpGtkEventsUntil(
+      [&page]
+      {
+        auto* const label = findLabelByText(page, "Moved 1 track in Manual Order.");
+        return label != nullptr && label->get_visible();
+      }));
   }
 
   TEST_CASE("TrackViewPage - an intervening revision cancels inline metadata without changing the row")

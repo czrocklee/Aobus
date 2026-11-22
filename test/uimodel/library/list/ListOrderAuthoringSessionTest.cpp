@@ -8,6 +8,7 @@
 #include "test/runtime/RuntimeLibraryTestSupport.h"
 #include "test/runtime/ViewServiceTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/library/ListStore.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackPresentation.h>
@@ -193,6 +194,22 @@ namespace ao::uimodel::test
       fixture.runtime.drainCallbacks();
       CHECK_FALSE(session.isCurrent());
     }
+  }
+
+  TEST_CASE("ListOrderAuthoringSession - a closed view preserves the runtime lookup error")
+  {
+    auto fixture = SessionFixture{};
+    auto const viewId = fixture.open();
+    REQUIRE(fixture.runtime.workspace.closeView(viewId));
+    auto const missingViewRes = fixture.runtime.service.findTrackListState(viewId);
+    REQUIRE_FALSE(missingViewRes);
+
+    auto const sessionRes = ListOrderAuthoringSession::begin(
+      fixture.runtime.commandsFixture.library(), fixture.runtime.service, viewId, ao::test::englishMessageCatalog());
+
+    REQUIRE_FALSE(sessionRes);
+    CHECK(sessionRes.error().code == Error::Code::NotFound);
+    CHECK(sessionRes.error().message == missingViewRes.error().message);
   }
 
   TEST_CASE("ListOrderAuthoringSession - a write not yet announced refuses binding with the localized reason",

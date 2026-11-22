@@ -281,8 +281,10 @@ ja:table {
     smart_list_showing_source { "{source, select, library {全{count, plural, one {#曲} other {#曲}}を表示中} other {ソースから全{count, plural, one {#曲} other {#曲}}を表示中}}" }
     smart_list_invalid_filter { "無効なフィルター" }
     smart_list_no_matches { "一致なし" }
+    smart_list_match_count { "{scope, select, library {ライブラリの曲数: {count, number}} source {ソースの曲数: {count, number}} other {一致件数: {count, number}}}" }
     smart_list_showing_all_matches { "全{count, plural, one {#件の一致} other {#件の一致}}を表示中" }
-    smart_list_showing_first_matches { "{count}件中{visible}件の一致を表示中" }
+    smart_list_showing_first_matches { "プレビュー: {scope, select, library {ライブラリの{count, plural, other {#曲}}のうち{visible}曲} source {ソースの{count, plural, other {#曲}}のうち{visible}曲} other {一致した{count, plural, other {#件}}のうち{visible}件}}" }
+    smart_list_preview_unavailable { "プレビューできません: {diagnostic}" }
     smart_list_untitled_track { "(無題)" }
     list_order_saved_lists_only { "手動並べ替えは保存されたリストでのみ利用できます。" }
     list_order_library_busy { "ライブラリがビジー状態です。メンテナンス完了後に手動並べ替えが利用可能になります。" }
@@ -414,7 +416,6 @@ ja:table {
     gtk_smart_list_unavailable_presentation { "利用不可: {id}（自動）" }
     gtk_smart_list_presentation { "表示" }
     gtk_smart_list_preview { "プレビュー" }
-    gtk_smart_list_waiting_for_filter { "フィルターを待機中..." }
     gtk_smart_list_track { "曲" }
     gtk_smart_list_invalid_source { "(無効なソース)" }
     gtk_smart_list_choose_membership_tag { "プレイリストのメンバーシップに使用する表示タグを選択してください" }
@@ -451,9 +452,10 @@ ja:table {
     library_restore_confirmation { "この復元により、現在の対象データ（{scope}）が置き換えられます。\n\nバックアップは YAML v{version} 形式で、モードは ''{mode}'' です。\nプレビューでは、{tracksCreated} 曲を作成し、{tracksUpdated} 曲を更新し、{tracksDeleted} 曲を削除します。{listsCreated} 件のリストを作成し、{listsDeleted} 件を削除します。未解決の参照 {dangling} 件は無視します。無効なリストフィルター {invalidFilters} 件はそのまま保持します。\n\n選択したバックアップの内容と一致する場合のみ続行してください。" }
     library_file_selection_error { "{operation}: {message}" }
     gtk_list_other_computed_membership { "他のリストには計算されたメンバーシップがあります。代わりにその式または曲のタグを編集してください。" }
-    list_no_editable_playlists { "直接編集可能なプレイリストはありません" }
+    list_no_membership_add_targets { "追加先のプレイリストはありません" }
     gtk_list_create_playlist { "プレイリストを作成..." }
     gtk_list_manage_lists { "リストを管理..." }
+    list_membership_add_target { "{name} ({tag})" }
     list_add_to_playlist { "プレイリストに追加" }
     list_remove_from_current { "{name} ({tag}) から削除" }
     gtk_list_remove_computed_unavailable { "メンバーシップが計算されているため、このリストからの削除は利用できません。" }
@@ -791,7 +793,6 @@ ja:table {
     winui_library_quick_filter_placeholder { "曲をフィルター" }
     winui_library_ready { "準備完了" }
     winui_library_rescanning { "ライブラリを再スキャン中..." }
-    winui_library_no_selection { "選択なし" }
     winui_track_move_column_left { "左へ移動" }
     winui_track_move_column_right { "右へ移動" }
     winui_track_resize_column { "列 {column} の幅を調整" }
@@ -1157,7 +1158,6 @@ ja:table {
     appkit_new_list { "新規リスト" }
     appkit_edit_list { "リストを編集" }
     appkit_remove_from_list { "リストから削除" }
-    appkit_add_to_list { "リストに追加" }
     appkit_properties_stale { "ライブラリが変更されました。入力内容は保持されています。最新の内容を編集するには、プロパティを開き直してください。" }
     appkit_editor_busy { "ライブラリがビジー状態です。入力内容は保持されています。もう一度保存してください。" }
     appkit_editor_stale { "ライブラリが変更されました。入力内容は保持されています。続けるにはエディターを開き直してください。" }
@@ -1260,7 +1260,6 @@ ja:table {
     appkit_choose_library_folder { "音楽ライブラリが入っているフォルダを選択してください。" }
     appkit_clear_recent_menu { "メニューを消去" }
     appkit_unknown_folder { "不明なフォルダ" }
-    appkit_remove_from_current_list { "このリストから削除" }
     appkit_playback_position_value { "{elapsed}（全体 {duration}）" }
     appkit_selection_total { "{selected, number} 曲を選択中 / {total, plural, other {全 # 曲}}" }
     appkit_tracks_selected { "{count, plural, other {# 曲を選択中}}" }

@@ -45,6 +45,7 @@ cc_library(
         "library/list/ListAuthoring.cpp",
         "library/list/ListOrder.cpp",
         "library/list/ListOrderAuthoringSession.cpp",
+        "library/list/ListOrderOutcome.cpp",
         "library/list/ListTreeProjection.cpp",
         "library/list/SmartListEditing.cpp",
         "library/presentation/CustomPresentationEditorModel.cpp",

@@ -22,6 +22,7 @@ namespace ao::rt
   class AppRuntime;
   class CompletionService;
   class LibraryJobs;
+  class LibraryChanges;
   class Library;
   class NotificationService;
   class PlaybackService;
@@ -174,6 +175,7 @@ namespace ao::gtk::layout
   void registerSelectionInfoComponent(ComponentRegistry& registry,
                                       rt::ViewService& views,
                                       rt::WorkspaceService& workspace,
+                                      rt::LibraryChanges const& changes,
                                       i18n::MessageCatalog const& textCatalog);
   void registerLibraryTrackCountComponent(ComponentRegistry& registry,
                                           rt::TrackSourceCache& sources,

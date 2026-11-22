@@ -13,11 +13,11 @@
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
+#include <ao/rt/ViewState.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/projection/TrackListProjection.h>
-#include <ao/rt/source/TrackSource.h>
 #include <ao/uimodel/library/list/ListOrder.h>
 #include <ao/uimodel/library/list/ListOrderSession.h>
 
@@ -348,15 +348,8 @@ namespace ao::uimodel
       return std::unexpected{sourceStateRes.error()};
     }
 
-    auto capabilities = describeListOrderCapabilities(textCatalog,
-                                                      ListOrderCapabilityInput{
-                                                        .listId = stateRes->listId,
-                                                        .presentation = stateRes->presentation,
-                                                        .quickFilterExpression = stateRes->filterExpression,
-                                                        .sourceLive = *sourceStateRes == rt::TrackSourceState::Live,
-                                                        .sourceHasError = stateRes->optFilterError.has_value(),
-                                                        .authoring = library.authoringAvailability(),
-                                                      });
+    auto capabilities =
+      describeViewListOrderCapabilities(textCatalog, *stateRes, *sourceStateRes, library.authoringAvailability());
 
     if (!capabilities.canAuthorOrder)
     {

@@ -21,7 +21,9 @@
 #include <gtkmm/window.h>
 #include <sigc++/scoped_connection.h>
 
+#include <cstddef>
 #include <cstdint>
+#include <format>
 #include <span>
 #include <string>
 #include <string_view>
@@ -137,6 +139,46 @@ namespace ao::gtk::test
       editor.setup(runtime.library(), {selectedTrackId});
 
       CHECK(directChildLabelTextsByClass(editor, "ao-tag-chip-suggested") == std::vector<std::string>{"ABC", "ＡＢＣ"});
+    }
+  }
+
+  TEST_CASE("TagEditor - caps the ranked tag window before excluding current tags")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    auto const selectedTrackId = addRuntimeTrack(runtime, library::test::TrackSpec{.tags = {"Chosen"}});
+    auto tags = std::vector<std::string>{"ä"};
+
+    for (std::size_t index = 0; index < 49; ++index)
+    {
+      tags.push_back(std::format("tag{:02}", index));
+    }
+
+    addRuntimeTrack(runtime, library::test::TrackSpec{.tags = std::move(tags)});
+    auto const checkWindow = [&](rt::TextOrderingPolicy const* policy,
+                                 std::string_view const expectedFirst,
+                                 std::string_view const expectedLast)
+    {
+      auto editor = TagEditor{ao::test::englishMessageCatalog(), policy};
+      editor.setup(runtime.library(), {selectedTrackId});
+
+      CHECK(directChildLabelTextsByClass(editor, "ao-tag-chip-current") == std::vector<std::string>{"Chosen"});
+      auto const suggestions = directChildLabelTextsByClass(editor, "ao-tag-chip-suggested");
+      REQUIRE(suggestions.size() == 49);
+      CHECK(suggestions.front() == expectedFirst);
+      CHECK(suggestions.back() == expectedLast);
+    };
+
+    SECTION("Without a locale policy, the cap takes the snapshot prefix")
+    {
+      checkWindow(nullptr, "tag00", "tag48");
+    }
+
+    SECTION("Locale rank can move a tag into the capped window")
+    {
+      auto const policy = TestTextOrderingPolicy{};
+      checkWindow(&policy, "ä", "tag47");
     }
   }
 

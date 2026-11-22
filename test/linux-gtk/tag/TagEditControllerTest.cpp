@@ -329,6 +329,8 @@ namespace ao::gtk::test
 
     auto const contextPopovers = collectAll<Gtk::PopoverMenu>(page);
     REQUIRE(contextPopovers.size() == 1);
+    CHECK(menuLabelForAction(*contextPopovers.front(), "ctx.add-to-list-unavailable") ==
+          std::optional<std::string>{"No Playlists to add to"});
     CHECK(contextPopovers.front()->activate_action("ctx.manage-lists"));
     CHECK(requestCount == 1);
     drainGtkEvents();
@@ -342,9 +344,10 @@ namespace ao::gtk::test
       [&](library::MusicLibrary& library)
       { trackId = library::test::addTrackWithUniqueFixtureUri(library, {.title = "Context Target"}); }};
     auto& runtime = fixture.runtime();
-    auto const writableId = ao::test::requireValue(runGtkTask(
-      runtime,
-      runtime.library().commands().createListAsync(rt::ListDraft{.name = "Road Trip", .expression = "#roadtrip"})));
+    auto const writableId =
+      ao::test::requireValue(runGtkTask(runtime,
+                                        runtime.library().commands().createListAsync(
+                                          rt::ListDraft{.name = "Road Trip", .expression = R"(#"旅程 \"A\"\\B")"})));
     auto const computedId = ao::test::requireValue(runGtkTask(
       runtime,
       runtime.library().commands().createListAsync(rt::ListDraft{.name = "Recent", .expression = "$year >= 2020"})));
@@ -385,7 +388,7 @@ namespace ao::gtk::test
     REQUIRE(contextPopovers.size() == 1);
     auto* const allTracksMenu = contextPopovers.front();
     CHECK(menuLabelForAction(*allTracksMenu, std::format("ctx.add-to-list-{}", writableId.raw())) ==
-          std::optional<std::string>{"Road Trip (#roadtrip)"});
+          std::optional<std::string>{R"label(Road Trip (#"旅程 \"A\"\\B"))label"});
     CHECK_FALSE(menuLabelForAction(*allTracksMenu, std::format("ctx.add-to-list-{}", computedId.raw())));
     CHECK(
       menuLabelForAction(*allTracksMenu, "ctx.computed-lists-omitted") ==

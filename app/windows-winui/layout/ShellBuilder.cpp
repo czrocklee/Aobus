@@ -230,7 +230,7 @@ namespace ao::winui::layout
     registerStatusComponents(_registry,
                              runtime.views(),
                              runtime.notifications(),
-                             runtime.library().jobs(),
+                             runtime.library(),
                              _config.trackList,
                              _session.textCatalog(),
                              _shellStateChanged,

@@ -27,6 +27,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 
 namespace winrt::Aobus::implementation
 {
@@ -61,11 +62,16 @@ namespace winrt::Aobus::implementation
     }
   }
 
+  bool MainWindow::tryInvokeShellAction(std::string_view const actionId) const
+  {
+    return _shellBuilderPtr && _shellBuilderPtr->tryInvokeAction(actionId);
+  }
+
   void MainWindow::handleTrackPropertiesInvoked(
     Microsoft::UI::Xaml::Input::KeyboardAccelerator const& /*sender*/,
     Microsoft::UI::Xaml::Input::KeyboardAcceleratorInvokedEventArgs const& args)
   {
-    args.Handled(_shellBuilderPtr && _shellBuilderPtr->tryInvokeAction("track.presentProperties"));
+    args.Handled(tryInvokeShellAction("track.presentProperties"));
   }
 
   void MainWindow::handleGroupCoverLoaded(Windows::Foundation::IInspectable const& sender,

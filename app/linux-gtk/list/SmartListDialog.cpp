@@ -11,8 +11,6 @@
 #include "track/TrackRowObject.h"
 #include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/query/Expression.h>
-#include <ao/query/Serializer.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/Log.h>
@@ -21,10 +19,12 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/VirtualListIds.h>
+#include <ao/rt/WritableTagList.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibrarySnapshot.h>
+#include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceCache.h>
-#include <ao/rt/source/TrackSourceLease.h>
+#include <ao/rt/source/TrackSourceDelta.h>
 #include <ao/uimodel/library/list/SmartListEditing.h>
 #include <ao/uimodel/library/presentation/TrackPresentationText.h>
 #include <ao/utility/StrongTypeFormatter.h>
@@ -46,9 +46,9 @@
 #include <gtkmm/listitem.h>
 #include <gtkmm/object.h>
 #include <gtkmm/scrolledwindow.h>
-#include <gtkmm/selectionmodel.h>
 #include <gtkmm/signallistitemfactory.h>
 #include <gtkmm/singleselection.h>
+#include <gtkmm/slicelistmodel.h>
 #include <gtkmm/stringlist.h>
 #include <gtkmm/stringobject.h>
 #include <gtkmm/window.h>
@@ -96,20 +96,32 @@ namespace ao::gtk
     configureForParent(parent);
     buildUi();
     buildPreview();
-    updatePreview();
+    refreshDraftPreview();
   }
 
   SmartListDialog::~SmartListDialog()
   {
     _presentationCallbacks.close();
+    _nameChangedConnection.disconnect();
+    _descriptionChangedConnection.disconnect();
+    _expressionChangedConnection.disconnect();
     _exprTimeoutConnection.disconnect();
-    _rebuildConnection.disconnect();
+    _previewSetupConnection.disconnect();
+    _previewRefreshConnection.disconnect();
+    _previewSourceSubscription.reset();
+    _previewColumnView.set_model({});
+
+    if (_previewModelPtr)
+    {
+      _previewModelPtr->clearProjection();
+    }
   }
 
   void SmartListDialog::populate(ListId id,
                                  rt::ListNode const& node,
                                  std::optional<std::string> const& optPresentationId)
   {
+    _submissionError.clear();
     _editListId = id;
     _nameEntry.set_text(node.name);
     _descEntry.set_text(node.description);
@@ -137,7 +149,7 @@ namespace ao::gtk
       _presentationDropDown.set_selected(static_cast<std::uint32_t>(presentationIndex));
     }
 
-    updateDialogState();
+    refreshDraftPreview();
   }
 
   ListId SmartListDialog::editListId() const
@@ -163,6 +175,7 @@ namespace ao::gtk
 
   void SmartListDialog::configurePlaylistTemplate(std::string_view const initialName, std::string_view const initialTag)
   {
+    _submissionError.clear();
     _playlistTemplate = true;
     set_title(gtkText(_textCatalog, i18n::MessageId::GtkSmartListNewPlaylistTitle));
     _membershipTagRow->set_visible(true);
@@ -191,25 +204,38 @@ namespace ao::gtk
 
   void SmartListDialog::setLocalExpression(std::string_view expression)
   {
-    _exprTimeoutConnection.disconnect();
-    _exprBox.entry().set_text(std::string{expression});
-    updatePreview();
+    if (_exprBox.entry().get_text().raw() != expression)
+    {
+      _exprBox.entry().set_text(std::string{expression});
+    }
+
+    refreshDraftPreview();
   }
 
   void SmartListDialog::showError(std::string_view message)
   {
-    _errorLabel.set_text(std::string{message});
-    _errorLabel.set_visible(!message.empty());
+    _submissionError.assign(message);
+    updateErrorLabel(editorViewState());
   }
 
   bool SmartListDialog::tryBeginSubmission()
   {
-    if (std::exchange(_submissionPending, true))
+    if (_submissionPending)
     {
       return false;
     }
 
-    updateDialogState();
+    _submissionError.clear();
+    refreshDraftPreview();
+
+    // The refreshed state includes the source, name, and playlist-tag gates.
+    if (!_okButton->get_sensitive())
+    {
+      return false;
+    }
+
+    _submissionPending = true;
+    _okButton->set_sensitive(false);
     return true;
   }
 
@@ -248,15 +274,17 @@ namespace ao::gtk
 
     auto* const detailsList = Gtk::make_managed<FormBoxedList>();
     _nameEntry.set_placeholder_text(gtkText(_textCatalog, i18n::MessageId::GtkSmartListNamePlaceholder));
-    _nameEntry.signal_changed().connect(
+    _nameChangedConnection = _nameEntry.signal_changed().connect(
       [this]
       {
+        dismissSubmissionError();
         updatePlaylistTagFromName();
         updateDialogState();
       });
     detailsList->addEntryRow(gtkText(_textCatalog, i18n::MessageId::GtkSmartListName), _nameEntry);
 
     _descEntry.set_placeholder_text(gtkText(_textCatalog, i18n::MessageId::GtkSmartListDescriptionPlaceholder));
+    _descriptionChangedConnection = _descEntry.signal_changed().connect([this] { dismissSubmissionError(); });
     detailsList->addEntryRow(gtkText(_textCatalog, i18n::MessageId::GtkSmartListDescription), _descEntry);
 
     _membershipTagEntry.set_placeholder_text(
@@ -284,14 +312,16 @@ namespace ao::gtk
 
     _exprBox.entry().set_placeholder_text(
       gtkText(_textCatalog, i18n::MessageId::GtkSmartListFilterExpressionPlaceholder));
-    _exprBox.entry().signal_changed().connect(
+    _expressionChangedConnection = _exprBox.entry().signal_changed().connect(
       [this]
       {
+        // Dismiss on the edit, not its delayed refresh: a write can fail before the timeout fires.
+        dismissSubmissionError();
         _exprTimeoutConnection.disconnect();
         _exprTimeoutConnection = Glib::signal_timeout().connect(
           [this]
           {
-            updatePreview();
+            refreshDraftPreview();
             return false;
           },
           100);
@@ -412,7 +442,6 @@ namespace ao::gtk
     _presentationDropDown.set_list_factory(popupFactoryPtr);
     _presentationDropDown.set_valign(Gtk::Align::CENTER);
     _presentationDropDown.set_halign(Gtk::Align::END);
-    _presentationDropDown.property_selected().signal_changed().connect([this] { updatePreview(); });
     presList->addRow(gtkText(_textCatalog, i18n::MessageId::GtkSmartListPresentation), _presentationDropDown);
     _leftPanel.append(*presList);
 
@@ -437,9 +466,6 @@ namespace ao::gtk
 
     _matchCountLabel.set_halign(Gtk::Align::END);
     _matchCountLabel.set_hexpand(true);
-    _matchCountLabel.set_markup(
-      std::format("<span alpha='50%'>{}</span>",
-                  italicMarkup(gtkText(_textCatalog, i18n::MessageId::GtkSmartListWaitingForFilter))));
     previewHeaderBox->append(_matchCountLabel);
     _rightPanel.append(*previewHeaderBox);
 
@@ -488,7 +514,16 @@ namespace ao::gtk
   void SmartListDialog::buildPreview()
   {
     configurePreviewColumns();
-    rebuildPreviewSource();
+    _previewSetupConnection = Glib::signal_idle().connect(
+      [this]
+      {
+        _previewModelPtr = TrackListModel::create(_trackRowCache);
+        _previewSampleModelPtr = Gtk::SliceListModel::create(
+          _previewModelPtr, 0U, static_cast<std::uint32_t>(uimodel::kSmartListPreviewLimit));
+        _previewColumnView.set_model(Gtk::SingleSelection::create(_previewSampleModelPtr));
+        refreshDraftPreview();
+        return false;
+      });
   }
 
   void SmartListDialog::configurePreviewColumns()
@@ -505,7 +540,7 @@ namespace ao::gtk
       });
 
     factoryPtr->signal_bind().connect(
-      [this](Glib::RefPtr<Gtk::ListItem> const& listItemPtr)
+      [textCatalog = _textCatalog](Glib::RefPtr<Gtk::ListItem> const& listItemPtr)
       {
         auto const itemPtr = listItemPtr->get_item();
         auto rowPtr = std::dynamic_pointer_cast<TrackRowObject>(itemPtr);
@@ -519,7 +554,7 @@ namespace ao::gtk
           auto const artistText = artist != nullptr ? std::string_view{artist->raw()} : std::string_view{};
           auto const albumText = album != nullptr ? std::string_view{album->raw()} : std::string_view{};
 
-          label->set_text(uimodel::formatSmartListPreviewTrackLabel(_textCatalog, titleText, artistText, albumText));
+          label->set_text(uimodel::formatSmartListPreviewTrackLabel(textCatalog, titleText, artistText, albumText));
         }
       });
 
@@ -528,31 +563,6 @@ namespace ao::gtk
     columnPtr->set_expand(true);
     columnPtr->set_resizable(true);
     _previewColumnView.append_column(columnPtr);
-  }
-
-  void SmartListDialog::rebuildPreviewSource()
-  {
-    _rebuildConnection.disconnect();
-    _rebuildConnection = Glib::signal_idle().connect(
-      [this]
-      {
-        auto emptySelectionPtr = Glib::RefPtr<Gtk::SelectionModel>{};
-        _previewColumnView.set_model(emptySelectionPtr);
-
-        _optPreviewSourceLease.reset();
-        _previewModelPtr.reset();
-
-        _previewModelPtr = TrackListModel::create(_trackRowCache);
-
-        auto selectionModelPtr = Gtk::SingleSelection::create(_previewModelPtr);
-        _previewColumnView.set_model(selectionModelPtr);
-
-        // Re-run the full preview so the model can replace its
-        // source-unavailable state as soon as the source arrives.
-        updatePreview();
-
-        return false;
-      });
   }
 
   void SmartListDialog::updateSourceLabels()
@@ -594,12 +604,10 @@ namespace ao::gtk
 
     if (!tag.empty())
     {
-      expression = query::serialize(query::VariableExpression{.type = query::VariableType::Tag, .name = tag});
+      expression = rt::serializeTagExpression(tag);
     }
 
-    _exprTimeoutConnection.disconnect();
-    _exprBox.entry().set_text(expression);
-    updatePreview();
+    setLocalExpression(expression);
   }
 
   void SmartListDialog::updatePlaylistTagFromName()
@@ -616,25 +624,35 @@ namespace ao::gtk
 
   uimodel::SmartListEditorViewState SmartListDialog::editorViewState() const
   {
+    auto const name = _nameEntry.get_text();
+    auto const localExpression = _exprBox.entry().get_text();
     auto const hasPreviewSource = _optPreviewSourceLease.has_value();
     auto const optError = hasPreviewSource ? _sources.sourceError(*_optPreviewSourceLease) : std::nullopt;
+    auto const& errorMessage = optError ? optError->message : _previewAcquisitionError;
+    auto const optSampleCount =
+      _previewSampleModelPtr ? std::optional<std::size_t>{_previewSampleModelPtr->get_n_items()} : std::nullopt;
 
-    return ao::uimodel::makeSmartListEditorViewState(
+    return uimodel::makeSmartListEditorViewState(
       _textCatalog,
-      ao::uimodel::SmartListPreviewState{
-        .name = _nameEntry.get_text().raw(),
-        .localExpression = _exprBox.entry().get_text().raw(),
+      uimodel::SmartListPreviewState{
+        .name = name.raw(),
+        .localExpression = localExpression.raw(),
         .hasPreviewSource = hasPreviewSource,
         .hasError = optError.has_value(),
-        .errorMessage = optError ? optError->message : std::string{},
+        .errorMessage = errorMessage,
         .matchCount = hasPreviewSource ? _optPreviewSourceLease->source().size() : 0,
+        .optSampleCount = optSampleCount,
         .isAllTracks = rt::isVirtualListId(_parentListId),
       });
   }
 
   void SmartListDialog::updateDialogState()
   {
-    auto const state = editorViewState();
+    updateDialogState(editorViewState());
+  }
+
+  void SmartListDialog::updateDialogState(uimodel::SmartListEditorViewState const& state)
+  {
     auto const playlistTagReady = !_playlistTemplate || !_membershipTagEntry.get_text().empty();
     _okButton->set_sensitive(state.canSubmit && playlistTagReady && !_submissionPending);
     _membershipEditingLabel.set_text(playlistTagReady
@@ -642,16 +660,18 @@ namespace ao::gtk
                                        : gtkText(_textCatalog, i18n::MessageId::GtkSmartListChooseMembershipTag));
   }
 
-  void SmartListDialog::updatePreview()
+  void SmartListDialog::updateErrorLabel(uimodel::SmartListEditorViewState const& state)
   {
-    updateSourceLabels();
+    auto const text = uimodel::formatSmartListEditorErrorText(_submissionError, state);
+    _errorLabel.set_text(text);
+    _errorLabel.set_visible(!text.empty());
+  }
 
-    if (!_previewModelPtr)
-    {
-      _previewScrolledWindow.set_visible(false);
-      updateDialogState();
-      return;
-    }
+  void SmartListDialog::acquirePreviewSource()
+  {
+    _previewRefreshConnection.disconnect();
+    _previewSourceSubscription.reset();
+    _previewModelPtr->clearProjection();
 
     auto const expr = std::string{_exprBox.entry().get_text()};
     auto const sourceListId = rt::resolveParentSourceId(_parentListId);
@@ -661,20 +681,80 @@ namespace ao::gtk
     {
       APP_LOG_ERROR("Cannot build smart-list preview for source {}: {}", sourceListId, sourceRes.error().message);
       _optPreviewSourceLease.reset();
-      _previewModelPtr->clearProjection();
-      _previewScrolledWindow.set_visible(false);
-      _matchCountLabel.set_markup(italicMarkup(gtkText(_textCatalog, i18n::MessageId::GtkSmartListWaitingForFilter)));
-      showError(sourceRes.error().message);
-      updateDialogState();
+      _previewAcquisitionError = std::move(sourceRes.error().message);
       return;
     }
 
     _optPreviewSourceLease.emplace(std::move(*sourceRes));
-    _previewModelPtr->bindProjection(
-      _views.createTransientTrackListProjection(*_optPreviewSourceLease, rt::TrackOrderSpec{}));
+    _previewAcquisitionError.clear();
+    _previewSourceSubscription = _optPreviewSourceLease->source().subscribe(
+      [this](rt::TrackSourceDelta const&)
+      {
+        // Changes past the end of the GTK slice still affect the total.
+        // Wait until both projection updates and source-cache retirement finish.
+        if (!_previewRefreshConnection.connected())
+        {
+          _previewRefreshConnection = Glib::signal_idle().connect(
+            [this]
+            {
+              if (!_exprTimeoutConnection.connected())
+              {
+                refreshPreview();
+              }
+
+              return false;
+            });
+        }
+      });
+  }
+
+  void SmartListDialog::dismissSubmissionError()
+  {
+    if (!_submissionError.empty())
+    {
+      _submissionError.clear();
+      updateErrorLabel(editorViewState());
+    }
+  }
+
+  void SmartListDialog::refreshDraftPreview()
+  {
+    _exprTimeoutConnection.disconnect();
+
+    if (_previewModelPtr)
+    {
+      acquirePreviewSource();
+    }
+
+    refreshPreview();
+  }
+
+  void SmartListDialog::refreshPreview()
+  {
+    updateSourceLabels();
+
+    if (_optPreviewSourceLease && _optPreviewSourceLease->source().state() == rt::TrackSourceState::Invalidated)
+    {
+      acquirePreviewSource();
+    }
+
+    if (_optPreviewSourceLease)
+    {
+      auto const localExpression = _exprBox.entry().get_text();
+      auto const optError = _sources.sourceError(*_optPreviewSourceLease);
+
+      if (uimodel::isSmartListLocalFilterRejected(localExpression.raw(), optError.has_value()))
+      {
+        _previewModelPtr->clearProjection();
+      }
+      else if (_previewModelPtr->projection() == nullptr)
+      {
+        _previewModelPtr->bindProjection(
+          _views.createTransientTrackListProjection(*_optPreviewSourceLease, rt::TrackOrderSpec{}));
+      }
+    }
 
     auto const state = editorViewState();
-
     _matchCountLabel.set_markup(italicMarkup(state.previewStatusText));
 
     if (state.queryInvalid)
@@ -686,15 +766,9 @@ namespace ao::gtk
       _exprBox.entry().remove_css_class("ao-query-invalid");
     }
 
-    _errorLabel.set_visible(state.errorVisible);
-    _errorLabel.set_text(state.errorText);
+    updateErrorLabel(state);
     _previewScrolledWindow.set_visible(state.previewVisible);
-    auto const playlistTagReady = !_playlistTemplate || !_membershipTagEntry.get_text().empty();
-    _membershipEditingLabel.set_text(playlistTagReady
-                                       ? state.membershipEditingText
-                                       : gtkText(_textCatalog, i18n::MessageId::GtkSmartListChooseMembershipTag));
-
-    _okButton->set_sensitive(state.canSubmit && playlistTagReady && !_submissionPending);
+    updateDialogState(state);
   }
 
   rt::ListDraft SmartListDialog::draft() const

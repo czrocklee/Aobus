@@ -758,6 +758,13 @@ namespace ao::winui::layout
         auto const node = sender.SelectedNode();
         auto const listId = taggedListId(node ? node.Content().try_as<FrameworkElement>() : FrameworkElement{nullptr});
 
+        // TreeView can deliver the restored selection after rebuild() returns.
+        // It still reflects the current List; reporting a navigation here would replace the command result.
+        if (listId == _binding.activeListId())
+        {
+          return;
+        }
+
         if (auto const label = _labelsById.find(listId); label != _labelsById.end())
         {
           _binding.navigate(listId, label->second);

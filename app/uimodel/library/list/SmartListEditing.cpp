@@ -5,8 +5,6 @@
 
 #include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/query/Expression.h>
-#include <ao/query/Serializer.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/WritableTagList.h>
@@ -30,16 +28,14 @@ namespace ao::uimodel
     auto state = SmartListEditorViewState{};
     state.name = std::string{input.name};
     state.localExpression = std::string{input.localExpression};
-    state.matchCount = input.matchCount;
     state.isAllTracks = input.isAllTracks;
     auto const optWritableTag = rt::writableTagForListExpression(input.localExpression);
     state.hasDirectMembershipEditing = optWritableTag.has_value();
 
     if (optWritableTag)
     {
-      auto const expression =
-        query::serialize(query::VariableExpression{.type = query::VariableType::Tag, .name = *optWritableTag});
-      state.membershipEditingText = smartListMembershipEditingText(textCatalog, true, expression);
+      state.membershipEditingText =
+        smartListMembershipEditingText(textCatalog, true, rt::serializeTagExpression(*optWritableTag));
     }
     else
     {
@@ -50,17 +46,29 @@ namespace ao::uimodel
     {
       state.expressionValid = false;
       state.previewVisible = false;
-      state.errorVisible = false;
+      state.errorVisible = !input.errorMessage.empty();
+
+      if (state.errorVisible)
+      {
+        state.errorText = i18n::requiredFormat(
+          textCatalog, i18n::MessageId::SmartListPreviewUnavailable, {{"diagnostic", input.errorMessage}});
+      }
+
       return state;
     }
 
-    state.queryInvalid = input.hasError && !input.localExpression.empty();
+    state.queryInvalid = isSmartListLocalFilterRejected(input.localExpression, input.hasError);
     state.errorVisible = state.queryInvalid;
     state.previewVisible = !state.queryInvalid;
     state.expressionValid = !state.queryInvalid;
     state.canSubmit = !state.name.empty() && state.expressionValid;
-    state.previewStatusText = formatSmartListPreviewStatusText(
-      textCatalog, state.expressionValid, input.matchCount, input.isAllTracks, input.localExpression.empty());
+    state.matchCount = state.expressionValid ? input.matchCount : 0;
+    state.previewStatusText = smartListPreviewStatus(textCatalog,
+                                                     state.expressionValid,
+                                                     state.matchCount,
+                                                     input.optSampleCount,
+                                                     input.isAllTracks,
+                                                     input.localExpression.empty());
 
     if (state.errorVisible)
     {
@@ -69,6 +77,23 @@ namespace ao::uimodel
     }
 
     return state;
+  }
+
+  std::string formatSmartListEditorErrorText(std::string_view mutationError, SmartListEditorViewState const& state)
+  {
+    auto text = std::string{mutationError};
+
+    if (state.errorVisible && !state.errorText.empty() && state.errorText != mutationError)
+    {
+      if (!text.empty())
+      {
+        text += '\n';
+      }
+
+      text += state.errorText;
+    }
+
+    return text;
   }
 
   std::string formatSmartListExpressionDisplayText(i18n::MessageCatalog const& textCatalog, std::string_view expression)
@@ -90,15 +115,6 @@ namespace ao::uimodel
     }
 
     return std::format("({}) and ({})", parent, local);
-  }
-
-  std::string formatSmartListPreviewStatusText(i18n::MessageCatalog const& textCatalog,
-                                               bool const expressionValid,
-                                               std::size_t count,
-                                               bool isAllTracks,
-                                               bool localEmpty)
-  {
-    return smartListPreviewStatus(textCatalog, expressionValid, count, isAllTracks, localEmpty);
   }
 
   std::string formatSmartListPreviewTrackLabel(i18n::MessageCatalog const& textCatalog,

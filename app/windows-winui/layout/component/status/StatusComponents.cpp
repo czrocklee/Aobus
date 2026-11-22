@@ -12,15 +12,18 @@
 #include "layout/runtime/ResourceLookup.h"
 #include "layout/runtime/UiSubscription.h"
 #include "platform/NamedControl.h"
-#include "platform/StringResources.h"
 #include "platform/WinRtStringResources.h"
 #include "status/ActivityStatusControl.h"
 #include "track/TrackListController.h"
 #include <ao/Error.h>
 #include <ao/async/Subscription.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryChanges.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/layout/shell/ShellGenerationSequence.h>
 #include <ao/uimodel/library/track/TrackSelectionSummary.h>
 #include <ao/winui/layout/LayoutSchema.h>
 #include <ao/winui/layout/ShellState.h>
@@ -267,15 +270,50 @@ namespace ao::winui::layout
       SelectionInfoComponent(LayoutBuildContext& ctx,
                              TrackListController& trackList,
                              rt::ViewService& views,
+                             rt::LibraryChanges const& changes,
                              i18n::MessageCatalog textCatalog,
                              async::Signal<ShellState>& shellStateChanged,
                              bool const summary)
-        : _trackList{trackList}, _textCatalog{std::move(textCatalog)}, _summary{summary}
+        : _trackList{trackList}
+        , _views{views}
+        , _textCatalog{std::move(textCatalog)}
+        , _gatePtr{ctx.gatePtr}
+        , _viewId{trackList.viewId()}
+        , _summary{summary}
       {
-        follow(views);
+        // Render the live selection even while this shell is still staged.
+        apply(_viewId, _views.selectedTrackIds(_viewId).size());
         applyShellState(ctx.shellState);
         _shellStateSub = subscribeUiUpdate(
           shellStateChanged, "SelectionInfoComponent", [this](ShellState const state) { applyShellState(state); });
+        _trackListChangedSub =
+          subscribeUiUpdate(_trackList.signalChanged(), "SelectionInfoComponent", [this] { refreshActiveView(); });
+        _librarySub = changes.onChanged(
+          [this](rt::LibraryChangeSet const& changed)
+          {
+            if (!uimodel::isGenerationActive(_gatePtr))
+            {
+              return;
+            }
+
+            auto const viewId = _trackList.viewId();
+            auto const selected = _views.selectedTrackIds(viewId);
+
+            if (uimodel::shouldRefreshTrackSelectionSummary(changed, selected))
+            {
+              applyUiUpdate(
+                "SelectionInfoComponent", [this, viewId, count = selected.size()] { apply(viewId, count); });
+            }
+          });
+        _selectionSub = _views.onSelectionChanged(
+          [this](rt::ViewService::SelectionChanged const& changed)
+          {
+            if (changed.viewId == _trackList.viewId() && uimodel::isGenerationActive(_gatePtr))
+            {
+              applyUiUpdate(
+                "SelectionInfoComponent", [this, &changed] { apply(changed.viewId, changed.selection.size()); });
+            }
+          });
       }
 
       FrameworkElement element() const override { return _text; }
@@ -289,33 +327,35 @@ namespace ao::winui::layout
         }
       }
 
-      void follow(rt::ViewService& views)
+      void refreshActiveView()
       {
-        apply(0);
-        _selectionSub = views.onSelectionChanged(
-          [this](rt::ViewService::SelectionChanged const& changed)
-          {
-            if (changed.viewId == _trackList.viewId())
-            {
-              apply(changed.selection.size());
-            }
-          });
+        // Projection and viewport changes also use this signal; only a view
+        // switch changes which selection should be summarized.
+        if (auto const viewId = _trackList.viewId(); viewId != _viewId && uimodel::isGenerationActive(_gatePtr))
+        {
+          _viewId = viewId;
+          apply(viewId, _views.selectedTrackIds(viewId).size());
+        }
       }
 
-      void apply(std::size_t const count)
+      void apply(rt::ViewId const viewId, std::size_t const count)
       {
-        auto summary = count == 0 ? resourceString("winui_library_no_selection")
-                                  : uimodel::trackSelectionSummaryText(_textCatalog, count);
-        _text.Text(winrt::to_hstring(summary));
+        auto const duration = _views.selectionDuration(viewId);
+        _text.Text(winrt::to_hstring(uimodel::trackSelectionSummaryText(_textCatalog, count, duration)));
       }
 
       TextBlock _text{};
       TrackListController& _trackList;
+      rt::ViewService& _views;
       i18n::MessageCatalog _textCatalog;
+      std::weak_ptr<uimodel::ShellGenerationGate> _gatePtr;
+      rt::ViewId _viewId;
       bool _summary = false;
       // Destroyed first, so handlers cannot run against a half-torn component.
-      async::Subscription _selectionSub;
       async::Subscription _shellStateSub;
+      async::Subscription _trackListChangedSub;
+      async::Subscription _selectionSub;
+      async::Subscription _librarySub;
     };
 
     /**
@@ -355,7 +395,7 @@ namespace ao::winui::layout
   void registerStatusComponents(ComponentRegistry& registry,
                                 rt::ViewService& views,
                                 rt::NotificationService& notifications,
-                                rt::LibraryJobs& libraryJobs,
+                                rt::Library& library,
                                 TrackListController& trackList,
                                 i18n::MessageCatalog textCatalog,
                                 async::Signal<ShellState>& shellStateChanged,
@@ -363,7 +403,7 @@ namespace ao::winui::layout
   {
     registry.registerComponent(
       "status.activity",
-      [&notifications, &libraryJobs, textCatalog](
+      [&notifications, &libraryJobs = library.jobs(), textCatalog](
         LayoutBuildContext& ctx, uimodel::LayoutNode const& /*node*/) -> Result<std::unique_ptr<LayoutComponent>>
       { return std::make_unique<ActivityStatusComponent>(ctx.resources, notifications, libraryJobs, textCatalog); });
 
@@ -378,11 +418,11 @@ namespace ao::winui::layout
 
     registry.registerComponent(
       "status.selectionInfo",
-      [&trackList, &views, textCatalog, &shellStateChanged](
+      [&trackList, &views, &changes = library.changes(), textCatalog, &shellStateChanged](
         LayoutBuildContext& ctx, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
       {
         return std::make_unique<SelectionInfoComponent>(
-          ctx, trackList, views, textCatalog, shellStateChanged, isSummaryVariant(node));
+          ctx, trackList, views, changes, textCatalog, shellStateChanged, isSummaryVariant(node));
       });
 
     registry.registerComponent(

@@ -5,6 +5,7 @@
 
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/library/Credits.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/MusicLibrary.h>
@@ -13,6 +14,7 @@
 #include <ao/query/Field.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/completion/CompletionAliasPolicy.h>
+#include <ao/rt/completion/VocabularyRanking.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/ordering/TextOrderingPolicy.h>
 
@@ -122,61 +124,6 @@ namespace ao::rt
       }
     }
 
-    void sortVocabulary(std::vector<VocabularyEntry>& entries, TextOrderingPolicy const* const textOrderingPolicy)
-    {
-      if (textOrderingPolicy != nullptr)
-      {
-        struct OrderedEntry final
-        {
-          VocabularyEntry entry;
-          std::string sortKey;
-        };
-
-        auto ordered = std::vector<OrderedEntry>{};
-        ordered.reserve(entries.size());
-
-        for (auto& entry : entries)
-        {
-          auto sortKey = std::string{};
-          auto const keyRes = textOrderingPolicy->makeSortKeyInto(sortKey, entry.value);
-          AO_INVARIANT(keyRes.has_value(),
-                       "Admitted completion text failed locale sort-key derivation: {}",
-                       keyRes.error().message);
-          ordered.push_back(OrderedEntry{.entry = std::move(entry), .sortKey = std::move(sortKey)});
-        }
-
-        std::ranges::sort(ordered,
-                          [](OrderedEntry const& lhs, OrderedEntry const& rhs)
-                          {
-                            if (lhs.entry.frequency != rhs.entry.frequency)
-                            {
-                              return lhs.entry.frequency > rhs.entry.frequency;
-                            }
-
-                            if (auto const sortKeyOrder = lhs.sortKey.compare(rhs.sortKey); sortKeyOrder != 0)
-                            {
-                              return sortKeyOrder < 0;
-                            }
-
-                            return lhs.entry.value < rhs.entry.value;
-                          });
-
-        entries.clear();
-
-        for (auto& entry : ordered)
-        {
-          entries.push_back(std::move(entry.entry));
-        }
-
-        return;
-      }
-
-      std::ranges::sort(
-        entries,
-        [](VocabularyEntry const& lhs, VocabularyEntry const& rhs)
-        { return lhs.frequency > rhs.frequency || (lhs.frequency == rhs.frequency && lhs.value < rhs.value); });
-    }
-
     template<typename Frequencies, typename GetAliases>
     std::vector<VocabularyEntry> sortedDictionaryVocabulary(Frequencies const& frequencies,
                                                             library::DictionaryStore const& dictionary,
@@ -198,7 +145,16 @@ namespace ao::rt
         }
       }
 
-      sortVocabulary(entries, textOrderingPolicy);
+      sortVocabularyByFrequency(entries,
+                                textOrderingPolicy,
+                                &VocabularyEntry::value,
+                                &VocabularyEntry::frequency,
+                                [](Result<> const& keyRes)
+                                {
+                                  AO_INVARIANT(keyRes.has_value(),
+                                               "Admitted completion text failed locale sort-key derivation: {}",
+                                               keyRes.error().message);
+                                });
       return entries;
     }
 

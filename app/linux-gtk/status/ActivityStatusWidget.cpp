@@ -23,6 +23,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <utility>
 
 namespace ao::gtk
 {
@@ -82,6 +83,7 @@ namespace ao::gtk
                                [this](uimodel::ActivityStatusViewState const&) { render(); },
                                uimodel::ActivityStatusViewModelOptions{
                                  .libraryJobs = dependencies.libraryJobs,
+                                 .clock = std::move(dependencies.clock),
                                  .emitInitialState = false,
                                }}
   {
@@ -91,11 +93,7 @@ namespace ao::gtk
 
   ActivityStatusWidget::~ActivityStatusWidget()
   {
-    if (_autoDismissTimer)
-    {
-      _autoDismissTimer.disconnect();
-    }
-
+    _autoDismissTimer.disconnect();
     _detailPopover.popdown();
   }
 
@@ -157,11 +155,6 @@ namespace ao::gtk
 
   void ActivityStatusWidget::render()
   {
-    if (_autoDismissTimer)
-    {
-      _autoDismissTimer.disconnect();
-    }
-
     auto const& compact = _activityStatusViewModel.viewState().compact;
     bool const idle = compact.kind == uimodel::ActivityStatusKind::Idle;
     bool const reserveIdle = idle && _options.idleBehavior == ActivityStatusWidgetIdleBehavior::Reserve;
@@ -206,11 +199,7 @@ namespace ao::gtk
     _detailButton.set_sensitive(openable);
     setCssClass(_box, "ao-activity-status-openable", openable);
     renderDetail();
-
-    if (compact.optAutoDismissTimeout)
-    {
-      startAutoDismissTimer(*compact.optAutoDismissTimeout);
-    }
+    syncAutoDismissTimer();
   }
 
   void ActivityStatusWidget::renderDetail()
@@ -309,15 +298,29 @@ namespace ao::gtk
     _detailBox.append(*row);
   }
 
-  void ActivityStatusWidget::startAutoDismissTimer(std::chrono::milliseconds const timeout)
+  void ActivityStatusWidget::syncAutoDismissTimer()
   {
+    _autoDismissTimer.disconnect();
+    auto const optRemaining = _activityStatusViewModel.compactAutoDismissRemaining();
+
+    if (!optRemaining)
+    {
+      return;
+    }
+
+    auto const delay = std::chrono::ceil<std::chrono::milliseconds>(*optRemaining);
     _autoDismissTimer = Glib::signal_timeout().connect(
       [this]
       {
-        _activityStatusViewModel.autoDismissCompact();
+        // Dismissal renders synchronously. Only an early wake needs another timer here.
+        if (!_activityStatusViewModel.tryAutoDismissCompactIfDue())
+        {
+          syncAutoDismissTimer();
+        }
+
         return false;
       },
-      static_cast<std::uint32_t>(timeout.count()));
+      static_cast<std::uint32_t>(delay.count()));
   }
 
   void ActivityStatusWidget::clearKindClasses()

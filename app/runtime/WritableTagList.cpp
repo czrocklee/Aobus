@@ -5,6 +5,7 @@
 
 #include <ao/query/Expression.h>
 #include <ao/query/Parser.h>
+#include <ao/query/Serializer.h>
 
 #include <memory>
 #include <optional>
@@ -39,6 +40,11 @@ namespace ao::rt
       return false;
     }
   } // namespace
+
+  std::string serializeTagExpression(std::string_view const tag)
+  {
+    return query::serialize(query::VariableExpression{.type = query::VariableType::Tag, .name = std::string{tag}});
+  }
 
   std::optional<std::string> writableTagForListExpression(std::string_view const expression)
   {

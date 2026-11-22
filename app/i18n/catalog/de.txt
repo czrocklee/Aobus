@@ -281,8 +281,10 @@ de:table {
     smart_list_showing_source { "{source, select, library {{count, plural, one {Alle Titel werden angezeigt: #} other {Alle Titel werden angezeigt: #}}} other {{count, plural, one {Alle Titel aus der Quelle werden angezeigt: #} other {Alle Titel aus der Quelle werden angezeigt: #}}}}" }
     smart_list_invalid_filter { "Ungültiger Filter" }
     smart_list_no_matches { "Keine Treffer" }
+    smart_list_match_count { "{scope, select, library {Titel in der Bibliothek: {count, number}} source {Titel aus der Quelle: {count, number}} other {Treffer: {count, number}}}" }
     smart_list_showing_all_matches { "{count, plural, one {Alle Treffer werden angezeigt: #} other {Alle Treffer werden angezeigt: #}}" }
-    smart_list_showing_first_matches { "{visible} von {count} Treffern werden angezeigt" }
+    smart_list_showing_first_matches { "Vorschau: {visible} von {scope, select, library {{count, plural, one {# Titel} other {# Titeln}} aus der Bibliothek} source {{count, plural, one {# Titel} other {# Titeln}} aus der Quelle} other {{count, plural, one {# Treffer} other {# Treffern}}}}" }
+    smart_list_preview_unavailable { "Vorschau nicht verfügbar: {diagnostic}" }
     smart_list_untitled_track { "(ohne Titel)" }
     list_order_saved_lists_only { "Eine manuelle Reihenfolge ist nur für gespeicherte Listen verfügbar." }
     list_order_library_busy { "Die Bibliothek ist beschäftigt. Die manuelle Reihenfolge ist nach Abschluss der Wartung wieder verfügbar." }
@@ -414,7 +416,6 @@ de:table {
     gtk_smart_list_unavailable_presentation { "Nicht verfügbar: {id} (Automatisch)" }
     gtk_smart_list_presentation { "Ansicht" }
     gtk_smart_list_preview { "Vorschau" }
-    gtk_smart_list_waiting_for_filter { "Warten auf Filter..." }
     gtk_smart_list_track { "Titel" }
     gtk_smart_list_invalid_source { "(ungültige Quelle)" }
     gtk_smart_list_choose_membership_tag { "Sichtbares Tag für die Wiedergabelisten-Mitgliedschaft wählen" }
@@ -451,9 +452,10 @@ de:table {
     library_restore_confirmation { "Diese Wiederherstellung ersetzt Folgendes: {scope}.\n\nInhalt: YAML v{version}, Modus ''{mode}''.\nVorschau — Titel: {tracksCreated} erstellt, {tracksUpdated} aktualisiert, {tracksDeleted} gelöscht; Listen: {listsCreated} erstellt, {listsDeleted} gelöscht; verwaiste Verweise: {dangling} ignoriert; ungültige Listenfilter: {invalidFilters} unverändert übernommen.\n\nFahren Sie nur fort, wenn dies der ausgewählten Sicherung entspricht." }
     library_file_selection_error { "{operation}: {message}" }
     gtk_list_other_computed_membership { "Andere Listen haben eine berechnete Mitgliedschaft; bearbeiten Sie stattdessen deren Ausdruck oder die Titel-Tags." }
-    list_no_editable_playlists { "Keine direkt bearbeitbaren Wiedergabelisten" }
+    list_no_membership_add_targets { "Keine Wiedergabeliste als Ziel verfügbar" }
     gtk_list_create_playlist { "Wiedergabeliste erstellen..." }
     gtk_list_manage_lists { "Listen verwalten..." }
+    list_membership_add_target { "{name} ({tag})" }
     list_add_to_playlist { "Zur Wiedergabeliste hinzufügen" }
     list_remove_from_current { "Aus {name} ({tag}) entfernen" }
     gtk_list_remove_computed_unavailable { "Das Entfernen aus dieser Liste ist nicht verfügbar, da ihre Mitgliedschaft berechnet wird." }
@@ -791,7 +793,6 @@ de:table {
     winui_library_quick_filter_placeholder { "Titel filtern" }
     winui_library_ready { "Bereit" }
     winui_library_rescanning { "Bibliothek wird neu gescannt..." }
-    winui_library_no_selection { "Keine Auswahl" }
     winui_track_move_column_left { "Nach links verschieben" }
     winui_track_move_column_right { "Nach rechts verschieben" }
     winui_track_resize_column { "Breite der Spalte {column} anpassen" }
@@ -1157,7 +1158,6 @@ de:table {
     appkit_new_list { "Neue Liste" }
     appkit_edit_list { "Liste bearbeiten" }
     appkit_remove_from_list { "Aus Liste entfernen" }
-    appkit_add_to_list { "Zur Liste hinzufügen" }
     appkit_properties_stale { "Die Bibliothek wurde geändert. Ihre Eingaben bleiben erhalten; öffnen Sie die Eigenschaften erneut, um den aktuellen Stand zu bearbeiten." }
     appkit_editor_busy { "Die Bibliothek ist beschäftigt. Ihre Eingaben bleiben erhalten; versuchen Sie erneut zu speichern." }
     appkit_editor_stale { "Die Bibliothek wurde geändert. Ihre Eingaben bleiben erhalten; öffnen Sie den Editor erneut, um fortzufahren." }
@@ -1260,7 +1260,6 @@ de:table {
     appkit_choose_library_folder { "Wählen Sie den Ordner mit Ihrer Musikbibliothek aus." }
     appkit_clear_recent_menu { "Einträge löschen" }
     appkit_unknown_folder { "Unbekannter Ordner" }
-    appkit_remove_from_current_list { "Aus dieser Liste entfernen" }
     appkit_playback_position_value { "{elapsed} von {duration}" }
     appkit_selection_total { "{selected, number} ausgewählt / {total, plural, one {# Titel} other {# Titel}}" }
     appkit_tracks_selected { "{count, plural, one {# Titel ausgewählt} other {# Titel ausgewählt}}" }

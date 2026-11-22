@@ -8,6 +8,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <optional>
 #include <string>
 
 namespace ao::uimodel::test
@@ -39,35 +40,21 @@ namespace ao::uimodel::test
     CHECK(combineSmartListEffectiveExpression("$year > 1970", "") == "$year > 1970");
   }
 
-  TEST_CASE("SmartListEditorModel - distinguishes complete and partial filtered results")
+  TEST_CASE("SmartListEditorModel - describes the supplied sample, not the sampling limit")
   {
-    auto const& textCatalog = ao::test::englishMessageCatalog();
+    auto const& catalog = ao::test::englishMessageCatalog();
+    auto input = SmartListPreviewState{
+      .name = "Jazz", .localExpression = "#jazz", .hasPreviewSource = true, .matchCount = 7, .optSampleCount = 3};
+    auto const partial = makeSmartListEditorViewState(catalog, input);
+    CHECK(partial.matchCount == 7);
+    CHECK(partial.previewStatusText == "Preview: 3 of 7 matches");
+    CHECK(partial.canSubmit);
 
-    CHECK(formatSmartListPreviewStatusText(textCatalog, true, 0, true, false) == "No matches");
-    CHECK(formatSmartListPreviewStatusText(textCatalog, true, 1, true, false) == "Showing all matches: 1");
-    CHECK(formatSmartListPreviewStatusText(textCatalog, true, 2, true, false) == "Showing all matches: 2");
-    CHECK(formatSmartListPreviewStatusText(textCatalog, true, 10, true, false) == "Showing all matches: 10");
-    CHECK(formatSmartListPreviewStatusText(textCatalog, true, 11, true, false) == "Showing 10 of 11 matches");
-  }
-
-  TEST_CASE("SmartListEditorModel - unfiltered previews describe the complete source")
-  {
-    auto const& textCatalog = ao::test::englishMessageCatalog();
-    CHECK(formatSmartListPreviewStatusText(textCatalog, true, 1, true, true) == "Showing all tracks: 1");
-    CHECK(formatSmartListPreviewStatusText(textCatalog, true, 2, true, true) == "Showing all tracks: 2");
-    CHECK(formatSmartListPreviewStatusText(textCatalog, true, 10, true, true) == "Showing all tracks: 10");
-    CHECK(formatSmartListPreviewStatusText(textCatalog, true, 11, true, true) == "Showing all tracks: 11");
-
-    CHECK(formatSmartListPreviewStatusText(textCatalog, true, 1, false, true) == "Showing all tracks from source: 1");
-    CHECK(formatSmartListPreviewStatusText(textCatalog, true, 2, false, true) == "Showing all tracks from source: 2");
-    CHECK(formatSmartListPreviewStatusText(textCatalog, true, 10, false, true) == "Showing all tracks from source: 10");
-    CHECK(formatSmartListPreviewStatusText(textCatalog, true, 11, false, true) == "Showing all tracks from source: 11");
-  }
-
-  TEST_CASE("SmartListEditorModel - formats an invalid expression")
-  {
-    CHECK(formatSmartListPreviewStatusText(ao::test::englishMessageCatalog(), false, 0, false, false) ==
-          "Invalid filter");
+    input.optSampleCount = std::nullopt;
+    CHECK(makeSmartListEditorViewState(catalog, input).previewStatusText == "Matches: 7");
+    input.matchCount = 1;
+    input.optSampleCount = 0;
+    CHECK(makeSmartListEditorViewState(catalog, input).previewStatusText == "Preview: 0 of 1 match");
   }
 
   TEST_CASE("SmartListEditorModel - formats track labels")
@@ -157,7 +144,7 @@ namespace ao::uimodel::test
     CHECK(computed.membershipEditingText == "Computed membership — edit tags or the expression");
   }
 
-  TEST_CASE("SmartListEditorModel - hides unavailable preview source")
+  TEST_CASE("SmartListEditorModel - hides a preview pending source acquisition")
   {
     auto const state = makeSmartListEditorViewState(ao::test::englishMessageCatalog(),
                                                     SmartListPreviewState{
@@ -183,6 +170,40 @@ namespace ao::uimodel::test
     CHECK(state.errorVisible == false);
   }
 
+  TEST_CASE("SmartListEditorModel - a lost source is not an invalid local filter or an empty result")
+  {
+    auto const state = makeSmartListEditorViewState(
+      ao::test::englishMessageCatalog(),
+      SmartListPreviewState{
+        .name = "Live", .localExpression = "#live", .hasPreviewSource = false, .errorMessage = "parent removed"});
+    CHECK(state.localExpression == "#live");
+    CHECK(state.hasDirectMembershipEditing);
+    CHECK_FALSE(state.canSubmit);
+    CHECK_FALSE(state.queryInvalid);
+    CHECK_FALSE(state.previewVisible);
+    CHECK(state.previewStatusText.empty());
+    REQUIRE(state.errorVisible);
+    CHECK(state.errorText == "Preview unavailable: parent removed");
+  }
+
+  TEST_CASE("SmartListEditorModel - shows distinct writer and visible preview diagnostics on separate lines")
+  {
+    auto state = SmartListEditorViewState{.errorText = "Preview unavailable: parent removed", .errorVisible = true};
+    CHECK(formatSmartListEditorErrorText("Create list is busy", state) ==
+          "Create list is busy\nPreview unavailable: parent removed");
+    CHECK(formatSmartListEditorErrorText("Preview unavailable: parent removed", state) ==
+          "Preview unavailable: parent removed");
+    CHECK(formatSmartListEditorErrorText({}, state) == "Preview unavailable: parent removed");
+
+    state.errorVisible = false;
+    CHECK(formatSmartListEditorErrorText("Create list is busy", state) == "Create list is busy");
+    CHECK(formatSmartListEditorErrorText({}, state).empty());
+
+    state.errorVisible = true;
+    state.errorText.clear();
+    CHECK(formatSmartListEditorErrorText("Create list is busy", state) == "Create list is busy");
+  }
+
   TEST_CASE("SmartListEditorModel - shows full source for empty local expression")
   {
     auto const state = makeSmartListEditorViewState(ao::test::englishMessageCatalog(),
@@ -193,6 +214,7 @@ namespace ao::uimodel::test
                                                       .hasError = false,
                                                       .errorMessage = "",
                                                       .matchCount = 4,
+                                                      .optSampleCount = 4,
                                                       .isAllTracks = false,
                                                     });
 
@@ -273,6 +295,7 @@ namespace ao::uimodel::test
                                                       .hasError = true,
                                                       .errorMessage = "ignored for empty filter",
                                                       .matchCount = 5,
+                                                      .optSampleCount = 5,
                                                       .isAllTracks = true,
                                                     });
 

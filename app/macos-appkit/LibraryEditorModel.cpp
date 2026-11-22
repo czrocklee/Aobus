@@ -200,8 +200,8 @@ namespace ao::appkit
     }
 
     _state = {.kind = LibraryEditorKind::Membership,
-              .title = remove ? std::string{i18n::requiredText(_catalog, i18n::MessageId::AppKitRemoveFromList)}
-                              : std::string{i18n::requiredText(_catalog, i18n::MessageId::AppKitAddToList)},
+              .title = std::string{i18n::requiredText(
+                _catalog, remove ? i18n::MessageId::AppKitRemoveFromList : i18n::MessageId::ListAddToPlaylist)},
               .trackIds = std::move(ids),
               .busy = true};
     publishChange();

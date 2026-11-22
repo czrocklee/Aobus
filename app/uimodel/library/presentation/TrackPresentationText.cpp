@@ -7,7 +7,6 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/projection/TrackListProjection.h>
-#include <ao/uimodel/library/list/SmartListEditing.h>
 
 #include <array>
 #include <cstddef>
@@ -222,39 +221,41 @@ namespace ao::uimodel
 
   std::string smartListPreviewStatus(MessageCatalog const& catalog,
                                      bool const expressionValid,
-                                     std::size_t const count,
+                                     std::size_t const matchCount,
+                                     std::optional<std::size_t> const optSampleCount,
                                      bool const isAllTracks,
                                      bool const localEmpty)
   {
-    if (localEmpty)
-    {
-      auto const source = isAllTracks ? std::string_view{"library"} : std::string_view{"source"};
-
-      if (count == 0)
-      {
-        return requiredFormat(catalog, MessageId::SmartListNoTracks, {{"source", source}});
-      }
-
-      return requiredFormat(catalog, MessageId::SmartListShowingSource, {{"source", source}, {"count", count}});
-    }
-
     if (!expressionValid)
     {
       return std::string{requiredText(catalog, MessageId::SmartListInvalidFilter)};
     }
 
-    if (count == 0)
+    auto const source = isAllTracks ? std::string_view{"library"} : std::string_view{"source"};
+
+    if (matchCount == 0)
     {
-      return std::string{requiredText(catalog, MessageId::SmartListNoMatches)};
+      return localEmpty ? requiredFormat(catalog, MessageId::SmartListNoTracks, {{"source", source}})
+                        : std::string{requiredText(catalog, MessageId::SmartListNoMatches)};
     }
 
-    if (count <= kSmartListPreviewLimit)
+    auto const scope = localEmpty ? source : std::string_view{"filtered"};
+
+    if (!optSampleCount)
     {
-      return requiredFormat(catalog, MessageId::SmartListShowingAllMatches, {{"count", count}});
+      return requiredFormat(catalog, MessageId::SmartListMatchCount, {{"scope", scope}, {"count", matchCount}});
     }
 
-    return requiredFormat(
-      catalog, MessageId::SmartListShowingFirstMatches, {{"visible", kSmartListPreviewLimit}, {"count", count}});
+    if (*optSampleCount < matchCount)
+    {
+      return requiredFormat(catalog,
+                            MessageId::SmartListShowingFirstMatches,
+                            {{"scope", scope}, {"visible", *optSampleCount}, {"count", matchCount}});
+    }
+
+    return localEmpty
+             ? requiredFormat(catalog, MessageId::SmartListShowingSource, {{"source", source}, {"count", matchCount}})
+             : requiredFormat(catalog, MessageId::SmartListShowingAllMatches, {{"count", matchCount}});
   }
 
   std::string trackChannelText(MessageCatalog const& catalog, std::uint8_t const channels)

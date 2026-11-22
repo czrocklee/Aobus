@@ -25,6 +25,7 @@
 #include "layout/runtime/PaneSettingsAccess.h"
 #include "layout/runtime/ResourceLookup.h"
 #include "layout/runtime/WindowActivityState.h"
+#include "list/ListAuthoringCoordinator.h"
 #include "platform/ResourceLanguage.h"
 #include "theme/SurfaceBrushes.h"
 #include "theme/ThemeCoordinator.h"
@@ -39,6 +40,8 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/LibraryWrite.h>
+#include <ao/library/ListBuilder.h>
+#include <ao/library/ListWriter.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackWriter.h>
@@ -46,6 +49,8 @@
 #include <ao/library/WriteTransaction.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
+#include <ao/rt/NotificationService.h>
+#include <ao/rt/NotificationState.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
@@ -70,6 +75,7 @@
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/winui/layout/LayoutSchema.h>
 #include <ao/winui/layout/ShellState.h>
+#include <ao/winui/list/ListAuthoringAdapter.h>
 
 #include <unknwn.h>
 #include <winrt/Microsoft.UI.Dispatching.h>
@@ -104,6 +110,7 @@
 #include <system_error>
 #include <tuple>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace
@@ -532,6 +539,17 @@ namespace
               _seededTrackIds.push_back(*createRes);
             }
 
+            auto list = ao::library::ListBuilder::makeEmpty();
+            list.name("Membership probe").filter("#membershipprobe");
+            list.orderTrackIds().add(_seededTrackIds.front());
+            auto const listRes = write.lists().create(list);
+
+            if (!listRes)
+            {
+              return std::unexpected{listRes.error()};
+            }
+
+            _membershipListId = *listRes;
             return {};
           });
 
@@ -886,7 +904,7 @@ namespace
       verifyHeaderResizeNames();
 
       clearSelectionPublications();
-      enqueueStep(&WinUiTrackTableProbeApplication::nativeSelectionStep);
+      enqueueStep(&WinUiTrackTableProbeApplication::listFeedbackSetupStep);
     }
 
     void nativeSelectionStep()
@@ -2225,6 +2243,10 @@ namespace
       }
 
       _navigationContent = _navigation.Content().as<FrameworkElement>();
+      auto const selectedItem = _navigation.SelectedItem().try_as<Controls::NavigationViewItem>();
+      _report.check(
+        selectedItem && winrt::unbox_value_or<std::uint32_t>(selectedItem.Tag(), 0) == ao::rt::kAllTracksListId.raw(),
+        "the additional saved List does not displace the selected All Tracks landmark");
       _navigationWidthIndex = 0;
       _navigationSortChecked = false;
     }
@@ -2414,8 +2436,306 @@ namespace
       }
       else
       {
-        finish();
+        // The remaining commands exercise the coordinator, not the geometry fixture's sidebar.
+        _hostPtr->retire();
+        enqueueStep(&WinUiTrackTableProbeApplication::membershipApplyStep);
       }
+    }
+
+    // --- Track-table List authoring feedback ------------------------------
+
+    void listFeedbackSetupStep()
+    {
+      _report.beginScenario("an order command on All Tracks explains the refusal in the idle Modern activity strip");
+      auto catalogRes = ao::i18n::MessageCatalog::create("en");
+
+      if (!catalogRes)
+      {
+        failSetup(catalogRes.error().message);
+        return;
+      }
+
+      ao::winui::layout::registerStatusComponents(*_registryPtr,
+                                                  _runtimePtr->views(),
+                                                  _runtimePtr->notifications(),
+                                                  _runtimePtr->library(),
+                                                  *_trackListPtr,
+                                                  *catalogRes,
+                                                  _shellStateChanged,
+                                                  _statusMessageChanged);
+      auto context = makeBuildContext();
+      auto activityRes = _registryPtr->build(context, {.id = "probe-activity", .type = "status.activity"});
+
+      if (!activityRes)
+      {
+        failSetup(activityRes.error().message);
+        return;
+      }
+
+      _activityPtr = std::move(activityRes->componentPtr);
+      _root.Children().Append(_activityPtr->element());
+      _listCoordinatorPtr =
+        std::make_unique<ao::winui::ListAuthoringCoordinator>(ao::winui::ListAuthoringCoordinatorConfig{
+          .xamlRoot = [this] { return _root.XamlRoot(); },
+          .asyncRuntime = _runtimePtr->async(),
+          .library = _runtimePtr->library(),
+          .views = _runtimePtr->views(),
+          .sources = _runtimePtr->sources(),
+          .notifications = _runtimePtr->notifications(),
+          .trackList = *_trackListPtr,
+          .presentationCatalog = *_presentationCatalogPtr,
+          .listPresentations = *_listPresentationsPtr,
+          .textCatalog = std::move(*catalogRes),
+          .reportStatus =
+            [this](std::string text)
+          {
+            _listStatuses.push_back(std::move(text));
+
+            if (_nextFeedbackCheck != nullptr)
+            {
+              afterPostedNotifications(std::exchange(_nextFeedbackCheck, nullptr));
+            }
+          },
+        });
+      _listFeedSub = _runtimePtr->notifications().onFeedUpdated(
+        [this](ao::rt::NotificationFeedUpdate const& update)
+        {
+          if (update.mutationKind != ao::rt::NotificationFeedMutationKind::Posted)
+          {
+            return;
+          }
+
+          auto const& entries = update.feedPtr->entries;
+          auto const posted = std::ranges::find(entries, update.id, &ao::rt::NotificationEntry::id);
+
+          if (posted != entries.end())
+          {
+            _listPosts.push_back(*posted);
+          }
+        });
+      afterNextLayoutStep(&WinUiTrackTableProbeApplication::orderRefusalStep);
+    }
+
+    static bool hasVisibleText(DependencyObject const& node, winrt::hstring const& expected)
+    {
+      if (auto const element = node.try_as<UIElement>(); element && element.Visibility() != Visibility::Visible)
+      {
+        return false;
+      }
+
+      if (auto const text = node.try_as<Controls::TextBlock>(); text && text.IsLoaded() && text.Text() == expected)
+      {
+        return true;
+      }
+
+      auto const childCount = Media::VisualTreeHelper::GetChildrenCount(node);
+
+      for (std::int32_t index = 0; index < childCount; ++index)
+      {
+        if (hasVisibleText(Media::VisualTreeHelper::GetChild(node, index), expected))
+        {
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+    void orderRefusalStep()
+    {
+      auto const activity = _activityPtr->element();
+      constexpr auto kReason = "Manual ordering is available for saved Lists only.";
+      _listCoordinatorPtr->applyOrder(ao::winui::ListOrderCommand::MoveUp);
+      checkListFeedback(kReason, ao::rt::NotificationSeverity::Info, ao::rt::NotificationLifetime::transient());
+      _report.check(hasVisibleText(activity, winrt::to_hstring(kReason)),
+                    "the loaded activity strip displays the reason without a status.message component");
+      _root.Children().RemoveAtEnd();
+      _activityPtr.reset();
+      enqueueStep(&WinUiTrackTableProbeApplication::nativeSelectionStep);
+    }
+
+    void expectListFeedback(Step check)
+    {
+      _listStatuses.clear();
+      _listPosts.clear();
+      _nextFeedbackCheck = check;
+    }
+
+    void dispatchMembershipAdd(ao::ListId const listId, Step check)
+    {
+      expectListFeedback(check);
+      _listCoordinatorPtr->editMembership(listId, true);
+    }
+
+    void checkListFeedback(std::string_view const expected,
+                           ao::rt::NotificationSeverity const severity,
+                           ao::rt::NotificationLifetime const lifetime)
+    {
+      _report.check(_listStatuses.size() == 1 && _listStatuses.front() == expected,
+                    std::format("status reports '{}' exactly once", expected));
+      checkListPost(expected, severity, lifetime);
+    }
+
+    void checkListPost(std::string_view const expected,
+                       ao::rt::NotificationSeverity const severity,
+                       ao::rt::NotificationLifetime const lifetime)
+    {
+      _report.check(_listPosts.size() == 1, "the real feed received exactly one post for the List command");
+
+      if (!_listPosts.empty())
+      {
+        auto const& entry = _listPosts.front();
+        auto const* text = std::get_if<std::string>(&entry.message);
+        _report.check(text != nullptr && *text == expected, "the real feed contains the same localized status text");
+        _report.check(entry.severity == severity && entry.lifetime == lifetime,
+                      "the feed entry has the expected severity and lifetime");
+      }
+    }
+
+    bool trySelectMembershipTrack(TrackId const trackId)
+    {
+      auto const selectionRes = _runtimePtr->views().setSelection(_trackListPtr->viewId(), {trackId});
+
+      if (!selectionRes)
+      {
+        failSetup(selectionRes.error().message);
+      }
+
+      return selectionRes.has_value();
+    }
+
+    bool hasMembershipTag(TrackId const trackId) const
+    {
+      auto const tags = _runtimePtr->library().snapshot().selectionTags(std::array{trackId});
+      return std::ranges::contains(tags, "membershipprobe");
+    }
+
+    void membershipApplyStep()
+    {
+      _report.beginScenario("a List membership edit updates status and posts one transient notification");
+
+      if (trySelectMembershipTrack(_firstTrack))
+      {
+        dispatchMembershipAdd(_membershipListId, &WinUiTrackTableProbeApplication::membershipNoOpStep);
+        std::ignore = trySelectMembershipTrack(_secondTrack);
+      }
+    }
+
+    void membershipNoOpStep()
+    {
+      checkListFeedback("Added #membershipprobe to 1 track in Membership probe.",
+                        ao::rt::NotificationSeverity::Info,
+                        ao::rt::NotificationLifetime::transient());
+      _report.check(hasMembershipTag(_firstTrack) && !hasMembershipTag(_secondTrack),
+                    "the dispatched List edit targets the captured Track rather than the later selection");
+      _report.beginScenario("a no-op List membership edit still reports informational feedback");
+
+      if (trySelectMembershipTrack(_firstTrack))
+      {
+        dispatchMembershipAdd(_membershipListId, &WinUiTrackTableProbeApplication::membershipOuterErrorStep);
+      }
+    }
+
+    void membershipOuterErrorStep()
+    {
+      checkListFeedback("Membership probe already has #membershipprobe on the selected tracks.",
+                        ao::rt::NotificationSeverity::Info,
+                        ao::rt::NotificationLifetime::transient());
+      _report.beginScenario("a List membership result error keeps its diagnostic in the status and feed history");
+      dispatchMembershipAdd(ao::ListId{9999}, &WinUiTrackTableProbeApplication::membershipCompleteStep);
+    }
+
+    void membershipCompleteStep()
+    {
+      checkListFeedback(
+        "Error: list not found: 9999", ao::rt::NotificationSeverity::Error, ao::rt::NotificationLifetime::history());
+      _report.beginScenario("order results and rejected relative moves in a filtered Manual Order view");
+      auto const* manual = ao::rt::builtinTrackPresentationPreset(ao::rt::kListOrderTrackPresentationId);
+
+      if (!manual)
+      {
+        failSetup("Manual Order preset is missing");
+        return;
+      }
+
+      auto const viewRes = _runtimePtr->workspace().navigate({
+        .target = ao::rt::FilteredListTarget{.listId = _membershipListId, .filterExpression = "#membershipprobe"},
+        .optPresentation = ao::rt::NavigationPresentation{.spec = manual->spec},
+      });
+
+      if (!viewRes)
+      {
+        failSetup(viewRes.error().message);
+        return;
+      }
+
+      afterPostedNotifications(&WinUiTrackTableProbeApplication::orderResetStep);
+    }
+
+    void orderResetStep()
+    {
+      expectListFeedback(&WinUiTrackTableProbeApplication::orderNoOpStep);
+      _listCoordinatorPtr->applyOrder(ao::winui::ListOrderCommand::Reset);
+    }
+
+    void orderNoOpStep()
+    {
+      checkListFeedback("Reset Manual Order and forgot 1 saved position.",
+                        ao::rt::NotificationSeverity::Info,
+                        ao::rt::NotificationLifetime::transient());
+      _report.check(_runtimePtr->library().snapshot().listOrderTrackIds(_membershipListId).empty(),
+                    "Reset removed the saved position");
+
+      if (trySelectMembershipTrack(_firstTrack))
+      {
+        expectListFeedback(&WinUiTrackTableProbeApplication::orderRejectedStep);
+        _listCoordinatorPtr->applyOrder(ao::winui::ListOrderCommand::MoveToBottom);
+      }
+    }
+
+    void orderRejectedStep()
+    {
+      checkListFeedback(
+        "Order unchanged.", ao::rt::NotificationSeverity::Info, ao::rt::NotificationLifetime::transient());
+      expectListFeedback(&WinUiTrackTableProbeApplication::missingDeleteStep);
+      _listCoordinatorPtr->applyOrder(ao::winui::ListOrderCommand::MoveUp);
+    }
+
+    void missingDeleteStep()
+    {
+      checkListFeedback(
+        "Clear the quick filter to drag or move relatively; moving to the top or bottom is still available.",
+        ao::rt::NotificationSeverity::Warning,
+        ao::rt::NotificationLifetime::history());
+      _report.beginScenario("a missing deletion target reports the preview error outside the dialog");
+      expectListFeedback(&WinUiTrackTableProbeApplication::missingEditStep);
+      _listCoordinatorPtr->deleteList(ao::ListId{9999}, false);
+    }
+
+    void missingEditStep()
+    {
+      checkListFeedback(
+        "Error: list not found: 9999", ao::rt::NotificationSeverity::Error, ao::rt::NotificationLifetime::history());
+      _report.check(!_listCoordinatorPtr->isDialogActive(), "a failed preview did not leave a confirmation open");
+      _report.beginScenario("an edit that cannot open reports the missing List but not into a retired window");
+      expectListFeedback(nullptr);
+      {
+        auto const retirement = _runtimePtr->notifications().onFeedUpdated(
+          [this](ao::rt::NotificationFeedUpdate const& update)
+          {
+            if (update.mutationKind == ao::rt::NotificationFeedMutationKind::Posted)
+            {
+              _listCoordinatorPtr->retire();
+            }
+          });
+        _listCoordinatorPtr->editList(ao::ListId{9999});
+      }
+      _report.check(
+        _listStatuses.empty(), "synchronous window retirement during a post suppressed the status callback");
+      checkListPost("This List is no longer available.",
+                    ao::rt::NotificationSeverity::Error,
+                    ao::rt::NotificationLifetime::history());
+      finish();
     }
 
     // --- Native surface discovery -------------------------------------------
@@ -2518,6 +2838,9 @@ namespace
 
       try
       {
+        _listFeedSub.reset();
+        _listCoordinatorPtr.reset();
+        _activityPtr.reset();
         _selectionSub.reset();
 
         if (_hostPtr)
@@ -2633,6 +2956,15 @@ namespace
     ao::async::Subscription _selectionSub;
     std::vector<std::vector<TrackId>> _selectionPublications;
     std::vector<std::string> _statusMessages;
+
+    std::unique_ptr<ao::winui::ListAuthoringCoordinator> _listCoordinatorPtr;
+    ao::async::Subscription _listFeedSub;
+    ao::ListId _membershipListId = ao::kInvalidListId;
+    Step _nextFeedbackCheck = nullptr;
+    std::vector<std::string> _listStatuses;
+    std::vector<ao::rt::NotificationEntry> _listPosts;
+    std::unique_ptr<ao::winui::layout::LayoutComponent> _activityPtr;
+    ao::async::Signal<std::string> _statusMessageChanged;
 
     std::unique_ptr<ao::winui::ThemeCoordinator> _themeCoordinatorPtr;
     std::unique_ptr<ao::uimodel::PlaybackActions> _playbackActionsPtr;

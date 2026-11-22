@@ -9,6 +9,7 @@
 #include <ao/rt/library/LibraryAuthoring.h>
 
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <span>
 #include <string>
@@ -18,6 +19,12 @@
 namespace ao::i18n
 {
   class MessageCatalog;
+}
+
+namespace ao::rt
+{
+  struct TrackListViewState;
+  enum class TrackSourceState : std::uint8_t;
 }
 
 namespace ao::uimodel
@@ -47,6 +54,12 @@ namespace ao::uimodel
 
   ListOrderCapabilityState describeListOrderCapabilities(i18n::MessageCatalog const& textCatalog,
                                                          ListOrderCapabilityInput const& input);
+
+  /// Projects loaded view details; callers decide how to handle view and source lookup failures.
+  ListOrderCapabilityState describeViewListOrderCapabilities(i18n::MessageCatalog const& textCatalog,
+                                                             rt::TrackListViewState const& view,
+                                                             rt::TrackSourceState sourceState,
+                                                             rt::LibraryAuthoringAvailability authoring);
 
   std::vector<TrackId> listOrderDragSelection(TrackId draggedTrackId,
                                               std::span<TrackId const> selectedTrackIds,

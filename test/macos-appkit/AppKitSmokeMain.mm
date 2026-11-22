@@ -61,8 +61,9 @@ int main(int argc, char** argv)
     }
 
     if (launch.stateRoot.empty() || !launch.optRequest ||
-        (scenario != "desktop" && scenario != "authoring" && scenario != "presentation" && scenario != "media" &&
-         scenario != "credits-controls" && scenario != "credits-previews" && scenario != "quality-presentation"))
+        (scenario != "desktop" && scenario != "membership" && scenario != "authoring" && scenario != "presentation" &&
+         scenario != "media" && scenario != "credits-controls" && scenario != "credits-previews" &&
+         scenario != "quality-presentation"))
     {
       return 2;
     }
@@ -104,6 +105,11 @@ int main(int argc, char** argv)
       AO_INVARIANT(launcher.length > 0, "Desktop scenarios require the process supervisor's launch bridge");
       launch.executable = ao::utility::pathFromNative(launcher.fileSystemRepresentation);
       return ao::appkit::test::runDesktopScenario(std::move(launch), std::move(*catalogRes), successor);
+    }
+
+    if (scenario == "membership")
+    {
+      return ao::appkit::test::runMembershipScenario(std::move(launch), std::move(*catalogRes));
     }
 
     [app finishLaunching];

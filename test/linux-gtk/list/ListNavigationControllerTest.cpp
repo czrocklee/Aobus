@@ -11,11 +11,15 @@
 #include "test/MessageCatalogTestSupport.h"
 #include "test/TestFixtureSupport.h"
 #include "test/library/TrackTestSupport.h"
+#include "test/library/WritableLibraryTestSupport.h"
 #include "test/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/linux-gtk/GtkWidgetTestSupport.h"
 #include "track/TrackRowCache.h"
 #include <ao/CoreIds.h>
+#include <ao/compat/MoveOnlyFunction.h>
+#include <ao/library/LibraryWrite.h>
+#include <ao/library/ListBuilder.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListMutation.h>
@@ -25,6 +29,7 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/uimodel/library/list/ListAuthoring.h>
 #include <ao/utility/ScopedRegistration.h>
@@ -32,6 +37,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <giomm/simpleaction.h>
 #include <giomm/simpleactiongroup.h>
+#include <gtkmm/button.h>
 #include <gtkmm/checkbutton.h>
 #include <gtkmm/dialog.h>
 #include <gtkmm/dropdown.h>
@@ -160,10 +166,14 @@ namespace ao::gtk::test
 
     struct NavigationFixture final
     {
-      NavigationFixture() { window.set_child(controller.widget()); }
+      explicit NavigationFixture(compat::MoveOnlyFunction<void(library::MusicLibrary&)> initializeLibrary = {})
+        : runtimeFixture{std::move(initializeLibrary)}
+      {
+        window.set_child(controller.widget());
+      }
 
       Glib::RefPtr<Gtk::Application> appPtr = ensureGtkApplication();
-      GtkRuntimeFixture runtimeFixture{};
+      GtkRuntimeFixture runtimeFixture;
       Gtk::Window window;
       TrackRowCache cache{runtimeFixture.runtime().library(), ao::test::englishMessageCatalog()};
       ListId selectedId{999};
@@ -501,6 +511,69 @@ namespace ao::gtk::test
     drainGtkEvents();
   }
 
+  TEST_CASE("ListNavigationController - fast Create rejects the current filter beneath a broken parent")
+  {
+    auto parentListId = kInvalidListId;
+    auto state = NavigationFixture{
+      [&parentListId](library::MusicLibrary& library)
+      {
+        auto transaction = library::test::writeTransaction(library);
+        parentListId = ao::test::requireValue(transaction.apply(
+          [](library::LibraryWrite& write)
+          { return write.lists().create(library::ListBuilder::makeEmpty().name("Broken parent").filter("(")); }));
+        REQUIRE(transaction.commit());
+      }};
+    auto& runtime = state.runtimeFixture.runtime();
+    auto const revision = runtime.library().snapshot().revision();
+    state.controller.rebuildTree(state.cache);
+    state.controller.createSmartListFromExpression(parentListId, {});
+    drainGtkEvents();
+
+    auto* const dialog = dynamic_cast<SmartListDialog*>(findAppDialogByTitle("New List"));
+    REQUIRE(dialog != nullptr);
+    auto* const name = listNameEntry(*dialog);
+    auto* const filter = findWidgetByClass<Gtk::Entry>(*dialog, "ao-query-expression-entry");
+    auto* const create = findButtonByLabel(*dialog, "Create");
+    auto* const error = findWidgetByClass<Gtk::Label>(*dialog, "ao-layout-error");
+    REQUIRE(name != nullptr);
+    REQUIRE(filter != nullptr);
+    REQUIRE(create != nullptr);
+    REQUIRE(error != nullptr);
+
+    name->set_text("Child draft");
+    REQUIRE(dialog->draft().expression.empty());
+    REQUIRE_FALSE(error->get_visible());
+    REQUIRE(create->get_sensitive());
+
+    // Drive the real response on the same turn as the edit, without settling the preview first.
+    filter->set_text("true");
+    REQUIRE(create->get_sensitive());
+    REQUIRE_FALSE(error->get_visible());
+    emitClicked(*create);
+
+    REQUIRE(findAppDialogByTitle("New List") == dialog);
+    REQUIRE(dialog->get_visible());
+    REQUIRE(error->get_visible());
+    CHECK(error->get_text().raw().contains("List " + std::to_string(parentListId.raw()) + " stored filter"));
+    CHECK_FALSE(create->get_sensitive());
+
+    auto rejectedDraft = dialog->draft();
+    REQUIRE(rejectedDraft.name == "Child draft");
+    REQUIRE(rejectedDraft.expression == "true");
+    // Without yielding to a writer callback, a valid correction must be writable again.
+    dialog->setLocalExpression({});
+    REQUIRE(create->get_sensitive());
+
+    // The writer would accept the rejected draft: the inherited diagnostic is a preview gate.
+    auto const previewRes =
+      runGtkTask(runtime, runtime.library().commands().previewCreateListAsync(std::move(rejectedDraft)));
+    REQUIRE(previewRes);
+    REQUIRE(findAppDialogByTitle("New List") == dialog);
+    CHECK(dialog->get_visible());
+    CHECK(runtime.library().snapshot().revision() == revision);
+    CHECK(countListsNamed(runtime, "Child draft") == 0);
+  }
+
   TEST_CASE("ListNavigationController - ignores duplicate OK responses during submission", "[concurrency]")
   {
     auto state = NavigationFixture{};
@@ -809,7 +882,7 @@ namespace ao::gtk::test
     CHECK(state.selectedId == listId);
   }
 
-  TEST_CASE("ListNavigationController - stale edit responses preserve the visible draft")
+  TEST_CASE("ListNavigationController - retrying a failed Save preserves the draft and replaces its feedback")
   {
     auto state = NavigationFixture{};
 
@@ -829,27 +902,41 @@ namespace ao::gtk::test
     REQUIRE(dialog != nullptr);
     REQUIRE(dialog->get_visible());
     CHECK(dialog->draft().name == "Draft to Preserve");
+    auto* const errorLabel = findWidgetByClass<Gtk::Label>(*dialog, "ao-layout-error");
+    auto* const saveButton = findButtonByLabel(*dialog, "Save");
+    REQUIRE(errorLabel != nullptr);
+    REQUIRE(saveButton != nullptr);
     deleteList(state.runtimeFixture.runtime(), listId);
+    REQUIRE(saveButton->get_sensitive());
 
-    dialog->response(Gtk::ResponseType::OK);
+    auto const missingListError = [&]
+    { return errorLabel->get_visible() && errorLabel->get_text().raw().starts_with("list not found:"); };
 
+    emitClicked(*saveButton);
+    REQUIRE(tryPumpGtkEventsUntil(missingListError));
+    REQUIRE(saveButton->get_sensitive());
     CHECK(dialog->get_visible());
     CHECK(dialog->draft().name == "Draft to Preserve");
-    bool visibleError = false;
 
-    REQUIRE(tryPumpGtkEventsUntil(
-      [&]
-      {
-        for (auto* const label : collectAll<Gtk::Label>(*dialog))
-        {
-          visibleError = visibleError || (label->get_visible() && label->has_css_class("ao-layout-error") &&
-                                          !label->get_text().empty());
-        }
+    auto const firstError = errorLabel->get_text();
+    auto const dropDowns = collectAll<Gtk::DropDown>(*dialog);
+    REQUIRE(dropDowns.size() == 1);
+    REQUIRE(dialog->presentationId().empty());
+    dropDowns.front()->set_selected(1U);
+    auto const chosenPreset = dialog->presentationId();
+    REQUIRE_FALSE(chosenPreset.empty());
+    CHECK(errorLabel->get_visible());
+    CHECK(errorLabel->get_text() == firstError);
+    REQUIRE(saveButton->get_sensitive());
 
-        return visibleError;
-      }));
-
-    CHECK(visibleError);
+    emitClicked(*saveButton);
+    CHECK_FALSE(errorLabel->get_visible());
+    CHECK_FALSE(saveButton->get_sensitive());
+    REQUIRE(tryPumpGtkEventsUntil(missingListError));
+    CHECK(dialog->get_visible());
+    CHECK(dialog->draft().name == "Draft to Preserve");
+    CHECK_FALSE(findList(state.runtimeFixture.runtime(), listId));
+    CHECK(dialog->presentationId() == chosenPreset);
     CHECK(state.savedPresentationListId == kInvalidListId);
     CHECK(state.savedPresentationId.empty());
     dialog->close();
@@ -942,9 +1029,9 @@ namespace ao::gtk::test
       previewText.append(label->get_text());
     }
 
-    CHECK(previewText.contains("Delete Tree"));
-    CHECK(previewText.contains("Delete Child"));
-    CHECK(previewText.contains("Delete Grandchild"));
+    CHECK(previewText.contains("Delete Tree (" + std::to_string(parentId.raw()) + ")"));
+    CHECK(previewText.contains("Delete Child (" + std::to_string(childId.raw()) + ")"));
+    CHECK(previewText.contains("Delete Grandchild (" + std::to_string(grandchildId.raw()) + ")"));
     confirmation->response(Gtk::ResponseType::YES);
     REQUIRE(tryPumpGtkEventsUntil(
       [&runtime, parentId, childId, grandchildId]

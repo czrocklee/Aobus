@@ -42,21 +42,24 @@ namespace ao::uimodel
     std::string_view localExpression;
     bool hasPreviewSource = false;
     bool hasError = false;
+    // Source acquisition diagnostic if unavailable; otherwise the filter diagnostic.
     std::string_view errorMessage{};
     std::size_t matchCount = 0;
+    // Rows actually provided, before viewport clipping. A count-only host leaves this absent.
+    std::optional<std::size_t> optSampleCount{};
     bool isAllTracks = false;
   };
 
   struct SmartListEditorViewState final
   {
-    std::string name;
-    std::string localExpression;
+    std::string name{};
+    std::string localExpression{};
 
     std::size_t matchCount = 0;
     bool isAllTracks = false;
-    std::string previewStatusText;
-    std::string errorText;
-    std::string membershipEditingText;
+    std::string previewStatusText{};
+    std::string errorText{};
+    std::string membershipEditingText{};
     bool hasDirectMembershipEditing = false;
     bool expressionValid = true;
     bool queryInvalid = false;
@@ -65,8 +68,17 @@ namespace ao::uimodel
     bool errorVisible = false;
   };
 
+  // A source error inherited by a blank draft is not a rejection of its local filter.
+  constexpr bool isSmartListLocalFilterRejected(std::string_view localExpression, bool hasSourceError) noexcept
+  {
+    return hasSourceError && !localExpression.empty();
+  }
+
   SmartListEditorViewState makeSmartListEditorViewState(i18n::MessageCatalog const& textCatalog,
                                                         SmartListPreviewState const& input);
+
+  // Combine display-ready diagnostics, writer first and any distinct visible preview error on its own line.
+  std::string formatSmartListEditorErrorText(std::string_view mutationError, SmartListEditorViewState const& state);
 
   // Expression text
 
@@ -77,16 +89,8 @@ namespace ao::uimodel
 
   // Preview
 
-  /// The bounded number of leading matches a frontend preview shows. The
-  /// preview status names this count when a source has more matches, so the
-  /// rendered rows and the status text agree.
+  /// Maximum leading rows to sample; not a match count or a viewport size.
   inline constexpr std::size_t kSmartListPreviewLimit = 10;
-
-  std::string formatSmartListPreviewStatusText(i18n::MessageCatalog const& textCatalog,
-                                               bool expressionValid,
-                                               std::size_t count,
-                                               bool isAllTracks,
-                                               bool localEmpty);
 
   std::string formatSmartListPreviewTrackLabel(i18n::MessageCatalog const& textCatalog,
                                                std::string_view title,

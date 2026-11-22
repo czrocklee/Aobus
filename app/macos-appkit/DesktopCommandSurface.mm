@@ -552,24 +552,36 @@ namespace
       properties.representedObject = @{@"tracks": tracks};
       auto* const reveal = add([self text:MessageId::AppKitRevealInFinder], @selector(revealSelection:));
       reveal.representedObject = @{@"tracks": tracks};
-      auto* const targets = add([self text:MessageId::AppKitAddToList], nil);
-      targets.submenu = [[NSMenu alloc] initWithTitle:[self text:MessageId::AppKitAddToList]];
+      auto const writable = ao::uimodel::writableTagListTargets(
+        _sessionPtr->runtime().library().snapshot().lists(), _sessionPtr->runtime().textOrderingPolicy());
+      auto const membership = ao::uimodel::listMembershipMenu(_sessionPtr->catalog(), writable, [self activeListId]);
+      auto* const title = [self text:MessageId::ListAddToPlaylist];
+      auto* const submenu = [[NSMenu alloc] initWithTitle:title];
+      add(title, nil).submenu = submenu;
 
-      for (auto const& target : ao::uimodel::writableTagListTargets(
-             _sessionPtr->runtime().library().snapshot().lists(), _sessionPtr->runtime().textOrderingPolicy()))
+      for (auto const& target : membership.addTargets)
       {
-        auto* const item = [targets.submenu addItemWithTitle:nativeText(target.name)
-                                                      action:@selector(changeMembership:)
-                                               keyEquivalent:@""];
+        auto* const item = [submenu addItemWithTitle:nativeText(target.label)
+                                              action:@selector(changeMembership:)
+                                       keyEquivalent:@""];
         item.target = self;
         item.representedObject = @{@"list": @(target.listId.raw()), @"tracks": tracks};
+      }
 
-        if (target.listId == [self activeListId])
-        {
-          auto* const remove = add([self text:MessageId::AppKitRemoveFromCurrentList], @selector(changeMembership:));
-          remove.tag = 1;
-          remove.representedObject = item.representedObject;
-        }
+      if (membership.addTargets.empty())
+      {
+        auto* const empty = [submenu addItemWithTitle:[self text:MessageId::ListNoMembershipAddTargets]
+                                               action:nil
+                                        keyEquivalent:@""];
+        empty.enabled = NO;
+      }
+
+      if (membership.optRemoveFromCurrent)
+      {
+        auto const& target = *membership.optRemoveFromCurrent;
+        auto* const remove = add(nativeText(target.label), @selector(changeMembership:));
+        remove.tag = 1;
+        remove.representedObject = @{@"list": @(target.listId.raw()), @"tracks": tracks};
       }
     });
 }

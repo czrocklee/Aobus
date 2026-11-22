@@ -9,8 +9,11 @@
 #include "test/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/linux-gtk/GtkWidgetTestSupport.h"
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
+#include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
+#include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
@@ -19,20 +22,25 @@
 #include <gtkmm/label.h>
 #include <gtkmm/widget.h>
 
+#include <chrono>
 #include <cstddef>
 #include <string>
+#include <utility>
 
 namespace ao::gtk::test
 {
   namespace
   {
-    ActivityStatusWidget makeStatus(rt::AppRuntime& runtime, ActivityStatusWidgetOptions options = {})
+    ActivityStatusWidget makeStatus(rt::AppRuntime& runtime,
+                                    ActivityStatusWidgetOptions options,
+                                    uimodel::ActivityStatusClock clock)
     {
       return ActivityStatusWidget{ActivityStatusWidgetDependencies{
         .notifications = runtime.notifications(),
         .textCatalog = ao::test::englishMessageCatalog(),
         .libraryJobs = nullptr,
         .options = options,
+        .clock = std::move(clock),
       }};
     }
 
@@ -43,8 +51,8 @@ namespace ao::gtk::test
       ActivityStatusWidget status;
       GtkWindowFixture windowFixture;
 
-      explicit MountedActivityStatus(ActivityStatusWidgetOptions options = {})
-        : status{makeStatus(runtimeFixture.runtime(), options)}
+      explicit MountedActivityStatus(ActivityStatusWidgetOptions options = {}, uimodel::ActivityStatusClock clock = {})
+        : status{makeStatus(runtimeFixture.runtime(), options, std::move(clock))}
       {
         windowFixture.mount(status.widget());
         windowFixture.present();
@@ -81,6 +89,50 @@ namespace ao::gtk::test
       CHECK(hasAccessibleLabel(status.dismissButton(), "Hide status"));
       CHECK(hasCssClass(status.widget(), "ao-activity-status-warning"));
     }
+  }
+
+  TEST_CASE("ActivityStatusWidget - unrelated updates preserve the compact dismissal deadline")
+  {
+    constexpr auto kRemaining = std::chrono::milliseconds{50};
+    constexpr auto kWakeTimeout = std::chrono::seconds{2};
+    auto now = std::chrono::steady_clock::time_point{};
+    std::size_t clockReads = 0;
+    auto clock = [&]
+    {
+      ++clockReads;
+      return now;
+    };
+    auto mounted = MountedActivityStatus{{}, clock};
+    auto& notifications = mounted.runtime().notifications();
+    auto& status = mounted.status;
+    auto const reportKey = rt::NotificationReportKey{"background.task"};
+    auto request = rt::NotificationRequest{
+      .message = "Background task started",
+      .lifetime = rt::NotificationLifetime::pinned(),
+    };
+    notifications.createOrUpdate(reportKey, request);
+    notifications.post(rt::NotificationSeverity::Info, "Saved playlist", rt::NotificationLifetime::history());
+    mounted.drain();
+    REQUIRE(status.widget().get_visible());
+    REQUIRE(status.label().get_text() == "Saved playlist");
+
+    now += uimodel::kActivityStatusDefaultAutoDismissTimeout - kRemaining;
+    request.message = "Background task advanced";
+    notifications.createOrUpdate(reportKey, request);
+    REQUIRE(status.widget().get_visible());
+    CHECK(status.label().get_text() == "Saved playlist");
+
+    // Deliver a native timeout with the model clock still before the deadline.
+    // Observe a clock check or an erroneous hide rather than sleeping for a fixed cutoff.
+    auto const readsAfterUpdate = clockReads;
+    CHECK(tryPumpGtkEventsUntil(
+      [&] { return clockReads != readsAfterUpdate || !status.widget().get_visible(); }, kWakeTimeout));
+    REQUIRE(status.widget().get_visible());
+
+    // The early wake must re-arm: no feed update or render is requested here.
+    now += kRemaining;
+    CHECK(tryPumpGtkEventsUntil([&] { return !status.widget().get_visible(); }, kWakeTimeout));
+    CHECK(notifications.feed().entries.size() == 2);
   }
 
   TEST_CASE("ActivityStatusWidget - separates compact dismissal from feed retention")

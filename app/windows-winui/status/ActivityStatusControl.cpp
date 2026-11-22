@@ -24,6 +24,7 @@
 #include <chrono>
 #include <cstddef>
 #include <memory>
+#include <optional>
 #include <string_view>
 #include <utility>
 
@@ -67,14 +68,6 @@ namespace ao::winui
     constexpr std::wstring_view kErrorGlyph = L"\uEA39";
     constexpr std::wstring_view kDismissGlyph = L"\uE711";
     constexpr std::wstring_view kNotificationGlyph = L"\uEA8F";
-
-    bool isSameCompactPresentation(uimodel::ActivityCompactState const& left,
-                                   uimodel::ActivityCompactState const& right)
-    {
-      return left.kind == right.kind && left.text == right.text &&
-             left.optProgressFraction == right.optProgressFraction && left.dismissible == right.dismissible &&
-             left.hasDetails == right.hasDetails && left.optAutoDismissTimeout == right.optAutoDismissTimeout;
-    }
 
     GridLength stars(double const value = 1.0) noexcept
     {
@@ -160,7 +153,8 @@ namespace ao::winui
     , _dismissButton{std::move(config.dismissButton)}
     , _detailFlyout{Flyout{}}
     , _detailRows{StackPanel{}}
-    , _autoDismissTimer{_root.DispatcherQueue().CreateTimer()}
+    , _autoDismissTimer{config.autoDismissTimer ? std::move(config.autoDismissTimer)
+                                                : _root.DispatcherQueue().CreateTimer()}
     , _textCatalog{std::move(config.textCatalog)}
     , _reserveIdle{config.reserveIdle}
   {
@@ -194,6 +188,7 @@ namespace ao::winui
         [this](uimodel::ActivityStatusViewState const& state) { render(state); },
         uimodel::ActivityStatusViewModelOptions{
           .libraryJobs = &libraryJobs,
+          .clock = std::move(config.clock),
           .emitInitialState = false,
         });
       render(_viewModelPtr->viewState());
@@ -284,7 +279,7 @@ namespace ao::winui
     ToolTipService::SetToolTip(_detailButton, detailToolTip);
 
     renderDetail(state);
-    syncAutoDismissTimer(compact);
+    syncAutoDismissTimer();
   }
 
   void ActivityStatusControl::renderDetail(uimodel::ActivityStatusViewState const& state)
@@ -392,22 +387,24 @@ namespace ao::winui
     }
   }
 
-  void ActivityStatusControl::syncAutoDismissTimer(uimodel::ActivityCompactState const& compact)
+  void ActivityStatusControl::syncAutoDismissTimer()
   {
-    if (!compact.optAutoDismissTimeout)
+    auto const optRemaining = _viewModelPtr ? _viewModelPtr->compactAutoDismissRemaining() : std::nullopt;
+
+    if (!optRemaining)
     {
       cancelAutoDismissTimer();
       return;
     }
 
-    if (_optScheduledCompact && isSameCompactPresentation(*_optScheduledCompact, compact))
+    // ActivityStatusFeedProjection::projectNotificationCompact uses kActivityStatusDefaultAutoDismissTimeout
+    // for every locally timed Info. A replacement cannot expire sooner, so keep the tick and recheck on delivery.
+    // If the projection introduces shorter lifetimes, reschedule for earlier deadlines.
+    if (_autoDismissTimerArmed)
     {
       return;
     }
 
-    _optScheduledCompact = compact;
-    _autoDismissTimer.Stop();
-    _autoDismissTickRevoker.revoke();
     auto const generation = ++_autoDismissGeneration;
     _autoDismissTickRevoker =
       _autoDismissTimer.Tick(winrt::auto_revoke,
@@ -419,30 +416,30 @@ namespace ao::winui
                                  return;
                                }
 
-                               _optScheduledCompact.reset();
+                               // Retire the arm before attempting dismissal, which can render synchronously.
+                               cancelAutoDismissTimer();
 
                                if (!_viewModelPtr->tryAutoDismissCompactIfDue())
                                {
-                                 _optScheduledCompact = _viewModelPtr->viewState().compact;
-                                 _autoDismissTimer.Interval(std::chrono::milliseconds{1});
-                                 _autoDismissTimer.Start();
+                                 syncAutoDismissTimer();
                                }
                              });
-    _autoDismissTimer.Interval(std::max(*compact.optAutoDismissTimeout, std::chrono::milliseconds{1}));
+    auto const delay = std::chrono::ceil<std::chrono::milliseconds>(*optRemaining);
+    _autoDismissTimer.Interval(std::max(delay, std::chrono::milliseconds{1}));
+    _autoDismissTimerArmed = true;
     _autoDismissTimer.Start();
   }
 
   void ActivityStatusControl::cancelAutoDismissTimer() noexcept
   {
+    ++_autoDismissGeneration;
+    _autoDismissTimerArmed = false;
+
     if (_autoDismissTimer)
     {
       _autoDismissTimer.Stop();
     }
 
-    ++_autoDismissGeneration;
-
     _autoDismissTickRevoker.revoke();
-
-    _optScheduledCompact.reset();
   }
 } // namespace ao::winui
