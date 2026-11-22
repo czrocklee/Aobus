@@ -1567,7 +1567,8 @@ actual Bazel `CppCompile`/`ObjcCompile` contexts, not a separate compilation
 database. The [aspect](../../bazel/lint/lint.bzl),
 [launcher](../../script/ao/graph/bazel_lint_action.py) and
 [current-report gate](../../script/ao/graph/bazel_lint_reports.py) implement the
-contracts below.
+contracts below. [Decision 0023](../decision/0023-full-input-native-lint-reports.md)
+explains why a report's include list does not narrow its cache dependencies.
 
 ```bash
 ./ao check lint --target //lib/utility:utility

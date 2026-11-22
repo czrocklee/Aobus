@@ -69,9 +69,8 @@ Do not perform a broad test-file split as drive-by cleanup unless it is necessar
 
 ## Validation
 
-This document owns completion validation for contributors and agent skills.
-Choose the route from the behavior and execution boundary being changed, and
-combine routes when a change spans several rows.
+During development, build or test the affected Bazel targets. Check platform-specific changes early on their native host, such as WinUI on Windows.
+Before delivering the finished change or pushing it for review, select all rows below that apply to the behavior and execution boundaries changed. A local commit or backup push alone does not require the native matrix.
 
 | Change or task                                                      | Completion evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -85,18 +84,9 @@ combine routes when a change spans several rows.
 
 Alongside the selected completion route, use [design review](../design-review.md) for structural acceptance and refactor evidence when work changes ownership or a public boundary, introduces an abstraction, or structurally refactors a subsystem.
 
-Follow the [formatting order](#formatting-before-validation) before completion checks.
-Run from the project root. Ordinary build/test/run uses pinned native Bazel;
-project-specific validation uses `./ao`, or `ao.bat` on Windows.
-For changes requiring complete native validation, run:
-
-```bash
-./ao check
-```
-
-The [completion gate](../bazel.md#completion-gate) checks the whole source
-snapshot. Use `--fresh` when you need new test executions, not a different
-scope. For documentation-only changes, use the two checks in the table above.
+Follow the [formatting order](#formatting-before-validation) before validation.
+The full [completion gate](../bazel.md#completion-gate) is `./ao check` (`ao.bat check` on Windows).
+It checks the whole source snapshot; `--fresh` forces new test executions without changing scope.
 
 `check lint` remains a useful standalone semantic check: source audits and
 Python checks for files in scope, plus native clang-tidy coverage for selected
@@ -129,19 +119,15 @@ Filter the executable that owns the case. On Linux, the wrapper starts only the
 private fixtures declared by the selected test. Before running an explicit GTK or backend test, check the
 [Linux fixture prerequisites](../bazel.md#direct-bazel-without-the-portal);
 do not start the services yourself.
-Focused results do not replace a full gate required by the table.
-Reuse a successful check when the relevant source, tests, dependencies,
-configuration, platform, and selected scope are unchanged.
-Do not repeat it merely because a skill hands off to another skill, a commit is
-created, or unrelated prose changes.
-Re-run affected checks after corrections; broaden only when new evidence shows
-another execution boundary is involved.
+A focused test or narrower CI job does not replace a required full gate.
+Reuse a passing result while its source, tests, dependencies, configuration, platform, and scope remain unchanged.
+After a correction, rerun affected checks; broaden the scope only if another boundary is involved.
 
 `check lint` is read-only, resolves its source scope once, and skips empty stage
 subsets. It performs no formatting or global documentation check; use
 `check format` and `check docs` separately.
 Explicit file and directory scopes for `format`, `check format`, `check lint`,
-and `check analyzer` must exist; a missing path fails even with `--report-only`.
+and `check analyzer` must exist. Relative paths are resolved from the worktree root; a missing path fails even with `--report-only`.
 Existing empty directories and scopes with no applicable files remain valid.
 Use an explicit scope or `--commit <base>` when validating a subset of a larger
 branch. `--all` requests whole-source lint; `check` independently owns the
@@ -161,18 +147,7 @@ If the task is explicitly about coverage percentage or missing lines, use `cover
 
 ### Formatting before validation
 
-Finish source edits and any needed `./ao format` before the required completion
-checks. Run formatting as a separate step, review its diff, and re-read rewritten
-files before relying on earlier file text. Do not chain source-rewriting format
-with builds or tests, or repeat it merely because another build or test starts.
-For a route requiring full validation, the order is source edits and formatting,
-then `./ao check`, whose graph includes the formatting and guardrail targets.
-Standalone scoped `./ao check format` and `./ao check lint` can be used while
-iterating without repeating native completion.
-
-If a later correction rewrites validated inputs, rerun the affected checks under
-the reuse rules above. A passing check from before that rewrite is not evidence
-for the new inputs.
+For read-only feedback on selected files, use `./ao check format` or `./ao check lint`. Finish edits, apply any needed formatting, and review the formatting diff before completion checks. Keep the rewrite separate from builds and tests. Re-read rewritten files before editing them again; rerun checks whose inputs changed.
 
 ### Continuous integration
 

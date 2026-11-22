@@ -38,6 +38,7 @@ See [documentation maintenance](../development/documentation.md#proposals-and-de
 - [Decision 0020: version persisted data for explicit upgrade](0020-versioning-and-upgrade-policy.md)
 - [Decision 0021: own test executables by runtime and link needs](0021-own-test-executables-by-runtime-needs.md); its ownership mechanism is superseded by Decision 0022.
 - [Decision 0022: use Bazel as the single native build backend](0022-single-native-build-backend.md)
+- [Decision 0023: keep full declared inputs for native lint reports](0023-full-input-native-lint-reports.md)
 
 ## Superseded decisions
 

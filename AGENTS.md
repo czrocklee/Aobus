@@ -1,11 +1,10 @@
 # Aobus Agent Guide
 
-Work from the repository root. Use pinned native `bazel build`, `bazel test`,
-and `bazel run`; `bazel test //:tests` is the default test selection.
-Use `./ao` (`ao.bat` on Windows) for project tooling; `./ao check` is the full
-validation gate. Linux tools come from the pinned `nix-shell`.
-Follow [native setup](doc/development/bazel.md#direct-bazel-without-the-portal)
-for host prerequisites.
+## Development workflow
+
+- **Iterate:** Use pinned `bazel build`, `bazel test`, or `bazel run` on affected targets. For the default test suite, run `bazel test //:tests`.
+- **Format:** Do not reformat a file another agent is editing in the same worktree: its pending patch may no longer match.
+- **Validate:** `./ao check` (`ao.bat check` on Windows) includes whole-graph lint. Run it on the final change when the [validation guide](doc/development/test/validation-and-review.md#validation) requires it, not after each edit.
 
 ## Repository rules
 
@@ -16,10 +15,9 @@ for host prerequisites.
 
 ## Guidance and authorization
 
+- [Native setup](doc/development/bazel.md#direct-bazel-without-the-portal): platform prerequisites and Linux fixture tools from the pinned `nix-shell`.
 - [Development guide](doc/development/README.md): task-specific contributor policy.
 - [System guide](doc/system/README.md): product contracts and subsystem code.
-- [Validation and review](doc/development/test/validation-and-review.md): select
-  checks by changed behavior, including formatting order and result reuse.
 
 Run required checks and fix failures within the authorized scope without
 per-step approval; report remaining failures or unvalidated boundaries.
