@@ -251,7 +251,8 @@ zh_Hant:table {
     library_task_updating_compact { "正在更新音樂庫" }
     library_scan_up_to_date { "音樂庫已是最新" }
     library_scan_complete { "音樂庫掃描完成" }
-    library_scan_relinked { "{count, plural, one {重新連結了 # 個移動的檔案} other {重新連結了 # 個移動的檔案}}" }
+    library_scan_notices_need_review { "掃描音樂庫時發現了需要檢查的項目。詳情請查看日誌。" }
+    library_scan_relinked { "{count, plural, one {重新連結了 # 個檔案} other {重新連結了 # 個檔案}}" }
     library_scan_missing { "{count, plural, one {# 個遺失的檔案需要檢查} other {# 個遺失的檔案需要檢查}}" }
     library_scan_changes_combined { "{relinked}；{missing}" }
     library_scan_completed_with_errors { "{hasChanges, select, yes {掃描完成但有錯誤；{changes}} other {掃描完成但有錯誤}}" }
@@ -837,7 +838,7 @@ zh_Hant:table {
     library_scan_cue_whole_file { "{uri}：已作為整個檔案匯入。請移除該音軌後重新掃描以分割檔案。" }
     library_scan_cue_missing { "{uri}：沒有用於分割此檔案的 CUE 檔案。已保留匯入的片段。" }
     library_scan_cue_layout_mismatch { "{uri}：CUE 分段無效，或與已匯入的範圍不一致。請檢查 CUE 檔案後重新掃描。若要替換既有範圍，請先移除已匯入的音軌。" }
-    library_scan_cue_carrier_mismatch { "{uri}：檔案的影格數或取樣率與已匯入的片段不一致。未變更已匯入的音軌。" }
+    library_scan_cue_carrier_mismatch { "{uri}：無法確認檔案的影格數和取樣率是否與已匯入的片段一致。未變更已匯入的音軌。" }
     library_scan_cue_detail { " 詳細資訊：{detail}" }
     library_scan_cue_additional_issues { "{count, plural, other {另有 # 個 CUE 問題；詳情請查看記錄。}}" }
     track_cue_number { "CUE 音軌編號" }

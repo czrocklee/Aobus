@@ -44,6 +44,7 @@ namespace ao::uimodel
   {
     std::size_t newCount = 0;
     std::size_t changedCount = 0;
+    /// Files to relink, including filename spelling changes.
     std::size_t movedCount = 0;
     std::size_t missingCount = 0;
     std::size_t errorCount = 0;

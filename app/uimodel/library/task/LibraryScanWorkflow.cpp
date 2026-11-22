@@ -28,7 +28,7 @@ namespace ao::uimodel
       return {
         .newCount = plan.count(rt::ScanClassification::New) + plan.count(rt::ScanClassification::MissingSegments),
         .changedCount = plan.count(rt::ScanClassification::Changed),
-        .movedCount = plan.count(rt::ScanClassification::Moved),
+        .movedCount = plan.count(rt::ScanClassification::Moved) + plan.count(rt::ScanClassification::SpellingChanged),
         .missingCount = plan.count(rt::ScanClassification::Missing),
         .errorCount = plan.count(rt::ScanClassification::Error),
         .noticeCount = noticeCount,

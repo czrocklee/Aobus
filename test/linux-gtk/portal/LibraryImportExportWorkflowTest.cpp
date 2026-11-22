@@ -367,7 +367,7 @@ namespace ao::gtk::test
     workflow.scan();
 
     REQUIRE(tryPumpGtkEventsUntil(
-      [&fixture] { return hasNotification(fixture, rt::NotificationSeverity::Info, "Relinked 1 moved file"); }));
+      [&fixture] { return hasNotification(fixture, rt::NotificationSeverity::Info, "Relinked 1 file"); }));
     CHECK(activeChanges == std::vector<bool>{true, false, true, false});
     CHECK(finishedCount == 5);
     CHECK_FALSE(hasErrorNotification(fixture));
@@ -394,7 +394,7 @@ namespace ao::gtk::test
     workflow.scan();
 
     REQUIRE(tryPumpGtkEventsUntil(
-      [&fixture] { return hasNotification(fixture, rt::NotificationSeverity::Info, "Relinked 1 moved file"); }));
+      [&fixture] { return hasNotification(fixture, rt::NotificationSeverity::Info, "Relinked 1 file"); }));
 
     CHECK(trackUris(fixture) == std::vector<std::string>{"renamed.flac"});
   }

@@ -35,6 +35,7 @@ namespace ao::cli
   {
     std::string type{};
     std::string uri{};
+    std::optional<std::string> optOldUri{};
     std::optional<std::string> optMessage{};
   };
 
@@ -49,6 +50,7 @@ namespace ao::cli
     std::uint64_t unchanged = 0;
     std::uint64_t errors = 0;
     std::uint64_t warnings = 0;
+    std::uint64_t spellingChanged = 0;
     std::optional<std::vector<ScanItemDto>> optItems{};
   };
 } // namespace ao::cli
@@ -58,6 +60,11 @@ struct ao::yaml::ReflectNameOverrides<ao::cli::ScanItemDto>
 {
   static constexpr std::string_view keyFor(std::string_view memberName) noexcept
   {
+    if (memberName == "optOldUri")
+    {
+      return "oldUri";
+    }
+
     if (memberName == "optMessage")
     {
       return "message";
@@ -100,10 +107,17 @@ namespace ao::cli
       return utility::pathToGenericUtf8(item.fullPath);
     }
 
+    bool hasRelinkSource(rt::ScanItem const& item)
+    {
+      return item.classification == rt::ScanClassification::Moved ||
+             item.classification == rt::ScanClassification::SpellingChanged;
+    }
+
     ScanItemDto toScanItemDto(rt::ScanItem const& item)
     {
       return ScanItemDto{.type = std::string{scanClassificationName(item.classification)},
                          .uri = itemLabel(item),
+                         .optOldUri = hasRelinkSource(item) ? std::optional{item.oldUri} : std::nullopt,
                          .optMessage = item.errorMessage.empty() ? std::nullopt : std::optional{item.errorMessage}};
     }
 
@@ -113,6 +127,7 @@ namespace ao::cli
       auto const changedCount = plan.count(rt::ScanClassification::Changed);
       auto const missingSegmentsCount = plan.count(rt::ScanClassification::MissingSegments);
       auto const movedCount = plan.count(rt::ScanClassification::Moved);
+      auto const spellingChangedCount = plan.count(rt::ScanClassification::SpellingChanged);
       auto const missingCount = plan.count(rt::ScanClassification::Missing);
       auto const unchangedCount = plan.count(rt::ScanClassification::Unchanged);
       auto const errorCount = std::ranges::count_if(plan.items(), rt::isScanFailure);
@@ -128,7 +143,8 @@ namespace ao::cli
                                     .missing = static_cast<std::uint64_t>(missingCount),
                                     .unchanged = static_cast<std::uint64_t>(unchangedCount),
                                     .errors = static_cast<std::uint64_t>(errorCount),
-                                    .warnings = static_cast<std::uint64_t>(warningCount)};
+                                    .warnings = static_cast<std::uint64_t>(warningCount),
+                                    .spellingChanged = static_cast<std::uint64_t>(spellingChangedCount)};
 
         if (dryRun)
         {
@@ -149,17 +165,18 @@ namespace ao::cli
         return;
       }
 
-      std::println(
-        os,
-        "new {}  changed {}  moved {}  missing {}  unchanged {}  errors {}  missing-segments {}  warnings {}",
-        newCount,
-        changedCount,
-        movedCount,
-        missingCount,
-        unchangedCount,
-        errorCount,
-        missingSegmentsCount,
-        warningCount);
+      std::println(os,
+                   "new {}  changed {}  moved {}  missing {}  unchanged {}  errors {}  missing-segments {}  warnings {}"
+                   "  spelling-changed {}",
+                   newCount,
+                   changedCount,
+                   movedCount,
+                   missingCount,
+                   unchangedCount,
+                   errorCount,
+                   missingSegmentsCount,
+                   warningCount,
+                   spellingChangedCount);
 
       if (!dryRun)
       {
@@ -173,7 +190,14 @@ namespace ao::cli
           continue;
         }
 
-        std::print(os, "{} {}", scanClassificationName(item.classification), itemLabel(item));
+        std::print(os, "{} ", scanClassificationName(item.classification));
+
+        if (hasRelinkSource(item))
+        {
+          std::print(os, "{} -> ", item.oldUri);
+        }
+
+        std::print(os, "{}", itemLabel(item));
 
         if (!item.errorMessage.empty())
         {
@@ -219,8 +243,7 @@ namespace ao::cli
 
       if (result.relinkedFileCount > 0)
       {
-        std::println(
-          os, "Relinked {} moved file{}", result.relinkedFileCount, result.relinkedFileCount == 1 ? "" : "s");
+        std::println(os, "Relinked {} file{}", result.relinkedFileCount, result.relinkedFileCount == 1 ? "" : "s");
       }
 
       if (result.missingCount > 0)

@@ -120,10 +120,12 @@ namespace ao::cli::test
     auto result = fixture.run({"-O", "json", "init"});
     REQUIRE(result.status == 0);
     requireJsonLineParses(result.out);
-    auto initTree = parseYaml(result.out);
+    auto const initTree = parseYaml(result.out);
     CHECK(yaml::scalarView(initTree.rootref()["new"]) == "1");
     CHECK(yaml::scalarView(initTree.rootref()["dryRun"]) == "false");
+    CHECK_FALSE(initTree.rootref().has_child("items"));
     CHECK(yaml::scalarView(initTree.rootref()["missingSegments"]) == "0");
+    CHECK(yaml::scalarView(initTree.rootref()["spellingChanged"]) == "0");
 
     fixture.copyAudio("hires.flac", "created.flac");
     auto const createPath = (fixture.root() / "created.flac").string();

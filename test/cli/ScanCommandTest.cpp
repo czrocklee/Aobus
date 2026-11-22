@@ -4,9 +4,12 @@
 #include "CliTestSupport.h"
 #include "test/audio/AudioFixtureSupport.h"
 #include "test/library/MusicLibraryTestSupport.h"
+#include <ao/CoreIds.h>
 #include <ao/library/AudioIdentity.h>
+#include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/library/TrackStore.h>
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/utility/Path.h>
 #include <ao/yaml/RymlAdapter.h>
@@ -17,10 +20,12 @@
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <ios>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace ao::cli::test
 {
@@ -272,32 +277,119 @@ namespace ao::cli::test
     CHECK(contains(result.err, "apply:"));
   }
 
-  TEST_CASE("CLI - scan reports moved files")
+  TEST_CASE("CLI - scan previews relinks without changing the Track or manifest binding")
   {
     auto fixture = CliFixture{};
-    auto const originalPath = fixture.root() / "track.flac";
-    auto const movedPath = fixture.root() / "renamed.flac";
-    fixture.copyAudio("basic_metadata.flac", originalPath.filename().string());
+    auto const* const oldUri = "track.flac";
+    auto const oldPath = fixture.root() / oldUri;
+    fixture.copyAudio("basic_metadata.flac", oldUri);
+    REQUIRE(fixture.run({"init"}).status == 0);
 
-    auto result = fixture.run({"init"});
-    REQUIRE(result.status == 0);
+    auto const checkBinding = [&](std::string_view uri, std::string_view absentUri)
+    {
+      auto const musicLibrary =
+        library::test::makeTestMusicLibrary(fixture.root(), rt::LibraryPaths{fixture.root()}.databasePath());
+      auto const transaction = musicLibrary.readTransaction();
+      auto const manifest = musicLibrary.manifest().reader(transaction);
+      auto const optRow = manifest.get(uri);
+      REQUIRE(optRow);
+      CHECK(optRow->status() == library::FileStatus::Available);
+      CHECK_FALSE(manifest.get(absentUri));
 
-    fs::rename(originalPath, movedPath);
+      auto const trackId = optRow->trackId();
+      REQUIRE(trackId != kInvalidTrackId);
+      auto const tracks = musicLibrary.tracks().reader(transaction);
+      CHECK(tracks.entryCount() == 1);
+      auto const optTrack = tracks.get(trackId);
+      REQUIRE(optTrack);
+      CHECK(optTrack->property().uri() == uri);
+      return std::pair<TrackId, std::uint64_t>{trackId, musicLibrary.libraryRevision(transaction)};
+    };
+    auto const [trackId, revision] = checkBinding(oldUri, "fresh.flac");
+    auto newUri = std::string_view{};
+    bool isSpellingChange = false;
 
-    result = fixture.run({"scan", "--dry-run"});
-    REQUIRE(result.status == 0);
-    CHECK(result.err.empty());
-    CHECK(contains(result.out, "new 0  changed 0  moved 1  missing 0  unchanged 0  errors 0"));
-    CHECK(contains(result.out, "moved renamed.flac"));
+    SECTION("move to a different name")
+    {
+      newUri = "renamed.flac";
+      fs::rename(oldPath, fixture.root() / newUri);
+    }
 
-    result = fixture.run({"scan"});
-    REQUIRE(result.status == 0);
-    CHECK(contains(result.out, "new 0  changed 0  moved 1  missing 0  unchanged 0  errors 0"));
-    CHECK(contains(result.out, "Relinked 1 moved file"));
+    SECTION("case-only rename")
+    {
+      newUri = "Track.flac";
+      auto const newPath = fixture.root() / newUri;
+      // Case lookup depends on the fixture's directory, not the host OS.
+      isSpellingChange = fs::exists(newPath);
 
-    result = fixture.run({"scan", "--dry-run"});
-    REQUIRE(result.status == 0);
-    CHECK(contains(result.out, "new 0  changed 0  moved 0  missing 0  unchanged 1  errors 0"));
+      if (isSpellingChange)
+      {
+        REQUIRE(fs::equivalent(oldPath, newPath));
+      }
+
+      auto const intermediate = fixture.root() / "case-change.tmp";
+      fs::rename(oldPath, intermediate);
+      fs::rename(intermediate, newPath);
+    }
+
+    fixture.copyAudio("hires.flac", "fresh.flac");
+    auto const* const type = isSpellingChange ? "spelling-changed" : "moved";
+    auto const* const movedCount = isSpellingChange ? "0" : "1";
+    auto const* const spellingCount = isSpellingChange ? "1" : "0";
+    auto const counts = std::format(
+      "changed 0  moved {}  missing 0  unchanged 0  errors 0  missing-segments 0  warnings 0  spelling-changed {}\n",
+      movedCount,
+      spellingCount);
+    auto const plain = fixture.run({"scan", "--dry-run"});
+    REQUIRE(plain.status == 0);
+    CHECK(plain.err.empty());
+    CHECK(contains(plain.out, "new 1  " + counts));
+    CHECK(contains(plain.out, std::format("{} {} -> {}\n", type, oldUri, newUri)));
+    CHECK(contains(plain.out, "new fresh.flac\n"));
+
+    for (auto const* const format : {"json", "yaml"})
+    {
+      CAPTURE(format);
+      auto const structured = fixture.run({"-O", format, "scan", "--dry-run"});
+      REQUIRE(structured.status == 0);
+      CHECK(structured.err.empty());
+      auto const tree = parseYaml(structured.out);
+      auto const report = tree.rootref();
+      CHECK(yaml::scalarView(report["dryRun"]) == "true");
+      CHECK(yaml::scalarView(report["new"]) == "1");
+      CHECK(yaml::scalarView(report["moved"]) == movedCount);
+      CHECK(yaml::scalarView(report["spellingChanged"]) == spellingCount);
+      CHECK(yaml::scalarView(report["missing"]) == "0");
+      auto const items = report["items"];
+      REQUIRE(items.is_seq());
+      REQUIRE(items.num_children() == 2);
+      auto const firstIsNew = yaml::scalarView(items[0]["type"]) == "new";
+      auto const fresh = items[firstIsNew ? 0U : 1U];
+      auto const relink = items[firstIsNew ? 1U : 0U];
+      CHECK(yaml::scalarView(fresh["type"]) == "new");
+      CHECK(yaml::scalarView(fresh["uri"]) == "fresh.flac");
+      CHECK_FALSE(fresh.has_child("oldUri"));
+      CHECK(relink.num_children() == 3);
+      CHECK(yaml::scalarView(relink["type"]) == type);
+      CHECK(yaml::scalarView(relink["uri"]) == newUri);
+      REQUIRE(relink.has_child("oldUri"));
+      CHECK(yaml::scalarView(relink["oldUri"]) == oldUri);
+    }
+
+    auto const [previewId, previewRevision] = checkBinding(oldUri, newUri);
+    CHECK(previewId == trackId);
+    CHECK(previewRevision == revision);
+
+    REQUIRE(fs::remove(fixture.root() / "fresh.flac"));
+    auto const applied = fixture.run({"scan"});
+    REQUIRE(applied.status == 0);
+    CHECK(contains(applied.out, "new 0  " + counts));
+    CHECK(contains(applied.out, "Relinked 1 file\n"));
+    CHECK(checkBinding(newUri, oldUri).first == trackId);
+
+    auto const healthy = fixture.run({"scan", "--dry-run"});
+    REQUIRE(healthy.status == 0);
+    CHECK(contains(healthy.out, "new 0  changed 0  moved 0  missing 0  unchanged 1  errors 0"));
   }
 
   TEST_CASE("CLI - scan reports one moved file for a two-member CUE carrier")
@@ -331,8 +423,8 @@ namespace ao::cli::test
     REQUIRE(applied.status == 0);
     CHECK(applied.err.empty());
     CHECK(contains(applied.out, "new 0  changed 0  moved 1  missing 0  unchanged 0  errors 0"));
-    CHECK(contains(applied.out, "Relinked 1 moved file"));
-    CHECK_FALSE(contains(applied.out, "Relinked 2 moved files"));
+    CHECK(contains(applied.out, "Relinked 1 file\n"));
+    CHECK_FALSE(contains(applied.out, "Relinked 2 files\n"));
 
     auto const after = fixture.run({"-O", "yaml", "track", "show"});
     REQUIRE(after.status == 0);

@@ -452,11 +452,15 @@ namespace ao::rt
 
     auto const& stored = *item.optManifestEvidence;
 
-    if (!stored.members.empty() && item.hasExactMediaFacts &&
-        (item.totalFrames != stored.totalFrames || item.sampleRate != stored.sampleRate))
+    if (!stored.members.empty() &&
+        ((!item.hasExactMediaFacts && item.classification == ScanClassification::SpellingChanged) ||
+         (item.hasExactMediaFacts && (item.totalFrames != stored.totalFrames || item.sampleRate != stored.sampleRate))))
     {
       item.classification = ScanClassification::Error;
-      item.errorMessage = "Carrier extent or sample rate differs from imported segments";
+      item.errorMessage =
+        item.hasExactMediaFacts
+          ? "Carrier extent or sample rate differs from imported segments"
+          : "Cannot verify carrier extent against imported segments; exact frame count is unavailable";
       item.cueDiagnostic = ScanCueDiagnostic::CarrierFactsMismatch;
       return;
     }

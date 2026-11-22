@@ -251,7 +251,8 @@ de:table {
     library_task_updating_compact { "Bibliothek wird aktualisiert" }
     library_scan_up_to_date { "Bibliothek ist aktuell" }
     library_scan_complete { "Bibliotheksscan abgeschlossen" }
-    library_scan_relinked { "{count, plural, one {# verschobene Datei neu verknüpft} other {# verschobene Dateien neu verknüpft}}" }
+    library_scan_notices_need_review { "Beim Bibliotheksscan wurden Einträge gefunden, die überprüft werden müssen. Details stehen im Protokoll." }
+    library_scan_relinked { "{count, plural, one {# Datei neu verknüpft} other {# Dateien neu verknüpft}}" }
     library_scan_missing { "{count, plural, one {# fehlende Datei muss geprüft werden} other {# fehlende Dateien müssen geprüft werden}}" }
     library_scan_changes_combined { "{relinked}; {missing}" }
     library_scan_completed_with_errors { "{hasChanges, select, yes {Scan mit Fehlern abgeschlossen; {changes}} other {Scan mit Fehlern abgeschlossen}}" }
@@ -837,7 +838,7 @@ de:table {
     library_scan_cue_whole_file { "{uri}: Bereits als ganze Datei importiert. Entfernen Sie den Titel und scannen Sie erneut, um die Datei aufzuteilen." }
     library_scan_cue_missing { "{uri}: Keine CUE-Datei teilt diese Datei auf. Importierte Segmente wurden beibehalten." }
     library_scan_cue_layout_mismatch { "{uri}: Die CUE-Aufteilung ist ungültig oder weicht von importierten Bereichen ab. Prüfen Sie die CUE-Datei und scannen Sie erneut. Um vorhandene Bereiche zu ersetzen, entfernen Sie zuerst die importierten Titel." }
-    library_scan_cue_carrier_mismatch { "{uri}: Frame-Anzahl oder Abtastrate der Datei weichen von den importierten Segmenten ab. Die importierten Titel wurden nicht geändert." }
+    library_scan_cue_carrier_mismatch { "{uri}: Es ließ sich nicht bestätigen, dass die Frame-Anzahl und die Abtastrate der Datei mit den importierten Segmenten übereinstimmen. Die importierten Titel wurden nicht geändert." }
     library_scan_cue_detail { " Details: {detail}" }
     library_scan_cue_additional_issues { "{count, plural, one {# weiteres CUE-Problem; Einzelheiten finden Sie im Protokoll.} other {# weitere CUE-Probleme; Einzelheiten finden Sie im Protokoll.}}" }
     track_cue_number { "CUE-Titelnummer" }

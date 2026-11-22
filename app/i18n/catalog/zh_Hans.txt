@@ -252,7 +252,8 @@ zh_Hans:table {
     library_task_updating_compact { "正在更新音乐库" }
     library_scan_up_to_date { "音乐库已是最新" }
     library_scan_complete { "音乐库扫描完成" }
-    library_scan_relinked { "{count, plural, one {重新关联了 # 个移动的文件} other {重新关联了 # 个移动的文件}}" }
+    library_scan_notices_need_review { "扫描音乐库时发现了需要检查的项目。详情请查看日志。" }
+    library_scan_relinked { "{count, plural, one {重新关联了 # 个文件} other {重新关联了 # 个文件}}" }
     library_scan_missing { "{count, plural, one {# 个缺失的文件需要检查} other {# 个缺失的文件需要检查}}" }
     library_scan_changes_combined { "{relinked}；{missing}" }
     library_scan_completed_with_errors { "{hasChanges, select, yes {扫描完成但有错误；{changes}} other {扫描完成但有错误}}" }
@@ -838,7 +839,7 @@ zh_Hans:table {
     library_scan_cue_whole_file { "{uri}：已作为整个文件导入。请移除该音轨后重新扫描以分割文件。" }
     library_scan_cue_missing { "{uri}：没有用于分割此文件的 CUE 文件。已保留导入的片段。" }
     library_scan_cue_layout_mismatch { "{uri}：CUE 分段无效，或与已导入的范围不一致。请检查 CUE 文件后重新扫描。若要替换已有范围，请先移除已导入的音轨。" }
-    library_scan_cue_carrier_mismatch { "{uri}：文件的帧数或采样率与已导入的片段不一致。未更改已导入的音轨。" }
+    library_scan_cue_carrier_mismatch { "{uri}：无法确认文件的帧数和采样率是否与已导入的片段一致。未更改已导入的音轨。" }
     library_scan_cue_detail { " 详细信息：{detail}" }
     library_scan_cue_additional_issues { "{count, plural, other {另有 # 个 CUE 问题；详情请查看日志。}}" }
     track_cue_number { "CUE 音轨编号" }

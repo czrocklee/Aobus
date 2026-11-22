@@ -18,6 +18,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <variant>
 
 namespace ao::uimodel
@@ -31,6 +32,42 @@ namespace ao::uimodel
   {
     constexpr std::size_t kMaxScanCueIssues = 5;
     constexpr auto kScanMessageBytes = rt::NotificationFeedLimits::kDefaultMaxTextBytes;
+
+    MessageId completedScanMessageId(LibraryScanOutcome const& outcome)
+    {
+      if (auto const& summary = outcome.summary;
+          summary.newCount != 0 || summary.changedCount != 0 || summary.movedCount != 0 || summary.missingCount != 0)
+      {
+        return MessageId::LibraryScanComplete;
+      }
+
+      return MessageId::LibraryScanUpToDate;
+    }
+
+    std::string scanChangeSummary(MessageCatalog const& catalog, LibraryScanOutcome const& outcome)
+    {
+      auto relinked = std::string{};
+
+      if (outcome.relinkedCount > 0)
+      {
+        relinked = requiredFormat(catalog, MessageId::LibraryScanRelinked, {{"count", outcome.relinkedCount}});
+      }
+
+      if (outcome.missingCount == 0)
+      {
+        return relinked;
+      }
+
+      auto missing = requiredFormat(catalog, MessageId::LibraryScanMissing, {{"count", outcome.missingCount}});
+
+      if (relinked.empty())
+      {
+        return missing;
+      }
+
+      return requiredFormat(
+        catalog, MessageId::LibraryScanChangesCombined, {{"relinked", relinked}, {"missing", missing}});
+    }
 
     void appendScanCueIssue(std::string& message, MessageCatalog const& catalog, LibraryScanIssue const& issue)
     {
@@ -98,14 +135,25 @@ namespace ao::uimodel
       }
     }
 
-    void appendScanCueSummary(std::string& message, MessageCatalog const& catalog, LibraryScanOutcome const& outcome)
+    void appendScanIssueSummary(std::string& message,
+                                MessageCatalog const& catalog,
+                                LibraryScanOutcome const& outcome,
+                                std::string_view logNotice)
     {
       auto remaining = static_cast<std::size_t>(std::ranges::count_if(
         outcome.issues,
         [](LibraryScanIssue const& issue) { return issue.cueDiagnostic != rt::ScanCueDiagnostic::None; }));
-      auto const omission = scanCueOmission(catalog, remaining);
-      AO_INVARIANT(omission.size() < kScanMessageBytes, "The CUE summary suffix must leave room for its verdict");
-      boundScanVerdict(message, catalog, kScanMessageBytes - omission.size());
+      auto const reservedBytes =
+        scanCueOmission(catalog, remaining).size() + (logNotice.empty() ? 0 : 1 + logNotice.size());
+      AO_INVARIANT(reservedBytes < kScanMessageBytes, "The scan issue summary must leave room for its verdict");
+      boundScanVerdict(message, catalog, kScanMessageBytes - reservedBytes);
+
+      if (!logNotice.empty())
+      {
+        message += '\n';
+        message += logNotice;
+      }
+
       std::size_t included = 0;
 
       for (auto const& issue : outcome.issues)
@@ -264,35 +312,12 @@ namespace ao::uimodel
 
   std::string formatLibraryScanMessage(MessageCatalog const& catalog, LibraryScanOutcome const& outcome)
   {
-    auto const changeSummary = [&]
-    {
-      auto relinked = std::string{};
-
-      if (outcome.relinkedCount > 0)
-      {
-        relinked = requiredFormat(catalog, MessageId::LibraryScanRelinked, {{"count", outcome.relinkedCount}});
-      }
-
-      auto missing = std::string{};
-
-      if (outcome.missingCount > 0)
-      {
-        missing = requiredFormat(catalog, MessageId::LibraryScanMissing, {{"count", outcome.missingCount}});
-      }
-
-      if (!relinked.empty() && !missing.empty())
-      {
-        return requiredFormat(
-          catalog, MessageId::LibraryScanChangesCombined, {{"relinked", relinked}, {"missing", missing}});
-      }
-
-      if (!relinked.empty())
-      {
-        return relinked;
-      }
-
-      return missing;
-    };
+    auto const hasLogOnlyNotice =
+      std::ranges::any_of(outcome.issues,
+                          [](LibraryScanIssue const& issue)
+                          { return issue.isNotice && issue.cueDiagnostic == rt::ScanCueDiagnostic::None; });
+    auto logNotice =
+      hasLogOnlyNotice ? requiredText(catalog, MessageId::LibraryScanNoticesNeedReview) : std::string_view{};
 
     auto message = [&] -> std::string
     {
@@ -302,21 +327,24 @@ namespace ao::uimodel
         case LibraryScanVerdict::Complete:
         case LibraryScanVerdict::NeedsReview:
         {
-          if (auto changes = changeSummary(); !changes.empty())
+          if (auto changes = scanChangeSummary(catalog, outcome); !changes.empty())
           {
             return changes;
           }
 
-          // Notices on a plan with nothing to apply leave the library current.
-          auto const& summary = outcome.summary;
-          auto const hadNothingToApply =
-            summary.newCount == 0 && summary.changedCount == 0 && summary.movedCount == 0 && summary.missingCount == 0;
-          return std::string{
-            requiredText(catalog, hadNothingToApply ? MessageId::LibraryScanUpToDate : MessageId::LibraryScanComplete)};
+          auto const messageId = completedScanMessageId(outcome);
+
+          if (messageId == MessageId::LibraryScanUpToDate && !logNotice.empty())
+          {
+            // Lead with the notice rather than appending it to an up-to-date verdict.
+            return std::string{std::exchange(logNotice, {})};
+          }
+
+          return std::string{requiredText(catalog, messageId)};
         }
         case LibraryScanVerdict::CompletedWithErrors:
         {
-          auto const changes = changeSummary();
+          auto const changes = scanChangeSummary(catalog, outcome);
           return requiredFormat(catalog,
                                 MessageId::LibraryScanCompletedWithErrors,
                                 {{"hasChanges", changes.empty() ? "no" : "yes"}, {"changes", changes}});
@@ -336,7 +364,7 @@ namespace ao::uimodel
       return requiredFormat(catalog, MessageId::LibraryScanFailed, {{"hasError", "no"}, {"error", ""}});
     }();
 
-    appendScanCueSummary(message, catalog, outcome);
+    appendScanIssueSummary(message, catalog, outcome, logNotice);
     return message;
   }
 

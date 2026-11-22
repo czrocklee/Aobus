@@ -35,7 +35,7 @@ namespace ao::uimodel
 
     void logPlan(LibraryScanPlanSummary const& summary)
     {
-      APP_LOG_INFO("Scan plan: {} new, {} changed, {} moved, {} missing, {} errors, {} notices",
+      APP_LOG_INFO("Scan plan: {} new, {} changed, {} relinks, {} missing, {} errors, {} notices",
                    summary.newCount,
                    summary.changedCount,
                    summary.movedCount,

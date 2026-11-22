@@ -251,7 +251,8 @@ fr:table {
     library_task_updating_compact { "Mise à jour de la bibliothèque" }
     library_scan_up_to_date { "La bibliothèque est à jour" }
     library_scan_complete { "Analyse de la bibliothèque terminée" }
-    library_scan_relinked { "{count, plural, one {# fichier déplacé relié} other {# fichiers déplacés reliés}}" }
+    library_scan_notices_need_review { "L''analyse de la bibliothèque a détecté des éléments à vérifier. Consultez le journal pour plus de détails." }
+    library_scan_relinked { "{count, plural, one {# fichier associé à nouveau} other {# fichiers associés à nouveau}}" }
     library_scan_missing { "{count, plural, one {# fichier manquant à vérifier} other {# fichiers manquants à vérifier}}" }
     library_scan_changes_combined { "{relinked} ; {missing}" }
     library_scan_completed_with_errors { "{hasChanges, select, yes {Analyse terminée avec des erreurs ; {changes}} other {Analyse terminée avec des erreurs}}" }
@@ -837,7 +838,7 @@ fr:table {
     library_scan_cue_whole_file { "{uri} : Déjà importé comme fichier entier. Supprimez la piste et relancez l''analyse pour le diviser." }
     library_scan_cue_missing { "{uri} : Aucune feuille CUE ne divise ce fichier. Les segments importés ont été conservés." }
     library_scan_cue_layout_mismatch { "{uri} : Le découpage CUE est invalide ou diffère des plages importées. Vérifiez la feuille et relancez l''analyse. Pour remplacer les plages existantes, supprimez d''abord les pistes importées." }
-    library_scan_cue_carrier_mismatch { "{uri} : Le nombre de trames ou la fréquence d''échantillonnage du fichier diffère des segments importés. Les pistes importées n''ont pas été modifiées." }
+    library_scan_cue_carrier_mismatch { "{uri} : Impossible de confirmer que le nombre de trames et la fréquence d''échantillonnage du fichier correspondent à ceux des segments importés. Les pistes importées n''ont pas été modifiées." }
     library_scan_cue_detail { " Détails : {detail}" }
     library_scan_cue_additional_issues { "{count, plural, one {# autre problème CUE ; consultez le journal pour plus de détails.} other {# autres problèmes CUE ; consultez le journal pour plus de détails.}}" }
     track_cue_number { "Numéro de piste CUE" }

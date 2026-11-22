@@ -6,7 +6,7 @@ id: library.scan-identity
 
 ## Scope
 
-This specification defines `LibraryScan`, scan plans, plan application, encoded-audio identity, automatic move relinking, and pending-identity backfill.
+This specification defines `LibraryScan`, scan plans, plan application, filename spelling reconciliation, encoded-audio identity, automatic move relinking, and pending-identity backfill.
 It owns filesystem-to-library reconciliation behavior rather than the physical manifest record.
 
 Supported containers, imported tags, and encoded payload ranges belong to the [supported audio files reference](../../reference/media/audio-file.md).
@@ -40,7 +40,7 @@ The runtime-private `ScanApplyOperation::run()` is the distinct offline composit
 - Scan and pending-audio-identity backfill never populate or overwrite RecordingDate or Credits for an existing Track; audio identity backfill is not metadata backfill.
 - A source field that the [source field mapping](../../reference/media/audio-file.md#source-field-mapping) does not import never enters the library: no scan or import that reads the file stores it.
 - An embedded cover is a scan fact rather than curated metadata: the file is the authority on which covers a track has, and a scan is the only writer of that reference set.
-- A scan never admits an unsupported file into its plan.
+- A scan never imports unsupported files. A directory entry that cannot be imported can still prevent a filename spelling match.
 - A scan never deletes a Track, never changes a stored segment range, and never converts a whole-file Track into a carrier or the reverse. Re-splitting a file is the user's action: remove its Tracks and scan again.
 - Sheet text is read only for Tracks being created. A text-only sheet edit writes nothing, as a tag edit does not replace a changed file's curated metadata.
 - Only the runtime planner can construct an applicable plan; consumers may inspect its immutable items but cannot insert or rewrite them.
@@ -52,7 +52,7 @@ The runtime-private `ScanApplyOperation::run()` is the distinct offline composit
 - Media decoders may translate their declared legacy encodings, but library admission never repairs malformed declared UTF-8: a new file with invalid metadata becomes a per-item failure and no Track, manifest, dictionary row, or replacement character is committed.
 - Scan application cancellation before commit leaves all track, manifest, identity, and relink state unchanged.
 - A relink preserves `TrackId` and updates the track URI and manifest binding together or not at all.
-- Automatic relinking requires one missing row and one new file with exactly equal non-pending audio identity.
+- An automatic audio-identity move requires one missing row and one new file with exactly equal non-pending audio identity. A `SpellingChanged` relink instead requires native file identity that can be revalidated across phases; an eligible case-only pair without that proof uses the audio-identity move rules.
 - A modification time crosses filesystem, manifest, plan, and backfill boundaries as one portable Unix/POSIX instant: the planner converts each inspected file's native clock to that scale, a conversion the native clock cannot express is a per-item failure, and comparisons include stored absence, so an absent stored time never equals a file's present instant.
 - Identity backfill never commits a hash for a row or file whose live size or modification time changed after snapshot.
 - Persisted manifest corruption present at open rejects the library with `CorruptData`; a post-open manifest integrity breach aborts through the fatal facility and delivers no partial plan or later row.
@@ -64,14 +64,15 @@ The planner recursively walks the configured music root, skips unsupported and n
 
 | Classification    | Meaning                                                                                                                                                         |
 | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `New`             | Supported URI has no manifest row and is not unambiguously matched as a move.                                                                                   |
+| `New`             | Supported URI has no manifest row and is neither a spelling change nor an unambiguous move.                                                                     |
 | `Changed`         | URI exists but file size or modification time differs, or a present file restores a manifest row whose status is `Missing`.                                     |
+| `SpellingChanged` | The directory entry differs from the stored filename only in ASCII case, and native file IDs prove both spellings name the same regular, nonredirected file.    |
 | `Moved`           | New URI is uniquely matched to one missing manifest row by audio identity.                                                                                      |
 | `Missing`         | Manifest URI has no corresponding supported file and was not matched as a move.                                                                                 |
 | `MissingSegments` | An unchanged carrier's sheet has ordinals the carrier lacks, and every stored segment still equals the sheet's segment of that ordinal.                         |
 | `Unchanged`       | URI and file facts match the manifest, and no missing ordinal is being created.                                                                                 |
 | `Error`           | The item could not be inspected or classified, its directory's sheets could not be read and it is not `Unchanged`, or CUE binding refused to import a new file. |
-| `Notice`          | A report-only entry: a readable CUE sheet with two or more audio tracks names no supported file. It names no library file and is never applied.                 |
+| `Notice`          | A report-only entry, such as a CUE sheet that names no supported audio file or a proven spelling alias of an already bound file. It is never applied.           |
 
 A missing root or a walk that cannot start or advance to the next entry is a
 plan-building error; the walk iteration cannot continue past a failed advance.
@@ -84,12 +85,32 @@ A file of an unsupported format needs no URI, so the walk skips it even when its
 The planner reads the persisted library id, committed revision, and manifest from one short LMDB snapshot, copies every manifest row into owned plan-building state, and closes the transaction before walking the filesystem.
 Cancellation is checked while copying the manifest, traversing entries, reporting progress, adding missing rows, matching moves, and hashing candidate payloads.
 
-The planner performs URI matching before identity matching.
-It groups missing rows with stored identities by payload length and signature.
+The planner matches exact URIs and checks filename spelling before matching audio-identity moves.
+A spelling pair has byte-identical parent URIs and filenames that differ only in the case of ASCII letters.
+The raw directory listing must contain exactly one entry in that ASCII-case group: the destination's exact spelling, not the old spelling.
+Both names must resolve to regular files without redirection below the resolved music root. A symlink or a Windows reparse point cannot provide spelling evidence.
+Equal native file IDs that can be revalidated across phases establish that the two spellings name one file in the current root, so the planner can report `SpellingChanged`. Case-insensitive lookup alone, equal file facts, or an equal audio signature does not prove that identity.
+The native ID does not prove a historical rename or identify the file the manifest previously described, for example if the database was moved to another root. As with recovery at the exact stored URI, a replacement at a proven spelling alias can restore a `Missing` Track with its curation even when the audio differs.
+If the observed spelling already has an exact manifest owner, a proven alias is a standalone, non-blocking `Notice`. It names both URIs and, when both rows bind whole-file Tracks, both Track IDs. The exact owner follows its normal classification; the scan neither merges the rows nor offers the alias for automatic or manual moves.
+An ambiguous group with no exact owner is an `Error`, not a new import or move. If planning cannot read the media for a spelling change that requires a refresh, it reports an `Error` for that item only; unrelated items can still apply.
+
+Only when both regular, nonredirected lookups lack native IDs usable across phases may the planner fall back to an audio fingerprint for a single missing source and a single unbound destination in that spelling group.
+On Windows, after `FileBasicInfo` and the file-type check confirm a regular disk file with no visible reparse point, a `FileIdInfo` query that returns `ERROR_INVALID_PARAMETER` (87) triggers `GetFileInformationByHandle` on the same handle.
+If both lookups take that path, matching legacy volume serials and file indices, or the same legacy volume with no usable index on either lookup, qualify only for the fingerprint fallback. Legacy indices are not proof across phases.
+Conflicting IDs or volumes fail the spelling check rather than triggering fallback, regardless of provider. A conflicting manifest binding, additional spelling, access failure, or reparse point also disqualifies the pair.
+The fallback is a `Moved` relink, not `SpellingChanged`. It requires the normal non-pending audio-identity match and uniqueness across the plan: another `New` file or `Missing` row with that identity blocks the match.
+An unresolved fallback pair is not offered as a new import or an unrelated move.
+
+URIs remain byte-exact: applying the plan stores the observed spelling rather than a case-folded key. This spelling rule does not reconcile directory spelling or Unicode case or normalization variants. If the old filename lookup is genuinely absent, as on a case-sensitive filesystem after a rename, ordinary audio-identity move matching still applies.
+
+If the exact old name is now a symlink to a moved audio file inside the root, the scanner follows it to the target's URI. A unique audio-identity match can still produce `Moved`; the link is not evidence of a spelling change.
+If only the new spelling is listed and looking up the old spelling reaches that symlink, the spelling check reports `Error` rather than relinking through it.
+
+For an audio-identity move, the planner groups missing rows with stored identities by payload length and signature.
 A new file is hashed only when its payload length can match at least one missing row.
-Ambiguous duplicate groups remain `Missing` plus `New` for explicit resolution.
+For ordinary moves, ambiguous duplicate groups remain `Missing` plus `New` for explicit resolution.
 Identity matching runs before CUE binding, so a destination that binding alone would leave unimported is still a move when the identities match.
-Planning can still refuse a matched move whose destination it cannot inspect, such as one whose folder's sheets or whose media cannot be read. That destination is `Error` without the source's evidence, and the source stays `Missing`, so application marks its row and a later scan can pair the files again.
+Planning can still refuse a matched move whose destination it cannot inspect, such as one whose folder's sheets or media cannot be read. The destination is `Error`. For an ordinary move, the destination has no source evidence and the source stays `Missing`, so application can mark the row missing and a later scan can pair the files again. A spelling fallback does not turn a refused relink into a separate missing-row update.
 
 ## CUE binding
 
@@ -126,12 +147,12 @@ For each supported file the planner derives one binding state after the file cla
 
 "Unchanged" in that table means no Track is created and no member or range changes. It does not withhold a status, file-fact, technical, or cover refresh.
 A carrier whose exact extent or sample rate differs from the stored ones is `Error` and stays unchanged, including when the file would otherwise be `Changed`.
-A `Moved` or relinked file keeps its source form whatever the binding at the destination: a carrier keeps every member id, ordinal, and range and relinks them together, and a whole-file Track stays whole.
+A `Moved` or `SpellingChanged` file keeps its source form whatever the binding at the destination: a carrier keeps every member id, ordinal, and range and relinks them together, and a whole-file Track stays whole.
 The applied result reports every affected member Track id but counts the carrier once as a relinked physical file.
-A carrier moves only when the destination's exact extent and sample rate equal the stored ones. Otherwise the destination is `Error` and is not imported, and the source stays `Missing`.
+A carrier relinks only when the destination's exact extent and sample rate equal the stored ones. Otherwise the destination is `Error` and is not imported; a `Moved` source stays `Missing`.
 A binding report accompanies the file classification instead of replacing it, except for the `Error` cases above and for `MissingSegments`.
 Such a report, like a `Notice` entry, is a notice: it is shown and logged as a warning, but it neither blocks its item nor fails the scan or explicit relink. Only an `Error` item is a failure.
-Missing ordinals are created only for a carrier whose file facts are unchanged, so a moved or refreshed carrier gains them on the next scan.
+Missing ordinals are created only for a carrier classified `MissingSegments`. Rescan a relinked or refreshed carrier to allow it to gain any missing ordinals.
 An ordinal the carrier lacks is created again, including one the user deleted. That is `MissingSegments`, not `New`, so move matching never treats it as a new file.
 
 A sheet that names no supported file is ignored, except that a readable sheet with two or more audio tracks is a `Notice` entry saying that no supported audio file has its name.
@@ -150,7 +171,7 @@ A stored member's codec or rate is not a substitute, even when every member reco
 This is not a requirement that members share a codec, and it does not change the stored format.
 A layout is the ordered ordinals and starts, plus any data-track end, resolved against the reader's exact extent.
 That comparison does not decode the audio payload.
-Apply preparation opens the media reader again for a new, changed, moved, or missing-segment item, and does not decode the payload for the extent comparison.
+Apply preparation opens the media reader again for a new, changed, moved, or missing-segment item and for a spelling change on a carrier or a whole-file Track that requires a technical refresh. It does not decode the payload for the extent comparison.
 An unchanged item is not opened again during preparation.
 An unchanged whole-file Track with no external candidate is not opened during planning either: its embedded source was checked on admission, and unchanged file facts preserve that result.
 New, changed, or moved files still inspect their media, and a newly added external candidate is checked even for an unchanged whole-file Track.
@@ -172,7 +193,7 @@ Once the background command is queued or active, later Track/List authoring retu
 It reports updating and fingerprinting progress during preparation.
 Preparation reads each directory's sheets once and shares that snapshot among its items, including any directory-read failure. Final filesystem revalidation uses a separate directory snapshot and re-reads the sheets; it never admits an item using the preparation cache alone.
 Each of those reads resolves candidates under the configured root and applies the external size limit before using the bytes.
-Media preparation resolves an actionable item's URI once, and final filesystem proof resolves each prepared item once. In each phase the resolved canonical path must match the plan's physical-path provenance, and that same admitted path supplies the media reads and CUE directory. A changed resolution is an ordinary stale skip, or a failure that immediately aborts the whole application for `Moved`.
+Media preparation resolves an actionable item's URI once, and final filesystem proof resolves each prepared item once. In each phase the resolved canonical path must match the plan's physical-path provenance, and that same admitted path supplies the media reads and CUE directory. A changed resolution is an ordinary stale skip, or a failure that immediately aborts the whole application for `Moved` or `SpellingChanged`.
 Reported failures use the CUE-binding stage only for a typed CUE diagnostic; unrelated walk and inspection failures retain the scan stage.
 The runtime-private operation enforces `Created → Prepared → Revalidated → Applied/Terminal`; callers cannot skip final file revalidation or apply the same operation twice.
 
@@ -184,18 +205,19 @@ The two compositions share that state machine but not transaction ownership:
 There is no nullable or mode-switching transaction branch inside `apply()`.
 
 Application validates the persisted library id before reporting item progress, opening media, or fingerprinting, and validates that id again in the write transaction.
-The planner revision remains diagnostic provenance and is not a transaction-admission gate.
+An intervening revision triggers a check for new filename spelling conflicts; an unrelated edit does not invalidate the plan.
 A foreign binding returns `InvalidInput` without a durable revision or content change.
 
 Immediately after the write transaction opens and before any item mutates storage, one pass admits actionable items against live database evidence:
 
-- `New` requires the destination manifest URI to remain absent.
+- `New` requires the destination manifest URI to remain absent. For both `New` and ordinary `Moved` items, no additional ASCII case variant of the destination filename may have been bound in the same directory since planning. Distinct spellings already in the manifest snapshot are not new conflicts for these items. A newly bound variant makes a `New` item stale; a later scan reclassifies it and need not import it.
 - `Changed` requires the same manifest URI, Track id, status, file size, and modification time, plus a live Track still bound to that URI. Curated Track fields and independently backfilled manifest identity are not admission evidence; apply re-reads the live complete Track and merges into it. For a carrier, the same pass also requires the stored extent, member ids, ordinals, ranges, and sample rate.
 - `MissingSegments` requires that same carrier evidence. A member deleted or added after planning makes the item stale, not an invariant breach.
 - `Missing` requires the same manifest URI, Track id, status, file facts, and Track binding. Independently completed identity is preserved from the live manifest and is not admission evidence. A carrier is marked missing as one row.
-- `Moved` requires that complete source evidence under `oldUri`, including carrier membership when the source is a carrier, and an absent destination manifest.
+- `Moved` requires that complete source evidence under `oldUri`, including stored audio identity and carrier membership when the source is a carrier, and an absent destination manifest.
+- `SpellingChanged` also requires the source binding, status, file facts, and any carrier evidence under `oldUri`. Live audio identity need not equal the identity copied into the plan. For both `SpellingChanged` and a spelling fallback `Moved`, no other manifest row may reserve an ASCII case variant of that filename in the same parent, including the destination.
 
-A stale `New`, `Changed`, `MissingSegments`, or `Missing` item increments the stale count and is skipped without entering the per-item failure channel. Stale `Moved` evidence reports failure and aborts the complete application, matching explicit relink's stricter identity-preserving semantics.
+A stale `New`, `Changed`, `MissingSegments`, or `Missing` item increments the stale count and is skipped without entering the per-item failure channel. Stale `Moved` or `SpellingChanged` evidence reports failure and aborts the complete application: neither kind of relink can partly apply.
 Because this pass completes before the first mutation and LMDB serializes the writer, the logical writer's later Track/manifest binding invariants describe internal breaches rather than ordinary user races.
 
 The transaction covers the complete admitted plan and has no item or byte bound.
@@ -207,6 +229,8 @@ There is no nested LMDB transaction, item savepoint, or partial batch commit.
 - `Changed` preserves curated metadata, including exact recording-date precision and credit kinds, within-kind order, names, duplicates, and optional roles, replaces the track's cover references with the set the new file carries, then replaces Track data and file/identity facts through one logical operation. A carrier keeps every member's sample rate, range, and derived duration; bitrate, channels, codec, bit depth, covers, and file facts may refresh when the extent and rate still match.
   Every carrier member is validated before the first write. A member the writer would reject is reported at the `serialize` stage and skips a changed carrier, or aborts the complete application for a moved one, as it would a whole-file Track.
 - `Moved` first requires the stored Track URI to equal the plan's old URI, then rebuilds the existing track with the new URI, refreshed technical properties, and the destination file's cover references, and uses the logical relink operation to replace the manifest key while preserving the Track id; a mismatch reports the item failure and aborts the complete scan transaction. A carrier uses `relinkCarrier`, so every member moves together and no range changes.
+- `SpellingChanged` rebinds the Track or every carrier member and the manifest row to the new URI. If the source was already available and the file facts match, apply preserves technical properties, covers, and the live manifest audio identity, including a pending identity, without hashing the file again. Otherwise, including when the source was `Missing`, it refreshes technical properties, covers, file facts, and audio identity as for `Changed`.
+  Like `Unchanged`, the no-refresh path does not try to detect pre-plan tag edits or file replacements that leave size and modification time unchanged.
 - `Missing` preserves the previous identity and uses the manifest-only logical update to mark the row missing. A carrier's segments are missing together.
 - `Unchanged` performs no write. The desktop summary still reports a binding notice on that item; apply does not count it as a failure. The CLI dry-run item list omits an `Unchanged` item only when it carries no diagnostic; a diagnostic-bearing unchanged item stays in that list under its file classification. That emission limit is recorded in the [command reference](../../reference/cli/command.md). Apply preparation progress is separate from the dry-run item list and reports every item, including a diagnostic-free `Unchanged` item.
 - Item-level parse/open failures are counted and reported without claiming that item succeeded.
@@ -223,14 +247,17 @@ An explicit refresh/population workflow for existing tracks would be a separate 
 
 After preparation, once the background command owns the active lane turn and immediately before opening its write transaction, application re-stats every prepared new, changed, or moved file and requires its planned size and modification time, checks that every missing path remains absent, and fingerprints every moved destination again against both the prepared and planned identities.
 It also lists each such item's directory again, derives both sheet-candidate sets, and re-reads each present sheet, comparing names, sizes, modification times, and XXH3 digests with the plan evidence.
-A sheet added after planning under any case spelling, or edited without a size or time change, is therefore a stale skip rather than a bypass of an undetermined binding. One listing serves every item in a directory.
+A sheet added after planning under any case spelling, or edited without a size or time change, therefore makes the item stale rather than bypassing an undetermined binding. One listing serves every item in a directory.
 Stale new, changed, missing, or missing-segment filesystem evidence increments the stale count and skips that item without rewriting current facts. Path-resolution, permission, and other inspection failures remain per-item failures.
-A moved mismatch, including a sheet set that changed after planning, aborts the complete application.
+For both `SpellingChanged` and spelling fallback moves, preparation and final revalidation each inspect a fresh raw directory listing and recheck both filenames without following redirects.
+`SpellingChanged` requires the planned native file ID. A fallback move must still show matching native IDs usable across phases or satisfy the fallback's lookup rules on fresh inspection. A legacy index does not prove continuity with planning, and the planned file facts and audio identity still have to match. Only planning can authorize the fallback.
+A stale move or spelling change, including a change to its sheet evidence, aborts the complete application.
 
+Explicit relink does not accept a `SpellingChanged` item; `scan` applies it directly.
 Successful explicit relink derivation consumes an unresolved plan and produces one `Moved` item only when the selected `Missing` source and destination carry the same non-pending planned identity, and, when the source is a carrier, the destination's inspected exact extent and sample rate equal the stored ones.
 A `New` destination is admitted unless its diagnostic is a carrier-facts mismatch. An `Error` destination is admitted only when it has no stored manifest evidence, a present modification time, a nonempty planned path, a non-pending identity, and a CUE-binding diagnostic of invalid encoding, an unreadable or malformed sheet, ambiguous sheets, an unsupported carrier, or a layout mismatch.
 Derivation keeps the source manifest evidence and classifies that stored form against the destination binding without another sheet read. A source-form diagnostic can therefore accompany the committed relink as a notice, not an item failure.
-The derived plan preserves the source library binding, planner revision provenance, and missing-row evidence, and live destination fingerprinting remains mandatory during apply.
+The derived plan preserves the source library binding, planner revision provenance, and missing-row evidence, but does not inherit the planner's private spelling proof or its authorization to use a spelling fallback. Live destination fingerprinting remains mandatory during apply.
 
 A scan writes descriptors and never cover content: preparation hashes each embedded picture, counts its bytes, and replaces the borrowed payload with an observed descriptor before any write transaction opens.
 The Resource writer consumes that counted evidence without hashing again and may correct a previously declared length for the same digest.
@@ -238,7 +265,7 @@ A picture longer than `UINT32_MAX` is never truncated to fit a descriptor: prepa
 No container this project reads can carry one, because FLAC and ID3 picture lengths are themselves 32-bit.
 A file whose art was removed leaves the track with no cover reference, and the descriptors that reference set named stay in the store, because rows are never deleted.
 Retagging a file back to its earlier art reuses the existing row, since equal content has one digest.
-The scan report gains no cover-specific field: a track whose file is gone is counted `missing`, and a track whose art changed is counted `changed`, which replaces the stale reference rather than leaving something to report.
+The scan report has no cover-specific field. When a file's covers are refreshed, the item keeps its file classification rather than reporting the replacement of its cover references separately.
 
 The result carries the committed revision, inserted ids, mutated ids, every affected member id in `relinkedIds`, the physical file count in `relinkedFileCount`, the missing count, the ordinary stale-item count, and the item-failure count.
 One carrier contributes every member id and increments `relinkedFileCount` once.
@@ -250,10 +277,10 @@ Only a successful commit makes those content counts observable.
 
 `AudioIdentityPolicy::Eager` fingerprints new and changed files during preparation.
 `DeferNew` may write a newly imported available row with pending identity so metadata becomes visible quickly.
-Changed and moved files remain eager, and a plan item that already carries a valid new-file identity reuses it.
+Changed and moved files and spelling changes that require a refresh remain eager. A plan item that already carries a valid new-file identity reuses it.
 
-Pending rows cannot participate in automatic or validated explicit relinking until backfill supplies identity.
-Aobus never writes a guessed identity.
+Pending rows cannot participate in audio-identity moves, including spelling fallback moves, until backfill supplies identity. A native `SpellingChanged` relink can preserve a pending identity because it relies on filesystem evidence instead.
+Aobus never writes a guessed identity. Native IDs and the evidence authorizing a spelling fallback are private to the plan and are not persisted; the database and transfer formats are unchanged.
 
 ## Identity backfill
 
@@ -296,7 +323,7 @@ non-miss native cursor fault is `AO_FATAL`.
 Any post-effect storage failure reaches the scan's root `WriteTransaction::apply()` boundary; that owner aborts the complete scan transaction before returning the carried `Error`.
 Cancellation is cooperative during payload hashing and before commit.
 The shared UIModel workflow distinguishes an up-to-date plan, an errors-only
-plan, and an actionable plan before application. It counts `MissingSegments` with new files.
+plan, and an actionable plan before application. It counts `MissingSegments` with new files and `SpellingChanged` with relinks.
 It counts `Error` items as failures and every other reported item as a notice, including one attached to an otherwise unchanged file.
 Notices alone leave a plan up to date or applicable, and they are logged once as warnings because no apply pass reports them.
 Frontends remain responsible
@@ -308,7 +335,7 @@ Created segment Tracks publish like other created Tracks. A scan deletes no Trac
 ## Implementation map
 
 - [`LibraryScan.h`](../../../app/include/ao/rt/library/LibraryScan.h) and [`ScanPlan.h`](../../../app/include/ao/rt/library/ScanPlan.h) define the shared scan surface.
-- [`LibraryScan.cpp`](../../../app/runtime/library/LibraryScan.cpp) owns planning and move matching.
+- [`LibraryScan.cpp`](../../../app/runtime/library/LibraryScan.cpp) owns planning, filename spelling reconciliation, and move matching. [`ScanSpelling.cpp`](../../../app/runtime/library/ScanSpelling.cpp) proves raw filename spelling and native file identity.
 - [`CueBinding.cpp`](../../../app/runtime/library/CueBinding.cpp) owns sheet discovery, binding states, and new-segment metadata mapping.
 - [`ScanApplyOperation.cpp`](../../../app/runtime/library/ScanApplyOperation.cpp) owns the shared state machine, the self-contained offline `run()` composition, and transaction-scoped apply.
 - [`TrackWriter.h`](../../../include/ao/library/TrackWriter.h) owns the logical create, replace, relink, and manifest-only operations used during apply.

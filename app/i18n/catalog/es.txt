@@ -251,7 +251,8 @@ es:table {
     library_task_updating_compact { "Actualizando biblioteca" }
     library_scan_up_to_date { "La biblioteca está actualizada" }
     library_scan_complete { "Escaneo de biblioteca completo" }
-    library_scan_relinked { "{count, plural, one {Se volvió a vincular # archivo movido} other {Se volvieron a vincular # archivos movidos}}" }
+    library_scan_notices_need_review { "El análisis de la biblioteca encontró elementos que requieren revisión. Consulte el registro para obtener detalles." }
+    library_scan_relinked { "{count, plural, one {Se volvió a vincular # archivo} other {Se volvieron a vincular # archivos}}" }
     library_scan_missing { "{count, plural, one {# archivo desaparecido requiere revisión} other {# archivos desaparecidos requieren revisión}}" }
     library_scan_changes_combined { "{relinked}; {missing}" }
     library_scan_completed_with_errors { "{hasChanges, select, yes {Escaneo completado con errores; {changes}} other {Escaneo completado con errores}}" }
@@ -837,7 +838,7 @@ es:table {
     library_scan_cue_whole_file { "{uri}: Ya se importó como archivo completo. Elimine la pista y vuelva a explorar para dividirlo." }
     library_scan_cue_missing { "{uri}: Ninguna hoja CUE divide este archivo. Se conservaron los segmentos importados." }
     library_scan_cue_layout_mismatch { "{uri}: La división CUE no es válida o difiere de los intervalos importados. Revise la hoja y vuelva a explorar. Para reemplazar los intervalos existentes, elimine primero las pistas importadas." }
-    library_scan_cue_carrier_mismatch { "{uri}: El número de fotogramas de audio o la frecuencia de muestreo del archivo difieren de los segmentos importados. Las pistas importadas no se modificaron." }
+    library_scan_cue_carrier_mismatch { "{uri}: No se pudo confirmar que el número de fotogramas de audio y la frecuencia de muestreo del archivo coincidan con los de los segmentos importados. Las pistas importadas no se modificaron." }
     library_scan_cue_detail { " Detalles: {detail}" }
     library_scan_cue_additional_issues { "{count, plural, one {# problema CUE adicional; consulte el registro para obtener detalles.} other {# problemas CUE adicionales; consulte el registro para obtener detalles.}}" }
     track_cue_number { "Número de pista CUE" }

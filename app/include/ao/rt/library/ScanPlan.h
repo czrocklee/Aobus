@@ -15,6 +15,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
@@ -25,6 +26,7 @@ namespace ao::rt
 {
   class ScanApplyOperation;
   class LibraryScan;
+  struct ScanSpellingEvidence;
 
   enum class ScanClassification : std::uint8_t
   {
@@ -35,9 +37,10 @@ namespace ao::rt
     Missing,
     Unchanged,
     Error,
-    // A report-only entry, such as a CUE sheet that names no supported audio
-    // file. It names no library file and is never applied.
+    // A report-only entry, such as an unmatched sheet or a historical filename alias.
     Notice,
+    // The same directory entry is now enumerated under a different spelling.
+    SpellingChanged,
   };
 
   enum class ScanCueDiagnostic : std::uint8_t
@@ -129,6 +132,14 @@ namespace ao::rt
     return library::hasAudioIdentity(item.audioPayloadLength, item.audioSignature);
   }
 
+  // Unchanged file facts rekey the live Track and manifest without replacing their media facts.
+  inline bool isPlainSpelling(ScanItem const& item) noexcept
+  {
+    return item.classification == ScanClassification::SpellingChanged && item.optManifestEvidence &&
+           item.optManifestEvidence->status == library::FileStatus::Available &&
+           item.optManifestEvidence->fileSize == item.fileSize && item.optManifestEvidence->optMtime == item.optMtime;
+  }
+
   // A failure leaves its item unapplied and fails the scan.
   inline bool isScanFailure(ScanItem const& item) noexcept
   {
@@ -149,7 +160,7 @@ namespace ao::rt
   class ScanPlan final
   {
   public:
-    ~ScanPlan() = default;
+    ~ScanPlan();
 
     ScanPlan(ScanPlan const&) = delete;
     ScanPlan& operator=(ScanPlan const&) = delete;
@@ -173,11 +184,18 @@ namespace ao::rt
     Result<ScanPlan> makeRelinkPlan(std::string_view oldUri, std::string_view newUri) &&;
 
   private:
-    ScanPlan(std::array<std::byte, 16> libraryId, std::uint64_t libraryRevision, std::vector<ScanItem> items) noexcept;
+    ScanPlan(std::array<std::byte, 16> libraryId,
+             std::uint64_t libraryRevision,
+             std::vector<ScanItem> items,
+             std::vector<std::string> knownSpellingPeers,
+             std::unique_ptr<ScanSpellingEvidence> spellingEvidencePtr) noexcept;
 
     std::array<std::byte, 16> _libraryId{};
     std::uint64_t _libraryRevision = 0;
     std::vector<ScanItem> _items;
+    // Sorted snapshot keys in the same spelling groups as possible new or moved destinations.
+    std::vector<std::string> _knownSpellingPeers;
+    std::unique_ptr<ScanSpellingEvidence> _spellingEvidencePtr;
     bool _executable = true;
 
     friend class ScanApplyOperation;

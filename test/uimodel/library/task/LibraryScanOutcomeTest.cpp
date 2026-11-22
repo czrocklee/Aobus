@@ -87,12 +87,12 @@ namespace ao::uimodel::test
 
     CHECK(decideLibraryScanOutcome(applied(result)).verdict == LibraryScanVerdict::Complete);
     CHECK(decideLibraryScanOutcome(applied(result)).relinkedCount == 1);
-    CHECK(messageFor(applied(result)) == "Relinked 1 moved file");
+    CHECK(messageFor(applied(result)) == "Relinked 1 file");
 
     result.relinkedFileCount = 2;
     result.relinkedIds.emplace_back(2);
     CHECK(decideLibraryScanOutcome(applied(result)).relinkedCount == 2);
-    CHECK(messageFor(applied(result)) == "Relinked 2 moved files");
+    CHECK(messageFor(applied(result)) == "Relinked 2 files");
   }
 
   TEST_CASE("LibraryScanOutcome - two relinked member ids report one physical file")
@@ -109,7 +109,7 @@ namespace ao::uimodel::test
     CHECK(outcome.verdict == LibraryScanVerdict::Complete);
     CHECK(outcome.relinkedCount == 1);
     CHECK(result.relinkedIds.size() == 2);
-    CHECK(messageFor(applied(result)) == "Relinked 1 moved file");
+    CHECK(messageFor(applied(result)) == "Relinked 1 file");
   }
 
   TEST_CASE("LibraryScanOutcome - files the library lost need a person")
@@ -132,7 +132,7 @@ namespace ao::uimodel::test
 
     result.relinkedFileCount = 1;
     result.relinkedIds.emplace_back(1);
-    CHECK(messageFor(applied(result)) == "Relinked 1 moved file; 3 missing files need review");
+    CHECK(messageFor(applied(result)) == "Relinked 1 file; 3 missing files need review");
   }
 
   TEST_CASE("LibraryScanOutcome - notices on an applied plan need review but are not failures")
@@ -259,6 +259,54 @@ namespace ao::uimodel::test
     CHECK_FALSE(message.contains("English runtime wording"));
   }
 
+  TEST_CASE("LibraryScanOutcome - alias notices alone direct readers to the log instead of claiming up to date")
+  {
+    auto workflow = LibraryScanWorkflowResult{};
+    workflow.summary.noticeCount = 1;
+    workflow.issues.push_back(
+      {.uri = "image.flac", .message = "Two library records refer to the same file", .isNotice = true});
+
+    auto const outcome = decideLibraryScanOutcome(ScanResult{workflow});
+    CHECK(outcome.verdict == LibraryScanVerdict::NeedsReview);
+    CHECK(libraryScanSeverity(outcome.verdict) == rt::NotificationSeverity::Warning);
+    CHECK(formatLibraryScanMessage(ao::test::englishMessageCatalog(), outcome) ==
+          "Library scan found items that need review. See the log for details.");
+  }
+
+  TEST_CASE("LibraryScanOutcome - applied scans retain the result and log guidance for alias notices")
+  {
+    auto result = rt::ScanApplyResult{};
+    auto expected = std::string{"Library scan complete"};
+
+    SECTION("A new file was imported")
+    {
+      result.insertedIds.emplace_back(1);
+    }
+
+    SECTION("Two files were relinked")
+    {
+      result.relinkedFileCount = 2;
+      result.relinkedIds.emplace_back(1);
+      result.relinkedIds.emplace_back(2);
+      expected = "Relinked 2 files";
+    }
+
+    SECTION("A relink succeeded despite a missing file and an apply failure")
+    {
+      result.relinkedFileCount = 1;
+      result.relinkedIds.emplace_back(1);
+      result.missingCount = 1;
+      result.failureCount = 1;
+      expected = "Scan completed with errors; Relinked 1 file; 1 missing file needs review";
+    }
+
+    auto workflow = applied(std::move(result));
+    workflow->summary.noticeCount = 1;
+    workflow->issues.push_back(
+      {.uri = "image.flac", .message = "Two library records refer to the same file", .isNotice = true});
+    CHECK(messageFor(workflow) == expected + "\nLibrary scan found items that need review. See the log for details.");
+  }
+
   TEST_CASE("LibraryScanOutcome - CUE reasons retain external diagnostics but not unrelated raw errors")
   {
     auto outcome = LibraryScanOutcome{.verdict = LibraryScanVerdict::Unreadable};
@@ -270,13 +318,18 @@ namespace ao::uimodel::test
        .message = "Competing CUE sheets:",
        .cueDiagnostic = rt::ScanCueDiagnostic::AmbiguousSheets,
        .detail = "image.flac.cue, image.FLAC.cue"},
+      {.uri = "carrier.flac",
+       .message = "Carrier extent is unknown",
+       .cueDiagnostic = rt::ScanCueDiagnostic::CarrierFactsMismatch},
       {.uri = "raw.flac", .message = "not a CUE diagnostic"},
     };
     auto const message = formatLibraryScanMessage(ao::test::englishMessageCatalog(), outcome);
     CHECK(message.contains("broken.cue: The CUE sheet could not be read or is malformed"));
     CHECK(message.contains("Details: line 7: missing INDEX 01"));
     CHECK(message.contains("Details: image.flac.cue, image.FLAC.cue"));
+    CHECK(message.contains("carrier.flac: Could not confirm that the file's frame count and sample rate match"));
     CHECK_FALSE(message.contains("Competing CUE sheets:"));
+    CHECK_FALSE(message.contains("Carrier extent is unknown"));
     CHECK_FALSE(message.contains("not a CUE diagnostic"));
   }
 
@@ -388,7 +441,9 @@ namespace ao::uimodel::test
     }
 
     auto outcome = LibraryScanOutcome{.verdict = LibraryScanVerdict::Unreadable, .failureCount = 2};
-    outcome.issues = {issue, {.uri = "next.cue", .cueDiagnostic = rt::ScanCueDiagnostic::NoMatchingAudio}};
+    outcome.issues = {issue,
+                      {.uri = "next.cue", .cueDiagnostic = rt::ScanCueDiagnostic::NoMatchingAudio},
+                      {.uri = "alias.flac", .message = "Two library records refer to the same file", .isNotice = true}};
 
     for (auto const* locale : {"en", "de", "es", "fr", "ja", "zh-Hans", "zh-Hant"})
     {
@@ -400,12 +455,14 @@ namespace ao::uimodel::test
       CHECK(message.size() <= rt::NotificationFeedLimits::kDefaultMaxTextBytes);
       CHECK(utility::validateUtf8(message));
       CHECK(message.ends_with(suffix));
+      CHECK(message.contains(i18n::requiredText(*catalogRes, i18n::MessageId::LibraryScanNoticesNeedReview)));
       CHECK_FALSE(message.contains(issue.uri));
       CHECK_FALSE(message.contains("next.cue"));
+      CHECK_FALSE(message.contains("alias.flac"));
     }
 
     CHECK(outcome.issues.front() == issue);
-    CHECK(outcome.issues.size() == 2);
+    CHECK(outcome.issues.size() == 3);
   }
 
   TEST_CASE("LibraryScanOutcome - long failed verdicts remain UTF-8 within the notification budget")
